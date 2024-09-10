@@ -7606,7 +7606,7 @@ int Client::path_walk(const filepath& origpath, walk_dentry_result* result, cons
 
 // namespace ops
 
-int Client::link(const char *relexisting, const char *relpath, const UserPerm& perm, std::string alternate_name)
+int Client::do_link(const char *relexisting, const char *relpath, const UserPerm& perm, std::string alternate_name)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
@@ -7703,7 +7703,7 @@ int Client::unlinkat(int dirfd, const char *relpath, int flags, const UserPerm& 
   return r;
 }
 
-int Client::rename(const char *relfrom, const char *relto, const UserPerm& perm, std::string alternate_name)
+int Client::do_rename(const char *relfrom, const char *relto, const UserPerm& perm, std::string alternate_name)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
@@ -7748,12 +7748,7 @@ out:
 
 // dirs
 
-int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm, std::string alternate_name)
-{
-  return mkdirat(CEPHFS_AT_FDCWD, relpath, mode, perm, alternate_name);
-}
-
-int Client::mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm,
+int Client::do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm,
                     std::string alternate_name)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
@@ -7891,12 +7886,7 @@ int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t
 
 // symlinks
   
-int Client::symlink(const char *target, const char *relpath, const UserPerm& perms, std::string alternate_name)
-{
-  return symlinkat(target, CEPHFS_AT_FDCWD, relpath, perms, alternate_name);
-}
-
-int Client::symlinkat(const char *target, int dirfd, const char *relpath, const UserPerm& perms,
+int Client::do_symlinkat(const char *target, int dirfd, const char *relpath, const UserPerm& perms,
                       std::string alternate_name)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
@@ -10117,15 +10107,7 @@ int Client::create_and_open(int dirfd, const char *relpath, int flags,
   return r;
 }
 
-int Client::open(const char *relpath, int flags, const UserPerm& perms,
-		 mode_t mode, int stripe_unit, int stripe_count,
-		 int object_size, const char *data_pool, std::string alternate_name)
-{
-  return openat(CEPHFS_AT_FDCWD, relpath, flags, perms, mode, stripe_unit,
-                stripe_count, object_size, data_pool, std::move(alternate_name));
-}
-
-int Client::openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
+int Client::do_openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
                    mode_t mode, int stripe_unit, int stripe_count, int object_size,
                    const char *data_pool, std::string alternate_name) {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
