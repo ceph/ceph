@@ -1025,7 +1025,7 @@ def _generate_share(
     share: resources.Share, resolver: PathResolver, cephx_entity: str
 ) -> Dict[str, Dict[str, str]]:
     assert share.cephfs is not None
-    assert share.cephfs.provider == CephFSStorageProvider.SAMBA_VFS
+    assert share.cephfs.provider.is_vfs(), "not a vfs provider"
     assert cephx_entity, "cephx entity name missing"
     # very annoyingly, samba's ceph module absolutely must NOT have the
     # "client." bit in front. JJM has been tripped up by this multiple times -
@@ -1040,15 +1040,24 @@ def _generate_share(
         share.cephfs.subvolume,
         share.cephfs.path,
     )
+    try:
+        ceph_vfs = {
+            CephFSStorageProvider.SAMBA_VFS_CLASSIC: 'ceph',
+            CephFSStorageProvider.SAMBA_VFS_NEW: 'ceph_new',
+        }[share.checked_cephfs.provider.expand()]
+    except KeyError:
+        raise ValueError(
+            f'unsupported provider: {share.checked_cephfs.provider}'
+        )
     cfg = {
         # smb.conf options
         'options': {
             'path': path,
-            "vfs objects": "acl_xattr ceph",
+            "vfs objects": f"acl_xattr {ceph_vfs}",
             'acl_xattr:security_acl_name': 'user.NTACL',
-            'ceph:config_file': '/etc/ceph/ceph.conf',
-            'ceph:filesystem': share.cephfs.volume,
-            'ceph:user_id': cephx_entity,
+            f'{ceph_vfs}:config_file': '/etc/ceph/ceph.conf',
+            f'{ceph_vfs}:filesystem': share.cephfs.volume,
+            f'{ceph_vfs}:user_id': cephx_entity,
             'read only': ynbool(share.readonly),
             'browseable': ynbool(share.browseable),
             'kernel share modes': 'no',
