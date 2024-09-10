@@ -39,7 +39,6 @@ private:
   Partition partition_info;
   uint64_t free_space;
   CephContext* cct;
-  inline static std::atomic<uint64_t> index{0};
 
   struct libaio_read_handler {
     rgw::Aio* throttle = nullptr;
@@ -104,8 +103,8 @@ private:
 
   struct AsyncWriteRequest {
     const DoutPrefixProvider* dpp;
-	  std::string key;
-    std::string temp_key;
+	  std::string file_path;
+    std::string temp_file_path;
 	  void *data;
 	  int fd;
 	  unique_aio_cb_ptr cb;
@@ -115,7 +114,7 @@ private:
     using Signature = void(boost::system::error_code);
     using Completion = ceph::async::Completion<Signature, AsyncWriteRequest>;
 
-	  int prepare_libaio_write_op(const DoutPrefixProvider *dpp, bufferlist& bl, unsigned int len, std::string key, std::string cache_location);
+	  int prepare_libaio_write_op(const DoutPrefixProvider *dpp, bufferlist& bl, unsigned int len, std::string file_path);
     static void libaio_write_cb(sigval sigval);
 
     template <typename Executor1, typename CompletionHandler>
