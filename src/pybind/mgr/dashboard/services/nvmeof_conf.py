@@ -51,11 +51,29 @@ class NvmeofGatewaysConfig(object):
         return cls._load_config_from_store()
 
     @classmethod
-    def add_gateway(cls, name, service_url):
+    def add_gateway(cls, name, service_url, group, daemon_name):
         config = cls.get_gateways_config()
-        if name in config:
-            raise NvmeofGatewayAlreadyExists(name)
-        config['gateways'][name] = {'service_url': service_url}
+
+        if name in config.get('gateways', {}):
+            existing_gateways = config['gateways'][name]
+            for gateway in existing_gateways:
+                if 'daemon_name' not in gateway:
+                    gateway['daemon_name'] = daemon_name
+                    break
+                if gateway['service_url'] == service_url:
+                    return
+
+        new_gateway = {
+            'service_url': service_url,
+            'group': group,
+            'daemon_name': daemon_name
+        }
+
+        if name in config.get('gateways', {}):
+            config['gateways'][name].append(new_gateway)
+        else:
+            config['gateways'][name] = [new_gateway]
+
         cls._save_config(config)
 
     @classmethod
@@ -67,12 +85,43 @@ class NvmeofGatewaysConfig(object):
         cls._save_config(config)
 
     @classmethod
-    def get_service_info(cls):
+    def get_service_info(cls, group=None):
         try:
             config = cls.get_gateways_config()
-            service_name = list(config['gateways'].keys())[0]
-            addr = config['gateways'][service_name]['service_url']
-            return service_name, addr
+            gateways = config.get('gateways', {})
+            if not gateways:
+                return None
+
+            try:
+                if group:
+                    orch = OrchClient.instance()
+
+                    for service_name, svc_config in gateways.items():
+                        # get the group name of the service and match it against the
+                        # group name provided
+                        group_name_from_spec = orch.services.get(service_name)[0].spec.group
+
+                        if group == group_name_from_spec:
+                            # get the running nvmeof daemons
+                            running_daemons = [d.to_dict() for d in orch.services.list_daemons(
+                                service_name=service_name, status=['running'])]
+
+                            try:
+                                config = next((config for config in svc_config
+                                               if config['daemon_name'] in running_daemons))
+
+                                return service_name, config['service_url']
+                            except StopIteration:
+                                return None
+
+                return None
+
+            except OrchestratorError:
+                if gateways:
+                    service_name = list(gateways.keys())[0]
+                    return service_name, config['gateways'][service_name][0]['service_url']
+                return None
+
         except (KeyError, IndexError) as e:
             raise DashboardException(
                 msg=f'NVMe-oF configuration is not set: {e}',
