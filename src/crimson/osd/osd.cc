@@ -718,7 +718,7 @@ seastar::future<> OSD::stop()
     DEBUG("prepared to stop");
     public_msgr->stop();
     cluster_msgr->stop();
-    auto gate_close_fut = gate.close();
+    auto gate_close_fut = gate.close_all();
     return asok->stop().then([this] {
       return heartbeat->stop();
     }).then([this] {

@@ -255,7 +255,7 @@ public:
   class shard_states_t {
   public:
     shard_states_t(seastar::shard_id _sid, io_state_t state)
-      : sid{_sid}, io_state{state} {}
+      : sid{_sid}, io_state{state}, gate{_sid} {}
 
     seastar::shard_id get_shard_id() const {
       return sid;
