@@ -173,16 +173,22 @@ public:
     if (!parent_modified()) {
       return;
     }
+    LOG_PREFIX(BtreeLBAMapping::maybe_fix_pos);
     auto &p = static_cast<LBALeafNode&>(*parent);
     p.maybe_fix_mapping_pos(*this);
+    SUBDEBUGT(seastore_lba, "fixed pin {}",
+              ctx.trans, static_cast<LBAMapping&>(*this));
   }
 
   LBAMappingRef refresh_with_pending_parent() final {
+    LOG_PREFIX(BtreeLBAMapping::refresh_with_pending_parent);
     assert(is_parent_valid() && !is_parent_viewable());
     auto &p = static_cast<LBALeafNode&>(*parent);
     auto &viewable_p = static_cast<LBALeafNode&>(
       *p.find_pending_version(ctx.trans, get_key()));
-    return viewable_p.get_mapping(ctx, get_key());
+    auto new_pin = viewable_p.get_mapping(ctx, get_key());
+    SUBDEBUGT(seastore_lba, "new pin {}", ctx.trans, static_cast<LBAMapping&>(*new_pin));
+    return new_pin;
   }
 protected:
   std::unique_ptr<BtreeNodeMapping<laddr_t, paddr_t>> _duplicate(
