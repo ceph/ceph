@@ -59,14 +59,6 @@ ostream& operator<<(ostream& out, const scrub_flags_t& sf)
   return out;
 }
 
-ostream& operator<<(ostream& out, const requested_scrub_t& sf)
-{
-  if (sf.req_scrub)
-    out << " planned REQ_SCRUB";
-
-  return out;
-}
-
 void PgScrubber::on_replica_activate()
 {
   dout(10) << __func__ << dendl;
@@ -570,8 +562,7 @@ void PgScrubber::update_scrub_job(Scrub::delay_ready_t delay_ready)
 
 scrub_level_t PgScrubber::scrub_requested(
     scrub_level_t scrub_level,
-    scrub_type_t scrub_type,
-    requested_scrub_t& req_flags)
+    scrub_type_t scrub_type)
 {
   const bool repair_requested = (scrub_type == scrub_type_t::do_repair);
   const bool deep_requested =
@@ -579,11 +570,11 @@ scrub_level_t PgScrubber::scrub_requested(
   scrub_level = deep_requested ? scrub_level_t::deep : scrub_level_t::shallow;
   dout(10) << fmt::format(
 		  "{}: {}{} scrub requested. "
-		  "@entry:{},last-stamp:{:s},Registered?{}",
+		  "@entry:last-stamp:{:s},Registered?{}",
 		  __func__,
 		  (scrub_type == scrub_type_t::do_repair ? "repair + "
 							 : "not-repair + "),
-		  (deep_requested ? "deep" : "shallow"), req_flags,
+		  (deep_requested ? "deep" : "shallow"),
 		  m_scrub_job->get_sched_time(), registration_state())
 	   << dendl;
 
@@ -596,11 +587,6 @@ scrub_level_t PgScrubber::scrub_requested(
 	     << dendl;
     return scrub_level_t::shallow;
   }
-
-  // modifying the planned-scrub flags - to be removed shortly
-  // User might intervene, so clear this
-  req_flags.req_scrub = true;
-  dout(20) << fmt::format("{}: planned scrub:{}", __func__, req_flags) << dendl;
 
   // update the relevant SchedTarget (either shallow or deep). Set its urgency
   // to either operator_requested or must_repair. Push it into the queue
@@ -790,10 +776,9 @@ void PgScrubber::on_operator_periodic_cmd(
 // when asked to force a high-priority scrub
 void PgScrubber::on_operator_forced_scrub(
     ceph::Formatter* f,
-    scrub_level_t scrub_level,
-    requested_scrub_t& request_flags)
+    scrub_level_t scrub_level)
 {
-  auto deep_req = scrub_requested(scrub_level, scrub_type_t::not_repair, request_flags);
+  auto deep_req = scrub_requested(scrub_level, scrub_type_t::not_repair);
   asok_response_section(f, false, deep_req);
 }
 
@@ -1878,8 +1863,6 @@ void PgScrubber::scrub_finish()
   ceph_assert(m_pg->is_locked());
   ceph_assert(is_queued_or_active());
 
-  m_planned_scrub = requested_scrub_t{};
-
   // if the repair request comes from auto-repair and large number of errors,
   // we would like to cancel auto-repair
   if (m_is_repair && m_flags.auto_repair &&
@@ -2125,9 +2108,8 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 
   dout(10) << fmt::format(
 		  "{}: executing target: {}. Session flags: {} up-to-date job: "
-		  "{} planned: {}",
-		  __func__, *m_active_target, m_flags, *m_scrub_job,
-		  m_planned_scrub)
+		  "{}",
+		  __func__, *m_active_target, m_flags, *m_scrub_job)
 	   << dendl;
 
   // copy the aborted target
@@ -2220,8 +2202,7 @@ void PgScrubber::requeue_penalized(
 Scrub::schedule_result_t PgScrubber::start_scrub_session(
     scrub_level_t s_or_d,
     Scrub::OSDRestrictions osd_restrictions,
-    Scrub::ScrubPGPreconds pg_cond,
-    const requested_scrub_t& requested_flags)
+    Scrub::ScrubPGPreconds pg_cond)
 {
   auto& trgt = m_scrub_job->get_target(s_or_d);
   dout(10) << fmt::format(
@@ -2361,14 +2342,9 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
 }
 
 
-/*
- * note that the flags-set fetched from the PG (m_pg->m_planned_scrub)
- * is cleared once scrubbing starts; Some of the values dumped here are
- * thus transitory.
- */
+///\todo modify the fields dumped here to match the new scrub-job structure
 void PgScrubber::dump_scrubber(
-    ceph::Formatter* f,
-    const requested_scrub_t& request_flags) const
+    ceph::Formatter* f) const
 {
   f->open_object_section("scrubber");
 
@@ -2546,7 +2522,6 @@ PgScrubber::PgScrubber(PG* pg)
     , m_pg_id{pg->pg_id}
     , m_osds{m_pg->osd}
     , m_pg_whoami{pg->pg_whoami}
-    , m_planned_scrub{pg->get_planned_scrub(ScrubberPasskey{})}
     , preemption_data{pg}
 {
   m_fsm = std::make_unique<ScrubMachine>(m_pg, this);

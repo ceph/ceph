@@ -293,38 +293,6 @@ struct PgScrubBeListener {
 
 
 /**
- * Flags affecting the scheduling and behaviour of the *next* scrub.
- *
- * we hold two of these flag collections: one
- * for the next scrub, and one frozen at initiation (i.e. in pg::queue_scrub())
- */
-struct requested_scrub_t {
-  /**
-   * scrub must not be aborted.
-   * Set for explicitly requested scrubs, and for scrubs originated by the
-   * pairing process with the 'repair' flag set (in the RequestScrub event).
-   *
-   * Will be copied into the 'required' scrub flag upon scrub start.
-   */
-  bool req_scrub{false};
-};
-
-std::ostream& operator<<(std::ostream& out, const requested_scrub_t& sf);
-
-template <>
-struct fmt::formatter<requested_scrub_t> {
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const requested_scrub_t& rs, FormatContext& ctx) const
-  {
-    return fmt::format_to(ctx.out(),
-                          "(plnd:{})",
-                          rs.req_scrub ? " req_scrub" : "");
-  }
-};
-
-/**
  *  The interface used by the PG when requesting scrub-related info or services
  */
 struct ScrubPgIF {
@@ -434,8 +402,7 @@ struct ScrubPgIF {
   virtual Scrub::schedule_result_t start_scrub_session(
       scrub_level_t s_or_d,
       Scrub::OSDRestrictions osd_restrictions,
-      Scrub::ScrubPGPreconds pg_cond,
-      const requested_scrub_t& requested_flags) = 0;
+      Scrub::ScrubPGPreconds pg_cond) = 0;
 
   virtual void set_op_parameters(Scrub::ScrubPGPreconds pg_cond) = 0;
 
@@ -465,11 +432,9 @@ struct ScrubPgIF {
   /// ... by requesting an "operator initiated" scrub
   virtual void on_operator_forced_scrub(
     ceph::Formatter* f,
-    scrub_level_t scrub_level,
-    requested_scrub_t& request_flags) = 0;
+    scrub_level_t scrub_level) = 0;
 
-  virtual void dump_scrubber(ceph::Formatter* f,
-			     const requested_scrub_t& request_flags) const = 0;
+  virtual void dump_scrubber(ceph::Formatter* f) const = 0;
 
   /**
    * Return true if soid is currently being scrubbed and pending IOs should
@@ -534,8 +499,7 @@ struct ScrubPgIF {
 
   virtual scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
-      scrub_type_t scrub_type,
-      requested_scrub_t& req_flags) = 0;
+      scrub_type_t scrub_type) = 0;
 
   /**
    * let the scrubber know that a recovery operation has completed.

@@ -209,8 +209,7 @@ class PgScrubber : public ScrubPgIF,
   Scrub::schedule_result_t start_scrub_session(
       scrub_level_t s_or_d,
       Scrub::OSDRestrictions osd_restrictions,
-      Scrub::ScrubPGPreconds pg_cond,
-      const requested_scrub_t& requested_flags) final;
+      Scrub::ScrubPGPreconds pg_cond) final;
 
   void initiate_regular_scrub(epoch_t epoch_queued) final;
 
@@ -281,8 +280,7 @@ class PgScrubber : public ScrubPgIF,
 
   scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
-      scrub_type_t scrub_type,
-      requested_scrub_t& req_flags) final;
+      scrub_type_t scrub_type) final;
 
   /**
    * let the scrubber know that a recovery operation has completed.
@@ -311,11 +309,9 @@ class PgScrubber : public ScrubPgIF,
 
   void on_operator_forced_scrub(
     ceph::Formatter* f,
-    scrub_level_t scrub_level,
-    requested_scrub_t& request_flags) final;
+    scrub_level_t scrub_level) final;
 
-  void dump_scrubber(ceph::Formatter* f,
-		     const requested_scrub_t& request_flags) const final;
+  void dump_scrubber(ceph::Formatter* f) const final;
 
   // used if we are a replica
 
@@ -746,10 +742,6 @@ class PgScrubber : public ScrubPgIF,
 				   //output?
 
   scrub_flags_t m_flags;
-
-  /// a reference to the details of the next scrub (as requested and managed by
-  /// the PG)
-  requested_scrub_t& m_planned_scrub;
 
   bool m_active{false};
 
