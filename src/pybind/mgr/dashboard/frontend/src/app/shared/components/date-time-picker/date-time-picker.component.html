@@ -1,22 +1,23 @@
-<div cdsCol
-     class="form-item">
-  <div cdsRow>
-<cds-date-picker [label]="name"
-                 i18n-label
-                 placeholder="NOT PROTECTED"
-                 formControlname="expiresAt"
-                 dateFormat="Y/m/d"
-                 [value]="date"
-                 (valueChange)="onModelChange($event)"
-                 [helperText]="helperText"
-                 [disabled]="disabled"
-                 cdsTheme="theme"></cds-date-picker>
-<cds-timepicker (valueChange)="onModelChange($event)"
-                [(ngModel)]="time"
-                label="Select a time"
-                [disabled]="disabled"
-                pattern="(1[012]|[0-9]):[0-5][0-9]"
-                *ngIf="hasTime">
+<div cdsCol>
+  <div cdsRow
+       class="form-item-append">
+    <cds-text-label>{{name}}
+      <cds-date-picker  i18n-label
+                        [placeholder]="placeHolder"
+                        formControlname="expiresAt"
+                        dateFormat="Y/m/d"
+                        [value]="date"
+                        (valueChange)="onModelChange($event)"
+                        [helperText]="helperText"
+                        [disabled]="disabled"
+                        cdsTheme="theme"></cds-date-picker>
+    </cds-text-label>
+  <cds-text-label *ngIf="hasTime">Select a time
+  <cds-timepicker (valueChange)="onModelChange($event)"
+                  [(ngModel)]="time"
+                  [disabled]="disabled"
+                  pattern="(1[012]|[0-9]):[0-5][0-9]"
+                  *ngIf="hasTime">
   <cds-timepicker-select [(ngModel)]="ampm"
                          [disabled]="disabled"
                          (valueChange)="onModelChange($event)">
@@ -24,5 +25,7 @@
             value="AM">AM</option>
     <option value="PM">PM</option>
   </cds-timepicker-select>
-</cds-timepicker></div>
+</cds-timepicker>
+</cds-text-label>
+</div>
 </div>

@@ -1,249 +1,205 @@
-<div class="cd-col-form"
-     *cdFormLoading="loading">
-  <form name="userForm"
-        #formDir="ngForm"
-        [formGroup]="userForm"
-        novalidate>
-    <div class="card">
+<div cdsCol
+     [columnNumbers]="{md: 4}">
+  <ng-container *cdFormLoading="loading">
+    <form #frm="ngForm"
+          #formDir="ngForm"
+          [formGroup]="userForm"
+          novalidate>
       <div i18n="form title"
-           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
-      <div class="card-body">
+           class="form-header">{{ action | titlecase }} {{ resource | upperFirst }}
+      </div>
+      <!-- UserName -->
+      <div class="form-item">
+        <cds-text-label labelInputID="username"
+                        cdRequiredField="Username"
+                        [invalid]="!userForm.controls.username.valid && userForm.controls.username.dirty"
+                        [invalidText]="usernameError"
+                        i18n>Username
+          <input cdsText
+                 placeholder="Username..."
+                 i18n-placeholder
+                 id="username"
+                 formControlName="username"
+                 [invalid]="!userForm.controls.username.valid && userForm.controls.username.dirty"
+                 autofocus
+                 ngbTooltip="White spaces at the beginning and end will be trimmed"
+                 i18n-ngbTooltip
+                 cdTrim>
+        </cds-text-label>
+        <ng-template #usernameError>
+          <span *ngIf="userForm.showError('username', formDir, 'required')">
+            <ng-container i18n>
+             This field is required.
+            </ng-container>
+          </span>
+          <span *ngIf="userForm.showError('username', formDir, 'notUnique')">
+            <ng-container i18n>
+              The username already exists.
+            </ng-container>
+          </span>
+        </ng-template>
+      </div>
+      <!-- Password -->
+      <div class="form-item">
+        <cds-password-label labelInputID="password"
+                            label="Password..."
+                            [invalid]="!userForm.controls.password.valid && userForm.controls.password.dirty"
+                            [invalidText]="passwordError"
+                            i18n>Password
+        <cd-helper *ngIf="passwordPolicyHelpText.length > 0"
+                    class="text-pre-wrap"
+                    html="{{ passwordPolicyHelpText }}">
+        </cd-helper>
+        <input cdsPassword
+               type="password"
+               placeholder="Password..."
+               id="password"
+               autocomplete="new-password"
+               formControlName="password"
+               >
+        </cds-password-label>
+        <ng-template #passwordError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('password', formDir, 'match')"
+                i18n>Password confirmation doesn't match the password.
+          </span>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('password', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('password', formDir, 'passwordPolicy')">
+            {{ passwordValuation }}
+          </span>
+        </ng-template>
+      </div>
 
-        <!-- Username -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 [ngClass]="{'required': mode !== userFormMode.editing}"
-                 for="username"
-                 i18n>Username</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   placeholder="Username..."
-                   id="username"
-                   name="username"
-                   formControlName="username"
-                   autocomplete="off"
-                   autofocus
-                   ngbTooltip="White spaces at the beginning and end will be trimmed"
-                   i18n-ngbTooltip
-                   cdTrim>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('username', formDir, 'required')"
-                  i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('username', formDir, 'notUnique')"
-                  i18n>The username already exists.</span>
-          </div>
-        </div>
-
-        <!-- Password -->
-        <div class="form-group row"
-             *ngIf="!authStorageService.isSSO()">
-          <label class="cd-col-form-label"
-                 for="password">
-            <ng-container i18n>Password</ng-container>
-            <cd-helper *ngIf="passwordPolicyHelpText.length > 0"
-                       class="text-pre-wrap"
-                       html="{{ passwordPolicyHelpText }}">
-            </cd-helper>
-          </label>
-          <div class="cd-col-form-input">
-            <div class="input-group">
-              <input class="form-control"
-                     type="password"
-                     placeholder="Password..."
-                     id="password"
-                     name="password"
-                     autocomplete="new-password"
-                     formControlName="password">
-              <button type="button"
-                      class="btn btn-light"
-                      cdPasswordButton="password">
-              </button>
-            </div>
-            <div class="password-strength-level">
-              <div class="{{ passwordStrengthLevelClass }}"
-                   data-toggle="tooltip"
-                   title="{{ passwordValuation }}">
-              </div>
-            </div>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('password', formDir, 'required')"
-                  i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('password', formDir, 'passwordPolicy')">
-              {{ passwordValuation }}
-            </span>
-          </div>
-        </div>
-
-        <!-- Confirm password -->
-        <div class="form-group row"
-             *ngIf="!authStorageService.isSSO()">
-          <label i18n
-                 class="cd-col-form-label"
-                 for="confirmpassword">Confirm password</label>
-          <div class="cd-col-form-input">
-            <div class="input-group">
-              <input class="form-control"
-                     type="password"
-                     placeholder="Confirm password..."
-                     id="confirmpassword"
-                     name="confirmpassword"
-                     autocomplete="new-password"
-                     formControlName="confirmpassword">
-              <button type="button"
-                      class="btn btn-light"
-                      cdPasswordButton="confirmpassword">
-              </button>
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
-                    i18n>Password confirmation doesn't match the password.</span>
-            </div>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('confirmpassword', formDir, 'required')"
-                  i18n>This field is required.</span>
-          </div>
-        </div>
-
-        <!-- Password expiration date -->
-        <div class="form-group row"
-             *ngIf="!authStorageService.isSSO()">
-          <label class="cd-col-form-label"
-                 [ngClass]="{'required': pwdExpirationSettings.pwdExpirationSpan > 0}"
-                 for="pwdExpirationDate">
-            <ng-container i18n>Password expiration date</ng-container>
-            <cd-helper class="text-pre-wrap"
-                       *ngIf="pwdExpirationSettings.pwdExpirationSpan == 0">
-              <p>
+      <!-- Confirm password -->
+      <div class="form-item">
+        <cds-password-label labelInputID="confirmpassword"
+                            label="Confirm password..."
+                            [invalid]="!userForm.controls.confirmpassword.valid && userForm.controls.confirmpassword.dirty"
+                            [invalidText]="confirmpasswordError"
+                            i18n> Confirm password
+          <input cdsPassword
+                 type="password"
+                 placeholder="Confirm password..."
+                 id="confirmpassword"
+                 formControlName="confirmpassword">
+        </cds-password-label>
+        <ng-template #confirmpasswordError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
+                i18n>Password confirmation doesn't match the password.</span>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('confirmpassword', formDir, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+      <!-- Password expiration date -->
+      <div class="form-item"
+           *ngIf="!authStorageService.isSSO()">
+        <cds-text-label  [ngClass]="{'required': pwdExpirationSettings.pwdExpirationSpan > 0}">{{'Password Expiration Date'}}
+          <cd-helper class="text-pre-wrap"
+                     *ngIf="pwdExpirationSettings.pwdExpirationSpan == 0">
+            <span>
                 The Dashboard setting defining the expiration interval of
                 passwords is currently set to <strong>0</strong>. This means
                 if a date is set, the user password will only expire once.
-              </p>
-              <p>
-                Consider configuring the Dashboard setting
-                <a routerLink="/mgr-modules/edit/dashboard"
-                   class="alert-link">USER_PWD_EXPIRATION_SPAN</a>
-                in order to let passwords expire periodically.
-              </p>
-            </cd-helper>
-          </label>
-          <div class="cd-col-form-input">
-            <div class="input-group">
-              <input class="form-control"
-                     i18n-placeholder
-                     placeholder="Password expiration date..."
-                     id="pwdExpirationDate"
-                     name="pwdExpirationDate"
-                     formControlName="pwdExpirationDate"
-                     [ngbPopover]="popContent"
-                     triggers="manual"
-                     #p="ngbPopover"
-                     (click)="p.open()"
-                     (keypress)="p.close()">
-              <button type="button"
-                      class="btn btn-light"
-                      (click)="clearExpirationDate()">
-                <i class="icon-prepend {{ icons.destroy }}"></i>
-              </button>
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('pwdExpirationDate', formDir, 'required')"
-                    i18n>This field is required.</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Name -->
-        <div class="form-group row">
-          <label i18n
-                 class="cd-col-form-label"
-                 for="name">Full name</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   placeholder="Full name..."
-                   id="name"
-                   name="name"
-                   formControlName="name">
-          </div>
-        </div>
-
-        <!-- Email -->
-        <div class="form-group row">
-          <label i18n
-                 class="cd-col-form-label"
-                 for="email">Email</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="email"
-                   placeholder="Email..."
-                   id="email"
-                   name="email"
-                   formControlName="email">
-
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('email', formDir, 'email')"
-                  i18n>Invalid email.</span>
-          </div>
-        </div>
-
-        <!-- Roles -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 i18n>Roles</label>
-          <div class="cd-col-form-input">
-            <span class="no-border full-height"
-                  *ngIf="allRoles">
-              <cd-select-badges [data]="userForm.controls.roles.value"
-                                [options]="allRoles"
-                                [messages]="messages"></cd-select-badges>
             </span>
-          </div>
-        </div>
-
-        <!-- Enabled -->
-        <div class="form-group row"
-             *ngIf="!isCurrentUser()">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input type="checkbox"
-                     class="custom-control-input"
-                     id="enabled"
-                     name="enabled"
-                     formControlName="enabled">
-              <label class="custom-control-label"
-                     for="enabled"
-                     i18n>Enabled</label>
-            </div>
-          </div>
-        </div>
-
-        <!-- Force change password -->
-        <div class="form-group row"
-             *ngIf="!isCurrentUser() && !authStorageService.isSSO()">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input type="checkbox"
-                     class="custom-control-input"
-                     id="pwdUpdateRequired"
-                     name="pwdUpdateRequired"
-                     formControlName="pwdUpdateRequired">
-              <label class="custom-control-label"
-                     for="pwdUpdateRequired"
-                     i18n>User must change password at next logon</label>
-            </div>
-          </div>
-        </div>
-
+            <span>Consider configuring the Dashboard setting
+              <a routerLink="/mgr-modules/edit/dashboard"
+                 class="alert-link">USER_PWD_EXPIRATION_SPAN</a>
+                  in order to let passwords expire periodically.
+            </span>
+          </cd-helper>
+        <cd-date-time-picker [control]="userForm.get('pwdExpirationDate')"
+                             placeHolder="Password expiration date"
+                             [hasTime]="false"
+                             [defaultDate]="passwordexp"
+                             i18n-name
+                             >
+        </cd-date-time-picker>
+      </cds-text-label>
+        <span class="invalid-feedback"
+              *ngIf="userForm.showError('pwdExpirationDate', formDir, 'required')"
+              i18n>This field is required.
+        </span>
       </div>
-      <div class="card-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="userForm"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                              wrappingClass="text-right"></cd-form-button-panel>
+      <!--Full Name-->
+      <div class="form-item">
+        <cds-text-label for="name"
+                        i18n> Full Name
+          <input cdsText
+                 type="text"
+                 placeholder="Full Name..."
+                 id="name"
+                 formControlName="name">
+        </cds-text-label>
       </div>
-    </div>
-  </form>
+      <!-- Email -->
+      <div class="form-item">
+        <cds-text-label for="email"
+                        [invalid]="!userForm.controls.email.valid && userForm.controls.email.dirty"
+                        [invalidText]="emailError"
+                        i18n>
+          Email
+          <input cdsText
+                 type="email"
+                 placeholder="Email..."
+                 id="email"
+                 formControlName="email">
+        </cds-text-label>
+        <ng-template #emailError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('email', formDir, 'email')"
+                i18n>Invalid email.
+          </span>
+        </ng-template>
+      </div>
+      <!-- Roles -->
+      <div class="form-item"
+           *ngIf="allRoles">
+        <cds-combo-box label="Roles"
+                       type="multi"
+                       selectionFeedback="top-after-reopen"
+                       for="roles"
+                       formControlName="roles"
+                       id="roles"
+                       placeholder="Select Roles..."
+                       i18n-placeholder
+                       [appendInline]="true"
+                       [items]="allRoles"
+                       itemValueKey="name"
+                       i18n>
+          <cds-dropdown-list></cds-dropdown-list>
+        </cds-combo-box>
+      </div>
+      <!-- Enabled -->
+      <div class="form-item"
+           *ngIf="!isCurrentUser()">
+        <cds-checkbox id="enabled"
+                      formControlName="enabled"
+                      name="enabled"
+                      i18n>Enabled
+        </cds-checkbox>
+      </div>
+      <!-- Force change password -->
+      <div class="form-item"
+           *ngIf="!isCurrentUser() && !authStorageService.isSSO()">
+        <cds-checkbox id="pwdUpdateRequired"
+                      formControlName="pwdUpdateRequired"
+                      name="pwdUpdateRequired"
+                      i18n>User must change password at next logon
+        </cds-checkbox>
+      </div>
+      <!--Submit Button-->
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [form]="userForm"
+                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                            wrappingClass="text-right">
+      </cd-form-button-panel>
+    </form>
+  </ng-container>
 </div>
 
 <ng-template #removeSelfUserReadUpdatePermissionTpl>
