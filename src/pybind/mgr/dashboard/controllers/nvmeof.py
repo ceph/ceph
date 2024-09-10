@@ -61,13 +61,13 @@ else:
             "Create a new NVMeoF subsystem",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
-                "max_namespaces": Param(int, "Maximum number of namespaces", True, 256),
+                "max_namespaces": Param(int, "Maximum number of namespaces", True, 1024),
                 "enable_ha": Param(bool, "Enable high availability"),
             },
         )
         @empty_response
         @handle_nvmeof_error
-        def create(self, nqn: str, enable_ha: bool, max_namespaces: int = 256):
+        def create(self, nqn: str, enable_ha: bool, max_namespaces: int = 1024):
             return NVMeoFClient().stub.create_subsystem(
                 NVMeoFClient.pb2.create_subsystem_req(
                     subsystem_nqn=nqn, max_namespaces=max_namespaces, enable_ha=enable_ha
