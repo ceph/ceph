@@ -25,6 +25,23 @@
 #endif
 #include "ppc-opcode.h"
 
+/*
+ * The following line is required because toc is defined as 2 in
+ * ppc-asm.h. This definition will break @toc in the assembly code,
+ * hence toc should be undefined.
+ */
+#undef toc
+
+/* If we do not define r2 as 2, the assembler throws errors.
+ * This is because the assembler has no builtin support for
+ * registers, and we should either define them ourselves or
+ * use their indexes explicitly like:
+ *       addis   4,2,.bit_reflected_constants@toc@ha
+ */
+#ifndef r2
+#define r2 2
+#endif
+
 	.section	.data
 .balign 16
 .constants:
@@ -45,8 +62,8 @@
 
 /* unsigned int barrett_reduction(unsigned long val) */
 FUNC_START(barrett_reduction)
-	lis	r4,.constants@ha
-	la	r4,.constants@l(r4)
+	addis   r4,r2,.constants@toc@ha
+	addi    r4,r4,.constants@toc@l
 
 	li	r5,16
 	vxor	v1,v1,v1	/* zero v1 */
@@ -83,8 +100,8 @@ FUNC_END(barrett_reduction)
 
 /* unsigned int barrett_reduction_reflected(unsigned long val) */
 FUNC_START(barrett_reduction_reflected)
-	lis	r4,.bit_reflected_constants@ha
-	la	r4,.bit_reflected_constants@l(r4)
+	addis   r4,r2,.bit_reflected_constants@toc@ha
+	addi    r4,r4,.bit_reflected_constants@toc@l
 
 	li	r5,16
 	vxor	v1,v1,v1	/* zero v1 */
