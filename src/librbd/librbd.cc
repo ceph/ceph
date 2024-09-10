@@ -1456,7 +1456,8 @@ namespace librbd {
     }
 
     std::vector<group_snap_info2_t> snaps2;
-    int r = librbd::api::Group<>::snap_list(group_ioctx, group_name, &snaps2);
+    int r = librbd::api::Group<>::snap_list(group_ioctx, group_name, true,
+                                            false, &snaps2);
 
     for (const auto& snap : snaps2) {
       snaps->push_back(
@@ -1473,7 +1474,8 @@ namespace librbd {
   int RBD::group_snap_list2(IoCtx& group_ioctx, const char *group_name,
                             std::vector<group_snap_info2_t> *snaps)
   {
-    return librbd::api::Group<>::snap_list(group_ioctx, group_name, snaps);
+    return librbd::api::Group<>::snap_list(group_ioctx, group_name, true,
+                                           false, snaps);
   }
 
   int RBD::group_snap_get_info(IoCtx& group_ioctx, const char *group_name,
@@ -7322,7 +7324,8 @@ extern "C" int rbd_group_snap_list(rados_ioctx_t group_p,
   }
 
   std::vector<librbd::group_snap_info2_t> cpp_snaps;
-  int r = librbd::api::Group<>::snap_list(group_ioctx, group_name, &cpp_snaps);
+  int r = librbd::api::Group<>::snap_list(group_ioctx, group_name, true, false,
+                                          &cpp_snaps);
 
   if (r == -ENOENT) {
     *snaps_size = 0;
@@ -7372,7 +7375,8 @@ extern "C" int rbd_group_snap_list2(rados_ioctx_t group_p,
   librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
 
   std::vector<librbd::group_snap_info2_t> cpp_snaps;
-  int r = librbd::api::Group<>::snap_list(group_ioctx, group_name, &cpp_snaps);
+  int r = librbd::api::Group<>::snap_list(group_ioctx, group_name, true, false,
+                                          &cpp_snaps);
   if (r < 0) {
     return r;
   }
