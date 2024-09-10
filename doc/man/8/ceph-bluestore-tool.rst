@@ -93,15 +93,17 @@ Commands
    
 :command:`bluefs-bdev-migrate` --dev-target *new-device* --devs-source *device1* [--devs-source *device2*]
 
-   Moves BlueFS data from source device(s) to the target one, source devices
-   (except the main one) are removed on success. Target device can be both
-   already attached or new device. In the latter case it's added to OSD
-   replacing one of the source devices. Following replacement rules apply
-   (in the order of precedence, stop on the first match):
+   Moves BlueFS data from source device(s) to the target device. Source devices
+   (except the main one) are removed on success. Expands the target storage
+   (updates the size label), making "bluefs-bdev-expand" unnecessary. The
+   target device can be either a new device or a device that is already
+   attached. If the device is a new device, it is added to the OSD replacing
+   one of the source devices. The following replacement rules apply (in the
+   order of precedence, stop on the first match):
 
-      - if source list has DB volume - target device replaces it.
-      - if source list has WAL volume - target device replace it.
-      - if source list has slow volume only - operation isn't permitted, requires explicit allocation via new-db/new-wal command.
+      - if the source list has DB volume - the target device replaces it.
+      - if the source list has WAL volume - the target device replaces it.
+      - if the source list has slow volume only - the operation isn't permitted and requires explicit allocation via a new-DB/new-WAL command.
 
 :command:`show-label` --dev *device* [...]
 
