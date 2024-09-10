@@ -98,7 +98,8 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   });
 }
 
-TransactionManager::mount_ertr::future<> TransactionManager::mount()
+TransactionManager::mount_ertr::future<>
+TransactionManager::mount()
 {
   LOG_PREFIX(TransactionManager::mount);
   INFO("enter");
@@ -175,7 +176,8 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   );
 }
 
-TransactionManager::close_ertr::future<> TransactionManager::close() {
+TransactionManager::close_ertr::future<>
+TransactionManager::close() {
   LOG_PREFIX(TransactionManager::close);
   INFO("enter");
   return epm->stop_background(
@@ -241,11 +243,11 @@ TransactionManager::ref_ret TransactionManager::remove(
   });
 }
 
-TransactionManager::ref_ret TransactionManager::_dec_ref(
+TransactionManager::ref_ret TransactionManager::remove(
   Transaction &t,
   laddr_t offset)
 {
-  LOG_PREFIX(TransactionManager::_dec_ref);
+  LOG_PREFIX(TransactionManager::remove);
   TRACET("{}", t, offset);
   return lba_manager->decref_extent(t, offset
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
@@ -273,17 +275,18 @@ TransactionManager::refs_ret TransactionManager::remove(
   LOG_PREFIX(TransactionManager::remove);
   DEBUG("{} offsets", offsets.size());
   return seastar::do_with(std::move(offsets), std::vector<unsigned>(),
-      [this, &t] (auto &&offsets, auto &refcnt) {
-      return trans_intr::do_for_each(offsets.begin(), offsets.end(),
-        [this, &t, &refcnt] (auto &laddr) {
-        return this->remove(t, laddr).si_then([&refcnt] (auto ref) {
-          refcnt.push_back(ref);
-          return ref_iertr::now();
-        });
-      }).si_then([&refcnt] {
-        return ref_iertr::make_ready_future<std::vector<unsigned>>(std::move(refcnt));
+    [this, &t](auto &&offsets, auto &refcnts) {
+    return trans_intr::do_for_each(offsets.begin(), offsets.end(),
+      [this, &t, &refcnts](auto &laddr) {
+      return this->remove(t, laddr
+      ).si_then([&refcnts](auto ref) {
+        refcnts.push_back(ref);
+        return ref_iertr::now();
       });
+    }).si_then([&refcnts] {
+      return ref_iertr::make_ready_future<std::vector<unsigned>>(std::move(refcnts));
     });
+  });
 }
 
 TransactionManager::submit_transaction_iertr::future<>
@@ -340,6 +343,7 @@ TransactionManager::update_lba_mappings(
         return;
       }
       if (extent->is_logical()) {
+        assert(is_logical_type(extent->get_type()));
         // for rewritten extents, last_committed_crc should have been set
         // because the crc of the original extent may be reused.
         // also see rewrite_logical_extent()
@@ -359,6 +363,7 @@ TransactionManager::update_lba_mappings(
 #endif
         lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
       } else {
+        assert(is_physical_type(extent->get_type()));
         pextents.emplace_back(extent);
       }
     };
@@ -566,7 +571,8 @@ TransactionManager::rewrite_logical_extent(
       0,
       lextent->get_length(),
       extent_ref_count_t(0),
-      [this, lextent, &t](auto &extents, auto &off, auto &left, auto &refcount) {
+      [this, lextent, &t]
+      (auto &extents, auto &off, auto &left, auto &refcount) {
       return trans_intr::do_for_each(
         extents,
         [lextent, this, &t, &off, &left, &refcount](auto &nextent) {
@@ -665,11 +671,6 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     t.get_rewrite_stats().account_n_dirty();
   }
 
-  if (is_backref_node(extent->get_type())) {
-    DEBUGT("rewriting backref extent -- {}", t, *extent);
-    return backref_manager->rewrite_extent(t, extent);
-  }
-
   if (is_root_type(extent->get_type())) {
     DEBUGT("rewriting root extent -- {}", t, *extent);
     cache->duplicate_for_write(t, extent);
@@ -677,8 +678,13 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   }
 
   if (extent->is_logical()) {
+    assert(is_logical_type(extent->get_type()));
     return rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
+  } else if (is_backref_node(extent->get_type())) {
+    DEBUGT("rewriting backref extent -- {}", t, *extent);
+    return backref_manager->rewrite_extent(t, extent);
   } else {
+    assert(is_lba_node(extent->get_type()));
     DEBUGT("rewriting physical extent -- {}", t, *extent);
     return lba_manager->rewrite_extent(t, extent);
   }

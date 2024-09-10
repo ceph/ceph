@@ -215,49 +215,6 @@ public:
     });
   }
 
-  template <typename T>
-  std::variant<LBAMappingRef, base_iertr::future<TCachedExtentRef<T>>>
-  get_extent_if_linked(
-    Transaction &t,
-    LBAMappingRef pin)
-  {
-    ceph_assert(pin->is_parent_viewable());
-    // checking the lba child must be atomic with creating
-    // and linking the absent child
-    auto v = pin->get_logical_extent(t);
-    if (v.has_child()) {
-      return v.get_child_fut().safe_then([pin=std::move(pin)](auto extent) {
-#ifndef NDEBUG
-        auto lextent = extent->template cast<LogicalCachedExtent>();
-        auto pin_laddr = pin->get_key();
-        if (pin->is_indirect()) {
-          pin_laddr = pin->get_intermediate_base();
-        }
-        assert(lextent->get_laddr() == pin_laddr);
-#endif
-	return extent->template cast<T>();
-      });
-    } else {
-      return pin;
-    }
-  }
-
-  base_iertr::future<LogicalCachedExtentRef> read_pin_by_type(
-    Transaction &t,
-    LBAMappingRef pin,
-    extent_types_t type)
-  {
-    ceph_assert(!pin->parent_modified());
-    auto v = pin->get_logical_extent(t);
-    // checking the lba child must be atomic with creating
-    // and linking the absent child
-    if (v.has_child()) {
-      return std::move(v.get_child_fut());
-    } else {
-      return pin_to_extent_by_type(t, std::move(pin), type);
-    }
-  }
-
   /// Obtain mutable copy of extent
   LogicalCachedExtentRef get_mutable_extent(Transaction &t, LogicalCachedExtentRef ref) {
     LOG_PREFIX(TransactionManager::get_mutable_extent);
@@ -282,7 +239,6 @@ public:
     return ret;
   }
 
-
   using ref_iertr = LBAManager::ref_iertr;
   using ref_ret = ref_iertr::future<extent_ref_count_t>;
 
@@ -302,26 +258,15 @@ public:
    * remove
    *
    * Remove the extent and the corresponding lba mapping,
-   * users must make sure that lba mapping's refcount is 1
+   * users must make sure that lba mapping's refcount > 1
    */
   ref_ret remove(
     Transaction &t,
     LogicalCachedExtentRef &ref);
 
-  /**
-   * remove
-   *
-   * 1. Remove the indirect mapping(s), and if refcount drops to 0,
-   *    also remove the direct mapping and retire the extent.
-   * 
-   * 2. Remove the direct mapping(s) and retire the extent if
-   * 	refcount drops to 0.
-   */
   ref_ret remove(
     Transaction &t,
-    laddr_t offset) {
-    return _dec_ref(t, offset);
-  }
+    laddr_t offset);
 
   /// remove refcount for list of offset
   using refs_ret = ref_iertr::future<std::vector<unsigned>>;
@@ -411,7 +356,10 @@ public:
   }
 
   template <typename T>
-  read_extent_ret<T> get_mutable_extent_by_laddr(Transaction &t, laddr_t laddr, extent_len_t len) {
+  read_extent_ret<T> get_mutable_extent_by_laddr(
+      Transaction &t,
+      laddr_t laddr,
+      extent_len_t len) {
     return get_pin(t, laddr
     ).si_then([this, &t, len](auto pin) {
       ceph_assert(pin->is_data_stable() && !pin->is_zero_reserved());
@@ -853,6 +801,49 @@ private:
 
   shard_stats_t& shard_stats;
 
+  template <typename T>
+  std::variant<LBAMappingRef, base_iertr::future<TCachedExtentRef<T>>>
+  get_extent_if_linked(
+    Transaction &t,
+    LBAMappingRef pin)
+  {
+    ceph_assert(pin->is_parent_viewable());
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
+    auto v = pin->get_logical_extent(t);
+    if (v.has_child()) {
+      return v.get_child_fut().safe_then([pin=std::move(pin)](auto extent) {
+#ifndef NDEBUG
+        auto lextent = extent->template cast<LogicalCachedExtent>();
+        auto pin_laddr = pin->get_key();
+        if (pin->is_indirect()) {
+          pin_laddr = pin->get_intermediate_base();
+        }
+        assert(lextent->get_laddr() == pin_laddr);
+#endif
+	return extent->template cast<T>();
+      });
+    } else {
+      return pin;
+    }
+  }
+
+  base_iertr::future<LogicalCachedExtentRef> read_pin_by_type(
+    Transaction &t,
+    LBAMappingRef pin,
+    extent_types_t type)
+  {
+    ceph_assert(!pin->parent_modified());
+    auto v = pin->get_logical_extent(t);
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
+    if (v.has_child()) {
+      return std::move(v.get_child_fut());
+    } else {
+      return pin_to_extent_by_type(t, std::move(pin), type);
+    }
+  }
+
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
     LogicalCachedExtentRef extent);
@@ -861,11 +852,6 @@ private:
     Transaction &t,
     ExtentPlacementManager::dispatch_result_t dispatch_result,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt);
-
-  /// Remove refcount for offset
-  ref_ret _dec_ref(
-    Transaction &t,
-    laddr_t offset);
 
   using update_lba_mappings_ret = LBAManager::update_mappings_ret;
   update_lba_mappings_ret update_lba_mappings(
