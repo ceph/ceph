@@ -326,3 +326,10 @@ RGW
   the notifications, new configs will be used.
 * RGW: in bucket notifications, the ``principalId`` inside ``ownerIdentity``
   now contains the complete user ID, prefixed with the tenant ID.
+
+Telemetry
+~~~~~~~~~
+
+* The ``basic`` channel in telemetry now captures pool flags that allows us to
+  better understand feature adoption, such as Crimson. 
+  To opt in to telemetry, run ``ceph telemetry on``.
