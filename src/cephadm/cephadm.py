@@ -3568,7 +3568,7 @@ def list_daemons(
                                 elif daemon_type == 'grafana':
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
-                                                           'grafana-server', '-v'],
+                                                           'grafana', 'server', '-v'],
                                                           verbosity=CallVerbosity.QUIET)
                                     if not code and \
                                        out.startswith('Version '):
@@ -4074,7 +4074,7 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
     ports = Monitoring.port_map['grafana']
     endpoints = [EndPoint('0.0.0.0', p) for p in ports]
 
-    _stop_and_disable(ctx, 'grafana-server')
+    _stop_and_disable(ctx, 'grafana server')
 
     ident = DaemonIdentity(fsid, daemon_type, daemon_id)
     data_dir_dst = make_data_dir(
