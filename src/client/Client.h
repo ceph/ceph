@@ -391,15 +391,22 @@ public:
   void seekdir(dir_result_t *dirp, loff_t offset);
 
   int may_delete(const char *relpath, const UserPerm& perms);
-  int link(const char *existing, const char *newname, const UserPerm& perm, std::string alternate_name="");
+  int link(const char *oldpath, const char *newpath, const UserPerm& perm) {
+    return do_link(oldpath, newpath, perm);
+  }
   int unlink(const char *path, const UserPerm& perm);
   int unlinkat(int dirfd, const char *relpath, int flags, const UserPerm& perm);
-  int rename(const char *from, const char *to, const UserPerm& perm, std::string alternate_name="");
+  int rename(const char *from, const char *to, const UserPerm& perm) {
+    return do_rename(from, to, perm);
+  }
 
   // dirs
-  int mkdir(const char *path, mode_t mode, const UserPerm& perm, std::string alternate_name="");
-  int mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm,
-              std::string alternate_name="");
+  int mkdir(const char *path, mode_t mode, const UserPerm& perm) {
+    return mkdirat(CEPHFS_AT_FDCWD, path, mode, perm);
+  }
+  int mkdirat(int dirfd, const char *path, mode_t mode, const UserPerm& perm) {
+    return do_mkdirat(dirfd, path, mode, perm);
+  }
   int mkdirs(const char *path, mode_t mode, const UserPerm& perms);
   int rmdir(const char *path, const UserPerm& perms);
 
@@ -407,12 +414,12 @@ public:
   int readlink(const char *path, char *buf, loff_t size, const UserPerm& perms);
   int readlinkat(int dirfd, const char *relpath, char *buf, loff_t size, const UserPerm& perms);
 
-  int symlink(const char *existing, const char *newname, const UserPerm& perms, std::string alternate_name="");
-  int symlinkat(const char *target, int dirfd, const char *relpath, const UserPerm& perms,
-                std::string alternate_name="");
-
-  // path traversal for high-level interface
-  int walk(std::string_view path, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true);
+  int symlink(const char *target, const char *linkpath, const UserPerm& perms) {
+    return symlinkat(target, CEPHFS_AT_FDCWD, linkpath, perms);
+  }
+  int symlinkat(const char *target, int dirfd, const char *linkpath, const UserPerm& perms) {
+    return do_symlinkat(target, dirfd, linkpath, perms);
+  }
 
   // inode stuff
   unsigned statx_to_mask(unsigned int flags, unsigned int want);
@@ -456,21 +463,21 @@ public:
   // file ops
   int mknod(const char *path, mode_t mode, const UserPerm& perms, dev_t rdev=0);
 
-  int create_and_open(int dirfd, const char *relpath, int flags, const UserPerm& perms,
-                      mode_t mode, int stripe_unit, int stripe_count, int object_size,
-                      const char *data_pool, std::string alternate_name);
-  int open(const char *path, int flags, const UserPerm& perms, mode_t mode=0, std::string alternate_name="") {
-    return open(path, flags, perms, mode, 0, 0, 0, NULL, alternate_name);
+  int open(const char *path, int flags, const UserPerm& perms, mode_t mode=0) {
+    return open(path, flags, perms, mode, 0, 0, 0, NULL);
   }
   int open(const char *path, int flags, const UserPerm& perms,
 	   mode_t mode, int stripe_unit, int stripe_count, int object_size,
-	   const char *data_pool, std::string alternate_name="");
-  int openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
+	   const char *data_pool) {
+    return openat(CEPHFS_AT_FDCWD, path, flags, perms, mode, stripe_unit, stripe_count, object_size, data_pool);
+  }
+  int openat(int dirfd, const char *path, int flags, const UserPerm& perms, mode_t mode=0) {
+    return openat(dirfd, path, flags, perms, mode, 0, 0, 0, NULL);
+  }
+  int openat(int dirfd, const char *path, int flags, const UserPerm& perms,
              mode_t mode, int stripe_unit, int stripe_count,
-             int object_size, const char *data_pool, std::string alternate_name);
-  int openat(int dirfd, const char *path, int flags, const UserPerm& perms, mode_t mode=0,
-             std::string alternate_name="") {
-    return openat(dirfd, path, flags, perms, mode, 0, 0, 0, NULL, alternate_name);
+             int object_size, const char *data_pool) {
+    return do_openat(dirfd, path, flags, perms, mode, stripe_unit, stripe_count, object_size, data_pool);
   }
 
   int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
@@ -985,6 +992,9 @@ protected:
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f, bool cap_dump=false);
 
+  // path traversal for testing, looking at walk_dentry_result
+  int walk(std::string_view path, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true);
+
   int make_request(MetaRequest *req, const UserPerm& perms,
                    InodeRef *ptarget = 0, bool *pcreated = 0,
                    mds_rank_t use_mds=-1, bufferlist *pdirbl=0,
@@ -1012,6 +1022,16 @@ protected:
   void handle_client_request_forward(const MConstRef<MClientRequestForward>& reply);
   void handle_client_reply(const MConstRef<MClientReply>& reply);
   bool is_dir_operation(MetaRequest *request);
+
+  int create_and_open(int dirfd, const char *relpath, int flags, const UserPerm& perms,
+                      mode_t mode, int stripe_unit, int stripe_count, int object_size,
+                      const char *data_pool, std::string alternate_name);
+
+  int do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm, std::string alternate_name="");
+  int do_rename(const char *from, const char *to, const UserPerm& perm, std::string alternate_name="");
+  int do_link(const char *existing, const char *newname, const UserPerm& perm, std::string alternate_name="");
+  int do_symlinkat(const char *target, int dirfd, const char *linkpath, const UserPerm& perms, std::string alternate_name="");
+  int do_openat(int dirfd, const char *path, int flags, const UserPerm& perms, mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool, std::string alternate_name="");
 
   int path_walk(const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true, int mask=0,
                 InodeRef dirinode=nullptr);
