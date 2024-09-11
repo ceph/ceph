@@ -987,7 +987,19 @@ RandomBlockOolWriter::alloc_write_ool_extents(
     return alloc_write_iertr::now();
   }
   return seastar::with_gate(write_guard, [this, &t, &extents] {
-    return do_write(t, extents);
+    seastar::lw_shared_ptr<rbm_pending_ool_t> ptr =
+      seastar::make_lw_shared<rbm_pending_ool_t>();
+    ptr->pending_extents = t.get_pre_alloc_list();
+    assert(!t.is_conflicted());
+    t.set_pending_ool(ptr);
+    return do_write(t, extents
+    ).finally([this, ptr=ptr] {
+      if (ptr->is_conflicted) {
+	for (auto &e : ptr->pending_extents) {
+	  rb_cleaner->mark_space_free(e->get_paddr(), e->get_length());
+	}
+      }
+    });
   });
 }
 
