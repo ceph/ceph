@@ -24,29 +24,33 @@ namespace {
 
 using std::map;
 using std::set;
+using PglogBasedRecovery = crimson::osd::PglogBasedRecovery;
 
 void PGRecovery::start_pglogbased_recovery()
 {
-  using PglogBasedRecovery = crimson::osd::PglogBasedRecovery;
-  (void) pg->get_shard_services().start_operation<PglogBasedRecovery>(
+  auto [op, fut] = pg->get_shard_services().start_operation<PglogBasedRecovery>(
     static_cast<crimson::osd::PG*>(pg),
     pg->get_shard_services(),
     pg->get_osdmap_epoch(),
     float(0.001));
+  pg->set_pglog_based_recovery_op(op.get());
 }
 
 PGRecovery::interruptible_future<bool>
 PGRecovery::start_recovery_ops(
   RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
+  PglogBasedRecovery &recover_op,
   size_t max_to_start)
 {
   assert(pg->is_primary());
   assert(pg->is_peered());
 
-  if (!pg->is_recovering() && !pg->is_backfilling()) {
-    logger().debug("recovery raced and were queued twice, ignoring!");
+  if (pg->has_reset_since(recover_op.get_epoch_started()) ||
+      recover_op.is_cancelled()) {
+    logger().debug("recovery {} cancelled.", recover_op);
     return seastar::make_ready_future<bool>(false);
   }
+  ceph_assert(pg->is_recovering());
 
   // in ceph-osd the do_recovery() path handles both the pg log-based
   // recovery and the backfill, albeit they are separated at the layer
@@ -68,12 +72,15 @@ PGRecovery::start_recovery_ops(
   return interruptor::parallel_for_each(started,
 					[] (auto&& ifut) {
     return std::move(ifut);
-  }).then_interruptible([this] {
+  }).then_interruptible([this, &recover_op] {
     //TODO: maybe we should implement a recovery race interruptor in the future
-    if (!pg->is_recovering() && !pg->is_backfilling()) {
-      logger().debug("recovery raced and were queued twice, ignoring!");
+    if (pg->has_reset_since(recover_op.get_epoch_started()) ||
+	recover_op.is_cancelled()) {
+      logger().debug("recovery {} cancelled.", recover_op);
       return seastar::make_ready_future<bool>(false);
     }
+    ceph_assert(pg->is_recovering());
+    ceph_assert(!pg->is_backfilling());
 
     bool done = !pg->get_peering_state().needs_recovery();
     if (done) {
@@ -101,6 +108,7 @@ PGRecovery::start_recovery_ops(
           pg->get_osdmap_epoch(),
           PeeringState::RequestBackfill{});
       }
+      pg->reset_pglog_based_recovery_op();
     }
     return seastar::make_ready_future<bool>(!done);
   });
