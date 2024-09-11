@@ -112,7 +112,7 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
 
 write_ertr::future<> NVMeBlockDevice::write(
   uint64_t offset,
-  bufferptr &&bptr,
+  bufferptr bptr,
   uint16_t stream) {
   logger().debug(
       "block: write offset {} len {}",
@@ -127,13 +127,13 @@ write_ertr::future<> NVMeBlockDevice::write(
   }
   if (is_end_to_end_data_protection()) {
     return seastar::do_with(
-      std::move(bptr),
+      bptr,
       [this, offset] (auto &bptr) {
       return nvme_write(offset, bptr.length(), bptr.c_str());
     });
   }
   return seastar::do_with(
-    std::move(bptr),
+    bptr,
     [this, offset, length, supported_stream] (auto& bptr) {
     return io_device[supported_stream].dma_write(
       offset, bptr.c_str(), length).handle_exception(

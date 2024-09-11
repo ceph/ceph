@@ -43,7 +43,7 @@ public:
    */
 
   read_ertr::future<> read(paddr_t addr, bufferptr &buffer) final;
-  write_ertr::future<> write(paddr_t addr, bufferptr &buf) final;
+  write_ertr::future<> write(paddr_t addr, bufferptr buf) final;
   open_ertr::future<> open() final;
   close_ertr::future<> close() final;
 

@@ -129,18 +129,16 @@ bool BlockRBManager::check_valid_range(rbm_abs_addr addr, bufferptr &bptr) {
 
 BlockRBManager::write_ertr::future<> BlockRBManager::write(
   paddr_t paddr,
-  bufferptr &bptr)
+  bufferptr bptr)
 {
   ceph_assert(device);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   if (!check_valid_range(addr, bptr)) {
     return crimson::ct_error::erange::make();
   }
-  bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(bptr.length()));
-  bp.copy_in(0, bptr.length(), bptr.c_str());
   return device->write(
     addr,
-    std::move(bp));
+    bptr);
 }
 
 BlockRBManager::read_ertr::future<> BlockRBManager::read(
