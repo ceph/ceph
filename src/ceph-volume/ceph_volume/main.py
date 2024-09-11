@@ -11,8 +11,16 @@ try:
     from importlib.metadata import entry_points
 
     def get_entry_points(group: str):  # type: ignore
-        return entry_points().get(group, [])  # type: ignore
+        eps = entry_points()
+        if hasattr(eps, 'select'):
+            # New importlib.metadata uses .select()
+            return eps.select(group=group)
+        else:
+            # Fallback to older EntryPoints that returns dicts
+            return eps.get(group, [])  # type: ignore
+
 except ImportError:
+    # Fallback to `pkg_resources` for older versions
     from pkg_resources import iter_entry_points as entry_points  # type: ignore
 
     def get_entry_points(group: str):  # type: ignore
