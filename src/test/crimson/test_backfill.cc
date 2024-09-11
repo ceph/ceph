@@ -119,6 +119,11 @@ class BackfillFixture : public crimson::osd::BackfillState::BackfillListener {
     events_to_dispatch.emplace_back(event.intrusive_from_this());
   }
 
+  template <class EventT>
+  void schedule_event_immediate(const EventT& event) {
+    events_to_dispatch.emplace_front(event.intrusive_from_this());
+  }
+
   // BackfillListener {
   void request_replica_scan(
     const pg_shard_t& target,
@@ -188,12 +193,11 @@ public:
   struct PGFacade;
 
   void cancel() {
-    events_to_dispatch.clear();
-    schedule_event(crimson::osd::BackfillState::CancelBackfill{});
+    schedule_event_immediate(crimson::osd::BackfillState::CancelBackfill{});
   }
 
   void resume() {
-    schedule_event(crimson::osd::BackfillState::Triggered{});
+    schedule_event_immediate(crimson::osd::BackfillState::Triggered{});
   }
 };
 
@@ -455,7 +459,38 @@ TEST(backfill, two_empty_replicas)
   EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
 }
 
-TEST(backfill, cancel_resume)
+TEST(backfill, cancel_resume_middle_of_primaryscan)
+{
+  const auto reference_store = FakeStore{ {
+    { "1:00058bcc:::rbd_data.1018ac3e755.00000000000000d5:head", {10, 234} },
+    { "1:00ed7f8e:::rbd_data.1018ac3e755.00000000000000af:head", {10, 196} },
+    { "1:01483aea:::rbd_data.1018ac3e755.0000000000000095:head", {10, 169} },
+  }};
+  auto cluster_fixture = BackfillFixtureBuilder::add_source(
+    reference_store.objs
+  ).add_target(
+    { /* nothing 1 */ }
+  ).add_target(
+    { /* nothing 2 */ }
+  ).get_result();
+
+  EXPECT_CALL(cluster_fixture, backfilled);
+  cluster_fixture.cancel();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::CancelBackfill>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::PrimaryScanned>();
+  cluster_fixture.resume();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::Triggered>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.next_till_done();
+
+  EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
+}
+
+TEST(backfill, cancel_resume_middle_of_replicascan1)
 {
   const auto reference_store = FakeStore{ {
     { "1:00058bcc:::rbd_data.1018ac3e755.00000000000000d5:head", {10, 234} },
@@ -486,7 +521,7 @@ TEST(backfill, cancel_resume)
   EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
 }
 
-TEST(backfill, cancel_resume_middle_of_scan)
+TEST(backfill, cancel_resume_middle_of_replicascan2)
 {
   const auto reference_store = FakeStore{ {
     { "1:00058bcc:::rbd_data.1018ac3e755.00000000000000d5:head", {10, 234} },
@@ -512,6 +547,100 @@ TEST(backfill, cancel_resume_middle_of_scan)
   cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.next_till_done();
+
+  EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
+}
+
+TEST(backfill, cancel_resume_middle_of_push1)
+{
+  const auto reference_store = FakeStore{ {
+    { "1:00058bcc:::rbd_data.1018ac3e755.00000000000000d5:head", {10, 234} },
+    { "1:00ed7f8e:::rbd_data.1018ac3e755.00000000000000af:head", {10, 196} },
+    { "1:01483aea:::rbd_data.1018ac3e755.0000000000000095:head", {10, 169} },
+  }};
+  auto cluster_fixture = BackfillFixtureBuilder::add_source(
+    reference_store.objs
+  ).add_target(
+    { /* nothing 1 */ }
+  ).add_target(
+    { /* nothing 2 */ }
+  ).get_result();
+
+  EXPECT_CALL(cluster_fixture, backfilled);
+  cluster_fixture.next_round2<crimson::osd::BackfillState::PrimaryScanned>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
+  cluster_fixture.cancel();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::CancelBackfill>();
+  cluster_fixture.resume();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::Triggered>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.next_till_done();
+
+  EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
+}
+
+TEST(backfill, cancel_resume_middle_of_push2)
+{
+  const auto reference_store = FakeStore{ {
+    { "1:00058bcc:::rbd_data.1018ac3e755.00000000000000d5:head", {10, 234} },
+    { "1:00ed7f8e:::rbd_data.1018ac3e755.00000000000000af:head", {10, 196} },
+    { "1:01483aea:::rbd_data.1018ac3e755.0000000000000095:head", {10, 169} },
+  }};
+  auto cluster_fixture = BackfillFixtureBuilder::add_source(
+    reference_store.objs
+  ).add_target(
+    { /* nothing 1 */ }
+  ).add_target(
+    { /* nothing 2 */ }
+  ).get_result();
+
+  EXPECT_CALL(cluster_fixture, backfilled);
+  cluster_fixture.next_round2<crimson::osd::BackfillState::PrimaryScanned>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.cancel();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::CancelBackfill>();
+  cluster_fixture.resume();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::Triggered>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.next_till_done();
+
+  EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
+}
+
+TEST(backfill, cancel_resume_middle_of_push3)
+{
+  const auto reference_store = FakeStore{ {
+    { "1:00058bcc:::rbd_data.1018ac3e755.00000000000000d5:head", {10, 234} },
+    { "1:00ed7f8e:::rbd_data.1018ac3e755.00000000000000af:head", {10, 196} },
+    { "1:01483aea:::rbd_data.1018ac3e755.0000000000000095:head", {10, 169} },
+  }};
+  auto cluster_fixture = BackfillFixtureBuilder::add_source(
+    reference_store.objs
+  ).add_target(
+    { /* nothing 1 */ }
+  ).add_target(
+    { /* nothing 2 */ }
+  ).get_result();
+
+  EXPECT_CALL(cluster_fixture, backfilled);
+  cluster_fixture.next_round2<crimson::osd::BackfillState::PrimaryScanned>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.cancel();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::CancelBackfill>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
+  cluster_fixture.resume();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::Triggered>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::RequestDone>();
   cluster_fixture.next_till_done();
 
   EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
