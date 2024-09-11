@@ -321,6 +321,8 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   if (!read_request)
     return 0;
 
+  bool experimental = cct->_conf->osd_ec_partial_reads_experimental;
+
   extent_set extra_extents;
 
   /* First deal with missing shards */
@@ -332,8 +334,14 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
      * redundant reads is set, then we want to have the same reads on
      * every extent. Otherwise, we need to read every shard only if the
      * necessary shard is missing.
+     *
+     * FIXME: (remove !experimental) This causes every read to grow to to the
+     *        superset of all shard reads.  This is required because the
+     *        recovery path currently will not re-read shards it has already
+     *        read. Once that is fixed, this experimental flag can be removed.
+     *
      */
-    if (!have.contains(i) || do_redundant_reads) {
+    if (!have.contains(i) || do_redundant_reads || !experimental) {
       extra_extents.union_of(want_shard_reads[i].extents);
     }
   }
@@ -354,6 +362,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     shard_read.extents.align(CEPH_PAGE_SIZE);
     read_request->shard_reads[pg_shard] = shard_read;
   }
+
   return 0;
 }
 
@@ -807,6 +816,12 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
   const hobject_t &hoid,
   ReadOp &rop)
 {
+  //FIXME: This function currently assumes that if it has already read a shard
+  //       then no further reads from that shard are required.  However with
+  //       the experimental optimised partial reads, it is possible for extra
+  //       reads to be required to an already-read shard. We plan on fixing this
+  //       before allowing such a configuration option to be enabled outside
+  //       test/dev environments.
   set<int> already_read;
   const set<pg_shard_t>& ots = rop.obj_to_source[hoid];
   for (set<pg_shard_t>::iterator i = ots.begin(); i != ots.end(); ++i)
