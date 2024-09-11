@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 class MgrModuleTestCase(DashboardTestCase):
     MGRS_REQUIRED = 1
 
-    @retry(on_exception=RuntimeError, tries=2, delay=0.5, logger=logger)
+    @retry(on_exception=(RuntimeError, requests.ConnectionError),
+           tries=2, delay=0.5, logger=logger)
     def wait_until_rest_api_accessible(self):
         """
         Wait until the REST API is accessible.
