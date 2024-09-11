@@ -2410,6 +2410,12 @@ def enable_cephadm_mgr_module(
     logger.info('Enabling cephadm module...')
     cli(['mgr', 'module', 'enable', 'cephadm'])
     wait_for_mgr_restart()
+    # https://tracker.ceph.com/issues/67969
+    # luckily `ceph mgr module enable <module>` returns
+    # a zero rc when the module is already enabled so
+    # this is no issue even if it is unnecessary
+    logger.info('Verifying orchestrator module is enabled...')
+    cli(['mgr', 'module', 'enable', 'orchestrator'])
     logger.info('Setting orchestrator backend to cephadm...')
     cli(['orch', 'set', 'backend', 'cephadm'])
 
