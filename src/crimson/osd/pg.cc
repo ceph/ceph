@@ -1058,13 +1058,12 @@ PG::do_osd_ops_execute(
       // this is a path for EIO. it's special because we want to fix the obejct
       // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
       // restart the execution.
-      return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-      [obc=rollbacker.get_obc(), this] {
-        return repair_object(obc->obs.oi.soid,
-                             obc->obs.oi.version
-        ).then_interruptible([] {
-          return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
-        });
+      rollbacker.rollback_obc_if_modified(e);
+      auto obc = rollbacker.get_obc();
+      return repair_object(obc->obs.oi.soid,
+                           obc->obs.oi.version
+      ).then_interruptible([] {
+        return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
       });
     }), OpsExecuter::osd_op_errorator::all_same_way(
         [rollbacker, failure_func_ptr]
@@ -1073,11 +1072,8 @@ PG::do_osd_ops_execute(
           ceph_assert(e.value() == EDQUOT ||
                       e.value() == ENOSPC ||
                       e.value() == EAGAIN);
-          return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-          [e, failure_func_ptr] {
-            // no need to record error log
-            return (*failure_func_ptr)(e);
-          });
+          rollbacker.rollback_obc_if_modified(e);
+          return (*failure_func_ptr)(e);
     }));
 
     return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
@@ -1089,37 +1085,34 @@ PG::do_osd_ops_execute(
      rollbacker, failure_func_ptr]
     (const std::error_code& e) mutable {
     ceph_tid_t rep_tid = shard_services.get_tid();
-    return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-    [&, op_info, m, obc,
-     this, e, rep_tid, failure_func_ptr] {
-      // record error log
-      auto maybe_submit_error_log =
-        seastar::make_ready_future<std::optional<eversion_t>>(std::nullopt);
-      // call submit_error_log only for non-internal clients
-      if constexpr (!std::is_same_v<Ret, void>) {
-        if(op_info.may_write()) {
-          maybe_submit_error_log =
-            submit_error_log(m, op_info, obc, e, rep_tid);
-        }
+    rollbacker.rollback_obc_if_modified(e);
+    // record error log
+    auto maybe_submit_error_log =
+      seastar::make_ready_future<std::optional<eversion_t>>(std::nullopt);
+    // call submit_error_log only for non-internal clients
+    if constexpr (!std::is_same_v<Ret, void>) {
+      if(op_info.may_write()) {
+        maybe_submit_error_log =
+          submit_error_log(m, op_info, obc, e, rep_tid);
       }
-      return maybe_submit_error_log.then(
-      [this, failure_func_ptr, e, rep_tid] (auto version) {
-        auto all_completed =
-        [this, failure_func_ptr, e, rep_tid,  version] {
-          if (version.has_value()) {
-            return complete_error_log(rep_tid, version.value()).then(
-            [failure_func_ptr, e] {
-              return (*failure_func_ptr)(e);
-            });
-          } else {
+    }
+    return maybe_submit_error_log.then(
+    [this, failure_func_ptr, e, rep_tid] (auto version) {
+      auto all_completed =
+      [this, failure_func_ptr, e, rep_tid,  version] {
+        if (version.has_value()) {
+          return complete_error_log(rep_tid, version.value()).then(
+          [failure_func_ptr, e] {
             return (*failure_func_ptr)(e);
-          }
-        };
-        return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
-          std::move(seastar::now()),
-          std::move(all_completed())
-        );
-      });
+          });
+        } else {
+          return (*failure_func_ptr)(e);
+        }
+      };
+      return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
+        std::move(seastar::now()),
+        std::move(all_completed())
+      );
     });
   }));
 }
