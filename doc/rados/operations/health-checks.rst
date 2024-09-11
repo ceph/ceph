@@ -1513,6 +1513,32 @@ To manually initiate a deep scrub of a clean PG, run the following command:
 
    ceph pg deep-scrub <pgid>
 
+Under certain conditions, the warning ``X PGs not deep-scrubbed in time``
+appears. This might be because the cluster contains many large PGs, which take
+longer to deep-scrub. To remedy this situation, you must change the value of
+``osd_deep_scrub_interval`` either globally or for the Manager daemon.
+
+#. Confirm that ``ceph health detail`` returns a ``pgs not deep-scrubbed in
+   time`` warning::
+
+      # ceph health detail
+      HEALTH_WARN 1161 pgs not deep-scrubbed in time
+      [WRN] PG_NOT_DEEP_SCRUBBED: 1161 pgs not deep-scrubbed in time
+      pg 86.fff not deep-scrubbed since 2024-08-21T02:35:25.733187+0000
+
+#. Change ``osd_deep_scrub_interval`` globally:   
+
+   .. prompt:: bash #
+
+      ceph config set global osd_deep_scrub_interval 1209600
+
+The above procedure was developed by Eugen Block in September of 2024.
+
+See `Eugen Block's blog post <https://heiterbiswolkig.blogs.nde.ag/2024/09/06/pgs-not-deep-scrubbed-in-time/>`_ for much more detail.
+
+See `Redmine tracker issue #44959 <https://tracker.ceph.com/issues/44959>`_.
+
+
 
 PG_SLOW_SNAP_TRIMMING
 _____________________
