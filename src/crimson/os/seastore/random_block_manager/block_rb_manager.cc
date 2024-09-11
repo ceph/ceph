@@ -115,18 +115,25 @@ BlockRBManager::open_ertr::future<> BlockRBManager::open()
   return open_ertr::now();
 }
 
-BlockRBManager::write_ertr::future<> BlockRBManager::write(
-  paddr_t paddr,
-  bufferptr &bptr)
-{
-  LOG_PREFIX(BlockRBManager::write);
-  ceph_assert(device);
-  rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
+bool BlockRBManager::check_valid_range(rbm_abs_addr addr, bufferptr &bptr) {
+  LOG_PREFIX(BlockRBManager::check_valid_range);
   rbm_abs_addr start = device->get_shard_start();
   rbm_abs_addr end = device->get_shard_end();
   if (addr < start || addr + bptr.length() > end) {
     ERROR("out of range: start {}, end {}, addr {}, length {}",
       start, end, addr, bptr.length());
+    return false;
+  }
+  return true;
+}
+
+BlockRBManager::write_ertr::future<> BlockRBManager::write(
+  paddr_t paddr,
+  bufferptr &bptr)
+{
+  ceph_assert(device);
+  rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
+  if (!check_valid_range(addr, bptr)) {
     return crimson::ct_error::erange::make();
   }
   bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(bptr.length()));
@@ -140,14 +147,9 @@ BlockRBManager::read_ertr::future<> BlockRBManager::read(
   paddr_t paddr,
   bufferptr &bptr)
 {
-  LOG_PREFIX(BlockRBManager::read);
   ceph_assert(device);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-  rbm_abs_addr start = device->get_shard_start();
-  rbm_abs_addr end = device->get_shard_end();
-  if (addr < start || addr + bptr.length() > end) {
-    ERROR("out of range: start {}, end {}, addr {}, length {}",
-      start, end, addr, bptr.length());
+  if (!check_valid_range(addr, bptr)) {
     return crimson::ct_error::erange::make();
   }
   return device->read(

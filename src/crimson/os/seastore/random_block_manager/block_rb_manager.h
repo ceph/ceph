@@ -127,6 +127,8 @@ public:
     return device->get_journal_size();
   }
 
+  bool check_valid_range(rbm_abs_addr paddr, bufferptr &bptr);
+
 #ifdef UNIT_TESTS_BUILT
   void prefill_fragmented_device() final;
 #endif
