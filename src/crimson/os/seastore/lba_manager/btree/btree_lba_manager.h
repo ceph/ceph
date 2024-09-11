@@ -77,7 +77,7 @@ public:
 	meta),
       key(meta.begin),
       indirect(val.pladdr.is_laddr()),
-      intermediate_key(indirect ? val.pladdr.get_laddr() : L_ADDR_NULL),
+      intermediate_key(indirect ? val.pladdr.build_laddr(key) : L_ADDR_NULL),
       intermediate_length(indirect ? val.len : 0),
       raw_val(val.pladdr),
       map_val(val),
@@ -151,7 +151,7 @@ public:
     laddr_t interkey = L_ADDR_NULL)
   {
     assert(indirect);
-    assert(value.is_paddr());
+    assert(value_is_paddr());
     intermediate_key = (interkey == L_ADDR_NULL ? key : interkey);
     key = new_key;
     len = length;
@@ -272,7 +272,7 @@ public:
 	L_ADDR_NULL,
 	lba_map_val_t{
 	  len,
-	  P_ADDR_ZERO,
+	  pladdr_t(P_ADDR_ZERO),
 	  EXTENT_DEFAULT_REF_COUNT,
 	  0
 	},
@@ -282,12 +282,12 @@ public:
     static alloc_mapping_info_t create_indirect(
       laddr_t laddr,
       extent_len_t len,
-      laddr_t intermediate_key) {
+      local_clone_id_t id) {
       return {
 	laddr,
 	{
 	  len,
-	  intermediate_key,
+	  pladdr_t(id),
 	  EXTENT_DEFAULT_REF_COUNT,
 	  0	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
@@ -301,7 +301,7 @@ public:
       extent_ref_count_t refcount,
       uint32_t checksum,
       LogicalCachedExtent *extent) {
-      return {laddr, {len, paddr, refcount, checksum}, extent};
+      return {laddr, {len, pladdr_t(paddr), refcount, checksum}, extent};
     }
   };
 
@@ -336,7 +336,10 @@ public:
   {
     std::vector<alloc_mapping_info_t> alloc_infos = {
       alloc_mapping_info_t::create_indirect(
-	laddr, len, intermediate_key)};
+	laddr,
+	len,
+	intermediate_key.get_local_clone_id())
+    };
     return alloc_cloned_mappings(
       t,
       laddr,
@@ -487,12 +490,13 @@ public:
 	      " intermediate_base: {}, intermediate_key: {}", t,
 	      remap_laddr, orig_paddr, remap_len,
 	      intermediate_base, intermediate_key);
-	    auto remapped_intermediate_key = (intermediate_key + remap_offset).checked_to_laddr();
+	    laddr_t remapped_intermediate_key = (intermediate_key + remap_offset).checked_to_laddr();
+	    auto id = remapped_intermediate_key.get_local_clone_id();
 	    alloc_infos.emplace_back(
 	      alloc_mapping_info_t::create_indirect(
 		remap_laddr,
 		remap_len,
-		remapped_intermediate_key));
+		id));
 	  }
 	  fut = alloc_cloned_mappings(
 	    t,
@@ -669,7 +673,9 @@ private:
   {
 #ifndef NDEBUG
     for (auto &alloc_info : alloc_infos) {
-      assert(alloc_info.value.pladdr.get_laddr() != L_ADDR_NULL);
+      assert(alloc_info.value.pladdr.is_laddr());
+      assert(alloc_info.value.pladdr.get_local_clone_id()
+	     != LOCAL_CLONE_ID_NULL);
     }
 #endif
     return seastar::do_with(
@@ -688,8 +694,8 @@ private:
 	  auto mapping = static_cast<BtreeLBAMapping*>(mit->release());
 	  auto &alloc_info = *ait;
 	  assert(mapping->get_key() == alloc_info.key);
-	  assert(mapping->get_raw_val().get_laddr() ==
-	    alloc_info.value.pladdr.get_laddr());
+	  assert(mapping->get_raw_val().get_local_clone_id() ==
+	    alloc_info.value.pladdr.get_local_clone_id());
 	  assert(mapping->get_length() == alloc_info.value.len);
 	  rets.emplace_back(mapping);
 	}
