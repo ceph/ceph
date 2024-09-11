@@ -92,9 +92,10 @@ To build Ceph, follow this procedure:
     ``cd build``
 4. Use the `ninja` buildsystem to build the development environment:
 
-    ``ninja``
+       ninja -j3
 
-   > [!TIP]
+   > [IMPORTANT]
+   >
    > [Ninja](https://ninja-build.org/) is the build system used by the Ceph
    > project to build test builds.  The number of jobs used by `ninja` is 
    > derived from the number of CPU cores of the building host if unspecified. 
@@ -106,7 +107,7 @@ To build Ceph, follow this procedure:
    > Using the `-j` option with an argument appropriate to the hardware on
    > which the `ninja` command is run is expected to result in a successful
    > build. For example, to limit the job number to 3, run the command `ninja
-   > -j 3`. On average, each `ninja` job run in parallel needs approximately
+   > -j3`. On average, each `ninja` job run in parallel needs approximately
    > 2.5 GiB of RAM.
 
    This documentation assumes that your build directory is a subdirectory of
@@ -119,11 +120,11 @@ To build Ceph, follow this procedure:
 
    To build only certain targets, run a command of the following form:
 
-	ninja [target name]
+	``ninja [target name]``
 
 5. Install the vstart cluster:
 
-	ninja install
+	``ninja install``
  
 ### CMake Options
 
