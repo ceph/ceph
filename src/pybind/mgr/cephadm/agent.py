@@ -864,7 +864,7 @@ class CephadmAgentHelpers:
                 host, self.mgr.agent_cache.agent_ports[host], payload, self.mgr, daemon_spec)
             message_thread.start()
 
-    def _request_ack_all_not_up_to_date(self) -> None:
+    def request_ack_all_not_up_to_date(self) -> None:
         self.mgr.agent_helpers._request_agent_acks(
             set([h for h in self.mgr.cache.get_hosts() if
                  (not self.mgr.cache.host_metadata_up_to_date(h)
