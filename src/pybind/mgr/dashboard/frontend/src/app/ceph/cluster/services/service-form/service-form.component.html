@@ -292,7 +292,7 @@
         </div>
 
         <!-- Count -->
-        <div *ngIf="!serviceForm.controls.unmanaged.value"
+        <div *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value !== 'nvmeof'"
              class="form-group row">
           <label class="cd-col-form-label"
                  for="count">
