@@ -212,7 +212,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         ]
       ],
       group: [
-        null,
+        'default',
         CdValidators.requiredIf({
           service_type: 'nvmeof'
         })
@@ -855,7 +855,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         this.serviceForm.get('count').setValue(2);
         break;
       case 'iscsi':
-      case 'nvmeof':
       case 'cephfs-mirror':
       case 'nfs':
       case 'grafana':
@@ -962,16 +961,29 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     );
   }
 
-  setNvmeofServiceId(): void {
-    const defaultRbdPool: string = this.rbdPools?.find((p: Pool) => p.pool_name === 'rbd')
-      ?.pool_name;
-    if (defaultRbdPool) {
-      this.serviceForm.get('pool').setValue(defaultRbdPool);
-    }
+  onNvmeofGroupChange(groupName: string) {
+    const pool = this.serviceForm.get('pool').value;
+    if (pool) this.serviceForm.get('service_id').setValue(`${pool}.${groupName}`);
+    else this.serviceForm.get('service_id').setValue(groupName);
   }
 
-  onNvmeofGroupChange(groupName: string) {
-    this.serviceForm.get('service_id').setValue(groupName);
+  getDefaultBlockPool(): string {
+    // returns 'rbd' pool otherwise the first block pool
+    return (
+      this.rbdPools?.find((p: Pool) => p.pool_name === 'rbd')?.pool_name ||
+      this.rbdPools?.[0].pool_name
+    );
+  }
+
+  setNvmeofServiceIdAndPool(): void {
+    const defaultBlockPool: string = this.getDefaultBlockPool();
+    const group: string = this.serviceForm.get('group').value;
+    if (defaultBlockPool && group) {
+      this.serviceForm.get('pool').setValue(defaultBlockPool);
+      this.serviceForm.get('service_id').setValue(`${defaultBlockPool}.${group}`);
+    } else {
+      this.serviceForm.get('service_id').setValue(null);
+    }
   }
 
   requiresServiceId(serviceType: string) {
@@ -981,7 +993,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   setServiceId(serviceId: string): void {
     const requiresServiceId: boolean = this.requiresServiceId(serviceId);
     if (requiresServiceId && serviceId === 'nvmeof') {
-      this.setNvmeofServiceId();
+      this.setNvmeofServiceIdAndPool();
     } else if (requiresServiceId) {
       this.serviceForm.get('service_id').setValue(null);
     } else {
@@ -1019,7 +1031,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
   onBlockPoolChange() {
     const selectedBlockPool = this.serviceForm.get('pool').value;
-    if (selectedBlockPool) {
+    const group = this.serviceForm.get('group').value;
+    if (selectedBlockPool && group) {
+      this.serviceForm.get('service_id').setValue(`${selectedBlockPool}.${group}`);
+    } else if (selectedBlockPool) {
       this.serviceForm.get('service_id').setValue(selectedBlockPool);
     } else {
       this.serviceForm.get('service_id').setValue(null);
