@@ -149,11 +149,7 @@ void LogicalCachedExtent::on_replace_prior() {
 }
 
 parent_tracker_t::~parent_tracker_t() {
-  // this is parent's tracker, reset it
-  auto &p = (FixedKVNode<laddr_t>&)*parent;
-  if (p.my_tracker == this) {
-    p.my_tracker = nullptr;
-  }
+  parent->maybe_reset_parent_tracker(this);
 }
 
 std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs)
