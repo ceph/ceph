@@ -1,0 +1,13 @@
+<cd-nvmeof-tabs></cd-nvmeof-tabs>
+
+<legend i18n>
+  Gateways
+  <cd-help-text>
+    Ceph NVMe-oF gateways provide Ceph Block Device storage through NVMe/TCP. For VMware clients the NVMe/TCP volumes display as  VMFS Datastores. For Linux clients the NVMe/TCP volumes display as as block devices.</cd-help-text>
+</legend>
+<div>
+  <cd-table [data]="gateways"
+            (fetchData)="getGateways()"
+            [columns]="gatewayColumns">
+  </cd-table>
+</div>
