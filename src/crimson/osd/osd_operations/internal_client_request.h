@@ -41,6 +41,8 @@ private:
 
   CommonPGPipeline& client_pp();
 
+  InternalClientRequest::interruptible_future<> with_interruption();
+
   seastar::future<> do_process();
 
   Ref<PG> pg;
