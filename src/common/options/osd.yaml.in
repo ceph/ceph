@@ -1359,6 +1359,13 @@ options:
   level: advanced
   default: true
   with_legacy: true
+# Adds some experimental features to osd_ec_partial_reads that may cause
+# data corruption/crashes or worse.
+- name: osd_ec_partial_reads_experimental
+  type: bool
+  level: dev
+  default: false
+  with_legacy: true
 - name: osd_recovery_delay_start
   type: float
   level: advanced
