@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=${prefix}
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libcephfs
+Description: Ceph distributed file system client library
+Version: @libcephfs_version@
+Cflags: -I${includedir}/cephfs -D_FILE_OFFSET_BITS=64
+Libs: -L${libdir} -lcephfs
