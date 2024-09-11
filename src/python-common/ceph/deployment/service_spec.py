@@ -1330,7 +1330,6 @@ class NvmeofServiceSpec(ServiceSpec):
                  verify_nqns: Optional[bool] = True,
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
-                 ping_spdk_under_lock: Optional[bool] = False,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1408,8 +1407,6 @@ class NvmeofServiceSpec(ServiceSpec):
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
         self.spdk_ping_interval_in_seconds = spdk_ping_interval_in_seconds
-        #: ``ping_spdk_under_lock`` whether or not we should perform SPDK ping under the RPC lock
-        self.ping_spdk_under_lock = ping_spdk_under_lock
         #: ``bdevs_per_cluster`` number of bdevs per cluster
         self.bdevs_per_cluster = bdevs_per_cluster
         #: ``server_key`` gateway server key
