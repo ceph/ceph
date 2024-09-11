@@ -44,8 +44,7 @@ namespace rgw::bucketlogging {
          </SimplePrefix>
       </TargetObjectKeyFormat>
       <TargetPrefix>string</TargetPrefix>
-      <EventType>Read|Write|ReadWrite</EventType>       <!-- Ceph extension -->
-      <RecordType>Standard|Short</RecordType>           <!-- Ceph extension -->
+      <LoggingType>Standard|Journal</LoggingType>       <!-- Ceph extension -->
       <ObjectRollTime>integer</ObjectRollTime>          <!-- Ceph extension -->
       <RecordsBatchSize>integer</RecordsBatchSize>      <!-- Ceph extension -->
    </LoggingEnabled>
@@ -53,8 +52,7 @@ namespace rgw::bucketlogging {
 */
 
 enum class KeyFormat {Partitioned, Simple};
-enum class RecordType {Standard, Short};
-enum class EventType {Read, Write, ReadWrite};
+enum class LoggingType {Standard, Journal};
 enum class PartitionDateSource {DeliveryTime, EventTime};
 
 struct configuration {
@@ -69,16 +67,13 @@ struct configuration {
                              // useful when multiple bucket log to the same target 
                              // or when the target bucket is used for other things than logs
   uint32_t obj_roll_time; // time in seconds to move object to bucket and start another object
-  RecordType record_type = RecordType::Standard;
+  LoggingType logging_type = LoggingType::Standard;
+  // in case of "Standard: logging type, all bucket operations are logged
+  // in case of "Journal" logging type only the following operations are logged: PUT, COPY, MULTI/DELETE, Complete MPU
   uint32_t records_batch_size = 0; // how many records to batch in memory before writing to the object
                                    // if set to zero, records are written syncronously to the object.
                                    // if obj_roll_time is reached, the batch of records will be written to the object
                                    // regardless of the number of records
-  EventType event_type = EventType::ReadWrite;
-  // which events to log:
-  // Write: PUT, COPY, DELETE, Complete MPU
-  // Read: GET, HEAD
-  // ReadWrite: all the above
   PartitionDateSource date_source = PartitionDateSource::DeliveryTime;
   // EventTime: use only year, month, and day. The hour, minutes and seconds are set to 00 in the key
   // DeliveryTime: the time the log object was created
@@ -93,9 +88,8 @@ struct configuration {
     encode(static_cast<int>(obj_key_format), bl);
     encode(target_prefix, bl);
     encode(obj_roll_time, bl);
-    encode(static_cast<int>(record_type), bl);
+    encode(static_cast<int>(logging_type), bl);
     encode(records_batch_size, bl);
-    encode(static_cast<int>(event_type), bl);
     encode(static_cast<int>(date_source), bl);
     ENCODE_FINISH(bl);
   }
@@ -109,10 +103,8 @@ struct configuration {
     decode(target_prefix, bl);
     decode(obj_roll_time, bl);
     decode(type, bl);
-    record_type = static_cast<RecordType>(type);
+    logging_type = static_cast<LoggingType>(type);
     decode(records_batch_size, bl);
-    decode(type, bl);
-    event_type = static_cast<EventType>(type);
     decode(type, bl);
     date_source = static_cast<PartitionDateSource>(type);
     DECODE_FINISH(bl);

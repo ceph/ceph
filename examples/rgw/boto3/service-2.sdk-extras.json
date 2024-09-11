@@ -280,13 +280,9 @@
                     "shape":"ObjectRollTime",
                     "documentation":"<p>time in seconds to move the log object to the target bucket and start another log object.</p>"
                 },
-                "RecordType":{
-                    "shape":"RecordType",
-                    "documentation":"<p>use Standard (log) format of record or Short format containing only minimal information on the object needed for fetching the object.</p>"
-                },
-                "EventType":{
-                    "shape":"EventType",
-                    "documentation":"<p>use Write type to log PUT, COPY, Complete MPU and DELETE operations, Read to log GET operations, and ReadWrite to log both.</p>"
+                "LoggingType":{
+                    "shape":"LoggingType",
+                    "documentation":"<p>use Standard log type to log all bucket operations i nthe standard format. use Journal log type to log only creations and deletion of objects in more compact format.</p>"
                 },
                 "RecordsBatchSize":{
                     "shape":"RecordsBatchSize",
@@ -338,19 +334,11 @@
         },
         "ObjectRollTime":{"type":"integer"},
         "RecordsBatchSize":{"type":"integer"},
-        "RecordType":{
+        "LoggingType":{
             "type":"string",
             "enum": [
                 "Standard",
-                "Short"
-            ]
-        },
-        "EventType":{
-            "type":"string",
-            "enum": [
-                "Read",
-                "Write",
-                "ReadWrite"
+                "Journal"
             ]
         }
     },

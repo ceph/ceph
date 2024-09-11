@@ -26,11 +26,11 @@ bool configuration::decode_xml(XMLObj* obj) {
     RGWXMLDecoder::decode_xml("ObjectRollTime", obj_roll_time, default_obj_roll_time, o);
     std::string default_type{"Standard"};
     std::string type;
-    RGWXMLDecoder::decode_xml("RecordType", type, default_type, o);
+    RGWXMLDecoder::decode_xml("LoggingType", type, default_type, o);
     if (type == "Standard") {
-      record_type = RecordType::Standard;
-    } else if (type == "Short") {
-      record_type = RecordType::Short;
+      logging_type = LoggingType::Standard;
+    } else if (type == "Journal") {
+      logging_type = LoggingType::Journal;
     } else {
       throw RGWXMLDecoder::err("invalid bucket logging record type: '" + type + "'");
     }
@@ -53,17 +53,6 @@ bool configuration::decode_xml(XMLObj* obj) {
         throw RGWXMLDecoder::err("TargetObjectKeyFormat must contain a format tag");
       }
     }
-    default_type = "ReadWrite";
-    RGWXMLDecoder::decode_xml("EventType", type, default_type, o);
-    if (type == "Read") {
-      event_type = EventType::Read;
-    } else if (type == "Write") {
-      event_type = EventType::Write;
-    } else if (type == "ReadWrite") {
-      event_type = EventType::ReadWrite;
-    } else {
-      throw RGWXMLDecoder::err("invalid bucket logging event type: '" + type + "'");
-    }
   }
 
   return true;
@@ -77,23 +66,12 @@ void configuration::dump_xml(Formatter *f) const {
   ::encode_xml("TargetBucket", target_bucket, f);
   ::encode_xml("TargetPrefix", target_prefix, f);
   ::encode_xml("ObjectRollTime", obj_roll_time, f);
-  switch (record_type) {
-    case RecordType::Standard:
-      ::encode_xml("RecordType", "Standard", f);
+  switch (logging_type) {
+    case LoggingType::Standard:
+      ::encode_xml("LoggingType", "Standard", f);
       break;
-    case RecordType::Short:
-      ::encode_xml("RecordType", "Short", f);
-      break;
-  }
-  switch (event_type) {
-    case EventType::Read:
-      ::encode_xml("EventType", "Read", f);
-      break;
-    case EventType::Write:
-      ::encode_xml("EventType", "Write", f);
-      break;
-    case EventType::ReadWrite:
-      ::encode_xml("EventType", "ReadWrite", f);
+    case LoggingType::Journal:
+      ::encode_xml("LoggingType", "Journal", f);
       break;
   }
   ::encode_xml("RecordsBatchSize", records_batch_size, f);
@@ -130,12 +108,12 @@ void configuration::dump(Formatter *f) const {
     encode_json("targetBucket", target_bucket, f);
     encode_json("targetPrefix", target_prefix, f);
     encode_json("objectRollTime", obj_roll_time, f);
-    switch (record_type) {
-      case RecordType::Standard:
-        encode_json("recordType", "Standard", f);
+    switch (logging_type) {
+      case LoggingType::Standard:
+        encode_json("loggingType", "Standard", f);
         break;
-      case RecordType::Short:
-        encode_json("recordType", "Short", f);
+      case LoggingType::Journal:
+        encode_json("loggingType", "Journal", f);
         break;
     }
     encode_json("recordsBatchSize", records_batch_size, f);
@@ -161,17 +139,6 @@ void configuration::dump(Formatter *f) const {
         }
         break;
       }
-    }
-    switch (event_type) {
-      case EventType::Read:
-        encode_json("eventType", "Read", f);
-        break;
-      case EventType::Write:
-        encode_json("eventType", "Write", f);
-        break;
-      case EventType::ReadWrite:
-        encode_json("eventType", "ReadWrite", f);
-        break;
     }
   }
 }
@@ -286,7 +253,9 @@ int rollover_logging_object(const configuration& conf,
 }
 
 #define dash_if_empty(S) (S).empty() ? "-" : S
-#define dash_if_zero(i) (i) == 0 ? "-" : std::to_string(i)
+#define dash_if_empty_or_null(P, S) (((P) == nullptr) || (S).empty()) ? "-" : S
+#define dash_if_zero(I) (I) == 0 ? "-" : std::to_string(I)
+#define dash_if_zero_or_null(P, I) (((P) == nullptr) || ((I) == 0)) ? "-" : std::to_string(I)
 
 /* S3 bucket standard log record
  * based on: https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html
@@ -335,6 +304,10 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp, 
     optional_yield y,
     bool async_completion) {
+  if (!s->bucket) {
+    ldpp_dout(dpp, 1) << "ERROR: only bucket operations are logged" << dendl;
+    return -EINVAL;
+  }
   std::unique_ptr<rgw::sal::Bucket> target_bucket;
   auto ret = driver->load_bucket(dpp, rgw_bucket(s->bucket_tenant, conf.target_bucket),
                                &target_bucket, y);
@@ -379,8 +352,8 @@ int log_record(rgw::sal::Driver* driver,
   if (!s->info.domain.empty() && !fqdn.empty()) {
     fqdn.append(".").append(s->info.domain);
   }
-  switch (conf.record_type) {
-    case RecordType::Standard:
+  switch (conf.logging_type) {
+    case LoggingType::Standard:
       record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} REST.{}.{} {} \"{} {}{}{} HTTP/1.1\" {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
         dash_if_empty(to_string(s->bucket->get_owner())),
         dash_if_empty(s->bucket->get_name()),
@@ -389,8 +362,8 @@ int log_record(rgw::sal::Driver* driver,
         dash_if_empty(user_or_account),
         dash_if_empty(s->req_id),
         s->info.method,
-        op_name, // TODO: use "resource" from URI
-        dash_if_empty(s->object->get_key().name),
+        op_name,
+        dash_if_empty_or_null(s->object, s->object->get_key().name),
         s->info.method,
         s->info.request_uri,
         s->info.request_params.empty() ? "" : "?",
@@ -398,12 +371,12 @@ int log_record(rgw::sal::Driver* driver,
         dash_if_zero(s->err.http_ret),
         dash_if_empty(s->err.err_code),
         dash_if_zero(s->content_length),
-        dash_if_zero(s->object->get_size()),
+        dash_if_zero_or_null(s->object, s->object->get_size()),
         "-", // no total time when logging record
-        "-", // no turn around time when logging record
+        std::chrono::duration_cast<std::chrono::milliseconds>(s->time_elapsed()),
         "-", // TODO: referer
         "-", // TODO: user agent
-        dash_if_empty(s->object->get_instance()),
+        dash_if_empty_or_null(s->object, s->object->get_instance()),
         s->info.x_meta_map.contains("x-amz-id-2") ? s->info.x_meta_map.at("x-amz-id-2") : "-",
         "-", // TODO: Signature Version (SigV2 or SigV4)
         "-", // TODO: SSL cipher. e.g. "ECDHE-RSA-AES128-GCM-SHA256"
@@ -413,14 +386,15 @@ int log_record(rgw::sal::Driver* driver,
         "-", // no access point ARN
         (s->has_acl_header) ? "Yes" : "-");
       break;
-    case RecordType::Short:
-      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} REST.{}.{} {}",
+    case LoggingType::Journal:
+      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} REST.{}.{} {} {}",
         dash_if_empty(to_string(s->bucket->get_owner())),
         dash_if_empty(s->bucket->get_name()),
         t,
-        dash_if_empty(s->object->get_key().name),
+        dash_if_empty_or_null(s->object, s->object->get_key().name),
         s->info.method,
-        op_name, // TODO: use "resource" from URI
+        op_name,
+        dash_if_zero_or_null(s->object, s->object->get_size()),
         dash_if_empty(etag));
       break;
   }

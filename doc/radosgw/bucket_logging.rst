@@ -20,17 +20,23 @@ may be used to distinguish between logs from different buckets.
 
 Logging Reliability
 -------------------
-Records are written to the log bucket before the bucket operation is completed. This means that if the logging
-action fails, the operation may fail as well. This means that the log records are guaranteed to be
-written if the operation is successful.
-An exception to the above are "read" log records and "delete" log records. If writing these log records fail, the operation
-continues and may still be successful.
-Note that it may happen that the log records were successfully written, but the bucket operation failed, since the logs are written
-before such a failure, there will be no indication for that in the log records.
 For performance reasons, even though the log records are written to persistent storage, the log object will
 appear in the log bucket only after some configurable amount of time (or if the maximum object size of 128MB is reached).
 Adding a log object to the lock bucket is done "lazily", meaning, that if no more records are written to the object, it may
 remain outside of the log bucket even after the configured time has passed.
+
+Standard
+````````
+If logging type is set to "Standard" (the default) the log records are written to the log bucket after the bucket operation is completed.
+This means that there are the logging operation may fail, with no indication to he client.
+
+Journal
+``````
+If logging type is set to "Journal", the records are written to the log bucket before the bucket operation is completed. 
+This means that if the logging action fails, the operation will not be executed, and an error will be returned to the client.
+An exception to the above are "multi/delete" log records: if writing these log records fail, the operation continues and may still be successful.
+Note that it may happen that the log records were successfully written, but the bucket operation failed, since the logs are written
+before such a failure, there will be no indication for that in the log records. 
 
 
 Bucket Logging REST API

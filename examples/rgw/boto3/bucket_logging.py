@@ -31,11 +31,10 @@ bucket_logging_conf = {'LoggingEnabled': {
     'TargetBucket': target_bucket,
     'TargetPrefix': 'log/',
     'TargetObjectKeyFormat': {
-      'RGW': {}
+      'Simple': {}
     },
     'ObjectRollTime': 60,
-    'RecordType': 'Short',
-    'RecordsBatchSize': 1000
+    'LoggingType': 'Journal',
   }
 }
 

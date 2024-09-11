@@ -749,8 +749,7 @@ Parameters are XML encoded in the body of the request, in the following format:
         </SimplePrefix>
       </TargetObjectKeyFormat>
       <TargetPrefix>string</TargetPrefix>
-      <EventType>Read|Write|ReadWrite</EventType>
-      <RecordType>Standard|Short</RecordType>
+      <LoggingType>Standard|Journal</LoggingType>
       <ObjectRollTime>integer</ObjectRollTime>
     </LoggingEnabled>
   </BucketLoggingStatus>
@@ -778,15 +777,11 @@ Parameters are XML encoded in the body of the request, in the following format:
 | ``TargetPrefix``              | String    | The prefix for the log objects. Used in both formats. May be used to distinguish     | No       |
 |                               |           | between different source buckets writing log records to the same log bucket.         |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``EventType``                 | String    | The type of events to log. Valid values are:                                         | No       |
-|                               |           | ``Write`` will record: PUT, COPY, DELETE, Complete MPU                               |          |
-|                               |           | ``Read`` will record: GET, HEAD                                                      |          |
-|                               |           | ``ReadWrite`` (default) will record all of the above                                 |          |
-|                               |           | Note this is a Ceph extension.                                                       |          |
-+-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``RecordType``                | String    | The type of log record to create. Valid values are:                                  | No       |
-|                               |           | ``Standard`` (default) will record all fields in the log record                      |          |
-|                               |           | ``Short`` will record the minimum subset of fields in the log record that is needed  |          |
+| ``LoggingType``               | String    | The type of logging. Valid values are:                                               | No       |
+|                               |           | ``Standard`` (default) all bucket operations are logged after being perfomed.        |          |
+|                               |           | The log record will contain all fields.                                              |          |
+|                               |           | ``Journal`` only PUT, COPY, MULTI/DELETE and MPU operations are logged.              |          |
+|                               |           | Will record the minimum subset of fields in the log record that is needed            |          |
 |                               |           | for journaling.                                                                      |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 | ``ObjectRollTime``            | Integer   | The time in seconds after which a new log object is created, and the previous log    | No       |
@@ -884,8 +879,7 @@ Response is XML encoded in the body of the request, in the following format:
         </SimplePrefix>
       </TargetObjectKeyFormat>
       <TargetPrefix>string</TargetPrefix>
-      <EventType>Read|Write|ReadWrite</EventType>
-      <RecordType>Standard|Short</RecordType>
+      <LoggingType>Standard|Journal</LoggingType>
       <ObjectRollTime>integer</ObjectRollTime>
     </LoggingEnabled>
   </BucketLoggingStatus>

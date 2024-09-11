@@ -21,6 +21,7 @@
 #include "rgw_lua_request.h"
 #include "rgw_tracer.h"
 #include "rgw_ratelimit.h"
+#include "rgw_bucket_logging.h"
 
 #include "services/svc_zone_utils.h"
 
@@ -262,6 +263,42 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   return 0;
 }
 
+int do_standard_bucket_logging(rgw::sal::Driver* driver,
+    req_state* s, 
+    RGWOp* op, 
+    optional_yield y) {
+  if (!s->bucket) {
+    // not a bucket operation
+    return 0;
+  }
+  // check if bucket logging is needed
+  const auto& bucket_attrs = s->bucket->get_attrs();
+  auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING); 
+  if (iter == bucket_attrs.end()) {
+    return 0;
+  }
+  rgw::bucketlogging::configuration configuration;
+  try {
+    configuration.enabled = true;
+    decode(configuration, iter->second);  
+    if (configuration.logging_type != rgw::bucketlogging::LoggingType::Standard) {
+      return 0;
+    }
+    ldpp_dout(op, 20) << "INFO: found 'Standard' logging configuration of bucket '" << s->bucket->get_name() << 
+      "' configuration: " << configuration.to_json_str() << dendl;
+    if (auto ret = log_record(driver, s, op->name(), "", configuration, op, y, true); ret < 0) { 
+      ldpp_dout(op, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_name() << 
+        "'. ret=" << ret << dendl;
+      return ret;
+    }
+  } catch (buffer::error& err) {
+    ldpp_dout(op, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING 
+      << "'. error: " << err.what() << dendl;
+    return  -EINVAL;
+  }
+  return 0;
+}
+
 int process_request(const RGWProcessEnv& penv,
                     RGWRequest* const req,
                     const std::string& frontend_prefix,
@@ -441,6 +478,8 @@ done:
   if (should_log) {
     rgw_log_op(rest, s, op, penv.olog);
   }
+
+  do_standard_bucket_logging(driver, s, op, yield);
 
   if (http_ret != nullptr) {
     *http_ret = s->err.http_ret;
