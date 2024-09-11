@@ -17,6 +17,7 @@
 
 namespace crimson::osd {
 class UrgentRecovery;
+class PglogBasedRecovery;
 }
 
 class MOSDPGBackfillRemove;
@@ -32,6 +33,7 @@ public:
 
   interruptible_future<bool> start_recovery_ops(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
+    crimson::osd::PglogBasedRecovery &recover_op,
     size_t max_to_start);
   void on_activate_complete();
   void on_backfill_reserved();
