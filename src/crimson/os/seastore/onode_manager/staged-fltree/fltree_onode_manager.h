@@ -299,8 +299,11 @@ struct FLTreeOnode final : Onode, Value {
     status = status_t::DELETED;
   }
 
-  laddr_t get_hint() const final {
-    return Value::get_hint();
+  laddr_hint_t get_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id,
+    bool is_metadata) const final {
+    return Value::get_hint(object_id, clone_id, is_metadata);
   }
   ~FLTreeOnode() final {}
 };

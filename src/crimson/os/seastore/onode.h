@@ -56,7 +56,11 @@ class Onode : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>
 {
 protected:
-  virtual laddr_t get_hint() const = 0;
+  virtual laddr_hint_t get_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id,
+    bool is_metadata) const = 0;
+
   const hobject_t hobj;
 public:
   explicit Onode(const hobject_t &hobj) : hobj(hobj) {}
@@ -98,11 +102,20 @@ public:
     return id;
   }
 
-  laddr_t get_metadata_hint() const {
-    return get_hint();
+  // see gen_object_hint() in seastore_types.cc
+  laddr_hint_t get_metadata_hint() const {
+    return get_hint(
+      get_local_object_id(),
+      get_local_clone_id(),
+      /*is_metadata=*/true);
   }
-  laddr_t get_data_hint() const {
-    return get_hint();
+
+  // see gen_object_hint() in seastore_types.cc
+  laddr_hint_t get_data_hint() const {
+    return get_hint(
+      get_local_object_id(),
+      get_local_clone_id(),
+      /*is_metadata=*/false);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
