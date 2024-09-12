@@ -11,7 +11,6 @@ import { RgwZone } from '../models/rgw-multisite';
 import _ from 'lodash';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { HostService } from '~/app/shared/api/host.service';
-import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { Observable, Subject, merge } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
@@ -62,8 +61,7 @@ export class RgwMultisiteImportComponent implements OnInit {
     this.zoneNames = this.zoneList.map((zone) => {
       return zone['name'];
     });
-    const hostContext = new CdTableFetchDataContext(() => undefined);
-    this.hostService.list(hostContext.toParams(), 'false').subscribe((resp: object[]) => {
+    this.hostService.getAllHosts().subscribe((resp: object[]) => {
       const options: SelectOption[] = [];
       _.forEach(resp, (host: object) => {
         if (_.get(host, 'sources.orchestrator', false)) {
