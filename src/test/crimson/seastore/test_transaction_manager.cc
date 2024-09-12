@@ -1425,12 +1425,19 @@ struct transaction_manager_test_t :
   void test_clone_and_remap_pin() {
     run_async([this] {
       disable_max_extent_size();
-      laddr_t l_offset = laddr_t::from_byte_offset(32 << 10);
+      laddr_hint_t hint = gen_object_hint(0, 0, 0, std::nullopt, std::nullopt, false);
+      laddr_t data_base = hint.addr;
+      laddr_t l_offset = data_base.with_block_offset(32 << 10);
       size_t l_len = 32 << 10;
-      laddr_t r_offset = laddr_t::from_byte_offset(64 << 10);
+      laddr_t r_offset = data_base.with_block_offset(64 << 10);
       size_t r_len = 32 << 10;
-      laddr_t l_clone_offset = laddr_t::from_byte_offset(96 << 10);
-      laddr_t r_clone_offset = laddr_t::from_byte_offset(128 << 10);
+      laddr_hint_t clone_hint = gen_object_hint(0, 0, 0, data_base.get_local_object_id(), std::nullopt, false);
+      while (clone_hint.addr.get_local_clone_id() == hint.addr.get_local_clone_id()) {
+	clone_hint = gen_next_hint(clone_hint);
+      }
+      laddr_t clone_base = clone_hint.addr;
+      laddr_t l_clone_offset = clone_base.with_block_offset(32 << 10);
+      laddr_t r_clone_offset = clone_base.with_block_offset(64 << 10);
       {
 	auto t = create_transaction();
 	auto lext = alloc_extent(t, l_offset, l_len);

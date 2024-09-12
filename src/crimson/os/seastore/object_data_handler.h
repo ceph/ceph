@@ -240,6 +240,7 @@ private:
   write_ret prepare_data_reservation(
     context_t ctx,
     object_data_t &object_data,
+    laddr_hint_t hint,
     extent_len_t size);
 
   /// Trims data past size

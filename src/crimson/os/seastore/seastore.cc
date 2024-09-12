@@ -1659,7 +1659,28 @@ SeaStore::Shard::_do_transaction_step(
       case Transaction::OP_CREATE:
       case Transaction::OP_TOUCH:
       {
-        return _touch(ctx, onodes[op->oid]);
+	return seastar::do_with(i.get_oid(op->oid), [&, op, this](ghobject_t &ghobj) {
+	  ghobj.hobj.snap = CEPH_NOSNAP;
+	  return onode_manager->get_latest_snap_and_head(*ctx.transaction, ghobj
+	  ).si_then([&, op, this](auto res) {
+	    auto [latest, head] = std::move(res);
+	    auto id = LOCAL_OBJECT_ID_NULL;
+	    if (head) {
+	      auto head_id = head->get_local_object_id();
+	      ceph_assert(head_id);
+	      id = *head_id;
+	    } else if (latest) {
+	      auto latest_id = latest->get_local_object_id();
+	      ceph_assert(latest_id);
+	      id = *latest_id;
+	    }
+	    auto onode = onodes[op->oid];
+	    if (id != LOCAL_OBJECT_ID_NULL) {
+	      onode->update_local_object_id(*ctx.transaction, id);
+	    }
+	    return _touch(ctx, onode);
+	  });
+	});
       }
       case Transaction::OP_WRITE:
       {
@@ -2008,6 +2029,16 @@ SeaStore::Shard::_clone(
 {
   LOG_PREFIX(SeaStore::_clone);
   DEBUGT("onode={} d_onode={}", *ctx.transaction, *onode, *d_onode);
+  auto src_id = onode->get_local_object_id();
+  ceph_assert(src_id);
+  if (auto dest_id = d_onode->get_local_object_id();
+      !dest_id) {
+    DEBUGT("update d_onode local_object_id to: {}",
+	   *ctx.transaction, *src_id);
+    d_onode->update_local_object_id(*ctx.transaction, *src_id);
+  } else {
+    ceph_assert(*src_id == *dest_id);
+  }
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [this, &ctx, &onode, &d_onode](auto &objHandler) {
