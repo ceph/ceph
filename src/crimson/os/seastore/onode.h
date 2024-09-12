@@ -111,10 +111,10 @@ public:
   }
 
   // see gen_object_hint() in seastore_types.cc
-  laddr_hint_t get_data_hint() const {
+  laddr_hint_t get_data_hint(bool gen_clone_hint = false) const {
     return get_hint(
       get_local_object_id(),
-      get_local_clone_id(),
+      gen_clone_hint ? std::nullopt : get_local_clone_id(),
       /*is_metadata=*/false);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
