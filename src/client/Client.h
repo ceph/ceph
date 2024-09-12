@@ -266,11 +266,6 @@ public:
 
   typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct ceph_statx *stx, off_t off, Inode *in);
 
-  struct walk_dentry_result {
-    InodeRef in;
-    std::string alternate_name;
-  };
-
   class CommandHook : public AdminSocketHook {
   public:
     explicit CommandHook(Client *client);
@@ -952,6 +947,11 @@ public:
   bool _collect_and_send_global_metrics;
 
 protected:
+  struct walk_dentry_result {
+    InodeRef in;
+    std::string alternate_name;
+  };
+
   std::list<ceph::condition_variable*> waiting_for_reclaim;
   /* Flags for check_caps() */
   static const unsigned CHECK_CAPS_NODELAY = 0x1;
