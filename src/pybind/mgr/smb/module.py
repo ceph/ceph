@@ -171,6 +171,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         custom_dns: Optional[List[str]] = None,
         placement: Optional[str] = None,
         clustering: Optional[SMBClustering] = None,
+        public_addrs: Optional[List[str]] = None,
     ) -> results.Result:
         """Create an smb cluster"""
         domain_settings = None
@@ -255,6 +256,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 )
             )
 
+        c_public_addrs = []
+        if public_addrs:
+            for pa in public_addrs:
+                pa_arr = pa.split('%', 1)
+                address = pa_arr[0]
+                destination = pa_arr[1] if len(pa_arr) > 1 else None
+                c_public_addrs.append(
+                    resources.ClusterPublicIPAssignment(
+                        address=address, destination=destination
+                    )
+                )
+
         pspec = resources.WrappedPlacementSpec.wrap(
             PlacementSpec.from_string(placement)
         )
@@ -266,6 +279,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             custom_dns=custom_dns,
             placement=pspec,
             clustering=clustering,
+            public_addrs=c_public_addrs,
         )
         to_apply.append(cluster)
         return self._handler.apply(to_apply, create_only=True).squash(cluster)

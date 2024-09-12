@@ -96,6 +96,11 @@ clustering
     enables clustering regardless of the placement count. A value of ``never``
     disables clustering regardless of the placement count. If unspecified,
     ``default`` is assumed.
+public_addrs
+    Optional. A string in the form of <ipaddress/prefixlength>[%<destination interface>].
+    Supported only when using Samba's clustering. Assign "virtual" IP
+    addresses that will be managed by the clustering subsystem and may automatically
+    move between nodes running Samba containers.
 
 Remove Cluster
 ++++++++++++++
