@@ -47,12 +47,8 @@ class NvmeofService(CephService):
         transport_tcp_options = json.dumps(spec.transport_tcp_options) if spec.transport_tcp_options else None
         name = '{}.{}'.format(utils.name_to_config_section('nvmeof'), nvmeof_gw_id)
         rados_id = name[len('client.'):] if name.startswith('client.') else name
-        addr = host_ip
-        discovery_addr = host_ip
-        if spec.addr and spec.addr != "0.0.0.0":
-            addr = spec.addr
-        if spec.discovery_addr and spec.discovery_addr != "0.0.0.0":
-            discovery_addr = spec.discovery_addr
+        addr = spec.addr or host_ip
+        discovery_addr = spec.discovery_addr or host_ip
         context = {
             'spec': spec,
             'name': name,
