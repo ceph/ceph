@@ -37,14 +37,15 @@ namespace cls::cmpxattr {
     return 0;
   }
 
-  int lock_update(librados::ObjectWriteOperation& writeop,
-		  const std::string& owner,
-		  const std::string& key_name,
-		  const utime_t&     max_lock_duration,
-		  operation_flags_t  op_flags,
-		  ceph::bufferlist   in_bl,
-		  uint64_t           progress_a,
-		  uint64_t           progress_b)
+  void lock_update(librados::ObjectWriteOperation& writeop,
+		   const std::string& owner,
+		   const std::string& key_name,
+		   const utime_t&     max_lock_duration,
+		   operation_flags_t  op_flags,
+		   ceph::bufferlist   in_bl,
+		   uint64_t           progress_a,
+		   uint64_t           progress_b,
+		   int32_t            urgent_msg)
   {
     // TBD: snaity check paramters
 
@@ -56,10 +57,10 @@ namespace cls::cmpxattr {
     call.max_lock_duration = max_lock_duration;
     call.op_flags = op_flags;
     call.in_bl = in_bl;
+    call.urgent_msg = urgent_msg;
     bufferlist in;
     encode(call, in);
     writeop.exec("cmpxattr", "lock_update", in);
-    return 0;
   }
 
 } // namespace cls::cmpxattr

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "types.h"
+#include "server.h"
 #include "include/encoding.h"
 #include <time.h>
 #include "include/utime.h"
@@ -50,13 +51,13 @@ namespace cls::cmpxattr {
   }
 
   //===========================================================================
-
   struct operation_flags_t {
     friend inline void encode(const operation_flags_t& o, ceph::bufferlist& bl);
     friend inline void decode(operation_flags_t& o, ceph::bufferlist::const_iterator& bl);
     static constexpr uint8_t LOCK_UPDATE_OP_SET_LOCK       = 0x01;
     static constexpr uint8_t LOCK_UPDATE_OP_SET_EPOCH      = 0x02;
     static constexpr uint8_t LOCK_UPDATE_OP_MARK_COMPLETED = 0x04;
+    static constexpr uint8_t LOCK_UPDATE_OP_URGENT_MSG     = 0x08;
 
     operation_flags_t() : flags(0) {}
     operation_flags_t(uint8_t _flags) : flags(_flags) {}
@@ -75,6 +76,10 @@ namespace cls::cmpxattr {
       return ((flags & LOCK_UPDATE_OP_MARK_COMPLETED) != 0);
     }
 
+    inline void set_urgent_msg()      {this->flags |= LOCK_UPDATE_OP_URGENT_MSG; }
+    inline bool is_urgent_msg() const {
+      return ((flags & LOCK_UPDATE_OP_URGENT_MSG) != 0);
+    }
   private:
     uint16_t flags;
   };
@@ -94,13 +99,49 @@ namespace cls::cmpxattr {
   }
 
   struct lock_update_op {
+    bool is_urgent_stop_msg() const {
+      return (op_flags.is_urgent_msg() &&
+	      ((urgent_msg == URGENT_MSG_STOP) || (urgent_msg == URGENT_MSG_PASUE)));
+    }
+
+    bool is_lock_revert_msg() const {
+      return (op_flags.is_urgent_msg() && (urgent_msg == URGENT_MSG_RESUME));
+    }
+
+    bool is_urgent_msg() const { return op_flags.is_urgent_msg(); }
+
+    bool verify() const {
+      if (op_flags.is_urgent_msg()) {
+	return (op_flags.is_set_lock()        &&
+		!op_flags.is_set_epoch()      &&
+		!op_flags.is_mark_completed() &&
+		in_bl.length() == 0           &&
+		urgent_msg != URGENT_MSG_NONE &&
+		!progress_a && !progress_b);
+      }
+
+      if (op_flags.is_set_epoch()) {
+	return (op_flags.is_set_lock()        &&
+		!op_flags.is_mark_completed() &&
+		in_bl.length() == 0           &&
+		urgent_msg == URGENT_MSG_NONE &&
+		!progress_a && !progress_b);
+      }
+
+      if (op_flags.is_mark_completed() ) {
+	return (in_bl.length() > 0 && urgent_msg == URGENT_MSG_NONE);
+      }
+
+      return true;
+    }
     utime_t           max_lock_duration; // max duration for holding a lock
-    uint64_t          progress_a;
-    uint64_t          progress_b;
+    uint64_t          progress_a = 0;
+    uint64_t          progress_b = 0;
     std::string       owner;
     std::string       key_name;
-    operation_flags_t op_flags;
+    operation_flags_t op_flags = 0;
     ceph::bufferlist  in_bl;
+    int32_t           urgent_msg = URGENT_MSG_NONE;
   };
 
   inline void encode(const lock_update_op& o, ceph::bufferlist& bl)
@@ -113,6 +154,7 @@ namespace cls::cmpxattr {
     encode(o.key_name, bl);
     encode(o.op_flags, bl);
     encode(o.in_bl, bl);
+    encode(o.urgent_msg, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -126,6 +168,7 @@ namespace cls::cmpxattr {
     decode(o.key_name, bl);
     decode(o.op_flags, bl);
     decode(o.in_bl, bl);
+    decode(o.urgent_msg, bl);
     DECODE_FINISH(bl);
   }
 

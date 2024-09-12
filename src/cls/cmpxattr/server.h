@@ -22,14 +22,22 @@
 #include "common/ceph_time.h"
 #include "common/Clock.h"
 
+using namespace cls::cmpxattr;
 struct named_time_lock_t {
-  utime_t     creation_time;
-  utime_t     completion_time;
-  utime_t     max_lock_duration; // max duration for holding a lock
-  utime_t     lock_time;
-  uint64_t    progress_a;
-  uint64_t    progress_b;
+  bool is_urgent_stop_msg() const {
+    return( (urgent_msg == URGENT_MSG_STOP) ||
+	    (urgent_msg == URGENT_MSG_PASUE) );
+  }
+
+  utime_t     creation_time = utime_t();
+  utime_t     completion_time = utime_t();
+  utime_t     max_lock_duration = utime_t();
+  utime_t     lock_time = utime_t();
+  uint64_t    progress_a = 0;
+  uint64_t    progress_b = 0 ;
   std::string owner;
+  std::string prev_owner;
+  int32_t     urgent_msg = URGENT_MSG_NONE;
 };
 
 static inline void encode(const named_time_lock_t& ntl, ceph::bufferlist& bl)
@@ -42,6 +50,8 @@ static inline void encode(const named_time_lock_t& ntl, ceph::bufferlist& bl)
   encode(ntl.progress_a, bl);
   encode(ntl.progress_b, bl);
   encode(ntl.owner, bl);
+  encode(ntl.prev_owner, bl);
+  encode(ntl.urgent_msg, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -55,5 +65,7 @@ static inline void decode(named_time_lock_t& ntl, ceph::bufferlist::const_iterat
   decode(ntl.progress_a, bl);
   decode(ntl.progress_b, bl);
   decode(ntl.owner, bl);
+  decode(ntl.prev_owner, bl);
+  decode(ntl.urgent_msg, bl);
   DECODE_FINISH(bl);
 }

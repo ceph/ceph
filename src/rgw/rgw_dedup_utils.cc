@@ -170,7 +170,6 @@ namespace rgw::dedup {
 	  << s.ingress_skip_compressed << "\n";
     }
 
-    out << "Shard Process Duration   = " << s.duration << "\n";
     return out;
   }
 
@@ -194,7 +193,6 @@ namespace rgw::dedup {
     out << "Singleton Obj            = " << s.singleton_count << "\n";
     out << "Unique Obj               = " << s.unique_count << "\n";
     out << "Duplicate Obj            = " << s.duplicate_count << "\n";
-    out << "Shard Process Duration   = " << s.duration << "\n";
     if (s.skipped_duplicate) {
       out << "\n\n***ERR:Skipped duplicate = " << s.skipped_duplicate << "***\n\n\n";
     }

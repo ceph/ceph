@@ -21,6 +21,14 @@
 
 namespace cls::cmpxattr {
 
+  enum urgent_msg_t {
+    URGENT_MSG_NONE   = 0,
+    URGENT_MSG_STOP   = 1,
+    URGENT_MSG_PASUE  = 2,
+    URGENT_MSG_SKIP   = 3,
+    URGENT_MSG_RESUME = 4
+  };
+
   /// comparison operand type
   enum class Mode : uint8_t {
     String = CEPH_OSD_CMPXATTR_MODE_STRING,

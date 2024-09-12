@@ -46,14 +46,15 @@ namespace cls::cmpxattr {
   //    -> If duration since lock-time is higher than allowed_duration:
   //         -> Break the lock and set a new lock under your name with curr time
   //    -> Otherwise, fail operation
-  [[nodiscard]] int lock_update(librados::ObjectWriteOperation& writeop,
-				const std::string& owner,
-				const std::string& key_name,
-				const utime_t&     max_lock_duration,
-				operation_flags_t  op_flags,
-				ceph::bufferlist   in_bl,
-				uint64_t           progress_a = 0,
-				uint64_t           progress_b = 0);
+  void lock_update(librados::ObjectWriteOperation& writeop,
+		   const std::string& owner,
+		   const std::string& key_name,
+		   const utime_t&     max_lock_duration,
+		   operation_flags_t  op_flags,
+		   ceph::bufferlist   in_bl,
+		   uint64_t           progress_a,
+		   uint64_t           progress_b,
+		   int32_t            urgent_msg);
 
   // bufferlist factories for comparison values
   inline ceph::bufferlist string_buffer(const std::string_view& value) {

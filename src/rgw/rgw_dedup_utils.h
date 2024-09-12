@@ -9,7 +9,7 @@ namespace rgw::dedup {
   using work_shard_t   = uint8_t;
   using md5_shard_t    = uint8_t;
   const work_shard_t MAX_WORK_SHARD = 12;
-  const md5_shard_t  MAX_MD5_SHARD  = 8;
+  const md5_shard_t  MAX_MD5_SHARD  = 12;
 
   struct __attribute__ ((packed)) dedup_flags_t {
   private:

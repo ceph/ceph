@@ -2784,15 +2784,30 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       utime_t epoch;
       auto p = bl.cbegin();
       decode(epoch, p);
-      cout << "Epoch time is [" << epoch.tv.tv_sec << ":" << epoch.tv.tv_nsec << "]" << std::endl;
+      utime_t elapsd = ceph_clock_now() - epoch;
+      cout << "Epoch time is " << epoch << "(time elapsd = "
+	   << elapsd.tv.tv_sec << " seconds)"<< std::endl;
     }
     else if (attr_name == "cluster_lock") {
       named_time_lock_t ntl;
-      auto p = bl.cbegin();
-      decode(ntl, p);
+      try {
+	auto p = bl.cbegin();
+	decode(ntl, p);
+      }
+      catch (const buffer::error&) {
+	cout << "failed named_time_lock_t decode!" << std::endl;
+	return -1;
+      }
+      if (ntl.is_urgent_stop_msg()) {
+	const int32_t &msg = ntl.urgent_msg;
+	std::cout << "Worker Shard is marked for urgent message ";
+	std::cout << (msg == URGENT_MSG_STOP  ? "URGENT_MSG_STOP" :"");
+	std::cout << (msg == URGENT_MSG_PASUE ? "URGENT_MSG_PASUE" :"") << std::endl;
+      }
       utime_t duration = ceph_clock_now() - ntl.lock_time;
       cout << ntl.owner << "::duration = " << duration
-	   << "::max_lock_duration = " << ntl.max_lock_duration << std::endl;
+	   << "::max_lock_duration = " << ntl.max_lock_duration << "::Lock "
+	   << ((duration > ntl.max_lock_duration) ? "was expired" : "is valid") << std::endl;
       if (ntl.progress_b == ULLONG_MAX) {
 	cout << "Token is marked completed! obj_count=" << ntl.progress_a << std::endl;
       }
@@ -2809,6 +2824,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     else {
       string s(bl.c_str(), bl.length());
+      // REMOVE-ME !!!!
+      // GBH: must remove before commit as it breaks tests!!!
       cout << s << std::endl;
     }
   } else if (strcmp(nargs[0], "rmxattr") == 0) {
