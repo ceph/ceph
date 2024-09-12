@@ -5166,13 +5166,125 @@ int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& b
 
   return 0;
 }
-  
+
+int RGWRados::store_delete_bucket_info_flag(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, optional_yield y, const DoutPrefixProvider *dpp) {
+  const rgw_bucket& bucket = bucket_info.bucket;
+  static constexpr auto max_retries = 10;
+  rgw::bucket_log_layout_generation index_log;
+  int shards_num;
+  int retries = 0;
+  int r = 0;
+  do {
+    bucket_info.flags |= BUCKET_DELETED;
+    index_log = bucket_info.layout.logs.back();
+    shards_num = rgw::num_shards(index_log.layout.in_index);
+    const auto& log = bucket_info.layout.logs.back();
+    bucket_info.layout.logs.push_back({log.gen+1, {rgw::BucketLogType::Deleted}});
+    r = ctl.bucket->store_bucket_instance_info(bucket, bucket_info, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
+                                                                    .set_exclusive(false)
+                                                                    .set_mtime(real_time())
+                                                                    .set_attrs(&attrs)
+                                                                    .set_orig_info(&bucket_info));
+    if (r == -ECANCELED) {
+      //racing write. re-read bucket info
+      int ret = get_bucket_instance_info(bucket, bucket_info, nullptr, &attrs, y, dpp);
+      if (ret < 0) {
+        ldpp_dout(dpp, 5) << "ERROR: failed to get bucket instance info for bucket=" << bucket.name << " ret=" << ret << dendl;
+        r = ret;
+        break;
+      }
+    }
+
+  } while (r == -ECANCELED && ++retries < max_retries);
+
+  if (r == 0) {
+    for (int i = 0; i < shards_num; ++i) {
+      ldpp_dout(dpp, 10) << "adding to data_log shard_id: " << i << " of gen:" << index_log.gen << dendl;
+      int ret = svc.datalog_rados->add_entry(dpp, bucket_info, index_log, i,
+                                                  null_yield);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1) << "WARNING: failed writing data log for bucket="
+        << bucket_info.bucket << ", shard_id=" << i << "of generation="
+        << index_log.gen << dendl;
+        } // datalog error is not fatal
+  }
+  }
+
+  return r;
+}
+
+int get_zone_ids(const DoutPrefixProvider *dpp,
+				        rgw::sal::RadosStore* const driver,
+                const rgw_zone_id source_zone,
+                const rgw_bucket& bucket,
+                std::vector<rgw_zone_id>& zids,
+                optional_yield y)
+{
+  RGWBucketSyncPolicyHandlerRef source_handler;
+  int ret = driver->get_sync_policy_handler(dpp, source_zone, bucket, &source_handler, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << "failed to get bucket sync policy handler (r=" << ret << ")" << dendl;
+    return ret;
+  }
+
+  auto all_dests = source_handler->get_all_dests();
+  rgw_zone_id last_zid;
+  for (auto& diter : all_dests) {
+    const auto& zid = diter.first;
+    if (zid == last_zid) {
+      continue;
+    }
+    last_zid = zid;
+    zids.push_back(zid);
+  }
+  return 0;
+}
+
+int list_remote_buckets(const DoutPrefixProvider *dpp,
+				               rgw::sal::RadosStore* const driver,
+                       const rgw_zone_id source_zone,
+                       const rgw_bucket& bucket,
+                       optional_yield y)
+{
+
+  std::vector<rgw_zone_id> zids;
+  int ret = get_zone_ids(dpp, driver, source_zone, bucket, zids, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << "failed to get remote zones (r=" << ret << ")" << dendl;
+    return ret;
+  }
+
+  std::vector<bucket_unordered_list_result> peer_status;
+  peer_status.resize(zids.size());
+
+  RGWCoroutinesManager crs(driver->ctx(), driver->getRados()->get_cr_registry());
+  RGWHTTPManager http(driver->ctx(), crs.get_completion_mgr());
+  ret = http.start();
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
+    return ret;
+  }
+
+  ret = crs.run(dpp, new RGWStatRemoteBucketCR(dpp, driver, source_zone, bucket, &http, zids, peer_status));
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed to fetch remote bucket stats " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  for (const auto& list_result: peer_status) {
+    if (!list_result.entries.empty()) {
+      return -ENOTEMPTY;
+    }
+  }
+  return 0;
+}
+
 /**
  * Delete a bucket.
  * bucket: the name of the bucket to delete
  * Returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool check_empty)
+int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool check_empty)
 {
   const rgw_bucket& bucket = bucket_info.bucket;
   librados::IoCtx index_pool;
@@ -5185,6 +5297,26 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     r = check_bucket_empty(dpp, bucket_info, y);
     if (r < 0) {
       return r;
+    }
+  }
+
+  // delete_bucket checks for objects in the bucket on other zones,
+  // if there is bucket sync policy configured, by doing unordered
+  // listing with max_key=1. if objects are found, don't delete the bucket.
+  if (svc.zone->is_syncing_bucket_meta(bucket)) {
+    auto bs_policy = bucket_info.sync_policy;
+    if (bs_policy) {
+      ldpp_dout(dpp, 10) << "bucket policy exists. listing remote zones" << dendl;
+      const rgw_zone_id source_zone = svc.zone->get_zone_params().get_id();
+
+      r = list_remote_buckets(dpp, driver, source_zone, bucket, y);
+      if (r == -ENOTEMPTY) {
+        ldpp_dout(dpp, 0) << "ERROR: cannot delete bucket. objects exist in the bucket on another zone " << dendl;
+        return r;
+      } else if (r < 0) {
+        ldpp_dout(dpp, 10) << "failed to list remote buckets" << dendl;
+        // don't return.
+      }
     }
   }
 
@@ -5233,6 +5365,15 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     (void) CLSRGWIssueBucketIndexClean(index_pool,
 				       bucket_objs,
 				       cct->_conf->rgw_bucket_index_max_aio)();
+  } else {
+    // set 'deleted' flag for multisite replication to handle bucket instance removal
+    r = store_delete_bucket_info_flag(bucket_info, attrs, y, dpp);
+    if (r < 0) {
+      // no need to treat this as an error
+      ldpp_dout(dpp, 0) << "WARNING: failed to store bucket info flag 'deleted' on bucket: " << bucket.name << " r=" << r << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << "INFO: setting bucket info flag to deleted for bucket: " << bucket.name << dendl;
+    }
   }
 
   return 0;

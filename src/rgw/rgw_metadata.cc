@@ -558,12 +558,14 @@ int RGWMetadataManager::remove(string& metadata_key, optional_yield y, const Dou
 
   int ret = find_handler(metadata_key, &handler, entry);
   if (ret < 0) {
+    ldout(cct, 10) << "ERROR: " << __func__ << "(): find_handler returned: ret=" << ret << dendl;
     return ret;
   }
 
   RGWMetadataObject *obj;
   ret = handler->get(entry, &obj, y, dpp);
   if (ret < 0) {
+    ldout(cct, 10) << "ERROR: " << __func__ << "(): handler->get() returned: ret=" << ret << dendl;
     return ret;
   }
   RGWObjVersionTracker objv_tracker;
