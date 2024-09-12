@@ -24,7 +24,7 @@ class CephFSStorageProvider(_StrEnum):
         """Expand abbreviated/default values into the full/expanded form."""
         if self is self.SAMBA_VFS:
             # mypy gets confused by enums
-            return self.__class__(self.SAMBA_VFS_NEW)
+            return self.__class__(self.SAMBA_VFS_PROXIED)
         return self
 
     def is_vfs(self) -> bool:
