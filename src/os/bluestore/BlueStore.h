@@ -3084,7 +3084,7 @@ public:
   std::string get_device_path(unsigned id);
 
   int dump_bluefs_sizes(std::ostream& out);
-  static int zap_device(CephContext* cct, const std::string& dev, uint64_t gap_size);
+  static int zap_device(CephContext* cct, const std::string& dev);
 
 public:
   int statfs(struct store_statfs_t *buf,

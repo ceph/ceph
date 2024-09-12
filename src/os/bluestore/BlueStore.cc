@@ -8895,27 +8895,20 @@ int BlueStore::dump_bluefs_sizes(ostream& out)
   return r;
 }
 
-int BlueStore::zap_device(CephContext* cct, const string& dev, uint64_t gap_size)
+int BlueStore::zap_device(CephContext* cct, const string& dev)
 {
-  string path; // dummy var for dout
-  dout(5)<<  __func__ << " " << dev << dendl;
-  auto * _bdev =
-    BlockDevice::create(cct, dev, nullptr, nullptr, nullptr, nullptr);
+  string path = dev; // dummy var for dout
+  uint64_t brush_size;
+  dout(5) << __func__ << " " << dev << dendl;
+  unique_ptr<BlockDevice>
+    _bdev(BlockDevice::create(cct, dev, nullptr, nullptr, nullptr, nullptr));
   int r = _bdev->open(dev);
   if (r < 0)
     goto fail;
-  if (!gap_size) {
-    gap_size = _bdev->get_block_size();
-  }
-  if (p2align(gap_size, _bdev->get_block_size()) != gap_size) {
-    derr << __func__
-         << " zapping size has to be aligned with device block size: 0x" 
-         << std::hex << gap_size << " vs. 0x" << _bdev->get_block_size()
-         << std::dec << dendl;
-    return -EINVAL;
-  }
+  brush_size = std::max(_bdev->get_block_size(), BDEV_LABEL_BLOCK_SIZE);
+
   for (auto off : bdev_label_positions) {
-    uint64_t end = std::min(off + gap_size, _bdev->get_size());
+    uint64_t end = std::min(off + brush_size, _bdev->get_size());
     if (end > off) {
       uint64_t l = end - off;
       bufferlist bl;
@@ -8937,7 +8930,6 @@ int BlueStore::zap_device(CephContext* cct, const string& dev, uint64_t gap_size
     }
   }
 
-fail_close:
   _bdev->close();
 
 fail:
