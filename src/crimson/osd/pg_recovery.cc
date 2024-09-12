@@ -611,9 +611,13 @@ bool PGRecovery::budget_available() const
   return true;
 }
 
-void PGRecovery::backfilled()
+void PGRecovery::on_pg_clean()
 {
   backfill_state.reset();
+}
+
+void PGRecovery::backfilled()
+{
   using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
   std::ignore = pg->get_shard_services().start_operation<LocalPeeringEvent>(
     static_cast<crimson::osd::PG*>(pg),
