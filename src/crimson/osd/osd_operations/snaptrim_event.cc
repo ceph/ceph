@@ -197,7 +197,7 @@ SnapTrimObjSubEvent::remove_clone(
     pg->get_collection_ref()->get_cid(),
     ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
   obc->obs.oi = object_info_t(coid);
-  return OpsExecuter::snap_map_remove(coid, pg->snap_mapper, pg->osdriver, txn);
+  return interruptor::now();
 }
 
 void SnapTrimObjSubEvent::remove_head_whiteout(
@@ -363,6 +363,7 @@ SnapTrimObjSubEvent::remove_or_update(
       // save head snapset
       logger().debug("{}: {} new snapset {} on {}",
 		     *this, coid, head_obc->ssc->snapset, head_obc->obs.oi);
+      osd_op_p.at_version.version++;
       if (head_obc->ssc->snapset.clones.empty() && head_obc->obs.oi.is_whiteout()) {
 	remove_head_whiteout(obc, head_obc, txn);
       } else {
