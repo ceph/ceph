@@ -37,7 +37,15 @@ public:
     return true;
   }
   bool is_dirty() const { return dirty; }
-  laddr_t get_hint() const final {return L_ADDR_MIN; }
+  laddr_hint_t get_hint(std::optional<local_object_id_t>,
+			std::optional<local_clone_id_t>,
+			bool) const final {
+    laddr_hint_t hint;
+    hint.addr = laddr_t::from_byte_offset(0);
+    hint.conflict_level = laddr_conflict_level_t::block_offset;
+    hint.conflict_policy = laddr_conflict_policy_t::linear_search;
+    return hint;
+  }
   ~TestOnode() final = default;
 
   void update_onode_size(Transaction &t, uint32_t size) final {
