@@ -822,6 +822,7 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
   //       reads to be required to an already-read shard. We plan on fixing this
   //       before allowing such a configuration option to be enabled outside
   //       test/dev environments.
+  ceph_assert(!cct->_conf->osd_ec_partial_reads_experimental);
   set<int> already_read;
   const set<pg_shard_t>& ots = rop.obj_to_source[hoid];
   for (set<pg_shard_t>::iterator i = ots.begin(); i != ots.end(); ++i)
