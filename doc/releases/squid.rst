@@ -225,6 +225,12 @@ RBD
 * RBD: `RBD_IMAGE_OPTION_FLATTEN` option has been exposed in Python bindings
   via `flatten` optional parameter to `deep_copy` and `migration_prepare`
   methods.
+* RBD: `rbd-wnbd` driver has gained the ability to multiplex image mappings.
+  Previously, each image mapping spawned its own `rbd-wnbd` daemon, which lead
+  to an excessive amount of TCP sessions and other resources being consumed,
+  eventually exceeding Windows limits.  With this change, a single `rbd-wnbd`
+  daemon is spawned per host and most OS resources are shared between image
+  mappings.  Additionally, `ceph-rbd` service starts much faster.
 
 RGW
 ~~~
