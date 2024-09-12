@@ -657,6 +657,20 @@ private:
     laddr_hint_t hint,
     std::vector<alloc_mapping_info_t> &alloc_infos);
 
+  struct insert_pos_t {
+    insert_pos_t(LBABtree::iterator iter, laddr_t laddr)
+      : iter(iter), laddr(laddr) {}
+    LBABtree::iterator iter;
+    laddr_t laddr;
+  };
+
+  using search_insert_pos_ret = alloc_extent_iertr::future<insert_pos_t>;
+  search_insert_pos_ret search_insert_pos(
+    Transaction &t,
+    LBABtree &btree,
+    laddr_hint_t hint,
+    extent_len_t length);
+
   ref_ret _incref_extent(
     Transaction &t,
     laddr_t addr,
