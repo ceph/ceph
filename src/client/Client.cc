@@ -1448,7 +1448,6 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 	// new dn
 	dn = link(effective_dir, dname, in, NULL);
       }
-      dn->alternate_name = std::move(dlease.alternate_name);
 
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       if (hash_order) {
