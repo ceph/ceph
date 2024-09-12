@@ -41,6 +41,8 @@ void intrusive_ptr_release(CachedExtent *);
 
 #endif
 
+// Note: BufferSpace::to_full_ptr() also creates extent ptr.
+
 inline ceph::bufferptr create_extent_ptr_rand(extent_len_t len) {
   assert(is_aligned(len, CEPH_PAGE_SIZE));
   assert(len > 0);
@@ -165,6 +167,85 @@ struct trans_spec_view_t {
     trans_view_member_options,
     boost::intrusive::constant_time_size<false>,
     boost::intrusive::compare<cmp_t>>;
+};
+
+struct load_range_t {
+  extent_len_t offset;
+  ceph::bufferptr ptr;
+
+  extent_len_t get_length() const {
+    return ptr.length();
+  }
+
+  extent_len_t get_end() const {
+    extent_len_t end = offset + ptr.length();
+    assert(end > offset);
+    return end;
+  }
+};
+struct load_ranges_t {
+  extent_len_t length = 0;
+  std::list<load_range_t> ranges;
+
+  void push_back(extent_len_t offset, ceph::bufferptr ptr) {
+    assert(ranges.empty() ||
+           (ranges.back().get_end() < offset));
+    assert(ptr.length());
+    length += ptr.length();
+    ranges.push_back({offset, std::move(ptr)});
+  }
+};
+
+/// manage small chunks of extent
+class BufferSpace {
+  using map_t = std::map<extent_len_t, ceph::bufferlist>;
+public:
+  BufferSpace() = default;
+
+  /// Returns true if offset~length is fully loaded
+  bool is_range_loaded(extent_len_t offset, extent_len_t length) const;
+
+  /// Returns the bufferlist of offset~length
+  ceph::bufferlist get_buffer(extent_len_t offset, extent_len_t length) const;
+
+  /// Returns the ranges to load, merge the buffer_map if possible
+  load_ranges_t load_ranges(extent_len_t offset, extent_len_t length);
+
+  /// Converts to ptr when fully loaded
+  ceph::bufferptr to_full_ptr(extent_len_t length);
+
+private:
+  // create and append the read-hole to
+  // load_ranges_t and bl
+  static void create_hole_append_bl(
+      load_ranges_t& ret,
+      ceph::bufferlist& bl,
+      extent_len_t hole_offset,
+      extent_len_t hole_length) {
+    ceph::bufferptr hole_ptr = create_extent_ptr_rand(hole_length);
+    bl.append(hole_ptr);
+    ret.push_back(hole_offset, std::move(hole_ptr));
+  }
+
+  // create and insert the read-hole to buffer_map,
+  // and append to load_ranges_t
+  // returns the iterator containing the inserted read-hole
+  auto create_hole_insert_map(
+      load_ranges_t& ret,
+      extent_len_t hole_offset,
+      extent_len_t hole_length,
+      const map_t::const_iterator& next_it) {
+    assert(!buffer_map.contains(hole_offset));
+    ceph::bufferlist bl;
+    create_hole_append_bl(ret, bl, hole_offset, hole_length);
+    auto it = buffer_map.insert(
+        next_it, std::pair{hole_offset, std::move(bl)});
+    assert(next_it == std::next(it));
+    return it;
+  }
+
+  /// extent offset -> buffer, won't overlap nor contiguous
+  map_t buffer_map;
 };
 
 class ExtentIndex;
