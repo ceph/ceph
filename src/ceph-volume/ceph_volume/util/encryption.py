@@ -1,14 +1,68 @@
 import base64
 import os
 import logging
+import re
 from ceph_volume import process, conf, terminal
 from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
 from .disk import lsblk, device_family, get_part_entry_type
+from packaging import version
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
+
+def set_dmcrypt_no_workqueue(target_version: str = '2.3.4') -> None:
+    """Set `conf.dmcrypt_no_workqueue` to `True` if the installed version
+    of `cryptsetup` is greater than or equal to the specified `target_version`.
+
+    Depending on the crypsetup version, `cryptsetup --version` output can be different.
+    Eg:
+
+    CentOS Stream9:
+    $ cryptsetup --version
+    cryptsetup 2.6.0 flags: UDEV BLKID KEYRING FIPS KERNEL_CAPI PWQUALITY
+
+    CentOS Stream8:
+    $ cryptsetup --version
+    cryptsetup 2.3.7
+
+    Args:
+        target_version (str, optional): The minimum version required for setting
+            `conf.dmcrypt_no_workqueue` to `True`. Defaults to '2.3.4'.
+
+    Raises:
+        RuntimeError: If failed to retrieve the cryptsetup version.
+        RuntimeError: If failed to parse the cryptsetup version.
+        RuntimeError: If failed to compare the cryptsetup version with the target version.
+    """
+    command = ["cryptsetup", "--version"]
+    out, err, rc = process.call(command)
+
+    # This regex extracts the version number from
+    # the `cryptsetup --version` output
+    pattern: str = r'(\d+\.?)+'
+
+    if rc:
+        raise RuntimeError(f"Can't retrieve cryptsetup version: {err}")
+
+    try:
+        cryptsetup_version = re.search(pattern, out[0])
+
+        if cryptsetup_version is None:
+            _output: str = "\n".join(out)
+            raise RuntimeError('Error while checking cryptsetup version.\n',
+                               '`cryptsetup --version` output:\n',
+                               f'{_output}')
+
+        if version.parse(cryptsetup_version.group(0)) >= version.parse(target_version):
+            conf.dmcrypt_no_workqueue = True
+    except IndexError:
+        mlogger.debug(f'cryptsetup version check: rc={rc} out={out} err={err}')
+        raise RuntimeError("Couldn't check the cryptsetup version.")
+
+def bypass_workqueue(device: str) -> bool:
+    return not Device(device).rotational and conf.dmcrypt_no_workqueue
 
 def get_key_size_from_conf():
     """
@@ -79,6 +133,10 @@ def plain_open(key, device, mapping):
         '--key-size', '256',
     ]
 
+    if bypass_workqueue(device):
+        command.extend(['--perf-no_read_workqueue',
+                        '--perf-no_write_workqueue'])
+
     process.call(command, stdin=key, terminal_verbose=True, show_command=True)
 
 
@@ -103,6 +161,11 @@ def luks_open(key, device, mapping):
         device,
         mapping,
     ]
+
+    if bypass_workqueue(device):
+        command.extend(['--perf-no_read_workqueue',
+                        '--perf-no_write_workqueue'])
+
     process.call(command, stdin=key, terminal_verbose=True, show_command=True)
 
 
