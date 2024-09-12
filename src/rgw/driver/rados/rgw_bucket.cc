@@ -561,7 +561,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   }
 
   // use a quicker/shorter tag timeout during this process
-  bucket->set_tag_timeout(dpp, BUCKET_TAG_QUICK_TIMEOUT);
+  bucket->set_tag_timeout(dpp, y, BUCKET_TAG_QUICK_TIMEOUT);
 
   rgw::sal::Bucket::ListResults results;
   results.is_truncated = true;
@@ -589,7 +589,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   formatter->close_section();
 
   // restore normal tag timeout for bucket
-  bucket->set_tag_timeout(dpp, 0);
+  bucket->set_tag_timeout(dpp, y, 0);
 
   return 0;
 }
@@ -2937,7 +2937,8 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
 
   objv_tracker = bci.info.objv_tracker;
 
-  int ret = bihandler->svc.bi->init_index(dpp, bci.info, bci.info.layout.current_index);
+  // XXX: skip this if bucket isn't owned by the local zonegroup
+  int ret = bihandler->svc.bi->init_index(dpp, y, bci.info, bci.info.layout.current_index);
   if (ret < 0) {
     return ret;
   }

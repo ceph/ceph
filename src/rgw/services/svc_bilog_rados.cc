@@ -4,6 +4,7 @@
 #include "svc_bilog_rados.h"
 #include "svc_bi_rados.h"
 
+#include "rgw_asio_thread.h"
 #include "cls/rgw/cls_rgw_client.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -48,6 +49,7 @@ int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp,
     return r;
   }
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   return CLSRGWIssueBILogTrim(index_pool, start_marker_mgr, end_marker_mgr, bucket_objs,
 			      cct->_conf->rgw_bucket_index_max_aio)();
 }
@@ -61,6 +63,7 @@ int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, const RGWBucketI
   if (r < 0)
     return r;
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   return CLSRGWIssueResyncBucketBILog(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
@@ -73,6 +76,7 @@ int RGWSI_BILog_RADOS::log_stop(const DoutPrefixProvider *dpp, const RGWBucketIn
   if (r < 0)
     return r;
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   return CLSRGWIssueBucketBILogStop(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
@@ -113,6 +117,7 @@ int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp,
   if (r < 0)
     return r;
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   r = CLSRGWIssueBILogList(index_pool, marker_mgr, max, oids, bi_log_lists, cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0)
     return r;

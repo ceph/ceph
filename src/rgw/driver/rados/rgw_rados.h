@@ -1479,7 +1479,6 @@ public:
   int cls_obj_complete_cancel(BucketShard& bs, std::string& tag, rgw_obj& obj,
                               std::list<rgw_obj_index_key> *remove_objs,
                               uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int cls_obj_set_bucket_tag_timeout(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, uint64_t timeout);
 
   using ent_map_t =
     boost::container::flat_map<std::string, rgw_bucket_dir_entry>;
@@ -1513,11 +1512,6 @@ public:
 				rgw_obj_index_key *last_entry,
                                 optional_yield y,
 				RGWBucketListNameFilter force_check_filter = {});
-  int cls_bucket_head(const DoutPrefixProvider *dpp,
-		      const RGWBucketInfo& bucket_info,
-		      const rgw::bucket_index_layout_generation& idx_layout,
-		      int shard_id, std::vector<rgw_bucket_dir_header>& headers,
-		      std::map<int, std::string> *bucket_instance_ids = NULL);
   int cls_bucket_head_async(const DoutPrefixProvider *dpp,
 			    const RGWBucketInfo& bucket_info,
 			    const rgw::bucket_index_layout_generation& idx_layout,
@@ -1717,23 +1711,23 @@ struct get_obj_data {
   D3nGetObjData d3n_get_data;
   std::atomic_bool d3n_bypass_cache_write{false};
 
-  int flush(rgw::AioResultList&& results);
+  int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results);
 
   void cancel() {
     // wait for all completions to drain and ignore the results
     aio->drain();
   }
 
-  int drain() {
+  int drain(const DoutPrefixProvider* dpp) {
     auto c = aio->wait();
     while (!c.empty()) {
-      int r = flush(std::move(c));
+      int r = flush(dpp, std::move(c));
       if (r < 0) {
         cancel();
         return r;
       }
       c = aio->wait();
     }
-    return flush(std::move(c));
+    return flush(dpp, std::move(c));
   }
 };

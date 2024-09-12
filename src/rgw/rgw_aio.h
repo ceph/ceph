@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <concepts>
 #include <cstdint>
 #include <memory>
 #include <type_traits>
@@ -22,6 +24,8 @@
 #include <boost/intrusive/list.hpp>
 #include "include/rados/librados_fwd.hpp"
 #include "common/async/yield_context.h"
+#include "common/dout.h"
+#include "common/errno.h"
 
 #include "rgw_common.h"
 
@@ -63,14 +67,25 @@ struct OwningList : boost::intrusive::list<T, Args...> {
 };
 using AioResultList = OwningList<AioResultEntry>;
 
-// returns the first error code or 0 if all succeeded
-inline int check_for_errors(const AioResultList& results) {
-  for (auto& e : results) {
-    if (e.result < 0) {
-      return e.result;
-    }
+// log an error message for each entry that matches the given predicate and
+// return the last matching error code
+inline int check_for_errors(const rgw::AioResultList& results,
+                            std::invocable<int> auto is_error,
+                            const DoutPrefixProvider* dpp,
+                            std::string_view log_message)
+{
+  int r = 0;
+  auto pred = [&] (const rgw::AioResult& e) { return is_error(e.result); };
+
+  auto i = std::find_if(results.begin(), results.end(), pred);
+  while (i != results.end()) {
+    r = i->result;
+    ldpp_dout(dpp, 4) << log_message << ' ' << i->obj
+        << " with " << cpp_strerror(r) << dendl;
+
+    i = std::find_if(std::next(i), results.end(), pred);
   }
-  return 0;
+  return r;
 }
 
 // interface to submit async librados operations and wait on their completions.

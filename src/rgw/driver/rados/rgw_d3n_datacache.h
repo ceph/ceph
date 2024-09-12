@@ -209,7 +209,7 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
     const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
     auto completed = d->aio->get(ref.obj, rgw::Aio::librados_op(ref.ioctx, std::move(op), d->yield), cost, id);
-    return d->flush(std::move(completed));
+    return d->flush(dpp, std::move(completed));
   } else {
     ldpp_dout(dpp, 20) << "D3nDataCache::" << __func__ << "(): oid=" << read_obj.oid << ", is_head_obj=" << is_head_obj << ", obj-ofs=" << obj_ofs << ", read_ofs=" << read_ofs << ", len=" << len << dendl;
     int r;
@@ -233,7 +233,7 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
       d->d3n_bypass_cache_write = true;
       lsubdout(g_ceph_context, rgw, 5) << "D3nDataCache: " << __func__ << "(): Note - bypassing datacache: oid=" << read_obj.oid << ", read_ofs!=0 = " << read_ofs << ", size=" << astate->size << " != accounted_size=" << astate->accounted_size << ", is_compressed=" << is_compressed << ", is_encrypted=" << is_encrypted  << dendl;
       auto completed = d->aio->get(ref.obj, rgw::Aio::librados_op(ref.ioctx, std::move(op), d->yield), cost, id);
-      r = d->flush(std::move(completed));
+      r = d->flush(dpp, std::move(completed));
       return r;
     }
 
@@ -241,7 +241,7 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
       // Read From Cache
       ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): READ FROM CACHE: oid=" << read_obj.oid << ", obj-ofs=" << obj_ofs << ", read_ofs=" << read_ofs << ", len=" << len << dendl;
       auto completed = d->aio->get(ref.obj, rgw::Aio::d3n_cache_op(dpp, d->yield, read_ofs, len, d->rgwrados->d3n_data_cache->cache_location), cost, id);
-      r = d->flush(std::move(completed));
+      r = d->flush(dpp, std::move(completed));
       if (r < 0) {
         lsubdout(g_ceph_context, rgw, 0) << "D3nDataCache: " << __func__ << "(): Error: failed to drain/flush, r= " << r << dendl;
       }
@@ -250,7 +250,7 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
       // Write To Cache
       ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): WRITE TO CACHE: oid=" << read_obj.oid << ", obj-ofs=" << obj_ofs << ", read_ofs=" << read_ofs << " len=" << len << dendl;
       auto completed = d->aio->get(ref.obj, rgw::Aio::librados_op(ref.ioctx, std::move(op), d->yield), cost, id);
-      return d->flush(std::move(completed));
+      return d->flush(dpp, std::move(completed));
     }
   }
   lsubdout(g_ceph_context, rgw, 1) << "D3nDataCache: " << __func__ << "(): Warning: Check head object cache handling flow, oid=" << read_obj.oid << dendl;
