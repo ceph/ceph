@@ -189,7 +189,6 @@ ceph::coarse_real_time time_from_name(const std::string& obj_name, const DoutPre
 
 int new_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& bucket,
-    const std::string& rgw_id,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
     optional_yield y) {
@@ -236,18 +235,26 @@ int new_logging_object(const configuration& conf,
 
 int rollover_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& bucket,
-    const std::string& rgw_id,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
-    optional_yield y) {
+    optional_yield y,
+    bool must_commit) {
+  if (conf.target_bucket != bucket->get_name()) {
+    ldpp_dout(dpp, 1) << "ERROR: bucket name mismatch: '" << conf.target_bucket << "' != '" << bucket->get_name() << "'" << dendl;
+    return -EINVAL;
+  }
   const auto old_obj = obj_name;
-  if (const auto ret = new_logging_object(conf, bucket, rgw_id, obj_name, dpp, y); ret < 0 ) {
+  if (const auto ret = new_logging_object(conf, bucket, obj_name, dpp, y); ret < 0 ) {
     return ret;
   }
   if (const auto ret = bucket->commit_logging_object(old_obj, y, dpp); ret < 0) {
+    if (must_commit) {
+      return ret;
+    }
     ldpp_dout(dpp, 5) << "WARNING: failed to commit logging object '" << old_obj << "' to bucket '" <<
       conf.target_bucket << "', ret = " << ret << dendl;
     // we still want to write the new records to the new object even if commit failed
+    // will try to commit again next time
   }
   return 0;
 }
@@ -322,7 +329,7 @@ int log_record(rgw::sal::Driver* driver,
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
       ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' exceeded its time, will be committed to bucket '" <<
         conf.target_bucket << "'" << dendl;
-      if (ret = rollover_logging_object(conf, target_bucket, driver->get_host_id(), obj_name, dpp, y); ret < 0 ) {
+      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, y, false); ret < 0) {
         return ret;
       }
     } else {
@@ -331,7 +338,7 @@ int log_record(rgw::sal::Driver* driver,
   } else if (ret == -ENOENT) {
     // create the temporary log object for the first time
     ldpp_dout(dpp, 20) << "INFO: first time logging for bucket '" << conf.target_bucket << "'" << dendl;
-    if (ret = new_logging_object(conf, target_bucket, driver->get_host_id(), obj_name, dpp, y); ret < 0 ) {
+    if (ret = new_logging_object(conf, target_bucket, obj_name, dpp, y); ret < 0 ) {
       return ret;
     }
   } else {
@@ -411,7 +418,7 @@ int log_record(rgw::sal::Driver* driver,
   if (ret == -EFBIG) {
     ldpp_dout(dpp, 20) << "WARNING: logging object '" << obj_name << "' is full, will be committed to bucket '" <<
       conf.target_bucket << "'" << dendl;
-    if (ret = rollover_logging_object(conf, target_bucket, driver->get_host_id(), obj_name, dpp, y); ret < 0 ) {
+    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, y, true); ret < 0 ) {
       return ret;
     }
     if (ret = target_bucket->write_logging_object(obj_name,

@@ -129,6 +129,16 @@ inline std::string to_string(const Records& records) {
 int log_record(rgw::sal::Driver* driver, const req_state* s, const std::string& op_name, const std::string& etag, const configuration& conf,
     const DoutPrefixProvider *dpp, optional_yield y, bool async_completion);
 
+// commit the pending log objec tto the log bucket
+// and create a new pending log object
+// if "must_commit" is "false" the function will return success even if the pending log object was not committed
+int rollover_logging_object(const configuration& conf,
+    const std::unique_ptr<rgw::sal::Bucket>& bucket,
+    std::string& obj_name,
+    const DoutPrefixProvider *dpp,
+    optional_yield y,
+    bool must_commit);
+
 // return the oid of the object holding the name of the temporary logging object
 // bucket - log bucket
 // prefix - logging prefix from configuration. should be used when multiple buckets log into the same log bucket
