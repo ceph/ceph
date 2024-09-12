@@ -2235,14 +2235,16 @@ struct __attribute__((packed)) object_data_le_t {
 struct omap_root_t {
   laddr_t addr = L_ADDR_NULL;
   depth_t depth = 0;
-  laddr_t hint = L_ADDR_MIN;
+  // set never conflict at default initialization, making it
+  // conflict with CollectionNode
+  laddr_hint_t hint = laddr_hint_t::never_conflict(L_ADDR_MIN);
   bool mutated = false;
 
   omap_root_t() = default;
-  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min)
+  omap_root_t(laddr_t addr, depth_t depth, laddr_hint_t hint)
     : addr(addr),
       depth(depth),
-      hint(addr_min) {}
+      hint(hint) {}
 
   omap_root_t(const omap_root_t &o) = default;
   omap_root_t(omap_root_t &&o) = default;
@@ -2257,7 +2259,7 @@ struct omap_root_t {
     return mutated;
   }
   
-  void update(laddr_t _addr, depth_t _depth, laddr_t _hint) {
+  void update(laddr_t _addr, depth_t _depth, laddr_hint_t _hint) {
     mutated = true;
     addr = _addr;
     depth = _depth;
@@ -2272,7 +2274,7 @@ struct omap_root_t {
     return depth;
   }
 
-  laddr_t get_hint() const {
+  laddr_hint_t get_hint() const {
     return hint;
   }
 };
@@ -2298,7 +2300,7 @@ public:
     depth = init_depth_le(nroot.get_depth());
   }
   
-  omap_root_t get(laddr_t hint) const {
+  omap_root_t get(laddr_hint_t hint) const {
     return omap_root_t(addr, depth, hint);
   }
 };
