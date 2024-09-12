@@ -693,3 +693,115 @@ TYPED_TEST(IntervalSetTest, align) {
     ASSERT_TRUE(iset1 == iset2);
   }
 }
+
+TYPED_TEST(IntervalSetTest, insert) {
+  // Tests targetted at refactor allowing over-lapping inserts.
+
+  // Exact overlap
+  typedef typename TestFixture::ISet ISet;
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(1, 4);
+    iset1.insert(1, 4);
+    iset2.insert(1, 4);
+
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  // Adjacent before
+  typedef typename TestFixture::ISet ISet;
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.insert(1, 2);
+    iset2.insert(1, 6);
+
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  // Overlap before - single unit.
+  typedef typename TestFixture::ISet ISet;
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.insert(2, 2);
+    iset2.insert(2, 5);
+
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  // Overlap before - two units.
+  typedef typename TestFixture::ISet ISet;
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.insert(2, 3);
+    iset2.insert(2, 5);
+
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  // Adjacent after
+  typedef typename TestFixture::ISet ISet;
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.insert(7, 2);
+    iset2.insert(3, 6);
+
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  // Overlap after - single unit.
+  typedef typename TestFixture::ISet ISet;
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.insert(6, 2);
+    iset2.insert(3, 5);
+
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  // Overlap after - two units.
+  typedef typename TestFixture::ISet ISet;
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.insert(5, 3);
+    iset2.insert(3, 5);
+
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  // insert entirely contains existing.
+  typedef typename TestFixture::ISet ISet;
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.insert(2, 6);
+    iset2.insert(2, 6);
+
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  // insert entirely contained within existing
+  typedef typename TestFixture::ISet ISet;
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.insert(4, 2);
+    iset2.insert(3, 4);
+
+    ASSERT_TRUE(iset1 == iset2);
+  }
+}
