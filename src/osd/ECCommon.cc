@@ -872,7 +872,7 @@ bool ECCommon::ec_align_t::operator==(const ec_align_t &other) const {
 }
 
 bool ECCommon::shard_read_t::operator==(const shard_read_t &other) const {
-  return extents==other.extents && subchunk==other.subchunk;
+  return extents == other.extents && subchunk == other.subchunk;
 }
 
 bool ECCommon::read_request_t::operator==(const read_request_t &other) const {

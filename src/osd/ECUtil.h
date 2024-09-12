@@ -112,7 +112,7 @@ public:
     const auto last_chunk_idx = (chunk_size - 1 + off + len) / chunk_size;
     const auto first_chunk_offset =  first_chunk_idx * chunk_size;
     const auto first_shard_offset = off - first_chunk_offset + first_chunk_offset/stripe_width;
-    const auto last_chunk_len = len==0?0:off + len - (last_chunk_idx - 1) * chunk_size;
+    const auto last_chunk_len = (len == 0) ? 0:off + len - (last_chunk_idx - 1) * chunk_size;
     return {first_chunk_idx, last_chunk_idx, first_shard_offset, last_chunk_len};
   }
   bool offset_length_is_same_stripe(
