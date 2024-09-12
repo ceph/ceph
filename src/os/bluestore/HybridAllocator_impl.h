@@ -38,7 +38,7 @@ int64_t HybridAllocatorBase<T>::allocate(
   std::lock_guard l(T::get_lock());
 
   // try bitmap first to avoid unneeded contiguous extents split if
-  // desired amount is less than shortes range in AVL
+  // desired amount is less than shortes range in AVL or Btree2
   bool primary_first = !(bmap_alloc &&
                          bmap_alloc->get_free() &&
                          want < T::_lowest_size_available());
