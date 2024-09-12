@@ -41,7 +41,7 @@ public:
 			bool) const final {
     laddr_hint_t hint;
     hint.addr = laddr_t::from_byte_offset(0);
-    hint.conflict_level = laddr_conflict_level_t::block_offset;
+    hint.conflict_level = laddr_conflict_level_t::all;
     hint.conflict_policy = laddr_conflict_policy_t::linear_search;
     return hint;
   }

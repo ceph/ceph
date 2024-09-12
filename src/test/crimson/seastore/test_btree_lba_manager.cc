@@ -515,7 +515,7 @@ struct btree_lba_manager_test : btree_test_base {
 
   auto alloc_mappings(
     test_transaction_t &t,
-    laddr_t hint,
+    laddr_t addr,
     size_t len) {
     auto rets = with_trans_intr(
       *t.t,
@@ -529,8 +529,16 @@ struct btree_lba_manager_test : btree_test_base {
 	return seastar::do_with(
 	  std::vector<LogicalCachedExtentRef>(
 	    extents.begin(), extents.end()),
-	  [this, &t, hint](auto &extents) {
-	  return lba_manager->alloc_extents(t, hint, std::move(extents), EXTENT_DEFAULT_REF_COUNT);
+	  [this, &t, addr](auto &extents) {
+	  laddr_hint_t hint;
+	  hint.addr = addr;
+	  hint.conflict_level = laddr_conflict_level_t::all;
+	  hint.conflict_policy = laddr_conflict_policy_t::linear_search;
+	  return lba_manager->alloc_extents(
+	    t,
+	    hint,
+	    std::move(extents),
+	    EXTENT_DEFAULT_REF_COUNT);
 	});
       }).unsafe_get();
     for (auto &ret : rets) {
@@ -780,7 +788,7 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 400; ++i) {
-	alloc_mappings(t, L_ADDR_MIN, block_size);
+	alloc_mappings(t, laddr_t::from_byte_offset(i * block_size), block_size);
       }
       check_mappings(t);
       submit_test_transaction(std::move(t));
@@ -803,7 +811,7 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 600; ++i) {
-	alloc_mappings(t, L_ADDR_MIN, block_size);
+	alloc_mappings(t, laddr_t::from_byte_offset(i * block_size), block_size);
       }
       auto addresses = get_mapped_addresses(t);
       for (unsigned i = 0; i != addresses.size(); ++i) {

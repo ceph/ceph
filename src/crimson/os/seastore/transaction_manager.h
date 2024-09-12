@@ -292,7 +292,7 @@ public:
   template <typename T>
   alloc_extent_ret<T> alloc_non_data_extent(
     Transaction &t,
-    laddr_t laddr_hint,
+    laddr_hint_t laddr_hint,
     extent_len_t len,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
     LOG_PREFIX(TransactionManager::alloc_non_data_extent);
@@ -331,7 +331,7 @@ public:
   template <typename T>
   alloc_extents_ret<T> alloc_data_extents(
     Transaction &t,
-    laddr_t laddr_hint,
+    laddr_hint_t laddr_hint,
     extent_len_t len,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
     LOG_PREFIX(TransactionManager::alloc_data_extents);
@@ -534,7 +534,7 @@ public:
   using reserve_extent_ret = reserve_extent_iertr::future<LBAMappingRef>;
   reserve_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     extent_len_t len) {
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
@@ -593,7 +593,7 @@ public:
    alloc_extents_iertr::future<std::vector<TCachedExtentRef<T>>>
    alloc_extents(
      Transaction &t,
-     laddr_t hint,
+     laddr_hint_t hint,
      extent_len_t len,
      int num) {
      LOG_PREFIX(TransactionManager::alloc_extents);

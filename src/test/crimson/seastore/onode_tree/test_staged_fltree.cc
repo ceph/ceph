@@ -38,12 +38,16 @@ using namespace crimson::os::seastore::onode;
     }                                   \
   )
 
-#define INTR_WITH_PARAM(fun, c, b, v)   \
-  with_trans_intr(                      \
-    c.t,                                \
-    [=] (auto &t) {                     \
-      return fun(c, L_ADDR_MIN, b, v);  \
-    }                                   \
+#define INTR_WITH_PARAM(fun, c, b, v)     \
+  with_trans_intr(                        \
+    c.t,                                  \
+    [=](auto &t) {                        \
+      laddr_hint_t hint;                  \
+      hint.addr = L_ADDR_MIN;             \
+      hint.conflict_level =               \
+          laddr_conflict_level_t::all;    \
+      return fun(c, hint, b, v);          \
+    }                                     \
   )
 
 namespace {
@@ -1061,7 +1065,10 @@ class DummyChildPool {
         crimson::ct_error::assert_all{"Invalid error during create_initial()"}
       ).si_then([c, initial](auto super) {
         initial->make_root_new(c, std::move(super));
-        return initial->upgrade_root(c, L_ADDR_MIN).si_then([initial] {
+        laddr_hint_t hint;
+        hint.addr = L_ADDR_MIN;
+        hint.conflict_level = laddr_conflict_level_t::all;
+        return initial->upgrade_root(c, hint).si_then([initial] {
           return initial;
         });
       });
