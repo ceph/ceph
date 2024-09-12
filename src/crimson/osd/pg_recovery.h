@@ -44,6 +44,7 @@ public:
   }
 
   seastar::future<> stop() { return seastar::now(); }
+  void on_pg_clean();
 private:
   PGRecoveryListener* pg;
   size_t start_primary_recovery_ops(
