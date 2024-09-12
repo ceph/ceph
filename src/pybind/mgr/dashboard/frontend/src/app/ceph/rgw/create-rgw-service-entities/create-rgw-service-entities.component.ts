@@ -64,6 +64,9 @@ export class CreateRgwServiceEntitiesComponent {
     this.zonegroup.endpoints = '';
     this.zone = new RgwZone();
     this.zone.name = values['zoneName'];
+    this.rgwZoneService.get(this.zone).subscribe((zone: RgwZone) => {
+      this.zone.realm_id = zone.realm_id;
+    });
     this.zone.endpoints = '';
     this.zone.system_key = new SystemKey();
     this.zone.system_key.access_key = '';
@@ -77,7 +80,14 @@ export class CreateRgwServiceEntitiesComponent {
           .toPromise()
           .then(() => {
             this.rgwZoneService
-              .create(this.zone, this.zonegroup, true, true, this.zone.endpoints)
+              .create(
+                this.zone,
+                this.zonegroup,
+                true,
+                true,
+                this.zone.endpoints,
+                this.zone.realm_id
+              )
               .toPromise()
               .then(() => {
                 this.notificationService.show(

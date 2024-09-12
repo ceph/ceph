@@ -367,10 +367,7 @@ class PeriodOp:
             zonegroups = realm_period['period_map']['zonegroups']
 
             # Find the master zonegroup in the realm period data
-            for zonegroup in zonegroups:
-                if zonegroup['id'] == master_zonegroup_id:
-                    return zonegroup
-            return None
+            return next((zg for zg in zonegroups if zg['id'] == master_zonegroup_id), None)
 
         except RGWAMCmdRunException as e:
             log.error(f"Failed to fetch master zonegroup: {e}")
@@ -435,6 +432,26 @@ class UserOp:
         opt_arg(params, '--access-key', access_key)
 
         return RGWAdminCmd(ze).run(params)
+
+
+class RealmsInfo:
+    def __init__(self, realm_name, realm_id, master_zone_id, endpoint, access_key, secret):
+        self.realm_name = realm_name
+        self.realm_id = realm_id
+        self.master_zone_id = master_zone_id
+        self.endpoint = endpoint
+        self.access_key = access_key
+        self.secret = secret
+
+    def to_dict(self):
+        return {
+            "realm_name": self.realm_name,
+            "realm_id": self.realm_id,
+            "master_zone_id": self.master_zone_id,
+            "endpoint": self.endpoint,
+            "access_key": self.access_key,
+            "secret": self.secret
+        }
 
 
 class RGWAM:
@@ -779,7 +796,7 @@ class RGWAM:
         return (0, f'Modified zonegroup {zonegroup_name} of realm {realm_name}', '')
 
     def get_realms_info(self):
-        realms_info = []
+        realms_info_list = []
         for realm_name in self.realm_op().list():
             realm = self.get_realm(realm_name)
             realm_period = self.period_op().get(realm)
@@ -799,16 +816,16 @@ class RGWAM:
                     access_key = ''
                     secret = ''
 
-                realms_info.append({
-                    "realm_name": realm_name,
-                    "realm_id": realm.id,
-                    "master_zone_id": master_zone_inf['id'] if master_zone_inf else '',
-                    "endpoint": zone_ep[0] if zone_ep else None,
-                    "access_key": access_key,
-                    "secret": secret
-                })
-
-        return realms_info
+                realms_info = RealmsInfo(
+                    realm_name=realm_name,
+                    realm_id=realm.id,
+                    master_zone_id=master_zone_inf['id'] if master_zone_inf else '',
+                    endpoint=zone_ep[0] if zone_ep else None,
+                    access_key=access_key,
+                    secret=secret
+                )
+                realms_info_list.append(realms_info)
+        return realms_info_list
 
     def get_master_zone_name(self, realm_data, master_zone_id):
         # Find the zonegroups in the period_map

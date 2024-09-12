@@ -107,6 +107,7 @@ describe('RgwMultisiteZoneFormComponent', () => {
 
   it('should create a new zone', () => {
     component.action = 'create';
+    component.realmId = 'realm2';
     const createSpy = spyOn(rgwZoneService, 'create').and.returnValue(of({}));
     component.submit();
     expect(createSpy).toHaveBeenCalledWith(
@@ -118,7 +119,8 @@ describe('RgwMultisiteZoneFormComponent', () => {
       { name: 'zonegroup2' },
       true,
       true,
-      'http://192.168.100.100:80'
+      'http://192.168.100.100:80',
+      'realm2'
     );
   });
 });
