@@ -21,7 +21,7 @@ sub get_timestamp {
    if ($min < 10) { $min = "0$min"; }
    if ($sec < 10) { $sec = "0$sec"; }
    $year=$year+1900;
-   return $year . '_' . $mon . '_' . $mday . '_' . $hour . '_' . $min . '_' . $sec;
+   return $year . '-' . $mon . '-' . $mday . '-' . $hour . '-' . $min . '-' . $sec;
 }
 
 # Function to check if radosgw is already running
@@ -195,11 +195,12 @@ sub run_s3
                 host                  => $hostname,
                 secure                => 0,
                 retry                 => 1,
+                dns_bucket_names      => 0,
             }
       );
     }
 
-our $bucketname = 'buck_'.get_timestamp();
+our $bucketname = 'buck-'.get_timestamp();
 # create a new bucket (the test bucket)
 our $bucket = $s3->add_bucket( { bucket => $bucketname } )
       or die $s3->err. "bucket $bucketname create failed\n". $s3->errstr;
