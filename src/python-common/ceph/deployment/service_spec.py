@@ -1377,7 +1377,7 @@ class NvmeofServiceSpec(ServiceSpec):
         #: RADOS pool where ceph-nvmeof config data is stored.
         self.pool = pool
         #: ``addr`` address of the nvmeof gateway
-        self.addr = addr or "0.0.0.0"
+        self.addr = addr
         #: ``port`` port of the nvmeof gateway
         self.port = port or 5500
         #: ``name`` name of the nvmeof gateway
