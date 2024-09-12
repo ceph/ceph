@@ -534,7 +534,7 @@ export class TaskMessageService {
   }
 
   service(metadata: any) {
-    return $localize`Service '${metadata.service_name}'`;
+    return $localize`service '${metadata.service_name}'`;
   }
 
   crudMessage(metadata: any) {
