@@ -450,7 +450,7 @@ class SyntheticWorkload {
      int i = 0;
      return seastar::do_until(
        [this] { return !dispatcher.get_num_pending_msgs(); },
-       [this, &i]
+       [this, i] () mutable
      {
        if (i++ % 50 == 0){
          print_internal_state(true);
