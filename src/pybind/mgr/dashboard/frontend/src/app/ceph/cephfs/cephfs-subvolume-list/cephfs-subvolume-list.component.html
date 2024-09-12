@@ -1,12 +1,12 @@
 <div class="row">
-  <div class="col-sm-1"
+  <div class="col-sm-2"
        *ngIf="subVolumeGroups$ | async as subVolumeGroups">
     <cd-vertical-navigation title="Groups"
                             [items]="subvolumeGroupList"
                             inputIdentifier="group-filter"
                             (emitActiveItem)="selectSubVolumeGroup($event)"></cd-vertical-navigation>
   </div>
-  <div class="col-11 vertical-line">
+  <div class="col-10 vertical-line">
     <cd-table [data]="subVolumes$ | async"
               columnMode="flex"
               [columns]="columns"

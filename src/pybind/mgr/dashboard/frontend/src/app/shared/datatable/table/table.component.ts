@@ -411,7 +411,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
                 template: col?.headerTemplate,
                 // if cellClass is a function it cannot be called here as it requires table data to execute
                 // instead if cellClass is a function it will be called and applied while parsing the data
-                className: _.isString(col?.cellClass) ? col?.cellClass : col?.className,
+                className: _.isString(col?.cellClass) ? `${col?.cellClass}` : `${col?.className}`,
                 visible: !col.isHidden,
                 sortable: _.isNil(col.sortable) ? true : col.sortable
               })
@@ -553,12 +553,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     // this method was triggered by ngOnChanges().
     if (this.fetchData.observers.length > 0) {
       this.loadingIndicator = true;
+      const loadingSubscription = this.fetchData.subscribe(() => {
+        this.loadingIndicator = false;
+        this.cdRef.detectChanges();
+      });
+      this._subscriptions.add(loadingSubscription);
     }
-    const loadingSubscription = this.fetchData.subscribe(() => {
-      this.loadingIndicator = false;
-      this.cdRef.detectChanges();
-    });
-    this._subscriptions.add(loadingSubscription);
 
     if (_.isInteger(this.autoReload) && this.autoReload > 0) {
       this.reloadSubscriber = this.timerService

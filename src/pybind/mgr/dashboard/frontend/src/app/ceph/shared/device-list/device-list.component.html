@@ -40,11 +40,11 @@
 
 <ng-template #lifeExpectancy
              let-value="data.value">
-  <span *ngIf="!value.life_expectancy_enabled"
+  <span *ngIf="!value?.life_expectancy_enabled"
         i18n>{{ "" | notAvailable }}</span>
-  <span *ngIf="value.min && !value.max">&gt; {{value.min | i18nPlural: translationMapping}}</span>
-  <span *ngIf="value.max && !value.min">&lt; {{value.max | i18nPlural: translationMapping}}</span>
-  <span *ngIf="value.max && value.min">{{value.min}} to {{value.max | i18nPlural: translationMapping}}</span>
+  <span *ngIf="value?.min && !value?.max">&gt; {{value.min | i18nPlural: translationMapping}}</span>
+  <span *ngIf="value?.max && !value?.min">&lt; {{value.max | i18nPlural: translationMapping}}</span>
+  <span *ngIf="value?.max && value?.min">{{value.min}} to {{value.max | i18nPlural: translationMapping}}</span>
 </ng-template>
 
 <ng-template #lifeExpectancyTimestamp

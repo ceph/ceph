@@ -1,22 +1,22 @@
 <div class="row">
-  <div class="col-sm-6">
+  <div class="col-sm-8">
     <legend i18n>Ranks</legend>
     <cd-table [data]="data.ranks"
               [columns]="columns.ranks"
               [toolHeader]="false">
     </cd-table>
 
-    <legend i18n>Standbys</legend>
-    <cd-table-key-value [data]="standbys">
-    </cd-table-key-value>
-  </div>
-
-  <div class="col-sm-6">
     <legend i18n>Pools</legend>
     <cd-table [data]="data.pools"
               [columns]="columns.pools"
               [toolHeader]="false">
     </cd-table>
+  </div>
+
+  <div class="col-sm-4">
+    <legend i18n>Standbys</legend>
+    <cd-table-key-value [data]="standbys">
+    </cd-table-key-value>
   </div>
 </div>
 
