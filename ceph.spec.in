@@ -1187,6 +1187,7 @@ Obsoletes:	ceph-libs < %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-libcephfs < %{_epoch_prefix}%{version}-%{release}
 %endif
 Recommends: libcephfs-proxy2 = %{_epoch_prefix}%{version}-%{release}
+Requires:   libcephfs-daemon
 %description -n libcephfs2
 Ceph is a distributed network file system designed to provide excellent
 performance, reliability, and scalability. This is a shared library
