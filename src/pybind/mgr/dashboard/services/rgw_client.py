@@ -2032,7 +2032,8 @@ class RgwMultisite:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
-    def create_sync_policy_group(self, group_id: str, status: str, bucket_name: str = ''):
+    def create_sync_policy_group(self, group_id: str, status: str, bucket_name: str = '',
+                                 update_period=False):
         rgw_sync_policy_cmd = ['sync', 'group', 'create', '--group-id', group_id,
                                '--status', SyncStatus[status].value]
         if bucket_name:
@@ -2044,8 +2045,11 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
+        if not bucket_name and update_period:
+            self.update_period()
 
-    def update_sync_policy_group(self, group_id: str, status: str, bucket_name: str = ''):
+    def update_sync_policy_group(self, group_id: str, status: str, bucket_name: str = '',
+                                 update_period=False):
         rgw_sync_policy_cmd = ['sync', 'group', 'modify', '--group-id', group_id,
                                '--status', SyncStatus[status].value]
         if bucket_name:
@@ -2057,8 +2061,10 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
+        if not bucket_name and update_period:
+            self.update_period()
 
-    def remove_sync_policy_group(self, group_id: str, bucket_name=''):
+    def remove_sync_policy_group(self, group_id: str, bucket_name='', update_period=False):
         rgw_sync_policy_cmd = ['sync', 'group', 'remove', '--group-id', group_id]
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
@@ -2069,11 +2075,14 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
+        if not bucket_name and update_period:
+            self.update_period()
 
     def create_sync_flow(self, group_id: str, flow_id: str, flow_type: str,
                          zones: Optional[Dict[str, List]] = None, bucket_name: str = '',
                          source_zone: Optional[str] = None,
-                         destination_zone: Optional[str] = None):
+                         destination_zone: Optional[str] = None,
+                         update_period=False):
         rgw_sync_policy_cmd = ['sync', 'group', 'flow', 'create', '--group-id', group_id,
                                '--flow-id', flow_id, '--flow-type', SyncFlowTypes[flow_type].value]
 
@@ -2114,10 +2123,13 @@ class RgwMultisite:
                 if len(zones['removed']) > 0:
                     self.remove_sync_flow(group_id, flow_id, flow_type, source_zone,
                                           destination_zone, zones['removed'], bucket_name)
+        if not bucket_name and update_period:
+            self.update_period()
 
     def remove_sync_flow(self, group_id: str, flow_id: str, flow_type: str,
                          source_zone='', destination_zone='',
-                         zones: Optional[List[str]] = None, bucket_name: str = ''):
+                         zones: Optional[List[str]] = None, bucket_name: str = '',
+                         update_period=False):
         rgw_sync_policy_cmd = ['sync', 'group', 'flow', 'remove', '--group-id', group_id,
                                '--flow-id', flow_id, '--flow-type', SyncFlowTypes[flow_type].value]
 
@@ -2138,13 +2150,16 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
+        if not bucket_name and update_period:
+            self.update_period()
 
     def create_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Dict[str, Any],
                          destination_zones: Dict[str, Any],
                          source_bucket: str = '',
                          destination_bucket: str = '',
-                         bucket_name: str = ''):
+                         bucket_name: str = '',
+                         update_period=False):
 
         if source_zones['added'] or destination_zones['added']:
             rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'create',
@@ -2173,6 +2188,8 @@ class RgwMultisite:
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
+            if not bucket_name and update_period:
+                self.update_period()
 
         if source_zones['removed'] or destination_zones['removed']:
             self.remove_sync_pipe(group_id, pipe_id, source_zones['removed'],
@@ -2182,7 +2199,8 @@ class RgwMultisite:
     def remove_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Optional[List[str]] = None,
                          destination_zones: Optional[List[str]] = None,
-                         destination_bucket: str = '', bucket_name: str = ''):
+                         destination_bucket: str = '', bucket_name: str = '',
+                         update_period=False):
         rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'remove',
                                '--group-id', group_id, '--pipe-id', pipe_id]
 
@@ -2206,6 +2224,8 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
+        if not bucket_name and update_period:
+            self.update_period()
 
     def create_dashboard_admin_sync_group(self, zonegroup_name: str = ''):
 
