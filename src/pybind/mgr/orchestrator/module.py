@@ -1342,6 +1342,7 @@ Usage:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
         try:
             host_name, raw = svc_arg.split(":")
+            list_drive_group_spec_bool_arg: List[str] = []
             drive_group_spec = {
                 'data_devices': []
             }  # type: Dict
@@ -1357,6 +1358,8 @@ Usage:
                                             'journal_devices']:
                         drive_group_spec[drv_grp_spec_arg] = []
                         drive_group_spec[drv_grp_spec_arg].append(value)
+                        if value.lower() in ['true', 'false']:
+                            list_drive_group_spec_bool_arg.append(drv_grp_spec_arg)
                     else:
                         drive_group_spec[drv_grp_spec_arg] = value
                 elif drv_grp_spec_arg is not None:
@@ -1369,15 +1372,9 @@ Usage:
                 drive_group_spec[dev_type] = DeviceSelection(
                     paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
 
-            valid_true_vals = {'true', '1'}
-            valid_false_vals = {'false', '0'}
-            for drive_group_spec_bool_arg in ['encrypted', 'unmanaged', 'preview_only']:
-                drive_group_spec_value: Optional[str] = drive_group_spec.get(drive_group_spec_bool_arg)
-                if isinstance(drive_group_spec_value, str):
-                    value_lower = drive_group_spec_value.lower()
-                    if value_lower not in valid_true_vals and value_lower not in valid_false_vals:
-                        raise OrchestratorValidationError(usage)
-                    drive_group_spec[drive_group_spec_bool_arg] = value_lower in valid_true_vals
+            for drive_group_spec_bool_arg in list_drive_group_spec_bool_arg:
+                drive_group_spec_value: str = drive_group_spec[drive_group_spec_bool_arg]
+                drive_group_spec[drive_group_spec_bool_arg] = drive_group_spec_value.lower() == "true"
 
             drive_group = DriveGroupSpec(
                 placement=PlacementSpec(host_pattern=host_name),
