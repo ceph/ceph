@@ -71,10 +71,11 @@ def wait_for_daemon_to_start(service_name, timeout=30):
         all_running = True
 
         for daemon in daemons:
+            logger.info("Checking daemon %s state", daemon['daemon_id'])
             daemon_state = daemon['status_desc']
 
             if daemon_state in ('unknown', 'error', 'stopped'):
-                logger.error("Failed to restart daemon %s for service %s. State is %s", daemon['daemon_id'], service_name, daemon_state)  # noqa E501  # pylint: disable=line-too-long
+                logger.error("Failed to restart daemon %s for service %s. State is %s", daemon['daemon_id'], service_name, daemon_state)
                 raise DashboardException(
                     code='daemon_restart_failed',
                     msg="Failed to restart the daemon %s. Daemon state is %s." % (daemon['daemon_id'], daemon_state)  # noqa E501  # pylint: disable=line-too-long
@@ -101,6 +102,13 @@ def wait_for_daemon_to_start(service_name, timeout=30):
 
 
 class RgwServiceManager:
+    def create_rgw_instance(self, service_spec):
+        # Create RGW instance.
+        logger.info("Creating RGW instance")
+        orch = OrchClient.instance()
+        result = orch.services.apply(service_spec)
+        return result
+    
     def find_available_port(self, starting_port=80):
         orch = OrchClient.instance()
         daemons = [d.to_dict() for d in orch.services.list_daemons(daemon_type='rgw')]

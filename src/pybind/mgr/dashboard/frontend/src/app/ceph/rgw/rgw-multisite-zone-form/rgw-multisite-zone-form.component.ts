@@ -55,6 +55,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
   master_zonegroup_of_realm: RgwZonegroup;
   compressionTypes = ['lz4', 'zlib', 'snappy'];
   userListReady: boolean = false;
+  realmId: string;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -128,6 +129,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
     let zg = new RgwZonegroup();
     zg.name = zonegroupName;
     this.rgwZoneGroupService.get(zg).subscribe((zonegroup: RgwZonegroup) => {
+      this.realmId = zonegroup.realm_id;
       if (_.isEmpty(zonegroup.master_zone)) {
         this.multisiteZoneForm.get('master_zone').setValue(true);
         this.multisiteZoneForm.get('master_zone').disable();
@@ -268,7 +270,8 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
           this.zonegroup,
           values['default_zone'],
           values['master_zone'],
-          this.zone.endpoints
+          this.zone.endpoints,
+          this.realmId
         )
         .subscribe(
           () => {
@@ -296,6 +299,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
           this.zone,
           this.zonegroup,
           values['zoneName'],
+          this.realmId,
           values['default_zone'],
           values['master_zone'],
           this.zone.endpoints,
