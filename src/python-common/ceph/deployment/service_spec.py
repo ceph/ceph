@@ -1926,6 +1926,7 @@ class OAuth2ProxySpec(ServiceSpec):
                  cookie_secret: Optional[str] = None,
                  ssl_certificate: Optional[str] = None,
                  ssl_certificate_key: Optional[str] = None,
+                 whitelist_domains: Optional[List[str]] = None,
                  unmanaged: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
@@ -1961,6 +1962,9 @@ class OAuth2ProxySpec(ServiceSpec):
         self.ssl_certificate = ssl_certificate
         #: The multi-line SSL certificate private key for decrypting communications.
         self.ssl_certificate_key = ssl_certificate_key
+        #: List of allowed domains for safe redirection after login or logout,
+        # preventing unauthorized redirects.
+        self.whitelist_domains = whitelist_domains
         self.unmanaged = unmanaged
 
     def get_port_start(self) -> List[int]:
