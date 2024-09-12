@@ -726,6 +726,10 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
   const uint64_t ssize = 4;
   const int nshards = 6;
 
+  bool old_osd_ec_partial_reads_experimental =
+    g_ceph_context->_conf->osd_ec_partial_reads_experimental;
+  g_ceph_context->_conf->osd_ec_partial_reads_experimental = true;
+
   ECUtil::stripe_info_t s(ssize, swidth);
   ECListenerStub listenerStub;
   ASSERT_EQ(s.get_stripe_width(), swidth);
@@ -759,7 +763,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
   /* Read to every data shard. */
   {
-    std::vector<ECCommon::shard_read_t> want_to_read(empty_shard_vector);
+    std::vector want_to_read(empty_shard_vector);
     std::list<ECCommon::ec_align_t> to_read_list;
     hobject_t hoid;
     ECCommon::read_request_t read_request(to_read_list, false);
@@ -775,7 +779,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       want_to_read[i].subchunk = ecode->default_sub_chunk;
       ref.shard_reads[pg_shard_t(i, shard_id_t(i))] = want_to_read[i];
     }
-
     ASSERT_EQ(read_request,  ref);
   }
 
@@ -921,6 +924,9 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
     ASSERT_EQ(read_request,  ref);
   }
+
+  g_ceph_context->_conf->osd_ec_partial_reads_experimental =
+    old_osd_ec_partial_reads_experimental;
 }
 
 TEST(ECCommon, shard_read_combo_tests)
@@ -930,6 +936,10 @@ TEST(ECCommon, shard_read_combo_tests)
   const uint64_t ssize = 2;
   const int nshards = 4;
   hobject_t hoid;
+
+  bool old_osd_ec_partial_reads_experimental =
+    g_ceph_context->_conf->osd_ec_partial_reads_experimental;
+  g_ceph_context->_conf->osd_ec_partial_reads_experimental = true;
 
   ECUtil::stripe_info_t s(ssize, swidth);
   ECListenerStub listenerStub;
@@ -1006,6 +1016,9 @@ TEST(ECCommon, shard_read_combo_tests)
 
     ASSERT_EQ(read_request,  ref);
   }
+
+  g_ceph_context->_conf->osd_ec_partial_reads_experimental =
+    old_osd_ec_partial_reads_experimental;
 }
 
 TEST(ECCommon, get_min_want_to_read_shards_bug67087)
