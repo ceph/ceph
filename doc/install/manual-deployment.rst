@@ -475,7 +475,7 @@ thread on the ceph-users mailing list
 
    .. prompt:: bash #
       
-      ceph auth get-or-create client.short-hostname-of-rgw mon 'allow rw' osd 'allow rwx'
+      ceph auth get-or-create client.$(hostname -s) mon 'allow rw' osd 'allow rwx'
 
 #. On one of the RGW nodes, do the following:
 
