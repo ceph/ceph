@@ -35,6 +35,8 @@ struct onode_layout_t {
   omap_root_le_t xattr_root;
 
   object_data_le_t object_data;
+  local_object_id_le_t local_object_id{LOCAL_OBJECT_ID_NULL};
+  local_clone_id_le_t local_clone_id{LOCAL_CLONE_ID_NULL};
 
   char oi[MAX_OI_LENGTH];
   char ss[MAX_SS_LENGTH];
@@ -63,6 +65,8 @@ public:
   virtual const onode_layout_t &get_layout() const = 0;
   virtual ~Onode() = default;
 
+  virtual void update_local_object_id(Transaction&, local_object_id_t) = 0;
+  virtual void update_local_clone_id(Transaction&, local_clone_id_t) = 0;
   virtual void update_onode_size(Transaction&, uint32_t) = 0;
   virtual void update_omap_root(Transaction&, omap_root_t&) = 0;
   virtual void update_xattr_root(Transaction&, omap_root_t&) = 0;
@@ -71,6 +75,27 @@ public:
   virtual void update_snapset(Transaction&, ceph::bufferlist&) = 0;
   virtual void clear_object_info(Transaction&) = 0;
   virtual void clear_snapset(Transaction&) = 0;
+
+  // local object id doesn't use all of 64 bits internally,
+  // LOCAL_OBJECT_ID_NULL means this onode doesn't have
+  // local object id yet.
+  std::optional<local_object_id_t> get_local_object_id() const {
+    std::optional<local_object_id_t> id = std::nullopt;
+    if (auto loid = local_object_id_t(get_layout().local_object_id);
+        loid != LOCAL_OBJECT_ID_NULL) {
+      id = loid;
+    }
+    return id;
+  }
+
+  std::optional<local_clone_id_t> get_local_clone_id() const {
+    std::optional<local_clone_id_t> id = std::nullopt;
+    if (auto lcid = local_clone_id_t(get_layout().local_clone_id);
+        lcid != LOCAL_CLONE_ID_NULL) {
+      id = lcid;
+    }
+    return id;
+  }
 
   laddr_t get_metadata_hint() const {
     return get_hint();

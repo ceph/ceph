@@ -32,6 +32,14 @@ void FLTreeOnode::Recorder::apply_value_delta(
       DEBUG("update xattr root");
       bliter.copy(sizeof(mlayout.xattr_root), (char *)&mlayout.xattr_root);
       break;
+    case delta_op_t::UPDATE_LOCAL_OBJECT_ID:
+      DEBUG("update local object id");
+      bliter.copy(sizeof(mlayout.local_object_id), (char *)&mlayout.local_object_id);
+      break;
+    case delta_op_t::UPDATE_LOCAL_CLONE_ID:
+      DEBUG("update local clone id");
+      bliter.copy(sizeof(mlayout.local_clone_id), (char *)&mlayout.local_clone_id);
+      break;
     case delta_op_t::UPDATE_OBJECT_DATA:
       DEBUG("update object data");
       bliter.copy(sizeof(mlayout.object_data), (char *)&mlayout.object_data);
@@ -93,6 +101,18 @@ void FLTreeOnode::Recorder::encode_update(
     encoded.append(
       (const char *)&layout.xattr_root,
       sizeof(layout.xattr_root));
+    break;
+  case delta_op_t::UPDATE_LOCAL_OBJECT_ID:
+    DEBUG("update local object id");
+    encoded.append(
+      (const char *)&layout.local_object_id,
+      sizeof(layout.local_object_id));
+    break;
+  case delta_op_t::UPDATE_LOCAL_CLONE_ID:
+    DEBUG("update local clone id");
+    encoded.append(
+      (const char *)&layout.local_clone_id,
+      sizeof(layout.local_clone_id));
     break;
   case delta_op_t::UPDATE_OBJECT_DATA:
     DEBUG("update object data");

@@ -64,6 +64,18 @@ public:
     });
   }
 
+  void update_local_object_id(Transaction &t, local_object_id_t id) final {
+    with_mutable_layout(t, [id](onode_layout_t &mlayout) {
+      mlayout.local_object_id = id;
+    });
+  }
+
+  void update_local_clone_id(Transaction &t, local_clone_id_t id) final {
+    with_mutable_layout(t, [id](onode_layout_t &mlayout) {
+      mlayout.local_clone_id = id;
+    });
+  }
+
   void update_object_info(Transaction &t, ceph::bufferlist &oi_bl) final {
     with_mutable_layout(t, [&oi_bl](onode_layout_t &mlayout) {
       maybe_inline_memcpy(
