@@ -1557,10 +1557,18 @@ seastar::future<> OSD::handle_peering_op(
 
 seastar::future<> OSD::check_osdmap_features()
 {
+  LOG_PREFIX(OSD::check_osdmap_features);
   assert(seastar::this_shard_id() == PRIMARY_CORE);
-  return store.write_meta(
-      "require_osd_release",
-      stringify((int)osdmap->require_osd_release));
+  if (osdmap->require_osd_release != last_require_osd_release) {
+    DEBUG("updating require_osd_release from {} to {}",
+          to_string(last_require_osd_release),
+          to_string(osdmap->require_osd_release));
+    last_require_osd_release = osdmap->require_osd_release;
+    return store.write_meta(
+        "require_osd_release",
+        stringify((int)osdmap->require_osd_release));
+  }
+  return seastar::now();
 }
 
 seastar::future<> OSD::prepare_to_stop()

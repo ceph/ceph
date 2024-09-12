@@ -234,6 +234,8 @@ private:
 private:
   crimson::common::gate_per_shard gate;
 
+  ceph_release_t last_require_osd_release{ceph_release_t::unknown};
+
   seastar::promise<> stop_acked;
   void got_stop_ack() {
     stop_acked.set_value();
