@@ -29,6 +29,7 @@ function clean_up_after_myself() {
 
 function detect_ceph_dev_pkgs() {
     local boost_root=/opt/ceph
+    local cmake_opts=""
     if test -f $boost_root/include/boost/config.hpp; then
         cmake_opts+=" -DWITH_SYSTEM_BOOST=ON -DBOOST_ROOT=$boost_root"
     else
