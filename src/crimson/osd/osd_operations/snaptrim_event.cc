@@ -396,7 +396,7 @@ SnapTrimObjSubEvent::start()
   });
 
   co_await enter_stage<interruptor>(
-    client_pp().get_obc);
+    client_pp().check_already_complete_get_obc);
 
   logger().debug("{}: getting obc for {}", *this, coid);
   // end of commonality

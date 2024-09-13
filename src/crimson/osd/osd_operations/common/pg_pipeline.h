@@ -23,9 +23,6 @@ protected:
   struct CheckAlreadyCompleteGetObc : OrderedExclusivePhaseT<CheckAlreadyCompleteGetObc> {
     static constexpr auto type_name = "CommonPGPipeline::check_already_complete_get_obc";
   } check_already_complete_get_obc;
-  struct GetOBC : OrderedExclusivePhaseT<GetOBC> {
-    static constexpr auto type_name = "CommonPGPipeline::get_obc";
-  } get_obc;
   struct LockOBC : OrderedConcurrentPhaseT<LockOBC> {
     static constexpr auto type_name = "CommonPGPipeline::lock_obc";
   } lock_obc;
