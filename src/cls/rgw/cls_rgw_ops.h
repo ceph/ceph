@@ -734,8 +734,6 @@ WRITE_CLASS_ENCODER(rgw_cls_bi_get_ret)
 struct rgw_cls_bi_put_op {
   rgw_cls_bi_entry entry;
 
-  rgw_cls_bi_put_op() {}
-
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(entry, bl);
