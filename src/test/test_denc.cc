@@ -532,6 +532,55 @@ TEST(denc, bufferptr_shallow_and_deep) {
   }
 }
 
+TEST(denc, bufferlist_zero) {
+  bufferlist to_marshall;
+  {
+    to_marshall.append("foo", strlen("foo"));
+    to_marshall.append_zero(42 - strlen("foo"));
+    cout << "to_marshall is " << to_marshall << std::endl;
+    to_marshall.hexdump(cout);
+  }
+
+  // as reference point for comparing lenght
+  bufferlist marshalled_no_dezeroize;
+  {
+      auto a = marshalled_no_dezeroize.get_contiguous_appender(100);
+      denc(to_marshall, a, 0);
+  }
+
+  bufferlist marshalled;
+  {
+    // cont appender flishes at destruction
+    {
+      auto a = marshalled.get_contiguous_appender(100);
+      denc(to_marshall, a, CEPH_FEATURE_DEZEROIZE_BL);
+    }
+    cout << "marshalled is " << marshalled << std::endl;
+    marshalled.hexdump(cout);
+  }
+  ASSERT_LT(marshalled.length(), marshalled_no_dezeroize.length());
+
+  bufferlist demarshalled_with_bl_iter;
+  {
+    auto p = marshalled.cbegin();
+    denc(demarshalled_with_bl_iter, p, CEPH_FEATURE_DEZEROIZE_BL);
+    cout << "demarshalled_with_bl_iter is "
+         << demarshalled_with_bl_iter << std::endl;
+    demarshalled_with_bl_iter.hexdump(cout);
+  }
+  ASSERT_TRUE(demarshalled_with_bl_iter.contents_equal(to_marshall));
+
+  bufferlist demarshalled_with_ptr_iter;
+  {
+    auto marshalled_copy{marshalled};
+    marshalled_copy.rebuild();
+    auto p = marshalled_copy.front().cbegin();
+    denc(demarshalled_with_ptr_iter, p, CEPH_FEATURE_DEZEROIZE_BL);
+  }
+  ASSERT_TRUE(
+    demarshalled_with_bl_iter.contents_equal(demarshalled_with_ptr_iter));
+}
+
 TEST(denc, array)
 {
   {
