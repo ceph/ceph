@@ -26,13 +26,11 @@
 
 #include "rgw_formats.h"
 
-#include "services/svc_bucket_types.h"
 #include "services/svc_bucket_sync.h"
 
 // define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, std::string& buckets_obj_id);
 
-class RGWSI_Meta;
 class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
@@ -171,41 +169,32 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 
-class RGWBucketMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
-public:
-  virtual ~RGWBucketMetadataHandlerBase() {}
-  virtual void init(RGWSI_Bucket *bucket_svc,
-                    RGWBucketCtl *bucket_ctl) = 0;
+// bucket entrypoint metadata handler factory
+auto create_bucket_metadata_handler(librados::Rados& rados,
+                                    RGWSI_Bucket* svc_bucket,
+                                    RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>;
 
-};
+// bucket instance metadata handler factory
+auto create_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
+                                             RGWSI_Zone* svc_zone,
+                                             RGWSI_Bucket* svc_bucket,
+                                             RGWSI_BucketIndex* svc_bi)
+    -> std::unique_ptr<RGWMetadataHandler>;
 
-class RGWBucketInstanceMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
-public:
-  virtual ~RGWBucketInstanceMetadataHandlerBase() {}
-  virtual void init(RGWSI_Zone *zone_svc,
-                    RGWSI_Bucket *bucket_svc,
-                    RGWSI_BucketIndex *bi_svc) = 0;
-};
+// archive bucket entrypoint metadata handler factory
+auto create_archive_bucket_metadata_handler(librados::Rados& rados,
+                                            RGWSI_Bucket* svc_bucket,
+                                            RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>;
 
-class RGWBucketMetaHandlerAllocator {
-public:
-  static RGWBucketMetadataHandlerBase *alloc(librados::Rados& rados);
-};
+// archive bucket instance metadata handler factory
+auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
+                                                     RGWSI_Zone* svc_zone,
+                                                     RGWSI_Bucket* svc_bucket,
+                                                     RGWSI_BucketIndex* svc_bi)
+    -> std::unique_ptr<RGWMetadataHandler>;
 
-class RGWBucketInstanceMetaHandlerAllocator {
-public:
-  static RGWBucketInstanceMetadataHandlerBase *alloc(rgw::sal::Driver* driver);
-};
-
-class RGWArchiveBucketMetaHandlerAllocator {
-public:
-  static RGWBucketMetadataHandlerBase *alloc(librados::Rados& rados);
-};
-
-class RGWArchiveBucketInstanceMetaHandlerAllocator {
-public:
-  static RGWBucketInstanceMetadataHandlerBase *alloc(rgw::sal::Driver* driver);
-};
 
 extern int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key, optional_yield y);
 
@@ -441,14 +430,6 @@ class RGWBucketCtl {
     RGWUserCtl *user{nullptr};
   } ctl;
 
-  RGWBucketMetadataHandler *bm_handler;
-  RGWBucketInstanceMetadataHandler *bmi_handler;
-
-  RGWSI_Bucket_BE_Handler bucket_be_handler; /* bucket backend handler */
-  RGWSI_BucketInstance_BE_Handler bi_be_handler; /* bucket instance backend handler */
-
-  int call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f);
-
 public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
                RGWSI_Bucket *bucket_svc,
@@ -457,8 +438,6 @@ public:
                RGWSI_User* user_svc);
 
   void init(RGWUserCtl *user_ctl,
-            RGWBucketMetadataHandler *_bm_handler,
-            RGWBucketInstanceMetadataHandler *_bmi_handler,
             RGWDataChangesLog *datalog,
             const DoutPrefixProvider *dpp);
 
@@ -469,7 +448,6 @@ public:
       std::map<std::string, bufferlist> *attrs{nullptr};
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
-      std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
 
       GetParams() {}
 
@@ -495,11 +473,6 @@ public:
 
       GetParams& set_refresh_version(const obj_version& _refresh_version) {
         refresh_version = _refresh_version;
-        return *this;
-      }
-
-      GetParams& set_bectx_params(std::optional<RGWSI_MetaBackend_CtxParams> _bectx_params) {
-        bectx_params = _bectx_params;
         return *this;
       }
     };
@@ -552,7 +525,6 @@ public:
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
       RGWObjVersionTracker *objv_tracker{nullptr};
-      std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
 
       GetParams() {}
 
@@ -578,11 +550,6 @@ public:
 
       GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
         objv_tracker = _objv_tracker;
-        return *this;
-      }
-
-      GetParams& set_bectx_params(std::optional<RGWSI_MetaBackend_CtxParams> _bectx_params) {
-        bectx_params = _bectx_params;
         return *this;
       }
     };
@@ -736,20 +703,11 @@ public:
                           const DoutPrefixProvider *dpp);
 
 private:
-  int convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                              const rgw_bucket& bucket,
+  int convert_old_bucket_info(const rgw_bucket& bucket,
                               optional_yield y,
                               const DoutPrefixProvider *dpp);
 
-  int do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                    const rgw_bucket& bucket,
-                                    RGWBucketInfo& info,
-                                    optional_yield y,
-                                    const DoutPrefixProvider *dpp,
-                                    const BucketInstance::PutParams& params);
-
-  int do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                                  RGWBucketInfo& info,
+  int do_store_linked_bucket_info(RGWBucketInfo& info,
                                   RGWBucketInfo *orig_info,
                                   bool exclusive, real_time mtime,
                                   obj_version *pep_objv,
@@ -757,25 +715,6 @@ private:
                                   bool create_entry_point,
 				  optional_yield,
                                   const DoutPrefixProvider *dpp);
-
-  int do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                     librados::Rados& rados,
-                     const rgw_owner& owner,
-                     const rgw_bucket& bucket,
-                     ceph::real_time creation_time,
-                     bool update_entrypoint,
-                     rgw_ep_info *pinfo,
-		     optional_yield y,
-                     const DoutPrefixProvider *dpp);
-
-  int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                       librados::Rados& rados,
-                       const rgw_owner& owner,
-                       const rgw_bucket& bucket,
-                       bool update_entrypoint,
-		       optional_yield y,
-                       const DoutPrefixProvider *dpp);
-
 };
 
 bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::Driver* driver, const std::string& marker,

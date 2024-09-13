@@ -496,7 +496,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
       }
 
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, role_tenant, role_account);
-      int ret = role->get(dpp, y);
+      int ret = role->load_by_name(dpp, y);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "Role not found: name:" << role_name << " tenant: " << role_tenant << dendl;
         return result_t::deny(-EACCES);

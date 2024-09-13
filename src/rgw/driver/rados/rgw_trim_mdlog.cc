@@ -9,7 +9,6 @@
 #include "rgw_cr_rest.h"
 #include "rgw_zone.h"
 #include "services/svc_zone.h"
-#include "services/svc_meta.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_cls.h"
 

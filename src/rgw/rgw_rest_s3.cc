@@ -6537,7 +6537,7 @@ rgw::auth::s3::STSEngine::authenticate(
   rgw::auth::RoleApplier::TokenAttrs t_attrs;
   if (! token.roleId.empty()) {
     std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(token.roleId);
-    if (role->get_by_id(dpp, y) < 0) {
+    if (role->load_by_id(dpp, y) < 0) {
       return result_t::deny(-EPERM);
     }
     r.id = token.roleId;

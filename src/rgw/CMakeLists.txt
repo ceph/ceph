@@ -40,15 +40,9 @@ set(librgw_common_srcs
   services/svc_cls.cc
   services/svc_config_key_rados.cc
   services/svc_mdlog.cc
-  services/svc_meta.cc
-  services/svc_meta_be.cc
-  services/svc_meta_be_otp.cc
-  services/svc_meta_be_sobj.cc
   services/svc_notify.cc
-  services/svc_otp.cc
   services/svc_quota.cc
   services/svc_sync_modules.cc
-  services/svc_role_rados.cc
   services/svc_sys_obj.cc
   services/svc_sys_obj_cache.cc
   services/svc_sys_obj_core.cc
@@ -204,6 +198,7 @@ set(librgw_common_srcs
   driver/rados/rgw_trim_mdlog.cc
   driver/rados/rgw_user.cc
   driver/rados/rgw_zone.cc
+  driver/rados/role.cc
   driver/rados/roles.cc
   driver/rados/sync_fairness.cc
   driver/rados/topic.cc

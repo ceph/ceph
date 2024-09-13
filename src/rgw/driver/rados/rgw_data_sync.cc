@@ -3120,11 +3120,19 @@ public:
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
-  RGWMetadataHandler *alloc_bucket_meta_handler(librados::Rados& rados) override {
-    return RGWArchiveBucketMetaHandlerAllocator::alloc(rados);
+  auto alloc_bucket_meta_handler(librados::Rados& rados,
+                                 RGWSI_Bucket* svc_bucket,
+                                 RGWBucketCtl* ctl_bucket)
+      -> std::unique_ptr<RGWMetadataHandler> override {
+    return create_archive_bucket_metadata_handler(rados, svc_bucket, ctl_bucket);
   }
-  RGWBucketInstanceMetadataHandlerBase *alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver) override {
-    return RGWArchiveBucketInstanceMetaHandlerAllocator::alloc(driver);
+  auto alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver,
+                                          RGWSI_Zone* svc_zone,
+                                          RGWSI_Bucket* svc_bucket,
+                                          RGWSI_BucketIndex* svc_bi)
+      -> std::unique_ptr<RGWMetadataHandler> override {
+    return create_archive_bucket_instance_metadata_handler(
+        driver, svc_zone, svc_bucket, svc_bi);
   }
 };
 

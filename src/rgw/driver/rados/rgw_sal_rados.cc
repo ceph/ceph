@@ -28,6 +28,7 @@
 #include "common/Clock.h"
 #include "common/errno.h"
 
+#include "role.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #include "rgw_bucket.h"
@@ -56,8 +57,6 @@
 #include "rgw_rest_user.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_mdlog.h"
-#include "services/svc_meta.h"
-#include "services/svc_meta_be_sobj.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bi_rados.h"
@@ -66,7 +65,6 @@
 #include "services/svc_quota.h"
 #include "services/svc_config_key.h"
 #include "services/svc_zone_utils.h"
-#include "services/svc_role_rados.h"
 #include "services/svc_user.h"
 #include "services/svc_sys_obj_cache.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -572,21 +570,18 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
 
-  RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj();
   RGWObjVersionTracker ep_ot;
   if (info.bucket.bucket_id.empty()) {
     ret = store->ctl()->bucket->read_bucket_info(info.bucket, &info, y, dpp,
 				      RGWBucketCtl::BucketInstance::GetParams()
 				      .set_mtime(&mtime)
-				      .set_attrs(&attrs)
-                                      .set_bectx_params(bectx_params),
+				      .set_attrs(&attrs),
 				      &ep_ot);
   } else {
     ret  = store->ctl()->bucket->read_bucket_instance_info(info.bucket, &info, y, dpp,
 				      RGWBucketCtl::BucketInstance::GetParams()
 				      .set_mtime(&mtime)
-				      .set_attrs(&attrs)
-				      .set_bectx_params(bectx_params));
+				      .set_attrs(&attrs));
   }
   if (ret != 0) {
     return ret;
@@ -1286,15 +1281,16 @@ int RadosStore::list_account_roles(const DoutPrefixProvider* dpp,
 
   // load the role metadata for each
   for (const auto& id : ids) {
-    std::unique_ptr<rgw::sal::RGWRole> role = get_role(id);
-    r = role->read_info(dpp, y);
+    RGWRoleInfo info;
+    r = rgwrados::role::read_by_id(dpp, y, *svc()->sysobj, zone, id,
+                                   info, nullptr, nullptr, nullptr);
     if (r == -ENOENT) {
       continue;
     }
     if (r < 0) {
       return r;
     }
-    listing.roles.push_back(std::move(role->get_info()));
+    listing.roles.push_back(std::move(info));
   }
 
   return 0;
@@ -2016,67 +2012,10 @@ int RadosStore::list_roles(const DoutPrefixProvider *dpp,
 			   uint32_t max_items,
 			   RoleList& listing)
 {
-  listing.roles.clear();
-
-  const auto& pool = svc()->zone->get_zone_params().roles_pool;
-  std::string prefix;
-
-  // List all roles if path prefix is empty
-  if (! path_prefix.empty()) {
-    prefix = tenant + RGWRole::role_path_oid_prefix + path_prefix;
-  } else {
-    prefix = tenant + RGWRole::role_path_oid_prefix;
-  }
-
-  //Get the filtered objects
-  RGWListRawObjsCtx ctx;
-  int r = rados->list_raw_objects_init(dpp, pool, marker, &ctx);
-  if (r < 0) {
-    return r;
-  }
-
-  bool is_truncated = false;
-  list<std::string> oids;
-  r = rados->list_raw_objects(dpp, pool, prefix, max_items,
-                              ctx, oids, &is_truncated);
-  if (r == -ENOENT) {
-    r = 0;
-  } else if (r < 0) {
-    return r;
-  }
-
-  for (const auto& oid : oids) {
-    const std::string key = oid.substr(RGWRole::role_path_oid_prefix.size());
-
-    //Find the role oid prefix from the end
-    size_t pos = key.rfind(RGWRole::role_oid_prefix);
-    if (pos == std::string::npos) {
-      continue;
-    }
-    // Split the result into path and info_oid + id
-    std::string path = key.substr(0, pos);
-
-    /*Make sure that prefix is part of path (False results could've been returned)
-      because of the role info oid + id appended to the path)*/
-    if(path_prefix.empty() || path.find(path_prefix) != std::string::npos) {
-      //Get id from info oid prefix + id
-      std::string id = key.substr(pos + RGWRole::role_oid_prefix.length());
-
-      std::unique_ptr<rgw::sal::RGWRole> role = get_role(id);
-      r = role->read_info(dpp, y);
-      if (r < 0) {
-        return r;
-      }
-      listing.roles.push_back(std::move(role->get_info()));
-    }
-  }
-
-  if (is_truncated) {
-    listing.next_marker = rados->list_raw_objs_get_cursor(ctx);
-  } else {
-    listing.next_marker.clear();
-  }
-  return 0;
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::role::list_tenant(dpp, y, *svc()->sysobj, zone,
+                                     tenant, marker, max_items, path_prefix,
+                                     listing.roles, listing.next_marker);
 }
 
 static constexpr std::string_view oidc_url_oid_prefix = "oidc_url.";
@@ -4434,321 +4373,39 @@ std::ostream& RadosLuaManager::PackagesWatcher::gen_prefix(std::ostream& out) co
 
 int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
-  using ceph::encode;
-  std::string oid;
-
-  oid = info.id;
-
-  bufferlist bl;
-  encode(this->info, bl);
-
-  if (!this->info.tags.empty()) {
-    bufferlist bl_tags;
-    encode(this->info.tags, bl_tags);
-    map<string, bufferlist> attrs;
-    attrs.emplace("tagging", bl_tags);
-
-    RGWSI_MBSObj_PutParams params(bl, &attrs, info.mtime, exclusive);
-    std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
-    ctx->init(store->svc()->role->get_be_handler());
-    return store->svc()->role->svc.meta_be->put(ctx.get(), oid, params, &info.objv_tracker, y, dpp);
-  } else {
-    RGWSI_MBSObj_PutParams params(bl, nullptr, info.mtime, exclusive);
-    std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
-    ctx->init(store->svc()->role->get_be_handler());
-    return store->svc()->role->svc.meta_be->put(ctx.get(), oid, params, &info.objv_tracker, y, dpp);
-  }
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  RGWServices* svc = store->svc();
+  const RGWZoneParams& zone = svc->zone->get_zone_params();
+  return rgwrados::role::write(dpp, y, rados, *svc->sysobj, svc->mdlog,
+                               zone, info, info.objv_tracker,
+                               ceph::real_time{}, exclusive);
 }
 
-static std::string role_name_oid(const RGWRoleInfo& r, std::string_view prefix)
+int RadosRole::load_by_name(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  if (!r.account_id.empty()) {
-    // names are case-insensitive, so store them in lower case
-    std::string lower_name = r.name;
-    boost::algorithm::to_lower(lower_name);
-    // use account id as prefix
-    return string_cat_reserve(r.account_id, prefix, lower_name);
-  } else {
-    // use tenant as prefix
-    return string_cat_reserve(r.tenant, prefix, r.name);
-  }
+  RGWServices* svc = store->svc();
+  const RGWZoneParams& zone = svc->zone->get_zone_params();
+  return rgwrados::role::read_by_name(dpp, y, *svc->sysobj, zone,
+                                      info.tenant, info.account_id,
+                                      info.name, info, &info.mtime,
+                                      &info.objv_tracker);
 }
 
-int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+int RadosRole::load_by_id(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto sysobj = store->svc()->sysobj;
-  RGWNameToId nameToId;
-  nameToId.obj_id = info.id;
-
-  std::string oid = role_name_oid(info, get_names_oid_prefix());
-
-  bufferlist bl;
-  using ceph::encode;
-  encode(nameToId, bl);
-
-  return rgw_put_system_obj(dpp, sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, &info.objv_tracker, real_time(), y);
-}
-
-int RadosRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  if (!info.account_id.empty()) {
-    librados::Rados& rados = *store->getRados()->get_rados_handle();
-    const RGWZoneParams& zone = store->svc()->zone->get_zone_params();
-    const rgw_raw_obj& obj = rgwrados::account::get_roles_obj(zone, info.account_id);
-    constexpr uint32_t no_limit = std::numeric_limits<uint32_t>::max();
-    return rgwrados::roles::add(dpp, y, rados, obj, info, false, no_limit);
-  }
-
-  auto sysobj = store->svc()->sysobj;
-  std::string oid = info.tenant + get_path_oid_prefix() + info.path + get_info_oid_prefix() + info.id;
-
-  bufferlist bl;
-
-  return rgw_put_system_obj(dpp, sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, &info.objv_tracker, real_time(), y);
-}
-
-int RadosRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y)
-{
-  auto sysobj = store->svc()->sysobj;
-  std::string oid = info.tenant + get_names_oid_prefix() + role_name;
-  bufferlist bl;
-
-  int ret = rgw_get_system_obj(sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, y, dpp);
-  if (ret < 0) {
-    return ret;
-  }
-
-  RGWNameToId nameToId;
-  try {
-    auto iter = bl.cbegin();
-    using ceph::decode;
-    decode(nameToId, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to decode role from Role pool: " << role_name << dendl;
-    return -EIO;
-  }
-  role_id = nameToId.obj_id;
-  return 0;
-}
-
-int RadosRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  auto sysobj = store->svc()->sysobj;
-  std::string oid = role_name_oid(info, get_names_oid_prefix());
-  bufferlist bl;
-
-  int ret = rgw_get_system_obj(sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, y, dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed reading role name from Role pool: " << info.name <<
-      ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  RGWNameToId nameToId;
-  try {
-    using ceph::decode;
-    auto iter = bl.cbegin();
-    decode(nameToId, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to decode role name from Role pool: " << info.name << dendl;
-    return -EIO;
-  }
-  info.id = nameToId.obj_id;
-  return 0;
-}
-
-int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  std::string oid;
-
-  oid = info.id;
-  ldpp_dout(dpp, 20) << "INFO: oid in read_info is: " << oid << dendl;
-
-  bufferlist bl;
-
-  RGWSI_MBSObj_GetParams params(&bl, &info.attrs, &info.mtime);
-  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
-  ctx->init(store->svc()->role->get_be_handler());
-  int ret = store->svc()->role->svc.meta_be->get(ctx.get(), oid, params, &info.objv_tracker, y, dpp, true);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed reading role info from Role pool: " << info.id << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  try {
-    using ceph::decode;
-    auto iter = bl.cbegin();
-    decode(this->info, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to decode role info from Role pool: " << info.id << dendl;
-    return -EIO;
-  }
-
-  auto it = info.attrs.find("tagging");
-  if (it != info.attrs.end()) {
-    bufferlist bl_tags = it->second;
-    try {
-      using ceph::decode;
-      auto iter = bl_tags.cbegin();
-      decode(info.tags, iter);
-    } catch (buffer::error& err) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to decode attrs" << info.id << dendl;
-      return -EIO;
-    }
-  }
-
-  return 0;
-}
-
-int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, const std::string& role_id, optional_yield y)
-{
-  int ret;
-
-  if (! validate_input(dpp)) {
-    return -EINVAL;
-  }
-
-  if (!role_id.empty()) {
-    info.id = role_id;
-  }
-
-  /* check to see the name is not used */
-  ret = read_id(dpp, info.name, info.tenant, info.id, y);
-  if (exclusive && ret == 0) {
-    ldpp_dout(dpp, 0) << "ERROR: name " << info.name << " already in use for role id "
-                    << info.id << dendl;
-    return -EEXIST;
-  } else if ( ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "failed reading role id  " << info.id << ": "
-                  << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  if (info.id.empty()) {
-    /* create unique id */
-    uuid_d new_uuid;
-    char uuid_str[37];
-    new_uuid.generate_random();
-    new_uuid.print(uuid_str);
-    info.id = uuid_str;
-  }
-
-  //arn
-  std::string_view account = !info.account_id.empty() ? info.account_id : info.tenant;
-  info.arn = string_cat_reserve(role_arn_prefix, account, ":role", info.path, info.name);
-
-  if (info.creation_date.empty()) {
-    // Creation time
-    real_clock::time_point t = real_clock::now();
-
-    struct timeval tv;
-    real_clock::to_timeval(t, tv);
-
-    char buf[30];
-    struct tm result;
-    gmtime_r(&tv.tv_sec, &result);
-    strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
-    sprintf(buf + strlen(buf),".%03dZ",(int)tv.tv_usec/1000);
-    info.creation_date.assign(buf, strlen(buf));
-  }
-
-  auto& pool = store->svc()->zone->get_zone_params().roles_pool;
-  ret = store_info(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR:  storing role info in Role pool: "
-                  << info.id << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  ret = store_name(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: storing role name in Role pool: "
-                  << info.name << ": " << cpp_strerror(-ret) << dendl;
-
-    //Delete the role info that was stored in the previous call
-    std::string oid = get_info_oid_prefix() + info.id;
-    int info_ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, oid, nullptr, y);
-    if (info_ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: cleanup of role id from Role pool: "
-                  << info.id << ": " << cpp_strerror(-info_ret) << dendl;
-    }
-    return ret;
-  }
-
-  ret = store_path(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: storing role path in Role pool: "
-                  << info.path << ": " << cpp_strerror(-ret) << dendl;
-    //Delete the role info that was stored in the previous call
-    std::string oid = get_info_oid_prefix() + info.id;
-    int info_ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, oid, nullptr, y);
-    if (info_ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: cleanup of role id from Role pool: "
-                  << info.id << ": " << cpp_strerror(-info_ret) << dendl;
-    }
-    //Delete role name that was stored in previous call
-    oid = role_name_oid(info, get_names_oid_prefix());
-    int name_ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, oid, nullptr, y);
-    if (name_ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: cleanup of role name from Role pool: "
-                  << info.name << ": " << cpp_strerror(-name_ret) << dendl;
-    }
-    return ret;
-  }
-  return 0;
+  RGWServices* svc = store->svc();
+  const RGWZoneParams& zone = svc->zone->get_zone_params();
+  return rgwrados::role::read_by_id(dpp, y, *svc->sysobj, zone, info.id,
+                                    info, &info.mtime, &info.objv_tracker);
 }
 
 int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto& pool = store->svc()->zone->get_zone_params().roles_pool;
-
-  int ret = read_name(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = read_info(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  // Delete id & insert MD Log
-  RGWSI_MBSObj_RemoveParams params;
-  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
-  ctx->init(store->svc()->role->get_be_handler());
-  ret = store->svc()->role->svc.meta_be->remove(ctx.get(), info.id, params, &info.objv_tracker, y, dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: deleting role id: " << info.id << " failed with code: " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  // Delete name
-  std::string oid = role_name_oid(info, get_names_oid_prefix());
-  ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, oid, nullptr, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: deleting role name from Role pool: "
-                  << info.name << ": " << cpp_strerror(-ret) << dendl;
-  }
-
-  // Delete path
-  if (!info.account_id.empty()) {
-    librados::Rados& rados = *store->getRados()->get_rados_handle();
-    const RGWZoneParams& zone = store->svc()->zone->get_zone_params();
-    const rgw_raw_obj& obj = rgwrados::account::get_roles_obj(zone, info.account_id);
-    ret = rgwrados::roles::remove(dpp, y, rados, obj, info.name);
-    if (ret < 0) {
-      ldpp_dout(dpp, 4) << "ERROR: deleting role path from account list: "
-                    << info.path << ": " << cpp_strerror(-ret) << dendl;
-    }
-  } else {
-    oid = info.tenant + get_path_oid_prefix() + info.path + get_info_oid_prefix() + info.id;
-    ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, oid, nullptr, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 4) << "ERROR: deleting role path from Role pool: "
-                    << info.path << ": " << cpp_strerror(-ret) << dendl;
-    }
-  }
-  return 0;
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  RGWServices* svc = store->svc();
+  const RGWZoneParams& zone = svc->zone->get_zone_params();
+  return rgwrados::role::remove(dpp, y, rados, *svc->sysobj, svc->mdlog, zone,
+                                info.tenant, info.account_id, info.name);
 }
 
 } // namespace rgw::sal

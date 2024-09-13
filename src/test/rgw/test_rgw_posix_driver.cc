@@ -17,6 +17,7 @@
 #include <iostream>
 #include <filesystem>
 #include "common/common_init.h"
+#include "common/errno.h"
 #include "global/global_init.h"
 
 using namespace rgw::sal;

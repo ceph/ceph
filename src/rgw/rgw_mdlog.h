@@ -26,6 +26,9 @@
 
 #define META_LOG_OBJ_PREFIX "meta.log."
 
+class RGWSI_Cls;
+class RGWSI_Zone;
+
 struct RGWMetadataLogInfo {
   std::string marker;
   real_time last_update;

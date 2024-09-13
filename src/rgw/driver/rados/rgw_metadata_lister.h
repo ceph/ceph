@@ -49,6 +49,7 @@ class RGWMetadataLister {
   int get_next(const DoutPrefixProvider* dpp, int max,
                std::list<std::string>& keys, bool* truncated)
   {
+    keys.clear();
     std::vector<std::string> oids;
     int r = listing.get_next(dpp, max, &oids, truncated);
     if (r == -ENOENT) {
