@@ -52,12 +52,12 @@ class D4NTestsRemote(Task):
         self.create_user()
 
     def end(self):
+        for client in self.all_clients:
+            self.delete_user(client)
+            self.remove_packages(client)
+
         super(D4NTestsRemote, self).end()
         log.info('D4N Tests: END')
-
-        for client in self.all_clients:
-            self.remove_packages(client)
-            self.delete_user(client)
 
     def create_user(self):
         log.info("D4N Tests: Creating S3 user...")
@@ -114,7 +114,7 @@ class D4NTestsRemote(Task):
                     'user', 'rm',
                     '--uid', s3_user_id,
                     '--purge-data',
-                    '--cluster', cluster_name 
+                    #'--cluster', cluster_name 
                 ],
             )
 
