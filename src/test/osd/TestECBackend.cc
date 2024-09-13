@@ -754,7 +754,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     std::list<ECCommon::ec_align_t> to_read_list;
     hobject_t hoid;
     ECCommon::read_request_t read_request(to_read_list, false);
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, &read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
 
@@ -772,7 +772,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       want_to_read[i].extents.insert(i*2*page_size, page_size);
     }
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, &read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
     for (unsigned int i=0; i<ssize; i++) {
@@ -793,7 +793,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       want_to_read[i].extents.insert(i*2*page_size, page_size);
     }
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, &read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
     for (unsigned int i=0; i<ssize; i++) {
@@ -820,7 +820,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       ref_shard_read.extents.insert(i*2*page_size, page_size);
     }
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, &read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
 
     ASSERT_EQ(read_request,  ref);
   }
@@ -840,7 +840,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     int parity_shard = ssize;
     listenerStub.acting_shards.erase(pg_shard_t(missing_shard, shard_id_t(missing_shard)));
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, &read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
     for (unsigned int i=0; i<ssize; i++) {
@@ -892,7 +892,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
     listenerStub.acting_shards.erase(pg_shard_t(missing_shard, shard_id_t(missing_shard)));
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, &read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
 
     ASSERT_EQ(read_request,  ref);
 
@@ -912,7 +912,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       extents_to_read.insert(i*2*page_size, page_size);
     }
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, true, &read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, true, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
     for (unsigned int i=0; i<ssize+2; i++) {
@@ -969,7 +969,7 @@ TEST(ECCommon, shard_read_combo_tests)
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
       to_read, s, chunk_mapping, want_to_read);
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, &read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
     {
@@ -998,7 +998,7 @@ TEST(ECCommon, shard_read_combo_tests)
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
       to_read, s, chunk_mapping, want_to_read);
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, &read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
     {

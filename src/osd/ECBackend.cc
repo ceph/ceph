@@ -567,7 +567,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
 	want_shard_reads[w].extents.insert(from, amount);
       }
       int r = read_pipeline.get_min_avail_to_read_shards(
-	op.hoid, want_shard_reads, true, false, &read_request);
+        op.hoid, want_shard_reads, true, false, read_request);
       if (r != 0) {
 	// we must have lost a recovery source
 	ceph_assert(!op.recovery_progress.first);
