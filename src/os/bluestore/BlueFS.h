@@ -749,6 +749,8 @@ public:
 
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
+  void drain_discard();
+  void cancel_discard();
 
   void flush(FileWriter *h, bool force = false);
 

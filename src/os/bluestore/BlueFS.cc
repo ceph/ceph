@@ -577,6 +577,34 @@ void BlueFS::handle_discard(unsigned id, interval_set<uint64_t>& to_release)
   drop_pending_release(to_release.size());
 }
 
+// Wait until all pending discard are processed.
+void BlueFS::drain_discard()
+{
+  wait_pending_release++;
+  if (pending_release > 0) {
+    std::unique_lock l(pending_release_lock);
+    while (pending_release > 0) {
+      pending_release_cond.wait(l);
+    }
+  }
+  wait_pending_release--;
+}
+
+// Wait until discard queue is empty,
+// but try to cancel as much discarding as possible.
+void BlueFS::cancel_discard()
+{
+  for (unsigned id = 0; id < bdev.size(); ++id) {
+    if (!bdev[id]) {
+      continue;
+    }
+    interval_set<uint64_t> cancelled;
+    bdev[id]->swap_discard_queued(cancelled);
+    handle_discard(id, cancelled);
+  }
+  drain_discard();
+}
+
 uint64_t BlueFS::get_used()
 {
   uint64_t used = 0;
@@ -663,18 +691,6 @@ void BlueFS::foreach_block_extents(
       }
     }
   }
-  std::lock_guard dl(dirty.lock);
-  for (auto& p : dirty.pending_release[id]) {
-    fn(p.first, p.second);
-  }
-  wait_pending_release++;
-  if (pending_release.load()) {
-    std::unique_lock l(pending_release_lock);
-    while (pending_release.load()) {
-      pending_release_cond.wait(l);
-    }
-  }
-  wait_pending_release--;
 }
 
 int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)

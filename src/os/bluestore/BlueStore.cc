@@ -10701,7 +10701,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   if (bluefs) {
     interval_set<uint64_t> bluefs_extents;
-
+    // In this case we would prefer to include BlueFS blocks that are in waiting for bdev discard.
+    // The rationale is that it strengthens collision detection, as no BlueStore object should
+    // occupy the same location as freshly released BlueFS file.
     bluefs->foreach_block_extents(
       bluefs_layout.shared_bdev,
       [&](uint64_t start, uint32_t len) {
@@ -15205,6 +15207,9 @@ int BlueStore::_deferred_replay()
   int r = 0;
   interval_set<uint64_t> bluefs_extents;
   if (bluefs) {
+    // In this scenario we mildly care for block in dispose queue.
+    // Space in dispose queue is not occupied by any Object anyway,
+    // so write will either take disk space or will soon be disposed.
     bluefs->foreach_block_extents(
       bluefs_layout.shared_bdev,
       [&] (uint64_t start, uint32_t len) {
@@ -20465,6 +20470,9 @@ int BlueStore::compare_allocators(Allocator* alloc1, Allocator* alloc2, uint64_t
 //---------------------------------------------------------
 int BlueStore::add_existing_bluefs_allocation(Allocator* allocator, read_alloc_stats_t &stats)
 {
+  // Invoked for bluestore tool, in RocksDB read-only mode.
+  // We are sure that BlueFS dispose queue will be empty.
+
   // then add space used by bluefs to store rocksdb
   unsigned extent_count = 0;
   if (bluefs) {
@@ -20557,6 +20565,20 @@ Allocator* BlueStore::clone_allocator_without_bluefs(Allocator *src_allocator)
     derr << "****failed create_bitmap_allocator()" << dendl;
     return nullptr;
   }
+
+  // The goal here is to obtain allocations used by Objects;
+  // we do it by subtracting allocations used by BlueFS.
+  // We need to execute:
+  // - copy_allocator
+  // - foreach_block_extents
+  // Should dispose thread be running during this,
+  // we can have src_allocator updates after we copy its contents.
+  //
+  // Hence we need:
+  // 1. Drain or cancel BlueFS dispose queue
+  // 2. copy_allocator
+  // 3. foreach_block_extents
+  bluefs->drain_discard(); // or cancel_discard() if we are in hurry
 
   uint64_t num_entries = 0;
   copy_allocator(src_allocator, allocator, &num_entries);
