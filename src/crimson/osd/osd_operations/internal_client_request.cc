@@ -74,7 +74,7 @@ InternalClientRequest::with_interruption()
       fmt::format("{} is unfound, drop it!", get_target_oid()));
   }
   co_await enter_stage<interruptor>(
-    client_pp().get_obc);
+    client_pp().check_already_complete_get_obc);
 
   DEBUGI("{}: getting obc lock", *this);
 
