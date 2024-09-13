@@ -286,7 +286,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   vector<shard_read_t> &want_shard_reads,
   bool for_recovery,
   bool do_redundant_reads,
-  read_request_t *read_request) {
+  read_request_t &read_request) {
   // Make sure we don't do redundant reads for recovery
   ceph_assert(!for_recovery || !do_redundant_reads);
 
@@ -317,9 +317,6 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
       need[i] = subchunks_list;
     }
   }
-
-  if (!read_request)
-    return 0;
 
   bool experimental = cct->_conf->osd_ec_partial_reads_experimental;
 
@@ -360,7 +357,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     }
 
     shard_read.extents.align(CEPH_PAGE_SIZE);
-    read_request->shard_reads[pg_shard] = shard_read;
+    read_request.shard_reads[pg_shard] = shard_read;
   }
 
   return 0;
@@ -788,7 +785,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
       want_shard_reads,
       false,
       fast_read,
-      &read_request);
+      read_request);
     ceph_assert(r == 0);
 
     int subchunk_size =

@@ -488,8 +488,8 @@ struct ECCommon {
       std::vector<shard_read_t> &want_shard_read, ///< [in] desired shards
       bool for_recovery,         ///< [in] true if we may use non-acting replicas
       bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
-      read_request_t *read_request ///< [out] shard_reads, corresponding subchunks / other sub reads to read
-      ); ///< @return error code, 0 on success
+      read_request_t& read_request ///< [out] shard_reads, corresponding subchunks / other sub reads to read
+    ); ///< @return error code, 0 on success
 
     void schedule_recovery_work();
 
