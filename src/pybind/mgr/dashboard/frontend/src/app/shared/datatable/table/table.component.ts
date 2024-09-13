@@ -284,15 +284,21 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
    * how the table is renderer a second time, we now clone that list into a
    * local variable and only use the clone.
    */
-  localColumns: CdTableColumn[];
+  set localColumns(value: CdTableColumn[]) {
+    this._localColumns = this.getTableColumnsWithNames(value);
+  }
+
+  get localColumns(): CdTableColumn[] {
+    return this._localColumns;
+  }
+
+  private _localColumns: CdTableColumn[];
 
   model: TableModel = new TableModel();
 
   set tableColumns(value: CdTableColumn[]) {
     // In case a name is not provided set it to the prop name if present or an empty string
-    const valuesWithNames = value.map((col: CdTableColumn) =>
-      col?.name ? col : { ...col, name: col?.prop ? _.capitalize(_.toString(col.prop)) : '' }
-    );
+    const valuesWithNames = this.getTableColumnsWithNames(value);
     this._tableColumns = valuesWithNames;
     this._tableHeaders.next(valuesWithNames);
   }
@@ -305,6 +311,18 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   get visibleColumns() {
     return this.localColumns?.filter?.((x) => !x.isHidden);
+  }
+
+  getTableColumnsWithNames(value: CdTableColumn[]): CdTableColumn[] {
+    return value.map((col: CdTableColumn) =>
+      col?.name ? col : { ...col, name: col?.prop ? this.deCamelCase(String(col?.prop)) : '' }
+    );
+  }
+
+  deCamelCase(str: string): string {
+    return str
+      .replace(/([A-Z])/g, (match) => ` ${match}`)
+      .replace(/^./, (match) => match.toUpperCase());
   }
 
   icons = Icons;
