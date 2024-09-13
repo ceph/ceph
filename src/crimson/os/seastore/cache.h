@@ -114,6 +114,8 @@ using backref_entry_ref = std::unique_ptr<backref_entry_t>;
 using backref_entry_mset_t = backref_entry_t::multiset_t;
 using backref_entry_refs_t = std::vector<backref_entry_ref>;
 using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_entry_refs_t>;
+using backref_entryrefs_by_trans_id_t = std::map<
+  transaction_id_t, backref_entry_refs_t>;
 using backref_entry_query_set_t = std::set<
     backref_entry_t, backref_entry_t::cmp_t>;
 
@@ -853,6 +855,11 @@ private:
     );
   }
 
+  // the backref entries indexed by trans_id only store the reampped
+  // entries to ensure the gc transaction could retrieve the latest
+  // changes. These entries are merged into backref_entryrefs_by_seq
+  // in Cache::complete_commit
+  backref_entryrefs_by_trans_id_t backref_entryrefs_by_trans_id;
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_entry_mset_t backref_entry_mset;
 
@@ -1767,7 +1774,12 @@ private:
     return bp;
   }
 
+  void prepare_remapped_backref_entryrefs(
+    transaction_id_t trans_id,
+    backref_entry_refs_t backref_entries);
+
   void backref_batch_update(
+    transaction_id_t,
     std::vector<backref_entry_ref> &&,
     const journal_seq_t &);
 
