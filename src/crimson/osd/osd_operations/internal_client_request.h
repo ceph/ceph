@@ -58,7 +58,7 @@ public:
     CommonPGPipeline::WaitForActive::BlockingEvent,
     PGActivationBlocker::BlockingEvent,
     CommonPGPipeline::RecoverMissing::BlockingEvent,
-    CommonPGPipeline::GetOBC::BlockingEvent,
+    CommonPGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent,
     CommonPGPipeline::LockOBC::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
     CompletionEvent

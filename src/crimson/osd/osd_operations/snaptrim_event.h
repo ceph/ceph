@@ -170,7 +170,7 @@ public:
 
   std::tuple<
     StartEvent,
-    CommonPGPipeline::GetOBC::BlockingEvent,
+    CommonPGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
     CommonPGPipeline::WaitRepop::BlockingEvent,
     CompletionEvent
