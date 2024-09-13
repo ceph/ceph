@@ -504,27 +504,41 @@ class interval_set {
     } else {
       if (p->first < start) {
         T pend = p->first + p->second;
+        new_len = new_len - (std::min(pend, end) - start); // Remove the overlap
         p->second = std::max(pend, end) - p->first; // Adjust existing
-        new_len = p->first + p->second - pend;
-        
+
         auto n = p;
         ++n;
-        if (n != m.end() && end == n->first) {   // combine with next
-          p->second += n->second;
-          m.erase(n);
+        std::list<T> keys_to_remove; // Do not remove + iterate!
+        for (; n != m.end() && end >= n->first; n++) {
+          // The follow is split out to avoid template issues.
+          // This adds the part of n which is not overlapping with the insert.
+          T a = n->second;
+          T b = end - n->first;
+          new_len = new_len - std::min(a, b);
+          p->second += n->second - std::min(a, b);
+          keys_to_remove.emplace_back(n->first);
+        }
+        for (T k : keys_to_remove) {
+          m.erase(k);
         }
 
         o = *p;
       } else {
-        if (end >= p->first) {
+        T old_len = 0;
+        T new_end = end;
+        std::list<T> keys_to_remove; // Do not remove + iterate!
+        for (; p != m.end() && end >= p->first; p++) {
           T pend = p->first + p->second;
-          T old_len = p->second;
-          m.erase(p);
-          o.second = m[start] = std::max(end, pend) - start;
-          new_len = o.second - old_len;
-        } else {
-          m[start] = len;              // new interval
+          new_end = std::max(pend, end);
+          old_len = old_len + p->second;
+          keys_to_remove.emplace_back(p->first);
         }
+        for (T k : keys_to_remove) {
+          m.erase(k);
+        }
+        m[start] = o.second = new_end - start;
+        new_len = o.second - old_len;
       }
     }
 
