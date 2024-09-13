@@ -5,6 +5,9 @@
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
+// not tested, just make sure it compiles
+#include "neorados/cls/rgw.h"
+
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
 #include "global/global_context.h"
