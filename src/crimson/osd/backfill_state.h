@@ -421,7 +421,7 @@ public:
 
   bool enqueue_push(const hobject_t&);
   void enqueue_drop(const hobject_t&);
-  void complete_to(const hobject_t&, const pg_stat_t&);
+  void complete_to(const hobject_t&, const pg_stat_t&, bool may_push_to_max);
 };
 
 } // namespace crimson::osd
