@@ -495,8 +495,6 @@ struct rgw_cls_bucket_update_stats_op
   std::map<RGWObjCategory, rgw_bucket_category_stats> stats;
   std::map<RGWObjCategory, rgw_bucket_category_stats> dec_stats;
 
-  rgw_cls_bucket_update_stats_op() {}
-
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(2, 1, bl);
     encode(absolute, bl);
