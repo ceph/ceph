@@ -61,11 +61,16 @@ class CephFSVolumeEarmarking:
         if isinstance(e, ValueError):
             raise EarmarkException(errno.EINVAL, f"Invalid earmark specified: {e}") from e
         elif isinstance(e, OSError):
-            log.error(f"Error {action} earmark: {e}")
-            raise EarmarkException(-e.errno, e.strerror) from e
+            if e.errno == errno.ENODATA:
+                # Return empty string when earmark is not set
+                log.info(f"No earmark set for the path while {action}. Returning empty result.")
+                return ''
+            else:
+                log.error(f"Error {action} earmark: {e}")
+                raise EarmarkException(-e.errno, e.strerror) from e
         else:
             log.error(f"Unexpected error {action} earmark: {e}")
-            raise EarmarkException
+            raise EarmarkException(errno.EFAULT, f"Unexpected error {action} earmark: {e}") from e
 
     @staticmethod
     def parse_earmark(value: str) -> Optional[EarmarkContents]:
@@ -128,8 +133,7 @@ class CephFSVolumeEarmarking:
             )
             return earmark_value
         except Exception as e:
-            self._handle_cephfs_error(e, "getting")
-            return None
+            return self._handle_cephfs_error(e, "getting")
 
     def set_earmark(self, earmark: str):
         # Validate the earmark before attempting to set it
