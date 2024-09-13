@@ -20527,6 +20527,14 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
     if (ret < 0) {
       return ret;
     }
+    if (bdev_label_multi) {
+      uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+      for (uint64_t p : bdev_label_valid_locations) {
+	if (p != BDEV_FIRST_LABEL_POSITION) {
+	  allocator->init_rm_free(p, lsize);
+	}
+      }
+    }
 
     duration = ceph_clock_now() - start;
     stats.insert_count = 0;
