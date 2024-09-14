@@ -572,10 +572,6 @@ OpsExecuter::flush_changes_n_do_ops_effects(
 template <class Func>
 struct OpsExecuter::RollbackHelper {
   void rollback_obc_if_modified(const std::error_code& e);
-  ObjectContextRef get_obc() const {
-    assert(ox);
-    return ox->obc;
-  }
   seastar::lw_shared_ptr<OpsExecuter> ox;
   Func func;
 };

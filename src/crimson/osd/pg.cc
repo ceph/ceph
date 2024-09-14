@@ -1048,18 +1048,17 @@ PG::do_osd_ops_execute(
           std::move(log_entries));
     });
   }).safe_then_unpack_interruptible(
-    [success_func=std::move(success_func), rollbacker, this, failure_func_ptr]
+    [success_func=std::move(success_func), rollbacker, this, failure_func_ptr, obc]
     (auto submitted_fut, auto _all_completed_fut) mutable {
 
     auto all_completed_fut = _all_completed_fut.safe_then_interruptible_tuple(
       std::move(success_func),
       crimson::ct_error::object_corrupted::handle(
-      [rollbacker, this] (const std::error_code& e) mutable {
+      [rollbacker, this, obc] (const std::error_code& e) mutable {
       // this is a path for EIO. it's special because we want to fix the obejct
       // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
       // restart the execution.
       rollbacker.rollback_obc_if_modified(e);
-      auto obc = rollbacker.get_obc();
       return repair_object(obc->obs.oi.soid,
                            obc->obs.oi.version
       ).then_interruptible([] {
