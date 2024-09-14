@@ -688,12 +688,10 @@ struct rgw_bi_log_entry {
 WRITE_CLASS_ENCODER(rgw_bi_log_entry)
 
 struct rgw_bucket_category_stats {
-  uint64_t total_size;
-  uint64_t total_size_rounded;
-  uint64_t num_entries;
+  uint64_t total_size = 0;
+  uint64_t total_size_rounded = 0;
+  uint64_t num_entries = 0;
   uint64_t actual_size{0}; //< account for compression, encryption
-
-  rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(3, 2, bl);
