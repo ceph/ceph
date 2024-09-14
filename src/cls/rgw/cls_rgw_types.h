@@ -729,6 +729,49 @@ inline bool operator!=(const rgw_bucket_category_stats& lhs,
   return !(lhs == rhs);
 }
 
+inline auto operator+(const rgw_bucket_category_stats& lhs,
+                      const rgw_bucket_category_stats& rhs)
+  -> rgw_bucket_category_stats
+{
+  return rgw_bucket_category_stats{
+    .total_size = lhs.total_size + rhs.total_size,
+    .total_size_rounded = lhs.total_size_rounded + rhs.total_size_rounded,
+    .num_entries = lhs.num_entries + rhs.num_entries,
+    .actual_size = lhs.actual_size + rhs.actual_size
+  };
+}
+inline auto operator+=(rgw_bucket_category_stats& lhs,
+                       const rgw_bucket_category_stats& rhs)
+  -> rgw_bucket_category_stats&
+{
+  lhs.total_size += rhs.total_size;
+  lhs.total_size_rounded += rhs.total_size_rounded;
+  lhs.num_entries += rhs.num_entries;
+  lhs.actual_size += rhs.actual_size;
+  return lhs;
+}
+inline auto operator-(const rgw_bucket_category_stats& lhs,
+                      const rgw_bucket_category_stats& rhs)
+  -> rgw_bucket_category_stats
+{
+  return rgw_bucket_category_stats{
+    .total_size = lhs.total_size - rhs.total_size,
+    .total_size_rounded = lhs.total_size_rounded - rhs.total_size_rounded,
+    .num_entries = lhs.num_entries - rhs.num_entries,
+    .actual_size = lhs.actual_size - rhs.actual_size
+  };
+}
+inline auto operator-=(rgw_bucket_category_stats& lhs,
+                       const rgw_bucket_category_stats& rhs)
+  -> rgw_bucket_category_stats&
+{
+  lhs.total_size -= rhs.total_size;
+  lhs.total_size_rounded -= rhs.total_size_rounded;
+  lhs.num_entries -= rhs.num_entries;
+  lhs.actual_size -= rhs.actual_size;
+  return lhs;
+}
+
 enum class cls_rgw_reshard_status : uint8_t {
   NOT_RESHARDING  = 0,
   IN_PROGRESS     = 1,
