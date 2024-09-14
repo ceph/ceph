@@ -13,6 +13,7 @@ add_library(libneorados STATIC
 target_link_libraries(libneorados PRIVATE
   osdc ceph-common cls_lock_client ${FMT_LIB}
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
+target_include_directories(libneorados PUBLIC "${CMAKE_SOURCE_DIR}/src/include")
 
 # if(ENABLE_SHARED)
 #   add_library(libneorados ${CEPH_SHARED}
