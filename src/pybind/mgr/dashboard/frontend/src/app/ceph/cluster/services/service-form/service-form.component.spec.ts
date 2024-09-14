@@ -469,7 +469,22 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         expect(countEl).toBeNull();
       });
 
-      it('should submit nvmeof', () => {
+      it('should not show certs and keys field with mTLS disabled', () => {
+        formHelper.setValue('ssl', true);
+        fixture.detectChanges();
+        const root_ca_cert = fixture.debugElement.query(By.css('#root_ca_cert'));
+        const client_cert = fixture.debugElement.query(By.css('#client_cert'));
+        const client_key = fixture.debugElement.query(By.css('#client_key'));
+        const server_cert = fixture.debugElement.query(By.css('#server_cert'));
+        const server_key = fixture.debugElement.query(By.css('#server_key'));
+        expect(root_ca_cert).toBeNull();
+        expect(client_cert).toBeNull();
+        expect(client_key).toBeNull();
+        expect(server_cert).toBeNull();
+        expect(server_key).toBeNull();
+      });
+
+      it('should submit nvmeof without mTLS', () => {
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'nvmeof',
@@ -477,7 +492,32 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           placement: {},
           unmanaged: false,
           pool: 'rbd',
-          group: 'default'
+          group: 'default',
+          enable_auth: false
+        });
+      });
+
+      it('should submit nvmeof with mTLS', () => {
+        formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('root_ca_cert', 'root_ca_cert');
+        formHelper.setValue('client_cert', 'client_cert');
+        formHelper.setValue('client_key', 'client_key');
+        formHelper.setValue('server_cert', 'server_cert');
+        formHelper.setValue('server_key', 'server_key');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'rbd.default',
+          placement: {},
+          unmanaged: false,
+          pool: 'rbd',
+          group: 'default',
+          enable_auth: true,
+          root_ca_cert: 'root_ca_cert',
+          client_cert: 'client_cert',
+          client_key: 'client_key',
+          server_cert: 'server_cert',
+          server_key: 'server_key'
         });
       });
     });
@@ -720,6 +760,25 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         fixture.detectChanges();
         const groupId = fixture.debugElement.query(By.css('#group')).nativeElement;
         expect(groupId.disabled).toBeTruthy();
+      });
+
+      it('should update nvmeof service to disable mTLS', () => {
+        spyOn(cephServiceService, 'update').and.stub();
+        component.serviceType = 'nvmeof';
+        formHelper.setValue('service_type', 'nvmeof');
+        formHelper.setValue('pool', 'rbd');
+        formHelper.setValue('group', 'default');
+        // mTLS disabled
+        formHelper.setValue('enable_mtls', false);
+        component.onSubmit();
+        expect(cephServiceService.update).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          placement: {},
+          unmanaged: false,
+          pool: 'rbd',
+          group: 'default',
+          enable_auth: false
+        });
       });
     });
   });

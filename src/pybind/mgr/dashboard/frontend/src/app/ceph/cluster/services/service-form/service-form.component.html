@@ -83,7 +83,7 @@
                     name="pool"
                     class="form-select"
                     formControlName="pool"
-                    (change)="onBlockPoolChange()">
+                    (change)="setNvmeServiceId()">
               <option *ngIf="rbdPools === null"
                       [ngValue]="null"
                       i18n>Loading...</option>
@@ -118,7 +118,7 @@
                      class="form-control"
                      type="text"
                      formControlName="group"
-                     (change)="onNvmeofGroupChange($event.target.value)">
+                     (change)="setNvmeServiceId()">
             </div>
             <cd-help-text i18n>
               The name of the gateway group.
@@ -1033,6 +1033,125 @@
             </div>
           </div>
         </ng-container>
+
+        <!-- NVMe/TCP -->
+        <!-- mTLS -->
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'nvmeof'">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="enable_mtls"
+                     type="checkbox"
+                     formControlName="enable_mtls">
+              <label class="custom-control-label"
+                     for="enable_mtls"
+                     i18n>Encryption</label>
+              <cd-help-text i18n>Enables mutual TLS (mTLS) between the client and the gateway server.</cd-help-text>
+            </div>
+          </div>
+        </div>
+
+        <!-- root_ca_cert -->
+        <div *ngIf="serviceForm.controls.enable_mtls.value"
+             class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="root_ca_cert">
+            <span i18n>Root CA certificate</span>
+          </label>
+          <div class="cd-col-form-input">
+            <textarea id="root_ca_cert"
+                      class="form-control resize-vertical text-monospace text-pre"
+                      formControlName="root_ca_cert"
+                      rows="5"></textarea>
+            <input type="file"
+                   (change)="fileUpload($event.target.files, 'root_ca_cert')">
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('root_ca_cert', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- client_cert -->
+        <div *ngIf="serviceForm.controls.enable_mtls.value"
+             class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="client_cert">
+            <span i18n>Client CA certificate</span>
+          </label>
+          <div class="cd-col-form-input">
+            <textarea id="client_cert"
+                      class="form-control resize-vertical text-monospace text-pre"
+                      formControlName="client_cert"
+                      rows="5"></textarea>
+            <input type="file"
+                   (change)="fileUpload($event.target.files, 'client_cert')">
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('client_cert', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- client_key -->
+        <div *ngIf="serviceForm.controls.enable_mtls.value"
+             class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="client_key">
+            <span i18n>Client key</span>
+          </label>
+          <div class="cd-col-form-input">
+            <textarea id="client_key"
+                      class="form-control resize-vertical text-monospace text-pre"
+                      formControlName="client_key"
+                      rows="5"></textarea>
+            <input type="file"
+                   (change)="fileUpload($event.target.files, 'client_key')">
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('client_key', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- server_cert -->
+        <div *ngIf="serviceForm.controls.enable_mtls.value"
+             class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="server_cert">
+            <span i18n>Gateway server certificate</span>
+          </label>
+          <div class="cd-col-form-input">
+            <textarea id="server_cert"
+                      class="form-control resize-vertical text-monospace text-pre"
+                      formControlName="server_cert"
+                      rows="5"></textarea>
+            <input type="file"
+                   (change)="fileUpload($event.target.files, 'server_cert')">
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('server_cert', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- server_key -->
+        <div *ngIf="serviceForm.controls.enable_mtls.value"
+             class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="server_key">
+            <span i18n>Gateway server key</span>
+          </label>
+          <div class="cd-col-form-input">
+            <textarea id="server_key"
+                      class="form-control resize-vertical text-monospace text-pre"
+                      formControlName="server_key"
+                      rows="5"></textarea>
+            <input type="file"
+                   (change)="fileUpload($event.target.files, 'server_key')">
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('server_key', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
       </div>
 
       <div class="modal-footer">
