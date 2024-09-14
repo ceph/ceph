@@ -44,7 +44,6 @@ private:
   seastar::future<> do_process();
 
   Ref<PG> pg;
-  epoch_t start_epoch;
   OpInfo op_info;
   PipelineHandle handle;
 

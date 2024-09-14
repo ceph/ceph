@@ -25,7 +25,7 @@ SET_SUBSYS(osd);
 namespace crimson::osd {
 
 InternalClientRequest::InternalClientRequest(Ref<PG> pg)
-  : pg(pg), start_epoch(pg->get_osdmap_epoch())
+  : pg(pg)
 {
   assert(bool(this->pg));
   assert(this->pg->is_primary());
@@ -130,7 +130,7 @@ seastar::future<> InternalClientRequest::start()
         } else {
           return seastar::stop_iteration::no;
         }
-      }, pg, start_epoch);
+      }, pg, pg->get_osdmap_epoch());
     }).then([this] {
       track_event<CompletionEvent>();
     }).handle_exception_type([](std::system_error &error) {
