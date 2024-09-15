@@ -1507,6 +1507,14 @@ that they are to be cleaned, and not that they have been examined and found to
 be clean). Misplaced or degraded PGs might not be flagged as ``clean`` (see
 *PG_AVAILABILITY* and *PG_DEGRADED* above).
 
+This document offers two methods of setting the value of
+``osd_deep_scrub_interval``. The first method listed here changes the value of
+``osd_deep_scrub_interval`` globally. The second method listed here changes the
+value of ``osd_deep scrub interval`` for OSDs and for the Manager daemon.
+
+First Method
+~~~~~~~~~~~~
+
 To manually initiate a deep scrub of a clean PG, run the following command:
 
 .. prompt:: bash $
@@ -1516,7 +1524,7 @@ To manually initiate a deep scrub of a clean PG, run the following command:
 Under certain conditions, the warning ``X PGs not deep-scrubbed in time``
 appears. This might be because the cluster contains many large PGs, which take
 longer to deep-scrub. To remedy this situation, you must change the value of
-``osd_deep_scrub_interval`` either globally or for the Manager daemon.
+``osd_deep_scrub_interval`` globally.
 
 #. Confirm that ``ceph health detail`` returns a ``pgs not deep-scrubbed in
    time`` warning::
@@ -1531,6 +1539,46 @@ longer to deep-scrub. To remedy this situation, you must change the value of
    .. prompt:: bash #
 
       ceph config set global osd_deep_scrub_interval 1209600
+
+The above procedure was developed by Eugen Block in September of 2024.
+
+See `Eugen Block's blog post <https://heiterbiswolkig.blogs.nde.ag/2024/09/06/pgs-not-deep-scrubbed-in-time/>`_ for much more detail.
+
+See `Redmine tracker issue #44959 <https://tracker.ceph.com/issues/44959>`_.
+
+Second Method
+~~~~~~~~~~~~~
+
+To manually initiate a deep scrub of a clean PG, run the following command:
+
+.. prompt:: bash $
+
+   ceph pg deep-scrub <pgid>
+
+Under certain conditions, the warning ``X PGs not deep-scrubbed in time``
+appears. This might be because the cluster contains many large PGs, which take
+longer to deep-scrub. To remedy this situation, you must change the value of
+``osd_deep_scrub_interval`` for OSDs and for the Manager daemon.
+
+#. Confirm that ``ceph health detail`` returns a ``pgs not deep-scrubbed in
+   time`` warning::
+
+      # ceph health detail
+      HEALTH_WARN 1161 pgs not deep-scrubbed in time
+      [WRN] PG_NOT_DEEP_SCRUBBED: 1161 pgs not deep-scrubbed in time
+      pg 86.fff not deep-scrubbed since 2024-08-21T02:35:25.733187+0000
+
+#. Change the ``osd_deep_scrub_interval`` for OSDs:   
+
+   .. prompt:: bash #
+
+      ceph config set osd osd_deep_scrub_interval 1209600
+
+#. Change the ``osd_deep_scrub_interval`` for Managers:   
+
+   .. prompt:: bash #
+
+      ceph config set mgr osd_deep_scrub_interval 1209600
 
 The above procedure was developed by Eugen Block in September of 2024.
 
