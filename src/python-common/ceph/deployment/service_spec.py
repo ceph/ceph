@@ -1381,7 +1381,7 @@ class NvmeofServiceSpec(ServiceSpec):
         #: RADOS pool where ceph-nvmeof config data is stored.
         self.pool = pool
         #: ``addr`` address of the nvmeof gateway
-        self.addr = addr or "0.0.0.0"
+        self.addr = addr
         #: ``port`` port of the nvmeof gateway
         self.port = port or 5500
         #: ``name`` name of the nvmeof gateway
@@ -1447,7 +1447,7 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
         #: ``discovery_addr`` address of the discovery service
-        self.discovery_addr = discovery_addr or "0.0.0.0"
+        self.discovery_addr = discovery_addr
         #: ``discovery_port`` port of the discovery service
         self.discovery_port = discovery_port or 8009
         #: ``log_level`` the nvmeof gateway log level
