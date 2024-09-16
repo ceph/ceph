@@ -119,7 +119,7 @@ class CherryPyConfig(object):
                       server_addr, server_port)
 
         # Initialize custom handlers.
-        cherrypy.tools.authenticate = AuthManagerTool()
+        cherrypy.tools.authenticate = AuthManagerTool(backend=self.get_module_option('auth_backend'))  # type: ignore
         configure_cors()
         cherrypy.tools.plugin_hooks_filter_request = cherrypy.Tool(
             'before_handler',
@@ -275,6 +275,7 @@ class Module(MgrModule, CherryPyConfig):
                min=400, max=599),
         Option(name='redirect_resolve_ip_addr', type='bool', default=False),
         Option(name='cross_origin_url', type='str', default=''),
+        Option(name='auth_backend', type='str', default='local'),
     ]
     MODULE_OPTIONS.extend(options_schema_list())
     for options in PLUGIN_MANAGER.hook.get_options() or []:
