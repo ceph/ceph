@@ -16,9 +16,6 @@ struct CommonClientRequest {
     Ref<PG> pg,
     const hobject_t& soid,
     const osd_reqid_t& reqid);
-
-  static bool should_abort_request(
-    const crimson::Operation& op, std::exception_ptr eptr);
 };
 
 } // namespace crimson::osd
