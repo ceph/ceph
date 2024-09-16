@@ -13,10 +13,10 @@
 #
 releases:
   squid:
-    target_eol: 2026-XX-XX
+    target_eol: 2026-09-19
     releases:
       - version: 19.2.0
-        released: 2024-XX-XX
+        released: 2024-09-25
 
   reef:
     target_eol: 2025-08-01
