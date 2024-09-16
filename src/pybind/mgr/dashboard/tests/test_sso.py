@@ -166,7 +166,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                       idp_metadata=self.IDP_METADATA)
 
         result = self.exec_cmd('sso enable saml2')
-        self.assertEqual(result, 'SSO is "enabled" with "SAML2" protocol.')
+        self.assertEqual(result, 'SSO is "enabled" with "saml2" protocol.')
 
     def test_sso_disable(self):
         result = self.exec_cmd('sso disable')
@@ -181,7 +181,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                       idp_metadata=self.IDP_METADATA)
 
         result = self.exec_cmd('sso status')
-        self.assertEqual(result, 'SSO is "enabled" with "SAML2" protocol.')
+        self.assertEqual(result, 'SSO is "enabled" with "saml2" protocol.')
 
     def test_sso_show_saml2(self):
         result = self.exec_cmd('sso show saml2')

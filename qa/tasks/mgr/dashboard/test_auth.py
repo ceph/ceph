@@ -152,7 +152,8 @@ class AuthTest(DashboardTestCase):
         self._post("/api/auth/logout")
         self.assertStatus(200)
         self.assertJsonBody({
-            "redirect_url": "#/login"
+            "redirect_url": "#/login",
+            "protocol": 'local'
         })
         self._get("/api/host", version='1.1')
         self.assertStatus(401)
@@ -167,7 +168,8 @@ class AuthTest(DashboardTestCase):
         self._post("/api/auth/logout", set_cookies=True)
         self.assertStatus(200)
         self.assertJsonBody({
-            "redirect_url": "#/login"
+            "redirect_url": "#/login",
+            "protocol": 'local'
         })
         self._get("/api/host", set_cookies=True, version='1.1')
         self.assertStatus(401)
