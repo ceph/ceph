@@ -1,5 +1,5 @@
 <ng-container *ngIf="!dropDownOnly; else dropDownOnlyTpl">
-  <button *ngIf="currentAction"
+  <button *ngIf="currentAction && tableActions.length > 0"
           type="button"
           [cdsButton]="currentAction.buttonKind"
           title="{{ useDisableDesc(currentAction) }}"
