@@ -49,5 +49,14 @@ describe('Services page', () => {
 
       services.deleteService('oauth2-proxy');
     });
+
+    it('should create and delete a mgmt-gateway service', () => {
+      services.navigateTo('create');
+      services.addService('mgmt-gateway');
+
+      services.checkExist('mgmt-gateway', true);
+
+      services.deleteService('mgmt-gateway');
+    });
   });
 });

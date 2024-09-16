@@ -22,6 +22,12 @@
                         i18n>
           Authentication must be enabled in an active `mgtm-gateway` service to enable Single Sign-On(SSO) with `oauth2-proxy`
         </cd-alert-panel>
+        <cd-alert-panel *ngIf="serviceForm.controls.service_type.value === 'mgmt-gateway'"
+                        type="info"
+                        spacingClass="mb-3"
+                        i18n>
+          With an active mgmt-gateway service, the dashboard will continue to be served on {{currentURL}}:{{port}} and all other services will be accessible from {{currentURL}}:{{port}}/service_name
+        </cd-alert-panel>
 
         <!-- Service type -->
         <div class="form-group row">
@@ -1052,25 +1058,106 @@
           </div>
         </ng-container>
 
-        <!-- RGW, Ingress, iSCSI & Oauth2-proxy -->
-        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && ['rgw', 'iscsi', 'ingress', 'oauth2-proxy'].includes(serviceForm.controls.service_type.value)">
-          <!-- ssl -->
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && ['mgmt-gateway'].includes(serviceForm.controls.service_type.value)">
+          <!-- port -->
           <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="ssl"
-                       type="checkbox"
-                       formControlName="ssl">
-                <label class="custom-control-label"
-                       for="ssl"
-                       i18n>SSL</label>
-              </div>
+            <label i18n
+                   class="cd-col-form-label"
+                   for="port">Port</label>
+            <div class="cd-col-form-input">
+              <input id="port"
+                     class="form-control"
+                     type="number"
+                     formControlName="port"
+                     min="1"
+                     max="65535">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('port', frm, 'pattern')"
+                    i18n>The entered value needs to be a number.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('port', frm, 'min')"
+                    i18n>The value must be at least 1.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('port', frm, 'max')"
+                    i18n>The value cannot exceed 65535.</span>
             </div>
           </div>
-
+          <!-- enable_auth -->
+          <div class="form-item">
+            <fieldset>
+              <label class="cds--label"
+                     for="pools"
+                     i18n>Authentication</label>
+                <cds-checkbox i18n-label
+                              id="enable_auth"
+                              name="enable_auth"
+                              formControlName="enable_auth">
+                Enable
+                <cd-help-text i18n>
+                  Allows to enable authentication through an external Identity Provider (IdP) using Single Sign-On (SSO)
+                </cd-help-text>
+              </cds-checkbox>
+            </fieldset>
+          </div>
+          <!-- ssl_protocols -->
+          <div class="form-item">
+            <cds-combo-box type="multi"
+                           label="SSL protocols"
+                           selectionFeedback="top-after-reopen"
+                           for="ssl_protocols"
+                           name="ssl_protocols"
+                           formControlName="ssl_protocols"
+                           id="ssl_protocols"
+                           placeholder="Select protocols..."
+                           [appendInline]="true"
+                           [items]="sslProtocolsItems"
+                           i18n-placeholder
+                           i18n>
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+          </div>
+          <!-- ssl_ciphers -->
+          <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="ssl_ciphers">
+            <span i18n>SSL ciphers</span>
+          </label>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input id="ssl_ciphers"
+                     class="form-control"
+                     type="text"
+                     formControlName="ssl_ciphers"
+                     placeholder="ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256">
+            </div>
+            <cd-help-text i18n>Default cipher list used: <a href="https://ssl-config.mozilla.org/#server=nginx"
+                                                            target="_blank">https://ssl-config.mozilla.org/#server=nginx</a></cd-help-text>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('ssl_ciphers', frm, 'invalidPattern')"
+                  i18n>Invalid cipher suite. Each cipher must be separated by '-' and each cipher suite must be separated by ':'</span>
+          </div>
+        </div>
+        </ng-container>
+        <!-- RGW, Ingress, iSCSI, Oauth2-proxy & mgmt-gateway -->
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && ['rgw', 'iscsi', 'ingress', 'oauth2-proxy', 'mgmt-gateway'].includes(serviceForm.controls.service_type.value)">
+          <!-- ssl -->
+          <ng-container *ngIf="!['mgmt-gateway'].includes(serviceForm.controls.service_type.value)">
+            <div class="form-group row">
+              <div class="cd-col-form-offset">
+                <div class="custom-control custom-checkbox">
+                  <input class="custom-control-input"
+                         id="ssl"
+                         type="checkbox"
+                         formControlName="ssl">
+                  <label class="custom-control-label"
+                         for="ssl"
+                         i18n>SSL</label>
+                </div>
+              </div>
+            </div>
+          </ng-container>
           <!-- ssl_cert -->
-          <div *ngIf="serviceForm.controls.ssl.value"
+          <div *ngIf="serviceForm.controls.ssl.value || ['mgmt-gateway'].includes(serviceForm.controls.service_type.value)"
                class="form-group row">
             <label class="cd-col-form-label"
                    for="ssl_cert">
@@ -1095,7 +1182,7 @@
           </div>
 
           <!-- ssl_key -->
-          <div *ngIf="serviceForm.controls.ssl.value && !(['rgw', 'ingress'].includes(serviceForm.controls.service_type.value))"
+          <div *ngIf="(serviceForm.controls.ssl.value && !(['rgw', 'ingress'].includes(serviceForm.controls.service_type.value))) || ['mgmt-gateway'].includes(serviceForm.controls.service_type.value)"
                class="form-group row">
             <label class="cd-col-form-label"
                    for="ssl_key">
@@ -1178,6 +1265,13 @@
             </div>
           </div>
         </ng-container>
+
+      <cd-alert-panel *ngIf="serviceForm.controls.service_type.value === 'mgmt-gateway' && showMgmtGatewayMessage"
+                      type="warning"
+                      spacingClass="mb-3"
+                      i18n>
+        Modifying the default settings could lead to a weaker security configuration
+      </cd-alert-panel>
       </div>
 
       <div class="modal-footer">

@@ -35,7 +35,11 @@ export interface CephServiceAdditionalSpec {
   rgw_frontend_ssl_certificate: string;
   ssl: boolean;
   ssl_cert: string;
+  ssl_certificate: string;
   ssl_key: string;
+  ssl_certificate_key: string;
+  ssl_protocols: string[];
+  ssl_ciphers: string[];
   port: number;
   initial_admin_password: string;
   rgw_realm: string;
@@ -52,6 +56,7 @@ export interface CephServiceAdditionalSpec {
   client_id: string;
   client_secret: string;
   oidc_issuer_url: string;
+  enable_auth: boolean;
 }
 
 export interface CephServicePlacement {

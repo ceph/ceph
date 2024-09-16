@@ -352,3 +352,19 @@ export class TimerServiceInterval {
     this.TIMER_SERVICE_PERIOD = 5000;
   }
 }
+
+export const SSL_PROTOCOLS = ['TLSv1.2', 'TLSv1.3'];
+
+export const SSL_CIPHERS = [
+  'ECDHE',
+  'ECDSA',
+  'AES128',
+  'GCM',
+  'SHA256',
+  'RSA',
+  'AES256',
+  'SHA384',
+  'CHACHA20',
+  'POLY1305',
+  'DHE'
+];
