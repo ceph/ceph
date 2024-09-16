@@ -13,6 +13,7 @@ import requests
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
+from ..services.auth import JwtManager
 from ..services.orchestrator import OrchClient
 from ..settings import Settings
 from ..tools import configure_cors
@@ -24,21 +25,25 @@ from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
 @APIDoc('Multi-cluster Management API', 'Multi-cluster')
 class MultiCluster(RESTController):
     def _proxy(self, method, base_url, path, params=None, payload=None, verify=False,
-               token=None, cert=None):
+               token=None, cert=None, headers=None):
         if not base_url.endswith('/'):
             base_url = base_url + '/'
 
         try:
             if token:
-                headers = {
+                default_headers = {
                     'Accept': 'application/vnd.ceph.api.v1.0+json',
                     'Authorization': 'Bearer ' + token,
                 }
             else:
-                headers = {
+                default_headers = {
                     'Accept': 'application/vnd.ceph.api.v1.0+json',
                     'Content-Type': 'application/json',
                 }
+
+            if headers:
+                default_headers.update(headers)
+
             cert_file_path = verify
             if verify:
                 with tempfile.NamedTemporaryFile(delete=False) as cert_file:
@@ -46,7 +51,7 @@ class MultiCluster(RESTController):
                     cert_file_path = cert_file.name
             response = requests.request(method, base_url + path, params=params,
                                         json=payload, verify=cert_file_path,
-                                        headers=headers)
+                                        headers=default_headers)
         except Exception as e:
             raise DashboardException(
                 "Could not reach {}, {}".format(base_url+path, e),
@@ -75,9 +80,8 @@ class MultiCluster(RESTController):
             payload = {
                 'username': username,
                 'password': password,
-                'ttl': ttl
             }
-            cluster_token = self.check_cluster_connection(url, payload, username,
+            cluster_token = self.check_cluster_connection(url, payload, ttl, username,
                                                           ssl_verify, ssl_certificate)
 
             cors_endpoints_string = self.get_cors_endpoints_string(hub_url)
@@ -137,7 +141,7 @@ class MultiCluster(RESTController):
         cors_endpoints_string = ", ".join(cors_endpoints_set)
         return cors_endpoints_string
 
-    def check_cluster_connection(self, url, payload, username, ssl_verify, ssl_certificate):
+    def check_cluster_connection(self, url, payload, ttl, username, ssl_verify, ssl_certificate):
         try:
             hub_cluster_version = mgr.version.split('ceph version ')[1]
             multi_cluster_content = self._proxy('GET', url, 'api/multi-cluster/get_config',
@@ -149,8 +153,13 @@ class MultiCluster(RESTController):
                                          to is upgraded to { hub_cluster_version } to enable the \
                                          multi-cluster functionality.',
                                          code='invalid_version', component='multi-cluster')
+            ttl_token = self.generate_token_for_ttl(username, ttl)
+            headers = {
+                'X-Multi-Cluster-Token': ttl_token
+            }
             content = self._proxy('POST', url, 'api/auth', payload=payload,
-                                  verify=ssl_verify, cert=ssl_certificate)
+                                  verify=ssl_verify, cert=ssl_certificate,
+                                  headers=headers)
             if 'token' not in content:
                 raise DashboardException(msg=content['detail'], code='invalid_credentials',
                                          component='multi-cluster')
@@ -368,6 +377,14 @@ class MultiCluster(RESTController):
                                               'time_left': time_left}
 
         return token_status_map
+
+    def generate_token_for_ttl(self, username, ttl):
+        payload = {
+            'ttl': ttl,
+            'iat': int(time.time())
+        }
+        token = JwtManager.gen_token(username=username, payload=payload)
+        return token
 
     @Endpoint()
     @ReadPermission
