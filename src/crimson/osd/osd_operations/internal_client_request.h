@@ -6,7 +6,6 @@
 #include "crimson/common/type_helpers.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/client_request_common.h"
-#include "crimson/osd/osd_operations/common/pg_pipeline.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_activation_blocker.h"
 
