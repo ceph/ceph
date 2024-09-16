@@ -383,7 +383,8 @@ export class ErasureCodeProfileFormModalComponent
             nodes,
             this.form.get('crushRoot'),
             this.form.get('crushFailureDomain'),
-            this.form.get('crushDeviceClass')
+            this.form.get('crushDeviceClass'),
+            false
           );
           this.plugins = plugins;
           this.names = names;

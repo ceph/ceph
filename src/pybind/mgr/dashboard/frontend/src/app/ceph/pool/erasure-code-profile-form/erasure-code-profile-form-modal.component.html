@@ -410,8 +410,6 @@
           <label for="crushDeviceClass"
                  class="cd-col-form-label">
             <ng-container i18n>Crush device class</ng-container>
-            <cd-helper [html]="tooltips.crushDeviceClass">
-            </cd-helper>
           </label>
           <div class="cd-col-form-input">
             <select class="form-select"
@@ -419,12 +417,15 @@
                     name="crushDeviceClass"
                     formControlName="crushDeviceClass">
               <option ngValue=""
-                      i18n>Let Ceph decide</option>
+                      i18n>All devices</option>
               <option *ngFor="let deviceClass of devices"
                       [ngValue]="deviceClass">
                 {{ deviceClass }}
               </option>
             </select>
+            <cd-help-text>
+              <span i18n>{{tooltips.crushDeviceClass}}</span>
+            </cd-help-text>
             <span class="form-text text-muted"
                   i18n>Available OSDs: {{deviceCount}}</span>
           </div>
