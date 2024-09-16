@@ -225,7 +225,7 @@ Copyright: 2015 Red Hat <contact@redhat.com>
            2018 SUSE LLC
 License: GNU Affero General Public License, Version 3
 
-Files: src/arch/*s390x*, src/common/*s390x*
+Files: src/common/*s390x*
 Copyright: 2024 IBM <contact@ibm.com>
 License: GNU General Public License, version 2
          Apache License, version 2.0
