@@ -132,6 +132,7 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
   bufferptr bptr)
 {
   ceph_assert(device);
+  ceph_assert(bptr.is_page_aligned());
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   if (!check_valid_range(addr, bptr)) {
     return crimson::ct_error::erange::make();
@@ -146,6 +147,7 @@ BlockRBManager::read_ertr::future<> BlockRBManager::read(
   bufferptr &bptr)
 {
   ceph_assert(device);
+  ceph_assert(bptr.is_page_aligned());
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   if (!check_valid_range(addr, bptr)) {
     return crimson::ct_error::erange::make();
