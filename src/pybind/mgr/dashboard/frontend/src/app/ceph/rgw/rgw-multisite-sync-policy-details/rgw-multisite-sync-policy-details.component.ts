@@ -17,6 +17,12 @@ import { RgwMultisiteSyncFlowModalComponent } from '../rgw-multisite-sync-flow-m
 import { FlowType } from '../models/rgw-multisite';
 import { RgwMultisiteSyncPipeModalComponent } from '../rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+
+enum MultisiteResourceType {
+  flow = 'flow',
+  pipe = 'pipe'
+}
 
 @Component({
   selector: 'cd-rgw-multisite-sync-policy-details',
@@ -34,6 +40,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
 
+  resourceType: MultisiteResourceType = MultisiteResourceType.flow;
   flowType = FlowType;
   modalRef: NgbModalRef;
   symmetricalFlowData: any = [];
@@ -136,22 +143,17 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       click: () => this.openModal(FlowType.directional),
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
-    const dirEditAction: CdTableAction = {
-      permission: 'update',
-      icon: Icons.edit,
-      name: this.actionLabels.EDIT,
-      click: () => this.openModal(FlowType.directional, true),
-      disable: () => true // TODO: disabling 'edit' as we are not getting flow ID from backend which is needed for edit
-    };
     const dirDeleteAction: CdTableAction = {
       permission: 'delete',
       icon: Icons.destroy,
-      disable: () => true, // TODO: disabling 'delete' as we are not getting flow ID from backend which is needed for deletion
+      // TODO: disabling 'delete' as we are not getting flow_id from backend which is needed for deletion
+      disable: () =>
+        'Deleting the directional flow is disabled in the UI. Please use CLI to delete the directional flow',
       name: this.actionLabels.DELETE,
       click: () => this.deleteFlow(FlowType.directional),
-      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+      canBePrimary: (selection: CdTableSelection) => selection.hasSelection
     };
-    this.dirFlowTableActions = [dirAddAction, dirEditAction, dirDeleteAction];
+    this.dirFlowTableActions = [dirAddAction, dirDeleteAction];
     const pipeAddAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
@@ -229,13 +231,14 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
 
     try {
       const res = await this.modalRef.result;
-      if (res === 'success') {
+      if (res === NotificationType.success) {
         this.loadData();
       }
     } catch (err) {}
   }
 
   deleteFlow(flowType: FlowType) {
+    this.resourceType = MultisiteResourceType.flow;
     let selection = this.symFlowSelection;
     if (flowType === FlowType.directional) {
       selection = this.dirFlowSelection;
@@ -297,13 +300,14 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
 
     try {
       const res = await this.modalRef.result;
-      if (res === 'success') {
+      if (res === NotificationType.success) {
         this.loadData();
       }
     } catch (err) {}
   }
 
   deletePipe() {
+    this.resourceType = MultisiteResourceType.pipe;
     const pipeIds = this.pipeSelection.selected.map((pipe: any) => pipe.id);
     this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: this.pipeSelection.hasSingleSelection ? $localize`Pipe` : $localize`Pipes`,

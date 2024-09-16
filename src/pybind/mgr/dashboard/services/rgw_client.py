@@ -2071,31 +2071,49 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
     def create_sync_flow(self, group_id: str, flow_id: str, flow_type: str,
-                         zones: Optional[List[str]] = None, bucket_name: str = '',
-                         source_zone: Optional[List[str]] = None,
-                         destination_zone: Optional[List[str]] = None):
+                         zones: Optional[Dict[str, List]] = None, bucket_name: str = '',
+                         source_zone: Optional[str] = None,
+                         destination_zone: Optional[str] = None):
         rgw_sync_policy_cmd = ['sync', 'group', 'flow', 'create', '--group-id', group_id,
                                '--flow-id', flow_id, '--flow-type', SyncFlowTypes[flow_type].value]
-
-        if SyncFlowTypes[flow_type].value == 'directional':
-            if source_zone is not None:
-                rgw_sync_policy_cmd += ['--source-zone', ','.join(source_zone)]
-            if destination_zone is not None:
-                rgw_sync_policy_cmd += ['--dest-zone', ','.join(destination_zone)]
-        else:
-            if zones:
-                rgw_sync_policy_cmd += ['--zones', ','.join(zones)]
 
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
 
-        try:
-            exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
-            if exit_code > 0:
-                raise DashboardException(f'Unable to create sync flow: {err}',
-                                         http_status_code=500, component='rgw')
-        except SubprocessError as error:
-            raise DashboardException(error, http_status_code=500, component='rgw')
+        if SyncFlowTypes[flow_type].value == 'directional':
+
+            if source_zone is not None:
+                rgw_sync_policy_cmd += ['--source-zone', source_zone]
+
+            if destination_zone is not None:
+                rgw_sync_policy_cmd += ['--dest-zone', destination_zone]
+
+            logger.info("Creating directional flow! %s", rgw_sync_policy_cmd)
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+                if exit_code > 0:
+                    raise DashboardException(f'Unable to create sync flow: {err}',
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+
+        else:
+            if zones is not None and (zones['added'] or zones['removed']):
+                if len(zones['added']) > 0:
+                    rgw_sync_policy_cmd += ['--zones', ','.join(zones['added'])]
+
+                    logger.info("Creating symmetrical flow! %s", rgw_sync_policy_cmd)
+                    try:
+                        exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+                        if exit_code > 0:
+                            raise DashboardException(f'Unable to create sync flow: {err}',
+                                                     http_status_code=500, component='rgw')
+                    except SubprocessError as error:
+                        raise DashboardException(error, http_status_code=500, component='rgw')
+
+                if len(zones['removed']) > 0:
+                    self.remove_sync_flow(group_id, flow_id, flow_type, source_zone,
+                                          destination_zone, zones['removed'], bucket_name)
 
     def remove_sync_flow(self, group_id: str, flow_id: str, flow_type: str,
                          source_zone='', destination_zone='',
@@ -2112,6 +2130,7 @@ class RgwMultisite:
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
 
+        logger.info("Removing sync flow! %s", rgw_sync_policy_cmd)
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
             if exit_code > 0:
@@ -2121,36 +2140,44 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
     def create_sync_pipe(self, group_id: str, pipe_id: str,
-                         source_zones: Optional[List[str]] = None,
-                         destination_zones: Optional[List[str]] = None,
+                         source_zones: Dict[str, Any],
+                         destination_zones: Dict[str, Any],
                          source_bucket: str = '',
                          destination_bucket: str = '',
                          bucket_name: str = ''):
-        rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'create',
-                               '--group-id', group_id, '--pipe-id', pipe_id]
 
-        if bucket_name:
-            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        if source_zones['added'] or destination_zones['added']:
+            rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'create',
+                                   '--group-id', group_id, '--pipe-id', pipe_id]
 
-        if source_zones:
-            rgw_sync_policy_cmd += ['--source-zones', ','.join(source_zones)]
+            if bucket_name:
+                rgw_sync_policy_cmd += ['--bucket', bucket_name]
 
-        if destination_zones:
-            rgw_sync_policy_cmd += ['--dest-zones', ','.join(destination_zones)]
+            if source_bucket:
+                rgw_sync_policy_cmd += ['--source-bucket', source_bucket]
 
-        if source_bucket:
-            rgw_sync_policy_cmd += ['--source-bucket', source_bucket]
+            if destination_bucket:
+                rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
 
-        if destination_bucket:
-            rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
+            if source_zones['added']:
+                rgw_sync_policy_cmd += ['--source-zones', ','.join(source_zones['added'])]
 
-        try:
-            exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
-            if exit_code > 0:
-                raise DashboardException(f'Unable to create sync pipe: {err}',
-                                         http_status_code=500, component='rgw')
-        except SubprocessError as error:
-            raise DashboardException(error, http_status_code=500, component='rgw')
+            if destination_zones['added']:
+                rgw_sync_policy_cmd += ['--dest-zones', ','.join(destination_zones['added'])]
+
+            logger.info("Creating sync pipe!")
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+                if exit_code > 0:
+                    raise DashboardException(f'Unable to create sync pipe: {err}',
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+
+        if source_zones['removed'] or destination_zones['removed']:
+            self.remove_sync_pipe(group_id, pipe_id, source_zones['removed'],
+                                  destination_zones['removed'], destination_bucket,
+                                  bucket_name)
 
     def remove_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Optional[List[str]] = None,
@@ -2171,6 +2198,7 @@ class RgwMultisite:
         if destination_bucket:
             rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
 
+        logger.info("Removing sync pipe! %s", rgw_sync_policy_cmd)
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
             if exit_code > 0:
@@ -2191,10 +2219,12 @@ class RgwMultisite:
         # create a sync flow with source and destination zones
         self.create_sync_flow(_SYNC_GROUP_ID, _SYNC_FLOW_ID,
                               SyncFlowTypes.symmetrical.value,
-                              zones=zone_names)
+                              zones={'added': zone_names, 'removed': []})
         # create a sync pipe with source and destination zones
-        self.create_sync_pipe(_SYNC_GROUP_ID, _SYNC_PIPE_ID, source_zones=['*'],
-                              destination_zones=['*'], source_bucket='*', destination_bucket='*')
+        self.create_sync_pipe(_SYNC_GROUP_ID, _SYNC_PIPE_ID,
+                              source_zones={'added': '*', 'removed': []},
+                              destination_zones={'added': '*', 'removed': []}, source_bucket='*',
+                              destination_bucket='*')
         # period update --commit
         self.update_period()
 

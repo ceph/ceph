@@ -61,3 +61,8 @@ export enum FlowType {
   directional = 'directional',
   symmetrical = 'symmetrical'
 }
+
+export interface Zone {
+  added: string[];
+  removed: string[];
+}

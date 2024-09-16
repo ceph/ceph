@@ -59,7 +59,23 @@
                      i18n>Source Zone
               </label>
               <div class="cd-col-form-input">
-                <ng-container *ngTemplateOutlet="zoneMultiSelect;context: { name: 'source_zone', zone: sourceZones }"></ng-container>
+                <select id="sourceZone"
+                        name="sourceZone"
+                        class="form-select"
+                        formControlName="source_zone"
+                        [autofocus]="editing">
+                <option i18n
+                        *ngIf="zones.data.available.length == 0"
+                        [ngValue]="null">Loading...</option>
+                <option i18n
+                        *ngIf="zones.data.available.length > 0"
+                        [ngValue]="null">-- Select source zone --</option>
+                <option *ngFor="let sourceZone of zones.data.available"
+                        [value]="sourceZone.name">{{ sourceZone.name }}</option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="currentFormGroupContext.showError('source_zone', frm, 'required')"
+                    i18n>This field is required.</span>
               </div>
             </div>
             <div class="form-group row">
@@ -67,7 +83,16 @@
                      for="destination_zone"
                      i18n>Destination Zone</label>
               <div class="cd-col-form-input">
-                <ng-container *ngTemplateOutlet="zoneMultiSelect;context: { name: 'destination_zone', zone: destinationZones }"></ng-container>
+                <input id="destination_zone"
+                       name="destination_zone"
+                       class="form-control"
+                       type="text"
+                       i18n-placeholder
+                       placeholder="Destination Zone..."
+                       formControlName="destination_zone"/>
+                <span class="invalid-feedback"
+                      *ngIf="currentFormGroupContext.showError('destination_zone', frm, 'required')"
+                      i18n>This field is required.</span>
               </div>
             </div>
           </ng-template>
