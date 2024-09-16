@@ -67,12 +67,12 @@ class OAuth2ProxyService(CephadmService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         svc_spec = cast(OAuth2ProxySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        whitelist_domains = svc_spec.whitelist_domains or []
-        whitelist_domains += self.get_service_ips_and_hosts('mgmt-gateway')
+        allowlist_domains = svc_spec.allowlist_domains or []
+        allowlist_domains += self.get_service_ips_and_hosts('mgmt-gateway')
         context = {
             'spec': svc_spec,
             'cookie_secret': svc_spec.cookie_secret or self.generate_random_secret(),
-            'whitelist_domains': whitelist_domains,
+            'allowlist_domains': allowlist_domains,
             'redirect_url': svc_spec.redirect_url or self.get_redirect_url()
         }
 
