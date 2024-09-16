@@ -317,16 +317,16 @@ directory tree within the ``suites/`` subdirectory of the `ceph/qa sub-directory
 The set of all tests defined by a given subdirectory of ``suites/`` is
 called an "integration test suite", or a "teuthology suite".
 
-Combination of yaml facets is controlled by special files (``%`` and
-``+``) that are placed within the directory tree and can be thought of as
-operators.  The ``%`` file is the "convolution" operator and ``+``
-signifies concatenation.
+Combination of YAML facets is controlled by special files (``%``, ``+`` and ``$``)
+that are placed within the directory tree and can be thought of as
+operators.  The ``%`` file is the "convolution" operator, ``+`` signifies
+concatenation and ``$`` is the "random selection" operator.
 
-Convolution operator
-^^^^^^^^^^^^^^^^^^^^
+Convolution operator - ``%``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The convolution operator, implemented as a (typically empty) file called ``%``,
-tells teuthology to construct a test matrix from yaml facets found in
+tells teuthology to construct a test matrix from YAML facets found in
 subdirectories below the directory containing the operator.
 
 For example, the `ceph-deploy suite
@@ -421,8 +421,8 @@ tests will still preserve the correct numerator (subset of subsets).
 You can disable nested subsets using the ``--no-nested-subset`` argument to
 ``teuthology-suite``.
 
-Concatenation operator
-^^^^^^^^^^^^^^^^^^^^^^
+Concatenation operator - ``+``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 For even greater flexibility in sharing yaml files between suites, the
 special file plus (``+``) can be used to concatenate files within a
@@ -560,6 +560,15 @@ The next stage is running thrash tests and given workload tests. Later on, conti
 rest of the cluster (``5-finish-upgrade.yaml``).
 The last stage is requiring the updated release (``ceph require-osd-release quincy``,
 ``ceph osd set-require-min-compat-client quincy``) and running the ``final-workload``.
+
+Random Selection Operator - ``$``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The presence of a file named ``$`` provides a hint to teuthology to randomly
+include one of the YAML fragments in the test. Such a scenario is typically
+seen when we need to choose one of the flavors of the features/options to be
+tested randomly.
+
 
 Position Independent Linking
 ----------------------------
