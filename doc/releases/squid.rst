@@ -15,8 +15,8 @@ Ceph
   produce large amounts of output, this avoids a potential spike in memory
   usage on the daemon, allows for faster streaming writes to a file local to
   the daemon, and reduces time holding any locks required to execute the
-  command. For analysis, it is necessary to retrieve the file from the host
-  running the daemon manually. Currently, only ``--format=json|json-pretty``
+  command. For analysis, it is necessary to manually retrieve the file from the host
+  running the daemon. Currently, only ``--format=json|json-pretty``
   are supported.
 * ``cls_cxx_gather`` is marked as deprecated.
 * Tracing: The blkin tracing feature (see
@@ -26,7 +26,7 @@ Ceph
   be removed in a later release.
 * PG dump: The default output of ``ceph pg dump --format json`` has changed.
   The default JSON format produces a rather massive output in large clusters
-  and isn't scalable. So we have removed the 'network_ping_times' section from
+  and isn't scalable, so we have removed the 'network_ping_times' section from
   the output. Details in the tracker: https://tracker.ceph.com/issues/57460
 
 CephFS
@@ -117,11 +117,9 @@ CephX
 Dashboard
 ~~~~~~~~~
 
-* Dashboard: Rearranged Navigation Layout: The navigation layout has been
-  reorganized for improved usability and easier access to key features.
+* Dashboard: Rearranged Navigation Layout: The navigation layout has been reorganized for improved usability and easier access to key features.
 * Dashboard: CephFS Improvments
-  * Support for managing CephFS snapshots and clones, as well as snapshot
-    schedule management
+  * Support for managing CephFS snapshots and clones, as well as snapshot schedule management
   * Manage authorization capabilities for CephFS resources
   * Helpers on mounting a CephFS volume
 * Dashboard: RGW Improvements
@@ -163,7 +161,7 @@ RADOS
   health warning for that pool. The user might temporarily mute this warning
   using ``ceph health mute POOL_APP_NOT_ENABLED``.
 * RADOS: `get_pool_is_selfmanaged_snaps_mode` C++ API has been deprecated due
-  to being prone to false negative results.  It's safer replacement is
+  to being prone to false negative results.  Its safer replacement is
   `pool_is_in_selfmanaged_snaps_mode`.
 * RADOS: For bug 62338 (https://tracker.ceph.com/issues/62338), we did not
   choose to condition the fix on a server flag in order to simplify
@@ -202,7 +200,7 @@ RBD
 ~~~
 
 * RBD: When diffing against the beginning of time (`fromsnapname == NULL`) in
-  fast-diff mode (`whole_object == true` with `fast-diff` image feature enabled
+  fast-diff mode (`whole_object == true` with ``fast-diff`` image feature enabled
   and valid), diff-iterate is now guaranteed to execute locally if exclusive
   lock is available.  This brings a dramatic performance improvement for QEMU
   live disk synchronization and backup use cases.
@@ -251,7 +249,7 @@ RGW
   and the bucket notification configuration is stored in a bucket attribute.
   This new representation supports multisite replication via metadata sync and
   can scale to many topics. This is on by default for new deployments, but is
-  is not enabled by default on upgrade. Once all radosgws have upgraded (on all
+  not enabled by default on upgrade. Once all radosgws have upgraded (on all
   zones in a multisite configuration), the ``notification_v2`` zone feature can
   be enabled to migrate to the new format. See
   https://docs.ceph.com/en/squid/radosgw/zone-features for details. The "v1"
@@ -326,7 +324,7 @@ RGW
   permissions unless explicitly granted by topic policy.
 * RGW: Fix issue with persistent notifications where the changes to topic param
   that were modified while persistent notifications were in the queue will be
-  reflected in notifications.  So if user sets up topic with incorrect config
+  reflected in notifications.  So if the user sets up topic with incorrect config
   (password/ssl) causing failure while delivering the notifications to broker,
   can now modify the incorrect topic attribute and on retry attempt to delivery
   the notifications, new configs will be used.
@@ -339,3 +337,225 @@ Telemetry
 * The ``basic`` channel in telemetry now captures pool flags that allows us to
   better understand feature adoption, such as Crimson. 
   To opt in to telemetry, run ``ceph telemetry on``.
+
+Upgrading from Quincy or Reef
+--------------------------------
+
+Before starting, make sure your cluster is stable and healthy (no down or recovering OSDs).
+(This is optional, but recommended.) You can disable the autoscaler for all pools during the
+upgrade using the noautoscale flag.
+
+.. note::
+
+   You can monitor the progress of your upgrade at each stage with the ``ceph versions`` command, which will tell you what ceph version(s) are running for each type of daemon.
+
+Upgrading cephadm clusters
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If your cluster is deployed with cephadm (first introduced in Octopus), then the upgrade process is entirely automated. To initiate the upgrade,
+
+  .. prompt:: bash #
+
+    ceph orch upgrade start --image quay.io/ceph/ceph:v19.2.0
+
+The same process is used to upgrade to future minor releases.
+
+Upgrade progress can be monitored with
+
+  .. prompt:: bash #
+
+    ceph orch upgrade status
+
+Upgrade progress can also be monitored with `ceph -s` (which provides a simple progress bar) or more verbosely with
+
+  .. prompt:: bash #
+
+    ceph -W cephadm
+
+The upgrade can be paused or resumed with
+
+  .. prompt:: bash #
+
+    ceph orch upgrade pause  # to pause
+    ceph orch upgrade resume # to resume
+
+or canceled with
+
+.. prompt:: bash #
+
+    ceph orch upgrade stop
+
+Note that canceling the upgrade simply stops the process; there is no ability to downgrade back to Quincy or Reef.
+
+Upgrading non-cephadm clusters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note::
+
+   1. If your cluster is running Quincy (17.2.x) or later, you might choose to first convert it to use cephadm so that the upgrade to Reef is automated (see above).
+      For more information, see https://docs.ceph.com/en/squid/cephadm/adoption/.
+
+   2. If your cluster is running Quincy (17.2.x) or later, systemd unit file names have changed to include the cluster fsid. To find the correct systemd unit file name for your cluster, run following command:
+
+      ```
+      systemctl -l | grep <daemon type>
+      ```
+
+      Example:
+
+      ```
+      $ systemctl -l | grep mon | grep active
+      ceph-6ce0347c-314a-11ee-9b52-000af7995d6c@mon.f28-h21-000-r630.service                                           loaded active running   Ceph mon.f28-h21-000-r630 for 6ce0347c-314a-11ee-9b52-000af7995d6c
+      ```
+
+#. Set the `noout` flag for the duration of the upgrade. (Optional, but recommended.)
+
+   .. prompt:: bash #
+
+      ceph osd set noout
+
+#. Upgrade monitors by installing the new packages and restarting the monitor daemons. For example, on each monitor host
+
+   .. prompt:: bash #
+
+      systemctl restart ceph-mon.target
+
+   Once all monitors are up, verify that the monitor upgrade is complete by looking for the `squid` string in the mon map. The command
+
+   .. prompt:: bash #
+
+      ceph mon dump | grep min_mon_release
+
+   should report:
+
+   .. prompt:: bash #
+
+      min_mon_release 19 (squid)
+
+   If it does not, that implies that one or more monitors hasn't been upgraded and restarted and/or the quorum does not include all monitors.
+
+#. Upgrade `ceph-mgr` daemons by installing the new packages and restarting all manager daemons. For example, on each manager host,
+
+   .. prompt:: bash #
+
+      systemctl restart ceph-mgr.target
+
+   Verify the `ceph-mgr` daemons are running by checking `ceph -s`:
+
+   .. prompt:: bash #
+
+      ceph -s
+
+   ::
+
+     ...
+       services:
+        mon: 3 daemons, quorum foo,bar,baz
+        mgr: foo(active), standbys: bar, baz
+     ...
+
+#. Upgrade all OSDs by installing the new packages and restarting the ceph-osd daemons on all OSD hosts
+
+   .. prompt:: bash #
+
+      systemctl restart ceph-osd.target
+
+#. Upgrade all CephFS MDS daemons. For each CephFS file system,
+
+   #. Disable standby_replay:
+
+         .. prompt:: bash #
+
+            ceph fs set <fs_name> allow_standby_replay false
+
+   #. Reduce the number of ranks to 1. (Make note of the original number of MDS daemons first if you plan to restore it later.)
+
+      .. prompt:: bash #
+
+         ceph status # ceph fs set <fs_name> max_mds 1
+
+   #. Wait for the cluster to deactivate any non-zero ranks by periodically checking the status
+
+      .. prompt:: bash #
+
+         ceph status
+
+   #. Take all standby MDS daemons offline on the appropriate hosts with
+
+      .. prompt:: bash #
+
+         systemctl stop ceph-mds@<daemon_name>
+
+   #. Confirm that only one MDS is online and is rank 0 for your FS
+
+      .. prompt:: bash #
+
+         ceph status
+
+   #. Upgrade the last remaining MDS daemon by installing the new packages and restarting the daemon
+
+      .. prompt:: bash #
+
+         systemctl restart ceph-mds.target
+
+   #. Restart all standby MDS daemons that were taken offline
+
+      .. prompt:: bash #
+
+         systemctl start ceph-mds.target
+
+   #. Restore the original value of `max_mds` for the volume
+
+      .. prompt:: bash #
+
+         ceph fs set <fs_name> max_mds <original_max_mds>
+
+#. Upgrade all radosgw daemons by upgrading packages and restarting daemons on all hosts
+
+   .. prompt:: bash #
+
+      systemctl restart ceph-radosgw.target
+
+#. Complete the upgrade by disallowing pre-Squid OSDs and enabling all new Squid-only functionality
+
+   .. prompt:: bash #
+
+      ceph osd require-osd-release squid
+
+#. If you set `noout` at the beginning, be sure to clear it with
+
+   .. prompt:: bash #
+
+      ceph osd unset noout
+
+#. Consider transitioning your cluster to use the cephadm deployment and orchestration framework to simplify
+   cluster management and future upgrades. For more information on converting an existing cluster to cephadm,
+   see https://docs.ceph.com/en/squid/cephadm/adoption/.
+
+Post-upgrade
+~~~~~~~~~~~~
+
+#. Verify the cluster is healthy with `ceph health`. If your cluster is running Filestore, and you are upgrading directly from Quincy to Squid, a deprecation warning is expected. This warning can be temporarily muted using the following command
+
+   .. prompt:: bash #
+
+      ceph health mute OSD_FILESTORE
+
+#. Consider enabling the `telemetry module <https://docs.ceph.com/en/squid/mgr/telemetry/>`_ to send anonymized usage statistics and crash information to the Ceph upstream developers. To see what would be reported (without actually sending any information to anyone),
+
+   .. prompt:: bash #
+
+      ceph telemetry preview-all
+
+   If you are comfortable with the data that is reported, you can opt-in to automatically report the high-level cluster metadata with
+
+   .. prompt:: bash #
+
+      ceph telemetry on
+
+   The public dashboard that aggregates Ceph telemetry can be found at https://telemetry-public.ceph.com/.
+
+Upgrading from pre-Quincy releases (like Pacific)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You **must** first upgrade to Quincy (17.2.z) or Reef (18.2.z) before upgrading to Squid.
