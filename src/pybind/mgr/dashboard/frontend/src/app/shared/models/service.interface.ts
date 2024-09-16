@@ -47,6 +47,11 @@ export interface CephServiceAdditionalSpec {
   custom_dns: string[];
   join_sources: string[];
   include_ceph_users: string[];
+  https_address: string;
+  provider_display_name: string;
+  client_id: string;
+  client_secret: string;
+  oidc_issuer_url: string;
 }
 
 export interface CephServicePlacement {
