@@ -457,18 +457,17 @@ struct ECCommon {
 
     int get_remaining_shards(
       const hobject_t &hoid,
-      const std::set<int> &avail,
-      const std::set<int> &want,
-      const read_result_t &result,
-      std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read,
-      bool for_recovery);
+      read_result_t &read_result,
+      read_request_t &read_request,
+      bool for_recovery,
+      bool fast_read);
 
     void get_all_avail_shards(
       const hobject_t &hoid,
-      const std::set<pg_shard_t> &error_shards,
       std::set<int> &have,
       std::map<shard_id_t, pg_shard_t> &shards,
-      bool for_recovery);
+      bool for_recovery,
+      const std::optional<std::set<pg_shard_t>>& error_shards = std::nullopt);
 
     friend std::ostream &operator<<(std::ostream &lhs, const ReadOp &rhs);
     friend struct FinishReadOp;
@@ -483,8 +482,9 @@ struct ECCommon {
       const std::map<int, extent_set> &want_shard_read, ///< [in] desired shards
       bool for_recovery,         ///< [in] true if we may use non-acting replicas
       bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
-      read_request_t& read_request ///< [out] shard_reads, corresponding subchunks / other sub reads to read
-    ); ///< @return error code, 0 on success
+      read_request_t& read_request, ///< [out] shard_reads, corresponding subchunks / other sub reads to read
+      const std::optional<std::set<pg_shard_t>>& error_shards = std::nullopt //< [in] Shards where reads have failed (optional)
+      ); ///< @return error code, 0 on success
 
     void schedule_recovery_work();
 

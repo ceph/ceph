@@ -14,13 +14,13 @@
 
 #include <iostream>
 #include <sstream>
+#include <fmt/ostream.h>
 
 #include "ECCommon.h"
 #include "messages/MOSDECSubOpWrite.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "ECMsgTypes.h"
 #include "PGLog.h"
-
 #include "osd_tracer.h"
 
 #define dout_context cct
@@ -218,10 +218,10 @@ void ECCommon::ReadPipeline::on_change()
 
 void ECCommon::ReadPipeline::get_all_avail_shards(
   const hobject_t &hoid,
-  const set<pg_shard_t> &error_shards,
   set<int> &have,
   map<shard_id_t, pg_shard_t> &shards,
-  bool for_recovery)
+  bool for_recovery,
+  const std::optional<set<pg_shard_t>>& error_shards)
 {
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_acting_shards().begin();
@@ -229,7 +229,7 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
        ++i) {
     dout(10) << __func__ << ": checking acting " << *i << dendl;
     const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
-    if (error_shards.find(*i) != error_shards.end())
+    if (error_shards && error_shards->find(*i) != error_shards->end())
       continue;
     if (!missing.is_missing(hoid)) {
       ceph_assert(!have.count(i->shard));
@@ -244,7 +244,7 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
 	   get_parent()->get_backfill_shards().begin();
 	 i != get_parent()->get_backfill_shards().end();
 	 ++i) {
-      if (error_shards.find(*i) != error_shards.end())
+      if (error_shards && error_shards->find(*i) != error_shards->end())
 	continue;
       if (have.count(i->shard)) {
 	ceph_assert(shards.count(i->shard));
@@ -272,7 +272,7 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
 	if (m) {
 	  ceph_assert(!(*m).is_missing(hoid));
 	}
-	if (error_shards.find(*i) != error_shards.end())
+	if (error_shards && error_shards->find(*i) != error_shards->end())
 	  continue;
 	have.insert(i->shard);
 	shards.insert(make_pair(i->shard, *i));
@@ -286,15 +286,15 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   const map<int, extent_set> &want_shard_reads,
   bool for_recovery,
   bool do_redundant_reads,
-  read_request_t &read_request) {
+  read_request_t &read_request,
+  const std::optional<set<pg_shard_t>>& error_shards) {
   // Make sure we don't do redundant reads for recovery
   ceph_assert(!for_recovery || !do_redundant_reads);
 
   set<int> have;
   map<shard_id_t, pg_shard_t> shards;
-  set<pg_shard_t> error_shards;
 
-  get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
+  get_all_avail_shards(hoid, have, shards, for_recovery, error_shards);
 
   map<int, vector<pair<int, int>>> need;
   set<int> want;
@@ -315,8 +315,6 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     }
   }
 
-  bool experimental = cct->_conf->osd_ec_partial_reads_experimental;
-
   extent_set extra_extents;
 
   /* First deal with missing shards */
@@ -325,14 +323,8 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
      * redundant reads is set, then we want to have the same reads on
      * every extent. Otherwise, we need to read every shard only if the
      * necessary shard is missing.
-     *
-     * FIXME: (remove !experimental) This causes every read to grow to to the
-     *        superset of all shard reads.  This is required because the
-     *        recovery path currently will not re-read shards it has already
-     *        read. Once that is fixed, this experimental flag can be removed.
-     *
      */
-    if (!have.contains(shard) || do_redundant_reads || !experimental) {
+    if (!have.contains(shard) || do_redundant_reads) {
       extra_extents.union_of(extent_set);
     }
   }
@@ -372,47 +364,51 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
 
 int ECCommon::ReadPipeline::get_remaining_shards(
   const hobject_t &hoid,
-  const set<int> &avail,
-  const set<int> &want,
-  const read_result_t &result,
-  map<pg_shard_t, vector<pair<int, int>>> *to_read,
-  bool for_recovery)
+  read_result_t &read_result,
+  read_request_t &read_request,
+  bool for_recovery,
+  bool fast_read)
 {
-  ceph_assert(to_read);
-
   set<int> have;
   map<shard_id_t, pg_shard_t> shards;
   set<pg_shard_t> error_shards;
-  for (auto &p : result.errors) {
-    error_shards.insert(p.first);
+  for (auto &&[shard, _] : read_result.errors) {
+    error_shards.insert(shard);
   }
 
-  get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
+  // Recalculate the data shards we need.
+  map<int, extent_set> want_shard_reads;
+  get_want_to_read_shards(read_request.to_read, want_shard_reads);
+  int r = get_min_avail_to_read_shards(
+    hoid,
+    want_shard_reads,
+    for_recovery,
+    fast_read,
+    read_request,
+    error_shards);
 
-  map<int, vector<pair<int, int>>> need;
-  int r = ec_impl->minimum_to_decode(want, have, &need);
-  if (r < 0) {
+  if (r) {
     dout(0) << __func__ << " not enough shards left to try for " << hoid
-	    << " read result was " << result << dendl;
+	    << " read result was " << read_result << dendl;
     return -EIO;
   }
 
-  set<int> shards_left;
-  for (auto p : need) {
-    if (avail.find(p.first) == avail.end()) {
-      shards_left.insert(p.first);
+  // Rather than repeating whole read, we can remove everything we already have.
+  for (auto iter = read_request.shard_reads.begin();
+      iter != read_request.shard_reads.end();) {
+    auto &&[pg_shard, shard_read] = *(iter++);
+
+    auto &buffers_read = read_result.buffers_read;
+    // Ignore where shard has not been read at all.
+    if (buffers_read.contains(pg_shard.shard)) {
+
+      shard_read.extents.subtract(buffers_read[pg_shard.shard].get_interval_set());
+      if (shard_read.extents.empty()) {
+        read_request.shard_reads.erase(pg_shard);
+      }
     }
   }
 
-  vector<pair<int, int>> subchunks;
-  subchunks.push_back(make_pair(0, ec_impl->get_sub_chunk_count()));
-  for (set<int>::iterator i = shards_left.begin();
-       i != shards_left.end();
-       ++i) {
-    ceph_assert(shards.count(shard_id_t(*i)));
-    ceph_assert(avail.find(*i) == avail.end());
-    to_read->insert(make_pair(shards[shard_id_t(*i)], subchunks));
-  }
   return 0;
 }
 
@@ -469,6 +465,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
       op.source_to_obj[shard].insert(hoid);
     }
     for (auto &&[shard, shard_read] : read_request.shard_reads) {
+      ceph_assert(!shard_read.extents.empty());
       for (auto extent = shard_read.extents.begin();
       		extent != shard_read.extents.end();
 		extent++) {
@@ -727,26 +724,6 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
   const hobject_t &hoid,
   ReadOp &rop)
 {
-  //FIXME: This function currently assumes that if it has already read a shard
-  //       then no further reads from that shard are required.  However with
-  //       the experimental optimised partial reads, it is possible for extra
-  //       reads to be required to an already-read shard. We plan on fixing this
-  //       before allowing such a configuration option to be enabled outside
-  //       test/dev environments.
-  ceph_assert(!cct->_conf->osd_ec_partial_reads_experimental);
-  set<int> already_read;
-  const set<pg_shard_t>& ots = rop.obj_to_source[hoid];
-  for (set<pg_shard_t>::iterator i = ots.begin(); i != ots.end(); ++i)
-    already_read.insert(i->shard);
-  dout(10) << __func__ << " have/error shards=" << already_read << dendl;
-  map<pg_shard_t, vector<pair<int, int>>> shards;
-  int r = get_remaining_shards(hoid, already_read, rop.want_to_read[hoid],
-			       rop.complete[hoid], &shards, rop.for_recovery);
-  if (r)
-    return r;
-
-  list<ec_align_t> to_read = rop.to_read.find(hoid)->second.to_read;
-
   // (Note cuixf) If we need to read attrs and we read failed, try to read again.
   bool want_attrs =
     rop.to_read.find(hoid)->second.want_attrs &&
@@ -755,15 +732,12 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
     dout(10) << __func__ << " want attrs again" << dendl;
   }
 
-  read_request_t read_request(to_read, want_attrs);
-  for (auto &&[shard, subchunk] : shards) {
-    read_request.shard_reads[shard].subchunk = subchunk;
+  read_request_t read_request(rop.to_read.find(hoid)->second.to_read, want_attrs);
+  int r = get_remaining_shards(hoid, rop.complete[hoid], read_request,
+        rop.do_redundant_reads, want_attrs);
 
-    for (auto &read : to_read) {
-      auto p = sinfo.chunk_aligned_offset_len_to_chunk(read.offset, read.size);
-      read_request.shard_reads[shard].extents.insert(p.first, p.second);
-    }
-  }
+  if (r)
+    return r;
 
   rop.to_read.erase(hoid);
   rop.to_read.insert(make_pair(hoid, read_request));

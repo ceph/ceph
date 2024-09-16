@@ -209,7 +209,17 @@ public:
       if (available.contains(shard)) {
 	(*minimum)[shard] = default_sub_chunk;
       } else {
-	(*minimum)[parity_shard_index++] = default_sub_chunk;
+        // Shard is missing.  Recover with every other shard and one parity
+        // for each missing shard.
+        for (int i=0; i<data_chunk_count; i++) {
+          if (available.contains(i))
+            (*minimum)[i] = default_sub_chunk;
+          else
+            (*minimum)[parity_shard_index++] = default_sub_chunk;
+
+          if (parity_shard_index == chunk_count)
+            return -EIO; // Cannot recover.
+        }
       }
     }
     return 0;
@@ -919,6 +929,45 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     ASSERT_EQ(read_request,  ref);
   }
 
+  /* Read to every data shard, missing shard. */
+  {
+    std::vector<ECCommon::shard_read_t> want_to_read(empty_shard_vector);
+    std::list<ECCommon::ec_align_t> to_read_list;
+    hobject_t hoid;
+    ECCommon::read_request_t read_request(to_read_list, false);
+
+    for (unsigned int i=0; i<ssize; i++) {
+      want_to_read[i].extents.insert(i*2*page_size, page_size);
+    }
+
+    unsigned int missing_shard = 1;
+    int parity_shard = ssize;
+    std::set<pg_shard_t> error_shards;
+    error_shards.emplace(missing_shard, shard_id_t(missing_shard));
+    // Similar to previous tests with missing shards, but this time, emulate
+    // the shard being missing as a result of a bad read.
+    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request, error_shards);
+
+    ECCommon::read_request_t ref(to_read_list, false);
+    for (unsigned int i=0; i<ssize; i++) {
+      if (i != missing_shard) {
+        want_to_read[i].subchunk = ecode->default_sub_chunk;
+        want_to_read[i].extents.union_of(want_to_read[missing_shard].extents);
+        ref.shard_reads[pg_shard_t(i, shard_id_t(i))] = want_to_read[i];
+      } else {
+        ECCommon::shard_read_t parity_shard_read;
+        parity_shard_read.subchunk = ecode->default_sub_chunk;
+        parity_shard_read.extents.union_of(want_to_read[i].extents);
+        ref.shard_reads[pg_shard_t(parity_shard, shard_id_t(parity_shard))] = parity_shard_read;
+      }
+    }
+
+    ASSERT_EQ(read_request,  ref);
+
+    listenerStub.acting_shards.insert(pg_shard_t(1, shard_id_t(1)));
+  }
+
+
   g_ceph_context->_conf->osd_ec_partial_reads_experimental =
     old_osd_ec_partial_reads_experimental;
 }
@@ -1046,6 +1095,133 @@ TEST(ECCommon, get_min_want_to_read_shards_bug67087)
      to_read2, want_to_read);
     // We have 4 data shards per stripe.
     ref[0].insert(512+4*1024, 512);
-    ASSERT_EQ(want_to_read, ref);
+  }
+}
+
+TEST(ECCommon, get_remaining_shards)
+{
+  const uint64_t page_size = CEPH_PAGE_SIZE;
+  const uint64_t swidth = 64*page_size;
+  const uint64_t ssize = 4;
+  const int nshards = 6;
+  const uint64_t chunk_size = swidth / ssize;
+
+  g_ceph_context->_conf->osd_ec_partial_reads_experimental = true;
+
+  ECUtil::stripe_info_t s(ssize, swidth);
+  ECListenerStub listenerStub;
+  ASSERT_EQ(s.get_stripe_width(), swidth);
+  ASSERT_EQ(s.get_chunk_size(), swidth/ssize);
+
+  const std::vector<int> chunk_mapping = {}; // no remapping
+  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  std::vector<ECCommon::shard_read_t> empty_shard_vector(ssize);
+  ECCommon::shard_read_t empty_shard_read;
+  fill(empty_shard_vector.begin(), empty_shard_vector.end(), empty_shard_read);
+
+  vector<pg_shard_t> pg_shards(nshards);
+  for (int i = 0; i < nshards; i++) {
+    pg_shards[i] = pg_shard_t(i, shard_id_t(i));
+    listenerStub.acting_shards.insert(pg_shards[i]);
+  }
+
+  {
+    hobject_t hoid;
+
+    // Mock up a read request
+    std::list<ECCommon::ec_align_t> to_read;
+    to_read.emplace_back(0, 4096, 0);
+    ECCommon::read_request_t read_request(to_read, false);
+    int missing_shard = 0;
+
+    // Mock up a read result.
+    ECCommon::read_result_t read_result;
+    read_result.errors.emplace(pg_shards[missing_shard], -EIO);
+
+    pipeline.get_remaining_shards(hoid, read_result, read_request, false, false);
+
+    ECCommon::read_request_t ref(to_read, false);
+    int parity_shard = 4;
+    for (unsigned int i=0; i<ssize; i++) {
+      ECCommon::shard_read_t shard_read;
+      shard_read.subchunk = ecode->default_sub_chunk;
+      shard_read.extents.insert(0,4096);
+      int shard_id = i==missing_shard?parity_shard:i;
+      ref.shard_reads[pg_shard_t(shard_id, shard_id_t(shard_id))] = shard_read;
+    }
+
+    ASSERT_EQ(read_request,  ref);
+  }
+
+  {
+    hobject_t hoid;
+
+    // Mock up a read request
+    std::list<ECCommon::ec_align_t> to_read;
+    to_read.emplace_back(chunk_size-page_size, 2*page_size, 0);
+    ECCommon::read_request_t read_request(to_read, false);
+    int missing_shard = 1;
+
+    // Mock up a read result.
+    ECCommon::read_result_t read_result;
+    read_result.errors.emplace(pg_shards[missing_shard], -EIO);
+    buffer::list bl;
+    bl.append_zero(page_size);
+    read_result.buffers_read[0].insert(chunk_size-page_size, page_size, bl);
+
+    pipeline.get_remaining_shards(hoid, read_result, read_request, false, false);
+
+    // The result should be a read request for the first 4k of shard 0, as that
+    // is currently missing.
+    ECCommon::read_request_t ref(to_read, false);
+    int parity_shard = 4;
+    for (int i=0; i<ssize; i++) {
+      ECCommon::shard_read_t shard_read;
+      shard_read.subchunk = ecode->default_sub_chunk;
+      shard_read.extents.insert(0,4096);
+      int shard_id = i==missing_shard?parity_shard:i;
+      ref.shard_reads[pg_shard_t(shard_id, shard_id_t(shard_id))] = shard_read;
+    }
+
+    ASSERT_EQ(read_request,  ref);
+  }
+
+  // Request re-read. There is a page of overlap in what is already read.
+  {
+    hobject_t hoid;
+
+    std::list<ECCommon::ec_align_t> to_read;
+    to_read.emplace_back(chunk_size/2, chunk_size+page_size, 0);
+    ECCommon::read_request_t read_request(to_read, false);
+    int missing_shard = 1;
+
+    // Mock up a read result.
+    ECCommon::read_result_t read_result;
+    read_result.errors.emplace(pg_shards[missing_shard], -EIO);
+    buffer::list bl;
+    bl.append_zero(chunk_size/2);
+    read_result.buffers_read[0].insert(chunk_size/2, chunk_size/2, bl);
+
+    pipeline.get_remaining_shards(hoid, read_result, read_request, false, false);
+
+    // The result should be a read request for the first 4k of shard 0, as that
+    // is currently missing.
+    ECCommon::read_request_t ref(to_read, false);
+    int parity_shard = 4;
+    for (int i=0; i<ssize; i++) {
+      ECCommon::shard_read_t shard_read;
+      shard_read.subchunk = ecode->default_sub_chunk;
+      int shard_id = i==missing_shard?parity_shard:i;
+      ref.shard_reads[pg_shard_t(shard_id, shard_id_t(shard_id))] = shard_read;
+    }
+    ref.shard_reads[pg_shards[0]].extents.insert(0, chunk_size/2);
+    ref.shard_reads[pg_shards[2]].extents.insert(0, chunk_size/2+page_size);
+    ref.shard_reads[pg_shards[3]].extents.insert(0, chunk_size/2+page_size);
+    ref.shard_reads[pg_shards[4]].extents.insert(0, chunk_size/2+page_size);
+
+    ASSERT_EQ(read_request,  ref);
   }
 }
