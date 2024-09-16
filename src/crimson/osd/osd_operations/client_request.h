@@ -14,7 +14,6 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/client_request_common.h"
-#include "crimson/osd/osd_operations/common/pg_pipeline.h"
 #include "crimson/osd/pg_activation_blocker.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/scrub/pg_scrubber.h"

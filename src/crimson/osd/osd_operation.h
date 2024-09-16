@@ -40,6 +40,37 @@ struct PerShardPipeline {
   } create_or_wait_pg;
 };
 
+struct PGPeeringPipeline {
+  struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
+    static constexpr auto type_name = "PeeringEvent::PGPipeline::await_map";
+  } await_map;
+  struct Process : OrderedExclusivePhaseT<Process> {
+    static constexpr auto type_name = "PeeringEvent::PGPipeline::process";
+  } process;
+};
+
+struct CommonPGPipeline {
+  struct WaitForActive : OrderedExclusivePhaseT<WaitForActive> {
+    static constexpr auto type_name = "CommonPGPipeline:::wait_for_active";
+  } wait_for_active;
+  struct RecoverMissing : OrderedConcurrentPhaseT<RecoverMissing> {
+    static constexpr auto type_name = "CommonPGPipeline::recover_missing";
+  } recover_missing;
+  struct CheckAlreadyCompleteGetObc : OrderedExclusivePhaseT<CheckAlreadyCompleteGetObc> {
+    static constexpr auto type_name = "CommonPGPipeline::check_already_complete_get_obc";
+  } check_already_complete_get_obc;
+  struct LockOBC : OrderedConcurrentPhaseT<LockOBC> {
+    static constexpr auto type_name = "CommonPGPipeline::lock_obc";
+  } lock_obc;
+  struct Process : OrderedExclusivePhaseT<Process> {
+    static constexpr auto type_name = "CommonPGPipeline::process";
+  } process;
+  struct WaitRepop : OrderedConcurrentPhaseT<WaitRepop> {
+    static constexpr auto type_name = "ClientRequest::PGPipeline::wait_repop";
+  } wait_repop;
+};
+
+
 enum class OperationTypeCode {
   client_request = 0,
   peering_event,
