@@ -1,0 +1,8 @@
+tasks:
+- rbd_fio:
+    client.0:
+      fio-io-size: 100%
+      formats: [2]
+      io-engine: rbd
+      rw: randwrite
+      runtime: 600
