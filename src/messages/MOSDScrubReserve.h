@@ -83,7 +83,7 @@ public:
     return;
   }
 
-  void decode_payload(uint64_t) {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid, p);
@@ -105,7 +105,7 @@ public:
     }
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(pgid, payload);
     encode(map_epoch, payload);
