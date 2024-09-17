@@ -1437,6 +1437,10 @@ int execute_info(const po::variables_map &vm,
   }
 
   if (mirror_mode != RBD_MIRROR_MODE_DISABLED) {
+    r = rbd.mirror_uuid_get(io_ctx, &mirror_uuid);
+    if (r < 0) {
+      return r;
+    }
     r = rbd.mirror_remote_namespace_get(io_ctx, &remote_namespace);
     if (r < 0) {
       return r;
@@ -1475,8 +1479,10 @@ int execute_info(const po::variables_map &vm,
       }
     }
     if (formatter != nullptr) {
+      formatter->dump_string("mirror_uuid", mirror_uuid);
       formatter->dump_string("remote_namespace", remote_namespace);
     } else {
+      std::cout << "Mirror UUID: " << mirror_uuid << std::endl;
       std::cout << "Remote Namespace: " << remote_namespace << std::endl
 		<< std::endl;
     }
