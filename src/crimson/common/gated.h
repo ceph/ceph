@@ -31,13 +31,13 @@ class Gated {
 
   template <typename Func, typename T>
   inline void dispatch_in_background(const char* what, T& who, Func&& func) {
-    //ceph_assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     (void) dispatch(what, who, std::forward<Func>(func));
   }
 
   template <typename Func, typename T>
   inline seastar::future<> dispatch(const char* what, T& who, Func&& func) {
-    //ceph_assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     return seastar::with_gate(pending_dispatch, std::forward<Func>(func)
     ).handle_exception([what, &who] (std::exception_ptr eptr) {
       if (*eptr.__cxa_exception_type() == typeid(system_shutdown_exception)) {
@@ -58,7 +58,7 @@ class Gated {
 
   template <typename Func>
   auto simple_dispatch(const char* what, Func&& func) {
-    //ceph_assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     return seastar::with_gate(pending_dispatch, std::forward<Func>(func));
   }
 
