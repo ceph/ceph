@@ -104,6 +104,46 @@ int increment(cls_method_context_t hctx, buffer::list *in, buffer::list *out)
   return 0;
 }
 
+int reset(cls_method_context_t hctx, buffer::list *in, buffer::list *out)
+{
+  CLS_LOG(10, "%s", __PRETTY_FUNCTION__);
+
+  ss::reset op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const std::exception& e) {
+    CLS_ERR("ERROR: %s: failed to decode request: %s", __PRETTY_FUNCTION__,
+            e.what());
+    return -EINVAL;
+  }
+
+  if (op.keys.size() > ::cls::sem_set::max_keys) {
+    CLS_ERR("ERROR: %s: too many keys: %zu", __PRETTY_FUNCTION__,
+	    op.keys.size());
+    return -E2BIG;
+  }
+
+  for (const auto& [key_, v] : op.keys) try {
+      buffer::list valbl;
+      auto key = std::string(PREFIX) + key_;
+      sem_val val{v};
+      encode(val, valbl);
+      auto r = cls_cxx_map_set_val(hctx, key, &valbl);
+      if (r < 0) {
+        CLS_ERR("ERROR: %s: failed to reset semaphore: r=%d",
+                __PRETTY_FUNCTION__, r);
+        return r;
+      }
+    } catch (const std::exception& e) {
+      CLS_ERR("CAN'T HAPPEN: %s: failed to decode semaphore: %s",
+              __PRETTY_FUNCTION__, e.what());
+      return -EIO;
+    }
+
+  return 0;
+}
+
 int decrement(cls_method_context_t hctx, buffer::list *in, buffer::list *out)
 {
   CLS_LOG(10, "%s", __PRETTY_FUNCTION__);
@@ -247,6 +287,10 @@ CLS_INIT(sem_set)
   cls_register_cxx_method(h_class, ss::DECREMENT,
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           &decrement, &h_decrement);
+
+  cls_register_cxx_method(h_class, ss::RESET,
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          &reset, &h_decrement);
 
   cls_register_cxx_method(h_class, ss::LIST,
                           CLS_METHOD_RD,

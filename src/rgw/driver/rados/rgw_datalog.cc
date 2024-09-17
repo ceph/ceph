@@ -52,6 +52,7 @@ namespace sys = boost::system;
 
 namespace nlog = ::neorados::cls::log;
 namespace fifo = ::neorados::cls::fifo;
+namespace ss = neorados::cls::sem_set;
 
 namespace async = ceph::async;
 namespace buffer = ceph::buffer;
@@ -369,8 +370,7 @@ RGWDataChangesLog::RGWDataChangesLog(CephContext *cct, bool log_data,
       num_shards(num_shards ? *num_shards :
 		 cct->_conf->rgw_data_log_num_shards),
       prefix(get_prefix()), changes(cct->_conf->rgw_data_log_changes_size),
-      sem_max_keys(sem_max_keys ? *sem_max_keys :
-		   neorados::cls::sem_set::max_keys) {}
+      sem_max_keys(sem_max_keys ? *sem_max_keys : ss::max_keys) {}
 
 
 void DataLogBackends::handle_init(entries_t e) {
@@ -786,7 +786,6 @@ RGWDataChangesLog::renew_entries(const DoutPrefixProvider* dpp)
     co_return;
   }
 
-  namespace sem_set = neorados::cls::sem_set;
   // If we didn't error in pushing, we can now decrement the semaphores
   l.lock();
   for (auto index = 0u; index < unsigned(num_shards); ++index) {
@@ -800,7 +799,7 @@ RGWDataChangesLog::renew_entries(const DoutPrefixProvider* dpp)
       auto to_copy = std::min(sem_max_keys, keys.size());
       std::copy_n(keys.begin(), to_copy,
 		  std::inserter(batch, batch.end()));
-      auto op = WriteOp{}.exec(sem_set::decrement(std::move(batch)));
+      auto op = WriteOp{}.exec(ss::decrement(std::move(batch)));
       l.unlock();
       co_await rados->execute(get_sem_set_oid(index), loc, std::move(op),
 			      asio::use_awaitable);
@@ -956,9 +955,8 @@ void RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
     auto need_sem_set = register_renew(std::move(bg));
     if (need_sem_set) {
       using neorados::WriteOp;
-      using neorados::cls::sem_set::increment;
       rados->execute(get_sem_set_oid(index), loc,
-		     WriteOp{}.exec(increment(std::move(key))), y);
+		     WriteOp{}.exec(ss::increment(std::move(key))), y);
     }
     return;
   }
@@ -1573,8 +1571,8 @@ RGWDataChangesLog::read_sems(int index, std::string cursor) {
   try {
     co_await rados->execute(
       get_sem_set_oid(index), loc,
-      neorados::ReadOp{}.exec(sem_set::list(sem_max_keys, std::move(cursor),
-					    &out, &cursor)),
+      neorados::ReadOp{}.exec(ss::list(sem_max_keys, std::move(cursor),
+				       &out, &cursor)),
       nullptr, asio::use_awaitable);
   } catch (const sys::system_error& e) {
     if (e.code() != sys::errc::no_such_file_or_directory) {
@@ -1606,7 +1604,7 @@ RGWDataChangesLog::synthesize_entries(
       change.gen = bg.gen;
       encode(change, bl);
       be->prepare(timestamp, change.key, std::move(bl), batch);
-    } catch (const sys::error_code& e) {
+    } catch (const sys::system_error& e) {
       push_failed = true;
       ldpp_dout(dpp, -1) << "RGWDataChangesLog::synthesize_entries(): Unable to "
 			 << "parse Bucketgen key: " << key << "Got exception: "
@@ -1695,7 +1693,7 @@ RGWDataChangesLog::decrement_sems(
     auto grace = ((ceph::mono_clock::now() - fetch_time) * 4) / 3;
     co_await rados->execute(
       get_sem_set_oid(index), loc, neorados::WriteOp{}.exec(
-	sem_set::decrement(std::move(batch), grace)),
+	ss::decrement(std::move(batch), grace)),
       asio::use_awaitable);
   }
 }
@@ -1759,6 +1757,108 @@ asio::awaitable<void> RGWDataChangesLog::recover(const DoutPrefixProvider* dpp,
   std::unique_lock l(lock);
   last_recovery = ceph::mono_clock::now();
   l.unlock();
+}
+
+asio::awaitable<void>
+RGWDataChangesLog::admin_sem_list(std::optional<int> req_shard,
+				  std::uint64_t max_entries,
+				  std::string marker,
+				  std::ostream& m,
+				  ceph::Formatter& formatter)
+{
+  int shard = req_shard.value_or(0);
+  std::string keptmark;
+
+  if (!marker.empty()) {
+    // Signal caught by radosgw-admin
+    BucketGen bg{marker};
+    auto index = choose_oid(bg.shard);
+    if (req_shard && *req_shard != index) {
+      throw sys::system_error{
+	EINVAL, sys::generic_category(),
+	fmt::format("Requested shard {} but marker is for shard {}",
+		    shard, index)};
+    }
+  }
+  bc::flat_map<std::string, std::uint64_t> entries;
+  std::uint64_t count = 0;
+  bool begin_next = false;
+  // So the marker traverses between shards if the last entry in the
+  // shard is the last needed for max_entries
+  std::string mkeep;
+  entries.reserve(sem_max_keys);
+  formatter.open_object_section("semaphores");
+  formatter.open_array_section("entries");
+  while ((max_entries == 0 || (count < max_entries)) && shard < num_shards) {
+    entries.clear();
+    try {
+      if (begin_next) {
+	marker.clear();
+	begin_next = false;
+      }
+      co_await rados->execute(get_sem_set_oid(shard), loc,
+			      neorados::ReadOp{}.
+			      exec(ss::list(std::min(max_entries - count,
+						     sem_max_keys),
+					    marker,
+					    &entries, &marker)),
+	nullptr, asio::use_awaitable);
+      if (!marker.empty()) {
+	mkeep = marker;
+      }
+    } catch (const sys::system_error& e) {
+      if (e.code() == sys::errc::no_such_file_or_directory) {
+	if (!req_shard) {
+	  begin_next = true;
+	  ++shard;
+	  continue;
+	} else {
+	  break;
+	}
+      } else {
+	throw;
+      }
+    }
+    for (auto i = entries.cbegin(); i != entries.cend(); ++i) {
+      const auto& [k, v] = *i;
+      formatter.open_object_section("semaphore");
+      formatter.dump_string("key", k);
+      formatter.dump_unsigned("count", v);
+      formatter.close_section();
+      ++count;
+    }
+    formatter.flush(m);
+    if (marker.empty()) {
+      if (!entries.empty()) {
+	mkeep = (entries.cend() - 1)->first;
+      }
+      if (!req_shard) {
+	++shard;
+      } else {
+	break;
+      }
+    }
+  }
+  if (shard < num_shards && !req_shard && count == max_entries) {
+    marker = std::move(mkeep);
+  }
+  formatter.close_section();
+  formatter.dump_string("marker", marker);
+  formatter.close_section();
+  formatter.flush(m);
+  co_return;
+}
+
+asio::awaitable<void>
+RGWDataChangesLog::admin_sem_reset(std::string_view marker,
+				   std::uint64_t count)
+{
+  // Exceptions here are caught by radosgw-admin
+  BucketGen bg{marker};
+  unsigned index = choose_oid(bg.shard);
+  auto wop = neorados::WriteOp{}.exec(ss::reset(std::string(marker), count));
+  co_await rados->execute(get_sem_set_oid(index), loc,
+			  std::move(wop), asio::use_awaitable);
 }
 
 void RGWDataChangesLogInfo::dump(Formatter *f) const

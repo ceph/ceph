@@ -11,6 +11,9 @@
 #include <optional>
 #include <iostream>
 
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/use_awaitable.hpp>
+
 extern "C" {
 #include <liboath/oath.h>
 }
@@ -30,6 +33,8 @@ extern "C" {
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/fault_injector.h"
+
+#include "common/async/blocked_completion.h"
 
 #include "include/util.h"
 
@@ -292,6 +297,8 @@ void usage()
   cout << "  datalog trim                     trim data log\n";
   cout << "  datalog status                   read data log status\n";
   cout << "  datalog type                     change datalog type to --log_type={fifo,omap}\n";
+  cout << "  datalog semaphore list           List recovery semaphores\n";
+  cout << "  datalog semaphore reset          Reset recovery semaphore (use marker)\n";
   cout << "  orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish                   deprecated -- clean up search for leaked rados objects\n";
   cout << "  orphans list-jobs                deprecated -- list the current job-ids for orphans search\n";
@@ -379,6 +386,8 @@ void usage()
   cout << "   --end-date=<date>                 end date in the format yyyy-mm-dd\n";
   cout << "   --bucket-id=<bucket-id>           bucket id\n";
   cout << "   --bucket-new-name=<bucket>        for bucket link: optional new name\n";
+  cout << "   --count=<count>                   optional for:\n";
+  cout << "                                       datalog semaphore reset\n";
   cout << "   --shard-id=<shard-id>             optional for:\n";
   cout << "                                       mdlog list\n";
   cout << "                                       data sync status\n";
@@ -814,6 +823,8 @@ enum class OPT {
   DATALOG_TRIM,
   DATALOG_TYPE,
   DATALOG_PRUNE,
+  DATALOG_SEMAPHORE_LIST,
+  DATALOG_SEMAPHORE_RESET,
   REALM_CREATE,
   REALM_DELETE,
   REALM_GET,
@@ -1059,6 +1070,8 @@ static SimpleCmd::Commands all_cmds = {
   { "datalog trim", OPT::DATALOG_TRIM },
   { "datalog type", OPT::DATALOG_TYPE },
   { "datalog prune", OPT::DATALOG_PRUNE },
+  { "datalog semaphore list", OPT::DATALOG_SEMAPHORE_LIST },
+  { "datalog semaphore reset", OPT::DATALOG_SEMAPHORE_RESET },
   { "realm create", OPT::REALM_CREATE },
   { "realm rm", OPT::REALM_DELETE },
   { "realm get", OPT::REALM_GET },
@@ -3485,6 +3498,27 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
   }
 }
 
+int run_coro(asio::awaitable<void> coro, std::string_view name) {
+  try {
+    // Blocking in startup code, not ideal, but won't hurt anything.
+    std::exception_ptr eptr
+      = asio::co_spawn(static_cast<rgw::sal::RadosStore*>(driver)->get_io_context(),
+		       std::move(coro),
+		       async::use_blocked);
+    if (eptr) {
+      std::rethrow_exception(eptr);
+    }
+  } catch (boost::system::system_error& e) {
+    ldpp_dout(dpp(), -1) << name << ": failed: " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  } catch (std::exception& e) {
+    ldpp_dout(dpp(), -1) << name << ": failed: " << e.what() << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.
 // coverity[root_function:SUPPRESS]
@@ -3616,6 +3650,7 @@ int main(int argc, const char **argv)
   bool account_root_specified = false;
   int shard_id = -1;
   bool specified_shard_id = false;
+  std::optional<std::uint64_t> count;
   string client_id;
   string op_id;
   string op_mask_str;
@@ -3994,6 +4029,12 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       specified_shard_id = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--count", (char*)NULL)) {
+      count = strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse count: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--gen", (char*)NULL)) {
       gen = strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -4477,6 +4518,7 @@ int main(int argc, const char **argv)
 			 OPT::BILOG_STATUS,
 			 OPT::DATA_SYNC_STATUS,
 			 OPT::DATALOG_LIST,
+			 OPT::DATALOG_SEMAPHORE_LIST,
 			 OPT::DATALOG_STATUS,
 			 OPT::REALM_GET,
 			 OPT::REALM_GET_DEFAULT,
@@ -10834,6 +10876,35 @@ next:
     if (ret < 0) {
       cerr << "automated bilog trim failed with " << cpp_strerror(ret) << std::endl;
       return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::DATALOG_SEMAPHORE_LIST) {
+    auto datalog = static_cast<rgw::sal::RadosStore*>(driver)
+      ->svc()->datalog_rados;
+    std::optional<int> shard;
+    if (specified_shard_id) {
+      shard = shard_id;
+    }
+    ret = run_coro(datalog->admin_sem_list(shard, max_entries, marker,
+					   cout, *formatter),
+		   "datalog seamphore list");
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  if (opt_cmd == OPT::DATALOG_SEMAPHORE_RESET) {
+    if (marker.empty()) {
+      std::cerr << "Specify the semaphore key with --marker." << std::endl;
+      return -EINVAL;
+    }
+    auto datalog = static_cast<rgw::sal::RadosStore*>(driver)
+      ->svc()->datalog_rados;
+    ret = run_coro(datalog->admin_sem_reset(marker, count.value_or(0)),
+		   "datalog seamphore reset");
+    if (ret < 0) {
+      return ret;
     }
   }
 
