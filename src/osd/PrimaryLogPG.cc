@@ -8566,22 +8566,30 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
   map<snapid_t, interval_set<uint64_t> >::iterator rollback_target_iter =
     snapset.clone_overlap.lower_bound(snapid);
   ceph_assert(rollback_target_iter != snapset.clone_overlap.end());
-  interval_set<uint64_t> new_last_clone_overlap = rollback_target_iter->second;
 
   // Let's reuse what we already have, bring forward the overlaps
   // between the rollback target to the newest clone we have
   auto last_clone_overlap_iter = --snapset.clone_overlap.end();
-  for (auto iter = rollback_target_iter;
-       iter != last_clone_overlap_iter;
-       ++iter) {
-    new_last_clone_overlap.intersection_of(iter->second);
+
+  // Forget last_clone overlap with head as we are about to overwrite it
+  // Calculate the new last clone overlap with the rollback taret and
+  // adjust it directly.
+  {
+    interval_set<uint64_t> new_last_clone_overlap;
+    new_last_clone_overlap.insert(0, rollback_to->obs.oi.size);
+    for (auto iter = rollback_target_iter;
+         iter != last_clone_overlap_iter;
+         ++iter) {
+      new_last_clone_overlap.intersection_of(iter->second);
+    }
+    last_clone_overlap_iter->second = new_last_clone_overlap;
   }
 
   if (obs.oi.size > 0) {
     interval_set<uint64_t> modified;
     modified.insert(0, obs.oi.size);
-    new_last_clone_overlap.intersection_of(modified);
-    modified.subtract(new_last_clone_overlap);
+    last_clone_overlap_iter->second.intersection_of(modified);
+    modified.subtract(last_clone_overlap_iter->second);
     ctx->modified_ranges.union_of(modified);
   }
 
