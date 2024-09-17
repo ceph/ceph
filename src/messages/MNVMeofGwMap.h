@@ -43,7 +43,7 @@ private:
 public:
   std::string_view get_type_name() const override { return "nvmeofgwmap"; }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     auto p = payload.cbegin();
     int version;
     decode(version, p);

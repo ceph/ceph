@@ -45,7 +45,7 @@ public:
     : MOSDFastDispatchOp{MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION}
     {}
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid, p);
