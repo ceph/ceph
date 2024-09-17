@@ -1335,8 +1335,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         usage = """
 Usage:
   ceph orch daemon add osd host:device1,device2,...
-  ceph orch daemon add osd host:data_devices=device1,device2,db_devices=device3,osds_per_device=2[,encrypted=true|True|1]
-  ceph orch daemon add osd host:data_devices=device1[,encrypted=false|False|0]
+  ceph orch daemon add osd host:data_devices=device1,device2,db_devices=device3,osds_per_device=2[,encrypted=false]
+  ceph orch daemon add osd host:data_devices=device1[,encrypted=true,tpm2=true]
 """
         if not svc_arg:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
@@ -1358,10 +1358,12 @@ Usage:
                                             'journal_devices']:
                         drive_group_spec[drv_grp_spec_arg] = []
                         drive_group_spec[drv_grp_spec_arg].append(value)
+                    else:
                         if value.lower() in ['true', 'false']:
                             list_drive_group_spec_bool_arg.append(drv_grp_spec_arg)
-                    else:
-                        drive_group_spec[drv_grp_spec_arg] = value
+                            drive_group_spec[drv_grp_spec_arg] = value.lower() == "true"
+                        else:
+                            drive_group_spec[drv_grp_spec_arg] = value
                 elif drv_grp_spec_arg is not None:
                     drive_group_spec[drv_grp_spec_arg].append(v)
                 else:
@@ -1371,10 +1373,6 @@ Usage:
             for dev_type in ['data_devices', 'db_devices', 'wal_devices', 'journal_devices']:
                 drive_group_spec[dev_type] = DeviceSelection(
                     paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
-
-            for drive_group_spec_bool_arg in list_drive_group_spec_bool_arg:
-                drive_group_spec_value: str = drive_group_spec[drive_group_spec_bool_arg]
-                drive_group_spec[drive_group_spec_bool_arg] = drive_group_spec_value.lower() == "true"
 
             drive_group = DriveGroupSpec(
                 placement=PlacementSpec(host_pattern=host_name),
