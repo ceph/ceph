@@ -785,7 +785,7 @@ class CompareContext2:
     def check(self, ctx):
         assert ctx.name == 'cc2'
         assert ctx.fsid == 'foobar'
-        assert ctx.image == 'quay.ceph.io/ceph-ci/ceph:main'
+        assert ctx.image == 'quay.io/ceph/ceph:v19'
         assert ctx.meta_properties == {"fruit": "banana", "vegetable": "carrot"}
         assert ctx.config_blobs == {
             "alpha": {"sloop": "John B"},
