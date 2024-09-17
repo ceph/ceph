@@ -903,6 +903,7 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
 
   ldout(cct, 20) << __func__ << " got " << front.length() << " + "
                  << middle.length() << " + " << data.length() << " byte message"
+                 << " with features" << connection->get_features()
                  << dendl;
   Message *message = decode_message(cct,
                                     messenger->crcflags,
@@ -911,7 +912,8 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
                                     to_bl(std::move(front)),
                                     to_bl(std::move(middle)),
                                     to_bl(std::move(data)),
-                                    connection);
+                                    connection,
+                                    connection->get_features());
   if (!message) {
     ldout(cct, 1) << __func__ << " decode message failed " << dendl;
     return _fault();

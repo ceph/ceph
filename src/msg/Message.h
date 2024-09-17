@@ -557,7 +557,8 @@ extern Message *decode_message(CephContext *cct,
                                ceph::buffer::list&& front,
                                ceph::buffer::list&& middle,
                                const ceph::buffer::list& data,
-                               Message::ConnectionRef conn);
+                               Message::ConnectionRef conn,
+                               uint64_t features);
 inline std::ostream& operator<<(std::ostream& out, const Message& m) {
   m.print(out);
   if (m.get_header().version)
