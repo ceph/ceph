@@ -54,7 +54,7 @@ public:
     ceph::encode_nohead(split_realms, payload);
     ceph::encode_nohead(bl, payload);
   }
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(head, p);

@@ -48,7 +48,7 @@ private:
   ~MWatchNotify() final {}
 
 public:
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     uint8_t msg_ver;
     auto p = payload.cbegin();

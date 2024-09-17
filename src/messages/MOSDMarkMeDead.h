@@ -30,7 +30,7 @@ private:
 public:
   epoch_t get_epoch() const { return epoch; }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);

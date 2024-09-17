@@ -43,7 +43,7 @@ public:
     encode(what, payload);
   }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     auto p = payload.cbegin();
     using ceph::decode;
     decode(handle, p);
