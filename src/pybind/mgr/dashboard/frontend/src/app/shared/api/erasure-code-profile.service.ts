@@ -91,8 +91,7 @@ export class ErasureCodeProfileService {
      defaults to 1. Using a value greater than one will cause a CRUSH MSR rule to be created.
       Must be specified if crush-num-failure-domains is specified.`,
 
-    crushDeviceClass: $localize`Restrict placement to devices of a specific class
-      (e.g., ssd or hdd), using the crush device class names in the CRUSH map.`,
+    crushDeviceClass: $localize`The device class on which to place data.`,
 
     directory: $localize`Set the directory name from which the erasure code plugin is loaded.`
   };

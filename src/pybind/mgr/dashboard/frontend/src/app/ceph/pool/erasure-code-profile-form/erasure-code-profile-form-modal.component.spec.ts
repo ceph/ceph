@@ -563,6 +563,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         ecpChange('technique', 'cauchy');
         formHelper.setMultipleValues(ecp, true);
         formHelper.setValue('crushFailureDomain', 'osd', true);
+        formHelper.setValue('crushDeviceClass', 'ssd', true);
         submittedEcp['crush-failure-domain'] = 'osd';
         submittedEcp['crush-device-class'] = 'ssd';
         testCreation();
