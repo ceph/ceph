@@ -2093,7 +2093,8 @@ class RgwMultisite:
             if not bucket_name and update_period:
                 self.update_period()
 
-        if source_zones['removed'] or destination_zones['removed']:
+        if ((source_zones['removed'] and '*' not in source_zones['added'])
+                or (destination_zones['removed'] and '*' not in destination_zones['added'])):
             self.remove_sync_pipe(group_id, pipe_id, source_zones['removed'],
                                   destination_zones['removed'], destination_bucket,
                                   bucket_name)

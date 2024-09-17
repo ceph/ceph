@@ -35,8 +35,6 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
   flowType = FlowType;
   icons = Icons;
   zones = new ZoneData(false, 'Filter Zones');
-  sourceZone: string;
-  destinationZone: string;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -120,6 +118,11 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
         validators: [Validators.required]
       })
     });
+  }
+
+  onChangeZoneDropdown(zoneType: string, event: Event) {
+    const selectedVal = (event.target as HTMLSelectElement).value;
+    this.currentFormGroupContext.get(zoneType).setValue(selectedVal);
   }
 
   commonFormControls(flowType: FlowType) {
