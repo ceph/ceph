@@ -198,6 +198,7 @@ set(librgw_common_srcs
   driver/rados/rgw_trim_mdlog.cc
   driver/rados/rgw_user.cc
   driver/rados/rgw_zone.cc
+  driver/rados/reshard_writer.cc
   driver/rados/role.cc
   driver/rados/roles.cc
   driver/rados/sync_fairness.cc
