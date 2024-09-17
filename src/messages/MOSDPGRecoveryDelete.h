@@ -67,7 +67,7 @@ public:
 	<< min_epoch << " " << objects << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(from, payload);
     encode(pgid, payload);
@@ -76,7 +76,7 @@ public:
     encode(cost, payload);
     encode(objects, payload);
   }
-  void decode_payload(uint64_t) {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(from, p);
