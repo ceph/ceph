@@ -17,7 +17,7 @@ import { UserFormComponent } from './user-form/user-form.component';
 import { UserListComponent } from './user-list/user-list.component';
 import { UserPasswordFormComponent } from './user-password-form/user-password-form.component';
 import { UserTabsComponent } from './user-tabs/user-tabs.component';
-
+import { ButtonModule, GridModule, IconModule, InputModule } from 'carbon-components-angular';
 @NgModule({
   imports: [
     CommonModule,
@@ -28,7 +28,11 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
     NgbPopoverModule,
     NgxPipeFunctionModule,
     RouterModule,
-    NgbModule
+    NgbModule,
+    IconModule,
+    GridModule,
+    ButtonModule,
+    InputModule
   ],
   declarations: [
     LoginComponent,
