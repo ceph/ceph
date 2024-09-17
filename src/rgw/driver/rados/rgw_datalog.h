@@ -532,6 +532,13 @@ public:
 				decltype(recovery_signal));
   asio::awaitable<void> shutdown();
   asio::awaitable<void> shutdown_or_timeout();
+
+  asio::awaitable<void> admin_sem_list(std::optional<int> req_shard,
+				       std::uint64_t max_entries,
+				       std::string_view marker_,
+				       ceph::Formatter& formatter);
+  asio::awaitable<void> admin_sem_reset(std::string_view marker,
+					std::uint64_t count);
 };
 
 class RGWDataChangesBE : public boost::intrusive_ref_counter<RGWDataChangesBE> {
