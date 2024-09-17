@@ -30,4 +30,5 @@ overrides:
       - out of quorum
       - noscrub
       - nodeep-scrub
+      - Degraded data redundancy
       - is down
