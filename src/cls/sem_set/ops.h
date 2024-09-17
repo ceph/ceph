@@ -85,6 +85,36 @@ struct decrement {
 };
 WRITE_CLASS_ENCODER(decrement);
 
+struct reset {
+  std::unordered_map<std::string, std::uint64_t> keys;
+
+  reset() = default;
+
+  reset(std::string s, uint64_t val = 0)
+    : keys({{std::move(s), val}}) {}
+
+  reset(decltype(keys) s)
+    : keys(std::move(s)) {}
+
+  template<std::input_iterator I>
+  reset(I begin, I end)
+    requires std::is_convertible_v<typename I::value_type, std::string>
+    : keys(begin, end) {}
+
+  void encode(buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(keys, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(keys, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(reset);
+
 struct list_op {
   std::uint64_t count;
   std::string cursor;
@@ -130,6 +160,7 @@ WRITE_CLASS_ENCODER(list_ret);
 inline constexpr auto CLASS = "sem_set";
 inline constexpr auto INCREMENT = "increment";
 inline constexpr auto DECREMENT = "decrement";
+inline constexpr auto RESET = "reset";
 inline constexpr auto LIST = "list";
 
 } // namespace cls::sem_set
