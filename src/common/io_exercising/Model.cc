@@ -89,7 +89,9 @@ RadosIo::AsyncOp::~AsyncOp() {
 
 bool RadosIo::readyForIoOp(IoOp &op)
 {
+#ifdef CEPH_DEBUG_MUTEX
   ceph_assert(lock.is_locked_by_me()); //Must be called with lock held
+#endif
   if (!om->readyForIoOp(op)) {
     return false;
   }
