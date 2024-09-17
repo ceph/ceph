@@ -3,7 +3,14 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { ComboBoxModule, DropdownModule, CheckboxModule } from 'carbon-components-angular';
+import {
+  ComboBoxModule,
+  DropdownModule,
+  CheckboxModule,
+  ButtonModule,
+  GridModule,
+  ProgressIndicatorModule
+} from 'carbon-components-angular';
 
 import { TreeModule } from '@circlon/angular-tree-component';
 import {
@@ -92,7 +99,10 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     DashboardV3Module,
     ComboBoxModule,
     DropdownModule,
-    CheckboxModule
+    CheckboxModule,
+    GridModule,
+    ProgressIndicatorModule,
+    ButtonModule
   ],
   declarations: [
     HostsComponent,

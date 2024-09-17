@@ -1,53 +1,57 @@
-<div class="row">
-  <div class="col-lg-3">
+<div cdsRow>
+  <div cdsCol>
     <fieldset>
       <legend class="cd-header"
               i18n>Cluster Resources</legend>
       <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
-        <tr>
-          <td i18n
-              class="bold">Hosts</td>
-          <td>{{ hostsCount }}</td>
-        </tr>
-        <tr *ngIf="!isSimpleDeployment; else simpleDeploymentTextTpl">
-          <td>
-            <dl>
-              <dt>
-                <p i18n>Storage Capacity</p>
-              </dt>
-              <dd>
-                <p i18n>Number of devices</p>
-              </dd>
-              <dd>
-                <p i18n>Raw capacity</p>
-              </dd>
-            </dl>
-          </td>
-          <td class="pt-5"><p>{{ totalDevices }}</p><p>
-            {{ totalCapacity | dimlessBinary }}</p></td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">CPUs</td>
-          <td>{{ totalCPUs | empty }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Memory</td>
-          <td>{{ totalMemory | empty }}</td>
-        </tr>
+        <tbody>
+          <tr>
+            <td i18n
+                class="bold">Hosts</td>
+            <td>{{ hostsCount }}</td>
+          </tr>
+          <tr *ngIf="!isSimpleDeployment; else simpleDeploymentTextTpl">
+            <td>
+              <dl>
+                <dt>
+                  <p i18n>Storage Capacity</p>
+                </dt>
+                <dd>
+                  <p i18n>Number of devices</p>
+                </dd>
+                <dd>
+                  <p i18n>Raw capacity</p>
+                </dd>
+              </dl>
+            </td>
+            <td class="pt-5"><p>{{ totalDevices }}</p><p>
+              {{ totalCapacity | dimlessBinary }}</p></td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">CPUs</td>
+            <td>{{ totalCPUs | empty }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Memory</td>
+            <td>{{ totalMemory | empty }}</td>
+          </tr>
+        </tbody>
       </table>
     </fieldset>
   </div>
-
-  <div class="col-lg-9">
-  <legend i18n
-          class="cd-header">Host Details</legend>
-  <cd-hosts [hiddenColumns]="['services', 'status']"
-            [hideToolHeader]="true"
-            [hasTableDetails]="false"
-            [showGeneralActionsOnly]="true"
-            [showExpandClusterBtn]="false">
+</div>
+<div cdsRow>
+  <div cdsCol>
+    <legend i18n
+            class="cd-header">Host Details</legend>
+    <cd-hosts [hiddenColumns]="['service_instances', 'status']"
+              [hideToolHeader]="true"
+              [hasTableDetails]="false"
+              [showGeneralActionsOnly]="true"
+              [showExpandClusterBtn]="false"
+              [showInlineActions]="false">
     </cd-hosts>
   </div>
 </div>

@@ -1,4 +1,5 @@
 import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Step } from 'carbon-components-angular';
 
 import * as _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
@@ -13,13 +14,17 @@ import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 })
 export class WizardComponent implements OnInit, OnDestroy {
   @Input()
-  stepsTitle: string[];
+  stepsTitle: Step[];
 
   steps: Observable<WizardStepModel[]>;
   currentStep: WizardStepModel;
   currentStepSub: Subscription;
 
-  constructor(private stepsService: WizardStepsService) {}
+  constructor(private stepsService: WizardStepsService) {
+    this.stepsTitle?.forEach((steps, index) => {
+      steps.onClick = () => (this.currentStep.stepIndex = index);
+    });
+  }
 
   ngOnInit(): void {
     this.stepsService.setTotalSteps(this.stepsTitle.length);

@@ -15,7 +15,15 @@ describe('WizardComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(WizardComponent);
     component = fixture.componentInstance;
-    component.stepsTitle = ['Add Hosts', 'Review'];
+    component.stepsTitle = [
+      {
+        label: 'Add Hosts'
+      },
+      {
+        label: 'Create OSDs',
+        complete: false
+      }
+    ];
     fixture.detectChanges();
   });
 
