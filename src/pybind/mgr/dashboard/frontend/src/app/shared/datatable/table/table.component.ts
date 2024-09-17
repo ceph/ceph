@@ -436,12 +436,15 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         next: (values) => {
           const datasets: TableItem[][] = values.map((val) => {
             return this.tableColumns.map((column: CdTableColumn, colIndex: number) => {
-              const rowValue = _.get(val, column.prop);
+              const rowValue = _.get(val, column?.prop);
+
+              const pipeTransform = () =>
+                column?.prop ? column.pipe.transform(rowValue) : column.pipe.transform(val);
 
               let tableItem = new TableItem({
                 selected: val,
                 data: {
-                  value: column.pipe ? column.pipe.transform(rowValue) : rowValue,
+                  value: column.pipe ? pipeTransform() : rowValue,
                   row: val,
                   column: { ...column, ...val }
                 }
