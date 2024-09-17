@@ -210,6 +210,30 @@ decrement(I begin, I end, ceph::timespan grace = 0ns)
   }};
 }
 
+/// \brief Reset semaphore
+///
+/// Append a call to a write operation that reset the semaphore
+/// on a key to a given value.
+///
+/// \param key Key to reset
+/// \param val Value to set it to
+///
+/// \note This function exists to be called by radosgw-admin when the
+/// administrator wants to reset a semaphore. It should not be called
+/// in normal RGW operation and can lead to unreplicated objects.
+///
+/// \return The ClsWriteOp to be passed to WriteOp::exec
+[[nodiscard]] inline auto reset(std::string key, std::uint64_t val)
+{
+  namespace ss = ::cls::sem_set;
+  buffer::list in;
+  ss::reset call{std::move(key), val};
+  encode(call, in);
+  return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
+    op.exec(ss::CLASS, ss::RESET, in);
+  }};
+}
+
 /// \brief List keys and semaphores
 ///
 /// Append a call to a read operation that lists keys and semaphores
