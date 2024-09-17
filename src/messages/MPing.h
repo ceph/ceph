@@ -25,7 +25,7 @@ private:
   ~MPing() final {}
 
 public:
-  void decode_payload() override { }
+  void decode_payload(uint64_t) override { }
   void encode_payload(uint64_t features) override { }
   std::string_view get_type_name() const override { return "ping"; }
 };
