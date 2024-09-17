@@ -286,7 +286,6 @@ target_link_libraries(rgw_common
     cls_user_client
     cls_version_client
     librados
-    libneorados
     rt
     ICU::uc
     OATH::OATH
@@ -297,6 +296,7 @@ target_link_libraries(rgw_common
     ${ARROW_FLIGHT_LIBRARIES}
     ${LMDB_LIBRARIES}
   PUBLIC
+    libneorados
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     Boost::context
