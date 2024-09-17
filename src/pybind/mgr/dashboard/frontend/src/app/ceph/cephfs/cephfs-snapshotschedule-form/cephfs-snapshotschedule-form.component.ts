@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, Inject, OnInit, Optional } from '@angular
 import { AbstractControl, FormArray, FormControl, FormGroup, Validators } from '@angular/forms';
 import { NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
 import { padStart, uniq } from 'lodash';
+import moment from 'moment';
 import { Observable, OperatorFunction, of, timer } from 'rxjs';
 import {
   catchError,
@@ -165,29 +166,26 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
     this.action = this.actionLabels.EDIT;
     this.snapScheduleService.getSnapshotSchedule(this.path, this.fsName, false).subscribe({
       next: (response: SnapshotSchedule[]) => {
-        const first = response.find((x) => x.path === this.path);
+        const schedule = response.find((x) => x.path === this.path);
+        const offset = moment().utcOffset();
+        const startDate = moment
+          .parseZone(schedule.start)
+          .utc()
+          .utcOffset(offset)
+          .local()
+          .format('YYYY-MM-DD HH:mm:ss');
         this.snapScheduleForm.get('directory').disable();
-        this.snapScheduleForm.get('directory').setValue(first.path);
+        this.snapScheduleForm.get('directory').setValue(schedule.path);
         this.snapScheduleForm.get('startDate').disable();
-        this.snapScheduleForm
-          .get('startDate')
-          .setValue(
-            `${new Date(first.start).getUTCFullYear()}-${
-              new Date(first.start).getUTCMonth() + 1
-            }-${new Date(first.start).getUTCDate()} ${new Date(
-              first.start
-            ).getUTCHours()}:${new Date(first.start).getUTCMinutes()}:${new Date(
-              first.start
-            ).getUTCSeconds()}`
-          );
+        this.snapScheduleForm.get('startDate').setValue(startDate);
         this.snapScheduleForm.get('repeatInterval').disable();
-        this.snapScheduleForm.get('repeatInterval').setValue(first.schedule.split('')?.[0]);
+        this.snapScheduleForm.get('repeatInterval').setValue(schedule.schedule.split('')?.[0]);
         this.snapScheduleForm.get('repeatFrequency').disable();
-        this.snapScheduleForm.get('repeatFrequency').setValue(first.schedule.split('')?.[1]);
+        this.snapScheduleForm.get('repeatFrequency').setValue(schedule.schedule.split('')?.[1]);
 
         // retention policies
-        first.retention &&
-          Object.entries(first.retention).forEach(([frequency, interval], idx) => {
+        schedule.retention &&
+          Object.entries(schedule.retention).forEach(([frequency, interval], idx) => {
             const freqKey = Object.keys(RetentionFrequency)[
               Object.values(RetentionFrequency).indexOf(frequency as any)
             ];
