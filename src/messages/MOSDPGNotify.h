@@ -65,7 +65,7 @@ public:
     encode(pg_list, payload);
   }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     auto p = payload.cbegin();
     using ceph::decode;
     decode(epoch, p);

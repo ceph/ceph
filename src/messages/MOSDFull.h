@@ -32,7 +32,7 @@ public:
     encode(map_epoch, payload);
     encode(state, payload);
   }
-  void decode_payload() {
+  void decode_payload(uint64_t) {
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);

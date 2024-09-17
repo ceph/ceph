@@ -87,7 +87,7 @@ public:
     encode(forced_pgs, payload);
     encode(options, payload);
   }
-  void decode_payload() {
+  void decode_payload(uint64_t) {
     using ceph::decode;
     auto p = payload.cbegin();
     if (header.version == 1) {

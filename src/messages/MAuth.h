@@ -42,7 +42,7 @@ public:
 	<< " epoch " << monmap_epoch << ")";
   }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);

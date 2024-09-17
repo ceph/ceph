@@ -162,7 +162,7 @@ public:
     encode(clients_addrs, payload, features);
     encode(clients_names, payload, features);
   }
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);

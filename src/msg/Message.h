@@ -538,7 +538,7 @@ public:
   }
 
   // virtual bits
-  virtual void decode_payload() = 0;
+  virtual void decode_payload(uint64_t features) = 0;
   virtual void encode_payload(uint64_t features) = 0;
   virtual std::string_view get_type_name() const = 0;
   virtual void print(std::ostream& out) const {
