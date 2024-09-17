@@ -2174,7 +2174,8 @@ class RgwMultisite:
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
 
-        if source_zones['removed'] or destination_zones['removed']:
+        if ((source_zones['removed'] and '*' not in source_zones['added'])
+                or (destination_zones['removed'] and '*' not in destination_zones['added'])):
             self.remove_sync_pipe(group_id, pipe_id, source_zones['removed'],
                                   destination_zones['removed'], destination_bucket,
                                   bucket_name)
