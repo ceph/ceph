@@ -24,12 +24,6 @@ Requirements
 Any modern Linux distribution should be sufficient.  Dependencies
 are installed automatically by the bootstrap process below.
 
-See the section :ref:`Compatibility With Podman
-Versions<cephadm-compatibility-with-podman>` for a table of Ceph versions that
-are compatible with Podman. Not every version of Podman is compatible with
-Ceph.
-
-
 
 .. _get-cephadm:
 
