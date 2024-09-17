@@ -123,6 +123,7 @@ describe('PoolDetailsComponent', () => {
         expectedChange(
           {
             poolDetails: {
+              application_metadata: ['rbd'],
               pg_num: 256,
               pg_num_target: 256,
               pg_placement_num: 256,
