@@ -283,7 +283,7 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
 
 int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   const hobject_t &hoid,
-  vector<shard_read_t> &want_shard_reads,
+  const map<int, extent_set> &want_shard_reads,
   bool for_recovery,
   bool do_redundant_reads,
   read_request_t &read_request) {
@@ -299,11 +299,8 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   map<int, vector<pair<int, int>>> need;
   set<int> want;
 
-  for (int i=0; auto &&want_shard_read : want_shard_reads) {
-    if (!want_shard_read.extents.empty()) {
-      want.insert(i);
-    }
-    i++;
+  for (auto &&[shard, _] : want_shard_reads) {
+    want.insert(shard);
   }
 
   int r = ec_impl->minimum_to_decode(want, have, &need);
@@ -323,10 +320,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   extent_set extra_extents;
 
   /* First deal with missing shards */
-  for (unsigned int i=0; i < want_shard_reads.size(); i++) {
-    if (want_shard_reads[i].extents.empty())
-      continue;
-
+  for (auto &&[shard, extent_set] : want_shard_reads) {
     /* Work out what extra extents we need to read on each shard. If do
      * redundant reads is set, then we want to have the same reads on
      * every extent. Otherwise, we need to read every shard only if the
@@ -338,8 +332,8 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
      *        read. Once that is fixed, this experimental flag can be removed.
      *
      */
-    if (!have.contains(i) || do_redundant_reads || !experimental) {
-      extra_extents.union_of(want_shard_reads[i].extents);
+    if (!have.contains(shard) || do_redundant_reads || !experimental) {
+      extra_extents.union_of(extent_set);
     }
   }
 
@@ -352,8 +346,10 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     shard_read.subchunk = subchunk;
     shard_read.extents.union_of(extra_extents);
 
-    if (shard_index < (int)want_shard_reads.size()) {
-      shard_read.extents.union_of(want_shard_reads[shard_index].extents);
+
+    if (shard_index < (int)want_shard_reads.size() &&
+        want_shard_reads.contains(shard_index)) {
+      shard_read.extents.union_of(want_shard_reads.at(shard_index));
     }
 
     shard_read.extents.align(CEPH_PAGE_SIZE);
@@ -363,93 +359,13 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   return 0;
 }
 
-/*
-ASCII Art describing the various variables in the following function:
-                    start    end
-                      |       |
-                      |       |
-                      |       |
-           - - - - - -v- -+---+-----------+ - - - - - -
-                 start_adj|   |           |      ^
-to_read.offset - ->-------+   |           | chunk_size
-                  |           |           |      v
-           +------+ - - - - - + - - - - - + - - - - - -
-           |                  |           |
-           |                  v           |
-           |              - - - - +-------+
-           |               end_adj|
-           |              +-------+
-           |              |       |
-           +--------------+       |
-                          |       |
-                          | shard |
- */
-void ECCommon::ReadPipeline::get_min_want_to_read_shards(
-    const ec_align_t &to_read,
-    const ECUtil::stripe_info_t& sinfo,
-    const vector<int>& chunk_mapping,
-    vector<shard_read_t> &want_shard_reads) {
-  if (to_read.size == 0)
-    return;
-
-  uint64_t stripe_width = sinfo.get_stripe_width();
-  uint64_t chunk_size = sinfo.get_chunk_size();
-  uint64_t data_chunk_count = sinfo.get_data_chunk_count();
-
-  // Aim is to minimise non-^2 divs (chunk_size is assumed to be a power of 2).
-  // These should be the only non ^2 divs.
-  uint64_t begin_div = to_read.offset / stripe_width;
-  uint64_t end_div = (to_read.offset+to_read.size+stripe_width-1)/stripe_width - 1;
-  uint64_t start = begin_div*chunk_size;
-  uint64_t end = end_div*chunk_size;
-
-  uint64_t start_shard = (to_read.offset - begin_div*stripe_width) / chunk_size;
-  uint64_t chunk_count = (to_read.offset + to_read.size + chunk_size - 1)/chunk_size - to_read.offset/chunk_size;;
-
-  // The end_shard needs a modulus to calculate the actual shard, however
-  // it is convenient to store it like this for the loop.
-  auto end_shard = start_shard + std::min(chunk_count, data_chunk_count);
-
-  // The last shard is the raw shard index which contains the last chunk.
-  // Is it possible to calculate this without th e +%?
-  uint64_t last_shard = (start_shard + chunk_count - 1) % data_chunk_count;
-
-  for (auto i = start_shard; i < end_shard; i++) {
-    auto raw_shard = i >= data_chunk_count ? i - data_chunk_count : i;
-    auto shard = chunk_mapping.size() > raw_shard ?
-		 chunk_mapping[raw_shard] : static_cast<int>(raw_shard);
-
-    // Adjust the start and end blocks if needed.
-    uint64_t start_adj = 0;
-    uint64_t end_adj = 0;
-
-    if (raw_shard<start_shard) {
-      // Shards before the start, must start on the next chunk.
-      start_adj = chunk_size;
-    } else if (raw_shard == start_shard) {
-      // The start shard itself needs to be moved a partial-chunk forward.
-      start_adj = to_read.offset % chunk_size;
-    }
-
-    // The end is similar to the start, but the end must be rounded up.
-    if (raw_shard < last_shard) {
-      end_adj = chunk_size;
-    } else if (raw_shard == last_shard) {
-      end_adj = (to_read.offset + to_read.size - 1) % chunk_size + 1;
-    }
-
-    want_shard_reads[shard].extents.insert(
-      start + start_adj,
-      end + end_adj - start - start_adj);
-  }
-}
 
 void ECCommon::ReadPipeline::get_min_want_to_read_shards(
   const ec_align_t &to_read,
-  vector<shard_read_t> &want_shard_reads)
+  map<int, extent_set> &want_shard_reads)
 {
-  get_min_want_to_read_shards(
-    to_read, sinfo, ec_impl->get_chunk_mapping(), want_shard_reads);
+  const std::vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+  sinfo.get_min_want_shards(to_read.offset, to_read.size, chunk_mapping, want_shard_reads);;
   dout(20) << __func__ << ": to_read " << to_read
 	   << " read_request " << want_shard_reads << dendl;
 }
@@ -596,7 +512,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
 
 void ECCommon::ReadPipeline::get_want_to_read_shards(
   const list<ec_align_t> &to_read,
-  std::vector<shard_read_t> &want_shard_reads)
+  std::map<int, extent_set> &want_shard_reads)
 {
   if (cct->_conf->osd_ec_partial_reads) {
       //optimised.
@@ -613,7 +529,7 @@ void ECCommon::ReadPipeline::get_want_to_read_shards(
 
     for (auto &&read : to_read) {
       auto offset_len = sinfo.chunk_aligned_offset_len_to_chunk(read.offset, read.size);
-      want_shard_reads[chunk].extents.insert(offset_len.first, offset_len.second);
+      want_shard_reads[chunk].insert(offset_len.first, offset_len.second);
     }
   }
 }
@@ -766,17 +682,15 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
 
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&[hoid, to_read]: reads) {
-    vector want_shard_reads(ec_impl->get_chunk_count(), shard_read_t());
+    map<int, extent_set> want_shard_reads;
 
     get_want_to_read_shards(to_read, want_shard_reads);
 
     // This is required by the completion.  This currently only contains the
     // relevant shards. We may find this needs the actual relevant extents
     // within the shards, in which case a bigger refactor will be required.
-    for (unsigned int i=0; i<want_shard_reads.size(); i++) {
-      if (!want_shard_reads[i].extents.empty()) {
-        want_to_read.insert(i);
-      }
+    for (auto &&[shard, _] : want_shard_reads) {
+      want_to_read.insert(shard);
     }
 
     read_request_t read_request(to_read, false);

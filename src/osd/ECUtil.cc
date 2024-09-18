@@ -6,6 +6,7 @@
 #include "include/encoding.h"
 #include "common/interval_map.h"
 #include "ECUtil.h"
+#include "ExtentCache.h"
 
 using namespace std;
 using ceph::bufferlist;
@@ -18,6 +19,97 @@ std::pair<uint64_t, uint64_t> ECUtil::stripe_info_t::chunk_aligned_offset_len_to
   return std::make_pair(
     chunk_aligned_logical_offset_to_chunk_offset(off),
     chunk_aligned_logical_size_to_chunk_size(len));
+}
+
+
+/*
+ASCII Art describing the various variables in the following function:
+                    start    end
+                      |       |
+                      |       |
+                      |       |
+           - - - - - -v- -+---+-----------+ - - - - - -
+                 start_adj|   |           |      ^
+to_read.offset - ->-------+   |           | chunk_size
+                  |           |           |      v
+           +------+ - - - - - + - - - - - + - - - - - -
+           |                  |           |
+           |                  v           |
+           |              - - - - +-------+
+           |               end_adj|
+           |              +-------+
+           |              |       |
+           +--------------+       |
+                          |       |
+                          | shard |
+
+Given an offset and size, this adds to a vector of extents describing the
+minimal IO ranges on each shard.  If passed, this method will also populate
+a superset of all extents required.
+ */
+void ECUtil::stripe_info_t::get_min_want_shards(
+    uint64_t offset,
+    uint64_t size,
+    const vector<int>& chunk_mapping,
+    map<int, extent_set> &raw_shard_extents,
+    optional<extent_set> extent_superset) const {
+
+  // Some of the maths below assumes size not zero.
+  if (size == 0) return;
+
+  uint64_t data_chunk_count = get_data_chunk_count();
+
+  // Aim is to minimise non-^2 divs (chunk_size is assumed to be a power of 2).
+  // These should be the only non ^2 divs.
+  uint64_t begin_div = offset / stripe_width;
+  uint64_t end_div = (offset+size+stripe_width-1)/stripe_width - 1;
+  uint64_t start = begin_div*chunk_size;
+  uint64_t end = end_div*chunk_size;
+
+  uint64_t start_shard = (offset - begin_div*stripe_width) / chunk_size;
+  uint64_t chunk_count = (offset + size + chunk_size - 1)/chunk_size - offset/chunk_size;;
+
+  // The end_shard needs a modulus to calculate the actual shard, however
+  // it is convenient to store it like this for the loop.
+  auto end_shard = start_shard + std::min(chunk_count, data_chunk_count);
+
+  // The last shard is the raw shard index which contains the last chunk.
+  // Is it possible to calculate this without th e +%?
+  uint64_t last_shard = (start_shard + chunk_count - 1) % data_chunk_count;
+
+  for (auto i = start_shard; i < end_shard; i++) {
+    auto raw_shard = i >= data_chunk_count ? i - data_chunk_count : i;
+
+    // Adjust the start and end blocks if needed.
+    uint64_t start_adj = 0;
+    uint64_t end_adj = 0;
+
+    if (raw_shard<start_shard) {
+      // Shards before the start, must start on the next chunk.
+      start_adj = chunk_size;
+    } else if (raw_shard == start_shard) {
+      // The start shard itself needs to be moved a partial-chunk forward.
+      start_adj = offset % chunk_size;
+    }
+
+    // The end is similar to the start, but the end must be rounded up.
+    if (raw_shard < last_shard) {
+      end_adj = chunk_size;
+    } else if (raw_shard == last_shard) {
+      end_adj = (offset + size - 1) % chunk_size + 1;
+    }
+
+    auto shard = chunk_mapping.size() > raw_shard ?
+             chunk_mapping[raw_shard] : static_cast<int>(raw_shard);
+
+    int off = start + start_adj;
+    int len =  end + end_adj - start - start_adj;
+    raw_shard_extents[shard].insert(off, len);
+
+    if (extent_superset) {
+      extent_superset->insert(off, len);
+    }
+  }
 }
 
 /* This variant of decode allows for minimal reads. It expects the caller to
@@ -293,3 +385,5 @@ const string &ECUtil::get_hinfo_key()
 {
   return HINFO_KEY;
 }
+
+

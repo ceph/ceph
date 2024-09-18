@@ -21,6 +21,7 @@
 #include "include/ceph_assert.h"
 #include "include/encoding.h"
 #include "common/Formatter.h"
+#include "ExtentCache.h"
 
 namespace ECUtil {
 
@@ -125,6 +126,12 @@ public:
     const auto last_inc_stripe_idx = (off + len - 1) / stripe_width;
     return first_stripe_idx == last_inc_stripe_idx;
   }
+  void get_min_want_shards(
+    uint64_t offset,
+    uint64_t size,
+    const std::vector<int>& chunk_mapping,
+    std::map<int, extent_set> &raw_shard_extents,
+    std::optional<extent_set> extent_superset = std::nullopt) const;
 };
 
 int decode(
