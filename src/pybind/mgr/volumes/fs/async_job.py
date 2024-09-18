@@ -167,7 +167,7 @@ class AsyncJobs(threading.Thread):
                     for i in range(c, self.nr_concurrent_jobs):
                         self.threads.append(JobThread(self, self.vc, name="{0}.{1}.{2}".format(self.name_pfx, time.time(), i)))
                         self.threads[-1].start()
-                self.cv.wait(timeout=5)
+                self.cv.wait(timeout=self.wakeup_timeout)
 
     def shutdown(self):
         self.stopping.set()
