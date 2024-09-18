@@ -247,6 +247,30 @@ void NVMeofGwMap::track_deleting_gws(const NvmeGroupKey& group_key,
   }
 }
 
+int NVMeofGwMap::process_gw_map_gw_no_subsystems(
+  const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending)
+{
+  int rc = 0;
+  auto& gws_states = created_gws[group_key];
+  auto  gw_state = gws_states.find(gw_id);
+  if (gw_state != gws_states.end()) {
+    dout(10) << "GW- no subsystems configured " << gw_id << dendl;
+    auto& st = gw_state->second;
+    st.availability = gw_availability_t::GW_CREATED;
+    for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
+      fsm_handle_gw_no_subsystems(
+    gw_id, group_key, state_itr.second,state_itr.first, propose_pending);
+    }
+    propose_pending = true; // map should reflect that gw becames Created
+    if (propose_pending) validate_gw_map(group_key);
+  } else {
+    dout(1)  << __FUNCTION__ << "ERROR GW-id was not found in the map "
+         << gw_id << dendl;
+    rc = -EINVAL;
+  }
+  return rc;
+}
+
 int NVMeofGwMap::process_gw_map_gw_down(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending)
 {
@@ -263,7 +287,7 @@ int NVMeofGwMap::process_gw_map_gw_down(
 	state_itr.first, propose_pending);
       state_itr.second = gw_states_per_group_t::GW_STANDBY_STATE;
     }
-    propose_pending = true; // map should reflect that gw becames unavailable
+    propose_pending = true; // map should reflect that gw becames Unavailable
     if (propose_pending) validate_gw_map(group_key);
   } else {
     dout(1)  << __FUNCTION__ << "ERROR GW-id was not found in the map "
@@ -612,6 +636,59 @@ void NVMeofGwMap::fsm_handle_gw_alive(
 
   default:
     break;
+  }
+}
+
+void NVMeofGwMap::fsm_handle_gw_no_subsystems(
+    const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
+    gw_states_per_group_t state, NvmeAnaGrpId grpid,  bool &map_modified)
+{
+  switch (state) {
+  case gw_states_per_group_t::GW_STANDBY_STATE:
+  case gw_states_per_group_t::GW_IDLE_STATE:
+    // nothing to do
+    break;
+
+  case gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL:
+  {
+    cancel_timer(gw_id, group_key, grpid);
+    auto& gw_st = created_gws[group_key][gw_id];
+    gw_st.standby_state(grpid);
+    map_modified = true;
+  }
+  break;
+
+  case gw_states_per_group_t::GW_WAIT_FAILBACK_PREPARED:
+    cancel_timer(gw_id, group_key,  grpid);
+    map_modified = true;
+    for (auto& gw_st: created_gws[group_key]) {
+      auto& st = gw_st.second;
+      // found GW   that was intended for  Failback for this ana grp
+      if (st.sm_state[grpid] ==
+      gw_states_per_group_t::GW_OWNER_WAIT_FAILBACK_PREPARED) {
+    dout(4) << "Warning: Outgoing Failback when GW is without subsystems"
+        << " - to rollback it" <<" GW " << gw_id << "for ANA Group "
+        << grpid << dendl;
+    st.standby_state(grpid);
+    break;
+      }
+    }
+    break;
+
+  case gw_states_per_group_t::GW_OWNER_WAIT_FAILBACK_PREPARED:
+  case gw_states_per_group_t::GW_ACTIVE_STATE:
+  {
+    dout(4) << "Set state to Standby for GW " << gw_id << " group "
+        << grpid << dendl;
+    auto& gw_st = created_gws[group_key][gw_id];
+    gw_st.standby_state(grpid);
+  }
+  break;
+
+  default:
+  {
+    dout(4) << "Error : Invalid state " << state << "for GW " << gw_id  << dendl;
+  }
   }
 }
 

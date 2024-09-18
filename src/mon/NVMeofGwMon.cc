@@ -432,7 +432,8 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
       if (rc == 0) {
         bool propose = false;
         // Simulate  immediate Failover of this GW
-        process_gw_down(id, group_key, propose);
+        process_gw_down(id, group_key, propose,
+           gw_availability_t::GW_UNAVAILABLE);
       } else if (rc == -EINVAL) {
 	dout (4) << "Error: GW not found in the database " << id << " "
 		 << pool << " " << group << "  rc " << rc << dendl;
@@ -462,13 +463,19 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
 }
 
 void NVMeofGwMon::process_gw_down(const NvmeGwId &gw_id,
-   const NvmeGroupKey& group_key, bool &propose_pending)
+   const NvmeGroupKey& group_key, bool &propose_pending,
+   gw_availability_t avail)
 {
   LastBeacon lb = {gw_id, group_key};
   auto it = last_beacon.find(lb);
   if (it != last_beacon.end()) {
     last_beacon.erase(it);
-    pending_map.process_gw_map_gw_down(gw_id, group_key, propose_pending);
+    if (avail == gw_availability_t::GW_UNAVAILABLE) {
+      pending_map.process_gw_map_gw_down(gw_id, group_key, propose_pending);
+    } else {
+      pending_map.process_gw_map_gw_no_subsystems(gw_id, group_key, propose_pending);
+    }
+
   }
 }
 
@@ -581,7 +588,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   }
 
   if (sub.size() == 0) {
-    avail = gw_availability_t::GW_UNAVAILABLE;
+    avail = gw_availability_t::GW_CREATED;
   }
   if (pending_map.created_gws[group_key][gw_id].subsystems != sub) {
     dout(10) << "subsystems of GW changed, propose pending " << gw_id << dendl;
@@ -607,8 +614,9 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     epoch_t last_osd_epoch = m->get_last_osd_epoch();
     pending_map.process_gw_map_ka(gw_id, group_key, last_osd_epoch, propose);
   // state set by GW client application
-  } else if (avail == gw_availability_t::GW_UNAVAILABLE) {
-      process_gw_down(gw_id, group_key, propose);
+  } else if (avail == gw_availability_t::GW_UNAVAILABLE ||
+      avail == gw_availability_t::GW_CREATED) {
+      process_gw_down(gw_id, group_key, propose, avail);
   }
   // Periodic: check active FSM timers
   pending_map.update_active_timers(timer_propose);

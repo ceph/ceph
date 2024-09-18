@@ -85,7 +85,8 @@ public:
 private:
   void synchronize_last_beacon();
   void process_gw_down(const NvmeGwId &gw_id,
-     const NvmeGroupKey& group_key, bool &propose_pending);
+     const NvmeGroupKey& group_key, bool &propose_pending,
+     gw_availability_t avail);
 };
 
 #endif /* MON_NVMEGWMONITOR_H_ */
