@@ -1,0 +1,29 @@
+{
+    "_args": {
+        "image": null,
+        "docker": false,
+        "data_dir": "/var/lib/ceph",
+        "log_dir": "/var/log/ceph",
+        "logrotate_dir": "/etc/logrotate.d",
+        "sysctl_dir": "/etc/sysctl.d",
+        "unit_dir": "/etc/systemd/system",
+        "verbose": false,
+        "log_dest": null,
+        "timeout": null,
+        "retry": 15,
+        "env": [],
+        "no_container_init": false,
+        "no_cgroups_split": false,
+        "fsid": "0f907084-70af-11ef-9fe4-7d9b10252be2",
+        "force": true,
+        "keep_logs": false,
+        "zap_osds": true,
+        "command": [
+            "ceph",
+            "-s"
+        ],
+        "func": "<function command_rm_cluster at 0xabcdabcdabcd>",
+        "container_init": true
+    },
+    "_conf": "<cephadmlib.context.BaseConfig object at 0x7f7756e64c70>"
+}
