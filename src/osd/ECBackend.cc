@@ -562,9 +562,9 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       list<ec_align_t> to_read;
       to_read.emplace_back(op.recovery_progress.data_recovered_to, amount, 0);
       read_request_t read_request(to_read, op.recovery_progress.first && !op.obc);
-      std::vector want_shard_reads(sinfo.get_stripe_width(), shard_read_t());
+      std::map<int, extent_set> want_shard_reads;
       for (int w : want) {
-	want_shard_reads[w].extents.insert(from, amount);
+	want_shard_reads[w].insert(from, amount);
       }
       int r = read_pipeline.get_min_avail_to_read_shards(
         op.hoid, want_shard_reads, true, false, read_request);

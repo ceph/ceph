@@ -452,13 +452,8 @@ struct ECCommon {
      */
     void get_min_want_to_read_shards(
       const ec_align_t &to_read,                  ///< [in]
-      std::vector<shard_read_t> &want_shard_reads ///< [out]
+      std::map<int, extent_set> &want_shard_reads ///< [out]
       );
-    static void get_min_want_to_read_shards(
-      const ec_align_t &to_read,
-      const ECUtil::stripe_info_t& sinfo,
-      const std::vector<int>& chunk_mapping,
-      std::vector<shard_read_t> &want_shard_reads);
 
     int get_remaining_shards(
       const hobject_t &hoid,
@@ -480,12 +475,12 @@ struct ECCommon {
 
     void get_want_to_read_shards(
       const std::list<ec_align_t> &to_read,
-      std::vector<shard_read_t> &want_shard_reads);
+      std::map<int, extent_set> &want_shard_reads);
 
     /// Returns to_read replicas sufficient to reconstruct want
     int get_min_avail_to_read_shards(
       const hobject_t &hoid,     ///< [in] object
-      std::vector<shard_read_t> &want_shard_read, ///< [in] desired shards
+      const std::map<int, extent_set> &want_shard_read, ///< [in] desired shards
       bool for_recovery,         ///< [in] true if we may use non-acting replicas
       bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
       read_request_t& read_request ///< [out] shard_reads, corresponding subchunks / other sub reads to read
