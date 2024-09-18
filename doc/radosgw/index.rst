@@ -84,4 +84,5 @@ Cluster with one API and then retrieve that data with the other API.
    Lua Scripting <lua-scripting>
    D3N Data Cache <d3n_datacache>
    Cloud Transition <cloud-transition>
-
+   Metrics <metrics>
+   UADK Acceleration for Compression <uadk-accel>
