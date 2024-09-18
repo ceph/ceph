@@ -15690,9 +15690,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_SETATTR:
       {
         string name = i.decode_string();
-        bufferptr bp;
-        i.decode_bp(bp);
-	r = _setattr(txc, c, o, name, bp);
+        bufferlist bl;
+        i.decode_bl(bl);
+	r = _setattr(txc, c, o, name, bl);
       }
       break;
 
@@ -17733,18 +17733,22 @@ int BlueStore::_setattr(TransContext *txc,
 			CollectionRef& c,
 			OnodeRef& o,
 			const string& name,
-			bufferptr& val)
+			bufferlist& val)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << dendl;
   int r = 0;
-  if (val.is_partial()) {
-    auto& b = o->onode.attrs[name.c_str()] = bufferptr(val.c_str(),
-						       val.length());
+  if (!val.length()) {
+    auto& b = o->onode.attrs[name.c_str()] = bufferptr("", 0);
     b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
-  } else {
-    auto& b = o->onode.attrs[name.c_str()] = val;
+  } else if (!val.is_contiguous()) {
+    val.rebuild();
+    auto& b = o->onode.attrs[name.c_str()] = val.front();
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
+  } else if (val.front().is_partial()) {
+    val.rebuild();
+    auto& b = o->onode.attrs[name.c_str()] = val.front();
     b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
   }
   txc->write_onode(o);
