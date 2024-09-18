@@ -1,5 +1,20 @@
 <cd-nvmeof-tabs></cd-nvmeof-tabs>
 
+<div class="pb-3"
+     cdsCol
+     [columnNumbers]="{md: 4}">
+  <cds-combo-box
+      type="single"
+      label="Selected Gateway Group"
+      i18n-placeholder
+      placeholder="Enter group"
+      [items]="gwGroups"
+      (selected)="onGroupSelection($event)"
+      (clear)="onGroupClear()">
+    <cds-dropdown-list></cds-dropdown-list>
+  </cds-combo-box>
+</div>
+
 <legend i18n>
   Gateways
   <cd-help-text>
@@ -11,3 +26,11 @@
             [columns]="gatewayColumns">
   </cd-table>
 </div>
+
+<ng-template #statusTpl
+             let-row="data.row">
+  <span class="badge"
+        [ngClass]="row | pipeFunction:getStatusClass">
+    {{ row.status_desc }}
+  </span>
+</ng-template>

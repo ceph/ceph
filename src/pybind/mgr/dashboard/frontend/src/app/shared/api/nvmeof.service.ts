@@ -36,6 +36,11 @@ const UI_API_PATH = 'ui-api/nvmeof';
 export class NvmeofService {
   constructor(private http: HttpClient) {}
 
+  // Gateway groups
+  listGatewayGroups() {
+    return this.http.get(`${API_PATH}/gateway/group`);
+  }
+
   // Gateways
   listGateways() {
     return this.http.get(`${API_PATH}/gateway`);
