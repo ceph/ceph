@@ -694,12 +694,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             case 'nvmeof':
               this.serviceForm.get('pool').setValue(response[0].spec.pool);
               this.serviceForm.get('group').setValue(response[0].spec.group);
-              this.serviceForm.get('enable_auth').setValue(response[0].spec.enable_auth);
-              this.serviceForm.get('root_ca_cert').setValue(response[0].spec.root_ca_cert);
-              this.serviceForm.get('client_cert').setValue(response[0].spec.client_cert);
-              this.serviceForm.get('client_key').setValue(response[0].spec.client_key);
-              this.serviceForm.get('server_cert').setValue(response[0].spec.server_cert);
-              this.serviceForm.get('server_key').setValue(response[0].spec.server_key);
+              this.serviceForm.get('enable_mtls').setValue(response[0].spec?.enable_auth);
+              this.serviceForm.get('root_ca_cert').setValue(response[0].spec?.root_ca_cert);
+              this.serviceForm.get('client_cert').setValue(response[0].spec?.client_cert);
+              this.serviceForm.get('client_key').setValue(response[0].spec?.client_key);
+              this.serviceForm.get('server_cert').setValue(response[0].spec?.server_cert);
+              this.serviceForm.get('server_key').setValue(response[0].spec?.server_key);
               break;
             case 'rgw':
               this.serviceForm
