@@ -21,7 +21,7 @@ class CephFSStorageProvider(_StrEnum):
 
     def expand(self) -> 'CephFSStorageProvider':
         """Expand abbreviated/default values into the full/expanded form."""
-        if self == self.SAMBA_VFS:
+        if self is self.SAMBA_VFS:
             # mypy gets confused by enums
             return self.__class__(self.SAMBA_VFS_NEW)
         return self
@@ -89,9 +89,9 @@ class LoginAccess(_StrEnum):
     def expand(self) -> 'LoginAccess':
         """Exapend abbreviated enum values into their full forms."""
         # the extra LoginAccess(...) calls are to appease mypy
-        if self == self.READ_ONLY_SHORT:
+        if self is self.READ_ONLY_SHORT:
             return LoginAccess(self.READ_ONLY)
-        if self == self.READ_WRITE_SHORT:
+        if self is self.READ_WRITE_SHORT:
             return LoginAccess(self.READ_WRITE)
         return self
 
