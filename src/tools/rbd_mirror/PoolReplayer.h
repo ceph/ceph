@@ -107,7 +107,7 @@ private:
                  bool strip_cluster_overrides);
 
   void update_namespace_replayers();
-  int list_mirroring_namespaces(std::set<std::string> *namespaces);
+  int list_mirroring_namespaces(std::map<std::string, std::string> *namespaces);
 
   void namespace_replayer_acquire_leader(const std::string &name,
                                          Context *on_finish);

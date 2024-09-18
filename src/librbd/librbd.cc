@@ -1101,6 +1101,18 @@ namespace librbd {
     return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
   }
 
+  int RBD::mirror_remote_namespace_get(IoCtx& io_ctx,
+                                       std::string* remote_namespace) {
+    return librbd::api::Mirror<>::remote_namespace_get(io_ctx,
+                                                       remote_namespace);
+  }
+
+  int RBD::mirror_remote_namespace_set(IoCtx& io_ctx,
+                                       const std::string& remote_namespace) {
+    return librbd::api::Mirror<>::remote_namespace_set(io_ctx,
+                                                       remote_namespace);
+  }
+
   int RBD::mirror_uuid_get(IoCtx& io_ctx, std::string* mirror_uuid) {
     return librbd::api::Mirror<>::uuid_get(io_ctx, mirror_uuid);
   }
@@ -3395,6 +3407,37 @@ extern "C" int rbd_mirror_mode_set(rados_ioctx_t p,
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
+}
+
+extern "C" int rbd_mirror_remote_namespace_get(rados_ioctx_t p,
+                                               char *remote_namespace,
+                                               size_t *max_len) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::string remote_namespace_str;
+  int r = librbd::api::Mirror<>::remote_namespace_get(io_ctx,
+                                                      &remote_namespace_str);
+  if (r < 0) {
+    return r;
+  }
+
+  auto total_len = remote_namespace_str.size() + 1;
+  if (*max_len < total_len) {
+    *max_len = total_len;
+    return -ERANGE;
+  }
+  *max_len = total_len;
+
+  strcpy(remote_namespace, remote_namespace_str.c_str());
+  return 0;
+}
+
+extern "C" int rbd_mirror_remote_namespace_set(rados_ioctx_t p,
+                                               const char *remote_namespace) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::api::Mirror<>::remote_namespace_set(io_ctx, remote_namespace);
 }
 
 extern "C" int rbd_mirror_uuid_get(rados_ioctx_t p,

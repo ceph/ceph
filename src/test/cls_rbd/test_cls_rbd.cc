@@ -1606,7 +1606,9 @@ TEST_F(TestClsRbd, mirror) {
   ASSERT_EQ(-ENOENT, mirror_peer_list(&ioctx, &peers));
 
   std::string uuid;
+  std::string remote_ns;
   ASSERT_EQ(-ENOENT, mirror_uuid_get(&ioctx, &uuid));
+  ASSERT_EQ(-ENOENT, mirror_remote_namespace_get(&ioctx, &remote_ns));
   ASSERT_EQ(-EINVAL, mirror_peer_add(&ioctx, {"uuid1", MIRROR_PEER_DIRECTION_RX,
                                               "siteA", "client",
                                               "mirror uuid"}));
@@ -1622,11 +1624,16 @@ TEST_F(TestClsRbd, mirror) {
   ASSERT_EQ(0, mirror_uuid_get(&ioctx, &uuid));
   ASSERT_EQ("mirror-uuid", uuid);
 
+  ASSERT_EQ(0, mirror_remote_namespace_set(&ioctx, "remote-ns"));
+  ASSERT_EQ(0, mirror_remote_namespace_get(&ioctx, &remote_ns));
+  ASSERT_EQ("remote-ns", remote_ns);
+
   ASSERT_EQ(0, mirror_mode_set(&ioctx, cls::rbd::MIRROR_MODE_IMAGE));
   ASSERT_EQ(0, mirror_mode_get(&ioctx, &mirror_mode));
   ASSERT_EQ(cls::rbd::MIRROR_MODE_IMAGE, mirror_mode);
 
   ASSERT_EQ(-EINVAL, mirror_uuid_set(&ioctx, "new-mirror-uuid"));
+  ASSERT_EQ(-EINVAL, mirror_remote_namespace_set(&ioctx, "new-remote-ns"));
 
   ASSERT_EQ(0, mirror_mode_set(&ioctx, cls::rbd::MIRROR_MODE_POOL));
   ASSERT_EQ(0, mirror_mode_get(&ioctx, &mirror_mode));
@@ -1726,6 +1733,7 @@ TEST_F(TestClsRbd, mirror) {
   ASSERT_EQ(0, mirror_mode_get(&ioctx, &mirror_mode));
   ASSERT_EQ(cls::rbd::MIRROR_MODE_DISABLED, mirror_mode);
   ASSERT_EQ(-ENOENT, mirror_uuid_get(&ioctx, &uuid));
+  ASSERT_EQ(-ENOENT, mirror_remote_namespace_get(&ioctx, &remote_ns));
 }
 
 TEST_F(TestClsRbd, mirror_image) {

@@ -543,8 +543,9 @@ Commands
 
 :command:`mirror pool info` [*pool-name*]
   Show information about the pool or namespace mirroring configuration.
-  For a pool, it includes mirroring mode, peer UUID, remote cluster name,
-  and remote client name. For a namespace, it includes only mirroring mode.
+  For both pools and namespaces, it includes the mirroring mode, mirror UUID
+  and remote namespace. For pools, it additionally includes the site name,
+  peer UUID, remote cluster name, and remote client name.
 
 :command:`mirror pool peer add` [*pool-name*] *remote-cluster-spec*
   Add a mirroring peer to a pool.
@@ -555,7 +556,7 @@ Commands
   This requires mirroring to be enabled on the pool.
 
 :command:`mirror pool peer remove` [*pool-name*] *uuid*
-  Remove a mirroring peer from a pool. The peer uuid is available
+  Remove a mirroring peer from a pool. The peer UUID is available
   from ``mirror pool info`` command.
 
 :command:`mirror pool peer set` [*pool-name*] *uuid* *key* *value*

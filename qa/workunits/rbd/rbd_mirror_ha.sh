@@ -71,7 +71,7 @@ test_replay()
 	wait_for_image_replay_started ${CLUSTER1}:${LEADER} ${POOL} ${image}
 	write_image ${CLUSTER2} ${POOL} ${image} 100
 	wait_for_replay_complete ${CLUSTER1}:${LEADER} ${CLUSTER2} ${POOL} \
-				 ${image}
+				 ${POOL} ${image}
 	wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' \
                                     'primary_position' \
                                     "${MIRROR_USER_ID_PREFIX}${LEADER} on $(hostname -s)"
@@ -79,7 +79,7 @@ test_replay()
 	    wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} \
 					'down+unknown'
 	fi
-	compare_images ${POOL} ${image}
+	compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
     done
 }
 

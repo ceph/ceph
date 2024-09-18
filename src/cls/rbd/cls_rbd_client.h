@@ -389,6 +389,11 @@ int mirror_mode_get(librados::IoCtx *ioctx,
 int mirror_mode_set(librados::IoCtx *ioctx,
                     cls::rbd::MirrorMode mirror_mode);
 
+int mirror_remote_namespace_get(librados::IoCtx *ioctx,
+				std::string *mirror_namespace);
+int mirror_remote_namespace_set(librados::IoCtx *ioctx,
+				const std::string &mirror_namespace);
+
 int mirror_peer_ping(librados::IoCtx *ioctx,
                      const std::string& site_name,
                      const std::string& fsid);

@@ -37,12 +37,12 @@ set_image_meta ${CLUSTER2} ${POOL} ${image} "key1" "value1"
 set_image_meta ${CLUSTER2} ${POOL} ${image} "key2" "value2"
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
 if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'down+unknown'
 fi
-compare_images ${POOL} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 compare_image_meta ${CLUSTER1} ${POOL} ${image} "key1" "value1"
 compare_image_meta ${CLUSTER1} ${POOL} ${image} "key2" "value2"
 
@@ -53,19 +53,19 @@ create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image1} ${RBD_MIRROR_MODE}
 write_image ${CLUSTER2} ${POOL} ${image1} 100
 start_mirrors ${CLUSTER1}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image1}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image1}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1}
 if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image1} 'down+unknown'
 fi
-compare_images ${POOL} ${image1}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image1}
 
 testlog "TEST: test the first image is replaying after restart"
 write_image ${CLUSTER2} ${POOL} ${image} 100
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
-compare_images ${POOL} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
 if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   testlog "TEST: stop/start/restart mirror via admin socket"
@@ -173,7 +173,7 @@ wait_for_image_in_omap ${CLUSTER2} ${POOL}
 create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${RBD_MIRROR_MODE}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 
 testlog "TEST: failover and failback"
@@ -187,10 +187,10 @@ wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
-compare_images ${POOL} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
 # failover (unmodified)
 demote_image ${CLUSTER2} ${POOL} ${image}
@@ -207,10 +207,10 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
 wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
-compare_images ${POOL} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
 # failover
 demote_image ${CLUSTER2} ${POOL} ${image}
@@ -220,10 +220,10 @@ wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER2} ${POOL} ${image}
 write_image ${CLUSTER1} ${POOL} ${image} 100
-wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${POOL} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
 wait_for_replaying_status_in_pool_dir ${CLUSTER2} ${POOL} ${image}
-compare_images ${POOL} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
 # failback
 demote_image ${CLUSTER1} ${POOL} ${image}
@@ -233,10 +233,10 @@ wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
-compare_images ${POOL} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
 testlog "TEST: failover / failback loop"
 for i in `seq 1 20`; do
@@ -246,7 +246,7 @@ for i in `seq 1 20`; do
   wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
   promote_image ${CLUSTER1} ${POOL} ${image}
   wait_for_image_replay_started ${CLUSTER2} ${POOL} ${image}
-  wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${POOL} ${image}
+  wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${POOL} ${POOL} ${image}
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
   wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+replaying'
   demote_image ${CLUSTER1} ${POOL} ${image}
@@ -255,7 +255,7 @@ for i in `seq 1 20`; do
   wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
   promote_image ${CLUSTER2} ${POOL} ${image}
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
   wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 done
@@ -271,7 +271,7 @@ create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${force_promote_image} ${RBD_
 write_image ${CLUSTER2} ${POOL} ${force_promote_image} 100
 wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${force_promote_image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${force_promote_image}
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${force_promote_image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${force_promote_image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${force_promote_image}
 wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${force_promote_image} 'up+stopped'
 promote_image ${CLUSTER1} ${POOL} ${force_promote_image} '--force'
@@ -302,14 +302,14 @@ else
   enable_mirror ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${RBD_MIRROR_MODE}
 fi
 wait_for_image_replay_started ${CLUSTER1} ${PARENT_POOL} ${parent_image}
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${PARENT_POOL} ${parent_image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${PARENT_POOL} ${PARENT_POOL} ${parent_image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${PARENT_POOL} ${parent_image}
-compare_images ${PARENT_POOL} ${parent_image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${PARENT_POOL} ${PARENT_POOL} ${parent_image}
 
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${clone_image}
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${clone_image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${clone_image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${clone_image}
-compare_images ${POOL} ${clone_image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${clone_image}
 remove_image_retry ${CLUSTER2} ${POOL} ${clone_image}
 
 testlog " - clone v1"
@@ -383,11 +383,11 @@ create_snapshot ${CLUSTER2} ${POOL} ${dp_image} 'snap1'
 write_image ${CLUSTER2} ${POOL} ${dp_image} 100
 create_snapshot ${CLUSTER2} ${POOL} ${dp_image} 'snap2'
 write_image ${CLUSTER2} ${POOL} ${dp_image} 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${dp_image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${dp_image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${dp_image}
-compare_images ${POOL} ${dp_image}@snap1
-compare_images ${POOL} ${dp_image}@snap2
-compare_images ${POOL} ${dp_image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${dp_image}@snap1
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${dp_image}@snap2
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${dp_image}
 remove_image_retry ${CLUSTER2} ${POOL} ${dp_image}
 
 testlog "TEST: disable mirroring / delete non-primary image"
@@ -436,8 +436,8 @@ if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
     wait_for_image_present ${CLUSTER1} ${POOL} ${i} 'present'
     wait_for_snap_present ${CLUSTER1} ${POOL} ${i} 'snap2'
     wait_for_image_replay_started ${CLUSTER1} ${POOL} ${i}
-    wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${i}
-    compare_images ${POOL} ${i}
+    wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${i}
+    compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${i}
   done
 
   testlog "TEST: remove mirroring pool"
@@ -454,9 +454,9 @@ if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
   create_image ${CLUSTER2} ${POOL} ${rdp_image} 128 --data-pool ${pool}
   write_image ${CLUSTER2} ${pool} ${image} 100
   write_image ${CLUSTER2} ${POOL} ${rdp_image} 100
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${pool} ${image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${pool} ${pool} ${image}
   wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${pool} ${image}
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${rdp_image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${rdp_image}
   wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${rdp_image}
   for cluster in ${CLUSTER1} ${CLUSTER2}; do
     CEPH_ARGS='' ceph --cluster ${cluster} osd pool rm ${pool} ${pool} --yes-i-really-really-mean-it
@@ -519,12 +519,12 @@ wait_for_image_replay_started ${CLUSTER1} ${POOL}/${NS1} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL}/${NS2} ${image}
 write_image ${CLUSTER2} ${POOL}/${NS1} ${image} 100
 write_image ${CLUSTER2} ${POOL}/${NS2} ${image} 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${image}
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS2} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${POOL}/${NS1} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS2} ${POOL}/${NS2} ${image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS1} ${image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS2} ${image}
-compare_images ${POOL}/${NS1} ${image}
-compare_images ${POOL}/${NS2} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${POOL}/${NS1} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS2} ${POOL}/${NS2} ${image}
 
 testlog " - disable mirroring / delete image"
 remove_image_retry ${CLUSTER2} ${POOL}/${NS1} ${image}
@@ -532,6 +532,40 @@ disable_mirror ${CLUSTER2} ${POOL}/${NS2} ${image}
 wait_for_image_present ${CLUSTER1} ${POOL}/${NS1} ${image} 'deleted'
 wait_for_image_present ${CLUSTER1} ${POOL}/${NS2} ${image} 'deleted'
 remove_image_retry ${CLUSTER2} ${POOL}/${NS2} ${image}
+
+testlog "TEST: mirror to a different remote namespace"
+testlog " - replay"
+NS3=ns3
+NS4=ns4
+rbd --cluster ${CLUSTER1} namespace create ${POOL}/${NS3}
+rbd --cluster ${CLUSTER2} namespace create ${POOL}/${NS4}
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL}/${NS3} ${MIRROR_POOL_MODE} --remote-namespace ${NS4}
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL}/${NS4} ${MIRROR_POOL_MODE} --remote-namespace ${NS3}
+create_image_and_enable_mirror ${CLUSTER2} ${POOL}/${NS4} ${image} ${RBD_MIRROR_MODE}
+wait_for_image_replay_started ${CLUSTER1} ${POOL}/${NS3} ${image}
+write_image ${CLUSTER2} ${POOL}/${NS4} ${image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS3} ${POOL}/${NS4} ${image}
+wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS3} ${image}
+compare_images  ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS3} ${POOL}/${NS4} ${image}
+
+testlog " - disable mirroring and re-enable without remote-namespace"
+remove_image_retry ${CLUSTER2} ${POOL}/${NS4} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL}/${NS3} ${image} 'deleted'
+rbd --cluster ${CLUSTER1} mirror pool disable ${POOL}/${NS3}
+rbd --cluster ${CLUSTER2} mirror pool disable ${POOL}/${NS4}
+rbd --cluster ${CLUSTER2} namespace create ${POOL}/${NS3}
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL}/${NS3} ${MIRROR_POOL_MODE}
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL}/${NS3} ${MIRROR_POOL_MODE}
+create_image_and_enable_mirror ${CLUSTER2} ${POOL}/${NS3} ${image} ${RBD_MIRROR_MODE}
+wait_for_image_replay_started ${CLUSTER1} ${POOL}/${NS3} ${image}
+write_image ${CLUSTER2} ${POOL}/${NS3} ${image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS3} ${POOL}/${NS3} ${image}
+wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS3} ${image}
+compare_images  ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS3} ${POOL}/${NS3} ${image}
+remove_image_retry ${CLUSTER2} ${POOL}/${NS3} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL}/${NS3} ${image} 'deleted'
+rbd --cluster ${CLUSTER1} mirror pool disable ${POOL}/${NS3}
+rbd --cluster ${CLUSTER2} mirror pool disable ${POOL}/${NS3}
 
 testlog " - data pool"
 dp_image=test_data_pool
@@ -542,9 +576,9 @@ wait_for_image_replay_started ${CLUSTER1} ${POOL}/${NS1} ${dp_image}
 data_pool=$(get_image_data_pool ${CLUSTER1} ${POOL}/${NS1} ${dp_image})
 test "${data_pool}" = "${PARENT_POOL}"
 write_image ${CLUSTER2} ${POOL}/${NS1} ${dp_image} 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${dp_image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${POOL}/${NS1} ${dp_image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS1} ${dp_image}
-compare_images ${POOL}/${NS1} ${dp_image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${POOL}/${NS1} ${dp_image}
 remove_image_retry ${CLUSTER2} ${POOL}/${NS1} ${dp_image}
 
 testlog "TEST: simple image resync"
@@ -553,7 +587,7 @@ wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
-compare_images ${POOL} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
 if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   testlog "TEST: image resync while replayer is stopped"
@@ -566,7 +600,7 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
   wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
-  compare_images ${POOL} ${image}
+  compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 fi
 
 testlog "TEST: request image resync while daemon is offline"
@@ -577,7 +611,7 @@ wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
-compare_images ${POOL} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 remove_image_retry ${CLUSTER2} ${POOL} ${image}
 
 if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
@@ -588,7 +622,7 @@ if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
 
   testlog " - replay stopped after disconnect"
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
   test -n "$(get_mirror_journal_position ${CLUSTER2} ${POOL} ${image})"
   disconnect_image ${CLUSTER2} ${POOL} ${image}
   test -z "$(get_mirror_journal_position ${CLUSTER2} ${POOL} ${image})"
@@ -600,9 +634,9 @@ if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
   wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
   wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
   test -n "$(get_mirror_journal_position ${CLUSTER2} ${POOL} ${image})"
-  compare_images ${POOL} ${image}
+  compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
   testlog " - disconnected after max_concurrent_object_sets reached"
   if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
@@ -628,25 +662,25 @@ if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
   wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
   wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
   test -n "$(get_mirror_journal_position ${CLUSTER2} ${POOL} ${image})"
-  compare_images ${POOL} ${image}
+  compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
   testlog " - rbd_mirroring_resync_after_disconnect config option"
   set_image_meta ${CLUSTER2} ${POOL} ${image} \
 	  conf_rbd_mirroring_resync_after_disconnect true
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
   image_id=$(get_image_id ${CLUSTER1} ${POOL} ${image})
   disconnect_image ${CLUSTER2} ${POOL} ${image}
   wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
   wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
   test -n "$(get_mirror_journal_position ${CLUSTER2} ${POOL} ${image})"
-  compare_images ${POOL} ${image}
+  compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
   set_image_meta ${CLUSTER2} ${POOL} ${image} \
 	  conf_rbd_mirroring_resync_after_disconnect false
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
   disconnect_image ${CLUSTER2} ${POOL} ${image}
   test -z "$(get_mirror_journal_position ${CLUSTER2} ${POOL} ${image})"
   wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}

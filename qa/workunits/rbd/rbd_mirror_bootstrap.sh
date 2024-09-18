@@ -38,7 +38,7 @@ create_image_and_enable_mirror ${CLUSTER1} ${POOL} image1
 
 wait_for_image_replay_started ${CLUSTER2} ${POOL} image1
 write_image ${CLUSTER1} ${POOL} image1 100
-wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${POOL} image1
+wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${POOL} ${POOL} image1
 wait_for_replaying_status_in_pool_dir ${CLUSTER2} ${POOL} image1
 
 testlog "TEST: verify rx-tx direction"
@@ -54,12 +54,12 @@ enable_mirror ${CLUSTER2} ${PARENT_POOL} image2
 
 wait_for_image_replay_started ${CLUSTER2} ${PARENT_POOL} image1
 write_image ${CLUSTER1} ${PARENT_POOL} image1 100
-wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${PARENT_POOL} image1
+wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${PARENT_POOL} ${PARENT_POOL} image1
 wait_for_replaying_status_in_pool_dir ${CLUSTER2} ${PARENT_POOL} image1
 
 wait_for_image_replay_started ${CLUSTER1} ${PARENT_POOL} image2
 write_image ${CLUSTER2} ${PARENT_POOL} image2 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${PARENT_POOL} image2
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${PARENT_POOL} ${PARENT_POOL} image2
 wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${PARENT_POOL} image2
 
 testlog "TEST: pool replayer and callout cleanup when peer is updated"

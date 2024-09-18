@@ -2391,6 +2391,27 @@ class TestMirroring(object):
         self.rbd.mirror_site_name_set(rados, "")
         eq(rados.get_fsid(), self.rbd.mirror_site_name_get(rados))
 
+    def test_mirror_remote_namespace(self):
+        remote_namespace = "remote-ns"
+        # cannot set remote namespace for the default namespace
+        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
+                      ioctx, remote_namespace)
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        self.rbd.namespace_create(ioctx, "ns1")
+        ioctx.set_namespace("ns1")
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
+        # cannot set remote namespace while mirroring enabled
+        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
+                      ioctx, remote_namespace)
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
+        # cannot set remote namespace to the default namespace
+        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
+                      ioctx, "")
+        self.rbd.mirror_remote_namespace_set(ioctx, remote_namespace)
+        eq(remote_namespace, self.rbd.mirror_remote_namespace_get(ioctx))
+        ioctx.set_namespace("")
+        self.rbd.namespace_remove(ioctx, "ns1")
+
     def test_mirror_peer_bootstrap(self):
         eq([], list(self.rbd.mirror_peer_list(ioctx)))
 

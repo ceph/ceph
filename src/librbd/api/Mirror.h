@@ -31,6 +31,11 @@ struct Mirror {
   static int mode_get(librados::IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   static int mode_set(librados::IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
 
+  static int remote_namespace_get(librados::IoCtx& io_ctx,
+                                  std::string* remote_namespace);
+  static int remote_namespace_set(librados::IoCtx& io_ctx,
+                                  const std::string& remote_namespace);
+
   static int uuid_get(librados::IoCtx& io_ctx, std::string* mirror_uuid);
   static void uuid_get(librados::IoCtx& io_ctx, std::string* mirror_uuid,
                        Context* on_finish);
