@@ -72,7 +72,8 @@
               i18n-title
               i18n-description
               class="toolbar-action"
-              placement="bottom">
+              placement="bottom"
+              *ngIf="fetchData?.observers?.length > 0">
         <svg cdsIcon="renew"
              size="16"
              [ngClass]="{ 'cds--toolbar-action__icon': true, 'reload': loadingIndicator }"></svg>
@@ -195,7 +196,8 @@
                   (selectPage)="onPageChange($event)"
                   [disabled]="limit === 0"
                   [skeleton]="loadingIndicator"
-                  [pageInputDisabled]="limit === 0">
+                  [pageInputDisabled]="limit === 0"
+                  *ngIf="footer">
   </cds-pagination>
 </cds-table-container>
 

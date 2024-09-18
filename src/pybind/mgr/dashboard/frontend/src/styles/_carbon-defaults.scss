@@ -46,6 +46,18 @@ tr.cds--expandable-row > td:first-of-type {
   padding-inline-start: 1rem !important;
 }
 
+tr.cds--expandable-row {
+  th,
+  tr td {
+    padding-inline-start: 0;
+  }
+}
+
+tbody:has(td.cds--table-column-checkbox) > tr.cds--expandable-row[data-child-row] td,
+tr.cds--parent-row.cds--expandable-row + tr[data-child-row] td {
+  padding-inline-start: 1rem;
+}
+
 th {
   padding-block: 0 !important;
 }

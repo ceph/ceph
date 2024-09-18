@@ -139,26 +139,24 @@
                 <td><pre>{{ selection.bucket_policy | json}}</pre></td>
               </tr>
               <tr>
-                <div>
-                  <td i18n
-                      class="bold w-25">Lifecycle
-                    <div *ngIf="(selection.lifecycle | json) !== '{}'"
-                         class="input-group">
-                      <button type="button"
-                              class="btn btn-light"
-                              [ngClass]="{'active': lifecycleFormat === 'json'}"
-                              (click)="lifecycleFormat = 'json'">
-                            JSON
-                      </button>
-                      <button type="button"
-                              class="btn btn-light"
-                              [ngClass]="{'active': lifecycleFormat === 'xml'}"
-                              (click)="lifecycleFormat = 'xml'">
-                            XML
-                      </button>
-                    </div>
-                  </td>
-                </div>
+                <td i18n
+                    class="bold w-25">Lifecycle
+                  <div *ngIf="(selection.lifecycle | json) !== '{}'"
+                       class="input-group">
+                    <button type="button"
+                            class="btn btn-light"
+                            [ngClass]="{'active': lifecycleFormat === 'json'}"
+                            (click)="lifecycleFormat = 'json'">
+                          JSON
+                    </button>
+                    <button type="button"
+                            class="btn btn-light"
+                            [ngClass]="{'active': lifecycleFormat === 'xml'}"
+                            (click)="lifecycleFormat = 'xml'">
+                          XML
+                    </button>
+                  </div>
+                </td>
                 <td>
                   <pre *ngIf="lifecycleFormat === 'json'">{{selection.lifecycle | json}}</pre>
                   <pre *ngIf="lifecycleFormat === 'xml'">{{ (selection.lifecycle | xml) || '-'}}</pre>
