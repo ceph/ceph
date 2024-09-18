@@ -7724,6 +7724,10 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   if (r < 0)
     goto out_fm;
 
+  if (bdev_label_multi) {
+    _main_bdev_label_try_reserve();
+  }
+
   // Re-open in the proper mode(s).
 
   // Can't simply bypass second open for read-only mode as we need to
@@ -7738,10 +7742,6 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
 
   if (!read_only) {
     _post_init_alloc();
-  }
-
-  if (bdev_label_multi) {
-    _main_bdev_label_try_reserve();
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
