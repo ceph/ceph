@@ -20,6 +20,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
   let form: CdFormGroup;
   let formHelper: FormHelper;
   const mockTimestamp = 1720693470789;
+  const mockGroupName = 'default';
 
   beforeEach(async () => {
     spyOn(Date, 'now').and.returnValue(mockTimestamp);
@@ -42,6 +43,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
     form = component.subsystemForm;
     formHelper = new FormHelper(form);
     fixture.detectChanges();
+    component.group = mockGroupName;
   });
 
   it('should create', () => {
@@ -60,7 +62,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
       expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
         nqn: expectedNqn,
         max_namespaces: MAX_NAMESPACE,
-        enable_ha: true
+        enable_ha: true,
+        gw_group: mockGroupName
       });
     });
 

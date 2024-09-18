@@ -6,6 +6,8 @@ import { NvmeofService } from '../../shared/api/nvmeof.service';
 describe('NvmeofService', () => {
   let service: NvmeofService;
   let httpTesting: HttpTestingController;
+  const mockGroupName = 'default';
+  const mockNQN = 'nqn.2001-07.com.ceph:1721041732363';
 
   configureTestBed({
     providers: [NvmeofService],
@@ -25,34 +27,51 @@ describe('NvmeofService', () => {
     expect(service).toBeTruthy();
   });
 
+  it('should call listGatewayGroups', () => {
+    service.listGatewayGroups().subscribe();
+    const req = httpTesting.expectOne('api/nvmeof/gateway/group');
+    expect(req.request.method).toBe('GET');
+  });
+
   it('should call listGateways', () => {
     service.listGateways().subscribe();
     const req = httpTesting.expectOne('api/nvmeof/gateway');
     expect(req.request.method).toBe('GET');
   });
 
+  it('should call listSubsystems', () => {
+    service.listSubsystems(mockGroupName).subscribe();
+    const req = httpTesting.expectOne(`api/nvmeof/subsystem?gw_group=${mockGroupName}`);
+    expect(req.request.method).toBe('GET');
+  });
+
   it('should call getSubsystem', () => {
-    service.getSubsystem('nqn.2001-07.com.ceph:1721041732363').subscribe();
-    const req = httpTesting.expectOne('api/nvmeof/subsystem/nqn.2001-07.com.ceph:1721041732363');
+    service.getSubsystem(mockNQN, mockGroupName).subscribe();
+    const req = httpTesting.expectOne(`api/nvmeof/subsystem/${mockNQN}?gw_group=${mockGroupName}`);
     expect(req.request.method).toBe('GET');
   });
 
   it('should call createSubsystem', () => {
     const request = {
-      nqn: 'nqn.2001-07.com.ceph:1721041732363',
+      nqn: mockNQN,
       enable_ha: true,
-      initiators: '*'
+      initiators: '*',
+      gw_group: mockGroupName
     };
     service.createSubsystem(request).subscribe();
     const req = httpTesting.expectOne('api/nvmeof/subsystem');
     expect(req.request.method).toBe('POST');
   });
 
+  it('should call deleteSubsystem', () => {
+    service.deleteSubsystem(mockNQN, mockGroupName).subscribe();
+    const req = httpTesting.expectOne(`api/nvmeof/subsystem/${mockNQN}?gw_group=${mockGroupName}`);
+    expect(req.request.method).toBe('DELETE');
+  });
+
   it('should call getInitiators', () => {
-    service.getInitiators('nqn.2001-07.com.ceph:1721041732363').subscribe();
-    const req = httpTesting.expectOne(
-      'api/nvmeof/subsystem/nqn.2001-07.com.ceph:1721041732363/host'
-    );
+    service.getInitiators(mockNQN).subscribe();
+    const req = httpTesting.expectOne(`api/nvmeof/subsystem/${mockNQN}/host`);
     expect(req.request.method).toBe('GET');
   });
 });
