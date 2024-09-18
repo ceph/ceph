@@ -78,10 +78,15 @@ To build Ceph, follow this procedure:
    contains `do_cmake.sh` and `CONTRIBUTING.rst`.
 2. Run the `do_cmake.sh` script:
 
-    >``./do_cmake.sh``
+       ./do_cmake.sh
+
+   ``do_cmake.sh`` by default creates a "debug build" of Ceph, which can be 
+   up to five times slower than a non-debug build. Pass 
+   ``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` to ``do_cmake.sh`` to create a 
+   non-debug build.
 3. Move into the `build` directory:
 
-    >``cd build``
+       cd build
 4. Use the `ninja` buildsystem to build the development environment:
 
     >``ninja``
@@ -112,11 +117,11 @@ to limit the job number to 3, run the command `ninja -j 3`. On average, each
 
    To build only certain targets, run a command of the following form:
 
-	ninja [target name]
+       ninja [target name]
 
 5. Install the vstart cluster:
 
-	ninja install
+       ninja install
  
 ### CMake Options
 
