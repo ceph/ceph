@@ -50,10 +50,10 @@ name:
 keyring: 
 mount: 
 funcs: 
-  # - "command_prepare_host"
+  - "command_prepare_host"
   - "command_rm_cluster"
-  # - "command_bootstrap"
-  # - "command_shell"
+  - "command_bootstrap"
+  - "command_shell"
 
 #Setting up cluster
 setup: true
