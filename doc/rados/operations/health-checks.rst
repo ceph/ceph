@@ -1499,8 +1499,8 @@ ____________________
 One or more Placement Groups (PGs) have not been deep scrubbed recently. PGs
 are normally scrubbed every :confval:`osd_deep_scrub_interval` seconds at most.
 This health check is raised if a certain percentage (determined by
-``mon_warn_pg_not_deep_scrubbed_ratio``) of the interval has elapsed after the
-time the scrub was scheduled and no scrub has been performed.
+:confval:`mon_warn_pg_not_deep_scrubbed_ratio`) of the interval has elapsed
+after the time the scrub was scheduled and no scrub has been performed.
 
 PGs will receive a deep scrub only if they are flagged as *clean* (which means
 that they are to be cleaned, and not that they have been examined and found to
@@ -1508,9 +1508,10 @@ be clean). Misplaced or degraded PGs might not be flagged as ``clean`` (see
 *PG_AVAILABILITY* and *PG_DEGRADED* above).
 
 This document offers two methods of setting the value of
-``osd_deep_scrub_interval``. The first method listed here changes the value of
-``osd_deep_scrub_interval`` globally. The second method listed here changes the
-value of ``osd_deep scrub interval`` for OSDs and for the Manager daemon.
+:confval:`osd_deep_scrub_interval`. The first method listed here changes the
+value of :confval:`osd_deep_scrub_interval` globally. The second method listed
+here changes the value of :confval:`osd_deep scrub interval` for OSDs and for
+the Manager daemon.
 
 First Method
 ~~~~~~~~~~~~
@@ -1521,10 +1522,10 @@ To manually initiate a deep scrub of a clean PG, run the following command:
 
    ceph pg deep-scrub <pgid>
 
-Under certain conditions, the warning ``X PGs not deep-scrubbed in time``
+Under certain conditions, the warning ``PGs not deep-scrubbed in time``
 appears. This might be because the cluster contains many large PGs, which take
 longer to deep-scrub. To remedy this situation, you must change the value of
-``osd_deep_scrub_interval`` globally.
+:confval:`osd_deep_scrub_interval` globally.
 
 #. Confirm that ``ceph health detail`` returns a ``pgs not deep-scrubbed in
    time`` warning::
@@ -1555,10 +1556,10 @@ To manually initiate a deep scrub of a clean PG, run the following command:
 
    ceph pg deep-scrub <pgid>
 
-Under certain conditions, the warning ``X PGs not deep-scrubbed in time``
+Under certain conditions, the warning ``PGs not deep-scrubbed in time``
 appears. This might be because the cluster contains many large PGs, which take
 longer to deep-scrub. To remedy this situation, you must change the value of
-``osd_deep_scrub_interval`` for OSDs and for the Manager daemon.
+:confval:`osd_deep_scrub_interval` for OSDs and for the Manager daemon.
 
 #. Confirm that ``ceph health detail`` returns a ``pgs not deep-scrubbed in
    time`` warning::
