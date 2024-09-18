@@ -1,0 +1,64 @@
+@use './src/styles/vendor/variables' as vv;
+
+:host {
+  bottom: 10px;
+  max-width: 90vw;
+  position: fixed;
+  right: -350px;
+  top: vv.$navbar-height + 10px;
+
+  transition: all 0.6s;
+
+  width: 350px;
+
+  z-index: 9;
+}
+
+:host.active {
+  right: 20px;
+}
+
+.card {
+  height: 100%;
+}
+
+.card-body {
+  padding-left: 0;
+  padding-right: 5px;
+  padding-top: 3px;
+}
+
+ngx-simplebar {
+  height: calc(100% - 42.2px);
+}
+
+.separator {
+  background-color: vv.$gray-200;
+  color: vv.$gray-600;
+  font-size: 1rem;
+  padding: 5px 12px;
+}
+
+.btn-block {
+  width: 98%;
+}
+
+.btn-link .fa-trash-o {
+  color: vv.$black;
+}
+
+table {
+  width: 100%;
+}
+
+.row {
+  margin-left: 0;
+  margin-right: 0;
+  padding-bottom: 1rem;
+  padding-top: 1rem;
+}
+
+hr {
+  margin-bottom: 2px;
+  margin-top: 2px;
+}
