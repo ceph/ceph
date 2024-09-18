@@ -619,9 +619,9 @@ public:
 
   void print(std::ostream& os) const;
   void dump_primary(Formatter*);
-  seastar::future<> complete_error_log(const ceph_tid_t& rep_tid,
+  interruptible_future<> complete_error_log(const ceph_tid_t& rep_tid,
                                        const eversion_t& version);
-  seastar::future<std::optional<eversion_t>> submit_error_log(
+  interruptible_future<std::optional<eversion_t>> submit_error_log(
     Ref<MOSDOp> m,
     const OpInfo &op_info,
     ObjectContextRef obc,

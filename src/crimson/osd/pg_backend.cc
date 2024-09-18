@@ -30,6 +30,7 @@
 #include "replicated_recovery_backend.h"
 #include "ec_backend.h"
 #include "exceptions.h"
+#include "osd/object_state_fmt.h"
 
 namespace {
   seastar::logger& logger() {
@@ -928,6 +929,7 @@ PGBackend::create_iertr::future<> PGBackend::create(
   ceph::os::Transaction& txn,
   object_stat_sum_t& delta_stats)
 {
+  logger().debug("{} obc existed: {}, osd_op {}", __func__, os, osd_op);
   if (os.exists && !os.oi.is_whiteout() &&
       (osd_op.op.flags & CEPH_OSD_OP_FLAG_EXCL)) {
     // this is an exclusive create

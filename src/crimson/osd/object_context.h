@@ -76,6 +76,11 @@ public:
   ObjectContext(hobject_t hoid) : lock(hoid),
                                   obs(std::move(hoid)) {}
 
+  void update_from(const ObjectContext &obc) {
+    obs = obc.obs;
+    ssc = obc.ssc;
+  }
+
   const hobject_t &get_oid() const {
     return obs.oi.soid;
   }

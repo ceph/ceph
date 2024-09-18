@@ -552,11 +552,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(
 
 template <class Func>
 struct OpsExecuter::RollbackHelper {
-  interruptible_future<> rollback_obc_if_modified(const std::error_code& e);
-  ObjectContextRef get_obc() const {
-    assert(ox);
-    return ox->obc;
-  }
+  void rollback_obc_if_modified(const std::error_code& e);
   seastar::lw_shared_ptr<OpsExecuter> ox;
   Func func;
 };
@@ -569,8 +565,7 @@ OpsExecuter::create_rollbacker(Func&& func) {
 
 
 template <class Func>
-OpsExecuter::interruptible_future<>
-OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified(
+void OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified(
   const std::error_code& e)
 {
   // Oops, an operation had failed. do_osd_ops() altogether with
@@ -579,12 +574,6 @@ OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified(
   // rollback as we gave OpsExecuter the very single copy of `obc`
   // we maintain and we did it for both reading and writing.
   // Now all modifications must be reverted.
-  //
-  // Let's just reload from the store. Evicting from the shared
-  // LRU would be tricky as next MOSDOp (the one at `get_obc`
-  // phase) could actually already finished the lookup. Fortunately,
-  // this is supposed to live on cold  paths, so performance is not
-  // a concern -- simplicity wins.
   //
   // The conditional's purpose is to efficiently handle hot errors
   // which may appear as a result of e.g. CEPH_OSD_OP_CMPXATTR or
@@ -600,7 +589,9 @@ OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified(
     ox->obc->get_oid(),
     e,
     need_rollback);
-  return need_rollback ? func(*ox->obc) : interruptor::now();
+  if (need_rollback) {
+    func(ox->obc);
+  }
 }
 
 // PgOpsExecuter -- a class for executing ops targeting a certain PG.

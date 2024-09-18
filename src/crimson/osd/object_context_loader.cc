@@ -1,5 +1,6 @@
 #include "crimson/osd/object_context_loader.h"
 #include "osd/osd_types_fmt.h"
+#include "osd/object_state_fmt.h"
 
 SET_SUBSYS(osd);
 
@@ -111,7 +112,7 @@ using crimson::common::local_conf;
 	  return std::invoke(std::move(func), obc);
 	}
       ).finally([FNAME, this, obc=ObjectContextRef(obc)] {
-	DEBUGDPP("released object {}", dpp, obc->get_oid());
+	DEBUGDPP("released object {}, {}", dpp, obc->get_oid(), obc->obs);
 	if constexpr (track) {
 	  obc->remove_from(obc_set_accessing);
 	}
@@ -125,7 +126,7 @@ using crimson::common::local_conf;
 	  return std::invoke(std::move(func), obc);
 	}
       ).finally([FNAME, this, obc=ObjectContextRef(obc)] {
-	DEBUGDPP("released object {}", dpp, obc->get_oid());
+	DEBUGDPP("released object {}, {}", dpp, obc->get_oid(), obc->obs);
 	if constexpr (track) {
 	  obc->remove_from(obc_set_accessing);
 	}

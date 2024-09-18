@@ -964,6 +964,15 @@ PG::BackgroundProcessLock::lock() noexcept
   return interruptor::make_interruptible(mutex.lock());
 }
 
+// We may need to rollback the ObjectContext on failed op execution.
+// Copy the current obc before mutating it in order to recover on failures.
+ObjectContextRef duplicate_obc(const ObjectContextRef &obc) {
+  ObjectContextRef object_context = new ObjectContext(obc->obs.oi.soid);
+  object_context->obs = obc->obs;
+  object_context->ssc = new SnapSetContext(*obc->ssc);
+  return object_context;
+}
+
 template <class Ret, class SuccessFunc, class FailureFunc>
 PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<Ret>>
 PG::do_osd_ops_execute(
@@ -976,9 +985,9 @@ PG::do_osd_ops_execute(
   FailureFunc&& failure_func)
 {
   assert(ox);
-  auto rollbacker = ox->create_rollbacker([this] (auto& obc) {
-    return obc_loader.reload_obc(obc).handle_error_interruptible(
-      load_obc_ertr::assert_all{"can't live with object state messed up"});
+  auto rollbacker = ox->create_rollbacker(
+    [object_context=duplicate_obc(obc)] (auto& obc) mutable {
+    obc->update_from(*object_context);
   });
   auto failure_func_ptr = seastar::make_lw_shared(std::move(failure_func));
   return interruptor::do_for_each(ops, [ox](OSDOp& osd_op) {
@@ -1040,23 +1049,21 @@ PG::do_osd_ops_execute(
           std::move(log_entries));
     });
   }).safe_then_unpack_interruptible(
-    [success_func=std::move(success_func), rollbacker, this, failure_func_ptr]
+    [success_func=std::move(success_func), rollbacker, this, failure_func_ptr, obc]
     (auto submitted_fut, auto _all_completed_fut) mutable {
 
     auto all_completed_fut = _all_completed_fut.safe_then_interruptible_tuple(
       std::move(success_func),
       crimson::ct_error::object_corrupted::handle(
-      [rollbacker, this] (const std::error_code& e) mutable {
+      [rollbacker, this, obc] (const std::error_code& e) mutable {
       // this is a path for EIO. it's special because we want to fix the obejct
       // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
       // restart the execution.
-      return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-      [obc=rollbacker.get_obc(), this] {
-        return repair_object(obc->obs.oi.soid,
-                             obc->obs.oi.version
-        ).then_interruptible([] {
-          return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
-        });
+      rollbacker.rollback_obc_if_modified(e);
+      return repair_object(obc->obs.oi.soid,
+                           obc->obs.oi.version
+      ).then_interruptible([] {
+        return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
       });
     }), OpsExecuter::osd_op_errorator::all_same_way(
         [rollbacker, failure_func_ptr]
@@ -1065,11 +1072,8 @@ PG::do_osd_ops_execute(
           ceph_assert(e.value() == EDQUOT ||
                       e.value() == ENOSPC ||
                       e.value() == EAGAIN);
-          return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-          [e, failure_func_ptr] {
-            // no need to record error log
-            return (*failure_func_ptr)(e);
-          });
+          rollbacker.rollback_obc_if_modified(e);
+          return (*failure_func_ptr)(e);
     }));
 
     return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
@@ -1081,45 +1085,42 @@ PG::do_osd_ops_execute(
      rollbacker, failure_func_ptr]
     (const std::error_code& e) mutable {
     ceph_tid_t rep_tid = shard_services.get_tid();
-    return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-    [&, op_info, m, obc,
-     this, e, rep_tid, failure_func_ptr] {
-      // record error log
-      auto maybe_submit_error_log =
-        seastar::make_ready_future<std::optional<eversion_t>>(std::nullopt);
-      // call submit_error_log only for non-internal clients
-      if constexpr (!std::is_same_v<Ret, void>) {
-        if(op_info.may_write()) {
-          maybe_submit_error_log =
-            submit_error_log(m, op_info, obc, e, rep_tid);
-        }
+    rollbacker.rollback_obc_if_modified(e);
+    // record error log
+    auto maybe_submit_error_log =
+      interruptor::make_ready_future<std::optional<eversion_t>>(std::nullopt);
+    // call submit_error_log only for non-internal clients
+    if constexpr (!std::is_same_v<Ret, void>) {
+      if(op_info.may_write()) {
+        maybe_submit_error_log =
+          submit_error_log(m, op_info, obc, e, rep_tid);
       }
-      return maybe_submit_error_log.then(
-      [this, failure_func_ptr, e, rep_tid] (auto version) {
-        auto all_completed =
-        [this, failure_func_ptr, e, rep_tid,  version] {
-          if (version.has_value()) {
-            return complete_error_log(rep_tid, version.value()).then(
-            [failure_func_ptr, e] {
-              return (*failure_func_ptr)(e);
-            });
-          } else {
+    }
+    return maybe_submit_error_log.then_interruptible(
+    [this, failure_func_ptr, e, rep_tid] (auto version) {
+      auto all_completed =
+      [this, failure_func_ptr, e, rep_tid,  version] {
+        if (version.has_value()) {
+          return complete_error_log(rep_tid, version.value()
+          ).then_interruptible([failure_func_ptr, e] {
             return (*failure_func_ptr)(e);
-          }
-        };
-        return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
-          std::move(seastar::now()),
-          std::move(all_completed())
-        );
-      });
+          });
+        } else {
+          return (*failure_func_ptr)(e);
+        }
+      };
+      return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
+        std::move(seastar::now()),
+        std::move(all_completed())
+      );
     });
   }));
 }
 
-seastar::future<> PG::complete_error_log(const ceph_tid_t& rep_tid,
+PG::interruptible_future<> PG::complete_error_log(const ceph_tid_t& rep_tid,
                                          const eversion_t& version)
 {
-  auto result = seastar::now();
+  auto result = interruptor::now();
   auto last_complete = peering_state.get_info().last_complete;
   ceph_assert(log_entry_update_waiting_on.contains(rep_tid));
   auto& log_update = log_entry_update_waiting_on[rep_tid];
@@ -1133,8 +1134,9 @@ seastar::future<> PG::complete_error_log(const ceph_tid_t& rep_tid,
   } else {
     logger().debug("complete_error_log: rep_tid {} awaiting update from {}",
                    rep_tid, log_update.waiting_on);
-    result = log_update.all_committed.get_shared_future().then(
-    [this, last_complete, rep_tid, version] {
+    result = interruptor::make_interruptible(
+      log_update.all_committed.get_shared_future()
+    ).then_interruptible([this, last_complete, rep_tid, version] {
       logger().debug("complete_error_log: rep_tid {} awaited ", rep_tid);
       peering_state.complete_write(version, last_complete);
       ceph_assert(!log_entry_update_waiting_on.contains(rep_tid));
@@ -1144,7 +1146,7 @@ seastar::future<> PG::complete_error_log(const ceph_tid_t& rep_tid,
   return result;
 }
 
-seastar::future<std::optional<eversion_t>> PG::submit_error_log(
+PG::interruptible_future<std::optional<eversion_t>> PG::submit_error_log(
   Ref<MOSDOp> m,
   const OpInfo &op_info,
   ObjectContextRef obc,
@@ -1175,7 +1177,7 @@ seastar::future<std::optional<eversion_t>> PG::submit_error_log(
 
   return seastar::do_with(log_entries, set<pg_shard_t>{},
     [this, t=std::move(t), rep_tid](auto& log_entries, auto& waiting_on) mutable {
-    return seastar::do_for_each(get_acting_recovery_backfill(),
+    return interruptor::do_for_each(get_acting_recovery_backfill(),
       [this, log_entries, waiting_on, rep_tid]
       (auto& i) mutable {
       pg_shard_t peer(i);
@@ -1200,7 +1202,7 @@ seastar::future<std::optional<eversion_t>> PG::submit_error_log(
       return shard_services.send_to_osd(peer.osd,
                                         std::move(log_m),
                                         get_osdmap_epoch());
-    }).then([this, waiting_on, t=std::move(t), rep_tid] () mutable {
+    }).then_interruptible([this, waiting_on, t=std::move(t), rep_tid] () mutable {
       waiting_on.insert(pg_whoami);
       logger().debug("submit_error_log: inserting rep_tid {}", rep_tid);
       log_entry_update_waiting_on.insert(
