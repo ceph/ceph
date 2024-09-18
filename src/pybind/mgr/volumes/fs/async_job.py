@@ -125,8 +125,7 @@ class AsyncJobs(threading.Thread):
         self.fs_client = CephfsClient(self.vc.mgr)
 
         self.threads = []
-        for i in range(self.nr_concurrent_jobs):
-            self.spawn_new_thread(i)
+        self.spawn_all_threads()
         self.start()
 
     def spawn_new_thread(self, suffix):
@@ -136,6 +135,20 @@ class AsyncJobs(threading.Thread):
         t.start()
 
         self.threads.append(t)
+
+    def spawn_all_threads(self):
+        log.debug(f'spawning {self.nr_concurrent_jobs} to execute more jobs '
+                  'concurrently')
+        for i in range(self.nr_concurrent_jobs):
+            self.spawn_new_thread(i)
+
+    def spawn_more_threads(self):
+        c = len(self.threads)
+        diff = self.nr_concurrent_jobs - c
+        log.debug(f'spawning {diff} threads to execute more jobs concurrently')
+
+        for i in range(c, self.nr_concurrent_jobs):
+            self.spawn_new_thread(i)
 
     def run(self):
         log.debug("tick thread {} starting".format(self.name))
@@ -148,9 +161,7 @@ class AsyncJobs(threading.Thread):
                     self.cv.notifyAll()
                 elif c < self.nr_concurrent_jobs:
                     # Increase concurrency: create more threads.
-                    log.debug("creating new threads to job increase")
-                    for i in range(c, self.nr_concurrent_jobs):
-                        self.spawn_new_thread(i)
+                    self.spawn_more_threads()
                 self.cv.wait(timeout=5)
 
     def shutdown(self):
