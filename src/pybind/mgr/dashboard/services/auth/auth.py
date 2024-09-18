@@ -41,9 +41,9 @@ class BaseAuth(abc.ABC):
     LOGOUT_URL: str
     sso: bool
 
-    @staticmethod
-    def from_protocol(protocol: AuthType) -> Type["BaseAuth"]:
-        for subclass in BaseAuth.__subclasses__():
+    @classmethod
+    def from_protocol(cls, protocol: AuthType) -> Type["BaseAuth"]:
+        for subclass in cls.__subclasses__():
             if subclass.__name__.lower() == protocol:
                 return subclass
             for subsubclass in subclass.__subclasses__():
@@ -72,7 +72,7 @@ class BaseAuth(abc.ABC):
         pass
 
     @classmethod
-    def get_auth_name(cls):
+    def name(cls):
         return cls.__name__.lower()
 
 
@@ -81,20 +81,15 @@ class Local(BaseAuth):
     LOGOUT_URL = '#/login'
     sso = False
 
-    @classmethod
-    def get_auth_name(cls):
-        return cls.__name__.lower()
-
     def to_dict(self) -> 'BaseAuth.Config':
-        return BaseAuth.Config()
+        return self.Config()
 
     @classmethod
     def from_dict(cls, s_dict: BaseAuth.Config) -> 'Local':
-        # pylint: disable=unused-argument
-        return cls()
+        raise NotImplementedError
 
 
-class SSOAuth(BaseAuth):
+class SSOAuthMixin:
     sso = True
 
 

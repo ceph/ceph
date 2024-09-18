@@ -6,15 +6,14 @@ import cherrypy
 import requests
 
 from ... import mgr
-from ...services.auth import BaseAuth, SSOAuth, decode_jwt_segment
+from ...services.auth import BaseAuth, SSOAuthMixin, decode_jwt_segment
 from ...tools import prepare_url_prefix
 from ..access_control import Role, User, UserAlreadyExists
 
 
-class OAuth2(SSOAuth):
+class OAuth2(BaseAuth, SSOAuthMixin):
     LOGIN_URL = 'auth/oauth2/login'
     LOGOUT_URL = 'auth/oauth2/logout'
-    sso = True
 
     class OAuth2Config(BaseAuth.Config):
         pass
@@ -23,17 +22,13 @@ class OAuth2(SSOAuth):
     def enabled():
         return mgr.get_module_option('sso_oauth2')
 
-    def to_dict(self) -> 'BaseAuth.Config':
+    def to_dict(self) -> 'OAuth2Config':
         return self.OAuth2Config()
 
     @classmethod
     def from_dict(cls, s_dict: OAuth2Config) -> 'OAuth2':
-        # pylint: disable=unused-argument
-        return OAuth2()
+        raise NotImplementedError
 
-    @classmethod
-    def get_auth_name(cls):
-        return cls.__name__.lower()
 
     @classmethod
     # pylint: disable=protected-access

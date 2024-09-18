@@ -162,7 +162,7 @@ class Auth(RESTController, ControllerAuthMixin):
         self._delete_token_cookie(token)
         return {
             'redirect_url': BaseAuth.from_db(mgr.SSO_DB).LOGOUT_URL,
-            'protocol': BaseAuth.from_db(mgr.SSO_DB).get_auth_name()
+            'protocol': BaseAuth.from_db(mgr.SSO_DB).name()
         }
 
     @RESTController.Collection('POST', query_params=['token'])
