@@ -195,10 +195,71 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         ]
       ],
       group: [
-        null,
+        'default',
         CdValidators.requiredIf({
           service_type: 'nvmeof'
         })
+      ],
+      enable_mtls: [false],
+      root_ca_cert: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              service_type: 'nvmeof',
+              enable_mtls: true
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      client_cert: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              service_type: 'nvmeof',
+              enable_mtls: true
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      client_key: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              service_type: 'nvmeof',
+              enable_mtls: true
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      server_cert: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              service_type: 'nvmeof',
+              enable_mtls: true
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      server_key: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              service_type: 'nvmeof',
+              enable_mtls: true
+            },
+            [Validators.required]
+          )
+        ]
       ],
       // RGW
       rgw_frontend_port: [null, [CdValidators.number(false)]],
@@ -527,6 +588,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             case 'nvmeof':
               this.serviceForm.get('pool').setValue(response[0].spec.pool);
               this.serviceForm.get('group').setValue(response[0].spec.group);
+              this.serviceForm.get('enable_mtls').setValue(response[0].spec?.enable_auth);
+              this.serviceForm.get('root_ca_cert').setValue(response[0].spec?.root_ca_cert);
+              this.serviceForm.get('client_cert').setValue(response[0].spec?.client_cert);
+              this.serviceForm.get('client_key').setValue(response[0].spec?.client_key);
+              this.serviceForm.get('server_cert').setValue(response[0].spec?.server_cert);
+              this.serviceForm.get('server_key').setValue(response[0].spec?.server_key);
               break;
             case 'rgw':
               this.serviceForm
@@ -673,7 +740,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         this.serviceForm.get('count').setValue(2);
         break;
       case 'iscsi':
-      case 'nvmeof':
       case 'cephfs-mirror':
       case 'nfs':
       case 'grafana':
@@ -778,16 +844,25 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     );
   }
 
-  setNvmeofServiceId(): void {
-    const defaultRbdPool: string = this.rbdPools?.find((p: Pool) => p.pool_name === 'rbd')
-      ?.pool_name;
-    if (defaultRbdPool) {
-      this.serviceForm.get('pool').setValue(defaultRbdPool);
+  setNvmeServiceId() {
+    const pool = this.serviceForm.get('pool').value;
+    const group = this.serviceForm.get('group').value;
+    if (pool && group) {
+      this.serviceForm.get('service_id').setValue(`${pool}.${group}`);
+    } else if (pool) {
+      this.serviceForm.get('service_id').setValue(pool);
+    } else if (group) {
+      this.serviceForm.get('service_id').setValue(group);
+    } else {
+      this.serviceForm.get('service_id').setValue(null);
     }
   }
 
-  onNvmeofGroupChange(groupName: string) {
-    this.serviceForm.get('service_id').setValue(groupName);
+  setNvmeDefaultPool() {
+    const defaultPool =
+      this.rbdPools?.find((p: Pool) => p.pool_name === 'rbd')?.pool_name ||
+      this.rbdPools?.[0].pool_name;
+    this.serviceForm.get('pool').setValue(defaultPool);
   }
 
   requiresServiceId(serviceType: string) {
@@ -797,7 +872,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   setServiceId(serviceId: string): void {
     const requiresServiceId: boolean = this.requiresServiceId(serviceId);
     if (requiresServiceId && serviceId === 'nvmeof') {
-      this.setNvmeofServiceId();
+      this.setNvmeDefaultPool();
+      this.setNvmeServiceId();
     } else if (requiresServiceId) {
       this.serviceForm.get('service_id').setValue(null);
     } else {
@@ -822,15 +898,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   onPlacementChange(selected: string) {
     if (selected === 'label') {
       this.serviceForm.get('count').setValue(null);
-    }
-  }
-
-  onBlockPoolChange() {
-    const selectedBlockPool = this.serviceForm.get('pool').value;
-    if (selectedBlockPool) {
-      this.serviceForm.get('service_id').setValue(selectedBlockPool);
-    } else {
-      this.serviceForm.get('service_id').setValue(null);
     }
   }
 
@@ -931,6 +998,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       case 'nvmeof':
         serviceSpec['pool'] = values['pool'];
         serviceSpec['group'] = values['group'];
+        serviceSpec['enable_auth'] = values['enable_mtls'];
+        if (values['enable_mtls']) {
+          serviceSpec['root_ca_cert'] = values['root_ca_cert'];
+          serviceSpec['client_cert'] = values['client_cert'];
+          serviceSpec['client_key'] = values['client_key'];
+          serviceSpec['server_cert'] = values['server_cert'];
+          serviceSpec['server_key'] = values['server_key'];
+        }
         break;
       case 'iscsi':
         serviceSpec['pool'] = values['pool'];
