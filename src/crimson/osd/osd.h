@@ -208,6 +208,8 @@ private:
                                         Ref<MOSDRepOpReply> m);
   seastar::future<> handle_peering_op(crimson::net::ConnectionRef conn,
                                       Ref<MOSDPeeringOp> m);
+  seastar::future<> handle_pg_remove(crimson::net::ConnectionRef conn,
+				     Ref<MOSDPGRemove> m);
   seastar::future<> handle_recovery_subreq(crimson::net::ConnectionRef conn,
                                            Ref<MOSDFastDispatchOp> m);
   seastar::future<> handle_scrub_command(crimson::net::ConnectionRef conn,

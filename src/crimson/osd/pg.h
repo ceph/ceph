@@ -375,7 +375,7 @@ public:
   }
   void check_blocklisted_watchers() final;
   void clear_primary_state() final {
-    // Not needed yet
+    recovery_finisher = nullptr;
   }
 
   void queue_check_readable(epoch_t last_peering_reset,
@@ -394,7 +394,7 @@ public:
   void on_replica_activate() final;
   void on_activate_complete() final;
   void on_new_interval() final {
-    // Not needed yet
+    recovery_finisher = nullptr;
   }
   Context *on_clean() final;
   void on_activate_committed() final {
@@ -712,9 +712,17 @@ public:
   }
   seastar::future<> stop();
 private:
+  class C_PG_FinishRecovery : public Context {
+  public:
+    explicit C_PG_FinishRecovery(PG &pg) : pg(pg) {}
+    void finish(int r) override;
+  private:
+    PG& pg;
+  };
   std::unique_ptr<PGBackend> backend;
   std::unique_ptr<RecoveryBackend> recovery_backend;
   std::unique_ptr<PGRecovery> recovery_handler;
+  C_PG_FinishRecovery *recovery_finisher;
 
   PeeringState peering_state;
   eversion_t projected_last_update;
