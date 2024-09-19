@@ -28,6 +28,10 @@
   by disabling async recovery by setting osd_async_recovery_min_cost to a very
   large value on all OSDs until the upgrade is complete:
   ``ceph config set osd osd_async_recovery_min_cost 1099511627776``
+* CephFS: EOPNOTSUPP (Operation not supported ) is now returned by the CephFS
+  fuse client for `fallocate` for the default case (i.e. mode == 0) since
+  CephFS does not support disk space reservation. The only flags supported are
+  `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
 
 >=19.0.0
 
