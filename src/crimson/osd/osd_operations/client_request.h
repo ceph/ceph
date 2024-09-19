@@ -274,12 +274,7 @@ private:
   interruptible_future<> with_sequencer(FuncT&& func);
   interruptible_future<> reply_op_error(const Ref<PG>& pg, int err);
 
-
-  using do_process_iertr =
-    ::crimson::interruptible::interruptible_errorator<
-      ::crimson::osd::IOInterruptCondition,
-      ::crimson::errorator<crimson::ct_error::eagain>>;
-  do_process_iertr::future<> do_process(
+  interruptible_future<> do_process(
     instance_handle_t &ihref,
     Ref<PG> pg,
     crimson::osd::ObjectContextRef obc,

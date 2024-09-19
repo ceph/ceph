@@ -103,9 +103,11 @@ InternalClientRequest::with_interruption()
 	    [](auto submitted, auto all_completed) {
 	      return all_completed.handle_error_interruptible(
 		crimson::ct_error::eagain::handle([] {
+		  ceph_assert(0 == "not handled");
 		  return seastar::now();
 		}));
 	    }, crimson::ct_error::eagain::handle([] {
+	      ceph_assert(0 == "not handled");
 	      return interruptor::now();
 	    })
 	  );
