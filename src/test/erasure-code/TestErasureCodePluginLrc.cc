@@ -26,12 +26,26 @@
 
 using namespace std;
 
-TEST(ErasureCodePlugin, factory)
+TEST(ErasureCodePlugin, factory_jerasure)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeProfile profile;
   profile["mapping"] = "DD_";
-  profile["layers"] = "[ [ \"DDc\", \"\" ] ]";
+  profile["layers"] = "[ [ \"DDc\", \"plugin=jerasure\" ] ]";
+  ErasureCodeInterfaceRef erasure_code;
+  EXPECT_FALSE(erasure_code);
+  EXPECT_EQ(0, instance.factory("lrc",
+				g_conf().get_val<std::string>("erasure_code_dir"),
+				profile, &erasure_code, &cerr));
+  EXPECT_TRUE(erasure_code.get());
+}
+
+TEST(ErasureCodePlugin, factory_isa)
+{
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  ErasureCodeProfile profile;
+  profile["mapping"] = "DD_";
+  profile["layers"] = "[ [ \"DDc\", \"plugin=isa\" ] ]";
   ErasureCodeInterfaceRef erasure_code;
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(0, instance.factory("lrc",
