@@ -1395,7 +1395,7 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``name`` name of the nvmeof gateway
         self.name = name
         #: ``group`` name of the nvmeof gateway
-        self.group = group
+        self.group = group or ''
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
         #: ``state_update_notify`` enables automatic update from OMAP in nvmeof gateway
@@ -1488,9 +1488,6 @@ class NvmeofServiceSpec(ServiceSpec):
 
         if not self.pool:
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
-
-        if not self.group:
-            raise SpecValidationError('Cannot add NVMEOF: No group specified')
 
         if self.enable_auth:
             if not all([self.server_key, self.server_cert, self.client_key,
