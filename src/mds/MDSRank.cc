@@ -2960,7 +2960,7 @@ void MDSRankDispatcher::evict_clients(
   dout(20) << __func__ << " matched " << victims.size() << " sessions" << dendl;
 
   if (victims.empty()) {
-    on_finish(-ESRCH, "no hosts match", outbl);
+    on_finish(0, "no hosts match", outbl);
     return;
   }
 
