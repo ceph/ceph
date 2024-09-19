@@ -134,6 +134,8 @@ RBD_GROUP_IMAGE_STATE_INCOMPLETE = _RBD_GROUP_IMAGE_STATE_INCOMPLETE
 RBD_GROUP_SNAP_STATE_INCOMPLETE = _RBD_GROUP_SNAP_STATE_INCOMPLETE
 RBD_GROUP_SNAP_STATE_COMPLETE = _RBD_GROUP_SNAP_STATE_COMPLETE
 
+RBD_GROUP_SNAP_NAMESPACE_TYPE_USER = _RBD_GROUP_SNAP_NAMESPACE_TYPE_USER
+
 RBD_IMAGE_MIGRATION_STATE_UNKNOWN = _RBD_IMAGE_MIGRATION_STATE_UNKNOWN
 RBD_IMAGE_MIGRATION_STATE_ERROR = _RBD_IMAGE_MIGRATION_STATE_ERROR
 RBD_IMAGE_MIGRATION_STATE_PREPARING = _RBD_IMAGE_MIGRATION_STATE_PREPARING
@@ -2843,6 +2845,8 @@ cdef class Group(object):
 
             * ``state`` (int) - state of the group snapshot
 
+            * ``namespace_type`` (int) - group snapshot namespace type
+
             * ``image_snap_name`` (str) - name of the image snapshots
 
             * ``image_snaps`` (list) - image snapshots that constitute the group snapshot.
@@ -2881,6 +2885,7 @@ cdef class Group(object):
             'id': decode_cstr(group_snap.id),
             'name': decode_cstr(group_snap.name),
             'state': group_snap.state,
+            'namespace_type': group_snap.namespace_type,
             'image_snap_name': decode_cstr(group_snap.image_snap_name),
             'image_snaps': image_snaps
         }
@@ -6055,6 +6060,8 @@ cdef class GroupSnapIterator(object):
 
     * ``state`` (int) - state of the group snapshot
 
+    * ``namespace_type`` (int) - group snapshot namespace type
+
     * ``image_snap_name`` (str) - name of the image snapshots
 
     * ``image_snaps`` (list) - image snapshots that constitute the group snapshot.
@@ -6105,6 +6112,7 @@ cdef class GroupSnapIterator(object):
                 'id': decode_cstr(group_snap.id),
                 'name': decode_cstr(group_snap.name),
                 'state': group_snap.state,
+                'namespace_type': group_snap.namespace_type,
                 'image_snap_name': decode_cstr(group_snap.image_snap_name),
                 'image_snaps': image_snaps,
             }

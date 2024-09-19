@@ -275,6 +275,7 @@ void group_snap_info2_cpp_to_c(const librbd::group_snap_info2_t &cpp_info,
   c_info->name = strdup(cpp_info.name.c_str());
   c_info->image_snap_name = strdup(cpp_info.image_snap_name.c_str());
   c_info->state = cpp_info.state;
+  c_info->namespace_type = cpp_info.namespace_type;
   c_info->image_snaps_count = cpp_info.image_snaps.size();
   c_info->image_snaps = static_cast<rbd_group_image_snap_info_t*>(calloc(
     cpp_info.image_snaps.size(), sizeof(rbd_group_image_snap_info_t)));
