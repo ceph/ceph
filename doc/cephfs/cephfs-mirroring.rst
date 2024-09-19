@@ -340,7 +340,7 @@ command is of format `filesystem-name@filesystem-id peer-uuid`::
         "last_synced_snap": {
             "id": 120,
             "name": "snap1",
-            "sync_duration": 0.079997898999999997,
+            "sync_duration": 3,
             "sync_time_stamp": "274900.558797s",
             "sync_bytes": 52428800
         },
@@ -374,7 +374,7 @@ When a directory is currently being synchronized, the mirror daemon marks it as 
         "last_synced_snap": {
             "id": 120,
             "name": "snap1",
-            "sync_duration": 0.079997898999999997,
+            "sync_duration": 3,
             "sync_time_stamp": "274900.558797s",
             "sync_bytes": 52428800
         },
@@ -403,7 +403,7 @@ E.g., adding a regular file for synchronization would result in failed status::
         "last_synced_snap": {
             "id": 121,
             "name": "snap2",
-            "sync_duration": 300,
+            "sync_duration": 5,
             "sync_time_stamp": "500900.600797s",
             "sync_bytes": 78643200
         },
@@ -439,7 +439,7 @@ In the remote filesystem::
         "last_synced_snap": {
             "id": 120,
             "name": "snap1",
-            "sync_duration": 0.079997898999999997,
+            "sync_duration": 3,
             "sync_time_stamp": "274900.558797s"
         },
         "snaps_synced": 2,
@@ -513,16 +513,16 @@ CephFS exports mirroring metrics as :ref:`Labeled Perf Counters` which will be c
      - The total number of snapshots renamed
    * - avg_sync_time
      - Gauge
-     - The average time (ms) taken by all snapshot synchronizations
+     - The average time taken by all snapshot synchronizations
    * - last_synced_start
      - Gauge
-     - The sync start time (ms) of the last synced snapshot
+     - The sync start time of the last synced snapshot
    * - last_synced_end
      - Gauge
-     - The sync end time (ms) of the last synced snapshot
+     - The sync end time of the last synced snapshot
    * - last_synced_duration
      - Gauge
-     - The time duration (ms) of the last synchronization
+     - The time duration of the last synchronization
    * - last_synced_bytes
      - counter
      - The total bytes being synchronized for the last synced snapshot
