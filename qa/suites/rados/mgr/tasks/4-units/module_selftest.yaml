@@ -1,0 +1,18 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - Reduced data availability
+      - Degraded data redundancy
+      - objects misplaced
+      - Synthetic exception in serve
+      - influxdb python module not found
+      - \(MGR_ZABBIX_
+      - foo bar
+      - Failed to open Telegraf
+      - evicting unresponsive client
+      - 1 mgr modules have recently crashed \(RECENT_MGR_MODULE_CRASH\)
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.mgr.test_module_selftest
+      fail_on_skip: false
