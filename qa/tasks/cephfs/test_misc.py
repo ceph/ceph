@@ -558,16 +558,18 @@ class TestSessionClientEvict(CephFSTestCase):
         self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
 
     def _evict_with_invalid_id(self, cmd):
+        info_initial = self.fs.rank_asok(cmd + ['ls'])
         # with invalid id
-        with self.assertRaises(CommandFailedError) as ce:
-            self.fs.rank_tell(cmd + ['evict', 'id=1'])
-        self.assertEqual(ce.exception.exitstatus, errno.ESRCH)
+        self.fs.rank_tell(cmd + ['evict', 'id=1'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), len(info_initial)) # session list is status-quo
 
     def _evict_with_negative_id(self, cmd):
+        info_initial = self.fs.rank_asok(cmd + ['ls'])
         # with negative id
-        with self.assertRaises(CommandFailedError) as ce:
-            self.fs.rank_tell(cmd + ['evict', 'id=-9'])
-        self.assertEqual(ce.exception.exitstatus, errno.ESRCH)
+        self.fs.rank_tell(cmd + ['evict', 'id=-9'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), len(info_initial)) # session list is status-quo
 
     def _evict_with_valid_id(self, cmd):
         info_initial = self.fs.rank_asok(cmd + ['ls'])
