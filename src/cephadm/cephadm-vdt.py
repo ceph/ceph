@@ -5921,6 +5921,9 @@ def preparing_remote_host(host):
     check_container_engine_cmd = f"{ssh_command} 'if ! command -v podman && ! command -v docker; then apt-get update && apt-get install -y podman; fi'"
     subprocess.run(check_container_engine_cmd, shell=True)
 
+    check_container_init_cmd = f"{ssh_command} 'if ! command -v podman && ! command -v docker; then apt-get update && apt-get install -y catatonit; fi'"
+    subprocess.run(check_container_init_cmd, shell=True)
+
     check_lvm2_cmd = f"{ssh_command} 'if ! command -v lvcreate; then apt-get update && apt-get install -y lvm2; fi'"
     subprocess.run(check_lvm2_cmd, shell=True)
 
