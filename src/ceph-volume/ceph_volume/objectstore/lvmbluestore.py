@@ -373,10 +373,18 @@ class LvmBlueStore(BlueStore):
                                                        osd_fsid,
                                                        lockbox_secret)
                 dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
-            encryption_utils.luks_open(dmcrypt_secret,
-                                       osd_block_lv.__dict__['lv_path'],
-                                       osd_block_lv.__dict__['lv_uuid'],
-                                       with_tpm=self.with_tpm)
+            lv_path: str = osd_block_lv.__dict__['lv_path']
+            if disk.has_holders(lv_path):
+                real_path_device = os.path.realpath(lv_path)
+                holders = disk.get_block_device_holders()
+
+                if real_path_device in holders.keys() and real_path_device in holders.values():
+                    osd_lv_path = disk.get_lvm_mapper_path_from_dm(next(k for k, v in holders.items() if v == real_path_device))
+            else:
+                encryption_utils.luks_open(dmcrypt_secret,
+                                           osd_block_lv.__dict__['lv_path'],
+                                           osd_block_lv.__dict__['lv_uuid'],
+                                           with_tpm=self.with_tpm)
         else:
             osd_lv_path = osd_block_lv.__dict__['lv_path']
 

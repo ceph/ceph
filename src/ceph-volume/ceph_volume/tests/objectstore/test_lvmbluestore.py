@@ -450,8 +450,8 @@ class TestLvmBlueStore:
                       lv_tags=f'ceph.type=db,ceph.db_uuid=fake-db-uuid,ceph.block_uuid=fake-block-uuid,ceph.wal_uuid=fake-wal-uuid,ceph.osd_id=0,ceph.osd_fsid=abcd,ceph.cluster_name=ceph,{encrypted},ceph.cephx_lockbox_secret=abcd',
                       lv_uuid='fake-db-uuid'),
                Volume(lv_name='lv_foo-db',
-                      lv_path='/fake-db-path',
-                      vg_name='vg_foo_db',
+                      lv_path='/fake-wal-path',
+                      vg_name='vg_foo_wal',
                       lv_tags=f'ceph.type=wal,ceph.block_uuid=fake-block-uuid,ceph.wal_uuid=fake-wal-uuid,ceph.db_uuid=fake-db-uuid,ceph.osd_id=0,ceph.osd_fsid=abcd,ceph.cluster_name=ceph,{encrypted},ceph.cephx_lockbox_secret=abcd',
                       lv_uuid='fake-wal-uuid')]
         self.lvm_bs._activate(lvs)
@@ -466,7 +466,7 @@ class TestLvmBlueStore:
                                       {'args': (['ln', '-snf', '/fake-db-path',
                                                  '/var/lib/ceph/osd/ceph-0/block.db'],),
                                        'kwargs': {}},
-                                      {'args': (['ln', '-snf', '/fake-db-path',
+                                      {'args': (['ln', '-snf', '/fake-wal-path',
                                                  '/var/lib/ceph/osd/ceph-0/block.wal'],),
                                        'kwargs': {}},
                                       {'args': (['systemctl', 'enable',
