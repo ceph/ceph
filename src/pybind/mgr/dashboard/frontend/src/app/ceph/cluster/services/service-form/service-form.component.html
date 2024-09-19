@@ -1292,7 +1292,7 @@
         </div>
 
         <!-- root_ca_cert -->
-        <div *ngIf="serviceForm.controls.enable_auth.value"
+        <div *ngIf="serviceForm.controls.enable_mtls.value"
              class="form-group row">
           <label class="cd-col-form-label required"
                  for="root_ca_cert">
@@ -1312,7 +1312,7 @@
         </div>
 
         <!-- client_cert -->
-        <div *ngIf="serviceForm.controls.enable_auth.value"
+        <div *ngIf="serviceForm.controls.enable_mtls.value"
              class="form-group row">
           <label class="cd-col-form-label required"
                  for="client_cert">
@@ -1332,7 +1332,7 @@
         </div>
 
         <!-- client_key -->
-        <div *ngIf="serviceForm.controls.enable_auth.value"
+        <div *ngIf="serviceForm.controls.enable_mtls.value"
              class="form-group row">
           <label class="cd-col-form-label required"
                  for="client_key">
@@ -1352,7 +1352,7 @@
         </div>
 
         <!-- server_cert -->
-        <div *ngIf="serviceForm.controls.enable_auth.value"
+        <div *ngIf="serviceForm.controls.enable_mtls.value"
              class="form-group row">
           <label class="cd-col-form-label required"
                  for="server_cert">
@@ -1372,7 +1372,7 @@
         </div>
 
         <!-- server_key -->
-        <div *ngIf="serviceForm.controls.enable_auth.value"
+        <div *ngIf="serviceForm.controls.enable_mtls.value"
              class="form-group row">
           <label class="cd-col-form-label required"
                  for="server_key">
