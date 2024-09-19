@@ -36,7 +36,7 @@ namespace ceph {
       interval_set<uint64_t> reads;
       interval_set<uint64_t> writes;
     public:
-      ObjectModel(const std::string oid, uint64_t block_size, int seed);
+      ObjectModel(const std::string& oid, uint64_t block_size, int seed);
       
       int get_seed(uint64_t offset) const;
       std::vector<int> get_seed_offsets(int seed) const;

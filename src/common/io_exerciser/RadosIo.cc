@@ -2,10 +2,12 @@
 
 #include "DataGenerator.h"
 
-ceph::io_exerciser::RadosIo::RadosIo(librados::Rados& rados,
+using RadosIo = ceph::io_exerciser::RadosIo;
+
+RadosIo::RadosIo(librados::Rados& rados,
         boost::asio::io_context& asio,
-        const std::string pool,
-        const std::string oid,
+        const std::string& pool,
+        const std::string& oid,
         uint64_t block_size,
         int seed,
 	int threads,
@@ -29,17 +31,17 @@ ceph::io_exerciser::RadosIo::RadosIo(librados::Rados& rados,
   allow_ec_overwrites(true);
 }
 
-ceph::io_exerciser::RadosIo::~RadosIo()
+RadosIo::~RadosIo()
 {
 }
 
-void ceph::io_exerciser::RadosIo::start_io()
+void RadosIo::start_io()
 {
   std::lock_guard l(lock);
   outstanding_io++;
 }
 
-void ceph::io_exerciser::RadosIo::finish_io()
+void RadosIo::finish_io()
 {
   std::lock_guard l(lock);
   ceph_assert(outstanding_io > 0);
@@ -47,7 +49,7 @@ void ceph::io_exerciser::RadosIo::finish_io()
   cond.notify_all();
 }
 
-void ceph::io_exerciser::RadosIo::wait_for_io(int count)
+void RadosIo::wait_for_io(int count)
 {
   std::unique_lock l(lock);
   while (outstanding_io > count) {
@@ -55,7 +57,7 @@ void ceph::io_exerciser::RadosIo::wait_for_io(int count)
   }
 }
 
-void ceph::io_exerciser::RadosIo::allow_ec_overwrites(bool allow)
+void RadosIo::allow_ec_overwrites(bool allow)
 {
   int rc;
   bufferlist inbl, outbl;
@@ -67,10 +69,9 @@ void ceph::io_exerciser::RadosIo::allow_ec_overwrites(bool allow)
   ceph_assert(rc == 0);
 }
 
-ceph::io_exerciser::RadosIo::AsyncOpInfo::AsyncOpInfo(
-        uint64_t offset1, uint64_t length1,
-        uint64_t offset2, uint64_t length2,
-        uint64_t offset3, uint64_t length3 ) :
+RadosIo::AsyncOpInfo::AsyncOpInfo(uint64_t offset1, uint64_t length1,
+                                  uint64_t offset2, uint64_t length2,
+                                  uint64_t offset3, uint64_t length3 ) :
   offset1(offset1), length1(length1),
   offset2(offset2), length2(length2),
   offset3(offset3), length3(length3)
@@ -78,7 +79,7 @@ ceph::io_exerciser::RadosIo::AsyncOpInfo::AsyncOpInfo(
 
 }
 
-bool ceph::io_exerciser::RadosIo::readyForIoOp(IoOp &op)
+bool RadosIo::readyForIoOp(IoOp &op)
 {
   ceph_assert(lock.is_locked_by_me()); //Must be called with lock held
   if (!om->readyForIoOp(op)) {
@@ -93,7 +94,7 @@ bool ceph::io_exerciser::RadosIo::readyForIoOp(IoOp &op)
   }
 }
 
-void ceph::io_exerciser::RadosIo::applyIoOp(IoOp &op)
+void RadosIo::applyIoOp(IoOp &op)
 {
   std::shared_ptr<AsyncOpInfo> op_info;
 

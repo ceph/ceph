@@ -25,7 +25,7 @@ namespace ceph {
       boost::asio::io_context& asio;
       std::unique_ptr<ObjectModel> om;
       std::unique_ptr<ceph::io_exerciser::data_generation::DataGenerator> db;
-      const std::string pool;
+      std::string pool;
       int threads;
       ceph::mutex& lock;
       ceph::condition_variable& cond;
@@ -39,8 +39,8 @@ namespace ceph {
     public:
       RadosIo(librados::Rados& rados,
               boost::asio::io_context& asio,
-              const std::string pool,
-              const std::string oid,
+              const std::string& pool,
+              const std::string& oid,
               uint64_t block_size,
               int seed,
               int threads,

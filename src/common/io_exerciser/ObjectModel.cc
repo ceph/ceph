@@ -1,18 +1,24 @@
 #include "ObjectModel.h"
 
-ceph::io_exerciser::ObjectModel::ObjectModel(const std::string oid, uint64_t block_size, int seed) :
+#include <algorithm>
+#include <execution>
+#include <iterator>
+
+using ObjectModel = ceph::io_exerciser::ObjectModel;
+
+ObjectModel::ObjectModel(const std::string& oid, uint64_t block_size, int seed) :
   Model(oid, block_size), created(false)
 {
   rng.seed(seed);
 }
 
-int ceph::io_exerciser::ObjectModel::get_seed(uint64_t offset) const
+int ObjectModel::get_seed(uint64_t offset) const
 {
   ceph_assert(offset < contents.size());
   return contents[offset];
 }
 
-std::vector<int> ceph::io_exerciser::ObjectModel::get_seed_offsets(int seed) const
+std::vector<int> ObjectModel::get_seed_offsets(int seed) const
 {
   std::vector<int> offsets;
   for (size_t i = 0; i < contents.size(); i++)
@@ -26,7 +32,7 @@ std::vector<int> ceph::io_exerciser::ObjectModel::get_seed_offsets(int seed) con
   return offsets;
 }
 
-std::string ceph::io_exerciser::ObjectModel::to_string(int mask) const
+std::string ObjectModel::to_string(int mask) const
 {
   if (!created) {
     return "Object does not exist";
@@ -42,13 +48,17 @@ std::string ceph::io_exerciser::ObjectModel::to_string(int mask) const
   return result;
 }
 
-bool ceph::io_exerciser::ObjectModel::readyForIoOp(IoOp& op)
+bool ObjectModel::readyForIoOp(IoOp& op)
 {
   return true;
 }
 
-void ceph::io_exerciser::ObjectModel::applyIoOp(IoOp& op)
+void ObjectModel::applyIoOp(IoOp& op)
 {
+  auto generate_random = [&rng = rng]() {
+    return rng();
+  };
+
   switch (op.op) {
   case BARRIER:
     reads.clear();
@@ -61,9 +71,8 @@ void ceph::io_exerciser::ObjectModel::applyIoOp(IoOp& op)
     ceph_assert(writes.empty());
     created = true;
     contents.resize(op.length1);
-    for (uint64_t i = 0; i < contents.size(); i++) {
-      contents[i] = rng();
-    }
+    std::generate(std::execution::seq, contents.begin(), contents.end(),
+                  generate_random);
     break;
 
   case REMOVE:
@@ -98,17 +107,18 @@ void ceph::io_exerciser::ObjectModel::applyIoOp(IoOp& op)
     reads.union_insert(op.offset1, op.length1);
     num_io++;
     break;
-    
+
   case WRITE3:
     ceph_assert(created);
     // Not allowed: write overlapping with parallel read or write
     ceph_assert(!reads.intersects(op.offset3, op.length3));
     ceph_assert(!writes.intersects(op.offset3, op.length3));
     writes.union_insert(op.offset3, op.length3);
-    for (uint64_t i = op.offset3; i < op.offset3 + op.length3; i++) {
-      ceph_assert(i < contents.size());
-      contents[i] = rng();
-    }
+    ceph_assert(op.offset3 + op.length3 <= contents.size());
+    std::generate(std::execution::seq,
+                  std::next(contents.begin(), op.offset3),
+                  std::next(contents.begin(), op.offset3 + op.length3),
+                  generate_random);
     [[fallthrough]];
 
   case WRITE2:
@@ -117,39 +127,41 @@ void ceph::io_exerciser::ObjectModel::applyIoOp(IoOp& op)
     ceph_assert(!reads.intersects(op.offset2, op.length2));
     ceph_assert(!writes.intersects(op.offset2, op.length2));
     writes.union_insert(op.offset2, op.length2);
-    for (uint64_t i = op.offset2; i < op.offset2 + op.length2; i++) {
-      ceph_assert(i < contents.size());
-      contents[i] = rng();
-    }
+    ceph_assert(op.offset2 + op.length2 <= contents.size());
+    std::generate(std::execution::seq,
+                  std::next(contents.begin(), op.offset2),
+                  std::next(contents.begin(), op.offset2 + op.length2),
+                  generate_random);
     [[fallthrough]];
-    
+
   case WRITE:
     ceph_assert(created);
     // Not allowed: write overlapping with parallel read or write
     ceph_assert(!reads.intersects(op.offset1, op.length1));
     ceph_assert(!writes.intersects(op.offset1, op.length1));
     writes.union_insert(op.offset1, op.length1);
-    for (uint64_t i = op.offset1; i < op.offset1 + op.length1; i++) {
-      ceph_assert(i < contents.size());
-      contents[i] = rng();
-    }
+    ceph_assert(op.offset1 + op.length1 <= contents.size());
+    std::generate(std::execution::seq,
+                  std::next(contents.begin(), op.offset1),
+                  std::next(contents.begin(), op.offset1 + op.length1),
+                  generate_random);
     num_io++;
     break;
   default:
     break;
   }
 }
-  
-void ceph::io_exerciser::ObjectModel::encode(ceph::buffer::list& bl) const {
+
+void ObjectModel::encode(ceph::buffer::list& bl) const {
   ENCODE_START(1, 1, bl);
   encode(created, bl);
   if (created) {
     encode(contents, bl);
   }
   ENCODE_FINISH(bl);
-}    
+}
 
-void ceph::io_exerciser::ObjectModel::decode(ceph::buffer::list::const_iterator& bl) {
+void ObjectModel::decode(ceph::buffer::list::const_iterator& bl) {
   DECODE_START(1, bl);
   DECODE_OLDEST(1);
   decode(created, bl);

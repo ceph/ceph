@@ -26,18 +26,18 @@ namespace ceph {
     class Model
     {
     protected:
-      int num_io;
-      const std::string oid;
+      int num_io{0};
+      std::string oid;
       uint64_t block_size;
 
     public:
-      Model(const std::string oid, uint64_t block_size);
+      Model(const std::string& oid, uint64_t block_size);
       virtual ~Model() = default;
 
       virtual bool readyForIoOp(IoOp& op) = 0;
       virtual void applyIoOp(IoOp& op) = 0;
       
-      const std::string& get_oid() const;
+      const std::string get_oid() const;
       const uint64_t get_block_size() const;
       int get_num_io() const;
     };

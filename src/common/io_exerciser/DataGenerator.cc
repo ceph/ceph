@@ -14,16 +14,19 @@
 #define dout_subsys ceph_subsys_rados
 #define dout_context g_ceph_context
 
-std::mutex ceph::io_exerciser::data_generation::DataGenerator
-  ::DataGenerationSingleton::m_mutex;
-ceph::io_exerciser::data_generation::DataGenerator::DataGenerationSingleton
-  ceph::io_exerciser::data_generation::DataGenerator::DataGenerationSingleton::m_singletonInstance =
-    ceph::io_exerciser::data_generation::DataGenerator::DataGenerationSingleton();
+using DataGenerator = ceph::io_exerciser::data_generation::DataGenerator;
+using SeededRandomGenerator = ceph::io_exerciser::data_generation
+                                ::SeededRandomGenerator;
+using HeaderedSeededRandomGenerator = ceph::io_exerciser::data_generation
+                                        ::HeaderedSeededRandomGenerator;
 
-std::unique_ptr<ceph::io_exerciser::data_generation::DataGenerator>
-  ceph::io_exerciser::data_generation::DataGenerator::create_generator(
-    ceph::io_exerciser::data_generation::GenerationType generationType,
-    const ObjectModel& model)
+std::mutex DataGenerator::DataGenerationSingleton::m_mutex;
+DataGenerator::DataGenerationSingleton
+  DataGenerator::DataGenerationSingleton::m_singletonInstance =
+    DataGenerator::DataGenerationSingleton();
+
+std::unique_ptr<DataGenerator> DataGenerator::create_generator(
+    GenerationType generationType, const ObjectModel& model)
 {
   switch(generationType)
   {
@@ -38,23 +41,20 @@ std::unique_ptr<ceph::io_exerciser::data_generation::DataGenerator>
   return nullptr;
 }
 
-ceph::io_exerciser::data_generation::DataGenerator
-  ::DataGenerationSingleton::DataGenerationSingleton()
+DataGenerator::DataGenerationSingleton::DataGenerationSingleton()
 {
   m_created = false;
 }
 
-ceph::io_exerciser::data_generation::DataGenerator
-  ::DataGenerationSingleton::DataGenerationSingleton(uint64_t unique_id)
+DataGenerator::DataGenerationSingleton
+  ::DataGenerationSingleton(uint64_t unique_id)
 {
   m_uniqueId = unique_id;
   m_created = true;
 }
 
-const ceph::io_exerciser::data_generation
-  ::DataGenerator::DataGenerationSingleton& 
-  ceph::io_exerciser::data_generation::DataGenerator
-    ::DataGenerationSingleton::createSpecificInstance(uint64_t unique_id)
+const DataGenerator::DataGenerationSingleton& 
+DataGenerator::DataGenerationSingleton::createSpecificInstance(uint64_t unique_id)
 {
   std::scoped_lock lock(m_mutex);
   ceph_assert(!m_singletonInstance.m_created);
@@ -63,9 +63,8 @@ const ceph::io_exerciser::data_generation
   return m_singletonInstance;
 }
 
-const ceph::io_exerciser::data_generation::DataGenerator::DataGenerationSingleton&
-  ceph::io_exerciser::data_generation::DataGenerator
-  ::DataGenerationSingleton::getInstance()
+const DataGenerator::DataGenerationSingleton&
+  DataGenerator::DataGenerationSingleton::getInstance()
 {
   if (!m_singletonInstance.m_created)
   {
@@ -81,15 +80,13 @@ const ceph::io_exerciser::data_generation::DataGenerator::DataGenerationSingleto
   return m_singletonInstance;
 }
 
-const uint64_t ceph::io_exerciser::data_generation::DataGenerator
-  ::DataGenerationSingleton::getUniqueId()
+const uint64_t DataGenerator::DataGenerationSingleton::getUniqueId()
 {
   return getInstance().m_uniqueId;
 }
 
-void ceph::io_exerciser::data_generation
-  ::DataGenerator::generate_wrong_data(uint64_t offset, uint64_t length,
-                                       ceph::bufferlist& retlist)
+void DataGenerator::generate_wrong_data(uint64_t offset, uint64_t length,
+                                        bufferlist& retlist)
 {
   uint64_t block_size = m_model.get_block_size();
   char buffer[block_size];
@@ -102,8 +99,7 @@ void ceph::io_exerciser::data_generation
   }
 }
 
-bool ceph::io_exerciser::data_generation
-  ::DataGenerator::validate(ceph::bufferlist& bufferlist, uint64_t offset, uint64_t length)
+bool DataGenerator::validate(bufferlist& bufferlist, uint64_t offset, uint64_t length)
 {
   ceph::bufferlist comparison_list;
   generate_data(offset, length, comparison_list);
@@ -112,8 +108,7 @@ bool ceph::io_exerciser::data_generation
 
 #include <bitset>
 
-ceph::bufferptr ceph::io_exerciser::data_generation
-  ::SeededRandomGenerator::generate_block(uint64_t block_offset)
+ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset)
 {
   uint64_t block_size = m_model.get_block_size();
   char buffer[block_size];
@@ -145,8 +140,8 @@ ceph::bufferptr ceph::io_exerciser::data_generation
   return ceph::bufferptr(buffer, block_size);
 }
 
-void ceph::io_exerciser::data_generation
-  ::SeededRandomGenerator::generate_data(uint64_t offset, uint64_t length, ceph::bufferlist& retlist)
+void SeededRandomGenerator::generate_data(uint64_t offset, uint64_t length,
+                                          bufferlist& retlist)
 {
   ceph_assert(retlist.length() == 0);
 
@@ -156,8 +151,7 @@ void ceph::io_exerciser::data_generation
   }
 }
 
-ceph::bufferptr ceph::io_exerciser::data_generation
-  ::HeaderedSeededRandomGenerator::generate_block(uint64_t block_offset)
+ceph::bufferptr HeaderedSeededRandomGenerator::generate_block(uint64_t block_offset)
 {
   UniqueIdBytes unique_run_id = DataGenerator::DataGenerationSingleton::getUniqueId();
   SeedBytes seed = m_model.get_seed(block_offset);
@@ -173,10 +167,9 @@ ceph::bufferptr ceph::io_exerciser::data_generation
   return bufferptr;
 }
 
-void ceph::io_exerciser::data_generation
-  ::HeaderedSeededRandomGenerator::generate_wrong_data(uint64_t offset,
-                                                       uint64_t length,
-                                                       ceph::bufferlist& retlist)
+void HeaderedSeededRandomGenerator::generate_wrong_data(uint64_t offset,
+                                                        uint64_t length,
+                                                        bufferlist& retlist)
 {
   ceph_assert(retlist.length() == 0);
   ceph_assert(m_model.get_block_size() >= headerLength());
@@ -199,10 +192,9 @@ void ceph::io_exerciser::data_generation
   }
 }
 
-const ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator::UniqueIdBytes
-  ceph::io_exerciser::data_generation
-    ::HeaderedSeededRandomGenerator::readUniqueRunId(uint64_t block_offset,
-                                                     const ceph::bufferlist& bufferlist)
+const HeaderedSeededRandomGenerator::UniqueIdBytes
+  HeaderedSeededRandomGenerator::readUniqueRunId(uint64_t block_offset,
+                                                 const bufferlist& bufferlist)
 {
   UniqueIdBytes read_unique_run_id = 0;
   std::memcpy(&read_unique_run_id,
@@ -211,10 +203,9 @@ const ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator::Unique
   return read_unique_run_id;
 }
 
-const ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator::SeedBytes
-  ceph::io_exerciser::data_generation
-    ::HeaderedSeededRandomGenerator::readSeed(uint64_t block_offset,
-                                              const ceph::bufferlist& bufferlist)
+const HeaderedSeededRandomGenerator::SeedBytes
+  HeaderedSeededRandomGenerator::readSeed(uint64_t block_offset,
+                                          const bufferlist& bufferlist)
 {
   SeedBytes read_seed = 0;
   std::memcpy(&read_seed,
@@ -223,10 +214,9 @@ const ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator::SeedBy
   return read_seed;
 }
 
-const ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator::TimeBytes
-  ceph::io_exerciser::data_generation
-  ::HeaderedSeededRandomGenerator::readDateTime(uint64_t block_offset,
-                                                const ceph::bufferlist& bufferlist)
+const HeaderedSeededRandomGenerator::TimeBytes
+  HeaderedSeededRandomGenerator::readDateTime(uint64_t block_offset,
+                                              const bufferlist& bufferlist)
 {
   TimeBytes read_time = 0;
   std::memcpy(&read_time,
@@ -235,9 +225,8 @@ const ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator::TimeBy
   return read_time;
 }
 
-bool ceph::io_exerciser::data_generation
-  ::HeaderedSeededRandomGenerator::validate(ceph::bufferlist& bufferlist,
-                                            uint64_t offset, uint64_t length)
+bool HeaderedSeededRandomGenerator::validate(bufferlist& bufferlist,
+                                             uint64_t offset, uint64_t length)
 {
   std::vector<uint64_t> invalid_block_offsets;
 
@@ -261,9 +250,8 @@ bool ceph::io_exerciser::data_generation
   return invalid_block_offsets.empty();
 }
 
-bool ceph::io_exerciser::data_generation
-  ::HeaderedSeededRandomGenerator::validate_block(uint64_t block_offset,
-                                                  const char* buffer_start)
+bool HeaderedSeededRandomGenerator::validate_block(uint64_t block_offset,
+                                                   const char* buffer_start)
 {
   // We validate the block matches what we generate byte for byte, however we ignore the time section of the header
   ceph::bufferptr bufferptr = generate_block(block_offset);
@@ -274,10 +262,10 @@ bool ceph::io_exerciser::data_generation
   return valid;
 }
  
-const ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator::ErrorType
-  ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
-    ::getErrorTypeForBlock(uint64_t read_offset, uint64_t block_offset,
-                           const ceph::bufferlist& bufferlist)
+const HeaderedSeededRandomGenerator::ErrorType
+  HeaderedSeededRandomGenerator::getErrorTypeForBlock(uint64_t read_offset,
+                                                      uint64_t block_offset,
+                                                      const bufferlist& bufferlist)
 {
   try
   {
@@ -310,9 +298,9 @@ const ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator::ErrorT
   return ErrorType::UNKNOWN;
 }
 
-void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
+void HeaderedSeededRandomGenerator
   ::printDebugInformationForBlock(uint64_t read_offset, uint64_t block_offset,
-                                  const ceph::bufferlist& bufferlist)
+                                  const bufferlist& bufferlist)
 {
   ErrorType blockError = getErrorTypeForBlock(read_offset, block_offset, bufferlist);
 
@@ -432,12 +420,12 @@ void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
   dout(0) << ss.str() << dendl;
 }
 
-void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
+void HeaderedSeededRandomGenerator
   ::printDebugInformationForRange(uint64_t read_offset,
                                   uint64_t start_block_offset,
                                   uint64_t range_length_in_blocks,
                                   ErrorType rangeError,
-                                  const ceph::bufferlist& bufferlist)
+                                  const bufferlist& bufferlist)
 {
   switch(rangeError)
   {
@@ -466,11 +454,11 @@ void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
   }
 }
 
-void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
+void HeaderedSeededRandomGenerator
   ::printDebugInformationForRunIdMismatchRange(uint64_t read_offset,
                                                uint64_t start_block_offset,
                                                uint64_t range_length_in_blocks,
-                                               const ceph::bufferlist& bufferlist)
+                                               const bufferlist& bufferlist)
 {
   uint64_t range_start = start_block_offset;
   uint64_t range_length = 0;
@@ -533,11 +521,11 @@ void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
   }
 }
 
-void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
+void HeaderedSeededRandomGenerator
   ::printDebugInformationForSeedMismatchRange(uint64_t read_offset,
                                               uint64_t start_block_offset,
                                               uint64_t range_length_in_blocks,
-                                              const ceph::bufferlist& bufferlist)
+                                              const bufferlist& bufferlist)
 {
   uint64_t range_start = start_block_offset;
   uint64_t range_length = 0;
@@ -614,11 +602,11 @@ void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
   }
 }
 
-void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
+void HeaderedSeededRandomGenerator
 ::printDebugInformationDataBodyMismatchRange(uint64_t read_offset,
                                              uint64_t start_block_offset,
                                              uint64_t range_length_in_blocks,
-                                             const ceph::bufferlist& bufferlist)
+                                             const bufferlist& bufferlist)
 {
   dout(0) << "Data Mismatch detected in blocks "
           << "from " << start_block_offset
@@ -634,11 +622,11 @@ void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
   }
 }
 
-void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
+void HeaderedSeededRandomGenerator
   ::printDebugInformationCorruptRange(uint64_t read_offset,
                                       uint64_t start_block_offset,
                                       uint64_t range_length_in_blocks,
-                                      const ceph::bufferlist& bufferlist)
+                                      const bufferlist& bufferlist)
 {
   dout(0) << "Data Mismatch detected in blocks "
   << "from " << start_block_offset 
@@ -653,11 +641,11 @@ void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
   }
 }
 
-void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
+void HeaderedSeededRandomGenerator
   ::printDebugInformationDataNotFoundRange(uint64_t read_offset,
                                            uint64_t start_block_offset,
                                            uint64_t range_length_in_blocks,
-                                           const ceph::bufferlist& bufferlist)
+                                           const bufferlist& bufferlist)
 {
   dout(0) << "Data not found for blocks "
           << "from " << start_block_offset
@@ -670,10 +658,10 @@ void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
   }
 }
 
-void ceph::io_exerciser::data_generation::HeaderedSeededRandomGenerator
+void HeaderedSeededRandomGenerator
   ::printDebugInformationForOffsets(uint64_t read_offset,
                                     std::vector<uint64_t> offsets,
-                                    const ceph::bufferlist& bufferlist)
+                                    const bufferlist& bufferlist)
 {
   uint64_t range_start = 0;
   uint64_t range_length = 0;

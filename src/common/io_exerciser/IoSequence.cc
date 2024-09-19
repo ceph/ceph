@@ -1,6 +1,8 @@
 #include "IoSequence.h"
 
-ceph::io_exerciser::IoSequence::IoSequence(std::pair<int,int> obj_size_range,
+using IoSequence = ceph::io_exerciser::IoSequence;
+
+IoSequence::IoSequence(std::pair<int,int> obj_size_range,
                                            int seed) :
         min_obj_size(obj_size_range.first), max_obj_size(obj_size_range.second),
         create(true), barrier(false), done(false), remove(false),
@@ -9,13 +11,9 @@ ceph::io_exerciser::IoSequence::IoSequence(std::pair<int,int> obj_size_range,
   rng.seed(seed);
 }
 
-std::unique_ptr<ceph::io_exerciser::IoSequence>
-  ceph::io_exerciser::IoSequence::generate_sequence
-  ( 
-    Sequence s,
-    std::pair<int,int> obj_size_range,
-    int seed
-  )
+std::unique_ptr<IoSequence> IoSequence::generate_sequence(Sequence s,
+                                                          std::pair<int,int> obj_size_range,
+                                                          int seed)
 {
   switch (s) {
     case SEQUENCE_SEQ0:
@@ -44,17 +42,17 @@ std::unique_ptr<ceph::io_exerciser::IoSequence>
   return nullptr;
 }
 
-int ceph::io_exerciser::IoSequence::get_step() const
+int IoSequence::get_step() const
 {
   return step;
 }
 
-int ceph::io_exerciser::IoSequence::get_seed() const
+int IoSequence::get_seed() const
 {
   return seed;
 }
 
-void ceph::io_exerciser::IoSequence::set_min_object_size(uint64_t size)
+void IoSequence::set_min_object_size(uint64_t size)
 {
   min_obj_size = size;
   if (obj_size < size) {
@@ -65,7 +63,7 @@ void ceph::io_exerciser::IoSequence::set_min_object_size(uint64_t size)
   }
 }
 
-void ceph::io_exerciser::IoSequence::set_max_object_size(uint64_t size)
+void IoSequence::set_max_object_size(uint64_t size)
 {
   max_obj_size = size;
   if (obj_size > size) {
@@ -73,15 +71,14 @@ void ceph::io_exerciser::IoSequence::set_max_object_size(uint64_t size)
   }
 }
 
-void ceph::io_exerciser::IoSequence::select_random_object_size()
+void IoSequence::select_random_object_size()
 {
   if (max_obj_size != min_obj_size) {
     obj_size = min_obj_size + rng(max_obj_size - min_obj_size);
   }
 }
 
-std::unique_ptr<ceph::io_exerciser::IoOp>
-  ceph::io_exerciser::IoSequence::increment_object_size()
+std::unique_ptr<ceph::io_exerciser::IoOp> IoSequence::increment_object_size()
 {
   obj_size++;
   if (obj_size > max_obj_size) {
@@ -93,7 +90,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp>
   return IoOp::generate_barrier();
 }
 
-std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::IoSequence::next()
+std::unique_ptr<ceph::io_exerciser::IoOp> IoSequence::next()
 {
   step++;
   if (remove) {
