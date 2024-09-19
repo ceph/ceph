@@ -16,20 +16,32 @@ import _ from 'lodash';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { map, switchMap } from 'rxjs/operators';
+import { BaseModal, Step } from 'carbon-components-angular';
+import { Location } from '@angular/common';
 
 @Component({
   selector: 'cd-rgw-multisite-wizard',
   templateUrl: './rgw-multisite-wizard.component.html',
   styleUrls: ['./rgw-multisite-wizard.component.scss']
 })
-export class RgwMultisiteWizardComponent implements OnInit {
+export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
   multisiteSetupForm: CdFormGroup;
   currentStep: WizardStepModel;
   currentStepSub: Subscription;
   permissions: Permissions;
-  stepTitles = ['Create Realm & Zonegroup', 'Create Zone', 'Select Cluster'];
+  stepTitles: Step[] = [
+    {
+      label: 'Create Realm & Zonegroup'
+    },
+    {
+      label: 'Create Zone'
+    },
+    {
+      label: 'Select Cluster'
+    }
+  ];
   stepsToSkip: { [steps: string]: boolean } = {};
   daemons: RgwDaemon[] = [];
   selectedCluster = '';
@@ -50,15 +62,18 @@ export class RgwMultisiteWizardComponent implements OnInit {
     private multiClusterService: MultiClusterService,
     private rgwMultisiteService: RgwMultisiteService,
     public notificationService: NotificationService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute,
+    private location: Location
   ) {
+    super();
     this.pageURL = 'rgw/multisite/configuration';
     this.currentStepSub = this.wizardStepsService
       .getCurrentStep()
       .subscribe((step: WizardStepModel) => {
         this.currentStep = step;
       });
-    this.currentStep.stepIndex = 1;
+    this.currentStep.stepIndex = 0;
     this.createForm();
     this.rgwEndpoints = {
       value: [],
@@ -71,6 +86,7 @@ export class RgwMultisiteWizardComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.open = this.route.outlet === 'modal';
     this.rgwDaemonService
       .list()
       .pipe(
@@ -105,7 +121,20 @@ export class RgwMultisiteWizardComponent implements OnInit {
         .filter((cluster) => cluster['cluster_alias'] !== 'local-cluster');
       this.isMultiClusterConfigured = this.clusterDetailsArray.length > 0;
       if (!this.isMultiClusterConfigured) {
-        this.stepTitles = ['Create Realm & Zonegroup', 'Create Zone', 'Export Multi-site token'];
+        this.stepTitles = [
+          {
+            label: 'Create Realm & Zonegroup'
+          },
+          {
+            label: 'Create Zone'
+          },
+          {
+            label: 'Export Multi-site token'
+          }
+        ];
+        this.stepTitles.forEach((steps, index) => {
+          steps.onClick = () => (this.currentStep.stepIndex = index);
+        });
       } else {
         this.selectedCluster = this.clusterDetailsArray[0]['name'];
       }
@@ -245,13 +274,13 @@ export class RgwMultisiteWizardComponent implements OnInit {
     if (!this.wizardStepsService.isFirstStep()) {
       this.wizardStepsService.moveToPreviousStep();
     } else {
-      this.activeModal.close();
+      this.location.back();
     }
   }
 
   onSkip() {
-    const stepTitle = this.stepTitles[this.currentStep.stepIndex - 1];
-    this.stepsToSkip[stepTitle] = true;
+    const stepTitle = this.stepTitles[this.currentStep.stepIndex];
+    this.stepsToSkip[stepTitle.label] = true;
     this.onNextStep();
   }
 }

@@ -4,7 +4,7 @@ import { BehaviorSubject, Observable } from 'rxjs';
 
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
 
-const initialStep = [{ stepIndex: 1, isComplete: false }];
+const initialStep = [{ stepIndex: 0, isComplete: false }];
 
 @Injectable({
   providedIn: 'root'
@@ -20,7 +20,7 @@ export class WizardStepsService {
 
   setTotalSteps(step: number) {
     const steps: WizardStepModel[] = [];
-    for (let i = 1; i <= step; i++) {
+    for (let i = 0; i < step; i++) {
       steps.push({ stepIndex: i, isComplete: false });
     }
     this.steps$ = new BehaviorSubject<WizardStepModel[]>(steps);
@@ -40,19 +40,19 @@ export class WizardStepsService {
 
   moveToNextStep(): void {
     const index = this.currentStep$.value.stepIndex;
-    this.currentStep$.next(this.steps$.value[index]);
+    this.currentStep$.next(this.steps$.value[index + 1]);
   }
 
   moveToPreviousStep(): void {
-    const index = this.currentStep$.value.stepIndex - 1;
+    const index = this.currentStep$.value.stepIndex;
     this.currentStep$.next(this.steps$.value[index - 1]);
   }
 
   isLastStep(): boolean {
-    return this.currentStep$.value.stepIndex === this.steps$.value.length;
+    return this.currentStep$.value?.stepIndex === this.steps$.value.length - 1;
   }
 
   isFirstStep(): boolean {
-    return this.currentStep$.value?.stepIndex - 1 === 0;
+    return this.currentStep$.value?.stepIndex === 0;
   }
 }

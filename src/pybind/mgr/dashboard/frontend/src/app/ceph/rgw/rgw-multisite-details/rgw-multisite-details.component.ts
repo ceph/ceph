@@ -39,6 +39,7 @@ import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { Router } from '@angular/router';
 import { RgwMultisiteWizardComponent } from '../rgw-multisite-wizard/rgw-multisite-wizard.component';
 import { RgwMultisiteSyncPolicyComponent } from '../rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 const BASE_URL = 'rgw/multisite/configuration';
 
@@ -119,7 +120,8 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     public rgwZoneService: RgwZoneService,
     public rgwDaemonService: RgwDaemonService,
     public mgrModuleService: MgrModuleService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private cdsModalService: ModalCdsService
   ) {
     this.permission = this.authStorageService.getPermissions().rgw;
   }
@@ -150,9 +152,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   }
 
   openMultisiteSetupWizard() {
-    this.bsModalRef = this.modalService.show(RgwMultisiteWizardComponent, {
-      size: 'lg'
-    });
+    this.bsModalRef = this.cdsModalService.show(RgwMultisiteWizardComponent);
   }
 
   openMigrateModal() {

@@ -34,7 +34,8 @@ import {
   NumberModule,
   DropdownModule,
   SelectModule,
-  ComboBoxModule
+  ComboBoxModule,
+  ProgressIndicatorModule
 } from 'carbon-components-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -118,7 +119,8 @@ import InfoIcon from '@carbon/icons/es/information/16';
     TimePickerSelectModule,
     DropdownModule,
     SelectModule,
-    ComboBoxModule
+    ComboBoxModule,
+    ProgressIndicatorModule
   ],
   declarations: [
     SparklineComponent,

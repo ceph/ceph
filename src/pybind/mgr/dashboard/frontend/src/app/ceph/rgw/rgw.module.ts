@@ -63,6 +63,14 @@ import { RgwMultisiteSyncPolicyDetailsComponent } from './rgw-multisite-sync-pol
 import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
 import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
 import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-tabs.component';
+import {
+  ButtonModule,
+  GridModule,
+  IconModule,
+  LoadingModule,
+  ModalModule,
+  ProgressIndicatorModule
+} from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -79,7 +87,13 @@ import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-ta
     TreeModule,
     DataTableModule,
     DashboardV3Module,
-    NgbTypeaheadModule
+    NgbTypeaheadModule,
+    ModalModule,
+    GridModule,
+    ProgressIndicatorModule,
+    ButtonModule,
+    LoadingModule,
+    IconModule
   ],
   exports: [
     RgwDaemonListComponent,

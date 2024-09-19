@@ -108,7 +108,7 @@ const routes: Routes = [
             redirectTo: 'dashboard',
             backend: 'cephadm'
           },
-          breadcrumbs: 'Expand Cluster'
+          breadcrumbs: 'Cluster/Expand Cluster'
         }
       },
       {
