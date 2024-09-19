@@ -93,9 +93,9 @@ class NvmeofGatewaysConfig(object):
                 return None
 
             if group:
-                return cls._get_name_url_for_group(gateways, group)
+                return _get_name_url_for_group(gateways, group)
 
-            return cls._get_default_service(gateways)
+            return _get_default_service(gateways)
 
         except (KeyError, IndexError) as e:
             raise DashboardException(
@@ -139,44 +139,44 @@ class NvmeofGatewaysConfig(object):
             # otherwise nvmeof api will raise this error and doesn't proceed.
             return None
 
-    @classmethod
-    def _get_name_url_for_group(cls, gateways, group):
-        try:
-            orch = OrchClient.instance()
-            for service_name, svc_config in gateways.items():
-                # get the group name of the service and match it against the
-                # group name provided
-                group_name_from_svc = orch.services.get(service_name)[0].spec.group
-                if group == group_name_from_svc:
-                    running_daemons = cls._get_running_daemons(orch, service_name)
-                    config = cls._get_running_daemon_svc_config(svc_config, running_daemons)
 
-                    if config:
-                        return service_name, config['service_url']
-            return None
+def _get_name_url_for_group(gateways, group):
+    try:
+        orch = OrchClient.instance()
+        for service_name, svc_config in gateways.items():
+            # get the group name of the service and match it against the
+            # group name provided
+            group_name_from_svc = orch.services.get(service_name)[0].spec.group
+            if group == group_name_from_svc:
+                running_daemons = _get_running_daemons(orch, service_name)
+                config = _get_running_daemon_svc_config(svc_config, running_daemons)
 
-        except OrchestratorError:
-            return cls._get_default_service(gateways)
-
-    @classmethod
-    def _get_running_daemons(cls, orch, service_name):
-        # get the running nvmeof daemons
-        daemons = [d.to_dict()
-                   for d in orch.services.list_daemons(service_name=service_name)]
-        return [d['daemon_name'] for d in daemons
-                if d['status_desc'] == 'running']
-
-    @classmethod
-    def _get_running_daemon_svc_config(cls, svc_config, running_daemons):
-        try:
-            return next(config for config in svc_config
-                        if config['daemon_name'] in running_daemons)
-        except StopIteration:
-            return None
-
-    @classmethod
-    def _get_default_service(cls, gateways):
-        if gateways:
-            service_name = list(gateways.keys())[0]
-            return service_name, gateways[service_name][0]['service_url']
+                if config:
+                    return service_name, config['service_url']
         return None
+
+    except OrchestratorError:
+        return _get_default_service(gateways)
+
+
+def _get_running_daemons(orch, service_name):
+    # get the running nvmeof daemons
+    daemons = [d.to_dict()
+               for d in orch.services.list_daemons(service_name=service_name)]
+    return [d['daemon_name'] for d in daemons
+            if d['status_desc'] == 'running']
+
+
+def _get_running_daemon_svc_config(svc_config, running_daemons):
+    try:
+        return next(config for config in svc_config
+                    if config['daemon_name'] in running_daemons)
+    except StopIteration:
+        return None
+
+
+def _get_default_service(gateways):
+    if gateways:
+        service_name = list(gateways.keys())[0]
+        return service_name, gateways[service_name][0]['service_url']
+    return None
