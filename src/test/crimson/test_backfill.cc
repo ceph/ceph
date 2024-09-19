@@ -274,6 +274,9 @@ struct BackfillFixture::PGFacade : public crimson::osd::BackfillState::PGFacade 
     return backfill_source.projected_log;
   }
 
+  std::ostream &print(std::ostream &out) const override {
+    return out << "FakePGFacade";
+  }
 };
 
 BackfillFixture::BackfillFixture(
