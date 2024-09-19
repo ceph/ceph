@@ -9,6 +9,8 @@ import { NvmeofSubsystem } from '~/app/shared/models/nvmeof';
 export class NvmeofSubsystemsDetailsComponent implements OnChanges {
   @Input()
   selection: NvmeofSubsystem;
+  @Input()
+  group: NvmeofSubsystem;
 
   selectedItem: any;
   data: any;

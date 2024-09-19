@@ -24,6 +24,8 @@ const BASE_URL = 'block/nvmeof/subsystems';
 export class NvmeofListenersListComponent implements OnInit, OnChanges {
   @Input()
   subsystemNQN: string;
+  @Input()
+  group: string;
 
   listenerColumns: any;
   tableActions: CdTableAction[];
@@ -64,10 +66,10 @@ export class NvmeofListenersListComponent implements OnInit, OnChanges {
         permission: 'create',
         icon: Icons.add,
         click: () =>
-          this.router.navigate([
-            BASE_URL,
-            { outlets: { modal: [URLVerbs.CREATE, this.subsystemNQN, 'listener'] } }
-          ]),
+          this.router.navigate(
+            [BASE_URL, { outlets: { modal: [URLVerbs.CREATE, this.subsystemNQN, 'listener'] } }],
+            { queryParams: { group: this.group } }
+          ),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {

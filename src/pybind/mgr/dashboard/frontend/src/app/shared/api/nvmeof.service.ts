@@ -36,32 +36,42 @@ const UI_API_PATH = 'ui-api/nvmeof';
 export class NvmeofService {
   constructor(private http: HttpClient) {}
 
+  // Gateway groups
+  listGatewayGroups() {
+    return this.http.get(`${API_PATH}/gateway/group`);
+  }
+
   // Gateways
   listGateways() {
     return this.http.get(`${API_PATH}/gateway`);
   }
 
   // Subsystems
-  listSubsystems() {
-    return this.http.get(`${API_PATH}/subsystem`);
+  listSubsystems(group: string) {
+    return this.http.get(`${API_PATH}/subsystem?gw_group=${group}`);
   }
 
-  getSubsystem(subsystemNQN: string) {
-    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}`);
+  getSubsystem(subsystemNQN: string, group: string) {
+    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}?gw_group=${group}`);
   }
 
-  createSubsystem(request: { nqn: string; max_namespaces?: number; enable_ha: boolean }) {
+  createSubsystem(request: {
+    nqn: string;
+    enable_ha: boolean;
+    gw_group: string;
+    max_namespaces?: number;
+  }) {
     return this.http.post(`${API_PATH}/subsystem`, request, { observe: 'response' });
   }
 
-  deleteSubsystem(subsystemNQN: string) {
-    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}`, {
+  deleteSubsystem(subsystemNQN: string, group: string) {
+    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}?gw_group=${group}`, {
       observe: 'response'
     });
   }
 
-  isSubsystemPresent(subsystemNqn: string): Observable<boolean> {
-    return this.getSubsystem(subsystemNqn).pipe(
+  isSubsystemPresent(subsystemNqn: string, group: string): Observable<boolean> {
+    return this.getSubsystem(subsystemNqn, group).pipe(
       mapTo(true),
       catchError((e) => {
         e?.preventDefault();
