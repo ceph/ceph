@@ -267,7 +267,7 @@ private:
   */
   void update_clone_overlap();
 
-  interruptible_future<std::vector<pg_log_entry_t>> flush_clone_metadata(
+  std::vector<pg_log_entry_t> flush_clone_metadata(
     std::vector<pg_log_entry_t>&& log_entries,
     SnapMapper& snap_mapper,
     OSDriver& osdriver,
@@ -510,7 +510,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(
   }
 
   if (want_mutate) {
-    auto log_entries = co_await flush_clone_metadata(
+    auto log_entries = flush_clone_metadata(
       prepare_transaction(ops),
       snap_mapper,
       osdriver,
