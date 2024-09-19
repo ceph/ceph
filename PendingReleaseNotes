@@ -87,6 +87,35 @@
 --------
 >=19.0.0
 
+* mgr/restful, mgr/zabbix: both modules, already deprecated since 2020, have been
+  finally removed. They have not been actively maintenance in the last years,
+  and started suffering from vulnerabilities in their dependency chain (e.g.:
+  CVE-2023-46136).  As alternatives, for the `restful` module, the `dashboard` module
+  provides a richer and better maintained RESTful API. Regarding the `zabbix` module,
+  there are alternative monitoring solutions, like `prometheus`, which is the most
+  widely adopted among the Ceph user community.
+
+* CephFS: EOPNOTSUPP (Operation not supported ) is now returned by the CephFS
+  fuse client for `fallocate` for the default case (i.e. mode == 0) since
+  CephFS does not support disk space reservation. The only flags supported are
+  `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
+
+>=19.0.0
+
+* cephx: key rotation is now possible using `ceph auth rotate`. Previously,
+  this was only possible by deleting and then recreating the key.
+* ceph: a new --daemon-output-file switch is available for `ceph tell` commands
+  to dump output to a file local to the daemon. For commands which produce
+  large amounts of output, this avoids a potential spike in memory usage on the
+  daemon, allows for faster streaming writes to a file local to the daemon, and
+  reduces time holding any locks required to execute the command. For analysis,
+  it is necessary to retrieve the file from the host running the daemon
+  manually. Currently, only --format=json|json-pretty are supported.
+* RGW: GetObject and HeadObject requests now return a x-rgw-replicated-at
+  header for replicated objects. This timestamp can be compared against the
+  Last-Modified header to determine how long the object took to replicate.
+* The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
+  python dependencies are now available in EPEL9.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
   multi-site. Previously, the replicas of such objects were corrupted on decryption.
   A new tool, ``radosgw-admin bucket resync encrypted multipart``, can be used to
