@@ -33,7 +33,7 @@ ceph::io_sequence::tester::ProgramOptionSelector<T, N, Ts>
                           po::variables_map vm,
                           const std::string& option_name,
                           bool set_forced,
-                          bool select_first) 
+                          bool select_first)
   : rng(rng),
     // choices(choices),
     option_name(option_name) {
@@ -86,7 +86,7 @@ ceph::io_sequence::tester::SelectBlockSize::SelectBlockSize(
 
 ceph::io_sequence::tester::SelectNumThreads::SelectNumThreads(
     ceph::util::random_number_generator<int>& rng,
-    po::variables_map vm) 
+    po::variables_map vm)
   : ProgramOptionSelector(rng, vm, "threads", true, true)
 {
 }
@@ -99,9 +99,9 @@ ceph::io_sequence::tester::SelectSeqRange::SelectSeqRange(
   : ProgramOptionSelector(rng, vm, "sequence", false, false)
 {
   if (vm.count(option_name)) {
-    ceph::io_exerciser::Sequence s = 
+    ceph::io_exerciser::Sequence s =
       static_cast<ceph::io_exerciser::Sequence>(vm["sequence"].as<int>());
-    if (s < ceph::io_exerciser::Sequence::SEQUENCE_BEGIN || 
+    if (s < ceph::io_exerciser::Sequence::SEQUENCE_BEGIN ||
         s >= ceph::io_exerciser::Sequence::SEQUENCE_END) {
       dout(0) << "Sequence argument out of range" << dendl;
       throw po::validation_error(po::validation_error::invalid_option_value);
@@ -127,7 +127,7 @@ const std::pair<ceph::io_exerciser::Sequence,ceph::io_exerciser::Sequence>
 
 
 ceph::io_sequence::tester::SelectErasureKM::SelectErasureKM(
-  ceph::util::random_number_generator<int>& rng, 
+  ceph::util::random_number_generator<int>& rng,
   po::variables_map vm)
   : ProgramOptionSelector(rng, vm, "km", true, true)
 {
@@ -184,7 +184,7 @@ const std::string ceph::io_sequence::tester::SelectECPool::choose()
   const std::string plugin = std::string(spl.choose());
   const uint64_t chunk_size = scs.choose();
 
-  std::string pool_name = "ec_" + plugin + 
+  std::string pool_name = "ec_" + plugin +
                           "_cs" + std::to_string(chunk_size) +
                           "_k" + std::to_string(k) +
                           "_m" + std::to_string(m);
@@ -234,7 +234,7 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
                         SelectECPool& spo,
                         SelectObjectSize& sos,
                         SelectNumThreads& snt,
-                        SelectSeqRange & ssr,
+                        SelectSeqRange& ssr,
                         ceph::util::random_number_generator<int>& rng,
                         ceph::mutex& lock,
                         ceph::condition_variable& cond,
@@ -247,20 +247,20 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
   if (dryrun) {
     verbose = true;
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(oid,
-                                        sbs.choose(),
-                                        rng());
+                                                                        sbs.choose(),
+                                                                        rng());
   } else {
     const std::string pool = spo.choose();
     int threads = snt.choose();
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(rados,
-                                    asio,
-                                    pool,
-                                    oid,
-                                    sbs.choose(),
-                                    rng(),
-                                    threads,
-                                    lock,
-                                    cond);
+                                                                    asio,
+                                                                    pool,
+                                                                    oid,
+                                                                    sbs.choose(),
+                                                                    rng(),
+                                                                    threads,
+                                                                    lock,
+                                                                    cond);
     dout(0) << "= " << oid << " pool=" << pool
             << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size()
@@ -276,9 +276,9 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
                                                             rng());
   op = seq->next();
   done = false;
-  dout(0) << "== " << exerciser_model->get_oid() << " " 
-          << curseq << " " 
-          << seq->get_name() 
+  dout(0) << "== " << exerciser_model->get_oid() << " "
+          << curseq << " "
+          << seq->get_name()
           << " ==" <<dendl;
 }
 
@@ -291,12 +291,12 @@ bool ceph::io_sequence::tester::TestObject::next()
 {
   if (!done) {
     if (verbose) {
-      dout(0) << exerciser_model->get_oid() 
+      dout(0) << exerciser_model->get_oid()
               << " Step " << seq->get_step() << ": "
               << op->to_string(exerciser_model->get_block_size()) << dendl;
     } else {
-      dout(5) << exerciser_model->get_oid() 
-              << " Step " << seq->get_step() << ": " 
+      dout(5) << exerciser_model->get_oid()
+              << " Step " << seq->get_step() << ": "
               << op->to_string(exerciser_model->get_block_size()) << dendl;
     }
     exerciser_model->applyIoOp(*op);
@@ -311,9 +311,9 @@ bool ceph::io_sequence::tester::TestObject::next()
         seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
                                                                 obj_size_range,
                                                                 has_seqseed ?
-                                                                  seqseed : 
+                                                                  seqseed :
                                                                   rng());
-        dout(0) << "== " << exerciser_model->get_oid() << " " 
+        dout(0) << "== " << exerciser_model->get_oid() << " "
                 << curseq << " " << seq->get_name()
                 << " ==" <<dendl;
         op = seq->next();
