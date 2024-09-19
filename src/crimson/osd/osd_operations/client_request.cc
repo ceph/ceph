@@ -403,11 +403,6 @@ ClientRequest::process_op(
 		   *pg, *this, this_instance_id);
 	  return do_process(
 	    ihref, pg, obc, this_instance_id
-	  ).handle_error_interruptible(
-	    crimson::ct_error::eagain::handle(
-	      [this, pg, this_instance_id, &ihref]() mutable {
-		return process_op(ihref, pg, this_instance_id);
-	      })
 	  );
 	}
       );
@@ -437,7 +432,7 @@ ClientRequest::process_op(
   co_await std::move(process);
 }
 
-ClientRequest::do_process_iertr::future<>
+ClientRequest::interruptible_future<>
 ClientRequest::do_process(
   instance_handle_t &ihref,
   Ref<PG> pg, crimson::osd::ObjectContextRef obc,
@@ -509,12 +504,26 @@ ClientRequest::do_process(
 
   auto [submitted, all_completed] = co_await pg->do_osd_ops(
     m, r_conn, obc, op_info, snapc
+  ).handle_error_interruptible(
+    crimson::ct_error::eagain::handle([] {
+      ceph_assert(0 == "not handled");
+      return std::make_tuple(
+	interruptor::now(),
+	PG::do_osd_ops_iertr::make_ready_future<MURef<MOSDOpReply>>());
+    })
   );
   co_await std::move(submitted);
 
   co_await ihref.enter_stage<interruptor>(client_pp(*pg).wait_repop, *this);
 
-  auto reply = co_await std::move(all_completed);
+  auto reply = co_await std::move(
+    all_completed
+  ).handle_error_interruptible(
+    crimson::ct_error::eagain::handle([] {
+      ceph_assert(0 == "not handled");
+      return MURef<MOSDOpReply>();
+    })
+  );
 
   co_await ihref.enter_stage<interruptor>(client_pp(*pg).send_reply, *this);
   DEBUGDPP("{}.{}: sending response",
