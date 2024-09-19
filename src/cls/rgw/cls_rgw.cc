@@ -886,6 +886,23 @@ static int write_header_while_logrecord(cls_method_context_t hctx,
   return 0;
 }
 
+static int guard_bucket_resharding(cls_method_context_t hctx,
+                                   const rgw_bucket_dir_header& header,
+                                   int error_code = -CLS_RGW_ERR_BUSY_RESHARDING)
+{
+  const ConfigProxy& conf = cls_get_config(hctx);
+  const uint32_t reshardlog_threshold = conf->rgw_reshardlog_threshold;
+
+  if (header.resharding_in_progress() ||
+      (header.resharding_in_logrecord() && header.reshardlog_entries >= reshardlog_threshold)) {
+    CLS_LOG(4, "ERROR: writes are blocked while bucket is "
+            "resharding, returning %d", error_code);
+    return error_code;
+  }
+
+  return 0;
+}
+
 int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   const ConfigProxy& conf = cls_get_config(hctx);
@@ -922,6 +939,11 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
     CLS_LOG_BITX(bitx_inst, 1, "ERROR: %s: failed to read header", __func__);
+    return rc;
+  }
+
+  rc = guard_bucket_resharding(hctx, header);
+  if (rc < 0) {
     return rc;
   }
 
@@ -1129,6 +1151,11 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     CLS_LOG_BITX(bitx_inst, 1, "ERROR: %s: failed to read header, rc=%d",
 		 __func__, rc);
     return -EINVAL;
+  }
+
+  rc = guard_bucket_resharding(hctx, header);
+  if (rc < 0) {
+    return rc;
   }
 
   rgw_bucket_dir_entry entry;
@@ -1757,6 +1784,11 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return rc;
   }
 
+  rc = guard_bucket_resharding(hctx, header);
+  if (rc < 0) {
+    return rc;
+  }
+
   /* read instance entry */
   BIVerObjEntry obj(hctx, op.key);
   int ret = obj.init(op.delete_marker);
@@ -1998,6 +2030,11 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
+  ret = guard_bucket_resharding(hctx, header);
+  if (ret < 0) {
+    return ret;
+  }
+
   BIVerObjEntry obj(hctx, dest_key);
   BIOLHEntry olh(hctx, dest_key);
 
@@ -2230,6 +2267,11 @@ static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bu
     return rc;
   }
 
+  rc = guard_bucket_resharding(hctx, header);
+  if (rc < 0) {
+    return rc;
+  }
+
   /* write the olh data entry */
   ret = write_entry(hctx, olh_data_entry, olh_data_key, header);
   if (ret < 0) {
@@ -2262,6 +2304,11 @@ static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, buffe
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
     CLS_LOG(1, "ERROR: %s(): failed to read header\n", __func__);
+    return rc;
+  }
+
+  rc = guard_bucket_resharding(hctx, header);
+  if (rc < 0) {
     return rc;
   }
 
@@ -2333,6 +2380,11 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
     CLS_LOG_BITX(bitx_inst, 1, "ERROR: %s: failed to read header", __func__);
+    return rc;
+  }
+
+  rc = guard_bucket_resharding(hctx, header);
+  if (rc < 0) {
     return rc;
   }
 
@@ -2785,72 +2837,6 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
   return 0;
 }
 
-/* gain bi_entry based on reshard log */
-static int rgw_bi_get_vals_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  // decode request
-  rgw_cls_bi_get_vals_op op;
-  auto bl_iter = in->cbegin();
-  try {
-    decode(op, bl_iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(0, "ERROR: %s: failed to decode request", __func__);
-    return -EINVAL;
-  }
-
-  map<string, bufferlist> keys;
-  int ret = cls_cxx_map_get_vals_by_keys(hctx, op.log_entries_wanted, &keys);
-  if (ret < 0) {
-    return ret;
-  }
-
-  rgw_cls_bi_list_ret op_ret;
-  std::map<string, bufferlist>::iterator iter;
-  for (iter = keys.begin(); iter != keys.end(); ++iter) {
-
-    rgw_cls_bi_entry entry;
-    entry.idx = iter->first;
-    entry.type = bi_type(iter->first);
-    entry.data = iter->second;
-
-    auto biter = entry.data.cbegin();
-
-    switch (entry.type) {
-      case BIIndexType::Plain:
-      case BIIndexType::Instance: {
-        rgw_bucket_dir_entry e;
-        try {
-          decode(e, biter);
-        } catch (ceph::buffer::error& err) {
-          CLS_LOG(0, "ERROR: %s: failed to decode buffer", __func__);
-          return -EIO;
-        }
-        break;
-      }
-      case BIIndexType::OLH: {
-        rgw_bucket_olh_entry e;
-        try {
-          decode(e, biter);
-        } catch (ceph::buffer::error& err) {
-          CLS_LOG(0, "ERROR: %s: failed to decode buffer (size=%d)", __func__, entry.data.length());
-          return -EIO;
-        }
-        break;
-      }
-      default:
-        CLS_LOG(0, "%s: invalid entry type: %d", __func__, int(entry.type));
-        return -EINVAL;
-    }
-    CLS_LOG(20, "%s: entry.idx=%s", __func__, escape_str(entry.idx).c_str());
-
-    op_ret.entries.push_back(entry);
-  }
-
-  encode(op_ret, *out);
-
-  return 0;
-}
-
 static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -2878,6 +2864,108 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
   }
 
   return 0;
+}
+
+static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  rgw_cls_bi_put_entries_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const ceph::buffer::error&) {
+    CLS_LOG(0, "ERROR: %s: failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  const size_t limit = cls_get_config(hctx)->osd_max_omap_entries_per_request;
+  if (op.entries.size() > limit) {
+    int r = -E2BIG;
+    CLS_LOG(0, "ERROR: %s: got too many entries (%zu > %zu), returning %d",
+            __func__, op.entries.size(), limit, r);
+    return r;
+  }
+
+  rgw_bucket_dir_header header;
+  int r = read_bucket_header(hctx, &header);
+  if (r < 0) {
+    CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
+    return r;
+  }
+
+  r = guard_bucket_resharding(hctx, header);
+  if (r < 0) {
+    return r;
+  }
+
+  if (op.check_existing) {
+    // fetch any existing keys and decrement their stats before overwriting
+    std::set<std::string> keys;
+    for (const auto& entry : op.entries) {
+      keys.insert(entry.idx);
+    }
+
+    std::map<std::string, ceph::buffer::list> vals;
+    r = cls_cxx_map_get_vals_by_keys(hctx, keys, &vals);
+    if (r < 0) {
+      CLS_LOG(0, "ERROR: %s: cls_cxx_map_get_vals_by_keys() returned r=%d",
+              __func__, r);
+      return r;
+    }
+
+    for (auto& [idx, data] : vals) {
+      rgw_cls_bi_entry entry;
+      entry.type = bi_type(idx);
+      entry.idx = std::move(idx);
+      entry.data = std::move(data);
+
+      cls_rgw_obj_key key;
+      RGWObjCategory category;
+      rgw_bucket_category_stats stats;
+      const bool account = entry.get_info(&key, &category, &stats);
+      if (account) {
+        auto& dest = header.stats[category];
+        dest.total_size -= stats.total_size;
+        dest.total_size_rounded -= stats.total_size_rounded;
+        dest.num_entries -= stats.num_entries;
+        dest.actual_size -= stats.actual_size;
+      }
+    } // foreach vals
+  } // if op.check_existing
+
+  std::map<std::string, ceph::buffer::list> new_vals;
+
+  for (auto& entry : op.entries) {
+    if (entry.type == BIIndexType::ReshardDeleted) {
+      r = cls_cxx_map_remove_key(hctx, entry.idx);
+      if (r < 0) {
+        CLS_LOG(0, "WARNING: %s: cls_cxx_map_remove_key(%s) returned r=%d",
+                __func__, entry.idx.c_str(), r);
+      } // not fatal
+      continue;
+    }
+
+    cls_rgw_obj_key key;
+    RGWObjCategory category;
+    rgw_bucket_category_stats stats;
+    const bool account = entry.get_info(&key, &category, &stats);
+    if (account) {
+      auto& dest = header.stats[category];
+      dest.total_size += stats.total_size;
+      dest.total_size_rounded += stats.total_size_rounded;
+      dest.num_entries += stats.num_entries;
+      dest.actual_size += stats.actual_size;
+    }
+
+    new_vals.emplace(std::move(entry.idx), std::move(entry.data));
+  }
+
+  r = cls_cxx_map_set_vals(hctx, &new_vals);
+  if (r < 0) {
+    CLS_LOG(0, "ERROR: %s: cls_cxx_map_set_vals() returned r=%d", __func__, r);
+    return r;
+  }
+
+  return write_bucket_header(hctx, &header);
 }
 
 /* The plain entries in the bucket index are divided into two regions
@@ -3277,18 +3365,12 @@ static int reshard_log_list_entries(cls_method_context_t hctx, const string& mar
 }
 
 static int check_index(cls_method_context_t hctx,
-		       rgw_bucket_dir_header *existing_header,
+		       const rgw_bucket_dir_header& existing_header,
 		       rgw_bucket_dir_header *calc_header)
 {
-  int rc = read_bucket_header(hctx, existing_header);
-  if (rc < 0) {
-    CLS_LOG(1, "ERROR: check_index(): failed to read header\n");
-    return rc;
-  }
-
-  calc_header->tag_timeout = existing_header->tag_timeout;
-  calc_header->ver = existing_header->ver;
-  calc_header->syncstopped = existing_header->syncstopped;
+  calc_header->tag_timeout = existing_header.tag_timeout;
+  calc_header->ver = existing_header.ver;
+  calc_header->syncstopped = existing_header.syncstopped;
 
   std::list<rgw_cls_bi_entry> entries;
   string start_obj;
@@ -3298,7 +3380,7 @@ static int check_index(cls_method_context_t hctx,
   bool more;
 
   do {
-    rc = list_plain_entries(hctx, filter_prefix, start_obj, CHECK_CHUNK_SIZE, &entries, &more);
+    int rc = list_plain_entries(hctx, filter_prefix, start_obj, CHECK_CHUNK_SIZE, &entries, &more);
     if (rc < 0) {
       return rc;
     }
@@ -3327,7 +3409,7 @@ static int check_index(cls_method_context_t hctx,
 
   start_obj = "";
   do {
-    rc = list_instance_entries(hctx, filter_prefix, start_obj, CHECK_CHUNK_SIZE, &entries, &more);
+    int rc = list_instance_entries(hctx, filter_prefix, start_obj, CHECK_CHUNK_SIZE, &entries, &more);
     if (rc < 0) {
       return rc;
     }
@@ -3360,9 +3442,21 @@ static int check_index(cls_method_context_t hctx,
 int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
+
   rgw_bucket_dir_header existing_header;
+  int rc = read_bucket_header(hctx, &existing_header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: check_index(): failed to read header\n");
+    return rc;
+  }
+
+  rc = guard_bucket_resharding(hctx, existing_header);
+  if (rc < 0) {
+    return rc;
+  }
+
   rgw_bucket_dir_header calc_header;
-  int rc = check_index(hctx, &existing_header, &calc_header);
+  rc = check_index(hctx, existing_header, &calc_header);
   if (rc < 0)
     return rc;
 
@@ -3374,8 +3468,13 @@ int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist
 {
   CLS_LOG(10, "entered %s", __func__);
   rgw_cls_check_index_ret ret;
+  int rc = read_bucket_header(hctx, &ret.existing_header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: check_index(): failed to read header\n");
+    return rc;
+  }
 
-  int rc = check_index(hctx, &ret.existing_header, &ret.calculated_header);
+  rc = check_index(hctx, ret.existing_header, &ret.calculated_header);
   if (rc < 0)
     return rc;
 
@@ -4903,13 +5002,9 @@ static int rgw_guard_bucket_resharding(cls_method_context_t hctx, bufferlist *in
 {
   CLS_LOG(10, "entered %s", __func__);
 
-  const ConfigProxy& conf = cls_get_config(hctx);
-  const uint32_t reshardlog_threshold = conf->rgw_reshardlog_threshold;
-
   cls_rgw_guard_bucket_resharding_op op;
-
-  auto in_iter = in->cbegin();
   try {
+    auto in_iter = in->cbegin();
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: %s: failed to decode entry", __func__);
@@ -4923,12 +5018,7 @@ static int rgw_guard_bucket_resharding(cls_method_context_t hctx, bufferlist *in
     return rc;
   }
 
-  if (header.resharding_in_progress() ||
-      (header.resharding_in_logrecord() && header.reshardlog_entries >= reshardlog_threshold)) {
-    return op.ret_err;
-  }
-
-  return 0;
+  return guard_bucket_resharding(hctx, header, op.ret_err);
 }
 
 static int rgw_get_bucket_resharding(cls_method_context_t hctx,
@@ -4983,8 +5073,8 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_obj_check_attrs_prefix;
   cls_method_handle_t h_rgw_obj_check_mtime;
   cls_method_handle_t h_rgw_bi_get_op;
-  cls_method_handle_t h_rgw_bi_get_vals_op;
   cls_method_handle_t h_rgw_bi_put_op;
+  cls_method_handle_t h_rgw_bi_put_entries_op;
   cls_method_handle_t h_rgw_bi_list_op;
   cls_method_handle_t h_rgw_reshard_log_trim_op;
   cls_method_handle_t h_rgw_bi_log_list_op;
@@ -5041,8 +5131,8 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_OBJ_CHECK_MTIME, CLS_METHOD_RD, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
 
   cls_register_cxx_method(h_class, RGW_BI_GET, CLS_METHOD_RD, rgw_bi_get_op, &h_rgw_bi_get_op);
-  cls_register_cxx_method(h_class, RGW_BI_GET_VALS, CLS_METHOD_RD, rgw_bi_get_vals_op, &h_rgw_bi_get_vals_op);
   cls_register_cxx_method(h_class, RGW_BI_PUT, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_op, &h_rgw_bi_put_op);
+  cls_register_cxx_method(h_class, RGW_BI_PUT_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_entries, &h_rgw_bi_put_entries_op);
   cls_register_cxx_method(h_class, RGW_BI_LIST, CLS_METHOD_RD, rgw_bi_list_op, &h_rgw_bi_list_op);
   cls_register_cxx_method(h_class, RGW_RESHARD_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_log_trim_op, &h_rgw_reshard_log_trim_op);
 

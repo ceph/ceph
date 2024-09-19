@@ -52,7 +52,7 @@ string str_int(string s, int i)
   return s;
 }
 
-void test_stats(librados::IoCtx& ioctx, string& oid, RGWObjCategory category, uint64_t num_entries, uint64_t total_size)
+void test_stats(librados::IoCtx& ioctx, const string& oid, RGWObjCategory category, uint64_t num_entries, uint64_t total_size)
 {
   map<int, struct rgw_cls_list_ret> results;
   map<int, string> oids;
@@ -70,8 +70,8 @@ void test_stats(librados::IoCtx& ioctx, string& oid, RGWObjCategory category, ui
   ASSERT_EQ(num_entries, entries);
 }
 
-void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
-                   string& tag, const cls_rgw_obj_key& key, string& loc,
+void index_prepare(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
+                   const string& tag, const cls_rgw_obj_key& key, const string& loc,
                    uint16_t bi_flags = 0, bool log_op = true)
 {
   ObjectWriteOperation op;
@@ -80,8 +80,8 @@ void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
 
-void index_complete(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
-                    string& tag, int epoch, const cls_rgw_obj_key& key,
+void index_complete(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
+                    const string& tag, int epoch, const cls_rgw_obj_key& key,
                     rgw_bucket_dir_entry_meta& meta, uint16_t bi_flags = 0,
                     bool log_op = true)
 {
@@ -1354,10 +1354,11 @@ TEST_F(cls_rgw, index_racing_removes)
 }
 
 void set_reshard_status(librados::IoCtx& ioctx, const std::string& oid,
-                const cls_rgw_bucket_instance_entry& entry)
+                        cls_rgw_reshard_status status)
 {
   map<int, string> bucket_objs;
   bucket_objs[0] = oid;
+  const auto entry = cls_rgw_bucket_instance_entry{.reshard_status = status};
   int r = CLSRGWIssueSetBucketResharding(ioctx, bucket_objs, entry, 1)();
   ASSERT_EQ(0, r);
 }
@@ -1395,9 +1396,7 @@ TEST_F(cls_rgw, reshardlog_list)
   ASSERT_EQ(0u, entries.size());
 
   // set reshard status to IN_LOGRECORD
-  cls_rgw_bucket_instance_entry entry;
-  entry.reshard_status = cls_rgw_reshard_status::IN_LOGRECORD;
-  set_reshard_status(ioctx, bucket_oid, entry);
+  set_reshard_status(ioctx, bucket_oid, cls_rgw_reshard_status::IN_LOGRECORD);
 
   // record a log in prepare
   cls_rgw_obj_key obj2 = str_int("obj2", 0);
@@ -1465,9 +1464,7 @@ TEST_F(cls_rgw, reshardlog_num)
   reshardlog_entries(ioctx, bucket_oid, 0u);
 
   // set reshard status to IN_LOGRECORD
-  cls_rgw_bucket_instance_entry entry;
-  entry.reshard_status = cls_rgw_reshard_status::IN_LOGRECORD;
-  set_reshard_status(ioctx, bucket_oid, entry);
+  set_reshard_status(ioctx, bucket_oid, cls_rgw_reshard_status::IN_LOGRECORD);
 
   // record a log in prepare not add reshardlog_entry
   cls_rgw_obj_key obj2 = str_int("obj2", 0);
@@ -1481,4 +1478,95 @@ TEST_F(cls_rgw, reshardlog_num)
   index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, obj1, loc);
   index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, 2, obj1, meta);
   reshardlog_entries(ioctx, bucket_oid, 2u);
+}
+
+TEST_F(cls_rgw, bi_put_entries)
+{
+  const string src_bucket = str_int("bi_put_entries", 0);
+  const string dst_bucket = str_int("bi_put_entries", 1);
+
+  const cls_rgw_obj_key obj1 = str_int("obj", 1);
+  const cls_rgw_obj_key obj2 = str_int("obj", 2);
+  const cls_rgw_obj_key obj3 = str_int("obj", 3);
+  const cls_rgw_obj_key obj4 = str_int("obj", 4);
+  const string tag = str_int("tag", 0);
+  const string loc = str_int("loc", 0);
+  auto meta = rgw_bucket_dir_entry_meta{
+    .category = RGWObjCategory::Main, .size = 8192};
+
+  // prepare src_bucket and add two objects
+  {
+    ObjectWriteOperation op;
+    cls_rgw_bucket_init_index2(op);
+    ASSERT_EQ(0, ioctx.operate(src_bucket, &op));
+
+    index_prepare(ioctx, src_bucket, CLS_RGW_OP_ADD, tag, obj1, loc);
+    index_complete(ioctx, src_bucket, CLS_RGW_OP_ADD, tag, 1, obj1, meta);
+
+    index_prepare(ioctx, src_bucket, CLS_RGW_OP_ADD, tag, obj2, loc);
+    index_complete(ioctx, src_bucket, CLS_RGW_OP_ADD, tag, 2, obj2, meta);
+
+    test_stats(ioctx, src_bucket, RGWObjCategory::Main, 2, 16384);
+  }
+
+  // prepare dst_bucket and copy the bi entries
+  {
+    ObjectWriteOperation op;
+    cls_rgw_bucket_init_index2(op);
+    ASSERT_EQ(0, ioctx.operate(dst_bucket, &op));
+  }
+  {
+    list<rgw_cls_bi_entry> src_entries;
+    bool truncated{false};
+    ASSERT_EQ(0, cls_rgw_bi_list(ioctx, src_bucket, "", "", 128,
+                                 &src_entries, &truncated));
+    ASSERT_EQ(2u, src_entries.size());
+
+    ObjectWriteOperation op;
+    cls_rgw_bi_put_entries(op, {src_entries.begin(), src_entries.end()}, true);
+    ASSERT_EQ(0, ioctx.operate(dst_bucket, &op));
+
+    test_stats(ioctx, dst_bucket, RGWObjCategory::Main, 2, 16384);
+  }
+
+  {
+    // start reshard on src_bucket
+    set_reshard_status(ioctx, src_bucket, cls_rgw_reshard_status::IN_LOGRECORD);
+
+    // delete obj1 and log a ReshardDeleted entry
+    index_prepare(ioctx, src_bucket, CLS_RGW_OP_DEL, tag, obj1, loc);
+    index_complete(ioctx, src_bucket, CLS_RGW_OP_DEL, tag, 3, obj1, meta);
+
+    // overwrite obj2 and record its reshardlog entry
+    index_prepare(ioctx, src_bucket, CLS_RGW_OP_ADD, tag, obj2, loc);
+    index_complete(ioctx, src_bucket, CLS_RGW_OP_ADD, tag, 4, obj2, meta);
+
+    // add two more objects
+    index_prepare(ioctx, src_bucket, CLS_RGW_OP_ADD, tag, obj3, loc);
+    index_complete(ioctx, src_bucket, CLS_RGW_OP_ADD, tag, 5, obj3, meta);
+
+    index_prepare(ioctx, src_bucket, CLS_RGW_OP_ADD, tag, obj4, loc);
+    index_complete(ioctx, src_bucket, CLS_RGW_OP_ADD, tag, 6, obj4, meta);
+
+    test_stats(ioctx, src_bucket, RGWObjCategory::Main, 3, 24576);
+  }
+
+  // copy the reshardlog entries from src_bucket to dst_bucket
+  {
+    list<rgw_cls_bi_entry> src_entries;
+    bool truncated{false};
+    const bool reshardlog = true;
+    ASSERT_EQ(0, cls_rgw_bi_list(ioctx, src_bucket, "", "", 128,
+                                 &src_entries, &truncated, reshardlog));
+    ASSERT_EQ(4u, src_entries.size());
+
+    const auto& entry = src_entries.front();
+    EXPECT_EQ(BIIndexType::ReshardDeleted, entry.type);
+
+    ObjectWriteOperation op;
+    cls_rgw_bi_put_entries(op, {src_entries.begin(), src_entries.end()}, true);
+    ASSERT_EQ(0, ioctx.operate(dst_bucket, &op));
+
+    test_stats(ioctx, dst_bucket, RGWObjCategory::Main, 3, 24576);
+  }
 }

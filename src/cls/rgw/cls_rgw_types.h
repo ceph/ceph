@@ -18,6 +18,8 @@
 #define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
 #define CEPH_RGW_DIR_SUGGEST_OP_MASK 0x7f
 
+#define CLS_RGW_ERR_BUSY_RESHARDING 2300 // also in rgw_common.h, don't change!
+
 constexpr uint64_t CEPH_RGW_DEFAULT_TAG_TIMEOUT = 120; // in seconds
 
 class JSONObj;
@@ -197,20 +199,17 @@ inline std::ostream& operator<<(std::ostream& out, RGWObjCategory c) {
 }
 
 struct rgw_bucket_dir_entry_meta {
-  RGWObjCategory category;
-  uint64_t size;
+  RGWObjCategory category = RGWObjCategory::None;
+  uint64_t size = 0;
   ceph::real_time mtime;
   std::string etag;
   std::string owner;
   std::string owner_display_name;
   std::string content_type;
-  uint64_t accounted_size;
+  uint64_t accounted_size = 0;
   std::string user_data;
   std::string storage_class;
-  bool appendable;
-
-  rgw_bucket_dir_entry_meta() :
-    category(RGWObjCategory::None), size(0), accounted_size(0), appendable(false) { }
+  bool appendable = false;
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(7, 3, bl);
@@ -479,11 +478,9 @@ enum class BIIndexType : uint8_t {
 struct rgw_bucket_category_stats;
 
 struct rgw_cls_bi_entry {
-  BIIndexType type;
+  BIIndexType type = BIIndexType::Invalid;
   std::string idx;
   ceph::buffer::list data;
-
-  rgw_cls_bi_entry() : type(BIIndexType::Invalid) {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -507,7 +504,7 @@ struct rgw_cls_bi_entry {
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
   static void generate_test_instances(std::list<rgw_cls_bi_entry*>& o);
   bool get_info(cls_rgw_obj_key *key, RGWObjCategory *category,
-		rgw_bucket_category_stats *accounted_stats);
+		rgw_bucket_category_stats *accounted_stats) const;
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 

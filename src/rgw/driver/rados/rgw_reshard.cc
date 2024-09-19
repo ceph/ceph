@@ -244,35 +244,11 @@ public:
 
     librados::ObjectWriteOperation op;
     if (process_log) {
-      map<RGWObjCategory, rgw_bucket_category_stats> dec_stats;
-      list<rgw_cls_bi_entry> dec_entries;
-      set<string> dec_entry_names_wanted;
-      for (auto& entry : entries) {
-        store->getRados()->bi_put(op, bs, entry, null_yield);
-        dec_entry_names_wanted.emplace(entry.idx);
-      }
-
-      // getting the index entry in target shard
-      int ret = store->getRados()->bi_get_vals(bs, dec_entry_names_wanted, &dec_entries, null_yield);
-      if(ret < 0) {
-        derr << "ERROR: bi_get_vals(): " << cpp_strerror(-ret) << dendl;
-        return ret;
-      }
-
-      for (auto& dec_entry : dec_entries) {
-        cls_rgw_obj_key cls_key;
-        RGWObjCategory category;
-        rgw_bucket_category_stats accounted_stats;
-        bool account = dec_entry.get_info(&cls_key, &category, &accounted_stats);
-        if (account) {
-          auto& dest = dec_stats[category];
-          dest.total_size += accounted_stats.total_size;
-          dest.total_size_rounded += accounted_stats.total_size_rounded;
-          dest.num_entries += accounted_stats.num_entries;
-          dest.actual_size += accounted_stats.actual_size;
-        }
-      }
-      cls_rgw_bucket_update_stats(op, false, stats, &dec_stats);
+      // write the entries in bulk and update the stats. since we may have
+      // already written some of these entries during the InLogrecord stage,
+      // check for existing entries and decrement their stats first
+      const bool check_existing = true;
+      cls_rgw_bi_put_entries(op, std::move(entries), check_existing);
     } else {
       for (auto& entry : entries) {
         store->getRados()->bi_put(op, bs, entry, null_yield);
