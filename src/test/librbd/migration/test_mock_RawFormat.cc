@@ -466,7 +466,7 @@ TEST_F(TestMockMigrationRawFormat, ListSnapsMerge) {
   expect_snapshot_get_info(*mock_snapshot_interface_2, snap_info_2);
   io::SparseExtents sparse_extents_2;
   sparse_extents_2.insert(0, 32, {io::SPARSE_EXTENT_STATE_DATA, 32});
-  expect_snapshot_list_snap(*mock_snapshot_interface_2, {{0, 123}},
+  expect_snapshot_list_snap(*mock_snapshot_interface_2, {{0, 64}},
                             sparse_extents_2, 0);
 
   expect_snapshot_get_info(*mock_snapshot_interface_head, snap_info_head);
