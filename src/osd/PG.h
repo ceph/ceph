@@ -179,13 +179,6 @@ public:
   /// and be removed only in the PrimaryLogPG destructor.
   std::unique_ptr<ScrubPgIF> m_scrubber;
 
-  /// flags detailing scheduling/operation characteristics of the next scrub 
-  requested_scrub_t m_planned_scrub;
-
-  const requested_scrub_t& get_planned_scrub() const {
-    return m_planned_scrub;
-  }
-
   /// scrubbing state for both Primary & replicas
   bool is_scrub_active() const { return m_scrubber->is_scrub_active(); }
 
@@ -685,8 +678,6 @@ public:
 
   void shutdown();
   virtual void on_shutdown() = 0;
-
-  bool get_must_scrub() const;
 
   Scrub::schedule_result_t start_scrubbing(
     const Scrub::SchedEntry& candidate,
@@ -1389,11 +1380,6 @@ public:
  const pg_info_t& get_pg_info(ScrubberPasskey) const final { return info; }
 
  OSDService* get_pg_osd(ScrubberPasskey) const { return osd; }
-
- requested_scrub_t& get_planned_scrub(ScrubberPasskey)
- {
-   return m_planned_scrub;
- }
 
  void force_object_missing(ScrubberPasskey,
                            const std::set<pg_shard_t>& peer,

@@ -120,13 +120,7 @@ void ScrubJob::adjust_shallow_schedule(
 
   auto& sh_times = shallow_target.sched_info.schedule;	// shorthand
 
-  if (!ScrubJob::requires_randomization(shallow_target.urgency())) {
-    // the target time is already set. Make sure to reset the n.b. and
-    // the (irrelevant) deadline
-    sh_times.not_before = sh_times.scheduled_at;
-    sh_times.deadline = sh_times.scheduled_at;
-
-  } else {
+  if (ScrubJob::requires_randomization(shallow_target.urgency())) {
     utime_t adj_not_before = last_scrub;
     utime_t adj_target = last_scrub;
     sh_times.deadline = adj_target;
@@ -152,6 +146,13 @@ void ScrubJob::adjust_shallow_schedule(
     }
     sh_times.scheduled_at = adj_target;
     sh_times.not_before = adj_not_before;
+
+  } else {
+
+    // the target time is already set. Make sure to reset the n.b. and
+    // the (irrelevant) deadline
+    sh_times.not_before = sh_times.scheduled_at;
+    sh_times.deadline = sh_times.scheduled_at;
   }
 
   dout(10) << fmt::format(
@@ -428,4 +429,15 @@ bool ScrubJob::observes_random_backoff(urgency_t urgency)
 bool ScrubJob::observes_recovery(urgency_t urgency)
 {
   return urgency < urgency_t::operator_requested;
+}
+
+bool ScrubJob::has_high_queue_priority(urgency_t urgency)
+{
+  return urgency >= urgency_t::operator_requested;
+}
+
+bool ScrubJob::is_repair_implied(urgency_t urgency)
+{
+  return urgency == urgency_t::after_repair ||
+	 urgency == urgency_t::repairing || urgency == urgency_t::must_repair;
 }

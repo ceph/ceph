@@ -37,18 +37,20 @@ namespace Scrub {
  *   This type of scrub is always deep.
  *   (note: this urgency level is not implemented in this commit)
  *
+ * 'repairing' - the target is currently being deep-scrubbed with the repair
+ *   flag set. Triggered by a previous shallow scrub that ended with errors.
+ *
  * 'operator_requested' - the target was manually requested for scrubbing by
  *   an administrator.
  *
  * 'must_repair' - the target is required to be deep-scrubbed with the
- *   repair flag set, as:
- *      - the scrub was initiated by a message specifying 'do_repair'; or
- *   or - a deep scrub is required after the previous scrub ended with errors.
+ *   repair flag set, initiated by a message specifying 'do_repair'.
  */
 enum class urgency_t {
   periodic_regular,
   must_scrub,
   after_repair,
+  repairing,
   operator_requested,
   must_repair,
 };
@@ -200,6 +202,7 @@ struct formatter<Scrub::urgency_t> : formatter<std::string_view> {
       case periodic_regular:    desc = "periodic-regular"; break;
       case must_scrub:          desc = "must-scrub"; break;
       case after_repair:        desc = "after-repair"; break;
+      case repairing:           desc = "repairing"; break;
       case operator_requested:  desc = "operator-requested"; break;
       case must_repair:         desc = "must-repair"; break;
       // better to not have a default case, so that the compiler will warn

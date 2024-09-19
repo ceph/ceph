@@ -143,9 +143,8 @@ struct scrub_flags_t {
   unsigned int priority{0};
 
   /**
-   * set by queue_scrub() if either planned_scrub.auto_repair or
-   * need_auto were set.
-   * Tested at scrub end.
+   * set by set_op_parameters() for deep scrubs, if the hardware
+   * supports auto repairing and osd_scrub_auto_repair is enabled.
    */
   bool auto_repair{false};
 
@@ -156,13 +155,6 @@ struct scrub_flags_t {
 
   /// checked at the end of the scrub, to possibly initiate a deep-scrub
   bool deep_scrub_on_error{false};
-
-  /**
-   * scrub must not be aborted.
-   * Set for explicitly requested scrubs, and for scrubs originated by the
-   * pairing process with the 'repair' flag set (in the RequestScrub event).
-   */
-  bool required{false};
 };
 
 ostream& operator<<(ostream& out, const scrub_flags_t& sf);
@@ -187,9 +179,6 @@ struct formatter<scrub_flags_t> {
     if (sf.deep_scrub_on_error) {
       txt += sep ? ",deep-scrub-on-error" : "deep-scrub-on-error";
       sep = true;
-    }
-    if (sf.required) {
-      txt += sep ? ",required" : "required";
     }
     return fmt::format_to(ctx.out(), "{}", txt);
   }
@@ -220,8 +209,7 @@ class PgScrubber : public ScrubPgIF,
   Scrub::schedule_result_t start_scrub_session(
       scrub_level_t s_or_d,
       Scrub::OSDRestrictions osd_restrictions,
-      Scrub::ScrubPGPreconds pg_cond,
-      const requested_scrub_t& requested_flags) final;
+      Scrub::ScrubPGPreconds pg_cond) final;
 
   void initiate_regular_scrub(epoch_t epoch_queued) final;
 
@@ -292,8 +280,7 @@ class PgScrubber : public ScrubPgIF,
 
   scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
-      scrub_type_t scrub_type,
-      requested_scrub_t& req_flags) final;
+      scrub_type_t scrub_type) final;
 
   /**
    * let the scrubber know that a recovery operation has completed.
@@ -322,11 +309,9 @@ class PgScrubber : public ScrubPgIF,
 
   void on_operator_forced_scrub(
     ceph::Formatter* f,
-    scrub_level_t scrub_level,
-    requested_scrub_t& request_flags) final;
+    scrub_level_t scrub_level) final;
 
-  void dump_scrubber(ceph::Formatter* f,
-		     const requested_scrub_t& request_flags) const final;
+  void dump_scrubber(ceph::Formatter* f) const final;
 
   // used if we are a replica
 
@@ -375,14 +360,8 @@ class PgScrubber : public ScrubPgIF,
 
   /**
    * finalize the parameters of the initiated scrubbing session:
-   *
-   * The "current scrub" flags (m_flags) are set from the 'planned_scrub'
-   * flag-set; PG_STATE_SCRUBBING, and possibly PG_STATE_DEEP_SCRUB &
-   * PG_STATE_REPAIR are set.
    */
-  void set_op_parameters(
-      Scrub::ScrubPGPreconds pg_cond,
-      const requested_scrub_t& request) final;
+  void set_op_parameters(Scrub::ScrubPGPreconds pg_cond) final;
 
   void cleanup_store(ObjectStore::Transaction* t) final;
 
@@ -764,10 +743,6 @@ class PgScrubber : public ScrubPgIF,
 
   scrub_flags_t m_flags;
 
-  /// a reference to the details of the next scrub (as requested and managed by
-  /// the PG)
-  requested_scrub_t& m_planned_scrub;
-
   bool m_active{false};
 
   /**
@@ -851,7 +826,7 @@ class PgScrubber : public ScrubPgIF,
   /**
    * initiate a deep-scrub after the current scrub ended with errors.
    */
-  void request_rescrubbing(requested_scrub_t& req_flags);
+  void request_rescrubbing();
 
   /**
    * combine cluster & pool configuration options into a single struct
@@ -860,37 +835,11 @@ class PgScrubber : public ScrubPgIF,
   Scrub::sched_conf_t populate_config_params() const;
 
   /**
-   * use the 'planned scrub' flags to determine the urgency attribute
-   * of the 'deep target' part of the ScrubJob object.
-   *
-   * Returns 'true' if a high-priority 'urgency' level was set by this
-   * call (note: not if it was already set).
-   *
-   * Note: in the previous implementation, if the shallow scrub had
-   * high priority, and it was time for the periodic deep scrub, a
-   * high priority deep scrub was initiated. This behavior is not
-   * replicated here.
-   */
-  bool flags_to_deep_priority(
-      const Scrub::sched_conf_t& app_conf,
-      utime_t scrub_clock_now);
-
-  /**
-   * use the 'planned scrub' flags to determine the urgency attribute
-   * of the 'shallow target' part of the ScrubJob object.
-   */
-  void flags_to_shallow_priority(
-      const Scrub::sched_conf_t& app_conf,
-      utime_t scrub_clock_now);
-
-  /**
    * recompute the two ScrubJob targets, taking into account not
-   * only the up-to-date 'last' stamps, but also the 'planned scrub'
-   * flags.
+   * only the up-to-date 'last' stamps, but also the 'urgency'
+   * attributes of both targets.
    */
-  void update_targets(
-      const requested_scrub_t& planned,
-      utime_t scrub_clock_now);
+  void update_targets(utime_t scrub_clock_now);
 
   /*
    * Select a range of objects to scrub.

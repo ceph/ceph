@@ -1279,12 +1279,6 @@ void PG::requeue_map_waiters()
   }
 }
 
-bool PG::get_must_scrub() const
-{
-  dout(20) << __func__ << " must_scrub? " << (m_planned_scrub.must_scrub ? "true" : "false") << dendl;
-  return m_planned_scrub.must_scrub;
-}
-
 unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const
 {
   return m_scrubber->scrub_requeue_priority(with_priority);
@@ -1324,7 +1318,7 @@ Scrub::schedule_result_t PG::start_scrubbing(
        get_pgbackend()->auto_repair_supported());
 
   return m_scrubber->start_scrub_session(
-      candidate.level, osd_restrictions, pg_cond, m_planned_scrub);
+      candidate.level, osd_restrictions, pg_cond);
 }
 
 double PG::next_deepscrub_interval() const
@@ -1357,8 +1351,7 @@ void PG::on_scrub_schedule_input_change(Scrub::delay_ready_t delay_ready)
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
 {
   ceph_assert(m_scrubber);
-  std::ignore =
-      m_scrubber->scrub_requested(scrub_level, scrub_type, m_planned_scrub);
+  std::ignore = m_scrubber->scrub_requested(scrub_level, scrub_type);
 }
 
 void PG::clear_ready_to_merge() {
@@ -1913,11 +1906,10 @@ ostream& operator<<(ostream& out, const PG& pg)
 {
   out << pg.recovery_state;
 
-  // listing all scrub-related flags - both current and "planned next scrub"
+  // listing all scrub-related flags
   if (pg.is_scrubbing()) {
     out << *pg.m_scrubber;
   }
-  out << pg.m_planned_scrub;
 
   if (pg.recovery_ops_active)
     out << " rops=" << pg.recovery_ops_active;
