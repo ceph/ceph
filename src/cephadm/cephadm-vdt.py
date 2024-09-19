@@ -28,6 +28,7 @@ import uuid
 from argparse import Namespace
 from datetime import datetime
 from cephadmlib.context import BaseConfig
+import concurrent.futures
 #End testing
 from contextlib import redirect_stdout
 from functools import wraps
@@ -2700,10 +2701,9 @@ def rollback(func: FuncT) -> FuncT:
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
-    
     logger.info('-----------------TEST VERSION 0.0.1-----------------')
     ctx.error_code = 0
-
+    command_context_write(ctx)
     if not ctx.output_config:
         ctx.output_config = os.path.join(ctx.output_dir, CEPH_CONF)
     if not ctx.output_keyring:
@@ -2978,7 +2978,7 @@ def command_bootstrap(ctx):
                 'For more information see:\n\n'
                 '\thttps://docs.ceph.com/en/latest/mgr/telemetry/\n')
     logger.info('Bootstrap testing completed.')
-    logger.info("End bootstraping cluster - writing context JSON:")
+    logger.info("End bootstraping cluster - writing context JSON")
 
     if getattr(ctx, 'deploy_cephadm_agent', None):
         cli(['config', 'set', 'mgr', 'mgr/cephadm/use_agent', 'true'])
@@ -3179,7 +3179,8 @@ def command_run(ctx):
 def command_shell(ctx):
     # Write context
     cp = read_config(ctx.config)
-    
+    preparing_remote_hosts(ctx.hosts)
+    distribute_ceph_pub_key(ctx.hosts, f'{ctx.output_dir}/ceph.pub')
     # Check fsid
     if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
@@ -5647,7 +5648,7 @@ def _get_parser():
 
     return parser
 
-#Custom fuction
+#Custom fuction:
 
 def command_context_write(ctx):
 
@@ -5717,7 +5718,7 @@ def command_context_log_clear(ctx):
     logger.info('\n------------------------END FUNCTION-------------------------\n')
     return 0
 
-
+#Function to load cephadmContext from a json file
 def load_context_from_file(file_path: str):
     with open(file_path, 'r') as f:
         ctx_dict = json.load(f)
@@ -5771,7 +5772,7 @@ def load_json_to_pkl(json_file, pkl_file):
 
     print(f"Context saved as {pkl_file}")
 
-
+#Function to get fsid after running bootstrap
 def get_fsid_from_conf(conf_file='/etc/ceph/ceph.conf'):
     try:
         with open(conf_file, 'r') as file:
@@ -5782,6 +5783,8 @@ def get_fsid_from_conf(conf_file='/etc/ceph/ceph.conf'):
         print(f"{conf_file} not found.")
         return None
 
+
+#Function to translate .yaml file to .json context file
 def translate_yaml_to_json(yaml_file):
     with open(yaml_file, 'r') as f:
         yaml_data = yaml.safe_load(f)
@@ -5790,7 +5793,7 @@ def translate_yaml_to_json(yaml_file):
     services = yaml_data.get('services', {})
     fsid = get_fsid_from_conf()
     commands = generate_ceph_commands(hosts, services)
-
+    
     with open('execute.sh', 'w') as output_file:
         output_file.write("#!/bin/bash\n\n")
         for command in commands:
@@ -5872,6 +5875,7 @@ def translate_yaml_to_json(yaml_file):
                 "command": [
                     "execute.sh"
                 ],
+                "hosts": None,
                 "no_hosts": False,
                 "dry_run": True,
                 "funcs": [
@@ -5884,7 +5888,88 @@ def translate_yaml_to_json(yaml_file):
         },
         "_conf": "<cephadmlib.context.BaseConfig object>"
     }
+def check_and_generate_ssh_key():
+    ssh_key_path = os.path.expanduser("~/.ssh/id_rsa")
+    if not os.path.exists(ssh_key_path):
+        logger.info("No SSH key found. Generating a new one...")
+        ssh_keygen_cmd = [
+            "ssh-keygen", "-t", "rsa", "-b", "4096", "-f", ssh_key_path, "-N", ""
+        ]        
+        result = subprocess.run(ssh_keygen_cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            logger.info(f"SSH key successfully generated at {ssh_key_path}.")
+        else:
+            logger.error(f"Failed to generate SSH key: {result.stderr}")
+    else:
+        logger.info(f"SSH key already exists at {ssh_key_path}.")
 
+def distribute_ssh_key(ssh_user, ip):
+    logger.info(f"Distributing SSH key to {ip}...")
+    distribute_key_cmd = f"ssh-copy-id -i ~/.ssh/id_rsa.pub {ssh_user}@{ip}"
+    subprocess.run(distribute_key_cmd, shell=True)
+
+def preparing_remote_host(host):
+    name = host['name']
+    ip = host['ipaddresses']
+    ssh_user = host.get('ssh-user', 'root')
+    ssh_pass = host.get('ssh-pass', None)
+
+    distribute_ssh_key(ssh_user, ip)
+    logger.info(f"Preparing host {name} at {ip}...")
+    ssh_command = f"ssh {ssh_user}@{ip} "
+
+    check_container_engine_cmd = f"{ssh_command} 'if ! command -v podman && ! command -v docker; then apt-get update && apt-get install -y podman; fi'"
+    subprocess.run(check_container_engine_cmd, shell=True)
+
+    check_lvm2_cmd = f"{ssh_command} 'if ! command -v lvcreate; then apt-get update && apt-get install -y lvm2; fi'"
+    subprocess.run(check_lvm2_cmd, shell=True)
+
+    check_time_sync_cmd = f"{ssh_command} 'if ! systemctl is-active --quiet systemd-timesyncd; then apt-get update && apt-get install -y chrony && systemctl enable chrony && systemctl start chrony; fi'"
+    subprocess.run(check_time_sync_cmd, shell=True)
+
+    check_ceph_common_cmd = f"{ssh_command} 'if ! dpkg -s ceph-common >/dev/null 2>&1; then apt-get update && apt-get install -y ceph-common; fi'"
+    subprocess.run(check_ceph_common_cmd, shell=True)
+
+    expected_hostname = host.get('name')
+    set_hostname_cmd = f"{ssh_command} 'hostnamectl set-hostname {expected_hostname}'"
+    subprocess.run(set_hostname_cmd, shell=True)
+
+    logger.info(f"Finished preparing host {name} at {ip}.")
+    logger.info("---------------------------------------------------------")
+
+def preparing_remote_hosts(hosts):
+    check_and_generate_ssh_key()
+    logger.info("------------------PREPARING REMOTE HOSTS------------------")
+    
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Use the map function to apply the preparation to each host concurrently
+        executor.map(preparing_remote_host, hosts)
+    
+    logger.info("Finished preparing all remote hosts.")
+
+def distribute_ceph_pub_key(hosts, pub_key_path):
+    logger.info(f"Distributing {pub_key_path} to each hosts:")
+    for host in hosts:
+        name = host['name']
+        ip = host['ipaddresses']
+        ssh_user=host['ssh-user']
+        try:
+            print(f"Sending {pub_key_path} to {ssh_user}@{ip}...")
+            
+            # Using sshpass to automate the ssh-copy-id command
+            result = subprocess.run(
+                ["ssh-copy-id", "-f", "-i", pub_key_path, f"{ssh_user}@{ip}"],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            
+            logger.info(f"Successfully sent key to {ip}. Output:\n{result.stdout}")
+        
+        except subprocess.CalledProcessError as e:
+            logger.info(f"Failed to send key to {ip}. Error: {e}")
+
+#Function to generate ceph commands
 def generate_ceph_commands(hosts, services):
     commands = []
     
@@ -5973,14 +6058,15 @@ function_map = {
 def main() -> None:
     av: List[str] = []
     av = sys.argv[1:]
-    ctx = load_context_from_file('context/context-bootstrap.json')
 
-    # fsid = get_fsid_from_conf()
-    # json_data = translate_yaml_to_json(av[0])
-    # with tempfile.NamedTemporaryFile('w', delete=False, suffix='.json') as temp_file:
-    #     json.dump(json_data, temp_file, indent=4)
-    #     temp_file_path = temp_file.name
-    # ctx = load_context_from_file(temp_file_path)
+    # ctx = load_context_from_file('context/context-bootstrap.json')
+
+    fsid = get_fsid_from_conf()
+    json_data = translate_yaml_to_json(av[0])
+    with tempfile.NamedTemporaryFile('w', delete=False, suffix='.json') as temp_file:
+        json.dump(json_data, temp_file, indent=4)
+        temp_file_path = temp_file.name
+    ctx = load_context_from_file(temp_file_path)
 
     if not ctx.funcs:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')

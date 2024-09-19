@@ -1,7 +1,5 @@
 #!/usr/bin/python3
-import pickle
-import pprint
-import json
+
 import argparse
 import datetime
 import ipaddress
@@ -24,11 +22,7 @@ from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, 
 
 import re
 import uuid
-#Imports for testing
-from argparse import Namespace
-from datetime import datetime
-from cephadmlib.context import BaseConfig
-#End testing
+
 from contextlib import redirect_stdout
 from functools import wraps
 from glob import glob
@@ -601,6 +595,8 @@ def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional
             if digest and not digest.endswith('@'):
                 logger.info(f"Using ceph image with id '{image_id}' and tag '{tag}' created on {created_date}\n{digest}")
                 return digest
+    if container_info is not None:
+        logger.warning(f"Not using image '{container_info.image_id}' as it's not in list of non-dangling images with ceph=True label")
     return None
 
 
@@ -2414,6 +2410,12 @@ def enable_cephadm_mgr_module(
     logger.info('Enabling cephadm module...')
     cli(['mgr', 'module', 'enable', 'cephadm'])
     wait_for_mgr_restart()
+    # https://tracker.ceph.com/issues/67969
+    # luckily `ceph mgr module enable <module>` returns
+    # a zero rc when the module is already enabled so
+    # this is no issue even if it is unnecessary
+    logger.info('Verifying orchestrator module is enabled...')
+    cli(['mgr', 'module', 'enable', 'orchestrator'])
     logger.info('Setting orchestrator backend to cephadm...')
     cli(['orch', 'set', 'backend', 'cephadm'])
 
@@ -2700,8 +2702,7 @@ def rollback(func: FuncT) -> FuncT:
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
-    
-    logger.info('-----------------TEST VERSION 0.0.1-----------------')
+
     ctx.error_code = 0
 
     if not ctx.output_config:
@@ -2977,10 +2978,7 @@ def command_bootstrap(ctx):
                 '\tceph telemetry on\n\n'
                 'For more information see:\n\n'
                 '\thttps://docs.ceph.com/en/latest/mgr/telemetry/\n')
-    logger.info('Bootstrap testing completed.')
-    logger.info("End bootstraping cluster - writing context JSON:")
-    command_context_write(ctx)
-    command_context_write_pickle(ctx)
+    logger.info('Bootstrap complete.')
 
     if getattr(ctx, 'deploy_cephadm_agent', None):
         cli(['config', 'set', 'mgr', 'mgr/cephadm/use_agent', 'true'])
@@ -3176,120 +3174,13 @@ def command_run(ctx):
 @infer_config
 @infer_image
 @validate_fsid
-# def command_shell(ctx):
-#     # type: (CephadmContext) -> int
-#     cp = read_config(ctx.config)
-#     command_context_write(ctx)
-#     if cp.has_option('global', 'fsid') and \
-#        cp.get('global', 'fsid') != ctx.fsid:
-#         raise Error('fsid does not match ceph.conf')
-
-#     if ctx.name:
-#         if '.' in ctx.name:
-#             (daemon_type, daemon_id) = ctx.name.split('.', 1)
-#         else:
-#             daemon_type = ctx.name
-#             daemon_id = None
-#     else:
-#         daemon_type = 'shell'  # get limited set of mounts
-#         daemon_id = None
-
-#     if ctx.fsid and daemon_type in ceph_daemons():
-#         make_log_dir(ctx, ctx.fsid)
-
-#     if daemon_id and not ctx.fsid:
-#         raise Error('must pass --fsid to specify cluster')
-
-#     # in case a dedicated keyring for the specified fsid is found we us it.
-#     # Otherwise, use /etc/ceph files by default, if present.  We do this instead of
-#     # making these defaults in the arg parser because we don't want an error
-#     # if they don't exist.
-#     if not ctx.keyring:
-#         keyring_file = f'{ctx.data_dir}/{ctx.fsid}/{CEPH_CONF_DIR}/{CEPH_KEYRING}'
-#         if os.path.exists(keyring_file):
-#             ctx.keyring = keyring_file
-#         elif os.path.exists(CEPH_DEFAULT_KEYRING):
-#             ctx.keyring = CEPH_DEFAULT_KEYRING
-
-#     container_args: List[str] = ['-i']
-#     if ctx.fsid and daemon_id:
-#         ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
-#         mounts = get_container_mounts(
-#             ctx, ident, no_config=bool(ctx.config),
-#         )
-#         binds = get_container_binds(ctx, ident)
-#     else:
-#         mounts = get_container_mounts_for_type(ctx, ctx.fsid, daemon_type)
-#         binds = []
-#     if ctx.config:
-#         mounts[pathify(ctx.config)] = '/etc/ceph/ceph.conf:z'
-#     if ctx.keyring:
-#         mounts[pathify(ctx.keyring)] = '/etc/ceph/ceph.keyring:z'
-#     if ctx.mount:
-#         for _mount in ctx.mount:
-#             split_src_dst = _mount.split(':')
-#             mount = pathify(split_src_dst[0])
-#             filename = os.path.basename(split_src_dst[0])
-#             if len(split_src_dst) > 1:
-#                 dst = split_src_dst[1]
-#                 if len(split_src_dst) == 3:
-#                     dst = '{}:{}'.format(dst, split_src_dst[2])
-#                 mounts[mount] = dst
-#             else:
-#                 mounts[mount] = '/mnt/{}'.format(filename)
-#     if ctx.command:
-#         command = ctx.command
-#     else:
-#         command = ['bash']
-#         container_args += [
-#             '-t',
-#             '-e', 'LANG=C',
-#             '-e', 'PS1=%s' % CUSTOM_PS1,
-#         ]
-#         if ctx.fsid:
-#             home = os.path.join(ctx.data_dir, ctx.fsid, 'home')
-#             if not os.path.exists(home):
-#                 logger.debug('Creating root home at %s' % home)
-#                 makedirs(home, 0, 0, 0o660)
-#                 if os.path.exists('/etc/skel'):
-#                     for f in os.listdir('/etc/skel'):
-#                         if f.startswith('.bash'):
-#                             shutil.copyfile(os.path.join('/etc/skel', f),
-#                                             os.path.join(home, f))
-#             mounts[home] = '/root'
-
-#     for i in ctx.volume:
-#         a, b = i.split(':', 1)
-#         mounts[a] = b
-
-#     c = CephContainer(
-#         ctx,
-#         image=ctx.image,
-#         entrypoint='doesnotmatter',
-#         args=[],
-#         container_args=container_args,
-#         volume_mounts=mounts,
-#         bind_mounts=binds,
-#         envs=ctx.env,
-#         privileged=True)
-#     command = c.shell_cmd(command)
-
-#     if ctx.dry_run:
-#         print(' '.join(shlex.quote(arg) for arg in command))
-#         return 0
-
-#     return call_timeout(ctx, command, ctx.timeout)
-#Sh
 def command_shell(ctx):
-    # Write context
-    command_context_write(ctx)
+    # type: (CephadmContext) -> int
     cp = read_config(ctx.config)
-    
-    # Check fsid
-    if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
+    if cp.has_option('global', 'fsid') and \
+       cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
 
-    # Set daemon_type and daemon_id
     if ctx.name:
         if '.' in ctx.name:
             (daemon_type, daemon_id) = ctx.name.split('.', 1)
@@ -3297,7 +3188,7 @@ def command_shell(ctx):
             daemon_type = ctx.name
             daemon_id = None
     else:
-        daemon_type = 'shell'
+        daemon_type = 'shell'  # get limited set of mounts
         daemon_id = None
 
     if ctx.fsid and daemon_type in ceph_daemons():
@@ -3306,7 +3197,10 @@ def command_shell(ctx):
     if daemon_id and not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
-    # Keyring
+    # in case a dedicated keyring for the specified fsid is found we us it.
+    # Otherwise, use /etc/ceph files by default, if present.  We do this instead of
+    # making these defaults in the arg parser because we don't want an error
+    # if they don't exist.
     if not ctx.keyring:
         keyring_file = f'{ctx.data_dir}/{ctx.fsid}/{CEPH_CONF_DIR}/{CEPH_KEYRING}'
         if os.path.exists(keyring_file):
@@ -3314,29 +3208,57 @@ def command_shell(ctx):
         elif os.path.exists(CEPH_DEFAULT_KEYRING):
             ctx.keyring = CEPH_DEFAULT_KEYRING
 
-    # Read the .sh file content if specified
-    if ctx.command and ctx.command[0].endswith('.sh'):
-        sh_file_path = ctx.command[0]
-        try:
-            with open(sh_file_path, 'r') as sh_file:
-                script_commands = sh_file.read()
-            command = ['bash', '-c', script_commands]
-        except FileNotFoundError:
-            raise Error(f'{sh_file_path} not found')
+    container_args: List[str] = ['-i']
+    if ctx.fsid and daemon_id:
+        ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
+        mounts = get_container_mounts(
+            ctx, ident, no_config=bool(ctx.config),
+        )
+        binds = get_container_binds(ctx, ident)
     else:
-        # Default to interactive bash if no command provided
-        command = ['bash']
-    
-    container_args = ['-i', '-t', '-e', 'LANG=C', '-e', f'PS1={CUSTOM_PS1}']
-
-    mounts = get_container_mounts_for_type(ctx, ctx.fsid, daemon_type)
-    
+        mounts = get_container_mounts_for_type(ctx, ctx.fsid, daemon_type)
+        binds = []
     if ctx.config:
         mounts[pathify(ctx.config)] = '/etc/ceph/ceph.conf:z'
     if ctx.keyring:
         mounts[pathify(ctx.keyring)] = '/etc/ceph/ceph.keyring:z'
+    if ctx.mount:
+        for _mount in ctx.mount:
+            split_src_dst = _mount.split(':')
+            mount = pathify(split_src_dst[0])
+            filename = os.path.basename(split_src_dst[0])
+            if len(split_src_dst) > 1:
+                dst = split_src_dst[1]
+                if len(split_src_dst) == 3:
+                    dst = '{}:{}'.format(dst, split_src_dst[2])
+                mounts[mount] = dst
+            else:
+                mounts[mount] = '/mnt/{}'.format(filename)
+    if ctx.command:
+        command = ctx.command
+    else:
+        command = ['bash']
+        container_args += [
+            '-t',
+            '-e', 'LANG=C',
+            '-e', 'PS1=%s' % CUSTOM_PS1,
+        ]
+        if ctx.fsid:
+            home = os.path.join(ctx.data_dir, ctx.fsid, 'home')
+            if not os.path.exists(home):
+                logger.debug('Creating root home at %s' % home)
+                makedirs(home, 0, 0, 0o660)
+                if os.path.exists('/etc/skel'):
+                    for f in os.listdir('/etc/skel'):
+                        if f.startswith('.bash'):
+                            shutil.copyfile(os.path.join('/etc/skel', f),
+                                            os.path.join(home, f))
+            mounts[home] = '/root'
 
-    # Initialize the container and run the command
+    for i in ctx.volume:
+        a, b = i.split(':', 1)
+        mounts[a] = b
+
     c = CephContainer(
         ctx,
         image=ctx.image,
@@ -3344,11 +3266,9 @@ def command_shell(ctx):
         args=[],
         container_args=container_args,
         volume_mounts=mounts,
-        bind_mounts=[],
+        bind_mounts=binds,
         envs=ctx.env,
-        privileged=True
-    )
-
+        privileged=True)
     command = c.shell_cmd(command)
 
     if ctx.dry_run:
@@ -3356,6 +3276,7 @@ def command_shell(ctx):
         return 0
 
     return call_timeout(ctx, command, ctx.timeout)
+
 ##################################
 
 
@@ -3655,7 +3576,7 @@ def list_daemons(
                                 elif daemon_type == 'grafana':
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
-                                                           'grafana-server', '-v'],
+                                                           'grafana', 'server', '-v'],
                                                           verbosity=CallVerbosity.QUIET)
                                     if not code and \
                                        out.startswith('Version '):
@@ -4161,7 +4082,7 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
     ports = Monitoring.port_map['grafana']
     endpoints = [EndPoint('0.0.0.0', p) for p in ports]
 
-    _stop_and_disable(ctx, 'grafana-server')
+    _stop_and_disable(ctx, 'grafana server')
 
     ident = DaemonIdentity(fsid, daemon_type, daemon_id)
     data_dir_dst = make_data_dir(
@@ -4451,9 +4372,6 @@ def command_rm_cluster(ctx: CephadmContext) -> None:
     lock = FileLock(ctx, ctx.fsid)
     lock.acquire()
     _rm_cluster(ctx, ctx.keep_logs, ctx.zap_osds)
-    logger.info("End removing cluster - writing context:")
-    command_context_write(ctx)
-    command_context_write_pickle(ctx)
 
 
 def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
@@ -4949,7 +4867,7 @@ def _add_deploy_parser_args(
 def _get_parser():
     # type: () -> argparse.ArgumentParser
     parser = argparse.ArgumentParser(
-        description='Bootstrap Ceph daemons with systemd and containers',
+        description='Bootstrap Ceph daemons with systemd and containers.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         '--image',
@@ -5296,7 +5214,6 @@ def _get_parser():
         'command', nargs='*',
         help='additional journalctl args')
 
-
     parser_bootstrap = subparsers.add_parser(
         'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
     parser_bootstrap.set_defaults(func=command_bootstrap)
@@ -5625,152 +5542,8 @@ def _get_parser():
         'disk-rescan', help='rescan all HBAs to detect new/removed devices')
     parser_disk_rescan.set_defaults(func=command_rescan_disks)
 
-    #Custom parser
-    parser_ctxwrite = subparsers.add_parser(
-        'ctxwrite', help='FOR TESTING PURPOSE - Write out context for ceph in .json format')
-    parser_ctxwrite.set_defaults(func=command_context_write)
-    parser_ctxwrite.add_argument(
-        '--fsid', 
-        help="A test value for ctxwriter parser",
-        type=str,
-    )
-
-    parser_ctxwrite_pkl = subparsers.add_parser(
-        'ctxwrite-pkl', help='FOR TESTING PURPOSE - Write out context for ceph in .pkl format')
-    parser_ctxwrite_pkl.set_defaults(func=command_context_write_pickle)
-    parser_ctxwrite_pkl.add_argument(
-        '--fsid', 
-        help="A test value for ctxwriter-pkl parser",
-        type=str,
-    )
-
-    parser_ctxlogsclear = subparsers.add_parser(
-        'ctxlogsclear', help='FOR TESTING PURPOSE - Clean all the context logs in /context-logs'
-    )
-    parser_ctxlogsclear.set_defaults(func=command_context_log_clear)
-    #End custom parser
-
     return parser
 
-#Custom fuction
-
-def command_context_write(ctx):
-
-    ctx_dict = {
-        "_args": {},
-        "_conf": ctx._conf 
-    }
-
-    logger.info('\n-----------THIS IS A FUNCTION FOR TESTING PURPPOSE-----------\n')
-
-    if hasattr(ctx, '_args') and isinstance(ctx._args, Namespace):
-        ctx_dict["_args"] = {key: value for key, value in vars(ctx._args).items()}
-    logger.info('Test parsing value (Default = 1): %s', ctx.fsid)
-    current_time = datetime.now().strftime("%d-%m-%Y_%H:%M:%S")
-    folder = 'context-logs'
-    context_filename = f'{folder}/context-{current_time}.json'
-
-    os.makedirs(folder, exist_ok=True)
-    logger.info("Writing the context file to: %s ", context_filename)
-
-    with open(context_filename, 'w') as f:
-        f.write(json.dumps(ctx_dict, indent=4, default=str))
-
-    logger.info('\n------------------------END FUNCTION-------------------------\n')
-    return 0
-
-
-
-def command_context_write_pickle(ctx):
-    logger.info('\n-----------THIS IS A FUNCTION FOR TESTING PURPOSE-----------\n')
-
-    current_time = datetime.now().strftime("%d-%m-%Y_%H:%M:%S")
-    folder = 'context-logs'
-    context_filename = f'{folder}/context-{current_time}.pkl'
-
-    os.makedirs(folder, exist_ok=True)
-    logger.info("Writing the context file to: %s ", context_filename)
-
-    try:
-        with open(context_filename, 'wb') as f:
-            pickle.dump(ctx, f)
-        logger.info('Context-fsid: %s', ctx.fsid)
-        logger.info('Context successfully written to file.')
-    except Exception as e:
-        logger.error('Failed to write context to file: %s', e)
-
-    logger.info('\n------------------------END FUNCTION-------------------------\n')
-    return 0
-
-def command_context_log_clear(ctx):
-    logger.info('\n-----------THIS IS A FUNCTION FOR TESTING PURPPOSE-----------\n')
-    folder = 'context-logs'  
-    logger.info('Start deleting context logs: ')
-    try:
-        if os.path.exists(folder):
-            for filename in os.listdir(folder):
-                file_path = os.path.join(folder, filename)
-                if os.path.isfile(file_path):
-                    os.remove(file_path)
-                    logger.info("  - Deleting log: %s", file_path)
-            logger.info("All context logs cleared from folder /%s", folder)
-        else:
-            logger.warning("Directory %s does not exist.", folder)
-    except Exception as e:
-        logger.error("Error clearing context files: %s", e)
-
-    logger.info('\n------------------------END FUNCTION-------------------------\n')
-    return 0
-
-
-def load_context_from_file(file_path: str):
-    with open(file_path, 'r') as f:
-        ctx_dict = json.load(f)
-    ctx = CephadmContext()
-
-    _args_dict = ctx_dict["_args"]
-
-    _args = argparse.Namespace(**_args_dict)
-    ctx.set_args(_args)
-    
-    func_name = _args.func.split()[1]
-
-    if func_name in function_map:
-        ctx.func = function_map[func_name]
-
-    _conf = ctx_dict["_conf"]
-    return ctx
-
-def load_context_from_file_pickle(file_path: str):
-    logger.info('Loading context from file: %s', file_path)
-
-    # Sử dụng pickle để nạp ngữ cảnh từ file
-    try:
-        with open(file_path, 'rb') as f:
-            ctx = pickle.load(f)
-        logger.info('Context successfully loaded from file.')
-        return ctx
-    except Exception as e:
-        logger.error('Failed to load context from file: %s', e)
-        raise   
-
-
-def load_json_to_pkl(json_file, pkl_file):
-    with open(json_file, 'r') as f:
-        data = json.load(f)
-
-    if '_args' in data and 'func' in data['_args']:
-        data['_args']['func'] = command_bootstrap
-
-    if '_conf' in data:
-        data['_conf'] = BaseConfig()
-
-    with open(pkl_file, 'wb') as f:
-        pickle.dump(data, f)
-
-    print(f"Context saved as {pkl_file}")
-
-#End custom function
 
 def _parse_args(av: List[str]) -> argparse.Namespace:
     parser = _get_parser()
@@ -5805,29 +5578,12 @@ def cephadm_require_root() -> None:
         sys.stderr.write('ERROR: cephadm should be run as root\n')
         sys.exit(1)
 
-function_map = {
-    "command_bootstrap": command_bootstrap,
-    "command_check_host": command_check_host,
-    "command_prepare_host": command_prepare_host,
-    "command_add_repo": command_add_repo,
-    "command_rm_repo": command_rm_repo,
-    "command_install": command_install,
-    "command_rm_cluster": command_rm_cluster,
-    "command_context_write": command_context_write,
-    #"command_context_log_clear": command_context_log_clear,
-}
 
 def main() -> None:
     av: List[str] = []
-    av = sys.argv[0:]
+    av = sys.argv[1:]
+
     ctx = cephadm_init_ctx(av)
-    #ctx = load_context_from_file('context/context-bootstrap.json')
-
-    #load_json_to_pkl('context/context-ctxwrite.json', 'context-logs/context.pkl')
-    #ctx = load_context_from_file_pickle('context-logs/context.pkl')
-    #logger(vars(ctx))
-
-
     if not ctx.has_function():
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
@@ -5853,11 +5609,7 @@ def main() -> None:
                     command_add_repo,
                     command_rm_repo,
                     command_install,
-                    command_bootstrap,
-                    #Custom functions
-                    command_context_write_pickle,
-                    command_context_log_clear
-                    #End custom functions
+                    command_bootstrap
                 ]:
             check_container_engine(ctx)
         # command handler

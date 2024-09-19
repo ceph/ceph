@@ -4,3 +4,4 @@ htmlcov
 .tox
 coverage.xml
 .mypy_cache
+testing.yaml

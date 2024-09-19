@@ -1,6 +1,6 @@
 #Bootstrap:
 image: 
-docker: false
+docker: true
 data_dir: "/var/lib/ceph"
 log_dir: "/var/log/ceph"
 logrotate_dir: "/etc/logrotate.d"
@@ -50,18 +50,25 @@ name:
 keyring: 
 mount: 
 funcs: 
-  - "command_prepare_host"
   - "command_rm_cluster"
-  - "command_bootstrap"
-  - "command_shell"
+  # - "command_prepare_host"
+  # - "command_bootstrap"
+  # - "command_shell"
 
 #Setting up cluster
 setup: true
 hosts:
-- name: LAPTOP-EJ8ISJEC
-  ipaddresses: 172.26.224.220
-  label: _admin,mgr,mon,osd,rgw 
  
+- name: ceph-node-1
+  ipaddresses: 171.254.95.193
+  label: _admin,mgr,mon,osd
+  ssh-user: root 
+
+- name: ceph-node-2
+  ipaddresses: 171.254.95.156
+  label: _admin,mgr,mon,osd 
+  ssh-user: root 
+
 services:
   monitor:
     count-per-host: 1
