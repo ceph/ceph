@@ -4,13 +4,13 @@
 
 <cd-alert-panel type="info"
                 *ngIf="!grafanaExist"
-                i18n>Please consult the <cd-doc section="grafana"></cd-doc> on
+                i18n>Please consult the&nbsp;<cd-doc section="grafana"></cd-doc>&nbsp;on
   how to configure and enable the monitoring functionality.</cd-alert-panel>
 
 <cd-alert-panel type="info"
                 *ngIf="!dashboardExist"
                 i18n>Grafana Dashboard doesn't exist. Please refer to
-  <cd-doc section="grafana"></cd-doc> on how to add dashboards to Grafana.</cd-alert-panel>
+  &nbsp;<cd-doc section="grafana"></cd-doc>&nbsp;on how to add dashboards to Grafana.</cd-alert-panel>
 
 <ng-container *ngIf="grafanaExist && dashboardExist">
   <div class="row mb-3">
@@ -58,10 +58,10 @@
                       *ngIf="showMessage"
                       dismissible="true"
                       (dismissed)="showMessage = false"
-                      i18n>If no embedded Grafana Dashboard appeared below, please follow <a [href]="grafanaSrc"
+                      i18n>If no embedded Grafana Dashboard appeared below, please follow&nbsp;<a [href]="grafanaSrc"
                       target="_blank"
                       noopener
-                      noreferrer>this link </a> to check if Grafana is reachable and there are no HTTPS certificate issues. You may need to reload this page after accepting any Browser certificate exceptions</cd-alert-panel>
+                      noreferrer>this link </a>&nbsp;to check if Grafana is reachable and there are no HTTPS certificate issues. You may need to reload this page after accepting any Browser certificate exceptions</cd-alert-panel>
     </div>
   </div>
 
