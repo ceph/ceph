@@ -129,8 +129,10 @@ class NvmeofGatewaysConfig(object):
             orch = OrchClient.instance()
             if orch.available():
                 if key:
-                    return orch.cert_store.get_key(entity, service_name)
-                return orch.cert_store.get_cert(entity, service_name)
+                    return orch.cert_store.get_key(entity, service_name,
+                                                   ignore_missing_exception=True)
+                return orch.cert_store.get_cert(entity, service_name,
+                                                ignore_missing_exception=True)
             return None
         except OrchestratorError:
             # just return None if any orchestrator error is raised

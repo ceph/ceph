@@ -204,13 +204,17 @@ class CertStoreManager(ResourceManager):
 
     @wait_api_result
     def get_cert(self, entity: str, service_name: Optional[str] = None,
-                 hostname: Optional[str] = None) -> str:
-        return self.api.cert_store_get_cert(entity, service_name, hostname)
+                 hostname: Optional[str] = None,
+                 ignore_missing_exception: bool = False) -> str:
+        return self.api.cert_store_get_cert(entity, service_name, hostname,
+                                            no_exception_when_missing=ignore_missing_exception)
 
     @wait_api_result
     def get_key(self, entity: str, service_name: Optional[str] = None,
-                hostname: Optional[str] = None) -> str:
-        return self.api.cert_store_get_key(entity, service_name, hostname)
+                hostname: Optional[str] = None,
+                ignore_missing_exception: bool = False) -> str:
+        return self.api.cert_store_get_key(entity, service_name, hostname,
+                                           no_exception_when_missing=ignore_missing_exception)
 
 
 class OrchClient(object):
