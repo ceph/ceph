@@ -311,7 +311,7 @@ class AlertmanagerService(CephadmService):
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        default_webhook_urls: List[str] = []
+        webhook_urls: List[str] = []
 
         spec = cast(AlertManagerSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         try:
@@ -321,7 +321,10 @@ class AlertmanagerService(CephadmService):
         user_data = spec.user_data
         if 'default_webhook_urls' in user_data and isinstance(
                 user_data['default_webhook_urls'], list):
-            default_webhook_urls.extend(user_data['default_webhook_urls'])
+            webhook_urls.extend(user_data['default_webhook_urls'])
+        if 'webhook_urls' in user_data and isinstance(
+                user_data['webhook_urls'], list):
+            webhook_urls.extend(user_data['webhook_urls'])
 
         security_enabled, mgmt_gw_enabled, oauth2_enabled = self.mgr._get_security_config()
         if mgmt_gw_enabled:
@@ -340,7 +343,7 @@ class AlertmanagerService(CephadmService):
         context = {
             'security_enabled': security_enabled,
             'dashboard_urls': dashboard_urls,
-            'default_webhook_urls': default_webhook_urls,
+            'webhook_urls': webhook_urls,
             'snmp_gateway_urls': snmp_gateway_urls,
             'secure': secure,
         }
