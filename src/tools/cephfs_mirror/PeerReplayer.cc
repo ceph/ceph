@@ -1514,7 +1514,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
   double duration = 0;
   for (; it != local_snap_map.end(); ++it) {
     if (m_perf_counters) {
-      start = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now().time_since_epoch()).count();
+      start = std::chrono::duration_cast<std::chrono::seconds>(clock::now().time_since_epoch()).count();
       utime_t t;
       t.set_from_double(start);
       m_perf_counters->tset(l_cephfs_mirror_peer_replayer_last_synced_start, t);
@@ -1533,7 +1533,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     }
     if (m_perf_counters) {
       m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snaps_synced);
-      end = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now().time_since_epoch()).count();
+      end = std::chrono::duration_cast<std::chrono::seconds>(clock::now().time_since_epoch()).count();
       utime_t t;
       t.set_from_double(end);
       m_perf_counters->tset(l_cephfs_mirror_peer_replayer_last_synced_end, t);
