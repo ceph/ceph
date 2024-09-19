@@ -515,8 +515,6 @@ class HostUi(BaseController):
 
     @Endpoint('GET')
     @ReadPermission
-    @raise_if_no_orchestrator([OrchFeature.HOST_LIST])
-    @handle_orchestrator_error('host')
     def list(self):
         """
         Get all hosts.
