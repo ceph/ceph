@@ -250,6 +250,41 @@ void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
     if (header.compat_version == 0)
       header.compat_version = header.version;
   }
+  if (true && (features & CEPH_FEATURE_DEZEROIZE_BL) != 0) {
+    auto [new_payload, payload_layout] =
+      bufferlist_layout_t::dezeroize(get_payload());
+    auto [new_middle, middle_layout] =
+      bufferlist_layout_t::dezeroize(get_middle());
+    auto [new_data, data_layout] =
+      bufferlist_layout_t::dezeroize(get_data());
+
+    size_t zerometa_len_bound = sizeof(unsigned);
+    {
+      payload_layout.bound_encode(zerometa_len_bound, features);
+      middle_layout.bound_encode(zerometa_len_bound, features);
+      data_layout.bound_encode(zerometa_len_bound, features);
+    }
+
+    // dtor flushes the appender
+    {
+      auto new_payload_p =
+        new_payload.get_contiguous_appender(zerometa_len_bound);
+      payload_layout.encode(new_payload_p, features);
+      middle_layout.encode(new_payload_p, features);
+      data_layout.encode(new_payload_p, features);
+      // this must the very last thing in the payload. another assumption
+      // is its size must be known.
+      unsigned layout_len = new_payload_p.get_logical_offset();
+      denc(layout_len, new_payload_p);
+      if (g_ceph_context) {
+        ldout(g_ceph_context, 5) << "layout_len at encode " << layout_len << dendl;
+      }
+    }
+
+    set_payload(std::move(new_payload));
+    set_middle(std::move(new_middle));
+    set_data(std::move(new_data));
+  }
   if (crcflags & MSG_CRC_HEADER)
     calc_front_crc();
 
@@ -998,9 +1033,35 @@ Message *decode_message(CephContext *cct,
   m->set_connection(std::move(conn));
   m->set_header(header);
   m->set_footer(footer);
-  m->set_payload(std::move(front));
-  m->set_middle(std::move(middle));
-  m->set_data(data);
+  if (true && (features & CEPH_FEATURE_DEZEROIZE_BL) != 0) {
+    bufferlist layout_meta;
+    bufferlist_layout_t payload_layout, middle_layout, data_layout;
+    unsigned layout_len = 0;
+    {
+      bufferlist layout_len_bl;
+      front.splice(front.length() - sizeof(layout_len), sizeof(layout_len), &layout_len_bl);
+      auto len_p = layout_len_bl.cbegin();
+      ceph::decode(layout_len, len_p);
+      if (cct) {
+        ldout(cct, 5) << "layout_len at decode " << layout_len << dendl;
+      }
+    }
+    front.splice(front.length() - layout_len, layout_len, &layout_meta);
+    ceph_assert(layout_meta.length() == layout_len);
+
+    auto p = layout_meta.cbegin();
+    payload_layout.decode(p, features);
+    middle_layout.decode(p, features);
+    data_layout.decode(p, features);
+
+    m->set_payload(payload_layout.rezeroize(front));
+    m->set_middle(middle_layout.rezeroize(middle));
+    m->set_data(data_layout.rezeroize(data));
+  } else {
+    m->set_payload(std::move(front));
+    m->set_middle(std::move(middle));
+    m->set_data(data);
+  }
 
   try {
     m->decode_payload(features);
