@@ -1122,7 +1122,11 @@ PG::do_osd_ops_execute(
     if constexpr (!std::is_same_v<Ret, void>) {
       if(op_info.may_write()) {
         maybe_submit_error_log =
-          submit_error_log(m, op_info, obc, e, rep_tid);
+          submit_error_log(
+	    m, op_info, obc, e, rep_tid
+	  ).then_interruptible([](auto &&e) {
+	    return std::make_optional<eversion_t>(std::move(e));
+	  });
       }
     }
     return maybe_submit_error_log.then_interruptible(
@@ -1175,7 +1179,7 @@ PG::interruptible_future<> PG::complete_error_log(const ceph_tid_t& rep_tid,
   return result;
 }
 
-PG::interruptible_future<std::optional<eversion_t>> PG::submit_error_log(
+PG::interruptible_future<eversion_t> PG::submit_error_log(
   Ref<MOSDOp> m,
   const OpInfo &op_info,
   ObjectContextRef obc,
@@ -1241,7 +1245,7 @@ PG::interruptible_future<std::optional<eversion_t>> PG::submit_error_log(
         get_collection_ref(), std::move(t)
       ).then([this] {
         peering_state.update_trim_to();
-        return seastar::make_ready_future<std::optional<eversion_t>>(projected_last_update);
+        return seastar::make_ready_future<eversion_t>(projected_last_update);
       });
     });
   });
