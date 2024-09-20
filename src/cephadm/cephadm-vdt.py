@@ -5788,18 +5788,19 @@ def get_fsid_from_conf(conf_file='/etc/ceph/ceph.conf'):
 def translate_yaml_to_json(yaml_file):
     with open(yaml_file, 'r') as f:
         yaml_data = yaml.safe_load(f)
-
+    logger.info('Translating yaml to bash file.......')
     hosts = yaml_data['hosts']
     services = yaml_data.get('services', {})
     fsid = get_fsid_from_conf()
     commands = generate_ceph_commands(hosts, services)
+    logger.info('Adding executing commands to the execute.sh.......')
     if (os.path.exists('execute.sh')):
         os.remove('execute.sh')
     with open('execute.sh', 'w') as output_file:
         output_file.write("#!/bin/bash\n\n")
         for command in commands:
             output_file.write(f"{command}\n")
-
+    logger.info('Translating yaml to json context file.......')
     return {
         "_args": {
             key: yaml_data.get(key, default)
@@ -5878,7 +5879,7 @@ def translate_yaml_to_json(yaml_file):
                 ],
                 "hosts": None,
                 "no_hosts": False,
-                "dry_run": True,
+                "dry_run": False,
                 "funcs": [
                     "command_shell"
                 ]
@@ -5982,8 +5983,14 @@ def generate_ceph_commands(hosts, services):
         ip = host['ipaddresses']
         labels = host['label']
         commands.append(f"ceph orch host add {name} {ip} --labels={labels}")
-
+        
+    def get_services():
+        result = subprocess.run("python3 -m cephadm shell -- ceph orch ps --format json-pretty", shell=True, capture_output=True, text=True)
+        services_list = json.loads(result.stdout)
+        return services_list
+    current_services = get_services()
     if 'add-monitor' in services:
+        logger.info("Adding monitors.......")
         monitor = services['add-monitor']
         count_per_host = monitor.get('count-per-host', 1)
         commands.append(f'ceph orch apply mon --placement="label:mon count-per-host:{count_per_host}"')
@@ -5991,24 +5998,23 @@ def generate_ceph_commands(hosts, services):
         commands.append(f'ceph orch apply mon --placement="label:mon count-per-host:1"')
 
     if 'add-manager' in services:
+        logger.info("Adding managers.......")
         manager = services['add-manager']
         count_per_host = manager.get('count-per-host', 1)
         commands.append(f'ceph orch apply mgr --placement="label:mgr count-per-host:{count_per_host}"')
 
     if 'add-radosgw' in services:
+        logger.info("Adding radosgws.......")
         radosgw_list = services['add-radosgw']
         for rgw_service in radosgw_list:
             service_name = rgw_service.get('name', 'default')
             port = rgw_service.get('port', 8080)  # Default port if none is provided
             count_per_host = rgw_service.get('count-per-host', 1)
             commands.append(f"ceph orch apply rgw {service_name} '--placement=label:rgw count-per-host:{count_per_host}' --port={port}")
-    def get_services():
-        result = subprocess.run("python3 -m cephadm shell -- ceph orch ps --format json-pretty", shell=True, capture_output=True, text=True)
-        services_list = json.loads(result.stdout)
-        return services_list
-    
-    current_services = get_services()
 
+    # with open('test.json', 'r') as file:
+    #     current_services = json.load(file)
+    
     def find_service_name(service_type, hostname):
         for service in current_services:
             if service['daemon_type'] == service_type and service['hostname'] == hostname:
@@ -6017,18 +6023,23 @@ def generate_ceph_commands(hosts, services):
 
     if 'rm-monitor' in services:
         for hostname in services['rm-monitor']['hostnames']:
+            logger.info(f'- {hostname}')
             service_name = find_service_name('mon', hostname)
             if service_name:
                 commands.append(f"cephadm shell -- ceph orch daemon rm {service_name}")
         
     if 'rm-manager' in services:
+        logger.info("Removing managers from:.......")
         for hostname in services['rm-manager']['hostnames']:
+            logger.info(f'- {hostname}')
             service_name = find_service_name('mgr', hostname)
             if service_name:
                 commands.append(f"cephadm shell -- ceph orch daemon rm {service_name}")
 
     if 'rm-radosgw' in services:
+        logger.info("Removing rgws from:.......")
         for hostname in services['rm-radosgw']['hostnames']:
+            logger.info(f'- {hostname}')
             service_name = find_service_name('rgw', hostname)
             if service_name:
                 commands.append(f"cephadm shell -- ceph orch daemon rm {service_name}")
@@ -6092,7 +6103,6 @@ def main() -> None:
 
     # ctx = load_context_from_file('context/context-bootstrap.json')
 
-    fsid = get_fsid_from_conf()
     json_data = translate_yaml_to_json(av[0])
     with tempfile.NamedTemporaryFile('w', delete=False, suffix='.json') as temp_file:
         json.dump(json_data, temp_file, indent=4)

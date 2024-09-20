@@ -1,0 +1,24 @@
+hosts:
+- name: ceph-node-1
+  ipaddresses: 171.254.95.193
+  label: osd
+  ssh-user: root
+
+- name: ceph-node-2
+  ipaddresses: 171.254.95.156
+  label: _admin,mgr,mon,osd
+  ssh-user: root
+
+- name: ceph-node-3
+  ipaddresses: 171.254.93.217
+  label: osd
+  ssh-user: root
+dry_run: False
+services:
+  rm-monitor:
+    hostnames:
+      - ceph-rook-1
+      - ceph-rook-3
+  rm-manager:
+    hostnames:
+      - ceph-rook-1
