@@ -329,6 +329,10 @@ public:
                              RGWSI_SyncModules *sync_modules_svc,
 			     RGWSI_Bucket_Sync *bucket_sync_svc,
                              std::optional<rgw_zone_id> effective_zone = std::nullopt);
+  RGWBucketSyncPolicyHandler(CephContext *_cct,
+                             const rgw_zone_id& effective_zone,
+                             RGWSI_Bucket_Sync *_bucket_sync_svc,
+                             const rgw_sync_policy_info& _sync_policy);
 
   RGWBucketSyncPolicyHandler *alloc_child(const RGWBucketInfo& bucket_info,
                                           std::map<std::string, bufferlist>&& bucket_attrs) const;
