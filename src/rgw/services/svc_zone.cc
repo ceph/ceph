@@ -302,8 +302,25 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR: could not initialize zone policy handler for zone=" << ziter.second.name << dendl;
       return ret;
-      }
+    }
     sync_policy_handlers[ziter.second.id] = zone_handler;
+  }
+  for (auto zgiter : current_period->get_map().zonegroups) {
+    if (zgiter.first == zonegroup->get_id()) {
+      // skip our zonegroup as we already initialized it with a different constructor
+      continue;
+    }
+
+    const RGWZoneGroup& zg = zgiter.second;
+    for (auto ziter : zg.zones) {
+      auto zone_handler = std::make_shared<RGWBucketSyncPolicyHandler>(cct, ziter.second.id, bucket_sync_svc, zg.sync_policy);
+      ret = zone_handler->init(dpp, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, -1) << "ERROR: could not initialize zone policy handler for zone=" << ziter.second.name << dendl;
+        return ret;
+      }
+      sync_policy_handlers[ziter.second.id] = zone_handler;
+    }
   }
 
   sync_policy_handler = sync_policy_handlers[zone_id()]; /* we made sure earlier that zonegroup->zones has our zone */
@@ -333,43 +350,50 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   exports_data = sm->supports_data_export();
 
   /* first build all zones index */
-  for (auto ziter : zonegroup->zones) {
-    const rgw_zone_id& id = ziter.first;
-    RGWZone& z = ziter.second;
-    zone_id_by_name[z.name] = id;
-    zone_by_id[id] = z;
+  for (auto zgiter : current_period->get_map().zonegroups) {
+    const RGWZoneGroup& zg = zgiter.second;
+    for (auto ziter : zg.zones) {
+      const rgw_zone_id& id = ziter.first;
+      RGWZone& z = ziter.second;
+      zone_id_by_name[z.name] = id;
+      zone_by_id[id] = z;
+    }
   }
 
   if (zone_by_id.find(zone_id()) == zone_by_id.end()) {
     ldpp_dout(dpp, 0) << "WARNING: could not find zone config in zonegroup for local zone (" << zone_id() << "), will use defaults" << dendl;
   }
 
-  for (const auto& ziter : zonegroup->zones) {
-    const rgw_zone_id& id = ziter.first;
-    const RGWZone& z = ziter.second;
-    if (id == zone_id()) {
-      continue;
-    }
-    if (z.endpoints.empty()) {
-      ldpp_dout(dpp, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
-      continue;
-    }
-    ldpp_dout(dpp, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-    RGWRESTConn *conn = new RGWRESTConn(cct, z.id, z.endpoints, zone_params->system_key, zonegroup->get_id(), zonegroup->api_name);
-    zone_conn_map[id] = conn;
+  for (const auto& zgiter : current_period->get_map().zonegroups) {
+    const auto& zg = zgiter.second;
 
-    bool zone_is_source = source_zones.find(z.id) != source_zones.end();
-    bool zone_is_target = target_zones.find(z.id) != target_zones.end();
+    for (const auto& ziter : zg.zones) {
+      const rgw_zone_id& id = ziter.first;
+      const RGWZone& z = ziter.second;
+      if (id == zone_id()) {
+        continue;
+      }
+      if (z.endpoints.empty()) {
+        ldpp_dout(dpp, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
+        continue;
+      }
+      ldpp_dout(dpp, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
+      RGWRESTConn *conn = new RGWRESTConn(cct, z.id, z.endpoints, zone_params->system_key, zonegroup->get_id(), zonegroup->api_name);
+      zone_conn_map[id] = conn;
 
-    if (zone_is_source || zone_is_target) {
-      if (zone_is_source && sync_modules->supports_data_export(z.tier_type)) {
-        data_sync_source_zones.push_back(&z);
+      bool zone_is_source = source_zones.find(z.id) != source_zones.end();
+      bool zone_is_target = target_zones.find(z.id) != target_zones.end();
+
+      if (zone_is_source || zone_is_target) {
+        if (zone_is_source && sync_modules->supports_data_export(z.tier_type)) {
+          data_sync_source_zones.push_back(&z);
+        }
+        if (zone_is_target) {
+          zone_data_notify_to_map[id] = conn;
+        }
+      } else {
+        ldpp_dout(dpp, 20) << "NOTICE: not syncing to/from zone " << z.name << " id " << z.id << dendl;
       }
-      if (zone_is_target) {
-        zone_data_notify_to_map[id] = conn;
-      }
-    } else {
-      ldpp_dout(dpp, 20) << "NOTICE: not syncing to/from zone " << z.name << " id " << z.id << dendl;
     }
   }
 

@@ -712,5 +712,29 @@ User mode makes sure that the user has permissions to both read the objects, and
                                 --group-id=buck11-default --pipe-id=pipe-dest-owner \
                                 --mode=user --uid=jenny
 
+Example 11: Replication between zonegroups
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+Replication between zonegroups is also supported. To enable this, a base ``allowed`` synchronization policy must be configured at the zonegroup level for all participating zonegroups. In addition, a bucket-level policy is required to activate specific synchronizations. The bucket-level policy can further restrict data movement to designated zones.
 
+::
+
+      [us-east-1] $ radosgw-admin sync group create --group-id=group1 --status=allowed
+      [us-east-1] $ radosgw-admin sync group flow create --group-id=group1 \
+                                --flow-id=flow-mirror --flow-type=symmetrical \
+                                --zones=us-east-1,us-west-1
+      [us-east-1] $ radosgw-admin sync group pipe create --group-id=group1 \
+                                --pipe-id=pipe1 --source-zones='*' \
+                                --source-bucket='*' --dest-zones='*' \
+                                --dest-bucket='*'
+      [us-east-1] $ radosgw-admin period update --commit
+
+      [us-west-1] $ radosgw-admin sync group create --group-id=group1 --status=allowed
+      [us-west-1] $ radosgw-admin sync group flow create --group-id=group1 \
+                                --flow-id=flow-mirror --flow-type=symmetrical \
+                                --zones=us-east-1,us-west-1
+      [us-west-1] $ radosgw-admin sync group pipe create --group-id=group1 \
+                                --pipe-id=pipe1 --source-zones='*' \
+                                --source-bucket='*' --dest-zones='*' \
+                                --dest-bucket='*'
+      [us-west-1] $ radosgw-admin period update --commit
