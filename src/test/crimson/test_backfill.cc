@@ -270,6 +270,9 @@ BackfillFixture::BackfillFixture(
                                                    this->backfill_targets),
                    std::make_unique<PGFacade>(this->backfill_source))
 {
+  seastar::global_logger_registry().set_all_loggers_level(
+    seastar::log_level::debug
+  );
   backfill_state.process_event(crimson::osd::BackfillState::Triggered{}.intrusive_from_this());
 }
 
