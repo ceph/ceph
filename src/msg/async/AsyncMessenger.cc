@@ -277,6 +277,37 @@ class C_handle_reap : public EventCallback {
 };
 
 /*******************
+ * Admin Socket Hook
+ */
+
+AsyncMessengerSocketHook::AsyncMessengerSocketHook(
+    AdminSocket& asok, AsyncMessenger& m, const std::string& name)
+    : m_asok(asok),
+      m_msgr(m),
+      m_name(name),
+      m_command(fmt::format("messenger dump {}", name)) {}
+
+AsyncMessengerSocketHook::~AsyncMessengerSocketHook() {
+  m_asok.unregister_commands(this);
+}
+
+int AsyncMessengerSocketHook::call(
+    std::string_view command, const cmdmap_t& cmdmap, const bufferlist&,
+    Formatter* f, std::ostream& errss, ceph::buffer::list& out) {
+  if (command == m_command) {
+    f->open_object_section("status");
+    f->open_object_section("messenger");
+    f->open_object_section(m_name);
+    m_msgr.dump(f);
+    f->close_section();
+    f->close_section();
+    f->close_section();
+    return 0;
+  }
+  return -CEPHFS_ENOSYS;
+}
+
+/*******************
  * AsyncMessenger
  */
 
@@ -284,6 +315,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
                                const std::string &type, std::string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name),
     dispatch_queue(cct, this, mname),
+    asok_hook(new AsyncMessengerSocketHook(*cct->get_admin_socket(), *this, mname)),
     nonce(_nonce)
 {
   std::string transport_type = "posix";
@@ -307,6 +339,14 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     processor_num = stack->get_num_worker();
   for (unsigned i = 0; i < processor_num; ++i)
     processors.push_back(new Processor(this, stack->get_worker(i), cct));
+
+  const int asok_ret = cct->get_admin_socket()->register_command(
+      asok_hook->command(), asok_hook.get(), "dump messenger status");
+  if (asok_ret != 0) {
+    ldout(cct, 0) << __func__ << " messenger asok command \""
+                  << asok_hook->command() << "\" failed with" << asok_ret
+                  << dendl;
+  }
 }
 
 /**
