@@ -156,8 +156,6 @@ void rgw_sync_group_pipe_map::init(const DoutPrefixProvider *dpp,
   default_flow = _default_flow;
   pall_zones = _pall_zones;
 
-  rgw_sync_bucket_entity zb(zone, bucket);
-
   status = group.status;
 
   std::vector<rgw_sync_bucket_pipes> zone_pipes;
@@ -743,6 +741,18 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
   *ppolicy = std::move(policy);
 }
 
+RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(CephContext *_cct,
+                                                       const rgw_zone_id& effective_zone,
+                                                       RGWSI_Bucket_Sync *_bucket_sync_svc,
+                                                       const rgw_sync_policy_info& _sync_policy) : bucket_sync_svc(_bucket_sync_svc),
+                                                                                                   zone_id(effective_zone),
+                                                                                                   sync_policy(_sync_policy) {
+  // This constructor is called only for remote zonegroups that read objects.
+  // Therefore, zone_svc is used solely for obtaining the context, and other properties are disregarded.
+  zone_svc = new RGWSI_Zone(_cct);
+  flow_mgr.reset(new RGWBucketSyncFlowManager(_cct, zone_id, nullopt, nullptr));
+}
+
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
                                                        RGWSI_SyncModules *sync_modules_svc,
 						       RGWSI_Bucket_Sync *_bucket_sync_svc,
@@ -1019,4 +1029,3 @@ bool RGWBucketSyncPolicyHandler::bucket_imports_data() const
 {
   return bucket_is_sync_target();
 }
-
