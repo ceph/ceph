@@ -94,7 +94,7 @@
         <div class="vstack gap-3 p-3"
              (click)="$event.stopPropagation()"
              [cdsTheme]="theme">
-          <ng-container *ngFor="let column of columns">
+          <ng-container *ngFor="let column of localColumns">
             <cds-checkbox *ngIf="!column?.isInvisible"
                           id="{{ column.prop }}{{ tableName }}"
                           name="{{ column.prop }}{{ tableName }}"
@@ -145,6 +145,8 @@
            (selectAll)="onSelectAll()"
            (sort)="changeSorting($event)"
            [model]="model"
+           [selectAllCheckbox]="selectAllCheckbox"
+           [selectAllCheckboxSomeSelected]="selectAllCheckboxSomeSelected"
            [showSelectionColumn]="showSelectionColumn"
            [enableSingleSelect]="enableSingleSelect"
            [skeleton]="loadingIndicator"
@@ -152,6 +154,7 @@
     </thead>
     <tbody cdsTableBody
            *ngIf="!noData; else noDataTemplate"
+           [enableSingleSelect]="enableSingleSelect"
            [skeleton]="loadingIndicator">
       <ng-container *ngFor="let row of model.data; let i = index; trackBy: trackByFn.bind(this, identifier)">
         <tr	cdsTableRow
@@ -162,7 +165,6 @@
             [expandable]="model.isRowExpandable(i)"
             [expanded]="model.isRowExpanded(i)"
             [showSelectionColumn]="showSelectionColumn"
-            [enableSingleSelect]="enableSingleSelect"
             [skeleton]="loadingIndicator"
             (selectRow)="onSelect(i)"
             (deselectRow)="onDeselect(i)"
@@ -196,8 +198,7 @@
                   (selectPage)="onPageChange($event)"
                   [disabled]="limit === 0"
                   [skeleton]="loadingIndicator"
-                  [pageInputDisabled]="limit === 0"
-                  *ngIf="footer">
+                  [pageInputDisabled]="limit === 0">
   </cds-pagination>
 </cds-table-container>
 
@@ -380,7 +381,7 @@
 </ng-template>
 
 <ng-template #copyTpl
-             let-value="value">
+             let-value="data.value">
   <span class="font-monospace">{{value}}</span>
   <cd-copy-2-clipboard-button *ngIf="value"
                               [source]="value"
