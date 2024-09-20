@@ -19,7 +19,7 @@
   </div>
 </cd-table>
 <ng-template #hostTpl
-             let-value="value">
+             let-value="data.value">
   <span *ngIf="value === '*'"
         i18n
         class="font-monospace">Any host allowed (*)</span>

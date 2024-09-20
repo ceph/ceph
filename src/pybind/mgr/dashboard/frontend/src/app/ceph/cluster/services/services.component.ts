@@ -232,13 +232,13 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     pagination_obs.observable.subscribe(
       (services: CephServiceSpec[]) => {
         this.services = services;
+        this.count = pagination_obs.count;
         this.services = this.services.filter((col: any) => {
           if (col.service_type === 'mgmt-gateway' && col.status.running) {
             this.isMgmtGateway = true;
           }
           return !this.hiddenServices.includes(col.service_name);
         });
-        this.count = this.services.length;
         this.isLoadingServices = false;
       },
       () => {

@@ -449,7 +449,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   editAction() {
     const selectedOsd = _.filter(this.osds, ['id', this.selection.first().id]).pop();
 
-    this.modalService.show(FormModalComponent, {
+    this.cdsModalService.show(FormModalComponent, {
       titleText: $localize`Edit OSD: ${selectedOsd.id}`,
       fields: [
         {
