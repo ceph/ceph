@@ -3246,6 +3246,13 @@ TEST(LibCephFS, Chownat) {
   // change ownership to nobody -- we assume nobody exists and id is always 65534
   ASSERT_EQ(ceph_conf_set(cmount, "client_permissions", "0"), 0);
   ASSERT_EQ(ceph_chownat(cmount, fd, rel_file_path, 65534, 65534, 0), 0);
+  // change relative fd ownership with AT_EMPTY_PATH
+#if defined(__linux__) && defined(AT_EMPTY_PATH)
+  int file_fd = ceph_openat(cmount, fd, rel_file_path, O_RDONLY, 0);
+  ASSERT_LE(0, file_fd);
+  ASSERT_EQ(ceph_chownat(cmount, file_fd, "", 65534, 65534, AT_EMPTY_PATH), 0);
+  ceph_close(cmount, file_fd);
+#endif
   ASSERT_EQ(ceph_conf_set(cmount, "client_permissions", "1"), 0);
   ceph_close(cmount, fd);
 
