@@ -1091,7 +1091,7 @@ int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int g
  * @param relpath the relpath of the file/directory to change the ownership of.
  * @param uid the user id to set on the file/directory.
  * @param gid the group id to set on the file/directory.
- * @param flags bitfield that can be used to set AT_* modifier flags (AT_SYMLINK_NOFOLLOW)
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_SYMLINK_NOFOLLOW and AT_EMPTY_PATH)
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_chownat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,

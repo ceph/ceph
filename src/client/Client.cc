@@ -8834,7 +8834,6 @@ int Client::chownat(int dirfd, const char *relpath, uid_t new_uid, gid_t new_gid
   tout(cct) << new_gid << std::endl;
   tout(cct) << flags << std::endl;
 
-  filepath path(relpath);
   InodeRef in;
   InodeRef dirinode;
 
@@ -8844,10 +8843,24 @@ int Client::chownat(int dirfd, const char *relpath, uid_t new_uid, gid_t new_gid
     return r;
   }
 
-  r = path_walk(path, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), 0, dirinode);
-  if (r < 0) {
-    return r;
+  if (!strcmp(relpath, "")) {
+#if defined(__linux__) && defined(AT_EMPTY_PATH)
+    if (flags & AT_EMPTY_PATH) {
+      in = dirinode;
+      goto out;
+    }
+#endif
+    return -CEPHFS_ENOENT;
+  } else {
+    filepath path(relpath);
+    r = path_walk(path, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), 0, dirinode);
+    if (r < 0) {
+      return r;
+    }
   }
+
+out:
+
   struct stat attr;
   attr.st_uid = new_uid;
   attr.st_gid = new_gid;
