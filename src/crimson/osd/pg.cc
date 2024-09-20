@@ -999,6 +999,28 @@ PG::do_osd_ops_execute(
       ceph_osd_op_name(osd_op.op.op));
     return ox->execute_op(osd_op);
   }).safe_then_interruptible([this, ox, &ops] {
+    /* flush_changes_n_do_ops_effects now returns
+     *
+     * interruptible_future<
+     *    tuple<interruptible_future<>, interruptible_future<>>>
+     *
+     * Previously, this lambda relied on the second element of that tuple to
+     * include OpsExecutor::osd_op_errorator in order to propogate the
+     * following three errors to the next callback.  This is actually quite
+     * awkward as the second future is the completion future, which really
+     * cannot fail (for it to do so would require an interval change to
+     * correct).
+     *
+     * Rather than reworking this now, I'll leave it as is and refactor it
+     * later.
+     */
+    using complete_iertr = crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      OpsExecuter::osd_op_errorator>;
+    using ret_t = std::tuple<
+      interruptible_future<>,
+      complete_iertr::future<>>;
+
     logger().debug(
       "do_osd_ops_execute: object {} all operations successful",
       ox->get_target());
@@ -1014,22 +1036,22 @@ PG::do_osd_ops_execute(
         // they tried, they failed.
         logger().info(" full, replying to FULL_TRY op");
         if (get_pgpool().info.has_flag(pg_pool_t::FLAG_FULL_QUOTA))
-          return interruptor::make_ready_future<OpsExecuter::rep_op_fut_tuple>(
-            seastar::now(),
-            OpsExecuter::osd_op_ierrorator::future<>(
-              crimson::ct_error::edquot::make()));
+	  return interruptor::make_ready_future<ret_t>(
+            interruptor::now(),
+	    complete_iertr::future<>(
+	      crimson::ct_error::edquot::make()));
         else
-          return interruptor::make_ready_future<OpsExecuter::rep_op_fut_tuple>(
-            seastar::now(),
-            OpsExecuter::osd_op_ierrorator::future<>(
-              crimson::ct_error::enospc::make()));
+	  return interruptor::make_ready_future<ret_t>(
+            interruptor::now(),
+	    complete_iertr::future<>(
+	      crimson::ct_error::enospc::make()));
       } else {
         // drop request
         logger().info(" full, dropping request (bad client)");
-        return interruptor::make_ready_future<OpsExecuter::rep_op_fut_tuple>(
-          seastar::now(),
-          OpsExecuter::osd_op_ierrorator::future<>(
-            crimson::ct_error::eagain::make()));
+	return interruptor::make_ready_future<ret_t>(
+	  interruptor::now(),
+	  complete_iertr::future<>(
+	    crimson::ct_error::eagain::make()));
       }
     }
     return std::move(*ox).flush_changes_n_do_ops_effects(
@@ -1049,7 +1071,12 @@ PG::do_osd_ops_execute(
           std::move(txn),
           std::move(osd_op_p),
           std::move(log_entries));
-    });
+      }).then_interruptible([](auto &&futs) {
+	auto &&[submitted, completed] = std::move(futs);
+	return interruptor::make_ready_future<ret_t>(
+	  std::move(submitted),
+	  std::move(completed));
+      });
   }).safe_then_unpack_interruptible(
     [success_func=std::move(success_func), rollbacker, this, failure_func_ptr, obc]
     (auto submitted_fut, auto _all_completed_fut) mutable {
