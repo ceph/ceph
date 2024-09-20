@@ -36,6 +36,7 @@
 #include "Event.h"
 
 #include "include/ceph_assert.h"
+#include "common/admin_socket.h"
 
 class AsyncMessenger;
 
@@ -63,6 +64,26 @@ class Processor {
   void start();
   void accept();
   friend class AsyncMessenger;
+};
+
+class AsyncMessengerSocketHook : public AdminSocketHook {
+  std::map<std::string, AsyncMessenger*> m_msgrs;
+
+ public:
+  static constexpr std::string_view COMMAND =
+      "messenger dump "
+      "name=msgr,type=CephString,req=false "
+      "name=dumpcontents,type=CephChoices,"
+      "strings=all|listen_sockets|connections|anon_conns|accepting_conns|deleted_conns,"
+      "n=N,req=false "
+      "name=tcp_info,type=CephBool,req=false";
+  AsyncMessengerSocketHook(AsyncMessenger& m, const std::string& name);
+  int call(
+      std::string_view command, const cmdmap_t& cmdmap, const bufferlist&,
+      Formatter* f, std::ostream& errss, ceph::buffer::list& out) override;
+  void add_messenger(const std::string& name, AsyncMessenger& msgr);
+  void remove_messenger(AsyncMessenger& msgr);
+  std::list<std::string> messengers() const;
 };
 
 /*
