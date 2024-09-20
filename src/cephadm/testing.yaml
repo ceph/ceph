@@ -51,9 +51,9 @@ keyring:
 mount: 
 funcs: 
   - "command_rm_cluster"
-  # - "command_prepare_host"
-  # - "command_bootstrap"
-  # - "command_shell"
+  - "command_prepare_host"
+  - "command_bootstrap"
+  - "command_shell"
 
 #Setting up cluster
 setup: true
@@ -69,18 +69,36 @@ hosts:
   label: _admin,mgr,mon,osd 
   ssh-user: root 
 
+- name: ceph-node-3
+  ipaddresses: 171.254.93.217
+  label: _admin,mgr,mon,osd
+  ssh-user: root 
+
+
 services:
-  monitor:
+  add-monitor:
     count-per-host: 1
-  manager:
+  add-manager:
     count-per-host: 1
-  radosgw:
+  add-radosgw:
     - name: public
       port: 8888
       count-per-host: 1
     - name: private
       port: 8889
       count-per-host: 1
+  rm-monitor:
+    host: 
+      - 192.168.1.1
+      - 192.168.1.2
+  rm-manager:
+    host:
+      - 192.168.1.1
+      - 192.168.1.2
+  rm-radosgw:
+    host:
+      - 192.168.1.1
+      - 192.168.1.2
 volume: []
 no_hosts: false
 dry_run: false

@@ -5879,9 +5879,6 @@ def translate_yaml_to_json(yaml_file):
                 "no_hosts": False,
                 "dry_run": True,
                 "funcs": [
-                    #"command_prepare_host",
-                    #"command_rm_cluster",
-                    #"command_bootstrap",
                     "command_shell"
                 ]
             }.items()
@@ -5912,7 +5909,6 @@ def preparing_remote_host(host):
     name = host['name']
     ip = host['ipaddresses']
     ssh_user = host.get('ssh-user', 'root')
-    ssh_pass = host.get('ssh-pass', None)
 
     distribute_ssh_key(ssh_user, ip)
     logger.info(f"Preparing host {name} at {ip}...")
@@ -5921,7 +5917,7 @@ def preparing_remote_host(host):
     check_container_engine_cmd = f"{ssh_command} 'if ! command -v podman && ! command -v docker; then apt-get update && apt-get install -y podman; fi'"
     subprocess.run(check_container_engine_cmd, shell=True)
 
-    check_container_init_cmd = f"{ssh_command} 'if ! command -v podman && ! command -v docker; then apt-get update && apt-get install -y catatonit; fi'"
+    check_container_init_cmd = f"{ssh_command} 'if ! command -v catatonit; then apt-get update && apt-get install -y catatonit; fi'"
     subprocess.run(check_container_init_cmd, shell=True)
 
     check_lvm2_cmd = f"{ssh_command} 'if ! command -v lvcreate; then apt-get update && apt-get install -y lvm2; fi'"
@@ -5986,25 +5982,56 @@ def generate_ceph_commands(hosts, services):
         labels = host['label']
         commands.append(f"ceph orch host add {name} {ip} --labels={labels}")
 
-    if 'monitor' in services:
-        monitor = services['monitor']
+    if 'add-monitor' in services:
+        monitor = services['add-monitor']
         count_per_host = monitor.get('count-per-host', 1)
         commands.append(f'ceph orch apply mon --placement="label:mon count-per-host:{count_per_host}"')
     else:
         commands.append(f'ceph orch apply mon --placement="label:mon count-per-host:1"')
 
-    if 'manager' in services:
-        manager = services['manager']
+    if 'add-manager' in services:
+        manager = services['add-manager']
         count_per_host = manager.get('count-per-host', 1)
         commands.append(f'ceph orch apply mgr --placement="label:mgr count-per-host:{count_per_host}"')
 
-    if 'radosgw' in services:
-        radosgw_list = services['radosgw']
+    if 'add-radosgw' in services:
+        radosgw_list = services['add-radosgw']
         for rgw_service in radosgw_list:
             service_name = rgw_service.get('name', 'default')
             port = rgw_service.get('port', 8080)  # Default port if none is provided
             count_per_host = rgw_service.get('count-per-host', 1)
             commands.append(f"ceph orch apply rgw {service_name} '--placement=label:rgw count-per-host:{count_per_host}' --port={port}")
+    def get_services():
+        result = subprocess.run("cephadm shell -- ceph orch ps --format json-pretty", shell=True, capture_output=True, text=True)
+        services_list = json.loads(result.stdout)
+        return services_list
+    
+    current_services = get_services()
+
+    def find_service_name(service_type, hostname):
+        for service in current_services:
+            if service['daemon_type'] == service_type and service['hostname'] == hostname:
+                return service['daemon_name']
+        return None
+
+    if 'rm-monitor' in services:
+        for hostname in services['rm-monitor']['hostname']:
+            service_name = find_service_name('mon', hostname)
+            if service_name:
+                commands.append(f"cephadm shell -- ceph orch daemon rm {service_name}")
+        
+    if 'rm-manager' in services:
+        for hostname in services['rm-manager']['host']:
+            service_name = find_service_name('mgr', hostname)
+            if service_name:
+                commands.append(f"cephadm shell -- ceph orch daemon rm {service_name}")
+
+    if 'rm-radosgw' in services:
+        for hostname in services['rm-radosgw']['host']:
+            service_name = find_service_name('rgw', hostname)
+            if service_name:
+                commands.append(f"cephadm shell -- ceph orch daemon rm {service_name}")
+
 
     return commands
 
