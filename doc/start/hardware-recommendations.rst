@@ -23,7 +23,7 @@ CPU
 ===
 
 CephFS Metadata Servers (MDS) are CPU-intensive. They are
-are single-threaded and perform best with CPUs with a high clock rate (GHz). MDS
+ single-threaded and perform best with CPUs with a high clock rate (GHz). MDS
 servers do not need a large number of CPU cores unless they are also hosting other
 services, such as SSD OSDs for the CephFS metadata pool.
 OSD nodes need enough processing power to run the RADOS service, to calculate data
