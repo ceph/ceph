@@ -18,7 +18,7 @@ export class CdTableFetchDataContext {
   search = '';
   sort = '+name';
 
-  constructor(error: () => void) {
+  constructor(error?: () => void) {
     this.error = error;
   }
 

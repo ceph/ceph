@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { OsdService } from './osd.service';
+import { CdTableFetchDataContext } from '../models/cd-table-fetch-data-context';
 
 describe('OsdService', () => {
   let service: OsdService;
@@ -64,8 +65,9 @@ describe('OsdService', () => {
   });
 
   it('should call getList', () => {
-    service.getList().subscribe();
-    const req = httpTesting.expectOne('api/osd');
+    const context = new CdTableFetchDataContext(() => {});
+    service.getList(context.toParams()).observable.subscribe();
+    const req = httpTesting.expectOne('api/osd?offset=0&limit=10&search=&sort=%2Bname');
     expect(req.request.method).toBe('GET');
   });
 

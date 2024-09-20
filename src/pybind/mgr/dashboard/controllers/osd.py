@@ -5,12 +5,14 @@ import logging
 import time
 from typing import Any, Dict, List, Optional, Union
 
+import cherrypy
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError  # type: ignore
 from mgr_util import get_most_recent_rate
 
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
+from ..services._paginate import ListPaginator
 from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_orchestrator_error, handle_send_command_error
 from ..services.orchestrator import OrchClient, OrchFeature
@@ -121,8 +123,30 @@ def osd_task(name, metadata, wait_for=2.0):
 @APIRouter('/osd', Scope.OSD)
 @APIDoc('OSD management API', 'OSD')
 class Osd(RESTController):
-    def list(self):
-        osds = self.get_osd_map()
+    @RESTController.MethodMap(version=APIVersion(1, 1))
+    def list(self, offset: int = 0, limit: int = 10,
+             search: str = '', sort: str = ''):
+        all_osds = self.get_osd_map()
+
+        paginator = ListPaginator(int(offset), int(limit), sort, search,
+                                  input_list=all_osds.values(),
+                                  searchable_params=['id'],
+                                  sortable_params=['id'],
+                                  default_sort='+id')
+
+        cherrypy.response.headers['X-Total-Count'] = paginator.get_count()
+
+        paginated_osds_list = list(paginator.list())
+        # creating a dictionary to have faster lookups
+        paginated_osds_by_id = {osd['id']: osd for osd in paginated_osds_list}
+        try:
+            osds = {
+                key: paginated_osds_by_id[int(key)]
+                for key in all_osds.keys()
+                if int(key) in paginated_osds_by_id
+            }
+        except ValueError as e:
+            raise DashboardException(e, component='osd', http_status_code=400)
 
         # Extending by osd stats information
         for stat in mgr.get('osd_stats')['osd_stats']:
