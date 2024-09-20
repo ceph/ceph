@@ -5793,7 +5793,8 @@ def translate_yaml_to_json(yaml_file):
     services = yaml_data.get('services', {})
     fsid = get_fsid_from_conf()
     commands = generate_ceph_commands(hosts, services)
-    
+    if (os.path.exists('execute.sh')):
+        os.remove('execute.sh')
     with open('execute.sh', 'w') as output_file:
         output_file.write("#!/bin/bash\n\n")
         for command in commands:
@@ -6002,7 +6003,7 @@ def generate_ceph_commands(hosts, services):
             count_per_host = rgw_service.get('count-per-host', 1)
             commands.append(f"ceph orch apply rgw {service_name} '--placement=label:rgw count-per-host:{count_per_host}' --port={port}")
     def get_services():
-        result = subprocess.run("cephadm shell -- ceph orch ps --format json-pretty", shell=True, capture_output=True, text=True)
+        result = subprocess.run("python3 -m cephadm shell -- ceph orch ps --format json-pretty", shell=True, capture_output=True, text=True)
         services_list = json.loads(result.stdout)
         return services_list
     
@@ -6015,19 +6016,19 @@ def generate_ceph_commands(hosts, services):
         return None
 
     if 'rm-monitor' in services:
-        for hostname in services['rm-monitor']['hostname']:
+        for hostname in services['rm-monitor']['hostnames']:
             service_name = find_service_name('mon', hostname)
             if service_name:
                 commands.append(f"cephadm shell -- ceph orch daemon rm {service_name}")
         
     if 'rm-manager' in services:
-        for hostname in services['rm-manager']['host']:
+        for hostname in services['rm-manager']['hostnames']:
             service_name = find_service_name('mgr', hostname)
             if service_name:
                 commands.append(f"cephadm shell -- ceph orch daemon rm {service_name}")
 
     if 'rm-radosgw' in services:
-        for hostname in services['rm-radosgw']['host']:
+        for hostname in services['rm-radosgw']['hostnames']:
             service_name = find_service_name('rgw', hostname)
             if service_name:
                 commands.append(f"cephadm shell -- ceph orch daemon rm {service_name}")
