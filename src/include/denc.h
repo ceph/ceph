@@ -40,6 +40,7 @@
 #include <boost/container/small_vector.hpp>
 #include <boost/optional.hpp>
 
+#include "include/ceph_features.h"
 #include "include/cpp_lib_backport.h"
 #include "include/compat.h"
 #include "include/int_types.h"
@@ -820,7 +821,7 @@ struct denc_traits<ceph::buffer::ptr> {
 };
 
 
-#define CEPH_FEATURE_DEZEROIZE_BL 1
+#define CEPH_FEATURE_DEZEROIZE_BL CEPH_FEATURE_SERVER_TENTACLE
 
 class bufferlist_layout_t {
   using offset_size_t = std::pair<unsigned, unsigned>;
@@ -834,6 +835,7 @@ public:
   ceph::buffer::list rezeroize(const buffer::list& bl);
 
   static void bound_encode(unsigned num_elems, size_t& p, uint64_t f = 0);
+  void bound_encode(size_t& p, uint64_t f = 0);
   void encode(ceph::buffer::list::contiguous_appender& p, uint64_t f);
   void decode(ceph::buffer::ptr::const_iterator& p, uint64_t f=0);
   void decode(ceph::buffer::list::const_iterator& p, uint64_t f=0);
@@ -2011,6 +2013,9 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 inline void bufferlist_layout_t::bound_encode(unsigned num_elems, size_t& p, uint64_t f) {
   denc(num_elems, p);
   denc(offset_size_t{}, p);
+}
+inline void bufferlist_layout_t::bound_encode(size_t& p, uint64_t f) {
+  denc(zero_regions_in_orig_bl, p);
 }
 inline void bufferlist_layout_t::encode(ceph::buffer::list::contiguous_appender& p, uint64_t f) {
   denc(zero_regions_in_orig_bl, p);
