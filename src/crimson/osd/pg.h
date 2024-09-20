@@ -621,7 +621,7 @@ public:
   void dump_primary(Formatter*);
   interruptible_future<> complete_error_log(const ceph_tid_t& rep_tid,
                                        const eversion_t& version);
-  interruptible_future<std::optional<eversion_t>> submit_error_log(
+  interruptible_future<eversion_t> submit_error_log(
     Ref<MOSDOp> m,
     const OpInfo &op_info,
     ObjectContextRef obc,
