@@ -179,7 +179,7 @@ private:
   // should be used.
   struct effect_t {
     // an effect can affect PG, i.e. create a watch timeout
-    virtual osd_op_errorator::future<> execute(Ref<PG> pg) = 0;
+    virtual seastar::future<> execute(Ref<PG> pg) = 0;
     virtual ~effect_t() = default;
   };
 
@@ -400,7 +400,7 @@ public:
   execute_op(OSDOp& osd_op);
 
   using rep_op_fut_tuple =
-    std::tuple<interruptible_future<>, osd_op_ierrorator::future<>>;
+    std::tuple<interruptible_future<>, interruptible_future<>>;
   using rep_op_fut_t =
     interruptible_future<rep_op_fut_tuple>;
   template <typename MutFunc>
@@ -475,7 +475,7 @@ auto OpsExecuter::with_effect_on_obc(
          effect_func(std::move(effect_func)),
          obc(std::move(obc)) {
     }
-    osd_op_errorator::future<> execute(Ref<PG> pg) final {
+    seastar::future<> execute(Ref<PG> pg) final {
       return std::move(effect_func)(std::move(ctx),
                                     std::move(obc),
                                     std::move(pg));
@@ -502,8 +502,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(
   assert(obc);
 
   auto submitted = interruptor::now();
-  auto all_completed =
-    interruptor::make_interruptible(osd_op_errorator::now());
+  auto all_completed = interruptor::now();
 
   if (cloning_ctx) {
     ceph_assert(want_mutate);
@@ -536,7 +535,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(
     // need extra ref pg due to apply_stats() which can be executed after
     // informing snap mapper
     all_completed =
-      std::move(all_completed).safe_then_interruptible([this, pg=this->pg] {
+      std::move(all_completed).then_interruptible([this, pg=this->pg] {
       // let's do the cleaning of `op_effects` in destructor
       return interruptor::do_for_each(op_effects,
         [pg=std::move(pg)](auto& op_effect) {
