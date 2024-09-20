@@ -24,6 +24,7 @@
 
 #include "common/Clock.h"
 #include "common/Formatter.h"
+#include "common/cmdparse.h"
 #include "common/config.h"
 #include "common/Timer.h"
 #include "common/errno.h"
@@ -277,6 +278,69 @@ class C_handle_reap : public EventCallback {
 };
 
 /*******************
+ * Admin Socket Hook
+ */
+
+AsyncMessengerSocketHook::AsyncMessengerSocketHook(
+    AsyncMessenger& m, const std::string& name)
+    : m_msgrs{{name, m}} {}
+
+int AsyncMessengerSocketHook::call(
+    std::string_view command, const cmdmap_t& cmdmap, const bufferlist&,
+    Formatter* f, std::ostream& errss, ceph::buffer::list& out) {
+  if (command == "messenger dump") {
+    std::string name;
+    if (common::cmd_getval(cmdmap, "msgr", name)) {
+      if (m_msgrs.contains(name)) {
+        std::vector<std::string> opts;
+        const bool tcp_info =
+            common::cmd_getval_or<bool>(cmdmap, "tcp_info", false);
+        const bool has_filter =
+            common::cmd_getval(cmdmap, "dumpcontents", opts);
+        const std::set<std::string> optset(opts.begin(), opts.end());
+        const bool all = !has_filter || optset.contains("all");
+        const auto filter_fn = [&](const std::string& key) {
+          if (key == "tcp_info") {
+            return tcp_info;
+          } else if (all) {
+            return true;
+          } else {
+            return optset.contains(key);
+          }
+        };
+
+        const auto& msgr = m_msgrs.at(name);
+        f->open_object_section("status");
+        f->open_object_section("messenger");
+        f->open_object_section(name);
+        msgr.dump(f, filter_fn);
+        f->close_section();
+        f->close_section();
+        f->close_section();
+        return 0;
+      } else {
+        return -CEPHFS_ENOENT;
+      }
+    } else {
+      f->open_object_section("status");
+      f->open_array_section("messengers");
+      for (const auto& [name, _] : m_msgrs) {
+        f->dump_string("name", name);
+      }
+      f->close_section();
+      f->close_section();
+      return 0;
+    }
+  }
+  return -CEPHFS_ENOSYS;
+}
+
+void AsyncMessengerSocketHook::add_messenger(
+    const std::string& name, AsyncMessenger& msgr) {
+  m_msgrs.try_emplace(name, msgr);
+}
+
+/*******************
  * AsyncMessenger
  */
 
@@ -307,6 +371,27 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     processor_num = stack->get_num_worker();
   for (unsigned i = 0; i < processor_num; ++i)
     processors.push_back(new Processor(this, stack->get_worker(i), cct));
+
+  if (cct->_msgr_hook) {
+    if (auto hook =
+            dynamic_cast<AsyncMessengerSocketHook*>(cct->_msgr_hook.get())) {
+      hook->add_messenger(mname, *this);
+    } else {
+      ceph_abort(
+          "BUG: messenger hook obj set, but not of type "
+          "AsyncMessengerSocketHook");
+    }
+  } else {
+    cct->_msgr_hook.reset(new AsyncMessengerSocketHook(*this, mname));
+    const int asok_ret = cct->get_admin_socket()->register_command(
+        AsyncMessengerSocketHook::COMMAND, cct->_msgr_hook.get(),
+        "dump messenger status");
+    if (asok_ret != 0) {
+      ldout(cct, 0) << __func__ << " messenger asok command \""
+                    << AsyncMessengerSocketHook::COMMAND << "\" failed with"
+                    << asok_ret << dendl;
+    }
+  }
 }
 
 /**

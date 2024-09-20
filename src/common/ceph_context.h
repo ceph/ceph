@@ -47,6 +47,7 @@
 #include "crush/CrushLocation.h"
 
 class AdminSocket;
+class AdminSocketHook;
 class CryptoHandler;
 class CryptoRandom;
 class MonMap;
@@ -383,6 +384,8 @@ private:
 #endif
 public:
   TOPNSPC::crush::CrushLocation crush_location;
+  std::unique_ptr<AdminSocketHook> _msgr_hook;
+
 private:
 
   enum {
