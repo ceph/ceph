@@ -25,6 +25,7 @@ and submit patches.
 Assignment of copyright is not required to contribute code. Code is
 contributed under the terms of the applicable license.
 
+[![Open in DevZero](https://assets.devzero.io/open-in-devzero.svg)](https://www.devzero.io/dashboard/recipes/new?repo-url=https://github.com/ceph/ceph)
 
 ## Checking out the source
 
