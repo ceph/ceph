@@ -1848,7 +1848,8 @@ int KStore::omap_check_keys(
 
 ObjectMap::ObjectMapIterator KStore::get_omap_iterator(
   CollectionHandle& ch,              ///< [in] collection
-  const ghobject_t &oid  ///< [in] object
+  const ghobject_t &oid,   ///< [in] object
+  std::string start_from  ///< [in] key the iterator should point to at the beginning
   )
 {
 

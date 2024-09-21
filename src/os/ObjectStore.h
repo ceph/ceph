@@ -763,7 +763,8 @@ public:
    */
   virtual ObjectMap::ObjectMapIterator get_omap_iterator(
     CollectionHandle &c,   ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
+    const ghobject_t &oid, ///< [in] object
+    std::string start_from = std::string{}  ///< [in] key the iterator should point to at the beginning
     ) = 0;
 
   virtual int flush_journal() { return -EOPNOTSUPP; }

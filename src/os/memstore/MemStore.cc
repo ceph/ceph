@@ -629,7 +629,8 @@ public:
 
 ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(
   CollectionHandle& ch,
-  const ghobject_t& oid)
+  const ghobject_t& oid,
+  std::string start_from)
 {
   dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
   Collection *c = static_cast<Collection*>(ch.get());

@@ -384,7 +384,8 @@ public:
   using ObjectStore::get_omap_iterator;
   ObjectMap::ObjectMapIterator get_omap_iterator(
     CollectionHandle& c,              ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
+    const ghobject_t &oid,  ///< [in] object
+    std::string start_from  ///< [in] key the iterator should point to at the beginning
     ) override;
 
   void set_fsid(uuid_d u) override;

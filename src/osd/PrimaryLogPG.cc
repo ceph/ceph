@@ -7709,9 +7709,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bool truncated = false;
 	if (oi.is_omap()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    ch, ghobject_t(soid)
+	    ch, ghobject_t(soid), start_after
 	    );
 	  ceph_assert(iter);
+	  // the get_omap_iterator() seeks to lower bound
 	  iter->upper_bound(start_after);
 	  for (num = 0; iter->valid(); ++num, iter->next()) {
 	    if (num >= max_return ||
@@ -7756,7 +7757,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bufferlist bl;
 	if (oi.is_omap()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    ch, ghobject_t(soid)
+	    ch, ghobject_t(soid), start_after
 	    );
           if (!iter) {
             result = -ENOENT;

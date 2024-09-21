@@ -1744,7 +1744,7 @@ public:
 
     std::string _stringify() const;
   public:
-    OmapIteratorImpl(PerfCounters* l, CollectionRef c, OnodeRef& o, KeyValueDB::Iterator it);
+    OmapIteratorImpl(PerfCounters* l, CollectionRef c, OnodeRef& o, KeyValueDB::Iterator it, std::string start_from);
     virtual ~OmapIteratorImpl();
     int seek_to_first() override;
     int upper_bound(const std::string &after) override;
@@ -3419,7 +3419,8 @@ public:
 
   ObjectMap::ObjectMapIterator get_omap_iterator(
     CollectionHandle &c,   ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
+    const ghobject_t &oid, ///< [in] object
+    std::string start_from = std::string{}  ///< [in] key the iterator should point to at the beginning
     ) override;
 
   void set_fsid(uuid_d u) override {
