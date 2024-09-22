@@ -6,6 +6,7 @@
 #include <compare>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <vector>
 
 #include "common/ceph_atomic.h"
@@ -65,8 +66,9 @@ struct sched_conf_t {
 
   /**
    * a randomization factor aimed at preventing 'thundering herd' problems
-   * upon deep-scrubs common intervals. If polling a random number smaller
-   * than that percentage, the next shallow scrub is upgraded to deep.
+   * upon deep-scrubs common intervals. The actual deep scrub interval will
+   * be selected with a normal distribution around the configured interval,
+   * with a standard deviation of <deep_randomize_ratio> * <interval>.
    */
   double deep_randomize_ratio{0.0};
 
@@ -167,6 +169,11 @@ class ScrubJob {
   utime_t blocked_since{};
 
   CephContext* cct;
+
+  /// random generator for the randomization of the scrub times
+  /// \todo consider using one common generator in the OSD service
+  std::random_device random_dev;
+  std::mt19937 random_gen;
 
   ScrubJob(CephContext* cct, const spg_t& pg, int node_id);
 
