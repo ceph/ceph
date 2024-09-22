@@ -596,6 +596,7 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
   bool is_action = false;
   bool is_valid_action = false;
   Statement* t = p.statements.empty() ? nullptr : &(p.statements.back());
+  ceph_assert(t || w->id == TokenID::Version || w->id == TokenID::Id);
 
   // Top level!
   if (w->id == TokenID::Version) {
