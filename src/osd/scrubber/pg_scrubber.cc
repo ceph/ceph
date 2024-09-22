@@ -1671,15 +1671,7 @@ void PgScrubber::set_op_parameters(ScrubPGPreconds pg_cond)
     m_flags.deep_scrub_on_error = false;
   }
 
-  if (ScrubJob::has_high_queue_priority(m_active_target->urgency())) {
-    // specific high priority scrubs - high queue priority
-    /// \todo consider - do we really want high queue priority for any scrub?
-    m_flags.priority = get_pg_cct()->_conf->osd_requested_scrub_priority;
-  } else {
-    // regular, low-priority scrubs - low queue priority - unless blocking
-    // client I/O
-    m_flags.priority = m_pg->get_scrub_priority();
-  }
+  m_flags.priority = m_pg->get_scrub_priority();
 
   // The publishing here is required for tests synchronization.
   // The PG state flags were modified.
