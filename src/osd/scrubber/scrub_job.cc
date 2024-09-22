@@ -66,6 +66,7 @@ ScrubJob::ScrubJob(CephContext* cct, const spg_t& pg, int node_id)
     , shallow_target{pg, scrub_level_t::shallow}
     , deep_target{pg, scrub_level_t::deep}
     , cct{cct}
+    , random_gen{random_dev()}
     , log_msg_prefix{fmt::format("osd.{} scrub-job:pg[{}]:", node_id, pgid)}
 {}
 
@@ -242,6 +243,7 @@ utime_t ScrubJob::get_sched_time() const
   return earliest_target().sched_info.schedule.not_before;
 }
 
+
 void ScrubJob::adjust_deep_schedule(
     utime_t last_deep,
     const Scrub::sched_conf_t& app_conf,
@@ -258,13 +260,7 @@ void ScrubJob::adjust_deep_schedule(
 
   auto& dp_times = deep_target.sched_info.schedule;  // shorthand
 
-  if (!ScrubJob::requires_randomization(deep_target.urgency())) {
-    // the target time is already set. Make sure to reset the n.b. and
-    // the (irrelevant) deadline
-    dp_times.not_before = dp_times.scheduled_at;
-    dp_times.deadline = dp_times.scheduled_at;
-
-  } else {
+  if (ScrubJob::requires_randomization(deep_target.urgency())) {
     utime_t adj_not_before = last_deep;
     utime_t adj_target = last_deep;
     dp_times.deadline = adj_target;
@@ -273,10 +269,18 @@ void ScrubJob::adjust_deep_schedule(
     // scrubs that are not already eligible for scrubbing.
     if ((modify_ready_targets == delay_ready_t::delay_ready) ||
 	adj_not_before > scrub_clock_now) {
-      adj_target += app_conf.deep_interval;
-      double r = rand() / (double)RAND_MAX;
-      adj_target += app_conf.deep_interval * app_conf.interval_randomize_ratio *
-		    r;	// RRR fix
+      double sdv = app_conf.deep_interval * app_conf.deep_randomize_ratio;
+      std::normal_distribution<double> normal_dist{app_conf.deep_interval, sdv};
+      auto next_delay = std::clamp(
+	  normal_dist(random_gen), app_conf.deep_interval - 2 * sdv,
+	  app_conf.deep_interval + 2 * sdv);
+      adj_target += next_delay;
+      dout(20) << fmt::format(
+		      "deep scrubbing: next_delay={:.0f} (interval={:.0f}, "
+		      "ratio={:.3f}), adjusted:{:s}",
+		      next_delay, app_conf.deep_interval,
+		      app_conf.deep_randomize_ratio, adj_target)
+	       << dendl;
     }
 
     // the deadline can be updated directly into the scrub-job
@@ -290,6 +294,11 @@ void ScrubJob::adjust_deep_schedule(
     }
     dp_times.scheduled_at = adj_target;
     dp_times.not_before = adj_not_before;
+  } else {
+    // the target time is already set. Make sure to reset the n.b. and
+    // the (irrelevant) deadline
+    dp_times.not_before = dp_times.scheduled_at;
+    dp_times.deadline = dp_times.scheduled_at;
   }
 
   dout(10) << fmt::format(
