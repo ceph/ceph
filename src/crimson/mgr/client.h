@@ -55,7 +55,7 @@ private:
   WithStats& with_stats;
   crimson::net::ConnectionRef conn;
   seastar::timer<seastar::lowres_clock> report_timer;
-  crimson::common::Gated gate;
+  crimson::common::gate_per_shard gates;
   uint64_t last_config_bl_version = 0;
   std::string service_name, daemon_name;
 
