@@ -1166,9 +1166,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         entity: str,
         _end_positional_: int = 0,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> HandleCommandResult:
-        completion = self.cert_store_get_cert(entity, service_name, hostname)
+        completion = self.cert_store_get_cert(
+            entity,
+            service_name,
+            hostname,
+            no_exception_when_missing
+        )
         cert = raise_if_exception(completion)
         return HandleCommandResult(stdout=cert)
 
@@ -1178,9 +1184,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         entity: str,
         _end_positional_: int = 0,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> HandleCommandResult:
-        completion = self.cert_store_get_key(entity, service_name, hostname)
+        completion = self.cert_store_get_key(
+            entity,
+            service_name,
+            hostname,
+            no_exception_when_missing
+        )
         key = raise_if_exception(completion)
         return HandleCommandResult(stdout=key)
 

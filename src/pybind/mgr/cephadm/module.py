@@ -3317,10 +3317,13 @@ Then run the following:
         self,
         entity: str,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> str:
         cert = self.cert_key_store.get_cert(entity, service_name or '', hostname or '')
         if not cert:
+            if no_exception_when_missing:
+                return ''
             raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
         return cert
 
@@ -3329,10 +3332,13 @@ Then run the following:
         self,
         entity: str,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> str:
         key = self.cert_key_store.get_key(entity, service_name or '', hostname or '')
         if not key:
+            if no_exception_when_missing:
+                return ''
             raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
         return key
 
