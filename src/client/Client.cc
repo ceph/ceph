@@ -11511,6 +11511,7 @@ int Client::statxat(int dirfd, const char *relpath,
 
   unsigned mask = statx_to_mask(flags, want);
 
+  InodeRef in;
   InodeRef dirinode;
   std::scoped_lock lock(client_lock);
   int r = get_fd_inode(dirfd, &dirinode);
@@ -11518,12 +11519,24 @@ int Client::statxat(int dirfd, const char *relpath,
     return r;
   }
 
-  InodeRef in;
-  filepath path(relpath);
-  r = path_walk(path, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), mask, dirinode);
-  if (r < 0) {
-    return r;
+  if (!strcmp(relpath, "")) {
+#if defined(__linux__) && defined(AT_EMPTY_PATH)
+    if (flags & AT_EMPTY_PATH) {
+      in = dirinode;
+      goto out;
+    }
+#endif
+    return -CEPHFS_ENOENT;
+  } else {
+    filepath path(relpath);
+    r = path_walk(path, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), mask, dirinode);
+    if (r < 0) {
+      return r;
+    }
   }
+
+out:
+
   r = _getattr(in, mask, perms);
   if (r < 0) {
     ldout(cct, 3) << __func__ << " exit on error!" << dendl;
