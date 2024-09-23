@@ -5827,19 +5827,19 @@ def get_fsid_from_conf(conf_file='/etc/ceph/ceph.conf'):
 def translate_yaml_to_json(yaml_file):
     with open(yaml_file, 'r') as f:
         yaml_data = yaml.safe_load(f)
-    logger.info('---------------------TRANSLATING TO BASH FILES---------------------')
+    print('---------------------TRANSLATING TO BASH FILES---------------------')
     hosts = yaml_data['hosts']
     services = yaml_data.get('services', {})
     fsid = get_fsid_from_conf()
     commands = generate_ceph_commands(hosts, services)
-    logger.info('-------------------------TRANSLATIONS DONE-------------------------\n')
+    print('-------------------------TRANSLATIONS DONE-------------------------\n')
     if (os.path.exists('execute.sh')):
         os.remove('execute.sh')
     with open('execute.sh', 'w') as output_file:
         output_file.write("#!/bin/bash\n\n")
         for command in commands:
             output_file.write(f"{command}\n")
-    logger.info('----------------------GENERATING CONTEXT FILES---------------------\n')
+    print('----------------------GENERATING CONTEXT FILES---------------------\n')
     return {
         "_args": {
             key: yaml_data.get(key, default)
@@ -6056,7 +6056,8 @@ def generate_ceph_commands(hosts, services):
         for service in current_services:
             if service['daemon_type'] == service_type and service['hostname'] == hostname:
                 return service['daemon_name']
-        print(f'Cant find {service_type} on {hostname}, please recheck your hostname or services types!')
+        print(f'WARNING: Cannot find {service_type} on {hostname}, please recheck your hostname or services types!')
+        print(f'{service_type} on {hostname} will not be removed!')
         return None
 
     if 'rm-monitor' in services:
@@ -6067,7 +6068,7 @@ def generate_ceph_commands(hosts, services):
             if service_name:
                 commands.append(f"ceph orch daemon rm {service_name} --force")
     if 'rm-manager' in services:
-        print("Removing managers from:.......")
+        print("Removing managers from:")
         for hostname in services['rm-manager']['hostnames']:
             print(f'- {hostname}')
             service_name = find_service_name('mgr', hostname)
@@ -6075,7 +6076,7 @@ def generate_ceph_commands(hosts, services):
                 commands.append(f"ceph orch daemon rm {service_name} --force")
 
     if 'rm-radosgw' in services:
-        print("Removing rgws from:.......")
+        print("Removing rgws from:")
         for hostname in services['rm-radosgw']['hostnames']:
             print(f'- {hostname}')
             service_name = find_service_name('rgw', hostname)
