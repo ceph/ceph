@@ -1,0 +1,135 @@
+@use '../vendor/variables' as vv;
+@use '@carbon/colors';
+
+/* Forms */
+.required::after {
+  color: vv.$danger;
+  content: '*';
+  font-size: 1.167rem;
+  padding-left: 4px;
+}
+
+.form-footer {
+  display: flex;
+  width: 100%;
+}
+
+.custom-checkbox {
+  @extend .form-check;
+  padding-top: 7px;
+
+  .custom-control-label {
+    @extend .form-check-label;
+  }
+}
+
+.custom-radio {
+  @extend .form-check;
+  padding-top: 5px;
+}
+
+.cd-col-form {
+  @extend .col-12;
+  @extend .col-lg-8;
+  @extend .col-xl-6;
+}
+
+.cd-col-form-label {
+  @extend .col-form-label;
+  @extend .col-sm-4;
+  @extend .col-md-4;
+  @extend .col-lg-3;
+}
+
+.cd-col-form-input {
+  @extend .col-sm-8;
+  @extend .col-md-8;
+  @extend .col-lg-9;
+}
+
+.cd-col-form-offset {
+  @extend .offset-sm-4;
+  @extend .offset-lg-3;
+  @extend .cd-col-form-input;
+}
+
+// Until all the modals are converted to carbon
+// need to keep this so that modals won't get hidden
+// behind nav bar
+ngb-modal-window {
+  .modal-dialog {
+    margin-top: 3rem;
+  }
+}
+
+cd-modal {
+  .modal {
+    /* stylelint-disable */
+    background-color: rgba(0, 0, 0, 0.4);
+    /* stylelint-enable */
+    display: block;
+    margin-top: 3rem;
+  }
+
+  .modal-dialog {
+    max-width: 70vh;
+  }
+
+  .cd-col-form-label {
+    @extend .col-lg-4;
+  }
+
+  .cd-col-form-input {
+    @extend .col-lg-8;
+  }
+
+  .cd-col-form-offset {
+    @extend .offset-lg-4;
+  }
+}
+
+.invalid-feedback {
+  display: block;
+}
+
+.form-group {
+  @extend .mb-3;
+}
+
+.custom-control-label {
+  @extend .form-label;
+}
+
+/******************************************
+Carbon Overrides
+******************************************/
+
+/******************************************
+Form Controls
+******************************************/
+.form-item {
+  @extend .cds--form-item;
+  display: block;
+  margin-bottom: 32px;
+  margin-top: 32px;
+}
+
+.form-item-append {
+  display: flex;
+  flex-direction: row;
+}
+
+.cds-input-group {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+}
+
+.icon-btn-group {
+  background-color: colors.$gray-10;
+  border-bottom: 1px solid colors.$gray-50;
+}
+
+fieldset {
+  @extend .cds--fieldset;
+}

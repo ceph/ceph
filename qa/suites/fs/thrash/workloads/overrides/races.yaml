@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      mds:
+        mds_sleep_rank_change: 5000000.0
