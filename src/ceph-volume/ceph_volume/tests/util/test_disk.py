@@ -1,6 +1,7 @@
 import pytest
 from ceph_volume.util import disk
 from mock.mock import patch, Mock, MagicMock, mock_open
+from pyfakefs.fake_filesystem_unittest import TestCase
 
 
 class TestFunctions:
@@ -42,6 +43,21 @@ class TestFunctions:
     def test_get_lvm_mapper_path_from_dm(self):
         with patch('builtins.open', mock_open(read_data='test--foo--vg-test--foo--lv')):
             assert disk.get_lvm_mapper_path_from_dm('/dev/dm-123') == '/dev/mapper/test--foo--vg-test--foo--lv'
+
+    @patch('ceph_volume.util.disk.get_block_device_holders', MagicMock(return_value={'/dev/dmcrypt-mapper-123': '/dev/sda'}))
+    @patch('os.path.realpath', MagicMock(return_value='/dev/sda'))
+    def test_has_holders_true(self):
+        assert disk.has_holders('/dev/sda')
+
+    @patch('ceph_volume.util.disk.get_block_device_holders', MagicMock(return_value={'/dev/dmcrypt-mapper-123': '/dev/sda'}))
+    @patch('os.path.realpath', MagicMock(return_value='/dev/sdb'))
+    def test_has_holders_false(self):
+        assert not disk.has_holders('/dev/sda')
+
+    @patch('ceph_volume.util.disk.get_block_device_holders', MagicMock(return_value={'/dev/dmcrypt-mapper-123': '/dev/sda'}))
+    @patch('os.path.realpath', MagicMock(return_value='/dev/foobar'))
+    def test_has_holders_device_does_not_exist(self):
+        assert not disk.has_holders('/dev/foobar')
 
 class TestLsblkParser(object):
 
@@ -560,3 +576,67 @@ class TestHasBlueStoreLabel(object):
         device_path = '/var/lib/ceph/osd/ceph-0'
         fake_filesystem.create_dir(device_path)
         assert not disk.has_bluestore_label(device_path)
+
+
+class TestBlockSysFs(TestCase):
+    def setUp(self) -> None:
+        self.setUpPyfakefs()
+        self.fs.create_dir('/fake-area/foo/holders')
+        self.fs.create_dir('/fake-area/bar2/holders')
+        self.fs.create_file('/fake-area/bar2/holders/dm-0')
+        self.fs.create_file('/fake-area/foo/holders/dm-1')
+        self.fs.create_file('/fake-area/bar2/partition', contents='2')
+        self.fs.create_dir('/sys/dev/block')
+        self.fs.create_dir('/sys/block/foo')
+        self.fs.create_symlink('/sys/dev/block/8:0', '/fake-area/foo')
+        self.fs.create_symlink('/sys/dev/block/252:2', '/fake-area/bar2')
+        self.fs.create_file('/sys/block/dm-0/dm/uuid', contents='CRYPT-LUKS2-1234-abcdef')
+        self.fs.create_file('/sys/block/dm-1/dm/uuid', contents='LVM-abcdef')
+
+    def test_init(self) -> None:
+        b = disk.BlockSysFs('/dev/foo')
+        assert b.path == '/dev/foo'
+        assert b.sys_dev_block == '/sys/dev/block'
+        assert b.sys_block == '/sys/block'
+
+    def test_get_sys_dev_block_path(self) -> None:
+        b = disk.BlockSysFs('/dev/foo')
+        assert b.get_sys_dev_block_path == '/sys/dev/block/8:0'
+
+    def test_is_partition_true(self) -> None:
+        b = disk.BlockSysFs('/dev/bar2')
+        assert b.is_partition
+
+    def test_is_partition_false(self) -> None:
+        b = disk.BlockSysFs('/dev/foo')
+        assert not b.is_partition
+
+    def test_holders(self) -> None:
+        b1 = disk.BlockSysFs('/dev/bar2')
+        b2 = disk.BlockSysFs('/dev/foo')
+        assert b1.holders == ['dm-0']
+        assert b2.holders == ['dm-1']
+
+    def test_has_active_dmcrypt_mapper(self) -> None:
+        b = disk.BlockSysFs('/dev/bar2')
+        assert b.has_active_dmcrypt_mapper
+
+    def test_has_active_mappers(self) -> None:
+        b = disk.BlockSysFs('/dev/foo')
+        assert b.has_active_mappers
+
+    def test_active_mappers_dmcrypt(self) -> None:
+        b = disk.BlockSysFs('/dev/bar2')
+        assert b.active_mappers()
+        assert b.active_mappers()['dm-0']
+        assert b.active_mappers()['dm-0']['type'] == 'CRYPT'
+        assert b.active_mappers()['dm-0']['dmcrypt_mapping'] == 'abcdef'
+        assert b.active_mappers()['dm-0']['dmcrypt_type'] == 'LUKS2'
+        assert b.active_mappers()['dm-0']['dmcrypt_uuid'] == '1234'
+
+    def test_active_mappers_lvm(self) -> None:
+        b = disk.BlockSysFs('/dev/foo')
+        assert b.active_mappers()
+        assert b.active_mappers()['dm-1']
+        assert b.active_mappers()['dm-1']['type'] == 'LVM'
+        assert b.active_mappers()['dm-1']['uuid'] == 'abcdef'

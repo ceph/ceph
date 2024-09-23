@@ -179,6 +179,38 @@ class TestLuksOpen(object):
         encryption.luks_open('abcd', '/dev/foo', '/dev/bar')
         assert m_call.call_args[0][0] == expected
 
+    @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_open_command_with_tpm(self, m_call, m_bypass_workqueue, conf_ceph_stub):
+        fake_mapping: str = 'fake-mapping'
+        fake_device: str = 'fake-device'
+        expected = [
+            '/usr/lib/systemd/systemd-cryptsetup',
+            'attach',
+            fake_mapping,
+            fake_device,
+            '-',
+            'tpm2-device=auto,discard,headless=true,nofail',
+        ]
+        encryption.luks_open('', fake_device, fake_mapping, 1)
+        assert m_call.call_args[0][0] == expected
+
+    @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=True)
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_open_command_with_tpm_bypass_workqueue(self, m_call, m_bypass_workqueue, conf_ceph_stub):
+        fake_mapping: str = 'fake-mapping'
+        fake_device: str = 'fake-device'
+        expected = [
+            '/usr/lib/systemd/systemd-cryptsetup',
+            'attach',
+            fake_mapping,
+            fake_device,
+            '-',
+            'tpm2-device=auto,discard,headless=true,nofail,no-read-workqueue,no-write-workqueue',
+        ]
+        encryption.luks_open('', fake_device, fake_mapping, 1)
+        assert m_call.call_args[0][0] == expected
+
 
 class TestCephLuks2:
     @patch.object(encryption.CephLuks2, 'get_osd_fsid', Mock(return_value='abcd-1234'))
