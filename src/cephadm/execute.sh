@@ -9,3 +9,4 @@ ceph orch apply mon --placement="label:mon count-per-host:1"
 ceph orch apply mgr --placement="label:mgr count-per-host:1"
 ceph orch apply rgw public '--placement=label:rgw count-per-host:1' --port=8888
 ceph orch apply rgw private '--placement=label:rgw count-per-host:1' --port=8889
+ceph orch apply -i osd_spec.yml --dry-run

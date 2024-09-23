@@ -1,8 +1,10 @@
     service_type: osd
-    service_id: {server}
+    service_id: osd_spec_hdd
     placement:
       hosts:
-        {hót+s}
+        - hla-vts-pub-sds-10-210-110-109
+        - hla-vts-pub-sds-10-210-110-110
+        - hla-vts-pub-sds-10-210-110-111
 
     spec:
       data_devices:

@@ -6022,11 +6022,6 @@ def generate_ceph_commands(hosts, services):
         print(f'Adding hosts {name} with labels {labels}')
         commands.append(f"ceph orch host add {name} {ip} --labels={labels}")
 
-    def get_services():
-        result = subprocess.run("python3 -m cephadm shell -- ceph orch ps --format json-pretty", shell=True, capture_output=True, text=True)
-        services_list = json.loads(result.stdout)
-        return services_list
-    current_services = get_services()
     if 'add-monitor' in services:
         print("Adding monitors.......")
         monitor = services['add-monitor']
@@ -6048,8 +6043,33 @@ def generate_ceph_commands(hosts, services):
             count_per_host = rgw_service.get('count-per-host', 1)
             commands.append(f"ceph orch apply rgw {service_name} '--placement=label:rgw count-per-host:{count_per_host}' --port={port}")
 
-    # with open('test.json', 'r') as file:
-    #     current_services = json.load(file)
+    if 'add-osds' in services:
+            print("Adding OSDs.......")
+            osd_services = services['add-osds']
+
+            with open('osd_spec.yml', 'w') as osd_file:
+                for idx, osd_service in enumerate(osd_services):
+                    osd_spec = {
+                        'service_type': 'osd',
+                        'service_id': osd_service.get('service-id'),
+                        'placement': {'hosts': osd_service['placement']['hosts']},
+                        'spec': osd_service.get('spec')
+                    }
+
+                    yaml.dump(osd_spec, osd_file)
+                    if idx < len(osd_services) - 1:
+                        osd_file.write('---\n')
+            if services.get('dry-run', False):
+                commands.append(f"ceph orch apply -i osd_spec.yml --dry-run")
+            else:
+                commands.append(f"ceph orch apply -i osd_spec.yml")
+    def get_services():
+        result = subprocess.run("python3 -m cephadm shell -- ceph orch ps --format json-pretty", shell=True, capture_output=True, text=True)
+        services_list = json.loads(result.stdout)
+        return services_list
+    current_services = get_services()
+    with open('test.json', 'r') as file:
+        current_services = json.load(file)
 
     def find_service_name(service_type, hostname):
         for service in current_services:

@@ -73,9 +73,8 @@ hosts:
   ipaddresses: 171.254.93.217
   label: _admin,mgr,mon,osd
   ssh-user: root 
-
-
 services:
+  dry-run: true
   add-monitor:
     count-per-host: 1
   add-manager:
@@ -87,6 +86,30 @@ services:
     - name: private
       port: 8889
       count-per-host: 1
+  add-osds:
+    - service-id: osd_spec_ssd
+      placement: 
+        hosts:
+          - ceph-node-1
+          - ceph-node-2
+          - ceph-node-3
+      spec:
+        osds_per_device: 1
+        data_devices:
+          rotational: 0
+          size: '6500G:'
+    - service-id: osd_spec_ssd
+      placement: 
+        hosts:
+          - ceph-node-1
+          - ceph-node-2
+          - ceph-node-3
+      spec:
+        osds_per_device: 1
+        data_devices:
+          rotational: 0
+          size: '6500G:'
+
 
 volume: []
 no_hosts: false
