@@ -1804,6 +1804,7 @@ class MgmtGatewaySpec(ServiceSpec):
                  ssl_stapling_verify: Optional[str] = None,
                  ssl_protocols: Optional[List[str]] = None,
                  ssl_ciphers: Optional[List[str]] = None,
+                 enable_health_check_endpoint: bool = False,
                  preview_only: bool = False,
                  unmanaged: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
@@ -1849,6 +1850,7 @@ class MgmtGatewaySpec(ServiceSpec):
         self.ssl_protocols = ssl_protocols
         #: List of supported secure SSL ciphers. Changing this list may reduce system security.
         self.ssl_ciphers = ssl_ciphers
+        self.enable_health_check_endpoint = enable_health_check_endpoint
 
     def get_port_start(self) -> List[int]:
         ports = []

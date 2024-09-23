@@ -46,6 +46,12 @@ server {
     # add_header Content-Security-Policy "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; require-trusted-types-for 'script'; frame-ancestors 'self';";
 {% endif %}
 
+{% if spec.enable_health_check_endpoint %}
+    location /health {
+         return 200 'OK';
+         add_header Content-Type text/plain;
+    }
+{% endif %}
 {% if oauth2_proxy_url %}
     location /oauth2/ {
         proxy_pass {{ oauth2_proxy_url }};
