@@ -1223,7 +1223,7 @@ void PgScrubber::reinit_scrub_store()
   } else {
     dout(10) << __func__ << " creating new store" << dendl;
     m_store = std::make_unique<Scrub::Store>(
-	*m_pg->osd->store, &t, m_pg->info.pgid, m_pg->coll);
+	*this, *m_pg->osd->store, &t, m_pg->info.pgid, m_pg->coll);
   }
 
   // regardless of whether the ScrubStore object was recreated or reused, we need to

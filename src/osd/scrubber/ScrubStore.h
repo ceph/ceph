@@ -14,6 +14,7 @@ struct object_id_t;
 
 struct inconsistent_obj_wrapper;
 struct inconsistent_snapset_wrapper;
+class PgScrubber;
 
 namespace Scrub {
 
@@ -21,10 +22,12 @@ class Store {
  public:
   ~Store();
 
-  Store(ObjectStore& osd_store,
-    ObjectStore::Transaction* t,
-    const spg_t& pgid,
-    const coll_t& coll);
+  Store(
+      PgScrubber& scrubber,
+      ObjectStore& osd_store,
+      ObjectStore::Transaction* t,
+      const spg_t& pgid,
+      const coll_t& coll);
 
 
   /// mark down detected errors, either shallow or deep
@@ -64,6 +67,8 @@ class Store {
     const librados::object_id_t& start,
     uint64_t max_return) const;
 
+  std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
+
  private:
   /**
    * at_level_t
@@ -95,6 +100,10 @@ class Store {
   std::vector<ceph::buffer::list> get_errors(const std::string& start,
 					     const std::string& end,
 					     uint64_t max_return) const;
+
+  /// access to the owning Scrubber object, for logging mostly
+  PgScrubber& m_scrubber;
+
   /// the OSD's storage backend
   ObjectStore& object_store;
 
@@ -116,7 +125,8 @@ class Store {
    */
   void clear_level_db(
       ObjectStore::Transaction* t,
-      at_level_t& db);
+      at_level_t& db,
+      std::string_view db_name);
 
 };
 }  // namespace Scrub
