@@ -150,6 +150,7 @@ bool QatAccel::init(const std::string &alg) {
 }
 
 int QatAccel::compress(const bufferlist &in, bufferlist &out, std::optional<int32_t> &compressor_message) {
+  dout(20) << "QAT compress" << dendl;
   auto s = get_session(); // get a session from the pool
   if (!s) {
     return -1; // session initialization failed
@@ -165,7 +166,15 @@ int QatAccel::compress(const bufferlist &in, bufferlist &out, std::optional<int3
 
     bufferptr ptr = buffer::create_small_page_aligned(out_len);
     unsigned char* c_out = (unsigned char*)ptr.c_str() + begin;
-    int rc = qzCompress(session.get(), c_in, &len, c_out, &out_len, 1);
+    QzSession_T *sess = session.get();
+    int rc = qzCompress(sess, c_in, &len, c_out, &out_len, 1);
+    if(sess->hw_session_stat != QZ_OK) {
+      if(sess->hw_session_stat == QZ_NO_HW) {
+        dout(1) << "QAT compressor NOT OK - Using SW: No QAT HW detected" << dendl;
+      } else {
+        dout(1) << "QAT compressor NOT OK - session state=" << sess->hw_session_stat << dendl;
+      }
+    }
     if (rc != QZ_OK)
       return -1;
     if (begin) {
@@ -190,6 +199,7 @@ int QatAccel::decompress(bufferlist::const_iterator &p,
 		 size_t compressed_len,
 		 bufferlist &dst,
 		 std::optional<int32_t> compressor_message) {
+  dout(20) << "QAT decompress" << dendl;
   auto s = get_session(); // get a session from the pool
   if (!s) {
     return -1; // session initialization failed
@@ -219,7 +229,15 @@ int QatAccel::decompress(bufferlist::const_iterator &p,
       }
 
       ptr = buffer::create_small_page_aligned(out_len);
-      rc = qzDecompress(session.get(), (const unsigned char*)c_in, &len_current, (unsigned char*)ptr.c_str(), &out_len);
+      QzSession_T *sess = session.get();
+      rc = qzDecompress(sess, (const unsigned char*)c_in, &len_current, (unsigned char*)ptr.c_str(), &out_len);
+      if(sess->hw_session_stat != QZ_OK) {
+        if(sess->hw_session_stat == QZ_NO_HW) {
+          dout(1) << "QAT decompress NOT OK - Using SW: No QAT HW detected" << dendl;
+        } else {
+          dout(1) << "QAT decompress NOT OK - session state=" << sess->hw_session_stat << dendl;
+        }
+      }
       ratio_idx++;
     } while (rc == QZ_BUF_ERROR && ratio_idx < std::size(expansion_ratio));
     c_in += len_current;
