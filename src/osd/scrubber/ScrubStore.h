@@ -20,11 +20,16 @@ namespace Scrub {
 class Store {
  public:
   ~Store();
-  static Store* create(ObjectStore* store,
-		       ObjectStore::Transaction* t,
-		       const spg_t& pgid,
-		       const coll_t& coll);
+
+  Store(ObjectStore& osd_store,
+    ObjectStore::Transaction* t,
+    const spg_t& pgid,
+    const coll_t& coll);
+
+
+  /// mark down detected errors, either shallow or deep
   void add_object_error(int64_t pool, const inconsistent_obj_wrapper& e);
+
   void add_snap_error(int64_t pool, const inconsistent_snapset_wrapper& e);
 
   // and a variant-friendly interface:
@@ -33,7 +38,21 @@ class Store {
 
   bool empty() const;
   void flush(ObjectStore::Transaction*);
+
+  /// remove both shallow and deep errors DBs. Called on interval.
   void cleanup(ObjectStore::Transaction*);
+
+  /**
+   * prepare the Store object for a new scrub session.
+   * This involves clearing one or both of the errors DBs, and resetting
+   * the cache.
+   *
+   * @param level: the scrub level to prepare for. Whenever a deep scrub
+   * is requested, both the shallow and deep errors DBs are cleared.
+   * If, on the other hand, a shallow scrub is requested, only the shallow
+   * errors DB is cleared.
+   */
+  void reinit(ObjectStore::Transaction* t, scrub_level_t level);
 
   std::vector<ceph::buffer::list> get_snap_errors(
     int64_t pool,
@@ -73,15 +92,9 @@ class Store {
     std::map<std::string, ceph::buffer::list> results;
   };
 
-  Store(ObjectStore& osd_store,
-    ObjectStore::Transaction* t,
-    const spg_t& pgid,
-    const coll_t& coll);
-
   std::vector<ceph::buffer::list> get_errors(const std::string& start,
 					     const std::string& end,
 					     uint64_t max_return) const;
- private:
   /// the OSD's storage backend
   ObjectStore& object_store;
 
@@ -96,6 +109,15 @@ class Store {
    */
   mutable std::optional<at_level_t> errors_db;
   // not yet: mutable std::optional<at_level_t> deep_db;
+
+  /**
+   * Clear the DB of errors at a specific scrub level by performing an
+   * omap_clear() on the DB object, and resetting the MapCacher.
+   */
+  void clear_level_db(
+      ObjectStore::Transaction* t,
+      at_level_t& db);
+
 };
 }  // namespace Scrub
 

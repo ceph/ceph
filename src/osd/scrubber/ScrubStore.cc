@@ -99,20 +99,6 @@ string last_snap_key(int64_t pool)
 
 namespace Scrub {
 
-Store*
-Store::create(ObjectStore* store,
-	      ObjectStore::Transaction* t,
-	      const spg_t& pgid,
-	      const coll_t& coll)
-{
-  ceph_assert(store);
-  ceph_assert(t);
-  ghobject_t oid = make_scrub_object(pgid);
-  t->touch(coll, oid);
-  return new Store{*store, t, pgid, coll};
-}
-
-
 Store::Store(
     ObjectStore& osd_store,
     ObjectStore::Transaction* t,
@@ -173,6 +159,33 @@ void Store::flush(ObjectStore::Transaction* t)
   }
   errors_db->results.clear();
 }
+
+
+void Store::clear_level_db(
+    ObjectStore::Transaction* t,
+    at_level_t& db)
+{
+  // easiest way to guarantee that the object representing the DB exists
+  t->touch(coll, db.errors_hoid);
+
+  // remove all the keys in the DB
+  t->omap_clear(coll, db.errors_hoid);
+
+  // restart the 'in progress' part of the MapCacher
+  db.backend.reset();
+}
+
+
+void Store::reinit(ObjectStore::Transaction* t, [[maybe_unused]] scrub_level_t level)
+{
+  // Note: only one caller, and it creates the transaction passed to reinit().
+  // No need to assert on 't'
+
+  if (errors_db) {
+    clear_level_db(t, *errors_db);
+  }
+}
+
 
 void Store::cleanup(ObjectStore::Transaction* t)
 {
