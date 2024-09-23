@@ -3180,11 +3180,17 @@ def command_run(ctx):
 def command_shell(ctx):
     # Write context
     cp = read_config(ctx.config)
+    logger.info('----------------------CHECKING FOR CONNECTIONS---------------------')
     problem_hosts = checking_connections(ctx.hosts)
     if problem_hosts:
+        logger.info('Warning, there is some problematic hosts, start preparing hosts:')
+        for host in problem_hosts:
+            name = host['name']
+            logger.info(f'- {name}')
         preparing_remote_hosts(problem_hosts)
         distribute_ceph_pub_key(problem_hosts, f'{ctx.output_dir}/ceph.pub')
     # Check fsid
+    logger.info('---------------------START EXECUTING BASH FILES--------------------')
     if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
 
@@ -3370,7 +3376,6 @@ def check_host_ssh_and_ceph_pub(host):
             print(f"SSH connection failed for {host['name']} ({host['ipaddresses']}): {result.stderr.decode().strip()}")
             return False
 
-        # Check if /etc/ceph/ceph.pub exists
         ssh_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "test -f /etc/ceph/ceph.pub"]
         result = subprocess.run(ssh_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if result.returncode != 0:
