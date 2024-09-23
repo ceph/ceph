@@ -1,10 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
-#include "ScrubStore.h"
+#include "./ScrubStore.h"
 #include "osd/osd_types.h"
 #include "common/scrub_types.h"
 #include "include/rados/rados_types.hpp"
+
+#include "pg_scrubber.h"
 
 using std::ostringstream;
 using std::string;
@@ -95,16 +97,31 @@ string last_snap_key(int64_t pool)
   hoid.build_hash_cache();
   return "SCRUB_SS_" + hoid.to_str();
 }
+
+}  // namespace
+
+#undef dout_context
+#define dout_context (m_scrubber.get_pg_cct())
+#define dout_subsys ceph_subsys_osd
+#undef dout_prefix
+#define dout_prefix _prefix_fn(_dout, this, __func__)
+
+template <class T>
+static std::ostream& _prefix_fn(std::ostream* _dout, T* t, std::string fn = "")
+{
+  return t->gen_prefix(*_dout, fn);
 }
 
 namespace Scrub {
 
 Store::Store(
+    PgScrubber& scrubber,
     ObjectStore& osd_store,
     ObjectStore::Transaction* t,
     const spg_t& pgid,
     const coll_t& coll)
-    : object_store{osd_store}
+    : m_scrubber{scrubber}
+    , object_store{osd_store}
     , coll{coll}
 {
   ceph_assert(t);
@@ -119,6 +136,18 @@ Store::~Store()
 {
   ceph_assert(!errors_db || errors_db->results.empty());
 }
+
+
+std::ostream& Store::gen_prefix(std::ostream& out, std::string_view fn) const
+{
+  if (fn.starts_with("operator")) {
+    // it's a lambda, and __func__ is not available
+    return m_scrubber.gen_prefix(out) << "Store::";
+  } else {
+    return m_scrubber.gen_prefix(out) << "Store::" << fn << ": ";
+  }
+}
+
 
 void Store::add_error(int64_t pool, const inconsistent_obj_wrapper& e)
 {
@@ -163,8 +192,11 @@ void Store::flush(ObjectStore::Transaction* t)
 
 void Store::clear_level_db(
     ObjectStore::Transaction* t,
-    at_level_t& db)
+    at_level_t& db,
+    std::string_view db_name)
 {
+  dout(20) << fmt::format("removing (omap) entries for {} error DB", db_name)
+	   << dendl;
   // easiest way to guarantee that the object representing the DB exists
   t->touch(coll, db.errors_hoid);
 
@@ -176,19 +208,27 @@ void Store::clear_level_db(
 }
 
 
-void Store::reinit(ObjectStore::Transaction* t, [[maybe_unused]] scrub_level_t level)
+void Store::reinit(
+    ObjectStore::Transaction* t,
+    [[maybe_unused]] scrub_level_t level)
 {
+  dout(20) << fmt::format(
+		  "re-initializing the Scrub::Store (for {} scrub)",
+		  (level == scrub_level_t::deep ? "deep" : "shallow"))
+	   << dendl;
+
   // Note: only one caller, and it creates the transaction passed to reinit().
   // No need to assert on 't'
 
   if (errors_db) {
-    clear_level_db(t, *errors_db);
+    clear_level_db(t, *errors_db, "scrub");
   }
 }
 
 
 void Store::cleanup(ObjectStore::Transaction* t)
 {
+  dout(20) << "discarding error DBs" << dendl;
   ceph_assert(t);
   if (errors_db)
     t->remove(coll, errors_db->errors_hoid);
