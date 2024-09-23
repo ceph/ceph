@@ -15,21 +15,9 @@ using std::vector;
 using ceph::bufferlist;
 
 namespace {
-ghobject_t make_scrub_object(const spg_t& pgid)
-{
-  ostringstream ss;
-  ss << "scrub_" << pgid;
-  return pgid.make_temp_ghobject(ss.str());
-}
-
 string first_object_key(int64_t pool)
 {
-  auto hoid = hobject_t(object_t(),
-			"",
-			0,
-			0x00000000,
-			pool,
-			"");
+  auto hoid = hobject_t(object_t(), "", CEPH_NOSNAP, 0x00000000, pool, "");
   hoid.build_hash_cache();
   return "SCRUB_OBJ_" + hoid.to_str();
 }
@@ -49,12 +37,7 @@ string to_object_key(int64_t pool, const librados::object_id_t& oid)
 
 string last_object_key(int64_t pool)
 {
-  auto hoid = hobject_t(object_t(),
-			"",
-			0,
-			0xffffffff,
-			pool,
-			"");
+  auto hoid = hobject_t(object_t(), "", CEPH_NOSNAP, 0xffffffff, pool, "");
   hoid.build_hash_cache();
   return "SCRUB_OBJ_" + hoid.to_str();
 }
@@ -62,14 +45,9 @@ string last_object_key(int64_t pool)
 string first_snap_key(int64_t pool)
 {
   // scrub object is per spg_t object, so we can misuse the hash (pg.seed) for
-  // the representing the minimal and maximum keys. and this relies on how
+  // representing the minimal and maximum keys. and this relies on how
   // hobject_t::to_str() works: hex(pool).hex(revhash).
-  auto hoid = hobject_t(object_t(),
-			"",
-			0,
-			0x00000000,
-			pool,
-			"");
+  auto hoid = hobject_t(object_t(), "", 0, 0x00000000, pool, "");
   hoid.build_hash_cache();
   return "SCRUB_SS_" + hoid.to_str();
 }
@@ -88,12 +66,7 @@ string to_snap_key(int64_t pool, const librados::object_id_t& oid)
 
 string last_snap_key(int64_t pool)
 {
-  auto hoid = hobject_t(object_t(),
-			"",
-			0,
-			0xffffffff,
-			pool,
-			"");
+  auto hoid = hobject_t(object_t(), "", 0, 0xffffffff, pool, "");
   hoid.build_hash_cache();
   return "SCRUB_SS_" + hoid.to_str();
 }
@@ -168,22 +141,23 @@ void Store::add_error(int64_t pool, const inconsistent_snapset_wrapper& e)
   add_snap_error(pool, e);
 }
 
+
 void Store::add_snap_error(int64_t pool, const inconsistent_snapset_wrapper& e)
 {
-  bufferlist bl;
-  e.encode(bl);
-  errors_db->results[to_snap_key(pool, e.object)] = bl;
+  errors_db->results[to_snap_key(pool, e.object)] = e.encode();
 }
 
-bool Store::empty() const
+
+bool Store::is_empty() const
 {
-  return errors_db->results.empty();
+  return !errors_db || errors_db->results.empty();
 }
+
 
 void Store::flush(ObjectStore::Transaction* t)
 {
   if (t) {
-    OSDriver::OSTransaction txn = errors_db->driver.get_transaction(t);
+    auto txn = errors_db->driver.get_transaction(t);
     errors_db->backend.set_keys(errors_db->results, &txn);
   }
   errors_db->results.clear();
@@ -234,10 +208,11 @@ void Store::cleanup(ObjectStore::Transaction* t)
     t->remove(coll, errors_db->errors_hoid);
 }
 
-std::vector<bufferlist>
-Store::get_snap_errors(int64_t pool,
-		       const librados::object_id_t& start,
-		       uint64_t max_return) const
+
+std::vector<bufferlist> Store::get_snap_errors(
+    int64_t pool,
+    const librados::object_id_t& start,
+    uint64_t max_return) const
 {
   const string begin = (start.name.empty() ?
 			first_snap_key(pool) : to_snap_key(pool, start));
@@ -272,6 +247,8 @@ Store::get_errors(const string& begin,
     errors.push_back(next.second);
     max_return--;
   }
+
+  dout(10) << fmt::format("{} errors reported", errors.size()) << dendl;
   return errors;
 }
 
