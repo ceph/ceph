@@ -5827,7 +5827,7 @@ def get_fsid_from_conf(conf_file='/etc/ceph/ceph.conf'):
 def translate_yaml_to_json(yaml_file):
     with open(yaml_file, 'r') as f:
         yaml_data = yaml.safe_load(f)
-    print('---------------------TRANSLATING TO BASH FILES---------------------')
+    print('-------------TRANSLATING YAML TO BASH AND CONTEXT FILES------------')
     hosts = yaml_data['hosts']
     services = yaml_data.get('services', {})
     fsid = get_fsid_from_conf()
@@ -5839,7 +5839,6 @@ def translate_yaml_to_json(yaml_file):
         output_file.write("#!/bin/bash\n\n")
         for command in commands:
             output_file.write(f"{command}\n")
-    print('----------------------GENERATING CONTEXT FILES---------------------\n')
     return {
         "_args": {
             key: yaml_data.get(key, default)
@@ -5871,8 +5870,8 @@ def translate_yaml_to_json(yaml_file):
                 "config": None,
                 "skip_ssh": False,
                 "initial_dashboard_user": "admin",
-                "initial_dashboard_password": "passowrd",
-                "ssl_dashboard_port": 8848,
+                "initial_dashboard_password": "password",
+                "ssl_dashboard_port": 8443,
                 "ssh_config": None,
                 "ssh_private_key": None,
                 "ssh_public_key": None,
