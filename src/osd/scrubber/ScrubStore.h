@@ -1,8 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-
-#ifndef CEPH_SCRUB_RESULT_H
-#define CEPH_SCRUB_RESULT_H
+#pragma once
 
 #include "common/map_cacher.hpp"
 #include "osd/osd_types_fmt.h"
@@ -39,7 +37,7 @@ class Store {
   void add_error(int64_t pool, const inconsistent_obj_wrapper& e);
   void add_error(int64_t pool, const inconsistent_snapset_wrapper& e);
 
-  bool empty() const;
+  [[nodiscard]] bool is_empty() const;
   void flush(ObjectStore::Transaction*);
 
   /// remove both shallow and deep errors DBs. Called on interval.
@@ -101,11 +99,6 @@ class Store {
       MapCacher::MapCacher<std::string, ceph::buffer::list>::PosAndData;
   using ExpCacherPosData = tl::expected<CacherPosData, int>;
 
-
-  std::vector<ceph::buffer::list> get_errors(const std::string& start,
-					     const std::string& end,
-					     uint64_t max_return) const;
-
   /// access to the owning Scrubber object, for logging mostly
   PgScrubber& m_scrubber;
 
@@ -124,6 +117,11 @@ class Store {
   mutable std::optional<at_level_t> errors_db;
   // not yet: mutable std::optional<at_level_t> deep_db;
 
+  std::vector<ceph::buffer::list> get_errors(
+      const std::string& start,
+      const std::string& end,
+      uint64_t max_return) const;
+
   /**
    * Clear the DB of errors at a specific scrub level by performing an
    * omap_clear() on the DB object, and resetting the MapCacher.
@@ -135,5 +133,3 @@ class Store {
 
 };
 }  // namespace Scrub
-
-#endif	// CEPH_SCRUB_RESULT_H
