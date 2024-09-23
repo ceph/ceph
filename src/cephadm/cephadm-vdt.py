@@ -3177,34 +3177,6 @@ def command_run(ctx):
 
 #.sh function, this function have been modified to run using only bash file.
 
-def check_host_ssh_and_ceph_pub(host):
-    #Check SSH connection and if /etc/ceph/ceph.pub exists on the host
-    try:
-        # Check SSH connection by running a basic command
-        ssh_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "uptime"]
-        result = subprocess.run(ssh_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode != 0:
-            print(f"SSH connection failed for {host['name']} ({host['ipaddresses']}): {result.stderr.decode().strip()}")
-            return False
-
-        # Check if /etc/ceph/ceph.pub exists
-        ssh_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "test -f /etc/ceph/ceph.pub"]
-        result = subprocess.run(ssh_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode != 0:
-            print(f"ceph.pub is missing on {host['name']} ({host['ipaddresses']}).")
-            return False
-
-        return True
-
-    except Exception as e:
-        print(f"Error while processing {host['name']} ({host['ipaddresses']}): {str(e)}")
-        return False
-    
-def checking_connections(hosts):
-    #Check SSH connections and /etc/ceph/ceph.pub presence, returning problematic hosts.
-    problematic_hosts = [host for host in hosts if not check_host_ssh_and_ceph_pub(host)]
-    return problematic_hosts
-
 def command_shell(ctx):
     # Write context
     cp = read_config(ctx.config)
@@ -3386,6 +3358,35 @@ def command_shell(ctx):
         return 0
 
     return call_timeout(ctx, command, ctx.timeout)
+
+
+def check_host_ssh_and_ceph_pub(host):
+    #Check SSH connection and if /etc/ceph/ceph.pub exists on the host
+    try:
+        # Check SSH connection by running a basic command
+        ssh_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "uptime"]
+        result = subprocess.run(ssh_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            print(f"SSH connection failed for {host['name']} ({host['ipaddresses']}): {result.stderr.decode().strip()}")
+            return False
+
+        # Check if /etc/ceph/ceph.pub exists
+        ssh_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "test -f /etc/ceph/ceph.pub"]
+        result = subprocess.run(ssh_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            print(f"ceph.pub is missing on {host['name']} ({host['ipaddresses']}).")
+            return False
+
+        return True
+
+    except Exception as e:
+        print(f"Error while processing {host['name']} ({host['ipaddresses']}): {str(e)}")
+        return False
+    
+def checking_connections(hosts):
+    #Check SSH connections and /etc/ceph/ceph.pub presence, returning problematic hosts.
+    problematic_hosts = [host for host in hosts if not check_host_ssh_and_ceph_pub(host)]
+    return problematic_hosts
 
 ##################################
 

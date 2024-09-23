@@ -13,3 +13,7 @@ hosts:
   ipaddresses: 171.254.93.217
   label: osd,mon,mgr
   ssh-user: root
+
+services:
+  add-monitor:
+    count-per-host: 1
