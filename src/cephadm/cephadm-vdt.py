@@ -3376,8 +3376,8 @@ def check_host_ssh_and_ceph_pub(host):
             print(f"SSH connection failed for {host['name']} ({host['ipaddresses']}): {result.stderr.decode().strip()}")
             return False
 
-        ssh_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "test -f /etc/ceph/ceph.pub"]
-        result = subprocess.run(ssh_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        ceph_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "ceph health"]
+        result = subprocess.run(ceph_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if result.returncode != 0:
             print(f"ceph.pub is missing on {host['name']} ({host['ipaddresses']}).")
             return False
