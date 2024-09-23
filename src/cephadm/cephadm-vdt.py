@@ -3176,11 +3176,42 @@ def command_run(ctx):
 @validate_fsid
 
 #.sh function, this function have been modified to run using only bash file.
+
+def check_host_ssh_and_ceph_pub(host):
+    #Check SSH connection and if /etc/ceph/ceph.pub exists on the host
+    try:
+        # Check SSH connection by running a basic command
+        ssh_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "uptime"]
+        result = subprocess.run(ssh_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            print(f"SSH connection failed for {host['name']} ({host['ipaddresses']}): {result.stderr.decode().strip()}")
+            return False
+
+        # Check if /etc/ceph/ceph.pub exists
+        ssh_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "test -f /etc/ceph/ceph.pub"]
+        result = subprocess.run(ssh_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            print(f"ceph.pub is missing on {host['name']} ({host['ipaddresses']}).")
+            return False
+
+        return True
+
+    except Exception as e:
+        print(f"Error while processing {host['name']} ({host['ipaddresses']}): {str(e)}")
+        return False
+    
+def checking_connections(hosts):
+    #Check SSH connections and /etc/ceph/ceph.pub presence, returning problematic hosts.
+    problematic_hosts = [host for host in hosts if not check_host_ssh_and_ceph_pub(host)]
+    return problematic_hosts
+
 def command_shell(ctx):
     # Write context
     cp = read_config(ctx.config)
-    #preparing_remote_hosts(ctx.hosts)
-    #distribute_ceph_pub_key(ctx.hosts, f'{ctx.output_dir}/ceph.pub')
+    problem_hosts = checking_connections(ctx.hosts)
+    if problem_hosts:
+        preparing_remote_hosts(problem_hosts)
+        distribute_ceph_pub_key(problem_hosts, f'{ctx.output_dir}/ceph.pub')
     # Check fsid
     if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
@@ -5941,7 +5972,7 @@ def preparing_remote_host(host):
 
 def preparing_remote_hosts(hosts):
     check_and_generate_ssh_key()
-    logger.info("-----------------------PREPARING REMOTE HOSTS----------------------")
+    print("-----------------------PREPARING REMOTE HOSTS----------------------")
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Use the map function to apply the preparation to each host concurrently
         executor.map(preparing_remote_host, hosts)
@@ -5955,7 +5986,7 @@ def distribute_ceph_pub_key(hosts, pub_key_path):
         ip = host['ipaddresses']
         ssh_user=host['ssh-user']
         try:
-            print(f"Sending {pub_key_path} to {ssh_user}@{ip}...")
+            print(f"Sending {pub_key_path} to {ssh_user}@{name}...")
             
             # Using sshpass to automate the ssh-copy-id command
             result = subprocess.run(
@@ -5985,7 +6016,6 @@ def generate_ceph_commands(hosts, services):
         commands.append(f"ceph orch host add {name} {ip} --labels={labels}")
 
     def get_services():
-        print('Getting services:')
         result = subprocess.run("python3 -m cephadm shell -- ceph orch ps --format json-pretty", shell=True, capture_output=True, text=True)
         services_list = json.loads(result.stdout)
         return services_list
