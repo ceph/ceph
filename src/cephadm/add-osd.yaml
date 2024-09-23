@@ -1,0 +1,27 @@
+    service_type: osd
+    service_id: {server}
+    placement:
+      hosts:
+        {hót+s}
+
+    spec:
+      data_devices:
+        rotational: 1
+      db_devices:
+        rotational: 0
+        size: '3000G:'
+        limit: 2
+    ---
+    service_type: osd
+    service_id: osd_spec_ssd
+    placement:
+      hosts:
+        - hla-vts-pub-sds-10-210-110-109
+        - hla-vts-pub-sds-10-210-110-110
+        - hla-vts-pub-sds-10-210-110-111
+
+    spec:
+      osds_per_device: 1
+      data_devices:
+        rotational: 0
+        size: '6500G:'

@@ -1,6 +1,6 @@
 #Bootstrap:
 image: 
-docker: true
+docker: false
 data_dir: "/var/lib/ceph"
 log_dir: "/var/log/ceph"
 logrotate_dir: "/etc/logrotate.d"
@@ -50,7 +50,7 @@ name:
 keyring: 
 mount: 
 funcs: 
-  - "command_rm_cluster"
+#  - "command_rm_cluster"
   - "command_prepare_host"
   - "command_bootstrap"
   - "command_shell"
@@ -87,18 +87,7 @@ services:
     - name: private
       port: 8889
       count-per-host: 1
-  rm-monitor:
-    host: 
-      - 192.168.1.1
-      - 192.168.1.2
-  rm-manager:
-    host:
-      - 192.168.1.1
-      - 192.168.1.2
-  rm-radosgw:
-    host:
-      - 192.168.1.1
-      - 192.168.1.2
+
 volume: []
 no_hosts: false
 dry_run: false

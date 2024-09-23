@@ -1,8 +1,8 @@
 {
     "_args": {
         "image": null,
-        "docker": true,
-        "fsid": "276132c4-771d-11ef-9616-a722f4ee0099",
+        "docker": false,
+        "fsid": null,
         "data_dir": "/var/lib/ceph",
         "log_dir": "/var/log/ceph",
         "logrotate_dir": "/etc/logrotate.d",
@@ -13,14 +13,10 @@
         "timeout": null,
         "mon_id": null,
         "mon_addrv": null,
-        "mon_ip": "172.26.224.220",
+        "mon_ip": "172.26.224.221",
         "mgr_id": null,
         "retry": 15,
-        "env": [
-            "NODE_NAME=LAPTOP-EJ8ISJEC",
-            "CEPH_VOLUME_SKIP_RESTORECON=yes",
-            "CEPH_VOLUME_DEBUG=1"
-        ],
+        "env": [],
         "no_container_init": false,
         "no_cgroups_split": false,
         "output_dir": "/etc/ceph",
@@ -99,11 +95,10 @@
         "no_hosts": false,
         "dry_run": false,
         "funcs": [
-            "<function command_rm_cluster at 0x7f02952cff40>",
-            "<function command_prepare_host at 0x7f02952d41f0>",
-            "<function command_bootstrap at 0x7f02952cdbd0>",
-            "<function command_shell at 0x7f02952ce560>"
+            "<function command_prepare_host at 0x7f1595880280>",
+            "<function command_bootstrap at 0x7f1595875c60>",
+            "<function command_shell at 0x7f15958765f0>"
         ]
     },
-    "_conf": "<cephadmlib.context.BaseConfig object at 0x7f02952ec8b0>"
+    "_conf": "<cephadmlib.context.BaseConfig object at 0x7f1595894550>"
 }
