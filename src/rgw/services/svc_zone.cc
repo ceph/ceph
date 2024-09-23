@@ -347,9 +347,6 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   for (const auto& ziter : zonegroup->zones) {
     const rgw_zone_id& id = ziter.first;
     const RGWZone& z = ziter.second;
-    if (id == zone_id()) {
-      continue;
-    }
     if (z.endpoints.empty()) {
       ldpp_dout(dpp, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
       continue;
