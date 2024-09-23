@@ -97,6 +97,11 @@ class Store {
     std::map<std::string, ceph::buffer::list> results;
   };
 
+  using CacherPosData =
+      MapCacher::MapCacher<std::string, ceph::buffer::list>::PosAndData;
+  using ExpCacherPosData = tl::expected<CacherPosData, int>;
+
+
   std::vector<ceph::buffer::list> get_errors(const std::string& start,
 					     const std::string& end,
 					     uint64_t max_return) const;
