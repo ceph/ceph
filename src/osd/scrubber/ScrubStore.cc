@@ -109,19 +109,29 @@ Store::create(ObjectStore* store,
   ceph_assert(t);
   ghobject_t oid = make_scrub_object(pgid);
   t->touch(coll, oid);
-  return new Store{coll, oid, store};
+  return new Store{*store, t, pgid, coll};
 }
 
-Store::Store(const coll_t& coll, const ghobject_t& oid, ObjectStore* store)
-  : coll(coll),
-    hoid(oid),
-    driver(store, coll, hoid),
-    backend(&driver)
-{}
+
+Store::Store(
+    ObjectStore& osd_store,
+    ObjectStore::Transaction* t,
+    const spg_t& pgid,
+    const coll_t& coll)
+    : object_store{osd_store}
+    , coll{coll}
+{
+  ceph_assert(t);
+
+  const auto err_obj = pgid.make_temp_ghobject(fmt::format("scrub_{}", pgid));
+  t->touch(coll, err_obj);
+  errors_db.emplace(pgid, err_obj, OSDriver{&object_store, coll, err_obj});
+}
+
 
 Store::~Store()
 {
-  ceph_assert(results.empty());
+  ceph_assert(!errors_db || errors_db->results.empty());
 }
 
 void Store::add_error(int64_t pool, const inconsistent_obj_wrapper& e)
@@ -131,10 +141,12 @@ void Store::add_error(int64_t pool, const inconsistent_obj_wrapper& e)
 
 void Store::add_object_error(int64_t pool, const inconsistent_obj_wrapper& e)
 {
+  const auto key = to_object_key(pool, e.object);
   bufferlist bl;
   e.encode(bl);
-  results[to_object_key(pool, e.object)] = bl;
+  errors_db->results[key] = bl;
 }
+
 
 void Store::add_error(int64_t pool, const inconsistent_snapset_wrapper& e)
 {
@@ -145,26 +157,28 @@ void Store::add_snap_error(int64_t pool, const inconsistent_snapset_wrapper& e)
 {
   bufferlist bl;
   e.encode(bl);
-  results[to_snap_key(pool, e.object)] = bl;
+  errors_db->results[to_snap_key(pool, e.object)] = bl;
 }
 
 bool Store::empty() const
 {
-  return results.empty();
+  return errors_db->results.empty();
 }
 
 void Store::flush(ObjectStore::Transaction* t)
 {
   if (t) {
-    OSDriver::OSTransaction txn = driver.get_transaction(t);
-    backend.set_keys(results, &txn);
+    OSDriver::OSTransaction txn = errors_db->driver.get_transaction(t);
+    errors_db->backend.set_keys(errors_db->results, &txn);
   }
-  results.clear();
+  errors_db->results.clear();
 }
 
 void Store::cleanup(ObjectStore::Transaction* t)
 {
-  t->remove(coll, hoid);
+  ceph_assert(t);
+  if (errors_db)
+    t->remove(coll, errors_db->errors_hoid);
 }
 
 std::vector<bufferlist>
@@ -195,8 +209,11 @@ Store::get_errors(const string& begin,
 		  uint64_t max_return) const
 {
   vector<bufferlist> errors;
+  if (!errors_db)
+    return errors;
+
   auto next = std::make_pair(begin, bufferlist{});
-  while (max_return && !backend.get_next(next.first, &next)) {
+  while (max_return && !errors_db->backend.get_next(next.first, &next)) {
     if (next.first >= end)
       break;
     errors.push_back(next.second);
