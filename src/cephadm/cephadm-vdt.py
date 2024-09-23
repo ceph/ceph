@@ -3189,6 +3189,8 @@ def command_shell(ctx):
             logger.info(f'- {name}')
         preparing_remote_hosts(problem_hosts)
         distribute_ceph_pub_key(problem_hosts, f'{ctx.output_dir}/ceph.pub')
+    else:
+        logger.info('All hosts connect, processing to the next steps')
     # Check fsid
     logger.info('---------------------START EXECUTING BASH FILES--------------------')
     if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
