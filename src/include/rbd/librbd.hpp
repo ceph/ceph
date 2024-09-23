@@ -160,6 +160,7 @@ namespace librbd {
   } group_info_t;
 
   typedef rbd_group_snap_state_t group_snap_state_t;
+  typedef rbd_group_snap_namespace_type_t group_snap_namespace_type_t;
 
   typedef struct {
     std::string image_name;
@@ -177,7 +178,7 @@ namespace librbd {
     std::string name;
     std::string image_snap_name;
     group_snap_state_t state;
-    //group_snap_namespace_type_t namespace_type;
+    group_snap_namespace_type_t namespace_type;
     std::vector<group_image_snap_info_t> image_snaps;
   } group_snap_info2_t;
 

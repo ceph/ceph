@@ -249,6 +249,10 @@ typedef enum {
   RBD_GROUP_SNAP_STATE_COMPLETE
 } rbd_group_snap_state_t;
 
+typedef enum {
+  RBD_GROUP_SNAP_NAMESPACE_TYPE_USER = 0
+} rbd_group_snap_namespace_type_t;
+
 typedef struct {
   char *image_name;
   int64_t pool_id;
@@ -265,7 +269,7 @@ typedef struct {
   char *name;
   char *image_snap_name;
   rbd_group_snap_state_t state;
-  //rbd_group_snap_namespace_type_t namespace_type;
+  rbd_group_snap_namespace_type_t namespace_type;
   size_t image_snaps_count;
   rbd_group_image_snap_info_t *image_snaps;
 } rbd_group_snap_info2_t;
