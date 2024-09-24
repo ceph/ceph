@@ -93,7 +93,7 @@ write_ertr::future<> RBMDevice::write_rbm_superblock()
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
   assert(bl.length() < super.block_size);
   iter.copy(bl.length(), bp.c_str());
-  return write(RBM_START_ADDRESS, std::move(bp));
+  return write(RBM_START_ADDRESS, bp);
 }
 
 read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
@@ -212,7 +212,7 @@ open_ertr::future<> EphemeralRBMDevice::open(
 
 write_ertr::future<> EphemeralRBMDevice::write(
   uint64_t offset,
-  bufferptr &&bptr,
+  bufferptr bptr,
   uint16_t stream) {
   LOG_PREFIX(EphemeralRBMDevice::write);
   ceph_assert(buf);
