@@ -1,0 +1,29 @@
+openstack:
+  - volumes: # attached to each instance
+      count: 2
+      size: 10 # GB
+roles:
+- [mon.a, mds.a, mgr.x, osd.0, osd.1, client.0]
+overrides:
+  ceph:
+    log-ignorelist:
+      - MDS in read-only mode
+      - force file system read-only
+      - overall HEALTH_
+      - \(FS_DEGRADED\)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_FULL\)
+      - \(MDS_READ_ONLY\)
+      - \(POOL_FULL\)
+      - \(POOL_APP_NOT_ENABLED\)
+tasks:
+- install:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+- rgw:
+  - client.0
+- exec:
+    client.0:
+      - ceph_test_admin_socket_output --all
+      - sudo ceph tell osd.* injectfull none # Fixes https://tracker.ceph.com/issues/59380
