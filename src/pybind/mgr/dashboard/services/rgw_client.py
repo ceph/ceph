@@ -1154,6 +1154,7 @@ class RgwMultisite:
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
 
     def replace_hostname(self, endpoint, hostname_to_ip):
         # Replace the hostname in the endpoint URL with its corresponding IP address.
