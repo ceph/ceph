@@ -38,22 +38,4 @@ cypress_run () {
 
 cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/frontend
 
-kcli ssh -u root ceph-node-00 'cephadm shell "ceph config set mgr mgr/prometheus/exclude_perf_counters false"'
-
-# check if the prometheus daemon is running
-# before starting the e2e tests
-
-PROMETHEUS_RUNNING_COUNT=$(kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch ls --service_name=prometheus --format=json"' | jq -r '.[] | .status.running')
-while [[ $PROMETHEUS_RUNNING_COUNT -lt 1 ]]; do
-    PROMETHEUS_RUNNING_COUNT=$(kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch ls --service_name=prometheus --format=json"' | jq -r '.[] | .status.running')
-done
-
-# grafana ip address is set to the fqdn by default.
-# kcli is not working with that, so setting the IP manually.
-kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-alertmanager-api-host http://192.168.100.100:9093"'
-kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-prometheus-api-host http://192.168.100.100:9095"'
-kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-grafana-api-url https://192.168.100.100:3000"'
-kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch apply node-exporter --placement 'count:2'"'
-
-cypress_run ["cypress/e2e/orchestrator/workflow/*.feature","cypress/e2e/orchestrator/workflow/*-spec.ts"]
-cypress_run "cypress/e2e/orchestrator/grafana/*.feature"
+cypress_run ["cypress/e2e/orchestrator/workflow/*.feature","cypress/e2e/orchestrator/workflow/*-spec.ts","cypress/e2e/orchestrator/grafana/*.feature"]
