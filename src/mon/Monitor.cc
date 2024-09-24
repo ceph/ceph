@@ -4398,8 +4398,9 @@ void Monitor::resend_routed_requests()
       delete rr;
     } else {
       auto q = rr->request_bl.cbegin();
+      // for features see forward_request_leader()
       PaxosServiceMessage *req =
-	(PaxosServiceMessage *)decode_message(cct, 0, q);
+	(PaxosServiceMessage *)decode_message(cct, 0, q, CEPH_FEATURES_ALL);
       rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req
 	       << dendl;
