@@ -1081,6 +1081,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->snap_btime = st->snap_btime;
     in->snap_metadata = st->snap_metadata;
     in->fscrypt_auth = st->fscrypt_auth;
+    in->fscrypt_file = st->fscrypt_file;
     in->fscrypt_ctx = in->init_fscrypt_ctx(fscrypt.get());
     need_snapdir_attr_refresh = true;
   }
