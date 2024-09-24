@@ -7757,14 +7757,20 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bufferlist bl;
 	if (oi.is_omap()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    ch, ghobject_t(soid), start_after
+	    ch, ghobject_t(soid),
+	    // try to seek as many keys-at-once as possible for the sake of performance.
+	    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
+	    // than just seek(n).
+	    filter_prefix >= start_after ? filter_prefix : start_after
 	    );
           if (!iter) {
             result = -ENOENT;
             goto fail;
           }
-	  iter->upper_bound(start_after);
-	  if (filter_prefix > start_after) iter->lower_bound(filter_prefix);
+	  if (filter_prefix <= start_after) {
+	    // the get_omap_iterator() seeks to lower bound
+	    iter->upper_bound(start_after);
+	  }
 	  for (num = 0;
 	       iter->valid() &&
 		 iter->key().substr(0, filter_prefix.size()) == filter_prefix;
