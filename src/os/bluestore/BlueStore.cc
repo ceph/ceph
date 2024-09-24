@@ -8910,73 +8910,69 @@ string BlueStore::get_device_path(unsigned id)
   return res;
 }
 
-int BlueStore::_set_bdev_label_size(const string& path, uint64_t size)
-{
-  bluestore_bdev_label_t label;
-  int r = _read_bdev_label(cct, bdev, path, &label);
-  if (r < 0) {
-    derr << "unable to read label for " << path << ": "
-          << cpp_strerror(r) << dendl;
-  } else {
-    label.size = size;
-    r = _write_bdev_label(cct, bdev, path, label);
-    if (r < 0) {
-      derr << "unable to write label for " << path << ": "
-            << cpp_strerror(r) << dendl;
-    }
-  }
-  return r;
-}
-
 int BlueStore::expand_devices(ostream& out)
 {
   int r = _open_db_and_around(true);
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
   out << "Expanding DB/WAL..." << std::endl;
-  for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
-    if (devid == bluefs_layout.shared_bdev ) {
+  uint64_t old_shared_size = 0;
+  uint64_t new_shared_size = 0;
+  for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB, BlueFS::BDEV_SLOW}) {
+    bool shared_dev = devid == bluefs_layout.shared_bdev;
+    auto bdev0 = shared_dev ? bdev : bluefs->get_block_device(devid);
+    if (!bdev0 || new_shared_size) {
       continue;
     }
-    uint64_t size = bluefs->get_block_device_size(devid);
-    if (size == 0) {
-      // no bdev
+    bluestore_bdev_label_t label;
+    bool label_supported = bdev0->supported_bdev_label();
+    uint64_t new_size = bdev0->get_size();
+    int r = label_supported ? _read_bdev_label(cct, bdev0, path, &label) : 0;
+    if (r < 0) {
+      derr << devid
+           << " : unable to read label for " << path << ": "
+           << cpp_strerror(r) << dendl;
       continue;
     }
-
-    out << devid
-	<<" : expanding " << " to 0x" << size << std::dec << std::endl;
+    uint64_t size = shared_dev ? fm->get_size() : label.size;
+    if (p2align(new_size, min_alloc_size) <= size) {
+      // no need to expand
+      out << devid
+	  <<" : nothing to do, skipped"
+	  << std::endl;
+      continue;
+    }
     string p = get_device_path(devid);
     const char* path = p.c_str();
     if (path == nullptr) {
       derr << devid
-	    <<": can't find device path " << dendl;
+           <<": can't find device path " << dendl;
       continue;
     }
-    if (bluefs->bdev_support_label(devid)) {
-      if (_set_bdev_label_size(p, size) >= 0) {
-        out << devid
-          << " : size label updated to " << size
-          << std::endl;
+    out << devid
+	<<" : Expanding to 0x" << std::hex << new_size
+	<< std::dec << "(" << byte_u_t(new_size) << ")"
+	<< std::endl;
+    label.size = new_size;
+    r = label_supported ? _write_bdev_label(cct, bdev0, path, label) : 0;
+    if (r < 0) {
+      derr << devid
+           << " : bdev label update failed:" << cpp_strerror(r)
+           << dendl;
+    } else {
+      if (shared_dev) {
+        _write_out_fm_meta(new_size);
+        old_shared_size = size;
+        new_shared_size = new_size;
       }
+      out << devid
+          << " : size updated to 0x" << std::hex << new_size
+          << std::dec << "(" << byte_u_t(new_size) << ")"
+          << std::endl;
     }
   }
-  uint64_t size0 = fm->get_size();
-  uint64_t size = bdev->get_size();
-  if (size0 < size) {
-    out << bluefs_layout.shared_bdev
-      << " : expanding " << " from 0x" << std::hex
-      << size0 << " to 0x" << size << std::dec << std::endl;
-    _write_out_fm_meta(size);
-    if (bdev->supported_bdev_label()) {
-      if (_set_bdev_label_size(path, size) >= 0) {
-        out << bluefs_layout.shared_bdev
-          << " : size label updated to " << size
-          << std::endl;
-      }
-    }
-    _close_db_and_around();
-
+  _close_db_and_around();
+  if (new_shared_size) {
     // mount in read/write to sync expansion changes
     if (bdev_label_multi) {
       // We need not do fsck, because we can be broken - size is increased,
@@ -8987,11 +8983,11 @@ int BlueStore::expand_devices(ostream& out)
     ceph_assert(r == 0);
     if (fm && fm->is_null_manager()) {
       // we grow the allocation range, must reflect it in the allocation file
-      alloc->init_add_free(size0, size - size0);
+      alloc->init_add_free(old_shared_size, new_shared_size - old_shared_size);
       if (bdev_label_multi) {
         uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
         for (uint64_t loc : bdev_label_positions) {
-          if ((loc >= size0) && (loc + lsize <= size)) {
+          if ((loc >= old_shared_size) && (loc + lsize <= new_shared_size)) {
             bdev_label_valid_locations.push_back(loc);
           }
         }
@@ -9000,8 +8996,6 @@ int BlueStore::expand_devices(ostream& out)
       need_to_destage_allocation_file = true;
     }
     umount();
-  } else {
-    _close_db_and_around();
   }
   return r;
 }

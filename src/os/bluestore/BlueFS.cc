@@ -635,13 +635,17 @@ void BlueFS::dump_block_extents(ostream& out)
     if (!bdev[i]) {
       continue;
     }
-    auto total = get_total(i);
+    if (!alloc[i]) {
+      continue;
+    }
+    auto total = get_total(i) + block_reserved[i];
     auto free = get_free(i);
 
     out << i << " : device size 0x" << std::hex << total
-        << " : using 0x" << total - free
-	<< std::dec << "(" << byte_u_t(total - free) << ")";
-    out << "\n";
+	<< std::dec << "(" << byte_u_t(total) << ")"
+        << " : using 0x" << std::hex << total - free
+	<< std::dec << "(" << byte_u_t(total - free) << ")"
+        << std::endl;
   }
 }
 
