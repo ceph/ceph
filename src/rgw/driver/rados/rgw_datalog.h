@@ -333,6 +333,15 @@ public:
   void set_bucket_filter(decltype(bucket_filter)&& f) {
     bucket_filter = std::move(f);
   }
+  bool should_log_bucket(const DoutPrefixProvider* dpp,
+                         const RGWBucketInfo& bucket_info,
+                         optional_yield y) const {
+    if (bucket_info.layout.logs.empty()) {
+      return false;
+    }
+
+    return filter_bucket(dpp, bucket_info.bucket, y);
+  }
   // a marker that compares greater than any other
   std::string max_marker() const;
   std::string get_oid(uint64_t gen_id, int shard_id) const;
