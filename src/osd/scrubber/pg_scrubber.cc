@@ -1209,7 +1209,7 @@ void PgScrubber::reinit_scrub_store()
   // actual Object Store objects).
   // 1. The ScrubStore object itself.
   // 2,3. The two special hobjects in the coll (the PG data) holding the last
-  //      scrub's results. <<note: only one DB in this commit>>
+  //      scrub's results.
   //
   // The Store object can be deleted and recreated, as a way to guarantee
   // no junk is left. We won't do it here, but we will clear the at_level_t
