@@ -58,17 +58,36 @@ def mock_lv_device_generator():
         return dev
     return mock_lv
 
-def mock_device():
+def mock_device(name='foo',
+                vg_name='vg_foo',
+                vg_size=None,
+                lv_name='lv_foo',
+                lv_size=None,
+                path='foo',
+                lv_path='',
+                number_lvs=0):
     dev = create_autospec(device.Device)
-    dev.path = '/dev/foo'
-    dev.vg_name = 'vg_foo'
-    dev.lv_name = 'lv_foo'
+    if vg_size is None:
+        dev.vg_size = [21474836480]
+    if lv_size is None:
+        lv_size = dev.vg_size
+    dev.lv_size = lv_size
+    dev.path = f'/dev/{path}'
+    dev.vg_name = f'{vg_name}'
+    dev.lv_name = f'{lv_name}'
+    dev.lv_path = lv_path if lv_path else f'/dev/{dev.vg_name}/{dev.lv_name}'
     dev.symlink = None
     dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
     dev.available_lvm = True
-    dev.vg_size = [21474836480]
     dev.vg_free = dev.vg_size
     dev.lvs = []
+    for n in range(0, number_lvs):
+        dev.lvs.append(lvm.Volume(vg_name=f'{dev.vg_name}{n}',
+                                  lv_name=f'{dev.lv_name}-{n}',
+                                  lv_path=f'{dev.lv_path}-{n}',
+                                  lv_size=dev.lv_size,
+                                  lv_tags=''))
+    dev.is_device = True
     return dev
 
 @pytest.fixture(params=range(1,4))
@@ -79,6 +98,26 @@ def mock_devices_available(request):
         # after v15.2.8, a single VG is created for each PV
         dev.vg_name = f'vg_foo_{n}'
         dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
+        ret.append(dev)
+    return ret
+
+@pytest.fixture(params=range(2,5))
+def mock_devices_available_multi_pvs_per_vg(request):
+    ret = []
+    number_lvs = 1
+    # for n in range(0, 2):
+    for n in range(0, request.param):
+        if n == request.param - 1:
+            number_lvs = 2
+        dev = mock_device(path=f'foo{str(n)}',
+                          vg_name='vg_foo',
+                          lv_name=f'lv_foo{str(n)}',
+                          lv_size=[21474836480],
+                          number_lvs=number_lvs)
+        # after v15.2.8, a single VG is created for each PV
+        dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name,
+                                   pv_name=dev.path,
+                                   pv_count=request.param)]
         ret.append(dev)
     return ret
 

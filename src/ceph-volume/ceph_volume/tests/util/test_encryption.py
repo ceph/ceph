@@ -103,8 +103,9 @@ class TestLuksFormat(object):
 
 
 class TestLuksOpen(object):
+    @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)
     @patch('ceph_volume.util.encryption.process.call')
-    def test_luks_open_command_with_default_size(self, m_call, conf_ceph_stub):
+    def test_luks_open_command_with_default_size(self, m_call, m_bypass_workqueue, conf_ceph_stub):
         conf_ceph_stub('[global]\nfsid=abcd')
         expected = [
             'cryptsetup',
@@ -120,8 +121,9 @@ class TestLuksOpen(object):
         encryption.luks_open('abcd', '/dev/foo', '/dev/bar')
         assert m_call.call_args[0][0] == expected
 
+    @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)
     @patch('ceph_volume.util.encryption.process.call')
-    def test_luks_open_command_with_custom_size(self, m_call, conf_ceph_stub):
+    def test_luks_open_command_with_custom_size(self, m_call, m_bypass_workqueue, conf_ceph_stub):
         conf_ceph_stub('[global]\nfsid=abcd\n[osd]\nosd_dmcrypt_key_size=256')
         expected = [
             'cryptsetup',

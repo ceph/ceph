@@ -1,11 +1,13 @@
 import pytest
-from mock.mock import patch
+from mock.mock import patch, Mock
 from ceph_volume import process
 from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import migrate
 from ceph_volume.util.device import Device
 from ceph_volume.util import system
 from ceph_volume.util import encryption as encryption_utils
+from ceph_volume.devices.lvm.zap import Zap
+
 
 class TestGetClusterName(object):
 
@@ -533,9 +535,8 @@ class TestNew(object):
         expected = 'This command needs to be executed with sudo or as root'
         assert expected in str(error.value)
 
-    @patch('os.getuid')
-    def test_newdb_not_target_lvm(self, m_getuid, capsys):
-        m_getuid.return_value = 0
+    @patch('ceph_volume.api.lvm.get_lv_by_fullname', Mock(return_value=None))
+    def test_newdb_not_target_lvm(self, is_root, capsys):
         with pytest.raises(SystemExit) as error:
             migrate.NewDB(argv=[
                 '--osd-id', '1',
@@ -1225,9 +1226,8 @@ Example calls for supported scenarios:
         assert not stderr
 
 
-    @patch('os.getuid')
-    def test_migrate_data_db_to_new_db(self, m_getuid, monkeypatch):
-        m_getuid.return_value = 0
+    @patch.object(Zap, 'main')
+    def test_migrate_data_db_to_new_db(self, m_zap, is_root, monkeypatch):
 
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev'
@@ -1325,9 +1325,11 @@ Example calls for supported scenarios:
             '--command', 'bluefs-bdev-migrate',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.db']
+        m_zap.assert_called_once()
 
+    @patch.object(Zap, 'main')
     @patch('os.getuid')
-    def test_migrate_data_db_to_new_db_encrypted(self, m_getuid, monkeypatch):
+    def test_migrate_data_db_to_new_db_encrypted(self, m_getuid, m_zap, monkeypatch):
         m_getuid.return_value = 0
 
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
@@ -1440,6 +1442,8 @@ Example calls for supported scenarios:
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.db']
 
+        m_zap.assert_called_once()
+
     def test_migrate_data_db_to_new_db_active_systemd(self, is_root, monkeypatch, capsys):
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev'
@@ -1503,7 +1507,8 @@ Example calls for supported scenarios:
         assert '--> OSD is running, stop it with: systemctl stop ceph-osd@2' == stderr.rstrip()
         assert not stdout
 
-    def test_migrate_data_db_to_new_db_no_systemd(self, is_root, monkeypatch):
+    @patch.object(Zap, 'main')
+    def test_migrate_data_db_to_new_db_no_systemd(self, m_zap, is_root, monkeypatch):
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev'
         source_db_tags = 'ceph.osd_id=2,ceph.type=db,ceph.osd_fsid=1234,' \
@@ -1599,10 +1604,10 @@ Example calls for supported scenarios:
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.db']
 
-    @patch('os.getuid')
-    def test_migrate_data_db_to_new_db_skip_wal(self, m_getuid, monkeypatch):
-        m_getuid.return_value = 0
+        m_zap.assert_called_once()
 
+    @patch.object(Zap, 'main')
+    def test_migrate_data_db_to_new_db_skip_wal(self, m_zap, is_root, monkeypatch):
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev'
         source_db_tags = 'ceph.osd_id=2,ceph.type=db,ceph.osd_fsid=1234,' \
@@ -1721,10 +1726,10 @@ Example calls for supported scenarios:
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.db']
 
-    @patch('os.getuid')
-    def test_migrate_data_db_wal_to_new_db(self, m_getuid, monkeypatch):
-        m_getuid.return_value = 0
+        m_zap.assert_called_once()
 
+    @patch.object(Zap, 'main')
+    def test_migrate_data_db_wal_to_new_db(self, m_zap, is_root, monkeypatch):
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
         'ceph.wal_uuid=waluuid,ceph.wal_device=wal_dev'
@@ -1848,8 +1853,11 @@ Example calls for supported scenarios:
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.db',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.wal']
 
+        assert len(m_zap.mock_calls) == 2
+
+    @patch.object(Zap, 'main')
     @patch('os.getuid')
-    def test_migrate_data_db_wal_to_new_db_encrypted(self, m_getuid, monkeypatch):
+    def test_migrate_data_db_wal_to_new_db_encrypted(self, m_getuid, m_zap, monkeypatch):
         m_getuid.return_value = 0
 
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
@@ -1988,6 +1996,8 @@ Example calls for supported scenarios:
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.db',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.wal']
+
+        assert len(m_zap.mock_calls) == 2
 
     @patch('os.getuid')
     def test_dont_migrate_data_db_wal_to_new_data(self,
@@ -2360,12 +2370,12 @@ Example calls for supported scenarios:
             '--command', 'bluefs-bdev-migrate',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block']
 
-    @patch('os.getuid')
+    @patch.object(Zap, 'main')
     def test_migrate_data_wal_to_db(self,
-                                    m_getuid,
+                                    m_zap,
+                                    is_root,
                                     monkeypatch,
                                     capsys):
-        m_getuid.return_value = 0
 
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
@@ -2465,11 +2475,15 @@ Example calls for supported scenarios:
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.wal']
 
+        m_zap.assert_called_once()
+
+    @patch.object(Zap, 'main')
     @patch('os.getuid')
     def test_migrate_wal_to_db(self,
-                                m_getuid,
-                                monkeypatch,
-                                capsys):
+                               m_getuid,
+                               m_zap,
+                               monkeypatch,
+                               capsys):
         m_getuid.return_value = 0
 
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
@@ -2552,9 +2566,13 @@ Example calls for supported scenarios:
             '--command', 'bluefs-bdev-migrate',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.wal']
 
+        m_zap.assert_called_once()
+
+    @patch.object(Zap, 'main')
     @patch('os.getuid')
     def test_migrate_data_wal_to_db_encrypted(self,
                                               m_getuid,
+                                              m_zap,
                                               monkeypatch,
                                               capsys):
         m_getuid.return_value = 0
@@ -2666,6 +2684,8 @@ Example calls for supported scenarios:
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.wal']
 
+        m_zap.assert_called_once()
+
     def test_migrate_data_wal_to_db_active_systemd(self, is_root, monkeypatch, capsys):
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
@@ -2738,7 +2758,8 @@ Example calls for supported scenarios:
         assert '--> OSD is running, stop it with: systemctl stop ceph-osd@2' == stderr.rstrip()
         assert not stdout
 
-    def test_migrate_data_wal_to_db_no_systemd(self, is_root, monkeypatch):
+    @patch.object(Zap, 'main')
+    def test_migrate_data_wal_to_db_no_systemd(self, m_zap, is_root, monkeypatch):
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
         'ceph.wal_uuid=waluuid,ceph.wal_device=wal_dev'
@@ -2834,3 +2855,5 @@ Example calls for supported scenarios:
             '--command', 'bluefs-bdev-migrate',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.wal']
+
+        m_zap.assert_called_once()

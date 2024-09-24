@@ -1,11 +1,13 @@
 import os
 import pytest
 from ceph_volume.devices.simple import activate
+from mock.mock import patch
 
 
 class TestActivate(object):
 
-    def test_no_data_uuid(self, factory, is_root, monkeypatch, capture, fake_filesystem):
+    @patch('ceph_volume.decorators.os.getuid', return_value=0)
+    def test_no_data_uuid(self, m_getuid, factory, capture, fake_filesystem):
         fake_filesystem.create_file('/tmp/json-config', contents='{}')
         args = factory(osd_id='0', osd_fsid='1234', json_config='/tmp/json-config')
         with pytest.raises(RuntimeError):
