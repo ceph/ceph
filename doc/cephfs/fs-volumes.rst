@@ -299,6 +299,24 @@ The earmarking mechanism ensures that subvolumes are correctly tagged and manage
 helping to avoid conflicts and ensuring that each subvolume is associated
 with the intended service or use case.
 
+Valid Earmarks
+~~~~~~~~~~~~~~~~~~~~
+
+- **For NFS:**
+   - The valid earmark format is the top-level scope: ``'nfs'``.
+
+- **For SMB:**
+   - The valid earmark formats are:
+      - The top-level scope: ``'smb'``.
+      - The top-level scope with an intra-module level scope: ``'smb.cluster.{cluster_id}'``, where ``cluster_id`` is a short string uniquely identifying the cluster.
+      - Example without intra-module scope: ``smb``
+      - Example with intra-module scope: ``smb.cluster.cluster_1``
+
+.. note:: If you are changing an earmark from one scope to another (e.g., from nfs to smb or vice versa),
+   be aware that user permissions and ACLs associated with the previous scope might still apply. Ensure that
+   any necessary permissions are updated as needed to maintain proper access control.
+
+
 Removing a subvolume
 ~~~~~~~~~~~~~~~~~~~~
 
