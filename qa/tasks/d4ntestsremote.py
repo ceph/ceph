@@ -53,7 +53,7 @@ class D4NTestsRemote(Task):
 
     def end(self):
         for client in self.all_clients:
-            self.delete_user(client)
+            #self.delete_user(client)
             self.remove_packages(client)
 
         super(D4NTestsRemote, self).end()

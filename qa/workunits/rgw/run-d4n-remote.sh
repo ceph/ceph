@@ -15,4 +15,6 @@ pip install boto3
 $mydir/bin/python3 $mydir/test_rgw_d4n_remote.py
 
 deactivate
+
+sudo radosgw-admin -n client.0 user rm --uid s3main --purge-data
 echo OK.
