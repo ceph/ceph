@@ -234,18 +234,27 @@ class RgwClient(RestClient):
 
     @staticmethod
     def _get_daemon_connection_info(daemon_name: str) -> dict:
+        access_key = None
+        secret_key = None
+
         try:
+            # Try to fetch realm-specific credentials first
             realm_name = RgwClient._daemons[daemon_name].realm_name
             access_key = Settings.RGW_API_ACCESS_KEY[realm_name]
             secret_key = Settings.RGW_API_SECRET_KEY[realm_name]
         except TypeError:
-            # Legacy string values.
+            # Handle legacy case where credentials are simple strings, not per-realm
             access_key = Settings.RGW_API_ACCESS_KEY
             secret_key = Settings.RGW_API_SECRET_KEY
         except KeyError as error:
-            raise DashboardException(msg='Credentials not found for RGW Daemon: {}'.format(error),
-                                     http_status_code=404,
-                                     component='rgw')
+            # If the realm-specific credentials are not found, try fetching dashboard user keys
+            rgw_service_manager = RgwServiceManager()
+            # pylint: disable=protected-access
+            access_key, secret_key = rgw_service_manager._get_user_keys('dashboard')
+            if not access_key:
+                raise DashboardException(msg='Credentials not found for RGW Daemon: {}'.format(error),  # noqa E501  # pylint: disable=line-too-long
+                                         http_status_code=404,
+                                         component='rgw')
 
         return {'access_key': access_key, 'secret_key': secret_key}
 
