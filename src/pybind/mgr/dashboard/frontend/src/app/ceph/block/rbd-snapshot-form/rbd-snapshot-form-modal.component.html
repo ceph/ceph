@@ -27,6 +27,9 @@
                   i18n>This field is required.</span>
             <span *ngIf="((mirroring === 'snapshot') ? true : null) && (snapshotForm.getValue('mirrorImageSnapshot') === true) ? true: null"
                   i18n>Snapshot mode is enabled on image <b>{{ imageName }}</b>: snapshot names are auto generated</span>
+            <span *ngIf="snapshotForm.showError('snapshotName', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>The snapshot name cannot start with "." and cannot contain "/" and "@".</span>
           </div>
         </div>
         <ng-container *ngIf="(mirroring === 'snapshot') ? true : null">
