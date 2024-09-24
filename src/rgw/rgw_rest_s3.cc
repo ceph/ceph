@@ -2492,6 +2492,10 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
   if ((op_ret < 0) && (op_ret != -ERR_LENGTH_REQUIRED))
     return op_ret;
 
+  if (!driver->is_meta_master()) {
+    in_data.append(data);
+  }
+
   if (data.length()) {
     RGWCreateBucketParser parser;
 

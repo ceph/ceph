@@ -3618,7 +3618,6 @@ void RGWCreateBucket::execute(optional_yield y)
 
   if (!driver->is_meta_master()) {
     // apply bucket creation on the master zone first
-    bufferlist in_data;
     JSONParser jp;
     op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
                                            &in_data, &jp, s->info, y);
