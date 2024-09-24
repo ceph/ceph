@@ -1117,6 +1117,7 @@ class RGWCreateBucket : public RGWOp {
   bool relaxed_region_enforcement = false;
   RGWCORSConfiguration cors_config;
   std::set<std::string> rmattr_names;
+  bufferlist in_data;
 
   virtual bool need_metadata_upload() const { return false; }
 
