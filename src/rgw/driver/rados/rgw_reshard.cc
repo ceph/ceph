@@ -812,7 +812,7 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
   const auto next_log_gen = layout.logs.empty() ? 1 :
       layout.logs.back().gen + 1;
 
-  if (!store->svc()->zone->need_to_log_data()) {
+  if (!store->svc()->datalog_rados->should_log_bucket(dpp, bucket_info, y)) {
     // if we're not syncing data, we can drop any existing logs
     layout.logs.clear();
   }
@@ -896,7 +896,7 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     return ret;
   }
 
-  if (store->svc()->zone->need_to_log_data() && !prev.logs.empty() &&
+  if (store->svc()->datalog_rados->should_log_bucket(dpp, bucket_info, y) && !prev.logs.empty() &&
       prev.current_index.layout.type == rgw::BucketIndexType::Normal) {
     // write a datalog entry for each shard of the previous index. triggering
     // sync on the old shards will force them to detect the end-of-log for that
@@ -1343,10 +1343,12 @@ int RGWBucketReshard::execute(int num_shards,
   return 0;
 } // execute
 
-bool RGWBucketReshard::should_zone_reshard_now(const RGWBucketInfo& bucket,
-					       const RGWSI_Zone* zone_svc)
+bool RGWBucketReshard::should_zone_reshard_now(const DoutPrefixProvider* dpp,
+                                               optional_yield y,
+                                               const RGWBucketInfo& bucket,
+                                               const RGWDataChangesLog* datalog_rados)
 {
-  return !zone_svc->need_to_log_data() ||
+  return !datalog_rados->should_log_bucket(dpp, bucket, y) ||
     bucket.layout.logs.size() < max_bilog_history;
 }
 
@@ -1653,7 +1655,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     // needed to perform the calculation before calling
     // calculating_preferred_shards() in this class
     store->getRados()->calculate_preferred_shards(
-      dpp, num_entries, current_shard_count,
+      dpp, y, bucket_info, num_entries, current_shard_count,
       needs_resharding, &suggested_shard_count);
 
     // if we no longer need resharding or currently need to expand
@@ -1704,7 +1706,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     // all checks passed; we can drop through and proceed
   }
 
-  if (!RGWBucketReshard::should_zone_reshard_now(bucket_info, store->svc()->zone)) {
+  if (!RGWBucketReshard::should_zone_reshard_now(dpp, y, bucket_info, store->svc()->datalog_rados)) {
     return clean_up("bucket not eligible for resharding until peer "
 		    "zones finish syncing one or more of its old log "
 		    "generations");
