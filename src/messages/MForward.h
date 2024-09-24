@@ -112,7 +112,7 @@ public:
     encode(entity_name, payload);
   }
 
-  void decode_payload(uint64_t) override {
+  void decode_payload(uint64_t features) override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(tid, p);
@@ -128,7 +128,7 @@ public:
       decode(client_socket_addr, p);
     }
     decode(client_caps, p);
-    msg = (PaxosServiceMessage *)decode_message(NULL, 0, p);
+    msg = (PaxosServiceMessage *)decode_message(NULL, 0, p, features);
     decode(con_features, p);
     decode(entity_name, p);
   }

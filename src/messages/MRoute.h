@@ -45,7 +45,7 @@ private:
   }
 
 public:
-  void decode_payload(uint64_t) override {
+  void decode_payload(uint64_t features) override {
     auto p = payload.cbegin();
     using ceph::decode;
     decode(session_mon_tid, p);
@@ -54,7 +54,7 @@ public:
     bool m;
     decode(m, p);
     if (m)
-      msg = decode_message(NULL, 0, p);
+      msg = decode_message(NULL, 0, p, features);
     decode(send_osdmap_first, p);
   }
   void encode_payload(uint64_t features) override {
