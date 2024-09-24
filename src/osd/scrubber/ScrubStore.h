@@ -16,6 +16,28 @@ class PgScrubber;
 
 namespace Scrub {
 
+/**
+ * Storing errors detected during scrubbing.
+ *
+ * From both functional and internal perspectives, the store is a pair of key-value
+ * databases: one maps objects to shallow errors detected during their scrubbing,
+ * and other stores deep errors.
+ * Note that the first store is updated in both shallow and in deep scrubs. The
+ * second - only while deep scrubbing.
+ *
+ * The DBs can be consulted by the operator, when trying to list 'errors known
+ * at this point in time'. Whenever a scrub starts - the relevant entries in the
+ * DBs are removed. Specifically - the shallow errors DB is recreated each scrub,
+ * while the deep errors DB is recreated only when a deep scrub starts.
+ *
+ * When queried - the data from both DBs is merged for each named object, and
+ * returned to the operator.
+ *
+ * Implementation:
+ * Each of the two DBs is implemented as OMAP entries of a single, uniquely named,
+ * object. Both DBs are cached using the general KV Cache mechanism.
+ */
+
 class Store {
  public:
   ~Store();
@@ -114,12 +136,19 @@ class Store {
    * allocations; and 'mutable', as the caching mechanism is used in const
    * methods)
    */
-  mutable std::optional<at_level_t> errors_db;
-  // not yet: mutable std::optional<at_level_t> deep_db;
+  mutable std::optional<at_level_t> shallow_db;
+  mutable std::optional<at_level_t> deep_db;
 
   std::vector<ceph::buffer::list> get_errors(
       const std::string& start,
       const std::string& end,
+      uint64_t max_return) const;
+
+  void collect_specific_store(
+      MapCacher::MapCacher<std::string, ceph::buffer::list>& backend,
+      ExpCacherPosData& latest,
+      std::vector<bufferlist>& errors,
+      std::string_view end_key,
       uint64_t max_return) const;
 
   /**
@@ -131,5 +160,14 @@ class Store {
       at_level_t& db,
       std::string_view db_name);
 
+  /**
+   * merge the two error wrappers - fetched from both DBs for the same object.
+   * Specifically, the object errors are or'ed, and so are the per-shard
+   * entries.
+   */
+  bufferlist merge_encoded_error_wrappers(
+      hobject_t obj,
+      ExpCacherPosData& latest_sh,
+      ExpCacherPosData& latest_dp) const;
 };
 }  // namespace Scrub
