@@ -1,0 +1,22 @@
+[global]
+bs=4k
+size=1g
+iodepth=128
+
+ioengine=libfio_ceph_messenger.so
+#ceph_conf_file=ceph-messenger.conf
+
+# In order to select protocol explicitly add 'v1:' or 'v2:' prefix.
+# By default v2 is used.
+hostname=127.0.0.1
+port=5555
+
+ms_type=async+posix # or async+dpdk or async+rdma
+
+[client]
+receiver=0
+rw=write
+
+[server]
+receiver=1
+rw=read
