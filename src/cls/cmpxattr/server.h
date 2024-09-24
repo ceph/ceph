@@ -23,9 +23,12 @@
 #include "common/Clock.h"
 
 using namespace cls::cmpxattr;
+#define NTL_ALL_OBJECTS ULLONG_MAX
+#define NTL_NO_OBJECTS  0ULL
+
 struct named_time_lock_t {
   bool is_urgent_stop_msg() const {
-    return( (urgent_msg == URGENT_MSG_STOP) ||
+    return( (urgent_msg == URGENT_MSG_ABORT) ||
 	    (urgent_msg == URGENT_MSG_PASUE) );
   }
 

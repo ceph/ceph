@@ -22,13 +22,15 @@
 namespace cls::cmpxattr {
 
   enum urgent_msg_t {
-    URGENT_MSG_NONE   = 0,
-    URGENT_MSG_STOP   = 1,
-    URGENT_MSG_PASUE  = 2,
-    URGENT_MSG_SKIP   = 3,
-    URGENT_MSG_RESUME = 4
+    URGENT_MSG_NONE    = 0,
+    URGENT_MSG_ABORT   = 1,
+    URGENT_MSG_PASUE   = 2,
+    URGENT_MSG_RESUME  = 3,
+    URGENT_MSG_SKIP    = 4,
+    URGENT_MSG_INVALID = 5
   };
 
+  const char* get_urgent_msg_names(int msg);
   /// comparison operand type
   enum class Mode : uint8_t {
     String = CEPH_OSD_CMPXATTR_MODE_STRING,

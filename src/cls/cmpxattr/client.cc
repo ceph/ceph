@@ -63,4 +63,21 @@ namespace cls::cmpxattr {
     writeop.exec("cmpxattr", "lock_update", in);
   }
 
+  static const char* s_urgent_msg_names[] = {
+    "URGENT_MSG_NONE",
+    "URGENT_MSG_ABORT",
+    "URGENT_MSG_PASUE",
+    "URGENT_MSG_RESUME",
+    "URGENT_MSG_SKIP",
+    "URGENT_MSG_INVALID"
+  };
+
+  const char* get_urgent_msg_names(int msg) {
+    if (msg <= URGENT_MSG_INVALID && msg >= URGENT_MSG_NONE) {
+      return s_urgent_msg_names[msg];
+    }
+    else {
+      return s_urgent_msg_names[URGENT_MSG_INVALID];
+    }
+  }
 } // namespace cls::cmpxattr

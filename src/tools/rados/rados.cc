@@ -51,7 +51,7 @@
 #include <optional>
 
 #include "cls/lock/cls_lock_client.h"
-#include "../../cls/cmpxattr/server.h"
+#include "cls/cmpxattr/server.h"
 #include "include/compat.h"
 #include "include/util.h"
 #include "common/hobject.h"
@@ -1866,6 +1866,44 @@ static std::string prettify(const std::string& s)
   }
 }
 
+static const char* s_urgent_msg_names[] = {
+  "URGENT_MSG_NONE",
+  "URGENT_MSG_ABORT",
+  "URGENT_MSG_PASUE",
+  "URGENT_MSG_RESUME",
+  "URGENT_MSG_SKIP",
+  "URGENT_MSG_INVALID"
+};
+
+const char* rados_get_urgent_msg_names(int msg) {
+  if (msg <= URGENT_MSG_RESUME && msg >= URGENT_MSG_NONE) {
+    return s_urgent_msg_names[msg];
+  }
+  else {
+    return s_urgent_msg_names[URGENT_MSG_INVALID];
+  }
+}
+
+//---------------------------------------------------------------------------
+static void ntl_display_progress(const named_time_lock_t &ntl)
+{
+  if (ntl.progress_b == NTL_ALL_OBJECTS) {
+    std::cout << "Token is marked completed! obj_count="
+	      << ntl.progress_a << std::endl;
+  }
+  else if (ntl.progress_a == 0 && ntl.progress_b == 0) {
+    std::cout << "Token was not started yet!" << std::endl;
+  }
+  else if (ntl.progress_b == 0) {
+    std::cout << "Token is incomplete: progress = "
+	      << ntl.progress_a <<  std::endl;
+  }
+  else {
+    std::cout << "Token is incomplete: progress = [" << ntl.progress_a
+	      << ", " << ntl.progress_b << "]" <<  std::endl;
+  }
+}
+
 /**********************************************
 
 **********************************************/
@@ -2789,6 +2827,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << elapsd.tv.tv_sec << " seconds)"<< std::endl;
     }
     else if (attr_name == "cluster_lock") {
+      if (!obj_name) {
+	obj_name = nargs[1];
+      }
+      std::cout << obj_name << std::endl;
       named_time_lock_t ntl;
       try {
 	auto p = bl.cbegin();
@@ -2800,15 +2842,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
       if (ntl.is_urgent_stop_msg()) {
 	const int32_t &msg = ntl.urgent_msg;
-	std::cout << "Worker Shard is marked for urgent message ";
-	std::cout << (msg == URGENT_MSG_STOP  ? "URGENT_MSG_STOP" :"");
-	std::cout << (msg == URGENT_MSG_PASUE ? "URGENT_MSG_PASUE" :"") << std::endl;
+	std::cout << "Worker Shard is marked for urgent message "
+		  << rados_get_urgent_msg_names(msg) << std::endl;
       }
       utime_t duration = ceph_clock_now() - ntl.lock_time;
       cout << ntl.owner << "::duration = " << duration
 	   << "::max_lock_duration = " << ntl.max_lock_duration << "::Lock "
 	   << ((duration > ntl.max_lock_duration) ? "was expired" : "is valid") << std::endl;
-      if (ntl.progress_b == ULLONG_MAX) {
+#if 0
+      if (ntl.progress_b == NTL_ALL_OBJECTS) {
 	cout << "Token is marked completed! obj_count=" << ntl.progress_a << std::endl;
       }
       else if (ntl.progress_a == 0 && ntl.progress_b == 0) {
@@ -2821,6 +2863,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	cout << "Token is incomplete: progress = [" << ntl.progress_a
 	     << ", " << ntl.progress_b << "]" <<  std::endl;
       }
+#else
+      ntl_display_progress(ntl);
+#endif
     }
     else {
       string s(bl.c_str(), bl.length());

@@ -35,6 +35,7 @@ namespace rgw::dedup {
 
   static constexpr work_shard_t NULL_WORK_SHARD = 0xFF;
   static constexpr md5_shard_t  NULL_MD5_SHARD  = 0xFF;
+  static constexpr unsigned     NULL_SHARD      = 0xFF;
   struct __attribute__ ((packed)) disk_block_id_t
   {
   public:

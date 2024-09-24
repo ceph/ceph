@@ -101,7 +101,7 @@ namespace cls::cmpxattr {
   struct lock_update_op {
     bool is_urgent_stop_msg() const {
       return (op_flags.is_urgent_msg() &&
-	      ((urgent_msg == URGENT_MSG_STOP) || (urgent_msg == URGENT_MSG_PASUE)));
+	      ((urgent_msg == URGENT_MSG_ABORT) || (urgent_msg == URGENT_MSG_PASUE)));
     }
 
     bool is_lock_revert_msg() const {
@@ -109,6 +109,8 @@ namespace cls::cmpxattr {
     }
 
     bool is_urgent_msg() const { return op_flags.is_urgent_msg(); }
+
+    bool is_mark_completed_msg() const { return op_flags.is_mark_completed(); }
 
     bool verify() const {
       if (op_flags.is_urgent_msg()) {

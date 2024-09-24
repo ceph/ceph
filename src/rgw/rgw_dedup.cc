@@ -824,7 +824,6 @@ namespace rgw::dedup {
     }
 #endif
 #if 0
-    //(const ceph::real_time      &last_scan_time);
     ceph::real_time mtime = obj->get_mtime();
     if (mtime < last_scan_time) {
       return 0;
@@ -868,20 +867,44 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::check_and_update_worker_heartbeat(work_shard_t worker_id,
-						    int64_t ingress_obj_count)
+  int Background::check_and_update_heartbeat(unsigned shard_id, uint64_t count_a,
+					     uint64_t count_b, const char *prefix)
   {
-    if (unlikely(d_stopped || d_pause_req)) {
-      ldpp_dout(dpp, 1) << __func__ << "::" << (d_stopped ? "STOPPED::" : "")
-			<< (d_pause_req ? "PAUSE_REQ" : "") << dendl;
+    if (unlikely(need_to_update_heartbeat())) {
+      int urgent_msg = URGENT_MSG_NONE;
+      d_cluster.update_shard_token_heartbeat(p_dedup_cluster_ioctx, shard_id, count_a,
+					     count_b, prefix, &urgent_msg);
+      if (unlikely(urgent_msg == URGENT_MSG_ABORT)) {
+	ldpp_dout(dpp, 1) << "::Remote Stop Request" << dendl;
+	d_remote_abort_req = true;
+      }
+      else if (unlikely(urgent_msg == URGENT_MSG_PASUE)) {
+	d_remote_pause_req = true;
+      }
+      else if (unlikely(urgent_msg == URGENT_MSG_SKIP)) {
+	return -1;
+      }
+    }
+
+    if (unlikely(d_local_pause_req || d_remote_pause_req)) {
+      ldpp_dout(dpp, 1) << (d_local_pause_req ? "::Local" : "::Remote")
+			<< " pause request" << dendl;
+      handle_pause_req();
+    }
+
+    if (unlikely(should_stop())) {
+      ldpp_dout(dpp, 1) << "Dedup background thread stopped" << dendl;
       return -1;
     }
 
-    if (unlikely(need_to_update_heartbeat())) {
-      return d_cluster.update_work_shard_token_heartbeat(p_dedup_cluster_ioctx,
-							 worker_id, ingress_obj_count);
-    }
     return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::check_and_update_worker_heartbeat(work_shard_t worker_id,
+						    int64_t ingress_obj_count)
+  {
+    return check_and_update_heartbeat(worker_id, ingress_obj_count, 0, WORKER_SHARD_PREFIX);
   }
 
   //---------------------------------------------------------------------------
@@ -889,17 +912,7 @@ namespace rgw::dedup {
 						 uint64_t load_count,
 						 uint64_t dedup_count)
   {
-    if (unlikely(d_stopped || d_pause_req)) {
-      ldpp_dout(dpp, 1) << __func__ << "::" << (d_stopped ? "STOPPED::" : "")
-			<< (d_pause_req ? "PAUSE_REQ" : "") << dendl;
-      return -1;
-    }
-
-    if (unlikely(need_to_update_heartbeat())) {
-      return d_cluster.update_md5_shard_token_heartbeat(p_dedup_cluster_ioctx,
-							md5_id, load_count, dedup_count);
-    }
-    return 0;
+    return check_and_update_heartbeat(md5_id, load_count, dedup_count, MD5_SHARD_PREFIX);
   }
 
   //---------------------------------------------------------------------------
@@ -1013,7 +1026,7 @@ namespace rgw::dedup {
   {
     for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
       run_dedup_step(STEP_BUILD_TABLE, md5_shard, worker_id, p_stats);
-      if (unlikely(d_stopped)) {
+      if (unlikely(should_stop())) {
 	ldpp_dout(dpp, 1) << __func__ << "::STEP_BUILD_TABLE::STOPPED\n" << dendl;
 	return -1;
       }
@@ -1029,7 +1042,7 @@ namespace rgw::dedup {
     d_table.remove_singletons_and_redistribute_keys();
     for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
       run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, worker_id, p_stats);
-      if (unlikely(d_stopped)) {
+      if (unlikely(should_stop())) {
 	ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::STOPPED\n" << dendl;
 	return -1;
       }
@@ -1081,68 +1094,109 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::objects_ingress()
+  int Background::f_ingress(unsigned worker_id)
   {
-    while (true) {
-      d_heart_beat_last_update = ceph_clock_now();
-      work_shard_t worker_id = d_cluster.get_next_work_shard_token(p_dedup_cluster_ioctx);
-      if (worker_id != NULL_WORK_SHARD) {
-	worker_stats_t worker_stats;
-	ceph_assert(worker_stats.ingress_obj == 0);
-	utime_t start_time = ceph_clock_now();
-	int ret = objects_ingress_single_shard(worker_id, &worker_stats);
-	if (likely(ret == 0)) {
-	  worker_stats.duration = ceph_clock_now() - start_time;
-	  d_cluster.mark_work_shard_token_completed(p_dedup_cluster_ioctx, worker_id, &worker_stats);
-	  ldpp_dout(dpp, 0) << "stat counters [worker]:\n" << worker_stats << dendl;
-	}
-	else {
-	  return ret;
-	}
-      }
-      else {
-	break;
-      }
+    utime_t start_time = ceph_clock_now();
+    worker_stats_t worker_stats;
+    int ret = objects_ingress_single_shard(worker_id, &worker_stats);
+    if (ret == 0) {
+      worker_stats.duration = ceph_clock_now() - start_time;
+      d_cluster.mark_work_shard_token_completed(p_dedup_cluster_ioctx, worker_id, &worker_stats);
+      ldpp_dout(dpp, 0) << "stat counters [worker]:\n" << worker_stats << dendl;
+      ldpp_dout(dpp, 0) << "Shard Process Duration   = " << worker_stats.duration << dendl;
     }
-    return 0;
+    return ret;
   }
 
   //---------------------------------------------------------------------------
-  int Background::objects_dedup()
+  int Background::f_dedup(unsigned md5_shard)
+  {
+    utime_t start_time = ceph_clock_now();
+    md5_stats_t md5_stats;
+    int ret = objects_dedup_single_shard(md5_shard, &md5_stats);
+    if (ret == 0) {
+      md5_stats.duration = ceph_clock_now() - start_time;
+      d_cluster.mark_md5_shard_token_completed(p_dedup_cluster_ioctx, md5_shard, &md5_stats);
+      ldpp_dout(dpp, 0) << "stat counters [md5]:\n" << md5_stats << dendl;
+      ldpp_dout(dpp, 0) << "Shard Process Duration   = " << md5_stats.duration << dendl;
+      d_table.reset();
+    }
+    return ret;
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::process_all_shards(bool ingress_work_shards, int (Background::* func)(unsigned))
   {
     while (true) {
       d_heart_beat_last_update = ceph_clock_now();
-      md5_shard_t md5_shard = d_cluster.get_next_md5_shard_token(p_dedup_cluster_ioctx);
-      if (md5_shard != NULL_MD5_SHARD) {
-	md5_stats_t md5_stats;
-	utime_t start_time = ceph_clock_now();
-	int ret = objects_dedup_single_shard(md5_shard, &md5_stats);
-	if (unlikely(ret != 0)) {
-	  return ret;
-	}
-	md5_stats.duration = ceph_clock_now() - start_time;
-	d_cluster.mark_md5_shard_token_completed(p_dedup_cluster_ioctx, md5_shard, &md5_stats);
-	ldpp_dout(dpp, 0) << "stat counters [md5]:\n" << md5_stats << dendl;
-	d_table.reset();
+      int urgent_msg = URGENT_MSG_NONE;
+      unsigned shard_id;
+      if (ingress_work_shards) {
+	shard_id = d_cluster.get_next_work_shard_token(p_dedup_cluster_ioctx, &urgent_msg);
       }
       else {
-	break;
+	shard_id = d_cluster.get_next_md5_shard_token(p_dedup_cluster_ioctx, &urgent_msg);
       }
-    }
+      // start with a common error handler
+      if (shard_id != NULL_SHARD) {
+	int ret = (this->*func)(shard_id);
+	if (unlikely(ret != 0)) {
+	  if (should_stop()) {
+	    ldpp_dout(dpp, 0) << __func__ << "stop execution" << dendl;
+	    return -1;
+	  }
+	  else {
+	    ldpp_dout(dpp, 0) << "Skip shard # " << shard_id << dendl;
+	  }
+	}
+      }
+      else { // we got a NULL_SHARD
+	ldpp_dout(dpp, 10) << __func__ << "::Got NULL_SHARD" << dendl;
+	if (urgent_msg == URGENT_MSG_NONE) {
+	  ldpp_dout(dpp, 0) << __func__ << "::finished scan" << dendl;
+	  break;
+	}
+	const char* name = get_urgent_msg_names(urgent_msg);
+	ldpp_dout(dpp, 0) << __func__ << "::NULL_SHARD::urgent_msg=" << urgent_msg
+			  << "::" << name << dendl;
+	if (urgent_msg == URGENT_MSG_PASUE) {
+	  d_remote_pause_req = true;
+	}
+
+	if (d_local_pause_req || d_remote_pause_req) {
+	  ldpp_dout(dpp, 0) << __func__ << "::PAUSE REQ" << dendl;
+	  handle_pause_req();
+	  ldpp_dout(dpp, 0) << __func__ << "::PAUSE RESUME" << dendl;
+	  // fall through ABORT code
+	}
+
+	if (urgent_msg == URGENT_MSG_ABORT) {
+	  ldpp_dout(dpp, 0) << __func__ << "::URGENT_MSG_ABORT" << dendl;
+	  d_remote_abort_req = true;
+	}
+
+	if (should_stop()) {
+	  return -1;
+	}
+
+	if (urgent_msg >= URGENT_MSG_INVALID) {
+	  return -1;
+	}
+      }
+    } // while loop
     return 0;
   }
 
   //---------------------------------------------------------------------------
   int Background::setup()
   {
-    ceph::real_time last_scan_time;
-
     init_rados_access_handles();
     int ret = d_cluster.init(store, p_dedup_cluster_ioctx);
     if (ret != 0) {
       derr << __func__ << "::failed cluster.init()" << dendl;
       return -1;
     }
+    d_table.reset();
 
     return 0;
   }
@@ -1168,17 +1222,18 @@ namespace rgw::dedup {
   //------------------------- --------------------------------------------------
   void Background::shutdown()
   {
-    d_stopped = true;
+    d_shutdown_req = true;
     d_cond.notify_all();
     if (d_runner.joinable()) {
       d_runner.join();
     }
     {
       std::unique_lock pause_lock(d_pause_mutex);
-      d_started   = false;
-      d_stopped   = false;
-      d_pause_req = false;
-      d_paused    = false;
+      d_started          = false;
+      d_shutdown_req     = false;
+      d_remote_abort_req = false;
+      d_local_pause_req  = false;
+      d_local_paused     = false;
     }
   }
 
@@ -1187,13 +1242,14 @@ namespace rgw::dedup {
   {
     {
       std::unique_lock pause_lock(d_pause_mutex);
-      if (d_paused) {
+      d_local_pause_req = true;
+      if (d_local_paused || d_shutdown_req) {
 	derr <<  __FILE__ << "::" <<__func__
-	     << "::background is already paused!!!" << dendl;
-	d_pause_req = true;
+	     << "::background is already paused/stopped!!!" << dendl;
+	return;
       }
       std::unique_lock cond_lock(d_cond_mutex);
-      d_cond.wait(cond_lock, [this]{return d_paused || d_stopped;});
+      d_cond.wait(cond_lock, [this]{return d_local_paused || d_shutdown_req;});
     }
   }
 
@@ -1202,7 +1258,7 @@ namespace rgw::dedup {
   {
     {
       std::unique_lock pause_lock(d_pause_mutex);
-      if (!d_paused) {
+      if (!d_local_paused) {
 	derr <<  __FILE__ << "::" <<__func__
 	     << "::background is not paused!!!" << dendl;
 	if (_driver != driver) {
@@ -1211,8 +1267,8 @@ namespace rgw::dedup {
 	}
 	return;
       }
-      d_pause_req = false;
-      d_paused    = false;
+      d_local_pause_req = false;
+      d_local_paused    = false;
       driver = _driver;
       init_rados_access_handles();
     }
@@ -1221,79 +1277,130 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void Background::handle_pause_request()
+  void Background::handle_pause_req()
   {
-    if (d_pause_req) {
-      d_paused = true;
-      d_cond.notify_all();
-      ldpp_dout(dpp, 10) << "Dedup background thread paused" << dendl;
-      std::unique_lock cond_lock(d_cond_mutex);
-      d_cond.wait(cond_lock, [this]{return !d_paused || d_stopped;});
-      if (!d_stopped) {
-	ldpp_dout(dpp, 10) << "Dedup background thread resumed" << dendl;
-      }
-#if 0
-      if (d_stopped) {
-	ldpp_dout(dpp, 10) << "Dedup background thread stopped" << dendl;
+    bool first_time = true;
+    while (d_local_pause_req || d_local_paused || d_remote_pause_req || d_remote_paused) {
+
+      if (should_stop()) {
 	return;
       }
-#endif
 
-    }
+      if (d_local_pause_req) {
+	d_local_paused = true;
+      }
+
+      if (d_remote_pause_req) {
+	d_remote_paused = true;
+      }
+
+      d_cond.notify_all();
+      std::unique_lock cond_lock(d_cond_mutex);
+
+      if (d_local_paused) {
+	if (first_time) {
+	  first_time = false;
+	  ldpp_dout(dpp, 1) << "Dedup background thread paused" << dendl;
+	}
+	d_cond.wait(cond_lock, [this]{return !d_local_paused || d_shutdown_req;});
+	continue;
+      }
+
+      if (d_remote_paused) {
+	unsigned interval = 3;
+	if (first_time) {
+	  //first_time = false;
+	  ldpp_dout(dpp, 1) << "Dedup background thread paused (remote request)" << dendl;
+	}
+	d_cond.wait_for(cond_lock, std::chrono::seconds(interval),
+			[this]{return d_shutdown_req || d_local_pause_req ;});
+	if (!d_local_paused && !d_local_pause_req && !d_shutdown_req) {
+	  d_remote_pause_req = false;
+	  d_remote_paused = false;
+	  int urgent_msg = URGENT_MSG_NONE;
+	  d_cluster.get_urgent_msg_state(p_dedup_cluster_ioctx, &urgent_msg);
+	  if (urgent_msg == URGENT_MSG_PASUE) {
+	    d_remote_pause_req = true;
+	  }
+	  else if (urgent_msg == URGENT_MSG_ABORT) {
+	    d_remote_abort_req = true;
+	  }
+	}
+      }
+
+    } // while loop
+
+    ldpp_dout(dpp, 0) << "Dedup background thread resumed!" << dendl;
   }
 
   //---------------------------------------------------------------------------
   void Background::run()
   {
-    bool first_time = true;
-    if (setup() != 0) {
-      derr << "failed setup()" << dendl;
-      return;
-    }
-
-    ceph::real_time last_scan_time;
-    ldpp_dout(dpp, 1) <<  __FILE__ << "::" <<__func__ << "::dedup::main loop" << dendl;
-    while (!d_stopped) {
-      if (unlikely(d_pause_req)) {
-	handle_pause_request();
-	if (d_stopped) {
-	  ldpp_dout(dpp, 10) << "Dedup background thread stopped" << dendl;
-	  return;
+    init_rados_access_handles();
+    utime_t epoch = ceph_clock_now();
+    bool need_to_scan = true;
+    ldpp_dout(dpp, 1) <<__func__ << "::dedup::main loop" << dendl;
+    while (!d_shutdown_req) {
+      if (unlikely(d_local_pause_req)) {
+	handle_pause_req();
+	if (d_shutdown_req) {
+	  goto shutdown;
 	}
       }
 
-      // -->
-      // Do Work !!!
-      // -->
-      if (first_time) {
-	first_time = false;
-	if (unlikely(objects_ingress() != 0)) {
-	  derr << __func__ << "::failed objects_ingress()" << dendl;
+      if (need_to_scan) {
+	if (setup() != 0) {
+	  derr << "failed setup()" << dendl;
 	  return;
 	}
+	epoch = d_cluster.get_epoch();
+	ldpp_dout(dpp, 1) << __func__ << "::Epoch=" << epoch << dendl;
+	process_all_shards(true, &Background::f_ingress);
+	if (should_stop()) {
+	  goto finish_scan;
+	}
 
-	// TBD:
 	// Wait for other worker to finish ingress step
 	uint32_t ttl = 0;
 	uint64_t total_ingressed = 0;
-	while (d_cluster.all_work_shard_tokens_completed(p_dedup_cluster_ioctx, &ttl, &total_ingressed) == false) {
+	while (!d_cluster.all_work_shard_tokens_completed(p_dedup_cluster_ioctx, &ttl, &total_ingressed)) {
 	  ldpp_dout(dpp, 0) << "Waiting for INGRESS step completion ttl=" << ttl << dendl;
-	  sleep(ttl);
+	  std::unique_lock cond_lock(d_cond_mutex);
+	  d_cond.wait_for(cond_lock, std::chrono::seconds(ttl), [this]{return d_shutdown_req || d_local_pause_req;});
+	  if (unlikely(d_local_pause_req)) {
+	    handle_pause_req();
+	  }
+	  if (should_stop()) {
+	    goto finish_scan;
+	  }
 	}
 
 	ldpp_dout(dpp, 1) << "\n\n==INGRESS step was completed on all shards! ("
 			  << total_ingressed << ")==\n" << dendl;
-	if (objects_dedup() != 0) {
-	  derr << __func__ << "::failed objects_dedup()" << dendl;
-	  return;
+	if (unlikely(d_local_pause_req)) {
+	  handle_pause_req();
+	}
+	if (should_stop()) {
+	  goto finish_scan;
+	}
+	process_all_shards(false, &Background::f_dedup);
+	ldpp_dout(dpp, 1) << "\n\n==DEDUP step was completed on all shards! ==\n" << dendl;
+      }
+    finish_scan:
+      need_to_scan = false;
+      std::unique_lock cond_lock(d_cond_mutex);
+      unsigned interval = 10;
+      d_cond.wait_for(cond_lock, std::chrono::seconds(interval), [this]{return d_shutdown_req || d_local_pause_req;});
+      if (!d_local_paused && !d_local_pause_req && !d_shutdown_req) {
+	if (d_cluster.can_start_new_scan(store, epoch, dpp)) {
+	  d_remote_pause_req = false;
+	  d_remote_abort_req = false;
+	  need_to_scan = true;
 	}
       }
-      last_scan_time = ceph_clock_now().to_real_time();
-      std::unique_lock cond_lock(d_cond_mutex);
-      d_cond.wait_for(cond_lock, std::chrono::seconds(d_execute_interval), [this]{return d_stopped;});
     }
-
-    ldpp_dout(dpp, 10) << "Dedup background thread stopped" << dendl;
+  shutdown:
+    ldpp_dout(dpp, 1) << "Dedup background thread stopped" << dendl;
   }
 
 }; //namespace rgw::dedup

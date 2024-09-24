@@ -32,8 +32,10 @@ namespace rgw::dedup {
   private:
     void run();
     int  setup();
-    void handle_pause_request();
-
+    void handle_pause_req();
+    bool should_stop() {
+      return (unlikely(d_shutdown_req || d_remote_abort_req));
+    }
     enum dedup_step_t {
       STEP_NONE,
       STEP_BUILD_TABLE,
@@ -41,6 +43,9 @@ namespace rgw::dedup {
     };
     int  read_buckets();
     bool need_to_update_heartbeat();
+    int  check_and_update_heartbeat(unsigned shard_id, uint64_t count_a, uint64_t count_b,
+				    const char *prefix);
+
     inline int  check_and_update_worker_heartbeat(work_shard_t worker_id, int64_t obj_count);
     inline int  check_and_update_md5_heartbeat(md5_shard_t md5_id,
 					       uint64_t load_count,
@@ -59,8 +64,9 @@ namespace rgw::dedup {
 					     worker_stats_t *p_worker_stats /*IN-OUT*/);
     int  objects_ingress_single_shard(work_shard_t worker_id,
 				      worker_stats_t *p_worker_stats);
-    int  objects_ingress();
-
+    int  f_ingress(unsigned shard_id);
+    int  f_dedup(unsigned shard_id);
+    int  process_all_shards(bool ingress_work_shards, int (Background::* func)(unsigned));
     int  read_bucket_stats(rgw::sal::Bucket *bucket, const std::string &bucket_name);
     int  run_dedup_step(dedup_step_t step,
 			md5_shard_t md5_shard,
@@ -68,12 +74,10 @@ namespace rgw::dedup {
 			md5_stats_t *p_stats /* IN-OUT */);
 
     int objects_dedup_single_shard(md5_shard_t md5_shard, md5_stats_t *p_stats);
-    int objects_dedup();
     int add_disk_record(const rgw::sal::Bucket *p_bucket,
 			const rgw::sal::Object *p_obj,
 			uint64_t                obj_size);
 
-    //void calc_object_key(uint64_t object_size, bufferlist &etag_bl, struct Key *p_key);
     int try_deduping_record(const disk_record_t *p_rec,
 			    disk_block_id_t      block_id,
 			    record_id_t          rec_id,
@@ -114,10 +118,13 @@ namespace rgw::dedup {
     unsigned d_heart_beat_max_elapsed_sec;
 
     // allow to start/pasue/resume/stop execution
-    bool d_stopped   = false;
-    bool d_started   = false;
-    bool d_paused    = false;
-    bool d_pause_req = false;
+    bool d_shutdown_req     = false;
+    bool d_remote_abort_req = false;
+    bool d_started          = false;
+    bool d_local_paused     = false;
+    bool d_local_pause_req  = false;
+    bool d_remote_paused    = false;
+    bool d_remote_pause_req = false;
     int  d_execute_interval;
 
     std::thread d_runner;

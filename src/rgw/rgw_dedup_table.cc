@@ -14,10 +14,8 @@ namespace rgw::dedup {
     dpp = _dpp;
     entries_count = _entries_count;
     hash_tab = new table_entry_t[entries_count];
-    if (hash_tab) {
-      reset();
-    }
-    occupied_count = 0;
+    ceph_assert(hash_tab);
+    reset();
   }
 
   //---------------------------------------------------------------------------
@@ -33,6 +31,8 @@ namespace rgw::dedup {
   {
     char *p = (char*)hash_tab;
     memset(p, 0, sizeof(table_entry_t)*entries_count);
+    occupied_count = 0;
+    stat_counters_reset();
   }
 
   //---------------------------------------------------------------------------

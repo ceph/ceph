@@ -2,8 +2,8 @@
 
 RGW_BASE="http://localhost:800"
 INFLATOR=(7937)
-FILE_COUNT=$((64*1024))
-BUCKET_COUNT=5
+FILE_COUNT=$((128*1024))
+BUCKET_COUNT=1
 OUT_DIR="/tmp/tmp_objs"
 BASE_FILE_NAME_SHORT="file_"
 BASE_FILE_NAME="$OUT_DIR/$BASE_FILE_NAME_SHORT"
@@ -20,7 +20,7 @@ seed=$4
 logfile=$5
 end_range=$(($start_range+$count))
 MAX_COUNT=$(($count*$multiplier))
-#echo "start_range = $start_range, end_range = $end_range, count=$count, max_count=$MAX_COUNT"
+echo "start_range = $start_range, end_range = $end_range, count=$count, max_count=$MAX_COUNT"
 #RANDOM=$seed
 objs_count=0
 PRINT_RANGE=1000
@@ -41,11 +41,11 @@ do
     #copies_count=$(( ($RANDOM % MAX_COPIES) + 1 ))
     val=$(($RANDOM % 7))
     if [ $val -lt 4 ]; then
-	copies_count=1
+	copies_count=5
     elif [ $val -lt 6 ]; then
-	copies_count=2
+	copies_count=10
     else
-	copies_count=3
+	copies_count=1
     fi
     
     if [ $copies_count -eq 1 ]; then
