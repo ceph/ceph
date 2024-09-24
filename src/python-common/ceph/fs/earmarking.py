@@ -19,7 +19,7 @@ supported top-level scopes.
 import errno
 import enum
 import logging
-from typing import Optional, Tuple
+from typing import List, NamedTuple, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +43,15 @@ class EarmarkException(Exception):
         return f"{self.errno} ({self.error_str})"
 
 
+class EarmarkContents(NamedTuple):
+    top: 'EarmarkTopScope'
+    subsections: List[str]
+
+
+class EarmarkParseError(ValueError):
+    pass
+
+
 class CephFSVolumeEarmarking:
     def __init__(self, fs, path: str) -> None:
         self.fs = fs
@@ -56,26 +65,60 @@ class CephFSVolumeEarmarking:
             raise EarmarkException(-e.errno, e.strerror) from e
         else:
             log.error(f"Unexpected error {action} earmark: {e}")
-            raise EarmarkException(errno.EIO, "Unexpected error") from e
+            raise EarmarkException
+
+    @staticmethod
+    def parse_earmark(value: str) -> Optional[EarmarkContents]:
+        """
+        Parse an earmark value. Returns None if the value is an empty string.
+        Raises EarmarkParseError if the top-level scope is not valid or the earmark
+        string is not properly structured.
+        Returns an EarmarkContents for valid earmark values.
+
+        :param value: The earmark string to parse.
+        :return: An EarmarkContents instance if valid, None if empty.
+        """
+        if not value:
+            return None
+
+        parts = value.split('.')
+
+        # Check if the top-level scope is valid
+        if parts[0] not in (scope.value for scope in EarmarkTopScope):
+            raise EarmarkParseError(f"Invalid top-level scope: {parts[0]}")
+
+        # Check if all parts are non-empty to ensure valid dot-separated format
+        if not all(parts):
+            raise EarmarkParseError("Earmark contains empty sections.")
+
+        # Return parsed earmark with top scope and subsections
+        return EarmarkContents(top=EarmarkTopScope(parts[0]), subsections=parts[1:])
 
     def _validate_earmark(self, earmark: str) -> bool:
         """
-        Validates that the earmark string is either empty or composed of parts separated by scopes,
-        with the top-level scope being either 'nfs' or 'smb'.
+        Validates the earmark string further by checking specific conditions for scopes like 'smb'.
 
         :param earmark: The earmark string to validate.
         :return: True if valid, False otherwise.
         """
-        if not earmark or earmark in (scope.value for scope in EarmarkTopScope):
-            return True
-
-        parts = earmark.split('.')
-
-        if parts[0] not in (scope.value for scope in EarmarkTopScope):
+        try:
+            parsed = self.parse_earmark(earmark)
+        except EarmarkParseError:
             return False
 
-        # Check if all parts are non-empty (to ensure valid dot-separated format)
-        return all(parts)
+        # If parsed is None, it's considered valid since the earmark is empty
+        if not parsed:
+            return True
+
+        # Specific validation for 'smb' scope
+        if parsed.top == EarmarkTopScope.SMB:
+            # Valid formats: 'smb' or 'smb.cluster.{cluster_id}'
+            if not (len(parsed.subsections) == 0 or
+                    (len(parsed.subsections) == 2 and
+                    parsed.subsections[0] == 'cluster' and parsed.subsections[1])):
+                return False
+
+        return True
 
     def get_earmark(self) -> Optional[str]:
         try:
@@ -95,7 +138,8 @@ class CephFSVolumeEarmarking:
                 errno.EINVAL,
                 f"Invalid earmark specified: '{earmark}'. "
                 "A valid earmark should either be empty or start with 'nfs' or 'smb', "
-                "followed by dot-separated non-empty components."
+                "followed by dot-separated non-empty components or simply set "
+                "'smb.cluster.{cluster_id}' for the smb intra-cluster scope."
                 )
 
         try:
