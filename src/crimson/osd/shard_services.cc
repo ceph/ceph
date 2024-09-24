@@ -786,7 +786,7 @@ seastar::future<> ShardServices::dispatch_context_transaction(
 seastar::future<> ShardServices::dispatch_context_messages(
   BufferedRecoveryMessages &&ctx)
 {
-  LOG_PREFIX(OSDSingletonState::dispatch_context_transaction);
+  LOG_PREFIX(OSDSingletonState::dispatch_context_messages);
   auto ret = seastar::parallel_for_each(std::move(ctx.message_map),
     [FNAME, this](auto& osd_messages) {
       auto& [peer, messages] = osd_messages;
