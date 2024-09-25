@@ -113,9 +113,9 @@ class RgwMultisiteStatus(RESTController):
     @RESTController.Collection(method='GET', path='/sync_status')
     @allow_empty_body
     # pylint: disable=W0102,W0613
-    def get_sync_status(self):
+    def get_sync_status(self, daemon_name=None):
         multisite_instance = RgwMultisite()
-        result = multisite_instance.get_multisite_sync_status()
+        result = multisite_instance.get_multisite_sync_status(daemon_name)
         return result
 
 
