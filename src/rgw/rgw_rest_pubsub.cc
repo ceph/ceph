@@ -396,16 +396,16 @@ class RGWPSCreateTopicOp : public RGWOp {
 
 void RGWPSCreateTopicOp::execute(optional_yield y) {
   // master request will replicate the topic creation.
-  if (!driver->is_meta_master()) {
-    op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 4)
-          << "CreateTopic forward_request_to_master returned ret = " << op_ret
-          << dendl;
-      return;
-    }
-  }
+//  if (!driver->is_meta_master()) {
+//    op_ret = rgw_forward_request_to_master(
+//        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
+//    if (op_ret < 0) {
+//      ldpp_dout(this, 4)
+//          << "CreateTopic forward_request_to_master returned ret = " << op_ret
+//          << dendl;
+//      return;
+//    }
+// }
 
   // don't add a persistent queue if we already have one
   const bool already_persistent = topic && topic_needs_queue(topic->dest);
