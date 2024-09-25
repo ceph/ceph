@@ -295,6 +295,100 @@ TEST_F(ObjectDirectoryFixture, UpdateFieldYield)
   io.run();
 }
 
+TEST_F(ObjectDirectoryFixture, ZAddYield)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    auto m_time = real_clock::now();
+    auto score = ceph::real_clock::to_double(m_time);
+    std::string version = "v1";
+    ASSERT_EQ(0, dir->zadd(env->dpp, obj, score, version, yield));
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("FLUSHALL");
+      response<boost::redis::ignore_t> resp;
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+    }
+    conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
+
+TEST_F(ObjectDirectoryFixture, ZAddZRevRangeYield)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    {
+      auto m_time = real_clock::now();
+      auto score = ceph::real_clock::to_double(m_time);
+      std::string version = "v2";
+      ASSERT_EQ(0, dir->zadd(env->dpp, obj, score, version, yield));
+    }
+    {
+      auto m_time = real_clock::now();
+      auto score = ceph::real_clock::to_double(m_time);
+      std::string version = "v1";
+      ASSERT_EQ(0, dir->zadd(env->dpp, obj, score, version, yield));
+    }
+    {
+      std::vector<std::string> members;
+      ASSERT_EQ(0, dir->zrevrange(env->dpp, obj, "0", "0", members, yield));
+      ASSERT_EQ(1, members.size());
+      ASSERT_EQ("v1", members[0]);
+    }
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("FLUSHALL");
+      response<boost::redis::ignore_t> resp;
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+    }
+    conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
+
+TEST_F(ObjectDirectoryFixture, ZAddZRemYield)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    {
+      auto m_time = real_clock::now();
+      auto score = ceph::real_clock::to_double(m_time);
+      std::cout << "Score for v1: " << score << std::endl;
+      std::string version = "v1";
+      ASSERT_EQ(0, dir->zadd(env->dpp, obj, score, version, yield));
+    }
+    {
+      auto m_time = real_clock::now();
+      auto score = ceph::real_clock::to_double(m_time);
+      std::cout << "Score for v2: " << score << std::endl;
+      std::string version = "v2";
+      ASSERT_EQ(0, dir->zadd(env->dpp, obj, score, version, yield));
+    }
+    {
+      ASSERT_EQ(0, dir->zrem(env->dpp, obj, "v2", yield));
+      std::vector<std::string> members;
+      ASSERT_EQ(0, dir->zrevrange(env->dpp, obj, "0", "0", members, yield));
+      ASSERT_EQ(1, members.size());
+      ASSERT_EQ("v1", members[0]);
+    }
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("FLUSHALL");
+      response<boost::redis::ignore_t> resp;
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+    }
+    conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
 
 TEST_F(BlockDirectoryFixture, SetYield)
 {
