@@ -13,6 +13,7 @@ constexpr char RGW_CACHE_ATTR_BUCKET_NAME[] = "user.rgw.bucket_name";
 constexpr char RGW_CACHE_ATTR_VERSION_ID[] = "user.rgw.version_id";
 constexpr char RGW_CACHE_ATTR_SOURC_ZONE[] = "user.rgw.source_zone";
 constexpr char RGW_CACHE_ATTR_LOCAL_WEIGHT[] = "user.rgw.localWeight";
+constexpr char RGW_CACHE_ATTR_DELETE_MARKER[] = "user.rgw.deleteMarker";
 
 constexpr char DIRTY_BLOCK_PREFIX[] = "D#";
 constexpr char CACHE_DELIM = '#';
