@@ -1758,8 +1758,9 @@ class RgwMultisite:
         rgw_zone_add_storage_class_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
                                           '--placement-id', placement_target,
                                           '--storage-class', storage_class,
-                                          '--data-pool', data_pool,
-                                          '--compression', compression]
+                                          '--data-pool', data_pool]
+        if compression:
+            rgw_zone_add_storage_class_cmd.extend(['--compression', compression])
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_storage_class_cmd)
             if exit_code > 0:
