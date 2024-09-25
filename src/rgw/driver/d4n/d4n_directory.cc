@@ -332,7 +332,7 @@ int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* objec
   }
 }
 
-int ObjectDirectory::zadd(const DoutPrefixProvider* dpp, CacheObj* object, double score, const std::string& member, optional_yield y)
+int ObjectDirectory::zadd(const DoutPrefixProvider* dpp, CacheObj* object, double score, const std::string& member, optional_yield y, bool multi)
 {
   std::string key = build_index(object);
   try {
@@ -348,9 +348,11 @@ int ObjectDirectory::zadd(const DoutPrefixProvider* dpp, CacheObj* object, doubl
       return -ec.value();
     }
 
-    if (std::get<0>(resp).value() != "1") {
-      ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() Response value is: " << std::get<0>(resp).value() << dendl;
-      return -EINVAL;
+    if (!multi) {
+      if (std::get<0>(resp).value() != "1") {
+        ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() Response value is: " << std::get<0>(resp).value() << dendl;
+        return -EINVAL;
+      }
     }
 
   } catch (std::exception &e) {
@@ -409,11 +411,6 @@ int ObjectDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheObj* object, 
       return -ec.value();
     }
 
-    if (std::get<0>(resp).value().empty()) {
-      ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() Empty response" << dendl;
-      return -EINVAL;
-    }
-
     members = std::get<0>(resp).value();
 
   } catch (std::exception &e) {
@@ -424,7 +421,7 @@ int ObjectDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheObj* object, 
   return 0;
 }
 
-int ObjectDirectory::zrem(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, optional_yield y)
+int ObjectDirectory::zrem(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, optional_yield y, bool multi)
 {
   std::string key = build_index(object);
   try {
@@ -440,9 +437,42 @@ int ObjectDirectory::zrem(const DoutPrefixProvider* dpp, CacheObj* object, const
       return -ec.value();
     }
 
-    if (std::get<0>(resp).value() != "1") {
-      ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
-      return -EINVAL;
+    if (!multi) {
+      if (std::get<0>(resp).value() != "1") {
+        ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
+        return -EINVAL;
+      }
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int ObjectDirectory::zremrangebyscore(const DoutPrefixProvider* dpp, CacheObj* object, double min, double max, optional_yield y, bool multi)
+{
+  std::string key = build_index(object);
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("ZREMRANGEBYSCORE", key, std::to_string(min), std::to_string(max));
+    response<std::string> resp;
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (!multi) {
+      if (std::get<0>(resp).value() == "0") {
+        ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() No element removed!" << dendl;
+        return -EINVAL;
+      }
     }
 
   } catch (std::exception &e) {
@@ -839,7 +869,7 @@ int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block
   return 0;
 }
 
-int BlockDirectory::zadd(const DoutPrefixProvider* dpp, CacheBlock* block, double score, const std::string& member, optional_yield y)
+int BlockDirectory::zadd(const DoutPrefixProvider* dpp, CacheBlock* block, double score, const std::string& member, optional_yield y, bool multi)
 {
   std::string key = build_index(block);
   try {
@@ -854,10 +884,11 @@ int BlockDirectory::zadd(const DoutPrefixProvider* dpp, CacheBlock* block, doubl
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
       return -ec.value();
     }
-
-    if (std::get<0>(resp).value() != "1") {
-      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() Response value is: " << std::get<0>(resp).value() << dendl;
-      return -EINVAL;
+    if (!multi) {
+      if (std::get<0>(resp).value() != "1") {
+        ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() Response value is: " << std::get<0>(resp).value() << dendl;
+        return -EINVAL;
+      }
     }
 
   } catch (std::exception &e) {
@@ -1054,6 +1085,34 @@ int BlockDirectory::discard(const DoutPrefixProvider* dpp, optional_yield y)
     boost::system::error_code ec;
     request req;
     req.push("DISCARD");
+    response<std::string> resp;
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value() != "OK") {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
+      return -EINVAL;
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int BlockDirectory::unwatch(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("UNWATCH");
     response<std::string> resp;
 
     redis_exec(conn, ec, req, resp, y);
