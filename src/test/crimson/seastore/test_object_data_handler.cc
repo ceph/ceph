@@ -49,7 +49,11 @@ public:
 
   void update_omap_root(Transaction &t, omap_root_t &oroot) final {
     with_mutable_layout(t, [&oroot](onode_layout_t &mlayout) {
-      mlayout.omap_root.update(oroot);
+      if (oroot.get_type() == omap_type_t::OMAP_SMALL_LEAF) {
+	mlayout.omap_root_small_leaf.update(oroot);
+      }
+      assert(oroot.get_type() == omap_type_t::OMAP_LARGE_LEAF);
+      mlayout.omap_root_large_leaf.update(oroot);
     });
   }
 

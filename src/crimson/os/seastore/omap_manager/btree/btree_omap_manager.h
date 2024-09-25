@@ -26,8 +26,8 @@ class BtreeOMapManager : public OMapManager {
   TransactionManager &tm;
 
   omap_context_t get_omap_context(
-    Transaction &t, laddr_t addr_min) {
-    return omap_context_t{tm, t, addr_min};
+    Transaction &t, laddr_t addr_min, omap_type_t type) {
+    return omap_context_t{tm, t, addr_min, get_leaf_size(type)};
   }
 
   /* get_omap_root
@@ -65,7 +65,8 @@ class BtreeOMapManager : public OMapManager {
 public:
   explicit BtreeOMapManager(TransactionManager &tm);
 
-  initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint) final;
+  initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint,
+    omap_type_t type) final;
 
   omap_get_value_ret omap_get_value(
     const omap_root_t &omap_root,
@@ -104,6 +105,30 @@ public:
   omap_clear_ret omap_clear(
     omap_root_t &omap_root,
     Transaction &t) final;
+
+  extent_len_t get_leaf_size(omap_type_t type) {
+    if (type == omap_type_t::OMAP_SMALL_LEAF) {
+      return OMAP_SMALL_LEAF_BLOCK_SIZE;
+    }
+    ceph_assert(type == omap_type_t::OMAP_LARGE_LEAF);
+    return OMAP_LARGE_LEAF_BLOCK_SIZE;
+  }
+
+  void get_root_types_with_sets(
+    std::map<omap_type_t, std::map<std::string, ceph::bufferlist>> &sets,
+    std::map<std::string, ceph::bufferlist> &&aset) {
+    sets[omap_type_t::OMAP_SMALL_LEAF] = std::move(aset);
+    std::erase_if(sets[omap_type_t::OMAP_SMALL_LEAF], [&sets](auto &item) {
+      if (item.second.length() > OMAP_THRESHOLD_SIZE) {
+	auto str = item.first;
+	sets[omap_type_t::OMAP_LARGE_LEAF][str] =
+	  sets[omap_type_t::OMAP_SMALL_LEAF][str];
+	return true;
+      }
+      return false;
+    });
+  }
+
 
 };
 using BtreeOMapManagerRef = std::unique_ptr<BtreeOMapManager>;

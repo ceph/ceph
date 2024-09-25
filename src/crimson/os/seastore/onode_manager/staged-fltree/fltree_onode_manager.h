@@ -48,7 +48,8 @@ struct FLTreeOnode final : Onode, Value {
   struct Recorder : public ValueDeltaRecorder {
     enum class delta_op_t : uint8_t {
       UPDATE_ONODE_SIZE,
-      UPDATE_OMAP_ROOT,
+      UPDATE_OMAP_ROOT_LARGE_LEAF,
+      UPDATE_OMAP_ROOT_SMALL_LEAF,
       UPDATE_XATTR_ROOT,
       UPDATE_OBJECT_DATA,
       UPDATE_OBJECT_INFO,
@@ -74,6 +75,7 @@ struct FLTreeOnode final : Onode, Value {
   bool is_alive() const {
     return status != status_t::DELETED;
   }
+
   const onode_layout_t &get_layout() const final {
     assert(status != status_t::DELETED);
     return *read_payload<onode_layout_t>();
@@ -124,10 +126,18 @@ struct FLTreeOnode final : Onode, Value {
       [&oroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
 	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
           payload_mut.get_write());
-	mlayout.omap_root.update(oroot);
+	Recorder::delta_op_t op;
+	if (oroot.get_type() == omap_type_t::OMAP_LARGE_LEAF) {
+	  mlayout.omap_root_large_leaf.update(oroot);
+	  op = Recorder::delta_op_t::UPDATE_OMAP_ROOT_LARGE_LEAF;
+	} else {
+	  assert(oroot.get_type() == omap_type_t::OMAP_SMALL_LEAF);
+	  mlayout.omap_root_small_leaf.update(oroot);
+	  op = Recorder::delta_op_t::UPDATE_OMAP_ROOT_SMALL_LEAF;
+	}
 	if (recorder) {
 	  recorder->encode_update(
-	    payload_mut, Recorder::delta_op_t::UPDATE_OMAP_ROOT);
+	    payload_mut, op);
 	}
     });
   }

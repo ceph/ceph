@@ -17,7 +17,9 @@
 //TODO: calculate the max key and value sizes the current layout supports,
 //	and return errors during insert if the max is exceeded.
 #define OMAP_INNER_BLOCK_SIZE 8192
-#define OMAP_LEAF_BLOCK_SIZE 65536
+#define OMAP_LARGE_LEAF_BLOCK_SIZE 65536
+#define OMAP_SMALL_LEAF_BLOCK_SIZE 16384
+#define OMAP_THRESHOLD_SIZE 8192
 
 namespace crimson::os::seastore {
 
@@ -40,7 +42,8 @@ public:
    */
   using initialize_omap_iertr = base_iertr;
   using initialize_omap_ret = initialize_omap_iertr::future<omap_root_t>;
-  virtual initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint) = 0;
+  virtual initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint,
+    omap_type_t type) = 0;
 
   /**
    * get value(string) by key(string)

@@ -151,7 +151,7 @@ struct OMapLeafNode
   template <typename... T>
   OMapLeafNode(T&&... t) :
     OMapNode(std::forward<T>(t)...),
-    StringKVLeafNodeLayout(get_bptr().c_str()) {}
+    StringKVLeafNodeLayout(get_bptr().c_str(), get_bptr().length()) {}
 
   omap_node_meta_t get_node_meta() const final { return get_meta(); }
   bool extent_will_overflow(
