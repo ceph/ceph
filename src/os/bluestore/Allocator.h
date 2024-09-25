@@ -15,6 +15,8 @@
 #include <functional>
 #include <ostream>
 #include "include/ceph_assert.h"
+#include "global/global_context.h"
+#include "simple_bitmap.h"
 #include "bluestore_types.h"
 #include "common/ceph_mutex.h"
 
@@ -286,6 +288,7 @@ public:
   virtual void dump() = 0;
   virtual void foreach(
     std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
+  virtual const uint64_t* get_as_bitmap(size_t* out_count) const { return nullptr; }
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
@@ -350,6 +353,14 @@ public:
     void foreach(
       std::function<void(uint64_t, uint64_t, uint64_t, uint64_t)> cb);
   };
+
+  void copy_in(SimpleBitmap* sbmap, uint64_t alloc_size);
+
+  static bool compare_allocators(Allocator* alloc1, Allocator* alloc2);
+  static Allocator* create_bitmap_allocator(uint64_t bdev_size,
+                                            uint64_t min_alloc_size) {
+    return create(g_ceph_context, "bitmap", bdev_size, min_alloc_size, "recovery");
+  }
 
 private:
   class SocketHook;

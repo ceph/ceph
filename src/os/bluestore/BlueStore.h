@@ -43,6 +43,7 @@
 #include "include/unordered_map.h"
 #include "include/mempool.h"
 #include "include/hash.h"
+#include "common/admin_socket.h"
 #include "common/bloom_filter.hpp"
 #include "common/Finisher.h"
 #include "common/ceph_mutex.h"
@@ -65,12 +66,12 @@ class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
 class SimpleBitmap;
+class BlueStoreTester;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 
 // constants for Buffer::optimize()
 #define MAX_BUFFER_SLOP_RATIO_DEN  8  // so actually 1/N
-#define CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
 
 enum {
   l_bluestore_first = 732430,
@@ -202,6 +203,7 @@ enum {
   l_bluestore_omap_setkeys_count,
   l_bluestore_omap_setkeys_records,
   l_bluestore_omap_setkeys_bytes,
+  l_bluestore_allocmap_rebuild,
   //****************************************
 
   // other client ops latencies
@@ -2379,7 +2381,7 @@ private:
 
   // store open_db options:
   bool db_was_opened_read_only = true;
-  bool need_to_destage_allocation_file = false;
+  bool need_to_destage_allocmap = false;
 
   ///< rwlock to protect coll_map/new_coll_map
   ceph::shared_mutex coll_lock = ceph::make_shared_mutex("BlueStore::coll_lock");
@@ -2811,16 +2813,24 @@ private:
 	       bool to_repair_db=false,
 	       bool read_only = false);
   void _close_db();
-  int _open_fm(KeyValueDB::Transaction t,
-               bool read_only,
-               bool db_avail,
-               bool fm_restore = false);
+  int _create_fm(KeyValueDB::Transaction t,
+                 const std::string& new_type,
+                 bool restore);
+  int _open_fm(bool read_only);
   void _close_fm();
   int _write_out_fm_meta(uint64_t target_size);
+
+  //to be removed once we get rid off interval_set in Allocator
+  void _update_fm(bool allocated,
+                  const interval_set<uint64_t>& changes,
+                  KeyValueDB::Transaction t);
+  void _update_fm(bool allocated,
+                  const PExtentVector& changes,
+                  KeyValueDB::Transaction t);
+
   int _create_alloc();
   int _init_alloc();
-  void _post_init_alloc();
-  void _close_alloc();
+  void _close_alloc(bool do_discard = true);
   int _open_collections();
   void _fsck_collections(int64_t* errors);
   void _close_collections();
@@ -3034,6 +3044,8 @@ private:
 		      ceph::buffer::list& padded);
 
   void _record_onode(OnodeRef &o, KeyValueDB::Transaction &txn);
+
+  std::string get_freelist_type();
 
   // -- ondisk version ---
 public:
@@ -3426,6 +3438,12 @@ public:
   }
   uuid_d get_fsid() override {
     return fsid;
+  }
+
+  std::string get_block_path() const {
+    std::string res(path);
+    res += "/block";
+    return res;
   }
 
   uint64_t estimate_objects_overhead(uint64_t num_objects) override {
@@ -4023,13 +4041,29 @@ public:
     mempool::bluestore_fsck::list<std::string>* expecting_shards,
     std::map<BlobRef, bluestore_blob_t::unused_t>* referenced,
     BlueStore::FSCK_ObjectCtx& ctx);
-#ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
-  int  push_allocation_to_rocksdb();
-  int  read_allocation_from_drive_for_bluestore_tool();
-#endif
-  void set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offset, uint64_t length);
+  int  push_allocmap_to_bitmap();
+  int  push_allocmap_to_nil(bool create_file);
 
 private:
+  friend class SocketHook;
+  class SocketHook : public AdminSocketHook {
+    BlueStore* store = nullptr;
+
+  public:
+    static SocketHook* create(BlueStore* store);
+    ~SocketHook();
+
+  private:
+    SocketHook(BlueStore* _store);
+    int call(std::string_view command, const cmdmap_t& cmdmap,
+             const bufferlist&,
+             Formatter *f,
+             std::ostream& errss,
+             bufferlist& out) override;
+  };
+
+  std::unique_ptr<SocketHook> asok_hook = nullptr;
+
   struct  read_alloc_stats_t {
     uint32_t onode_count             = 0;
     uint32_t shard_count             = 0;
@@ -4039,7 +4073,6 @@ private:
     uint64_t shared_blob_count      = 0;
     uint64_t compressed_blob_count   = 0;
     uint64_t spanning_blob_count     = 0;
-    uint64_t insert_count            = 0;
     uint64_t extent_count            = 0;
 
     std::map<uint64_t, volatile_statfs> actual_pool_vstatfs;
@@ -4050,6 +4083,7 @@ private:
     read_alloc_stats_t& stats;
     SimpleBitmap& sbmap;
     sb_info_space_efficient_map_t& sb_info;
+    uint64_t min_alloc_size_mask;
     uint8_t min_alloc_size_order;
     Extent extent;
     ghobject_t oid;
@@ -4080,8 +4114,10 @@ private:
                          read_alloc_stats_t& _stats,
                          SimpleBitmap& _sbmap,
                          sb_info_space_efficient_map_t& _sb_info,
+                         uint64_t _min_alloc_size_mask,
                          uint8_t _min_alloc_size_order)
       : store(_store), stats(_stats), sbmap(_sbmap), sb_info(_sb_info),
+        min_alloc_size_mask(_min_alloc_size_mask),
         min_alloc_size_order(_min_alloc_size_order)
     {}
     const ghobject_t& get_oid() const {
@@ -4091,6 +4127,8 @@ private:
       volatile_statfs* _per_pool_statfs);
   };
 
+  friend class BlueStoreTester;
+  friend class BlueStoreRepairer;
   friend std::ostream& operator<<(std::ostream& out, const read_alloc_stats_t& stats) {
     out << "==========================================================" << std::endl;
     out << "NCB::onode_count             = " ;out.width(10);out << stats.onode_count << std::endl
@@ -4099,37 +4137,24 @@ private:
 	<< "NCB::compressed_blob_count   = " ;out.width(10);out << stats.compressed_blob_count << std::endl
 	<< "NCB::spanning_blob_count     = " ;out.width(10);out << stats.spanning_blob_count << std::endl
 	<< "NCB::skipped_illegal_extent  = " ;out.width(10);out << stats.skipped_illegal_extent << std::endl
-	<< "NCB::extent_count            = " ;out.width(10);out << stats.extent_count << std::endl
-	<< "NCB::insert_count            = " ;out.width(10);out << stats.insert_count << std::endl;
+	<< "NCB::extent_count            = " ;out.width(10);out << stats.extent_count << std::endl;
 
     out << "==========================================================" << std::endl;
 
     return out;
   }
 
-  int  compare_allocators(Allocator* alloc1, Allocator* alloc2, uint64_t req_extent_count, uint64_t memory_target);
-  Allocator* create_bitmap_allocator(uint64_t bdev_size);
-  int  add_existing_bluefs_allocation(Allocator* allocator, read_alloc_stats_t& stats);
-  int  allocator_add_restored_entries(Allocator *allocator, const void *buff, unsigned extent_count, uint64_t *p_read_alloc_size,
-				      uint64_t  *p_extent_count, const void *v_header, BlueFS::FileReader *p_handle, uint64_t offset);
-
-  int  copy_allocator(Allocator* src_alloc, Allocator *dest_alloc, uint64_t* p_num_entries);
+  int  __store_allocator(Allocator* allocator, const char* filename, uint32_t ver);
   int  store_allocator(Allocator* allocator);
-  int  invalidate_allocation_file_on_bluefs();
-  int  __restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
-  int  restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
-  int  read_allocation_from_drive_on_startup();
-  int  reconstruct_allocations(SimpleBitmap *smbmp, read_alloc_stats_t &stats);
+  int  __restore_allocator(Allocator* alloc, const char* filename, uint64_t total_size);
+  int  restore_allocator(Allocator* alloc);
+
+  int  maybe_invalidate_allocmap(bool force = false);
+  int  rebuild_allocations();
   int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
-  int  commit_freelist_type();
-  int  commit_to_null_manager();
-  int  commit_to_real_manager();
-  int  db_cleanup(int ret);
-  int  reset_fm_for_restore();
-  int  verify_rocksdb_allocations(Allocator *allocator);
-  Allocator* clone_allocator_without_bluefs(Allocator *src_allocator);
-  Allocator* initialize_allocator_from_freelist(FreelistManager *real_fm);
-  void copy_allocator_content_to_fm(Allocator *allocator, FreelistManager *real_fm);
+  int  reset_fm(const std::string& new_type);
+  Allocator* clone_allocator(Allocator *src_allocator, bool exclude_bluefs);
+  void copy_allocator_to_fm(Allocator *allocator, FreelistManager *real_fm);
 
 
   void _fsck_check_object_omap(FSCKDepth depth,
@@ -4309,11 +4334,9 @@ public:
   bool fix_statfs(KeyValueDB *db, const std::string& key,
     const store_statfs_t& new_statfs);
 
-  bool fix_leaked(KeyValueDB *db,
-		  FreelistManager* fm,
+  bool fix_leaked(BlueStore* store,
 		  uint64_t offset, uint64_t len);
-  bool fix_false_free(KeyValueDB *db,
-		      FreelistManager* fm,
+  bool fix_false_free(BlueStore* store,
 		      uint64_t offset, uint64_t len);
   bool fix_spanning_blobs(
     KeyValueDB* db,

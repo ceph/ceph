@@ -95,7 +95,14 @@ public:
       return false;
     }
   }
-
+  //----------------------------------------------------------------------------
+  uint8_t* get_data(uint64_t* ret_size) {
+    ceph_assert(ret_size);
+    *ret_size = m_word_count * BYTES_IN_WORD;
+    return (uint8_t*)m_arr;
+  }
+  //----------------------------------------------------------------------------
+  bool compare(const SimpleBitmap& other) const;
 private:
   //----------------------------------------------------------------------------
   static inline std::pair<uint64_t, uint64_t> split(uint64_t offset) {
