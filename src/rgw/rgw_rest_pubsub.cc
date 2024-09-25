@@ -214,7 +214,13 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
   return verify_topic_permission(dpp, s, topic.owner, arn, policy, op);
 }
 
-// command (AWS compliant): 
+bool should_forward_request_to_master(req_state* s, rgw::sal::Driver* driver) {
+  return (!driver->is_meta_master() &&
+          rgw::all_zonegroups_support(*s->penv.site,
+                                      rgw::zone_features::notification_v2));
+}
+
+// command (AWS compliant):
 // POST
 // Action=CreateTopic&Name=<topic-name>[&OpaqueData=data][&push-endpoint=<endpoint>[&persistent][&<arg1>=<value1>]]
 class RGWPSCreateTopicOp : public RGWOp {
@@ -253,7 +259,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     // Remove the args that are parsed, so the push_endpoint_args only contains
     // necessary one's which is parsed after this if. but only if master zone,
     // else we do not remove as request is forwarded to master.
-    if (driver->is_meta_master()) {
+    if (!should_forward_request_to_master(s, driver)) {
       s->info.args.remove("OpaqueData");
       s->info.args.remove("push-endpoint");
       s->info.args.remove("persistent");
@@ -376,7 +382,7 @@ class RGWPSCreateTopicOp : public RGWOp {
 
 void RGWPSCreateTopicOp::execute(optional_yield y) {
   // master request will replicate the topic creation.
-  if (!driver->is_meta_master()) {
+  if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
@@ -842,7 +848,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
 };
 
 void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
@@ -987,9 +993,10 @@ class RGWPSDeleteTopicOp : public RGWOp {
 };
 
 void RGWPSDeleteTopicOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
+
     if (op_ret < 0) {
       ldpp_dout(this, 1)
           << "DeleteTopic forward_request_to_master returned ret = " << op_ret
@@ -1239,7 +1246,7 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
 }
 
 void RGWPSCreateNotifOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &data, nullptr, s->info, y);
     if (op_ret < 0) {
@@ -1441,7 +1448,7 @@ int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
 }
 
 void RGWPSDeleteNotifOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (should_forward_request_to_master(s, driver)) {
     bufferlist indata;
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &indata, nullptr, s->info, y);
