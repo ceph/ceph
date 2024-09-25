@@ -14087,6 +14087,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	if (txc->had_ios)
 	  kv_ios++;
 	kv_throttle_costs += txc->cost;
+	++kv_throttle_txcs;
       }
       return;
     case TransContext::STATE_KV_SUBMITTED:
@@ -14339,7 +14340,11 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
              ", txc cost = " + stringify(txc->cost) +
              ", txc onodes = " + stringify(txc->onodes.size()) +
              ", DB updates = " + stringify(txc->t->get_count()) +
-             ", DB bytes = " + stringify(txc->t->get_size_bytes())
+             ", DB bytes = " + stringify(txc->t->get_size_bytes()) +
+             ", cost max = " + stringify(throttle.bytes_observed_max) +
+               " on " + stringify(throttle.bytes_max_ts) +
+             ", txc max = " + stringify(throttle.transactions_observed_max) +
+               " on " + stringify(throttle.transactions_max_ts)
              ;
     },
     l_bluestore_slow_committed_kv_count
@@ -14690,7 +14695,7 @@ void BlueStore::_kv_sync_thread()
     } else {
       deque<TransContext*> kv_submitting;
       deque<DeferredBatch*> deferred_done, deferred_stable;
-      uint64_t aios = 0, costs = 0;
+      uint64_t aios = 0, costs = 0, txcs = 0;
 
       dout(20) << __func__ << " committing " << kv_queue.size()
 	       << " submitting " << kv_queue_unsubmitted.size()
@@ -14703,8 +14708,10 @@ void BlueStore::_kv_sync_thread()
       deferred_stable.swap(deferred_stable_queue);
       aios = kv_ios;
       costs = kv_throttle_costs;
+      txcs = kv_throttle_txcs;
       kv_ios = 0;
       kv_throttle_costs = 0;
+      kv_throttle_txcs = 0;
       l.unlock();
 
       dout(30) << __func__ << " committing " << kv_committing << dendl;
@@ -14800,7 +14807,7 @@ void BlueStore::_kv_sync_thread()
       // iteration there will already be ops awake.  otherwise, we
       // end up going to sleep, and then wake up when the very first
       // transaction is ready for commit.
-      throttle.release_kv_throttle(costs);
+      throttle.release_kv_throttle(costs, txcs);
 
       // cleanup sync deferred keys
       for (auto b : deferred_stable) {
@@ -18602,6 +18609,20 @@ bool BlueStore::BlueStoreThrottle::try_start_transaction(
   TransContext &txc,
   mono_clock::time_point start_throttle_acquire)
 {
+  {
+    std::lock_guard l(lock);
+    auto cost0 = throttle_bytes.get_current();
+    if (cost0 + txc.cost > bytes_observed_max) {
+      bytes_observed_max = cost0 + txc.cost;
+      bytes_max_ts = ceph_clock_now();
+    }
+    auto txcs = ++transactions;
+    if (txcs > transactions_observed_max) {
+      transactions_observed_max = txcs;
+      transactions_max_ts = ceph_clock_now();
+    }
+  }
+
   throttle_bytes.get(txc.cost);
 
   if (!txc.deferred_txn || throttle_deferred_bytes.get_or_fail(txc.cost)) {
