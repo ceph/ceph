@@ -2,13 +2,13 @@
 # pylint: disable=C0302
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-lines
-import ast
 import ipaddress
 import json
 import logging
 import os
 import re
 import time
+import uuid
 import xml.etree.ElementTree as ET  # noqa: N814
 from enum import Enum
 from subprocess import SubprocessError
@@ -26,7 +26,7 @@ from ..settings import Settings
 from ..tools import dict_contains_path, dict_get, json_str_to_object, str_to_bool
 from .ceph_service import CephService
 from .orchestrator import OrchClient
-from .service import RgwServiceManager
+from .service import RgwServiceManager, wait_for_daemon_to_start, verify_service_restart
 
 try:
     from typing import Any, Dict, List, Optional, Tuple, Union
@@ -1078,6 +1078,313 @@ class SyncFlowTypes(Enum):
     symmetrical = 'symmetrical'
 
 
+class RgwMultisiteAutomation:
+    def __init__(self):
+        self.progress_id = str(uuid.uuid4())
+        self.progress_title = ''
+        self.progress_done = 0
+        self.progress_total = 2  # Total number of major steps
+
+    def update_progress(self, progress_title, progress_action='update', failure_msg=None):
+        self.progress_title = 'Multisite-Setup: ' + progress_title
+        progress = (self.progress_done / self.progress_total)
+        if progress_action == 'update':
+            mgr.remote('progress', progress_action, self.progress_id,
+                       ev_msg=self.progress_title,
+                       ev_progress=progress,
+                       add_to_ceph_s=True)
+        if progress_action == 'fail':
+            mgr.remote('progress', 'fail', self.progress_id, failure_msg)
+        if progress_action == 'complete':
+            mgr.remote('progress', 'complete', self.progress_id)
+
+    def replace_hostname_port(self, endpoint, hostname_to_ip, rgw_frontend_port, default_realm):
+        # Parse the endpoint URL
+        parsed_url = urlparse(endpoint)
+        hostname = parsed_url.hostname
+        port = parsed_url.port
+
+        # Replace hostname if it exists in the hostname_to_ip mapping
+        if hostname in hostname_to_ip:
+            endpoint = endpoint.replace(hostname, hostname_to_ip[hostname])
+
+        # Replace the port with rgw_frontend_port if needed
+        if not str_to_bool(default_realm):
+            logger.info("Replacing port %s with %s", port, rgw_frontend_port)
+            endpoint = endpoint.replace(f":{port}", f":{rgw_frontend_port}")
+
+        return endpoint
+
+    def setup_multisite_replication(self, realm_name: str, default_realm: str,
+                                    zonegroup_name: str, zonegroup_endpoints: str,
+                                    zone_name: str, zone_endpoints: str,
+                                    username: str, cluster_fsid: Optional[str] = None,
+                                    replication_zone_name: Optional[str] = None,
+                                    cluster_details: Optional[str] = None):
+
+        # Set up multisite replication for Ceph RGW.
+        logger.info("Starting multisite replication setup")
+        if cluster_details:
+            cluster_details_dict = json.loads(cluster_details)
+        orch = OrchClient.instance()
+        rgw_multisite_instance = RgwMultisite()
+
+        rgw_service_manager = RgwServiceManager()
+        rgw_frontend_port = rgw_service_manager.find_available_port()
+
+        if cluster_fsid:
+            self.progress_total = 4
+
+        def get_updated_endpoints(endpoints):
+            # Update endpoint URLs by replacing hostnames with IP addresses.
+            try:
+                hostname_to_ip = {host['hostname']: host['addr'] for host in (h.to_json() for h in orch.hosts.list())}  # noqa E501  # pylint: disable=line-too-long
+                updated_endpoints = [self.replace_hostname_port(endpoint, hostname_to_ip, rgw_frontend_port, default_realm) for endpoint in endpoints.split(',')]  # noqa E501  # pylint: disable=line-too-long
+                unique_endpoints = list(set(updated_endpoints))
+                logger.debug("Updated endpoints: %s", unique_endpoints)
+                return unique_endpoints
+            except Exception as e:
+                logger.error("Failed to update endpoints: %s", e)
+                raise
+
+        zonegroup_ip_url = ','.join(get_updated_endpoints(zonegroup_endpoints))
+        zone_ip_url = ','.join(get_updated_endpoints(zone_endpoints))
+        try:
+            # Create the realm and zonegroup
+            self.update_progress(
+                f"Creating realm: {realm_name}, zonegroup: {zonegroup_name} and zone: {zone_name}")
+            logger.info("Creating realm: %s", realm_name)
+            rgw_multisite_instance.create_realm(realm_name=realm_name, default=str_to_bool(default_realm))
+            logger.info("Creating zonegroup: %s", zonegroup_name)
+            rgw_multisite_instance.create_zonegroup(realm_name=realm_name,
+                                                    zonegroup_name=zonegroup_name,
+                                                    default=True, master=True,
+                                                    endpoints=zonegroup_ip_url)
+        except Exception as e:
+            logger.error("Failed to create realm or zonegroup: %s", e)
+            self.update_progress("Failed to create realm or zonegroup", 'fail', str(e))
+            raise
+        try:
+            # Create the zone and system user, then modify the zone with user credentials
+            logger.info("Creating zone: %s", zone_name)
+            if rgw_multisite_instance.create_zone(zone_name=zone_name,
+                                                  zonegroup_name=zonegroup_name,
+                                                  default=True, master=True,
+                                                  endpoints=zone_ip_url,
+                                                  access_key=None,
+                                                  secret_key=None,
+                                                  realm_name=realm_name):
+                self.progress_done += 1
+                logger.info("Creating system user: %s", username)
+                user_details = rgw_multisite_instance.create_system_user(username, zone_name)
+                if user_details:
+                    keys = user_details['keys'][0]
+                    access_key = keys['access_key']
+                    secret_key = keys['secret_key']
+                    if access_key and secret_key:
+                        rgw_multisite_instance.modify_zone(zone_name=zone_name,
+                                                           zonegroup_name=zonegroup_name,
+                                                           default='true', master='true',
+                                                           endpoints=zone_ip_url,
+                                                           access_key=keys['access_key'],
+                                                           secret_key=keys['secret_key'],
+                                                           realm_name=realm_name)
+                    else:
+                        raise ValueError("Access key or secret key is missing")
+        except Exception as e:
+            logger.error("Failed to create zone or system user: %s", e)
+            self.update_progress("Failed to create zone or system user:", 'fail', str(e))
+            raise
+        try:
+            if not str_to_bool(default_realm):
+                service_type = 'rgw'
+                service_id = f'{zone_name}.{rgw_frontend_port}'
+                service_name = f'{service_type}.{service_id}'
+
+                # Setting multisite configuration
+                CephService.set_multisite_config(realm_name, zonegroup_name, zone_name, service_id)
+
+                hostnames = [urlparse(url).hostname for url in zone_endpoints.split(',')]
+                unique_hostnames = list(set(hostnames))
+                service_spec = {
+                    'service_type': service_type,
+                    'service_id': service_id,
+                    'placement': {'hosts': unique_hostnames},
+                    'rgw_realm': realm_name,
+                    'rgw_zone': zone_name,
+                    'rgw_frontend_port': rgw_frontend_port
+                }
+                # Start RGW daemons
+                logger.info("Starting RGW daemon")
+                self.update_progress("Starting RGW daemon")
+
+                # Create RGW instance
+                rgw_service_manager.create_rgw_instance(service_spec)
+
+                # Wait for daemon to start
+                daemons_up = wait_for_daemon_to_start(orch, service_name)
+                if not daemons_up:
+                    raise TimeoutError("RGW daemons failed to start within the expected time")
+
+                self.progress_done += 1
+
+            else:
+                # Restart RGW daemons and set credentials
+                logger.info("Restarting RGW daemons and setting credentials")
+                self.update_progress("Restarting RGW daemons and setting credentials")
+
+                rgw_service_manager = RgwServiceManager()
+                rgw_service_manager.restart_rgw_daemons_and_set_credentials()
+
+                self.progress_done += 1
+
+        except TimeoutError as e:
+            logger.error("Timed out waiting for RGW daemon: %s", e)
+            self.update_progress("Timed out waiting for RGW daemon", 'fail', str(e))
+            raise
+        except Exception as e:
+            logger.error("Failed during RGW operations: %s", e)
+            self.update_progress(f"Failed during RGW operations", 'fail', str(e))
+            raise
+
+        try:
+            # Get realm tokens and import to another cluster if specified
+            logger.info("Getting realm tokens")
+            realm_token_info = CephService.get_realm_tokens()
+            logger.info("Realm tokens: %s", realm_token_info)
+
+            if cluster_fsid and realm_token_info and replication_zone_name and cluster_details_dict:
+                logger.info("Importing realm token to cluster: %s", cluster_fsid)
+                self.update_progress(f"Importing realm token to cluster: {cluster_fsid}")
+                self.import_realm_token_to_cluster(cluster_fsid, realm_name,
+                                                   default_realm,
+                                                   zonegroup_name,
+                                                   realm_token_info, username,
+                                                   replication_zone_name,
+                                                   cluster_details_dict)
+            else:
+                self.update_progress("Realm Export Token fetched successfully", 'complete')
+        except Exception as e:
+            logger.error("Failed to get realm tokens or import to cluster: %s", e)
+            self.update_progress("Failed to get realm tokens or import to cluster:", 'fail', str(e))
+            raise
+        logger.info("Multisite replication setup completed")
+        return realm_token_info
+
+    def import_realm_token_to_cluster(self, cluster_fsid, realm_name, default_realm, zonegroup_name,
+                                      realm_token_info, username,
+                                      replication_zone_name, cluster_details):  # noqa E501  # pylint: disable=line-too-long
+        logger.info("Importing realm token to cluster: %s", cluster_fsid)
+        try:
+            for realm_token in realm_token_info:
+                if realm_token['realm'] == realm_name:
+                    realm_export_token = realm_token['token']
+                    break
+            else:
+                raise ValueError(f"Realm {realm_name} not found in realm tokens")
+            for cluster in cluster_details:
+                if cluster['name'] == cluster_fsid:
+                    cluster_token = cluster['token']
+                    cluster_url = cluster['url']
+                    break
+            if cluster_token:
+                if not cluster_url.endswith('/'):
+                    cluster_url += '/'
+
+                path = 'api/rgw/realm/import_realm_token'
+                try:
+                    multi_cluster_instance = MultiCluster()
+                    daemon_name = f"{realm_name}.{replication_zone_name}"
+                    # pylint: disable=protected-access
+                    config_payload = {
+                        'realm_name': realm_name,
+                        'zonegroup_name': zonegroup_name,
+                        'zone_name': replication_zone_name,
+                        'daemon_name': daemon_name,
+                    }
+                    config_info = multi_cluster_instance._proxy(method='PUT', base_url=cluster_url,
+                                                                path='api/rgw/daemon/set_multisite_config',
+                                                                payload= config_payload,
+                                                                token=cluster_token)
+                    logger.info("Config set response: %s", config_info)
+                    available_port = multi_cluster_instance._proxy(method='GET', base_url=cluster_url,
+                                                                   path='ui-api/rgw/multisite/available-ports',
+                                                                   token=cluster_token)
+                    placement_spec: Dict[str, Dict] = {"placement": {}}
+                    payload = {
+                        'realm_token': realm_export_token,
+                        'zone_name': replication_zone_name,
+                        'port': available_port,
+                        'placement_spec': placement_spec,
+                    }
+                    token_import_response = multi_cluster_instance._proxy(method='POST', base_url=cluster_url,
+                                                                          path=path, payload=payload,
+                                                                          token=cluster_token)
+                    logger.info("Import realm token response: %s", token_import_response)
+                    self.progress_done += 1
+                    self.update_progress(f"Checking for user {username} in the selected cluster and setting credentials")
+                    service_name = f"rgw.{daemon_name}"
+                    daemons_status = multi_cluster_instance._proxy(method='GET', base_url=cluster_url,
+                                                                   path=f'ui-api/rgw/multisite/check-daemons-status?service_name={service_name}',
+                                                                   token=cluster_token)
+                    logger.info("Daemons status: %s", daemons_status)
+                    if daemons_status == True:
+                        self.check_user_in_second_cluster(cluster_url, cluster_token, username, replication_zone_name)
+                    else:
+                        self.update_progress("Failed to set credentials in selected cluster", 'fail', "RGW daemons failed to start")
+                        return token_import_response
+                except requests.RequestException as e:
+                    logger.error("Could not reach %s: %s", cluster_url, e)
+                    self.update_progress("Failed to set credentials in selected cluster", 'fail', str(e))
+                    raise DashboardException(f"Could not reach {cluster_url}: {e}",
+                                             http_status_code=404, component='dashboard')
+                except json.JSONDecodeError as e:
+                    logger.error("Error parsing Dashboard API response: %s", e.msg)
+                    self.update_progress("Failed to set credentials in selected cluster", 'fail', str(e))
+                    raise DashboardException(f"Error parsing Dashboard API response: {e.msg}",
+                                             component='dashboard')
+        except Exception as e:
+            logger.error("Failed to import realm token to cluster: %s", e)
+            self.update_progress("Failed to import realm token to cluster:", 'fail', str(e))
+            raise
+
+    def check_user_in_second_cluster(self, cluster_url, cluster_token, username,
+                                     replication_zone_name):
+        logger.info("Checking for user %s in the second cluster", username)
+        path = f'api/rgw/zone/get_user_list?zoneName={replication_zone_name}'
+        user_found = False
+        start_time = time.time()
+        while not user_found:
+            if time.time() - start_time > 120:  # Timeout after 2 minutes
+                logger.error("Timeout reached while waiting for user %s to appear \
+                             in the second cluster", username)
+                raise DashboardException(code='user_replication_timeout',
+                                         msg="Timeout reached while waiting for \
+                                         user %s to appear in the second cluster." % username)
+            try:
+                multi_cluster_instance = MultiCluster()
+                # pylint: disable=protected-access
+                user_content = multi_cluster_instance._proxy(method='GET', base_url=cluster_url,
+                                                             path=path, token=cluster_token)
+                if isinstance(user_content, list) and username in user_content:
+                    user_found = True
+                    logger.info("User %s found in the second cluster", username)
+                    # pylint: disable=protected-access
+                    set_creds_cont = multi_cluster_instance._proxy(method='PUT', base_url=cluster_url,  # noqa E501  # pylint: disable=line-too-long
+                                                                   path='ui-api/rgw/multisite/setup-rgw-credentials',  # noqa E501  # pylint: disable=line-too-long
+                                                                   token=cluster_token)  # noqa E501  # pylint: disable=line-too-long
+                    logger.info("set credentials in selected cluster response: %s", set_creds_cont)  # noqa E501  # pylint: disable=line-too-long  # noqa E501  # pylint: disable=line-too-long
+                    self.progress_done += 1
+                    self.update_progress("Multisite replication setup completed",
+                                         'complete')
+                    break
+            except requests.RequestException as e:
+                logger.error("Error checking user in the second cluster: %s", e)
+                self.update_progress("Error checking user in the second cluster", 'fail', str(e))
+            logger.info("User %s not found yet, retrying in 5 seconds", username)
+            time.sleep(5)
+
+
 class RgwMultisite:
     def migrate_to_multisite(self, realm_name: str, zonegroup_name: str, zone_name: str,
                              zonegroup_endpoints: str, zone_endpoints: str, access_key: str,
@@ -1156,181 +1463,10 @@ class RgwMultisite:
                 raise DashboardException(error, http_status_code=500, component='rgw')
         self.update_period()
 
-    def replace_hostname(self, endpoint, hostname_to_ip):
-        # Replace the hostname in the endpoint URL with its corresponding IP address.
-        parsed_url = urlparse(endpoint)
-        hostname = parsed_url.hostname
-        if hostname in hostname_to_ip:
-            return endpoint.replace(hostname, hostname_to_ip[hostname])
-        return endpoint
-
-    def setup_multisite_replication(self, realm_name: str, zonegroup_name: str,
-                                    zonegroup_endpoints: str, zone_name: str,
-                                    zone_endpoints: str, username: str,
-                                    cluster_fsid: Optional[str] = None):
-
-        # Set up multisite replication for Ceph RGW.
-        logger.info("Starting multisite replication setup")
-        orch = OrchClient.instance()
-
-        def get_updated_endpoints(endpoints):
-            # Update endpoint URLs by replacing hostnames with IP addresses.
-            logger.debug("Updating endpoints: %s", endpoints)
-            try:
-                hostname_to_ip = {host['hostname']: host['addr'] for host in (h.to_json() for h in orch.hosts.list())}  # noqa E501  # pylint: disable=line-too-long
-                updated_endpoints = [self.replace_hostname(endpoint, hostname_to_ip) for endpoint in endpoints.split(',')]  # noqa E501  # pylint: disable=line-too-long
-                logger.debug("Updated endpoints: %s", updated_endpoints)
-                return updated_endpoints
-            except Exception as e:
-                logger.error("Failed to update endpoints: %s", e)
-                raise
-
-        zonegroup_ip_url = ','.join(get_updated_endpoints(zonegroup_endpoints))
-        zone_ip_url = ','.join(get_updated_endpoints(zone_endpoints))
-        try:
-            # Create the realm and zonegroup
-            logger.info("Creating realm: %s", realm_name)
-            self.create_realm(realm_name=realm_name, default=True)
-            logger.info("Creating zonegroup: %s", zonegroup_name)
-            self.create_zonegroup(realm_name=realm_name, zonegroup_name=zonegroup_name,
-                                  default=True, master=True, endpoints=zonegroup_ip_url)
-        except Exception as e:
-            logger.error("Failed to create realm or zonegroup: %s", e)
-            raise
-        try:
-            # Create the zone and system user, then modify the zone with user credentials
-            logger.info("Creating zone: %s", zone_name)
-            if self.create_zone(zone_name=zone_name, zonegroup_name=zonegroup_name,
-                                default=True, master=True, endpoints=zone_ip_url,
-                                access_key=None, secret_key=None):
-                logger.info("Creating system user: %s", username)
-                user_details = self.create_system_user(username, zone_name)
-                if user_details:
-                    keys = user_details['keys'][0]
-                    logger.info("Modifying zone with user credentials: %s", username)
-                    self.modify_zone(zone_name=zone_name, zonegroup_name=zonegroup_name,
-                                     default='true', master='true', endpoints=zone_ip_url,
-                                     access_key=keys['access_key'],
-                                     secret_key=keys['secret_key'])
-        except Exception as e:
-            logger.error("Failed to create zone or system user: %s", e)
-            raise
-        try:
-            # Restart RGW daemons and set credentials
-            logger.info("Restarting RGW daemons and setting credentials")
-            rgw_service_manager = RgwServiceManager()
-            rgw_service_manager.restart_rgw_daemons_and_set_credentials()
-        except Exception as e:
-            logger.error("Failed to restart RGW daemons: %s", e)
-            raise
-        try:
-            # Get realm tokens and import to another cluster if specified
-            logger.info("Getting realm tokens")
-            realm_token_info = CephService.get_realm_tokens()
-
-            if cluster_fsid and realm_token_info:
-                logger.info("Importing realm token to cluster: %s", cluster_fsid)
-                self.import_realm_token_to_cluster(cluster_fsid, realm_name,
-                                                   realm_token_info, username)
-        except Exception as e:
-            logger.error("Failed to get realm tokens or import to cluster: %s", e)
-            raise
-        logger.info("Multisite replication setup completed")
-        return realm_token_info
-
-    def import_realm_token_to_cluster(self, cluster_fsid, realm_name, realm_token_info, username):
-        logger.info("Importing realm token to cluster: %s", cluster_fsid)
-        try:
-            for realm_token in realm_token_info:
-                if realm_token['realm'] == realm_name:
-                    realm_export_token = realm_token['token']
-                    break
-            else:
-                raise ValueError(f"Realm {realm_name} not found in realm tokens")
-            multi_cluster_config_str = str(mgr.get_module_option_ex('dashboard', 'MULTICLUSTER_CONFIG'))  # noqa E501  # pylint: disable=line-too-long
-            multi_cluster_config = ast.literal_eval(multi_cluster_config_str)
-            for fsid, clusters in multi_cluster_config['config'].items():
-                if fsid == cluster_fsid:
-                    for cluster_info in clusters:
-                        cluster_token = cluster_info.get('token')
-                        cluster_url = cluster_info.get('url')
-                        break
-                    else:
-                        raise ValueError(f"No cluster token found for fsid: {cluster_fsid}")
-                    break
-            else:
-                raise ValueError(f"Cluster fsid {cluster_fsid} not found in multi-cluster config")
-            if cluster_token:
-                placement_spec: Dict[str, Dict] = {"placement": {}}
-                payload = {
-                    'realm_token': realm_export_token,
-                    'zone_name': 'new_replicated_zone',
-                    'port': 81,
-                    'placement_spec': placement_spec
-                }
-
-                if not cluster_url.endswith('/'):
-                    cluster_url += '/'
-
-                path = 'api/rgw/realm/import_realm_token'
-                try:
-                    multi_cluster_instance = MultiCluster()
-                    # pylint: disable=protected-access
-                    response = multi_cluster_instance._proxy(method='POST', base_url=cluster_url,
-                                                             path=path, payload=payload,
-                                                             token=cluster_token)
-                    logger.info("Successfully imported realm token to cluster: %s", cluster_fsid)
-                    self.check_user_in_second_cluster(cluster_url, cluster_token, username)
-                    return response
-                except requests.RequestException as e:
-                    logger.error("Could not reach %s: %s", cluster_url, e)
-                    raise DashboardException(f"Could not reach {cluster_url}: {e}",
-                                             http_status_code=404, component='dashboard')
-                except json.JSONDecodeError as e:
-                    logger.error("Error parsing Dashboard API response: %s", e.msg)
-                    raise DashboardException(f"Error parsing Dashboard API response: {e.msg}",
-                                             component='dashboard')
-        except Exception as e:
-            logger.error("Failed to import realm token to cluster: %s", e)
-            raise
-
-    def check_user_in_second_cluster(self, cluster_url, cluster_token, username):
-        logger.info("Checking for user %s in the second cluster", username)
-        path = 'api/rgw/zone/get_user_list?zoneName=new_replicated_zone'
-        user_found = False
-        start_time = time.time()
-        while not user_found:
-            if time.time() - start_time > 120:  # Timeout after 2 minutes
-                logger.error("Timeout reached while waiting for user %s to appear \
-                             in the second cluster", username)
-                raise DashboardException(code='user_replication_timeout',
-                                         msg="Timeout reached while waiting for \
-                                         user %s to appear in the second cluster." % username)
-            try:
-                multi_cluster_instance = MultiCluster()
-                # pylint: disable=protected-access
-                user_content = multi_cluster_instance._proxy(method='GET', base_url=cluster_url,
-                                                             path=path, token=cluster_token)
-                logger.info("User content in the second cluster: %s", user_content)
-                for user in user_content:
-                    if user['user_id'] == username:
-                        user_found = True
-                        logger.info("User %s found in the second cluster", username)
-                        # pylint: disable=protected-access
-                        restart_daemons_content = multi_cluster_instance._proxy(method='PUT', base_url=cluster_url,  # noqa E501  # pylint: disable=line-too-long
-                                                                                path='ui-api/rgw/multisite/setup-rgw-credentials',  # noqa E501  # pylint: disable=line-too-long
-                                                                                token=cluster_token)  # noqa E501  # pylint: disable=line-too-long
-                        logger.info("Restarted RGW daemons in the second cluster: %s", restart_daemons_content)  # noqa E501  # pylint: disable=line-too-long
-                        break
-            except requests.RequestException as e:
-                logger.error("Error checking user in the second cluster: %s", e)
-            logger.info("User %s not found yet, retrying in 5 seconds", username)
-            time.sleep(5)
-
     def create_realm(self, realm_name: str, default: bool):
         rgw_realm_create_cmd = ['realm', 'create']
         cmd_create_realm_options = ['--rgw-realm', realm_name]
-        if default:
+        if str_to_bool(default):
             cmd_create_realm_options.append('--default')
         rgw_realm_create_cmd += cmd_create_realm_options
         try:
@@ -1424,9 +1560,9 @@ class RgwMultisite:
         if realm_name != 'null':
             cmd_create_zonegroup_options.append('--rgw-realm')
             cmd_create_zonegroup_options.append(realm_name)
-        if default != 'false':
+        if str_to_bool(default):
             cmd_create_zonegroup_options.append('--default')
-        if master != 'false':
+        if str_to_bool(master):
             cmd_create_zonegroup_options.append('--master')
         if endpoints:
             cmd_create_zonegroup_options.append('--endpoints')
@@ -1489,7 +1625,7 @@ class RgwMultisite:
             all_zonegroups_info['default_zonegroup'] = ''  # type: ignore
         return all_zonegroups_info
 
-    def delete_zonegroup(self, zonegroup_name: str, delete_pools: str, pools: List[str]):
+    def delete_zonegroup(self, realm_id: str, zonegroup_name: str, delete_pools: str, pools: List[str]):
         if delete_pools == 'true':
             zonegroup_info = self.get_zonegroup(zonegroup_name)
         rgw_delete_zonegroup_cmd = ['zonegroup', 'delete', '--rgw-zonegroup', zonegroup_name]
@@ -1500,7 +1636,7 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
+        self.update_period(realm_id)
         if delete_pools == 'true':
             for zone in zonegroup_info['zones']:
                 self.delete_zone(zone['name'], 'true', pools)
@@ -1525,9 +1661,9 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
+        self.update_period(realm_name=realm_name)
 
-    def add_or_remove_zone(self, zonegroup_name: str, zone_name: str, action: str):
+    def add_or_remove_zone(self, realm_name: str, zonegroup_name: str, zone_name: str, action: str):
         if action == 'add':
             rgw_zonegroup_add_zone_cmd = ['zonegroup', 'add', '--rgw-zonegroup',
                                           zonegroup_name, '--rgw-zone', zone_name]
@@ -1538,7 +1674,7 @@ class RgwMultisite:
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
-            self.update_period()
+            self.update_period(realm_name=realm_name)
         if action == 'remove':
             rgw_zonegroup_rm_zone_cmd = ['zonegroup', 'remove',
                                          '--rgw-zonegroup', zonegroup_name, '--rgw-zone', zone_name]
@@ -1549,7 +1685,7 @@ class RgwMultisite:
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
-            self.update_period()
+            self.update_period(realm_name=realm_name)
 
     def get_placement_targets_by_zonegroup(self, zonegroup_name: str):
         rgw_get_placement_cmd = ['zonegroup', 'placement',
@@ -1563,7 +1699,7 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
         return out
 
-    def add_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
+    def add_placement_targets(self, realm_name: str, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'add']
         for placement_target in placement_targets:
             cmd_add_placement_options = ['--rgw-zonegroup', zonegroup_name,
@@ -1579,7 +1715,7 @@ class RgwMultisite:
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
-            self.update_period()
+            self.update_period(realm_name=realm_name)
             storage_classes = placement_target['storage_class'].split(",") if placement_target['storage_class'] else []  # noqa E501  #pylint: disable=line-too-long
             if storage_classes:
                 for sc in storage_classes:
@@ -1593,9 +1729,9 @@ class RgwMultisite:
                                                      http_status_code=500, component='rgw')
                     except SubprocessError as error:
                         raise DashboardException(error, http_status_code=500, component='rgw')
-                    self.update_period()
+                    self.update_period(realm_name=realm_name)
 
-    def modify_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
+    def modify_placement_targets(self, realm_name: str, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'modify']
         for placement_target in placement_targets:
             cmd_add_placement_options = ['--rgw-zonegroup', zonegroup_name,
@@ -1617,7 +1753,7 @@ class RgwMultisite:
                                                      http_status_code=500, component='rgw')
                     except SubprocessError as error:
                         raise DashboardException(error, http_status_code=500, component='rgw')
-                    self.update_period()
+                    self.update_period(realm_name=realm_name)
             else:
                 try:
                     exit_code, _, err = mgr.send_rgwadmin_command(rgw_add_placement_cmd)
@@ -1627,7 +1763,7 @@ class RgwMultisite:
                                                  http_status_code=500, component='rgw')
                 except SubprocessError as error:
                     raise DashboardException(error, http_status_code=500, component='rgw')
-                self.update_period()
+                self.update_period(realm_name=realm_name)
 
     # pylint: disable=W0102
     def edit_zonegroup(self, realm_name: str, zonegroup_name: str, new_zonegroup_name: str,
@@ -1645,25 +1781,31 @@ class RgwMultisite:
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
-            self.update_period()
+            self.update_period(realm_name=realm_name)
         self.modify_zonegroup(realm_name, new_zonegroup_name, default, master, endpoints)
         if add_zones:
             for zone_name in add_zones:
-                self.add_or_remove_zone(new_zonegroup_name, zone_name, 'add')
+                self.add_or_remove_zone(realm_name, new_zonegroup_name, zone_name, 'add')
         if remove_zones:
             for zone_name in remove_zones:
-                self.add_or_remove_zone(new_zonegroup_name, zone_name, 'remove')
+                self.add_or_remove_zone(realm_name, new_zonegroup_name, zone_name, 'remove')
         existing_placement_targets = self.get_placement_targets_by_zonegroup(new_zonegroup_name)
         existing_placement_targets_ids = [pt['key'] for pt in existing_placement_targets]
         if placement_targets:
             for pt in placement_targets:
                 if pt['placement_id'] in existing_placement_targets_ids:
-                    self.modify_placement_targets(new_zonegroup_name, placement_targets)
+                    self.modify_placement_targets(realm_name, new_zonegroup_name, placement_targets)
                 else:
-                    self.add_placement_targets(new_zonegroup_name, placement_targets)
+                    self.add_placement_targets(realm_name, new_zonegroup_name, placement_targets)
 
-    def update_period(self):
-        rgw_update_period_cmd = ['period', 'update', '--commit']
+    def update_period(self, realm_name=None, realm_id=None):
+        rgw_update_period_cmd = ['period', 'update', '--commit']  # noqa E501  #pylint: disable=line-too-long
+        if realm_name:
+            rgw_update_period_cmd.append('--rgw-realm')
+            rgw_update_period_cmd.append(realm_name)
+        if realm_id:
+            rgw_update_period_cmd.append('--realm-id')
+            rgw_update_period_cmd.append(realm_id)
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_update_period_cmd)
             if exit_code > 0:
@@ -1673,15 +1815,15 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
     def create_zone(self, zone_name, zonegroup_name, default, master, endpoints, access_key,
-                    secret_key):
+                    secret_key, realm_name=None, realm_id=None):
         rgw_zone_create_cmd = ['zone', 'create']
         cmd_create_zone_options = ['--rgw-zone', zone_name]
         if zonegroup_name != 'null':
             cmd_create_zone_options.append('--rgw-zonegroup')
             cmd_create_zone_options.append(zonegroup_name)
-        if default != 'false':
+        if str_to_bool(default):
             cmd_create_zone_options.append('--default')
-        if master != 'false':
+        if str_to_bool(master):
             cmd_create_zone_options.append('--master')
         if endpoints != 'null':
             cmd_create_zone_options.append('--endpoints')
@@ -1700,8 +1842,9 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-
-        self.update_period()
+        
+        if realm_name or realm_id:
+            self.update_period(realm_name=realm_name, realm_id=realm_id)
         return out
 
     def parse_secrets(self, user, data):
@@ -1713,7 +1856,8 @@ class RgwMultisite:
         return '', ''
 
     def modify_zone(self, zone_name: str, zonegroup_name: str, default: str, master: str,
-                    endpoints: str, access_key: str, secret_key: str):
+                    endpoints: str, access_key: str, secret_key: str, realm_id=None,
+                    realm_name=None):
         rgw_zone_modify_cmd = ['zone', 'modify', '--rgw-zonegroup',
                                zonegroup_name, '--rgw-zone', zone_name]
         if endpoints:
@@ -1736,10 +1880,11 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
+        if realm_name or realm_id:
+            self.update_period(realm_name=realm_name, realm_id=realm_id)
 
     def add_placement_targets_zone(self, zone_name: str, placement_target: str, data_pool: str,
-                                   index_pool: str, data_extra_pool: str):
+                                   index_pool: str, data_extra_pool: str, realm_id=str):
         rgw_zone_add_placement_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
                                       '--placement-id', placement_target, '--data-pool', data_pool,
                                       '--index-pool', index_pool,
@@ -1751,15 +1896,18 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
+        self.update_period(realm_id=realm_id)
 
     def add_storage_class_zone(self, zone_name: str, placement_target: str, storage_class: str,
-                               data_pool: str, compression: str):
+                               data_pool: str, compression: str, realm_id: str):
         rgw_zone_add_storage_class_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
                                           '--placement-id', placement_target,
                                           '--storage-class', storage_class,
-                                          '--data-pool', data_pool,
-                                          '--compression', compression]
+                                          '--data-pool', data_pool]
+        if compression != '':
+            rgw_zone_add_storage_class_cmd.append('--compression')
+            rgw_zone_add_storage_class_cmd.append(compression)
+
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_storage_class_cmd)
             if exit_code > 0:
@@ -1767,9 +1915,9 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
+        self.update_period(realm_id=realm_id)
 
-    def edit_zone(self, zone_name: str, new_zone_name: str, zonegroup_name: str, default: str = '',
+    def edit_zone(self, zone_name: str, new_zone_name: str, realm_id: str, zonegroup_name: str, default: str = '',
                   master: str = '', endpoints: str = '', access_key: str = '', secret_key: str = '',
                   placement_target: str = '', data_pool: str = '', index_pool: str = '',
                   data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
@@ -1784,13 +1932,13 @@ class RgwMultisite:
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
-            self.update_period()
+            self.update_period(realm_id=realm_id)
         self.modify_zone(new_zone_name, zonegroup_name, default, master, endpoints, access_key,
-                         secret_key)
+                         secret_key, realm_id=realm_id)
         self.add_placement_targets_zone(new_zone_name, placement_target,
-                                        data_pool, index_pool, data_extra_pool)
+                                        data_pool, index_pool, data_extra_pool, realm_id=realm_id)
         self.add_storage_class_zone(new_zone_name, placement_target, storage_class,
-                                    data_pool_class, compression)
+                                    data_pool_class, compression, realm_id=realm_id)
 
     def list_zones(self):
         rgw_zone_list = {}
@@ -1836,7 +1984,7 @@ class RgwMultisite:
             all_zones_info['default_zone'] = ''  # type: ignore
         return all_zones_info
 
-    def delete_zone(self, zone_name: str, delete_pools: str, pools: List[str],
+    def delete_zone(self, realm_id: str, zone_name: str, delete_pools: str, pools: List[str],
                     zonegroup_name: str = '',):
         rgw_remove_zone_from_zonegroup_cmd = ['zonegroup', 'remove', '--rgw-zonegroup',
                                               zonegroup_name, '--rgw-zone', zone_name]
@@ -1849,7 +1997,7 @@ class RgwMultisite:
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
-            self.update_period()
+            self.update_period(realm_id=realm_id)
         try:
             exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_zone_cmd)
             if exit_code > 0:
@@ -1857,7 +2005,7 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
+        self.update_period(realm_id=realm_id)
         if delete_pools == 'true':
             self.delete_pools(pools)
 
@@ -1879,7 +2027,6 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
     def get_user_list(self, zoneName: str):
-        all_users_info = []
         user_list = []
         rgw_user_list_cmd = ['user', 'list', '--rgw-zone', zoneName]
         try:
@@ -1890,19 +2037,7 @@ class RgwMultisite:
             user_list = out
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-
-        if len(user_list) > 0:
-            for user_name in user_list:
-                rgw_user_info_cmd = ['user', 'info', '--uid', user_name, '--rgw-zone', zoneName]
-                try:
-                    exit_code, out, _ = mgr.send_rgwadmin_command(rgw_user_info_cmd)
-                    if exit_code > 0:
-                        raise DashboardException('Unable to get user info',
-                                                 http_status_code=500, component='rgw')
-                    all_users_info.append(out)
-                except SubprocessError as error:
-                    raise DashboardException(error, http_status_code=500, component='rgw')
-        return all_users_info
+        return user_list
 
     def get_multisite_status(self):
         is_multisite_configured = True
@@ -1915,7 +2050,7 @@ class RgwMultisite:
         return is_multisite_configured
 
     def get_multisite_sync_status(self):
-        rgw_multisite_sync_status_cmd = ['sync', 'status']
+        rgw_multisite_sync_status_cmd = ['sync', 'status', '--rgw-realm', 'qwerty']
         try:
             exit_code, out, _ = mgr.send_rgwadmin_command(rgw_multisite_sync_status_cmd, False)
             if exit_code > 0:

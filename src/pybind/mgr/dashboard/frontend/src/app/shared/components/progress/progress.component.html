@@ -1,0 +1,62 @@
+<div class="d-flex flex-column justify-content-center align-items-center bold">
+  <ng-container>
+    <h3 class="text-center"
+        [ngClass]="{ 'mt-3': status === 'in-progress' && isPaused }"
+        *ngIf="!value || actionName === 'upgrading'">
+      <i *ngIf="status === 'in-progress' && isPaused; else spinningIcon"
+         [ngClass]="[icons.large, icons.spinner]"></i>
+      <ng-template #spinningIcon>
+        <i [ngClass]="[icons.large, icons.spin, icons.spinner]"></i>
+      </ng-template>
+    </h3>
+
+    <h3 class="text-center"
+        [ngClass]="status === 'in-progress' && isPaused ? ['mt-3', 'mb-4'] : 'mt-2'"
+        *ngIf="label">
+      {{ label }}
+    </h3>
+
+    <h5 class="text-center mt-3"
+        *ngIf="subLabel && status === 'in-progress' && !isPaused">
+      {{ subLabel }}
+    </h5>
+
+    <h5 class="text-center mt-3"
+        *ngIf="description">
+      {{ description }}
+    </h5>
+  </ng-container>
+
+  <div class="w-50 row h-100 d-flex justify-content-center align-items-center mt-4">
+    <div class="text-center w-75">
+      <ng-container *ngIf="completedItems && completedItems.length > 0"
+                    i18n>
+        Finished {{ actionName }}:
+        <span class="text-success">
+          {{ completedItems }}
+        </span>
+      </ng-container>
+
+      <!-- Progress Bar -->
+      <div class="mt-2">
+        <ngb-progressbar type="info"
+                         [value]="value"
+                         [striped]="true"
+                         [animated]="!isPaused"></ngb-progressbar>
+      </div>
+      <p class="card-text text-muted">
+        <span class="float-end">{{ value || 0 }} %</span>
+      </p>
+    </div>
+
+    <h4 class="text-center m-2"
+        *ngIf="helperText">
+      {{ helperText }}
+    </h4>
+
+    <h5 class="text-center mt-2"
+        *ngIf="footerText">
+      {{ footerText }}
+    </h5>
+  </div>
+</div>
