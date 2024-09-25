@@ -275,6 +275,7 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
                                             time_t creationTime = time_t(nullptr);
                                             rgw_user user;
                                             rgw_obj_key obj_key;
+                                            bool deleteMarker = false;
                                             if (attrs.find(RGW_ATTR_ETAG) != attrs.end()) {
                                                 etag = attrs[RGW_ATTR_ETAG].to_str();
                                                 ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): etag: " << etag << dendl;
@@ -321,8 +322,14 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
                                                 ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): localWeightStr: " << localWeightStr << dendl;
                                             }
 
+                                            if (attrs.find(RGW_CACHE_ATTR_DELETE_MARKER) != attrs.end()) {
+                                                std::string deleteMarkerStr = attrs[RGW_CACHE_ATTR_LOCAL_WEIGHT].to_str();
+                                                deleteMarker = (deleteMarkerStr == "1") ? true : false;
+                                                ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): deleteMarker: " << deleteMarker << dendl;
+                                            }
+
                                             ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): calling func for: " << key << dendl;
-                                            obj_func(dpp, key, version, dirty, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, null_yield);
+                                            obj_func(dpp, key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, null_yield);
                                             block_func(dpp, key, offset, len, version, dirty, null_yield, localWeightStr);
                                             parsed = true;
                                         } //end-if part.size() == 2

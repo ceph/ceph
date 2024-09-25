@@ -699,10 +699,18 @@ TEST_F(BlockDirectoryFixture, MultiExecuteYield)
       }
       {
         request req;
+        response<std::string> resp;
+        req.push("ZADD", "key4", "1", "v1");                  // Command 3
+        conn->async_exec(req, resp, yield[ec]);
+        ASSERT_EQ((bool)ec, false);
+        std::cout << "ZADD value: " << std::get<0>(resp).value() << std::endl;
+      }
+      {
+        request req;
         //string as response here as the command is only getting queued, not executed
         //if response type is changed to int then the operation fails
         response<std::string> resp;
-        req.push("DEL", "key3");                  // Command 3
+        req.push("DEL", "key3");                  // Command 4
         conn->async_exec(req, resp, yield[ec]);
         ASSERT_EQ((bool)ec, false);
         std::cout << "DEL value: " << std::get<0>(resp).value() << std::endl;
@@ -728,6 +736,8 @@ TEST_F(BlockDirectoryFixture, MultiExecuteYield)
       ASSERT_EQ(0, dir->set(env->dpp, block, yield));
       block->cacheObj.objName = "testBlockA";
       ASSERT_EQ(0, dir->del(env->dpp, block, yield, true));
+      block->cacheObj.objName = "testBlockB";
+      ASSERT_EQ(0, dir->zadd(env->dpp, block, 100, "version1", yield, true));
       std::vector<std::string> responses;
       ASSERT_EQ(0, dir->exec(env->dpp, responses, optional_yield{yield}));
       for (auto r : responses) {
