@@ -1849,6 +1849,12 @@ def conf_setup(ctx, config):
     for p in procs:
         log.debug("waiting for %s", p)
         p.wait()
+    cmd = [
+        'ceph',
+        'config',
+        'dump',
+    ]
+    _shell(ctx, cluster_name, remote, args=cmd)
     yield
 
 @contextlib.contextmanager
