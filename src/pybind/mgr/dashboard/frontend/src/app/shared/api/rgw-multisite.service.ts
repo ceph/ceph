@@ -28,7 +28,9 @@ export class RgwMultisiteService {
   }
 
   getSyncStatus() {
-    return this.http.get(`${this.url}/sync_status`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/sync_status`, { params: params });
+    });
   }
 
   status() {

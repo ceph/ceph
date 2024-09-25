@@ -91,7 +91,9 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
         this.totalPoolUsedBytes = data['total_pool_bytes_used'];
         this.averageObjectSize = data['average_object_size'];
       });
-      this.getSyncStatus();
+      setTimeout(() => {
+        this.getSyncStatus();
+      });
     });
     this.BucketSub = this.rgwBucketService
       .getTotalBucketsAndUsersLength()
