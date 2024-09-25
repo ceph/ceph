@@ -140,7 +140,7 @@ else:
             trsvcid: int = 4420,
             adrfam: int = 0,  # IPv4
         ):
-            return NVMeoFClient().stub.create_listener(
+            return NVMeoFClient(traddr=traddr).stub.create_listener(
                 NVMeoFClient.pb2.create_listener_req(
                     nqn=nqn,
                     host_name=host_name,
