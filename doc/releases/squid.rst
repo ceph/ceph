@@ -32,6 +32,11 @@ Ceph
 CephFS
 ~~~~~~
 
+* CephFS: it is now possible to pause write I/O and metadata mutations on a
+  tree in the file system using a new suite of subvolume quiesce commands.
+  This is implemented to support crash-consistent snapshots for distributed
+  applications. Please see the relevant section in the documentation on CephFS
+  subvolumes for more information.
 * CephFS: MDS evicts clients which are not advancing their request tids which
   causes a large buildup of session metadata resulting in the MDS going
   read-only due to the RADOS operation exceeding the size threshold.
@@ -107,6 +112,10 @@ CephFS
   progress made by each of them.
 * cephfs-shell: The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9
   as required python dependencies are now available in EPEL9.
+* The CephFS automatic metadata load (sometimes called "default") balancer is
+  now disabled by default. The new file system flag `balance_automate`
+  can be used to toggle it on or off. It can be enabled or disabled via
+  `ceph fs set <fs_name> balance_automate <bool>`.
 
 CephX
 ~~~~~
@@ -392,7 +401,7 @@ Upgrading non-cephadm clusters
 
 .. note::
 
-   1. If your cluster is running Quincy (17.2.x) or later, you might choose to first convert it to use cephadm so that the upgrade to Reef is automated (see above).
+   1. If your cluster is running Quincy (17.2.x) or later, you might choose to first convert it to use cephadm so that the upgrade to Squid is automated (see above).
       For more information, see https://docs.ceph.com/en/squid/cephadm/adoption/.
 
    2. If your cluster is running Quincy (17.2.x) or later, systemd unit file names have changed to include the cluster fsid. To find the correct systemd unit file name for your cluster, run following command:
