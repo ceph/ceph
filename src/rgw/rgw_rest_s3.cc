@@ -5845,7 +5845,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   auto canonical_qs = rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);
 
   /* Craft canonical method. */
-  auto canonical_method = rgw::auth::s3::get_v4_canonical_method(s);
+  auto canonical_method = rgw::auth::s3::get_canonical_method(s, s->op_type, s->info);
 
   /* Craft canonical request. */
   auto canonical_req_hash = \
@@ -6109,7 +6109,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   /* Let's canonize the HTTP headers that are covered by the AWS auth v2. */
   std::string string_to_sign;
   utime_t header_time;
-  if (! rgw_create_s3_canonical_header(s, s->info, &header_time, string_to_sign,
+  if (! rgw_create_s3_canonical_header(s, s->op_type, s->info, &header_time, string_to_sign,
         qsr)) {
     ldpp_dout(s, 10) << "failed to create the canonized auth header\n"
                    << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
