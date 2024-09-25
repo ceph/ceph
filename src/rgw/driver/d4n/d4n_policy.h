@@ -39,7 +39,7 @@ class CachePolicy {
     struct ObjEntry {
       std::string key;
       std::string version;
-      bool dirty;
+      bool delete_marker;
       uint64_t size;
       time_t creationTime;
       rgw_user user;
@@ -48,9 +48,9 @@ class CachePolicy {
       std::string bucket_id;
       rgw_obj_key obj_key;
       ObjEntry() = default;
-      ObjEntry(std::string& key, std::string version, bool dirty, uint64_t size, 
+      ObjEntry(std::string& key, std::string version, bool delete_marker, uint64_t size,
 		time_t creationTime, rgw_user user, std::string& etag, 
-		const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key) : key(key), version(version), dirty(dirty), size(size), 
+		const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key) : key(key), version(version), delete_marker(delete_marker), size(size),
 									      creationTime(creationTime), user(user), etag(etag), 
 									      bucket_name(bucket_name), bucket_id(bucket_id), obj_key(obj_key) {}
     };
@@ -112,9 +112,9 @@ class LFUDAPolicy : public CachePolicy {
       using handle_type = boost::heap::fibonacci_heap<LFUDAObjEntry*, boost::heap::compare<ObjectComparator<LFUDAObjEntry>>>::handle_type;
       handle_type handle;
 
-      LFUDAObjEntry(std::string& key, std::string& version, bool dirty, uint64_t size, 
+      LFUDAObjEntry(std::string& key, std::string& version, bool deleteMarker, uint64_t size,
                      time_t creationTime, rgw_user user, std::string& etag, 
-                     const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key) : ObjEntry(key, version, dirty, size, 
+                     const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key) : ObjEntry(key, version, deleteMarker, size,
 									    creationTime, user, etag, bucket_name, bucket_id, obj_key) {}
 
       void set_handle(handle_type handle_) { handle = handle_; }
