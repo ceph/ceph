@@ -17,6 +17,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { ZoneData } from '../models/rgw-multisite-zone-selector';
 import { SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
 
+const ALL_ZONES = $localize`All zones (*)`;
+
 @Component({
   selector: 'cd-rgw-multisite-sync-pipe-modal',
   templateUrl: './rgw-multisite-sync-pipe-modal.component.html',
@@ -29,7 +31,7 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
   action: string;
   editing: boolean;
   sourceZones = new ZoneData(false, 'Filter Zones');
-  destZones = new ZoneData(true, 'Filter or Add Zones');
+  destZones = new ZoneData(false, 'Filter Zones');
   icons = Icons;
 
   constructor(
@@ -42,6 +44,14 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    if (this.pipeSelectedRow) {
+      this.pipeSelectedRow.source.zones = this.replaceAsteriskWithString(
+        this.pipeSelectedRow.source.zones
+      );
+      this.pipeSelectedRow.dest.zones = this.replaceAsteriskWithString(
+        this.pipeSelectedRow.dest.zones
+      );
+    }
     this.editing = this.action === 'create' ? false : true;
     this.pipeForm = new CdFormGroup({
       pipe_id: new UntypedFormControl('', {
@@ -80,10 +90,12 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
       .subscribe((zonegroupData: any) => {
         if (zonegroupData && zonegroupData?.zones?.length > 0) {
           let zones: any[] = [];
+          zones.push(new SelectOption(false, ALL_ZONES, ''));
           zonegroupData.zones.forEach((zone: any) => {
             zones.push(new SelectOption(false, zone.name, ''));
           });
-          this.sourceZones.data.available = [...zones];
+          this.sourceZones.data.available = JSON.parse(JSON.stringify(zones));
+          this.destZones.data.available = JSON.parse(JSON.stringify(zones));
           if (this.editing) {
             this.pipeForm.get('pipe_id').disable();
             this.sourceZones.data.selected = [...this.pipeSelectedRow.source.zones];
@@ -92,7 +104,6 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
             this.pipeSelectedRow.dest.zones.forEach((zone: string) => {
               availableDestZone.push(new SelectOption(true, zone, ''));
             });
-            this.destZones.data.available = availableDestZone;
             this.pipeForm.patchValue({
               pipe_id: this.pipeSelectedRow.id,
               source_zones: this.pipeSelectedRow.source.zones,
@@ -103,6 +114,14 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
           }
         }
       });
+  }
+
+  replaceWithAsterisk(zones: string[]) {
+    return zones.map((str) => str.replace(ALL_ZONES, '*'));
+  }
+
+  replaceAsteriskWithString(zones: string[]) {
+    return zones.map((str) => str.replace('*', ALL_ZONES));
   }
 
   onZoneSelection(zoneType: string) {
@@ -122,7 +141,9 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
   }
 
   assignZoneValue(zone: string[], selectedZone: string[]) {
-    return zone.length > 0 ? zone : selectedZone;
+    return zone.length > 0
+      ? this.replaceWithAsterisk(zone)
+      : this.replaceWithAsterisk(selectedZone);
   }
 
   submit() {
@@ -158,6 +179,9 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
     }
     sourceZones.added = this.assignZoneValue(sourceZones.added, this.sourceZones.data.selected);
     destZones.added = this.assignZoneValue(destZones.added, this.destZones.data.selected);
+
+    sourceZones.removed = this.replaceWithAsterisk(sourceZones.removed);
+    destZones.removed = this.replaceWithAsterisk(destZones.removed);
 
     this.rgwMultisiteService
       .createEditSyncPipe({
