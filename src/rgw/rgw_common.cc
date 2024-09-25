@@ -49,127 +49,129 @@ using rgw::IAM::PolicyPrincipal;
 const uint32_t RGWBucketInfo::NUM_SHARDS_BLIND_BUCKET(UINT32_MAX);
 
 rgw_http_errors rgw_http_s3_errors({
-    { 0, {200, "" }},
-    { STATUS_CREATED, {201, "Created" }},
-    { STATUS_ACCEPTED, {202, "Accepted" }},
-    { STATUS_NO_CONTENT, {204, "NoContent" }},
-    { STATUS_PARTIAL_CONTENT, {206, "" }},
-    { ERR_PERMANENT_REDIRECT, {301, "PermanentRedirect" }},
-    { ERR_WEBSITE_REDIRECT, {301, "WebsiteRedirect" }},
-    { STATUS_REDIRECT, {303, "" }},
-    { ERR_NOT_MODIFIED, {304, "NotModified" }},
-    { EINVAL, {400, "InvalidArgument" }},
-    { ERR_INVALID_REQUEST, {400, "InvalidRequest" }},
-    { ERR_INVALID_DIGEST, {400, "InvalidDigest" }},
-    { ERR_BAD_DIGEST, {400, "BadDigest" }},
-    { ERR_INVALID_LOCATION_CONSTRAINT, {400, "InvalidLocationConstraint" }},
-    { ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION, {400, "ZonegroupDefaultPlacementMisconfiguration" }},
-    { ERR_INVALID_BUCKET_NAME, {400, "InvalidBucketName" }},
-    { ERR_INVALID_OBJECT_NAME, {400, "InvalidObjectName" }},
-    { ERR_UNRESOLVABLE_EMAIL, {400, "UnresolvableGrantByEmailAddress" }},
-    { ERR_INVALID_PART, {400, "InvalidPart" }},
-    { ERR_INVALID_PART_ORDER, {400, "InvalidPartOrder" }},
-    { ERR_REQUEST_TIMEOUT, {400, "RequestTimeout" }},
-    { ERR_TOO_LARGE, {400, "EntityTooLarge" }},
-    { ERR_TOO_SMALL, {400, "EntityTooSmall" }},
-    { ERR_TOO_MANY_BUCKETS, {400, "TooManyBuckets" }},
-    { ERR_MALFORMED_XML, {400, "MalformedXML" }},
-    { ERR_AMZ_CONTENT_SHA256_MISMATCH, {400, "XAmzContentSHA256Mismatch" }},
-    { ERR_MALFORMED_DOC, {400, "MalformedPolicyDocument"}},
-    { ERR_INVALID_TAG, {400, "InvalidTag"}},
-    { ERR_MALFORMED_ACL_ERROR, {400, "MalformedACLError" }},
-    { ERR_INVALID_CORS_RULES_ERROR, {400, "InvalidRequest" }},
-    { ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR, {400, "InvalidRequest" }},
-    { ERR_INVALID_ENCRYPTION_ALGORITHM, {400, "InvalidEncryptionAlgorithmError" }},
-    { ERR_INVALID_RETENTION_PERIOD,{400, "InvalidRetentionPeriod"}},
-    { ERR_LIMIT_EXCEEDED, {409, "LimitExceeded" }},
-    { ERR_LENGTH_REQUIRED, {411, "MissingContentLength" }},
-    { EACCES, {403, "AccessDenied" }},
-    { EPERM, {403, "AccessDenied" }},
-    { ERR_AUTHORIZATION, {403, "AuthorizationError" }},
-    { ERR_SIGNATURE_NO_MATCH, {403, "SignatureDoesNotMatch" }},
-    { ERR_INVALID_ACCESS_KEY, {403, "InvalidAccessKeyId" }},
-    { ERR_USER_SUSPENDED, {403, "UserSuspended" }},
-    { ERR_REQUEST_TIME_SKEWED, {403, "RequestTimeTooSkewed" }},
-    { ERR_QUOTA_EXCEEDED, {403, "QuotaExceeded" }},
-    { ERR_MFA_REQUIRED, {403, "AccessDenied" }},
-    { ENOENT, {404, "NoSuchKey" }},
-    { ERR_NO_SUCH_BUCKET, {404, "NoSuchBucket" }},
-    { ERR_NO_SUCH_WEBSITE_CONFIGURATION, {404, "NoSuchWebsiteConfiguration" }},
-    { ERR_NO_SUCH_UPLOAD, {404, "NoSuchUpload" }},
-    { ERR_NOT_FOUND, {404, "NotFound"}},
-    { ERR_NO_SUCH_LC, {404, "NoSuchLifecycleConfiguration"}},
-    { ERR_NO_SUCH_BUCKET_POLICY, {404, "NoSuchBucketPolicy"}},
-    { ERR_NO_SUCH_USER, {404, "NoSuchUser"}},
-    { ERR_NO_ROLE_FOUND, {404, "NoSuchEntity"}},
-    { ERR_NO_CORS_FOUND, {404, "NoSuchCORSConfiguration"}},
-    { ERR_NO_SUCH_SUBUSER, {404, "NoSuchSubUser"}},
-    { ERR_NO_SUCH_ENTITY, {404, "NoSuchEntity"}},
-    { ERR_NO_SUCH_CORS_CONFIGURATION, {404, "NoSuchCORSConfiguration"}},
-    { ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION, {404, "ObjectLockConfigurationNotFoundError"}},
-    { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
-    { ETIMEDOUT, {408, "RequestTimeout" }},
-    { EEXIST, {409, "BucketAlreadyExists" }},
-    { ERR_USER_EXIST, {409, "UserAlreadyExists" }},
-    { ERR_EMAIL_EXIST, {409, "EmailExists" }},
-    { ERR_KEY_EXIST, {409, "KeyExists"}},
-    { ERR_TAG_CONFLICT, {409, "OperationAborted"}},
-    { ERR_POSITION_NOT_EQUAL_TO_LENGTH, {409, "PositionNotEqualToLength"}},
-    { ERR_OBJECT_NOT_APPENDABLE, {409, "ObjectNotAppendable"}},
-    { ERR_INVALID_BUCKET_STATE, {409, "InvalidBucketState"}},
-    { ERR_INVALID_OBJECT_STATE, {403, "InvalidObjectState"}},
-    { ERR_INVALID_SECRET_KEY, {400, "InvalidSecretKey"}},
-    { ERR_INVALID_KEY_TYPE, {400, "InvalidKeyType"}},
-    { ERR_INVALID_CAP, {400, "InvalidCapability"}},
-    { ERR_INVALID_TENANT_NAME, {400, "InvalidTenantName" }},
-    { ENOTEMPTY, {409, "BucketNotEmpty" }},
-    { ERR_PRECONDITION_FAILED, {412, "PreconditionFailed" }},
-    { ERANGE, {416, "InvalidRange" }},
-    { ERR_UNPROCESSABLE_ENTITY, {422, "UnprocessableEntity" }},
-    { ERR_LOCKED, {423, "Locked" }},
-    { ERR_INTERNAL_ERROR, {500, "InternalError" }},
-    { ERR_NOT_IMPLEMENTED, {501, "NotImplemented" }},
-    { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
-    { EBUSY, {503, "ServiceUnavailable"}},
-    { ERR_RATE_LIMITED, {503, "SlowDown"}},
-    { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
-    { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSet"}},
-    { ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION, {404, "ServerSideEncryptionConfigurationNotFoundError"}},
-    { ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION, {404, "NoSuchPublicAccessBlockConfiguration"}},
-    { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists"}},
-    { ECANCELED, {409, "ConcurrentModification"}},
+    { 0, {200, "", ""}},
+    { STATUS_CREATED, {201, "Created", ""}},
+    { STATUS_ACCEPTED, {202, "Accepted", ""}},
+    { STATUS_NO_CONTENT, {204, "NoContent", ""}},
+    { STATUS_PARTIAL_CONTENT, {206, "", ""}},
+    { ERR_PERMANENT_REDIRECT, {301, "PermanentRedirect", ""}},
+    { ERR_WEBSITE_REDIRECT, {301, "WebsiteRedirect", ""}},
+    { STATUS_REDIRECT, {303, "", ""}},
+    { ERR_NOT_MODIFIED, {304, "NotModified", ""}},
+    { EINVAL, {400, "InvalidArgument", ""}},
+    { ERR_INVALID_REQUEST, {400, "InvalidRequest", ""}},
+    { ERR_INVALID_DIGEST, {400, "InvalidDigest", ""}},
+    { ERR_BAD_DIGEST, {400, "BadDigest", ""}},
+    { ERR_INVALID_LOCATION_CONSTRAINT, {400, "InvalidLocationConstraint", ""}},
+    { ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION, {400, "ZonegroupDefaultPlacementMisconfiguration", ""}},
+    { ERR_INVALID_BUCKET_NAME, {400, "InvalidBucketName", ""}},
+    { ERR_INVALID_OBJECT_NAME, {400, "InvalidObjectName", ""}},
+    { ERR_UNRESOLVABLE_EMAIL, {400, "UnresolvableGrantByEmailAddress", ""}},
+    { ERR_INVALID_PART, {400, "InvalidPart", ""}},
+    { ERR_INVALID_PART_ORDER, {400, "InvalidPartOrder", ""}},
+    { ERR_REQUEST_TIMEOUT, {400, "RequestTimeout", ""}},
+    { ERR_TOO_LARGE, {400, "EntityTooLarge", ""}},
+    { ERR_TOO_SMALL, {400, "EntityTooSmall", ""}},
+    { ERR_TOO_MANY_BUCKETS, {400, "TooManyBuckets", ""}},
+    { ERR_MALFORMED_XML, {400, "MalformedXML", ""}},
+    { ERR_AMZ_CONTENT_SHA256_MISMATCH, {400, "XAmzContentSHA256Mismatch", ""}},
+    { ERR_MALFORMED_DOC, {400, "MalformedPolicyDocument", ""}},
+    { ERR_INVALID_TAG, {400, "InvalidTag", ""}},
+    { ERR_MALFORMED_ACL_ERROR, {400, "MalformedACLError", ""}},
+    { ERR_INVALID_CORS_RULES_ERROR, {400, "InvalidRequest", ""}},
+    { ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR, {400, "InvalidRequest", ""}},
+    { ERR_INVALID_ENCRYPTION_ALGORITHM, {400, "InvalidEncryptionAlgorithmError", ""}},
+    { ERR_INVALID_RETENTION_PERIOD,{400, "InvalidRetentionPeriod", ""}},
+    { ERR_LIMIT_EXCEEDED, {409, "LimitExceeded", ""}},
+    { ERR_LENGTH_REQUIRED, {411, "MissingContentLength", ""}},
+    { EACCES, {403, "AccessDenied", ""}},
+    { EPERM, {403, "AccessDenied", ""}},
+    { ERR_AUTHORIZATION, {403, "AuthorizationError", ""}},
+    { ERR_SIGNATURE_NO_MATCH, {403, "SignatureDoesNotMatch", ""}},
+    { ERR_INVALID_ACCESS_KEY, {403, "InvalidAccessKeyId", ""}},
+    { ERR_USER_SUSPENDED, {403, "UserSuspended", ""}},
+    { ERR_REQUEST_TIME_SKEWED, {403, "RequestTimeTooSkewed", ""}},
+    { ERR_QUOTA_EXCEEDED, {403, "QuotaExceeded", ""}},
+    { ERR_MFA_REQUIRED, {403, "AccessDenied", ""}},
+    { ENOENT, {404, "NoSuchKey", ""}},
+    { ERR_NO_SUCH_BUCKET, {404, "NoSuchBucket", ""}},
+    { ERR_NO_SUCH_WEBSITE_CONFIGURATION, {404, "NoSuchWebsiteConfiguration", ""}},
+    { ERR_NO_SUCH_UPLOAD, {404, "NoSuchUpload", ""}},
+    { ERR_NOT_FOUND, {404, "NotFound", ""}},
+    { ERR_NO_SUCH_LC, {404, "NoSuchLifecycleConfiguration", ""}},
+    { ERR_NO_SUCH_BUCKET_POLICY, {404, "NoSuchBucketPolicy", ""}},
+    { ERR_NO_SUCH_USER, {404, "NoSuchUser", ""}},
+    { ERR_NO_ROLE_FOUND, {404, "NoSuchEntity", ""}},
+    { ERR_NO_CORS_FOUND, {404, "NoSuchCORSConfiguration", ""}},
+    { ERR_NO_SUCH_SUBUSER, {404, "NoSuchSubUser", ""}},
+    { ERR_NO_SUCH_ENTITY, {404, "NoSuchEntity", ""}},
+    { ERR_NO_SUCH_CORS_CONFIGURATION, {404, "NoSuchCORSConfiguration", ""}},
+    { ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION, {404, "ObjectLockConfigurationNotFoundError", ""}},
+    { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed", ""}},
+    { ETIMEDOUT, {408, "RequestTimeout", ""}},
+    { EEXIST, {409, "BucketAlreadyExists", ""}},
+    { ERR_USER_EXIST, {409, "UserAlreadyExists", ""}},
+    { ERR_EMAIL_EXIST, {409, "EmailExists", ""}},
+    { ERR_KEY_EXIST, {409, "KeyExists", ""}},
+    { ERR_TAG_CONFLICT, {409, "OperationAborted", ""}},
+    { ERR_POSITION_NOT_EQUAL_TO_LENGTH, {409, "PositionNotEqualToLength", ""}},
+    { ERR_OBJECT_NOT_APPENDABLE, {409, "ObjectNotAppendable", ""}},
+    { ERR_INVALID_BUCKET_STATE, {409, "InvalidBucketState", ""}},
+    { ERR_INVALID_OBJECT_STATE, {403, "InvalidObjectState", ""}},
+    { ERR_PRESIGNED_URL_EXPIRED, {403, "AccessDenied", "Request has expired"}},
+    { ERR_PRESIGNED_URL_DISABLED, {403, "AccessDenied", "Presigned URLs are disabled by admin"}},
+    { ERR_INVALID_SECRET_KEY, {400, "InvalidSecretKey", ""}},
+    { ERR_INVALID_KEY_TYPE, {400, "InvalidKeyType", ""}},
+    { ERR_INVALID_CAP, {400, "InvalidCapability", ""}},
+    { ERR_INVALID_TENANT_NAME, {400, "InvalidTenantName", ""}},
+    { ENOTEMPTY, {409, "BucketNotEmpty", ""}},
+    { ERR_PRECONDITION_FAILED, {412, "PreconditionFailed", ""}},
+    { ERANGE, {416, "InvalidRange", ""}},
+    { ERR_UNPROCESSABLE_ENTITY, {422, "UnprocessableEntity", ""}},
+    { ERR_LOCKED, {423, "Locked", ""}},
+    { ERR_INTERNAL_ERROR, {500, "InternalError", ""}},
+    { ERR_NOT_IMPLEMENTED, {501, "NotImplemented", ""}},
+    { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable", ""}},
+    { EBUSY, {503, "ServiceUnavailable", ""}},
+    { ERR_RATE_LIMITED, {503, "SlowDown", ""}},
+    { ERR_ZERO_IN_URL, {400, "InvalidRequest", ""}},
+    { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSet", ""}},
+    { ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION, {404, "ServerSideEncryptionConfigurationNotFoundError", ""}},
+    { ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION, {404, "NoSuchPublicAccessBlockConfiguration", ""}},
+    { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists", ""}},
+    { ECANCELED, {409, "ConcurrentModification", ""}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
-    { EACCES, {403, "AccessDenied" }},
-    { EPERM, {401, "AccessDenied" }},
-    { ENAMETOOLONG, {400, "Metadata name too long" }},
-    { ERR_USER_SUSPENDED, {401, "UserSuspended" }},
-    { ERR_INVALID_UTF8, {412, "Invalid UTF8" }},
-    { ERR_BAD_URL, {412, "Bad URL" }},
-    { ERR_NOT_SLO_MANIFEST, {400, "Not an SLO manifest" }},
-    { ERR_QUOTA_EXCEEDED, {413, "QuotaExceeded" }},
+    { EACCES, {403, "AccessDenied", ""}},
+    { EPERM, {401, "AccessDenied", ""}},
+    { ENAMETOOLONG, {400, "Metadata name too long", ""}},
+    { ERR_USER_SUSPENDED, {401, "UserSuspended", ""}},
+    { ERR_INVALID_UTF8, {412, "Invalid UTF8", ""}},
+    { ERR_BAD_URL, {412, "Bad URL", ""}},
+    { ERR_NOT_SLO_MANIFEST, {400, "Not an SLO manifest", ""}},
+    { ERR_QUOTA_EXCEEDED, {413, "QuotaExceeded", ""}},
     { ENOTEMPTY, {409, "There was a conflict when trying "
-                       "to complete your request." }},
+                       "to complete your request.", ""}},
     /* FIXME(rzarzynski): we need to find a way to apply Swift's error handling
      * procedures also for ERR_ZERO_IN_URL. This make a problem as the validation
      * is performed very early, even before setting the req_state::proto_flags. */
-    { ERR_ZERO_IN_URL, {412, "Invalid UTF8 or contains NULL"}},
-    { ERR_RATE_LIMITED, {498, "Rate Limited"}},
+    { ERR_ZERO_IN_URL, {412, "Invalid UTF8 or contains NULL", ""}},
+    { ERR_RATE_LIMITED, {498, "Rate Limited", ""}},
 });
 
 rgw_http_errors rgw_http_sts_errors({
-    { ERR_PACKED_POLICY_TOO_LARGE, {400, "PackedPolicyTooLarge" }},
-    { ERR_INVALID_IDENTITY_TOKEN, {400, "InvalidIdentityToken" }},
+    { ERR_PACKED_POLICY_TOO_LARGE, {400, "PackedPolicyTooLarge", ""}},
+    { ERR_INVALID_IDENTITY_TOKEN, {400, "InvalidIdentityToken", ""}},
 });
 
 rgw_http_errors rgw_http_iam_errors({
-    { EINVAL, {400, "InvalidInput" }},
-    { ENOENT, {404, "NoSuchEntity"}},
-    { ERR_ROLE_EXISTS, {409, "EntityAlreadyExists"}},
-    { ERR_DELETE_CONFLICT, {409, "DeleteConflict"}},
-    { EEXIST, {409, "EntityAlreadyExists"}},
-    { ERR_INTERNAL_ERROR, {500, "ServiceFailure" }},
+    { EINVAL, {400, "InvalidInput", ""}},
+    { ENOENT, {404, "NoSuchEntity", ""}},
+    { ERR_ROLE_EXISTS, {409, "EntityAlreadyExists", ""}},
+    { ERR_DELETE_CONFLICT, {409, "DeleteConflict", ""}},
+    { EEXIST, {409, "EntityAlreadyExists", ""}},
+    { ERR_INTERNAL_ERROR, {500, "ServiceFailure", ""}},
 });
 
 using namespace std;
@@ -303,12 +305,15 @@ std::ostream& req_state::gen_prefix(std::ostream& out) const
 
 }
 
-bool search_err(rgw_http_errors& errs, int err_no, int& http_ret, string& code)
+bool search_err(rgw_http_errors& errs, int err_no, int& http_ret, string& code, string& message)
 {
   auto r = errs.find(err_no);
   if (r != errs.end()) {
-    http_ret = r->second.first;
-    code = r->second.second;
+    http_ret = std::get<0>(r->second);
+    code = std::get<1>(r->second);
+    auto msg = std::get<2>(r->second);
+    if (! msg.empty())
+      message = msg;
     return true;
   }
   return false;
@@ -324,28 +329,29 @@ void set_req_state_err(struct rgw_err& err,	/* out */
   err.ret = -err_no;
 
   if (prot_flags & RGW_REST_SWIFT) {
-    if (search_err(rgw_http_swift_errors, err_no, err.http_ret, err.err_code))
+    if (search_err(rgw_http_swift_errors, err_no, err.http_ret, err.err_code, err.message))
       return;
   }
 
   if (prot_flags & RGW_REST_STS) {
-    if (search_err(rgw_http_sts_errors, err_no, err.http_ret, err.err_code))
+    if (search_err(rgw_http_sts_errors, err_no, err.http_ret, err.err_code, err.message))
       return;
   }
 
   if (prot_flags & RGW_REST_IAM) {
-    if (search_err(rgw_http_iam_errors, err_no, err.http_ret, err.err_code))
+    if (search_err(rgw_http_iam_errors, err_no, err.http_ret, err.err_code, err.message))
       return;
   }
 
   //Default to searching in s3 errors
-  if (search_err(rgw_http_s3_errors, err_no, err.http_ret, err.err_code))
+  if (search_err(rgw_http_s3_errors, err_no, err.http_ret, err.err_code, err.message))
       return;
   dout(0) << "WARNING: set_req_state_err err_no=" << err_no
 	<< " resorting to 500" << dendl;
 
   err.http_ret = 500;
   err.err_code = "UnknownError";
+  err.message = "";
 }
 
 void set_req_state_err(req_state* s, int err_no, const string& err_msg)

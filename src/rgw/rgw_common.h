@@ -21,6 +21,7 @@
 #include <string_view>
 #include <atomic>
 #include <unordered_map>
+#include <tuple>
 
 #include <fmt/format.h>
 #include <boost/container/flat_map.hpp>

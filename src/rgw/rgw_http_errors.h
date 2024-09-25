@@ -5,7 +5,7 @@
 
 #include "rgw_common.h"
 
-typedef const std::map<int,const std::pair<int, const char*>> rgw_http_errors;
+typedef const std::map<int,const std::tuple<int, const std::string, const std::string>> rgw_http_errors;
 
 extern rgw_http_errors rgw_http_s3_errors;
 

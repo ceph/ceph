@@ -104,11 +104,13 @@ void rgw_get_errno_s3(rgw_http_error *e , int err_no)
   rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(err_no);
 
   if (r != rgw_http_s3_errors.end()) {
-    e->http_ret = r->second.first;
-    e->s3_code = r->second.second;
+    e->http_ret = std::get<0>(r->second);
+    e->s3_code = std::get<1>(r->second);
+    e->message = std::get<2>(r->second);
   } else {
     e->http_ret = 500;
     e->s3_code = "UnknownError";
+    e->message = "";
   }
 }
 
@@ -4330,6 +4332,9 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(const rgw_obj_key& key
       err_no = -ret;
       rgw_get_errno_s3(&r, err_no);
 
+      if (r.message.empty())
+        r.message = r.s3_code;
+
       ops_log_entry.error = true;
       ops_log_entry.http_status = r.http_ret;
       ops_log_entry.error_message = r.s3_code;
@@ -4337,7 +4342,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(const rgw_obj_key& key
       s->formatter->dump_string("Key", key.name);
       s->formatter->dump_string("VersionId", key.instance);
       s->formatter->dump_string("Code", r.s3_code);
-      s->formatter->dump_string("Message", r.s3_code);
+      s->formatter->dump_string("Message", r.message);
       s->formatter->close_section();
     }
 
@@ -5529,7 +5534,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
   int http_error_code = -1;
 
   if (r != rgw_http_s3_errors.end()) {
-    http_error_code = r->second.first;
+    http_error_code = std::get<0>(r->second);
   }
   ldpp_dout(s, 10) << "RGWHandler_REST_S3Website::error_handler err_no=" << err_no << " http_ret=" << http_error_code << dendl;
 

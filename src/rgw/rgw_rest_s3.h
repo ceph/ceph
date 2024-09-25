@@ -31,7 +31,8 @@
 
 struct rgw_http_error {
   int http_ret;
-  const char *s3_code;
+  std::string s3_code;
+  std::string message;
 };
 
 void rgw_get_errno_s3(struct rgw_http_error *e, int err_no);
