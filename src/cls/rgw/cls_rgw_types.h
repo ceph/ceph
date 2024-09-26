@@ -5,6 +5,7 @@
 
 #include <string>
 #include <list>
+#include <vector>
 #include <boost/container/flat_map.hpp>
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
@@ -1197,16 +1198,14 @@ struct cls_rgw_obj {
 WRITE_CLASS_ENCODER(cls_rgw_obj)
 
 struct cls_rgw_obj_chain {
-  std::list<cls_rgw_obj> objs;
-
-  cls_rgw_obj_chain() {}
+  std::vector<cls_rgw_obj> objs;
 
   void push_obj(const std::string& pool, const cls_rgw_obj_key& key, const std::string& loc) {
     cls_rgw_obj obj;
     obj.pool = pool;
     obj.key = key;
     obj.loc = loc;
-    objs.push_back(obj);
+    objs.push_back(std::move(obj));
   }
 
   void encode(ceph::buffer::list& bl) const {
@@ -1223,9 +1222,9 @@ struct cls_rgw_obj_chain {
 
   void dump(ceph::Formatter *f) const {
     f->open_array_section("objs");
-    for (std::list<cls_rgw_obj>::const_iterator p = objs.begin(); p != objs.end(); ++p) {
+    for (const auto& o : objs) {
       f->open_object_section("obj");
-      p->dump(f);
+      o.dump(f);
       f->close_section();
     }
     f->close_section();

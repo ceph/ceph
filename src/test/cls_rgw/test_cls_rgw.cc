@@ -854,7 +854,7 @@ TEST_F(cls_rgw, gc_set)
     /* verify expected num of objects in chain */
     ASSERT_EQ(2, (int)entry.chain.objs.size());
 
-    list<cls_rgw_obj>::iterator oiter = entry.chain.objs.begin();
+    auto oiter = entry.chain.objs.begin();
     cls_rgw_obj obj1, obj2;
 
     /* create expected objects */
@@ -932,7 +932,7 @@ TEST_F(cls_rgw, gc_list)
     /* verify expected num of objects in chain */
     ASSERT_EQ(2, (int)entry.chain.objs.size());
 
-    list<cls_rgw_obj>::iterator oiter = entry.chain.objs.begin();
+    auto oiter = entry.chain.objs.begin();
     cls_rgw_obj obj1, obj2;
 
     /* create expected objects */

@@ -653,7 +653,6 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	info.tag << "', time=" << info.time << ", chain.objs.size()=" <<
 	info.chain.objs.size() << dendl;
 
-      std::list<cls_rgw_obj>::iterator liter;
       cls_rgw_obj_chain& chain = info.chain;
 
       utime_t now = ceph_clock_now();
@@ -668,9 +667,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
         }
       }
       if (! chain.objs.empty()) {
-	for (liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
-	  cls_rgw_obj& obj = *liter;
-
+	for (const auto& obj : chain.objs) {
 	  if (obj.pool != last_pool) {
 	    delete ctx;
 	    ctx = new IoCtx;

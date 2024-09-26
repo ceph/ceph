@@ -8806,10 +8806,7 @@ next:
 	formatter->dump_string("tag", info.tag);
 	formatter->dump_stream("time") << info.time;
 	formatter->open_array_section("objs");
-        list<cls_rgw_obj>::iterator liter;
-	cls_rgw_obj_chain& chain = info.chain;
-	for (liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
-	  cls_rgw_obj& obj = *liter;
+	for (const auto& obj : info.chain.objs) {
           encode_json("obj", obj, formatter.get());
 	}
 	formatter->close_section(); // objs
