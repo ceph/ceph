@@ -17,27 +17,25 @@
        routerLink="/services">
        Cluster->Services</a>
   </cd-alert-panel>
-  <span *ngIf="!showMigrateAndReplicationActions; else migrateAndReplicationActionTpl">
-    <cd-table-actions class="btn-group mb-4 me-2"
-                      [permission]="permission"
-                      [selection]="selection"
-                      [tableActions]="createTableActions"
-                      [primaryDropDown]="true">
-    </cd-table-actions>
-  </span>
-  <ng-template #migrateAndReplicationActionTpl>
-    <cd-table-actions class="btn-group mb-4 me-2"
-                      [permission]="permission"
-                      [selection]="selection"
-                      [tableActions]="multisiteReplicationActions">
-    </cd-table-actions>
-    <cd-table-actions class="btn-group mb-4 me-2 secondary"
-                      [permission]="permission"
-                      [btnColor]="'light'"
-                      [selection]="selection"
-                      [tableActions]="migrateTableAction">
-    </cd-table-actions>
-  </ng-template>
+  <cd-table-actions class="btn-group mb-4 me-2"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="multisiteReplicationActions">
+  </cd-table-actions>
+  <cd-table-actions *ngIf="showMigrateAndReplicationActions"
+                    class="btn-group mb-4 me-2 secondary"
+                    [permission]="permission"
+                    [btnColor]="'light'"
+                    [selection]="selection"
+                    [tableActions]="migrateTableAction">
+  </cd-table-actions>
+  <cd-table-actions *ngIf="!showMigrateAndReplicationActions"
+                    class="btn-group mb-4 me-2"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="createTableActions"
+                    [primaryDropDown]="true">
+  </cd-table-actions>
   <cd-table-actions class="btn-group mb-4 me-2"
                     [permission]="permission"
                     [btnColor]="'light'"

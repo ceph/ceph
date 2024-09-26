@@ -66,7 +66,7 @@ class Auth(RESTController, ControllerAuthMixin):
             fsid = mgr.get('config')['fsid']
         except KeyError:
             fsid = ''
-        if max_attempt == 0 or mgr.ACCESS_CTRL_DB.get_attempt(username) < max_attempt:
+        if max_attempt == 0 or mgr.ACCESS_CTRL_DB.get_attempt(username) < max_attempt:  # pylint: disable=R1702,line-too-long # noqa: E501
             if user_data:
                 user_perms = user_data.get('permissions')
                 pwd_expiration_date = user_data.get('pwdExpirationDate', None)
@@ -94,20 +94,26 @@ class Auth(RESTController, ControllerAuthMixin):
                     multicluster_config = Settings.MULTICLUSTER_CONFIG.copy()
                 try:
                     if fsid in multicluster_config['config']:
-                        existing_entries = multicluster_config['config'][fsid]
-                        if not any((entry['user'] == username or entry['cluster_alias'] == 'local-cluster') for entry in existing_entries):  # noqa E501 #pylint: disable=line-too-long
-                            existing_entries.append({
+                        cluster_configurations = multicluster_config['config'][fsid]
+                        for config_item in cluster_configurations:
+                            if config_item['user'] == username or config_item['cluster_alias'] == 'local-cluster':  # noqa E501  #pylint: disable=line-too-long
+                                config_item['token'] = token  # Update token
+                                break
+                        else:
+                            cluster_configurations.append({
                                 "name": fsid,
                                 "url": origin,
                                 "cluster_alias": "local-cluster",
-                                "user": username
+                                "user": username,
+                                "token": token
                             })
                     else:
                         multicluster_config['config'][fsid] = [{
                             "name": fsid,
                             "url": origin,
                             "cluster_alias": "local-cluster",
-                            "user": username
+                            "user": username,
+                            "token": token
                         }]
 
                 except KeyError:
@@ -121,7 +127,8 @@ class Auth(RESTController, ControllerAuthMixin):
                                     "name": fsid,
                                     "url": origin,
                                     "cluster_alias": "local-cluster",
-                                    "user": username
+                                    "user": username,
+                                    "token": token
                                 }
                             ]
                         }
