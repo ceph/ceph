@@ -160,6 +160,36 @@ class TestCephadm(object):
         match_glob(new_mgr, 'myhost.*')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_valid_url(self, cephadm_module):
+        # Test with valid IPv4 and IPv6 urls
+        test_cases = [
+            ("http://192.168.100.100:9090", "prometheus multi-cluster targets updated"),  # Valid IPv4
+            ("https://192.168.100.100/prometheus", "prometheus multi-cluster targets updated"),       # Valid IPv4 without port
+            ("http://[2001:0db8:85a3::8a2e:0370:7334]:9090", "prometheus multi-cluster targets updated"),  # Valid IPv6 with port
+            ("https://[2001:0db8:85a3::8a2e:0370:7334]/prometheus", "prometheus multi-cluster targets updated"),  # Valid IPv6 without port
+        ]
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='prometheus'), CephadmOrchestrator.apply_prometheus, 'test'):
+                for url, expected_output in test_cases:
+                    c = cephadm_module.set_prometheus_target(url)
+                    assert wait(cephadm_module, c) == expected_output
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_invalid_url(self, cephadm_module):
+        # Test with invalid IPv4 and IPv6 urls
+        test_cases = [
+            ("https://192.168.100.100:99999", "Invalid url. Port out of range 0-65535"),  # Port out of range
+            ("http://[2001:0db8:85a3::8a2e:0370:7334]:99999", "Invalid url. Port out of range 0-65535"),  # IPv6 with invalid port
+            ("https://192.168.100.999:9090", "Invalid url. '192.168.100.999' does not appear to be an IPv4 or IPv6 address"),  # Invalid IPv4
+            ("http://[fe80:2030:31:24]:9090", "Invalid url. 'fe80:2030:31:24' does not appear to be an IPv4 or IPv6 address")  # Invalid IPv6
+        ]
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='prometheus'), CephadmOrchestrator.apply_prometheus, 'test'):
+                for url, expected_output in test_cases:
+                    c = cephadm_module.set_prometheus_target(url)
+                    assert wait(cephadm_module, c) == expected_output
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_host(self, cephadm_module):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
         with with_host(cephadm_module, 'test'):

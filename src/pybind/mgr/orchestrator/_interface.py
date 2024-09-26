@@ -789,6 +789,10 @@ class Orchestrator(object):
         """get prometheus access information"""
         raise NotImplementedError()
 
+    def get_security_config(self) -> OrchResult[Dict[str, bool]]:
+        """get security config"""
+        raise NotImplementedError()
+
     def set_alertmanager_access_info(self, user: str, password: str) -> OrchResult[str]:
         """set alertmanager access information"""
         raise NotImplementedError()

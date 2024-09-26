@@ -1267,6 +1267,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         access_info = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(access_info))
 
+    @_cli_write_command('orch get-security-config')
+    def _get_security_config(self) -> HandleCommandResult:
+        completion = self.get_security_config()
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
+
     @_cli_write_command('orch alertmanager get-credentials')
     def _get_alertmanager_access_info(self) -> HandleCommandResult:
         completion = self.get_alertmanager_access_info()

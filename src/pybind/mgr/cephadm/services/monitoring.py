@@ -507,7 +507,17 @@ class PrometheusService(CephadmService):
 
         alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
         prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
+        federate_path = self.get_target_cluster_federate_path(targets)
+        cluster_credentials: Dict[str, Any] = {}
+        cluster_credentials_files: Dict[str, Any] = {'files': {}}
         FSID = self.mgr._cluster_fsid
+        if targets:
+            if 'dashboard' in self.mgr.get('mgr_map')['modules']:
+                cluster_credentials_files, cluster_credentials = self.mgr.remote(
+                    'dashboard', 'get_cluster_credentials_files', targets
+                )
+            else:
+                logger.error("dashboard module not found")
 
         # generate the prometheus configuration
         context = {
@@ -526,7 +536,9 @@ class PrometheusService(CephadmService):
             'external_prometheus_targets': targets,
             'cluster_fsid': FSID,
             'nfs_sd_url': nfs_sd_url,
-            'smb_sd_url': smb_sd_url
+            'smb_sd_url': smb_sd_url,
+            'clusters_credentials': cluster_credentials,
+            'federate_path': federate_path
         }
 
         ip_to_bind_to = ''
@@ -563,6 +575,7 @@ class PrometheusService(CephadmService):
                 'web_config': '/etc/prometheus/web.yml',
                 'use_url_prefix': mgmt_gw_enabled
             }
+            r['files'].update(cluster_credentials_files['files'])
         else:
             r = {
                 'files': {
@@ -673,6 +686,12 @@ class PrometheusService(CephadmService):
         if warn and not force:
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
         return HandleCommandResult(0, warn_message, '')
+
+    def get_target_cluster_federate_path(self, targets: List[str]) -> str:
+        for target in targets:
+            if ':' in target:
+                return '/federate'
+        return '/prometheus/federate'
 
 
 class NodeExporterService(CephadmService):
