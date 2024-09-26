@@ -51,6 +51,30 @@ CommonPGPipeline& InternalClientRequest::client_pp()
 }
 
 InternalClientRequest::interruptible_future<>
+InternalClientRequest::do_process(
+  crimson::osd::ObjectContextRef obc,
+  std::vector<OSDOp> &osd_ops)
+{
+  return pg->do_osd_ops(
+    std::move(obc),
+    osd_ops,
+    std::as_const(op_info),
+    get_do_osd_ops_params()
+  ).safe_then_unpack_interruptible(
+    [](auto submitted, auto all_completed) {
+      return all_completed.handle_error_interruptible(
+	crimson::ct_error::eagain::handle([] {
+	  ceph_assert(0 == "not handled");
+	  return seastar::now();
+	}));
+    }, crimson::ct_error::eagain::handle([] {
+      ceph_assert(0 == "not handled");
+      return interruptor::now();
+    })
+  );
+}
+
+InternalClientRequest::interruptible_future<>
 InternalClientRequest::with_interruption()
 {
   LOG_PREFIX(InternalClientRequest::with_interruption);
@@ -93,24 +117,8 @@ InternalClientRequest::with_interruption()
     [&osd_ops, this](auto, auto obc) {
       return enter_stage<interruptor>(client_pp().process
       ).then_interruptible(
-	[obc=std::move(obc), &osd_ops, this] {
-	  return pg->do_osd_ops(
-	    std::move(obc),
-	    osd_ops,
-	    std::as_const(op_info),
-	    get_do_osd_ops_params()
-	  ).safe_then_unpack_interruptible(
-	    [](auto submitted, auto all_completed) {
-	      return all_completed.handle_error_interruptible(
-		crimson::ct_error::eagain::handle([] {
-		  ceph_assert(0 == "not handled");
-		  return seastar::now();
-		}));
-	    }, crimson::ct_error::eagain::handle([] {
-	      ceph_assert(0 == "not handled");
-	      return interruptor::now();
-	    })
-	  );
+	[obc=std::move(obc), &osd_ops, this]() mutable {
+	  return do_process(std::move(obc), osd_ops);
 	});
     }).handle_error_interruptible(
       crimson::ct_error::assert_all("unexpected error")
