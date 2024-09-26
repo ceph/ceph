@@ -5,6 +5,7 @@
 #include "svc_bilog_rados.h"
 #include "svc_zone.h"
 
+#include "rgw_asio_thread.h"
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
 #include "rgw_datalog.h"
@@ -339,6 +340,7 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
     list_results.emplace(iter.first, rgw_cls_list_ret());
   }
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   r = CLSRGWIssueGetDirHeader(index_pool, oids, list_results,
 			      cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0)
@@ -369,6 +371,7 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
   map<int, string> bucket_objs;
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards, idx_layout.gen, &bucket_objs);
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   if (judge_support_logrecord) {
     return CLSRGWIssueBucketIndexInit2(index_pool,
                                        bucket_objs,
@@ -397,6 +400,7 @@ int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, const RG
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards,
                            idx_layout.gen, &bucket_objs);
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   return CLSRGWIssueBucketIndexClean(index_pool,
 				     bucket_objs,
 				     cct->_conf->rgw_bucket_index_max_aio)();
