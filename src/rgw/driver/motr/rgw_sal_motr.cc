@@ -1347,7 +1347,7 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   if (params.mod_ptr || params.unmod_ptr) {
     // Convert all times go GMT to make them compatible
     obj_time_weight src_weight;
-    src_weight.init(*params.lastmod, params.mod_zone_id, params.mod_pg_ver);
+    src_weight.init(*params.lastmod, *params.lastmod, params.mod_zone_id, params.mod_pg_ver);
     src_weight.high_precision = params.high_precision_time;
 
     obj_time_weight dest_weight;
@@ -1355,7 +1355,7 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
 
     // Check if-modified-since condition
     if (params.mod_ptr && !params.if_nomatch) {
-      dest_weight.init(*params.mod_ptr, params.mod_zone_id, params.mod_pg_ver);
+      dest_weight.init(*params.mod_ptr, *params.mod_ptr, params.mod_zone_id, params.mod_pg_ver);
       ldpp_dout(dpp, 10) << "If-Modified-Since: " << dest_weight << " & "
                          << "Last-Modified: " << src_weight << dendl;
       if (!(dest_weight < src_weight)) {
@@ -1365,7 +1365,7 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
 
     // Check if-unmodified-since condition
     if (params.unmod_ptr && !params.if_match) {
-      dest_weight.init(*params.unmod_ptr, params.mod_zone_id, params.mod_pg_ver);
+      dest_weight.init(*params.unmod_ptr, *params.unmod_ptr, params.mod_zone_id, params.mod_pg_ver);
       ldpp_dout(dpp, 10) << "If-UnModified-Since: " << dest_weight << " & " 
                          << "Last-Modified: " << src_weight << dendl;
       if (dest_weight < src_weight) {

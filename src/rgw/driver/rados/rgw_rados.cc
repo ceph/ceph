@@ -3941,6 +3941,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 
 struct obj_time_weight {
   real_time mtime;
+  real_time internal_mtime;
   uint32_t zone_short_id;
   uint64_t pg_ver;
   bool high_precision;
@@ -3950,6 +3951,16 @@ struct obj_time_weight {
   bool compare_low_precision(const obj_time_weight& rhs) {
     struct timespec l = ceph::real_clock::to_timespec(mtime);
     struct timespec r = ceph::real_clock::to_timespec(rhs.mtime);
+    l.tv_nsec = 0;
+    r.tv_nsec = 0;
+    if (l > r) {
+      return false;
+    }
+    if (l < r) {
+      return true;
+    }
+    l = ceph::real_clock::to_timespec(mtime);
+    r = ceph::real_clock::to_timespec(rhs.mtime);
     l.tv_nsec = 0;
     r.tv_nsec = 0;
     if (l > r) {
@@ -3979,6 +3990,12 @@ struct obj_time_weight {
     if (mtime < rhs.mtime) {
       return true;
     }
+    if (internal_mtime > rhs.internal_mtime) {
+      return false;
+    }
+    if (internal_mtime < rhs.internal_mtime) {
+      return true;
+    }
     if (!zone_short_id || !rhs.zone_short_id) {
       /* don't compare zone ids, if one wasn't provided */
       return false;
@@ -3989,8 +4006,10 @@ struct obj_time_weight {
     return (pg_ver < rhs.pg_ver);
   }
 
-  void init(const real_time& _mtime, uint32_t _short_id, uint64_t _pg_ver) {
+  void init(const real_time& _mtime, const real_time *_internal_mtime, uint32_t _short_id, uint64_t _pg_ver) {
     mtime = _mtime;
+    if (_internal_mtime)
+    internal_mtime = *_internal_mtime;
     zone_short_id = _short_id;
     pg_ver = _pg_ver;
   }
@@ -3999,6 +4018,15 @@ struct obj_time_weight {
     mtime = state->mtime;
     zone_short_id = state->zone_short_id;
     pg_ver = state->pg_ver;
+    bufferlist bl;
+    if (state->get_attr(RGW_ATTR_INTERNAL_MTIME, bl)) {
+      try {
+        auto iter = bl.cbegin();
+        decode(internal_mtime, iter);
+      } catch (buffer::error& err) {
+        //ldpp_dout(dpp, 0) << "ERROR: couldn't decode RGW_ATTR_INTERNAL_MTIME" << dendl;
+      }
+    }
   }
 };
 
@@ -4103,7 +4131,7 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
 
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
-    int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
+    int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr, &dest_mtime_weight.internal_mtime,
                         dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                         prepend_meta, get_op, rgwx_stat,
                         sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
@@ -4305,7 +4333,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                     });
 
   string etag;
-  real_time set_mtime;
+  real_time set_mtime, src_obj_internal_mtime;
   uint64_t accounted_size = 0;
 
   RGWObjState *dest_state = NULL;
@@ -4338,8 +4366,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
     ret = conn->get_obj(rctx.dpp, user_id, info, src_obj, pmod, unmod_ptr,
-                        dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                        prepend_meta, get_op, rgwx_stat,
+                        real_clock::is_zero(dest_mtime_weight.internal_mtime) ? NULL : &dest_mtime_weight.internal_mtime,
+                        dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver, prepend_meta, get_op, rgwx_stat,
                         sync_manifest, skip_decrypt, &dst_zone_trace,
                         sync_cloudtiered, true,
                         &cb, &in_stream_req);
@@ -4494,7 +4522,16 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
         /* non critical error */
       }
     }
-    set_mtime_weight.init(set_mtime, svc.zone->get_zone_short_id(), pg_ver);
+    if (auto i = attrs.find(RGW_ATTR_INTERNAL_MTIME);
+      i != attrs.end()) {
+        try {
+          auto iter = i->second.cbegin();
+          decode(src_obj_internal_mtime, iter);
+          } catch (const buffer::error&) {
+            ldpp_dout(rctx.dpp, 0) << "ERROR: failed to decode internal mtime field for zone replication" << dendl;
+          }
+    }
+    set_mtime_weight.init(set_mtime, &src_obj_internal_mtime, svc.zone->get_zone_short_id(), pg_ver);
   }
 
   /* Perform ETag verification is we have computed the object's MD5 sum at our end */
@@ -5256,7 +5293,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     bufferlist bl;
     bl.append(buf, 32);
     encode(restore_time, bl);
-    attrs[RGW_ATTR_RESTORE_TIME] = std::move(bl);
+    attrs[RGW_ATTR_RESTORE_TIME] = attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
   }
 
   real_time delete_at = real_time();
@@ -5341,6 +5378,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     return ret;
   }
 
+  attrs.erase(RGW_ATTR_TRANSITION_TIME);
   // XXX: handle olh_epoch for versioned objects like in fetch_remote_obj
   return ret; 
 }
@@ -7106,7 +7144,7 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
     dest_weight.high_precision = conds.high_precision_time;
 
     if (conds.mod_ptr && !conds.if_nomatch) {
-      dest_weight.init(*conds.mod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
+      dest_weight.init(*conds.mod_ptr, conds.internal_mtime_ptr, conds.mod_zone_id, conds.mod_pg_ver);
       ldpp_dout(dpp, 10) << "If-Modified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
       if (!(dest_weight < src_weight)) {
         return -ERR_NOT_MODIFIED;
@@ -7114,7 +7152,7 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
     }
 
     if (conds.unmod_ptr && !conds.if_match) {
-      dest_weight.init(*conds.unmod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
+      dest_weight.init(*conds.unmod_ptr, conds.internal_mtime_ptr, conds.mod_zone_id, conds.mod_pg_ver);
       ldpp_dout(dpp, 10) << "If-UnModified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
       if (dest_weight < src_weight) {
         return -ERR_PRECONDITION_FAILED;

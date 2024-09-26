@@ -361,6 +361,7 @@ protected:
   const char *range_str;
   const char *if_mod;
   const char *if_unmod;
+  const char *if_internal_mtime_mod;
   const char *if_match;
   const char *if_nomatch;
   uint32_t mod_zone_id;
@@ -372,8 +373,10 @@ protected:
   ceph::real_time mod_time;
   ceph::real_time lastmod;
   ceph::real_time unmod_time;
+  ceph::real_time internal_mtime;
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
+  ceph::real_time *internal_mtime_ptr;
   rgw::sal::Attrs attrs;
   bool get_torrent = false;
   bool get_data;
@@ -436,6 +439,8 @@ public:
     cur_ofs = 0;
     get_retention = false;
     get_legal_hold = false;
+    internal_mtime_ptr = NULL;
+    if_internal_mtime_mod = NULL;
  }
 
   bool prefetch_data() override;

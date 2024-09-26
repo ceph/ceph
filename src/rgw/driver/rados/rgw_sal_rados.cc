@@ -2761,6 +2761,13 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
           bufferlist bl;
           bl.append(tier_config.name);
           attrs[RGW_ATTR_STORAGE_CLASS] = bl;
+	  char buf[32];
+	  utime_t ut(obj_op.meta.delete_at);
+	  snprintf(buf, sizeof(buf), "%lld.%09lld",
+			  (long long)ut.sec(),
+			  (long long)ut.nsec());
+	  bl.append(buf, 32);
+	  attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
 
           const req_context rctx{dpp, y, nullptr};
           return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace());
@@ -2807,6 +2814,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   obj_op.meta.user_data = NULL;
   obj_op.meta.zones_trace = NULL;
   obj_op.meta.olh_epoch = olh_epoch;
+  obj_op.meta.set_mtime = head_obj->get_mtime();
 
   RGWObjManifest *pmanifest;
   RGWObjManifest manifest;
@@ -2830,6 +2838,19 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   bufferlist bl;
   bl.append(tier->get_storage_class());
   attrs[RGW_ATTR_STORAGE_CLASS] = bl;
+
+  ceph::real_time transition_time = real_clock::now();
+  {
+    char buf[32];
+    utime_t ut(transition_time);
+    snprintf(buf, sizeof(buf), "%lld.%09lld",
+          (long long)ut.sec(),
+          (long long)ut.nsec());
+    bufferlist bl;
+    bl.append(buf, 32);
+    encode(transition_time, bl);
+    attrs[RGW_ATTR_TRANSITION_TIME] = attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
+ }
 
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_TAIL_TAG);
@@ -2945,6 +2966,8 @@ int RadosObject::RadosReadOp::prepare(optional_yield y, const DoutPrefixProvider
 
   parent_op.conds.mod_ptr = params.mod_ptr;
   parent_op.conds.unmod_ptr = params.unmod_ptr;
+  if (params.internal_mtime_ptr)
+    parent_op.conds.internal_mtime_ptr = params.internal_mtime_ptr;
   parent_op.conds.high_precision_time = params.high_precision_time;
   parent_op.conds.mod_zone_id = params.mod_zone_id;
   parent_op.conds.mod_pg_ver = params.mod_pg_ver;

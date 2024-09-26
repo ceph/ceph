@@ -1055,6 +1055,7 @@ class Object {
       struct Params {
         const ceph::real_time* mod_ptr{nullptr};
         const ceph::real_time* unmod_ptr{nullptr};
+        const ceph::real_time* internal_mtime_ptr{nullptr};
         bool high_precision_time{false};
         uint32_t mod_zone_id{0};
         uint64_t mod_pg_ver{0};

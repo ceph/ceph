@@ -297,7 +297,7 @@ static void set_header(T val, map<string, string>& headers, const string& header
 
 
 int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_owner& uid, req_info *info /* optional */, const rgw_obj& obj,
-                         const real_time *mod_ptr, const real_time *unmod_ptr,
+                         const real_time *mod_ptr, const real_time *unmod_ptr, const real_time *internal_mtime_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, bool get_op, bool rgwx_stat,
                          bool sync_manifest, bool skip_decrypt,
@@ -309,6 +309,8 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_owner& uid, re
   params.info = info;
   params.mod_ptr = mod_ptr;
   params.mod_pg_ver = mod_pg_ver;
+  if (internal_mtime_ptr)
+    params.internal_mtime_ptr = internal_mtime_ptr;
   params.prepend_metadata = prepend_metadata;
   params.get_op = get_op;
   params.rgwx_stat = rgwx_stat;
@@ -373,6 +375,7 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, cons
 
   set_date_header(in_params.mod_ptr, extra_headers, in_params.high_precision_time, "HTTP_IF_MODIFIED_SINCE");
   set_date_header(in_params.unmod_ptr, extra_headers, in_params.high_precision_time, "HTTP_IF_UNMODIFIED_SINCE");
+  set_date_header(in_params.internal_mtime_ptr, extra_headers, in_params.high_precision_time, "HTTP_IF_INTERNAL_MTIME_MODIFIED");
   if (!in_params.etag.empty()) {
     set_header(in_params.etag, extra_headers, "HTTP_IF_MATCH");
   }

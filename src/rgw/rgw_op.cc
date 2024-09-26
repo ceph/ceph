@@ -1030,7 +1030,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       op_ret = get_system_versioning_params(s, &epoch, NULL);
       ldpp_dout(dpp, 20) << "getting versioning params tier placement handle cloud tier" << op_ret << dendl;
       if (op_ret < 0) {
-	ldpp_dout(dpp, 20) << "failed to get versioning params, op_ret = " << op_ret << dendl;
+        ldpp_dout(dpp, 20) << "failed to get versioning params, op_ret = " << op_ret << dendl;
         s->err.message = "failed to restore object";
         return op_ret;
       }
@@ -2349,6 +2349,9 @@ void RGWGetObj::execute(optional_yield y)
 
   read_op->params.mod_ptr = mod_ptr;
   read_op->params.unmod_ptr = unmod_ptr;
+  if (internal_mtime_ptr) {
+    read_op->params.internal_mtime_ptr = internal_mtime_ptr;
+  }
   read_op->params.high_precision_time = s->system_request; /* system request need to use high precision time */
   read_op->params.mod_zone_id = mod_zone_id;
   read_op->params.mod_pg_ver = mod_pg_ver;
@@ -2581,6 +2584,12 @@ int RGWGetObj::init_common()
     if (parse_time(if_unmod, &unmod_time) < 0)
       return -EINVAL;
     unmod_ptr = &unmod_time;
+  }
+
+  if (if_internal_mtime_mod) {
+    if (parse_time(if_internal_mtime_mod, &internal_mtime) < 0)
+      return -EINVAL;
+    internal_mtime_ptr = &internal_mtime;
   }
 
   return 0;

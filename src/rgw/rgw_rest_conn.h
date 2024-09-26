@@ -149,6 +149,7 @@ public:
     req_info *info{nullptr};
     const ceph::real_time *mod_ptr{nullptr};
     const ceph::real_time *unmod_ptr{nullptr};
+    const ceph::real_time *internal_mtime_ptr{nullptr};
     bool high_precision_time{true};
 
     std::string etag;
@@ -174,7 +175,7 @@ public:
   int get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
 
   int get_obj(const DoutPrefixProvider *dpp, const rgw_owner& uid, req_info *info /* optional */, const rgw_obj& obj,
-              const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
+              const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr, const real_time *internal_mtime_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
               bool skip_decrypt, rgw_zone_set_entry *dst_zone_trace, bool sync_cloudtiered,

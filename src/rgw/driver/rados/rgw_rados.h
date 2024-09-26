@@ -753,6 +753,7 @@ public:
       struct ConditionParams {
         const ceph::real_time *mod_ptr;
         const ceph::real_time *unmod_ptr;
+        const ceph::real_time *internal_mtime_ptr;
         bool high_precision_time;
         uint32_t mod_zone_id;
         uint64_t mod_pg_ver;
@@ -761,7 +762,7 @@ public:
 
         ConditionParams() :
                  mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
-                 if_match(NULL), if_nomatch(NULL) {}
+                 if_match(NULL), if_nomatch(NULL), internal_mtime_ptr(NULL) {}
       } conds;
 
       struct Params {
