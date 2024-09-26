@@ -48,6 +48,19 @@ void redis_exec(std::shared_ptr<connection> conn,
   }
 }
 
+void redis_exec(std::shared_ptr<connection> conn,
+                boost::system::error_code& ec,
+                const boost::redis::request& req,
+                boost::redis::generic_response& resp, optional_yield y)
+{
+  if (y) {
+    auto yield = y.get_yield_context();
+    async_exec(std::move(conn), req, resp, yield[ec]);
+  } else {
+    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
+  }
+}
+
 int check_bool(std::string str) {
   if (str == "true" || str == "1") {
     return 1;
@@ -87,7 +100,7 @@ int ObjectDirectory::exist_key(const DoutPrefixProvider* dpp, CacheObj* object, 
   return std::get<0>(resp).value();
 }
 
-int ObjectDirectory::set(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y) 
+int ObjectDirectory::set(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y)
 {
   /* For existing keys, call get method beforehand. 
      Sets completely overwrite existing values. */
@@ -440,6 +453,33 @@ int ObjectDirectory::zrem(const DoutPrefixProvider* dpp, CacheObj* object, const
   return 0;
 }
 
+int ObjectDirectory::incr(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y)
+{
+  std::string key = build_index(object);
+  key = key + "_versioned_epoch";
+  uint64_t value;
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("INCR", key);
+    response<std::string> resp;
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    value = std::stoull(std::get<0>(resp).value());
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return value;
+}
 
 std::string BlockDirectory::build_index(CacheBlock* block) 
 {
@@ -470,7 +510,7 @@ int BlockDirectory::exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, 
   return std::get<0>(resp).value();
 }
 
-int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y) 
+int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y)
 {
   /* For existing keys, call get method beforehand. 
      Sets completely overwrite existing values. */
@@ -534,7 +574,6 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
     req.push_range("HSET", key, redisValues);
 
     redis_exec(conn, ec, req, resp, y);
-
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
       return -ec.value();
@@ -579,7 +618,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
     }
 
     if (std::get<0>(resp).value().value().empty()) {
-      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): No values returned for key=" << key << dendl;
+      ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): No values returned for key=" << key << dendl;
       return -ENOENT;
     } 
 
@@ -632,7 +671,7 @@ int BlockDirectory::copy(const DoutPrefixProvider* dpp, CacheBlock* block, const
     if (std::get<0>(std::get<3>(resp).value()).value().value() == 1) {
       return 0;
     } else {
-      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): No values copied." << dendl;
+      ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): No values copied." << dendl;
       return -ENOENT;
     }
   } catch (std::exception &e) {
@@ -641,30 +680,34 @@ int BlockDirectory::copy(const DoutPrefixProvider* dpp, CacheBlock* block, const
   }
 }
 
-int BlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y) 
+int BlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y, bool multi) 
 {
   std::string key = build_index(block);
   ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
 
   try {
     boost::system::error_code ec;
-    response<int> resp;
     request req;
     req.push("DEL", key);
-
-    redis_exec(conn, ec, req, resp, y);
-
-    if (!std::get<0>(resp).value()) {
-      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): No values deleted for key=" << key << dendl;
-      return -ENOENT;
-    }
-
+    if (!multi) {
+      response<int> resp;
+      redis_exec(conn, ec, req, resp, y);
+      if (!std::get<0>(resp).value()) {
+        ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): No values deleted for key=" << key << dendl;
+        return -ENOENT;
+      }
+    } else { //if delete is called as part of a transaction, the command will be queued, hence the response will be a string
+      response<std::string> resp;
+      redis_exec(conn, ec, req, resp, y);
+      }
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      std::cout << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << std::endl;
       return -ec.value();
     }
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    std::cout << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << std::endl;
     return -EINVAL;
   }
 
@@ -759,7 +802,7 @@ int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block
       if (it != std::string::npos) { 
 	result.erase(result.begin() + it, result.begin() + it + value.size());
       } else {
-	ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): Host was not found." << dendl;
+	ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): Host was not found." << dendl;
 	return -ENOENT;
       }
 
@@ -905,6 +948,122 @@ int BlockDirectory::zrem(const DoutPrefixProvider* dpp, CacheBlock* block, const
     }
 
     if (std::get<0>(resp).value() != "1") {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
+      return -EINVAL;
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int BlockDirectory::watch(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y)
+{
+  std::string key = build_index(block);
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("WATCH", key);
+    response<std::string> resp;
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value() != "OK") {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
+      return -EINVAL;
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int BlockDirectory::exec(const DoutPrefixProvider* dpp, std::vector<std::string>& responses, optional_yield y)
+{
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("EXEC");
+    boost::redis::generic_response resp;
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      std::cout << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << std::endl;
+      return -ec.value();
+    }
+
+    for (uint64_t i = 0; i < resp.value().size(); i++) {
+      ldpp_dout(dpp, 20) << "BlockDirectory::" << __func__ << "() MULTI: " << resp.value().front().value << dendl;
+      responses.emplace_back(resp.value().front().value);
+      boost::redis::consume_one(resp);
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    std::cout << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int BlockDirectory::multi(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("MULTI");
+    response<std::string> resp;
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value() != "OK") {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
+      return -EINVAL;
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int BlockDirectory::discard(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("DISCARD");
+    response<std::string> resp;
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value() != "OK") {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
       return -EINVAL;
     }
