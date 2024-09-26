@@ -406,4 +406,4 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                            zone_endpoints: Optional[str] = None) -> None:
         placement_spec = placement.get('placement') if placement else None
         self.rgw_zone_create(zone_name, realm_token, port, placement_spec, start_radosgw,
-                             zone_endpoints)
+                             zone_endpoints, secondary_zone_period_retry_limit=5)
