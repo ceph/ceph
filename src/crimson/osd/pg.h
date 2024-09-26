@@ -672,41 +672,8 @@ private:
     seastar::lw_shared_ptr<OpsExecuter> ox,
     const std::vector<OSDOp>& ops);
 
-  using do_osd_ops_ertr = crimson::errorator<
-   crimson::ct_error::eagain>;
-  using do_osd_ops_iertr =
-    ::crimson::interruptible::interruptible_errorator<
-      ::crimson::osd::IOInterruptCondition,
-      ::crimson::errorator<crimson::ct_error::eagain>>;
-  template <typename Ret = void>
-  using pg_rep_op_fut_t =
-    std::tuple<interruptible_future<>,
-               do_osd_ops_iertr::future<Ret>>;
-  do_osd_ops_iertr::future<pg_rep_op_fut_t<MURef<MOSDOpReply>>> do_osd_ops(
-    Ref<MOSDOp> m,
-    crimson::net::ConnectionXcoreRef conn,
-    ObjectContextRef obc,
-    const OpInfo &op_info,
-    const SnapContext& snapc);
-
   struct do_osd_ops_params_t;
-  do_osd_ops_iertr::future<MURef<MOSDOpReply>> log_reply(
-    Ref<MOSDOp> m,
-    const std::error_code& e);
-  do_osd_ops_iertr::future<pg_rep_op_fut_t<>> do_osd_ops(
-    ObjectContextRef obc,
-    std::vector<OSDOp>& ops,
-    const OpInfo &op_info,
-    const do_osd_ops_params_t &&params);
-  template <class Ret, class SuccessFunc, class FailureFunc>
-  do_osd_ops_iertr::future<pg_rep_op_fut_t<Ret>> do_osd_ops_execute(
-    seastar::lw_shared_ptr<OpsExecuter> ox,
-    ObjectContextRef obc,
-    const OpInfo &op_info,
-    Ref<MOSDOp> m,
-    std::vector<OSDOp>& ops,
-    SuccessFunc&& success_func,
-    FailureFunc&& failure_func);
+
   interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   interruptible_future<
     std::tuple<interruptible_future<>, interruptible_future<>>>
