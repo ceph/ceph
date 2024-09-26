@@ -41,6 +41,9 @@ private:
   CommonPGPipeline& client_pp();
 
   InternalClientRequest::interruptible_future<> with_interruption();
+  InternalClientRequest::interruptible_future<> do_process(
+    crimson::osd::ObjectContextRef obc,
+    std::vector<OSDOp> &osd_ops);
 
   seastar::future<> do_process();
 
