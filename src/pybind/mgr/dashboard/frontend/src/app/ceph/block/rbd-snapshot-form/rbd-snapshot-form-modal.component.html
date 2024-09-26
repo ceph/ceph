@@ -37,6 +37,9 @@
           <span *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
                 class="invalid-feedback"
                 i18n>This field is required.</span>
+          <span *ngIf="snapshotForm.showError('snapshotName', formDir, 'pattern')"
+                class="invalid-feedback"
+                i18n>The snapshot name cannot start with "." and cannot contain "/" and "@".</span>
         </ng-template>
       </div>
 

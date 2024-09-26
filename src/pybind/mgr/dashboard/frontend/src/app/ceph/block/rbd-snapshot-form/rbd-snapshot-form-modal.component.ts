@@ -53,7 +53,7 @@ export class RbdSnapshotFormModalComponent extends BaseModal implements OnInit {
   createForm() {
     this.snapshotForm = new CdFormGroup({
       snapshotName: new UntypedFormControl('', {
-        validators: [Validators.required]
+        validators: [Validators.required, Validators.pattern(/^(?!\.)[^/@]+$/)]
       }),
       mirrorImageSnapshot: new UntypedFormControl(false, {})
     });
