@@ -13,6 +13,44 @@ v19.2.0 Squid
    68215 <https://tracker.ceph.com/issues/68215>`_ before attempting an upgrade
    to 19.2.0.
 
+Highlights
+~~~~~~~~~~
+
+RADOS
+
+* BlueStore has been optimized for better performance in snapshot-intensive workloads.
+* BlueStore RocksDB LZ4 compression is now enabled by default to improve average performance
+  and "fast device" space usage.
+* Other improvements include more flexible EC configurations, an OpTracker to help debug mgr
+  module issues, and better scrub scheduling.
+
+Dashboard
+
+* Improved navigation layout
+
+CephFS
+
+* Support for managing CephFS snapshots and clones, as well as snapshot schedule management
+* Manage authorization capabilities for CephFS resources
+* Helpers on mounting a CephFS volume
+
+RBD
+
+* diff-iterate can now execute locally, bringing a dramatic performance improvement for QEMU
+  live disk synchronization and backup use cases.
+* Support for cloning from non-user type snapshots is added.
+* rbd-wnbd driver has gained the ability to multiplex image mappings.
+
+RGW
+
+* The User Accounts feature unlocks several new AWS-compatible IAM APIs for the self-service
+  management of users, keys, groups, roles, policy and more.
+
+Crimson/Seastore
+
+* Crimson's first tech preview release! Supporting RBD workloads on Replicated pools. For more
+  information please visit: https://ceph.io/en/news/crimson
+
 Ceph
 ~~~~
 
