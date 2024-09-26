@@ -55,23 +55,26 @@ InternalClientRequest::do_process(
   crimson::osd::ObjectContextRef obc,
   std::vector<OSDOp> &osd_ops)
 {
-  return pg->do_osd_ops(
-    std::move(obc),
-    osd_ops,
-    std::as_const(op_info),
-    get_do_osd_ops_params()
-  ).safe_then_unpack_interruptible(
-    [](auto submitted, auto all_completed) {
-      return all_completed.handle_error_interruptible(
-	crimson::ct_error::eagain::handle([] {
-	  ceph_assert(0 == "not handled");
-	  return seastar::now();
-	}));
-    }, crimson::ct_error::eagain::handle([] {
-      ceph_assert(0 == "not handled");
-      return interruptor::now();
-    })
+  LOG_PREFIX(InternalClientRequest::do_process);
+  auto params = get_do_osd_ops_params();
+  auto ox = seastar::make_lw_shared<OpsExecuter>(
+    pg, obc, op_info, params, params.get_connection(), SnapContext{});
+  co_await pg->run_executer(
+    ox, obc, op_info, osd_ops
+  ).handle_error_interruptible(
+    crimson::ct_error::all_same_way(
+      [this, FNAME](auto e) {
+	ERRORDPPI("{}: got unexpected error {}", *pg, *this, e);
+	ceph_assert(0 == "should not return an error");
+	return interruptor::now();
+      })
   );
+
+  auto [submitted, completed] = co_await pg->submit_executer(
+    std::move(ox), osd_ops);
+
+  co_await std::move(submitted);
+  co_await std::move(completed);
 }
 
 InternalClientRequest::interruptible_future<>
