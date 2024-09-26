@@ -128,6 +128,7 @@ class AsyncJobs(threading.Thread):
         # cv for job cancelation
         self.waiting = False
 
+        # Indicates whether or not entire async job machinery is being shutdown.
         self.stopping = False
 
         self.cancel_cv = threading.Condition(self.lock)
