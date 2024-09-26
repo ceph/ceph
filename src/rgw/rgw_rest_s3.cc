@@ -81,6 +81,8 @@ using namespace std;
 using namespace rgw;
 using namespace ceph::crypto;
 
+const std::string LIST_OBJS_CONTINUATION_TOKEN_DELIMITER = "#";
+
 void list_all_buckets_start(req_state *s)
 {
   s->formatter->open_array_section_in_ns("ListAllMyBucketsResult", XMLNS_AWS_S3);
@@ -1752,19 +1754,25 @@ int RGWListBucket_ObjStore_S3::get_params(optional_yield y)
 
 int RGWListBucket_ObjStore_S3v2::get_params(optional_yield y)
 {
-int ret = get_common_params();
-if (ret < 0) {
-  return ret;
-}
-s->info.args.get_bool("fetch-owner", &fetchOwner, false);
-startAfter = s->info.args.get("start-after", &start_after_exist);
-continuation_token = s->info.args.get("continuation-token", &continuation_token_exist);
-if(!continuation_token_exist) {
-  marker = startAfter;
-} else {
-  marker = continuation_token;
-}
-return 0;
+  int ret = get_common_params();
+  if (ret < 0) {
+    return ret;
+  }
+  s->info.args.get_bool("fetch-owner", &fetchOwner, false);
+  startAfter = s->info.args.get("start-after", &start_after_exist);
+  continuation_token = s->info.args.get("continuation-token", &continuation_token_exist);
+  if(!continuation_token_exist || continuation_token.empty()) {
+    marker = startAfter;
+  } else {
+    size_t sep_idx = continuation_token.rfind(LIST_OBJS_CONTINUATION_TOKEN_DELIMITER);
+    if (sep_idx == std::string::npos) {
+      return -ERR_INVALID_REQUEST;
+    }
+    std::string name = continuation_token.substr(0, sep_idx);
+    std::string instance = continuation_token.substr(sep_idx + 1);
+    marker = {name, instance};
+  }
+  return 0;
 }
 
 void RGWListBucket_ObjStore_S3::send_common_versioned_response()
@@ -2102,7 +2110,9 @@ void RGWListBucket_ObjStore_S3v2::send_response()
     s->formatter->dump_string("ContinuationToken", continuation_token);
   }
   if (is_truncated && !next_marker.empty()) {
-    s->formatter->dump_string("NextContinuationToken", next_marker.name);
+    std::string next_continuation_token = next_marker.name +
+      LIST_OBJS_CONTINUATION_TOKEN_DELIMITER + next_marker.instance;
+    s->formatter->dump_string("NextContinuationToken", next_continuation_token);
   }
   s->formatter->dump_int("KeyCount", objs.size() + common_prefixes.size());
   if (start_after_exist) {

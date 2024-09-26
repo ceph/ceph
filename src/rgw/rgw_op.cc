@@ -3116,7 +3116,7 @@ void RGWListBucket::execute(optional_yield y)
 
   rgw::sal::Bucket::ListResults results;
 
-  op_ret = s->bucket->list(this, params, max, results, y);
+  op_ret = s->bucket->list(this, params, max, results, y, requires_nonempty_result);
   if (op_ret >= 0) {
     next_marker = results.next_marker;
     is_truncated = results.is_truncated;
