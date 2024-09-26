@@ -1,6 +1,6 @@
 import pytest
 from ceph_volume.devices import raw
-from mock.mock import patch
+from mock.mock import patch, MagicMock
 
 
 class TestRaw(object):
@@ -41,8 +41,14 @@ class TestPrepare(object):
         assert 'Path to bluestore block.wal block device' in stdout
         assert 'Enable device encryption via dm-crypt' in stdout
 
+    @patch('ceph_volume.util.prepare.create_key', return_value='fake-secret')
+    @patch('ceph_volume.util.arg_validators.set_dmcrypt_no_workqueue', return_value=MagicMock())
     @patch('ceph_volume.util.arg_validators.ValidRawDevice.__call__')
-    def test_prepare_dmcrypt_no_secret_passed(self, m_valid_device, capsys):
+    def test_prepare_dmcrypt_no_secret_passed(self,
+                                              m_valid_device,
+                                              m_set_dmcrypt_no_workqueue,
+                                              m_create_key,
+                                              capsys):
         m_valid_device.return_value = '/dev/foo'
         with pytest.raises(SystemExit):
             raw.prepare.Prepare(argv=['--bluestore', '--data', '/dev/foo', '--dmcrypt']).main()
