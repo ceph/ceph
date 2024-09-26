@@ -225,9 +225,10 @@ void PurgeQueue::open(Context *completion)
       // Journaler only guarantees entries before head write_pos have been
       // fully flushed. Before appending new entries, we need to find and
       // drop any partial written entry.
-      if (journaler.last_committed.write_pos < journaler.get_write_pos()) {
+      auto&& last_committed = journaler.get_last_committed();
+      if (last_committed.write_pos < journaler.get_write_pos()) {
 	dout(4) << "recovering write_pos" << dendl;
-	journaler.set_read_pos(journaler.last_committed.write_pos);
+	journaler.set_read_pos(last_committed.write_pos);
 	_recover();
 	return;
       }
@@ -281,7 +282,8 @@ void PurgeQueue::_recover()
     if (journaler.get_read_pos() == journaler.get_write_pos()) {
       dout(4) << "write_pos recovered" << dendl;
       // restore original read_pos
-      journaler.set_read_pos(journaler.last_committed.expire_pos);
+      auto&& last_committed = journaler.get_last_committed();
+      journaler.set_read_pos(last_committed.expire_pos);
       journaler.set_writeable();
       recovered = true;
       finish_contexts(g_ceph_context, waiting_for_recovery);
