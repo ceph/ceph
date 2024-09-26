@@ -5369,33 +5369,41 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWRados::send_chain_to_gc(cls
 void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain,
                                   const string& tag, optional_yield y)
 {
-  string last_pool;
-  std::unique_ptr<IoCtx> ctx(new IoCtx);
-  int ret = 0;
-  for (auto liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
-    cls_rgw_obj& obj = *liter;
-    if (obj.pool != last_pool) {
-      ctx.reset(new IoCtx);
-      ret = rgw_init_ioctx(dpp, get_rados_handle(), obj.pool, *ctx);
-      if (ret < 0) {
-        last_pool = "";
-        ldpp_dout(dpp, 0) << "ERROR: failed to create ioctx pool=" <<
-        obj.pool << dendl;
-        continue;
-      }
-      last_pool = obj.pool;
-    }
-    ctx->locator_set_key(obj.loc);
-    const string& oid = obj.key.name; /* just stored raw oid there */
-    ldpp_dout(dpp, 5) << "delete_objs_inline: removing " << obj.pool <<
-    ":" << obj.key.name << dendl;
+  if (chain.objs.empty()) {
+    return;
+  }
+
+  // initialize an IoCtx for the first object's pool. RGWObjManifest uses the
+  // same pool for all tail objects
+  auto obj = chain.objs.begin();
+
+  librados::IoCtx ioctx;
+  int ret = rgw_init_ioctx(dpp, get_rados_handle(), obj->pool, ioctx);
+  if (ret < 0) {
+    return;
+  }
+
+  // issue deletions in parallel, up to max_aio at a time
+  auto aio = rgw::make_throttle(cct->_conf->rgw_multi_obj_del_max_aio, y);
+  static constexpr uint64_t cost = 1; // 1 throttle unit per request
+  static constexpr uint64_t id = 0; // ids unused
+
+  for (; obj != chain.objs.end(); ++obj) {
     ObjectWriteOperation op;
     cls_refcount_put(op, tag, true);
-    ret = rgw_rados_operate(dpp, *ctx, oid, &op, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 5) << "delete_objs_inline: refcount put returned error " << ret << dendl;
-    }
+
+    rgw_raw_obj raw;
+    raw.pool = std::move(obj->pool);
+    raw.oid = std::move(obj->key.name);
+    raw.loc = std::move(obj->loc);
+
+    auto completed = aio->get(std::move(raw), rgw::Aio::librados_op(
+            ioctx, std::move(op), y), cost, id);
+    std::ignore = rgw::check_for_errors(completed);
   }
+
+  auto completed = aio->drain();
+  std::ignore = rgw::check_for_errors(completed);
 }
 
 static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
