@@ -10,17 +10,17 @@ BASIC ARCHITECTURE AND TERMINOLOGY
 ----------------------------------
 
 * TRACE: A trace shows the data/execution path through a system.
-* SPAN: A single unit of a trace, it is a data structure that stores
-  information like operation name, timestamps, ordering in a trace.
-* JAEGER CLIENT: language-specific implementations of the OpenTracing API.
-* JAEGER AGENT: a daemon that listens for spans sent over User Datagram Protocol.
-  The agent is meant to be placed on the same host as the instrumented
-  application. (acts like a sidecar listener)
-* JAEGER COLLECTOR: Jaeger agent sends the spans to this daemon which then
-  stitches the spans together to form a trace(if enabled, also persists a database
-  for these traces)
-* JAEGER QUERY AND CONSOLE FRONTEND: UI based frontend to checkout the jaeger
-  traces, navigate to http://<jaeger frontend host>:16686 
+* SPAN: A single unit of a trace. A data structure that stores information such
+  as the operation name, timestamps, and the ordering within a trace.
+* JAEGER CLIENT: Language-specific implementations of the OpenTracing API.
+* JAEGER AGENT: A daemon that listens for spans sent over User Datagram
+  Protocol. The agent is meant to be placed on the same host as the
+  instrumented application. (The Jaeger agent acts like a sidecar listener.)
+* JAEGER COLLECTOR: A daemon that receives spans sent by the Jaeger agent. The
+  Jaeger collector then stitches the spans together to form a trace. (A database
+  can be enabled to persist these traces).
+* JAEGER QUERY AND CONSOLE FRONTEND: The UI-based frontend that presents
+  reports of the jaeger traces. Accessible at  http://<jaeger frontend host>:16686.
 
 
 read more about jaeger tracing:.
