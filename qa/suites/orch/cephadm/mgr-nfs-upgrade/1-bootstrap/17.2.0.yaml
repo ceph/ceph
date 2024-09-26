@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+tasks:
+- cephadm:
+    roleless: true
+    image: quay.io/ceph/ceph:v17.2.0
+    cephadm_branch: v17.2.0
+    cephadm_git_url: https://github.com/ceph/ceph
