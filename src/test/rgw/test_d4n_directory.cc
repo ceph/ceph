@@ -595,6 +595,170 @@ TEST_F(BlockDirectoryFixture, RemoveHostYield)
   io.run();
 }
 
+TEST_F(BlockDirectoryFixture, WatchExecuteYield)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+  {
+    boost::system::error_code ec;
+    request req;
+    req.push("WATCH", "testBucket");
+    response<std::string> resp;
+
+    conn->async_exec(req, resp, yield[ec]);
+    ASSERT_EQ((bool)ec, false);
+
+    // The number of members added
+    EXPECT_EQ(std::get<0>(resp).value(), "OK");
+  }
+
+  {
+      boost::system::error_code ec;
+      request req;
+      req.push("HSET", "testBucket", "objName", "newoid");
+      response<int> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 1);
+  }
+
+  {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXEC");
+      response<std::vector<std::string> > resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+  }
+
+  {
+      boost::system::error_code ec;
+      request req;
+      req.push("FLUSHALL");
+      response<boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+  }
+
+  conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
+
+TEST_F(BlockDirectoryFixture, IncrYield)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    for (int i = 0; i < 10; i++) {
+      {
+        boost::system::error_code ec;
+        request req;
+        req.push("INCR", "testObject");
+        response<std::string> resp;
+
+        conn->async_exec(req, resp, yield[ec]);
+        ASSERT_EQ((bool)ec, false);
+        std::cout << "thread id: " << std::this_thread::get_id() << std::endl;
+        std::cout << "INCR value: " << std::get<0>(resp).value() << std::endl;
+      }
+    }
+    boost::asio::post(conn->get_executor(), [c = conn] { c->cancel(); });
+  }, rethrow);
+
+  std::vector<std::thread> threads;
+
+  for (int i = 0; i < 10; ++i) {
+    threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+}
+
+TEST_F(BlockDirectoryFixture, MultiExecuteYield)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    {
+      boost::system::error_code ec;
+      {
+        request req;
+        response<std::string> resp;
+        req.push("MULTI");                       // Start transaction
+        conn->async_exec(req, resp, yield[ec]);
+        ASSERT_EQ((bool)ec, false);
+        std::cout << "MULTI value: " << std::get<0>(resp).value() << std::endl;
+      }
+      {
+        request req;
+        response<std::string> resp;
+        req.push("SET", "key1", "value1");       // Command 1
+        conn->async_exec(req, resp, yield[ec]);
+        ASSERT_EQ((bool)ec, false);
+        std::cout << "SET value: " << std::get<0>(resp).value() << std::endl;
+      }
+      {
+        request req;
+        response<std::string> resp;
+        req.push("SET", "key2", "value2");       // Command 2
+        conn->async_exec(req, resp, yield[ec]);
+        ASSERT_EQ((bool)ec, false);
+        std::cout << "SET value: " << std::get<0>(resp).value() << std::endl;
+      }
+      {
+        request req;
+        //string as response here as the command is only getting queued, not executed
+        //if response type is changed to int then the operation fails
+        response<std::string> resp;
+        req.push("DEL", "key3");                  // Command 3
+        conn->async_exec(req, resp, yield[ec]);
+        ASSERT_EQ((bool)ec, false);
+        std::cout << "DEL value: " << std::get<0>(resp).value() << std::endl;
+      }
+      {
+        request req;
+        req.push("EXEC");                        // Execute transaction
+
+        boost::redis::generic_response resp;
+        conn->async_exec(req, resp, yield[ec]);
+        ASSERT_EQ((bool)ec, false);
+        for (uint64_t i = 0; i < resp.value().size(); i++) {
+          std::cout << "EXEC: " << resp.value().front().value << std::endl;
+          boost::redis::consume_one(resp);
+        }
+      }
+    }
+    //test multi/exec using directory methods
+    {
+      ASSERT_EQ(0, dir->multi(env->dpp, optional_yield{yield}));
+      ASSERT_EQ(0, dir->set(env->dpp, block, yield));
+      block->cacheObj.objName = "testBlockNew";
+      ASSERT_EQ(0, dir->set(env->dpp, block, yield));
+      block->cacheObj.objName = "testBlockA";
+      ASSERT_EQ(0, dir->del(env->dpp, block, yield, true));
+      std::vector<std::string> responses;
+      ASSERT_EQ(0, dir->exec(env->dpp, responses, optional_yield{yield}));
+      for (auto r : responses) {
+        std::cout << "EXEC: " << r << std::endl;
+      }
+    }
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("FLUSHALL");
+      response<boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+    }
+
+    conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
+
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
 
