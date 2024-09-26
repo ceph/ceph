@@ -25,6 +25,7 @@ import { IdentityComponent } from '../identity/identity.component';
 import { NgbModule } from '@ng-bootstrap/ng-bootstrap';
 import { DashboardHelpComponent } from '../dashboard-help/dashboard-help.component';
 import { DialogModule, GridModule, ThemeModule, UIShellModule } from 'carbon-components-angular';
+import { ShortenNamePipe } from '~/app/shared/pipes/shorten-name.pipe';
 
 function everythingPermittedExcept(disabledPermissions: string[] = []): any {
   const permissions: Permissions = new Permissions({});
@@ -78,7 +79,13 @@ describe('NavigationComponent', () => {
       DialogModule,
       GridModule
     ],
-    providers: [AuthStorageService, SummaryService, FeatureTogglesService, PrometheusAlertService]
+    providers: [
+      AuthStorageService,
+      SummaryService,
+      FeatureTogglesService,
+      PrometheusAlertService,
+      ShortenNamePipe
+    ]
   });
 
   beforeEach(() => {

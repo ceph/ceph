@@ -233,4 +233,9 @@ export class MultiClusterService {
       });
     }
   }
+
+  // Sorts items such that the item with a specific priority value is always first.
+  sortByPriorityValue = (items: any[], key: string, priorityValue: string) => {
+    return items.sort((a, b) => (a[key] === priorityValue ? -1 : b[key] === priorityValue ? 1 : 0));
+  };
 }

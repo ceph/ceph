@@ -8,6 +8,7 @@ import { SettingsService } from '~/app/shared/api/settings.service';
 
 import { MultiCluster } from '~/app/shared/models/multi-cluster';
 import { Permissions } from '~/app/shared/models/permissions';
+import { ShortenNamePipe } from '~/app/shared/pipes/shorten-name.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CookiesService } from '~/app/shared/services/cookie.service';
 import {
@@ -40,13 +41,9 @@ export class NavigationComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
 
   clustersMap: Map<string, any> = new Map<string, any>();
-  selectedCluster: {
-    name: string;
-    cluster_alias: string;
-    user: string;
-    cluster_connection_status?: number;
-  };
+  selectedCluster: MultiCluster;
   currentClusterName: string;
+  sortedClusters: { key: string; value: MultiCluster }[];
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -56,7 +53,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
     private featureToggles: FeatureTogglesService,
     public prometheusAlertService: PrometheusAlertService,
     private cookieService: CookiesService,
-    private settingsService: SettingsService
+    private settingsService: SettingsService,
+    private shortNamePipe: ShortenNamePipe
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -64,23 +62,30 @@ export class NavigationComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.subs.add(
-      this.multiClusterService.subscribe((resp: object) => {
-        const clustersConfig = resp['config'];
+      this.multiClusterService.subscribe((resp: any) => {
+        const clustersConfig = resp.config;
         if (clustersConfig) {
-          this.clustersMap.clear();
-          Object.keys(clustersConfig).forEach((clusterKey: string) => {
-            const clusterDetailsList = clustersConfig[clusterKey];
-            clusterDetailsList.forEach((clusterDetails: MultiCluster) => {
-              const clusterUser = clusterDetails['user'];
-              const clusterUrl = clusterDetails['url'];
+          const clusters: { key: string; value: MultiCluster }[] = [];
+          Object.keys(clustersConfig).forEach((clusterKey) => {
+            clustersConfig[clusterKey].forEach((clusterDetails: MultiCluster) => {
+              const clusterUser = clusterDetails.user;
+              const clusterUrl = clusterDetails.url;
               const clusterUniqueKey = `${clusterUrl}-${clusterUser}`;
-              this.clustersMap.set(clusterUniqueKey, clusterDetails);
-              this.checkClusterConnectionStatus();
+              clusters.push({ key: clusterUniqueKey, value: clusterDetails });
             });
           });
+          this.sortedClusters = this.multiClusterService.sortByPriorityValue(
+            clusters,
+            'cluster_alias',
+            'local-cluster'
+          );
+          this.clustersMap.clear();
+          this.sortedClusters.forEach((cluster) =>
+            this.clustersMap.set(cluster.key, cluster.value)
+          );
           this.selectedCluster =
-            this.clustersMap.get(`${resp['current_url']}-${resp['current_user']}`) || {};
-          this.currentClusterName = `${this.selectedCluster?.name} - ${this.selectedCluster?.cluster_alias} - ${this.selectedCluster?.user}`;
+            this.clustersMap.get(`${resp.current_url}-${resp.current_user}`) || {};
+          this.currentClusterName = this.shortNamePipe.transform(this.selectedCluster, true);
         }
       })
     );
