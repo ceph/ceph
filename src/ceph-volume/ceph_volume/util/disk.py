@@ -818,7 +818,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     for block in block_devs:
         metadata: Dict[str, Any] = {}
         if block[2] == 'lvm':
-            block[1] = lvm.get_lv_path_from_mapper(block[1])
+            block[1] = UdevData(block[1]).slashed_path
         devname = os.path.basename(block[0])
         diskname = block[1]
         if block[2] not in block_types:
@@ -1261,4 +1261,130 @@ class BlockSysFs:
                         result[holder]['dmcrypt_mapping'] = content_split[3]
                     if mapper_type == 'LVM':
                         result[holder]['uuid'] = content_split[1]
+        return result
+
+class UdevData:
+    """
+    Class representing udev data for a specific device.
+    This class extracts and stores relevant information about the device from udev files.
+
+    Attributes:
+    -----------
+    path : str
+        The initial device path (e.g., /dev/sda).
+    realpath : str
+        The resolved real path of the device.
+    stats : os.stat_result
+        The result of the os.stat() call to retrieve device metadata.
+    major : int
+        The device's major number.
+    minor : int
+        The device's minor number.
+    udev_data_path : str
+        The path to the udev metadata for the device (e.g., /run/udev/data/b<major>:<minor>).
+    symlinks : List[str]
+        A list of symbolic links pointing to the device.
+    id : str
+        A unique identifier for the device.
+    environment : Dict[str, str]
+        A dictionary containing environment variables extracted from the udev data.
+    group : str
+        The group associated with the device.
+    queue : str
+        The queue associated with the device.
+    version : str
+        The version of the device or its metadata.
+    """
+    def __init__(self, path: str) -> None:
+        """Initialize an instance of the UdevData class and load udev information.
+
+        Args:
+            path (str): The path to the device to be analyzed (e.g., /dev/sda).
+
+        Raises:
+            RuntimeError: Raised if no udev data file is found for the specified device.
+        """
+        if not os.path.exists(path):
+            raise RuntimeError(f'{path} not found.')
+        self.path: str = path
+        self.realpath: str = os.path.realpath(self.path)
+        self.stats: os.stat_result = os.stat(self.realpath)
+        self.major: int = os.major(self.stats.st_rdev)
+        self.minor: int = os.minor(self.stats.st_rdev)
+        self.udev_data_path: str = f'/run/udev/data/b{self.major}:{self.minor}'
+        self.symlinks: List[str] = []
+        self.id: str = ''
+        self.environment: Dict[str, str] = {}
+        self.group: str = ''
+        self.queue: str = ''
+        self.version: str = ''
+
+        if not os.path.exists(self.udev_data_path):
+            raise RuntimeError(f'No udev data could be retrieved for {self.path}')
+
+        with open(self.udev_data_path, 'r') as f:
+            content: str = f.read().strip()
+            self.raw_data: List[str] = content.split('\n')
+
+        for line in self.raw_data:
+            data_type, data = line.split(':', 1)
+            if data_type == 'S':
+                self.symlinks.append(data)
+            if data_type == 'I':
+                self.id = data
+            if data_type == 'E':
+                key, value = data.split('=')
+                self.environment[key] = value
+            if data_type == 'G':
+                self.group = data
+            if data_type == 'Q':
+                self.queue = data
+            if data_type == 'V':
+                self.version = data
+
+    @property
+    def is_dm(self) -> bool:
+        """Check if the device is a device mapper (DM).
+
+        Returns:
+            bool: True if the device is a device mapper, otherwise False.
+        """
+        return 'DM_UUID' in self.environment.keys()
+
+    @property
+    def is_lvm(self) -> bool:
+        """Check if the device is a Logical Volume Manager (LVM) volume.
+
+        Returns:
+            bool: True if the device is an LVM volume, otherwise False.
+        """
+        return self.environment.get('DM_UUID', '').startswith('LVM')
+
+    @property
+    def slashed_path(self) -> str:
+        """Get the LVM path structured with slashes.
+
+        Returns:
+            str: A path using slashes if the device is an LVM volume (e.g., /dev/vgname/lvname),
+                 otherwise the original path.
+        """
+        result: str = self.path
+        if self.is_lvm:
+            vg: str = self.environment.get('DM_VG_NAME')
+            lv: str = self.environment.get('DM_LV_NAME')
+            result = f'/dev/{vg}/{lv}'
+        return result
+
+    @property
+    def dashed_path(self) -> str:
+        """Get the LVM path structured with dashes.
+
+        Returns:
+            str: A path using dashes if the device is an LVM volume (e.g., /dev/mapper/vgname-lvname),
+            otherwise the original path.
+        """
+        result: str = self.path
+        if self.is_lvm:
+            name: str = self.environment.get('DM_NAME')
+            result = f'/dev/mapper/{name}'
         return result
