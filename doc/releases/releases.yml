@@ -12,6 +12,12 @@
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
 releases:
+  squid:
+    target_eol: 2026-09-19
+    releases:
+      - version: 19.2.0
+        released: 2024-09-26
+
   reef:
     target_eol: 2025-08-01
     releases:
