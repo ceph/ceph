@@ -1199,6 +1199,19 @@ struct obj_time_weight {
     mtime = state->mtime;
     zone_short_id = state->zone_short_id;
     pg_ver = state->pg_ver;
+    bufferlist bl;
+    if (state->get_attr(RGW_ATTR_INTERNAL_MTIME, bl)) {
+      try {
+        auto iter = bl.cbegin();
+        real_time internal_mtime;
+        decode(internal_mtime, iter);
+        if (internal_mtime > mtime) {
+          mtime = internal_mtime;
+        }
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 0) << "ERROR: couldn't decode RGW_ATTR_INTERNAL_MTIME" << dendl;
+      }
+    }
   }
 };
 
