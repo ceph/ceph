@@ -29,6 +29,7 @@ Synopsis
 | **ceph-bluestore-tool** free-dump|free-score --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
 | **ceph-bluestore-tool** reshard --path *osd path* --sharding *new sharding* [ --sharding-ctrl *control string* ]
 | **ceph-bluestore-tool** show-sharding --path *osd path*
+| **ceph-bluestore-tool** zap-device --dev *dev path*
 
 
 Description
@@ -107,7 +108,8 @@ Commands
 
 :command:`show-label` --dev *device* [...]
 
-   Show device label(s).	   
+   Show device label(s).
+   The label may be printed while an OSD is running.
 
 :command:`free-dump` --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
 
@@ -132,6 +134,10 @@ Commands
 :command:`show-sharding` --path *osd path*
 
    Show sharding that is currently applied to BlueStore's RocksDB.
+
+:command: `zap-device` --dev *dev path*
+
+   Zeros all device label locations. This effectively makes device appear empty.
 
 Options
 =======
@@ -194,8 +200,8 @@ Useful to provide necessary configuration options when access to monitor/ceph.co
 Device labels
 =============
 
-Every BlueStore block device has a single block label at the beginning of the
-device.  You can dump the contents of the label with::
+Every BlueStore block device has a block label at the beginning of the device.
+You can dump the contents of the label with::
 
   ceph-bluestore-tool show-label --dev *device*
 
@@ -203,6 +209,10 @@ The main device will have a lot of metadata, including information
 that used to be stored in small files in the OSD data directory.  The
 auxiliary devices (db and wal) will only have the minimum required
 fields (OSD UUID, size, device type, birth time).
+The main device contains additional label copies at offsets: 1G, 10G, 100G and 1000G.
+Corrupted labels are fixed as part of repair::
+
+  ceph-bluestore-tool repair --dev *device*
 
 OSD directory priming
 =====================
