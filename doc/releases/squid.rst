@@ -7,6 +7,12 @@ Squid is the 19th stable release of Ceph.
 v19.2.0 Squid
 =============
 
+.. ATTENTION::
+   iSCSI users are advised that the upstream developers of Ceph encountered a
+   bug during an upgrade from Ceph 19.1.1 to Ceph 19.2.0. Read `Tracker Issue
+   68215 <https://tracker.ceph.com/issues/68215>`_ before attempting an upgrade
+   to 19.2.0.
+
 Ceph
 ~~~~
 
