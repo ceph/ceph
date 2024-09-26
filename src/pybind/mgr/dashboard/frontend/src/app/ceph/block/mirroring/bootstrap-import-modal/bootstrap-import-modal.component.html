@@ -98,6 +98,10 @@
                 class="invalid-feedback"
                 i18n>The token is invalid.</span>
         </ng-template>
+        <span *ngIf="generateBtnDisable"
+              class="invalid-feedback"
+              i18n>Note : Pools are disabled either they already have peers or they have mirroring disabled
+        </span>
       </div>
     </form>
   </section>

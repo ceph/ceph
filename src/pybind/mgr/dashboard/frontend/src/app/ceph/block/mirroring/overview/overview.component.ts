@@ -49,7 +49,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
       permission: 'update',
       icon: 'document--add',
       click: () => this.createBootstrapModal(),
-      name: $localize`Create Bootstrap Token`,
+      name: $localize`Setup Replication`,
       canBePrimary: () => true,
       disable: () => false,
       buttonKind: 'primary'

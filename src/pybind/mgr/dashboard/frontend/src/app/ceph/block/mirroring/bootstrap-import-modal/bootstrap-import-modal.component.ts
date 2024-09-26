@@ -21,11 +21,9 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 export class BootstrapImportModalComponent extends BaseModal implements OnInit, OnDestroy {
   pools: any[] = [];
   token: string;
-
   subs: Subscription;
-
   importBootstrapForm: CdFormGroup;
-
+  generateBtnDisable: boolean;
   directions: Array<any> = [
     { key: 'rx-tx', desc: 'Bidirectional' },
     { key: 'rx', desc: 'Unidirectional (receive-only)' }
@@ -70,7 +68,8 @@ export class BootstrapImportModalComponent extends BaseModal implements OnInit, 
       this.pools = pools.reduce((acc: any[], pool: Pool) => {
         acc.push({
           name: pool['name'],
-          mirror_mode: pool['mirror_mode']
+          mirror_mode: pool['mirror_mode'],
+          peer_uuids: pool['peer_uuids']
         });
         return acc;
       }, []);
@@ -80,18 +79,24 @@ export class BootstrapImportModalComponent extends BaseModal implements OnInit, 
         const poolName = pool['name'];
         const mirroring_disabled = pool['mirror_mode'] === 'disabled';
         const control = poolsControl.controls[poolName];
-        if (control) {
-          if (mirroring_disabled && control.disabled) {
-            control.enable();
-          } else if (!mirroring_disabled && control.enabled) {
+        if (mirroring_disabled || pool.peer_uuids.length > 0) {
+          if (control) {
             control.disable();
-            control.setValue(true);
+          } else {
+            poolsControl.addControl(
+              poolName,
+              new UntypedFormControl({ value: false, disabled: true })
+            );
           }
         } else {
-          poolsControl.addControl(
-            poolName,
-            new UntypedFormControl({ value: !mirroring_disabled, disabled: !mirroring_disabled })
-          );
+          if (control) {
+            control.enable();
+          } else {
+            poolsControl.addControl(
+              poolName,
+              new UntypedFormControl({ value: false, disabled: false })
+            );
+          }
         }
       });
     });
