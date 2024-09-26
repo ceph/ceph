@@ -1,0 +1,67 @@
+<head>
+  <title>Error Page</title>
+  <base target="_blank">
+</head>
+<div class="container h-75">
+  <div class="row h-100 justify-content-center align-items-center">
+    <div class="blank-page">
+      <div *ngIf="header && message; else elseBlock">
+        <i [ngClass]="icon"
+           class="mx-auto d-block"></i>
+
+        <div class="mt-4 text-center">
+          <h3><b>{{ header }}</b></h3>
+          <h4 class="mt-3"
+              *ngIf="header !== message">{{ message }}</h4>
+          <h4 *ngIf="section"
+              i18n>Please consult the&nbsp;<a href="{{ docUrl }}">documentation</a>&nbsp;on how to configure and enable
+                   the {{ sectionInfo }} management functionality.
+          </h4>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <div class="text-center"
+             *ngIf="(buttonName && buttonRoute) || uiConfig; else dashboardButton">
+          <button class="btn btn-primary ms-1"
+                  [routerLink]="buttonRoute"
+                  *ngIf="!uiConfig; else configureButtonTpl"
+                  i18n>{{ buttonName }}</button>
+          <button class="btn btn-light ms-1"
+                  [routerLink]="secondaryButtonRoute"
+                  *ngIf="secondaryButtonName && secondaryButtonRoute"
+                  i18n>{{ secondaryButtonName }}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<ng-template #configureButtonTpl>
+  <button class="btn btn-primary"
+          (click)="doConfigure()"
+          [attr.title]="buttonTitle"
+          *ngIf="uiConfig"
+          i18n>{{ buttonName }}</button>
+</ng-template>
+
+
+<ng-template #elseBlock>
+  <i class="fa fa-exclamation-triangle mx-auto d-block text-danger"></i>
+
+  <div class="mt-4 text-center">
+    <h3 i18n><b>Page not Found</b></h3>
+
+    <h4 class="mt-4"
+        i18n>Sorry, we couldn’t find what you were looking for.
+             The page you requested may have been changed or moved.</h4>
+  </div>
+</ng-template>
+
+<ng-template #dashboardButton>
+  <div class="mt-4 text-center">
+    <button class="btn btn-primary"
+            [routerLink]="'/dashboard'"
+            i18n>Go To Dashboard</button>
+  </div>
+</ng-template>
