@@ -469,7 +469,7 @@ struct transition_action
   int days;
   boost::optional<ceph::real_time> date;
   std::string storage_class;
-  transition_action() : days(0) {}
+  transition_action() : days(-1) {}
   void dump(Formatter *f) const {
     if (!date) {
       f->dump_int("days", days);
