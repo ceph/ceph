@@ -47,7 +47,7 @@ defaults
 
 frontend stats
     mode http
-    bind {{ ip }}:{{ monitor_port }}
+    bind {{ ip }}:{{ monitor_port }}{% if bind_flags %} {% endif %}{{ bind_flags|join(" ") }}
     bind {{ local_host_ip }}:{{ monitor_port }}
     stats enable
     stats uri /stats
@@ -58,9 +58,9 @@ frontend stats
 
 frontend frontend
 {% if spec.ssl_cert %}
-    bind {{ ip }}:{{ frontend_port }} ssl crt /var/lib/haproxy/haproxy.pem
+    bind {{ ip }}:{{ frontend_port }} ssl crt /var/lib/haproxy/haproxy.pem{% if bind_flags %} {% endif %}{{ bind_flags|join(" ") }}
 {% else %}
-    bind {{ ip }}:{{ frontend_port }}
+    bind {{ ip }}:{{ frontend_port }}{% if bind_flags %} {% endif %}{{ bind_flags|join(" ") }}
 {% endif %}
     default_backend backend
 

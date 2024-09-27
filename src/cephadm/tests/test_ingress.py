@@ -184,7 +184,7 @@ def test_haproxy_get_sysctl_settings():
             SAMPLE_HAPROXY_IMAGE,
         )
         ss = hap.get_sysctl_settings()
-        assert len(ss) == 3
+        assert len(ss) == 2
 
 
 @pytest.mark.parametrize(
@@ -347,4 +347,4 @@ def test_keepalived_get_sysctl_settings():
             SAMPLE_KEEPALIVED_IMAGE,
         )
         ss = kad.get_sysctl_settings()
-        assert len(ss) == 3
+        assert len(ss) == 2
