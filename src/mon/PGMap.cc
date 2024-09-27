@@ -3352,9 +3352,13 @@ void PGMap::get_health_checks(
       // application metadata is not encoded until luminous is minimum
       // required release
       if (pool.application_metadata.empty() && !pool.is_tier()) {
-        stringstream ss;
-        ss << "application not enabled on pool '" << pool_name << "'";
-        detail.push_back(ss.str());
+        utime_t now(ceph::real_clock::now());
+        if ((now - pool.get_create_time()) >
+            g_conf().get_val<std::chrono::seconds>("mon_warn_on_pool_no_app_grace").count()) {
+          stringstream ss;
+          ss << "application not enabled on pool '" << pool_name << "'";
+          detail.push_back(ss.str());
+        }
       }
     }
     if (!detail.empty()) {
