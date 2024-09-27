@@ -42,16 +42,17 @@ And('select options {string}', (labels: string) => {
 
 And('{string} option {string}', (action: string, labels: string) => {
   if (labels) {
+    cy.get('cds-modal').find('input[id=labels]').click();
     if (action === 'add') {
-      cy.get('cd-modal').find('.select-menu-edit').click();
       for (const label of labels.split(', ')) {
-        cy.get('.popover-body input').type(`${label}{enter}`);
+        cy.get('input[id=labels]').clear().type(`${label}`);
+
+        cy.get('cds-dropdown-list').find('li').should('have.attr', 'title', label).click();
       }
     } else {
       for (const label of labels.split(', ')) {
-        cy.contains('cd-modal .badge', new RegExp(`^${label}$`))
-          .find('.badge-remove')
-          .click();
+        cy.get('input[id=labels]').clear().type(`${label}`);
+        cy.get('cds-dropdown-list').find('li').should('have.attr', 'title', label).click();
       }
     }
   }
@@ -84,7 +85,7 @@ And('I confirm to {string} on carbon modal', (action: string) => {
 });
 
 Then('I should see an error in {string} field', (field: string) => {
-  cy.get('cd-modal').within(() => {
+  cy.get('cds-modal').within(() => {
     cy.get(`input[id=${field}]`).should('have.class', 'ng-invalid');
   });
 });

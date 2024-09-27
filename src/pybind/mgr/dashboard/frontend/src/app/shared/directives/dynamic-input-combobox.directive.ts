@@ -1,4 +1,12 @@
-import { Directive, Input, OnDestroy, OnInit, Output, EventEmitter, HostListener } from '@angular/core';
+import {
+  Directive,
+  Input,
+  OnDestroy,
+  OnInit,
+  Output,
+  EventEmitter,
+  HostListener
+} from '@angular/core';
 import { ComboBoxItem } from '../models/combo-box.model';
 import { ComboBoxService } from '../services/combo-box.service';
 import { Subject, Subscription } from 'rxjs';
@@ -15,9 +23,6 @@ export const DEBOUNCE_TIMER = 300;
   selector: '[cdDynamicInputCombobox]'
 })
 export class DynamicInputComboboxDirective implements OnInit, OnDestroy {
-  /**
-   * This input is the same as what we have in the <cds-combobox> element.
-   */
   @Input() items: ComboBoxItem[];
 
   /**
@@ -29,9 +34,7 @@ export class DynamicInputComboboxDirective implements OnInit, OnDestroy {
   private searchSubject: Subject<string> = new Subject();
   private selectedItems: ComboBoxItem[] = [];
 
-  constructor(
-    private combBoxService: ComboBoxService
-  ) { }
+  constructor(private combBoxService: ComboBoxService) {}
 
   ngOnInit() {
     this.searchSubscription = this.searchSubject
@@ -52,12 +55,12 @@ export class DynamicInputComboboxDirective implements OnInit, OnDestroy {
         const exists = this.items.some(
           (item: ComboBoxItem) => item.content === searchString
         );
-      
-        if (!exists) {
-          this.items = this.items.concat({ content: searchString, name: searchString });
-        }
-        this.updatedItems.emit(this.items );
-        this.combBoxService.emit({ searchString });
+
+      if (!exists) {
+        this.items = this.items.concat({ content: searchString, name: searchString });
+      }
+      this.updatedItems.emit(this.items);
+      this.combBoxService.emit({ searchString });
       });
   }
 
