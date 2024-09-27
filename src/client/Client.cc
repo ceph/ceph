@@ -10925,6 +10925,20 @@ retry:
     // branch below but in a non-blocking fashion. The code in _read_sync
     // is duplicated and modified and exists in
     // C_Read_Sync_NonBlocking::finish().
+
+    // trim read based on file size?
+    if ((offset >= in->size) || (size == 0)) {
+      // read is requested at the EOF or the read len is zero, therefore just
+      // release managed pointers and complete the C_Read_Finisher immediately with 0 bytes
+
+      Context *iof = iofinish.release();
+      crf.release();
+      iof->complete(0);
+
+      // Signal async completion
+      return 0;
+    }
+
     C_Read_Sync_NonBlocking *crsa =
       new C_Read_Sync_NonBlocking(this, iofinish.release(), f, in, f->pos,
                                   offset, size, bl, filer.get(), have);
