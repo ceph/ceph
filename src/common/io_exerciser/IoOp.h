@@ -17,7 +17,7 @@
 namespace ceph {
   namespace io_exerciser {
 
-    enum OpType {
+    enum class OpType {
       Done,       // End of I/O sequence
       BARRIER,    // Barrier - all prior I/Os must complete
       CREATE,     // Create object and pattern with data

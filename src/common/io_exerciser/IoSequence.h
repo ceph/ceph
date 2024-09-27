@@ -31,7 +31,7 @@
 namespace ceph {
   namespace io_exerciser {
 
-    enum Sequence {
+    enum class Sequence {
       SEQUENCE_SEQ0,
       SEQUENCE_SEQ1,
       SEQUENCE_SEQ2,
@@ -46,10 +46,13 @@ namespace ceph {
       SEQUENCE_END,
       SEQUENCE_BEGIN = SEQUENCE_SEQ0
     };
+
     inline Sequence operator++( Sequence& s )
     {
       return s = (Sequence)(((int)(s) + 1));
     }
+
+    std::ostream& operator<<(std::ostream& os, const Sequence& seq);
 
     /* I/O Sequences */
 

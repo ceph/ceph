@@ -60,12 +60,12 @@ void ObjectModel::applyIoOp(IoOp& op)
   };
 
   switch (op.op) {
-  case BARRIER:
+  case OpType::BARRIER:
     reads.clear();
     writes.clear();
     break;
 
-  case CREATE:
+  case OpType::CREATE:
     ceph_assert(!created);
     ceph_assert(reads.empty());
     ceph_assert(writes.empty());
@@ -75,7 +75,7 @@ void ObjectModel::applyIoOp(IoOp& op)
                   generate_random);
     break;
 
-  case REMOVE:
+  case OpType::REMOVE:
     ceph_assert(created);
     ceph_assert(reads.empty());
     ceph_assert(writes.empty());
@@ -83,7 +83,7 @@ void ObjectModel::applyIoOp(IoOp& op)
     contents.resize(0);
     break;
 
-  case READ3:
+  case OpType::READ3:
     ceph_assert(created);
     ceph_assert(op.offset3 + op.length3 <= contents.size());
     // Not allowed: read overlapping with parallel write
@@ -91,7 +91,7 @@ void ObjectModel::applyIoOp(IoOp& op)
     reads.union_insert(op.offset3, op.length3);
     [[fallthrough]];
 
-  case READ2:
+  case OpType::READ2:
     ceph_assert(created);
     ceph_assert(op.offset2 + op.length2 <= contents.size());
     // Not allowed: read overlapping with parallel write
@@ -99,7 +99,7 @@ void ObjectModel::applyIoOp(IoOp& op)
     reads.union_insert(op.offset2, op.length2);
     [[fallthrough]];
 
-  case READ:
+  case OpType::READ:
     ceph_assert(created);
     ceph_assert(op.offset1 + op.length1 <= contents.size());
     // Not allowed: read overlapping with parallel write
@@ -108,7 +108,7 @@ void ObjectModel::applyIoOp(IoOp& op)
     num_io++;
     break;
 
-  case WRITE3:
+  case OpType::WRITE3:
     ceph_assert(created);
     // Not allowed: write overlapping with parallel read or write
     ceph_assert(!reads.intersects(op.offset3, op.length3));
@@ -121,7 +121,7 @@ void ObjectModel::applyIoOp(IoOp& op)
                   generate_random);
     [[fallthrough]];
 
-  case WRITE2:
+  case OpType::WRITE2:
     ceph_assert(created);
     // Not allowed: write overlapping with parallel read or write
     ceph_assert(!reads.intersects(op.offset2, op.length2));
@@ -134,7 +134,7 @@ void ObjectModel::applyIoOp(IoOp& op)
                   generate_random);
     [[fallthrough]];
 
-  case WRITE:
+  case OpType::WRITE:
     ceph_assert(created);
     // Not allowed: write overlapping with parallel read or write
     ceph_assert(!reads.intersects(op.offset1, op.length1));

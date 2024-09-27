@@ -86,8 +86,8 @@ bool RadosIo::readyForIoOp(IoOp &op)
     return false;
   }
   switch (op.op) {
-  case Done:
-  case BARRIER:
+  case OpType::Done:
+  case OpType::BARRIER:
     return outstanding_io == 0;
   default:
     return outstanding_io < threads;
@@ -105,18 +105,18 @@ void RadosIo::applyIoOp(IoOp &op)
   wait_for_io(threads-1);
   
   switch (op.op) {
-  case Done:
+  case OpType::Done:
   [[ fallthrough ]];
-  case BARRIER:
+  case OpType::BARRIER:
     // Wait for all outstanding I/O to complete
     wait_for_io(0);
     break;    
 
-  case CREATE:
+  case OpType::CREATE:
     {
       start_io();
       op_info = std::make_shared<AsyncOpInfo>(0, op.length1);
-      db->generate_data(0, op.length1, op_info->bl1);
+      op_info->bl1 = db->generate_data(0, op.length1);
       op_info->wop.write_full(op_info->bl1);
       auto create_cb = [this] (boost::system::error_code ec) {
         ceph_assert(ec == boost::system::errc::success);
@@ -127,7 +127,7 @@ void RadosIo::applyIoOp(IoOp &op)
     }
     break;
 
-  case REMOVE:
+  case OpType::REMOVE:
     {
       start_io();
       op_info = std::make_shared<AsyncOpInfo>();
@@ -141,7 +141,7 @@ void RadosIo::applyIoOp(IoOp &op)
     }
     break;
 
-  case READ:
+  case OpType::READ:
     {
       start_io();
       op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1);
@@ -159,7 +159,7 @@ void RadosIo::applyIoOp(IoOp &op)
     }
     break;
 
-  case READ2:
+  case OpType::READ2:
     {
       start_io();
       op_info = std::make_shared<AsyncOpInfo>(op.offset1,
@@ -186,7 +186,7 @@ void RadosIo::applyIoOp(IoOp &op)
     }
     break;
 
-  case READ3:
+  case OpType::READ3:
     {
       start_io();
       op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1,
@@ -215,11 +215,11 @@ void RadosIo::applyIoOp(IoOp &op)
     }
     break;
 
-  case WRITE:
+  case OpType::WRITE:
     {
       start_io();
       op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1);
-      db->generate_data(op.offset1, op.length1, op_info->bl1);
+      op_info->bl1 = db->generate_data(op.offset1, op.length1);
 
       op_info->wop.write(op.offset1 * block_size, op_info->bl1);
       auto write_cb = [this] (boost::system::error_code ec) {
@@ -232,13 +232,13 @@ void RadosIo::applyIoOp(IoOp &op)
     }
     break;
 
-  case WRITE2:
+  case OpType::WRITE2:
     {
       start_io();
       op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1,
                                               op.offset2, op.length2);
-      db->generate_data(op.offset1, op.length1, op_info->bl1);
-      db->generate_data(op.offset2, op.length2, op_info->bl2);
+      op_info->bl1 = db->generate_data(op.offset1, op.length1);
+      op_info->bl2 = db->generate_data(op.offset2, op.length2);
       op_info->wop.write(op.offset1 * block_size, op_info->bl1);
       op_info->wop.write(op.offset2 * block_size, op_info->bl2);
       auto write2_cb = [this] (boost::system::error_code ec) {
@@ -251,15 +251,15 @@ void RadosIo::applyIoOp(IoOp &op)
     }
     break;
 
-  case WRITE3:
+  case OpType::WRITE3:
     {
       start_io();
       op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1,
                                               op.offset2, op.length2,
                                               op.offset3, op.length3);
-      db->generate_data(op.offset1, op.length1, op_info->bl1);
-      db->generate_data(op.offset2, op.length2, op_info->bl2);
-      db->generate_data(op.offset3, op.length3, op_info->bl3);
+      op_info->bl1 = db->generate_data(op.offset1, op.length1);
+      op_info->bl2 = db->generate_data(op.offset2, op.length2);
+      op_info->bl3 = db->generate_data(op.offset3, op.length3);
       op_info->wop.write(op.offset1 * block_size, op_info->bl1);
       op_info->wop.write(op.offset2 * block_size, op_info->bl2);
       op_info->wop.write(op.offset3 * block_size, op_info->bl3);

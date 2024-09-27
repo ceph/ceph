@@ -11,7 +11,7 @@ IoOp::IoOp( OpType op,
   offset2(offset2), length2(length2),
   offset3(offset3), length3(length3)
 {
-  
+
 }
 
 std::string IoOp::value_to_string(uint64_t v) const

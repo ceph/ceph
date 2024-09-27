@@ -16,18 +16,11 @@
  *   object, the buffer that was read and the expected buffer.
  *
  *
- * class DataGenerator::DataGenerationSingleton
- *   A singleton object created on first use to create and store
- *   a unique run identifier. Can either be created supplying an id
- *   or it can be generated at first use. Id cannot and should not be
- *   changed after being created.
- *
- * 
  * class SeededRandomGenerator
  *   Inherits from DataGenerator. Generates entirely random patterns
  *   based on the seed retrieved by the model.
- * 
- * 
+ *
+ *
  * class HeaderedSeededRandomGenerator
  *   Inherits from SeededDataGenerator. Generates entirely random patterns
  *   based on the seed retrieved by the model, however also appends a 
@@ -35,7 +28,7 @@
  *   a range of verbose debug options to help disagnose a miscompare
  *   whenever it detects unexpected data.
  */
- 
+
 namespace ceph {
   namespace io_exerciser {
     namespace data_generation {
@@ -45,44 +38,24 @@ namespace ceph {
         // CompressedGenerator
         // MixedGenerator
       };
-    
+
       class DataGenerator {
       public:
         virtual ~DataGenerator() = default;
         static std::unique_ptr<DataGenerator>
           create_generator(GenerationType generatorType,
                            const ObjectModel& model);
-        virtual void generate_data(uint64_t length, uint64_t offset,
-                                   bufferlist& retlist)=0;
+        virtual bufferlist generate_data(uint64_t length, uint64_t offset)=0;
         virtual bool validate(bufferlist& bufferlist, uint64_t offset,
                               uint64_t length);
 
         // Used for testing debug outputs from data generation
-        virtual void generate_wrong_data(uint64_t offset, uint64_t length,
-                                         bufferlist& retlist);
+        virtual bufferlist generate_wrong_data(uint64_t offset, uint64_t length);
 
       protected:
         const ObjectModel& m_model;
 
         DataGenerator(const ObjectModel& model) : m_model(model) {}
-
-        class DataGenerationSingleton {
-        private:
-          DataGenerationSingleton();
-          DataGenerationSingleton(uint64_t unique_id);
-
-          bool m_created = false;
-          uint64_t m_uniqueId = 0;
-
-          static DataGenerationSingleton m_singletonInstance;
-          static std::mutex m_mutex;
-
-        public:
-          static const DataGenerationSingleton&
-            createSpecificInstance(uint64_t unique_id);
-          static const DataGenerationSingleton& getInstance();
-          static const uint64_t getUniqueId();
-        };
       };
 
       class SeededRandomGenerator : public DataGenerator
@@ -92,19 +65,19 @@ namespace ceph {
             : DataGenerator(model) {}
 
           virtual bufferptr generate_block(uint64_t offset);
-          virtual void generate_data(uint64_t length, uint64_t offset,
-                                     bufferlist& retlist) override;
+          virtual bufferlist generate_data(uint64_t length, uint64_t offset);
+          virtual bufferptr generate_wrong_block(uint64_t offset);
+          virtual bufferlist generate_wrong_data(uint64_t offset, uint64_t length) override;
       };
 
       class HeaderedSeededRandomGenerator : public SeededRandomGenerator
       {
-        public:           
-          HeaderedSeededRandomGenerator(const ObjectModel& model)
-            : SeededRandomGenerator(model) {}
+        public:
+          HeaderedSeededRandomGenerator(const ObjectModel& model,
+                                        std::optional<uint64_t> unique_run_id = std::nullopt);
 
           bufferptr generate_block(uint64_t offset) override;
-          void generate_wrong_data(uint64_t offset, uint64_t length,
-                                   bufferlist& retlist) override;
+          bufferptr generate_wrong_block(uint64_t offset) override;
           bool validate(bufferlist& bufferlist, uint64_t offset,
                         uint64_t length) override;
 
@@ -112,6 +85,14 @@ namespace ceph {
           using UniqueIdBytes = uint64_t;
           using SeedBytes = int;
           using TimeBytes = uint64_t;
+
+          enum class ErrorType {
+            RUN_ID_MISMATCH,
+            SEED_MISMATCH,
+            DATA_MISMATCH,
+            DATA_NOT_FOUND,
+            UNKNOWN
+          };
 
           constexpr uint8_t headerStart() const
             { return 0; };
@@ -141,20 +122,16 @@ namespace ceph {
           const TimeBytes readDateTime(uint64_t block_offset,
                                        const bufferlist& bufferlist);
 
-          bool validate_block(uint64_t block_offset, const char* buffer_start);
+          const UniqueIdBytes unique_run_id;
 
-          enum class ErrorType {
-            RUN_ID_MISMATCH,
-            SEED_MISMATCH,
-            DATA_MISMATCH,
-            DATA_NOT_FOUND,
-            UNKNOWN
-          };
+          uint64_t generate_unique_run_id();
+
+          bool validate_block(uint64_t block_offset, const char* buffer_start);
 
           const ErrorType getErrorTypeForBlock(uint64_t read_offset,
                                                uint64_t block_offset,
                                                const bufferlist& bufferlist);
-          
+
           void printDebugInformationForBlock(uint64_t read_offset,
                                              uint64_t block_offset,
                                              const bufferlist& bufferlist);

@@ -1,6 +1,48 @@
 #include "IoSequence.h"
 
+using Sequence = ceph::io_exerciser::Sequence;
 using IoSequence = ceph::io_exerciser::IoSequence;
+
+std::ostream& ceph::io_exerciser::operator<<(std::ostream& os, const Sequence& seq)
+{
+  switch (seq)
+  {
+    case Sequence::SEQUENCE_SEQ0:
+      os << "SEQUENCE_SEQ0";
+      break;
+    case Sequence::SEQUENCE_SEQ1:
+      os << "SEQUENCE_SEQ1";
+      break;
+    case Sequence::SEQUENCE_SEQ2:
+      os << "SEQUENCE_SEQ2";
+      break;
+    case Sequence::SEQUENCE_SEQ3:
+      os << "SEQUENCE_SEQ3";
+      break;
+    case Sequence::SEQUENCE_SEQ4:
+      os << "SEQUENCE_SEQ4";
+      break;
+    case Sequence::SEQUENCE_SEQ5:
+      os << "SEQUENCE_SEQ5";
+      break;
+    case Sequence::SEQUENCE_SEQ6:
+      os << "SEQUENCE_SEQ6";
+      break;
+    case Sequence::SEQUENCE_SEQ7:
+      os << "SEQUENCE_SEQ7";
+      break;
+    case Sequence::SEQUENCE_SEQ8:
+      os << "SEQUENCE_SEQ8";
+      break;
+    case Sequence::SEQUENCE_SEQ9:
+      os << "SEQUENCE_SEQ9";
+      break;
+    case Sequence::SEQUENCE_END:
+      os << "SEQUENCE_END";
+      break;
+  }
+  return os;
+}
 
 IoSequence::IoSequence(std::pair<int,int> obj_size_range,
                                            int seed) :
@@ -16,25 +58,25 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(Sequence s,
                                                           int seed)
 {
   switch (s) {
-    case SEQUENCE_SEQ0:
+    case Sequence::SEQUENCE_SEQ0:
       return std::make_unique<Seq0>(obj_size_range, seed);
-    case SEQUENCE_SEQ1:
+    case Sequence::SEQUENCE_SEQ1:
       return std::make_unique<Seq1>(obj_size_range, seed);
-    case SEQUENCE_SEQ2:
+    case Sequence::SEQUENCE_SEQ2:
       return std::make_unique<Seq2>(obj_size_range, seed);
-    case SEQUENCE_SEQ3:
+    case Sequence::SEQUENCE_SEQ3:
       return std::make_unique<Seq3>(obj_size_range, seed);
-    case SEQUENCE_SEQ4:
+    case Sequence::SEQUENCE_SEQ4:
       return std::make_unique<Seq4>(obj_size_range, seed);
-    case SEQUENCE_SEQ5:
+    case Sequence::SEQUENCE_SEQ5:
       return std::make_unique<Seq5>(obj_size_range, seed);
-    case SEQUENCE_SEQ6:
+    case Sequence::SEQUENCE_SEQ6:
       return std::make_unique<Seq6>(obj_size_range, seed);
-    case SEQUENCE_SEQ7:
+    case Sequence::SEQUENCE_SEQ7:
       return std::make_unique<Seq7>(obj_size_range, seed);
-    case SEQUENCE_SEQ8:
+    case Sequence::SEQUENCE_SEQ8:
       return std::make_unique<Seq8>(obj_size_range, seed);
-    case SEQUENCE_SEQ9:
+    case Sequence::SEQUENCE_SEQ9:
       return std::make_unique<Seq9>(obj_size_range, seed);
     default:
       break;
