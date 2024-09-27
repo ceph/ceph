@@ -85,3 +85,4 @@ Further reading
 .. _Windows troubleshooting: ../windows-troubleshooting
 .. _General CephFS Prerequisites: ../../cephfs/mount-prerequisites
 .. _Client Authentication: ../../cephfs/client-auth
+.. _Windows testing: ../dev/tests-windows
