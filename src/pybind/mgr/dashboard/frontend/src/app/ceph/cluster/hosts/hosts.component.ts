@@ -328,7 +328,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       const host = this.selection.first();
       const labels = new Set(resp.concat(this.hostService.predefinedLabels));
       const allLabels = Array.from(labels).map((label) => {
-        return { content: label };
+        return { content: label, selected: host['labels'].includes(label) };
       });
       this.cdsModalService.show(FormModalComponent, {
         titleText: $localize`Edit Host: ${host.hostname}`,

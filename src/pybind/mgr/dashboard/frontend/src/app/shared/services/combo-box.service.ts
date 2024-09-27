@@ -8,8 +8,7 @@ import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 export class ComboBoxService {
   private searchSubject = new Subject<any>();
 
-  constructor() {
-  }
+  constructor() {}
 
   emit(value: any) {
     this.searchSubject.next(value);
