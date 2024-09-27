@@ -133,8 +133,6 @@ public:
   void kick_submitter();
   void shutdown();
 
-  void finish_head_waiters();
-
   void submit_entry(LogEvent *e, MDSLogContextBase* c = 0) {
     std::lock_guard l(submit_mutex);
     _submit_entry(e, c);
@@ -148,14 +146,8 @@ public:
     return unflushed == 0;
   }
 
-  void trim_expired_segments(MDSContext* ctx=nullptr) {
-    std::unique_lock locker(submit_mutex);
-    _trim_expired_segments(locker, ctx);
-  }
-  int trim_all() {
-    return trim_to(0);
-  }
-  int trim_to(SegmentBoundary::seq_t);
+  void trim_expired_segments();
+  int trim_all();
 
   void create(MDSContext *onfinish);  // fresh, empty log! 
   void open(MDSContext *onopen);      // append() or replay() to follow!
@@ -293,7 +285,7 @@ private:
   void try_expire(LogSegment *ls, int op_prio);
   void _maybe_expired(LogSegment *ls, int op_prio);
   void _expired(LogSegment *ls);
-  void _trim_expired_segments(auto& locker, MDSContext* ctx=nullptr);
+  void _trim_expired_segments();
   void write_head(MDSContext *onfinish);
 
   void trim();
@@ -322,7 +314,5 @@ private:
   // guarded by mds_lock
   std::condition_variable_any cond;
   std::atomic<bool> upkeep_log_trim_shutdown{false};
-
-  std::map<uint64_t, std::vector<Context*>> waiting_for_expire; // protected by mds_lock
 };
 #endif
