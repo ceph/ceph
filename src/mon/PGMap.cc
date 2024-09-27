@@ -1291,7 +1291,7 @@ void PGMap::calc_pool_stuck_unavailable_pg_map(const OSDMap& osdmap)
     if (val < cutoff) {
       pool_pg_unavailable_map[poolid].push_back(i->first);
       dout(20) << "pool: " << poolid << " pg: " << i->first
-         << " is stuck unavailable" << dendl;
+         << " is stuck unavailable" << " state: " << i->second.state << dendl;
     }
   }
 }
