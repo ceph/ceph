@@ -47,6 +47,7 @@ export class PoolListComponent implements OnInit, OnDestroy {
     private rbdMirroringService: RbdMirroringService,
     private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
+    private cdsModalService: ModalCdsService,
     private router: Router
   ) {
     this.data = [];
@@ -146,7 +147,7 @@ export class PoolListComponent implements OnInit, OnDestroy {
     const poolName = this.selection.first().name;
     const peerUUID = this.getPeerUUID();
 
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: $localize`mirror peer`,
       itemNames: [`${poolName} (${peerUUID})`],
       submitActionObservable: () =>

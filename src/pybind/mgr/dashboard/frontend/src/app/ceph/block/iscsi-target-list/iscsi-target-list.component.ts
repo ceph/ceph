@@ -65,6 +65,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n,
+    private cdsModalService: ModalCdsService,
     protected ngZone: NgZone
   ) {
     super(ngZone);
@@ -223,7 +224,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
   deleteIscsiTargetModal() {
     const target_iqn = this.selection.first().target_iqn;
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: $localize`iSCSI target`,
       itemNames: [target_iqn],
       submitActionObservable: () =>
