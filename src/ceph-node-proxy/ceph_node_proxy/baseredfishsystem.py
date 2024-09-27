@@ -34,7 +34,7 @@ class EndpointMgr:
                     self.log.debug(f'entrypoint found: {to_snake_case(k)} = {v["@odata.id"]}')
                     _name: str = to_snake_case(k)
                     _url: str = v['@odata.id']
-                    e = Endpoint(self, _url, self.client)
+                    e = Endpoint(_url, self.client)
                     setattr(self, _name, e)
             setattr(self, 'session', json_data['Links']['Sessions']['@odata.id'])  # TODO(guits): needs to be fixed
         except (URLError, KeyError) as e:
