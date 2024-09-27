@@ -4,7 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
 import { NgbModule, NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -26,7 +26,7 @@ import { ButtonModule, GridModule, IconModule, InputModule } from 'carbon-compon
     SharedModule,
     NgbNavModule,
     NgbPopoverModule,
-    NgxPipeFunctionModule,
+    PipesModule,
     RouterModule,
     NgbModule,
     IconModule,

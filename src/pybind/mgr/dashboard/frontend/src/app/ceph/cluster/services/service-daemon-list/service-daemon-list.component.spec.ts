@@ -3,7 +3,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import _ from 'lodash';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -135,7 +135,7 @@ describe('ServiceDaemonListComponent', () => {
       HttpClientTestingModule,
       CephModule,
       CoreModule,
-      NgxPipeFunctionModule,
+      PipesModule,
       SharedModule,
       ToastrModule.forRoot()
     ]
