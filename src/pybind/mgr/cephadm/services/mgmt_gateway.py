@@ -1,5 +1,5 @@
 import logging
-from typing import List, Any, Tuple, Dict, cast, Optional
+from typing import List, Any, Tuple, Dict, cast, TYPE_CHECKING
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec
@@ -36,10 +36,11 @@ class MgmtGatewayService(CephadmService):
         # if empty list provided, return empty Daemon Desc
         return DaemonDescription()
 
-    def get_oauth2_service_url(self) -> Optional[str]:
-        # TODO(redo): check how can we create several servers for HA
-        oauth2_servers = self.get_service_endpoints('oauth2-proxy')
-        return f'https://{oauth2_servers[0]}' if oauth2_servers else None
+    def get_mgmt_gw_ips(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> List[str]:
+        mgmt_gw_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+        if svc_spec.virtual_ip is not None:
+            mgmt_gw_ips.append(svc_spec.virtual_ip)
+        return mgmt_gw_ips
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
@@ -56,9 +57,9 @@ class MgmtGatewayService(CephadmService):
                 key = svc_spec.ssl_certificate_key
             else:
                 # not provided on the spec, let's generate self-sigend certificates
-                addr = self.mgr.inventory.get_addr(daemon_spec.host)
+                ips = self.get_mgmt_gw_ips(svc_spec, daemon_spec)
                 host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-                cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, addr)
+                cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, ips)
             # save certificates
             if cert and key:
                 self.mgr.cert_key_store.save_cert('mgmt_gw_cert', cert)
@@ -67,10 +68,18 @@ class MgmtGatewayService(CephadmService):
                 logger.error("Failed to obtain certificate and key from mgmt-gateway.")
         return cert, key
 
-    def get_internal_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+    def get_internal_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        ips = self.get_mgmt_gw_ips(svc_spec, daemon_spec)
         host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        return self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
+        return self.mgr.cert_mgr.generate_cert(host_fqdn, ips)
+
+    def get_service_discovery_endpoints(self) -> List[str]:
+        sd_endpoints = []
+        for dd in self.mgr.cache.get_daemons_by_service('mgr'):
+            assert dd.hostname is not None
+            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            sd_endpoints.append(f"{addr}:{self.mgr.service_discovery_port}")
+        return sd_endpoints
 
     def get_mgmt_gateway_deps(self) -> List[str]:
         # url_prefix for the following services depends on the presence of mgmt-gateway
@@ -79,10 +88,6 @@ class MgmtGatewayService(CephadmService):
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('alertmanager')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('grafana')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('oauth2-proxy')]
-        for dd in self.mgr.cache.get_daemons_by_service('mgr'):
-            # we consider mgr a dep even if the dashboard is disabled
-            # in order to be consistent with _calc_daemon_deps().
-            deps.append(dd.name())
 
         return deps
 
@@ -94,6 +99,8 @@ class MgmtGatewayService(CephadmService):
         prometheus_endpoints = self.get_service_endpoints('prometheus')
         alertmanager_endpoints = self.get_service_endpoints('alertmanager')
         grafana_endpoints = self.get_service_endpoints('grafana')
+        oauth2_proxy_endpoints = self.get_service_endpoints('oauth2-proxy')
+        service_discovery_endpoints = self.get_service_discovery_endpoints()
         try:
             grafana_spec = cast(GrafanaSpec, self.mgr.spec_store['grafana'].spec)
             grafana_protocol = grafana_spec.protocol
@@ -104,7 +111,9 @@ class MgmtGatewayService(CephadmService):
             'dashboard_endpoints': dashboard_endpoints,
             'prometheus_endpoints': prometheus_endpoints,
             'alertmanager_endpoints': alertmanager_endpoints,
-            'grafana_endpoints': grafana_endpoints
+            'grafana_endpoints': grafana_endpoints,
+            'oauth2_proxy_endpoints': oauth2_proxy_endpoints,
+            'service_discovery_endpoints': service_discovery_endpoints
         }
         server_context = {
             'spec': svc_spec,
@@ -117,11 +126,12 @@ class MgmtGatewayService(CephadmService):
             'prometheus_endpoints': prometheus_endpoints,
             'alertmanager_endpoints': alertmanager_endpoints,
             'grafana_endpoints': grafana_endpoints,
-            'oauth2_proxy_url': self.get_oauth2_service_url(),
+            'service_discovery_endpoints': service_discovery_endpoints,
+            'enable_oauth2_proxy': bool(oauth2_proxy_endpoints),
         }
 
         cert, key = self.get_external_certificates(svc_spec, daemon_spec)
-        internal_cert, internal_pkey = self.get_internal_certificates(daemon_spec)
+        internal_cert, internal_pkey = self.get_internal_certificates(svc_spec, daemon_spec)
         daemon_config = {
             "files": {
                 "nginx.conf": self.mgr.template.render(self.SVC_TEMPLATE_PATH, main_context),

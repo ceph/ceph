@@ -241,7 +241,12 @@ class IngressService(CephService):
         if spec.keepalived_password:
             password = spec.keepalived_password
 
-        daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
+        if spec.keepalive_only:
+            # when keepalive_only instead of haproxy, we have to monitor the backend service daemons
+            if spec.backend_service is not None:
+                daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
+        else:
+            daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
 
         if not daemons and not spec.keepalive_only:
             raise OrchestratorError(
@@ -297,6 +302,10 @@ class IngressService(CephService):
                     port = d.ports[1]   # monitoring port
                     host_ip = d.ip or self.mgr.inventory.get_addr(d.hostname)
                     script = f'/usr/bin/curl {build_url(scheme="http", host=host_ip, port=port)}/health'
+                elif d.daemon_type == 'mgmt-gateway':
+                    mgmt_gw_port = d.ports[0] if d.ports else None
+                    host_ip = d.ip or self.mgr.inventory.get_addr(d.hostname)
+                    script = f'/usr/bin/curl -k {build_url(scheme="https", host=host_ip, port=mgmt_gw_port)}/health'
         assert script
 
         states = []
