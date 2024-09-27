@@ -529,43 +529,43 @@ public:
   // ===================
 
   Header get_last_committed() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return last_committed;
   }
   Header get_last_written() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return last_written;
   }
 
   uint64_t get_layout_period() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return layout.get_period();
   }
   file_layout_t get_layout() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return layout;
   }
   bool is_active() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return state == STATE_ACTIVE;
   }
   bool is_stopping() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return state == STATE_STOPPING;
   }
   int get_error() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return error;
   }
   bool is_readonly() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return readonly;
   }
@@ -573,32 +573,32 @@ public:
   bool _is_readable();
   bool try_read_entry(bufferlist& bl);
   uint64_t get_write_pos() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return write_pos;
   }
   uint64_t get_write_safe_pos() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return safe_pos;
   }
   uint64_t get_read_pos() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return read_pos;
   }
   uint64_t get_expire_pos() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return expire_pos;
   }
   uint64_t get_trimmed_pos() const {
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return trimmed_pos;
   }
   size_t get_journal_envelope_size() const { 
-    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
     return journal_stream.get_envelope_size(); 
   }
