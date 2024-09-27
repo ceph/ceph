@@ -4589,8 +4589,11 @@ void InodeStoreBase::dump(Formatter *f) const
     for (const auto& [key, val] : *xattrs) {
       f->open_object_section("xattr");
       f->dump_string("key", key);
-      std::string v(val.c_str(), val.length());
-      f->dump_string("val", v);
+      if (val.length()) {
+        f->dump_string("val", std::string(val.c_str(), val.length()));
+      } else {
+        f->dump_string("val", "");
+      }
       f->close_section();
     }
   }
