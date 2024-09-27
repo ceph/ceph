@@ -4,7 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
 import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
@@ -82,7 +82,7 @@ import Reset from '@carbon/icons/es/reset/32';
     NgbNavModule,
     NgbPopoverModule,
     NgbTooltipModule,
-    NgxPipeFunctionModule,
+    PipesModule,
     SharedModule,
     RouterModule,
     TreeviewModule,

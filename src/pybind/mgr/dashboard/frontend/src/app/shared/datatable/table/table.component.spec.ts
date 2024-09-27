@@ -6,7 +6,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -44,7 +43,6 @@ describe('TableComponent', () => {
     declarations: [TableComponent, TablePaginationComponent],
     imports: [
       BrowserAnimationsModule,
-      NgxPipeFunctionModule,
       FormsModule,
       ComponentsModule,
       RouterTestingModule,

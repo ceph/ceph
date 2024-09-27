@@ -10,7 +10,7 @@ import {
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CRUDTableComponent } from '~/app/shared/datatable/crud-table/crud-table.component';
@@ -94,7 +94,7 @@ import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw
     RouterModule,
     NgbTooltipModule,
     NgbPopoverModule,
-    NgxPipeFunctionModule,
+    PipesModule,
     TreeviewModule,
     DataTableModule,
     DashboardV3Module,
