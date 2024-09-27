@@ -3,7 +3,6 @@ import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import {
   TableModule,
@@ -51,7 +50,6 @@ import { TableDetailDirective } from './directives/table-detail.directive';
 @NgModule({
   imports: [
     CommonModule,
-    NgxPipeFunctionModule,
     FormsModule,
     NgbDropdownModule,
     NgbTooltipModule,

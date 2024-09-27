@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { ToastrModule } from 'ngx-toastr';
 
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -23,7 +23,7 @@ describe('ServiceDetailsComponent', () => {
       RouterTestingModule,
       SharedModule,
       NgbNavModule,
-      NgxPipeFunctionModule,
+      PipesModule,
       ToastrModule.forRoot()
     ],
     declarations: [ServiceDetailsComponent, ServiceDaemonListComponent],
