@@ -21,7 +21,7 @@ export class HostsPageHelper extends PageHelper {
 
   add(hostname: string, exist?: boolean, maintenance?: boolean, labels: string[] = []) {
     cy.get(`${this.pages.add.id}`).within(() => {
-      cy.get('#hostname').type(hostname);
+      cy.get('#hostname').type(hostname, { force: true });
       if (maintenance) {
         cy.get('label[for=maintenance]').click();
       }
@@ -35,6 +35,7 @@ export class HostsPageHelper extends PageHelper {
     }
 
     cy.get('cd-submit-button').click();
+    cy.get('cds-modal').should('not.exist');
     // back to host list
     cy.get(`${this.pages.index.id}`);
   }

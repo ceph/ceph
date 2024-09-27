@@ -174,6 +174,6 @@ export class HostFormComponent extends CdForm implements OnInit {
   closeModal(): void {
     this.pageURL === 'hosts'
       ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
-      : this.open = false;
+      : (this.open = false);
   }
 }
