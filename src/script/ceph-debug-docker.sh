@@ -180,7 +180,7 @@ EOF
 
     printf "built image %s\n" "$tag"
 
-    run $SUDO docker run $PRIVILEGED -ti -v /ceph:/ceph:ro -v /cephfs:/cephfs:ro -v /teuthology:/teuthology:ro "$tag"
+    run $SUDO docker run $PRIVILEGED -ti -v /teuthology:/teuthology:ro "$tag"
     return 0
 }
 
