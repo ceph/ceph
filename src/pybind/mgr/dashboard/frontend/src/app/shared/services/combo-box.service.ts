@@ -7,8 +7,7 @@ import { Subject } from 'rxjs';
 export class ComboBoxService {
   private searchSubject = new Subject<{ searchString: string }>();
 
-  constructor() {
-  }
+  constructor() {}
 
   emit(value: { searchString: string }) {
     this.searchSubject.next(value);
