@@ -1156,6 +1156,20 @@ void AsioFrontend::stop()
     // signal cancellation of accept()
     listener.signal.emit(boost::asio::cancellation_type::terminal);
   }
+
+  const bool graceful_stop{ g_ceph_context->_conf->rgw_graceful_stop };
+  if (graceful_stop) {
+    ldout(ctx(), 4) << "frontend pausing and waiting for outstanding requests to complete..." << dendl;
+    pause_mutex.lock(ec);
+    if (ec) {
+      ldout(ctx(), 1) << "frontend failed to pause: " << ec.message() << dendl;
+    } else {
+      ldout(ctx(), 4) << "frontend paused" << dendl;
+    }
+    ldout(ctx(), 4) << "frontend outstanding requests have completed" << dendl;
+    pause_mutex.unlock();
+  }
+
   // close all connections
   connections.close(ec);
   pause_mutex.cancel();
