@@ -8,7 +8,7 @@ parameters:
  prefix: ceph
  numcpus: 1
  memory: 2048
- image: fedora36
+ image: fedora40
  notify: false
  admin_password: password
  disks:
@@ -35,8 +35,17 @@ parameters:
  sharedfolders: [{{ ceph_dev_folder }}]
  files:
   - bootstrap-cluster.sh
+  - dnf.conf.tpl
+  - load-podman-image.sh
+  - initial-ceph.conf
  cmds:
+ # updating the dnf.conf to make the dnf faster
+ - cp /root/dnf.conf.tpl /etc/dnf/dnf.conf
  - dnf -y install python3 chrony lvm2 podman
+ # setting up an insecure podman registry and then loading the ceph image to all hosts
+ {% if quick_install is defined %}
+ - /root/load-podman-image.sh
+ {% endif %}
  - sed -i "s/SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config
  - setenforce 0
  {% if number == 0 %}
