@@ -1255,16 +1255,16 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
 }
 
 void RGWPSCreateNotifOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
-    op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->owner.id, &data, nullptr, s->info, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 4) << "CreateBucketNotification "
-                            "forward_request_to_master returned ret = "
-                         << op_ret << dendl;
-      return;
-    }
-  }
+//  if (!driver->is_meta_master() && ) {
+//    op_ret = rgw_forward_request_to_master(
+//        this, *s->penv.site, s->owner.id, &data, nullptr, s->info, y);
+//    if (op_ret < 0) {
+////      ldpp_dout(this, 4) << "CreateBucketNotification "
+//                            "forward_request_to_master returned ret = "
+ //                        << op_ret << dendl;
+ //     return;
+//    }
+//  }
 
   if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
     return execute_v2(y);
