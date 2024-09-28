@@ -807,6 +807,7 @@ copy_to_legacy_head(struct ceph_mds_request_head_legacy *legacy,
 	*legacy = *embedded_legacy;
 }
 
+
 /* client reply */
 struct ceph_mds_reply_head {
 	__le32 op;
