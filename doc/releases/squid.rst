@@ -27,9 +27,6 @@ RADOS
 Dashboard
 
 * Improved navigation layout
-
-CephFS
-
 * Support for managing CephFS snapshots and clones, as well as snapshot schedule management
 * Manage authorization capabilities for CephFS resources
 * Helpers on mounting a CephFS volume
