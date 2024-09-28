@@ -111,6 +111,8 @@ TEST_F(TestClient, LlreadvLlwritev) {
   writefinish.reset(new C_SaferCond("test-nonblocking-writefinish"));
   readfinish.reset(new C_SaferCond("test-nonblocking-readfinish"));
   ssize_t nwritten_a = iov_out_a[0].iov_len + iov_out_a[1].iov_len;
+  // reset bufferlist
+  bl.clear();
 
   rc = client->ll_preadv_pwritev(fh, iov_out_a, 2, 100, true, writefinish.get(), nullptr);
   ASSERT_EQ(0, rc);
@@ -130,6 +132,8 @@ TEST_F(TestClient, LlreadvLlwritev) {
   writefinish.reset(new C_SaferCond("test-nonblocking-writefinish"));
   readfinish.reset(new C_SaferCond("test-nonblocking-readfinish"));
   ssize_t nwritten_b = iov_out_b[0].iov_len + iov_out_b[1].iov_len;
+  // reset bufferlist
+  bl.clear();
 
   rc = client->ll_preadv_pwritev(fh, iov_out_b, 2, 1000, true, writefinish.get(), nullptr, true, false);
   ASSERT_EQ(0, rc);
