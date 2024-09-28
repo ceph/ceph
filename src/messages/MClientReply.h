@@ -323,12 +323,15 @@ public:
 WRITE_CLASS_ENCODER(openc_response_t)
 
 class MClientReply final : public MMDSOp {
+private:
+  static constexpr int HEAD_VERSION = 2;
 public:
   // reply data
   struct ceph_mds_reply_head head {};
   ceph::buffer::list trace_bl;
   ceph::buffer::list extra_bl;
   ceph::buffer::list snapbl;
+  struct errorcode32_t error_code;
 
   int get_op() const { return head.op; }
 
@@ -336,35 +339,33 @@ public:
   epoch_t get_mdsmap_epoch() const { return head.mdsmap_epoch; }
 
   int get_result() const {
-    #ifdef _WIN32
-    // libclient and libcephfs return CEPHFS_E* errors, which are basically
-    // Linux errno codes. If we convert mds errors to host errno values, we
-    // end up mixing error codes.
-    //
-    // For Windows, we'll preserve the original error value, which is expected
-    // to be a linux (CEPHFS_E*) error. It may be worth doing the same for
-    // other platforms.
-    return head.result;
-    #else
-    return ceph_to_hostos_errno((__s32)(__u32)head.result);
-    #endif
+    // MDS now uses host errors, as defined in errno.cc, for current platform.
+    // errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
+    // when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
+    // assumes this code is executing after decode_payload() function has been called
+    return error_code;
   }
 
-  void set_result(int r) { head.result = r; }
+  void set_result(int r) { //
+    error_code = r;
+  }
 
   void set_unsafe() { head.safe = 0; }
 
   bool is_safe() const { return head.safe; }
 
 protected:
-  MClientReply() : MMDSOp{CEPH_MSG_CLIENT_REPLY} {}
+  MClientReply() : MMDSOp{CEPH_MSG_CLIENT_REPLY, HEAD_VERSION} {}
   MClientReply(const MClientRequest &req, int result = 0) :
-    MMDSOp{CEPH_MSG_CLIENT_REPLY} {
+    MMDSOp{CEPH_MSG_CLIENT_REPLY, HEAD_VERSION} {
     memset(&head, 0, sizeof(head));
     header.tid = req.get_tid();
     head.op = req.get_op();
-    head.result = result;
     head.safe = 1;
+    // MDS now uses host errors, as defined in errno.cc, for current platform.
+    // errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
+    // when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
+    set_result(result);
   }
   ~MClientReply() final {}
 
@@ -393,14 +394,24 @@ public:
     decode(trace_bl, p);
     decode(extra_bl, p);
     decode(snapbl, p);
+    // for the backward compatability, assuming LINUX error codes on the wire,
+    // we use the head.result as a value for error_code BEFORE decoding error_code.
+    // for the ver2 messages, the result is set in the error_code.result by sender
+    if (header.version < HEAD_VERSION) {
+      error_code.code = error_code.convert_decode(head.result);
+    } else {
+      decode(error_code, p);
+    }
     ceph_assert(p.end());
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
+    head.result = error_code.convert_encode();
     encode(head, payload);
     encode(trace_bl, payload);
     encode(extra_bl, payload);
     encode(snapbl, payload);
+    encode(error_code, payload);
   }
 
 

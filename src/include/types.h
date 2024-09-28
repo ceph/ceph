@@ -582,15 +582,23 @@ struct errorcode32_t {
   bool operator==(const errorcode32_t&) const = default;
   auto operator<=>(const errorcode32_t&) const = default;
 
+  inline __s32 convert_encode() const {
+    return hostos_to_ceph_errno(code);
+  }
+
+  inline __s32 convert_decode(const int32_t& err_code) const {
+    return ceph_to_hostos_errno(err_code);
+  }
+
   void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
-    __s32 newcode = hostos_to_ceph_errno(code);
+    __s32 newcode = convert_encode();
     encode(newcode, bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
     decode(code, bl);
-    code = ceph_to_hostos_errno(code);
+    code = convert_decode(code);
   }
   void dump(ceph::Formatter *f) const {
     f->dump_int("code", code);
