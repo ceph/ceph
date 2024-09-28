@@ -122,7 +122,7 @@ class C_MDL_WriteError : public MDSIOContextBase {
     MDSRank *mds = get_mds();
     // assume journal is reliable, so don't choose action based on
     // g_conf()->mds_action_on_write_error.
-    if (r == -CEPHFS_EBLOCKLISTED) {
+    if (r == -EBLOCKLISTED) {
       derr << "we have been blocklisted (fenced), respawning..." << dendl;
       mds->respawn();
     } else {
@@ -829,7 +829,7 @@ int MDLog::trim_to(SegmentBoundary::seq_t seq)
     if (pending_events.count(ls->seq)) {
       dout(5) << __func__ << ": " << *ls << " has pending events" << dendl;
       locker.unlock();
-      return -CEPHFS_EAGAIN;
+      return -EAGAIN;
     }
 
     if (expiring_segments.count(ls)) {
@@ -1042,7 +1042,7 @@ void MDLog::_recovery_thread(MDSContext *completion)
   // front = default ino and back = null
   JournalPointer jp(mds->get_nodeid(), mds->get_metadata_pool());
   const int read_result = jp.load(mds->objecter);
-  if (read_result == -CEPHFS_ENOENT) {
+  if (read_result == -ENOENT) {
     inodeno_t const default_log_ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
     jp.front = default_log_ino;
     int write_result = jp.save(mds->objecter);
@@ -1054,7 +1054,7 @@ void MDLog::_recovery_thread(MDSContext *completion)
       mds->damaged();
       ceph_abort();  // damaged should never return
     }
-  } else if (read_result == -CEPHFS_EBLOCKLISTED) {
+  } else if (read_result == -EBLOCKLISTED) {
     derr << "Blocklisted during JournalPointer read!  Respawning..." << dendl;
     mds->respawn();
     ceph_abort(); // Should be unreachable because respawn calls execv
@@ -1076,7 +1076,7 @@ void MDLog::_recovery_thread(MDSContext *completion)
       if (mds->is_daemon_stopping()) {
         return;
       }
-      completion->complete(-CEPHFS_EAGAIN);
+      completion->complete(-EAGAIN);
       return;
     }
     dout(1) << "Erasing journal " << jp.back << dendl;
@@ -1089,7 +1089,7 @@ void MDLog::_recovery_thread(MDSContext *completion)
     C_SaferCond recover_wait;
     back.recover(&recover_wait);
     int recovery_result = recover_wait.wait();
-    if (recovery_result == -CEPHFS_EBLOCKLISTED) {
+    if (recovery_result == -EBLOCKLISTED) {
       derr << "Blocklisted during journal recovery!  Respawning..." << dendl;
       mds->respawn();
       ceph_abort(); // Should be unreachable because respawn calls execv
@@ -1108,7 +1108,7 @@ void MDLog::_recovery_thread(MDSContext *completion)
 
     // If we are successful, or find no data, we can update the JournalPointer to
     // reflect that the back journal is gone.
-    if (erase_result != 0 && erase_result != -CEPHFS_ENOENT) {
+    if (erase_result != 0 && erase_result != -ENOENT) {
       derr << "Failed to erase journal " << jp.back << ": " << cpp_strerror(erase_result) << dendl;
     } else {
       dout(1) << "Successfully erased journal, updating journal pointer" << dendl;
@@ -1135,7 +1135,7 @@ void MDLog::_recovery_thread(MDSContext *completion)
   front_journal->recover(&recover_wait);
   dout(4) << "Waiting for journal " << jp.front << " to recover..." << dendl;
   int recovery_result = recover_wait.wait();
-  if (recovery_result == -CEPHFS_EBLOCKLISTED) {
+  if (recovery_result == -EBLOCKLISTED) {
     derr << "Blocklisted during journal recovery!  Respawning..." << dendl;
     mds->respawn();
     ceph_abort(); // Should be unreachable because respawn calls execv
@@ -1158,7 +1158,7 @@ void MDLog::_recovery_thread(MDSContext *completion)
         delete front_journal;
         return;
       }
-      completion->complete(-CEPHFS_EINVAL);
+      completion->complete(-EINVAL);
     }
   } else if (mds->is_standby_replay() || front_journal->get_stream_format() >= g_conf()->mds_journal_format) {
     /* The journal is of configured format, or we are in standbyreplay and will
@@ -1376,21 +1376,21 @@ void MDLog::_replay_thread()
     if (journaler->get_error()) {
       r = journaler->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
-      if (r == -CEPHFS_ENOENT) {
+      if (r == -ENOENT) {
         if (mds->is_standby_replay()) {
           // journal has been trimmed by somebody else
-          r = -CEPHFS_EAGAIN;
+          r = -EAGAIN;
         } else {
           mds->clog->error() << "missing journal object";
           mds->damaged_unlocked();
           ceph_abort();  // Should be unreachable because damaged() calls respawn()
         }
-      } else if (r == -CEPHFS_EINVAL) {
+      } else if (r == -EINVAL) {
         if (journaler->get_read_pos() < journaler->get_expire_pos()) {
           // this should only happen if you're following somebody else
           if(journaler->is_readonly()) {
-            dout(0) << "expire_pos is higher than read_pos, returning CEPHFS_EAGAIN" << dendl;
-            r = -CEPHFS_EAGAIN;
+            dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
+            r = -EAGAIN;
           } else {
             mds->clog->error() << "invalid journaler offsets";
             mds->damaged_unlocked();
@@ -1406,8 +1406,8 @@ void MDLog::_replay_thread()
           journaler->reread_head(&reread_fin);
           int err = reread_fin.wait();
           if (err) {
-            if (err == -CEPHFS_ENOENT && mds->is_standby_replay()) {
-              r = -CEPHFS_EAGAIN;
+            if (err == -ENOENT && mds->is_standby_replay()) {
+              r = -EAGAIN;
               dout(1) << "Journal header went away while in standby replay, journal rewritten?"
                       << dendl;
               break;
@@ -1423,8 +1423,8 @@ void MDLog::_replay_thread()
           }
 	  standby_trim_segments();
           if (journaler->get_read_pos() < journaler->get_expire_pos()) {
-            dout(0) << "expire_pos is higher than read_pos, returning CEPHFS_EAGAIN" << dendl;
-            r = -CEPHFS_EAGAIN;
+            dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
+            r = -EAGAIN;
           }
         }
       }
