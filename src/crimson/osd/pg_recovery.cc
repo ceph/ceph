@@ -651,13 +651,7 @@ void PGRecovery::on_activate_complete()
 void PGRecovery::on_backfill_reserved()
 {
   logger().debug("{}", __func__);
-  // yes, it's **not** backfilling yet. The PG_STATE_BACKFILLING
-  // will be set after on_backfill_reserved() returns.
-  // Backfill needs to take this into consideration when scheduling
-  // events -- they must be mutually exclusive with PeeringEvent
-  // instances. Otherwise the execution might begin without having
-  // the state updated.
-  ceph_assert(!pg->get_peering_state().is_backfilling());
+  ceph_assert(pg->get_peering_state().is_backfilling());
   // let's be lazy with creating the backfill stuff
   using BackfillState = crimson::osd::BackfillState;
   if (!backfill_state) {
