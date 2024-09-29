@@ -335,11 +335,10 @@ RecoveryBackend::handle_scan_digest(
     bi.clear_objects();
     ::decode_noclear(bi.objects, p);
   }
-  shard_services.start_operation<crimson::osd::BackfillRecovery>(
-    static_cast<crimson::osd::PG*>(&pg),
-    shard_services,
-    pg.get_osdmap_epoch(),
-    crimson::osd::BackfillState::ReplicaScanned{ m.from, std::move(bi) });
+  auto recovery_handler = pg.get_recovery_handler();
+  recovery_handler->dispatch_backfill_event(
+    crimson::osd::BackfillState::ReplicaScanned{
+      m.from, std::move(bi) }.intrusive_from_this());
   return seastar::now();
 }
 
