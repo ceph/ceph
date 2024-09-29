@@ -98,9 +98,6 @@ private:
   std::map<pg_shard_t,
            MURef<MOSDPGBackfillRemove>> backfill_drop_requests;
 
-  template <class EventT>
-  void start_backfill_recovery(
-    const EventT& evt);
   void backfill_cancelled();
   void request_replica_scan(
     const pg_shard_t& target,

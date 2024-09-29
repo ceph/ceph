@@ -479,17 +479,6 @@ void PGRecovery::_committed_pushed_object(epoch_t epoch,
   }
 }
 
-template <class EventT>
-void PGRecovery::start_backfill_recovery(const EventT& evt)
-{
-  using BackfillRecovery = crimson::osd::BackfillRecovery;
-  std::ignore = pg->get_shard_services().start_operation<BackfillRecovery>(
-    static_cast<crimson::osd::PG*>(pg),
-    pg->get_shard_services(),
-    pg->get_osdmap_epoch(),
-    evt);
-}
-
 void PGRecovery::request_replica_scan(
   const pg_shard_t& target,
   const hobject_t& begin,
@@ -522,7 +511,8 @@ void PGRecovery::request_primary_scan(
   ).then_interruptible([this] (BackfillInterval bi) {
     logger().debug("request_primary_scan:{}", __func__);
     using BackfillState = crimson::osd::BackfillState;
-    start_backfill_recovery(BackfillState::PrimaryScanned{ std::move(bi) });
+    backfill_state->process_event(
+      BackfillState::PrimaryScanned{ std::move(bi) }.intrusive_from_this());
   });
 }
 
@@ -542,7 +532,8 @@ void PGRecovery::enqueue_push(
   }).then_interruptible([this, obj] {
     logger().debug("enqueue_push:{}", __func__);
     using BackfillState = crimson::osd::BackfillState;
-    start_backfill_recovery(BackfillState::ObjectPushed(std::move(obj)));
+    backfill_state->process_event(
+      BackfillState::ObjectPushed(std::move(obj)).intrusive_from_this());
   });
 }
 
@@ -681,5 +672,6 @@ void PGRecovery::on_backfill_reserved()
   // it may be we either start a completely new backfill (first
   // event since last on_activate_complete()) or to resume already
   // (but stopped one).
-  start_backfill_recovery(BackfillState::Triggered{});
+  backfill_state->process_event(
+    BackfillState::Triggered{}.intrusive_from_this());
 }
