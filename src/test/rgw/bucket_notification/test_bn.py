@@ -711,19 +711,16 @@ def test_ps_s3_topic_on_master():
     assert_equal(status, 404)
 
     # get the remaining 2 topics
-    result, status = topic_conf1.get_list()
-    assert_equal(status, 200)
-    assert_equal(len(result['ListTopicsResponse']['ListTopicsResult']['Topics']['member']), 2)
+    list_topics(2, tenant)
 
     # delete topics
-    result = topic_conf2.del_config()
+    status = topic_conf2.del_config()
     assert_equal(status, 200)
-    result = topic_conf3.del_config()
+    status = topic_conf3.del_config()
     assert_equal(status, 200)
 
     # get topic list, make sure it is empty
-    result, status = topic_conf1.get_list()
-    assert_equal(result['ListTopicsResponse']['ListTopicsResult']['Topics'], None)
+    list_topics(0, tenant)
 
 
 @attr('basic_test')

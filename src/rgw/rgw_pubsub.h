@@ -643,9 +643,14 @@ public:
 
   // get a paginated list of topics
   // return 0 on success, error code otherwise
-  int get_topics(const DoutPrefixProvider* dpp,
-                 const std::string& start_marker, int max_items,
-                 rgw_pubsub_topics& result, std::string& next_marker,
+  int get_topics_v2(const DoutPrefixProvider* dpp,
+                    const std::string& start_marker, int max_items,
+                    rgw_pubsub_topics& result, std::string& next_marker,
+                    optional_yield y) const;
+
+  // return 0 on success, error code otherwise
+  int get_topics_v1(const DoutPrefixProvider* dpp,
+                 rgw_pubsub_topics& result,
                  optional_yield y) const;
 
   // get a topic with by its name and populate it into "result"
