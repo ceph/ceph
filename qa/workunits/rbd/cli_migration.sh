@@ -5,12 +5,16 @@ TEMPDIR=
 IMAGE1=image1
 IMAGE2=image2
 IMAGE3=image3
-IMAGES="${IMAGE1} ${IMAGE2} ${IMAGE3}"
+NAMESPACE1=namespace1
+NAMESPACE2=namespace2
+NAMESPACES="${NAMESPACE1} ${NAMESPACE2}"
+IMAGES="${IMAGE1} ${IMAGE2} ${IMAGE3} rbd/${NAMESPACE1}/${IMAGE1} rbd/${NAMESPACE2}/${IMAGE2}"
 
 cleanup() {
     kill_nbd_server
     cleanup_tempdir
     remove_images
+    remove_namespaces
 }
 
 setup_tempdir() {
@@ -42,8 +46,11 @@ create_base_image() {
 export_raw_image() {
     local image=$1
 
-    rm -rf "${TEMPDIR}/${image}"
-    rbd export ${image} "${TEMPDIR}/${image}"
+    # Replace slashes (/) with underscores (_) for namespace images
+    local export_image="${image//\//_}"
+
+    rm -rf "${TEMPDIR}/${export_image}"
+    rbd export "${image}" "${TEMPDIR}/${export_image}"
 }
 
 export_base_image() {
@@ -69,6 +76,13 @@ remove_images() {
     done
 }
 
+remove_namespaces() {
+    for namespace in ${NAMESPACES}
+    do
+        rbd namespace remove rbd/${namespace} || true
+    done
+}
+
 kill_nbd_server() {
     pkill -9 qemu-nbd || true
 }
@@ -90,6 +104,11 @@ compare_images() {
     local ret=0
 
     export_raw_image ${dst_image}
+
+    # Replace slashes (/) with underscores (_) for namespace images
+    src_image="${src_image//\//_}"
+    dst_image="${dst_image//\//_}"
+
     if ! cmp "${TEMPDIR}/${src_image}" "${TEMPDIR}/${dst_image}"
     then
         show_diff "${TEMPDIR}/${src_image}" "${TEMPDIR}/${dst_image}"
@@ -99,18 +118,26 @@ compare_images() {
 }
 
 test_import_native_format() {
-    local base_image=$1
-    local dest_image=$2
+    local base_image_spec=$1
+    local dest_image_spec=$2
 
-    rbd migration prepare --import-only "rbd/${base_image}@2" ${dest_image}
-    rbd migration abort ${dest_image}
+    # if base image is from namespace
+    local base_namespace=""
+    local base_image=${base_image_spec}
+    if [[ "${base_image_spec}" == rbd/*/* ]]; then
+        base_namespace=$(basename "$(dirname "${base_image_spec}")")
+        base_image=$(basename "${base_image_spec}")
+    fi
+
+    rbd migration prepare --import-only "${base_image_spec}@2" ${dest_image_spec}
+    rbd migration abort ${dest_image_spec}
 
     local pool_id=$(ceph osd pool ls detail --format xml | xmlstarlet sel -t -v "//pools/pool[pool_name='rbd']/pool_id")
     cat > ${TEMPDIR}/spec.json <<EOF
 {
   "type": "native",
   "pool_id": ${pool_id},
-  "pool_namespace": "",
+  "pool_namespace": "${base_namespace}",
   "image_name": "${base_image}",
   "snap_name": "2"
 }
@@ -118,85 +145,85 @@ EOF
     cat ${TEMPDIR}/spec.json
 
     rbd migration prepare --import-only \
-	--source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image_spec}
 
-    compare_images "${base_image}@1" "${dest_image}@1"
-    compare_images "${base_image}@2" "${dest_image}@2"
+    compare_images "${base_image_spec}@1" "${dest_image_spec}@1"
+    compare_images "${base_image_spec}@2" "${dest_image_spec}@2"
 
-    rbd migration abort ${dest_image}
+    rbd migration abort ${dest_image_spec}
 
     rbd migration prepare --import-only \
-        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
-    rbd migration execute ${dest_image}
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image_spec}
+    rbd migration execute ${dest_image_spec}
 
-    compare_images "${base_image}@1" "${dest_image}@1"
-    compare_images "${base_image}@2" "${dest_image}@2"
+    compare_images "${base_image_spec}@1" "${dest_image_spec}@1"
+    compare_images "${base_image_spec}@2" "${dest_image_spec}@2"
 
-    rbd migration abort ${dest_image}
+    rbd migration abort ${dest_image_spec}
 
     # no snap name or snap id
     expect_false rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\"}" \
-        ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\"}" \
+        ${dest_image_spec}
 
     # invalid source spec JSON
     expect_false rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_name\": non-existing}" \
-        ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\", \"snap_name\": non-existing}" \
+        ${dest_image_spec}
 
     # non-existing snap name
     expect_false rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_name\": \"non-existing\"}" \
-        ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\", \"snap_name\": \"non-existing\"}" \
+        ${dest_image_spec}
 
     # invalid snap name
     expect_false rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_name\": 123456}" \
-        ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\", \"snap_name\": 123456}" \
+        ${dest_image_spec}
 
     # non-existing snap id passed as int
     expect_false rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_id\": 123456}" \
-        ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\", \"snap_id\": 123456}" \
+        ${dest_image_spec}
 
     # non-existing snap id passed as string
     expect_false rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_id\": \"123456\"}" \
-        ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\", \"snap_id\": \"123456\"}" \
+        ${dest_image_spec}
 
     # invalid snap id
     expect_false rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_id\": \"foobar\"}" \
-        ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\", \"snap_id\": \"foobar\"}" \
+        ${dest_image_spec}
 
     # snap id passed as int
-    local snap_id=$(rbd snap ls ${base_image} --format xml | xmlstarlet sel -t -v "//snapshots/snapshot[name='2']/id")
+    local snap_id=$(rbd snap ls ${base_image_spec} --format xml | xmlstarlet sel -t -v "//snapshots/snapshot[name='2']/id")
     rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_id\": ${snap_id}}" \
-        ${dest_image}
-    rbd migration abort ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\", \"snap_id\": ${snap_id}}" \
+        ${dest_image_spec}
+    rbd migration abort ${dest_image_spec}
 
     # snap id passed as string
     rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_id\": \"${snap_id}\"}" \
-        ${dest_image}
-    rbd migration abort ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\", \"snap_id\": \"${snap_id}\"}" \
+        ${dest_image_spec}
+    rbd migration abort ${dest_image_spec}
 
     rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_name\": \"2\"}" \
-        ${dest_image}
-    rbd migration abort ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\", \"snap_name\": \"2\"}" \
+        ${dest_image_spec}
+    rbd migration abort ${dest_image_spec}
 
     rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_name\": \"rbd\", \"image_name\": \"${base_image}\", \"snap_name\": \"2\"}" \
-        ${dest_image}
-    rbd migration execute ${dest_image}
-    rbd migration commit ${dest_image}
+        --source-spec "{\"type\": \"native\", \"pool_name\": \"rbd\", \"pool_namespace\": \"${base_namespace}\", \"image_name\": \"${base_image}\", \"snap_name\": \"2\"}" \
+        ${dest_image_spec}
+    rbd migration execute ${dest_image_spec}
+    rbd migration commit ${dest_image_spec}
 
-    compare_images "${base_image}@1" "${dest_image}@1"
-    compare_images "${base_image}@2" "${dest_image}@2"
+    compare_images "${base_image_spec}@1" "${dest_image_spec}@1"
+    compare_images "${base_image_spec}@2" "${dest_image_spec}@2"
 
-    remove_image "${dest_image}"
+    remove_image "${dest_image_spec}"
 }
 
 test_import_qcow_format() {
@@ -337,12 +364,12 @@ EOF
     cat ${TEMPDIR}/spec.json
 
     cat ${TEMPDIR}/spec.json | rbd migration prepare --import-only \
-	--source-spec-path - ${dest_image}
+        --source-spec-path - ${dest_image}
     compare_images ${base_image} ${dest_image}
     rbd migration abort ${dest_image}
 
     rbd migration prepare --import-only \
-	--source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
     rbd migration execute ${dest_image}
     rbd migration commit ${dest_image}
 
@@ -586,5 +613,19 @@ test_import_nbd_stream_qcow2 ${IMAGE2} ${IMAGE3}
 
 test_import_raw_format ${IMAGE1} ${IMAGE2}
 test_import_nbd_stream_raw ${IMAGE1} ${IMAGE2}
+
+rbd namespace create rbd/${NAMESPACE1}
+rbd namespace create rbd/${NAMESPACE2}
+create_base_image rbd/${NAMESPACE1}/${IMAGE1}
+export_base_image rbd/${NAMESPACE1}/${IMAGE1}
+
+# Migration from namespace to namespace
+test_import_native_format rbd/${NAMESPACE1}/${IMAGE1} rbd/${NAMESPACE2}/${IMAGE2}
+
+# Migration from namespace to non-namespace
+test_import_native_format rbd/${NAMESPACE1}/${IMAGE1} ${IMAGE2}
+
+# Migration from non-namespace to namespace
+test_import_native_format ${IMAGE1} rbd/${NAMESPACE2}/${IMAGE2}
 
 echo OK
