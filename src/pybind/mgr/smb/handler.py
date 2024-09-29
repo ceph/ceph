@@ -834,6 +834,19 @@ def _check_cluster(cluster: ClusterRef, staging: _Staging) -> None:
             )
 
 
+def _parse_earmark(earmark: str) -> dict:
+    parts = earmark.split('.')
+
+    # If it only has one part (e.g., 'smb'), return None for cluster_id
+    if len(parts) == 1:
+        return {'scope': parts[0], 'cluster_id': None}
+
+    return {
+        'scope': parts[0],
+        'cluster_id': parts[2] if len(parts) > 2 else None,
+    }
+
+
 def _check_share(
     share: ShareRef,
     staging: _Staging,
@@ -878,19 +891,28 @@ def _check_share(
                 smb_earmark,
             )
         else:
+            parsed_earmark = _parse_earmark(earmark)
+
+            # Check if the top-level scope is not SMB
             if not earmark_resolver.check_earmark(
                 earmark, EarmarkTopScope.SMB
             ):
                 raise ErrorResult(
                     share,
-                    msg=f"earmark has already been set by {earmark.split('.')[0]}",
+                    msg=f"earmark has already been set by {parsed_earmark['scope']}",
                 )
-            # Check if earmark is set by same cluster
-            if earmark.split('.')[2] != share.cluster_id:
+
+            # Check if the earmark is set by a different cluster
+            if (
+                parsed_earmark['cluster_id']
+                and parsed_earmark['cluster_id'] != share.cluster_id
+            ):
                 raise ErrorResult(
                     share,
-                    msg=f"earmark has already been set by smb cluster {earmark.split('.')[2]}",
+                    msg="earmark has already been set by smb cluster "
+                    f"{parsed_earmark['cluster_id']}",
                 )
+
     name_used_by = _share_name_in_use(staging, share)
     if name_used_by:
         raise ErrorResult(
