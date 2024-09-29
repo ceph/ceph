@@ -27,11 +27,11 @@ class RemoteScrubEventBaseT : public PhasedOperationT<T> {
   crimson::net::ConnectionRef l_conn;
   crimson::net::ConnectionXcoreRef r_conn;
 
-  epoch_t epoch;
   spg_t pgid;
 
 protected:
   using interruptor = InterruptibleOperation::interruptor;
+  epoch_t epoch;
 
   template <typename U=void>
   using ifut = InterruptibleOperation::interruptible_future<U>;
@@ -40,7 +40,7 @@ protected:
 public:
   RemoteScrubEventBaseT(
     crimson::net::ConnectionRef conn, epoch_t epoch, spg_t pgid)
-    : l_conn(std::move(conn)), epoch(epoch), pgid(pgid) {}
+    : l_conn(std::move(conn)), pgid(pgid), epoch(epoch) {}
 
   PGPeeringPipeline &get_peering_pipeline(PG &pg);
 
@@ -117,6 +117,10 @@ public:
     : RemoteScrubEventBaseT<ScrubRequested>(std::forward<Args>(base_args)...),
       deep(deep) {}
 
+  epoch_t get_epoch_sent_at() const {
+    return epoch;
+  }
+
   void print(std::ostream &out) const final {
     out << "(deep=" << deep << ")";
   }
@@ -139,6 +143,10 @@ public:
     : RemoteScrubEventBaseT<ScrubMessage>(std::forward<Args>(base_args)...),
       m(m) {
     ceph_assert(scrub::PGScrubber::is_scrub_message(*m));
+  }
+
+  epoch_t get_epoch_sent_at() const {
+    return epoch;
   }
 
   void print(std::ostream &out) const final {

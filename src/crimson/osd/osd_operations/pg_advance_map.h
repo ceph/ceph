@@ -50,6 +50,10 @@ public:
     PGPeeringPipeline::Process::BlockingEvent
   > tracking_events;
 
+  epoch_t get_epoch_sent_at() const {
+    return to;
+  }
+
 private:
   PGPeeringPipeline &peering_pp(PG &pg);
 };
