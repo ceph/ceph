@@ -357,6 +357,37 @@ public:
 
     friend class SeaStoreOmapIterator;
 
+    base_iertr::future<ceph::bufferlist> _read( 
+      Transaction& t,
+      Onode& onode,
+      uint64_t offset,
+      std::size_t len,
+      uint32_t op_flags);
+
+    _omap_get_value_ret _get_attr(
+      Transaction& t,
+      Onode& onode,
+      std::string_view name) const;
+
+    base_iertr::future<attrs_t> _get_attrs(
+      Transaction& t,
+      Onode& onode);
+
+    seastar::future<struct stat> _stat(
+      Transaction& t,
+      Onode& onode,
+      const ghobject_t& oid);
+
+    base_iertr::future<omap_values_t> do_omap_get_values(
+      Transaction& t,
+      Onode& onode,
+      const omap_keys_t& keys);
+
+    base_iertr::future<omap_values_paged_t> do_omap_get_values(
+      Transaction& t,
+      Onode& onode,
+      const std::optional<std::string>& start);
+
     base_iertr::future<fiemap_ret_t> _fiemap(
       Transaction &t,
       Onode &onode,
