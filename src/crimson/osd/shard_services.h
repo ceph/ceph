@@ -483,6 +483,8 @@ public:
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
   }
 
+  Ref<PG> get_pg(spg_t pgid);
+
   crimson::common::CephContext *get_cct() {
     return &(local_state.cct);
   }
