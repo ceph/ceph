@@ -40,8 +40,8 @@ template <> struct fmt::formatter<crimson::os::seastore::op_type_t>
   auto format(op_type_t op, FormatContext& ctx) const {
     std::string_view name = "unknown";
     switch (op) {
-      case op_type_t::TRANSACTION:
-      name = "transaction";
+      case op_type_t::DO_TRANSACTION:
+      name = "do_transaction";
       break;
     case op_type_t::READ:
       name = "read";
@@ -61,8 +61,8 @@ template <> struct fmt::formatter<crimson::os::seastore::op_type_t>
     case op_type_t::OMAP_GET_VALUES:
       name = "omap_get_values";
       break;
-    case op_type_t::OMAP_LIST:
-      name = "omap_list";
+    case op_type_t::OMAP_GET_VALUES2:
+      name = "omap_get_values2";
       break;
     case op_type_t::MAX:
       name = "unknown";
@@ -141,14 +141,14 @@ void SeaStore::Shard::register_metrics()
   namespace sm = seastar::metrics;
   using op_type_t = crimson::os::seastore::op_type_t;
   std::pair<op_type_t, sm::label_instance> labels_by_op_type[] = {
-    {op_type_t::TRANSACTION,     sm::label_instance("latency", "TRANSACTION")},
-    {op_type_t::READ,            sm::label_instance("latency", "READ")},
-    {op_type_t::WRITE,           sm::label_instance("latency", "WRITE")},
-    {op_type_t::GET_ATTR,        sm::label_instance("latency", "GET_ATTR")},
-    {op_type_t::GET_ATTRS,       sm::label_instance("latency", "GET_ATTRS")},
-    {op_type_t::STAT,            sm::label_instance("latency", "STAT")},
-    {op_type_t::OMAP_GET_VALUES, sm::label_instance("latency",  "OMAP_GET_VALUES")},
-    {op_type_t::OMAP_LIST,       sm::label_instance("latency", "OMAP_LIST")},
+    {op_type_t::DO_TRANSACTION,   sm::label_instance("latency", "DO_TRANSACTION")},
+    {op_type_t::READ,             sm::label_instance("latency", "READ")},
+    {op_type_t::WRITE,            sm::label_instance("latency", "WRITE")},
+    {op_type_t::GET_ATTR,         sm::label_instance("latency", "GET_ATTR")},
+    {op_type_t::GET_ATTRS,        sm::label_instance("latency", "GET_ATTRS")},
+    {op_type_t::STAT,             sm::label_instance("latency", "STAT")},
+    {op_type_t::OMAP_GET_VALUES,  sm::label_instance("latency", "OMAP_GET_VALUES")},
+    {op_type_t::OMAP_GET_VALUES2, sm::label_instance("latency", "OMAP_GET_VALUES2")},
   };
 
   for (auto& [op_type, label] : labels_by_op_type) {
@@ -1033,7 +1033,7 @@ SeaStore::Shard::read(
     ch,
     oid,
     Transaction::src_t::READ,
-    "read_obj",
+    "read",
     op_type_t::READ,
     [this, offset, len, op_flags](auto &t, auto &onode) -> ObjectDataHandler::read_ret {
       size_t size = onode.get_layout().size;
@@ -1076,7 +1076,7 @@ SeaStore::Shard::exists(
     c,
     oid,
     Transaction::src_t::READ,
-    "oid_exists",
+    "exists",
     op_type_t::READ,
     [](auto&, auto&) {
     return seastar::make_ready_future<bool>(true);
@@ -1180,7 +1180,7 @@ SeaStore::Shard::get_attrs(
     ch,
     oid,
     Transaction::src_t::READ,
-    "get_addrs",
+    "get_attrs",
     op_type_t::GET_ATTRS,
     [this](auto &t, auto& onode) {
       auto& layout = onode.get_layout();
@@ -1389,8 +1389,8 @@ SeaStore::Shard::omap_get_values(
     ch,
     oid,
     Transaction::src_t::READ,
-    "omap_list",
-    op_type_t::OMAP_LIST,
+    "omap_get_values2",
+    op_type_t::OMAP_GET_VALUES2,
     [this, start](auto &t, auto &onode) {
       return omap_list(
 	onode,
@@ -1445,7 +1445,7 @@ SeaStore::Shard::fiemap(
     ch,
     oid,
     Transaction::src_t::READ,
-    "fiemap_read",
+    "fiemap",
     op_type_t::READ,
     [this, off, len](auto &t, auto &onode) -> base_iertr::future<fiemap_ret_t> {
     size_t size = onode.get_layout().size;
@@ -1490,7 +1490,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     std::move(_t),
     Transaction::src_t::MUTATE,
     "do_transaction",
-    op_type_t::TRANSACTION,
+    op_type_t::DO_TRANSACTION,
     [this](auto &ctx) {
       return with_trans_intr(*ctx.transaction, [&ctx, this](auto &t) {
         LOG_PREFIX(SeaStore::Shard::do_transaction_no_callbacks);
