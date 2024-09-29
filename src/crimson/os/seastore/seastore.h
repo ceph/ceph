@@ -35,14 +35,14 @@ using OnodeRef = boost::intrusive_ptr<Onode>;
 class TransactionManager;
 
 enum class op_type_t : uint8_t {
-    TRANSACTION = 0,
+    DO_TRANSACTION = 0,
     READ,
     WRITE,
     GET_ATTR,
     GET_ATTRS,
     STAT,
     OMAP_GET_VALUES,
-    OMAP_LIST,
+    OMAP_GET_VALUES2,
     MAX
 };
 
