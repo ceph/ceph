@@ -1131,13 +1131,18 @@ SeaStore::Shard::read(
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
 
+  std::string test_string = "test";
   return repeat_with_onode<ceph::bufferlist>(
     ch,
     oid,
     Transaction::src_t::READ,
     "read",
     op_type_t::READ,
-    [this, offset, len, op_flags](auto &t, auto &onode) {
+    [this, offset, len, op_flags, test_string](auto &t, auto &onode) {
+    LOG_PREFIX(SeaStoreS::read);
+    std::size_t test_size = onode.get_layout().size;
+    DEBUGT("should break clang14: {:x}, {:x}, {:x}, {}, {:x}",
+           t, offset, len, op_flags, test_string, test_size);
     return _read(t, onode, offset, len, op_flags);
   }).finally([this] {
     assert(shard_stats.pending_read_num);
