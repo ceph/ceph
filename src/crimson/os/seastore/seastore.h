@@ -300,18 +300,21 @@ public:
       auto begin_time = std::chrono::steady_clock::now();
       return seastar::do_with(
         oid, Ret{}, std::forward<F>(f),
-        [this, src, op_type, begin_time, tname
+        [this, ch, src, op_type, begin_time, tname
         ](auto &oid, auto &ret, auto &f)
       {
-        return repeat_eagain([&, this, src, tname] {
+        return repeat_eagain([&, this, ch, src, tname] {
           assert(src == Transaction::src_t::READ);
           ++(shard_stats.repeat_read_num);
 
           return transaction_manager->with_transaction_intr(
             src,
             tname,
-            [&, this](auto& t)
+            [&, this, ch, tname](auto& t)
           {
+            LOG_PREFIX(SeaStoreS::repeat_with_onode);
+            SUBDEBUGT(seastore, "{} cid={} oid={} ...",
+                      t, tname, ch->get_cid(), oid);
             return onode_manager->get_onode(t, oid
             ).si_then([&](auto onode) {
               return seastar::do_with(std::move(onode), [&](auto& onode) {
