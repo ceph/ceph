@@ -53,6 +53,10 @@ protected:
   float delay = 0;
   PGPeeringEvent evt;
 
+  epoch_t get_map_epoch() const {
+    return evt.get_epoch_sent();
+  }
+
   const pg_shard_t get_from() const {
     return from;
   }
@@ -92,6 +96,10 @@ public:
     delay(delay),
     evt(std::forward<Args>(args)...)
   {}
+
+  bool requires_pg() const final {
+    return evt.requires_pg;
+  }
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;

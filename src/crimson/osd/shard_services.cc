@@ -777,6 +777,11 @@ seastar::future<> ShardServices::dispatch_context_transaction(
   return ret;
 }
 
+Ref<PG> ShardServices::get_pg(spg_t pgid)
+{
+  return local_state.get_pg(pgid);
+}
+
 seastar::future<> ShardServices::dispatch_context_messages(
   BufferedRecoveryMessages &&ctx)
 {
