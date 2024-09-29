@@ -1084,6 +1084,42 @@ SeaStore::Shard::list_collections()
   });
 }
 
+SeaStore::base_iertr::future<ceph::bufferlist>
+SeaStore::Shard::_read(
+  Transaction& t,
+  Onode& onode,
+  uint64_t offset,
+  std::size_t len,
+  uint32_t op_flags)
+{
+  LOG_PREFIX(SeaStoreS::_read);
+  size_t size = onode.get_layout().size;
+  if (offset >= size) {
+    DEBUGT("0x{:x}~0x{:x} onode-size=0x{:x} flags=0x{:x}, got none",
+           t, offset, len, size, op_flags);
+    return seastar::make_ready_future<ceph::bufferlist>();
+  }
+
+  DEBUGT("0x{:x}~0x{:x} onode-size=0x{:x} flags=0x{:x} ...",
+         t, offset, len, size, op_flags);
+  size_t corrected_len = (len == 0) ?
+    size - offset :
+    std::min(size - offset, len);
+
+  return ObjectDataHandler(max_object_size).read(
+    ObjectDataHandler::context_t{
+      *transaction_manager,
+      t,
+      onode,
+    },
+    offset,
+    corrected_len
+  ).si_then([FNAME, &t](auto bl) {
+    DEBUGT("got bl length=0x{:x}", t, bl.length());
+    return bl;
+  });
+}
+
 SeaStore::Shard::read_errorator::future<ceph::bufferlist>
 SeaStore::Shard::read(
   CollectionRef ch,
@@ -1101,35 +1137,9 @@ SeaStore::Shard::read(
     Transaction::src_t::READ,
     "read",
     op_type_t::READ,
-    [this, offset, len, op_flags](auto &t, auto &onode) -> ObjectDataHandler::read_ret {
-      LOG_PREFIX(SeaStoreS::read);
-      size_t size = onode.get_layout().size;
-      if (offset >= size) {
-        DEBUGT("0x{:x}~0x{:x} onode-size=0x{:x} flags=0x{:x}, got none",
-               t, offset, len, size, op_flags);
-	return seastar::make_ready_future<ceph::bufferlist>();
-      }
-
-      DEBUGT("0x{:x}~0x{:x} onode-size=0x{:x} flags=0x{:x} ...",
-             t, offset, len, size, op_flags);
-      size_t corrected_len = (len == 0) ?
-	size - offset :
-	std::min(size - offset, len);
-
-      return ObjectDataHandler(max_object_size).read(
-        ObjectDataHandler::context_t{
-          *transaction_manager,
-          t,
-          onode,
-        },
-        offset,
-        corrected_len
-      ).si_then([FNAME, &t](auto bl) {
-        DEBUGT("got bl length=0x{:x}", t, bl.length());
-        return bl;
-      });
-    }
-  ).finally([this] {
+    [this, offset, len, op_flags](auto &t, auto &onode) {
+    return _read(t, onode, offset, len, op_flags);
+  }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
@@ -1198,6 +1208,34 @@ SeaStore::Shard::readv(
 
 using crimson::os::seastore::omap_manager::BtreeOMapManager;
 
+SeaStore::Shard::_omap_get_value_ret
+SeaStore::Shard::_get_attr(
+  Transaction& t,
+  Onode& onode,
+  std::string_view name) const
+{
+  LOG_PREFIX(SeaStoreS::_get_attr);
+  auto& layout = onode.get_layout();
+  if (name == OI_ATTR && layout.oi_size) {
+    ceph::bufferlist bl;
+    bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
+    DEBUGT("got OI_ATTR, value length=0x{:x}", t, bl.length());
+    return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
+  }
+  if (name == SS_ATTR && layout.ss_size) {
+    ceph::bufferlist bl;
+    bl.append(ceph::bufferptr(&layout.ss[0], layout.ss_size));
+    DEBUGT("got SS_ATTR, value length=0x{:x}", t, bl.length());
+    return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
+  }
+  DEBUGT("name={} ...", t, name);
+  return _omap_get_value(
+    t,
+    layout.xattr_root.get(
+      onode.get_metadata_hint(device->get_block_size())),
+    name);
+}
+
 SeaStore::Shard::get_attr_errorator::future<ceph::bufferlist>
 SeaStore::Shard::get_attr(
   CollectionRef ch,
@@ -1213,35 +1251,45 @@ SeaStore::Shard::get_attr(
     Transaction::src_t::READ,
     "get_attr",
     op_type_t::GET_ATTR,
-    [this, name](auto &t, auto& onode) -> _omap_get_value_ret {
-      LOG_PREFIX(SeaStoreS::get_attr);
-      auto& layout = onode.get_layout();
-      if (name == OI_ATTR && layout.oi_size) {
-        ceph::bufferlist bl;
-        bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
-        DEBUGT("got OI_ATTR, value length=0x{:x}", t, bl.length());
-        return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
-      }
-      if (name == SS_ATTR && layout.ss_size) {
-        ceph::bufferlist bl;
-        bl.append(ceph::bufferptr(&layout.ss[0], layout.ss_size));
-        DEBUGT("got SS_ATTR, value length=0x{:x}", t, bl.length());
-        return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
-      }
-      DEBUGT("name={} ...", t, name);
-      return _omap_get_value(
-        t,
-        layout.xattr_root.get(
-          onode.get_metadata_hint(device->get_block_size())),
-        name);
-    }
-  ).handle_error(
+    [this, name](auto &t, auto& onode) {
+    return _get_attr(t, onode, name);
+  }).handle_error(
     crimson::ct_error::input_output_error::assert_failure{
       "EIO when getting attrs"},
     crimson::ct_error::pass_further_all{}
   ).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
+  });
+}
+
+SeaStore::base_iertr::future<SeaStore::Shard::attrs_t>
+SeaStore::Shard::_get_attrs(
+  Transaction& t,
+  Onode& onode)
+{
+  LOG_PREFIX(SeaStoreS::_get_attrs);
+  DEBUGT("...", t);
+  auto& layout = onode.get_layout();
+  return omap_list(onode, layout.xattr_root, t, std::nullopt,
+    OMapManager::omap_list_config_t()
+      .with_inclusive(false, false)
+      .without_max()
+  ).si_then([&layout, &t, FNAME](auto p) {
+    auto& attrs = std::get<1>(p);
+    DEBUGT("got {} attrs, OI length=0x{:x}, SS length=0x{:x}",
+           t, attrs.size(), (uint32_t)layout.oi_size, (uint32_t)layout.ss_size);
+    ceph::bufferlist bl;
+    if (layout.oi_size) {
+      bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
+      attrs.emplace(OI_ATTR, std::move(bl));
+    }
+    if (layout.ss_size) {
+      bl.clear();
+      bl.append(ceph::bufferptr(&layout.ss[0], layout.ss_size));
+      attrs.emplace(SS_ATTR, std::move(bl));
+    }
+    return seastar::make_ready_future<attrs_t>(std::move(attrs));
   });
 }
 
@@ -1260,31 +1308,8 @@ SeaStore::Shard::get_attrs(
     "get_attrs",
     op_type_t::GET_ATTRS,
     [this](auto &t, auto& onode) {
-      LOG_PREFIX(SeaStoreS::get_attrs);
-      DEBUGT("...", t);
-      auto& layout = onode.get_layout();
-      return omap_list(onode, layout.xattr_root, t, std::nullopt,
-        OMapManager::omap_list_config_t()
-	  .with_inclusive(false, false)
-	  .without_max()
-      ).si_then([&layout, &t, FNAME](auto p) {
-        auto& attrs = std::get<1>(p);
-        DEBUGT("got {} attrs, OI length=0x{:x}, SS length=0x{:x}",
-               t, attrs.size(), (uint32_t)layout.oi_size, (uint32_t)layout.ss_size);
-        ceph::bufferlist bl;
-        if (layout.oi_size) {
-          bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
-          attrs.emplace(OI_ATTR, std::move(bl));
-        }
-        if (layout.ss_size) {
-          bl.clear();
-          bl.append(ceph::bufferptr(&layout.ss[0], layout.ss_size));
-          attrs.emplace(SS_ATTR, std::move(bl));
-        }
-        return seastar::make_ready_future<attrs_t>(std::move(attrs));
-      });
-    }
-  ).handle_error(
+    return _get_attrs(t, onode);
+  }).handle_error(
     crimson::ct_error::input_output_error::assert_failure{
       "EIO when getting attrs"},
     crimson::ct_error::pass_further_all{}
@@ -1292,6 +1317,23 @@ SeaStore::Shard::get_attrs(
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
+}
+
+seastar::future<struct stat> SeaStore::Shard::_stat(
+  Transaction& t,
+  Onode& onode,
+  const ghobject_t& oid)
+{
+  LOG_PREFIX(SeaStoreS::_stat);
+  struct stat st;
+  auto &olayout = onode.get_layout();
+  st.st_size = olayout.size;
+  st.st_blksize = device->get_block_size();
+  st.st_blocks = (st.st_size + st.st_blksize - 1) / st.st_blksize;
+  st.st_nlink = 1;
+  DEBUGT("oid={}, size={}, blksize={}",
+         t, oid, st.st_size, st.st_blksize);
+  return seastar::make_ready_future<struct stat>(st);
 }
 
 seastar::future<struct stat> SeaStore::Shard::stat(
@@ -1308,18 +1350,8 @@ seastar::future<struct stat> SeaStore::Shard::stat(
     "stat",
     op_type_t::STAT,
     [this, oid](auto &t, auto &onode) {
-      LOG_PREFIX(SeaStoreS::stat);
-      struct stat st;
-      auto &olayout = onode.get_layout();
-      st.st_size = olayout.size;
-      st.st_blksize = device->get_block_size();
-      st.st_blocks = (st.st_size + st.st_blksize - 1) / st.st_blksize;
-      st.st_nlink = 1;
-      DEBUGT("oid={}, size={}, blksize={}",
-             t, oid, st.st_size, st.st_blksize);
-      return seastar::make_ready_future<struct stat>(st);
-    }
-  ).handle_error(
+    return _stat(t, onode, oid);
+  }).handle_error(
     crimson::ct_error::assert_all{
       "Invalid error in SeaStoreS::stat"
     }
@@ -1335,6 +1367,22 @@ SeaStore::Shard::omap_get_header(
   const ghobject_t& oid)
 {
   return get_attr(ch, oid, OMAP_HEADER_XATTR_KEY);
+}
+
+SeaStore::base_iertr::future<SeaStore::Shard::omap_values_t>
+SeaStore::Shard::do_omap_get_values(
+  Transaction& t,
+  Onode& onode,
+  const omap_keys_t& keys)
+{
+  LOG_PREFIX(SeaStoreS::do_omap_get_values);
+  DEBUGT("{} keys ...", t, keys.size());
+  omap_root_t omap_root = onode.get_layout().omap_root.get(
+    onode.get_metadata_hint(device->get_block_size()));
+  return _omap_get_values(
+    t,
+    std::move(omap_root),
+    keys);
 }
 
 SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_t>
@@ -1353,16 +1401,8 @@ SeaStore::Shard::omap_get_values(
     "omap_get_values",
     op_type_t::OMAP_GET_VALUES,
     [this, keys](auto &t, auto &onode) {
-      LOG_PREFIX(SeaStoreS::omap_get_values);
-      DEBUGT("{} keys ...", t, keys.size());
-      omap_root_t omap_root = onode.get_layout().omap_root.get(
-	onode.get_metadata_hint(device->get_block_size()));
-      return _omap_get_values(
-	t,
-	std::move(omap_root),
-	keys);
-    }
-  ).finally([this] {
+    return do_omap_get_values(t, onode, keys);
+  }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
@@ -1462,6 +1502,29 @@ SeaStore::Shard::omap_list(
   });
 }
 
+SeaStore::base_iertr::future<SeaStore::Shard::omap_values_paged_t>
+SeaStore::Shard::do_omap_get_values(
+  Transaction& t,
+  Onode& onode,
+  const std::optional<std::string>& start)
+{
+  LOG_PREFIX(SeaStoreS::do_omap_get_values);
+  DEBUGT("start={} ...", t, start.has_value() ? *start : "");
+  return omap_list(
+    onode,
+    onode.get_layout().omap_root,
+    t,
+    start,
+    OMapManager::omap_list_config_t()
+      .with_inclusive(false, false)
+      .without_max()
+  ).si_then([FNAME, &t](omap_values_paged_t ret) {
+    DEBUGT("got {} values, complete={}",
+           t, std::get<1>(ret).size(), std::get<0>(ret));
+    return ret;
+  });
+}
+
 SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_paged_t>
 SeaStore::Shard::omap_get_values(
   CollectionRef ch,
@@ -1478,23 +1541,8 @@ SeaStore::Shard::omap_get_values(
     "omap_get_values2",
     op_type_t::OMAP_GET_VALUES2,
     [this, start](auto &t, auto &onode) {
-      LOG_PREFIX(SeaStoreS::omap_get_values);
-      DEBUGT("start={} ...", t, start.has_value() ? *start : "");
-      return omap_list(
-	onode,
-	onode.get_layout().omap_root,
-	t,
-	start,
-	OMapManager::omap_list_config_t()
-	  .with_inclusive(false, false)
-	  .without_max()
-      ).si_then([FNAME, &t](omap_values_paged_t ret) {
-        DEBUGT("got {} values, complete={}",
-               t, std::get<1>(ret).size(), std::get<0>(ret));
-        return ret;
-      });
-    }
-  ).finally([this] {
+    return do_omap_get_values(t, onode, start);
+  }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
@@ -1508,9 +1556,20 @@ SeaStore::Shard::_fiemap(
   uint64_t len) const
 {
   LOG_PREFIX(SeaStoreS::_fiemap);
+  size_t size = onode.get_layout().size;
+  if (off >= size) {
+    DEBUGT("0x{:x}~0x{:x} onode-size=0x{:x}, got none",
+           t, off, len, size);
+    return seastar::make_ready_future<std::map<uint64_t, uint64_t>>();
+  }
+  DEBUGT("0x{:x}~0x{:x} onode-size=0x{:x} ...",
+         t, off, len, size);
+  size_t adjust_len = (len == 0) ?
+    size - off:
+    std::min(size - off, len);
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
-    [this, off, len, &t, &onode](auto &objhandler) {
+    [this, off, adjust_len, &t, &onode](auto &objhandler) {
     return objhandler.fiemap(
       ObjectDataHandler::context_t{
         *transaction_manager,
@@ -1518,7 +1577,7 @@ SeaStore::Shard::_fiemap(
         onode,
       },
       off,
-      len);
+      adjust_len);
   }).si_then([FNAME, &t](auto ret) {
     DEBUGT("got {} intervals", t, ret.size());
     return ret;
@@ -1541,20 +1600,8 @@ SeaStore::Shard::fiemap(
     Transaction::src_t::READ,
     "fiemap",
     op_type_t::READ,
-    [this, off, len](auto &t, auto &onode) -> base_iertr::future<fiemap_ret_t> {
-    LOG_PREFIX(SeaStoreS::fiemap);
-    size_t size = onode.get_layout().size;
-    if (off >= size) {
-      DEBUGT("0x{:x}~0x{:x} onode-size=0x{:x}, got none",
-             t, off, len, size);
-      return seastar::make_ready_future<std::map<uint64_t, uint64_t>>();
-    }
-    DEBUGT("0x{:x}~0x{:x} onode-size=0x{:x} ...",
-           t, off, len, size);
-    size_t adjust_len = (len == 0) ?
-      size - off:
-      std::min(size - off, len);
-    return _fiemap(t, onode, off, adjust_len);
+    [this, off, len](auto &t, auto &onode) {
+    return _fiemap(t, onode, off, len);
   }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
