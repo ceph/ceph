@@ -5068,10 +5068,10 @@ PeeringState::Backfilling::Backfilling(my_context ctx)
 
   DECLARE_LOCALS;
   ps->backfill_reserved = true;
-  pl->on_backfill_reserved();
   ps->state_clear(PG_STATE_BACKFILL_TOOFULL);
   ps->state_clear(PG_STATE_BACKFILL_WAIT);
   ps->state_set(PG_STATE_BACKFILLING);
+  pl->on_backfill_reserved();
   pl->publish_stats_to_osd();
 }
 
