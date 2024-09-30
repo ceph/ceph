@@ -175,6 +175,12 @@ public:
     }
   }
 
+  //for dencoder only
+  SimpleLock() :
+    type(nullptr),
+    parent(nullptr)
+  {}
+
   SimpleLock(MDSCacheObject *o, const LockType *lt) :
     type(lt),
     parent(o)
@@ -199,8 +205,8 @@ public:
 
   // parent
   MDSCacheObject *get_parent() { return parent; }
-  int get_type() const { return type->type; }
-  const sm_t* get_sm() const { return type->sm; }
+  int get_type() const { return (type != nullptr) ? type->type : 0; }
+  const sm_t* get_sm() const { return (type != nullptr) ? type->sm : nullptr; }
 
   int get_cap_shift() const;
   int get_cap_mask() const;
@@ -493,6 +499,7 @@ public:
       encode(empty_gather_set, bl);
     ENCODE_FINISH(bl);
   }
+  
   void decode(ceph::buffer::list::const_iterator& p) {
     DECODE_START(2, p);
     decode(state, p);
@@ -588,6 +595,7 @@ public:
    * to formatter, or nothing if is_sync_and_unlocked.
    */
   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<SimpleLock*>& ls);
 
   virtual void print(std::ostream& out) const {
     out << "(";

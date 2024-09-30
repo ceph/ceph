@@ -99,6 +99,17 @@ void PurgeItem::decode(bufferlist::const_iterator &p)
   DECODE_FINISH(p);
 }
 
+void PurgeItem::generate_test_instances(std::list<PurgeItem*>& ls) {
+  ls.push_back(new PurgeItem());
+  ls.push_back(new PurgeItem());
+  ls.back()->action = PurgeItem::PURGE_FILE;
+  ls.back()->ino = 1;
+  ls.back()->size = 2;
+  ls.back()->layout = file_layout_t();
+  ls.back()->old_pools = {1, 2};
+  ls.back()->snapc = SnapContext();
+  ls.back()->stamp = utime_t(3, 4);
+}
 // if Objecter has any slow requests, take that as a hint and
 // slow down our rate of purging
 PurgeQueue::PurgeQueue(

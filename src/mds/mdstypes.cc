@@ -528,6 +528,15 @@ void feature_bitset_t::dump(Formatter *f) const {
   f->dump_string("feature_bits", css->strv());
 }
 
+void feature_bitset_t::generate_test_instances(std::list<feature_bitset_t*>& ls)
+{
+  ls.push_back(new feature_bitset_t());
+  ls.push_back(new feature_bitset_t());
+  ls.back()->_vec.push_back(1);
+  ls.back()->_vec.push_back(2);
+  ls.back()->_vec.push_back(3);
+}
+
 void feature_bitset_t::print(ostream& out) const
 {
   std::ios_base::fmtflags f(out.flags());
@@ -562,6 +571,13 @@ void metric_spec_t::decode(bufferlist::const_iterator &p) {
 
 void metric_spec_t::dump(Formatter *f) const {
   f->dump_object("metric_flags", metric_flags);
+}
+
+void metric_spec_t::generate_test_instances(std::list<metric_spec_t*>& ls)
+{
+  ls.push_back(new metric_spec_t());
+  ls.push_back(new metric_spec_t());
+  ls.back()->metric_flags = 1;
 }
 
 void metric_spec_t::print(ostream& out) const
@@ -599,6 +615,16 @@ void client_metadata_t::dump(Formatter *f) const
   f->dump_object("metric_spec", metric_spec);
   for (const auto& [name, val] : kv_map)
     f->dump_string(name.c_str(), val);
+}
+
+void client_metadata_t::generate_test_instances(std::list<client_metadata_t*>& ls)
+{
+  ls.push_back(new client_metadata_t());
+  ls.push_back(new client_metadata_t());
+  ls.back()->kv_map["key1"] = "val1";
+  ls.back()->kv_map["key2"] = "val2";
+  ls.back()->features = 0x12345678;
+  ls.back()->metric_spec.metric_flags = 0x12345678;
 }
 
 /*
