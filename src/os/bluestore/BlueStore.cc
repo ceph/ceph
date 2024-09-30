@@ -5511,7 +5511,7 @@ void BlueStore::MempoolThread::_update_cache_settings()
 #define dout_prefix *_dout << "bluestore.OmapIteratorImpl(" << this << ") "
 
 BlueStore::OmapIteratorImpl::OmapIteratorImpl(
-  PerfCounters* _logger, CollectionRef c, OnodeRef& o, KeyValueDB::Iterator it, string start_from)
+  PerfCounters* _logger, CollectionRef c, OnodeRef& o, KeyValueDB::Iterator it, const omap_iter_seek_t& start_from)
   : logger(_logger), c(c), o(o), it(it)
 {
   logger->inc(l_bluestore_omap_iterator_count);
@@ -5520,8 +5520,12 @@ BlueStore::OmapIteratorImpl::OmapIteratorImpl(
     o->get_omap_key(string(), &head);
     o->get_omap_tail(&tail);
     string key;
-    o->get_omap_key(start_from, &key);
-    it->lower_bound(key);
+    o->get_omap_key(start_from.seek_position, &key);
+    if (start_from.seek_type == omap_iter_seek_t::LOWER_BOUND) {
+      it->lower_bound(key);
+    } else {
+      it->upper_bound(key);
+    }
   }
 }
 BlueStore::OmapIteratorImpl::~OmapIteratorImpl()
@@ -13702,7 +13706,7 @@ int BlueStore::omap_check_keys(
 ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   CollectionHandle &c_,              ///< [in] collection
   const ghobject_t &oid,  ///< [in] object
-  std::string start_from  ///< [in] key the iterator should point to at the beginning
+  const omap_iter_seek_t start_from  ///< [in] where the iterator should point to at the beginning
   )
 {
   Collection *c = static_cast<Collection *>(c_.get());

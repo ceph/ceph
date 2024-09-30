@@ -761,10 +761,18 @@ public:
    *
    * @return iterator, null on error
    */
+  struct omap_iter_seek_t {
+    std::string seek_position;
+    enum {
+      LOWER_BOUND,
+      UPPER_BOUND
+    } seek_type = LOWER_BOUND;
+    static omap_iter_seek_t min_lower_bound() { return {}; }
+  };
   virtual ObjectMap::ObjectMapIterator get_omap_iterator(
     CollectionHandle &c,   ///< [in] collection
     const ghobject_t &oid, ///< [in] object
-    std::string start_from = std::string{}  ///< [in] key the iterator should point to at the beginning
+    omap_iter_seek_t start_from = omap_iter_seek_t::min_lower_bound()  ///< [in] where the iterator should point to at the beginning
     ) = 0;
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
