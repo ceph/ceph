@@ -550,7 +550,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             type='bool',
             default=False,
             desc='Pause the threads that asynchronously purge deleted/trashed '
-                 'subvolumes')
+                 'subvolumes'),
+        Option(
+            'pause_cloning',
+            type='bool',
+            default=False,
+            desc='Pause the threads that asynchronously clone snapshots')
     ]
 
     def __init__(self, *args, **kwargs):
@@ -561,6 +566,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.periodic_async_work = False
         self.snapshot_clone_no_wait = None
         self.pause_purging = False
+        self.pause_cloning = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -602,6 +608,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                             self.vc.purge_queue.pause()
                         else:
                             self.vc.purge_queue.resume()
+                    elif opt['name'] == "pause_cloning":
+                        if self.pause_cloning:
+                            self.vc.cloner.pause()
+                        else:
+                            self.vc.cloner.resume()
+
 
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
