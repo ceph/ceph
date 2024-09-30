@@ -10761,7 +10761,6 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
         goto success;
     }
 
-    clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
     // reverify size
     {
       r = clnt->_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
@@ -10772,14 +10771,6 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
     // eof?  short read.
     if ((uint64_t)pos >= in->size)
       goto success;
-
-    {
-      int have_caps2 = 0;
-      r = clnt->get_caps(f, CEPH_CAP_FILE_RD, have_caps, &have_caps2, -1);
-      if (r < 0) {
-        goto error;
-      }
-    }
 
     wanted = left;
     retry();
