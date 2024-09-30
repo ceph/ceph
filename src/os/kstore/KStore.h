@@ -172,7 +172,7 @@ public:
     KeyValueDB::Iterator it;
     std::string head, tail;
   public:
-    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it, const omap_iter_seek_t& start_from);
     int seek_to_first() override;
     int upper_bound(const std::string &after) override;
     int lower_bound(const std::string &to) override;

@@ -1565,14 +1565,20 @@ out:
 // omap reads
 
 KStore::OmapIteratorImpl::OmapIteratorImpl(
-  CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
+  CollectionRef c, OnodeRef o, KeyValueDB::Iterator it, const omap_iter_seek_t& start_from)
   : c(c), o(o), it(it)
 {
   std::shared_lock l{c->lock};
   if (o->onode.omap_head) {
     get_omap_key(o->onode.omap_head, string(), &head);
     get_omap_tail(o->onode.omap_head, &tail);
-    it->lower_bound(head);
+    string key;
+    get_omap_key(o->onode.omap_head, start_from.seek_position, &key);
+    if (start_from.seek_type == omap_iter_seek_t::LOWER_BOUND) {
+      it->lower_bound(key);
+    } else {
+      it->upper_bound(key);
+    }
   }
 }
 
@@ -1864,7 +1870,7 @@ ObjectMap::ObjectMapIterator KStore::get_omap_iterator(
   o->flush();
   dout(10) << __func__ << " header = " << o->onode.omap_head <<dendl;
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
-  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
+  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it, start_from));
 }
 
 
