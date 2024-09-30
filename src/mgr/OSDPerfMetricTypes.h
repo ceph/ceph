@@ -7,6 +7,8 @@
 #include "common/ceph_json.h"
 #include "include/denc.h"
 #include "include/stringify.h"
+#include "common/Formatter.h"
+
 #include "mgr/Types.h"
 
 #include <regex>
@@ -70,7 +72,6 @@ struct OSDPerfMetricSubKeyDescriptor {
     denc(v.regex_str, p);
     DENC_FINISH(p);
   }
-
   void dump(ceph::Formatter *f) const {
     f->dump_unsigned("type", static_cast<uint8_t>(type));
     f->dump_string("regex", regex_str);
