@@ -2078,14 +2078,6 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_data_log_obj_prefix
-  type: str
-  level: dev
-  default: data_log
-  fmt_desc: The object name prefix for the data log.
-  services:
-  - rgw
-  with_legacy: true
 - name: rgw_data_sync_poll_interval
   type: int
   level: dev
