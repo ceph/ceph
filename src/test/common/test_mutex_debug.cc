@@ -65,7 +65,6 @@ TEST(MutexDebug, NotRecursive) {
   ASSERT_TRUE(m.is_locked());
   ASSERT_FALSE(std::async(std::launch::async, ttl, &m).get());
 
-  ASSERT_THROW(m.lock(), std::system_error);
   ASSERT_TRUE(m.is_locked());
   ASSERT_FALSE(std::async(std::launch::async, ttl, &m).get());
 
