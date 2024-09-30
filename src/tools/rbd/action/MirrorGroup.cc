@@ -619,19 +619,19 @@ int execute_snapshot(const po::variables_map &vm,
 
 Shell::Action action_enable(
   {"mirror", "group", "enable"}, {},
-  "Enable RBD mirroring for an group.", "",
+  "Enable RBD mirroring for a group.", "",
   &get_arguments_enable, &execute_enable);
 Shell::Action action_disable(
   {"mirror", "group", "disable"}, {},
-  "Disable RBD mirroring for an group.", "",
+  "Disable RBD mirroring for a group.", "",
   &get_arguments_disable, &execute_disable);
 Shell::Action action_promote(
   {"mirror", "group", "promote"}, {},
-  "Promote an group to primary for RBD mirroring.", "",
+  "Promote a group to primary for RBD mirroring.", "",
   &get_arguments_promote, &execute_promote);
 Shell::Action action_demote(
   {"mirror", "group", "demote"}, {},
-  "Demote an group to non-primary for RBD mirroring.", "",
+  "Demote a group to non-primary for RBD mirroring.", "",
   &get_arguments, &execute_demote);
 Shell::Action action_resync(
   {"mirror", "group", "resync"}, {},
@@ -639,7 +639,7 @@ Shell::Action action_resync(
   &get_arguments, &execute_resync);
 Shell::Action action_status(
   {"mirror", "group", "status"}, {},
-  "Show RBD mirroring status for an group.", "",
+  "Show RBD mirroring status for a group.", "",
   &get_status_arguments, &execute_status);
 Shell::Action action_snapshot(
   {"mirror", "group", "snapshot"}, {},
