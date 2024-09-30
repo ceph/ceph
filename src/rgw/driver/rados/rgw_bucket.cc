@@ -2697,6 +2697,7 @@ class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   RGWSI_Zone* svc_zone{nullptr};
   RGWSI_Bucket* svc_bucket{nullptr};
   RGWSI_BucketIndex* svc_bi{nullptr};
+  RGWDataChangesLog *svc_datalog{nullptr};
 
   int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
                   const std::string& entry, RGWBucketCompleteInfo& bci,
@@ -2711,9 +2712,10 @@ class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   RGWBucketInstanceMetadataHandler(rgw::sal::Driver* driver,
                                    RGWSI_Zone* svc_zone,
                                    RGWSI_Bucket* svc_bucket,
-                                   RGWSI_BucketIndex* svc_bi)
+                                   RGWSI_BucketIndex* svc_bi,
+                                   RGWDataChangesLog *svc_datalog)
     : driver(driver), svc_zone(svc_zone),
-      svc_bucket(svc_bucket), svc_bi(svc_bi) {}
+      svc_bucket(svc_bucket), svc_bi(svc_bi), svc_datalog(svc_datalog) {}
 
   string get_type() override { return "bucket.instance"; }
 
@@ -2885,7 +2887,7 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
       ldpp_dout(dpp, 10) << "store log layout type: " <<  bci.info.layout.logs.back().layout.type << dendl;
       for (int i = 0; i < shards_num; ++i) {
         ldpp_dout(dpp, 10) << "adding to data_log shard_id: " << i << " of gen:" << index_log.gen << dendl;
-        ret = bihandler->svc.datalog_rados->add_entry(dpp, bci.info, index_log, i,
+        int ret = svc_datalog->add_entry(dpp, bci.info, index_log, i,
                                                     null_yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "WARNING: failed writing data log for bucket="
@@ -3052,7 +3054,8 @@ RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
                            RGWSI_Bucket_Sync *bucket_sync_svc,
                            RGWSI_BucketIndex *bi_svc,
-                           RGWSI_User* user_svc)
+                           RGWSI_User* user_svc,
+                           RGWDataChangesLog *datalog_svc)
   : cct(zone_svc->ctx())
 {
   svc.zone = zone_svc;
@@ -3060,6 +3063,7 @@ RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
   svc.bucket_sync = bucket_sync_svc;
   svc.bi = bi_svc;
   svc.user = user_svc;
+  svc.datalog_rados = datalog_svc;
 }
 
 void RGWBucketCtl::init(RGWUserCtl *user_ctl,
@@ -3548,11 +3552,13 @@ auto create_bucket_metadata_handler(librados::Rados& rados,
 auto create_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
                                              RGWSI_Zone* svc_zone,
                                              RGWSI_Bucket* svc_bucket,
-                                             RGWSI_BucketIndex* svc_bi)
+                                             RGWSI_BucketIndex* svc_bi,
+                                             RGWDataChangesLog *svc_datalog)
     -> std::unique_ptr<RGWMetadataHandler>
 {
   return std::make_unique<RGWBucketInstanceMetadataHandler>(driver, svc_zone,
-                                                            svc_bucket, svc_bi);
+                                                            svc_bucket, svc_bi,
+                                                            svc_datalog);
 }
 
 auto create_archive_bucket_metadata_handler(librados::Rados& rados,
@@ -3567,11 +3573,13 @@ auto create_archive_bucket_metadata_handler(librados::Rados& rados,
 auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
                                                      RGWSI_Zone* svc_zone,
                                                      RGWSI_Bucket* svc_bucket,
-                                                     RGWSI_BucketIndex* svc_bi)
+                                                     RGWSI_BucketIndex* svc_bi,
+                                                     RGWDataChangesLog *svc_datalog)
     -> std::unique_ptr<RGWMetadataHandler>
 {
   return std::make_unique<RGWArchiveBucketInstanceMetadataHandler>(driver, svc_zone,
-                                                                   svc_bucket, svc_bi);
+                                                                   svc_bucket, svc_bi,
+                                                                   svc_datalog);
 }
 
 void RGWBucketEntryPoint::generate_test_instances(list<RGWBucketEntryPoint*>& o)

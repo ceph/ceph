@@ -584,7 +584,6 @@ class BucketTrimInstanceCR : public RGWCoroutine {
     if (clean_info)
       return 0;
 
-
     if (pbucket_info->layout.logs.front().gen < totrim.gen) {
       clean_info = {*pbucket_info, {}};
       auto log = clean_info->first.layout.logs.cbegin();

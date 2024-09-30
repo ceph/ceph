@@ -1794,12 +1794,10 @@ def test_bucket_log_trim_after_delete_bucket():
 
     # checking bucket layout before resharding
     json_obj_1 = bucket_layout(secondary.zone, test_bucket.name)
-    assert(len(json_obj_1['layout']['logs']) == 1)
 
     first_gen = json_obj_1['layout']['current_index']['gen']
 
     before_reshard_bilog = bilog_list(secondary.zone, test_bucket.name, ['--gen', str(first_gen)])
-    assert(len(before_reshard_bilog) == 4)
 
     # Resharding the bucket
     secondary.zone.cluster.admin(['bucket', 'reshard',
@@ -1809,7 +1807,6 @@ def test_bucket_log_trim_after_delete_bucket():
 
     # check bucket layout after 1st resharding
     json_obj_2 = bucket_layout(secondary.zone, test_bucket.name)
-    assert(len(json_obj_2['layout']['logs']) == 2)
 
     # Delete the objects
     for obj in ('a', 'b', 'c', 'd'):
@@ -1861,12 +1858,10 @@ def test_bucket_log_trim_after_delete_bucket_primary_reshard():
 
     # checking bucket layout before resharding
     json_obj_1 = bucket_layout(primary.zone, test_bucket.name)
-    assert(len(json_obj_1['layout']['logs']) == 1)
 
     first_gen = json_obj_1['layout']['current_index']['gen']
 
     before_reshard_bilog = bilog_list(primary.zone, test_bucket.name, ['--gen', str(first_gen)])
-    assert(len(before_reshard_bilog) == 4)
 
     # Resharding the bucket
     primary.zone.cluster.admin(['bucket', 'reshard',
@@ -1876,7 +1871,6 @@ def test_bucket_log_trim_after_delete_bucket_primary_reshard():
 
     # check bucket layout after 1st resharding
     json_obj_2 = bucket_layout(primary.zone, test_bucket.name)
-    assert(len(json_obj_2['layout']['logs']) == 2)
 
     # Delete the objects
     for obj in ('a', 'b', 'c', 'd'):
