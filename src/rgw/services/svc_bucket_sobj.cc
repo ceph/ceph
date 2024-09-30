@@ -526,8 +526,7 @@ int RGWSI_Bucket_SObj::remove_bucket_instance_info(const string& key,
      */
   }
 
-  return svc.mdlog->complete_entry(dpp, y, "bucket.instance",
-                                   key, objv_tracker);
+  return 0;
 }
 
 int RGWSI_Bucket_SObj::read_bucket_stats(const RGWBucketInfo& bucket_info,

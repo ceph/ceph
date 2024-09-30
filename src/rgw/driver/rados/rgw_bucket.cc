@@ -2975,23 +2975,7 @@ int RGWBucketInstanceMetadataHandler::put_post(
 int RGWBucketInstanceMetadataHandler::remove(std::string& entry, RGWObjVersionTracker& objv_tracker,
                                              optional_yield y, const DoutPrefixProvider *dpp)
 {
-  RGWBucketCompleteInfo bci;
-  int ret = svc_bucket->read_bucket_instance_info(entry, &bci.info, nullptr,
-                                                  &bci.attrs, y, dpp);
-  if (ret == -ENOENT) {
-    return 0;
-  }
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = svc_bucket->remove_bucket_instance_info(
-      entry, bci.info, &bci.info.objv_tracker, y, dpp);
-  if (ret < 0)
-    return ret;
-  std::ignore = update_bucket_topic_mappings(dpp, &bci, /*current_bci=*/nullptr,
-                                             driver);
-  return 0;
+  return 0; // skip bucket instance removal. each zone will handle it independently during trimming
 }
 
 int RGWBucketInstanceMetadataHandler::mutate(const std::string& entry, const ceph::real_time& mtime,
