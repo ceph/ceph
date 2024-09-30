@@ -76,12 +76,12 @@ struct Handler {
   librados::IoCtx ctx;
   AioResult& r;
   // write callback
-  void operator()(boost::system::error_code ec) const {
+  void operator()(boost::system::error_code ec, version_t) const {
     r.result = -ec.value();
     throttle->put(r);
   }
   // read callback
-  void operator()(boost::system::error_code ec, bufferlist bl) const {
+  void operator()(boost::system::error_code ec, version_t, bufferlist bl) const {
     r.result = -ec.value();
     r.data = std::move(bl);
     throttle->put(r);

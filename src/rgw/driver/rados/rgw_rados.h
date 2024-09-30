@@ -1642,8 +1642,8 @@ public:
    * will encode that info as a suggested update.)
    */
   int check_disk_state(const DoutPrefixProvider *dpp,
-                       librados::IoCtx io_ctx,
                        RGWBucketInfo& bucket_info,
+                       const rgw_bucket_entry_ver& index_ver,
                        rgw_bucket_dir_entry& list_state,
                        rgw_bucket_dir_entry& object,
                        bufferlist& suggested_updates,
