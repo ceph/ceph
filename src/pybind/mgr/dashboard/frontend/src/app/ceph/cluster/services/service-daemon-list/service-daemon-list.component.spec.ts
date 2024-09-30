@@ -27,7 +27,7 @@ describe('ServiceDaemonListComponent', () => {
       hostname: 'osd0',
       container_id: '003c10beafc8c27b635bcdfed1ed832e4c1005be89bb1bb05ad4cc6c2b98e41b',
       container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
-      container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+      container_image_name: 'quay.io/ceph/daemon-base:latest-master-devel',
       daemon_id: '3',
       daemon_type: 'osd',
       daemon_name: 'osd.3',
@@ -47,7 +47,7 @@ describe('ServiceDaemonListComponent', () => {
       hostname: 'osd0',
       container_id: 'baeec41a01374b3ed41016d542d19aef4a70d69c27274f271e26381a0cc58e7a',
       container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
-      container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+      container_image_name: 'quay.io/ceph/daemon-base:latest-master-devel',
       daemon_id: '4',
       daemon_type: 'osd',
       daemon_name: 'osd.4',
@@ -63,7 +63,7 @@ describe('ServiceDaemonListComponent', () => {
       hostname: 'osd0',
       container_id: '8483de277e365bea4365cee9e1f26606be85c471e4da5d51f57e4b85a42c616e',
       container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
-      container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+      container_image_name: 'quay.io/ceph/daemon-base:latest-master-devel',
       daemon_id: '5',
       daemon_type: 'osd',
       daemon_name: 'osd.5',
@@ -79,7 +79,7 @@ describe('ServiceDaemonListComponent', () => {
       hostname: 'mon0',
       container_id: '6ca0574f47e300a6979eaf4e7c283a8c4325c2235ae60358482fc4cd58844a21',
       container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
-      container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+      container_image_name: 'quay.io/ceph/daemon-base:latest-master-devel',
       daemon_id: 'a',
       daemon_name: 'mon.a',
       daemon_type: 'mon',
@@ -99,7 +99,7 @@ describe('ServiceDaemonListComponent', () => {
       service_name: 'osd',
       status: {
         container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
-        container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+        container_image_name: 'quay.io/ceph/daemon-base:latest-master-devel',
         size: 3,
         running: 3,
         last_refresh: '2020-02-25T04:33:26.465699'
@@ -111,7 +111,7 @@ describe('ServiceDaemonListComponent', () => {
       service_name: 'crash',
       status: {
         container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
-        container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+        container_image_name: 'quay.io/ceph/daemon-base:latest-master-devel',
         size: 1,
         running: 1,
         last_refresh: '2020-02-25T04:33:26.465766'
