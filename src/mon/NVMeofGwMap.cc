@@ -16,7 +16,9 @@
 #include "NVMeofGwMon.h"
 #include "NVMeofGwMap.h"
 #include "OSDMonitor.h"
+#include "mon/health_check.h"
 
+using std::list;
 using std::map;
 using std::make_pair;
 using std::ostream;
@@ -878,6 +880,29 @@ struct CMonRequestProposal : public Context {
     }
   }
 };
+
+void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const 
+{
+  list<string> detail;
+  for (const auto& created_map_pair: created_gws) {
+    const auto& group_key = created_map_pair.first;
+    auto& group = group_key.second;
+    const NvmeGwMonStates& gw_created_map = created_map_pair.second;
+    if ( gw_created_map.size() == 1) {
+      ostringstream ss;
+      ss << "NVMeoF Gateway Group '" << group << "' has 1 gateway." ;
+      detail.push_back(ss.str());
+    }
+  }
+  if (!detail.empty()) {
+    ostringstream ss;
+    ss << detail.size() << " group(s) have only 1 nvmeof gateway"
+      << "; HA is not possible with single gateway.";
+    auto& d = checks->add("NVMEOF_SINGLE_GATEWAY", HEALTH_WARN,
+        ss.str(), detail.size());
+    d.detail.swap(detail);
+  }
+}
 
 int NVMeofGwMap::blocklist_gw(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key,

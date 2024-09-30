@@ -1633,6 +1633,18 @@ We encourage you to fix this by making the weights even on both dividing buckets
 This can be done by making sure the combined weight of the OSDs on each dividing
 bucket are the same.
 
+NVMeoF Gateway
+--------------
+
+NVMOEF_SINGLE_GATEWAY
+__________________________________
+
+One of the gateway group has only one gateway. This is not ideal because it makes
+high availability (HA) impossible with a single gatway in a group. This can lead to 
+problems with failover and failback operations for the NVMeoF gateway.
+
+It's recommended to have multiple NVMeoF gateways in a group.
+
 Miscellaneous
 -------------
 
