@@ -204,7 +204,7 @@ void OpHistory::dump_slow_ops(utime_t now, Formatter *f, set<string> filters)
   cleanup(now);
   f->open_object_section("OpHistory slow ops");
   f->dump_int("num to keep", history_slow_op_size.load());
-  f->dump_int("threshold to keep", history_slow_op_threshold.load());
+  f->dump_float("threshold to keep", history_slow_op_threshold.load());
   {
     f->open_array_section("Ops");
     for ([[maybe_unused]] const auto& [t, op] : slow_op) {
