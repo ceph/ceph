@@ -54,9 +54,9 @@ seastar::future<> InternalClientRequest::start()
 {
   track_event<StartEvent>();
   return crimson::common::handle_system_shutdown([this] {
-    return seastar::repeat([this] {
       LOG_PREFIX(InternalClientRequest::start);
       DEBUGI("{}: in repeat", *this);
+
       return interruptor::with_interruption([this]() mutable {
         return enter_stage<interruptor>(
 	  client_pp().wait_for_active
@@ -121,17 +121,12 @@ seastar::future<> InternalClientRequest::start()
           PG::load_obc_ertr::all_same_way([] {
             return seastar::now();
           })
-        ).then_interruptible([] {
-          return seastar::stop_iteration::yes;
-        });
-      }, [this](std::exception_ptr eptr) {
-        if (should_abort_request(*this, std::move(eptr))) {
-          return seastar::stop_iteration::yes;
-        } else {
-          return seastar::stop_iteration::no;
-        }
-      }, pg, start_epoch);
-    }).then([this] {
+	);
+      }, [](std::exception_ptr eptr) {
+	return seastar::now();
+      }, pg, start_epoch
+
+    ).then([this] {
       track_event<CompletionEvent>();
     }).handle_exception_type([](std::system_error &error) {
       logger().debug("error {}, message: {}", error.code(), error.what());
