@@ -44,7 +44,6 @@
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "rgw_putobj.h"
-#include "rgw_sal.h"
 #include "rgw_compression_types.h"
 #include "rgw_log.h"
 
