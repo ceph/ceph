@@ -213,6 +213,11 @@ struct ECCommon {
     uint64_t offset;
     uint64_t size;
     uint32_t flags;
+    ec_align_t(std::pair<uint64_t, uint64_t> p, uint32_t flags)
+      : offset(p.first), size(p.second), flags(flags) {}
+    ec_align_t(uint64_t offset, uint64_t size, uint32_t flags)
+      : offset(offset), size(size), flags(flags) {}
+    bool operator==(const ec_align_t &other) const;
   };
   friend std::ostream &operator<<(std::ostream &lhs, const ec_align_t &rhs);
 
@@ -238,15 +243,22 @@ struct ECCommon {
     bool fast_read,
     GenContextURef<ec_extents_t &&> &&func) = 0;
 
+  struct shard_read_t {
+    extent_set extents;
+    std::vector<std::pair<int, int>> subchunk;
+    bool operator==(const shard_read_t &other) const;
+  };
+  friend std::ostream &operator<<(std::ostream &lhs, const shard_read_t &rhs);
+
   struct read_request_t {
     const std::list<ec_align_t> to_read;
-    std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
+    std::map<pg_shard_t, shard_read_t> shard_reads;
     bool want_attrs;
     read_request_t(
       const std::list<ec_align_t> &to_read,
-      const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
       bool want_attrs)
-      : to_read(to_read), need(need), want_attrs(want_attrs) {}
+      : to_read(to_read), want_attrs(want_attrs) {}
+    bool operator==(const read_request_t &other) const;
   };
   friend std::ostream &operator<<(std::ostream &lhs, const read_request_t &rhs);
   struct ReadOp;
@@ -275,9 +287,7 @@ struct ECCommon {
     int r;
     std::map<pg_shard_t, int> errors;
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs;
-    std::list<
-      boost::tuple<
-	uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > > returned;
+    std::map<int, extent_map> buffers_read;
     read_result_t() : r(0) {}
   };
 
@@ -361,18 +371,7 @@ struct ECCommon {
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
         want_to_read(std::move(_want_to_read)),
-	to_read(std::move(_to_read)) {
-      for (auto &&hpair: to_read) {
-	auto &returned = complete[hpair.first].returned;
-	for (auto &&extent: hpair.second.to_read) {
-	  returned.push_back(
-	    boost::make_tuple(
-	      extent.offset,
-	      extent.size,
-	      std::map<pg_shard_t, ceph::buffer::list>()));
-	}
-      }
-    }
+	to_read(std::move(_to_read)) {}
     ReadOp() = delete;
     ReadOp(const ReadOp &) = delete; // due to on_complete being unique_ptr
     ReadOp(ReadOp &&) = default;
@@ -452,16 +451,9 @@ struct ECCommon {
      *
      */
     void get_min_want_to_read_shards(
-      uint64_t offset,				///< [in]
-      uint64_t length,    			///< [in]
-      std::set<int> *want_to_read               ///< [out]
+      const ec_align_t &to_read,                  ///< [in]
+      std::map<int, extent_set> &want_shard_reads ///< [out]
       );
-    static void get_min_want_to_read_shards(
-      const uint64_t offset,
-      const uint64_t length,
-      const ECUtil::stripe_info_t& sinfo,
-      const std::vector<int>& chunk_mapping,
-      std::set<int> *want_to_read);
 
     int get_remaining_shards(
       const hobject_t &hoid,
@@ -481,18 +473,26 @@ struct ECCommon {
     friend std::ostream &operator<<(std::ostream &lhs, const ReadOp &rhs);
     friend struct FinishReadOp;
 
-    void get_want_to_read_shards(std::set<int> *want_to_read) const;
+    void get_want_to_read_shards(
+      const std::list<ec_align_t> &to_read,
+      std::map<int, extent_set> &want_shard_reads);
 
     /// Returns to_read replicas sufficient to reconstruct want
     int get_min_avail_to_read_shards(
       const hobject_t &hoid,     ///< [in] object
-      const std::set<int> &want,      ///< [in] desired shards
+      const std::map<int, extent_set> &want_shard_read, ///< [in] desired shards
       bool for_recovery,         ///< [in] true if we may use non-acting replicas
       bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
-      std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
-      ); ///< @return error code, 0 on success
+      read_request_t& read_request ///< [out] shard_reads, corresponding subchunks / other sub reads to read
+    ); ///< @return error code, 0 on success
 
     void schedule_recovery_work();
+
+    uint64_t shard_buffer_list_to_chunk_buffer_list(
+      ec_align_t &read,
+      std::map<int, extent_map> buffers_read,
+      std::list<std::map<int, bufferlist>> &chunk_bufferlists,
+      std::list<std::set<int>> &want_to_reads);
   };
 
   /**
