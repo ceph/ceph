@@ -3004,16 +3004,9 @@ RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
   svc.user = user_svc;
 }
 
-void RGWBucketCtl::init(RGWUserCtl *user_ctl,
-                        RGWDataChangesLog *datalog,
-                        const DoutPrefixProvider *dpp)
+void RGWBucketCtl::init(RGWUserCtl *user_ctl)
 {
   ctl.user = user_ctl;
-
-  datalog->set_bucket_filter(
-    [this](const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp) {
-      return bucket_exports_data(bucket, y, dpp);
-    });
 }
 
 int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
@@ -3447,21 +3440,6 @@ int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,
     return r;
   }
   return 0;
-}
-
-int RGWBucketCtl::bucket_exports_data(const rgw_bucket& bucket,
-                                      optional_yield y,
-                                      const DoutPrefixProvider *dpp)
-{
-
-  RGWBucketSyncPolicyHandlerRef handler;
-
-  int r = get_sync_policy_handler(std::nullopt, bucket, &handler, y, dpp);
-  if (r < 0) {
-    return r;
-  }
-
-  return handler->bucket_exports_data();
 }
 
 int RGWBucketCtl::bucket_imports_data(const rgw_bucket& bucket,
