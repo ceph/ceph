@@ -23,6 +23,7 @@
 #include "common/BackTrace.h"
 #include "common/ceph_time.h"
 
+#include "rgw_asio_thread.h"
 #include "rgw_cksum.h"
 #include "rgw_sal.h"
 #include "rgw_zone.h"
@@ -5230,6 +5231,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     }
 
    /* remove bucket index objects asynchronously by best effort */
+    maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
     (void) CLSRGWIssueBucketIndexClean(index_pool,
 				       bucket_objs,
 				       cct->_conf->rgw_bucket_index_max_aio)();
@@ -5369,33 +5371,41 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWRados::send_chain_to_gc(cls
 void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain,
                                   const string& tag, optional_yield y)
 {
-  string last_pool;
-  std::unique_ptr<IoCtx> ctx(new IoCtx);
-  int ret = 0;
-  for (auto liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
-    cls_rgw_obj& obj = *liter;
-    if (obj.pool != last_pool) {
-      ctx.reset(new IoCtx);
-      ret = rgw_init_ioctx(dpp, get_rados_handle(), obj.pool, *ctx);
-      if (ret < 0) {
-        last_pool = "";
-        ldpp_dout(dpp, 0) << "ERROR: failed to create ioctx pool=" <<
-        obj.pool << dendl;
-        continue;
-      }
-      last_pool = obj.pool;
-    }
-    ctx->locator_set_key(obj.loc);
-    const string& oid = obj.key.name; /* just stored raw oid there */
-    ldpp_dout(dpp, 5) << "delete_objs_inline: removing " << obj.pool <<
-    ":" << obj.key.name << dendl;
+  if (chain.objs.empty()) {
+    return;
+  }
+
+  // initialize an IoCtx for the first object's pool. RGWObjManifest uses the
+  // same pool for all tail objects
+  auto obj = chain.objs.begin();
+
+  librados::IoCtx ioctx;
+  int ret = rgw_init_ioctx(dpp, get_rados_handle(), obj->pool, ioctx);
+  if (ret < 0) {
+    return;
+  }
+
+  // issue deletions in parallel, up to max_aio at a time
+  auto aio = rgw::make_throttle(cct->_conf->rgw_multi_obj_del_max_aio, y);
+  static constexpr uint64_t cost = 1; // 1 throttle unit per request
+  static constexpr uint64_t id = 0; // ids unused
+
+  for (; obj != chain.objs.end(); ++obj) {
     ObjectWriteOperation op;
     cls_refcount_put(op, tag, true);
-    ret = rgw_rados_operate(dpp, *ctx, oid, &op, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 5) << "delete_objs_inline: refcount put returned error " << ret << dendl;
-    }
+
+    rgw_raw_obj raw;
+    raw.pool = std::move(obj->pool);
+    raw.oid = std::move(obj->key.name);
+    raw.loc = std::move(obj->loc);
+
+    auto completed = aio->get(std::move(raw), rgw::Aio::librados_op(
+            ioctx, std::move(op), y), cost, id);
+    std::ignore = rgw::check_for_errors(completed);
   }
+
+  auto completed = aio->drain();
+  std::ignore = rgw::check_for_errors(completed);
 }
 
 static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
@@ -5436,6 +5446,7 @@ int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, RGWBucketInfo& b
     bucket_objs_ret.emplace(iter.first, rgw_cls_check_index_ret());
   }
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   ret = CLSRGWIssueBucketCheck(index_pool, oids, bucket_objs_ret, cct->_conf->rgw_bucket_index_max_aio)();
   if (ret < 0) {
     return ret;
@@ -5460,6 +5471,7 @@ int RGWRados::bucket_rebuild_index(const DoutPrefixProvider *dpp, RGWBucketInfo&
     return r;
   }
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   return CLSRGWIssueBucketRebuild(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
@@ -5611,6 +5623,8 @@ int RGWRados::bucket_set_reshard(const DoutPrefixProvider *dpp,
       cpp_strerror(-r) << ")" << dendl;
     return r;
   }
+
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   r = CLSRGWIssueSetBucketResharding(index_pool, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
@@ -9247,17 +9261,6 @@ int RGWRados::bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_
   return cls_rgw_bi_get(ref.ioctx, ref.obj.oid, index_type, key, entry);
 }
 
-int RGWRados::bi_get_vals(BucketShard& bs, set<string>& log_entries_wanted,
-                          list<rgw_cls_bi_entry> *entries, optional_yield y)
-{
-  auto& ref = bs.bucket_obj;
-  int ret = cls_rgw_bi_get_vals(ref.ioctx, ref.obj.oid, log_entries_wanted, entries);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}
-
 void RGWRados::bi_put(ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry, optional_yield y)
 {
   auto& ref = bs.bucket_obj;
@@ -9529,6 +9532,7 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(const DoutPrefixProvider *dpp, RGWB
   if (r < 0)
     return r;
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   return CLSRGWIssueSetTagTimeout(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio, timeout)();
 }
 
@@ -9660,6 +9664,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   auto& ioctx = index_pool;
   std::map<int, rgw_cls_list_ret> shard_list_results;
   cls_rgw_obj_key start_after_key(start_after.name, start_after.instance);
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   r = CLSRGWIssueBucketList(ioctx, start_after_key, prefix, delimiter,
 			    num_entries_per_shard,
 			    list_versions, shard_oids, shard_list_results,
@@ -9854,6 +9859,8 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   for (auto& miter : updates) {
     if (miter.second.length()) {
       ObjectWriteOperation o;
+      o.assert_exists();
+      cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
       cls_rgw_suggest_changes(o, miter.second);
       // we don't care if we lose suggested updates, send them off blindly
       AioCompletion *c =
@@ -10089,6 +10096,8 @@ check_updates:
   for (; miter != updates.end(); ++miter) {
     if (miter->second.length()) {
       ObjectWriteOperation o;
+      o.assert_exists();
+      cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
       cls_rgw_suggest_changes(o, miter->second);
       // we don't care if we lose suggested updates, send them off blindly
       AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
@@ -10440,6 +10449,7 @@ int RGWRados::cls_bucket_head(const DoutPrefixProvider *dpp, const RGWBucketInfo
     return r;
   }
 
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   r = CLSRGWIssueGetDirHeader(index_pool, oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0) {
     ldpp_dout(dpp, 20) << "cls_bucket_head: CLSRGWIssueGetDirHeader() returned "

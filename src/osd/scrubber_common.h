@@ -293,88 +293,6 @@ struct PgScrubBeListener {
 
 
 /**
- * Flags affecting the scheduling and behaviour of the *next* scrub.
- *
- * we hold two of these flag collections: one
- * for the next scrub, and one frozen at initiation (i.e. in pg::queue_scrub())
- */
-struct requested_scrub_t {
-
-  // flags to indicate explicitly requested scrubs (by admin):
-  // bool must_scrub, must_deep_scrub, must_repair, need_auto;
-
-  /**
-   * 'must_scrub' is set by an admin command (or by need_auto).
-   *  Affects the priority of the scrubbing, and the sleep periods
-   *  during the scrub.
-   */
-  bool must_scrub{false};
-
-  /**
-   * scrub must not be aborted.
-   * Set for explicitly requested scrubs, and for scrubs originated by the
-   * pairing process with the 'repair' flag set (in the RequestScrub event).
-   *
-   * Will be copied into the 'required' scrub flag upon scrub start.
-   */
-  bool req_scrub{false};
-
-  /**
-   * Set from:
-   *  - scrub_requested() with need_auto param set, which only happens in
-   *  - scrub_finish() - if can_autorepair is set, and we have errors
-   *
-   * If set, will prevent the OSD from casually postponing our scrub. When
-   * scrubbing starts, will cause must_scrub, must_deep_scrub and auto_repair to
-   * be set.
-   */
-  bool need_auto{false};
-
-  /**
-   * Set for scrub-after-recovery just before we initiate the recovery deep
-   * scrub, or if scrub_requested() was called with either need_auto ot repair.
-   * Affects PG_STATE_DEEP_SCRUB.
-   */
-  bool must_deep_scrub{false};
-
-  /**
-   * If set, we should see must_deep_scrub & must_scrub, too
-   *
-   * - 'must_repair' is checked by the OSD when scheduling the scrubs.
-   * - also checked & cleared at pg::queue_scrub()
-   */
-  bool must_repair{false};
-
-  /*
-   * the value of auto_repair is determined in sched_scrub() (once per scrub.
-   * previous value is not remembered). Set if
-   * - allowed by configuration and backend, and
-   * - for periodic scrubs: time_for_deep was just set RRR
-   */
-  bool auto_repair{false};
-};
-
-std::ostream& operator<<(std::ostream& out, const requested_scrub_t& sf);
-
-template <>
-struct fmt::formatter<requested_scrub_t> {
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const requested_scrub_t& rs, FormatContext& ctx) const
-  {
-    return fmt::format_to(ctx.out(),
-                          "(plnd:{}{}{}{}{}{})",
-                          rs.must_repair ? " must_repair" : "",
-                          rs.auto_repair ? " auto_repair" : "",
-                          rs.must_deep_scrub ? " must_deep_scrub" : "",
-                          rs.must_scrub ? " must_scrub" : "",
-                          rs.need_auto ? " need_auto" : "",
-                          rs.req_scrub ? " req_scrub" : "");
-  }
-};
-
-/**
  *  The interface used by the PG when requesting scrub-related info or services
  */
 struct ScrubPgIF {
@@ -484,12 +402,9 @@ struct ScrubPgIF {
   virtual Scrub::schedule_result_t start_scrub_session(
       scrub_level_t s_or_d,
       Scrub::OSDRestrictions osd_restrictions,
-      Scrub::ScrubPGPreconds pg_cond,
-      const requested_scrub_t& requested_flags) = 0;
+      Scrub::ScrubPGPreconds pg_cond) = 0;
 
-  virtual void set_op_parameters(
-      Scrub::ScrubPGPreconds pg_cond,
-      const requested_scrub_t&) = 0;
+  virtual void set_op_parameters(Scrub::ScrubPGPreconds pg_cond) = 0;
 
   /// stop any active scrubbing (on interval end) and unregister from
   /// the OSD scrub queue
@@ -517,11 +432,9 @@ struct ScrubPgIF {
   /// ... by requesting an "operator initiated" scrub
   virtual void on_operator_forced_scrub(
     ceph::Formatter* f,
-    scrub_level_t scrub_level,
-    requested_scrub_t& request_flags) = 0;
+    scrub_level_t scrub_level) = 0;
 
-  virtual void dump_scrubber(ceph::Formatter* f,
-			     const requested_scrub_t& request_flags) const = 0;
+  virtual void dump_scrubber(ceph::Formatter* f) const = 0;
 
   /**
    * Return true if soid is currently being scrubbed and pending IOs should
@@ -586,8 +499,7 @@ struct ScrubPgIF {
 
   virtual scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
-      scrub_type_t scrub_type,
-      requested_scrub_t& req_flags) = 0;
+      scrub_type_t scrub_type) = 0;
 
   /**
    * let the scrubber know that a recovery operation has completed.

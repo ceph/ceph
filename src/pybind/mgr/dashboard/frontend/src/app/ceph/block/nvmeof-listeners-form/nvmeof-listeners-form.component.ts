@@ -13,9 +13,9 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { HostService } from '~/app/shared/api/host.service';
-import { DaemonService } from '~/app/shared/api/daemon.service';
 import { map } from 'rxjs/operators';
 import { forkJoin } from 'rxjs';
+import { CephServiceSpec } from '~/app/shared/models/service.interface';
 
 @Component({
   selector: 'cd-nvmeof-listeners-form',
@@ -31,6 +31,7 @@ export class NvmeofListenersFormComponent implements OnInit {
   listenerForm: CdFormGroup;
   subsystemNQN: string;
   hosts: Array<object> = null;
+  group: string;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -42,8 +43,7 @@ export class NvmeofListenersFormComponent implements OnInit {
     private route: ActivatedRoute,
     public activeModal: NgbActiveModal,
     public formatterService: FormatterService,
-    public dimlessBinaryPipe: DimlessBinaryPipe,
-    private daemonService: DaemonService
+    public dimlessBinaryPipe: DimlessBinaryPipe
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
     this.hostPermission = this.authStorageService.getPermissions().hosts;
@@ -53,13 +53,20 @@ export class NvmeofListenersFormComponent implements OnInit {
 
   setHosts() {
     forkJoin({
-      daemons: this.daemonService.list(['nvmeof']),
+      gwGroups: this.nvmeofService.listGatewayGroups(),
       hosts: this.hostService.getAllHosts()
     })
       .pipe(
-        map(({ daemons, hosts }) => {
-          const hostNamesFromDaemon = daemons.map((daemon: any) => daemon.hostname);
-          return hosts.filter((host: any) => hostNamesFromDaemon.includes(host.hostname));
+        map(({ gwGroups, hosts }) => {
+          // Find the gateway hosts in current group
+          const selectedGwGroup: CephServiceSpec = gwGroups?.[0]?.find(
+            (gwGroup: CephServiceSpec) => gwGroup?.spec?.group === this.group
+          );
+          const gatewayHosts: string[] = selectedGwGroup?.placement?.hosts;
+          // Return the gateway hosts in current group with their metadata
+          return gatewayHosts
+            ? hosts.filter((host: any) => gatewayHosts.includes(host.hostname))
+            : [];
         })
       )
       .subscribe((nvmeofHosts: any[]) => {
@@ -71,7 +78,10 @@ export class NvmeofListenersFormComponent implements OnInit {
     this.createForm();
     this.action = this.actionLabels.CREATE;
     this.route.params.subscribe((params: { subsystem_nqn: string }) => {
-      this.subsystemNQN = params.subsystem_nqn;
+      this.subsystemNQN = params?.subsystem_nqn;
+    });
+    this.route.queryParams.subscribe((params) => {
+      this.group = params?.['group'];
     });
     this.setHosts();
   }
@@ -118,7 +128,9 @@ export class NvmeofListenersFormComponent implements OnInit {
           component.listenerForm.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.router.navigate([this.pageURL, { outlets: { modal: null } }]);
+          this.router.navigate([this.pageURL, { outlets: { modal: null } }], {
+            queryParams: { group: this.group }
+          });
         }
       });
   }

@@ -1,7 +1,17 @@
+import { BucketsPageHelper } from './buckets.po';
 import { MultisitePageHelper } from './multisite.po';
 
 describe('Multisite page', () => {
   const multisite = new MultisitePageHelper();
+  const buckets = new BucketsPageHelper();
+  const bucket_name = 'e2ebucket';
+
+  before(() => {
+    cy.login();
+    buckets.navigateTo('create');
+    buckets.create(bucket_name, BucketsPageHelper.USERS[0]);
+    buckets.getFirstTableCell(bucket_name).should('exist');
+  });
 
   beforeEach(() => {
     cy.login();
@@ -17,13 +27,13 @@ describe('Multisite page', () => {
   describe('create, edit & delete sync group policy', () => {
     it('should create policy', () => {
       multisite.navigateTo('create');
-      multisite.create('test', 'Enabled');
+      multisite.create('test', 'Enabled', bucket_name);
       multisite.getFirstTableCell('test').should('exist');
     });
 
     it('should edit policy status', () => {
       multisite.navigateTo();
-      multisite.edit('test', 'Forbidden');
+      multisite.edit('test', 'Forbidden', bucket_name);
     });
 
     it('should delete policy', () => {
@@ -36,7 +46,7 @@ describe('Multisite page', () => {
   describe.skip('create, edit & delete symmetrical sync Flow', () => {
     it('Preparing...(creating sync group policy)', () => {
       multisite.navigateTo('create');
-      multisite.create('test', 'Enabled');
+      multisite.create('test', 'Enabled', bucket_name);
       multisite.getFirstTableCell('test').should('exist');
     });
     describe('symmetrical Flow creation started', () => {

@@ -769,7 +769,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         formHelper.setValue('pool', 'rbd');
         formHelper.setValue('group', 'default');
         // mTLS disabled
-        formHelper.setValue('enable_auth', false);
+        formHelper.setValue('enable_mtls', false);
         component.onSubmit();
         expect(cephServiceService.update).toHaveBeenCalledWith({
           service_type: 'nvmeof',

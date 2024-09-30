@@ -232,7 +232,9 @@ Scrub::schedule_result_t OsdScrub::initiate_a_scrub(
     const Scrub::SchedEntry& candidate,
     Scrub::OSDRestrictions restrictions)
 {
-  dout(20) << fmt::format("trying pg[{}]", candidate.pgid) << dendl;
+  dout(20) << fmt::format(
+		  "trying pg[{}] (target:{})", candidate.pgid, candidate)
+	   << dendl;
 
   // we have a candidate to scrub. We need some PG information to
   // know if scrubbing is allowed

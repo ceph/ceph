@@ -59,12 +59,13 @@ using ceph::make_timespan;
 using ceph::mono_clock;
 using ceph::operator <<;
 
-KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
+KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv, const char* dev_name)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
     discard_callback(d_cb),
     discard_callback_priv(d_cbpriv),
     aio_stop(false),
+    discard_stop(false),
     aio_thread(this),
     injecting_crash(0)
 {
@@ -88,10 +89,25 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
     }
     io_queue = std::make_unique<aio_queue_t>(iodepth);
   }
+
+  char name[128];
+  sprintf(name, "blk-kernel-device-%s", dev_name);
+  PerfCountersBuilder b(cct, name,
+                       l_blk_kernel_device_first, l_blk_kernel_device_last);
+  b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_blk_kernel_device_discard_op, "discard_op",
+            "Number of discard ops issued to kernel device");
+
+  logger.reset(b.create_perf_counters());
+  cct->get_perfcounters_collection()->add(logger.get());
 }
 
 KernelDevice::~KernelDevice()
 {
+  if (logger) {
+    cct->get_perfcounters_collection()->remove(logger.get());
+    logger.reset();
+  }
   cct->_conf.remove_observer(this);
 }
 
@@ -783,6 +799,7 @@ void KernelDevice::_discard_thread(uint64_t tid)
       discard_running ++;
       l.unlock();
       dout(20) << __func__ << " finishing" << dendl;
+      logger->inc(l_blk_kernel_device_discard_op, discard_processing.size());
       for (auto p = discard_processing.begin(); p != discard_processing.end(); ++p) {
         _discard(p.get_start(), p.get_len());
       }

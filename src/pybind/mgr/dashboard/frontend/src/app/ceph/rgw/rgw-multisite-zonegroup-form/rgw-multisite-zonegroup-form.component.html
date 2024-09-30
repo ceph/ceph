@@ -58,7 +58,7 @@
             <cd-helper i18n>Zone group doesn't belong to the default realm.</cd-helper>
           </span>
           <cd-helper *ngIf="action === 'edit' && !info.data.is_default">
-            <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
+            <span i18n>Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to follow the failover mechanism</span>
           </cd-helper>
           <cd-helper *ngIf="action === 'edit' && info.data.is_default">
             <span i18n>You cannot unset the default flag.</span>
@@ -76,7 +76,7 @@
             <cd-helper i18n>Multiple master zone groups can't be configured. If you want to create a new zone group and make it the master zone group, you must delete the default zone group.</cd-helper>
           </span>
           <cd-helper *ngIf="action === 'edit' && !info.data.is_master">
-            <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
+            <span i18n>Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to follow the failover mechanism</span>
           </cd-helper>
           <cd-helper *ngIf="action === 'edit' && info.data.is_master">
             <span i18n>You cannot unset the master flag.</span>

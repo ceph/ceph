@@ -32,6 +32,7 @@ import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { DriveGroup } from '../osd/osd-form/drive-group.model';
 import { Location } from '@angular/common';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { Step } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-create-cluster',
@@ -45,7 +46,23 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
   currentStepSub: Subscription;
   permissions: Permissions;
   projectConstants: typeof AppConstants = AppConstants;
-  stepTitles = ['Add Hosts', 'Create OSDs', 'Create Services', 'Review'];
+  stepTitles: Step[] = [
+    {
+      label: 'Add Hosts'
+    },
+    {
+      label: 'Create OSDs',
+      complete: false
+    },
+    {
+      label: 'Create Services',
+      complete: false
+    },
+    {
+      label: 'Review',
+      complete: false
+    }
+  ];
   startClusterCreation = false;
   observables: any = [];
   modalRef: NgbModalRef;
@@ -79,10 +96,13 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
       .subscribe((step: WizardStepModel) => {
         this.currentStep = step;
       });
-    this.currentStep.stepIndex = 1;
+    this.currentStep.stepIndex = 0;
   }
 
   ngOnInit(): void {
+    this.stepTitles.forEach((steps, index) => {
+      steps.onClick = () => (this.currentStep.stepIndex = index);
+    });
     this.route.queryParams.subscribe((params) => {
       // reading 'welcome' value true/false to toggle expand-cluster wizand view and welcome view
       const showWelcomeScreen = params['welcome'];
@@ -97,8 +117,12 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
     });
 
     this.stepTitles.forEach((stepTitle) => {
-      this.stepsToSkip[stepTitle] = false;
+      this.stepsToSkip[stepTitle.label] = false;
     });
+  }
+
+  onStepClick(step: WizardStepModel) {
+    this.wizardStepsService.setCurrentStep(step);
   }
 
   createCluster() {
@@ -236,8 +260,8 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
   }
 
   onSkip() {
-    const stepTitle = this.stepTitles[this.currentStep.stepIndex - 1];
-    this.stepsToSkip[stepTitle] = true;
+    const stepTitle = this.stepTitles[this.currentStep.stepIndex];
+    this.stepsToSkip[stepTitle.label] = true;
     this.onNextStep();
   }
 

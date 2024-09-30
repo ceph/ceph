@@ -1,11 +1,3 @@
-.container-fluid {
-  align-items: flex-start;
-  display: flex;
-  padding-left: 0;
-  width: 100%;
-}
-
-::ng-deep .custom-modal-content .modal-content {
-  right: 40vh;
-  width: 140vh;
+cds-loading {
+  margin-left: 0.5rem;
 }

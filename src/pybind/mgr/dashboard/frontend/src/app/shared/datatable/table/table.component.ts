@@ -125,6 +125,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @Input()
   hasDetails = false;
 
+  @Input()
+  showInlineActions = true;
+
   /**
    * Auto reload time in ms - per default every 5s
    * You can set it to 0, undefined or false to disable the auto reload feature in order to
@@ -387,7 +390,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   ngAfterViewInit(): void {
-    if (this.tableActions?.dropDownActions?.length) {
+    if (this.showInlineActions && this.tableActions?.dropDownActions?.length) {
       this.tableColumns = [
         ...this.tableColumns,
         {
@@ -468,7 +471,6 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
               }
 
               tableItem.template = column.cellTemplate || this.defaultValueTpl;
-
               return tableItem;
             });
           });
@@ -1027,12 +1029,13 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   onSelect(selectedRowIndex: number) {
     const selectedData = _.get(this.model.data?.[selectedRowIndex], [0, 'selected']);
-    this.model.selectRow(selectedRowIndex, true);
     if (this.selectionType === 'single') {
+      this.model.selectAll(false);
       this.selection.selected = [selectedData];
     } else {
       this.selection.selected = [...this.selection.selected, selectedData];
     }
+    this.model.selectRow(selectedRowIndex, true);
     this.updateSelection.emit(this.selection);
   }
 
@@ -1087,7 +1090,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     if (!_.find(this.visibleColumns, (c: CdTableColumn) => c.prop === sortProp)) {
       this.userConfig.sorts = this.createSortingDefinition(this.visibleColumns[0].prop);
     }
-    if (this.tableActions?.dropDownActions?.length) {
+    if (this.showInlineActions && this.tableActions?.dropDownActions?.length) {
       this.tableColumns = [
         ...this.tableColumns,
         {
@@ -1203,7 +1206,6 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
 
       if (this.search.length > 0 && rows?.length) {
-        this.expanded = undefined;
         const columns = this.localColumns.filter(
           (c) => c.cellTransformation !== CellTemplate.sparkline
         );

@@ -6,6 +6,7 @@
 #include <compare>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <vector>
 
 #include "common/ceph_atomic.h"
@@ -65,8 +66,9 @@ struct sched_conf_t {
 
   /**
    * a randomization factor aimed at preventing 'thundering herd' problems
-   * upon deep-scrubs common intervals. If polling a random number smaller
-   * than that percentage, the next shallow scrub is upgraded to deep.
+   * upon deep-scrubs common intervals. The actual deep scrub interval will
+   * be selected with a normal distribution around the configured interval,
+   * with a standard deviation of <deep_randomize_ratio> * <interval>.
    */
   double deep_randomize_ratio{0.0};
 
@@ -167,6 +169,11 @@ class ScrubJob {
   utime_t blocked_since{};
 
   CephContext* cct;
+
+  /// random generator for the randomization of the scrub times
+  /// \todo consider using one common generator in the OSD service
+  std::random_device random_dev;
+  std::mt19937 random_gen;
 
   ScrubJob(CephContext* cct, const spg_t& pg, int node_id);
 
@@ -334,18 +341,19 @@ class ScrubJob {
  *
  * The following table summarizes the limitations in effect per urgency level:
  *
- *  +------------+------------+--------------+----------+-------------+
- *  | limitation | must-scrub | after-repair | operator | must-repair |
- *  +------------+------------+--------------+----------+-------------+
- *  | reservation|    yes!    |      no      |     no   |      no     |
- *  | dow/time   |    yes     |     yes      |     no   |      no     |
- *  | ext-sleep  |    no?     |      no      |     no   |      no     |
- *  | load       |    yes     |      no      |     no   |      no     |
- *  | noscrub    |    yes     |      no?     |     no   |      no     |
- *  | max-scrubs |    yes     |      yes?    |     no   |      no     |
- *  | backoff    |    yes     |      no      |     no   |      no     |
- *  | recovery   |    yes     |      no      |     no   |      no     |
- *  +------------+------------+--------------+----------+-------------+
+ *  +------------+---------+--------------+---------+----------+-------------+
+ *  | limitation |  must-  | after-repair |repairing| operator | must-repair |
+ *  |            |  scrub  |(aft recovery)|(errors) | request  |             |
+ *  +------------+---------+--------------+---------+----------+-------------+
+ *  | reservation|    yes! |      no      |    no?  +     no   |      no     |
+ *  | dow/time   |    yes  |     yes      |    no   +     no   |      no     |
+ *  | ext-sleep  |    no   |      no      |    no   +     no   |      no     |
+ *  | load       |    yes  |      no      |    no   +     no   |      no     |
+ *  | noscrub    |    yes  |      no?     |    Yes  +     no   |      no     |
+ *  | max-scrubs |    yes  |      yes     |    Yes  +     no   |      no     |
+ *  | backoff    |    yes  |      no      |    no   +     no   |      no     |
+ *  | recovery   |    yes  |      yes     |    Yes  +     no   |      no     |
+ *  +------------+---------+--------------+---------+----------+-------------+
  */
 
   // a set of helper functions for determining, for each urgency level, what
@@ -366,6 +374,12 @@ class ScrubJob {
   static bool observes_random_backoff(urgency_t urgency);
 
   static bool observes_recovery(urgency_t urgency);
+
+  // translating the 'urgency' into scrub behavior traits
+
+  static bool has_high_queue_priority(urgency_t urgency);
+
+  static bool is_repair_implied(urgency_t urgency);
 };
 }  // namespace Scrub
 

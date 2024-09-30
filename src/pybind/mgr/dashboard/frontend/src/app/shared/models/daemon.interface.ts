@@ -5,6 +5,8 @@ export interface Daemon {
   container_image_name: string;
   daemon_id: string;
   daemon_type: string;
+  daemon_name: string;
+  hostname: string;
   version: string;
   status: number;
   status_desc: string;

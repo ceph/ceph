@@ -406,7 +406,7 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
 
 bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
                                 RGWObjCategory *category,
-                                rgw_bucket_category_stats *accounted_stats)
+                                rgw_bucket_category_stats *accounted_stats) const
 {
   using ceph::decode;
   auto iter = data.cbegin();

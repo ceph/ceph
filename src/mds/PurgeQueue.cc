@@ -99,6 +99,17 @@ void PurgeItem::decode(bufferlist::const_iterator &p)
   DECODE_FINISH(p);
 }
 
+void PurgeItem::generate_test_instances(std::list<PurgeItem*>& ls) {
+  ls.push_back(new PurgeItem());
+  ls.push_back(new PurgeItem());
+  ls.back()->action = PurgeItem::PURGE_FILE;
+  ls.back()->ino = 1;
+  ls.back()->size = 2;
+  ls.back()->layout = file_layout_t();
+  ls.back()->old_pools = {1, 2};
+  ls.back()->snapc = SnapContext();
+  ls.back()->stamp = utime_t(3, 4);
+}
 // if Objecter has any slow requests, take that as a hint and
 // slow down our rate of purging
 PurgeQueue::PurgeQueue(
@@ -225,9 +236,10 @@ void PurgeQueue::open(Context *completion)
       // Journaler only guarantees entries before head write_pos have been
       // fully flushed. Before appending new entries, we need to find and
       // drop any partial written entry.
-      if (journaler.last_committed.write_pos < journaler.get_write_pos()) {
+      auto&& last_committed = journaler.get_last_committed();
+      if (last_committed.write_pos < journaler.get_write_pos()) {
 	dout(4) << "recovering write_pos" << dendl;
-	journaler.set_read_pos(journaler.last_committed.write_pos);
+	journaler.set_read_pos(last_committed.write_pos);
 	_recover();
 	return;
       }
@@ -281,7 +293,8 @@ void PurgeQueue::_recover()
     if (journaler.get_read_pos() == journaler.get_write_pos()) {
       dout(4) << "write_pos recovered" << dendl;
       // restore original read_pos
-      journaler.set_read_pos(journaler.last_committed.expire_pos);
+      auto&& last_committed = journaler.get_last_committed();
+      journaler.set_read_pos(last_committed.expire_pos);
       journaler.set_writeable();
       recovered = true;
       finish_contexts(g_ceph_context, waiting_for_recovery);

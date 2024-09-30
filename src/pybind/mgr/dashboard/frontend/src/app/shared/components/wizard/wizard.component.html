@@ -1,19 +1,7 @@
-<div class="card-body">
-  <div class="row m-7">
-    <nav class="col">
-      <ul class="nav nav-pills flex-column"
-          *ngFor="let step of steps | async; let i = index;">
-        <li class="nav-item text-nowrap">
-          <a class="nav-link"
-             (click)="onStepClick(step)"
-             [ngClass]="{active: currentStep.stepIndex === step.stepIndex}">
-            <span class="circle-step"
-                  [ngClass]="{active: currentStep.stepIndex === step.stepIndex}"
-                  i18n>{{ step.stepIndex }}</span>
-            <span i18n>{{ stepsTitle[i] }}</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
-  </div>
+<div class="indicator">
+  <cds-progress-indicator
+    orientation="vertical"
+    [steps]="stepsTitle"
+    [current]="currentStep?.stepIndex">
+  </cds-progress-indicator>
 </div>

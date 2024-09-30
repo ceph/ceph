@@ -106,7 +106,7 @@ describe('CheckedTableFormComponent', () => {
       owner: ['read', 'write'],
       group: ['execute']
     });
-    component.onClickHeaderCheckbox('scope', ({ target: { checked: true } } as unknown) as Event);
+    component.onClickHeaderCheckbox('scope', true);
     const scopes_permissions = form.getValue('scopes_permissions');
     const keys = Object.keys(scopes_permissions);
     expect(keys).toEqual(['owner', 'group']);

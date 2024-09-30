@@ -39,7 +39,7 @@
               <span i18n>You cannot unset the default flag.</span>
             </cd-helper>
             <cd-helper *ngIf="action === 'edit' && !info.data.is_default">
-              <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
+              <span i18n>Please consult the&nbsp;<a href="{{ docUrl }}">documentation</a>&nbsp;to follow the failover mechanism</span>
             </cd-helper>
             <cd-helper *ngIf="defaultRealmDisabled && action === 'create'">
               <span i18n>Default realm already exists.</span>

@@ -82,6 +82,9 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   @Input()
   showExpandClusterBtn = true;
 
+  @Input()
+  showInlineActions = true;
+
   permissions: Permissions;
   columns: Array<CdTableColumn> = [];
   hosts: Array<object> = [];

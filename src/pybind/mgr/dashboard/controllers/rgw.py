@@ -14,8 +14,9 @@ from ..rest_client import RequestException
 from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
-from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, RgwClient, RgwMultisite
-from ..services.service import RgwServiceManager
+from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, \
+    RgwClient, RgwMultisite, RgwMultisiteAutomation
+from ..services.service import RgwServiceManager, wait_for_daemon_to_start
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     CRUDCollectionMethod, CRUDEndpoint, DeletePermission, Endpoint, \
@@ -118,12 +119,15 @@ class RgwMultisiteStatus(RESTController):
     # pylint: disable=W0102,W0613
     def setup_multisite_replication(self, daemon_name=None, realm_name=None, zonegroup_name=None,
                                     zonegroup_endpoints=None, zone_name=None, zone_endpoints=None,
-                                    username=None, cluster_fsid=None):
-        multisite_instance = RgwMultisite()
+                                    username=None, cluster_fsid=None, replication_zone_name=None,
+                                    cluster_details=None):
+        multisite_instance = RgwMultisiteAutomation()
         result = multisite_instance.setup_multisite_replication(realm_name, zonegroup_name,
                                                                 zonegroup_endpoints, zone_name,
                                                                 zone_endpoints, username,
-                                                                cluster_fsid)
+                                                                cluster_fsid,
+                                                                replication_zone_name,
+                                                                cluster_details)
         return result
 
     @RESTController.Collection(method='PUT', path='/setup-rgw-credentials')
@@ -131,7 +135,22 @@ class RgwMultisiteStatus(RESTController):
     # pylint: disable=W0102,W0613
     def restart_rgw_daemons_and_set_credentials(self):
         rgw_service_manager_instance = RgwServiceManager()
-        result = rgw_service_manager_instance.restart_rgw_daemons_and_set_credentials()
+        result = rgw_service_manager_instance.configure_rgw_credentials()
+        return result
+
+    @RESTController.Collection(method='GET', path='/available-ports')
+    @allow_empty_body
+    # pylint: disable=W0102,W0613
+    def get_available_ports(self):
+        rgw_service_manager_instance = RgwServiceManager()
+        result = rgw_service_manager_instance.find_available_port()
+        return result
+
+    @RESTController.Collection(method='GET', path='/check-daemons-status')
+    @allow_empty_body
+    # pylint: disable=W0102,W0613
+    def check_daemons_status(self, service_name=None):
+        result = wait_for_daemon_to_start(service_name=service_name)
         return result
 
 
@@ -180,21 +199,21 @@ class RgwMultisiteController(RESTController):
     @CreatePermission
     def create_sync_policy_group(self, group_id: str, status: str, bucket_name=''):
         multisite_instance = RgwMultisite()
-        return multisite_instance.create_sync_policy_group(group_id, status, bucket_name)
+        return multisite_instance.create_sync_policy_group(group_id, status, bucket_name, True)
 
     @Endpoint(method='PUT', path='/sync-policy-group')
     @EndpointDoc("Update the sync policy group")
     @UpdatePermission
     def update_sync_policy_group(self, group_id: str, status: str, bucket_name=''):
         multisite_instance = RgwMultisite()
-        return multisite_instance.update_sync_policy_group(group_id, status, bucket_name)
+        return multisite_instance.update_sync_policy_group(group_id, status, bucket_name, True)
 
     @Endpoint(method='DELETE', path='/sync-policy-group')
     @EndpointDoc("Remove the sync policy group")
     @DeletePermission
     def remove_sync_policy_group(self, group_id: str, bucket_name=''):
         multisite_instance = RgwMultisite()
-        return multisite_instance.remove_sync_policy_group(group_id, bucket_name)
+        return multisite_instance.remove_sync_policy_group(group_id, bucket_name, True)
 
     @Endpoint(method='PUT', path='/sync-flow')
     @EndpointDoc("Create or update the sync flow")
@@ -206,7 +225,7 @@ class RgwMultisiteController(RESTController):
                          bucket_name=''):
         multisite_instance = RgwMultisite()
         return multisite_instance.create_sync_flow(group_id, flow_id, flow_type, zones,
-                                                   bucket_name, source_zone, destination_zone)
+                                                   bucket_name, source_zone, destination_zone, True)
 
     @Endpoint(method='DELETE', path='/sync-flow')
     @EndpointDoc("Remove the sync flow")
@@ -216,7 +235,7 @@ class RgwMultisiteController(RESTController):
                          bucket_name=''):
         multisite_instance = RgwMultisite()
         return multisite_instance.remove_sync_flow(group_id, flow_id, flow_type, source_zone,
-                                                   destination_zone, zones, bucket_name)
+                                                   destination_zone, zones, bucket_name, True)
 
     @Endpoint(method='PUT', path='/sync-pipe')
     @EndpointDoc("Create or update the sync pipe")
@@ -229,7 +248,7 @@ class RgwMultisiteController(RESTController):
         multisite_instance = RgwMultisite()
         return multisite_instance.create_sync_pipe(group_id, pipe_id, source_zones,
                                                    destination_zones, source_bucket,
-                                                   destination_bucket, bucket_name)
+                                                   destination_bucket, bucket_name, True)
 
     @Endpoint(method='DELETE', path='/sync-pipe')
     @EndpointDoc("Remove the sync pipe")
@@ -242,7 +261,7 @@ class RgwMultisiteController(RESTController):
         multisite_instance = RgwMultisite()
         return multisite_instance.remove_sync_pipe(group_id, pipe_id, source_zones,
                                                    destination_zones, destination_bucket,
-                                                   bucket_name)
+                                                   bucket_name, True)
 
 
 @APIRouter('/rgw/daemon', Scope.RGW)

@@ -1166,9 +1166,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         entity: str,
         _end_positional_: int = 0,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> HandleCommandResult:
-        completion = self.cert_store_get_cert(entity, service_name, hostname)
+        completion = self.cert_store_get_cert(
+            entity,
+            service_name,
+            hostname,
+            no_exception_when_missing
+        )
         cert = raise_if_exception(completion)
         return HandleCommandResult(stdout=cert)
 
@@ -1178,9 +1184,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         entity: str,
         _end_positional_: int = 0,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> HandleCommandResult:
-        completion = self.cert_store_get_key(entity, service_name, hostname)
+        completion = self.cert_store_get_key(
+            entity,
+            service_name,
+            hostname,
+            no_exception_when_missing
+        )
         key = raise_if_exception(completion)
         return HandleCommandResult(stdout=key)
 
@@ -1254,6 +1266,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         completion = self.get_prometheus_access_info()
         access_info = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(access_info))
+
+    @_cli_write_command('orch get-security-config')
+    def _get_security_config(self) -> HandleCommandResult:
+        completion = self.get_security_config()
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
 
     @_cli_write_command('orch alertmanager get-credentials')
     def _get_alertmanager_access_info(self) -> HandleCommandResult:
@@ -1337,8 +1355,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         usage = """
 Usage:
   ceph orch daemon add osd host:device1,device2,...
-  ceph orch daemon add osd host:data_devices=device1,device2,db_devices=device3,osds_per_device=2[,encrypted=true|True|1]
-  ceph orch daemon add osd host:data_devices=device1[,encrypted=false|False|0]
+  ceph orch daemon add osd host:data_devices=device1,device2,db_devices=device3,osds_per_device=2[,encrypted=false]
+  ceph orch daemon add osd host:data_devices=device1[,encrypted=true,tpm2=true]
 """
         if not svc_arg:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
@@ -1360,10 +1378,12 @@ Usage:
                                             'journal_devices']:
                         drive_group_spec[drv_grp_spec_arg] = []
                         drive_group_spec[drv_grp_spec_arg].append(value)
+                    else:
                         if value.lower() in ['true', 'false']:
                             list_drive_group_spec_bool_arg.append(drv_grp_spec_arg)
-                    else:
-                        drive_group_spec[drv_grp_spec_arg] = value
+                            drive_group_spec[drv_grp_spec_arg] = value.lower() == "true"
+                        else:
+                            drive_group_spec[drv_grp_spec_arg] = value
                 elif drv_grp_spec_arg is not None:
                     drive_group_spec[drv_grp_spec_arg].append(v)
                 else:
@@ -1373,10 +1393,6 @@ Usage:
             for dev_type in ['data_devices', 'db_devices', 'wal_devices', 'journal_devices']:
                 drive_group_spec[dev_type] = DeviceSelection(
                     paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
-
-            for drive_group_spec_bool_arg in list_drive_group_spec_bool_arg:
-                drive_group_spec_value: str = drive_group_spec[drive_group_spec_bool_arg]
-                drive_group_spec[drive_group_spec_bool_arg] = drive_group_spec_value.lower() == "true"
 
             drive_group = DriveGroupSpec(
                 placement=PlacementSpec(host_pattern=host_name),
@@ -1542,6 +1558,7 @@ Usage:
     @_cli_write_command('orch daemon add nvmeof')
     def _nvmeof_add(self,
                     pool: str,
+                    group: str,
                     placement: Optional[str] = None,
                     inbuf: Optional[str] = None) -> HandleCommandResult:
         """Start nvmeof daemon(s)"""
@@ -1549,8 +1566,9 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = NvmeofServiceSpec(
-            service_id='nvmeof',
+            service_id=f'{pool}.{group}' if group else pool,
             pool=pool,
+            group=group,
             placement=PlacementSpec.from_string(placement),
         )
         return self._daemon_add_misc(spec)
@@ -1875,7 +1893,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = NvmeofServiceSpec(
-            service_id=f'{pool}.{group}',
+            service_id=f'{pool}.{group}' if group else pool,
             pool=pool,
             group=group,
             placement=PlacementSpec.from_string(placement),

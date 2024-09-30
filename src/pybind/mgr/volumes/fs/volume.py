@@ -9,7 +9,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import cephfs
 
-from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException  # type: ignore
+from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException
 
 from mgr_util import CephfsClient
 

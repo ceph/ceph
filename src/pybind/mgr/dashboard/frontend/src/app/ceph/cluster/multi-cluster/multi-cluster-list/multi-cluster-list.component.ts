@@ -50,6 +50,7 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
   currentUrl: string;
   icons = Icons;
   managedByConfig$: Observable<any>;
+  prometheusConnectionError: any[] = [];
 
   constructor(
     private multiClusterService: MultiClusterService,

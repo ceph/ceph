@@ -442,17 +442,32 @@ options:
   type: float
   level: advanced
   desc: Deep scrub each PG (i.e., verify data checksums) at least this often
-  fmt_desc: The interval for "deep" scrubbing (fully reading all data). The
-    ``osd_scrub_load_threshold`` does not affect this setting.
+  fmt_desc: The interval for "deep" scrubbing (fully reading all data).
   default: 7_day
   with_legacy: true
+- name: osd_deep_scrub_interval_cv
+  type: float
+  level: advanced
+  desc: determining the amount of variation in the deep scrub interval
+  long_desc: deep scrub intervals are varied by a random amount to prevent
+    stampedes. This parameter determines the amount of variation.
+    Technically - osd_deep_scrub_interval_cv is the coefficient of variation for
+    the deep scrub interval.
+  fmt_desc: The coefficient of variation for the deep scrub interval, specified as a
+    ratio. On average, the next deep scrub for a PG is scheduled osd_deep_scrub_interval
+    after the last deep scrub . The actual time is randomized to a normal distribution
+    with a standard deviation of osd_deep_scrub_interval * osd_deep_scrub_interval_cv
+    (clamped to within 2 standard deviations).
+    The default value guarantees that 95% of the deep scrubs will be scheduled in the range
+    [0.8 * osd_deep_scrub_interval, 1.2 * osd_deep_scrub_interval].
+  min: 0
+  max: 0.4
+  default: 0.2
+  with_legacy: false
 - name: osd_deep_scrub_randomize_ratio
   type: float
   level: advanced
-  desc: Scrubs will randomly become deep scrubs at this rate (0.15 -> 15% of scrubs
-    are deep)
-  long_desc: This prevents a deep scrub 'stampede' by spreading deep scrubs so they
-    are uniformly distributed over the week
+  desc: deprecated. Has no effect.
   default: 0.15
   with_legacy: true
 - name: osd_deep_scrub_stride
@@ -900,6 +915,9 @@ options:
 - name: osd_op_num_threads_per_shard
   type: int
   level: advanced
+  fmt_desc: The number of worker threads spawned per OSD shard for a given OSD.
+    Each worker thread when operational processes items in the shard queue.
+    This setting overrides _ssd and _hdd if non-zero.
   default: 0
   flags:
   - startup
@@ -907,7 +925,9 @@ options:
 - name: osd_op_num_threads_per_shard_hdd
   type: int
   level: advanced
-  default: 1
+  fmt_desc: The number of worker threads spawned per OSD shard for a given OSD
+    (for rotational media).
+  default: 5
   see_also:
   - osd_op_num_threads_per_shard
   flags:
@@ -916,6 +936,8 @@ options:
 - name: osd_op_num_threads_per_shard_ssd
   type: int
   level: advanced
+  fmt_desc: The number of worker threads spawned per OSD shard for a given OSD
+    (for solid state media).
   default: 2
   see_also:
   - osd_op_num_threads_per_shard
@@ -936,7 +958,7 @@ options:
   type: int
   level: advanced
   fmt_desc: the number of shards allocated for a given OSD (for rotational media).
-  default: 5
+  default: 1
   see_also:
   - osd_op_num_shards
   flags:

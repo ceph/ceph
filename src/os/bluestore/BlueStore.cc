@@ -6928,6 +6928,10 @@ int BlueStore::read_bdev_label(
 {
   unique_ptr<BlockDevice> bdev(BlockDevice::create(
     cct, path, nullptr, nullptr, nullptr, nullptr));
+  if (!bdev) {
+    return -EIO;
+  }
+  bdev->set_no_exclusive_lock();
   int r = bdev->open(path);
   if (r < 0)
     return r;
@@ -6990,7 +6994,7 @@ int BlueStore::_open_bdev(bool create)
 {
   ceph_assert(bdev == NULL);
   string p = path + "/block";
-  bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this));
+  bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this), "bluestore");
   int r = bdev->open(p);
   if (r < 0)
     goto fail;
@@ -7724,6 +7728,10 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   if (r < 0)
     goto out_fm;
 
+  if (bdev_label_multi) {
+    _main_bdev_label_try_reserve();
+  }
+
   // Re-open in the proper mode(s).
 
   // Can't simply bypass second open for read-only mode as we need to
@@ -7738,10 +7746,6 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
 
   if (!read_only) {
     _post_init_alloc();
-  }
-
-  if (bdev_label_multi) {
-    _main_bdev_label_try_reserve();
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
@@ -8986,6 +8990,47 @@ void BlueStore::trim_free_space(const string& type, std::ostream& outss)
   } else {
     bluefs->trim_free_space(type, outss);
   }
+}
+
+int BlueStore::zap_device(CephContext* cct, const string& dev)
+{
+  string path = dev; // dummy var for dout
+  uint64_t brush_size;
+  dout(5) << __func__ << " " << dev << dendl;
+  unique_ptr<BlockDevice>
+    _bdev(BlockDevice::create(cct, dev, nullptr, nullptr, nullptr, nullptr));
+  int r = _bdev->open(dev);
+  if (r < 0)
+    goto fail;
+  brush_size = std::max(_bdev->get_block_size(), BDEV_LABEL_BLOCK_SIZE);
+
+  for (auto off : bdev_label_positions) {
+    uint64_t end = std::min(off + brush_size, _bdev->get_size());
+    if (end > off) {
+      uint64_t l = end - off;
+      bufferlist bl;
+      bl.append_zero(l);
+      dout(10) << __func__ << " writing 0x"
+               << std::hex << off << "~" << l
+               << std::dec << " to " << dev
+               <<  dendl;
+      r = _bdev->write(off, bl, false);
+      if (r < 0) {
+        derr << __func__ << " error writing 0x"
+             << std::hex << off << "~" << l
+             << std::dec << " to " << dev
+             << " : " << cpp_strerror(r) <<  dendl;
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  _bdev->close();
+
+fail:
+  return r;
 }
 
 void BlueStore::set_cache_shards(unsigned num)

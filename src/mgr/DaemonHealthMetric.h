@@ -7,6 +7,7 @@
 #include <ostream>
 #include "common/Formatter.h"
 #include "include/denc.h"
+#include "common/Formatter.h"
 
 enum class daemon_metric : uint8_t {
   SLOW_OPS,

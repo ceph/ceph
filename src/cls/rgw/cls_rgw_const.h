@@ -33,8 +33,8 @@ constexpr int RGWBIAdvanceAndRetryError = -EFBIG;
 #define RGW_OBJ_CHECK_MTIME "obj_check_mtime"
 
 #define RGW_BI_GET "bi_get"
-#define RGW_BI_GET_VALS "bi_get_vals"
 #define RGW_BI_PUT "bi_put"
+#define RGW_BI_PUT_ENTRIES "bi_put_entries"
 #define RGW_BI_LIST "bi_list"
 
 #define RGW_RESHARD_LOG_TRIM "reshard_log_trim"

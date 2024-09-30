@@ -289,7 +289,6 @@ int main(int argc, char **argv)
   string empty_sharding(1, '\0');
   string new_sharding = empty_sharding;
   string resharding_ctrl;
-  string really;
   int log_level = 30;
   bool fsck_deep = false;
   po::options_description po_options("Options");
@@ -312,7 +311,7 @@ int main(int argc, char **argv)
     ("value,v", po::value<string>(&value), "label metadata value")
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'")
     ("bdev-type", po::value<vector<string>>(&bdev_type), "bdev type to inspect: 'bdev-block'/'bdev-wal'/'bdev-db'")
-    ("really", po::value<string>(&really), "--yes-i-really-really-mean-it")
+    ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
     ("op", po::value<string>(&action_aux),
@@ -345,7 +344,9 @@ int main(int argc, char **argv)
         "bluefs-stats, "
         "reshard, "
         "show-sharding, "
-	"trim")
+	"trim, "
+        "zap-device"
+)
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -354,7 +355,11 @@ int main(int argc, char **argv)
   po::variables_map vm;
   try {
     po::parsed_options parsed =
-      po::command_line_parser(argc, argv).options(po_all).allow_unregistered().run();
+      po::command_line_parser(argc, argv).options(po_all)
+        .allow_unregistered()
+        .style(po::command_line_style::default_style &
+               ~po::command_line_style::allow_guessing)
+        .run();
     po::store( parsed, vm);
     po::notify(vm);
     ceph_option_strings = po::collect_unrecognized(parsed.options,
@@ -582,7 +587,7 @@ int main(int argc, char **argv)
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
     }
-    if (really.empty() || strcmp(really.c_str(), "--yes-i-really-really-mean-it") != 0) {
+    if (!vm.count("yes-i-really-really-mean-it")) {
       cerr << "Trimming a non healthy bluestore is a dangerous operation which could cause data loss, "
            << "please run fsck and confirm with --yes-i-really-really-mean-it option"
            << std::endl;
@@ -599,6 +604,18 @@ int main(int argc, char **argv)
     }
     if (bdev_type.empty())
       bdev_type = vector<string>{"bdev-block", "bdev-db", "bdev-wal"};
+  }
+  if (action == "zap-device") {
+    if (devs.empty()) {
+      cerr << "must specify device(s) with --dev option" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (!vm.count("yes-i-really-really-mean-it")) {
+      cerr << "zap-osd is a DESTRUCTIVE operation, it causes OSD data loss, "
+           << "please confirm with --yes-i-really-really-mean-it option"
+           << std::endl;
+      exit(EXIT_FAILURE);
+    }
   }
 
   if (action == "restore_cfb") {
@@ -1249,6 +1266,14 @@ int main(int argc, char **argv)
       cout << "status: " << outss.str() << std::endl;
     }
     bluestore.cold_close();
+  } else if (action == "zap-device") {
+    for(auto& dev : devs) {
+      int r = BlueStore::zap_device(cct.get(), dev);
+      if (r < 0) {
+        cerr << "error from zap: " << cpp_strerror(r) << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;

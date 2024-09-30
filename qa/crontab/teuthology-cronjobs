@@ -58,10 +58,6 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 # 00 03 * * 1 CEPH_BRANCH=main; MACHINE_NAME=smithi; $CW teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s windows -k distro -e $CEPH_QA_EMAIL
 
 
-## ********** crimson tests on main branch - weekly
-# 01 01 * * 0 CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=crimson-rados; KERNEL=distro;  $CW $SCHEDULE 100000 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
-
-
 ## ********** teuthology/nop on main branch - daily
 @daily             $CW $SS      1 --ceph main --suite teuthology/nop -p 1 --force-priority
 
@@ -78,9 +74,10 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 32 20 * * 4        $CW $SS      4 --ceph main --suite powercycle -p 950
 40 20 * * 5        $CW $SS      1 --ceph main --suite        rgw -p 950
 48 20 * * 6        $CW $SS      4 --ceph main --suite       krbd -p 950 --kernel testing
+56 20 * * 6        $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson
 
 
-## squid branch runs - twice weekly
+## squid branch runs - twice weekly (crimson-rados is run weekly)
 ## suites rados and rbd use --subset arg and must be call with schedule_subset.sh
 ## see script in https://github.com/ceph/ceph/tree/main/qa/machine_types
 
@@ -93,6 +90,7 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 32 21 * * 4,1      $CW $SS      4 --ceph squid --suite powercycle -p 100 --force-priority
 40 21 * * 5,2      $CW $SS      1 --ceph squid --suite        rgw -p 100 --force-priority
 48 21 * * 6,3      $CW $SS      4 --ceph squid --suite       krbd -p 100 --force-priority --kernel testing
+56 21 * * 6        $CW $SS      1 --ceph squid --suite crimson-rados -p 100 --force-priority --flavor crimson
 
 ## reef branch runs - weekly
 ## suites rados and rbd use --subset arg and must be call with schedule_subset.sh

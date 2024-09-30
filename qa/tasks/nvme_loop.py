@@ -67,6 +67,7 @@ def task(ctx, config):
 
         with contextutil.safe_while(sleep=1, tries=15) as proceed:
             while proceed():
+                remote.run(args=['lsblk'], stdout=StringIO())
                 p = remote.run(args=['sudo', 'nvme', 'list', '-o', 'json'], stdout=StringIO())
                 new_devs = []
                 # `nvme list -o json` will return the following output:
@@ -96,6 +97,7 @@ def task(ctx, config):
                     vendor = device['ModelNumber']
                     if dev.startswith('/dev/') and vendor == 'Linux':
                         new_devs.append(dev)
+                        bluestore_zap(remote, dev)
                 log.info(f'new_devs {new_devs}')
                 assert len(new_devs) <= len(devs)
                 if len(new_devs) == len(devs):
@@ -128,3 +130,13 @@ def task(ctx, config):
                 data=old_scratch_by_remote[remote],
                 sudo=True
             )
+
+def bluestore_zap(remote, device: str) -> None:
+    for offset in [0, 1073741824, 10737418240]:
+        remote.run(args=['sudo', 'dd',
+                         'if=/dev/zero', f'of={device}',
+                         f'seek={offset}', 'bs=1',
+                         'count=4096'], stdout=StringIO())
+        remote.run(args=['sudo', 'hexdump', '-n22',
+                         '-C', f'-s{offset}', f'{device}'],
+                   stdout=StringIO())

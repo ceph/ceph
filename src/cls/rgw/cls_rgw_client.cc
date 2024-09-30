@@ -186,7 +186,6 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
   return true;
 }
 
-// note: currently only called by testing code
 void cls_rgw_bucket_init_index(ObjectWriteOperation& o)
 {
   bufferlist in;
@@ -200,8 +199,14 @@ static bool issue_bucket_index_init_op(librados::IoCtx& io_ctx,
   bufferlist in;
   librados::ObjectWriteOperation op;
   op.create(true);
-  op.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX, in);
+  cls_rgw_bucket_init_index(op);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
+}
+
+void cls_rgw_bucket_init_index2(ObjectWriteOperation& o)
+{
+  bufferlist in;
+  o.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX2, in);
 }
 
 static bool issue_bucket_index_init_op2(librados::IoCtx& io_ctx,
@@ -211,7 +216,7 @@ static bool issue_bucket_index_init_op2(librados::IoCtx& io_ctx,
   bufferlist in;
   librados::ObjectWriteOperation op;
   op.create(true);
-  op.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX2, in);
+  cls_rgw_bucket_init_index2(op);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 
@@ -470,32 +475,6 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
-int cls_rgw_bi_get_vals(librados::IoCtx& io_ctx, const std::string oid,
-                        std::set<std::string>& log_entries_wanted,
-                        std::list<rgw_cls_bi_entry> *entries)
-{
-  bufferlist in, out;
-  struct rgw_cls_bi_get_vals_op call;
-  call.log_entries_wanted = std::move(log_entries_wanted);
-  encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_GET_VALS, in, out);
-  if (r < 0)
-    return r;
-
-  struct rgw_cls_bi_list_ret op_ret;
-  auto iter = out.cbegin();
-  try {
-    decode(op_ret, iter);
-  } catch (ceph::buffer::error& err) {
-    return -EIO;
-  }
-
-  if (entries)
-    entries->swap(op_ret.entries);
-
-  return 0;
-}
-
 int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_entry& entry)
 {
   bufferlist in, out;
@@ -516,6 +495,21 @@ void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, const rgw_cls_bi
   call.entry = entry;
   encode(call, in);
   op.exec(RGW_CLASS, RGW_BI_PUT, in);
+}
+
+void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
+                            std::vector<rgw_cls_bi_entry> entries,
+                            bool check_existing)
+{
+  const auto call = rgw_cls_bi_put_entries_op{
+    .entries = std::move(entries),
+    .check_existing = check_existing
+  };
+
+  bufferlist in;
+  encode(call, in);
+
+  op.exec(RGW_CLASS, RGW_BI_PUT_ENTRIES, in);
 }
 
 /* nb: any entries passed in are replaced with the results of the cls

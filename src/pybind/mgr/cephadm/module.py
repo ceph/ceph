@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
@@ -137,7 +138,7 @@ DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.2.17'
 DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:3.0.0'
 DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:3.0.0'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.27.0'
-DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:10.4.0'
+DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:10.4.8'
 DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.2.4'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
@@ -145,7 +146,7 @@ DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
 DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
 DEFAULT_NGINX_IMAGE = 'quay.io/ceph/nginx:sclorg-nginx-126'
-DEFAULT_OAUTH2_PROXY = 'quay.io/oauth2-proxy/oauth2-proxy:v7.6.0'
+DEFAULT_OAUTH2_PROXY_IMAGE = 'quay.io/oauth2-proxy/oauth2-proxy:v7.6.0'
 DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
 DEFAULT_SAMBA_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
 DEFAULT_SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:latest'
@@ -292,7 +293,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ),
         Option(
             'container_image_oauth2_proxy',
-            default=DEFAULT_OAUTH2_PROXY,
+            default=DEFAULT_OAUTH2_PROXY_IMAGE,
             desc='oauth2-proxy container image',
         ),
         Option(
@@ -1103,6 +1104,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 ports=d.get('ports'),
                 ip=d.get('ip'),
                 deployed_by=d.get('deployed_by'),
+                systemd_unit=d.get('systemd_unit'),
                 rank=rank,
                 rank_generation=rank_generation,
                 extra_container_args=d.get('extra_container_args'),
@@ -1610,6 +1612,58 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 return self.wait_async(self.osd_service.deploy_osd_daemons_for_existing_osds(h, 'osd'))
 
         return HandleCommandResult(stdout='\n'.join(run(host)))
+
+    @orchestrator._cli_read_command('cephadm systemd-unit ls')
+    def _systemd_unit_ls(
+        self,
+        hostname: Optional[str] = None,
+        daemon_type: Optional[str] = None,
+        daemon_id: Optional[str] = None
+    ) -> HandleCommandResult:
+        daemons = self.systemd_unit_ls(hostname, daemon_type, daemon_id)
+        return HandleCommandResult(stdout=json.dumps(daemons, indent=4))
+
+    @orchestrator._cli_read_command('cephadm systemd-unit ls')
+    def systemd_unit_ls(
+        self,
+        hostname: Optional[str] = None,
+        daemon_type: Optional[str] = None,
+        daemon_id: Optional[str] = None
+    ) -> HandleCommandResult:
+        # First, some filtering
+        if hostname and daemon_type:
+            daemons = self.cache.get_daemons_by_type(daemon_type, hostname)
+        elif hostname:
+            daemons = self.cache.get_daemons_by_host(hostname)
+        elif daemon_type:
+            daemons = self.cache.get_daemons_by_type(daemon_type)
+        else:
+            daemons = self.cache.get_daemons()
+        if daemon_id:
+            daemons = [d for d in daemons if d.daemon_id == daemon_id]
+        # intended structure for the dict is
+        # {
+        #     <host>: {
+        #         <daemon_type>: {
+        #             <daemon_name>: systemd unit
+        #         }
+        #     }
+        # }
+        systemd_unit_dict: Dict[str, Dict[str, Dict[str, str]]] = {}
+        for d in daemons:
+            # for mypy
+            host = d.hostname
+            d_type = d.daemon_type
+            systemd_unit = d.systemd_unit
+            assert host is not None
+            assert d_type is not None
+            assert systemd_unit is not None
+            if host not in systemd_unit_dict:
+                systemd_unit_dict[host] = {}
+            if d_type not in systemd_unit_dict[host]:
+                systemd_unit_dict[host][d_type] = {}
+            systemd_unit_dict[host][d_type][d.name()] = systemd_unit
+        return HandleCommandResult(stdout=json.dumps(systemd_unit_dict, indent=4))
 
     @orchestrator._cli_read_command('orch client-keyring ls')
     def _client_keyring_ls(self, format: Format = Format.plain) -> HandleCommandResult:
@@ -3195,13 +3249,25 @@ Then run the following:
 
     @handle_orch_error
     def set_prometheus_target(self, url: str) -> str:
+        try:
+            parsed_url = urlparse(url)
+            host = parsed_url.hostname
+            port = parsed_url.port
+            if not host:
+                return 'Invalid URL. Hostname is missing.'
+            ipaddress.ip_address(host)
+            url = f"{host}:{port}" if port else host
+        except ValueError as e:
+            return f'Invalid url. {str(e)}'
         prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+        # Add the target URL if it does not already exist
         if url not in prometheus_spec.targets:
             prometheus_spec.targets.append(url)
         else:
             return f"Target '{url}' already exists.\n"
-        if not prometheus_spec:
-            return "Service prometheus not found\n"
+        # Redeploy daemons after applying the configuration
         daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('prometheus')
         spec = ServiceSpec.from_json(prometheus_spec.to_json())
         self.apply([spec], no_overwrite=False)
@@ -3242,6 +3308,12 @@ Then run the following:
                 'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
+    def get_security_config(self) -> Dict[str, bool]:
+        security_enabled, mgmt_gw_enabled, _ = self._get_security_config()
+        return {'security_enabled': security_enabled,
+                'mgmt_gw_enabled': mgmt_gw_enabled}
+
+    @handle_orch_error
     def get_alertmanager_access_info(self) -> Dict[str, str]:
         security_enabled, _, _ = self._get_security_config()
         if not security_enabled:
@@ -3264,10 +3336,13 @@ Then run the following:
         self,
         entity: str,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> str:
         cert = self.cert_key_store.get_cert(entity, service_name or '', hostname or '')
         if not cert:
+            if no_exception_when_missing:
+                return ''
             raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
         return cert
 
@@ -3276,10 +3351,13 @@ Then run the following:
         self,
         entity: str,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> str:
         key = self.cert_key_store.get_key(entity, service_name or '', hostname or '')
         if not key:
+            if no_exception_when_missing:
+                return ''
             raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
         return key
 

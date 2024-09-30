@@ -1,75 +1,74 @@
-<div class="cd-col-form"
-     *cdFormLoading="loading">
-  <form name="roleForm"
-        #formDir="ngForm"
-        [formGroup]="roleForm"
-        novalidate>
-    <div class="card">
+<div cdsCol
+     [columnNumbers]="{md: 4}">
+  <ng-container *cdFormLoading="loading">
+    <form name="roleForm"
+          #formDir="ngForm"
+          [formGroup]="roleForm"
+          novalidate>
       <div i18n="form title"
-           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
-      <div class="card-body">
-
-        <!-- Name -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 [ngClass]="{'required': mode !== roleFormMode.editing}"
-                 for="name"
-                 i18n>Name</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   i18n-placeholder
-                   placeholder="Name..."
-                   id="name"
-                   name="name"
-                   formControlName="name"
-                   autofocus>
-            <span class="invalid-feedback"
-                  *ngIf="roleForm.showError('name', formDir, 'required')"
-                  i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="roleForm.showError('name', formDir, 'notUnique')"
-                  i18n>The chosen name is already in use.</span>
-          </div>
-        </div>
-
-        <!-- Description -->
-        <div class="form-group row">
-          <label i18n
-                 class="cd-col-form-label"
-                 for="description">Description</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   i18n-placeholder
-                   placeholder="Description..."
-                   id="description"
-                   name="description"
-                   formControlName="description">
-          </div>
-        </div>
-
-        <!-- Permissions -->
-        <div class="form-group row">
-          <label i18n
-                 class="cd-col-form-label">Permissions</label>
-          <div class="cd-col-form-input">
-            <cd-checked-table-form [data]="scopes_permissions"
-                                   [columns]="columns"
-                                   [form]="roleForm"
-                                   inputField="scopes_permissions"
-                                   [scopes]="scopes"
-                                   [initialValue]="initialValue"></cd-checked-table-form>
-          </div>
-        </div>
-
+           class="form-header">{{ action | titlecase }} {{ resource | upperFirst }}
       </div>
-      <div class="card-footer">
+        <!--Name -->
+      <div class="form-item">
+        <cds-text-label for="name"
+                        cdRequiredField="Name"
+                        [invalid]="!roleForm.controls.name.valid && roleForm.controls.name.dirty"
+                        [invalidText]="nameError"
+                        i18n>Name
+          <span [ngClass]="{'required': mode !== roleFormMode.editing}"></span>
+          <input cdsText
+                 placeholder="Name..."
+                 i18n-placeholder
+                 id="name"
+                 name="name"
+                 formControlName="name"
+                 [invalid]="!roleForm.controls.name.valid && roleForm.controls.name.dirty"
+                 autofocus>
+        </cds-text-label>
+        <ng-template #nameError>
+          <span *ngIf="roleForm.showError('name', formDir, 'required')">
+            <ng-container i18n>
+               This field is required.
+            </ng-container>
+          </span>
+          <span *ngIf="roleForm.showError('name', formDir, 'notUnique')">
+            <ng-container i18n>
+                The chosen name is already in use.
+            </ng-container>
+          </span>
+        </ng-template>
+      </div>
+    <!-- Description -->
+      <div class="form-item">
+        <cds-text-label for="name"
+                        i18n>Description
+        <input cdsText
+               type="text"
+               class="input-field"
+               placeholder="Description.."
+               id="description"
+               name="description"
+               formControlName="description">
+        </cds-text-label>
+      </div>
+      <!-- Permissions -->
+      <div  class="form-item">
+        <cds-text-label>Permissions</cds-text-label>
+        <cd-checked-table-form [data]="scopes_permissions"
+                               [columns]="columns"
+                               [form]="roleForm"
+                               inputField="scopes_permissions"
+                               [scopes]="scopes"
+                               [initialValue]="initialValue"></cd-checked-table-form>
+      </div>
+      <!--Submit Button-->
+      <div class="form-item">
         <cd-form-button-panel (submitActionEvent)="submit()"
                               [form]="roleForm"
                               [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                              wrappingClass="text-right"></cd-form-button-panel>
+                              wrappingClass="text-right">
+        </cd-form-button-panel>
       </div>
-    </div>
-  </form>
+    </form>
+  </ng-container>
 </div>

@@ -59,6 +59,7 @@ export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements 
     this.columns = [
       {
         prop: 'uniqueId',
+        isInvisible: true,
         isHidden: true
       },
       {

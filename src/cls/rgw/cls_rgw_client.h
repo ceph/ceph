@@ -264,6 +264,7 @@ public:
 
 /* bucket index */
 void cls_rgw_bucket_init_index(librados::ObjectWriteOperation& o);
+void cls_rgw_bucket_init_index2(librados::ObjectWriteOperation& o);
 
 class CLSRGWConcurrentIO {
 protected:
@@ -383,11 +384,14 @@ void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const ceph::real_time
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const std::string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,
                    rgw_cls_bi_entry *entry);
-int cls_rgw_bi_get_vals(librados::IoCtx& io_ctx, const std::string oid,
-                        std::set<std::string>& log_entries_wanted,
-                        std::list<rgw_cls_bi_entry> *entries);
 int cls_rgw_bi_put(librados::IoCtx& io_ctx, const std::string oid, const rgw_cls_bi_entry& entry);
 void cls_rgw_bi_put(librados::ObjectWriteOperation& op, const std::string oid, const rgw_cls_bi_entry& entry);
+// Write the given array of index entries and update bucket stats accordingly.
+// If existing entries may be overwritten, pass check_existing=true to decrement
+// their stats first.
+void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
+                            std::vector<rgw_cls_bi_entry> entries,
+                            bool check_existing);
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    const std::string& name, const std::string& marker, uint32_t max,
                    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
@@ -671,8 +675,16 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const std::string& oid, std::s
 int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_reshard_entry& entry);
 #endif
 
-/* resharding attribute on bucket index shard headers */
+// If writes to the bucket index should be blocked during resharding, fail with
+// the given error code. RGWRados::guard_reshard() calls this in a loop to retry
+// the write until the reshard completes.
+//
+// As of the T release, all index write ops in cls_rgw perform this check
+// themselves. RGW can stop issuing this call in the T+2 (V) release once it
+// knows that OSDs are running T at least. The call can be safely removed from
+// cls_rgw in the T+4 (X) release.
 void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err);
+
 // these overloads which call io_ctx.operate() should not be called in the rgw.
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
 #ifndef CLS_CLIENT_HIDE_IOCTX

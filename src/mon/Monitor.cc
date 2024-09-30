@@ -5722,7 +5722,12 @@ bool Monitor::_scrub(ScrubResult *r,
 
     bufferlist bl;
     int err = store->get(k.first, k.second, bl);
-    ceph_assert(err == 0);
+    if (err != 0) {
+      derr << __func__ << " store got: " << cpp_strerror(err)
+                       << " prefix: " << k.first << " key: " << k.second
+                       << dendl;
+      ceph_abort();
+    }
     
     uint32_t key_crc = bl.crc32c(0);
     dout(30) << __func__ << " " << k << " bl " << bl.length() << " bytes"

@@ -273,7 +273,7 @@ bs::error_code logback_generations::setup(const DoutPrefixProvider *dpp,
 	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << ": failed writing oid=" << oid
 		   << ", r=" << r << dendl;
-	bs::system_error(-r, bs::system_category());
+      return bs::error_code(-r, bs::system_category());
       }
       // Did someone race us? Then re-read.
       if (r != 0) {

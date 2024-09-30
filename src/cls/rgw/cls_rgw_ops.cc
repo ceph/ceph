@@ -580,3 +580,9 @@ void cls_rgw_get_bucket_resharding_op::generate_test_instances(
 void cls_rgw_get_bucket_resharding_op::dump(Formatter *f) const
 {
 }
+
+void rgw_cls_bi_put_entries_op::dump(Formatter *f) const
+{
+  encode_json("entries", entries, f);
+  encode_json("check_existing", check_existing, f);
+}

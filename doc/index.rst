@@ -94,7 +94,7 @@ about Ceph, see our `Architecture`_ section.
 .. _Ceph Object Store: radosgw
 .. _Ceph Block Device: rbd
 .. _Ceph File System: cephfs
-.. _Getting Started: install
+.. _Getting Started: start
 .. _Architecture: architecture
 
 .. toctree::
