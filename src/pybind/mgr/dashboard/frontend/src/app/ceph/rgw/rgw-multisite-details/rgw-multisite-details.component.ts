@@ -40,6 +40,7 @@ import { Router } from '@angular/router';
 import { RgwMultisiteWizardComponent } from '../rgw-multisite-wizard/rgw-multisite-wizard.component';
 import { RgwMultisiteSyncPolicyComponent } from '../rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 
 const BASE_URL = 'rgw/multisite/configuration';
 
@@ -121,7 +122,8 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     public rgwDaemonService: RgwDaemonService,
     public mgrModuleService: MgrModuleService,
     private notificationService: NotificationService,
-    private cdsModalService: ModalCdsService
+    private cdsModalService: ModalCdsService,
+    private rgwMultisiteService: RgwMultisiteService
   ) {
     this.permission = this.authStorageService.getPermissions().rgw;
   }
@@ -412,22 +414,30 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     this.realmIds = [];
     this.zoneIds = [];
     this.evaluateMigrateAndReplicationActions();
+    this.rgwMultisiteService.restartGatewayMessage$.subscribe((value) => {
+      if (value !== null) {
+        this.restartGatewayMessage = value;
+      } else {
+        this.checkRestartGatewayMessage();
+      }
+    });
+    return allNodes;
+  }
+
+  checkRestartGatewayMessage() {
     this.rgwDaemonService.list().subscribe((data: any) => {
-      const hasEmptyRealmName = data.some(
-        (item: { [x: string]: any }) =>
-          item['realm_name'] === '' &&
-          !data.some((i: { [x: string]: any }) => i['id'] === item['id'] && i['realm_name'] !== '')
-      );
+      const realmName = data.map((item: { [x: string]: any }) => item['realm_name']);
       if (
         this.defaultRealmId !== '' &&
         this.defaultZonegroupId !== '' &&
         this.defaultZoneId !== '' &&
-        hasEmptyRealmName
+        realmName.includes('')
       ) {
         this.restartGatewayMessage = true;
+      } else {
+        this.restartGatewayMessage = false;
       }
     });
-    return allNodes;
   }
 
   getDefaultsEntities(

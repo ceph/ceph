@@ -236,6 +236,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
         )
         .subscribe((data: object[]) => {
           this.setupCompleted = true;
+          this.rgwMultisiteService.setRestartGatewayMessage(false);
           this.loading = false;
           this.realms = data;
           this.showSuccessNotification();
@@ -258,6 +259,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
         .subscribe(
           () => {
             this.setupCompleted = true;
+            this.rgwMultisiteService.setRestartGatewayMessage(false);
             this.loading = false;
             this.showSuccessNotification();
           },
