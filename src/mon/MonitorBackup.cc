@@ -25,16 +25,22 @@
 void *MonitorBackupManager::entry() {
     while (true) {
         m_wakeup.Get();
+        
+        if (m_manager_stop) {
+            return nullptr;
+        }
 
-        bool start_backup = false;
         KeyValueDB::BackupStats *stats = m_last_backup.get();
         KeyValueDB::BackupCleanupStats *cleanup_stats = m_last_cleanup.get();
         auto now = ceph_clock_now();
         uint64_t interval = m_cct->_conf.get_val<uint64_t>("mon_backup_interval");
         uint64_t cleanup_interval = m_cct->_conf.get_val<uint64_t>("mon_backup_cleanup_interval");
+        bool start_backup = false;
+        bool start_backup_full = false;
         
         if (!stats && interval > 0) {
             start_backup = true;
+            start_backup_full = true;
         } else if (stats && interval > 0) {
             if ((now - stats->timestamp) > (interval * 60)) {
                 dout(10)  << " trigger timed backup " << dendl;
@@ -53,18 +59,27 @@ void *MonitorBackupManager::entry() {
                 start_cleanup = true;
             }
         }
+        
         start_backup |= m_do_backup;
+        start_backup_full |= m_do_backup_full;
+        
         m_do_cleanup = false;
         m_do_backup = false;
+        m_do_backup_full = false;
         m_lock.unlock();
         
         if (start_cleanup) {
             do_cleanup();
         }
         if (start_backup) {
-            do_backup();
+            do_backup(start_backup_full);
         }
     }
+}
+void MonitorBackupManager::stop() {
+    m_manager_stop = true;
+    m_wakeup.Put();
+    join();
 }
 
 void MonitorBackupManager::do_cleanup() {
@@ -114,7 +129,7 @@ bool MonitorBackupManager::check_free_space() {
     return true;
 }
 
-void MonitorBackupManager::do_backup() {
+void MonitorBackupManager::do_backup(bool full) {
     dout(1) << "start backup" << dendl;
     if (!mon || !mon->store || !mon->logger) {
         return;
@@ -128,7 +143,7 @@ void MonitorBackupManager::do_backup() {
         return;
     }
     
-    bool full = m_cct->_conf.get_val<bool>("mon_backup_always_full");
+    full |= m_cct->_conf.get_val<bool>("mon_backup_always_full");
     
     // we do full backups when it is the first of every 5th backup
     if (!full && (!m_last_backup || m_last_backup.get()->id % 5 == 0)) {

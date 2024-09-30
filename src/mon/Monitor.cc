@@ -204,8 +204,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   admin_hook(NULL),
   routed_request_tid(0),
-  op_tracker(cct, g_conf().get_val<bool>("mon_enable_op_tracker"), 1),
-  backup_manager(MonitorBackupManager(cct, this))
+  op_tracker(cct, g_conf().get_val<bool>("mon_enable_op_tracker"), 1)
 {
   clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
   audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
@@ -507,6 +506,10 @@ abort:
 
 int Monitor::backup(bool full)
 {
+  if (!backup_manager) {
+    dout(1) << "backup manager not started" << dendl;
+    return -EIO;
+  }
   std::string backup_path = g_conf().get_val<string>("mon_backup_path");
   full |= g_conf().get_val<bool>("mon_backup_always_full");
   dout(1) << "triggering backup full=" << full << dendl;
@@ -515,7 +518,7 @@ int Monitor::backup(bool full)
     dout(1) << "backup failed: no backup_path configured" << dendl;
     return -ENOTDIR;
   }
-  uint64_t jobid = backup_manager.backup();
+  uint64_t jobid = backup_manager->backup(full);
   if (jobid > 0) {
     dout(1) << "queues backup job id"
               << jobid << dendl;
@@ -528,6 +531,10 @@ int Monitor::backup(bool full)
 
 int Monitor::backup_cleanup()
 {
+  if (!backup_manager) {
+    dout(1) << "backup manager not started" << dendl;
+    return -EIO;
+  }
   dout(1) << "triggering backup_cleanup" << dendl;
   logger->inc(l_mon_backup_cleanup_started);
   std::string backup_path = g_conf().get_val<string>("mon_backup_path");
@@ -536,7 +543,7 @@ int Monitor::backup_cleanup()
     logger->inc(l_mon_backup_cleanup_failed);
     return -ENOTDIR;
   }
-  uint32_t jobid = backup_manager.cleanup();
+  uint32_t jobid = backup_manager->cleanup();
   dout(1) << "queues backup cleanup job "
             << jobid << dendl;
   return jobid > 0 ? 0 : -EIO;
@@ -1035,6 +1042,9 @@ int Monitor::init()
 
   // add features of myself into feature_map
   session_map.feature_map.add_mon(con_self->get_features());
+  
+  backup_manager = new MonitorBackupManager(cct, this);
+
   return 0;
 }
 
@@ -1130,6 +1140,8 @@ void Monitor::shutdown()
     delete admin_hook;
     admin_hook = NULL;
   }
+  backup_manager->stop();
+  delete backup_manager;
 
   elector.shutdown();
 
@@ -6065,7 +6077,7 @@ void Monitor::tick()
       backup();
       mon_backup_requested = false;
   }
-  backup_manager.tick();
+  backup_manager->tick();
 
   mgr_client.update_daemon_health(get_health_metrics());
   new_tick();
