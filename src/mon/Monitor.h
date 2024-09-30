@@ -1050,7 +1050,7 @@ private:
 
   OpTracker op_tracker;
 
-  MonitorBackupManager backup_manager;
+  MonitorBackupManager *backup_manager = nullptr;
   bool mon_backup_requested = false;
 
  public:
@@ -1099,7 +1099,7 @@ private:
 		       std::ostream& out);
 
   // Notify monitor that it should create a new database backup
-  void should_backup() {
+  void set_should_backup() {
     mon_backup_requested = true;
   }
   // Execute mon database backup

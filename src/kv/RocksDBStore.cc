@@ -2065,6 +2065,18 @@ KeyValueDB::BackupStats RocksDBStore::backup(const std::string& path, bool full)
   rv.size = new_backup_info.size;
   rv.number_files = new_backup_info.number_files;
 
+  if (full) {
+    // create symlink to last full backup
+    std::ostringstream os;
+    os << path << "/last_full";
+    const std::filesystem::path full_path = os.str();
+    std::ofstream full_file (full_path);
+    if (full_file.is_open()) {
+      full_file << std::to_string(new_backup_info.backup_id);
+      full_file.close();
+    }
+  }
+
   return rv;
 }
 

@@ -603,7 +603,7 @@ For more information about the pool flags see :ref:`Pool values <setpoolvalues>`
 Monitor backup
 ==============
 
-The Ceph Monitor can create consistent backups of its RocksDB to facilitate restoration in case the entire Monitor cluster fails. It uses the native RocksDB backup functionality to create consistant
+The Ceph Monitor can create consistent backups of its RocksDB to facilitate restoration in case the entire Monitor cluster fails. It uses the native RocksDB backup functionality to create consistant 
 snapshots that can be backuped elsewhere without downtime.
 
 When :ref:`Backup Interval<mon_backup_interval>` is set, the backup is triggered the specified interval in minutes.
@@ -633,7 +633,7 @@ You can trigger `backup` and `backup_cleanup` through the admin socket of any mo
      ceph --admin-daemon .../mon.asok backup_cleanup
 
 Since all backup operations run in their own threads, monitoring should be done using performance metrics.
-Use the prometheus interface to monitor for `backup_failed` or missing `backup_started` counters.
+Use prometheus to monitor for `backup_failed` or missing `backup_started` counters.
 
   .. prompt:: bash #
      ./bin/ceph --admin-daemon .../mon.asok perf dump | jq '.["mon"] | with_entries(select(.key | startswith("backup_")))'
