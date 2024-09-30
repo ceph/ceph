@@ -47,7 +47,7 @@ class TestCustomContainer(unittest.TestCase):
                     ]
                 ]
             },
-            image='docker.io/library/hello-world:latest'
+            image='quay.io/hello-world/hello-world:latest'
         )
 
     def test_entrypoint(self):
