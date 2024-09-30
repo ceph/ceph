@@ -1,0 +1,343 @@
+Metadata-Version: 2.1
+Name: parse_type
+Version: 0.6.3
+Summary: Simplifies to build parse types based on the parse module
+Home-page: https://github.com/jenisys/parse_type
+Download-URL: http://pypi.python.org/pypi/parse_type
+Author: Jens Engel
+Author-email: Jens Engel <jenisys@noreply.github.com>
+License: MIT
+Project-URL: Homepage, https://github.com/jenisys/parse_type
+Project-URL: Download, https://pypi.org/project/parse_type/
+Project-URL: Source Code, https://github.com/jenisys/parse_type
+Project-URL: Issue Tracker, https://github.com/jenisys/parse_type/issues/
+Keywords: parse,parsing
+Platform: any
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.2
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Code Generators
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=2.7, !=3.0.*, !=3.1.*
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: six >=1.15
+Requires-Dist: enum34 ; python_version < "3.4"
+Requires-Dist: parse >=1.13.1 ; python_version <= "2.7"
+Requires-Dist: parse >=1.18.0 ; python_version >= "3.0"
+Provides-Extra: develop
+Requires-Dist: setuptools ; extra == 'develop'
+Requires-Dist: build >=0.5.1 ; extra == 'develop'
+Requires-Dist: twine >=1.13.0 ; extra == 'develop'
+Requires-Dist: coverage >=4.4 ; extra == 'develop'
+Requires-Dist: pytest-html >=1.19.0 ; extra == 'develop'
+Requires-Dist: pytest-cov ; extra == 'develop'
+Requires-Dist: tox <4.0,>=2.8 ; extra == 'develop'
+Requires-Dist: pylint ; extra == 'develop'
+Requires-Dist: pytest <5.0 ; (python_version < "3.0") and extra == 'develop'
+Requires-Dist: virtualenv <20.22.0 ; (python_version <= "3.6") and extra == 'develop'
+Requires-Dist: virtualenv >=20.0.0 ; (python_version > "3.6") and extra == 'develop'
+Requires-Dist: pytest >=5.0 ; (python_version >= "3.0") and extra == 'develop'
+Requires-Dist: ruff ; (python_version >= "3.7") and extra == 'develop'
+Provides-Extra: docs
+Requires-Dist: Sphinx >=1.6 ; extra == 'docs'
+Requires-Dist: sphinx-bootstrap-theme >=0.6.0 ; extra == 'docs'
+Provides-Extra: testing
+Requires-Dist: pytest-html >=1.19.0 ; extra == 'testing'
+Requires-Dist: pytest <5.0 ; (python_version < "3.0") and extra == 'testing'
+Requires-Dist: pytest >=5.0 ; (python_version >= "3.0") and extra == 'testing'
+
+===============================================================================
+parse_type
+===============================================================================
+
+.. |badge.CI_status| image:: https://github.com/jenisys/parse_type/actions/workflows/test.yml/badge.svg
+    :target: https://github.com/jenisys/parse_type/actions/workflows/test.yml
+    :alt: CI Build Status
+
+.. |badge.latest_version| image:: https://img.shields.io/pypi/v/parse_type.svg
+    :target: https://pypi.python.org/pypi/parse_type
+    :alt: Latest Version
+
+.. |badge.downloads| image:: https://img.shields.io/pypi/dm/parse_type.svg
+    :target: https://pypi.python.org/pypi/parse_type
+    :alt: Downloads
+
+.. |badge.license| image:: https://img.shields.io/pypi/l/parse_type.svg
+    :target: https://pypi.python.org/pypi/parse_type/
+    :alt: License
+
+|badge.CI_status| |badge.latest_version| |badge.license| |badge.downloads|
+
+`parse_type`_ extends the `parse`_ module (opposite of `string.format()`_)
+with the following features:
+
+* build type converters for common use cases (enum/mapping, choice)
+* build a type converter with a cardinality constraint (0..1, 0..*, 1..*)
+    from the type converter with cardinality=1.
+* compose a type converter from other type converters
+* an extended parser that supports the CardinalityField naming schema
+    and creates missing type variants (0..1, 0..*, 1..*) from the
+    primary type converter
+
+.. _parse_type: http://pypi.python.org/pypi/parse_type
+.. _parse:      http://pypi.python.org/pypi/parse
+.. _`string.format()`: http://docs.python.org/library/string.html#format-string-syntax
+
+
+Definitions
+-------------------------------------------------------------------------------
+
+*type converter*
+    A type converter function that converts a textual representation
+    of a value type into instance of this value type.
+    In addition, a type converter function is often annotated with attributes
+    that allows the `parse`_ module to use it in a generic way.
+    A type converter is also called a *parse_type* (a definition used here).
+
+*cardinality field*
+    A naming convention for related types that differ in cardinality.
+    A cardinality field is a type name suffix in the format of a field.
+    It allows parse format expression, ala::
+
+        "{person:Person}"     #< Cardinality: 1    (one; the normal case)
+        "{person:Person?}"    #< Cardinality: 0..1 (zero or one  = optional)
+        "{persons:Person*}"   #< Cardinality: 0..* (zero or more = many0)
+        "{persons:Person+}"   #< Cardinality: 1..* (one  or more = many)
+
+    This naming convention mimics the relationship descriptions in UML diagrams.
+
+
+Basic Example
+-------------------------------------------------------------------------------
+
+Define an own type converter for numbers (integers):
+
+.. code-block:: python
+
+    # -- USE CASE:
+    def parse_number(text):
+        return int(text)
+    parse_number.pattern = r"\d+"  # -- REGULAR EXPRESSION pattern for type.
+
+This is equivalent to:
+
+.. code-block:: python
+
+    import parse
+
+    @parse.with_pattern(r"\d+")
+    def parse_number(text):
+         return int(text)
+    assert hasattr(parse_number, "pattern")
+    assert parse_number.pattern == r"\d+"
+
+
+.. code-block:: python
+
+    # -- USE CASE: Use the type converter with the parse module.
+    schema = "Hello {number:Number}"
+    parser = parse.Parser(schema, dict(Number=parse_number))
+    result = parser.parse("Hello 42")
+    assert result is not None, "REQUIRE: text matches the schema."
+    assert result["number"] == 42
+
+    result = parser.parse("Hello XXX")
+    assert result is None, "MISMATCH: text does not match the schema."
+
+.. hint::
+
+    The described functionality above is standard functionality
+    of the `parse`_ module. It serves as introduction for the remaining cases.
+
+
+Cardinality
+-------------------------------------------------------------------------------
+
+Create an type converter for "ManyNumbers" (List, separated with commas)
+with cardinality "1..* = 1+" (many) from the type converter for a "Number".
+
+.. code-block:: python
+
+    # -- USE CASE: Create new type converter with a cardinality constraint.
+    # CARDINALITY: many := one or more (1..*)
+    from parse import Parser
+    from parse_type import TypeBuilder
+    parse_numbers = TypeBuilder.with_many(parse_number, listsep=",")
+
+    schema = "List: {numbers:ManyNumbers}"
+    parser = Parser(schema, dict(ManyNumbers=parse_numbers))
+    result = parser.parse("List: 1, 2, 3")
+    assert result["numbers"] == [1, 2, 3]
+
+
+Create an type converter for an "OptionalNumbers" with cardinality "0..1 = ?"
+(optional) from the type converter for a "Number".
+
+.. code-block:: python
+
+    # -- USE CASE: Create new type converter with cardinality constraint.
+    # CARDINALITY: optional := zero or one (0..1)
+    from parse import Parser
+    from parse_type import TypeBuilder
+
+    parse_optional_number = TypeBuilder.with_optional(parse_number)
+    schema = "Optional: {number:OptionalNumber}"
+    parser = Parser(schema, dict(OptionalNumber=parse_optional_number))
+    result = parser.parse("Optional: 42")
+    assert result["number"] == 42
+    result = parser.parse("Optional: ")
+    assert result["number"] == None
+
+
+Enumeration (Name-to-Value Mapping)
+-------------------------------------------------------------------------------
+
+Create an type converter for an "Enumeration" from the description of
+the mapping as dictionary.
+
+.. code-block:: python
+
+    # -- USE CASE: Create a type converter for an enumeration.
+    from parse import Parser
+    from parse_type import TypeBuilder
+
+    parse_enum_yesno = TypeBuilder.make_enum({"yes": True, "no": False})
+    parser = Parser("Answer: {answer:YesNo}", dict(YesNo=parse_enum_yesno))
+    result = parser.parse("Answer: yes")
+    assert result["answer"] == True
+
+
+Create an type converter for an "Enumeration" from the description of
+the mapping as an enumeration class (`Python 3.4 enum`_ or the `enum34`_
+backport; see also: `PEP-0435`_).
+
+.. code-block:: python
+
+    # -- USE CASE: Create a type converter for enum34 enumeration class.
+    # NOTE: Use Python 3.4 or enum34 backport.
+    from parse import Parser
+    from parse_type import TypeBuilder
+    from enum import Enum
+
+    class Color(Enum):
+        red   = 1
+        green = 2
+        blue  = 3
+
+    parse_enum_color = TypeBuilder.make_enum(Color)
+    parser = Parser("Select: {color:Color}", dict(Color=parse_enum_color))
+    result = parser.parse("Select: red")
+    assert result["color"] is Color.red
+
+.. _`Python 3.4 enum`: http://docs.python.org/3.4/library/enum.html#module-enum
+.. _enum34:   http://pypi.python.org/pypi/enum34
+.. _PEP-0435: http://www.python.org/dev/peps/pep-0435
+
+
+Choice (Name Enumeration)
+-------------------------------------------------------------------------------
+
+A Choice data type allows to select one of several strings.
+
+Create an type converter for an "Choice" list, a list of unique names
+(as string).
+
+.. code-block:: python
+
+    from parse import Parser
+    from parse_type import TypeBuilder
+
+    parse_choice_yesno = TypeBuilder.make_choice(["yes", "no"])
+    schema = "Answer: {answer:ChoiceYesNo}"
+    parser = Parser(schema, dict(ChoiceYesNo=parse_choice_yesno))
+    result = parser.parse("Answer: yes")
+    assert result["answer"] == "yes"
+
+
+Variant (Type Alternatives)
+-------------------------------------------------------------------------------
+
+Sometimes you need a type converter that can accept text for multiple
+type converter alternatives. This is normally called a "variant" (or: union).
+
+Create an type converter for an "Variant" type that accepts:
+
+* Numbers (positive numbers, as integer)
+* Color enum values (by name)
+
+.. code-block:: python
+
+    from parse import Parser, with_pattern
+    from parse_type import TypeBuilder
+    from enum import Enum
+
+    class Color(Enum):
+        red   = 1
+        green = 2
+        blue  = 3
+
+    @with_pattern(r"\d+")
+    def parse_number(text):
+        return int(text)
+
+    # -- MAKE VARIANT: Alternatives of different type converters.
+    parse_color = TypeBuilder.make_enum(Color)
+    parse_variant = TypeBuilder.make_variant([parse_number, parse_color])
+    schema = "Variant: {variant:Number_or_Color}"
+    parser = Parser(schema, dict(Number_or_Color=parse_variant))
+
+    # -- TEST VARIANT: With number, color and mismatch.
+    result = parser.parse("Variant: 42")
+    assert result["variant"] == 42
+    result = parser.parse("Variant: blue")
+    assert result["variant"] is Color.blue
+    result = parser.parse("Variant: __MISMATCH__")
+    assert not result
+
+
+
+Extended Parser with CardinalityField support
+-------------------------------------------------------------------------------
+
+The parser extends the ``parse.Parser`` and adds the following functionality:
+
+* supports the CardinalityField naming scheme
+* automatically creates missing type variants for types with
+  a CardinalityField by using the primary type converter for cardinality=1
+* extends the provide type converter dictionary with new type variants.
+
+Example:
+
+.. code-block:: python
+
+    # -- USE CASE: Parser with CardinalityField support.
+    # NOTE: Automatically adds missing type variants with CardinalityField part.
+    # USE:  parse_number() type converter from above.
+    from parse_type.cfparse import Parser
+
+    # -- PREPARE: parser, adds missing type variant for cardinality 1..* (many)
+    type_dict = dict(Number=parse_number)
+    schema = "List: {numbers:Number+}"
+    parser = Parser(schema, type_dict)
+    assert "Number+" in type_dict, "Created missing type variant based on: Number"
+
+    # -- USE: parser.
+    result = parser.parse("List: 1, 2, 3")
+    assert result["numbers"] == [1, 2, 3]

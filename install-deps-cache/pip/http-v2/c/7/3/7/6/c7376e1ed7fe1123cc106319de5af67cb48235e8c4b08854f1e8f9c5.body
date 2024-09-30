@@ -1,0 +1,713 @@
+Metadata-Version: 2.1
+Name: isort
+Version: 5.5.3
+Summary: A Python utility / library to sort Python imports.
+Home-page: https://pycqa.github.io/isort/
+License: MIT
+Keywords: Refactor,Lint,Imports,Sort,Clean
+Author: Timothy Crosley
+Author-email: timothy.crosley@gmail.com
+Requires-Python: >=3.6,<4.0
+Classifier: Development Status :: 6 - Mature
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Utilities
+Provides-Extra: colors
+Provides-Extra: pipfile_deprecated_finder
+Provides-Extra: requirements_deprecated_finder
+Requires-Dist: colorama (>=0.4.3,<0.5.0); extra == "colors"
+Requires-Dist: pip-api; extra == "requirements_deprecated_finder"
+Requires-Dist: pipreqs; extra == "pipfile_deprecated_finder" or extra == "requirements_deprecated_finder"
+Requires-Dist: requirementslib; extra == "pipfile_deprecated_finder"
+Project-URL: Changelog, https://github.com/pycqa/isort/blob/master/CHANGELOG.md
+Project-URL: Documentation, https://pycqa.github.io/isort/
+Project-URL: Repository, https://github.com/pycqa/isort
+Description-Content-Type: text/markdown
+
+[![isort - isort your imports, so you don't have to.](https://raw.githubusercontent.com/pycqa/isort/develop/art/logo_large.png)](https://pycqa.github.io/isort/)
+
+------------------------------------------------------------------------
+
+[![PyPI version](https://badge.fury.io/py/isort.svg)](https://badge.fury.io/py/isort)
+[![Test Status](https://github.com/pycqa/isort/workflows/Test/badge.svg?branch=develop)](https://github.com/pycqa/isort/actions?query=workflow%3ATest)
+[![Lint Status](https://github.com/pycqa/isort/workflows/Lint/badge.svg?branch=develop)](https://github.com/pycqa/isort/actions?query=workflow%3ALint)
+[![Code coverage Status](https://codecov.io/gh/pycqa/isort/branch/develop/graph/badge.svg)](https://codecov.io/gh/pycqa/isort)
+[![Maintainability](https://api.codeclimate.com/v1/badges/060372d3e77573072609/maintainability)](https://codeclimate.com/github/timothycrosley/isort/maintainability)
+[![License](https://img.shields.io/github/license/mashape/apistatus.svg)](https://pypi.org/project/isort/)
+[![Join the chat at https://gitter.im/timothycrosley/isort](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/timothycrosley/isort?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Downloads](https://pepy.tech/badge/isort)](https://pepy.tech/project/isort)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
+[![DeepSource](https://static.deepsource.io/deepsource-badge-light-mini.svg)](https://deepsource.io/gh/timothycrosley/isort/?ref=repository-badge)
+_________________
+
+[Read Latest Documentation](https://pycqa.github.io/isort/) - [Browse GitHub Code Repository](https://github.com/pycqa/isort/)
+_________________
+
+isort your imports, so you don't have to.
+
+isort is a Python utility / library to sort imports alphabetically, and
+automatically separated into sections and by type. It provides a command line
+utility, Python library and [plugins for various
+editors](https://github.com/pycqa/isort/wiki/isort-Plugins) to
+quickly sort all your imports. It requires Python 3.6+ to run but
+supports formatting Python 2 code too.
+
+[Try isort now from your browser!](https://pycqa.github.io/isort/docs/quick_start/0.-try/)
+
+![Example Usage](https://raw.github.com/pycqa/isort/develop/example.gif)
+
+Before isort:
+
+```python
+from my_lib import Object
+
+import os
+
+from my_lib import Object3
+
+from my_lib import Object2
+
+import sys
+
+from third_party import lib15, lib1, lib2, lib3, lib4, lib5, lib6, lib7, lib8, lib9, lib10, lib11, lib12, lib13, lib14
+
+import sys
+
+from __future__ import absolute_import
+
+from third_party import lib3
+
+print("Hey")
+print("yo")
+```
+
+After isort:
+
+```python
+from __future__ import absolute_import
+
+import os
+import sys
+
+from third_party import (lib1, lib2, lib3, lib4, lib5, lib6, lib7, lib8,
+                         lib9, lib10, lib11, lib12, lib13, lib14, lib15)
+
+from my_lib import Object, Object2, Object3
+
+print("Hey")
+print("yo")
+```
+
+## Installing isort
+
+Installing isort is as simple as:
+
+```bash
+pip install isort
+```
+
+Install isort with requirements.txt support:
+
+```bash
+pip install isort[requirements_deprecated_finder]
+```
+
+Install isort with Pipfile support:
+
+```bash
+pip install isort[pipfile_deprecated_finder]
+```
+
+Install isort with both formats support:
+
+```bash
+pip install isort[requirements_deprecated_finder,pipfile_deprecated_finder]
+```
+
+## Using isort
+
+**From the command line**:
+
+```bash
+isort mypythonfile.py mypythonfile2.py
+```
+
+or recursively:
+
+```bash
+isort .
+```
+
+*which is equivalent to:*
+
+```bash
+isort **/*.py
+```
+
+or to see the proposed changes without applying them:
+
+```bash
+isort mypythonfile.py --diff
+```
+
+Finally, to atomically run isort against a project, only applying
+changes if they don't introduce syntax errors do:
+
+```bash
+isort --atomic .
+```
+
+(Note: this is disabled by default as it keeps isort from being able to
+run against code written using a different version of Python)
+
+**From within Python**:
+
+```bash
+import isort
+
+isort.file("pythonfile.py")
+```
+
+or:
+
+```bash
+import isort
+
+sorted_code = isort.code("import b\nimport a\n")
+```
+
+## Installing isort's for your preferred text editor
+
+Several plugins have been written that enable to use isort from within a
+variety of text-editors. You can find a full list of them [on the isort
+wiki](https://github.com/pycqa/isort/wiki/isort-Plugins).
+Additionally, I will enthusiastically accept pull requests that include
+plugins for other text editors and add documentation for them as I am
+notified.
+
+## Multi line output modes
+
+You will notice above the \"multi\_line\_output\" setting. This setting
+defines how from imports wrap when they extend past the line\_length
+limit and has 12 possible settings:
+
+**0 - Grid**
+
+```python
+from third_party import (lib1, lib2, lib3,
+                         lib4, lib5, ...)
+```
+
+**1 - Vertical**
+
+```python
+from third_party import (lib1,
+                         lib2,
+                         lib3
+                         lib4,
+                         lib5,
+                         ...)
+```
+
+**2 - Hanging Indent**
+
+```python
+from third_party import \
+    lib1, lib2, lib3, \
+    lib4, lib5, lib6
+```
+
+**3 - Vertical Hanging Indent**
+
+```python
+from third_party import (
+    lib1,
+    lib2,
+    lib3,
+    lib4,
+)
+```
+
+**4 - Hanging Grid**
+
+```python
+from third_party import (
+    lib1, lib2, lib3, lib4,
+    lib5, ...)
+```
+
+**5 - Hanging Grid Grouped**
+
+```python
+from third_party import (
+    lib1, lib2, lib3, lib4,
+    lib5, ...
+)
+```
+
+**6 - Hanging Grid Grouped, No Trailing Comma**
+
+In Mode 5 isort leaves a single extra space to maintain consistency of
+output when a comma is added at the end. Mode 6 is the same - except
+that no extra space is maintained leading to the possibility of lines
+one character longer. You can enforce a trailing comma by using this in
+conjunction with `-tc` or `include_trailing_comma: True`.
+
+```python
+from third_party import (
+    lib1, lib2, lib3, lib4,
+    lib5
+)
+```
+
+**7 - NOQA**
+
+```python
+from third_party import lib1, lib2, lib3, ...  # NOQA
+```
+
+Alternatively, you can set `force_single_line` to `True` (`-sl` on the
+command line) and every import will appear on its own line:
+
+```python
+from third_party import lib1
+from third_party import lib2
+from third_party import lib3
+...
+```
+
+**8 - Vertical Hanging Indent Bracket**
+
+Same as Mode 3 - _Vertical Hanging Indent_ but the closing parentheses
+on the last line is indented.
+
+```python
+from third_party import (
+    lib1,
+    lib2,
+    lib3,
+    lib4,
+    )
+```
+
+**9 - Vertical Prefix From Module Import**
+
+Starts a new line with the same `from MODULE import ` prefix when lines are longer than the line length limit.
+
+```python
+from third_party import lib1, lib2, lib3
+from third_party import lib4, lib5, lib6
+```
+
+**10 - Hanging Indent With Parentheses**
+
+Same as Mode 2 - _Hanging Indent_ but uses parentheses instead of backslash
+for wrapping long lines.
+
+```python
+from third_party import (
+    lib1, lib2, lib3,
+    lib4, lib5, lib6)
+```
+
+**11 - Backslash Grid**
+
+Same as Mode 0 - _Grid_ but uses backslashes instead of parentheses to group imports.
+
+```python
+from third_party import lib1, lib2, lib3, \
+                        lib4, lib5
+```
+
+## Indentation
+
+To change the how constant indents appear - simply change the
+indent property with the following accepted formats:
+
+-   Number of spaces you would like. For example: 4 would cause standard
+    4 space indentation.
+-   Tab
+-   A verbatim string with quotes around it.
+
+For example:
+
+```python
+"    "
+```
+
+is equivalent to 4.
+
+For the import styles that use parentheses, you can control whether or
+not to include a trailing comma after the last import with the
+`include_trailing_comma` option (defaults to `False`).
+
+## Intelligently Balanced Multi-line Imports
+
+As of isort 3.1.0 support for balanced multi-line imports has been
+added. With this enabled isort will dynamically change the import length
+to the one that produces the most balanced grid, while staying below the
+maximum import length defined.
+
+Example:
+
+```python
+from __future__ import (absolute_import, division,
+                        print_function, unicode_literals)
+```
+
+Will be produced instead of:
+
+```python
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+```
+
+To enable this set `balanced_wrapping` to `True` in your config or pass
+the `-e` option into the command line utility.
+
+## Custom Sections and Ordering
+
+You can change the section order with `sections` option from the default
+of:
+
+```ini
+FUTURE,STDLIB,THIRDPARTY,FIRSTPARTY,LOCALFOLDER
+```
+
+to your preference:
+
+```ini
+sections=FUTURE,STDLIB,FIRSTPARTY,THIRDPARTY,LOCALFOLDER
+```
+
+You also can define your own sections and their order.
+
+Example:
+
+```ini
+known_django=django
+known_pandas=pandas,numpy
+sections=FUTURE,STDLIB,DJANGO,THIRDPARTY,PANDAS,FIRSTPARTY,LOCALFOLDER
+```
+
+would create two new sections with the specified known modules.
+
+The `no_lines_before` option will prevent the listed sections from being
+split from the previous section by an empty line.
+
+Example:
+
+```ini
+sections=FUTURE,STDLIB,THIRDPARTY,FIRSTPARTY,LOCALFOLDER
+no_lines_before=LOCALFOLDER
+```
+
+would produce a section with both FIRSTPARTY and LOCALFOLDER modules
+combined.
+
+**IMPORTANT NOTE**: It is very important to know when setting `known` sections that the naming
+does not directly map for historical reasons. For custom settings, the only difference is
+capitalization (`known_custom=custom` VS `sections=CUSTOM,...`) for all others reference the
+following mapping:
+
+ - `known_standard_library` : `STANDARD_LIBRARY`
+ - `extra_standard_library` : `STANDARD_LIBRARY` # Like known standard library but appends instead of replacing
+ - `known_future_library` : `FUTURE`
+ - `known_first_party`: `FIRSTPARTY`
+ - `known_third_party`: `THIRDPARTY`
+ - `known_local_folder`: `LOCALFOLDER`
+
+This will likely be changed in isort 6.0.0+ in a backwards compatible way.
+
+## Auto-comment import sections
+
+Some projects prefer to have import sections uniquely titled to aid in
+identifying the sections quickly when visually scanning. isort can
+automate this as well. To do this simply set the
+`import_heading_{section_name}` setting for each section you wish to
+have auto commented - to the desired comment.
+
+For Example:
+
+```ini
+import_heading_stdlib=Standard Library
+import_heading_firstparty=My Stuff
+```
+
+Would lead to output looking like the following:
+
+```python
+# Standard Library
+import os
+import sys
+
+import django.settings
+
+# My Stuff
+import myproject.test
+```
+
+## Ordering by import length
+
+isort also makes it easy to sort your imports by length, simply by
+setting the `length_sort` option to `True`. This will result in the
+following output style:
+
+```python
+from evn.util import (
+    Pool,
+    Dict,
+    Options,
+    Constant,
+    DecayDict,
+    UnexpectedCodePath,
+)
+```
+
+It is also possible to opt-in to sorting imports by length for only
+specific sections by using `length_sort_` followed by the section name
+as a configuration item, e.g.:
+
+    length_sort_stdlib=1
+
+## Controlling how isort sections `from` imports
+
+By default isort places straight (`import y`) imports above from imports (`from x import y`):
+
+```python
+import b
+from a import a  # This will always appear below because it is a from import.
+```
+
+However, if you prefer to keep strict alphabetical sorting you can set [force sort within sections](https://pycqa.github.io/isort/docs/configuration/options/#force-sort-within-sections) to true. Resulting in:
+
+
+```python
+from a import a  # This will now appear at top because a appears in the alphabet before b
+import b
+```
+
+You can even tell isort to always place from imports on top, instead of the default of placing them on bottom, using [from first](https://pycqa.github.io/isort/docs/configuration/options/#from-first).
+
+```python
+from b import b # If from first is set to True, all from imports will be placed before non-from imports.
+import a
+```
+
+## Skip processing of imports (outside of configuration)
+
+To make isort ignore a single import simply add a comment at the end of
+the import line containing the text `isort:skip`:
+
+```python
+import module  # isort:skip
+```
+
+or:
+
+```python
+from xyz import (abc,  # isort:skip
+                 yo,
+                 hey)
+```
+
+To make isort skip an entire file simply add `isort:skip_file` to the
+module's doc string:
+
+```python
+""" my_module.py
+    Best module ever
+
+   isort:skip_file
+"""
+
+import b
+import a
+```
+
+## Adding an import to multiple files
+
+isort makes it easy to add an import statement across multiple files,
+while being assured it's correctly placed.
+
+To add an import to all files:
+
+```bash
+isort -a "from __future__ import print_function" *.py
+```
+
+To add an import only to files that already have imports:
+
+```bash
+isort -a "from __future__ import print_function" --append-only *.py
+```
+
+
+## Removing an import from multiple files
+
+isort also makes it easy to remove an import from multiple files,
+without having to be concerned with how it was originally formatted.
+
+From the command line:
+
+```bash
+isort --rm "os.system" *.py
+```
+
+## Using isort to verify code
+
+The `--check-only` option
+-------------------------
+
+isort can also be used to used to verify that code is correctly
+formatted by running it with `-c`. Any files that contain incorrectly
+sorted and/or formatted imports will be outputted to `stderr`.
+
+```bash
+isort **/*.py -c -v
+
+SUCCESS: /home/timothy/Projects/Open_Source/isort/isort_kate_plugin.py Everything Looks Good!
+ERROR: /home/timothy/Projects/Open_Source/isort/isort/isort.py Imports are incorrectly sorted.
+```
+
+One great place this can be used is with a pre-commit git hook, such as
+this one by \@acdha:
+
+<https://gist.github.com/acdha/8717683>
+
+This can help to ensure a certain level of code quality throughout a
+project.
+
+Git hook
+--------
+
+isort provides a hook function that can be integrated into your Git
+pre-commit script to check Python code before committing.
+
+To cause the commit to fail if there are isort errors (strict mode),
+include the following in `.git/hooks/pre-commit`:
+
+```python
+#!/usr/bin/env python
+import sys
+from isort.hooks import git_hook
+
+sys.exit(git_hook(strict=True, modify=True, lazy=True, settings_file=""))
+```
+
+If you just want to display warnings, but allow the commit to happen
+anyway, call `git_hook` without the strict parameter. If you want to
+display warnings, but not also fix the code, call `git_hook` without the
+modify parameter.
+The `lazy` argument is to support users who are "lazy" to add files
+individually to the index and tend to use `git commit -a` instead.
+Set it to `True` to ensure all tracked files are properly isorted,
+leave it out or set it to `False` to check only files added to your
+index.
+
+If you want to use a specific configuration file for the hook, you can pass its
+path to settings_file. If no path is specifically requested, `git_hook` will
+search for the configuration file starting at the directory containing the first
+staged file, as per `git diff-index` ordering, and going upward in the directory
+structure until a valid configuration file is found or
+[`MAX_CONFIG_SEARCH_DEPTH`](src/config.py:35) directories are checked.
+The settings_file parameter is used to support users who keep their configuration
+file in a directory that might not be a parent of all the other files.
+
+## Setuptools integration
+
+Upon installation, isort enables a `setuptools` command that checks
+Python files declared by your project.
+
+Running `python setup.py isort` on the command line will check the files
+listed in your `py_modules` and `packages`. If any warning is found, the
+command will exit with an error code:
+
+```bash
+$ python setup.py isort
+```
+
+Also, to allow users to be able to use the command without having to
+install isort themselves, add isort to the setup\_requires of your
+`setup()` like so:
+
+```python
+setup(
+    name="project",
+    packages=["project"],
+
+    setup_requires=[
+        "isort"
+    ]
+)
+```
+
+## Spread the word
+
+[![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
+
+Place this badge at the top of your repository to let others know your project uses isort.
+
+For README.md:
+
+```markdown
+[![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
+```
+
+Or README.rst:
+
+```rst
+.. image:: https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336
+    :target: https://pycqa.github.io/isort/
+```
+
+## Security contact information
+
+To report a security vulnerability, please use the [Tidelift security
+contact](https://tidelift.com/security). Tidelift will coordinate the
+fix and disclosure.
+
+## Why isort?
+
+isort simply stands for import sort. It was originally called
+"sortImports" however I got tired of typing the extra characters and
+came to the realization camelCase is not pythonic.
+
+I wrote isort because in an organization I used to work in the manager
+came in one day and decided all code must have alphabetically sorted
+imports. The code base was huge - and he meant for us to do it by hand.
+However, being a programmer - I\'m too lazy to spend 8 hours mindlessly
+performing a function, but not too lazy to spend 16 hours automating it.
+I was given permission to open source sortImports and here we are :)
+
+------------------------------------------------------------------------
+
+[Get professionally supported isort with the Tidelift
+Subscription](https://tidelift.com/subscription/pkg/pypi-isort?utm_source=pypi-isort&utm_medium=referral&utm_campaign=readme)
+
+Professional support for isort is available as part of the [Tidelift
+Subscription](https://tidelift.com/subscription/pkg/pypi-isort?utm_source=pypi-isort&utm_medium=referral&utm_campaign=readme).
+Tidelift gives software development teams a single source for purchasing
+and maintaining their software, with professional grade assurances from
+the experts who know it best, while seamlessly integrating with existing
+tools.
+
+------------------------------------------------------------------------
+
+Thanks and I hope you find isort useful!
+
+~Timothy Crosley
+

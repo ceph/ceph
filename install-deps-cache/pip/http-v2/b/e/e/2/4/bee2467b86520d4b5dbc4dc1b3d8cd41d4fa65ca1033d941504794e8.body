@@ -1,0 +1,146 @@
+Metadata-Version: 2.0
+Name: CherryPy
+Version: 13.1.0
+Summary: Object-Oriented HTTP framework
+Home-page: http://www.cherrypy.org
+Author: CherryPy Team
+Author-email: team@cherrypy.org
+License: BSD
+Description-Content-Type: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: Freely Distributable
+Classifier: Operating System :: OS Independent
+Classifier: Framework :: CherryPy
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: Implementation
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: Jython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Internet :: WWW/HTTP :: HTTP Servers
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI :: Application
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI :: Server
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Requires-Python: >=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*
+Requires-Dist: six (>=1.11.0)
+Requires-Dist: cheroot (>=5.9.1)
+Requires-Dist: portend (>=2.1.1)
+Requires-Dist: pypiwin32; sys_platform == "win32"
+Provides-Extra: docs
+Requires-Dist: sphinx; extra == 'docs'
+Requires-Dist: docutils; extra == 'docs'
+Requires-Dist: alabaster; extra == 'docs'
+Requires-Dist: rst.linker (>=1.9); extra == 'docs'
+Requires-Dist: jaraco.packaging (>=3.2); extra == 'docs'
+Provides-Extra: json
+Requires-Dist: simplejson; extra == 'json'
+Provides-Extra: memcached_session
+Requires-Dist: python-memcached (>=1.58); extra == 'memcached_session'
+Provides-Extra: routes_dispatcher
+Requires-Dist: routes (>=2.3.1); extra == 'routes_dispatcher'
+Provides-Extra: ssl
+Requires-Dist: pyOpenSSL; extra == 'ssl'
+Provides-Extra: testing
+Requires-Dist: coverage; extra == 'testing'
+Requires-Dist: codecov; extra == 'testing'
+Requires-Dist: objgraph; extra == 'testing'
+Requires-Dist: pytest (>=2.8); extra == 'testing'
+Requires-Dist: pytest-cov; extra == 'testing'
+Requires-Dist: pytest-sugar; extra == 'testing'
+Requires-Dist: backports.unittest-mock; extra == 'testing'
+Requires-Dist: path.py; extra == 'testing'
+Provides-Extra: xcgi
+Requires-Dist: flup; extra == 'xcgi'
+
+.. image:: https://img.shields.io/pypi/v/cherrypy.svg
+   :target: https://pypi.org/project/cherrypy
+
+.. image:: https://readthedocs.org/projects/cherrypy/badge/?version=latest
+  :target: http://docs.cherrypy.org/en/latest/?badge=latest
+
+.. image:: https://img.shields.io/travis/cherrypy/cherrypy/master.svg?label=Linux%20build%20%40%20Travis%20CI
+   :target: http://travis-ci.org/cherrypy/cherrypy
+
+.. image:: https://img.shields.io/appveyor/ci/CherryPy/cherrypy/master.svg?label=Windows%20build%20%40%20Appveyor
+   :target: https://ci.appveyor.com/project/CherryPy/cherrypy/branch/master
+
+.. image:: https://img.shields.io/pypi/pyversions/cherrypy.svg
+
+.. image:: http://badges.github.io/stability-badges/dist/stable.svg
+   :target: http://github.com/badges/stability-badges
+   :alt: stable
+
+.. image:: https://api.codacy.com/project/badge/Grade/48b11060b5d249dc86e52dac2be2c715
+   :target: https://www.codacy.com/app/webknjaz/cherrypy-upstream?utm_source=github.com&utm_medium=referral&utm_content=cherrypy/cherrypy&utm_campaign=Badge_Grade
+
+.. image:: https://codecov.io/gh/cherrypy/cherrypy/branch/master/graph/badge.svg
+   :target: https://codecov.io/gh/cherrypy/cherrypy
+   :alt: codecov
+
+Welcome to the GitHub repository of `CherryPy <http://cherrypy.org/>`_!
+
+CherryPy is a pythonic, object-oriented HTTP framework.
+
+1. It allows building web applications in much the same way one would
+   build any other object-oriented program.
+2. This design results in less and more readable code being developed faster.
+   It's all just properties and methods.
+3. It is now more than ten years old and has proven fast and very
+   stable.
+4. It is being used in production by many sites, from the simplest to
+   the most demanding.
+5. And perhaps most importantly, it is fun to work with :-)
+
+Here's how easy it is to write "Hello World" in CherryPy:
+
+.. code:: python
+
+    import cherrypy
+
+    class HelloWorld(object):
+        @cherrypy.expose
+        def index(self):
+            return "Hello World!"
+
+    cherrypy.quickstart(HelloWorld())
+
+And it continues to work that intuitively when systems grow, allowing
+for the Python object model to be dynamically presented as a web site
+and/or API.
+
+While CherryPy is one of the easiest and most intuitive frameworks out
+there, the prerequisite for understanding the `CherryPy
+documentation <http://docs.cherrypy.org/en/latest/>`_ is that you have
+a general understanding of Python and web development.
+Additionally:
+
+-  Tutorials are included in the repository:
+   https://github.com/cherrypy/cherrypy/tree/master/cherrypy/tutorial
+-  A general wiki at:
+   https://github.com/cherrypy/cherrypy/wiki
+
+If the docs are insufficient to address your needs, the CherryPy
+community has several `avenues for support
+<http://docs.cherrypy.org/en/latest/support.html>`_.
+
+Contributing
+------------
+
+Please follow the `contribution guidelines
+<http://docs.cherrypy.org/en/latest/contribute.html>`_.
+And by all means, absorb the `Zen of
+CherryPy <https://github.com/cherrypy/cherrypy/wiki/The-Zen-of-CherryPy>`_.
+
+
