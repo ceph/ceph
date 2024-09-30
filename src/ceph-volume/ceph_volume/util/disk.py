@@ -771,9 +771,20 @@ def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_pat
         result.append([name, kname, "part", partitions[partition]])
     return sorted(result, key=lambda x: x[0])
 
-def get_partitions(_sys_dev_block_path ='/sys/dev/block') -> List[str]:
+def get_partitions(_sys_dev_block_path: str ='/sys/dev/block') -> Dict[str, str]:
+    """
+    Retrieves a dictionary mapping partition system names to their parent device names.
+
+    Args:
+        _sys_dev_block_path (str, optional): The path to the system's block device directory.
+                                             Defaults to '/sys/dev/block'.
+
+    Returns:
+        Dict[str, str]: A dictionary where the keys are partition system names, and the values are
+                        the corresponding parent device names.
+    """
     devices: List[str] = os.listdir(_sys_dev_block_path)
-    result: Dict[str, str] = dict()
+    result: Dict[str, str] = {}
     for device in devices:
         device_path: str = os.path.join(_sys_dev_block_path, device)
         is_partition: bool = int(get_file_contents(os.path.join(device_path, 'partition'), '0')) > 0
@@ -1120,10 +1131,8 @@ def get_parent_device_from_mapper(mapper: str, abspath: bool = True) -> str:
             pass
     return result
 
-
 def get_lvm_mapper_path_from_dm(path: str, sys_block: str = '/sys/block') -> str:
-    """_summary_
-    Retrieve the logical volume path for a given device.
+    """Retrieve the logical volume path for a given device.
 
     This function takes the path of a device and returns the corresponding
     logical volume path by reading the 'dm/name' file within the sysfs
@@ -1134,7 +1143,7 @@ def get_lvm_mapper_path_from_dm(path: str, sys_block: str = '/sys/block') -> str
         sys_block (str, optional): The base sysfs block directory. Defaults to '/sys/block'.
 
     Returns:
-        str: The device mapper path in the form of '/dev/dm-X'.
+        str: The device mapper path in the 'dashed form' of '/dev/mapper/vg-lv'.
     """
     result: str = ''
     dev: str = os.path.basename(path)
