@@ -1,0 +1,18 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        lockdep: true
+    log-ignorelist:
+      - missing required features
+      - \(MDS_CACHE_OVERSIZED\)
+      - \(MDS_TRIM\)
+      - \(MDS_CLIENTS_BROKEN_ROOTSQUASH\)
+      - report clients with broken root_squash implementation
+      - evicting unresponsive client
+      - as file system flag refuse_client_session is set
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_admin
