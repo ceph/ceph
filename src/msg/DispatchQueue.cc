@@ -93,7 +93,7 @@ void DispatchQueue::enqueue(const ref_t<Message>& m, int priority, uint64_t id)
   } else {
     mqueue.enqueue(id, priority, m->get_cost(), QueueItem(m));
   }
-  cond.notify_all();
+  cond.notify_one();
 }
 
 void DispatchQueue::local_delivery(const ref_t<Message>& m, int priority)
