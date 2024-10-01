@@ -9195,6 +9195,13 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
     return -EINVAL;
   }
 
+  if (g_conf()->mon_osd_min_in_ratio > 0.55) {
+    ss << "mon_osd_min_in_ratio must be less than or equal to 0.55; current value is "
+       << g_conf()->mon_osd_min_in_ratio << "; Please adjust using the command"
+       << " 'ceph config set mon mon_osd_min_in_ratio <value>'";
+    return -EINVAL;
+  }
+
   p.peering_crush_bucket_count = static_cast<uint32_t>(bucket_count);
   p.peering_crush_bucket_target = static_cast<uint32_t>(bucket_target);
   p.peering_crush_bucket_barrier = static_cast<uint32_t>(bucket_barrier);

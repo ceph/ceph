@@ -737,8 +737,18 @@ Managing pools that are flagged with ``--bulk``
 ===============================================
 See :ref:`managing_bulk_flagged_pools`.
 
+.. _setting_values_for_a_stretch_pool:
+
 Setting values for a stretch pool
 =================================
+
+.. important:: Setting values for a stretch pool requires ``mon_osd_min_in_ratio <= 0.55``
+   to ensure that PGs get remapped to a new set of OSDs when the cluster
+   sustains multiple failures in different buckets. For example, a 3 site stretched cluster
+   is expected to sustain 33% of OSDs failing in the entire cluster, but the default value of
+   ``mon_osd_min_in_ratio`` is 0.75 which means it can only sustain 25% of OSD failures.
+   Please see: `<http://https://tracker.ceph.com/issues/68338>`_ for more information.`
+
 To set values for a stretch pool, run a command of the following form:
 
 .. prompt:: bash $
@@ -809,8 +819,6 @@ Here are the break downs of the arguments:
    
       :Type: Flag
       :Required: No.
-
-.. _setting_values_for_a_stretch_pool:
 
 Unsetting values for a stretch pool
 ===================================
