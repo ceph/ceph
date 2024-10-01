@@ -1636,14 +1636,21 @@ bucket are the same.
 NVMeoF Gateway
 --------------
 
-NVMOEF_SINGLE_GATEWAY
-__________________________________
+NVMEOF_SINGLE_GATEWAY
+_____________________
 
 One of the gateway group has only one gateway. This is not ideal because it makes
 high availability (HA) impossible with a single gatway in a group. This can lead to 
 problems with failover and failback operations for the NVMeoF gateway.
 
 It's recommended to have multiple NVMeoF gateways in a group.
+
+NVMEOF_GATEWAY_DOWN
+___________________
+
+Some of the gateways are in the GW_UNAVAILABLE state. If a NVMeoF daemon has crashed, 
+the daemon log file (found at ``/var/log/ceph/``) may contain troubleshooting information.
+
 
 Miscellaneous
 -------------
