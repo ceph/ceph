@@ -3656,7 +3656,7 @@ options:
 - name: osd_requested_scrub_priority
   type: uint
   level: advanced
-  default: 120
+  default: 5
   fmt_desc: The priority set for user requested scrub on the work queue.  If
     this value were to be smaller than ``osd_client_op_priority`` it
     can be boosted to the value of ``osd_client_op_priority`` when
