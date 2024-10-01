@@ -1,4 +1,5 @@
 import pytest
+import stat
 from ceph_volume.util import disk
 from mock.mock import patch, Mock, MagicMock, mock_open
 from pyfakefs.fake_filesystem_unittest import TestCase
@@ -640,3 +641,107 @@ class TestBlockSysFs(TestCase):
         assert b.active_mappers()['dm-1']
         assert b.active_mappers()['dm-1']['type'] == 'LVM'
         assert b.active_mappers()['dm-1']['uuid'] == 'abcdef'
+
+
+class TestUdevData(TestCase):
+    def setUp(self) -> None:
+        udev_data_lv_device: str = """
+S:disk/by-id/dm-uuid-LVM-1f1RaxWlzQ61Sbc7oCIHRMdh0M8zRTSnU03ekuStqWuiA6eEDmwoGg3cWfFtE2li
+S:mapper/vg1-lv1
+S:disk/by-id/dm-name-vg1-lv1
+S:vg1/lv1
+I:837060642207
+E:DM_UDEV_DISABLE_OTHER_RULES_FLAG=
+E:DM_UDEV_DISABLE_LIBRARY_FALLBACK_FLAG=1
+E:DM_UDEV_PRIMARY_SOURCE_FLAG=1
+E:DM_UDEV_RULES_VSN=2
+E:DM_NAME=fake_vg1-fake-lv1
+E:DM_UUID=LVM-1f1RaxWlzQ61Sbc7oCIHRMdh0M8zRTSnU03ekuStqWuiA6eEDmwoGg3cWfFtE2li
+E:DM_SUSPENDED=0
+E:DM_VG_NAME=fake_vg1
+E:DM_LV_NAME=fake-lv1
+E:DM_LV_LAYER=
+E:NVME_HOST_IFACE=none
+E:SYSTEMD_READY=1
+G:systemd
+Q:systemd
+V:1"""
+        udev_data_bare_device: str = """
+S:disk/by-path/pci-0000:00:02.0
+S:disk/by-path/virtio-pci-0000:00:02.0
+S:disk/by-diskseq/1
+I:3037919
+E:ID_PATH=pci-0000:00:02.0
+E:ID_PATH_TAG=pci-0000_00_02_0
+E:ID_PART_TABLE_UUID=baefa409
+E:ID_PART_TABLE_TYPE=dos
+E:NVME_HOST_IFACE=none
+G:systemd
+Q:systemd
+V:1"""
+        self.fake_device: str = '/dev/cephtest'
+        self.setUpPyfakefs()
+        self.fs.create_file(self.fake_device, st_mode=(stat.S_IFBLK | 0o600))
+        self.fs.create_file('/run/udev/data/b999:0', create_missing_dirs=True, contents=udev_data_bare_device)
+        self.fs.create_file('/run/udev/data/b998:1', create_missing_dirs=True, contents=udev_data_lv_device)
+
+    def test_device_not_found(self) -> None:
+        self.fs.remove(self.fake_device)
+        with pytest.raises(RuntimeError):
+            disk.UdevData(self.fake_device)
+
+    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
+    def test_no_data(self) -> None:
+        self.fs.remove('/run/udev/data/b999:0')
+        with pytest.raises(RuntimeError):
+            disk.UdevData(self.fake_device)
+
+    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
+    def test_is_dm_false(self) -> None:
+        assert not disk.UdevData(self.fake_device).is_dm
+
+    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_is_dm_true(self) -> None:
+        assert disk.UdevData(self.fake_device).is_dm
+
+    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_is_lvm_true(self) -> None:
+        assert disk.UdevData(self.fake_device).is_dm
+
+    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
+    def test_is_lvm_false(self) -> None:
+        assert not disk.UdevData(self.fake_device).is_dm
+
+    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_slashed_path_with_lvm(self) -> None:
+        assert disk.UdevData(self.fake_device).slashed_path == '/dev/fake_vg1/fake-lv1'
+
+    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_dashed_path_with_lvm(self) -> None:
+        assert disk.UdevData(self.fake_device).dashed_path == '/dev/mapper/fake_vg1-fake-lv1'
+
+    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
+    def test_slashed_path_with_bare_device(self) -> None:
+        assert disk.UdevData(self.fake_device).slashed_path == '/dev/cephtest'
+
+    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
+    def test_dashed_path_with_bare_device(self) -> None:
+        assert disk.UdevData(self.fake_device).dashed_path == '/dev/cephtest'
