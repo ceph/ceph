@@ -356,8 +356,7 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
   const ec_align_t &to_read,
   map<int, extent_set> &want_shard_reads)
 {
-  const std::vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
-  sinfo.get_min_want_shards(to_read.offset, to_read.size, chunk_mapping, want_shard_reads);;
+  sinfo.ro_range_to_shard_extent_set(to_read.offset, to_read.size, want_shard_reads);;
   dout(20) << __func__ << ": to_read " << to_read
 	   << " read_request " << want_shard_reads << dendl;
 }

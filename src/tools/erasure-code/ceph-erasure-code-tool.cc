@@ -96,7 +96,8 @@ int ec_init(const std::string &profile_str,
   uint64_t stripe_size = atoi(profile["k"].c_str());
   ceph_assert(stripe_size > 0);
   uint64_t stripe_width = stripe_size * stripe_unit;
-  sinfo->reset(new ECUtil::stripe_info_t(stripe_size, stripe_width));
+  sinfo->reset(new ECUtil::stripe_info_t(stripe_size, stripe_width,
+    (*ec_impl)->get_coding_chunk_count(), (*ec_impl)->get_chunk_mapping()));
 
   return 0;
 }
@@ -219,7 +220,7 @@ int do_encode(const std::vector<const char*> &args) {
   }
 
   std::map<int, ceph::bufferlist> encoded_data;
-  r = ECUtil::encode(*sinfo, ec_impl, decoded_data, want, &encoded_data);
+  r = ECUtil::encode(*sinfo, ec_impl, decoded_data, 0, want, &encoded_data);
   if (r < 0) {
     std::cerr << "failed to encode: " << cpp_strerror(r) << std::endl;
     return 1;

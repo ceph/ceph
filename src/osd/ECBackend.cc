@@ -118,7 +118,8 @@ ECBackend::ECBackend(
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
     recovery_backend(cct, this->coll, ec_impl, this->sinfo, read_pipeline, unstable_hashinfo_registry, get_parent(), this),
     ec_impl(ec_impl),
-    sinfo(ec_impl->get_data_chunk_count(), stripe_width),
+    sinfo(ec_impl->get_data_chunk_count(), stripe_width,
+      ec_impl->get_coding_chunk_count(), ec_impl->get_chunk_mapping()),
     unstable_hashinfo_registry(cct, ec_impl) {
   ceph_assert((ec_impl->get_data_chunk_count() *
 	  ec_impl->get_chunk_size(stripe_width)) == stripe_width);
