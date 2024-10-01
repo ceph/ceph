@@ -40,7 +40,7 @@ namespace crimson::osd {
 class PG;
 
 // OpsExecuter -- a class for executing ops targeting a certain object.
-class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
+class OpsExecuter {
   friend class SnapTrimObjSubEvent;
 
   using call_errorator = crimson::errorator<
@@ -549,14 +549,14 @@ template <class Func>
 struct OpsExecuter::RollbackHelper {
   void rollback_obc_if_modified();
   void rollback_obc_if_modified(const std::error_code& e);
-  seastar::lw_shared_ptr<OpsExecuter> ox;
+  OpsExecuter *ox;
   Func func;
 };
 
 template <class Func>
 inline OpsExecuter::RollbackHelper<Func>
 OpsExecuter::create_rollbacker(Func&& func) {
-  return {shared_from_this(), std::forward<Func>(func)};
+  return {this, std::forward<Func>(func)};
 }
 
 template <class Func>

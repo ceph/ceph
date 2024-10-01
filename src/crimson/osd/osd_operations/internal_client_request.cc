@@ -57,7 +57,7 @@ InternalClientRequest::do_process(
 {
   LOG_PREFIX(InternalClientRequest::do_process);
   auto params = get_do_osd_ops_params();
-  auto ox = seastar::make_lw_shared<OpsExecuter>(
+  OpsExecuter ox(
     pg, obc, op_info, params, params.get_connection(), SnapContext{});
   co_await pg->run_executer(
     ox, obc, op_info, osd_ops
