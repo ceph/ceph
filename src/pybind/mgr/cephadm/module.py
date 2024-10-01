@@ -36,7 +36,7 @@ from ceph.deployment.service_spec import \
     ServiceSpec, PlacementSpec, \
     HostPlacementSpec, IngressSpec, \
     TunedProfileSpec, IscsiServiceSpec, \
-    MgmtGatewaySpec
+    MgmtGatewaySpec, RGWSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -3114,6 +3114,13 @@ Then run the following:
             deps = sorted(deps)
         elif daemon_type == 'mgmt-gateway':
             deps = MgmtGatewayService.get_dependencies(self)
+        elif daemon_type == 'rgw':
+            rgw_spec = cast(RGWSpec, spec)
+            ssl_cert = getattr(rgw_spec, 'rgw_frontend_ssl_certificate', None)
+            if isinstance(ssl_cert, list):
+                ssl_cert = '\n'.join(ssl_cert)
+            if ssl_cert:
+                deps.append(str(utils.md5_hash(ssl_cert)))
         else:
             # this daemon type doesn't need deps mgmt
             pass
