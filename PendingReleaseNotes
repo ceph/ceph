@@ -160,6 +160,111 @@
   See https://docs.ceph.com/en/latest/rados/operations/balancer/ for more information.
 * CephFS: Full support for subvolumes and subvolume groups is now available
   for snap_schedule Manager module.
+* RGW: The SNS CreateTopic API now enforces the same topic naming requirements as AWS:
+  Topic names must be made up of only uppercase and lowercase ASCII letters, numbers,
+  underscores, and hyphens, and must be between 1 and 256 characters long.
+* RBD: When diffing against the beginning of time (`fromsnapname == NULL`) in
+  fast-diff mode (`whole_object == true` with `fast-diff` image feature enabled
+  and valid), diff-iterate is now guaranteed to execute locally if exclusive
+  lock is available.  This brings a dramatic performance improvement for QEMU
+  live disk synchronization and backup use cases.
+* RBD: The ``try-netlink`` mapping option for rbd-nbd has become the default
+  and is now deprecated. If the NBD netlink interface is not supported by the
+  kernel, then the mapping is retried using the legacy ioctl interface.
+* RADOS: Read balancing may now be managed automatically via the balancer
+  manager module. Users may choose between two new modes: ``upmap-read``, which
+  offers upmap and read optimization simultaneously, or ``read``, which may be used
+  to only optimize reads. For more detailed information see https://docs.ceph.com/en/latest/rados/operations/read-balancer/#online-optimization.
+* CephFS: MDS log trimming is now driven by a separate thread which tries to
+  trim the log every second (`mds_log_trim_upkeep_interval` config). Also,
+  a couple of configs govern how much time the MDS spends in trimming its
+  logs. These configs are `mds_log_trim_threshold` and `mds_log_trim_decay_rate`.
+* RGW: Notification topics are now owned by the user that created them. 
+  By default, only the owner can read/write their topics. Topic policy documents
+  are now supported to grant these permissions to other users. Preexisting topics
+  are treated as if they have no owner, and any user can read/write them using the SNS API. 
+  If such a topic is recreated with CreateTopic, the issuing user becomes the new owner.
+  For backward compatibility, all users still have permission to publish bucket 
+  notifications to topics owned by other users. A new configuration parameter:
+  ``rgw_topic_require_publish_policy`` can be enabled to deny ``sns:Publish``
+  permissions unless explicitly granted by topic policy.
+* RGW: Fix issue with persistent notifications where the changes to topic param that
+  were modified while persistent notifications were in the queue will be reflected in notifications.
+  So if user sets up topic with incorrect config (password/ssl) causing failure while delivering the
+  notifications to broker, can now modify the incorrect topic attribute and on retry attempt to delivery
+  the notifications, new configs will be used.
+* RBD: The option ``--image-id`` has been added to `rbd children` CLI command,
+  so it can be run for images in the trash.
+* PG dump: The default output of `ceph pg dump --format json` has changed. The
+  default json format produces a rather massive output in large clusters and
+  isn't scalable. So we have removed the 'network_ping_times' section from
+  the output. Details in the tracker: https://tracker.ceph.com/issues/57460
+* mgr/REST: The REST manager module will trim requests based on the 'max_requests' option.
+  Without this feature, and in the absence of manual deletion of old requests,
+  the accumulation of requests in the array can lead to Out Of Memory (OOM) issues, 
+  resulting in the Manager crashing.
+
+* CephFS: The `subvolume snapshot clone` command now depends on the config option
+  `snapshot_clone_no_wait` which is used to reject the clone operation when
+  all the cloner threads are busy. This config option is enabled by default which means 
+  that if no cloner threads are free, the clone request errors out with EAGAIN.
+  The value of the config option can be fetched by using:
+   `ceph config get mgr mgr/volumes/snapshot_clone_no_wait`
+  and it can be disabled by using:
+   `ceph config set mgr mgr/volumes/snapshot_clone_no_wait false`
+* RBD: `RBD_IMAGE_OPTION_CLONE_FORMAT` option has been exposed in Python
+  bindings via `clone_format` optional parameter to `clone`, `deep_copy` and
+  `migration_prepare` methods.
+* RBD: `RBD_IMAGE_OPTION_FLATTEN` option has been exposed in Python bindings via
+  `flatten` optional parameter to `deep_copy` and `migration_prepare` methods.
+
+* CephFS: Command "ceph mds fail" and "ceph fs fail" now requires a
+  confirmation flag when some MDSs exhibit health warning MDS_TRIM or
+  MDS_CACHE_OVERSIZED. This is to prevent accidental MDS failover causing
+  further delays in recovery.
+* CephFS: fixes to the implementation of the ``root_squash`` mechanism enabled
+  via cephx ``mds`` caps on a client credential require a new client feature
+  bit, ``client_mds_auth_caps``. Clients using credentials with ``root_squash``
+  without this feature will trigger the MDS to raise a HEALTH_ERR on the
+  cluster, MDS_CLIENTS_BROKEN_ROOTSQUASH. See the documentation on this warning
+  and the new feature bit for more information.
+* CephFS: Expanded removexattr support for cephfs virtual extended attributes.
+  Previously one had to use setxattr to restore the default in order to "remove".
+  You may now properly use removexattr to remove. You can also now remove layout
+  on root inode, which then will restore layout to default layout.
+
+* cls_cxx_gather is marked as deprecated.
+* CephFS: cephfs-journal-tool is guarded against running on an online file system.
+  The 'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset' and
+  'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset --force'
+  commands require '--yes-i-really-really-mean-it'.
+
+* Dashboard: Rearranged Navigation Layout: The navigation layout has been reorganized
+  for improved usability and easier access to key features.
+* Dashboard: CephFS Improvments
+  * Support for managing CephFS snapshots and clones, as well as snapshot schedule
+    management
+  * Manage authorization capabilities for CephFS resources
+  * Helpers on mounting a CephFS volume
+* Dashboard: RGW Improvements
+  * Support for managing bucket policies
+  * Add/Remove bucket tags
+  * ACL Management
+  * Several UI/UX Improvements to the bucket form
+* Monitoring: Grafana dashboards are now loaded into the container at runtime rather than
+  building a grafana image with the grafana dashboards. Official Ceph grafana images
+  can be found in quay.io/ceph/grafana
+* Monitoring: RGW S3 Analytics: A new Grafana dashboard is now available, enabling you to
+  visualize per bucket and user analytics data, including total GETs, PUTs, Deletes,
+  Copies, and list metrics.
+* RBD: `Image::access_timestamp` and `Image::modify_timestamp` Python APIs now
+  return timestamps in UTC.
+* RBD: Support for cloning from non-user type snapshots is added.  This is
+  intended primarily as a building block for cloning new groups from group
+  snapshots created with `rbd group snap create` command, but has also been
+  exposed via the new `--snap-id` option for `rbd clone` command.
+* RBD: The output of `rbd snap ls --all` command now includes the original
+  type for trashed snapshots.
 
 >=18.0.0
 
