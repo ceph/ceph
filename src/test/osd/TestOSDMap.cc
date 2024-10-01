@@ -202,8 +202,8 @@ public:
     int cpu_num = 8;
     int pgs_per_chunk = 256;
     ThreadPool tp(cct, "BUG_40104::clean_upmap_tp", "clean_upmap_tp", cpu_num);
-    tp.start();
     ParallelPGMapper mapper(cct, &tp);
+    tp.start();
     vector<pg_t> pgs_to_check;
     om.get_upmap_pgs(&pgs_to_check);
     OSDMonitor::CleanUpmapJob job(cct, om, pending_inc);
