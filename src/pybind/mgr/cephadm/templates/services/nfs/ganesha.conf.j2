@@ -4,6 +4,7 @@ NFS_CORE_PARAM {
         Enable_RQUOTA = false;
         Protocols = 4;
         NFS_Port = {{ port }};
+        allow_set_io_flusher_fail = true;
 {% if bind_addr %}
         Bind_addr = {{ bind_addr }};
 {% endif %}
