@@ -27,10 +27,9 @@ all code contributions go through a collaborative review process (and
 undergo testing) before being merged.  The specifics of this process
 are dynamic and evolving over time.
 
-New committers are added to the project (or committers removed from
-the project) at the discretion of the Ceph Leadership Team (below).
-The criteria for becoming a contributor include a consistent level of
-quality and engagement in the project over time.
+* Dan van der Ster <dan.vanderster@clyso.com>
+* Josh Durgin <jdurgin@redhat.com>
+* Neha Ojha <nojha@redhat.com>
 
 
 .. _clt:
@@ -62,9 +61,9 @@ Current CLT members are:
  * Igor Fedotov <igor.fedotov@croit.io>
  * Jeff Layton <jlayton@redhat.com>
  * Josh Durgin <jdurgin@redhat.com>
- * João Eduardo Luis <joao@suse.de>
+ * João Eduardo Luis <joao@clyso.com>
  * Ken Dreyer <kdreyer@redhat.com>
- * Mark Nelson <mnelson@redhat.com>
+ * Mark Nelson <mark.nelson@clyso.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
  * Myoungwon Oh <myoungwon.oh@samsung.com>
