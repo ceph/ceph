@@ -4,7 +4,6 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/encoding.h"
-#include "common/interval_map.h"
 #include "ECUtil.h"
 #include "ExtentCache.h"
 
@@ -12,6 +11,11 @@ using namespace std;
 using ceph::bufferlist;
 using ceph::ErasureCodeInterfaceRef;
 using ceph::Formatter;
+
+// FIXME: We want this to be the same as the constant in ErasureCode.h, which
+//        cannot be included here, for reasons I have not figured out yet.
+static const unsigned SIMD_ALIGN = 32;
+
 
 std::pair<uint64_t, uint64_t> ECUtil::stripe_info_t::chunk_aligned_offset_len_to_chunk(
   uint64_t _off, uint64_t _len) const {
@@ -47,38 +51,41 @@ Given an offset and size, this adds to a vector of extents describing the
 minimal IO ranges on each shard.  If passed, this method will also populate
 a superset of all extents required.
  */
-void ECUtil::stripe_info_t::get_min_want_shards(
-    uint64_t offset,
-    uint64_t size,
-    const vector<int>& chunk_mapping,
-    map<int, extent_set> &raw_shard_extents,
-    optional<extent_set> extent_superset) const {
+void ECUtil::stripe_info_t::ro_range_to_shards(
+    uint64_t ro_offset,
+    uint64_t ro_size,
+    map<int, extent_set> *shard_extent_set,
+    extent_set *extent_superset,
+    buffer::list *bl,
+    shard_extent_map_t *shard_extent_map) const {
 
   // Some of the maths below assumes size not zero.
-  if (size == 0) return;
+  if (ro_size == 0) return;
 
-  uint64_t data_chunk_count = get_data_chunk_count();
+  uint64_t k  = get_data_chunk_count();
 
   // Aim is to minimise non-^2 divs (chunk_size is assumed to be a power of 2).
   // These should be the only non ^2 divs.
-  uint64_t begin_div = offset / stripe_width;
-  uint64_t end_div = (offset+size+stripe_width-1)/stripe_width - 1;
+  uint64_t begin_div = ro_offset / stripe_width;
+  uint64_t end_div = (ro_offset+ro_size+stripe_width-1)/stripe_width - 1;
   uint64_t start = begin_div*chunk_size;
   uint64_t end = end_div*chunk_size;
 
-  uint64_t start_shard = (offset - begin_div*stripe_width) / chunk_size;
-  uint64_t chunk_count = (offset + size + chunk_size - 1)/chunk_size - offset/chunk_size;;
+  uint64_t start_shard = (ro_offset - begin_div*stripe_width) / chunk_size;
+  uint64_t chunk_count = (ro_offset + ro_size + chunk_size - 1)/chunk_size - ro_offset/chunk_size;;
 
   // The end_shard needs a modulus to calculate the actual shard, however
   // it is convenient to store it like this for the loop.
-  auto end_shard = start_shard + std::min(chunk_count, data_chunk_count);
+  auto end_shard = start_shard + std::min(chunk_count, k );
 
   // The last shard is the raw shard index which contains the last chunk.
   // Is it possible to calculate this without th e +%?
-  uint64_t last_shard = (start_shard + chunk_count - 1) % data_chunk_count;
+  uint64_t last_shard = (start_shard + chunk_count - 1) % k ;
+
+  uint64_t buffer_shard_start_offset = 0;
 
   for (auto i = start_shard; i < end_shard; i++) {
-    auto raw_shard = i >= data_chunk_count ? i - data_chunk_count : i;
+    auto raw_shard = i >= k  ? i - k  : i;
 
     // Adjust the start and end blocks if needed.
     uint64_t start_adj = 0;
@@ -89,14 +96,14 @@ void ECUtil::stripe_info_t::get_min_want_shards(
       start_adj = chunk_size;
     } else if (raw_shard == start_shard) {
       // The start shard itself needs to be moved a partial-chunk forward.
-      start_adj = offset % chunk_size;
+      start_adj = ro_offset % chunk_size;
     }
 
     // The end is similar to the start, but the end must be rounded up.
     if (raw_shard < last_shard) {
       end_adj = chunk_size;
     } else if (raw_shard == last_shard) {
-      end_adj = (offset + size - 1) % chunk_size + 1;
+      end_adj = (ro_offset + ro_size - 1) % chunk_size + 1;
     }
 
     auto shard = chunk_mapping.size() > raw_shard ?
@@ -104,10 +111,33 @@ void ECUtil::stripe_info_t::get_min_want_shards(
 
     int off = start + start_adj;
     int len =  end + end_adj - start - start_adj;
-    raw_shard_extents[shard].insert(off, len);
+    if (shard_extent_set) {
+      (*shard_extent_set)[shard].insert(off, len);
+    }
 
     if (extent_superset) {
       extent_superset->insert(off, len);
+    }
+
+    if (shard_extent_map) {
+      ceph_assert(bl);
+      buffer::list shard_bl;
+
+      uint64_t bl_offset = buffer_shard_start_offset;
+
+      // Start with any partial chunks.
+      if(chunk_size != start_adj) {
+        shard_bl.substr_of(*bl, bl_offset, min((uint64_t)bl->length() - bl_offset, chunk_size-start_adj));
+        buffer_shard_start_offset += chunk_size - start_adj;
+        bl_offset += chunk_size - start_adj + (k - 1) * chunk_size;
+      }
+      while (bl_offset < bl->length()) {
+        buffer::list tmp;
+        tmp.substr_of(*bl, bl_offset, min(chunk_size, bl->length() - bl_offset));
+        shard_bl.append(tmp);
+        bl_offset += k * chunk_size;
+      }
+      (*shard_extent_map).insert_in_shard(shard, off, shard_bl, ro_offset, ro_offset + ro_size);
     }
   }
 }
@@ -259,14 +289,251 @@ int ECUtil::decode(
   return 0;
 }
 
+namespace ECUtil {
+  void shard_extent_map_t::erase_after_ro_offset(uint64_t ro_offset)
+  {
+    /* Ignore the null case */
+    if (ro_offset >= ro_end)
+      return;
+
+    std::map<int, extent_set> ro_to_erase;
+    sinfo->ro_range_to_shard_extent_set(ro_offset, ro_end - ro_start,
+                              ro_to_erase);
+    for (auto && [shard, eset] : ro_to_erase) {
+      if (extent_maps.contains(shard)) {
+        extent_maps[shard].erase(eset.range_start(), eset.range_end());
+      }
+
+      // If the result is empty, delete the extent map.
+      if (extent_maps[shard].empty()) {
+          extent_maps.erase(shard);
+      }
+    }
+
+    compute_ro_range();
+  }
+
+  shard_extent_map_t shard_extent_map_t::intersect_ro_range(uint64_t ro_offset,
+    uint64_t ro_length) const
+  {
+    // Optimise (common) use case where the overlap is everything
+    if (ro_offset <= ro_start &&
+        ro_offset + ro_length >= ro_end) {
+      return *this;
+    }
+
+    shard_extent_map_t out(sinfo);
+
+    // Optimise (common) use cases where the overlap is nothing
+    if (ro_offset >= ro_end ||
+        ro_offset + ro_length <= ro_start) {
+      return out;
+    }
+
+    // Some splitting is required - but this should be rare (growing/truncating)
+    std::map<int, extent_set> ro_to_intersect;
+    sinfo->ro_range_to_shard_extent_set(ro_offset, ro_length, ro_to_intersect);
+
+    for (auto && [shard, eset] : ro_to_intersect) {
+      if (extent_maps.contains(shard)) {
+        extent_map tmp = extent_maps.at(shard).intersect(eset.range_start(), eset.size());
+        if (!tmp.empty()) {
+          out.extent_maps.emplace(shard, std::move(tmp));
+        }
+      }
+    }
+
+    // This is a fairly inefficient function, so there might be a better way
+    // of keeping track here. However, any solution has to cope with holes
+    // in the interval map around the start/end of the intersection range.
+    out.compute_ro_range();
+
+    return out;
+  }
+
+  /* Insert a buffer for a particular shard.
+   * NOTE: DO NOT CALL sinfo->get_min_want_shards()
+   */
+  void shard_extent_map_t::insert_in_shard(int shard, uint64_t off,
+    buffer::list &bl)
+  {
+    extent_maps[shard].insert(off, bl.length(), bl);
+    uint64_t new_start = calc_ro_offset(sinfo->get_raw_shard(shard), off);
+    uint64_t new_end = calc_ro_offset(sinfo->get_raw_shard(shard), off + bl.length() - 1) + 1;
+    if (empty() || new_start < ro_start)
+      ro_start = new_start;
+    if (empty() || new_end > ro_end )
+      ro_end = new_end;
+  }
+
+  /* Insert a buffer for a particular shard.
+   * If the client knows the new start and end, use this interface to improve
+   * performance.
+   */
+  void shard_extent_map_t::insert_in_shard(int shard, uint64_t off,
+    buffer::list &bl, uint64_t new_start, uint64_t new_end)
+  {
+    if (bl.length() == 0)
+      return;
+
+    extent_maps[shard].insert(off, bl.length(), bl);
+    if (empty() || new_start < ro_start)
+      ro_start = new_start;
+    if (empty() || new_end > ro_end )
+      ro_end = new_end;
+  }
+
+  /* Insert a region of zeros in rados object address space..
+   */
+  void shard_extent_map_t::insert_ro_zero_buffer( uint64_t ro_offset,
+    uint64_t ro_length )
+  {
+    buffer::list zero_buffer;
+    zero_buffer.append_zero(ro_length);
+    sinfo->ro_range_to_shard_extent_map(ro_offset, ro_length, zero_buffer, *this);
+  }
+
+  /* Append zeros to the extent maps, such that all bytes from the current end
+   * of the rados object range to the specified offset are zero.  Note that the
+   * byte at ro_offset does NOT get populated, so that this works as an
+   * addition to length.
+   */
+  void shard_extent_map_t::append_zeros_to_ro_offset( uint64_t ro_offset )
+  {
+    if (ro_offset <= ro_end)
+      return;
+    uint64_t append_offset = ro_end;
+    uint64_t append_length = ro_offset - ro_end;
+    insert_ro_zero_buffer(append_offset, append_length);
+  }
+
+  /* This method rearranges buffers from a rados object extent map into a shard
+   * extent map.  Note that it is a simple transformation, it does NOT perform
+   * any encoding of parity shards.
+   */
+  void shard_extent_map_t::insert_ro_extent_map(const extent_map &host_extent_map)
+  {
+    for (auto &&range = host_extent_map.begin();
+        range != host_extent_map.end();
+        ++range) {
+      buffer::list bl = range.get_val();
+      sinfo->ro_range_to_shard_extent_map(
+        range.get_off(),
+        range.get_len(),
+        bl,
+        *this);
+    }
+  }
+
+  extent_set shard_extent_map_t::get_extent_superset() const {
+    extent_set eset;
+
+    for (auto &&[shard, emap] : extent_maps) {
+      eset.union_of(emap.get_interval_set());
+    }
+
+    return eset;
+  }
+
+  void shard_extent_map_t::insert_parity_buffers()
+  {
+    extent_set encode_set = get_extent_superset();
+
+    /* Invent buffers for the parity coding, if they were not provided.
+     * e.g. appends will not provide parity buffers.
+     * We should EITHER have no buffers, or have the right buffers.
+     */
+    for (int i=sinfo->get_k(); i<sinfo->get_k_plus_m(); i++) {
+      int shard = sinfo->get_shard(i);
+      if (!extent_maps.contains(shard)) {
+        for (auto &&[offset, length] : encode_set) {
+          std::set<int> shards;
+          std::map<int, buffer::list> chunk_buffers;
+          bufferlist bl(length);
+          bl.push_back(buffer::create_aligned(length, SIMD_ALIGN));
+          extent_maps[shard].insert(offset, length, bl);
+        }
+      }
+    }
+  }
+
+  /* Encode parity chunks, using the encode_chunks interface into the
+   * erasure coding.  This generates all parity.
+   */
+  int shard_extent_map_t::encode(ErasureCodeInterfaceRef& ecimpl,
+    HashInfoRef &hinfo,
+    uint64_t before_ro_size) {
+    extent_set encode_set = get_extent_superset();
+
+    for (auto &&[offset, length] : encode_set) {
+      std::set<int> shards;
+      std::map<int, buffer::list> chunk_buffers;
+
+      for (auto &&[shard, emap] : extent_maps) {
+        auto &&[begin, _] = emap.get_containing_range(offset, length);
+        if (begin.contains(offset, length)) {
+          shards.insert(shard);
+          chunk_buffers[shard].substr_of(begin.get_val(),
+                                         offset - begin.get_off(),
+                                         length);
+          // FIXME: This whole re-align should not be needed and we plan to
+          //        remove it. As such, we have left the hard-coded value in
+          //        for now.
+          chunk_buffers[shard].rebuild_aligned_size_and_memory(length, SIMD_ALIGN);
+        }
+      }
+
+
+      /* Eventually this will call a new API to allow for delta writes. For now
+       * however, we call this interface, which will segfault if a full stripe
+       * is not provided.
+       */
+      int r = ecimpl->encode_chunks(shards, &chunk_buffers);
+      if (r) return r;
+
+      if (ro_start >= before_ro_size) {
+        ceph_assert(ro_start == before_ro_size);
+        hinfo->append(
+          offset,
+          chunk_buffers);
+      }
+    }
+
+    return 0;
+  }
+
+  void shard_extent_map_t::get_buffer(int shard, int offset, int length,
+      buffer::list &append_to) {
+    ceph_assert(extent_maps.contains(shard));
+    auto &&[range, _] = extent_maps.at(shard).get_containing_range(offset, length);
+    ceph_assert(range != extent_maps.at(shard).end() && range.contains(offset, length));
+
+    buffer::list bl;
+    bl.substr_of(range.get_val(), offset - range.get_off(), length);
+    append_to.append(bl);
+  }
+
+  map <int, extent_set> shard_extent_map_t::get_extent_set_map()
+  {
+    map<int, extent_set> eset_map;
+    for (auto &&[shard, emap] : extent_maps) {
+      eset_map.emplace(shard, std::move(emap.get_interval_set()));
+    }
+
+    return eset_map;
+  }
+}
+
 int ECUtil::encode(
   const stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ec_impl,
   bufferlist &in,
+  uint64_t offset,
   const set<int> &want,
   map<int, bufferlist> *out) {
 
   uint64_t logical_size = in.length();
+  uint64_t stripe_width = sinfo.get_stripe_width();
 
   ceph_assert(logical_size % sinfo.get_stripe_width() == 0);
   ceph_assert(out);
@@ -275,16 +542,19 @@ int ECUtil::encode(
   if (logical_size == 0)
     return 0;
 
-  for (uint64_t i = 0; i < logical_size; i += sinfo.get_stripe_width()) {
+  for (uint64_t i = 0, start = offset; i < logical_size;) {
+    uint64_t to_end_of_stripe = (start/stripe_width + 1) * stripe_width - start;
+    uint64_t to_end_of_buffer = logical_size - i;
+    uint64_t buffer_size = min(to_end_of_buffer, to_end_of_stripe);
+
     map<int, bufferlist> encoded;
     bufferlist buf;
-    buf.substr_of(in, i, sinfo.get_stripe_width());
+    buf.substr_of(in, i, buffer_size);
     int r = ec_impl->encode(want, buf, &encoded);
     ceph_assert(r == 0);
     for (map<int, bufferlist>::iterator i = encoded.begin();
 	 i != encoded.end();
 	 ++i) {
-      ceph_assert(i->second.length() == sinfo.get_chunk_size());
       (*out)[i->first].claim_append(i->second);
     }
   }
@@ -355,6 +625,12 @@ std::ostream& operator<<(std::ostream& out, const HashInfo& hi)
   for (auto hash: hi.cumulative_shard_hashes)
     hashes << " " << hex << hash;
   return out << "tcs=" << hi.total_chunk_size << hashes.str();
+}
+std::ostream& operator<<(std::ostream& out, const shard_extent_map_t& rhs)
+{
+  // sinfo not thought to be needed for debug, as it is constant.
+  return out << "shard_extent_map: ({" << rhs.ro_start << "~"
+    << rhs.ro_end << "}, maps=" << rhs.extent_maps << ")";
 }
 }
 

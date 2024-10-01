@@ -24,15 +24,58 @@
 #include "ExtentCache.h"
 
 namespace ECUtil {
+  class shard_extent_map_t;
 
-class stripe_info_t {
+  class stripe_info_t {
+  friend class shard_extent_map_t;
+
   const uint64_t stripe_width;
   const uint64_t chunk_size;
+  const int k; // Can be calculated with a division from above. Better to cache.
+  const int m;
+  const std::vector<int> chunk_mapping;
+  const std::map<int, int> chunk_mapping_reverse;
+
+  void ro_range_to_shards(
+    uint64_t ro_offset,
+    uint64_t ro_size,
+    std::map<int, extent_set> *shard_extent_set,
+    extent_set *extent_superset,
+    buffer::list *bl,
+    shard_extent_map_t *shard_extent_map) const;
+
+  static std::vector<int> complete_chunk_mapping(std::vector<int> _chunk_mapping, int n)
+  {
+    std::vector<int> chunk_mapping(n);
+    for (int i=0; i<n; i++) {
+      if ((int)_chunk_mapping.size() > i) {
+        chunk_mapping[i] = _chunk_mapping.at(i);
+      } else {
+        chunk_mapping[i] = i;
+      }
+    }
+    return chunk_mapping;
+  }
+
+  static std::map<int, int> reverse_chunk_mapping(std::vector<int> _chunk_mapping, int n)
+  {
+    std::vector<int> chunk_mapping = complete_chunk_mapping(_chunk_mapping, n);
+    std::map<int, int> reverse;
+    for (int i=0; i<n; i++) {
+      reverse[chunk_mapping[i]] = i;
+    }
+    return reverse;
+  }
 public:
-  stripe_info_t(uint64_t stripe_size, uint64_t stripe_width)
+  stripe_info_t(uint64_t k, uint64_t stripe_width, int m, std::vector<int> _chunk_mapping)
     : stripe_width(stripe_width),
-      chunk_size(stripe_width / stripe_size) {
-    ceph_assert(stripe_width % stripe_size == 0);
+      chunk_size(stripe_width / k),
+      k(k),
+      m(m),
+      chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
+      chunk_mapping_reverse(reverse_chunk_mapping(_chunk_mapping, k + m))
+  {
+    ceph_assert(stripe_width % k == 0);
   }
   bool logical_offset_is_stripe_aligned(uint64_t logical) const {
     return (logical % stripe_width) == 0;
@@ -43,8 +86,31 @@ public:
   uint64_t get_chunk_size() const {
     return chunk_size;
   }
-  uint64_t get_data_chunk_count() const {
-    return get_stripe_width() / get_chunk_size();
+  int get_m() const {
+    return m;
+  }
+  int get_k() const {
+    return k;
+  }
+  int get_k_plus_m() const {
+    return k + m;
+  }
+  std::vector<int> get_chunk_mapping() const {
+    return chunk_mapping;
+  }
+  int get_shard(int raw_shard) const {
+    if ((int)chunk_mapping.size() < raw_shard)
+      return raw_shard;
+
+    return chunk_mapping[raw_shard];
+  }
+  int get_raw_shard(int shard) const
+  {
+    return chunk_mapping_reverse.at(shard);
+  }
+  // FIXME: get_k() preferred... but changing would create a big change.
+  int get_data_chunk_count() const {
+    return k;
   }
   uint64_t logical_to_prev_chunk_offset(uint64_t offset) const {
     return (offset / stripe_width) * chunk_size;
@@ -126,12 +192,31 @@ public:
     const auto last_inc_stripe_idx = (off + len - 1) / stripe_width;
     return first_stripe_idx == last_inc_stripe_idx;
   }
-  void get_min_want_shards(
-    uint64_t offset,
-    uint64_t size,
-    const std::vector<int>& chunk_mapping,
-    std::map<int, extent_set> &raw_shard_extents,
-    std::optional<extent_set> extent_superset = std::nullopt) const;
+
+  void ro_range_to_shard_extent_set(
+    uint64_t ro_offset,
+    uint64_t ro_size,
+    std::map<int, extent_set> &shard_extent_set) const {
+    ro_range_to_shards(ro_offset, ro_size, &shard_extent_set, NULL, NULL, NULL);
+  }
+
+  void ro_range_to_shard_extent_set(
+    uint64_t ro_offset,
+    uint64_t ro_size,
+    std::map<int, extent_set> &shard_extent_set,
+    extent_set &extent_superset) const {
+    ro_range_to_shards(ro_offset, ro_size, &shard_extent_set, &extent_superset, NULL,
+                        NULL);
+  }
+
+  void ro_range_to_shard_extent_map(
+    uint64_t ro_offset,
+    uint64_t ro_size,
+    buffer::list &bl,
+    shard_extent_map_t &shard_extent_map) const {
+
+    ro_range_to_shards(ro_offset, ro_size, NULL, NULL, &bl, &shard_extent_map);
+  }
 };
 
 int decode(
@@ -157,6 +242,7 @@ int encode(
   const stripe_info_t &sinfo,
   ceph::ErasureCodeInterfaceRef &ec_impl,
   ceph::buffer::list &in,
+  uint64_t offset,
   const std::set<int> &want,
   std::map<int, ceph::buffer::list> *out);
 
@@ -222,6 +308,128 @@ public:
 };
 
 typedef std::shared_ptr<HashInfo> HashInfoRef;
+
+class shard_extent_map_t
+{
+  static const uint64_t invalid_offset = std::numeric_limits<uint64_t>::max();
+
+  const stripe_info_t *sinfo;
+  // The maximal range of all extents maps within rados object space.
+  uint64_t ro_start;
+  uint64_t ro_end;
+  std::map<int, extent_map> extent_maps;
+
+  /* This caculates the ro offset for an offset into a particular shard */
+  uint64_t calc_ro_offset(int raw_shard, int shard_offset) {
+    int stripes = shard_offset / sinfo->chunk_size;
+    return stripes * sinfo->stripe_width + raw_shard * sinfo->chunk_size +
+      shard_offset % sinfo->chunk_size;
+  }
+
+  /* This is a relatively expensive operation to update the ro offset/length.
+   * Ideally, we should be able to update offset/length incrementally.
+   */
+  void compute_ro_range()
+  {
+    uint64_t start = invalid_offset;
+    uint64_t end = 0;
+
+    for (int raw_shard = 0; raw_shard < sinfo->get_data_chunk_count(); ++raw_shard) {
+      int shard  = sinfo->get_shard(raw_shard);
+      if (extent_maps.contains(shard)) {
+        extent_set eset = extent_maps[shard].get_interval_set();
+        uint64_t start_iter = calc_ro_offset(raw_shard, eset.range_start());
+        if (start_iter < start)
+          start = start_iter;
+
+        uint64_t end_iter = calc_ro_offset(raw_shard, eset.range_end()-1)+1;
+        if (end_iter > end)
+          end = end_iter;
+      }
+    }
+    if (end != 0) {
+      ro_start = start;
+      ro_end = end;
+    } else {
+      ro_start = invalid_offset;
+      ro_end = invalid_offset;
+    }
+  }
+public:
+  shard_extent_map_t(const stripe_info_t *sinfo) :
+    sinfo(sinfo),
+    ro_start(invalid_offset),
+    ro_end(invalid_offset)
+  {}
+
+  shard_extent_map_t(const stripe_info_t *sinfo, std::map<int, extent_map> &&extent_maps) :
+    sinfo(sinfo),
+    extent_maps(std::move(extent_maps))
+  {
+    // Empty shards are not permitted, so clear them out.
+    for (auto iter = extent_maps.begin(); iter != extent_maps.end();) {
+
+      if (iter->second.empty())
+        iter = extent_maps.erase(iter);
+      else
+        ++iter;
+    }
+    compute_ro_range();
+  }
+
+  bool empty() {
+    return ro_end == invalid_offset;
+  }
+
+  uint64_t get_ro_start()
+  {
+    return ro_start;
+  }
+
+  uint64_t get_ro_end()
+  {
+    return ro_end;
+  }
+
+  /* Return the extent maps.  For reading only, set to const as the returned
+   * map should not be modified.
+   * We want to avoid:
+   *  - Empty extent maps on shards
+   *  - getting the offset/length out of sync.
+   */
+  const std::map<int, extent_map> &get_extent_maps() const {
+    return extent_maps;
+  }
+
+  /* Return a particlar extent map. This must be const because updating it
+   * would cause the shard_extent_map to become inconsistent.
+   *
+   * * This method will raise an exception if the shard has no extents.
+   */
+  const extent_map &get_extent_map(int shard) const {
+    return extent_maps.at(shard);
+  }
+
+  bool contains_shard(int shard) const {
+    return extent_maps.contains(shard);
+  }
+
+  void erase_after_ro_offset(uint64_t ro_offset);
+  shard_extent_map_t intersect_ro_range(uint64_t ro_offset, uint64_t ro_length) const;
+  void insert_in_shard(int shard, uint64_t off, buffer::list &bl);
+  void insert_in_shard(int shard, uint64_t off, buffer::list &bl, uint64_t new_start, uint64_t new_end);
+  void insert_ro_zero_buffer( uint64_t ro_offset, uint64_t ro_length );
+  void append_zeros_to_ro_offset( uint64_t ro_offset );
+  void insert_ro_extent_map(const extent_map &host_extent_map);
+  extent_set get_extent_superset() const;
+  int encode(ErasureCodeInterfaceRef& ecimpl, HashInfoRef &hinfo, uint64_t before_ro_size);
+  void get_buffer(int shard, int offset, int length, buffer::list &append_to);
+  std::map <int, extent_set> get_extent_set_map();
+  void insert_parity_buffers();
+
+  friend std::ostream& operator<<(std::ostream& lhs, const shard_extent_map_t& rhs);
+};
+
 
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();
