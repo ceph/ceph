@@ -258,31 +258,47 @@ Clients that are missing newly added features will be evicted automatically.
 
 Here are the current CephFS features and first release they came out:
 
-+------------------+--------------+-----------------+
-| Feature          | Ceph release | Upstream Kernel |
-+==================+==============+=================+
-| jewel            | jewel        | 4.5             |
-+------------------+--------------+-----------------+
-| kraken           | kraken       | 4.13            |
-+------------------+--------------+-----------------+
-| luminous         | luminous     | 4.13            |
-+------------------+--------------+-----------------+
-| mimic            | mimic        | 4.19            |
-+------------------+--------------+-----------------+
-| reply_encoding   | nautilus     | 5.1             |
-+------------------+--------------+-----------------+
-| reclaim_client   | nautilus     | N/A             |
-+------------------+--------------+-----------------+
-| lazy_caps_wanted | nautilus     | 5.1             |
-+------------------+--------------+-----------------+
-| multi_reconnect  | nautilus     | 5.1             |
-+------------------+--------------+-----------------+
-| deleg_ino        | octopus      | 5.6             |
-+------------------+--------------+-----------------+
-| metric_collect   | pacific      | N/A             |
-+------------------+--------------+-----------------+
-| alternate_name   | pacific      | PLANNED         |
-+------------------+--------------+-----------------+
++----------------------------+--------------+-----------------+
+| Feature                    | Ceph release | Upstream Kernel |
++============================+==============+=================+
+| jewel                      | jewel        | 4.5             |
++----------------------------+--------------+-----------------+
+| kraken                     | kraken       | 4.13            |
++----------------------------+--------------+-----------------+
+| luminous                   | luminous     | 4.13            |
++----------------------------+--------------+-----------------+
+| mimic                      | mimic        | 4.19            |
++----------------------------+--------------+-----------------+
+| reply_encoding             | nautilus     | 5.1             |
++----------------------------+--------------+-----------------+
+| reclaim_client             | nautilus     | N/A             |
++----------------------------+--------------+-----------------+
+| lazy_caps_wanted           | nautilus     | 5.1             |
++----------------------------+--------------+-----------------+
+| multi_reconnect            | nautilus     | 5.1             |
++----------------------------+--------------+-----------------+
+| deleg_ino                  | octopus      | 5.6             |
++----------------------------+--------------+-----------------+
+| metric_collect             | pacific      | N/A             |
++----------------------------+--------------+-----------------+
+| alternate_name             | pacific      | 6.5             |
++----------------------------+--------------+-----------------+
+| notify_session_state       | quincy       | 5.19            |
++----------------------------+--------------+-----------------+
+| op_getvxattr               | quincy       | 6.0             |
++----------------------------+--------------+-----------------+
+| 32bits_retry_fwd           | reef         | 6.6             |
++----------------------------+--------------+-----------------+
+| new_snaprealm_info         | reef         | UNKNOWN         |
++----------------------------+--------------+-----------------+
+| has_owner_uidgid           | reef         | 6.6             |
++----------------------------+--------------+-----------------+
+| client_mds_auth_caps       | squid+bp     | PLANNED         |
++----------------------------+--------------+-----------------+
+
+..
+    Comment: use `git describe --tags --abbrev=0 <commit>` to lookup release
+
 
 CephFS Feature Descriptions
 
@@ -339,6 +355,15 @@ Clients can send performance metric to MDS if MDS support this feature.
 
 Clients can set and understand "alternate names" for directory entries. This is
 to be used for encrypted file name support.
+
+::
+
+    client_mds_auth_caps
+
+To effectively implement ``root_squash`` in a client's ``mds`` caps, the client
+must understand that it is enforcing ``root_squash`` and other cap metadata.
+Clients without this feature are in danger of dropping updates to files.  It is
+recommend to set this feature bit.
 
 
 Global settings
