@@ -32,6 +32,11 @@ tasks:
 - cephadm.wait_for_service:
     service: mds.cephfs
 
+# Enable debug-level logs -- only added temporarily to test
+- cephadm.shell:
+    host.a:
+      - ceph config set mgr mgr/cephadm/log_to_cluster_level debug
+
 - cephadm.shell:
     host.a:
       # add subvolgroup & subvolumes for test
