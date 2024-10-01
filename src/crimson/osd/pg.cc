@@ -1080,13 +1080,13 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
 }
 
 PG::run_executer_fut PG::run_executer(
-  seastar::lw_shared_ptr<OpsExecuter> ox,
+  OpsExecuter &ox,
   ObjectContextRef obc,
   const OpInfo &op_info,
   std::vector<OSDOp>& ops)
 {
   LOG_PREFIX(PG::run_executer);
-  auto rollbacker = ox->create_rollbacker(
+  auto rollbacker = ox.create_rollbacker(
     [stored_obc=duplicate_obc(obc)](auto &obc) mutable {
       obc->update_from(*stored_obc);
     });
@@ -1095,16 +1095,16 @@ PG::run_executer_fut PG::run_executer(
   });
 
   for (auto &op: ops) {
-    DEBUGDPP("object {} handle op {}", *this, ox->get_target(), op);
-    co_await ox->execute_op(op);
+    DEBUGDPP("object {} handle op {}", *this, ox.get_target(), op);
+    co_await ox.execute_op(op);
   }
-  DEBUGDPP("object {} all operations successful", *this, ox->get_target());
+  DEBUGDPP("object {} all operations successful", *this, ox.get_target());
 
   // check for full
-  if ((ox->delta_stats.num_bytes > 0 ||
-       ox->delta_stats.num_objects > 0) &&
+  if ((ox.delta_stats.num_bytes > 0 ||
+       ox.delta_stats.num_objects > 0) &&
       get_pgpool().info.has_flag(pg_pool_t::FLAG_FULL)) {
-    const auto& m = ox->get_message();
+    const auto& m = ox.get_message();
     if (m.get_reqid().name.is_mds() ||   // FIXME: ignore MDS for now
 	m.has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
       INFODPP("full, but proceeding due to FULL_FORCE, or MDS", *this);
@@ -1129,13 +1129,12 @@ PG::run_executer_fut PG::run_executer(
 }
 
 PG::submit_executer_fut PG::submit_executer(
-  seastar::lw_shared_ptr<OpsExecuter> ox,
-  const std::vector<OSDOp>& ops)
-{
+  OpsExecuter &&ox,
+  const std::vector<OSDOp>& ops) {
   LOG_PREFIX(PG::submit_executer);
   // transaction must commit at this point
   return std::move(
-    *ox
+    ox
   ).flush_changes_n_do_ops_effects(
     ops,
     snap_mapper,

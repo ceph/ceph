@@ -502,8 +502,7 @@ ClientRequest::do_process(
     co_return;
   }
 
-  auto ox = seastar::make_lw_shared<OpsExecuter>(
-    pg, obc, op_info, *m, r_conn, snapc);
+  OpsExecuter ox(pg, obc, op_info, *m, r_conn, snapc);
   auto ret = co_await pg->run_executer(
     ox, obc, op_info, m->ops
   ).si_then([]() -> std::optional<std::error_code> {
