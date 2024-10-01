@@ -15,7 +15,8 @@
   http_port = {{ http_port }}
   http_addr = {{ http_addr }}
 {% if mgmt_gw_enabled %}
-  root_url = %(protocol)s://%(domain)s/grafana/
+  root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/
+  serve_from_sub_path = true
 {% endif %}
 [snapshots]
   external_enabled = false
