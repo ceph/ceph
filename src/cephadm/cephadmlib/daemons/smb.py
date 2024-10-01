@@ -714,6 +714,18 @@ class SMB(ContainerDaemonForm):
             mounts[ctdb_run] = '/var/run/ctdb:z'
             mounts[ctdb_volatile] = '/var/lib/ctdb/volatile:z'
             mounts[ctdb_etc] = '/etc/ctdb:z'
+            # create a shared smb.conf file for our clustered instances.
+            # This is a HACK that substitutes for a bunch of architectural
+            # changes to sambacc *and* smbmetrics (container). In short,
+            # sambacc can set up the correct cluster enabled conf file for
+            # samba daemons (smbd, winbindd, etc) but not it's own long running
+            # tasks.  Similarly, the smbmetrics container always uses the
+            # registry conf (non-clustered). Having cephadm create a stub
+            # config that will share the file across all containers is a
+            # stopgap that resolves the problem for now, but should eventually
+            # be replaced by a less "leaky" approach in the managed containers.
+            ctdb_smb_conf = str(data_dir / 'ctdb/smb.conf')
+            mounts[ctdb_smb_conf] = '/etc/samba/smb.conf:z'
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
@@ -739,6 +751,7 @@ class SMB(ContainerDaemonForm):
             file_utils.makedirs(ddir / 'ctdb/volatile', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
             self._write_ctdb_stub_config(etc_samba_ctr / 'ctdb.json')
+            self._write_smb_conf_stub(ddir / 'ctdb/smb.conf')
 
     def _write_ctdb_stub_config(self, path: pathlib.Path) -> None:
         reclock_cmd = ' '.join(_MUTEX_SUBCMD + [self._cfg.cluster_lock_uri])
@@ -757,6 +770,19 @@ class SMB(ContainerDaemonForm):
         }
         with file_utils.write_new(path) as fh:
             json.dump(stub_config, fh)
+
+    def _write_smb_conf_stub(self, path: pathlib.Path) -> None:
+        """Initialize a stub smb conf that will be shared by the primary
+        and sidecar containers. This is expected to be overwritten by
+        sambacc.
+        """
+        _lines = [
+            '[global]',
+            'config backend = registry',
+        ]
+        with file_utils.write_new(path) as fh:
+            for line in _lines:
+                fh.write(f'{line}\n')
 
 
 class _NetworkMapper:
