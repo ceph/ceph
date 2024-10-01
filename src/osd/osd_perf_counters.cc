@@ -336,7 +336,8 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   };
   osd_plb.add_u64_counter_histogram(
       l_osd_scrub_reservation_dur_hist, "scrub_resrv_repnum_vs_duration",
-      rsrv_hist_x_axis_config, rsrv_hist_y_axis_config, "Histogram of scrub replicas reservation duration");
+      rsrv_hist_x_axis_config, rsrv_hist_y_axis_config, "Histogram of scrub replicas reservation duration",
+      nullptr, PerfCountersBuilder::PRIO_USEFUL);
   osd_plb.add_u64_counter(
   l_osd_watch_timeouts, "watch_timeouts",
   "Number of watches that timed out or were blocklisted",
@@ -391,7 +392,7 @@ PerfCounters *build_scrub_labeled_perf(CephContext *cct, std::string label)
   //   <shallow/deep>  X  <replicated/EC>  // maybe later we'll add <periodic/operator>
   PerfCountersBuilder scrub_perf(cct, label, scrbcnt_first, scrbcnt_last);
 
-  scrub_perf.set_prio_default(PerfCountersBuilder::PRIO_INTERESTING);
+  scrub_perf.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
 
   scrub_perf.add_u64_counter(scrbcnt_started, "num_scrubs_started", "scrubs attempted count");
   scrub_perf.add_u64_counter(scrbcnt_active_started, "num_scrubs_past_reservation", "scrubs count");
