@@ -28,6 +28,19 @@
 #define dout_subsys ceph_subsys_rados
 #define dout_context g_ceph_context
 
+using OpType = ceph::io_exerciser::OpType;
+
+using DoneOp = ceph::io_exerciser::DoneOp;
+using BarrierOp = ceph::io_exerciser::BarrierOp;
+using CreateOp = ceph::io_exerciser::CreateOp;
+using RemoveOp = ceph::io_exerciser::RemoveOp;
+using SingleReadOp = ceph::io_exerciser::SingleReadOp;
+using DoubleReadOp = ceph::io_exerciser::DoubleReadOp;
+using TripleReadOp = ceph::io_exerciser::TripleReadOp;
+using SingleWriteOp = ceph::io_exerciser::SingleWriteOp;
+using DoubleWriteOp = ceph::io_exerciser::DoubleWriteOp;
+using TripleWriteOp = ceph::io_exerciser::TripleWriteOp;
+
 namespace {
   struct Size {};
   void validate(boost::any& v, const std::vector<std::string>& values,
@@ -465,25 +478,33 @@ bool ceph::io_sequence::tester::TestObject::readyForIo()
 
 bool ceph::io_sequence::tester::TestObject::next()
 {
-  if (!done) {
-    if (verbose) {
+  if (!done)
+  {
+    if (verbose)
+    {
       dout(0) << exerciser_model->get_oid()
               << " Step " << seq->get_step() << ": "
               << op->to_string(exerciser_model->get_block_size()) << dendl;
-    } else {
+    }
+    else
+    {
       dout(5) << exerciser_model->get_oid()
               << " Step " << seq->get_step() << ": "
               << op->to_string(exerciser_model->get_block_size()) << dendl;
     }
     exerciser_model->applyIoOp(*op);
-    if (op->done()) {
+    if (op->getOpType() == ceph::io_exerciser::OpType::Done)
+    {
       ++curseq;
-      if (curseq == seq_range.second) {
+      if (curseq == seq_range.second)
+      {
         done = true;
         dout(0) << exerciser_model->get_oid()
                 << " Number of IOs = " << exerciser_model->get_num_io()
                 << dendl;
-      } else {
+      }
+      else
+      {
         seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
                                                                 obj_size_range,
                                                                 seqseed.value_or(rng()));
@@ -492,7 +513,9 @@ bool ceph::io_sequence::tester::TestObject::next()
                 << " ==" <<dendl;
         op = seq->next();
       }
-    } else {
+    }
+    else
+    {
       op = seq->next();
     }
   }
@@ -556,7 +579,8 @@ ceph::io_sequence::tester::TestRunner::~TestRunner()
 void ceph::io_sequence::tester::TestRunner::help()
 {
   std::cout << get_options_description() << std::endl;
-  for (auto line : usage) {
+  for (auto line : usage)
+  {
     std::cout << line << std::endl;
   }
 }
@@ -567,7 +591,8 @@ void ceph::io_sequence::tester::TestRunner::list_sequence()
   std::pair<int,int> obj_size_range = sos.choose();
   for (ceph::io_exerciser::Sequence s
         = ceph::io_exerciser::Sequence::SEQUENCE_BEGIN;
-        s < ceph::io_exerciser::Sequence::SEQUENCE_END; ++s) {
+        s < ceph::io_exerciser::Sequence::SEQUENCE_END; ++s)
+  {
     std::unique_ptr<ceph::io_exerciser::IoSequence> seq =
     ceph::io_exerciser::IoSequence::generate_sequence(s,
                                                       obj_size_range,
@@ -630,11 +655,14 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test()
   std::unique_ptr<ceph::io_exerciser::IoOp> ioop;
   std::unique_ptr<ceph::io_exerciser::Model> model;
 
-  if (dryrun) {
+  if (dryrun)
+  {
     model = std::make_unique<ceph::io_exerciser::ObjectModel>(object_name,
 				                              sbs.choose(),
 				                              rng());
-  } else {
+  }
+  else
+  {
     const std::string pool = spo.choose();
     model = std::make_unique<ceph::io_exerciser::RadosIo>(rados, asio, pool,
                                                           object_name, sbs.choose(),
@@ -642,64 +670,84 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test()
                                                           lock, cond);
   }
 
-  while (!done) {
+  while (!done)
+  {
     const std::string op = get_token();
-    if (!op.compare("done")  || !op.compare("q") || !op.compare("quit")) {
-      ioop = ceph::io_exerciser::IoOp::generate_done();
-    } else if (!op.compare("create")) {
-      ioop = ceph::io_exerciser::IoOp::generate_create(get_numeric_token());
-    } else if (!op.compare("remove") || !op.compare("delete")) {
-      ioop = ceph::io_exerciser::IoOp::generate_remove();
-    } else if (!op.compare("read")) {
+    if (!op.compare("done")  || !op.compare("q") || !op.compare("quit"))
+    {
+      ioop = DoneOp::generate();
+    }
+    else if (!op.compare("create"))
+    {
+      ioop = CreateOp::generate(get_numeric_token());
+    }
+    else if (!op.compare("remove") || !op.compare("delete"))
+    {
+      ioop = RemoveOp::generate();
+    }
+    else if (!op.compare("read"))
+    {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_read(offset, length);
-    } else if (!op.compare("read2")) {
+      ioop = SingleReadOp::generate(offset, length);
+    }
+    else if (!op.compare("read2"))
+    {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
       uint64_t offset2 = get_numeric_token();
       uint64_t length2 = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_read2(offset1, length1,
-                                                      offset2, length2);
-    } else if (!op.compare("read3")) {
+      ioop = DoubleReadOp::generate(offset1, length1,
+                                                        offset2, length2);
+    }
+    else if (!op.compare("read3"))
+    {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
       uint64_t offset2 = get_numeric_token();
       uint64_t length2 = get_numeric_token();
       uint64_t offset3 = get_numeric_token();
       uint64_t length3 = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_read3(offset1, length1,
-                                                      offset2, length2,
-				                      offset3, length3);
-    } else if (!op.compare("write")) {
+      ioop = TripleReadOp::generate(offset1, length1,
+                                                        offset2, length2,
+                                                        offset3, length3);
+    }
+    else if (!op.compare("write"))
+    {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_write(offset, length);
-    } else if (!op.compare("write2")) {
+      ioop = SingleWriteOp::generate(offset, length);
+    }
+    else if (!op.compare("write2"))
+    {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
       uint64_t offset2 = get_numeric_token();
       uint64_t length2 = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_write2(offset1, length1,
-                                                       offset2, length2);
-    } else if (!op.compare("write3")) {
+      ioop = DoubleWriteOp::generate(offset1, length1,
+                                                        offset2, length2);
+    }
+    else if (!op.compare("write3"))
+    {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
       uint64_t offset2 = get_numeric_token();
       uint64_t length2 = get_numeric_token();
       uint64_t offset3 = get_numeric_token();
       uint64_t length3 = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_write3(offset1, length1,
-                                                       offset2, length2,
-				                       offset3, length3);
-    } else {
+      ioop = TripleWriteOp::generate(offset1, length1,
+                                                         offset2, length2,
+                                                         offset3, length3);
+    }
+    else
+    {
       throw std::runtime_error("Invalid operation "+op);
     }
     dout(0) << ioop->to_string(model->get_block_size()) << dendl;
     model->applyIoOp(*ioop);
-    done = ioop->done();
+    done = ioop->getOpType() == OpType::Done;
     if (!done) {
-      ioop = ceph::io_exerciser::IoOp::generate_barrier();
+      ioop = BarrierOp::generate();
       model->applyIoOp(*ioop);
     }
   }
@@ -731,7 +779,8 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test()
       )
     );
   }
-  if (!dryrun) {
+  if (!dryrun)
+  {
     rados.wait_for_latest_osdmap();
   }
 

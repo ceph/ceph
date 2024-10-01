@@ -64,10 +64,12 @@ namespace ceph {
       int get_step() const;
       int get_seed() const;
 
-      std::unique_ptr<IoOp> next();
+      virtual std::unique_ptr<IoOp> next();
 
       static std::unique_ptr<IoSequence>
-        generate_sequence(Sequence s, std::pair<int,int> obj_size_range, int seed );
+        generate_sequence(Sequence s,
+                          std::pair<int,int> obj_size_range,
+                          int seed );
 
     protected:
       uint64_t min_obj_size;
@@ -90,7 +92,6 @@ namespace ceph {
       void set_max_object_size(uint64_t size);
       void select_random_object_size();
       std::unique_ptr<IoOp> increment_object_size();
-
     };
 
     class Seq0: public IoSequence {
@@ -105,7 +106,7 @@ namespace ceph {
       uint64_t length;
     };
 
-    class Seq1: public IoSequence {  
+    class Seq1: public IoSequence {
     public:
       Seq1(std::pair<int,int> obj_size_range, int seed);
 
@@ -115,14 +116,14 @@ namespace ceph {
     private:
       int count;
     };
-      
+
     class Seq2: public IoSequence {
     public:
       Seq2(std::pair<int,int> obj_size_range, int seed);
 
       std::string get_name() const override;
       std::unique_ptr<IoOp> _next() override;
-    
+
     private:
       uint64_t offset;
       uint64_t length;

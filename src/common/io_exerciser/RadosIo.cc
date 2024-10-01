@@ -2,6 +2,8 @@
 
 #include "DataGenerator.h"
 
+#include <ranges>
+
 using RadosIo = ceph::io_exerciser::RadosIo;
 
 RadosIo::RadosIo(librados::Rados& rados,
@@ -69,12 +71,9 @@ void RadosIo::allow_ec_overwrites(bool allow)
   ceph_assert(rc == 0);
 }
 
-RadosIo::AsyncOpInfo::AsyncOpInfo(uint64_t offset1, uint64_t length1,
-                                  uint64_t offset2, uint64_t length2,
-                                  uint64_t offset3, uint64_t length3 ) :
-  offset1(offset1), length1(length1),
-  offset2(offset2), length2(length2),
-  offset3(offset3), length3(length3)
+template <int N>
+RadosIo::AsyncOpInfo<N>::AsyncOpInfo(const std::array<uint64_t, N>& offset, const std::array<uint64_t, N>& length) :
+  offset(offset), length(length)
 {
 
 }
@@ -82,42 +81,92 @@ RadosIo::AsyncOpInfo::AsyncOpInfo(uint64_t offset1, uint64_t length1,
 bool RadosIo::readyForIoOp(IoOp &op)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(lock)); //Must be called with lock held
-  if (!om->readyForIoOp(op)) {
+  if (!om->readyForIoOp(op))
+  {
     return false;
   }
-  switch (op.op) {
+
+  switch (op.getOpType())
+  {
   case OpType::Done:
-  case OpType::BARRIER:
+  case OpType::Barrier:
     return outstanding_io == 0;
   default:
     return outstanding_io < threads;
   }
 }
 
-void RadosIo::applyIoOp(IoOp &op)
+void RadosIo::applyIoOp(IoOp& op)
 {
-  std::shared_ptr<AsyncOpInfo> op_info;
-
   om->applyIoOp(op);
 
   // If there are thread concurrent I/Os in flight then wait for
   // at least one I/O to complete
   wait_for_io(threads-1);
-  
-  switch (op.op) {
+
+  auto applyReadOp = [this]<OpType opType, int N>(ReadWriteOp<opType, N> readOp)
+  {
+    auto op_info = std::make_shared<AsyncOpInfo<N>>(readOp.offset, readOp.length);
+
+      for (int i = 0; i < N; i++)
+      {
+        op_info->rop.read(readOp.offset[i] * block_size,
+                          readOp.length[i] * block_size,
+                          &op_info->bufferlist[i], nullptr);
+      }
+      auto read_cb = [this, op_info] (boost::system::error_code ec,
+                                       version_t ver,
+                                       bufferlist bl)
+      {
+        ceph_assert(ec == boost::system::errc::success);
+        for (int i = 0; i < N; i++)
+        {
+          ceph_assert(db->validate(op_info->bufferlist[i],
+                                   op_info->offset[i],
+                                   op_info->length[i]));
+        }
+        finish_io();
+      };
+      librados::async_operate(asio, io, oid,
+                              &op_info->rop, 0, nullptr, read_cb);
+      num_io++;
+  };
+
+  auto applyWriteOp = [this]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp)
+  {
+    auto op_info = std::make_shared<AsyncOpInfo<N>>(writeOp.offset, writeOp.length);
+    for (int i = 0; i < N; i++)
+    {
+      op_info->bufferlist[i] = db->generate_data(writeOp.offset[i], writeOp.length[i]);
+      op_info->wop.write(writeOp.offset[i] * block_size, op_info->bufferlist[i]);
+    }
+    auto write_cb = [this] (boost::system::error_code ec,
+                             version_t ver)
+    {
+      ceph_assert(ec == boost::system::errc::success);
+      finish_io();
+    };
+    librados::async_operate(asio, io, oid,
+                            &op_info->wop, 0, nullptr, write_cb);
+    num_io++;
+  };
+
+  switch (op.getOpType())
+  {
   case OpType::Done:
   [[ fallthrough ]];
-  case OpType::BARRIER:
+  case OpType::Barrier:
     // Wait for all outstanding I/O to complete
     wait_for_io(0);
-    break;    
+    break;
 
-  case OpType::CREATE:
+  case OpType::Create:
     {
       start_io();
-      op_info = std::make_shared<AsyncOpInfo>(0, op.length1);
-      op_info->bl1 = db->generate_data(0, op.length1);
-      op_info->wop.write_full(op_info->bl1);
+      uint64_t opSize = static_cast<CreateOp&>(op).size;
+      std::shared_ptr<AsyncOpInfo<1>> op_info = std::make_shared<AsyncOpInfo<1>>(std::array<uint64_t,1>{0}, std::array<uint64_t,1>{opSize});
+      op_info->bufferlist[0] = db->generate_data(0, opSize);
+      op_info->wop.write_full(op_info->bufferlist[0]);
       auto create_cb = [this] (boost::system::error_code ec,
                                version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
@@ -128,10 +177,10 @@ void RadosIo::applyIoOp(IoOp &op)
     }
     break;
 
-  case OpType::REMOVE:
+  case OpType::Remove:
     {
       start_io();
-      op_info = std::make_shared<AsyncOpInfo>();
+      auto op_info = std::make_shared<AsyncOpInfo<0>>();
       op_info->wop.remove();
       auto remove_cb = [this] (boost::system::error_code ec,
                                version_t ver) {
@@ -143,154 +192,51 @@ void RadosIo::applyIoOp(IoOp &op)
     }
     break;
 
-  case OpType::READ:
+  case OpType::Read:
     {
       start_io();
-      op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1);
-      op_info->rop.read(op.offset1 * block_size,
-                        op.length1 * block_size,
-                        &op_info->bl1, nullptr);
-      auto read_cb = [this, op_info] (boost::system::error_code ec,
-                                      version_t ver,
-                                      bufferlist bl) {
-        ceph_assert(ec == boost::system::errc::success);
-        ceph_assert(db->validate(op_info->bl1,
-                                 op_info->offset1,
-                                 op_info->length1));
-        finish_io();
-      };
-      librados::async_operate(asio, io, oid,
-                              &op_info->rop, 0, nullptr, read_cb);
-      num_io++;
+      SingleReadOp& readOp = static_cast<SingleReadOp&>(op);
+      applyReadOp(readOp);
     }
     break;
 
-  case OpType::READ2:
+  case OpType::Read2:
     {
       start_io();
-      op_info = std::make_shared<AsyncOpInfo>(op.offset1,
-                                              op.length1,
-                                              op.offset2,
-                                              op.length2);
-
-      op_info->rop.read(op.offset1 * block_size,
-                        op.length1 * block_size,
-                        &op_info->bl1, nullptr);
-      op_info->rop.read(op.offset2 * block_size,
-                    op.length2 * block_size,
-                    &op_info->bl2, nullptr);
-      auto read2_cb = [this, op_info] (boost::system::error_code ec,
-                                       version_t ver,
-                                       bufferlist bl) {
-        ceph_assert(ec == boost::system::errc::success);
-        ceph_assert(db->validate(op_info->bl1,
-                                 op_info->offset1,
-                                 op_info->length1));
-        ceph_assert(db->validate(op_info->bl2,
-                                 op_info->offset2,
-                                 op_info->length2));
-        finish_io();
-      };
-      librados::async_operate(asio, io, oid,
-                              &op_info->rop, 0, nullptr, read2_cb);
-      num_io++;
+      DoubleReadOp& readOp = static_cast<DoubleReadOp&>(op);
+      applyReadOp(readOp);
     }
     break;
 
-  case OpType::READ3:
+  case OpType::Read3:
     {
       start_io();
-      op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1,
-                                              op.offset2, op.length2,
-                                              op.offset3, op.length3);
-      op_info->rop.read(op.offset1 * block_size,
-                    op.length1 * block_size,
-                    &op_info->bl1, nullptr);
-      op_info->rop.read(op.offset2 * block_size,
-                    op.length2 * block_size,
-                    &op_info->bl2, nullptr);
-      op_info->rop.read(op.offset3 * block_size,
-                    op.length3 * block_size,
-                    &op_info->bl3, nullptr);
-      auto read3_cb = [this, op_info] (boost::system::error_code ec,
-                                       version_t ver,
-                                       bufferlist bl) {
-        ceph_assert(ec == boost::system::errc::success);
-        ceph_assert(db->validate(op_info->bl1,
-                                 op_info->offset1,
-                                 op_info->length1));
-        ceph_assert(db->validate(op_info->bl2,
-                                 op_info->offset2,
-                                 op_info->length2));
-        ceph_assert(db->validate(op_info->bl3,
-                                 op_info->offset3,
-                                 op_info->length3));
-        finish_io();
-      };
-      librados::async_operate(asio, io, oid,
-                              &op_info->rop, 0, nullptr, read3_cb);
-      num_io++;
+      TripleReadOp& readOp = static_cast<TripleReadOp&>(op);
+      applyReadOp(readOp);
     }
     break;
 
-  case OpType::WRITE:
+  case OpType::Write:
     {
       start_io();
-      op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1);
-      op_info->bl1 = db->generate_data(op.offset1, op.length1);
-
-      op_info->wop.write(op.offset1 * block_size, op_info->bl1);
-      auto write_cb = [this] (boost::system::error_code ec,
-                              version_t ver) {
-        ceph_assert(ec == boost::system::errc::success);
-        finish_io();
-      };
-      librados::async_operate(asio, io, oid,
-                              &op_info->wop, 0, nullptr, write_cb);
-      num_io++;
+      SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);
+      applyWriteOp(writeOp);
     }
     break;
 
-  case OpType::WRITE2:
+  case OpType::Write2:
     {
       start_io();
-      op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1,
-                                              op.offset2, op.length2);
-      op_info->bl1 = db->generate_data(op.offset1, op.length1);
-      op_info->bl2 = db->generate_data(op.offset2, op.length2);
-      op_info->wop.write(op.offset1 * block_size, op_info->bl1);
-      op_info->wop.write(op.offset2 * block_size, op_info->bl2);
-      auto write2_cb = [this] (boost::system::error_code ec,
-                               version_t ver) {
-        ceph_assert(ec == boost::system::errc::success);
-        finish_io();
-      };
-      librados::async_operate(asio, io, oid,
-                              &op_info->wop, 0, nullptr, write2_cb);
-      num_io++;
+      DoubleWriteOp& writeOp = static_cast<DoubleWriteOp&>(op);
+      applyWriteOp(writeOp);
     }
     break;
 
-  case OpType::WRITE3:
+  case OpType::Write3:
     {
       start_io();
-      op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1,
-                                              op.offset2, op.length2,
-                                              op.offset3, op.length3);
-      op_info->bl1 = db->generate_data(op.offset1, op.length1);
-      op_info->bl2 = db->generate_data(op.offset2, op.length2);
-      op_info->bl3 = db->generate_data(op.offset3, op.length3);
-      op_info->wop.write(op.offset1 * block_size, op_info->bl1);
-      op_info->wop.write(op.offset2 * block_size, op_info->bl2);
-      op_info->wop.write(op.offset3 * block_size, op_info->bl3);
-      auto write3_cb = [this] (boost::system::error_code ec,
-                               version_t ver) {
-        ceph_assert(ec == boost::system::errc::success);
-        finish_io();
-      };
-      librados::async_operate(asio, io, oid,
-                              &op_info->wop, 0, nullptr, write3_cb);
-      num_io++;
+      TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
+      applyWriteOp(writeOp);
     }
     break;
 

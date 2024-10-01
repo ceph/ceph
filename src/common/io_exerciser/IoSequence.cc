@@ -1,5 +1,6 @@
 #include "IoSequence.h"
 
+using IoOp = ceph::io_exerciser::IoOp;
 using Sequence = ceph::io_exerciser::Sequence;
 using IoSequence = ceph::io_exerciser::IoSequence;
 
@@ -44,15 +45,6 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os, const Sequence& s
   return os;
 }
 
-IoSequence::IoSequence(std::pair<int,int> obj_size_range,
-                                           int seed) :
-        min_obj_size(obj_size_range.first), max_obj_size(obj_size_range.second),
-        create(true), barrier(false), done(false), remove(false),
-        obj_size(min_obj_size), step(-1), seed(seed)
-{
-  rng.seed(seed);
-}
-
 std::unique_ptr<IoSequence> IoSequence::generate_sequence(Sequence s,
                                                           std::pair<int,int> obj_size_range,
                                                           int seed)
@@ -82,6 +74,15 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(Sequence s,
       break;
   }
   return nullptr;
+}
+
+IoSequence::IoSequence(std::pair<int,int> obj_size_range,
+                                           int seed) :
+        min_obj_size(obj_size_range.first), max_obj_size(obj_size_range.second),
+        create(true), barrier(false), done(false), remove(false),
+        obj_size(min_obj_size), step(-1), seed(seed)
+{
+  rng.seed(seed);
 }
 
 int IoSequence::get_step() const
@@ -120,7 +121,7 @@ void IoSequence::select_random_object_size()
   }
 }
 
-std::unique_ptr<ceph::io_exerciser::IoOp> IoSequence::increment_object_size()
+std::unique_ptr<IoOp> IoSequence::increment_object_size()
 {
   obj_size++;
   if (obj_size > max_obj_size) {
@@ -129,27 +130,27 @@ std::unique_ptr<ceph::io_exerciser::IoOp> IoSequence::increment_object_size()
   create = true;
   barrier = true;
   remove = true;
-  return IoOp::generate_barrier();
+  return BarrierOp::generate();
 }
 
-std::unique_ptr<ceph::io_exerciser::IoOp> IoSequence::next()
+std::unique_ptr<IoOp> IoSequence::next()
 {
   step++;
   if (remove) {
     remove = false;
-    return IoOp::generate_remove();
+    return RemoveOp::generate();
   }
   if (barrier) {
     barrier = false;
-    return IoOp::generate_barrier();
+    return BarrierOp::generate();
   }
   if (done) {
-    return IoOp::generate_done();
+    return DoneOp::generate();
   }
   if (create) {
     create = false;
     barrier = true;
-    return IoOp::generate_create(obj_size);
+    return CreateOp::generate(obj_size);
   }
   return _next();
 }
@@ -176,12 +177,12 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq0::_next()
     done = true;
     barrier = true;
     remove = true;
-    return IoOp::generate_barrier();
+    return BarrierOp::generate();
   }
   if (offset + length > obj_size) {
-    r = IoOp::generate_read(offset, obj_size - offset);
+    r = SingleReadOp::generate(offset, obj_size - offset);
   } else {
-    r = IoOp::generate_read(offset, length);
+    r = SingleReadOp::generate(offset, length);
   }
   offset += length;
   return r;
@@ -208,13 +209,20 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq1::_next()
   if (count-- == 0) {
     done = true;
     remove = true;
-    return IoOp::generate_barrier();
+    return BarrierOp::generate();
   }
 
   uint64_t offset = rng(obj_size - 1);
   uint64_t length = 1 + rng(obj_size - 1 - offset);
-  return (rng(2) != 0) ? IoOp::generate_write(offset, length) :
-    IoOp::generate_read(offset, length);
+
+  if (rng(2) != 0)
+  {
+    return SingleWriteOp::generate(offset, length);
+  }
+  else
+  {
+    return SingleReadOp::generate(offset, length);
+  }
 }
 
 
@@ -239,7 +247,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq2::_next()
       return increment_object_size();
     }
   }
-  return IoOp::generate_read(offset, length);
+  return SingleReadOp::generate(offset, length);
 }
 
 
@@ -267,7 +275,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq3::_next()
       return increment_object_size();
     }
   }
-  return IoOp::generate_read2(offset1, 1, offset1 + offset2, 1);
+  return DoubleReadOp::generate(offset1, 1, offset1 + offset2, 1);
 }
 
 
@@ -295,9 +303,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq4::_next()
       return increment_object_size();
     }
   }
-  return IoOp::generate_read3(offset1, 1,
-                              offset1 + offset2, 1,
-                              (offset1 * 2 + offset2)/2, 1);
+  return TripleReadOp::generate(offset1, 1, (offset1 + offset2), 1, (offset1 * 2 + offset2) / 2, 1);
 }
 
 
@@ -317,11 +323,11 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq5::_next()
     if (!doneread) {
       if (!donebarrier) {
         donebarrier = true;
-        return IoOp::generate_barrier();
+        return BarrierOp::generate();
       }
       doneread = true;
       barrier = true;
-      return IoOp::generate_read(0, obj_size);
+      return SingleReadOp::generate(0, obj_size);
     }
     doneread = false;
     donebarrier = false;
@@ -333,7 +339,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq5::_next()
     }
   }
   uint64_t io_len = (offset + length > obj_size) ? (obj_size - offset) : length;
-  std::unique_ptr<IoOp> r = IoOp::generate_write(offset, io_len);
+  std::unique_ptr<IoOp> r = SingleWriteOp::generate(offset, io_len);
   offset += io_len;
   return r;
 }
@@ -355,11 +361,11 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq6::_next()
     if (!doneread) {
       if (!donebarrier) {
         donebarrier = true;
-        return IoOp::generate_barrier();
+        return BarrierOp::generate();
       }
       doneread = true;
       barrier = true;
-      return IoOp::generate_read(0, obj_size);
+      return SingleReadOp::generate(0, obj_size);
     }
     doneread = false;
     donebarrier = false;
@@ -374,7 +380,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq6::_next()
   if (io_len == 0) {
     io_len = length;
   }
-  std::unique_ptr<IoOp> r = IoOp::generate_write(offset, io_len);
+  std::unique_ptr<IoOp> r = SingleWriteOp::generate(offset, io_len);
   offset += io_len;
   return r;
 }
@@ -398,11 +404,11 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq7::_next()
   if (!doneread) {
     if (!donebarrier) {
       donebarrier = true;
-      return IoOp::generate_barrier();
+      return BarrierOp::generate();
     }
     doneread = true;
     barrier = true;
-    return IoOp::generate_read(0, obj_size);
+    return SingleReadOp::generate(0, obj_size);
   }
   if (offset == 0) {
     doneread = false;
@@ -416,7 +422,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq7::_next()
   }
   doneread = false;
   donebarrier = false;
-  return IoOp::generate_write2(offset, 1, obj_size/2, 1);
+  return DoubleReadOp::generate(offset, 1, obj_size/2, 1);
 }
 
 
@@ -437,11 +443,11 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq8::_next()
   if (!doneread) {
     if (!donebarrier) {
       donebarrier = true;
-      return IoOp::generate_barrier();
+      return BarrierOp::generate();
     }
     doneread = true;
     barrier = true;
-    return IoOp::generate_read(0, obj_size);
+    return SingleReadOp::generate(0, obj_size);
   }
   offset2++;
   if (offset2 >= obj_size - offset1) {
@@ -455,9 +461,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq8::_next()
   }
   doneread = false;
   donebarrier = false;
-  return IoOp::generate_write3(offset1, 1,
-                              offset1 + offset2, 1,
-                              (offset1 * 2 + offset2)/2, 1);
+  return TripleWriteOp::generate(offset1, 1, offset1 + offset2, 1, (offset1 * 2 + offset2)/2, 1);
 }
 
 
@@ -465,7 +469,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq8::_next()
 ceph::io_exerciser::Seq9::Seq9(std::pair<int,int> obj_size_range, int seed) :
   IoSequence(obj_size_range, seed), offset(0), length(0)
 {
-  
+
 }
 
 std::string ceph::io_exerciser::Seq9::get_name() const
@@ -478,11 +482,11 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq9::_next()
   if (!doneread) {
     if (!donebarrier) {
       donebarrier = true;
-      return IoOp::generate_barrier();
+      return BarrierOp::generate();
     }
     doneread = true;
     barrier = true;
-    return IoOp::generate_read(0, obj_size);
+    return SingleReadOp::generate(0, obj_size);
   }
   length++;
   if (length > obj_size - offset) {
@@ -496,5 +500,5 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq9::_next()
   }
   doneread = false;
   donebarrier = false;
-  return IoOp::generate_write(offset, length);
+  return SingleWriteOp::generate(offset, length);
 }
