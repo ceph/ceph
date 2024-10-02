@@ -37,6 +37,8 @@ core
 *.log
 /src/td
 /src/vstart_environment.sh
+src/fmt/
+
 
 # alpine abuild things
 .abuild/
