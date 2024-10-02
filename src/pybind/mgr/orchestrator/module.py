@@ -799,11 +799,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host maintenance exit')
-    def _host_maintenance_exit(self, hostname: str) -> HandleCommandResult:
+    def _host_maintenance_exit(self, hostname: str, force: bool = False, offline: bool = False) -> HandleCommandResult:
         """
         Return a host from maintenance, restarting all Ceph daemons (cephadm only)
         """
-        completion = self.exit_host_maintenance(hostname)
+        completion = self.exit_host_maintenance(hostname, force, offline)
         raise_if_exception(completion)
 
         return HandleCommandResult(stdout=completion.result_str())
