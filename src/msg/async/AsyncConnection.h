@@ -187,6 +187,13 @@ private:
   ceph::buffer::list outgoing_bl;
   bool open_write = false;
 
+  /**
+   * True when we know that the kernel's socket receive buffer has run
+   * empty.  Until we get a notification from the kernel, we skip all
+   * further read calls.
+   */
+  bool skip_read = false;
+
   std::mutex write_lock;
 
   std::mutex lock;
