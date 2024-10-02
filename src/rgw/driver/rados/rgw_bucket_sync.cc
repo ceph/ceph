@@ -994,17 +994,34 @@ void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *_sour
   }
 }
 
-bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags) const {
-  if (bucket_exports_data()) {
-    for (auto& entry : target_pipes.pipe_map) {
-      auto& filter = entry.second.params.source.filter;
-      if (filter.check_prefix(obj_name) && filter.check_tags(tags.get_tags())) {
-	return true;
+bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags, std::set<rgw_zone_id>* log_zones) const {
+  if (!bucket_exports_data()) {
+    return false;
+  }
+
+  const auto& pipe_map = target_pipes.pipe_map;
+
+  for (const auto& [_, pipe] : pipe_map) {
+    const auto& filter = pipe.params.source.filter;
+
+    if (filter.check_prefix(obj_name) && filter.check_tags(tags.get_tags())) {
+      if (unlikely(!log_zones)) {
+        // early return if we only need to check if an object exports
+        return true;
+      }
+
+      if (likely(pipe.dest.zone.has_value())) {
+        log_zones->insert(*pipe.dest.zone);
+      } else {
+        // we have a wildcard zone, need to check all zones
+        // clear the log_zones and return true so all zones from the handler be used
+        log_zones->clear();
+        return true;
       }
     }
   }
 
-  return false;
+  return log_zones ? !log_zones->empty() : false;
 }
 
 bool RGWBucketSyncPolicyHandler::bucket_exports_data() const

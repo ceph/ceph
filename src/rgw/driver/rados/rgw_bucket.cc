@@ -147,10 +147,16 @@ bool rgw_bucket_object_check_filter(const std::string& oid)
 
 int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key, optional_yield y)
 {
-
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 
-  return object->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
+  int ret = 0;
+  rgw_log_op_info log_op_info;
+  if (ret = should_log_op(driver, bucket->get_key(), object.get(), dpp, y, log_op_info); ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  const bool log_op = ret;
+
+  return object->delete_object(dpp, y, &log_op_info, log_op ? rgw::sal::FLAG_LOG_OP : 0, nullptr, nullptr);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
@@ -671,8 +677,16 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
             ldpp_dout(dpp, -1) << "ERROR failed to load state for: " << olh_entry.key.name << " load_obj_state(): " << cpp_strerror(-ret) << dendl;
             continue;
           }
+
+          rgw_log_op_info log_op_info;
+          if (ret = should_log_op(rados_store, bucket->get_key(), object.get(), dpp, y, log_op_info); ret < 0 && ret != -ENOENT) {
+            ldpp_dout(dpp, -1) << "ERROR failed to check log operation for: " << olh_entry.key.name << " should_log_op(): " << cpp_strerror(-ret) << dendl;
+            continue;
+          }
+          const bool log_op = ret;
+
 	  RGWObjState& state = static_cast<rgw::sal::RadosObject*>(object.get())->get_state();
-          ret = store->update_olh(dpp, obj_ctx, &state, bucket->get_info(), obj, y);
+          ret = store->update_olh(dpp, obj_ctx, &state, bucket->get_info(), obj, y, nullptr, &log_op_info, false, log_op);
           if (ret < 0) {
             ldpp_dout(dpp, -1) << "ERROR failed to update olh for: " << olh_entry.key.name << " update_olh(): " << cpp_strerror(-ret) << dendl;
             continue;

@@ -520,6 +520,7 @@ class RGWGetObjTags : public RGWOp {
 class RGWPutObjTags : public RGWOp {
  protected:
   bufferlist tags_bl;
+  RGWObjTags obj_tags;
  public:
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
@@ -1333,6 +1334,7 @@ protected:
   std::map<std::string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
   std::optional<rgw::cksum::Cksum> cksum;
+  RGWObjTags obj_tags;
 
   /* Must be called after get_data() or the result is undefined. */
   virtual std::string get_current_filename() const = 0;

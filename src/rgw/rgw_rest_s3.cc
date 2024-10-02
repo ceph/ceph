@@ -838,7 +838,6 @@ int RGWPutObjTags_ObjStore_S3::get_params(optional_yield y)
     return -ERR_MALFORMED_XML;
   }
 
-  RGWObjTags obj_tags;
   r = tagging.rebuild(obj_tags);
   if (r < 0)
     return r;
@@ -2161,7 +2160,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
 void RGWGetBucketLocation_ObjStore_S3::send_response()
 {
   dump_errno(s);
-  dump_header(s, "x-rgw-bucket-placement-target", 
+  dump_header(s, "x-rgw-bucket-placement-target",
     s->bucket->get_info().placement_rule.name);
   end_header(s, this, to_mime_type(s->format));
   dump_start(s);
@@ -3157,7 +3156,6 @@ int RGWPostObj_ObjStore_S3::get_tags()
       return -EINVAL;
     }
 
-    RGWObjTags obj_tags;
     int r = tagging.rebuild(obj_tags);
     if (r < 0)
       return r;

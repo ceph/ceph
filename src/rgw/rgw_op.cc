@@ -909,6 +909,25 @@ void rgw_build_iam_environment(rgw::sal::Driver* driver,
   }
 }
 
+void set_replication_status_header(const DoutPrefixProvider *dpp,
+                                   rgw::sal::Object* object,
+                                   optional_yield y,
+                                   const std::string& status)
+{
+  object->set_atomic();
+
+  bufferlist bl;
+  bl.append(status);
+
+  rgw::sal::Attrs setattrs;
+  setattrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = std::move(bl);
+
+  int ret = object->set_obj_attrs(dpp, &setattrs, nullptr, y, nullptr, 0);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to set amz-replication-status header to " << status << " for object=" << object << dendl;
+  }
+}
+
 void handle_replication_status_header(
     const DoutPrefixProvider *dpp,
     rgw::sal::Attrs& attrs,
@@ -917,19 +936,11 @@ void handle_replication_status_header(
   auto attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
   if (attr_iter != attrs.end() && attr_iter->second.to_str() == "PENDING") {
     if (s->object->is_sync_completed(dpp, obj_mtime)) {
-      s->object->set_atomic();
-      rgw::sal::Attrs setattrs, rmattrs;
+      const std::string status = "COMPLETED";
+      set_replication_status_header(dpp, s->object.get(), s->yield, status);
+
       bufferlist bl;
-      bl.append("COMPLETED");
-      setattrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = bl;
-      int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, s->yield, 0);
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: failed to set object replication status to COMPLETED ret=" << ret << dendl;
-        return;
-      }
-
-      ldpp_dout(dpp, 20) << *s->object << " has amz-replication-status header set to COMPLETED" << dendl;
-
+      bl.append(status);
       attrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = std::move(bl); // update the attrs so that the status is reflected in the response
     }
   }
@@ -1040,14 +1051,33 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
         s->err.message = "failed to restore object";
         return op_ret;
       }
+
+      rgw_log_op_info log_op_info;
+      if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), attrs, dpp, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+        return op_ret;
+      }
+      const bool log_op = op_ret;
+
+      std::string replication_status = "PENDING";
+      if (op_ret == -ENOENT) {
+        replication_status = "FAILED";
+      }
+
+      auto flags = s->bucket->get_info().flags | (log_op ? rgw::sal::FLAG_LOG_OP : 0);
       op_ret = s->object->restore_obj_from_cloud(pbucket, tier.get(), target_placement, ent, s->cct, tier_config,
-                                                   mtime, epoch, days, dpp, y, s->bucket->get_info().flags);
+                                                   mtime, epoch, days, dpp, y, &log_op_info, flags);
       if (op_ret < 0) {
         ldpp_dout(dpp, 0) << "object " << ent.key.name << " fetching failed" << op_ret << dendl;
         s->err.message = "failed to restore object";
         return op_ret;
       }
       ldpp_dout(dpp, 20) << "object " << ent.key.name << " fetching succeed" << dendl;
+
+      // update replication status
+      if (log_op || replication_status == "FAILED") {
+        set_replication_status_header(dpp, s->object.get(), y, replication_status);
+      }
+
       /*  Even if restore is complete the first read through request will return but actually downloaded
        * object asyncronously.
        */
@@ -1211,14 +1241,34 @@ void RGWPutObjTags::execute(optional_yield y)
     return;
 
   if (rgw::sal::Object::empty(s->object.get())){
-    op_ret= -EINVAL; // we only support tagging on existing objects
+    op_ret = -EINVAL; // we only support tagging on existing objects
     return;
   }
 
   s->object->set_atomic();
-  op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this);
+
+  rgw_log_op_info log_op_info;
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), obj_tags, this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+    return;
+  }
+  const bool log_op = op_ret;
+
+  std::string replication_status = "PENDING";
+  if (op_ret == -ENOENT) {
+    replication_status = "FAILED"; // destination bucket does not exist - fast fail
+  }
+
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this, &log_op_info, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (op_ret == -ECANCELED){
     op_ret = -ERR_TAG_CONFLICT;
+  }
+
+  if (op_ret < 0) {
+    return;
+  }
+
+  if (log_op || replication_status == "FAILED") {
+    set_replication_status_header(this, s->object.get(), y, replication_status);
   }
 }
 
@@ -1249,7 +1299,25 @@ void RGWDeleteObjTags::execute(optional_yield y)
   if (rgw::sal::Object::empty(s->object.get()))
     return;
 
-  op_ret = s->object->delete_obj_attrs(this, RGW_ATTR_TAGS, y);
+  rgw_log_op_info log_op_info;
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), RGWObjTags(), this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+    return;
+  }
+  const bool log_op = op_ret;
+
+  std::string replication_status = "PENDING";
+  if (op_ret == -ENOENT) {
+    replication_status = "FAILED"; // destination bucket does not exist - fast fail
+  }
+
+  op_ret = s->object->delete_obj_attrs(this, RGW_ATTR_TAGS, y, &log_op_info, log_op ? rgw::sal::FLAG_LOG_OP : 0);
+  if (op_ret < 0) {
+    return;
+  }
+
+  if (log_op || replication_status == "FAILED") {
+    set_replication_status_header(this, s->object.get(), y, replication_status);
+  }
 }
 
 int RGWGetBucketTags::verify_permission(optional_yield y)
@@ -4605,17 +4673,26 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
-  RGWBucketSyncPolicyHandlerRef policy_handler;
-  op_ret = driver->get_sync_policy_handler(this, std::nullopt, s->bucket->get_key(), &policy_handler, s->yield);
+  // don't track the individual parts of multipart uploads. they replicate in
+  // full after CompleteMultipart
+  bool log_op = !multipart;
+  rgw_log_op_info log_op_info;
+  if (log_op) {
+    if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), obj_tags, this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+      return;
+    }
+    log_op = op_ret;
 
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "failed to read sync policy for bucket: " << s->bucket << dendl;
-    return;
-  }
-  if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags)) {
-    bufferlist repl_bl;
-    repl_bl.append("PENDING");
-    emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
+    if (log_op || op_ret == -ENOENT) {
+      std::string replication_status = "PENDING";
+      if (op_ret == -ENOENT) {
+        replication_status = "FAILED";
+      }
+
+      bufferlist repl_bl;
+      repl_bl.append(replication_status);
+      emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
+    }
   }
 
   if (slo_info) {
@@ -4701,9 +4778,7 @@ void RGWPutObj::execute(optional_yield y)
    }
   }
 
-  // don't track the individual parts of multipart uploads. they replicate in
-  // full after CompleteMultipart
-  const uint32_t complete_flags = multipart ? 0 : rgw::sal::FLAG_LOG_OP;
+  const uint32_t complete_flags = log_op ? rgw::sal::FLAG_LOG_OP : 0;
 
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
   const req_context rctx{this, s->yield, s->trace.get()};
@@ -4713,7 +4788,7 @@ void RGWPutObj::execute(optional_yield y)
 			cksum, (delete_at ? *delete_at : real_time()),
 			if_match, if_nomatch,
 			(user_data.empty() ? nullptr : &user_data),
-			nullptr, nullptr, rctx, complete_flags);
+			nullptr, &log_op_info, nullptr, rctx, complete_flags);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
   if (op_ret < 0) {
     return;
@@ -4975,12 +5050,29 @@ void RGWPostObj::execute(optional_yield y)
       }
     }
 
+    rgw_log_op_info log_op_info;
+    if (op_ret = should_log_op(driver, s->bucket->get_key(), obj->get_name(), obj_tags, this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+      return;
+    }
+    const bool log_op = op_ret;
+
+    if (log_op || op_ret == -ENOENT) {
+      std::string replication_status = "PENDING";
+      if (op_ret == -ENOENT) {
+        replication_status = "FAILED";
+      }
+
+      bufferlist repl_bl;
+      repl_bl.append(replication_status);
+      emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
+    }
+
     const req_context rctx{this, s->yield, s->trace.get()};
     op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(),
 				 attrs, cksum,
 				 (delete_at ? *delete_at : real_time()),
-				 nullptr, nullptr, nullptr, nullptr, nullptr,
-				 rctx, rgw::sal::FLAG_LOG_OP);
+				 nullptr, nullptr, nullptr, nullptr, &log_op_info, nullptr, rctx,
+                                 log_op ? rgw::sal::FLAG_LOG_OP : 0);
     if (op_ret < 0) {
       return;
     }
@@ -5270,7 +5362,24 @@ void RGWPutMetadataObject::execute(optional_yield y)
     }
   }
 
-  op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield, rgw::sal::FLAG_LOG_OP);
+  rgw_log_op_info log_op_info;
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), s->object->get_attrs(), this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+    return;
+  }
+  const bool log_op = op_ret;
+
+  if (log_op || op_ret == -ENOENT) {
+    std::string replication_status = "PENDING";
+    if (op_ret == -ENOENT) {
+      replication_status = "FAILED";
+    }
+
+    bufferlist repl_bl;
+    repl_bl.append(replication_status);
+    attrs.emplace(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
+  }
+
+  op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield, &log_op_info, log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
 int RGWRestoreObj::init_processing(optional_yield y)
@@ -5533,7 +5642,14 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.marker_version_id = version_id;
       del_op->params.null_verid = null_verid;
 
-      op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
+      rgw_log_op_info log_op_info;
+      if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), s->object->get_attrs(), this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+        return;
+      }
+      const bool log_op = op_ret;
+      del_op->params.log_op_info = &log_op_info;
+
+      op_ret = del_op->delete_obj(this, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
       if (op_ret >= 0) {
 	delete_marker = del_op->result.delete_marker;
 	version_id = del_op->result.version_id;
@@ -6239,12 +6355,27 @@ void RGWPutACLs::execute(optional_yield y)
 
   bufferlist bl;
   new_policy.encode(bl);
-  map<string, bufferlist> attrs;
 
   if (!rgw::sal::Object::empty(s->object.get())) {
     s->object->set_atomic();
-    //if instance is empty, we should modify the latest object
-    op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this);
+
+    rgw_log_op_info log_op_info;
+    if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object.get(), this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+      return;
+    }
+    const bool log_op = op_ret;
+
+    std::string replication_status = "PENDING";
+    if (op_ret == -ENOENT) {
+      replication_status = "FAILED"; // destination bucket does not exist - fast fail
+    }
+
+    // if instance is empty, we should modify the latest object
+    op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this, &log_op_info, log_op ? rgw::sal::FLAG_LOG_OP : 0);
+
+    if ((log_op || replication_status == "FAILED") && op_ret >= 0) {
+      set_replication_status_header(this, s->object.get(), y, replication_status);
+    }
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
@@ -7006,7 +7137,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   for (auto i = 0u; i < MAX_DELETE_RETRIES; i++) {
     // remove the upload meta object ; the meta object is not versioned
     // when the bucket is, as that would add an unneeded delete marker
-    int ret = meta_obj->delete_object(this, y, rgw::sal::FLAG_PREVENT_VERSIONING, &remove_objs, &objv_tracker);
+    int ret = meta_obj->delete_object(this, y, nullptr, rgw::sal::FLAG_PREVENT_VERSIONING, &remove_objs, &objv_tracker);
     if (ret != -ECANCELED || i == MAX_DELETE_RETRIES - 1) {
       if (ret >= 0) {
         /* serializer's exclusive lock is released */
@@ -7410,7 +7541,14 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
 
-  op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
+  rgw_log_op_info log_op_info;
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), obj->get_name(), obj->get_attrs(), this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+    return;
+  }
+  const bool log_op = op_ret;
+  del_op->params.log_op_info = &log_op_info;
+
+  op_ret = del_op->delete_obj(dpp, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
@@ -7575,7 +7713,14 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     del_op->params.obj_owner = bowner;
     del_op->params.bucket_owner = bucket_owner.id;
 
-    ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
+    rgw_log_op_info log_op_info;
+    if (ret = should_log_op(driver, s->bucket->get_key(), obj.get(), dpp, y, log_op_info); ret < 0 && ret != -ENOENT) {
+      goto binfo_fail;
+    }
+    const bool log_op = ret;
+    del_op->params.log_op_info = &log_op_info;
+
+    ret = del_op->delete_obj(dpp, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
     if (ret < 0) {
       goto delop_fail;
     }
@@ -8040,13 +8185,30 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   /* XXX I don't think bulk upload can support checksums */
 
+  rgw_log_op_info log_op_info;
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), obj->get_name(), attrs, this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+    return op_ret;
+  }
+  const bool log_op = op_ret;
+
+  if (log_op || op_ret == -ENOENT) {
+    std::string replication_status = "PENDING";
+    if (op_ret == -ENOENT) {
+      replication_status = "FAILED";
+    }
+
+    bufferlist bl;
+    bl.append(replication_status);
+    attrs.emplace(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(bl));
+  }
+
   /* Complete the transaction. */
   const req_context rctx{this, s->yield, s->trace.get()};
   op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
-			       attrs, rgw::cksum::no_cksum,
-			       ceph::real_time() /* delete_at */,
-			       nullptr, nullptr, nullptr, nullptr, nullptr,
-			       rctx, rgw::sal::FLAG_LOG_OP);
+                               attrs, rgw::cksum::no_cksum,
+                               ceph::real_time() /* delete_at */,
+                               nullptr, nullptr, nullptr, nullptr, &log_op_info, nullptr, rctx,
+                               log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor::complete returned op_ret=" << op_ret << dendl;
   }
@@ -8266,7 +8428,13 @@ void RGWRMAttrs::execute(optional_yield y)
 
   s->object->set_atomic();
 
-  op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y, rgw::sal::FLAG_LOG_OP);
+  rgw_log_op_info log_op_info;
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object.get(), this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+    return;
+  }
+  const bool log_op = op_ret;
+
+  op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y, &log_op_info, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to delete obj attrs, obj=" << s->object
 		       << " ret=" << op_ret << dendl;
@@ -8303,7 +8471,14 @@ void RGWSetAttrs::execute(optional_yield y)
 
   if (!rgw::sal::Object::empty(s->object.get())) {
     rgw::sal::Attrs a(attrs);
-    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y, rgw::sal::FLAG_LOG_OP);
+
+    rgw_log_op_info log_op_info;
+    if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), a, this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+      return;
+    }
+    const bool log_op = op_ret;
+
+    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y, &log_op_info, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   } else {
     op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
   }
@@ -8826,9 +9001,25 @@ void RGWPutObjRetention::execute(optional_yield y)
     }
   }
 
-  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl, s->yield, this);
+  rgw_log_op_info log_op_info;
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), attrs, this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+    return;
+  }
+  const bool log_op = op_ret;
 
-  return;
+  std::string replication_status = "PENDING";
+  if (op_ret == -ENOENT) {
+    replication_status = "FAILED"; // destination bucket does not exist - fast fail
+  }
+
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl, s->yield, this, &log_op_info, log_op ? rgw::sal::FLAG_LOG_OP : 0);
+  if (op_ret < 0) {
+    return;
+  }
+
+  if (log_op || replication_status == "FAILED") {
+    set_replication_status_header(this, s->object.get(), y, replication_status);
+  }
 }
 
 int RGWGetObjRetention::verify_permission(optional_yield y)
@@ -8930,9 +9121,27 @@ void RGWPutObjLegalHold::execute(optional_yield y) {
   }
   bufferlist bl;
   obj_legal_hold.encode(bl);
-  //if instance is empty, we should modify the latest object
-  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_LEGAL_HOLD, bl, s->yield, this);
-  return;
+
+  rgw_log_op_info log_op_info;
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object.get(), this, y, log_op_info); op_ret < 0 && op_ret != -ENOENT) {
+    return;
+  }
+  const bool log_op = op_ret;
+
+  std::string replication_status = "PENDING";
+  if (op_ret == -ENOENT) {
+    replication_status = "FAILED"; // destination bucket does not exist - fast fail
+  }
+
+  // if instance is empty, we should modify the latest object
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_LEGAL_HOLD, bl, s->yield, this, &log_op_info, log_op ? rgw::sal::FLAG_LOG_OP : 0);
+  if (op_ret < 0) {
+    return;
+  }
+
+  if (log_op || replication_status == "FAILED") {
+    set_replication_status_header(this, s->object.get(), y, replication_status);
+  }
 }
 
 int RGWGetObjLegalHold::verify_permission(optional_yield y)

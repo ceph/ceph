@@ -531,6 +531,7 @@ protected:
       virtual unsigned get_subsys() { return ceph_subsys_rgw_dbstore; };
       virtual int delete_object(const DoutPrefixProvider* dpp,
           optional_yield y,
+          rgw_log_op_info *log_op_info,
           uint32_t flags,
           std::list<rgw_obj_index_key>* remove_objs,
           RGWObjVersionTracker* objv) override;
@@ -553,7 +554,7 @@ protected:
       virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
       virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
 
-      virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) override;
+      virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, rgw_log_op_info *log_op_info, uint32_t flags) override;
 
       /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
       virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
@@ -563,8 +564,8 @@ protected:
 
       virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
       virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
-      virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) override;
-      virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) override;
+      virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, rgw_log_op_info *log_op_info, uint32_t flags) override;
+      virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y, rgw_log_op_info *log_op_info, uint32_t flags) override;
       virtual bool is_expired() override;
       virtual void gen_rand_obj_instance_name() override;
       virtual std::unique_ptr<Object> clone() override {
@@ -578,6 +579,7 @@ protected:
           uint64_t olh_epoch,
           const DoutPrefixProvider* dpp,
           optional_yield y,
+          rgw_log_op_info *log_op_info,
           uint32_t flags) override;
       virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
       virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
@@ -656,7 +658,8 @@ protected:
                          ceph::real_time delete_at,
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
-                         rgw_zone_set *zones_trace, bool *canceled,
+                         rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
+                         bool *canceled,
                          const req_context& rctx,
                          uint32_t flags) override;
   };
@@ -706,7 +709,8 @@ public:
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags) override;
   };

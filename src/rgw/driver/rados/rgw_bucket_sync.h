@@ -406,7 +406,7 @@ public:
     return target_hints;
   }
 
-  bool bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags) const;
+  bool bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags, std::set<rgw_zone_id>* log_zones) const;
   bool bucket_exports_data() const;
   bool bucket_imports_data() const;
 

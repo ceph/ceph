@@ -4466,18 +4466,20 @@ public:
                              real_time& _timestamp,
                              const rgw_bucket_entry_owner& _owner,
                              RGWModifyOp _op, RGWPendingState _op_state,
-		             const T& _entry_marker, RGWSyncShardMarkerTrack<T, K> *_marker_tracker, rgw_zone_set& _zones_trace,
+		             const T& _entry_marker, RGWSyncShardMarkerTrack<T, K> *_marker_tracker,
+                             rgw_zone_set& _zones_trace,
                              RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sc->cct),
-						      sc(_sc), sync_env(_sc->env),
-                                                      sync_pipe(_sync_pipe), bs(_sync_pipe.info.source_bs),
-                                                      key(_key), versioned(_versioned),
-                                                      null_verid(_null_verid),versioned_epoch(_versioned_epoch),
-                                                      owner(_owner),
-                                                      timestamp(_timestamp), op(_op),
-                                                      op_state(_op_state),
-                                                      entry_marker(_entry_marker),
-                                                      marker_tracker(_marker_tracker),
-                                                      sync_status(0){
+                                                                sc(_sc), sync_env(_sc->env),
+                                                                sync_pipe(_sync_pipe), bs(_sync_pipe.info.source_bs),
+                                                                key(_key), versioned(_versioned),
+                                                                null_verid(_null_verid),versioned_epoch(_versioned_epoch),
+                                                                owner(_owner),
+                                                                timestamp(_timestamp), op(_op),
+                                                                op_state(_op_state),
+                                                                entry_marker(_entry_marker),
+                                                                marker_tracker(_marker_tracker),
+                                                                sync_status(0),
+                                                                zones_trace(_zones_trace) {
     stringstream ss;
     ss << bucket_shard_str{bs} << "/" << key << "[" << versioned_epoch.value_or(0) << "]";
     set_description() << "bucket sync single entry (source_zone=" << sc->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state;
@@ -4493,7 +4495,6 @@ public:
     source_trace_entry.zone = sc->source_zone.id;
     source_trace_entry.location_key = _sync_pipe.info.source_bs.bucket.get_key();
 
-    zones_trace = _zones_trace;
     zones_trace.insert(sync_env->svc->zone->get_zone().id, _sync_pipe.info.dest_bucket.get_key());
 
     if (sc->env->ostr) {

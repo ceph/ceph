@@ -1177,7 +1177,7 @@ MotrObject::~MotrObject() {
 //    return read_op.prepare(dpp);
 //  }
 
-int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
+int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, rgw_log_op_info *log_op_info, uint32_t flags)
 {
   // TODO: implement
   ldpp_dout(dpp, 20) <<__func__<< ": MotrObject::set_obj_attrs()" << dendl;
@@ -1224,7 +1224,7 @@ int MotrObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, r
   return 0;
 }
 
-int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
+int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, rgw_log_op_info *log_op_info, uint32_t flags)
 {
   rgw_obj target = get_obj();
   int r = get_obj_attrs(y, dpp, &target);
@@ -1233,10 +1233,10 @@ int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, op
   }
   set_atomic();
   state.attrset[attr_name] = attr_val;
-  return set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  return set_obj_attrs(dpp, &state.attrset, nullptr, y, log_op_info, flags);
 }
 
-int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
+int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y, rgw_log_op_info *log_op_info, uint32_t flags)
 {
   rgw_obj target = get_obj();
   Attrs rmattr;
@@ -1244,7 +1244,7 @@ int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
 
   set_atomic();
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
+  return set_obj_attrs(dpp, nullptr, &rmattr, y, log_op_info, flags);
 }
 
 bool MotrObject::is_expired() {
@@ -1291,6 +1291,7 @@ int MotrObject::transition(Bucket* bucket,
     uint64_t olh_epoch,
     const DoutPrefixProvider* dpp,
     optional_yield y,
+    rgw_log_op_info *log_op_info,
     uint32_t flags)
 {
   return 0;
@@ -1499,6 +1500,7 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
 
 int MotrObject::delete_object(const DoutPrefixProvider* dpp,
     optional_yield y,
+    rgw_log_op_info *log_op_info,
     uint32_t flags,
     std::list<rgw_obj_index_key>* remove_objs,
     RGWObjVersionTracker* objv)
@@ -2325,7 +2327,8 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
 {
@@ -3000,7 +3003,8 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
+                       bool *canceled,
                        optional_yield y,
                        uint32_t flags)
 {

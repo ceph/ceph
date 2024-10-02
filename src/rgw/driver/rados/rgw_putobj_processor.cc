@@ -221,7 +221,7 @@ RadosWriter::~RadosWriter()
   if (need_to_remove_head) {
     std::string version_id;
     ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
-    int r = store->delete_obj(dpp, obj_ctx, bucket_info, head_obj, 0, y, 0);
+    int r = store->delete_obj(dpp, obj_ctx, bucket_info, head_obj, 0, y, 0, 0, ceph::real_time(), nullptr, nullptr, false);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
     }
@@ -351,7 +351,7 @@ int AtomicObjectProcessor::complete(
 				const char *if_match,
 				const char *if_nomatch,
 				const std::string *user_data,
-				rgw_zone_set *zones_trace,
+				rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
 				bool *pcanceled, 
 				const req_context& rctx,
 				uint32_t flags)
@@ -388,6 +388,7 @@ int AtomicObjectProcessor::complete(
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.user_data = user_data;
   obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.log_op_info = log_op_info;
   obj_op.meta.modify_tail = true;
 
   read_cloudtier_info_from_attrs(attrs, obj_op.meta.category, manifest);
@@ -501,7 +502,7 @@ int MultipartObjectProcessor::complete(
 			       const char *if_match,
 			       const char *if_nomatch,
 			       const std::string *user_data,
-			       rgw_zone_set *zones_trace,
+			       rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
 			       bool *pcanceled, 
 			       const req_context& rctx,
 			       uint32_t flags)
@@ -527,6 +528,7 @@ int MultipartObjectProcessor::complete(
   obj_op.meta.bucket_owner = bucket_info.owner;
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.log_op_info = log_op_info;
   obj_op.meta.modify_tail = true;
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
@@ -724,7 +726,8 @@ int AppendObjectProcessor::complete(
 			    const std::optional<rgw::cksum::Cksum>& cksum,
 			    ceph::real_time delete_at, const char *if_match,
 			    const char *if_nomatch,
-			    const string *user_data, rgw_zone_set *zones_trace,
+			    const string *user_data,
+                            rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
 			    bool *pcanceled,
 			    const req_context& rctx, uint32_t flags)
 {
@@ -756,6 +759,7 @@ int AppendObjectProcessor::complete(
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.user_data = user_data;
   obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.log_op_info = log_op_info;
   obj_op.meta.modify_tail = true;
   obj_op.meta.appendable = true;
   //Add the append part number

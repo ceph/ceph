@@ -9,6 +9,7 @@
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
 #include "rgw_datalog.h"
+#include "rgw_bucket_sync.h"
 
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -502,8 +503,14 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
     return ret;
   }
 
+  std::set<rgw_zone_id> log_zones;
+  ret = svc.datalog_rados->bucket_sync_targets(info.bucket, log_zones, y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
   for (int i = 0; i < shards_num; ++i) {
-    ret = svc.datalog_rados->add_entry(dpp, info, bilog, i, y);
+    ret = svc.datalog_rados->add_entry(dpp, info, bilog, i, y, log_zones);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << i << ")" << dendl;
     } // datalog error is not fatal
