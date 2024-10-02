@@ -54,7 +54,7 @@ class AsyncConnection : public Connection {
   ssize_t read(unsigned len, char *buffer,
                std::function<void(char *, ssize_t)> callback);
   ssize_t read_until(unsigned needed, char *p);
-  ssize_t read_bulk(std::span<char> dest);
+  ssize_t read_bulk(std::span<const std::span<char>> dest);
 
   ssize_t write(ceph::buffer::list &bl, std::function<void(ssize_t)> callback,
                 bool more=false);
