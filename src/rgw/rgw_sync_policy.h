@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "rgw_basic_types.h"
+#include "cls/rgw/cls_rgw_types.h"
 #include "rgw_tag.h"
 
 
@@ -680,5 +680,3 @@ struct rgw_sync_policy_info {
                                      std::set<rgw_bucket> *dests) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_policy_info)
-
-
