@@ -268,10 +268,7 @@ global_init(const std::map<std::string,std::string> *defaults,
     if (g_conf()->setgroup.length() > 0) {
       gid = atoi(g_conf()->setgroup.c_str());
       if (!gid) {
-	char buf[4096];
-	struct group gr;
-	struct group *g = 0;
-	getgrnam_r(g_conf()->setgroup.c_str(), &gr, buf, sizeof(buf), &g);
+	group *g = getgrnam(g_conf()->setgroup.c_str());
 	if (!g) {
 	  cerr << "unable to look up group '" << g_conf()->setgroup << "'"
 	       << ": " << cpp_strerror(errno) << std::endl;
