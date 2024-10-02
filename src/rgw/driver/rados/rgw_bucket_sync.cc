@@ -994,12 +994,27 @@ void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *_sour
   }
 }
 
-bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags) const {
+bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags, rgw_sync_bucket_pipe *dest_pipe) const {
   if (bucket_exports_data()) {
-    for (auto& entry : target_pipes.pipe_map) {
-      auto& filter = entry.second.params.source.filter;
+    // sort desc by priority
+    std::vector<const rgw_sync_bucket_pipe*> pipes;
+    pipes.reserve(target_pipes.pipe_map.size());
+    for (const auto& entry : target_pipes.pipe_map) {
+      pipes.push_back(&entry.second);
+    }
+    if (dest_pipe) { // if dest_pipe is provided, sort by priority and return the highest priority pipe
+      std::sort(pipes.begin(), pipes.end(), [](const rgw_sync_bucket_pipe* a, const rgw_sync_bucket_pipe* b) {
+        return a->params.priority > b->params.priority;
+      });
+    }
+
+    for (auto& pipe : pipes) {
+      const auto& filter = pipe->params.source.filter;
       if (filter.check_prefix(obj_name) && filter.check_tags(tags.get_tags())) {
-	return true;
+        if (dest_pipe) {
+          *dest_pipe = *pipe;
+        }
+        return true;
       }
     }
   }

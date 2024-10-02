@@ -60,63 +60,6 @@ struct rgw_err {
   std::string message;
 }; /* rgw_err */
 
-struct rgw_zone_id {
-  std::string id;
-
-  rgw_zone_id() {}
-  rgw_zone_id(const std::string& _id) : id(_id) {}
-  rgw_zone_id(std::string&& _id) : id(std::move(_id)) {}
-
-  void encode(ceph::buffer::list& bl) const {
-    /* backward compatibility, not using ENCODE_{START,END} macros */
-    ceph::encode(id, bl);
-  }
-
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    /* backward compatibility, not using DECODE_{START,END} macros */
-    ceph::decode(id, bl);
-  }
-
-  void dump(ceph::Formatter *f) const {
-    f->dump_string("id", id);
-  }
-
-  static void generate_test_instances(std::list<rgw_zone_id*>& o) {
-    o.push_back(new rgw_zone_id);
-    o.push_back(new rgw_zone_id("id"));
-  }
-
-  void clear() {
-    id.clear();
-  }
-
-  bool operator==(const std::string& _id) const {
-    return (id == _id);
-  }
-  bool operator==(const rgw_zone_id& zid) const {
-    return (id == zid.id);
-  }
-  bool operator!=(const rgw_zone_id& zid) const {
-    return (id != zid.id);
-  }
-  bool operator<(const rgw_zone_id& zid) const {
-    return (id < zid.id);
-  }
-  bool operator>(const rgw_zone_id& zid) const {
-    return (id > zid.id);
-  }
-
-  bool empty() const {
-    return id.empty();
-  }
-};
-WRITE_CLASS_ENCODER(rgw_zone_id)
-
-inline std::ostream& operator<<(std::ostream& os, const rgw_zone_id& zid) {
-  os << zid.id;
-  return os;
-}
-
 struct obj_version;
 struct rgw_placement_rule;
 struct RGWAccessKey;
@@ -126,11 +69,9 @@ extern void encode_json(const char *name, const obj_version& v, Formatter *f);
 extern void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);
 extern void encode_json(const char *name, const rgw_pool& pool, Formatter *f);
 extern void encode_json(const char *name, const rgw_placement_rule& r, Formatter *f);
-extern void encode_json_impl(const char *name, const rgw_zone_id& zid, ceph::Formatter *f);
 extern void encode_json_plain(const char *name, const RGWAccessKey& val, Formatter *f);
 
 extern void decode_json_obj(obj_version& v, JSONObj *obj);
-extern void decode_json_obj(rgw_zone_id& zid, JSONObj *obj);
 extern void decode_json_obj(rgw_pool& pool, JSONObj *obj);
 extern void decode_json_obj(rgw_placement_rule& v, JSONObj *obj);
 

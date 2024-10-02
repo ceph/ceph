@@ -17,7 +17,7 @@
 
 #include <optional>
 #include "common/ceph_time.h"
-#include "rgw_basic_types.h"
+#include "cls/rgw/cls_rgw_types.h"
 
 class DoutPrefixProvider;
 namespace rgw::sal { class RadosStore; }

@@ -71,12 +71,10 @@ void test_stats(librados::IoCtx& ioctx, const string& oid, RGWObjCategory catego
 }
 
 void index_prepare(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
-                   const string& tag, const cls_rgw_obj_key& key, const string& loc,
-                   uint16_t bi_flags = 0, bool log_op = true)
+                   const string& tag, const cls_rgw_obj_key& key, const string& loc)
 {
   ObjectWriteOperation op;
-  rgw_zone_set zones_trace;
-  cls_rgw_bucket_prepare_op(op, index_op, tag, key, loc, log_op, bi_flags, zones_trace);
+  cls_rgw_bucket_prepare_op(op, index_op, tag, key, loc);
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
 
@@ -90,7 +88,8 @@ void index_complete(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
   meta.accounted_size = meta.size;
-  cls_rgw_bucket_complete_op(op, index_op, tag, ver, key, meta, nullptr, log_op, bi_flags, nullptr);
+  constexpr std::set<rgw_zone_id> log_zones;
+  cls_rgw_bucket_complete_op(op, index_op, tag, ver, key, meta, nullptr, log_op, bi_flags, nullptr, log_zones);
   ASSERT_EQ(0, ioctx.operate(oid, &op));
   if (!key.instance.empty()) {
     bufferlist olh_tag;
@@ -98,7 +97,7 @@ void index_complete(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index
     rgw_zone_set zone_set;
     ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, key, olh_tag,
                                          false, tag, &meta, epoch,
-                                         ceph::real_time{}, true, true, zone_set));
+                                         ceph::real_time{}, true, true, zone_set, log_zones));
   }
 }
 

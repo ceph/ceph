@@ -110,16 +110,6 @@ void decode(rgw_bucket_shard& b, bufferlist::const_iterator& bl)
   decode(b.shard_id, bl);
 }
 
-void encode_json_impl(const char *name, const rgw_zone_id& zid, Formatter *f)
-{
-  encode_json(name, zid.id, f);
-}
-
-void decode_json_obj(rgw_zone_id& zid, JSONObj *obj)
-{
-  decode_json_obj(zid.id, obj);
-}
-
 void rgw_user::generate_test_instances(list<rgw_user*>& o)
 {
   rgw_user *u = new rgw_user("tenant", "user");

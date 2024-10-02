@@ -2011,3 +2011,43 @@ struct AioCompletionDeleter {
   void operator()(librados::AioCompletion* c) { c->release(); }
 };
 using aio_completion_ptr = std::unique_ptr<librados::AioCompletion, AioCompletionDeleter>;
+
+extern int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, optional_yield y, RGWObjTags& obj_tags);
+
+// rgw_log_op_info is used to pass information from should_log_op down to rgw_rados
+// to log bucket index and datalog changes for only specific zones
+struct rgw_log_op_info {
+  std::optional<rgw_zone_id> zone; // if rgw_data_sync_priority_rule_enforcement
+  std::set<rgw_zone_id> zones; // related zones for bucket sync
+
+  // return zones for bucket index logging
+  std::set<rgw_zone_id> get_index_log_zones() const {
+    if (zone) {
+      return { *zone };
+    }
+    return zones;
+  }
+};
+
+extern int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                         const std::string& object_name, const RGWObjTags& tagset,
+                         const DoutPrefixProvider *dpp, optional_yield y,
+                         rgw_log_op_info& log_op_info);
+
+extern int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                         const std::string& object_name, const rgw::sal::Attrs& obj_attrs,
+                         const DoutPrefixProvider *dpp, optional_yield y,
+                         rgw_log_op_info& log_op_info);
+
+extern int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                         rgw::sal::Object *object,
+                         const DoutPrefixProvider *dpp, optional_yield y,
+                         rgw_log_op_info& log_op_info);
+
+extern int list_zonegroup_zones(rgw::sal::Driver* driver, const std::string& zonegroup,
+                                const DoutPrefixProvider *dpp, optional_yield y,
+                                std::set<rgw_zone_id>& zones);
+
+extern int list_bucket_zones(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                             const DoutPrefixProvider *dpp, optional_yield y,
+                             std::set<rgw_zone_id>& zones);

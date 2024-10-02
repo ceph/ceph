@@ -53,21 +53,23 @@ struct rgw_data_change {
   std::string key;
   ceph::real_time timestamp;
   uint64_t gen = 0;
+  std::set<rgw_zone_id> log_zones;
 
   void encode(ceph::buffer::list& bl) const {
     // require decoders to recognize v2 when gen>0
     const uint8_t compat = (gen == 0) ? 1 : 2;
-    ENCODE_START(2, compat, bl);
+    ENCODE_START(3, compat, bl);
     auto t = std::uint8_t(entity_type);
     encode(t, bl);
     encode(key, bl);
     encode(timestamp, bl);
     encode(gen, bl);
+    encode(log_zones, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(2, bl);
+     DECODE_START(3, bl);
      std::uint8_t t;
      decode(t, bl);
      entity_type = DataLogEntityType(t);
@@ -77,6 +79,9 @@ struct rgw_data_change {
        gen = 0;
      } else {
        decode(gen, bl);
+     }
+     if (struct_v >= 3) {
+       decode(log_zones, bl);
      }
      DECODE_FINISH(bl);
   }
@@ -204,12 +209,13 @@ public:
 struct BucketGen {
   rgw_bucket_shard shard;
   uint64_t gen;
+  std::set<rgw_zone_id> log_zones;
 
-  BucketGen(const rgw_bucket_shard& shard, uint64_t gen)
-    : shard(shard), gen(gen) {}
+  BucketGen(const rgw_bucket_shard& shard, uint64_t gen, const std::set<rgw_zone_id>& log_zones)
+    : shard(shard), gen(gen), log_zones(log_zones) {}
 
-  BucketGen(rgw_bucket_shard&& shard, uint64_t gen)
-    : shard(std::move(shard)), gen(gen) {}
+  BucketGen(rgw_bucket_shard&& shard, uint64_t gen, const std::set<rgw_zone_id>& log_zones)
+    : shard(std::move(shard)), gen(gen), log_zones(log_zones) {}
 
   BucketGen(const BucketGen&) = default;
   BucketGen(BucketGen&&) = default;
@@ -220,17 +226,20 @@ struct BucketGen {
 };
 
 inline bool operator ==(const BucketGen& l, const BucketGen& r) {
-  return (l.shard == r.shard) && (l.gen == r.gen);
+  return (l.shard == r.shard) && (l.gen == r.gen) && (l.log_zones == r.log_zones);
 }
 
 inline bool operator <(const BucketGen& l, const BucketGen& r) {
   if (l.shard < r.shard) {
     return true;
   } else if (l.shard == r.shard) {
-    return l.gen < r.gen;
-  } else {
-    return false;
+    if (l.gen < r.gen) {
+      return true;
+    } else if (l.gen == r.gen) {
+      return l.log_zones < r.log_zones;
+    }
   }
+  return false;
 }
 
 class RGWDataChangesLog {
@@ -271,11 +280,13 @@ class RGWDataChangesLog {
 
   bc::flat_set<BucketGen> cur_cycle;
 
-  ChangeStatusPtr _get_change(const rgw_bucket_shard& bs, uint64_t gen);
+  ChangeStatusPtr _get_change(const rgw_bucket_shard& bs, uint64_t gen, const std::set<rgw_zone_id>& log_zones);
   void register_renew(const rgw_bucket_shard& bs,
-		      const rgw::bucket_log_layout_generation& gen);
+		      const rgw::bucket_log_layout_generation& gen,
+                      const std::set<rgw_zone_id>& log_zones);
   void update_renewed(const rgw_bucket_shard& bs,
 		      uint64_t gen,
+                      const std::set<rgw_zone_id>& log_zones,
 		      ceph::real_time expiration);
 
   ceph::mutex renew_lock = ceph::make_mutex("ChangesRenewThread::lock");
@@ -302,7 +313,7 @@ public:
   int choose_oid(const rgw_bucket_shard& bs);
   int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
 		const rgw::bucket_log_layout_generation& gen, int shard_id,
-		optional_yield y);
+		optional_yield y, const std::set<rgw_zone_id>& log_zones);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
@@ -335,9 +346,9 @@ public:
     this->observer = observer;
   }
 
-  bool should_log_bucket(const DoutPrefixProvider* dpp,
-                         const RGWBucketInfo& bucket_info,
-                         optional_yield y) const {
+  bool may_log_bucket(const DoutPrefixProvider* dpp,
+                      const RGWBucketInfo& bucket_info,
+                      optional_yield y) const {
     if (bucket_info.layout.logs.empty()) {
       return false;
     }
@@ -353,6 +364,11 @@ public:
   int trim_generations(const DoutPrefixProvider *dpp,
 		       std::optional<uint64_t>& through,
 		       optional_yield y);
+
+  int bucket_sync_targets(const rgw_bucket& bucket,
+                          std::set<rgw_zone_id>& targets,
+                          optional_yield y,
+                          const DoutPrefixProvider *dpp);
 };
 
 class RGWDataChangesBE : public boost::intrusive_ref_counter<RGWDataChangesBE> {
