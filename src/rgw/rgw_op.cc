@@ -4590,14 +4590,12 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
-  RGWBucketSyncPolicyHandlerRef policy_handler;
-  op_ret = driver->get_sync_policy_handler(this, std::nullopt, s->bucket->get_key(), &policy_handler, s->yield);
-
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "failed to read sync policy for bucket: " << s->bucket << dendl;
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), obj_tags, this, s->yield); op_ret < 0) {
     return;
   }
-  if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags)) {
+  const bool log_op = op_ret;
+
+  if (log_op) {
     bufferlist repl_bl;
     repl_bl.append("PENDING");
     emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
@@ -4680,7 +4678,7 @@ void RGWPutObj::execute(optional_yield y)
 
   // don't track the individual parts of multipart uploads. they replicate in
   // full after CompleteMultipart
-  const uint32_t complete_flags = multipart ? 0 : rgw::sal::FLAG_LOG_OP;
+  const uint32_t complete_flags = (multipart || !log_op) ? 0 : rgw::sal::FLAG_LOG_OP;
 
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
   const req_context rctx{this, s->yield, s->trace.get()};
@@ -4951,12 +4949,17 @@ void RGWPostObj::execute(optional_yield y)
       }
     }
 
+    if (op_ret = should_log_op(driver, s->bucket->get_key(), obj->get_name(), obj_tags, this, s->yield); op_ret < 0) {
+      return;
+    }
+    const bool log_op = op_ret;
+
     const req_context rctx{this, s->yield, s->trace.get()};
     op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(),
 				 attrs, cksum,
 				 (delete_at ? *delete_at : real_time()),
-				 nullptr, nullptr, nullptr, nullptr, nullptr,
-				 rctx, rgw::sal::FLAG_LOG_OP);
+				 nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
+         log_op ? rgw::sal::FLAG_LOG_OP : 0);
     if (op_ret < 0) {
       return;
     }
@@ -5243,7 +5246,12 @@ void RGWPutMetadataObject::execute(optional_yield y)
     }
   }
 
-  op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield, rgw::sal::FLAG_LOG_OP);
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), attrs, this, s->yield); op_ret < 0) {
+    return;
+  }
+  const bool log_op = op_ret;
+
+  op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield, log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
 int RGWRestoreObj::init_processing(optional_yield y)
@@ -5525,7 +5533,12 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.marker_version_id = version_id;
       del_op->params.null_verid = null_verid;
 
-      op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
+      if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), s->object->get_attrs(), this, s->yield); op_ret < 0) {
+        return;
+      }
+      const bool log_op = op_ret;
+
+      op_ret = del_op->delete_obj(this, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
       if (op_ret >= 0) {
 	delete_marker = del_op->result.delete_marker;
 	version_id = del_op->result.version_id;
@@ -7276,7 +7289,12 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
 
-  op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), obj->get_name(), obj->get_attrs(), this, s->yield); op_ret < 0) {
+    return;
+  }
+  const bool log_op = op_ret;
+
+  op_ret = del_op->delete_obj(dpp, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
@@ -7429,7 +7447,16 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     del_op->params.obj_owner = bowner;
     del_op->params.bucket_owner = bucket_owner.id;
 
-    ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
+    if (ret = obj->get_obj_attrs(y, dpp); ret < 0) {
+      goto binfo_fail;
+    }
+
+    if (ret = should_log_op(driver, s->bucket->get_key(), obj->get_name(), obj->get_attrs(), dpp, y); ret < 0) {
+      goto binfo_fail;
+    }
+    const bool log_op = ret;
+
+    ret = del_op->delete_obj(dpp, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
     if (ret < 0) {
       goto delop_fail;
     }
@@ -7894,13 +7921,18 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   /* XXX I don't think bulk upload can support checksums */
 
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), obj->get_name(), attrs, this, s->yield); op_ret < 0) {
+    return op_ret;
+  }
+  const bool log_op = op_ret;
+
   /* Complete the transaction. */
   const req_context rctx{this, s->yield, s->trace.get()};
   op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
 			       attrs, rgw::cksum::no_cksum,
 			       ceph::real_time() /* delete_at */,
-			       nullptr, nullptr, nullptr, nullptr, nullptr,
-			       rctx, rgw::sal::FLAG_LOG_OP);
+			       nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
+             log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor::complete returned op_ret=" << op_ret << dendl;
   }
@@ -8120,7 +8152,12 @@ void RGWRMAttrs::execute(optional_yield y)
 
   s->object->set_atomic();
 
-  op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y, rgw::sal::FLAG_LOG_OP);
+  if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), attrs, this, s->yield); op_ret < 0) {
+    return;
+  }
+  const bool log_op = op_ret;
+
+  op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to delete obj attrs, obj=" << s->object
 		       << " ret=" << op_ret << dendl;
@@ -8157,7 +8194,13 @@ void RGWSetAttrs::execute(optional_yield y)
 
   if (!rgw::sal::Object::empty(s->object.get())) {
     rgw::sal::Attrs a(attrs);
-    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y, rgw::sal::FLAG_LOG_OP);
+
+    if (op_ret = should_log_op(driver, s->bucket->get_key(), s->object->get_name(), a, this, s->yield); op_ret < 0) {
+      return;
+    }
+    const bool log_op = op_ret;
+
+    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   } else {
     op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
   }

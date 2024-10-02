@@ -147,10 +147,19 @@ bool rgw_bucket_object_check_filter(const std::string& oid)
 
 int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key, optional_yield y)
 {
-
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 
-  return object->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
+  int ret;
+  if (ret = object->get_obj_attrs(y, dpp); ret < 0) {
+    return ret;
+  }
+
+  if (ret = should_log_op(driver, bucket->get_key(), object->get_name(), object->get_attrs(), dpp, y); ret < 0) {
+    return ret;
+  }
+  const bool log_op = ret;
+
+  return object->delete_object(dpp, y, log_op ? rgw::sal::FLAG_LOG_OP : 0, nullptr, nullptr);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)

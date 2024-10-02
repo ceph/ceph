@@ -811,7 +811,7 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
   const auto next_log_gen = layout.logs.empty() ? 1 :
       layout.logs.back().gen + 1;
 
-  if (!store->svc()->datalog_rados->should_log_bucket(dpp, bucket_info, y)) {
+  if (!store->svc()->datalog_rados->may_log_bucket(dpp, bucket_info, y)) {
     // if we're not syncing data, we can drop any existing logs
     layout.logs.clear();
   }
@@ -895,7 +895,7 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     return ret;
   }
 
-  if (store->svc()->datalog_rados->should_log_bucket(dpp, bucket_info, y) && !prev.logs.empty() &&
+  if (store->svc()->datalog_rados->may_log_bucket(dpp, bucket_info, y) && !prev.logs.empty() &&
       prev.current_index.layout.type == rgw::BucketIndexType::Normal) {
     // write a datalog entry for each shard of the previous index. triggering
     // sync on the old shards will force them to detect the end-of-log for that
@@ -1347,7 +1347,7 @@ bool RGWBucketReshard::should_zone_reshard_now(const DoutPrefixProvider* dpp,
                                                const RGWBucketInfo& bucket,
 					       const RGWDataChangesLog* datalog_rados)
 {
-  return !datalog_rados->should_log_bucket(dpp, bucket, y) ||
+  return !datalog_rados->may_log_bucket(dpp, bucket, y) ||
     bucket.layout.logs.size() < max_bilog_history;
 }
 

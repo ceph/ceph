@@ -334,9 +334,9 @@ public:
     this->observer = observer;
   }
 
-  bool should_log_bucket(const DoutPrefixProvider* dpp,
-                         const RGWBucketInfo& bucket_info,
-                         optional_yield y) const {
+  bool may_log_bucket(const DoutPrefixProvider* dpp,
+                      const RGWBucketInfo& bucket_info,
+                      optional_yield y) const {
     if (bucket_info.layout.logs.empty()) {
       return false;
     }

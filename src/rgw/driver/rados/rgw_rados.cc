@@ -3307,8 +3307,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   state = NULL;
 
   if (versioned_op && meta.olh_epoch) {
-    bool add_log = log_op && store->svc.datalog_rados->should_log_bucket(rctx.dpp, target->get_bucket_info(), null_yield);
-    r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, add_log);
+    r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, log_op);
     if (r < 0) {
       return r;
     }
@@ -4220,6 +4219,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
+  bool log_op = false;
 
   // use an empty owner until we decode RGW_ATTR_ACL
   ACLOwner owner;
@@ -4509,13 +4509,18 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     }
   }
 
+  if (ret = should_log_op(driver, dest_bucket_info.bucket, dest_obj.key.name, attrs, rctx.dpp, rctx.y); ret < 0) {
+    return ret;
+  }
+  log_op = ret;
+
 #define MAX_COMPLETE_RETRY 100
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     bool canceled = false;
     ret = processor.complete(accounted_size, etag, mtime, set_mtime,
                              attrs, rgw::cksum::no_cksum, delete_at, nullptr, nullptr,
-			     nullptr, zones_trace, &canceled, rctx,
-			     rgw::sal::FLAG_LOG_OP);
+                             nullptr, zones_trace, &canceled, rctx,
+                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
     if (ret < 0) {
       goto set_err_state;
     }
@@ -5932,8 +5937,6 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
   bool explicit_marker_version = (!params.marker_version_id.empty());
 
   if (params.versioning_status & BUCKET_VERSIONED || explicit_marker_version) {
-    bool add_log = log_op && store->svc.datalog_rados->should_log_bucket(dpp, target->get_bucket_info(), y);
-
     if (instance.empty() || explicit_marker_version) {
       rgw_obj marker = obj;
       marker.key.instance.clear();
@@ -5964,7 +5967,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
 
       int r = store->set_olh(dpp, target->get_ctx(), target->get_bucket_info(), marker, true,
                              &meta, params.olh_epoch, params.unmod_since, params.high_precision_time,
-                             y, params.zones_trace, add_log);
+                             y, params.zones_trace, log_op);
       if (r < 0) {
         return r;
       }
@@ -5977,7 +5980,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
       }
       result.delete_marker = dirent.is_delete_marker();
       r = store->unlink_obj_instance(dpp, target->get_ctx(), target->get_bucket_info(), obj, params.olh_epoch,
-                                     y, params.bilog_flags, params.null_verid, params.zones_trace, add_log);
+                                     y, params.bilog_flags, params.null_verid, params.zones_trace, log_op);
       if (r < 0) {
         return r;
       }
@@ -5991,7 +5994,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
       return r;
     }
 
-    if (add_log) {
+    if (log_op) {
       add_datalog_entry(dpp, store->svc.datalog_rados,
                         target->get_bucket_info(), bs->shard_id, y);
     }
@@ -7246,10 +7249,8 @@ int RGWRados::Bucket::UpdateIndex::prepare(const DoutPrefixProvider *dpp, RGWMod
     }
   }
 
-  bool add_log = log_op && store->svc.datalog_rados->should_log_bucket(dpp, target->get_bucket_info(), y);
-
   int r = guard_reshard(dpp, obj, nullptr, [&](BucketShard *bs) -> int {
-				   return store->cls_obj_prepare_op(dpp, *bs, op, optag, obj, bilog_flags, y, zones_trace, add_log);
+				   return store->cls_obj_prepare_op(dpp, *bs, op, optag, obj, bilog_flags, y, zones_trace, log_op);
 				 }, y);
   if (r < 0) {
     return r;
@@ -7298,10 +7299,8 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
   ent.meta.content_type = content_type;
   ent.meta.appendable = appendable;
 
-  bool add_log = log_op && store->svc.datalog_rados->should_log_bucket(dpp, target->get_bucket_info(), y);
-
-  ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace, add_log);
-  if (add_log) {
+  ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace, log_op);
+  if (log_op) {
     add_datalog_entry(dpp, store->svc.datalog_rados,
                       target->bucket_info, bs->shard_id, y);
   }
@@ -7328,11 +7327,9 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  bool add_log = log_op && store->svc.datalog_rados->should_log_bucket(dpp, target->get_bucket_info(), y);
+  ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags, zones_trace, log_op);
 
-  ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags, zones_trace, add_log);
-
-  if (add_log) {
+  if (log_op) {
     add_datalog_entry(dpp, store->svc.datalog_rados,
                       target->bucket_info, bs->shard_id, y);
   }
@@ -7352,13 +7349,11 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp,
   RGWRados *store = target->get_store();
   BucketShard *bs;
 
-  bool add_log = log_op && store->svc.datalog_rados->should_log_bucket(dpp, target->get_bucket_info(), y);
-
   int ret = guard_reshard(dpp, obj, &bs, [&](BucketShard *bs) -> int {
-				 return store->cls_obj_complete_cancel(*bs, optag, obj, remove_objs, bilog_flags, zones_trace, add_log);
+				 return store->cls_obj_complete_cancel(*bs, optag, obj, remove_objs, bilog_flags, zones_trace, log_op);
 			       }, y);
 
-  if (add_log) {
+  if (log_op) {
     /*
      * need to update data log anyhow, so that whoever follows needs to update its internal markers
      * for following the specific bucket shard log. Otherwise they end up staying behind, and users
@@ -10526,7 +10521,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     bucket_info.bucket << " dir_entry=" << list_state.key << dendl_bitx;
 
   uint8_t suggest_flag = (
-    svc.datalog_rados->should_log_bucket(dpp, bucket_info, y)
+    svc.datalog_rados->may_log_bucket(dpp, bucket_info, y)
     ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0
   );
 
@@ -10731,7 +10726,7 @@ void RGWRados::calculate_preferred_shards(const DoutPrefixProvider* dpp,
     uint32_t(cct->_conf.get_val<uint64_t>("rgw_max_dynamic_shards"));
   const uint64_t max_objs_per_shard =
     cct->_conf.get_val<uint64_t>("rgw_max_objs_per_shard");
-  const bool is_multisite = svc.datalog_rados->should_log_bucket(dpp, bucket_info, y);
+  const bool is_multisite = svc.datalog_rados->may_log_bucket(dpp, bucket_info, y);
 
   RGWBucketReshard::calculate_preferred_shards(dpp,
 					       max_dynamic_shards,

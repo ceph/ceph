@@ -3121,7 +3121,6 @@ int RGWPostObj_ObjStore_S3::get_tags()
       return -EINVAL;
     }
 
-    RGWObjTags obj_tags;
     int r = tagging.rebuild(obj_tags);
     if (r < 0)
       return r;
