@@ -1,4 +1,0 @@
-overrides:
-  install:
-    ceph:
-      debuginfo: true

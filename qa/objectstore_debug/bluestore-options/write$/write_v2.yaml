@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      osd:
-        bluestore write v2: true

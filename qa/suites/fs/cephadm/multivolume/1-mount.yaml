@@ -1,7 +1,0 @@
-tasks:
-  - ceph-fuse:
-      client.0:
-        cephfs_name: foo
-  - ceph-fuse:
-      client.1:
-        cephfs_name: bar

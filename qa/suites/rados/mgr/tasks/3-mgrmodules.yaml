@@ -1,8 +1,0 @@
-mgrmodules:
-  sequential:
-    - print: "Enabling mgr modules"
-    # other fragments append to this
-
-tasks:
-  - sequential:
-      - mgrmodules

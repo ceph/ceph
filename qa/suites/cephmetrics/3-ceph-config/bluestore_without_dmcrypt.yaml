@@ -1,8 +1,0 @@
-meta:
-- desc: "use bluestore without dmcrypt"
-
-overrides:
-   ceph_ansible:
-     vars:
-        osd_objectstore: bluestore
-        dmcrypt: False

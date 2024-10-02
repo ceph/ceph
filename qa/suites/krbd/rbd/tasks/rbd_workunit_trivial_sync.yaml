@@ -1,8 +1,0 @@
-tasks:
-- install:
-- ceph:
-- rbd:
-    all:
-- workunit:
-    clients:
-      all: [fs/misc/trivial_sync.sh]

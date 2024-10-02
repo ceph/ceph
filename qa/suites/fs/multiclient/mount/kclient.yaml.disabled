@@ -1,7 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      global:
-        ms die on skipped message: false
-tasks:
-- kclient:

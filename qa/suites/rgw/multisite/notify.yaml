@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      client.0: # disable notifications on one zone per cluster
-        rgw data notify interval msec: 0

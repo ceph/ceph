@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      client:
-        rbd_persistent_cache_size: 1073741824

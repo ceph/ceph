@@ -1,3 +1,0 @@
-lib/systemd/system/ceph-mds*
-usr/bin/ceph-mds
-usr/share/man/man8/ceph-mds.8

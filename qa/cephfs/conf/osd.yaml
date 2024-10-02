@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    cluster-conf:
-      osd:
-        osd op complaint time: 180

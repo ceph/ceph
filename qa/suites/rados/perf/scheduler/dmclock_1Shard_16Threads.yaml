@@ -1,7 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      osd:
-        osd op num shards: 1
-        osd op num threads per shard: 16
-        osd op queue: mclock_scheduler

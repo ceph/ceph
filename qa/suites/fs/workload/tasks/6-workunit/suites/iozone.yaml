@@ -1,8 +1,0 @@
-overrides:
-  check-counter:
-    dry_run: true
-tasks:
-- workunit:
-    clients:
-      all:
-        - suites/iozone.sh

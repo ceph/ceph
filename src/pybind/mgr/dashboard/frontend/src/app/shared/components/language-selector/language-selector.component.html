@@ -1,6 +1,0 @@
-<cds-header-menu [title]="allLanguages[selectedLanguage]">
-  <ng-container *ngFor="let lang of supportedLanguages | keyvalue">
-    <cds-header-item (click)="changeLanguage(lang.key)">{{ lang.value }}</cds-header-item>
-  </ng-container>
-</cds-header-menu>
-

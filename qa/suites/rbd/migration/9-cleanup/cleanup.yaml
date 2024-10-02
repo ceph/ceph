@@ -1,5 +1,0 @@
-tasks:
-  - exec:
-      client.0:
-        - pkill -9 qemu-nbd || true
-        - rm -rf /home/ubuntu/cephtest/migration

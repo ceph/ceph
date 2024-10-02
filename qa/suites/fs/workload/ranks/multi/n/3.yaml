@@ -1,4 +1,0 @@
-overrides:
-  ceph:
-    cephfs:
-      max_mds: 3

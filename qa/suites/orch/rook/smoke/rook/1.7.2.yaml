@@ -1,4 +1,0 @@
-overrides:
-  rook:
-    rook_image: rook/ceph:v1.7.2
-    rook_branch: v1.7.2

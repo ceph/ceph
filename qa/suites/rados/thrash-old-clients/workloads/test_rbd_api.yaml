@@ -1,8 +1,0 @@
-meta:
-- desc: |
-   librbd C and C++ api tests
-workload:
-- workunit:
-    clients:
-      client.2:
-        - rbd/test_librbd.sh

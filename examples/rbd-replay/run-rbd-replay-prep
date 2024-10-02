@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-../../src/rbd-replay-prep traces/ust/uid/10002/64-bit replay.bin

@@ -1,7 +1,0 @@
-meta:
-- desc: "without dmcrypt"
-
-overrides:
-   ceph_ansible:
-     vars:
-        dmcrypt: False

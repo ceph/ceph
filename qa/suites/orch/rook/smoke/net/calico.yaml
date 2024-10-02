@@ -1,3 +1,0 @@
-overrides:
-  kubeadm:
-    pod_network: calico

@@ -1,7 +1,0 @@
-distutils_add_cython_module(cython_rados
-  rados
-  ${CMAKE_CURRENT_SOURCE_DIR}/rados.pyx
-  DISABLE_VTA)
-add_dependencies(cython_rados rados)
-distutils_install_cython_module(cython_rados
-  DISABLE_VTA)

@@ -1,2 +1,0 @@
-tasks:
-  - ceph-fuse: [client.0, client.1]

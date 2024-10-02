@@ -1,8 +1,0 @@
-tasks:
-- cephadm.shell:
-    host.a:
-      - ceph orch status
-      - ceph orch ps
-      - ceph orch ls
-      - ceph orch host ls
-      - ceph orch device ls

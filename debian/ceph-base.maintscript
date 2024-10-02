@@ -1,2 +1,0 @@
-rm_conffile /etc/logrotate.d/ceph
-rm_conffile /etc/logrotate.d/ceph.logrotate

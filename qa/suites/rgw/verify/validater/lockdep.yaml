@@ -1,7 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      osd:
-        lockdep: true
-      mon:
-        lockdep: true

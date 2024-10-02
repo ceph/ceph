@@ -1,3 +1,0 @@
-overrides:
-  rbd_fsx:
-    randomized_striping: true

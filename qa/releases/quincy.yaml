@@ -1,6 +1,0 @@
-tasks:
-- exec:
-    osd.0:
-      - ceph osd require-osd-release quincy
-      - ceph osd set-require-min-compat-client quincy
-- ceph.healthy:

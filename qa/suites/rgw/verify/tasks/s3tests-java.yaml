@@ -1,6 +1,0 @@
-tasks:
-- s3tests-java:
-    client.0:
-        force-branch: ceph-master
-        force-repo: https://github.com/ceph/java_s3tests.git 
-

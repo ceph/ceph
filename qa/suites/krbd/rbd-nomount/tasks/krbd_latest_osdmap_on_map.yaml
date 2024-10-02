@@ -1,5 +1,0 @@
-tasks:
-- workunit:
-    clients:
-      all:
-        - rbd/krbd_latest_osdmap_on_map.sh

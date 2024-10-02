@@ -1,3 +1,0 @@
-lib/systemd/system/ceph-rbd-mirror*
-usr/bin/rbd-mirror
-usr/share/man/man8/rbd-mirror.8

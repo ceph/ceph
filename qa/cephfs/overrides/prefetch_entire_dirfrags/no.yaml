@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    cluster-conf:
-      mds:
-        mds_dir_prefetch: false

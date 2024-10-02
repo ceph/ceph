@@ -1,3 +1,0 @@
-teuthology:
-  variables:
-    fail_fs: false

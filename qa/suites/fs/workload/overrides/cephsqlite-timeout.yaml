@@ -1,7 +1,0 @@
-# increase lock renewal timeout: OSD stress from small clusters may cause
-# spurious timeouts
-overrides:
-  ceph:
-    conf:
-      mgr:
-        cephsqlite lock renewal timeout: 900000

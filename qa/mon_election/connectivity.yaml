@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      global:
-        mon election default strategy: 3

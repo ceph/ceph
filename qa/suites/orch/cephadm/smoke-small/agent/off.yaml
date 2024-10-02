@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      mgr:
-        mgr/cephadm/use_agent: false

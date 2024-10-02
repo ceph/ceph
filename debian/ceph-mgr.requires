@@ -1,6 +1,0 @@
-bcrypt
-pyOpenSSL
-cephfs
-ceph-argparse
-pyyaml
-distutils

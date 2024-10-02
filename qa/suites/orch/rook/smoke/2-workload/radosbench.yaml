@@ -1,5 +1,0 @@
-tasks:
-- install:
-    host.a:
-- radosbench:
-    clients: [client.a]

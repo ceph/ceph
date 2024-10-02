@@ -1,7 +1,0 @@
-meta:
-  - desc: "Using EPEL"
-overrides:
-  cephmetrics:
-    group_vars:
-      all:
-        use_epel: true

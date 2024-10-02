@@ -1,2 +1,0 @@
-include bin/ceph-volume
-include tox.ini

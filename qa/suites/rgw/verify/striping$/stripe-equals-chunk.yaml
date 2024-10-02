@@ -1,7 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      client:
-        # use default values where chunk-size=stripe-size
-        #rgw max chunk size: 4194304
-        #rgw obj stripe size: 4194304

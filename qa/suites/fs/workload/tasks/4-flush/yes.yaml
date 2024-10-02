@@ -1,4 +1,0 @@
-tasks:
-- background_exec:
-    mon.a:
-      - while sleep 13; do ceph tell mds.cephfs:0 flush journal; done

@@ -1,8 +1,0 @@
-meta:
-- desc: run two ceph clusters
-tasks:
-- install:
-- ceph:
-    cluster: cluster1
-- ceph:
-    cluster: cluster2

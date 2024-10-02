@@ -1,3 +1,0 @@
-roles:
-- [mon.a, mgr.x, mds.a, osd.0, osd.1, osd.2]
-- [mon.b, mon.c, client.0]

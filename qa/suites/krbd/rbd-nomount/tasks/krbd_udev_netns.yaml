@@ -1,5 +1,0 @@
-tasks:
-- workunit:
-    clients:
-      all:
-        - rbd/krbd_udev_netns.sh

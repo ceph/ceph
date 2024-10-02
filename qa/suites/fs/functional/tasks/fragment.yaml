@@ -1,8 +1,0 @@
-overrides:
-  ceph:
-    log-ignorelist:
-      - Replacing daemon mds
-tasks:
-  - cephfs_test_runner:
-      modules:
-        - tasks.cephfs.test_fragment

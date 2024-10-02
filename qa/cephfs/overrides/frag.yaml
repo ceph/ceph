@@ -1,9 +1,0 @@
-overrides:
-  ceph:
-    cluster-conf:
-      mds:
-        mds bal fragment size max: 10000
-        mds bal merge size: 5
-        mds bal split bits: 3
-        mds bal split size: 100
-

@@ -1,9 +1,0 @@
-overrides:
-  check-counter:
-    dry_run: true
-tasks:
-- workunit:
-    clients:
-      all:
-        - direct_io
-

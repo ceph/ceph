@@ -1,6 +1,0 @@
-disabled: false
-reporter:
-    logSpans: true
-sampler:
-  type: const
-  param: 1

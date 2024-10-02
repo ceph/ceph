@@ -1,4 +1,0 @@
-meta:
-- desc: "Deploy cephmetrics and run integration tests"
-tasks:
-- cephmetrics:
