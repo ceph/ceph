@@ -99,6 +99,8 @@ int NVMeofGwMap::cfg_add_gw(
         return 0;
       }
     }
+  }
+  for (auto& itr: created_gws[group_key]) {
     if (itr.second.availability == gw_availability_t::GW_DELETING) {
       //Was found some GW in "Deleting" state. Just to inherit its ANA group
       NvmeGwMonState & gw_created = created_gws[group_key][itr.first];
