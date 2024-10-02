@@ -16,6 +16,31 @@ logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
 
 
+def zap_device(path: str) -> None:
+    """Remove any existing filesystem signatures.
+
+    Args:
+        path (str): The path to the device to zap.
+    """
+    zap_bluestore(path)
+    wipefs(path)
+    zap_data(path)
+
+def zap_bluestore(path: str) -> None:
+    """Remove all BlueStore signature on a device.
+
+    Args:
+        path (str): The path to the device to remove BlueStore signatures from.
+    """
+    terminal.info(f'Removing all BlueStore signature on {path} if any...')
+    process.run([
+        'ceph-bluestore-tool',
+        'zap-device',
+        '--dev',
+        path,
+        '--yes-i-really-really-mean-it'
+    ])
+
 def wipefs(path):
     """
     Removes the filesystem from an lv or partition.
@@ -170,8 +195,7 @@ class Zap(object):
                                         device.vg_name})
         self.unmount_lv(lv)
 
-        wipefs(device.path)
-        zap_data(device.path)
+        zap_device(device.path)
 
         if self.args.destroy:
             lvs = api.get_lvs(filters={'vg_name': device.vg_name})
@@ -217,8 +241,7 @@ class Zap(object):
             mlogger.info("Unmounting %s", device.path)
             system.unmount(device.path)
 
-        wipefs(device.path)
-        zap_data(device.path)
+        zap_device(device.path)
 
         if self.args.destroy:
             mlogger.info("Destroying partition since --destroy was used: %s" % device.path)
@@ -263,8 +286,7 @@ class Zap(object):
         for part_name in device.sys_api.get('partitions', {}).keys():
             self.zap_partition(Device('/dev/%s' % part_name))
 
-        wipefs(device.path)
-        zap_data(device.path)
+        zap_device(device.path)
 
     @decorators.needs_root
     def zap(self, devices=None):
