@@ -495,7 +495,7 @@ def parse_cli(build_step_names):
     )
     parser.add_argument(
         "--homedir",
-        default="/build",
+        default="/ceph",
         help="Container image home/build dir",
     )
     parser.add_argument(
