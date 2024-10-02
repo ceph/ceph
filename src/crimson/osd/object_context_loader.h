@@ -56,8 +56,6 @@ public:
                                                with_obc_func_t&& func,
                                                bool resolve_clone = true);
 
-  load_obc_iertr::future<> reload_obc(ObjectContext& obc) const;
-
   void notify_on_change(bool is_primary);
 
 private:

@@ -163,24 +163,6 @@ using crimson::common::local_conf;
     });
   }
 
-  ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::reload_obc(ObjectContext& obc) const
-  {
-    LOG_PREFIX(ObjectContextLoader::reload_obc);
-    assert(obc.is_head());
-    return backend.load_metadata(obc.get_oid())
-    .safe_then_interruptible<false>(
-      [FNAME, this, &obc](auto md)-> load_obc_ertr::future<> {
-      DEBUGDPP("reloaded obs {} for {}", dpp, md->os.oi, obc.get_oid());
-      if (!md->ssc) {
-	ERRORDPP("oid {} missing snapsetcontext", dpp, obc.get_oid());
-        return crimson::ct_error::object_corrupted::make();
-      }
-      obc.set_head_state(std::move(md->os), std::move(md->ssc));
-      return load_obc_ertr::now();
-    });
-  }
-
   void ObjectContextLoader::notify_on_change(bool is_primary)
   {
     LOG_PREFIX(ObjectContextLoader::notify_on_change);
