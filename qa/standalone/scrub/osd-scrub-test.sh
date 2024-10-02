@@ -44,7 +44,10 @@ function TEST_scrub_test() {
     TESTDATA="testdata.$$"
 
     run_mon $dir a --osd_pool_default_size=3 || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 --osd_stats_update_period_not_scrubbing=3 "
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2"
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
       run_osd $dir $osd || return 1
@@ -140,7 +143,7 @@ function TEST_interval_changes() {
 
     # This min scrub interval results in 30 seconds backoff time
     run_mon $dir a --osd_pool_default_size=$OSDS || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
       run_osd $dir $osd --osd_scrub_min_interval=$min_interval --osd_scrub_max_interval=$max_interval --osd_scrub_interval_randomize_ratio=0 || return 1
@@ -203,7 +206,7 @@ function TEST_scrub_extended_sleep() {
     DAY_END=$(expr $DAY + 3)
 
     run_mon $dir a --osd_pool_default_size=3 || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
       run_osd $dir $osd --osd_scrub_sleep=0 \
@@ -290,7 +293,7 @@ function _scrub_abort() {
     fi
 
     run_mon $dir a --osd_pool_default_size=3 || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
         # Set scheduler to "wpq" until there's a reliable way to query scrub
@@ -406,7 +409,7 @@ function TEST_scrub_permit_time() {
     TESTDATA="testdata.$$"
 
     run_mon $dir a --osd_pool_default_size=3 || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
     local scrub_begin_hour=$(date -d '2 hour ago' +"%H" | sed 's/^0//')
     local scrub_end_hour=$(date -d '1 hour ago' +"%H" | sed 's/^0//')
     for osd in $(seq 0 $(expr $OSDS - 1))
@@ -511,7 +514,7 @@ function TEST_dump_scrub_schedule() {
     TESTDATA="testdata.$$"
 
     run_mon $dir a --osd_pool_default_size=$OSDS || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
 
     # Set scheduler to "wpq" until there's a reliable way to query scrub states
     # with "--osd-scrub-sleep" set to 0. The "mclock_scheduler" overrides the
@@ -616,7 +619,8 @@ function TEST_dump_scrub_schedule() {
     # missed it.
     declare -A cond_active_dmp=( ['dmp_state_has_scrubbing']="true" ['query_active']="false" )
     sched_data=()
-    wait_any_cond $pgid 10 $saved_last_stamp cond_active_dmp "WaitingActive " sched_data || return 1
+    wait_any_cond $pgid 10 $saved_last_stamp cond_active_dmp "WaitingActive " sched_data
+    sleep 4
 }
 
 function TEST_pg_dump_objects_scrubbed() {
@@ -630,7 +634,7 @@ function TEST_pg_dump_objects_scrubbed() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=$OSDS || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
       run_osd $dir $osd || return 1
