@@ -239,6 +239,11 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
   recv_end = recv_start = 0;
   /* nothing left in the prefetch buffer */
 
+  if (skip_read)
+    /* the socket receive buffer is empty and it's useless to try to
+       receive from it */
+    return left;
+
   const std::array v{
     std::span<char>{p+state_offset, left},
     std::span<char>{recv_buf, recv_max_prefetch},
@@ -250,6 +255,11 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
     ldout(async_msgr->cct, 1) << __func__ << " read failed" << dendl;
     return -1;
   }
+
+  if (static_cast<uint64_t>(r) < left + recv_max_prefetch)
+    /* if the kernel gives us less than the number of bytes we
+       requested, it means that the receive buffer is now empty */
+    skip_read = true;
 
   if (static_cast<uint64_t>(r) >= left) {
     state_offset = 0;
@@ -362,6 +372,7 @@ void AsyncConnection::process() {
   std::lock_guard<std::mutex> l(lock);
   last_active = ceph::coarse_mono_clock::now();
   recv_start_time = ceph::mono_clock::now();
+  skip_read = false;
 
   ldout(async_msgr->cct, 20) << __func__ << dendl;
 
