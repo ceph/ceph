@@ -31,8 +31,15 @@ def task(ctx, config):
         remote.run(args=['sudo', 'systemctl', 'restart', 'iscsid'])
 
         remote.run(args=['sudo', 'modprobe', 'dm_multipath'])
-        remote.run(args=['sudo', 'mpathconf', '--enable'])
         conf = dedent('''
+        defaults {
+                user_friendly_names yes
+                find_multipaths yes
+        }
+
+        blacklist {
+        }
+
         devices {
                 device {
                         vendor                 "LIO-ORG"
@@ -50,7 +57,7 @@ def task(ctx, config):
         }
         ''')
         path = "/etc/multipath.conf"
-        remote.sudo_write_file(path, conf, append=True)
+        remote.sudo_write_file(path, conf)
         remote.run(args=['sudo', 'systemctl', 'start', 'multipathd'])
 
     yield
