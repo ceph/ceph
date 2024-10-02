@@ -135,8 +135,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
   write_callback_handler = new C_handle_write_callback(this);
   wakeup_handler = new C_time_wakeup(this);
   tick_handler = new C_tick_wakeup(this);
-  // double recv_max_prefetch see "read_until"
-  recv_buf = new char[2*recv_max_prefetch];
+  recv_buf = new char[recv_max_prefetch];
   if (local) {
     protocol = std::unique_ptr<Protocol>(new LoopbackProtocolV1(this));
   } else if (m2) {
@@ -219,6 +218,10 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
   ssize_t r = 0;
   uint64_t left = len - state_offset;
   if (recv_end > recv_start) {
+    /* this code block is only reachable for the first call with this
+       buffer, thus state_offset must be zero */
+    ceph_assert(state_offset == 0);
+
     uint64_t to_read = std::min<uint64_t>(recv_end - recv_start, left);
     memcpy(p, recv_buf+recv_start, to_read);
     recv_start += to_read;
@@ -235,55 +238,36 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
 
   recv_end = recv_start = 0;
   /* nothing left in the prefetch buffer */
-  if (left > (uint64_t)recv_max_prefetch) {
-    /* this was a large read, we don't prefetch for these */
-    do {
-      r = read_bulk({p+state_offset, left});
-      ldout(async_msgr->cct, 25) << __func__ << " read_bulk left is " << left << " got " << r << dendl;
-      if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " read failed" << dendl;
-        return -1;
-      } else if (r == static_cast<int>(left)) {
-        state_offset = 0;
-        return 0;
-      }
-      state_offset += r;
-      left -= r;
-    } while (r > 0);
-  } else {
-    do {
-      r = read_bulk({recv_buf+recv_end, recv_max_prefetch});
-      ldout(async_msgr->cct, 25) << __func__ << " read_bulk recv_end is " << recv_end
-                                 << " left is " << left << " got " << r << dendl;
-      if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " read failed" << dendl;
-        return -1;
-      }
-      recv_end += r;
-      if (r >= static_cast<int>(left)) {
-        recv_start = len - state_offset;
-        memcpy(p+state_offset, recv_buf, recv_start);
-        state_offset = 0;
-        return 0;
-      }
-      left -= r;
-    } while (r > 0);
-    memcpy(p+state_offset, recv_buf, recv_end-recv_start);
-    state_offset += (recv_end - recv_start);
-    recv_end = recv_start = 0;
+
+  const std::array v{
+    std::span<char>{p+state_offset, left},
+    std::span<char>{recv_buf, recv_max_prefetch},
+  };
+
+  r = read_bulk(v);
+  ldout(async_msgr->cct, 25) << __func__ << " read_bulk left is " << left << " got " << r << dendl;
+  if (r < 0) {
+    ldout(async_msgr->cct, 1) << __func__ << " read failed" << dendl;
+    return -1;
   }
-  ldout(async_msgr->cct, 25) << __func__ << " need len " << len << " remaining "
-                             << len - state_offset << " bytes" << dendl;
-  return len - state_offset;
+
+  if (static_cast<uint64_t>(r) >= left) {
+    state_offset = 0;
+    recv_end += r - left;
+    return 0;
+  } else {
+    state_offset += r;
+    return left - r;
+  }
 }
 
 /* return -1 means `fd` occurs error or closed, it should be closed
  * return 0 means EAGAIN or EINTR */
-ssize_t AsyncConnection::read_bulk(std::span<char> dest)
+ssize_t AsyncConnection::read_bulk(std::span<const std::span<char>> dest)
 {
   ssize_t nread;
  again:
-  nread = cs.read(dest);
+  nread = cs.readv(dest);
   if (nread < 0) {
     if (nread == -EAGAIN) {
       nread = 0;
