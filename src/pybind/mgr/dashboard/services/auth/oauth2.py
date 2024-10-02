@@ -27,60 +27,66 @@ class OAuth2(BaseAuth, SSOAuthMixin):
 
     @classmethod
     def from_dict(cls, s_dict: OAuth2Config) -> 'OAuth2':
-        raise NotImplementedError
-
+        return OAuth2()
 
     @classmethod
     # pylint: disable=protected-access
-    def get_token(cls, request: cherrypy._ThreadLocalProxy) -> str:
+    def token(cls, request: cherrypy._ThreadLocalProxy) -> str:
+        token = cls._get_token_from_cookie(request)
+        return token if token else cls._get_token_from_headers(request)
+
+    @staticmethod
+    def _get_token_from_cookie(request: cherrypy._ThreadLocalProxy) -> str:
         try:
             return request.cookie['token'].value
         except KeyError:
-            return request.headers.get('X-Access-Token')
+            return ''
+
+    @staticmethod
+    def _get_token_from_headers(request: cherrypy._ThreadLocalProxy) -> str:
+        return request.headers.get('X-Access-Token', '')
 
     @classmethod
     def set_token(cls, token: str):
         cherrypy.request.jwt = token
-        cherrypy.request.jwt_payload = cls.get_token_payload()
+        cherrypy.request.jwt_payload = cls.token_payload()
         cherrypy.request.user = cls.get_user(token)
 
     @classmethod
-    def get_token_payload(cls) -> Dict:
+    def token_payload(cls) -> Dict:
         try:
             return cherrypy.request.jwt_payload
         except AttributeError:
-            pass
-        try:
-            return decode_jwt_segment(cherrypy.request.jwt.split(".")[1])
-        except AttributeError:
             return {}
+
 
     @classmethod
     def set_token_payload(cls, token):
         cherrypy.request.jwt_payload = decode_jwt_segment(token.split(".")[1])
 
-    @classmethod
-    def get_user_roles(cls):
-        roles: List[Role] = []
-        user_roles: List[Role] = []
-        try:
-            jwt_payload = cherrypy.request.jwt_payload
-        except AttributeError:
-            raise cherrypy.HTTPError()
+    @staticmethod
+    def _client_roles(jwt_payload: Dict):
+        return next((value['roles'] for key, value in jwt_payload['resource_access'].items()
+                        if key != "account"), [])
 
-        # check for client roes
+    @staticmethod
+    def _realm_roles(jwt_payload: Dict):
+        return next((value for _, value in jwt_payload['realm_access'].items()),
+                        [])
+
+    @classmethod
+    def user_roles(cls):
+        roles: List[Role] = []
+
+        jwt_payload = cls.token_payload()
+
         if 'resource_access' in jwt_payload:
-            # Find the first value where the key is not 'account'
-            roles = next((value['roles'] for key, value in jwt_payload['resource_access'].items()
-                          if key != "account"), user_roles)
-        # check for global roles
+           roles = cls._client_roles(jwt_payload)
         elif 'realm_access' in jwt_payload:
-            roles = next((value['roles'] for _, value in jwt_payload['realm_access'].items()),
-                         user_roles)
+          roles = cls._realm_roles(jwt_payload)
         else:
             raise cherrypy.HTTPError()
-        user_roles = Role.map_to_system_roles(roles)
-        return user_roles
+        return Role.map_to_system_roles(roles)
 
     @classmethod
     def get_user(cls, token: str) -> User:
@@ -93,16 +99,16 @@ class OAuth2(BaseAuth, SSOAuthMixin):
 
     @classmethod
     def _create_user(cls):
-        try:
-            jwt_payload = cherrypy.request.jwt_payload
-        except AttributeError:
-            raise cherrypy.HTTPError()
+        jwt_payload = cls.token_payload()
+
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(
                 jwt_payload['sub'], None, jwt_payload['name'], jwt_payload['email'])
         except UserAlreadyExists:
             user = mgr.ACCESS_CTRL_DB.get_user(jwt_payload['sub'])
-        user.set_roles(cls.get_user_roles())
+        except KeyError:
+            raise cherrypy.HTTPError()
+        user.set_roles(cls.user_roles())
         # set user last update to token time issued
         user.last_update = jwt_payload['iat']
         cherrypy.request.user = user
@@ -116,13 +122,13 @@ class OAuth2(BaseAuth, SSOAuthMixin):
             raise cherrypy.HTTPError()
 
     @classmethod
-    def get_token_iss(cls, token=''):
+    def token_iss(cls, token=''):
         if token:
             cls.set_token_payload(token)
-        return cls.get_token_payload()['iss']
+        return cls.token_payload()['iss']
 
     @classmethod
-    def get_openid_config(cls, iss):
+    def openid_config(cls, iss):
         msg = 'Failed to logout: could not contact IDP'
         try:
             response = requests.get(f'{iss}/.well-known/openid-configuration')
@@ -133,14 +139,14 @@ class OAuth2(BaseAuth, SSOAuthMixin):
         return json.loads(response.text)
 
     @classmethod
-    def get_login_redirect_url(cls, token) -> str:
+    def login_redirect_url(cls, token) -> str:
         url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
         return f"{url_prefix}/#/login?access_token={token}"
 
     @classmethod
-    def get_logout_redirect_url(cls, token) -> str:
-        openid_config = OAuth2.get_openid_config(OAuth2.get_token_iss(token))
-        end_session_url = openid_config.get('end_session_endpoint')
+    def logout_redirect_url(cls, token) -> str:
+        openid_config = OAuth2.openid_config(OAuth2.token_iss(token))
+        end_session_url = openid_config['end_session_endpoint']
         encoded_end_session_url = quote(end_session_url, safe="")
         url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
         return f'{url_prefix}/oauth2/sign_out?rd={encoded_end_session_url}'

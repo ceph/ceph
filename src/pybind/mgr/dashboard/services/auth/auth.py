@@ -160,7 +160,10 @@ class JwtManager(object):
 
         decoded_message = decode_jwt_segment(base64_message)
         if oauth2_sso_protocol:
-            decoded_message['username'] = decoded_message['sub']
+            try:
+                decoded_message['username'] = decoded_message['sub']
+            except:
+                pass
         now = int(time.time())
         if decoded_message['exp'] < now:
             raise ExpiredSignatureError()
@@ -197,7 +200,7 @@ class JwtManager(object):
         if mgr.SSO_DB.protocol == AuthType.OAUTH2:
             # Avoids circular import
             from .oauth2 import OAuth2
-            return OAuth2.get_token(request)
+            return OAuth2.token(request)
         auth_cookie_name = 'token'
         try:
             # use cookie
