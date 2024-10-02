@@ -52,7 +52,7 @@ export class NvmeofGatewayComponent {
         prop: 'id'
       },
       {
-        name: $localize`Host name`,
+        name: $localize`Hostname`,
         prop: 'hostname'
       },
       {

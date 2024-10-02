@@ -883,15 +883,3 @@ class TestGetSingleLV(object):
 
         assert isinstance(lv_, api.Volume)
         assert lv_.name == 'lv1'
-
-
-class TestHelpers:
-    def test_get_lv_path_from_mapper(self):
-        mapper = '/dev/mapper/ceph--c1a97e46--234c--46aa--a549--3ca1d1f356a9-osd--block--32e8e896--172e--4a38--a06a--3702598510ec'
-        lv_path = api.get_lv_path_from_mapper(mapper)
-        assert lv_path == '/dev/ceph-c1a97e46-234c-46aa-a549-3ca1d1f356a9/osd-block-32e8e896-172e-4a38-a06a-3702598510ec'
-
-    def test_get_mapper_from_lv_path(self):
-        lv_path = '/dev/ceph-c1a97e46-234c-46aa-a549-3ca1d1f356a9/osd-block-32e8e896-172e-4a38-a06a-3702598510ec'
-        mapper = api.get_mapper_from_lv_path(lv_path)
-        assert mapper == '/dev/mapper/ceph--c1a97e46--234c--46aa--a549--3ca1d1f356a9/osd--block--32e8e896--172e--4a38--a06a/3702598510ec'

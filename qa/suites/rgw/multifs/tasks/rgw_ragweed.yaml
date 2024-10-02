@@ -1,8 +1,4 @@
 tasks:
-- install:
-- ceph:
-- rgw: [client.0]
-- tox: [client.0]
 - ragweed:
     client.0:
       default-branch: ceph-master

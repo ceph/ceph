@@ -128,7 +128,7 @@ describe('RbdListComponent', () => {
         ]
       });
       expect(component.getDeleteDisableDesc(component.selection)).toBe(
-        'This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.'
+        'This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD'
       );
     });
 
@@ -268,11 +268,11 @@ describe('RbdListComponent', () => {
           'Copy',
           'Flatten',
           'Resync',
-          'Delete',
-          'Move to Trash',
           'Remove Scheduling',
           'Promote',
-          'Demote'
+          'Demote',
+          'Move to Trash',
+          'Delete'
         ],
         primary: {
           multiple: 'Create',
@@ -300,7 +300,7 @@ describe('RbdListComponent', () => {
         }
       },
       'create,delete': {
-        actions: ['Create', 'Copy', 'Delete', 'Move to Trash'],
+        actions: ['Create', 'Copy', 'Move to Trash', 'Delete'],
         primary: {
           multiple: 'Create',
           executing: 'Create',
@@ -322,11 +322,11 @@ describe('RbdListComponent', () => {
           'Edit',
           'Flatten',
           'Resync',
-          'Delete',
-          'Move to Trash',
           'Remove Scheduling',
           'Promote',
-          'Demote'
+          'Demote',
+          'Move to Trash',
+          'Delete'
         ],
         primary: {
           multiple: '',
@@ -345,7 +345,7 @@ describe('RbdListComponent', () => {
         }
       },
       delete: {
-        actions: ['Delete', 'Move to Trash'],
+        actions: ['Move to Trash', 'Delete'],
         primary: {
           multiple: '',
           executing: '',

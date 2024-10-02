@@ -19,6 +19,8 @@ export class CdTableAction {
   // The font awesome icon that will be used
   icon: string;
 
+  // For adding the default tooltip
+  title?: string;
   /**
    * You can define the condition to disable the action.
    * By default all 'update' and 'delete' actions will only be enabled

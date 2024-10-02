@@ -1,7 +1,7 @@
 Login to the target
 ===================
   $ IP=`cat /etc/ceph/iscsi-gateway.cfg |grep 'trusted_ip_list' | awk -F'[, ]' '{print $3}'`
-  > sudo iscsiadm -m discovery -t st -p $IP -l 2&> /dev/null
+  $ sudo iscsiadm -m discovery -t st -p $IP -l >/dev/null 2>&1
   $ sleep 10
   $ sudo ls /dev/disk/by-path/ |grep 'iscsi-iqn.2003-01.com.redhat.iscsi-gw:ceph-gw' |wc -l
   2
