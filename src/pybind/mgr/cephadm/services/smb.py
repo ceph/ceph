@@ -84,6 +84,10 @@ class SMBService(CephService):
             self.mgr.container_image_samba_metrics
         )
         config_blobs['metrics_port'] = SMBService.DEFAULT_EXPORTER_PORT
+        if 'cephfs-proxy' in smb_spec.features:
+            config_blobs['proxy_image'] = self.mgr.get_container_image(
+                '', force_ceph_image=True
+            )
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
