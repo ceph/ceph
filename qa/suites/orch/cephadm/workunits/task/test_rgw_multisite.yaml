@@ -5,6 +5,7 @@ overrides:
       - mons down
       - mon down
       - out of quorum
+      - CEPHADM_STRAY_DAEMON
     log-only-match:
       - CEPHADM_
 roles:
