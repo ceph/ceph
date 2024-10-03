@@ -590,11 +590,6 @@ public:
   using with_obc_func_t =
     std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
-  load_obc_iertr::future<> with_locked_obc(
-    const hobject_t &hobj,
-    const OpInfo &op_info,
-    with_obc_func_t&& f);
-
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
   void update_stats(const pg_stat_t &stat);
   interruptible_future<> update_snap_map(
