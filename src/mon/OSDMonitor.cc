@@ -12245,25 +12245,27 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     ceph_release_t min_release = ceph_release_t::unknown;
     string feature_name = "unknown";
+    uint64_t min_feature = CEPH_FEATURES_ALL; // paranoia
     switch (upmap_option) {
     case OP_PG_UPMAP: 		// fall through
     case OP_RM_PG_UPMAP:	// fall through
     case OP_PG_UPMAP_ITEMS:	// fall through
     case OP_RM_PG_UPMAP_ITEMS:
       min_release = ceph_release_t::luminous;
+      min_feature = CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
       feature_name = "pg-upmap";
       break;
 
     case OP_PG_UPMAP_PRIMARY:	// fall through
     case OP_RM_PG_UPMAP_PRIMARY:
       min_release = ceph_release_t::reef;
+      min_feature = CEPH_FEATUREMASK_SERVER_REEF;
       feature_name = "pg-upmap-primary";
       break;
 
     default:
       ceph_abort_msg("invalid upmap option");
     }
-    uint64_t min_feature = CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
     string min_release_name = ceph_release_name(static_cast<int>(min_release));
 
     if (osdmap.require_min_compat_client < min_release) {
@@ -12276,7 +12278,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    //TODO: Should I add feature and test for upmap-primary?
     err = check_cluster_features(min_feature, ss);
     if (err == -EAGAIN)
       goto wait;
