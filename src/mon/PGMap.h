@@ -435,7 +435,7 @@ public:
 
   void apply_incremental(CephContext *cct, const Incremental& inc);
   void calc_stats();
-  void calc_pool_stuck_unavailable_pg_map(const OSDMap& osdmap);
+  void get_unavailable_pg_in_pool_map(const OSDMap& osdmap);
   void stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
   bool stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
