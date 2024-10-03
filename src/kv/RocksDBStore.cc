@@ -2018,6 +2018,7 @@ KeyValueDB::BackupStats RocksDBStore::backup(const std::string& path, bool full)
   rocksdb::BackupEngine* backup_engine;
   rocksdb::BackupEngineOptions engine_options = rocksdb::BackupEngineOptions(path);
   engine_options.share_table_files = !full;
+  engine_options.sync = true;
   
   rocksdb::Status s = rocksdb::BackupEngine::Open(
     engine_options,
