@@ -15,7 +15,6 @@
 #include <boost/circular_buffer.hpp>
 
 #include "ShardedCache.h"
-#include "common/autovector.h"
 #include "common/dout.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_context.h"
@@ -261,7 +260,15 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // to hold (usage_ + charge) is freed or the lru list is empty
   // This function is not thread safe - it needs to be executed while
   // holding the mutex_
-  void EvictFromLRU(size_t charge, ceph::autovector<BinnedLRUHandle*>* deleted);
+  void EvictFromLRU(size_t charge, BinnedLRUHandle*& deleted);
+
+  void FreeDeleted(BinnedLRUHandle* deleted) {
+    while (deleted) {
+      auto* entry = deleted;
+      deleted = deleted->next;
+      entry->Free();
+    }
+  }
 
   // Initialized before use.
   size_t capacity_;
