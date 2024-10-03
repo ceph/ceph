@@ -13,7 +13,7 @@ using crimson::common::local_conf;
   ObjectContextLoader::with_head_obc(const hobject_t& oid,
                                      with_obc_func_t&& func)
   {
-    return with_locked_obc<State, true /* track */>(
+    return with_locked_obc<State>(
       oid,
       [func=std::move(func)](auto obc) {
         // The template with_obc_func_t wrapper supports two obcs (head and clone).
@@ -73,7 +73,7 @@ using crimson::common::local_conf;
       }
       clone_oid = *resolved_oid;
     }
-    return with_locked_obc<State, false /* don't track */>(
+    return with_locked_obc<State>(
       clone_oid,
       [head=std::move(head), func=std::move(func)](auto clone) {
         clone->set_clone_ssc(head->ssc);
@@ -94,7 +94,7 @@ using crimson::common::local_conf;
     }
   }
 
-  template<RWState::State State, bool track, typename Func>
+  template<RWState::State State, typename Func>
   ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_locked_obc(const hobject_t& oid,
 		  Func&& func)
@@ -103,9 +103,7 @@ using crimson::common::local_conf;
     auto [obc, existed] = obc_registry.get_cached_obc(oid);
     DEBUGDPP("object {} existed {}",
              dpp, obc->get_oid(), existed);
-    if constexpr (track) {
-      obc->append_to(obc_set_accessing);
-    }
+    obc->append_to(obc_set_accessing);
     if (existed) {
       return obc->with_lock<State, IOInterruptCondition>(
 	[func=std::move(func), obc=ObjectContextRef(obc)] {
@@ -113,9 +111,7 @@ using crimson::common::local_conf;
 	}
       ).finally([FNAME, this, obc=ObjectContextRef(obc)] {
 	DEBUGDPP("released object {}, {}", dpp, obc->get_oid(), obc->obs);
-	if constexpr (track) {
-	  obc->remove_from(obc_set_accessing);
-	}
+	obc->remove_from(obc_set_accessing);
       });
     } else {
       return obc->load_then_with_lock<State> (
@@ -127,9 +123,7 @@ using crimson::common::local_conf;
 	}
       ).finally([FNAME, this, obc=ObjectContextRef(obc)] {
 	DEBUGDPP("released object {}, {}", dpp, obc->get_oid(), obc->obs);
-	if constexpr (track) {
-	  obc->remove_from(obc_set_accessing);
-	}
+	obc->remove_from(obc_set_accessing);
       });
     }
   }
