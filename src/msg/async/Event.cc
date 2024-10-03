@@ -347,7 +347,7 @@ void EventCenter::wakeup()
     return ;
 
   ldout(cct, 20) << __func__ << dendl;
-  char buf = 'c';
+  static constexpr char buf = 'c';
   // wake up "event_wait"
   #ifdef _WIN32
   int n = send(notify_send_fd, &buf, sizeof(buf), 0);
