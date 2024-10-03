@@ -1265,7 +1265,15 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     last_pg_scan = inc.pg_scan;
 }
 
-void PGMap::calc_pool_stuck_unavailable_pg_map(const OSDMap& osdmap)
+/*
+
+  Fetches all the pools present in the cluster. Any "stale", not-"active" PG's
+  of the pool are added as the values to the corresponding pool.
+
+  Eg: {1=[1.0],2=[],3=[]}
+  Here the cluster has 3 pools with id 1,2,3 and the Pool 1 has an inactive PG 1.0
+*/
+void PGMap::get_unavailable_pg_in_pool_map(const OSDMap& osdmap)
 {
   dout(20) << __func__ << dendl;
   pool_pg_unavailable_map.clear();
@@ -1523,7 +1531,7 @@ void PGMap::encode_digest(const OSDMap& osdmap,
   get_rules_avail(osdmap, &avail_space_by_rule);
   calc_osd_sum_by_class(osdmap);
   calc_purged_snaps();
-  calc_pool_stuck_unavailable_pg_map(osdmap);
+  get_unavailable_pg_in_pool_map(osdmap);
   PGMapDigest::encode(bl, features);
 }
 
