@@ -37,6 +37,7 @@
 #include "rgw_cr_rest.h"
 #include "rgw_datalog.h"
 #include "rgw_putobj_processor.h"
+#include "rgw_lc_tier.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -3212,6 +3213,30 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     op.setxattr(RGW_ATTR_STORAGE_CLASS, bl);
   }
 
+  /* For temporary restored copies, storage-class returned
+   * in GET/list-objects should correspond to original
+   * cloudtier storage class. For GET its handled in its REST
+   * response by verifying RESTORE_TYPE in attrs. But the same
+   * cannot be done for list-objects response and hence this
+   * needs to be updated in bi entry itself.
+   */
+  auto attr_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+  if (attr_iter != attrs.end()) {
+    rgw::sal::RGWRestoreType rt;
+    bufferlist bl = attr_iter->second;
+    auto iter = bl.cbegin();
+    decode(rt, iter);
+
+    if (rt == rgw::sal::RGWRestoreType::Temporary) {
+      // temporary restore; set storage-class to cloudtier storage class
+      auto c_iter = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+
+      if (c_iter != attrs.end()) {
+        storage_class = rgw_bl_str(c_iter->second);
+      }
+    }
+  }
+
   if (!op.size())
     return 0;
 
@@ -5126,6 +5151,199 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   return 0;
 }
 
+int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
+                             RGWObjectCtx& obj_ctx,
+                             RGWBucketInfo& dest_bucket_info,
+                             const rgw_obj& dest_obj,
+                             rgw_placement_rule& dest_placement,
+                             RGWObjTier& tier_config,
+                             real_time& mtime,
+                             uint64_t olh_epoch,
+                             std::optional<uint64_t> days,
+                             const DoutPrefixProvider *dpp,
+                             optional_yield y,
+                             bool log_op){
+
+  //XXX: read below from attrs .. check transition_obj()
+  ACLOwner owner;
+  rgw::sal::Attrs attrs;
+  const req_context rctx{dpp, y, nullptr};
+  int ret = 0;
+  bufferlist t, t_tier;
+  string tag;
+  append_rand_alpha(cct, tag, tag, 32);
+  auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
+  using namespace rgw::putobj;
+  jspan_context no_trace{false, false};
+  rgw::putobj::AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info, nullptr,
+                                  owner, obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
+ 
+  void (*progress_cb)(off_t, void *) = NULL;
+  void *progress_data = NULL;
+  bool cb_processed = false;
+  RGWFetchObjFilter *filter;
+  RGWFetchObjFilter_Default source_filter;
+  if (!filter) {
+    filter = &source_filter;
+  }
+  boost::optional<RGWPutObj_Compress> compressor;
+  CompressorRef plugin;
+  RGWRadosPutObj cb(dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
+                    [&](map<string, bufferlist> obj_attrs) {
+                      // XXX: do we need filter() like in fetch_remote_obj() cb
+                      dest_placement.inherit_from(dest_bucket_info.placement_rule);
+                      /* For now we always restore to STANDARD storage-class.
+                       * Later we will add support to take restore-target-storage-class
+                       * for permanent restore
+                       */
+                      dest_placement.storage_class = RGW_STORAGE_CLASS_STANDARD;
+
+                      processor.set_tail_placement(dest_placement);
+
+                      ret = processor.prepare(rctx.y);
+                      if (ret < 0) {
+                        return ret;
+                      }
+                      cb_processed = true;
+                      return 0;
+                    });
+
+  uint64_t accounted_size = 0;
+  string etag;
+  real_time set_mtime;
+  std::map<std::string, std::string> headers;
+  ldpp_dout(dpp, 20) << "Fetching from cloud, object:" << dest_obj << dendl;
+  ret = rgw_cloud_tier_get_object(tier_ctx, false,  headers,
+                                &set_mtime, etag, accounted_size,
+                                attrs, &cb);
+
+  if (ret < 0) { 
+    ldpp_dout(dpp, 20) << "Fetching from cloud failed, object:" << dest_obj << dendl;
+    return ret; 
+  }
+
+  if (!cb_processed) { 
+    ldpp_dout(dpp, 20) << "Callback not processed, object:" << dest_obj << dendl;
+    return -EIO; 
+  }
+
+  ret = cb.flush();
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (cb.get_data_len() != accounted_size) {
+    ret = -EIO;
+    ldpp_dout(dpp, -1) << "ERROR: object truncated during fetching, expected "
+        << accounted_size << " bytes but received " << cb.get_data_len() << dendl;
+    return ret;
+  }
+
+  {
+    bufferlist bl;
+    encode(rgw::sal::RGWRestoreStatus::CloudRestored, bl);
+    attrs[RGW_ATTR_RESTORE_STATUS] = std::move(bl);
+  }
+
+  ceph::real_time restore_time = real_clock::now();
+  {
+    char buf[32];
+    utime_t ut(restore_time);
+    snprintf(buf, sizeof(buf), "%lld.%09lld",
+          (long long)ut.sec(),
+          (long long)ut.nsec());
+    bufferlist bl;
+    bl.append(buf, 32);
+    encode(restore_time, bl);
+    attrs[RGW_ATTR_RESTORE_TIME] = std::move(bl);
+  }
+
+  real_time delete_at = real_time();
+  if (days) { //temp copy; do not change mtime and set expiry date
+    int expiry_days = days.value();
+    constexpr int32_t secs_in_a_day = 24 * 60 * 60;
+    ceph::real_time expiration_date ;
+
+    if (cct->_conf->rgw_restore_debug_interval > 0) {
+      expiration_date = restore_time + make_timespan(double(expiry_days)*cct->_conf->rgw_restore_debug_interval);
+      ldpp_dout(dpp, 20) << "Setting expiration time to rgw_restore_debug_interval: " << double(expiry_days)*cct->_conf->rgw_restore_debug_interval << ", days:" << expiry_days << dendl;
+    } else {
+        expiration_date = restore_time + make_timespan(double(expiry_days) * secs_in_a_day);
+    }
+    delete_at = expiration_date;
+
+    {
+      char buf[32];
+      utime_t ut(expiration_date);
+      snprintf(buf, sizeof(buf), "%lld.%09lld",
+            (long long)ut.sec(),
+            (long long)ut.nsec());
+      bufferlist bl;
+      bl.append(buf, 32);
+      encode(expiration_date, bl);
+      attrs[RGW_ATTR_RESTORE_EXPIRY_DATE] = std::move(bl);
+    }
+    {
+      bufferlist bl;
+      bl.clear();
+      using ceph::encode;
+      encode(rgw::sal::RGWRestoreType::Temporary, bl);
+      attrs[RGW_ATTR_RESTORE_TYPE] = std::move(bl);
+      ldpp_dout(dpp, 20) << "Temporary restore, object:" << dest_obj << dendl;
+    }
+    {
+      string sc = tier_ctx.storage_class;
+      bufferlist bl;
+      bl.append(sc.c_str(), sc.size());
+      attrs[RGW_ATTR_CLOUDTIER_STORAGE_CLASS] = std::move(bl);
+      ldpp_dout(dpp, 20) << "Setting RGW_ATTR_CLOUDTIER_STORAGE_CLASS: " << tier_ctx.storage_class << dendl;
+    }
+    //set same old mtime as that of transition time
+    set_mtime = mtime;
+
+    // set tier-config only for temp restored objects, as
+    // permanent copies will be treated as regular objects
+    {
+      t.append("cloud-s3");
+      encode(tier_config, t_tier);
+      attrs[RGW_ATTR_CLOUD_TIER_TYPE] = t;
+      attrs[RGW_ATTR_CLOUD_TIER_CONFIG] = t_tier;
+    }
+
+  } else { // permanent restore
+    {
+      bufferlist bl;
+      bl.clear();
+      using ceph::encode;
+      encode(rgw::sal::RGWRestoreType::Permanent, bl);
+      attrs[RGW_ATTR_RESTORE_TYPE] = std::move(bl);
+      ldpp_dout(dpp, 20) << "Permanent restore, object:" << dest_obj << dendl;
+    }
+    //set mtime to now()
+    set_mtime = real_clock::now();
+  }
+
+  {
+    string sc = dest_placement.get_storage_class(); //"STANDARD";
+    bufferlist bl;
+    bl.append(sc.c_str(), sc.size());
+    attrs[RGW_ATTR_STORAGE_CLASS] = std::move(bl);
+  }
+
+  // XXX: handle COMPLETE_RETRY like in fetch_remote_obj
+  bool canceled = false;
+  rgw_zone_set zone_set{};
+  ret = processor.complete(accounted_size, etag, &mtime, set_mtime,
+                           attrs, rgw::cksum::no_cksum, delete_at , nullptr, nullptr, nullptr,
+                           (rgw_zone_set *)&zone_set, &canceled, rctx, log_op ? rgw::sal::FLAG_LOG_OP : 0);
+  if (ret < 0) {
+    return ret;
+  }
+
+  // XXX: handle olh_epoch for versioned objects like in fetch_remote_obj
+  return ret; 
+}
+
 int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y)
 {
   constexpr uint NUM_ENTRIES = 1000u;
@@ -6642,9 +6860,28 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
         storage_class = rgw_bl_str(iter->second);
       }
       int64_t poolid = ioctx.get_id();
+
+      // Retain Object category as CloudTiered while restore is in
+      // progress or failed
+      RGWObjCategory category = RGWObjCategory::Main;
+      auto r_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
+      if (r_iter != attrs.end()) {
+        rgw::sal::RGWRestoreStatus st = rgw::sal::RGWRestoreStatus::None;
+        auto iter = r_iter->second.cbegin();
+
+        try {
+          using ceph::decode;
+          decode(st, iter);
+
+          if (st != rgw::sal::RGWRestoreStatus::CloudRestored) {
+            category = RGWObjCategory::CloudTiered;
+          }
+        } catch (buffer::error& err) {
+        }
+      }
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, storage_class, owner,
-                            RGWObjCategory::Main, nullptr, y, nullptr, false, log_op);
+                            category, nullptr, y, nullptr, false, log_op);
     } else {
       int ret = index_op.cancel(dpp, nullptr, y, log_op);
       if (ret < 0) {

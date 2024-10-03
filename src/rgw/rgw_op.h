@@ -1461,6 +1461,24 @@ public:
   virtual bool need_object_expiration() { return false; }
 };
 
+class RGWRestoreObj : public RGWOp {
+protected:
+  std::optional<uint64_t> expiry_days;
+public:
+  RGWRestoreObj() {}
+
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override;
+  void pre_exec() override;
+  void execute(optional_yield y) override;
+  virtual int get_params(optional_yield y) {return 0;}
+
+  void send_response() override = 0;
+  const char* name() const override { return "restore_obj"; }
+  RGWOpType get_type() override { return RGW_OP_RESTORE_OBJ; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+};
+
 class RGWDeleteObj : public RGWOp {
 protected:
   bool delete_marker;

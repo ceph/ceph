@@ -1117,6 +1117,23 @@ int FilterObject::transition_to_cloud(Bucket* bucket,
 				   o, cloud_targets, cct, update_object, dpp, y);
 }
 
+int FilterObject::restore_obj_from_cloud(Bucket* bucket,
+		          rgw::sal::PlacementTier* tier,
+		          rgw_placement_rule& placement_rule,
+		          rgw_bucket_dir_entry& o,
+		          CephContext* cct,
+		          RGWObjTier& tier_config,
+		          real_time& mtime,
+		          uint64_t olh_epoch,
+		          std::optional<uint64_t> days,
+		          const DoutPrefixProvider* dpp, 
+		          optional_yield y,
+		          uint32_t flags)
+{
+  return next->restore_obj_from_cloud(nextBucket(bucket), nextPlacementTier(tier),
+           placement_rule, o, cct, tier_config, mtime, olh_epoch, days, dpp, y, flags);
+}
+
 bool FilterObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)
 {
   return next->placement_rules_match(r1, r2);

@@ -153,6 +153,21 @@ enum AttrsMod {
 static constexpr uint32_t FLAG_LOG_OP = 0x0001;
 static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 
+enum RGWRestoreStatus : uint8_t {
+  None  = 0,
+  RestoreAlreadyInProgress = 1,
+  CloudRestored = 2,
+  RestoreFailed = 3
+};
+
+
+enum class RGWRestoreType : uint8_t {
+  None = 0,
+  Temporary = 1,
+  Permanent = 2
+};
+
+
 // a simple streaming data processing abstraction
 /**
  * @brief A simple streaming data processing abstraction
@@ -1199,6 +1214,18 @@ class Object {
 			   bool update_object,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) = 0;
+    virtual int restore_obj_from_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_placement_rule& placement_rule,
+			   rgw_bucket_dir_entry& o,
+			   CephContext* cct,
+         		   RGWObjTier& tier_config,
+			   real_time& mtime,
+			   uint64_t olh_epoch,
+		           std::optional<uint64_t> days,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y,
+			   uint32_t flags) = 0;
     /** Check to see if two placement rules match */
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     /** Dump driver-specific object layout info in JSON */
