@@ -65,7 +65,6 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
     discard_callback(d_cb),
     discard_callback_priv(d_cbpriv),
     aio_stop(false),
-    discard_stop(false),
     aio_thread(this),
     injecting_crash(0)
 {
@@ -548,7 +547,7 @@ void KernelDevice::_aio_stop()
   }
 }
 
-void KernelDevice::_discard_update_threads()
+void KernelDevice::_discard_update_threads(bool discard_stop)
 {
   std::unique_lock l(discard_lock);
 
@@ -570,28 +569,27 @@ void KernelDevice::_discard_update_threads()
     }
   // Decrease? Signal threads after telling them to stop
   } else if (newcount < oldcount) {
+    std::vector<std::shared_ptr<DiscardThread>> discard_threads_to_stop;
     dout(10) << __func__ << " stopping " << (oldcount - newcount) << " existing discard threads" << dendl;
 
     // Signal the last threads to quit, and stop tracking them
-    for(uint64_t i = oldcount; i > newcount; i--)
-    {
+    for(uint64_t i = oldcount; i > newcount; i--) {
       discard_threads[i-1]->stop = true;
-      discard_threads[i-1]->detach();
+      discard_threads_to_stop.push_back(discard_threads[i-1]);
     }
-    discard_threads.resize(newcount);
-
     discard_cond.notify_all();
+    discard_threads.resize(newcount);
+    l.unlock();
+    for (auto &t : discard_threads_to_stop) {
+      t->join();
+    }
   }
 }
 
 void KernelDevice::_discard_stop()
 {
   dout(10) << __func__ << dendl;
-
-  discard_stop = true;
-  _discard_update_threads();
-  discard_drain();
-
+  _discard_update_threads(true);
   dout(10) << __func__ << " stopped" << dendl;
 }
 
