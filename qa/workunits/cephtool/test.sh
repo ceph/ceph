@@ -2490,7 +2490,7 @@ function test_mon_osd_erasure_code()
   ceph osd erasure-code-profile set fooprofile a=b c=d
   ceph osd erasure-code-profile set fooprofile a=b c=d
   expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f
-  ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force
+  ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force --yes-i-really-mean-it
   ceph osd erasure-code-profile set fooprofile a=b c=d e=f
   expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f g=h
   # make sure rule-foo doesn't work anymore
