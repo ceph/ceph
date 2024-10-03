@@ -519,6 +519,22 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 	}
       }
     } /* checksum_mode */
+    auto attr_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+    if (attr_iter != attrs.end()) {
+      rgw::sal::RGWRestoreType rt;
+      bufferlist bl = attr_iter->second;
+      auto iter = bl.cbegin();
+      decode(rt, iter);
+
+      if (rt == rgw::sal::RGWRestoreType::Temporary) {
+        // temporary restore; set storage-class to cloudtier storage class
+        auto c_iter = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+
+        if (c_iter != attrs.end()) {
+          attrs[RGW_ATTR_STORAGE_CLASS] = c_iter->second;
+        }
+      }
+    }
 
     for (struct response_attr_param *p = resp_attr_params; p->param; p++) {
       bool exists;

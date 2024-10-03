@@ -1028,6 +1028,22 @@ int DaosObject::transition_to_cloud(
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
+int DaosObject::restore_obj_from_cloud(Bucket* bucket,
+          rgw::sal::PlacementTier* tier,
+          rgw_placement_rule& placement_rule,
+          rgw_bucket_dir_entry& o,
+	  CephContext* cct,
+          RGWObjTier& tier_config,
+          real_time& mtime,
+          uint64_t olh_epoch,
+          std::optional<uint64_t> days,
+          const DoutPrefixProvider* dpp, 
+          optional_yield y,
+          uint32_t flags)
+{
+  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
+}
+
 bool DaosObject::placement_rules_match(rgw_placement_rule& r1,
                                        rgw_placement_rule& r2) {
   /* XXX: support single default zone and zonegroup for now */

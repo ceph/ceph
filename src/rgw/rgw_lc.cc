@@ -1991,6 +1991,12 @@ int RGWLC::process(LCWorker* worker,
     }
   }
 
+  ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_expire_objects(this, null_yield);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "RGWLC::process_expire_objects: failed, "
+	          << " worker ix: " << worker->ix << dendl;
+  }
+
   return 0;
 }
 
