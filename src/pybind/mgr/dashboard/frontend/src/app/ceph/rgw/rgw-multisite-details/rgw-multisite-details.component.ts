@@ -546,20 +546,20 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
 
   delete(node: TreeNode) {
     if (node.data.type === 'realm') {
-      this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      const modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
         itemDescription: $localize`${node.data.type} ${node.data.name}`,
         itemNames: [`${node.data.name}`],
         submitAction: () => {
           this.rgwRealmService.delete(node.data.name).subscribe(
             () => {
-              this.modalRef.close();
               this.notificationService.show(
                 NotificationType.success,
                 $localize`Realm: '${node.data.name}' deleted successfully`
               );
+              this.cdsModalService.dismissAll();
             },
             () => {
-              this.modalRef.componentInstance.stopLoadingSpinner();
+              this.cdsModalService.stopLoadingSpinner(modalRef.deletionForm);
             }
           );
         }
