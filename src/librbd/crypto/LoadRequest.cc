@@ -130,12 +130,22 @@ void LoadRequest<I>::handle_load(int r) {
                              << dendl;
 
   m_format_idx++;
+  if (!m_current_image_ctx->migration_info.empty()) {
+    // prepend the format to use for the migration source image
+    // it's done implicitly here because this image is moved to the
+    // trash when migration is prepared
+    ceph_assert(m_current_image_ctx->parent != nullptr);
+    ldout(m_image_ctx->cct, 20) << "under migration, cloning format" << dendl;
+    m_formats.insert(m_formats.begin() + m_format_idx,
+                     m_formats[m_format_idx - 1]->clone());
+  }
+
   m_current_image_ctx = m_current_image_ctx->parent;
   if (m_current_image_ctx != nullptr) {
     // move on to loading parent
     if (m_format_idx >= m_formats.size()) {
       // try to load next ancestor using the same format
-      ldout(m_image_ctx->cct, 20) << "cloning format" << dendl;
+      ldout(m_image_ctx->cct, 20) << "out of formats, cloning format" << dendl;
       m_formats.push_back(m_formats[m_formats.size() - 1]->clone());
       m_is_current_format_assumed = true;
     }
