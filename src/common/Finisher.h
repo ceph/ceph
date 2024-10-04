@@ -28,6 +28,7 @@ enum {
   l_finisher_first = 997082,
   l_finisher_queue_len,
   l_finisher_complete_lat,
+  l_mod_finisher_cnt,
   l_finisher_last
 };
 
@@ -50,6 +51,8 @@ class Finisher {
   std::vector<std::pair<Context*,int>> in_progress_queue;
 
   std::string thread_name;
+
+  std::atomic_uint mod_finisher_cnt{0};
 
   /// Performance counter for the finisher's queue length.
   /// Only active for named finishers.
@@ -137,6 +140,18 @@ class Finisher {
 
   bool is_empty();
 
+  void inc_mod_finisher_cnt() {
+    ++mod_finisher_cnt;
+  }
+
+  void dec_mod_finisher_cnt() {
+    --mod_finisher_cnt;
+  }
+
+  auto get_mod_finisher_cnt() {
+    return mod_finisher_cnt.load();
+  }
+
   /// Construct an anonymous Finisher.
   /// Anonymous finishers do not log their queue length.
   explicit Finisher(CephContext *cct_) :
@@ -155,10 +170,12 @@ class Finisher {
 			  l_finisher_first, l_finisher_last);
     b.add_u64(l_finisher_queue_len, "queue_len");
     b.add_time_avg(l_finisher_complete_lat, "complete_latency");
+    b.add_u64(l_mod_finisher_cnt, "module_queue_len");
     logger = b.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
     logger->set(l_finisher_queue_len, 0);
     logger->set(l_finisher_complete_lat, 0);
+    logger->set(l_mod_finisher_cnt, get_mod_finisher_cnt());
   }
 
   ~Finisher() {

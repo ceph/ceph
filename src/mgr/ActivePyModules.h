@@ -193,6 +193,18 @@ public:
     return modules.at(name)->finisher;
   }
 
+  void inc_mod_finisher_cnt(const std::string &name) {
+    modules.at(name)->finisher.inc_mod_finisher_cnt();
+  }
+
+  void dec_mod_finisher_cnt(const std::string &name) {
+    modules.at(name)->finisher.dec_mod_finisher_cnt();
+  }
+
+  auto get_mod_finisher_cnt(const std::string &name) {
+    return modules.at(name)->finisher.get_mod_finisher_cnt();
+  }
+
   bool is_pending(std::string_view name) const {
     return pending_modules.count(name) > 0;
   }
