@@ -15,6 +15,7 @@
 #include "common/pick_address.h"
 
 #include <bitset>
+#include <ifaddrs.h> // for struct ifaddrs
 #include <netdb.h>
 #include <netinet/in.h>
 #ifdef _WIN32
@@ -40,6 +41,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/numa.h"
+#include "common/safe_io.h"
 
 #ifndef HAVE_IN_ADDR_T
 typedef uint32_t in_addr_t;
