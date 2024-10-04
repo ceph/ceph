@@ -13,6 +13,7 @@
  */
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "osdc/Journaler.h"
 #include "events/ESubtreeMap.h"
 #include "events/ESession.h"
@@ -39,6 +40,7 @@
 #include "events/ELid.h"
 
 #include "include/denc.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 #include "include/stringify.h"
 
 #include "LogSegment.h"
@@ -49,6 +51,7 @@
 #include "Server.h"
 #include "Migrator.h"
 #include "Mutation.h"
+#include "SnapRealm.h"
 
 #include "InoTable.h"
 #include "MDSTableClient.h"
