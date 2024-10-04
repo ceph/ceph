@@ -18,6 +18,7 @@
 #define CEPH_COMMON_PERF_COUNTERS_H
 
 #include <functional>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
