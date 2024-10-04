@@ -15,21 +15,22 @@
 #ifndef CEPH_MDS_LOCKER_H
 #define CEPH_MDS_LOCKER_H
 
+#include "common/ref.h"
 #include "include/types.h"
 
-#include "messages/MClientCaps.h"
-#include "messages/MClientCapRelease.h"
-#include "messages/MClientLease.h"
-#include "messages/MLock.h"
-
 #include "CInode.h"
-#include "SimpleLock.h"
 #include "MDSContext.h"
 #include "Mutation.h"
-#include "messages/MClientReply.h"
 
+struct LeaseStat;
 struct SnapRealm;
 
+class MClientCaps;
+class MClientCapRelease;
+class MClientLease;
+class MClientReply;
+class MDCache;
+class MLock;
 class MDSRank;
 class Session;
 class CDentry;
