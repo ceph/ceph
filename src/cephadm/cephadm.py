@@ -3412,10 +3412,10 @@ def list_daemons(
         data_dir = os.path.abspath(legacy_dir + data_dir)
 
     # keep track of ceph versions we see
-    seen_versions = {}  # type: Dict[str, Optional[str]]
+    seen_versions: Dict[str, Optional[str]] = {}
 
     # keep track of image digests
-    seen_digests = {}  # type: Dict[str, List[str]]
+    seen_digests: Dict[str, List[str]] = {}
 
     # keep track of memory and cpu usage we've seen
     seen_memusage_cid_len, seen_memusage = parsed_container_mem_usage(ctx)
@@ -3662,7 +3662,7 @@ def list_daemons(
                                     % daemon_type
                                 )
                     else:
-                        vfile = os.path.join(data_dir, fsid, j, 'unit.image')  # type: ignore
+                        vfile = os.path.join(data_dir, fsid, j, 'unit.image')
                         try:
                             with open(vfile, 'r') as f:
                                 image_name = f.read().strip() or None
@@ -3670,7 +3670,7 @@ def list_daemons(
                             pass
 
                     # unit.meta?
-                    mfile = os.path.join(data_dir, fsid, j, 'unit.meta')  # type: ignore
+                    mfile = os.path.join(data_dir, fsid, j, 'unit.meta')
                     try:
                         with open(mfile, 'r') as f:
                             meta = json.loads(f.read())
