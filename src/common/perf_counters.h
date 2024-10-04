@@ -24,10 +24,14 @@
 #include <cstdint>
 
 #include "common/perf_histogram.h"
-#include "include/utime.h"
 #include "include/common_fwd.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
+
+#include <functional>
+#include <set>
+
+class utime_t;
 
 namespace TOPNSPC::common {
   class CephContext;
