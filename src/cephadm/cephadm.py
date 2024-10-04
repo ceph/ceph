@@ -3411,6 +3411,11 @@ def list_daemons(
     if legacy_dir is not None:
         data_dir = os.path.abspath(legacy_dir + data_dir)
 
+    if not os.path.exists(data_dir):
+        # data_dir (/var/lib/ceph typically) is missing. Return empty list.
+        logger.warning('%s is missing: no daemon listing available', data_dir)
+        return []
+
     # keep track of ceph versions we see
     seen_versions: Dict[str, Optional[str]] = {}
 
@@ -3420,11 +3425,6 @@ def list_daemons(
     # keep track of memory and cpu usage we've seen
     seen_memusage_cid_len, seen_memusage = parsed_container_mem_usage(ctx)
     seen_cpuperc_cid_len, seen_cpuperc = parsed_container_cpu_perc(ctx)
-
-    if not os.path.exists(data_dir):
-        # data_dir (/var/lib/ceph typically) is missing. Return empty list.
-        logger.warning('%s is missing: no daemon listing available', data_dir)
-        return []
 
     for i in os.listdir(data_dir):
         if i in ['mon', 'osd', 'mds', 'mgr', 'rgw']:
