@@ -14,6 +14,7 @@
 
 #include "DecayCounter.h"
 #include "Formatter.h"
+#include "StackStringStream.h"
 
 #include "include/encoding.h"
 
@@ -76,4 +77,12 @@ void DecayCounter::decay(double delta) const
 
   val = newval;
   last_decay = now;
+}
+
+std::ostream& operator<<(std::ostream& out, const DecayCounter& d) {
+  CachedStackStringStream css;
+  css->precision(2);
+  double val = d.get();
+  *css << "[C " << std::scientific << val << "]";
+  return out << css->strv();
 }
