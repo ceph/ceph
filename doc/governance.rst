@@ -103,7 +103,7 @@ Current Members
  * Yehuda Sadeh <yehuda@redhat.com>
  * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
- * Zac Dover <zac.dover@gmail.com>
+ * Zac Dover <zac.dover@proton.me>
 
 .. _ctl:
 
