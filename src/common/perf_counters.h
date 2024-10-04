@@ -17,6 +17,8 @@
 #ifndef CEPH_COMMON_PERF_COUNTERS_H
 #define CEPH_COMMON_PERF_COUNTERS_H
 
+#include <functional>
+#include <set>
 #include <string>
 #include <vector>
 #include <memory>
@@ -24,10 +26,11 @@
 #include <cstdint>
 
 #include "common/perf_histogram.h"
-#include "include/utime.h"
 #include "include/common_fwd.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
+
+class utime_t;
 
 namespace TOPNSPC::common {
   class CephContext;
