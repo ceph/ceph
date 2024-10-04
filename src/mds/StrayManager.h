@@ -16,14 +16,20 @@
 
 #include "include/common_fwd.h"
 #include "include/elist.h"
-#include <list>
-#include "Mutation.h"
-#include "PurgeQueue.h"
 #include "MDSMetaRequest.h"
 #include "CDentry.h"
 
+#include <boost/intrusive_ptr.hpp>
+
+#include <set>
+#include <string>
+
 class MDSRank;
 class CInode;
+class PurgeQueue;
+
+struct MutationImpl;
+typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
 class StrayManager
 {
