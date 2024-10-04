@@ -15,7 +15,61 @@ project and ensuring that the developer and user communities are
 healthy.
 
 
-Committers
+Ceph Executive Council
+======================
+
+.. _exec-council-responsibilities:
+
+Ceph Executive Council Responsibilities
+---------------------------------------
+
+- Spokesperson
+
+   - welcome/keynote for cephalocon
+     
+   - maintaining slides and presenting about the project
+
+   - Community focal point (user interaction, conference talks, mailing list,
+     etc)
+   
+- Community
+
+    - managing community manager
+
+    - LF Program Manager person, Social Media person
+
+    - liase with the ambassadors
+
+    - make sure ceph events happen, successfully: cephalocon, ceph days, cds, user/dev, cdm
+
+    - coordinating with LF
+
+    - creating program committee
+
+    - recordings on youtube
+
+    - getting sponsors for events
+
+    - communications, schedule, venue decisions
+
+    - coordinate blog posts
+
+
+- Ceph Foundation
+
+    - ensure foundation is healthy: financials, operations
+
+    - represent the CLT on the Board
+
+    - present project status regularly (yearly)
+
+    - collect member ideas / feedback
+
+    - ensure members feel valued
+
+    - guide the members how to support the project (events, testing, marketing, hardware, ...)
+
+Membership
 ----------
 
 Committers are project contributors who have write access to the central
