@@ -25,14 +25,12 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/ref.h" // for cref_t
-#include "common/RefCountedObj.h"
 #include "include/compat.h"
 #include "include/Context.h" // for C_GatherBuilder
 #include "include/counter.h"
 #include "include/elist.h"
 #include "include/filepath.h"
 #include "include/types.h"
-#include "include/lru.h"
 #include "include/compact_set.h"
 
 #include "MDSCacheObject.h"
@@ -40,17 +38,11 @@
 #include "flock.h"
 #include "inode_backtrace.h" // for inode_backtrace_t
 
-#include "BatchOp.h"
-#include "CDentry.h"
 #include "ScrubHeader.h"
 #include "SimpleLock.h"
 #include "ScatterLock.h"
 #include "LocalLockC.h"
 #include "Capability.h"
-#include "SnapRealm.h"
-#include "Mutation.h"
-
-#include "messages/MClientCaps.h"
 
 #include <boost/intrusive_ptr.hpp>
 
@@ -428,16 +420,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // ---------------------------
   CInode() = delete;
   CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP);
-  ~CInode() override {
-    close_dirfrags();
-    close_snaprealm();
-    clear_file_locks();
-    ceph_assert(num_projected_srnodes == 0);
-    ceph_assert(num_caps_notable == 0);
-    ceph_assert(num_subtree_roots == 0);
-    ceph_assert(num_exporting_dirs == 0);
-    ceph_assert(batch_ops.empty());
-  }
+  ~CInode() override;
 
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
