@@ -2,7 +2,6 @@
 #define CEPH_STRLIST_H
 
 #include <list>
-#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
