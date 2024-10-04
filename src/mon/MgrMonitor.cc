@@ -215,7 +215,7 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
       string name = string("mgr/") + i.name + "/" + j.second.name;
       auto p = mgr_module_options.emplace(
 	name,
-	Option(name, static_cast<Option::type_t>(j.second.type),
+	Option(std::string{name}, static_cast<Option::type_t>(j.second.type),
 	       static_cast<Option::level_t>(j.second.level)));
       Option& opt = p.first->second;
       opt.set_flags(static_cast<Option::flag_t>(j.second.flags));
