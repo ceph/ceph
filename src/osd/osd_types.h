@@ -1137,7 +1137,7 @@ public:
   template<typename T>
   void set(key_t key, const T &val) {
     value_t value = val;
-    opts[key] = value;
+    opts.insert_or_assign(key, value);
   }
 
   template<typename T>
