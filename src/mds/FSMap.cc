@@ -19,6 +19,7 @@
 #include "FSMap.h"
 #include "common/debug.h"
 #include "common/StackStringStream.h"
+#include "common/strtol.h" // for strict_strtoll()
 
 #ifdef WITH_SEASTAR
 #include "crimson/common/config_proxy.h"
