@@ -5117,13 +5117,18 @@ PeeringState::Backfilling::react(const DeferBackfill &c)
   ps->state_clear(PG_STATE_BACKFILLING);
   cancel_backfill();
 
-  pl->schedule_event_after(
-    std::make_shared<PGPeeringEvent>(
-      ps->get_osdmap_epoch(),
-      ps->get_osdmap_epoch(),
-      RequestBackfill()),
-    c.delay);
-  return transit<NotBackfilling>();
+  if (ps->needs_backfill()) {
+    pl->schedule_event_after(
+      std::make_shared<PGPeeringEvent>(
+	ps->get_osdmap_epoch(),
+	ps->get_osdmap_epoch(),
+	RequestBackfill()),
+      c.delay);
+    return transit<NotBackfilling>();
+  } else {
+    // raced with MOSDPGBackfill::OP_BACKFILL_FINISH, ignore
+    return discard_event();
+  }
 }
 
 boost::statechart::result
