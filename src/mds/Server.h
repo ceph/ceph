@@ -15,35 +15,54 @@
 #ifndef CEPH_MDS_SERVER_H
 #define CEPH_MDS_SERVER_H
 
-#include <string_view>
-
-using namespace std::literals::string_view_literals;
+#include "mds/mdstypes.h" // for xattr_map
 
 #include <common/DecayCounter.h>
+#include "common/ref.h" // for cref_t
 
 #include "include/common_fwd.h"
-
-#include "messages/MClientReconnect.h"
-#include "messages/MClientReply.h"
-#include "messages/MClientRequest.h"
-#include "messages/MClientSession.h"
-#include "messages/MClientSnap.h"
-#include "messages/MClientReclaim.h"
-#include "messages/MClientReclaimReply.h"
-#include "messages/MLock.h"
+#include "include/Context.h" // for C_GatherBase
 
 #include "CInode.h"
-#include "MDSRank.h"
 #include "Mutation.h"
-#include "MDSContext.h"
+
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
+#include <map>
+#include <memory>
+#include <set>
+#include <string_view>
+#include <vector>
+
+using namespace std::literals::string_view_literals;
 
 class OSDMap;
 class LogEvent;
 class EMetaBlob;
 class EUpdate;
+class LogSegment;
+class MDCache;
 class MDLog;
+class MDSContext;
+class MDSRank;
+class Session;
 struct SnapInfo;
+struct SnapRealm;
+class Message;
 class MetricsHandler;
+class MClientReconnect;
+class MClientReply;
+class MClientRequest;
+class MClientSession;
+class MClientSnap;
+class MClientReclaim;
+class MClientReclaimReply;
+class MLock;
+class MMDSPeerRequest;
 
 enum {
   l_mdss_first = 1000,
