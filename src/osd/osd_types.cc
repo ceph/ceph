@@ -15,6 +15,9 @@
  *
  */
 
+#include "osd_types.h"
+#include "osd_perf_counters.h"
+
 #include <algorithm>
 #include <list>
 #include <map>
@@ -31,15 +34,18 @@
 #include "include/ceph_features.h"
 #include "include/encoding.h"
 #include "include/stringify.h"
+
+#include "crush/CrushWrapper.h"
 extern "C" {
+#include "crush/crush.h" // for CRUSH_ITEM_NONE
 #include "crush/hash.h"
 }
 
+#include "common/ceph_context.h"
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
 #include "include/utime_fmt.h"
 #include "OSDMap.h"
-#include "osd_types.h"
 #include "osd_types_fmt.h"
 #include "os/Transaction.h"
 
