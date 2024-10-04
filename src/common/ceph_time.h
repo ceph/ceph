@@ -16,7 +16,7 @@
 #define COMMON_CEPH_TIME_H
 
 #include <chrono>
-#include <iostream>
+#include <iosfwd>
 #include <string>
 #include <optional>
 #include <fmt/chrono.h>
