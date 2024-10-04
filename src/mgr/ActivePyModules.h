@@ -45,6 +45,7 @@ class ActivePyModules
   std::set<std::string, std::less<>> pending_modules;
   // module class instances already created
   std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
+  std::map<std::string, int> mod_finisher_cnt;
   PyModuleConfig &module_config;
   bool have_local_config_map = false;
   std::map<std::string, std::string> store_cache;
@@ -191,6 +192,27 @@ public:
 
   auto& get_module_finisher(const std::string &name) {
     return modules.at(name)->finisher;
+  }
+
+  void inc_mod_finisher_cnt(const std::string &name) {
+    if (mod_finisher_cnt.find(name) != mod_finisher_cnt.end()) {
+      mod_finisher_cnt[name]++;
+    } else {
+      mod_finisher_cnt.insert({name, 1});
+    }
+  }
+
+  void dec_mod_finisher_cnt(const std::string &name) {
+    if ((mod_finisher_cnt.find(name) != mod_finisher_cnt.end())
+          && (mod_finisher_cnt[name] != 0)) {
+      mod_finisher_cnt[name]--;
+    } else {
+      mod_finisher_cnt.erase(name);
+    }
+  }
+
+  auto& get_mod_finisher_cnt(const std::string &name) {
+    return mod_finisher_cnt[name];
   }
 
   bool is_pending(std::string_view name) const {

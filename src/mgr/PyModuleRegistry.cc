@@ -146,12 +146,19 @@ bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
       module->set_enabled(enabled);
       const bool always_on = (mgr_map.get_always_on_modules().count(module_name) > 0);
       module->set_always_on(always_on);
+      const int64_t threshold = mgr_map.get_module_threshold_value(module_name);
+      dout(4) << module_name << "get_threshold_val_before_setting " << dendl;
+      if (threshold)
+        module->set_threshold_val(threshold);
+      else
+        module->set_threshold_val(0);
     }
 
     return false;
   } else {
     bool modules_changed = mgr_map_.modules != mgr_map.modules ||
-      mgr_map_.always_on_modules != mgr_map.always_on_modules;
+      mgr_map_.always_on_modules != mgr_map.always_on_modules ||
+      mgr_map_.modules_threshold_value != mgr_map.modules_threshold_value;
     mgr_map = mgr_map_;
 
     if (standby_modules != nullptr) {

@@ -1319,6 +1319,34 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       ss << "module '" << module << "' is not enabled";
     }
     pending_map.modules.erase(module);
+  } else if (prefix == "mgr module set queue threshold") {
+    string module;
+    int64_t threshold;
+    cmd_getval(cmdmap, "module", module);
+    cmd_getval(cmdmap, "threshold", threshold);
+    if (module.empty()) {
+      r = -EINVAL;
+      goto out;
+    }
+    if (pending_map.get_module_threshold_value(module)) {
+      pending_map.modules_threshold_value[module] = threshold;
+    } else {
+      pending_map.modules_threshold_value.insert({module, threshold});
+    }
+    ss << "module '" << module << "' threshold value is set to " << pending_map.get_module_threshold_value(module);
+  } else if (prefix == "mgr module unset queue threshold") {
+    string module;
+    cmd_getval(cmdmap, "module", module);
+    if (module.empty()) {
+      r = -EINVAL;
+      goto out;
+    }
+    if (!pending_map.get_module_threshold_value(module)) {
+      ss << "module '" << module << "' threshold value is not set ";
+      goto out;
+    }   
+    pending_map.modules_threshold_value.erase(module);
+    ss << "module '" << module << "' threshold value has been unset ";
   } else {
     ss << "Command '" << prefix << "' not implemented!";
     r = -ENOSYS;
