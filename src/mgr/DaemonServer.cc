@@ -2556,11 +2556,32 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  auto finisher_val = py_modules.get_command_queue_threshold_val(mod_name);
+  auto queue_len = py_modules.get_mod_finisher_queue_len(mod_name);
+  ss << "The value of 'max_command_queue_length' config option for Module '" << mod_name << "' is "
+        << finisher_val << " and the current request queue length is " << queue_len << "\n";
+  dout(10) << ss.str() << dendl;
+
+  if (finisher_val != "0")  {
+    if (std::to_string(queue_len) > finisher_val)
+    {
+      ss << "Module '" << mod_name << "' has reached its finisher thread limit. "
+              "Set the threshold limit using the 'max_command_queue_length' config ";
+        dout(4) << ss.str() << dendl;
+        cmdctx->reply(-EAGAIN, ss);
+        return true;
+    }
+  }
+
   op->mark_queued_for_module();
 
   dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
   Finisher& mod_finisher = py_modules.get_active_module_finisher(mod_name);
 
+  py_modules.inc_mod_finisher_queue_len(mod_name);
+  ss << "Module '" << mod_name << "' queue length counter value is incremented. "
+          " Now the queue length is " << py_modules.get_mod_finisher_queue_len(mod_name);
+  dout(10) << ss.str() << dendl;
   mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op]
                                        (int r_) mutable {
     std::stringstream ss;
@@ -2568,6 +2589,10 @@ bool DaemonServer::_handle_command(
     dout(10) << "dispatching command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
 
     // Validate that the module is enabled
+    py_modules.inc_mod_finisher_queue_len(mod_name);
+    ss << "Module '" << mod_name << "' queue length counter value is incremented. "
+          " Now the queue length is " << py_modules.get_mod_finisher_queue_len(mod_name);
+    dout(10) << ss.str() << dendl;
     auto& py_handler_name = py_command.module_name;
     PyModuleRef module = py_modules.get_module(py_handler_name);
     ceph_assert(module);
@@ -2577,6 +2602,10 @@ bool DaemonServer::_handle_command(
             << py_handler_name << "` to enable it";
       dout(4) << ss.str() << dendl;
       cmdctx->reply(-EOPNOTSUPP, ss);
+      py_modules.dec_mod_finisher_queue_len(py_handler_name);
+      ss << "Module '" << py_handler_name << "' queue length counter value is decremented. "
+          " Now the queue length is " << py_modules.get_mod_finisher_queue_len(py_handler_name);
+      dout(10) << ss.str() << dendl;
       return;
     }
 
@@ -2609,6 +2638,10 @@ bool DaemonServer::_handle_command(
     if (!accept_command) {
       dout(4) << ss.str() << dendl;
       cmdctx->reply(-EIO, ss);
+      py_modules.dec_mod_finisher_queue_len(py_handler_name);
+      ss << "Module '" << py_handler_name << "' queue length counter value is decremented. "
+          " Now the queue length is " << py_modules.get_mod_finisher_queue_len(py_handler_name);
+      dout(10) << ss.str() << dendl;
       return;
     }
 
@@ -2624,6 +2657,10 @@ bool DaemonServer::_handle_command(
     cmdctx->odata.append(ds);
     cmdctx->reply(r, ss);
     dout(10) << " command returned " << r << dendl;
+    py_modules.dec_mod_finisher_queue_len(py_handler_name);
+    ss << "Module '" << py_handler_name << "' queue length counter value is decremented. "
+          " Now the queue length is " << py_modules.get_mod_finisher_queue_len(py_handler_name);
+    dout(10) << ss.str() << dendl;
   }));
   return true;
 }

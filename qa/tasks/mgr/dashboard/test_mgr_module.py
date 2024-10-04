@@ -113,6 +113,7 @@ class MgrModuleTest(MgrModuleTestCase):
             'leaderboard': module_options_object_schema,
             'leaderboard_description': module_options_object_schema,
             'sqlite3_killpoint': module_options_object_schema,
+            'max_command_queue_length': module_options_object_schema,
             'log_level': module_options_object_schema,
             'log_to_cluster': module_options_object_schema,
             'log_to_cluster_level': module_options_object_schema,
