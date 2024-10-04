@@ -18,35 +18,27 @@
 #include <atomic>
 #include <string_view>
 
+#include "common/admin_socket.h" // for asok_finisher
 #include "common/DecayCounter.h"
 #include "common/LogClient.h"
-#include "common/Timer.h"
-#include "common/fair_mutex.h"
-#include "common/TrackedOp.h"
-#include "common/ceph_mutex.h"
 
 #include "include/common_fwd.h"
-
-#include "messages/MClientRequest.h"
-#include "messages/MCommand.h"
-#include "messages/MMDSMap.h"
 
 #include "Beacon.h"
 #include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
-#include "MDCache.h"
-#include "MDLog.h"
 #include "MDSContext.h"
 #include "PurgeQueue.h"
-#include "Server.h"
 #include "MetricsHandler.h"
-#include "osdc/Journaler.h"
-#include "MDSMetaRequest.h"
+#include "mon/MonClient.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
 #include "common/perf_counters.h"
+
+class MDSMetaRequest;
+class MMDSMap;
 
 namespace boost::asio { class io_context; }
 
@@ -135,6 +127,9 @@ namespace ceph {
   struct heartbeat_handle_d;
 }
 
+template <class Mutex>
+class CommonSafeTimer;
+
 class Locker;
 class MDCache;
 class MDLog;
@@ -150,6 +145,7 @@ class Objecter;
 class MonClient;
 class MgrClient;
 class Finisher;
+class Server;
 class ScrubStack;
 class C_ExecAndReply;
 class QuiesceDbManager;
