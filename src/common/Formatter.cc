@@ -607,7 +607,7 @@ void XMLFormatter::write_bin_data(const char* buff, int buf_len)
   m_ss.seekg(buf_len);
 }
 
-void XMLFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str)
+void XMLFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str) const
 {
   CachedStackStringStream css;
 
@@ -996,7 +996,7 @@ void TableFormatter::write_raw_data(const char *data) {
   // not supported
 }
 
-void TableFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str)
+void TableFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str) const
 {
   CachedStackStringStream css;
 
