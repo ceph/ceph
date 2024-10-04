@@ -23,19 +23,19 @@
 #include <string>
 #include <string_view>
 
-#include "common/bloom_filter.hpp"
 #include "common/config.h"
 #include "include/buffer_fwd.h"
 #include "include/counter.h"
 #include "include/types.h"
 
+#include "snap.h" // for struct sr_t
 #include "CInode.h"
 #include "MDSCacheObject.h"
-#include "MDSContext.h"
-#include "cephfs_features.h"
-#include "SessionMap.h"
-#include "messages/MClientReply.h"
+#include "Mutation.h" // for struct MDLockCache
 
+struct DirStat;
+struct session_info_t;
+class bloom_filter;
 class CDentry;
 class MDCache;
 
@@ -204,6 +204,7 @@ public:
   static const int DUMP_DEFAULT          = DUMP_ALL & (~DUMP_ITEMS);
 
   CDir(CInode *in, frag_t fg, MDCache *mdc, bool auth);
+  ~CDir() noexcept;
 
   std::string_view pin_name(int p) const override {
     switch (p) {
@@ -396,9 +397,7 @@ public:
   void add_to_bloom(CDentry *dn);
   bool is_in_bloom(std::string_view name);
   bool has_bloom() { return (bloom ? true : false); }
-  void remove_bloom() {
-    bloom.reset();
-  }
+  void remove_bloom();
 
   void try_remove_dentries_for_stray();
   bool try_trim_snap_dentry(CDentry *dn, const std::set<snapid_t>& snaps);
