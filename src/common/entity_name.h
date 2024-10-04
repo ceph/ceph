@@ -34,19 +34,8 @@ namespace ceph { class Formatter; }
  */
 struct EntityName
 {
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(type, bl);
-    encode(id, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    using ceph::decode;
-    uint32_t type_;
-    std::string id_;
-    decode(type_, bl);
-    decode(id_, bl);
-    set(type_, id_);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<EntityName*>& ls);
   const std::string& to_str() const;
