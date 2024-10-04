@@ -29,6 +29,8 @@
 #include "common/entity_name.h"
 #include "include/encoding.h"
 
+class entity_addrvec_t;
+
 /////////////////////// Types ///////////////////////
 class CephInitParameters
 {
