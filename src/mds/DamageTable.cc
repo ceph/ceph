@@ -12,12 +12,15 @@
  *
  */
 
+#include "DamageTable.h"
+#include "BatchOp.h"
+
 #include "common/debug.h"
+#include "common/errno.h" // for cpp_strerror()
+#include "include/random.h"
 
 #include "mds/CDir.h"
 #include "mds/CInode.h"
-
-#include "DamageTable.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -158,6 +161,12 @@ class UninlineDamage : public DamageEntry
     f->close_section();
   }
 };
+}
+
+DamageEntry::DamageEntry()
+{
+  id = ceph::util::generate_random_number<damage_entry_id_t>(0, 0xffffffff);
+  reported_at = ceph_clock_now();
 }
 
 DamageEntry::~DamageEntry()
