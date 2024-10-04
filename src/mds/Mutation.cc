@@ -14,6 +14,8 @@
 
 #include "Mutation.h"
 #include "ScatterLock.h"
+#include "BatchOp.h"
+#include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
 
