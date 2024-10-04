@@ -209,7 +209,7 @@ static int sign_request_v2(const DoutPrefixProvider *dpp, const RGWAccessKey& ke
   }
 
   string canonical_header;
-  if (!rgw_create_s3_canonical_header(dpp, info, NULL, canonical_header, false)) {
+  if (!rgw_create_s3_canonical_header(dpp, RGW_OP_UNKNOWN, info, NULL, canonical_header, false)) {
     ldpp_dout(dpp, 0) << "failed to create canonical s3 header" << dendl;
     return -EINVAL;
   }
