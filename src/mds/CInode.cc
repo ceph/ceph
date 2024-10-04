@@ -12,14 +12,11 @@
  * 
  */
 
-#include "include/int_types.h"
-#include "common/errno.h"
-
-#include <string>
-
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
+#include "BatchOp.h"
+#include "SnapRealm.h"
 
 #include "MDSRank.h"
 #include "MDCache.h"
@@ -38,14 +35,21 @@
 
 #include "common/Clock.h"
 
+#include "common/ceph_json.h"
 #include "common/config.h"
+#include "common/errno.h"
 #include "global/global_context.h"
 #include "include/ceph_assert.h"
+#include "include/int_types.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 
 #include "mds/MDSContinuation.h"
 #include "mds/InoTable.h"
-#include "cephfs_features.h"
 #include "osdc/Objecter.h"
+
+#include "messages/MClientCaps.h"
+
+#include <string>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -103,6 +107,17 @@ const LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
 const LockType CInode::nestlock_type(CEPH_LOCK_INEST);
 const LockType CInode::flocklock_type(CEPH_LOCK_IFLOCK);
 const LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
+
+CInode::~CInode() {
+  close_dirfrags();
+  close_snaprealm();
+  clear_file_locks();
+  ceph_assert(num_projected_srnodes == 0);
+  ceph_assert(num_caps_notable == 0);
+  ceph_assert(num_subtree_roots == 0);
+  ceph_assert(num_exporting_dirs == 0);
+  ceph_assert(batch_ops.empty());
+}
 
 std::string_view CInode::pin_name(int p) const
 {
