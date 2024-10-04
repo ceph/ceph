@@ -11,6 +11,8 @@
 
 #include "include/ceph_assert.h"  // boost clobbers this
 
+#include <sstream>
+
 struct uuid_d;
 class LogEntry;
 
