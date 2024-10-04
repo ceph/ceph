@@ -43,6 +43,7 @@ class LRUSet {
   // lru
   boost::intrusive::list<
     Node,
+    boost::intrusive::constant_time_size<false>,
     boost::intrusive::member_hook<Node,
 				  boost::intrusive::list_member_hook<>,
 				  &Node::lru_item>
