@@ -4,6 +4,7 @@
 #pragma once
 
 #include <chrono>
+#include <iostream> // for std::cerr
 #include <string>
 #include <variant>
 #include <vector>
