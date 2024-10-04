@@ -63,9 +63,7 @@ static bool check_epilogue_late_status(__u8 late_status) {
 
 void FrameAssembler::fill_preamble(Tag tag,
                                    preamble_block_t& preamble) const {
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  ::memset(&preamble, 0, sizeof(preamble));
-
+  preamble = {};
   preamble.tag = static_cast<__u8>(tag);
   for (size_t i = 0; i < m_descs.size(); i++) {
     preamble.segments[i].length = m_descs[i].logical_len;
@@ -100,9 +98,7 @@ uint64_t FrameAssembler::get_frame_onwire_len() const {
 
 bufferlist FrameAssembler::asm_crc_rev0(const preamble_block_t& preamble,
                                         bufferlist segment_bls[]) const {
-  epilogue_crc_rev0_block_t epilogue;
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  ::memset(&epilogue, 0, sizeof(epilogue));
+  epilogue_crc_rev0_block_t epilogue{};
 
   bufferlist frame_bl(sizeof(preamble) + sizeof(epilogue));
   frame_bl.append(reinterpret_cast<const char*>(&preamble), sizeof(preamble));
@@ -123,9 +119,7 @@ bufferlist FrameAssembler::asm_secure_rev0(const preamble_block_t& preamble,
   preamble_bl.append(reinterpret_cast<const char*>(&preamble),
                      sizeof(preamble));
 
-  epilogue_secure_rev0_block_t epilogue;
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  ::memset(&epilogue, 0, sizeof(epilogue));
+  epilogue_secure_rev0_block_t epilogue{};
   bufferlist epilogue_bl(sizeof(epilogue));
   epilogue_bl.append(reinterpret_cast<const char*>(&epilogue),
                      sizeof(epilogue));
@@ -151,9 +145,7 @@ bufferlist FrameAssembler::asm_secure_rev0(const preamble_block_t& preamble,
 
 bufferlist FrameAssembler::asm_crc_rev1(const preamble_block_t& preamble,
                                         bufferlist segment_bls[]) const {
-  epilogue_crc_rev1_block_t epilogue;
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  ::memset(&epilogue, 0, sizeof(epilogue));
+  epilogue_crc_rev1_block_t epilogue{};
   epilogue.late_status |= FRAME_LATE_STATUS_COMPLETE;
 
   bufferlist frame_bl(sizeof(preamble) + FRAME_CRC_SIZE + sizeof(epilogue));
@@ -215,9 +207,7 @@ bufferlist FrameAssembler::asm_secure_rev1(const preamble_block_t& preamble,
     return frame_bl;  // no epilogue if only one segment
   }
 
-  epilogue_secure_rev1_block_t epilogue;
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  ::memset(&epilogue, 0, sizeof(epilogue));
+  epilogue_secure_rev1_block_t epilogue{};
   epilogue.late_status |= FRAME_LATE_STATUS_COMPLETE;
   bufferlist epilogue_bl(sizeof(epilogue));
   epilogue_bl.append(reinterpret_cast<const char*>(&epilogue),
