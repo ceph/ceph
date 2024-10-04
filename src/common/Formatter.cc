@@ -611,9 +611,7 @@ void XMLFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs
 {
   CachedStackStringStream css;
 
-  for (std::list<std::pair<std::string, std::string> >::const_iterator iter = attrs->attrs.begin();
-       iter != attrs->attrs.end(); ++iter) {
-    std::pair<std::string, std::string> p = *iter;
+  for (const auto &p : attrs->attrs) {
     *css << " " << p.first << "=" << "\"" << p.second << "\"";
   }
 
@@ -874,9 +872,9 @@ size_t TableFormatter::m_vec_index(std::string_view name)
 std::string TableFormatter::get_section_name(std::string_view name)
 {
   std::string t_name{name};
-  for (size_t i = 0; i < m_section.size(); i++) {
+  for (const auto &i : m_section) {
     t_name.insert(0, ":");
-    t_name.insert(0, m_section[i]);
+    t_name.insert(0, i);
   }
   if (m_section_open) {
     std::stringstream lss;
@@ -1000,9 +998,7 @@ void TableFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& att
 {
   CachedStackStringStream css;
 
-  for (std::list<std::pair<std::string, std::string> >::const_iterator iter = attrs->attrs.begin();
-       iter != attrs->attrs.end(); ++iter) {
-    std::pair<std::string, std::string> p = *iter;
+  for (const auto &p : attrs->attrs) {
     *css << " " << p.first << "=" << "\"" << p.second << "\"";
   }
 
