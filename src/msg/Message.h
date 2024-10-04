@@ -262,8 +262,8 @@ public:
 #endif
 
 protected:
-  ceph_msg_header  header;      // headerelope
-  ceph_msg_footer  footer;
+  ceph_msg_header  header{};      // headerelope
+  ceph_msg_footer  footer{};
   ceph::buffer::list       payload;  // "front" unaligned blob
   ceph::buffer::list       middle;   // "middle" unaligned blob
   ceph::buffer::list       data;     // data payload (page-alignment will be preserved where possible)
@@ -332,16 +332,11 @@ protected:
   friend class Messenger;
 
 public:
-  Message() {
-    memset(&header, 0, sizeof(header));
-    memset(&footer, 0, sizeof(footer));
-  }
+  Message() = default;
   Message(int t, int version=1, int compat_version=0) {
-    memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = version;
     header.compat_version = compat_version;
-    memset(&footer, 0, sizeof(footer));
   }
 
   Message *get() {
