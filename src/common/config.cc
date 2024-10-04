@@ -132,8 +132,8 @@ md_config_t::md_config_t(ConfigValues& values,
   subsys_options.reserve(values.subsys.get_num());
   for (unsigned i = 0; i < values.subsys.get_num(); ++i) {
     string name = string("debug_") + values.subsys.get_name(i);
-    subsys_options.push_back(
-      Option(name, Option::TYPE_STR, Option::LEVEL_ADVANCED));
+    subsys_options.emplace_back(
+      name, Option::TYPE_STR, Option::LEVEL_ADVANCED);
     Option& opt = subsys_options.back();
     opt.set_default(stringify(values.subsys.get_log_level(i)) + "/" +
 		    stringify(values.subsys.get_gather_level(i)));
