@@ -12753,13 +12753,11 @@ void MDCache::show_subtrees(int dbl, bool force_print)
     seen.insert(dir);
 
     // nested items?
-    if (!subtrees[dir].empty()) {
-      for (set<CDir*>::iterator p = subtrees[dir].begin();
-	   p != subtrees[dir].end();
-	   ++p) {
-	//dout(25) << " saw sub " << **p << dendl;
-	q.push_front(pair<CDir*,int>(*p, d+1));
-      }
+    for (set<CDir*>::iterator p = subtrees[dir].begin();
+	 p != subtrees[dir].end();
+	 ++p) {
+      //dout(25) << " saw sub " << **p << dendl;
+      q.push_front(pair<CDir*,int>(*p, d+1));
     }
   }
 
