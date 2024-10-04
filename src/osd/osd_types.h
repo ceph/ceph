@@ -1151,9 +1151,8 @@ public:
   bool is_set(key_t key) const;
 
   template<typename T>
-  void set(key_t key, const T &val) {
-    value_t value = val;
-    opts.insert_or_assign(key, value);
+  void set(key_t key, T &&val) {
+    opts.insert_or_assign(key, std::forward<T>(val));
   }
 
   template<typename T>
