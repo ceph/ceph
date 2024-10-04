@@ -16,12 +16,13 @@
 #ifndef MDS_CONTEXT_H
 #define MDS_CONTEXT_H
 
-#include <vector>
 #include <deque>
+#include <ostream>
+#include <string>
+#include <vector>
 
 #include "include/Context.h"
 #include "include/elist.h"
-#include "include/spinlock.h"
 #include "common/ceph_time.h"
 
 class MDSRank;
