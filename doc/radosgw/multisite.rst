@@ -508,7 +508,7 @@ For example:
 Updating the Period
 -------------------
 
-After updating the master zone configuration, update the period:
+After updating the secondary zone configuration, update the period:
 
 .. prompt:: bash #
 
