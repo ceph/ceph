@@ -5,14 +5,13 @@
 
 #include "include/int_types.h"
 
-#include <ostream>
+#include <iosfwd>
 #include <set>
 #include <map>
 #include <string>
 #include <string_view>
 
 #include "common/DecayCounter.h"
-#include "common/StackStringStream.h"
 #include "common/entity_name.h"
 
 #include "include/frag.h"
@@ -76,9 +75,7 @@ public:
     return (rank == MDS_RANK_NONE);
   }
 
-  void print(std::ostream& out) const {
-    out << fscid << ":" << rank;
-  }
+  void print(std::ostream& out) const;
 
   fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
   mds_rank_t rank = MDS_RANK_NONE;
@@ -130,14 +127,7 @@ namespace std {
   };
 }
 
-inline std::ostream& operator<<(std::ostream &out, const vinodeno_t &vino) {
-  out << vino.ino;
-  if (vino.snapid == CEPH_NOSNAP)
-    out << ".head";
-  else if (vino.snapid)
-    out << '.' << vino.snapid;
-  return out;
-}
+std::ostream& operator<<(std::ostream &out, const vinodeno_t &vino);
 
 typedef uint32_t damage_flags_t;
 
@@ -269,9 +259,7 @@ struct old_rstat_t {
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<old_rstat_t*>& ls);
 
-  void print(std::ostream& out) const {
-    out << "old_rstat(first " << first << " " << rstat << " " << accounted_rstat << ")";
-  }
+  void print(std::ostream& out) const;
 
   snapid_t first;
   nest_info_t rstat, accounted_rstat;
@@ -468,9 +456,7 @@ struct dentry_key_t {
   dentry_key_t(snapid_t s, std::string_view n, __u32 h=0) :
     snapid(s), name(n), hash(h) {}
 
-  void print(std::ostream& out) const {
-    out << "(" << name << "," << snapid << ")";
-  }
+  void print(std::ostream& out) const;
 
   bool is_valid() { return name.length() || snapid; }
 
@@ -482,18 +468,7 @@ struct dentry_key_t {
     using ceph::encode;
     encode(key, bl);
   }
-  void encode(std::string& key) const {
-    char b[20];
-    if (snapid != CEPH_NOSNAP) {
-      uint64_t val(snapid);
-      snprintf(b, sizeof(b), "%" PRIx64, val);
-    } else {
-      snprintf(b, sizeof(b), "%s", "head");
-    }
-    CachedStackStringStream css;
-    *css << name << "_" << b;
-    key = css->strv();
-  }
+  void encode(std::string& key) const;
   static void decode_helper(ceph::buffer::list::const_iterator& bl, std::string& nm,
 			    snapid_t& sn) {
     std::string key;
@@ -543,9 +518,7 @@ struct string_snap_t {
   string_snap_t() {}
   string_snap_t(std::string_view n, snapid_t s) : name(n), snapid(s) {}
 
-  void print(std::ostream& out) const {
-    out << "(" << name << "," << snapid << ")";
-  }
+  void print(std::ostream& out) const;
 
   int compare(const string_snap_t& r) const {
     int ret = name.compare(r.name);
@@ -624,13 +597,8 @@ struct metareqid_t {
     decode(tid, p);
   }
   void dump(ceph::Formatter *f) const;
-  void print(std::ostream& out) const {
-    out << name << ":" << tid;
-  }
-  static void generate_test_instances(std::list<metareqid_t*>& ls) {
-    ls.push_back(new metareqid_t);
-    ls.push_back(new metareqid_t(entity_name_t::CLIENT(123), 456));
-  }
+  void print(std::ostream& out) const;
+  static void generate_test_instances(std::list<metareqid_t*>& ls);
   entity_name_t name;
   uint64_t tid = 0;
 };
@@ -765,12 +733,7 @@ struct dirfrag_t {
   dirfrag_t() {}
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
 
-  void print(std::ostream& out) const {
-    out << ino;
-    if (!frag.is_root()) {
-      out << "." << frag;
-    }
-  }
+  void print(std::ostream& out) const;
 
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
@@ -782,15 +745,8 @@ struct dirfrag_t {
     decode(ino, bl);
     decode(frag, bl);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_unsigned("ino", ino);
-    f->dump_unsigned("frag", frag);
-  }
-  static void generate_test_instances(std::list<dirfrag_t*>& ls) {
-    ls.push_back(new dirfrag_t);
-    ls.push_back(new dirfrag_t(1, frag_t()));
-    ls.push_back(new dirfrag_t(2, frag_t(3)));
-  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<dirfrag_t*>& ls);
 
   inodeno_t ino = 0;
   frag_t frag;
@@ -890,18 +846,7 @@ public:
   }
   void dump(ceph::Formatter *f) const;
   void dump(ceph::Formatter *f, const DecayRate& rate) const;
-  void print(std::ostream& out) const {
-    CachedStackStringStream css;
-    *css << std::setprecision(1) << std::fixed
-         << "[pop"
-            " IRD:" << vec[0]
-         << " IWR:" << vec[1]
-         << " RDR:" << vec[2]
-         << " FET:" << vec[3]
-         << " STR:" << vec[4]
-         << " *LOAD:" << meta_load() << "]";
-    out << css->strv();
-  }
+  void print(std::ostream& out) const;
   static void generate_test_instances(std::list<dirfrag_load_vec_t*>& ls);
 
   const DecayCounter &get(int t) const {
@@ -963,14 +908,7 @@ struct mds_load_t {
   mds_load_t() : auth(DecayRate()), all(DecayRate()) {}
   mds_load_t(const DecayRate &rate) : auth(rate), all(rate) {}
 
-  void print(std::ostream& out) const {
-    out << "mdsload<" << auth << "/" << all
-        << ", req " << req_rate
-        << ", hr " << cache_hit_rate
-        << ", qlen " << queue_len
-	<< ", cpu " << cpu_load_avg
-        << ">";
-  }
+  void print(std::ostream& out) const;
 
   double req_rate = 0.0;
   double cache_hit_rate = 0.0;
@@ -1008,16 +946,7 @@ public:
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  void print(std::ostream& out) const {
-    if (ino) {
-      out << ino << "." << snapid;
-    } else if (dname.length()) {
-      out << dirfrag << "/" << dname
-          << " snap " << snapid;
-    } else {
-      out << dirfrag;
-    }
-  }
+  void print(std::ostream& out) const;
   static void generate_test_instances(std::list<MDSCacheObjectInfo*>& ls);
 
   inodeno_t ino = 0;
