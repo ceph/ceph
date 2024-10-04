@@ -500,6 +500,8 @@ set(libcommon_files
   ceph_ver.c
   global/global_context.cc
   xxHash/xxhash.c
+  include/invoke_date.cc
+  include/utime.cc
   common/error_code.cc
   common/tracer.cc
   log/Log.cc
