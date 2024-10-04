@@ -125,6 +125,7 @@ class intrusive_lru {
 
   using lru_list_t = boost::intrusive::list<
     base_t,
+    boost::intrusive::constant_time_size<false>,
     boost::intrusive::member_hook<
       base_t,
       boost::intrusive::list_member_hook<>,
