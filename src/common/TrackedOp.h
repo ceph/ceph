@@ -14,25 +14,11 @@
 #ifndef TRACKEDREQUEST_H_
 #define TRACKEDREQUEST_H_
 
-#include <atomic>
-#include "common/StackStringStream.h"
-#include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
-#include "common/debug.h"
-#include "common/Formatter.h"
-#include "common/histogram.h"
-#include "common/perf_counters.h" // for class PerfCountersBuilder
 #include "common/Thread.h"
 #include "common/Clock.h"
 #include "common/zipkin_trace.h"
 #include "include/spinlock.h"
-#include "msg/Message.h"
-
-#ifdef WITH_CRIMSON
-#include "crimson/common/perf_counters_collection.h"
-#else
-#include "common/perf_counters_collection.h"
-#endif
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive_ptr.hpp>
@@ -44,6 +30,7 @@
 
 #define OPTRACKER_PREALLOC_EVENTS 20
 
+struct pow2_hist_t;
 class TrackedOp;
 class OpHistory;
 
@@ -94,28 +81,8 @@ class OpHistory {
   std::unique_ptr<PerfCounters> logger;
 
 public:
-  OpHistory(CephContext *c) : cct(c), opsvc(this) {
-    PerfCountersBuilder b(cct, "trackedop",
-                         l_trackedop_slow_op_first, l_trackedop_slow_op_last);
-    b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
-
-    b.add_u64_counter(l_trackedop_slow_op_count, "slow_ops_count",
-                      "Number of operations taking over ten second");
-
-    logger.reset(b.create_perf_counters());
-    cct->get_perfcounters_collection()->add(logger.get());
-
-    opsvc.create("OpHistorySvc");
-  }
-  ~OpHistory() {
-    ceph_assert(arrived.empty());
-    ceph_assert(duration.empty());
-    ceph_assert(slow_op.empty());
-    if(logger) {
-      cct->get_perfcounters_collection()->remove(logger.get());
-      logger.reset();
-    }
-  }
+  OpHistory(CephContext *c);
+  ~OpHistory();
   void insert(const utime_t& now, TrackedOpRef op)
   {
     if (shutdown)
@@ -297,10 +264,7 @@ protected:
       return str.c_str();
     }
 
-    void dump(ceph::Formatter *f) const {
-      f->dump_stream("time") << stamp;
-      f->dump_string("event", str);
-    }
+    void dump(ceph::Formatter *f) const;
   };
 
   std::vector<Event> events;    ///< std::list of events and their times
@@ -353,61 +317,9 @@ public:
   void get() {
     ++nref;
   }
-  void put() {
-  again:
-    auto nref_snap = nref.load();
-    if (nref_snap == 1) {
-      switch (state.load()) {
-      case STATE_UNTRACKED:
-	_unregistered();
-	delete this;
-	break;
+  void put();
 
-      case STATE_LIVE:
-	mark_event("done");
-	tracker->unregister_inflight_op(this);
-	_unregistered();
-	if (!tracker->is_tracking()) {
-	  delete this;
-	} else {
-	  state = TrackedOp::STATE_HISTORY;
-	  tracker->record_history_op(
-	    TrackedOpRef(this, /* add_ref = */ false));
-	}
-	break;
-
-      case STATE_HISTORY:
-	delete this;
-	break;
-
-      default:
-	ceph_abort();
-      }
-    } else if (!nref.compare_exchange_weak(nref_snap, nref_snap - 1)) {
-      goto again;
-    }
-  }
-
-  std::string get_desc() const {
-    std::string ret;
-    {
-      std::lock_guard l(desc_lock);
-      ret = desc;
-    }
-    if (ret.size() == 0 || want_new_desc.load()) {
-      CachedStackStringStream css;
-      std::scoped_lock l(lock, desc_lock);
-      if (desc.size() && !want_new_desc.load()) {
-        return desc;
-      }
-      _dump_op_descriptor(*css);
-      desc = css->strv();
-      want_new_desc = false;
-      return desc;
-    } else {
-      return ret;
-    }
-  }
+  std::string get_desc() const;
 
 private:
   mutable ceph::mutex desc_lock = ceph::make_mutex("OpTracker::desc_lock");

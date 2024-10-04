@@ -11,6 +11,17 @@
  */
 
 #include "TrackedOp.h"
+#include "common/debug.h"
+#include "common/histogram.h"
+#include "common/Formatter.h"
+#include "common/perf_counters.h" // for class PerfCountersBuilder
+#include "common/StackStringStream.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #include <shared_mutex> // for std::shared_lock
 #include <sstream>
@@ -71,6 +82,29 @@ void* OpHistoryServiceThread::entry() {
   return nullptr;
 }
 
+OpHistory::OpHistory(CephContext *c) : cct(c), opsvc(this) {
+  PerfCountersBuilder b(cct, "trackedop",
+                             l_trackedop_slow_op_first, l_trackedop_slow_op_last);
+  b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+
+  b.add_u64_counter(l_trackedop_slow_op_count, "slow_ops_count",
+					       "Number of operations taking over ten second");
+
+  logger.reset(b.create_perf_counters());
+  cct->get_perfcounters_collection()->add(logger.get());
+
+  opsvc.create("OpHistorySvc");
+}
+
+OpHistory::~OpHistory() {
+  ceph_assert(arrived.empty());
+  ceph_assert(duration.empty());
+  ceph_assert(slow_op.empty());
+  if(logger) {
+    cct->get_perfcounters_collection()->remove(logger.get());
+    logger.reset();
+  }
+}
 
 void OpHistory::on_shutdown()
 {
@@ -484,6 +518,67 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 
 #undef dout_context
 #define dout_context tracker->cct
+
+void TrackedOp::Event::dump(ceph::Formatter *f) const {
+  f->dump_stream("time") << stamp;
+  f->dump_string("event", str);
+}
+
+void TrackedOp::put() {
+  again:
+    auto nref_snap = nref.load();
+  if (nref_snap == 1) {
+    switch (state.load()) {
+    case STATE_UNTRACKED:
+      _unregistered();
+      delete this;
+      break;
+
+    case STATE_LIVE:
+      mark_event("done");
+      tracker->unregister_inflight_op(this);
+      _unregistered();
+      if (!tracker->is_tracking()) {
+	delete this;
+      } else {
+	state = TrackedOp::STATE_HISTORY;
+	tracker->record_history_op(
+	  TrackedOpRef(this, /* add_ref = */ false));
+      }
+      break;
+
+    case STATE_HISTORY:
+      delete this;
+      break;
+
+    default:
+      ceph_abort();
+    }
+  } else if (!nref.compare_exchange_weak(nref_snap, nref_snap - 1)) {
+    goto again;
+  }
+}
+
+std::string TrackedOp::get_desc() const {
+  std::string ret;
+  {
+    std::lock_guard l(desc_lock);
+    ret = desc;
+  }
+  if (ret.size() == 0 || want_new_desc.load()) {
+    CachedStackStringStream css;
+    std::scoped_lock l(lock, desc_lock);
+    if (desc.size() && !want_new_desc.load()) {
+      return desc;
+    }
+    _dump_op_descriptor(*css);
+    desc = css->strv();
+    want_new_desc = false;
+    return desc;
+  } else {
+    return ret;
+  }
+}
 
 void TrackedOp::mark_event(std::string_view event, utime_t stamp)
 {
