@@ -8,6 +8,12 @@ After=docker.service
 Wants=docker.service
 {%- endif %}
 After={{ primary.service_name }}
+{%- if has_init_containers %}
+# Do not start sidecars unless init containers were successfully run. Without
+# this systemd starts them up anyway regardless of if the primary was started.
+Requires={{ primary.init_service_name }}
+{%- endif %}
+
 
 PartOf=ceph-{{ sidecar.fsid }}.target
 Before=ceph-{{ sidecar.fsid }}.target

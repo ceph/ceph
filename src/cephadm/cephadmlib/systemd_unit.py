@@ -82,6 +82,7 @@ def _write_sidecar_unit_file(
     ctx: CephadmContext,
     primary: DaemonIdentity,
     sidecar: DaemonSubIdentity,
+    has_init_containers: bool,
 ) -> None:
     has_docker_engine = isinstance(ctx.container_engine, Docker)
     has_podman_engine = isinstance(ctx.container_engine, Podman)
@@ -97,6 +98,7 @@ def _write_sidecar_unit_file(
         has_podman_split_version=(
             has_podman_engine and ctx.container_engine.supports_split_cgroups
         ),
+        has_init_containers=has_init_containers,
     )
 
 
@@ -121,7 +123,9 @@ def _install_extended_systemd_services(
         sids = []
         for si, sup in pinfo.sidecar_unit_files.items():
             sufh = estack.enter_context(write_new(sup, perms=None))
-            _write_sidecar_unit_file(sufh, ctx, identity, si)
+            _write_sidecar_unit_file(
+                sufh, ctx, identity, si, enable_init_containers
+            )
             sids.append(si)
 
         # create a drop-in to create a relationship between the primary
