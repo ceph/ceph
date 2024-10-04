@@ -18,8 +18,6 @@
 #include <atomic>
 #include <string_view>
 
-#include <boost/asio/io_context.hpp>
-
 #include "common/DecayCounter.h"
 #include "common/LogClient.h"
 #include "common/Timer.h"
@@ -49,6 +47,8 @@
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
 #include "common/perf_counters.h"
+
+namespace boost::asio { class io_context; }
 
 enum {
   l_mds_first = 2000,
