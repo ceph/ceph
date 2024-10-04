@@ -3,6 +3,7 @@
 #include "common/perf_counters.h"
 #include "common/ceph_context.h"
 #include "common/intrusive_lru.h"
+#include "include/utime.h"
 
 namespace ceph::perf_counters {
 
