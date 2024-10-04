@@ -962,15 +962,13 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
     // move items nested beneath me, under me.
     set<CDir*>::iterator p = subtrees[root].begin();
     while (p != subtrees[root].end()) {
-      set<CDir*>::iterator next = p;
-      ++next;
       if (get_subtree_root((*p)->get_parent_dir()) == dir) {
 	// move under me
 	dout(10) << "  claiming child bound " << **p << dendl;
 	subtrees[dir].insert(*p); 
-	subtrees[root].erase(p);
-      }
-      p = next;
+	p = subtrees[root].erase(p);
+      } else
+	++p;
     }
     
     // i am a bound of the parent subtree.
@@ -1115,15 +1113,13 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, const set<CDir*>& bounds, m
     // move items nested beneath me, under me.
     set<CDir*>::iterator p = subtrees[root].begin();
     while (p != subtrees[root].end()) {
-      set<CDir*>::iterator next = p;
-      ++next;
       if (get_subtree_root((*p)->get_parent_dir()) == dir) {
 	// move under me
 	dout(10) << "  claiming child bound " << **p << dendl;
 	subtrees[dir].insert(*p); 
-	subtrees[root].erase(p);
-      }
-      p = next;
+	p = subtrees[root].erase(p);
+      } else
+	++p;
     }
     
     // i am a bound of the parent subtree.
@@ -3089,18 +3085,17 @@ void MDCache::handle_mds_failure(mds_rank_t who)
       if (info.notify_ack_waiting.erase(who) &&
 	  info.notify_ack_waiting.empty()) {
 	fragment_drop_locks(info);
-	fragment_maybe_finish(p++);
+	p = fragment_maybe_finish(p);
       } else {
 	++p;
       }
       continue;
     }
 
-    ++p;
     dout(10) << "cancelling fragment " << df << " bit " << info.bits << dendl;
     std::vector<CDir*> dirs;
     info.dirs.swap(dirs);
-    fragments.erase(df);
+    p = fragments.erase(p);
     fragment_unmark_unfreeze_dirs(dirs);
   }
 
@@ -3285,8 +3280,6 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
     // check for any import success/failure (from this node)
     map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
     while (p != my_ambiguous_imports.end()) {
-      map<dirfrag_t, vector<dirfrag_t> >::iterator next = p;
-      ++next;
       CDir *dir = get_dirfrag(p->first);
       ceph_assert(dir);
       dout(10) << "checking ambiguous import " << *dir << dendl;
@@ -3316,7 +3309,7 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
 	    claimed_by_sender = true;
 	}
 
-	my_ambiguous_imports.erase(p);  // no longer ambiguous.
+	p = my_ambiguous_imports.erase(p);  // no longer ambiguous.
 	if (claimed_by_sender) {
 	  dout(7) << "ambiguous import failed on " << *dir << dendl;
 	  migrator->import_reverse(dir);
@@ -3324,8 +3317,8 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
 	  dout(7) << "ambiguous import succeeded on " << *dir << dendl;
 	  migrator->import_finish(dir, true);
 	}
-      }
-      p = next;
+      } else
+	++p;
     }
   }    
 
@@ -4079,7 +4072,7 @@ void MDCache::rejoin_send_rejoins()
 	  ++q;
 	} else {
 	  // remove reconnect with no session
-	  p.second.second.erase(q++);
+	  q = p.second.second.erase(q);
 	}
       }
       rejoins[target]->cap_exports[p.first] = p.second.second;
@@ -5568,7 +5561,7 @@ bool MDCache::process_imported_caps()
 	  }
 	}
       }
-      cap_imports.erase(p++);  // remove and move on
+      p = cap_imports.erase(p);  // remove and move on
     }
   } else {
     trim_non_auth();
@@ -5956,7 +5949,7 @@ void MDCache::open_snaprealms()
       }
     }
 
-    rejoin_pending_snaprealms.erase(it++);
+    it = rejoin_pending_snaprealms.erase(it);
     in->put(CInode::PIN_OPENINGSNAPPARENTS);
 
     send_snaps(splits);
@@ -11631,7 +11624,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 	set<CDir*>::iterator r = q->second.begin();
 	while (r != subtrees[dir].end()) {
 	  new_bounds.insert(*r);
-	  subtrees[dir].erase(r++);
+	  r = subtrees[dir].erase(r);
 	}
 	subtrees.erase(q);
 
@@ -12402,12 +12395,12 @@ void MDCache::fragment_drop_locks(fragment_info_t& info)
   //info.mdr.reset();
 }
 
-void MDCache::fragment_maybe_finish(const fragment_info_iterator it)
+MDCache::fragment_info_iterator MDCache::fragment_maybe_finish(const fragment_info_iterator it)
 {
   ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_MAYBE_FINISH);
 
   if (!it->second.finishing)
-    return;
+    return it;
 
   // unmark & auth_unpin
   for (const auto &dir : it->second.resultfrags) {
@@ -12421,7 +12414,7 @@ void MDCache::fragment_maybe_finish(const fragment_info_iterator it)
     mds->balancer->maybe_fragment(dir, false);
   }
 
-  fragments.erase(it);
+  return fragments.erase(it);
 }
 
 
