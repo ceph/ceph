@@ -1393,7 +1393,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     for (auto& [c, ec] : p->second) {
       asio::post(service.get_executor(), asio::append(std::move(c), ec));
     }
-    waiting_for_map.erase(p++);
+    p = waiting_for_map.erase(p);
   }
 
   monc->sub_got("osdmap", osdmap->get_epoch());
