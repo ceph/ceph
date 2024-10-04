@@ -14,11 +14,27 @@
 
 #include "common/entity_name.h"
 #include "common/ceph_strings.h"
+#include "common/Formatter.h"
+#include "msg/msg_types.h"
 
 #include <sstream>
 
 using std::string;
 
+void EntityName::encode(ceph::buffer::list& bl) const {
+  using ceph::encode;
+  encode(type, bl);
+  encode(id, bl);
+}
+
+void EntityName::decode(ceph::buffer::list::const_iterator& bl) {
+  using ceph::decode;
+  uint32_t type_;
+  std::string id_;
+  decode(type_, bl);
+  decode(id_, bl);
+  set(type_, id_);
+}
 
 const std::array<EntityName::str_to_entity_type_t, 6> EntityName::STR_TO_ENTITY_TYPE = {{
   { CEPH_ENTITY_TYPE_AUTH, "auth" },
