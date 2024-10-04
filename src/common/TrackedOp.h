@@ -243,6 +243,7 @@ private:
 public:
   typedef boost::intrusive::list<
   TrackedOp,
+  boost::intrusive::constant_time_size<false>,
   boost::intrusive::member_hook<
     TrackedOp,
     boost::intrusive::list_member_hook<>,
