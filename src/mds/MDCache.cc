@@ -12402,7 +12402,7 @@ void MDCache::fragment_drop_locks(fragment_info_t& info)
   //info.mdr.reset();
 }
 
-void MDCache::fragment_maybe_finish(const fragment_info_iterator& it)
+void MDCache::fragment_maybe_finish(const fragment_info_iterator it)
 {
   ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_MAYBE_FINISH);
 
