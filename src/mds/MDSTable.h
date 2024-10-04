@@ -15,11 +15,16 @@
 #ifndef CEPH_MDSTABLE_H
 #define CEPH_MDSTABLE_H
 
-#include "mdstypes.h"
-#include "mds_table_types.h"
 #include "include/buffer_fwd.h"
+#include "include/types.h" // for version_t
+#include "include/cephfs/types.h" // for mds_rank_t
 
 #include "MDSContext.h"
+
+#include <map>
+#include <string>
+#include <string_view>
+#include <vector>
 
 class MDSRank;
 
