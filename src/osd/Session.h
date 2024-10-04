@@ -136,7 +136,7 @@ struct Session : public RefCountedObject {
 
   ceph::mutex session_dispatch_lock =
     ceph::make_mutex("Session::session_dispatch_lock");
-  boost::intrusive::list<OpRequest> waiting_on_map;
+  boost::intrusive::list<OpRequest, boost::intrusive::constant_time_size<false>> waiting_on_map;
 
   ceph::spinlock projected_epoch_lock;
   epoch_t projected_epoch = 0;
