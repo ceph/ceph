@@ -28,6 +28,8 @@
 #include "include/encoding.h" // for WRITE_CLASS_ENCODER()
 #include "include/rados.h" // for struct ceph_timespec
 
+#include <iosfwd>
+
 namespace ceph { class Formatter; }
 
 // --------
@@ -240,128 +242,15 @@ public:
   }
 
   // output
-  std::ostream& gmtime(std::ostream& out, bool legacy_form=false) const {
-    out.setf(std::ios::right);
-    char oldfill = out.fill();
-    out.fill('0');
-    if (sec() < ((time_t)(60*60*24*365*10))) {
-      // raw seconds.  this looks like a relative time.
-      out << (long)sec() << "." << std::setw(6) << usec();
-    } else {
-      // this looks like an absolute time.
-      //  conform to http://en.wikipedia.org/wiki/ISO_8601
-      struct tm bdt;
-      time_t tt = sec();
-      gmtime_r(&tt, &bdt);
-      out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
-	  << '-' << std::setw(2) << (bdt.tm_mon+1)
-	  << '-' << std::setw(2) << bdt.tm_mday;
-      if (legacy_form) {
-	out << ' ';
-      } else {
-	out << 'T';
-      }
-      out << std::setw(2) << bdt.tm_hour
-	  << ':' << std::setw(2) << bdt.tm_min
-	  << ':' << std::setw(2) << bdt.tm_sec;
-      out << "." << std::setw(6) << usec();
-      out << "Z";
-    }
-    out.fill(oldfill);
-    out.unsetf(std::ios::right);
-    return out;
-  }
+  std::ostream& gmtime(std::ostream& out, bool legacy_form=false) const;
 
   // output
-  std::ostream& gmtime_nsec(std::ostream& out) const {
-    out.setf(std::ios::right);
-    char oldfill = out.fill();
-    out.fill('0');
-    if (sec() < ((time_t)(60*60*24*365*10))) {
-      // raw seconds.  this looks like a relative time.
-      out << (long)sec() << "." << std::setw(6) << usec();
-    } else {
-      // this looks like an absolute time.
-      //  conform to http://en.wikipedia.org/wiki/ISO_8601
-      struct tm bdt;
-      time_t tt = sec();
-      gmtime_r(&tt, &bdt);
-      out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
-	  << '-' << std::setw(2) << (bdt.tm_mon+1)
-	  << '-' << std::setw(2) << bdt.tm_mday
-	  << 'T'
-	  << std::setw(2) << bdt.tm_hour
-	  << ':' << std::setw(2) << bdt.tm_min
-	  << ':' << std::setw(2) << bdt.tm_sec;
-      out << "." << std::setw(9) << nsec();
-      out << "Z";
-    }
-    out.fill(oldfill);
-    out.unsetf(std::ios::right);
-    return out;
-  }
+  std::ostream& gmtime_nsec(std::ostream& out) const;
 
   // output
-  std::ostream& asctime(std::ostream& out) const {
-    out.setf(std::ios::right);
-    char oldfill = out.fill();
-    out.fill('0');
-    if (sec() < ((time_t)(60*60*24*365*10))) {
-      // raw seconds.  this looks like a relative time.
-      out << (long)sec() << "." << std::setw(6) << usec();
-    } else {
-      // this looks like an absolute time.
-      struct tm bdt;
-      time_t tt = sec();
-      gmtime_r(&tt, &bdt);
+  std::ostream& asctime(std::ostream& out) const;
 
-      char buf[128];
-      asctime_r(&bdt, buf);
-      int len = strlen(buf);
-      if (buf[len - 1] == '\n')
-        buf[len - 1] = '\0';
-      out << buf;
-    }
-    out.fill(oldfill);
-    out.unsetf(std::ios::right);
-    return out;
-  }
-
-  std::ostream& localtime(std::ostream& out, bool legacy_form=false) const {
-    out.setf(std::ios::right);
-    char oldfill = out.fill();
-    out.fill('0');
-    if (sec() < ((time_t)(60*60*24*365*10))) {
-      // raw seconds.  this looks like a relative time.
-      out << (long)sec() << "." << std::setw(6) << usec();
-    } else {
-      // this looks like an absolute time.
-      //  conform to http://en.wikipedia.org/wiki/ISO_8601
-      struct tm bdt;
-      time_t tt = sec();
-      localtime_r(&tt, &bdt);
-      out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
-	  << '-' << std::setw(2) << (bdt.tm_mon+1)
-	  << '-' << std::setw(2) << bdt.tm_mday;
-      if (legacy_form) {
-	out << ' ';
-      } else {
-	out << 'T';
-      }
-      out << std::setw(2) << bdt.tm_hour
-	  << ':' << std::setw(2) << bdt.tm_min
-	  << ':' << std::setw(2) << bdt.tm_sec;
-      out << "." << std::setw(6) << usec();
-      if (!legacy_form) {
-	char buf[32] = { 0 };
-	strftime(buf, sizeof(buf), "%z", &bdt);
-	out << buf;
-      }
-    }
-    out.fill(oldfill);
-    out.unsetf(std::ios::right);
-    return out;
-  }
+  std::ostream& localtime(std::ostream& out, bool legacy_form=false) const;
 
   static int invoke_date(const std::string& date_str, utime_t *result);
 
