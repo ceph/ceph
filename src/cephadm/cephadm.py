@@ -3469,199 +3469,202 @@ def list_daemons(
     )
     seen_cpuperc_cid_len, seen_cpuperc = _parse_cpu_perc(code, out)
 
-    # /var/lib/ceph
-    if os.path.exists(data_dir):
-        for i in os.listdir(data_dir):
-            if i in ['mon', 'osd', 'mds', 'mgr', 'rgw']:
-                daemon_type = i
-                for j in os.listdir(os.path.join(data_dir, i)):
-                    if '-' not in j:
-                        continue
-                    (cluster, daemon_id) = j.split('-', 1)
-                    fsid = get_legacy_daemon_fsid(ctx,
-                                                  cluster, daemon_type, daemon_id,
-                                                  legacy_dir=legacy_dir)
-                    legacy_unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
-                    val: Dict[str, Any] = {
-                        'style': 'legacy',
-                        'name': '%s.%s' % (daemon_type, daemon_id),
-                        'fsid': fsid if fsid is not None else 'unknown',
-                        'systemd_unit': legacy_unit_name,
-                    }
-                    if detail:
-                        (val['enabled'], val['state'], _) = check_unit(ctx, legacy_unit_name)
-                        if not host_version:
-                            try:
-                                out, err, code = call(ctx,
-                                                      ['ceph', '-v'],
-                                                      verbosity=CallVerbosity.QUIET)
-                                if not code and out.startswith('ceph version '):
-                                    host_version = out.split(' ')[2]
-                            except Exception:
-                                pass
-                        val['host_version'] = host_version
-                    ls.append(val)
-            elif is_fsid(i):
-                fsid = str(i)  # convince mypy that fsid is a str here
-                for j in os.listdir(os.path.join(data_dir, i)):
-                    if '.' in j and os.path.isdir(os.path.join(data_dir, fsid, j)):
-                        name = j
-                        if daemon_name and name != daemon_name:
-                            continue
-                        (daemon_type, daemon_id) = j.split('.', 1)
-                        unit_name = get_unit_name(fsid,
-                                                  daemon_type,
-                                                  daemon_id)
-                    else:
-                        continue
-                    val = {
-                        'style': 'cephadm:v1',
-                        'name': name,
-                        'fsid': fsid,
-                        'systemd_unit': unit_name,
-                    }
-                    if detail:
-                        # get container id
-                        (val['enabled'], val['state'], _) = check_unit(ctx, unit_name)
-                        container_id = None
-                        image_name = None
-                        image_id = None
-                        image_digests = None
-                        version = None
-                        start_stamp = None
+    if not os.path.exists(data_dir):
+        # data_dir (/var/lib/ceph typically) is missing. Return empty list.
+        logger.warning('%s is missing: no daemon listing available', data_dir)
+        return []
 
-                        out, err, code = get_container_stats(ctx, container_path, fsid, daemon_type, daemon_id)
-                        if not code:
-                            (container_id, image_name, image_id, start,
-                             version) = out.strip().split(',')
-                            image_id = normalize_container_id(image_id)
-                            daemon_type = name.split('.', 1)[0]
-                            start_stamp = try_convert_datetime(start)
-
-                            # collect digests for this image id
-                            image_digests = seen_digests.get(image_id)
-                            if not image_digests:
-                                out, err, code = call(
-                                    ctx,
-                                    [
-                                        container_path, 'image', 'inspect', image_id,
-                                        '--format', '{{.RepoDigests}}',
-                                    ],
-                                    verbosity=CallVerbosity.QUIET)
-                                if not code:
-                                    image_digests = list(set(map(
-                                        normalize_image_digest,
-                                        out.strip()[1:-1].split(' '))))
-                                    seen_digests[image_id] = image_digests
-
-                            # identify software version inside the container (if we can)
-                            if not version or '.' not in version:
-                                version = seen_versions.get(image_id, None)
-                            if daemon_type == NFSGanesha.daemon_type:
-                                version = NFSGanesha.get_version(ctx, container_id)
-                            if daemon_type == CephIscsi.daemon_type:
-                                version = CephIscsi.get_version(ctx, container_id)
-                            if daemon_type == CephNvmeof.daemon_type:
-                                version = CephNvmeof.get_version(ctx, container_id)
-                            if daemon_type == SMB.daemon_type:
-                                version = SMB.get_version(ctx, container_id)
-                            elif not version:
-                                if daemon_type in ceph_daemons():
-                                    out, err, code = call(ctx,
-                                                          [container_path, 'exec', container_id,
-                                                           'ceph', '-v'],
-                                                          verbosity=CallVerbosity.QUIET)
-                                    if not code and \
-                                       out.startswith('ceph version '):
-                                        version = out.split(' ')[2]
-                                        seen_versions[image_id] = version
-                                elif daemon_type == 'grafana':
-                                    out, err, code = call(ctx,
-                                                          [container_path, 'exec', container_id,
-                                                           'grafana', 'server', '-v'],
-                                                          verbosity=CallVerbosity.QUIET)
-                                    if not code and \
-                                       out.startswith('Version '):
-                                        version = out.split(' ')[1]
-                                        seen_versions[image_id] = version
-                                elif daemon_type in ['prometheus',
-                                                     'alertmanager',
-                                                     'node-exporter',
-                                                     'loki',
-                                                     'promtail']:
-                                    version = Monitoring.get_version(ctx, container_id, daemon_type)
-                                    seen_versions[image_id] = version
-                                elif daemon_type == 'haproxy':
-                                    out, err, code = call(ctx,
-                                                          [container_path, 'exec', container_id,
-                                                           'haproxy', '-v'],
-                                                          verbosity=CallVerbosity.QUIET)
-                                    if not code and \
-                                       out.startswith('HA-Proxy version ') or \
-                                       out.startswith('HAProxy version '):
-                                        version = out.split(' ')[2]
-                                        seen_versions[image_id] = version
-                                elif daemon_type == 'keepalived':
-                                    out, err, code = call(ctx,
-                                                          [container_path, 'exec', container_id,
-                                                           'keepalived', '--version'],
-                                                          verbosity=CallVerbosity.QUIET)
-                                    if not code and \
-                                       err.startswith('Keepalived '):
-                                        version = err.split(' ')[1]
-                                        if version[0] == 'v':
-                                            version = version[1:]
-                                        seen_versions[image_id] = version
-                                elif daemon_type == CustomContainer.daemon_type:
-                                    # Because a custom container can contain
-                                    # everything, we do not know which command
-                                    # to execute to get the version.
-                                    pass
-                                elif daemon_type == SNMPGateway.daemon_type:
-                                    version = SNMPGateway.get_version(ctx, fsid, daemon_id)
-                                    seen_versions[image_id] = version
-                                elif daemon_type == MgmtGateway.daemon_type:
-                                    version = MgmtGateway.get_version(ctx, container_id)
-                                    seen_versions[image_id] = version
-                                elif daemon_type == OAuth2Proxy.daemon_type:
-                                    version = OAuth2Proxy.get_version(ctx, container_id)
-                                    seen_versions[image_id] = version
-                                else:
-                                    logger.warning('version for unknown daemon type %s' % daemon_type)
-                        else:
-                            vfile = os.path.join(data_dir, fsid, j, 'unit.image')  # type: ignore
-                            try:
-                                with open(vfile, 'r') as f:
-                                    image_name = f.read().strip() or None
-                            except IOError:
-                                pass
-
-                        # unit.meta?
-                        mfile = os.path.join(data_dir, fsid, j, 'unit.meta')  # type: ignore
+    for i in os.listdir(data_dir):
+        if i in ['mon', 'osd', 'mds', 'mgr', 'rgw']:
+            daemon_type = i
+            for j in os.listdir(os.path.join(data_dir, i)):
+                if '-' not in j:
+                    continue
+                (cluster, daemon_id) = j.split('-', 1)
+                fsid = get_legacy_daemon_fsid(ctx,
+                                              cluster, daemon_type, daemon_id,
+                                              legacy_dir=legacy_dir)
+                legacy_unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
+                val: Dict[str, Any] = {
+                    'style': 'legacy',
+                    'name': '%s.%s' % (daemon_type, daemon_id),
+                    'fsid': fsid if fsid is not None else 'unknown',
+                    'systemd_unit': legacy_unit_name,
+                }
+                if detail:
+                    (val['enabled'], val['state'], _) = check_unit(ctx, legacy_unit_name)
+                    if not host_version:
                         try:
-                            with open(mfile, 'r') as f:
-                                meta = json.loads(f.read())
-                                val.update(meta)
+                            out, err, code = call(ctx,
+                                                  ['ceph', '-v'],
+                                                  verbosity=CallVerbosity.QUIET)
+                            if not code and out.startswith('ceph version '):
+                                host_version = out.split(' ')[2]
+                        except Exception:
+                            pass
+                    val['host_version'] = host_version
+                ls.append(val)
+        elif is_fsid(i):
+            fsid = str(i)  # convince mypy that fsid is a str here
+            for j in os.listdir(os.path.join(data_dir, i)):
+                if '.' in j and os.path.isdir(os.path.join(data_dir, fsid, j)):
+                    name = j
+                    if daemon_name and name != daemon_name:
+                        continue
+                    (daemon_type, daemon_id) = j.split('.', 1)
+                    unit_name = get_unit_name(fsid,
+                                              daemon_type,
+                                              daemon_id)
+                else:
+                    continue
+                val = {
+                    'style': 'cephadm:v1',
+                    'name': name,
+                    'fsid': fsid,
+                    'systemd_unit': unit_name,
+                }
+                if detail:
+                    # get container id
+                    (val['enabled'], val['state'], _) = check_unit(ctx, unit_name)
+                    container_id = None
+                    image_name = None
+                    image_id = None
+                    image_digests = None
+                    version = None
+                    start_stamp = None
+
+                    out, err, code = get_container_stats(ctx, container_path, fsid, daemon_type, daemon_id)
+                    if not code:
+                        (container_id, image_name, image_id, start,
+                         version) = out.strip().split(',')
+                        image_id = normalize_container_id(image_id)
+                        daemon_type = name.split('.', 1)[0]
+                        start_stamp = try_convert_datetime(start)
+
+                        # collect digests for this image id
+                        image_digests = seen_digests.get(image_id)
+                        if not image_digests:
+                            out, err, code = call(
+                                ctx,
+                                [
+                                    container_path, 'image', 'inspect', image_id,
+                                    '--format', '{{.RepoDigests}}',
+                                ],
+                                verbosity=CallVerbosity.QUIET)
+                            if not code:
+                                image_digests = list(set(map(
+                                    normalize_image_digest,
+                                    out.strip()[1:-1].split(' '))))
+                                seen_digests[image_id] = image_digests
+
+                        # identify software version inside the container (if we can)
+                        if not version or '.' not in version:
+                            version = seen_versions.get(image_id, None)
+                        if daemon_type == NFSGanesha.daemon_type:
+                            version = NFSGanesha.get_version(ctx, container_id)
+                        if daemon_type == CephIscsi.daemon_type:
+                            version = CephIscsi.get_version(ctx, container_id)
+                        if daemon_type == CephNvmeof.daemon_type:
+                            version = CephNvmeof.get_version(ctx, container_id)
+                        if daemon_type == SMB.daemon_type:
+                            version = SMB.get_version(ctx, container_id)
+                        elif not version:
+                            if daemon_type in ceph_daemons():
+                                out, err, code = call(ctx,
+                                                      [container_path, 'exec', container_id,
+                                                       'ceph', '-v'],
+                                                      verbosity=CallVerbosity.QUIET)
+                                if not code and \
+                                   out.startswith('ceph version '):
+                                    version = out.split(' ')[2]
+                                    seen_versions[image_id] = version
+                            elif daemon_type == 'grafana':
+                                out, err, code = call(ctx,
+                                                      [container_path, 'exec', container_id,
+                                                       'grafana', 'server', '-v'],
+                                                      verbosity=CallVerbosity.QUIET)
+                                if not code and \
+                                   out.startswith('Version '):
+                                    version = out.split(' ')[1]
+                                    seen_versions[image_id] = version
+                            elif daemon_type in ['prometheus',
+                                                 'alertmanager',
+                                                 'node-exporter',
+                                                 'loki',
+                                                 'promtail']:
+                                version = Monitoring.get_version(ctx, container_id, daemon_type)
+                                seen_versions[image_id] = version
+                            elif daemon_type == 'haproxy':
+                                out, err, code = call(ctx,
+                                                      [container_path, 'exec', container_id,
+                                                       'haproxy', '-v'],
+                                                      verbosity=CallVerbosity.QUIET)
+                                if not code and \
+                                   out.startswith('HA-Proxy version ') or \
+                                   out.startswith('HAProxy version '):
+                                    version = out.split(' ')[2]
+                                    seen_versions[image_id] = version
+                            elif daemon_type == 'keepalived':
+                                out, err, code = call(ctx,
+                                                      [container_path, 'exec', container_id,
+                                                       'keepalived', '--version'],
+                                                      verbosity=CallVerbosity.QUIET)
+                                if not code and \
+                                   err.startswith('Keepalived '):
+                                    version = err.split(' ')[1]
+                                    if version[0] == 'v':
+                                        version = version[1:]
+                                    seen_versions[image_id] = version
+                            elif daemon_type == CustomContainer.daemon_type:
+                                # Because a custom container can contain
+                                # everything, we do not know which command
+                                # to execute to get the version.
+                                pass
+                            elif daemon_type == SNMPGateway.daemon_type:
+                                version = SNMPGateway.get_version(ctx, fsid, daemon_id)
+                                seen_versions[image_id] = version
+                            elif daemon_type == MgmtGateway.daemon_type:
+                                version = MgmtGateway.get_version(ctx, container_id)
+                                seen_versions[image_id] = version
+                            elif daemon_type == OAuth2Proxy.daemon_type:
+                                version = OAuth2Proxy.get_version(ctx, container_id)
+                                seen_versions[image_id] = version
+                            else:
+                                logger.warning('version for unknown daemon type %s' % daemon_type)
+                    else:
+                        vfile = os.path.join(data_dir, fsid, j, 'unit.image')  # type: ignore
+                        try:
+                            with open(vfile, 'r') as f:
+                                image_name = f.read().strip() or None
                         except IOError:
                             pass
 
-                        val['container_id'] = container_id
-                        val['container_image_name'] = image_name
-                        val['container_image_id'] = image_id
-                        val['container_image_digests'] = image_digests
-                        if container_id:
-                            val['memory_usage'] = seen_memusage.get(container_id[0:seen_memusage_cid_len])
-                            val['cpu_percentage'] = seen_cpuperc.get(container_id[0:seen_cpuperc_cid_len])
-                        val['version'] = version
-                        val['started'] = start_stamp
-                        val['created'] = get_file_timestamp(
-                            os.path.join(data_dir, fsid, j, 'unit.created')
-                        )
-                        val['deployed'] = get_file_timestamp(
-                            os.path.join(data_dir, fsid, j, 'unit.image'))
-                        val['configured'] = get_file_timestamp(
-                            os.path.join(data_dir, fsid, j, 'unit.configured'))
-                    ls.append(val)
+                    # unit.meta?
+                    mfile = os.path.join(data_dir, fsid, j, 'unit.meta')  # type: ignore
+                    try:
+                        with open(mfile, 'r') as f:
+                            meta = json.loads(f.read())
+                            val.update(meta)
+                    except IOError:
+                        pass
+
+                    val['container_id'] = container_id
+                    val['container_image_name'] = image_name
+                    val['container_image_id'] = image_id
+                    val['container_image_digests'] = image_digests
+                    if container_id:
+                        val['memory_usage'] = seen_memusage.get(container_id[0:seen_memusage_cid_len])
+                        val['cpu_percentage'] = seen_cpuperc.get(container_id[0:seen_cpuperc_cid_len])
+                    val['version'] = version
+                    val['started'] = start_stamp
+                    val['created'] = get_file_timestamp(
+                        os.path.join(data_dir, fsid, j, 'unit.created')
+                    )
+                    val['deployed'] = get_file_timestamp(
+                        os.path.join(data_dir, fsid, j, 'unit.image'))
+                    val['configured'] = get_file_timestamp(
+                        os.path.join(data_dir, fsid, j, 'unit.configured'))
+                ls.append(val)
 
     return ls
 
