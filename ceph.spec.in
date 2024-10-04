@@ -417,9 +417,9 @@ BuildRequires:	python%{python3_pkgversion}-scipy
 BuildRequires:	python%{python3_pkgversion}-werkzeug
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 %endif
+BuildRequires:	jsonnet
 %if 0%{?suse_version}
 BuildRequires:	golang-github-prometheus-prometheus
-BuildRequires:	jsonnet
 BuildRequires:	libxmlsec1-1
 BuildRequires:	libxmlsec1-nss1
 BuildRequires:	libxmlsec1-openssl1
