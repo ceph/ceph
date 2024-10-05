@@ -999,3 +999,197 @@ TYPED_TEST(IntervalSetTest, insert) {
     ASSERT_TRUE(iset2.empty());
   }
 }
+
+TYPED_TEST(IntervalSetTest, erase)
+{
+  typedef typename TestFixture::ISet ISet;
+  // erase before miss by 1
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(4, 4);
+    iset1.erase(1, 2);
+    iset2.insert(4, 4);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase before miss by 0
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.erase(1, 2);
+    iset2.insert(3, 4);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase overlapping start by 1
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.erase(1, 3);
+    iset2.insert(4, 3);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase overlapping start by 2
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.erase(1, 4);
+    iset2.insert(5, 2);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase overlapping to end
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.erase(1, 6);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase overlapping past end
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.erase(1, 7);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase middle (split)
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.erase(4, 2);
+    iset2.insert(3, 1);
+    iset2.insert(6, 1);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase overlap end
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.erase(4, 3);
+    iset2.insert(3, 1);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase overlap end + 1
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.erase(4, 4);
+    iset2.insert(3, 1);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase after
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.erase(7, 1);
+    iset2.insert(3, 4);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase after + 1
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.erase(8, 1);
+    iset2.insert(3, 4);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase between
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.insert(10, 4);
+    iset1.erase(8, 1);
+    iset2.insert(3, 4);
+    iset2.insert(10, 4);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase multiple
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 4);
+    iset1.insert(10, 4);
+    iset1.erase(3, 11);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase many
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(3, 1);
+    iset1.insert(5, 1);
+    iset1.insert(7, 1);
+    iset1.insert(9, 1);
+    iset1.erase(2, 9);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase many with border
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(1, 1);
+    iset1.insert(3, 1);
+    iset1.insert(5, 1);
+    iset1.insert(7, 1);
+    iset1.insert(9, 1);
+    iset1.erase(2, 6);
+    iset2.insert(1, 1);
+    iset2.insert(9, 1);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+
+  // erase many splitting begin and end
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(1, 1);
+    iset1.insert(3, 4);
+    iset1.insert(8, 1);
+    iset1.insert(10, 1);
+    iset1.insert(12, 4);
+    iset1.erase(4, 11);
+    iset2.insert(1, 1);
+    iset2.insert(3, 1);
+    iset2.insert(15, 1);
+
+    ASSERT_EQ(iset1, iset2);
+  }
+}

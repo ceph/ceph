@@ -555,8 +555,13 @@ class interval_set {
     erase(val, 1);
   }
 
-  void erase(T start, T len, 
-    std::function<bool(T, T)> claim = {}) {
+  /* This variant of erase allows the client to determine whether touching
+   * intervals should also be erased. This variant will assert that the
+   * intersection of the interval (start~len) is entirely contained by a single
+   * interval in *this.
+   */
+  void erase(T start, T len,
+    std::function<bool(T, T)> claim) {
     auto p = find_inc_m(start);
 
     _size -= len;
@@ -583,6 +588,43 @@ class interval_set {
       } else {
 	m[start + len] = after;
       }
+    }
+  }
+
+  /** This variant of erase allows for general erases (making it useful for
+   * functions like subtract). It can cope with any overlaps and will erase
+   * multiple. entries.
+   */
+  void erase(T start, T len) {
+    T begin = start;
+    T end = start + len;
+
+    auto p = find_inc_m(begin);
+
+    while ( p != m.end() && begin < end && end > p->first) {
+      T pend = p->first + p->second;
+
+      // Skip any gap.
+      if (begin < p->first) begin = p->first;
+      _size -= pend - begin;
+
+      // Truncate (delete later if empty)
+      p->second = begin - p->first;
+
+      // Handle splits
+      if (end < pend) {
+        _size += pend - end;
+        // For some maps, inserting here corrupts p, so we need
+        // to insert, then recover p, so that we can delete it if needed.
+        p = m.insert(p, std::pair(end, pend-end));
+        --p;
+      }
+
+      // Erase empty interval or move on.
+      if (!p->second) p = m.erase(p);
+      else ++p;
+
+      begin = pend;
     }
   }
 
@@ -669,26 +711,13 @@ class interval_set {
     ceph_assert(&a != this);
     ceph_assert(&b != this);
     clear();
-    
-    //cout << "union_of" << endl;
 
-    // a
-    m = a.m;
-    _size = a._size;
-
-    // - (a*b)
-    interval_set ab;
-    ab.intersection_of(a, b);
-    subtract(ab);
-
-    // + b
+    insert(a);
     insert(b);
-    return;
   }
+
   void union_of(const interval_set &b) {
-    interval_set a;
-    swap(a);    
-    union_of(a, b);
+    insert(b);
   }
   void union_insert(T off, T len) {
     // insert supports overlapping entries. This function is redundant.
