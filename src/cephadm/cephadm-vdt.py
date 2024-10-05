@@ -6038,25 +6038,27 @@ def generate_ceph_commands(hosts, services):
             if service['daemon_type'] == service_type and service['hostname'] == hostname:
                 return service['daemon_name']
         return None
-
-    def manage_service(service_type, hostname, count_per_host, labels, service_spec=None):
-        service_name = find_service_name(service_type, hostname)
-
-        if service_type in labels and not service_name:
+    
+    def manage_service(service_type, service_name, hostname, count_per_host, labels, service_spec=None):
+        service_pod = find_service_name(service_type, hostname)
+        labels = [label.strip("'").lower() for label in labels]
+        service_type = service_type.strip().lower();
+        if service_type in labels and service_pod is None:
             print(f"Adding {service_type} on {hostname} with count_per_host={count_per_host}...")
-            spec = f" --placement='label:{service_type} count-per-host:{count_per_host}'"
+            spec = f' \'--placement=label:{service_type} count-per-host:{count_per_host}\' '
             if service_spec:
                 spec += f" {service_spec}"  # Append any extra specifications
-            commands.append(f"ceph orch apply {service_type}{spec}")
-        
-        if service_type not in labels and service_name:
+            commands.append(f"ceph orch apply {service_type} {service_name} {spec}")
+        if service_type not in labels and service_pod:
             print(f"Removing {service_type} from {hostname}...")
-            commands.append(f"ceph orch daemon rm {service_name} --force")
+            commands.append(f"ceph orch daemon rm {service_pod} --force")
+
     def get_labels_for_hostname(hostname, current_labels_list):
         for host in current_labels_list:
             if host['hostname'] == hostname:
                 return host['labels']  
         return [] 
+    
     def update_labels(hostname, current_labels, new_labels):
         current_label_set = set(current_labels)
         new_label_set = set(new_labels.split(','))
@@ -6085,24 +6087,21 @@ def generate_ceph_commands(hosts, services):
         labels = host['label'].split(',')
         current_labels = get_labels_for_hostname(name, current_labels_list)
         update_labels(name, current_labels, ','.join(labels))
-
         print(f'Processing host {name} with labels {labels}...')
-
         commands.append(f"ceph orch host add {name} {ip} --labels={','.join(labels)}")
-
 
         if 'monitor' in services and services['monitor']:  
             count_per_host = services['monitor'].get('count-per-host', 1)
-            manage_service('mon', name, count_per_host, labels)
+            manage_service('mon','', name, count_per_host, labels)
         else:
-            manage_service('mon', name, 1, labels)
+            manage_service('mon','', name, 1, labels)
 
 
         if 'manager' in services and services['manager']:  
             count_per_host = services['manager'].get('count-per-host', 1)
-            manage_service('mgr', name, count_per_host, labels)
+            manage_service('mgr','', name, count_per_host, labels)
         else:
-            manage_service('mgr', name, 1, labels)
+            manage_service('mgr','', name, 1, labels)
 
         if 'radosgw' in services and 'rgw' in labels and services['radosgw']:  
             for rgw_service in services['radosgw']:
@@ -6110,8 +6109,28 @@ def generate_ceph_commands(hosts, services):
                 port = rgw_service.get('port', 8080)
                 count_per_host = rgw_service.get('count-per-host', 1)
                 service_spec = f"--port={port}"
-                manage_service(f'rgw {service_name}', name, count_per_host, labels, service_spec)
+                manage_service(f'rgw', service_name , name, count_per_host, labels, service_spec)
 
+    if 'osds' in services:
+        print("Adding OSDs.......")
+        osd_services = services['add-osds']
+
+        with open('osd_spec.yml', 'w') as osd_file:
+            for idx, osd_service in enumerate(osd_services):
+                osd_spec = {
+                    'service_type': 'osd',
+                    'service_id': osd_service.get('service-id'),
+                    'placement': {'hosts': osd_service['placement']['hosts']},
+                    'spec': osd_service.get('spec')
+                }
+
+                yaml.dump(osd_spec, osd_file)
+                if idx < len(osd_services) - 1:
+                    osd_file.write('---\n')
+        if services.get('dry-run', False):
+            commands.append(f"ceph orch apply -i osd_spec.yml --dry-run")
+        else:
+            commands.append(f"ceph orch apply -i osd_spec.yml")
     return commands
 #End custom function
 
