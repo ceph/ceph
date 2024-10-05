@@ -130,6 +130,8 @@ class Store {
   /// the collection (i.e. - the PG store) in which the errors are stored
   const coll_t coll;
 
+  scrub_level_t current_level;
+
   /**
    * the machinery (backend details, cache, etc.) for storing both levels
    * of errors (note: 'optional' to allow delayed creation w/o dynamic

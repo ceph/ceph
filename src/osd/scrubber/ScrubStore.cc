@@ -142,49 +142,30 @@ void Store::add_error(int64_t pool, const inconsistent_obj_wrapper& e)
   add_object_error(pool, e);
 }
 
-namespace {
-
-inconsistent_obj_wrapper create_filtered_copy(
-    const inconsistent_obj_wrapper& obj,
-    uint64_t obj_err_mask,
-    uint64_t shard_err_mask)
-{
-  inconsistent_obj_wrapper dup = obj;
-  dup.errors &= obj_err_mask;
-  for (auto& [shard, si] : dup.shards) {
-    si.errors &= shard_err_mask;
-  }
-  return dup;
-}
-
-}  // namespace
-
 
 void Store::add_object_error(int64_t pool, const inconsistent_obj_wrapper& e)
 {
+  using librados::obj_err_t;
   const auto key = to_object_key(pool, e.object);
   dout(20) << fmt::format(
-		  "adding error for object {} ({}). Errors: {} ({}/{}) wr:{}",
-		  e.object, key, librados::err_t{e.errors},
-		  librados::err_t{e.errors & librados::err_t::SHALLOW_ERRORS},
-		  librados::err_t{e.errors & librados::err_t::DEEP_ERRORS}, e)
+		  "{}: adding error for object {} ({}). Errors: {} ({}/{}) "
+		  "unfiltered:{}",
+		  (current_level == scrub_level_t::deep ? "deep" : "shallow"),
+		  e.object, key, obj_err_t{e.errors},
+		  obj_err_t{e.errors & obj_err_t::SHALLOW_ERRORS},
+		  obj_err_t{e.errors & obj_err_t::DEEP_ERRORS}, e)
 	   << dendl;
 
-  // divide the errors & shard errors into shallow and deep.
-  {
-    bufferlist bl;
-    create_filtered_copy(
-	e, librados::obj_err_t::SHALLOW_ERRORS, librados::err_t::SHALLOW_ERRORS)
-	.encode(bl);
-    shallow_db->results[key] = bl;
+  if (current_level == scrub_level_t::deep) {
+    // not overriding the deep errors DB during shallow scrubs
+    deep_db->results[key] = e.encode();
   }
-  {
-    bufferlist bl;
-    create_filtered_copy(
-	e, librados::obj_err_t::DEEP_ERRORS, librados::err_t::DEEP_ERRORS)
-	.encode(bl);
-    deep_db->results[key] = bl;
-  }
+
+  // only shallow errors are stored in the shallow DB
+  auto e_copy = e;
+  e_copy.errors &= librados::obj_err_t::SHALLOW_ERRORS;
+  e_copy.union_shards.errors &= librados::err_t::SHALLOW_ERRORS;
+  shallow_db->results[key] = e_copy.encode();
 }
 
 
@@ -250,6 +231,8 @@ void Store::reinit(
 		  "re-initializing the Scrub::Store (for {} scrub)",
 		  (level == scrub_level_t::deep ? "deep" : "shallow"))
 	   << dendl;
+
+  current_level = level;
 
   // always clear the known shallow errors DB (as both shallow and deep scrubs
   // would recreate it)
@@ -344,6 +327,15 @@ void Store::collect_specific_store(
 }
 
 
+/*
+ * Implementation notes:
+ * - see https://github.com/ceph/ceph/commit/df3ff6dafeadb3822b35c424a890db9a14d7f60f
+ *   for why we encode the shard_info_t in the store.
+ * - to maintain known shard_info-s created during a deep scrub (but only when
+ *   needed), we use our knowledge of the level of the last scrub performed
+ *   (current_level), and the object user version as encoded in the error
+ *   structure.
+ */
 bufferlist Store::merge_encoded_error_wrappers(
     hobject_t obj,
     ExpCacherPosData& latest_sh,
@@ -352,26 +344,88 @@ bufferlist Store::merge_encoded_error_wrappers(
   // decode both error wrappers
   auto sh_wrap = decode_wrapper(obj, latest_sh->data.cbegin());
   auto dp_wrap = decode_wrapper(obj, latest_dp->data.cbegin());
-  dout(20) << fmt::format(
-		  "merging errors {}. Shallow: {}-({}), Deep: {}-({})",
-		  sh_wrap.object, sh_wrap.errors, dp_wrap.errors, sh_wrap,
-		  dp_wrap)
-	   << dendl;
 
-  // merge the object errors (a simple OR of the two error bit-sets)
-  sh_wrap.errors |= dp_wrap.errors;
-
-  // merge the two shard error maps
-  for (const auto& [shard, si] : dp_wrap.shards) {
+  // note: the '20' level is just until we're sure the merging works as
+  // expected
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     dout(20) << fmt::format(
-		    "shard {} dp-errors: {} sh-errors:{}", shard, si.errors,
-		    sh_wrap.shards[shard].errors)
+		    "merging errors {}. Deep: {:#x}-({})", sh_wrap.object,
+		    dp_wrap.errors, dp_wrap)
 	     << dendl;
-    // note: we may be creating the shallow shard entry here. This is OK
-    sh_wrap.shards[shard].errors |= si.errors;
+    dout(20) << fmt::format(
+		    "merging errors {}. Shallow: {:#x}-({})", sh_wrap.object,
+		    sh_wrap.errors, sh_wrap)
+	     << dendl;
+    // dev: list the attributes:
+    for (const auto& [shard, si] : sh_wrap.shards) {
+      for (const auto& [attr, bl] : si.attrs) {
+	dout(20) << fmt::format(" shallow: shard {} attr: {}", shard, attr)
+		 << dendl;
+      }
+    }
+    for (const auto& [shard, si] : dp_wrap.shards) {
+      for (const auto& [attr, bl] : si.attrs) {
+	dout(20) << fmt::format(" deep: shard {} attr: {}", shard, attr)
+		 << dendl;
+      }
+    }
   }
 
-  return sh_wrap.encode();
+  // Actual merging of the shard map entries is only performed if the
+  // latest version is from the shallow scrub.
+  // Otherwise, the deep scrub, which (for the shards info) contains all data,
+  // and the shallow scrub is ignored.
+  if (current_level == scrub_level_t::shallow) {
+    // is the object data related to the same object version?
+    if (sh_wrap.version == dp_wrap.version) {
+      // combine the error information
+      dp_wrap.errors |= sh_wrap.errors;
+      for (const auto& [shard, si] : sh_wrap.shards) {
+	if (dp_wrap.shards.contains(shard)) {
+	  dout(20) << fmt::format(
+			  "-----> {}-{}  combining: sh-errors: {} dp-errors:{}",
+			  sh_wrap.object, shard, si, dp_wrap.shards[shard])
+		   << dendl;
+	  const auto saved_er = dp_wrap.shards[shard].errors;
+	  dp_wrap.shards[shard].selected_oi = si.selected_oi;
+	  dp_wrap.shards[shard].primary = si.primary;
+	  dp_wrap.shards[shard].errors |= saved_er;
+
+	  // the attributes:
+	  for (const auto& [attr, bl] : si.attrs) {
+	    if (!dp_wrap.shards[shard].attrs.contains(attr)) {
+	      dout(20) << fmt::format(
+			      "-----> {}-{}  copying shallow attr: attr: {}",
+			      sh_wrap.object, shard, attr)
+		       << dendl;
+	      dp_wrap.shards[shard].attrs[attr] = bl;
+	    }
+	    // otherwise - we'll ignore the shallow attr buffer
+	  }
+	} else {
+	  // the deep scrub data for this shard is missing. We take the shallow
+	  // scrub data.
+	  dp_wrap.shards[shard] = si;
+	}
+      }
+    } else if (sh_wrap.version > dp_wrap.version) {
+	if (false && dp_wrap.version == 0) {
+	  // there was a read error in the deep scrub. The deep version
+	  // shows as '0'. That's severe enough for us to ignore the shallow.
+	  dout(10) << fmt::format("{} ignoring deep after read failure",
+			  sh_wrap.object)
+		   << dendl;
+	} else {
+	  // There is a new shallow version of the object results.
+	  // The deep data is for an older version of that object.
+	  // There are multiple possibilities here, but for now we ignore the
+	  // deep data.
+	  dp_wrap = sh_wrap;
+	}
+      }
+  }
+
+  return dp_wrap.encode();
 }
 
 
