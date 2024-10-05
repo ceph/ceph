@@ -707,15 +707,27 @@ ceph_statfs PGMapDigest::get_statfs(OSDMap &osdmap,
   }
 
   if (filter) {
+    auto bytes_avail = get_pool_free_space(osdmap, *data_pool);
+
     statfs.kb_used = (sum.num_bytes >> 10);
-    statfs.kb_avail = get_pool_free_space(osdmap, *data_pool) >> 10;
-    statfs.num_objects = sum.num_objects;
+    statfs.kb_avail = (bytes_avail >> 10);
     statfs.kb = statfs.kb_used + statfs.kb_avail;
+
+    statfs.bytes_used = sum.num_bytes;
+    statfs.bytes_avail = bytes_avail;
+    statfs.bytes = statfs.bytes_used + statfs.bytes_avail;
+
+    statfs.num_objects = sum.num_objects;
   } else {
     // these are in KB.
-    statfs.kb = osd_sum.statfs.kb();
     statfs.kb_used = osd_sum.statfs.kb_used_raw();
     statfs.kb_avail = osd_sum.statfs.kb_avail();
+    statfs.kb = osd_sum.statfs.kb();
+
+    statfs.bytes_used = osd_sum.statfs.get_used_raw();
+    statfs.bytes_avail = osd_sum.statfs.available;
+    statfs.bytes = osd_sum.statfs.total;
+
     statfs.num_objects = pg_sum.stats.sum.num_objects;
   }
 

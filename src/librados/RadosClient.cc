@@ -667,6 +667,24 @@ int librados::RadosClient::get_fs_stats(ceph_statfs& stats)
   return ret;
 }
 
+int librados::RadosClient::get_pool_fs_stats(int64_t pool_id, ceph_statfs& stats)
+{
+  ceph::mutex mylock = ceph::make_mutex("RadosClient::get_pool_fs_stats::mylock");
+  ceph::condition_variable cond;
+  bool done;
+  int ret = 0;
+  {
+    std::lock_guard l{mylock};
+    objecter->get_fs_stats(stats, std::optional<int64_t> (pool_id),
+			   new C_SafeCond(mylock, cond, &done, &ret));
+  }
+  {
+    std::unique_lock l{mylock};
+    cond.wait(l, [&done] { return done;});
+  }
+  return ret;
+}
+
 void librados::RadosClient::get() {
   std::lock_guard l(lock);
   ceph_assert(refcnt > 0);
