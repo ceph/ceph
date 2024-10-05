@@ -6052,9 +6052,13 @@ def generate_ceph_commands(hosts, services):
         if service_type not in labels and service_name:
             print(f"Removing {service_type} from {hostname}...")
             commands.append(f"ceph orch daemon rm {service_name} --force")
-
+    def get_labels_for_hostname(hostname, current_labels_list):
+        for host in current_labels_list:
+            if host['hostname'] == hostname:
+                return host['labels']  
+        return [] 
     def update_labels(hostname, current_labels, new_labels):
-        current_label_set = set(current_labels.split(','))
+        current_label_set = set(current_labels)
         new_label_set = set(new_labels.split(','))
 
         labels_to_add = new_label_set - current_label_set
@@ -6069,16 +6073,18 @@ def generate_ceph_commands(hosts, services):
             for label in labels_to_remove:
                 print(f"Removing label {label} from host {hostname}...")
                 commands.append(f"ceph orch host label rm {hostname} {label}")
+    current_labels_list = []
+    if os.path.exists('/etc/ceph/ceph.conf'):
+        current_labels_cmd = f"ceph orch host ls --format json-pretty"
+        current_labels_result = subprocess.run(current_labels_cmd, shell=True, capture_output=True, text=True)           
+        current_labels_list = json.loads(current_labels_result.stdout)
 
     for host in hosts:
         name = host['name']
         ip = host['ipaddresses']
         labels = host['label'].split(',')
-        if os.path.exists('/etc/ceph/ceph.conf'):
-            current_labels_cmd = f"ceph orch host ls --format json-pretty | jq -r '.[] | select(.hostname == \"{name}\") | .labels'"
-            current_labels_result = subprocess.run(current_labels_cmd, shell=True, capture_output=True, text=True)           
-            current_labels = json.loads(current_labels_result.stdout)
-            update_labels(name, current_labels, ','.join(labels))
+        current_labels = get_labels_for_hostname(name, current_labels_list)
+        update_labels(name, current_labels, ','.join(labels))
 
         print(f'Processing host {name} with labels {labels}...')
 
