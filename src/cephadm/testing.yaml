@@ -84,6 +84,7 @@ services:
     - name: private
       port: 8889
       count-per-host: 1
+  osd_dry_run: true
   osds:
     - service-id: osd_spec_ssd
       placement: 

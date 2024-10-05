@@ -6092,20 +6092,20 @@ def generate_ceph_commands(hosts, services):
         print(f'Processing host {name} with labels {labels}...')
         commands.append(f"ceph orch host add {name} {ip} --labels={','.join(labels)}")
 
-        if 'monitor' in services and services['monitor']:  
+        if 'monitor' in services:  
             count_per_host = services['monitor'].get('count-per-host', 1)
             manage_service('mon','', name, count_per_host, labels)
         else:
             manage_service('mon','', name, 1, labels)
 
 
-        if 'manager' in services and services['manager']:  
+        if 'manager' in services:  
             count_per_host = services['manager'].get('count-per-host', 1)
             manage_service('mgr','', name, count_per_host, labels)
         else:
             manage_service('mgr','', name, 1, labels)
 
-        if 'radosgw' in services and 'rgw' in labels and services['radosgw']:  
+        if 'radosgw' in services:  
             for rgw_service in services['radosgw']:
                 service_name = rgw_service.get('name', '')
                 port = rgw_service.get('port', 8080)
@@ -6124,12 +6124,11 @@ def generate_ceph_commands(hosts, services):
                     'placement': {'hosts': osd_service['placement']['hosts']},
                     'spec': osd_service.get('spec')
                 }
-
                 yaml.dump(osd_spec, osd_file)
                 if idx < len(osd_services) - 1:
                     osd_file.write('---\n')
-        if services.get('dry-run', False):
-            commands.append(f"ceph orch apply -i osd_spec.yml --dry-run")
+        if services.get('osd_dry_run'):
+            os.system(f"ceph orch apply -i osd_spec.yml --dry-run")
         else:
             commands.append(f"ceph orch apply -i osd_spec.yml")
     return commands
