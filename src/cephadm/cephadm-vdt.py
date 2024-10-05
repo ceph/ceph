@@ -6013,8 +6013,20 @@ def generate_ceph_commands(hosts, services):
     commands = []
     
     def get_services():
-        result = subprocess.run("python3 -m cephadm shell -- ceph orch ps --format json-pretty", shell=True, capture_output=True, text=True)
-        return json.loads(result.stdout)
+        result = subprocess.run(
+            "ceph orch ps --format json-pretty",
+            shell=True, 
+            capture_output=True, 
+            text=True
+        )
+        if result.returncode != 0:
+            print(f"Error executing command: {result.stderr}")
+            return {}
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError:
+            print("Failed to decode JSON from service output.")
+            return {}
 
     current_services = get_services()
 
@@ -6059,15 +6071,16 @@ def generate_ceph_commands(hosts, services):
         name = host['name']
         ip = host['ipaddresses']
         labels = host['label'].split(',')
-        current_labels_cmd = f"ceph orch host ls --format json-pretty | jq -r '.[] | select(.hostname == \"{name}\") | .labels'"
-        current_labels_result = subprocess.run(current_labels_cmd, shell=True, capture_output=True, text=True)
-        current_labels = json.loads(current_labels_result.stdout)
+        if os.path.exists('/etc/ceph/ceph.conf'):
+            current_labels_cmd = f"ceph orch host ls --format json-pretty | jq -r '.[] | select(.hostname == \"{name}\") | .labels'"
+            current_labels_result = subprocess.run(current_labels_cmd, shell=True, capture_output=True, text=True)           
+            current_labels = json.loads(current_labels_result.stdout)
+            update_labels(name, current_labels, ','.join(labels))
 
         print(f'Processing host {name} with labels {labels}...')
 
         commands.append(f"ceph orch host add {name} {ip} --labels={','.join(labels)}")
 
-        update_labels(name, current_labels, ','.join(labels))
 
         if 'monitor' in services and services['monitor']:  
             count_per_host = services['monitor'].get('count-per-host', 1)

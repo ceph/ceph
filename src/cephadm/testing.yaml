@@ -10,7 +10,7 @@ verbose: false
 log_dest: 
 timeout: 
 retry: 15
-mon_ip: 172.26.224.220
+mon_ip: 171.254.95.156
 initial_dashboard_user: admin
 initial_dashboard_password: passowrd
 ssl_dashboard_port: 8443
@@ -60,7 +60,7 @@ hosts:
  
 - name: ceph-node-1
   ipaddresses: 171.254.95.193
-  label: _admin,mgr,mon,osd
+  label: osd
   ssh-user: root 
 
 - name: ceph-node-2
@@ -70,7 +70,7 @@ hosts:
 
 - name: ceph-node-3
   ipaddresses: 171.254.93.217
-  label: _admin,mgr,mon,osd
+  label: osd
   ssh-user: root 
 services:
   add-monitor:
