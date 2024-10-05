@@ -6011,6 +6011,9 @@ def distribute_ceph_pub_key(hosts, pub_key_path):
 #Function to generate ceph commands
 def generate_ceph_commands(hosts, services):
     commands = []
+    base_services = ['mon', 'mgr']
+    for service in base_services:
+        commands.append(f"ceph orch apply {service} --unmanaged")
     
     def get_services():
         result = subprocess.run(
@@ -6085,18 +6088,23 @@ def generate_ceph_commands(hosts, services):
         if 'monitor' in services and services['monitor']:  
             count_per_host = services['monitor'].get('count-per-host', 1)
             manage_service('mon', name, count_per_host, labels)
+        else:
+            manage_service('mon', name, 1, labels)
+
 
         if 'manager' in services and services['manager']:  
             count_per_host = services['manager'].get('count-per-host', 1)
             manage_service('mgr', name, count_per_host, labels)
+        else:
+            manage_service('mgr', name, 1, labels)
 
         if 'radosgw' in services and 'rgw' in labels and services['radosgw']:  
             for rgw_service in services['radosgw']:
-                service_name = rgw_service.get('name', 'default')
+                service_name = rgw_service.get('name', '')
                 port = rgw_service.get('port', 8080)
                 count_per_host = rgw_service.get('count-per-host', 1)
                 service_spec = f"--port={port}"
-                manage_service('rgw', name, count_per_host, labels, service_spec)
+                manage_service(f'rgw {service_name}', name, count_per_host, labels, service_spec)
 
     return commands
 #End custom function
