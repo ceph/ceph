@@ -15,7 +15,9 @@ struct cls_timeindex_entry {
   /* Mandatory timestamp. Will be part of the key. */
   utime_t key_ts;
   /* Not mandatory. The name_ext field, if not empty, will form second
-   * part of the key. */
+   * part of the key. Also, a non empt key_ext is unique:
+     when adding an entry with key_ext that already exists the old
+     entry will be removed. */
   std::string key_ext;
   /* Become value of OMAP-based mapping. */
   ceph::buffer::list value;
