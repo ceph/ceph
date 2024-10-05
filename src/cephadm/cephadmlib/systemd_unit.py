@@ -41,6 +41,21 @@ class PathInfo:
         dname = f'{identity.service_name}.d'
         self.drop_in_file = unit_dir / dname / _DROP_IN_FILENAME
 
+    def has_init_unit(self) -> bool:
+        return self.init_ctr_unit_file.exists()
+
+    def has_sidecar_units(self, validate: bool = False) -> bool:
+        # validate defaults to false because there are "races" between
+        # cephadm ls and cephadm rm-daemon and we don't want errors
+        # to occur randomly during cleanup.
+        has_unit = False
+        for sidecar in self.sidecar_unit_files.values():
+            if sidecar.exists():
+                has_unit = True
+            elif validate:
+                raise RuntimeError(f'missing expected unit file: {sidecar}')
+        return has_unit
+
 
 def _write_drop_in(
     dest: IO,
