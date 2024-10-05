@@ -6113,8 +6113,7 @@ def generate_ceph_commands(hosts, services):
 
     if 'osds' in services:
         print("Adding OSDs.......")
-        osd_services = services['add-osds']
-
+        osd_services = services['osds']
         with open('osd_spec.yml', 'w') as osd_file:
             for idx, osd_service in enumerate(osd_services):
                 osd_spec = {

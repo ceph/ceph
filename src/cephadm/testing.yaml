@@ -50,8 +50,8 @@ keyring:
 mount: 
 funcs: 
 #  - "command_rm_cluster"
-  - "command_prepare_host"
-  - "command_bootstrap"
+#  - "command_prepare_host"
+#  - "command_bootstrap"
   - "command_shell"
 
 #Setting up cluster
@@ -65,26 +65,26 @@ hosts:
 
 - name: ceph-node-2
   ipaddresses: 171.254.95.156
-  label: _admin,mgr,mon,osd 
+  label: _admin,mgr,mon,osd,rgw
   ssh-user: root 
 
 - name: ceph-node-3
   ipaddresses: 171.254.93.217
-  label: osd
+  label: osd,mgr
   ssh-user: root 
 services:
-  add-monitor:
+  monitor:
     count-per-host: 1
-  add-manager:
+  manager:
     count-per-host: 1
-  add-radosgw:
+  radosgw:
     - name: public
       port: 8888
       count-per-host: 1
     - name: private
       port: 8889
       count-per-host: 1
-  add-osds:
+  osds:
     - service-id: osd_spec_ssd
       placement: 
         hosts:
