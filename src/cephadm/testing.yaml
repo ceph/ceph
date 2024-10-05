@@ -111,4 +111,4 @@ services:
 
 volume: []
 no_hosts: false
-dry_run: false
+dry_run: true
