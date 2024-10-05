@@ -23,13 +23,18 @@ source venv/bin/activate
 ### 3. Install dependencies:
 
 ```
-pip install pyyaml
-pip install jinja2
+kubectl apply -f -
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: linode-provider-ceph
+spec:
+  package: xpkg.upbound.io/linode/provider-ceph:v0.0.48
 ```
 
 ### 4. Running Cephadm-vdt through python3:
 - Before using cephadm, you need to create a .yaml file, example:
-```
+```helm repo add crossplane-stable https://charts.crossplane.io/stable
 #Bootstrap:
 image: 
 docker: false

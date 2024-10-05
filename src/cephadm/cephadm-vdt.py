@@ -6011,96 +6011,79 @@ def distribute_ceph_pub_key(hosts, pub_key_path):
 #Function to generate ceph commands
 def generate_ceph_commands(hosts, services):
     commands = []
-    base_services = ['mon', 'mgr']
-    for service in base_services:
-        commands.append(f"ceph orch apply {service} --unmanaged")
-
-    for host in hosts:
-        name = host['name']
-        ip = host['ipaddresses']
-        labels = host['label']
-        print(f'Adding hosts {name} with labels {labels}')
-        commands.append(f"ceph orch host add {name} {ip} --labels={labels}")
-
-    if 'add-monitor' in services:
-        print("Adding monitors.......")
-        monitor = services['add-monitor']
-        count_per_host = monitor.get('count-per-host', 1)
-        commands.append(f'ceph orch apply mon --placement="label:mon count-per-host:{count_per_host}"')
-
-    if 'add-manager' in services:
-        print("Adding managers.......")
-        manager = services['add-manager']
-        count_per_host = manager.get('count-per-host', 1)
-        commands.append(f'ceph orch apply mgr --placement="label:mgr count-per-host:{count_per_host}"')
-
-    if 'add-radosgw' in services:
-        print("Adding radosgws.......")
-        radosgw_list = services['add-radosgw']
-        for rgw_service in radosgw_list:
-            service_name = rgw_service.get('name', 'default')
-            port = rgw_service.get('port', 8080)  # Default port if none is provided
-            count_per_host = rgw_service.get('count-per-host', 1)
-            commands.append(f"ceph orch apply rgw {service_name} '--placement=label:rgw count-per-host:{count_per_host}' --port={port}")
-
-    if 'add-osds' in services:
-            print("Adding OSDs.......")
-            osd_services = services['add-osds']
-
-            with open('osd_spec.yml', 'w') as osd_file:
-                for idx, osd_service in enumerate(osd_services):
-                    osd_spec = {
-                        'service_type': 'osd',
-                        'service_id': osd_service.get('service-id'),
-                        'placement': {'hosts': osd_service['placement']['hosts']},
-                        'spec': osd_service.get('spec')
-                    }
-
-                    yaml.dump(osd_spec, osd_file)
-                    if idx < len(osd_services) - 1:
-                        osd_file.write('---\n')
-            if services.get('dry-run', False):
-                commands.append(f"ceph orch apply -i osd_spec.yml --dry-run")
-            else:
-                commands.append(f"ceph orch apply -i osd_spec.yml")
+    
     def get_services():
         result = subprocess.run("python3 -m cephadm shell -- ceph orch ps --format json-pretty", shell=True, capture_output=True, text=True)
-        services_list = json.loads(result.stdout)
-        return services_list
+        return json.loads(result.stdout)
+
     current_services = get_services()
-    with open('test.json', 'r') as file:
-        current_services = json.load(file)
 
     def find_service_name(service_type, hostname):
         for service in current_services:
             if service['daemon_type'] == service_type and service['hostname'] == hostname:
                 return service['daemon_name']
-        print(f'WARNING: Cannot find {service_type} on {hostname}, please recheck your hostname or services types!')
-        print(f'{service_type} on {hostname} will not be removed!')
         return None
 
-    if 'rm-monitor' in services:
-        print('Removing monitors from:')
-        for hostname in services['rm-monitor']['hostnames']:
-            print(f'- {hostname}')
-            service_name = find_service_name('mon', hostname)
-            if service_name:
-                commands.append(f"ceph orch daemon rm {service_name} --force")
-    if 'rm-manager' in services:
-        print("Removing managers from:")
-        for hostname in services['rm-manager']['hostnames']:
-            print(f'- {hostname}')
-            service_name = find_service_name('mgr', hostname)
-            if service_name:
-                commands.append(f"ceph orch daemon rm {service_name} --force")
+    def manage_service(service_type, hostname, count_per_host, labels, service_spec=None):
+        service_name = find_service_name(service_type, hostname)
 
-    if 'rm-radosgw' in services:
-        print("Removing rgws from:")
-        for hostname in services['rm-radosgw']['hostnames']:
-            print(f'- {hostname}')
-            service_name = find_service_name('rgw', hostname)
-            if service_name:
-                commands.append(f"cephadm shell -- ceph orch daemon rm {service_name}")
+        if service_type in labels and not service_name:
+            print(f"Adding {service_type} on {hostname} with count_per_host={count_per_host}...")
+            spec = f" --placement='label:{service_type} count-per-host:{count_per_host}'"
+            if service_spec:
+                spec += f" {service_spec}"  # Append any extra specifications
+            commands.append(f"ceph orch apply {service_type}{spec}")
+        
+        if service_type not in labels and service_name:
+            print(f"Removing {service_type} from {hostname}...")
+            commands.append(f"ceph orch daemon rm {service_name} --force")
+
+    def update_labels(hostname, current_labels, new_labels):
+        current_label_set = set(current_labels.split(','))
+        new_label_set = set(new_labels.split(','))
+
+        labels_to_add = new_label_set - current_label_set
+        labels_to_remove = current_label_set - new_label_set
+
+        if labels_to_add:
+            for label in labels_to_add:
+                print(f"Adding label {label} to host {hostname}...")
+                commands.append(f"ceph orch host label add {hostname} {label}")
+
+        if labels_to_remove:
+            for label in labels_to_remove:
+                print(f"Removing label {label} from host {hostname}...")
+                commands.append(f"ceph orch host label rm {hostname} {label}")
+
+    for host in hosts:
+        name = host['name']
+        ip = host['ipaddresses']
+        labels = host['label'].split(',')
+        current_labels_cmd = f"ceph orch host ls --format json-pretty | jq -r '.[] | select(.hostname == \"{name}\") | .labels'"
+        current_labels_result = subprocess.run(current_labels_cmd, shell=True, capture_output=True, text=True)
+        current_labels = json.loads(current_labels_result.stdout)
+
+        print(f'Processing host {name} with labels {labels}...')
+
+        commands.append(f"ceph orch host add {name} {ip} --labels={','.join(labels)}")
+
+        update_labels(name, current_labels, ','.join(labels))
+
+        if 'monitor' in services and services['monitor']:  
+            count_per_host = services['monitor'].get('count-per-host', 1)
+            manage_service('mon', name, count_per_host, labels)
+
+        if 'manager' in services and services['manager']:  
+            count_per_host = services['manager'].get('count-per-host', 1)
+            manage_service('mgr', name, count_per_host, labels)
+
+        if 'radosgw' in services and 'rgw' in labels and services['radosgw']:  
+            for rgw_service in services['radosgw']:
+                service_name = rgw_service.get('name', 'default')
+                port = rgw_service.get('port', 8080)
+                count_per_host = rgw_service.get('count-per-host', 1)
+                service_spec = f"--port={port}"
+                manage_service('rgw', name, count_per_host, labels, service_spec)
 
     return commands
 #End custom function
@@ -6201,8 +6184,6 @@ def main() -> None:
             sys.exit(1)
 
     sys.exit(r)
-
-
 
 if __name__ == '__main__':
     main()

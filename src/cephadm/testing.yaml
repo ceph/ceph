@@ -9,12 +9,11 @@ unit_dir: "/etc/systemd/system"
 verbose: false
 log_dest: 
 timeout: 
-#fsid: "d1eab4ce-74cd-11ef-8ba1-b9c479b5724c"
 retry: 15
 mon_ip: 172.26.224.220
 initial_dashboard_user: admin
 initial_dashboard_password: passowrd
-ssl_dashboard_port: 8848
+ssl_dashboard_port: 8443
 ssh_user: root
 skip_mon_network: false
 skip_dashboard: false
@@ -74,7 +73,6 @@ hosts:
   label: _admin,mgr,mon,osd
   ssh-user: root 
 services:
-  dry-run: true
   add-monitor:
     count-per-host: 1
   add-manager:
