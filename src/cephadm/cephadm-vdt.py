@@ -6040,9 +6040,11 @@ def generate_ceph_commands(hosts, services):
         return None
     
     def manage_service(service_type, service_name, hostname, count_per_host, labels, service_spec=None):
-        service_pod = find_service_name(service_type, hostname)
+        service_type = service_type.strip().lower()
         labels = [label.strip("'").lower() for label in labels]
-        service_type = service_type.strip().lower();
+        if service_type == 'rgw':
+            service_pod = find_service_name(f'{service_type}.{service_name}', hostname)
+        service_pod = find_service_name(service_type, hostname)
         if service_type in labels and service_pod is None:
             print(f"Adding {service_type} on {hostname} with count_per_host={count_per_host}...")
             spec = f' \'--placement=label:{service_type} count-per-host:{count_per_host}\' '
