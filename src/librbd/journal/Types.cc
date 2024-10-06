@@ -422,7 +422,7 @@ void EventEntry::encode(bufferlist& bl) const {
 }
 
 void EventEntry::decode(bufferlist::const_iterator& it) {
-  DECODE_START(1, it);
+  DECODE_START(5, it);
 
   uint32_t event_type;
   decode(event_type, it);
