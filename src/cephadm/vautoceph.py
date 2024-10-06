@@ -3389,8 +3389,8 @@ def check_host_ssh_and_ceph_pub(host):
             if node['hostname'] == host['name']:
                 logger.info(f"{node['hostname']} is part of the Ceph cluster.")
                 return True
-
-        return True
+        
+        return False
 
     except Exception as e:
         print(f"Error while processing {host['name']} ({host['ipaddresses']}): {str(e)}")
