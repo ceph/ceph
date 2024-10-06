@@ -3189,6 +3189,7 @@ def command_shell(ctx):
             logger.info(f'- {name}')
         preparing_remote_hosts(problem_hosts)
         distribute_ceph_pub_key(problem_hosts, f'{ctx.output_dir}/ceph.pub')
+        distribute_ceph_pub_key(problem_hosts, f'{ctx.output_dir}/ceph.conf')
     else:
         logger.info('All hosts connect, processing to the next steps')
     # Check fsid
@@ -3378,11 +3379,11 @@ def check_host_ssh_and_ceph_pub(host):
             print(f"SSH connection failed for {host['name']} ({host['ipaddresses']}): {result.stderr.decode().strip()}")
             return False
 
-        # ceph_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "ceph health"]
-        # result = subprocess.run(ceph_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        # if result.returncode != 0:
-        #     print(f"ceph.pub is missing on {host['name']} ({host['ipaddresses']}).")
-        #     return False
+        ceph_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "ceph health"]
+        result = subprocess.run(ceph_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            print(f"ceph.pub is missing on {host['name']} ({host['ipaddresses']}).")
+            return False
 
         return True
 
