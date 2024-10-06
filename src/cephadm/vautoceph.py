@@ -3189,7 +3189,6 @@ def command_shell(ctx):
             logger.info(f'- {name}')
         preparing_remote_hosts(problem_hosts)
         distribute_ceph_pub_key(problem_hosts, f'{ctx.output_dir}/ceph.pub')
-        distribute_ceph_pub_key(problem_hosts, f'{ctx.output_dir}/ceph.conf')
     else:
         logger.info('All hosts connect, processing to the next steps')
     # Check fsid
@@ -3378,8 +3377,9 @@ def check_host_ssh_and_ceph_pub(host):
         if result.returncode != 0:
             print(f"SSH connection failed for {host['name']} ({host['ipaddresses']}): {result.stderr.decode().strip()}")
             return False
-
-        ceph_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "ceph health"]
+        with open('/etc/ceph/ceph.pub', 'r') as f:
+            pub_key = f.read().strip()
+        ceph_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "grep", pub_key, "~/.ssh/authorized_keys"]
         result = subprocess.run(ceph_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if result.returncode != 0:
             print(f"ceph.pub is missing on {host['name']} ({host['ipaddresses']}).")
@@ -6008,6 +6008,7 @@ def distribute_ceph_pub_key(hosts, pub_key_path):
         
         except subprocess.CalledProcessError as e:
             logger.info(f"Failed to send key to {ip}. Error: {e}")
+
 
 #Function to generate ceph commands
 def generate_ceph_commands(hosts, services):
