@@ -4,8 +4,6 @@
 SMB Service
 ===========
 
-.. note:: Only the SMB3 protocol is supported.
-
 .. warning::
 
     SMB support is under active development and many features may be
