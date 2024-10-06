@@ -28,49 +28,51 @@ Ceph Executive Council Responsibilities
 
 - Spokesperson
 
-   - welcome/keynote for cephalocon
+   - Writes the welcome address and keynote at Cephalocon
      
-   - maintaining slides and presenting about the project
+   - Maintains slides and presents talks about Ceph 
 
-   - Community focal point (user interaction, conference talks, mailing list,
-     etc)
+   - Acts as a community focal point (user interaction, conference talks,
+     mailing list, etc.)
    
 - Community
 
-    - managing community manager
+    - Managing community manager
 
     - LF Program Manager person, Social Media person
 
-    - liase with the ambassadors
+    - Liasing with the ambassadors
 
-    - make sure ceph events happen, successfully: cephalocon, ceph days, cds, user/dev, cdm
+    - Make sure Ceph events happen successfully: Cephalocon, Ceph days, cds,
+      user/dev meetings, cdm
 
-    - coordinating with LF
+    - Coordinating with LF
 
-    - creating program committee
+    - Creating program committee
 
-    - recordings on youtube
+    - Recordings on youtube
 
-    - getting sponsors for events
+    - Getting sponsors for events
 
-    - communications, schedule, venue decisions
+    - Communications, schedule, venue decisions
 
-    - coordinate blog posts
+    - Coordinate blog posts
 
 
 - Ceph Foundation
 
-    - ensure foundation is healthy: financials, operations
+    - Ensure foundation is healthy: financials, operations
 
-    - represent the CLT on the Board
+    - Represent the CLT on the Board
 
-    - present project status regularly (yearly)
+    - Present project status regularly (yearly)
 
-    - collect member ideas / feedback
+    - Collect member ideas / feedback
 
-    - ensure members feel valued
+    - Ensure members feel valued
 
-    - guide the members how to support the project (events, testing, marketing, hardware, ...)
+    - Guide the members how to support the project (events, testing, marketing,
+      hardware, ...)
 
 Membership
 ----------
@@ -84,7 +86,7 @@ Membership
    other two in odd years
  * Members may resign at any time, and the steering committee may vote
    to appoint a replacement for the rest of their term
- * members must involve >1 employer
+ * Members must involve >1 employer
 
 Current Members
 ^^^^^^^^^^^^^^^
