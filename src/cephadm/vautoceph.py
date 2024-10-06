@@ -3377,13 +3377,18 @@ def check_host_ssh_and_ceph_pub(host):
         if result.returncode != 0:
             print(f"SSH connection failed for {host['name']} ({host['ipaddresses']}): {result.stderr.decode().strip()}")
             return False
-        with open('/etc/ceph/ceph.pub', 'r') as f:
-            pub_key = f.read().strip()
-        ceph_command = ["ssh", f"{host['ssh-user']}@{host['ipaddresses']}", "grep", pub_key, "~/.ssh/authorized_keys"]
-        result = subprocess.run(ceph_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode != 0:
-            print(f"ceph.pub is missing on {host['name']} ({host['ipaddresses']}).")
-            return False
+
+        result = subprocess.run(
+            ["ceph", "orch", "host", "ls", "--format", "json-pretty"],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        host_list = json.loads(result.stdout)
+        for node in host_list:
+            if node['hostname'] == host['name']:
+                logger.info(f"{node['hostname']} is part of the Ceph cluster.")
+                return True
 
         return True
 
@@ -3392,7 +3397,6 @@ def check_host_ssh_and_ceph_pub(host):
         return False
     
 def checking_connections(hosts):
-    #Check SSH connections and /etc/ceph/ceph.pub presence, returning problematic hosts.
     problematic_hosts = [host for host in hosts if not check_host_ssh_and_ceph_pub(host)]
     return problematic_hosts
 
@@ -6090,10 +6094,9 @@ def generate_ceph_commands(hosts, services):
         ip = host['ipaddresses']
         labels = host['label'].split(',')
         current_labels = get_labels_for_hostname(name, current_labels_list)
-        update_labels(name, current_labels, ','.join(labels))
         print(f'Processing host {name} with labels {labels}...')
         commands.append(f"ceph orch host add {name} {ip} --labels={','.join(labels)}")
-
+        update_labels(name, current_labels, ','.join(labels))
         if 'monitor' in services:  
             count_per_host = services['monitor'].get('count-per-host', 1)
             manage_service('mon','', name, count_per_host, labels)
