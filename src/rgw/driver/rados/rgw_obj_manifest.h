@@ -297,7 +297,7 @@ public:
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(7, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(8, 2, 2, bl);
     decode(obj_size, bl);
     decode(objs, bl);
     if (struct_v >= 3) {

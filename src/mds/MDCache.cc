@@ -11187,7 +11187,7 @@ void MDCache::decode_replica_dir(CDir *&dir, bufferlist::const_iterator& p, CIno
 
 void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p, CDir *dir, MDSContext::vec& finished)
 {
-  DECODE_START(1, p);
+  DECODE_START(3, p);
   string name;
   snapid_t last;
   decode(name, p);
@@ -11463,7 +11463,7 @@ void MDCache::encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl)
 
 void MDCache::decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::const_iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   inodeno_t ino;
   __u8 d_type;
   decode(ino, p);
