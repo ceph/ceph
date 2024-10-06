@@ -1091,8 +1091,6 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
                                       Formatter *formatter, rgw::BucketReshardState reshard_stage,
                                       const DoutPrefixProvider *dpp, optional_yield y)
 {
-  list<rgw_cls_bi_entry> entries;
-
   string stage;
   bool process_log = false;
   switch (reshard_stage) {
@@ -1120,81 +1118,104 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
     (*out) << stage;
   }
 
-  const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
-  string marker;
-  for (uint32_t i = 0; i < num_source_shards; ++i) {
-    bool is_truncated = true;
-    marker.clear();
-    const std::string null_object_filter; // empty string since we're not filtering by object
-    while (is_truncated) {
-      entries.clear();
+  const int num_source_shards = rgw::num_shards(current.layout.normal);
 
-      int ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter,
-                                           marker, max_op_entries, &entries,
-                                           &is_truncated, process_log, y);
-      if (ret == -ENOENT) {
-        ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
-            << i << ", skipping" << dendl;
-        // break out of the is_truncated loop and move on to the next shard
-        break;
-      } else if (ret < 0) {
-        derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
-        return ret;
+  boost::asio::io_context context;
+  int next_shard = 0;
+  const uint32_t max_aio = process_log ? store->ctx()->_conf.get_val<uint64_t>("rgw_bucket_index_max_aio") : 1;
+
+  for (uint32_t i = 0; i < max_aio; ++i) {
+    boost::asio::spawn(context, [&](boost::asio::yield_context yield) {
+      while (true) {
+        int shard = next_shard;
+        next_shard += 1;
+        if (shard >= num_source_shards) {
+          return;
+        }
+
+        bool is_truncated = true;
+        list<rgw_cls_bi_entry> entries;
+        string marker;
+        optional_yield y(yield);
+
+        const std::string null_object_filter; // empty string since we're not filtering by object
+        while (is_truncated) {
+          entries.clear();
+
+          int ret = store->getRados()->bi_list(dpp, bucket_info, shard, null_object_filter,
+                                              marker, max_op_entries, &entries,
+                                              &is_truncated, process_log, y);
+          if (ret == -ENOENT) {
+            ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
+                << i << ", skipping" << dendl;
+            // break out of the is_truncated loop and move on to the next shard
+            break;
+          } else if (ret < 0) {
+            derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
+            std::error_code ec(-ret, std::system_category());
+          }
+
+          for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
+            rgw_cls_bi_entry& entry = *iter;
+            if (verbose_json_out) {
+              formatter->open_object_section("entry");
+
+              encode_json("shard_id", shard, formatter);
+              encode_json("num_entry", stage_entries, formatter);
+              encode_json("entry", entry, formatter);
+            }
+            stage_entries++;
+
+            marker = entry.idx;
+
+            cls_rgw_obj_key cls_key;
+            RGWObjCategory category;
+            rgw_bucket_category_stats stats;
+            bool account = entry.get_info(&cls_key, &category, &stats);
+            rgw_obj_key key(cls_key);
+            if (entry.type == BIIndexType::OLH && key.empty()) {
+              // bogus entry created by https://tracker.ceph.com/issues/46456
+              // to fix, skip so it doesn't get include in the new bucket instance
+              stage_entries--;
+              ldpp_dout(dpp, 10) << "Dropping entry with empty name, idx=" << marker << dendl;
+              continue;
+            }
+
+            int shard_index;
+            ret = calc_target_shard(bucket_info, key, shard_index, dpp);
+            if (ret < 0) {
+              std::error_code ec(-ret, std::system_category());
+            }
+
+            ret = target_shards_mgr.add_entry(shard_index, entry, account,
+                      category, stats, process_log);
+            if (ret < 0) {
+              std::error_code ec(-ret, std::system_category());
+            }
+
+            ret = renew_lock_if_needed(dpp);
+            if (ret < 0) {
+              std::error_code ec(-ret, std::system_category());
+            }
+
+            if (verbose_json_out) {
+              formatter->close_section();
+              formatter->flush(*out);
+            } else if (out && !(stage_entries % 1000)) {
+              (*out) << " " << stage_entries;
+            }
+          } // entries loop
+        }
       }
-
-      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
-        rgw_cls_bi_entry& entry = *iter;
-        if (verbose_json_out) {
-          formatter->open_object_section("entry");
-
-          encode_json("shard_id", i, formatter);
-          encode_json("num_entry", stage_entries, formatter);
-          encode_json("entry", entry, formatter);
-        }
-        stage_entries++;
-
-        marker = entry.idx;
-
-        cls_rgw_obj_key cls_key;
-        RGWObjCategory category;
-        rgw_bucket_category_stats stats;
-        bool account = entry.get_info(&cls_key, &category, &stats);
-        rgw_obj_key key(cls_key);
-        if (entry.type == BIIndexType::OLH && key.empty()) {
-          // bogus entry created by https://tracker.ceph.com/issues/46456
-          // to fix, skip so it doesn't get include in the new bucket instance
-          stage_entries--;
-          ldpp_dout(dpp, 10) << "Dropping entry with empty name, idx=" << marker << dendl;
-          continue;
-        }
-
-        int shard_index;
-        ret = calc_target_shard(bucket_info, key, shard_index, dpp);
-        if (ret < 0) {
-          return ret;
-        }
-
-        ret = target_shards_mgr.add_entry(shard_index, entry, account,
-                  category, stats, process_log);
-        if (ret < 0) {
-          return ret;
-        }
-
-        ret = renew_lock_if_needed(dpp);
-        if (ret < 0) {
-          return ret;
-        }
-
-        if (verbose_json_out) {
-          formatter->close_section();
-          formatter->flush(*out);
-        } else if (out && !(stage_entries % 1000)) {
-          (*out) << " " << stage_entries;
-        }
-      } // entries loop
-    }
+    }, [] (std::exception_ptr eptr) {
+      if (eptr) std::rethrow_exception(eptr);
+    });
   }
-
+  try {
+    context.run();
+  } catch (const std::system_error& e) {
+    return -e.code().value();
+  }
   if (verbose_json_out) {
     formatter->close_section();
     formatter->flush(*out);
