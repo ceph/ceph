@@ -144,4 +144,10 @@ using namespace ceph;
    ? _CEPH_ASSERT_VOID_CAST (0)					\
    : ::ceph::__ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
 
+#define consteval_assert(expr, msg)	\
+  do {					\
+    if (!(expr)) {			\
+      throw (msg);			\
+    }					\
+  } while(false)
 #endif
