@@ -1,0 +1,63 @@
+============================================
+INTEL ISA library Erasure Coding plugin
+============================================
+
+Build Requirements
+==================
+Plug-in build compiles the included sources of ISA-L v2.10 and links them into the plugin. ISA-L implementation is portable and probes CPU features during runtime. Note that the names of the assembler source files have been renamed from *.asm to *.asm.s to be compatible with Automake.
+
+Run-time Requirements
+=====================
+None
+
+Plug-in Configuration
+=====================
+
+Used parameters are:
+k : number of data chunks
+m : number of coding chunks
+technique : cauchy, reed_sol_van
+
+The plug-in exports only two encoding technique (cauchy, reed_sol_van) using either a Vandermonde matrix or a Cauchy matrix for coding.
+By default a Vandermonde matrix is used. Be aware that sometimes the generated Vandermonde matrix is not always invertible and not fully MDS.
+Therefore the accepted parameter space has limited to maximum (21,4) and (32,3) for Vandermonde matrices.
+
+Run the Test suite
+==================
+cd ceph/src
+make unittest_erasure_code_isa
+./unittest_erasure_code_isa --gtest_filter=*.* --log-to-stderr=true --debug-ods=20
+
+Run the CEPH erasure code benchmark
+===================================
+cd ceph/src
+make ceph_erasure_code_benchmark
+
+# consult ./ceph_erasure_code_benchmark -h for help
+
+# encode performance
+./ceph_erasure_code_benchmark -p isa -P k=8 -P m=3 -S 1048576 -i 1000
+
+# decode performance one lost
+./ceph_erasure_code_benchmark -e 1 -w decode -p isa -P k=8 -P m=3 -S 1048576 -i 1000
+
+# decode performance two lost
+./ceph_erasure_code_benchmark -e 2 -w decode -p isa -P k=8 -P m=3 -S 1048576 -i 1000
+
+# decode performance three lost
+./ceph_erasure_code_benchmark -e 3 -w decode -p isa -P k=8 -P m=3 -S 1048576 -i 1000
+
+
+Developer Notes
+===============
+The plugin provides optimal performance for 32-byte aligned buffer start address and 
+k*32 byte aligned buffer length. The encoding tables are computed only once when the EC 
+object is created. Decoding Tables have to be computed for each decoding since the available 
+data/coding sources may change between calls.
+Decoding tables are cached in an LRU cache which is sufficiently large up to (12,4).
+
+For larger configurations the cache might expire the 'oldest' tables and decoding might
+slow down. The plug-in uses an optimization to use a pure region XOR to decode single disk
+failures if the erased chunk is within the first (k+1) chunks.
+
+The unittest probes all possible failure scenarios for (12,4) Vandermonde and Cauchy matrices.
