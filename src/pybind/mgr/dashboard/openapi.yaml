@@ -8293,6 +8293,7 @@ paths:
                   description: Enable high availability
                   type: boolean
                 gw_group:
+                  description: NVMeoF gateway group
                   type: string
                 max_namespaces:
                   default: 1024
@@ -8346,6 +8347,7 @@ paths:
         schema:
           type: boolean
       - allowEmptyValue: true
+        description: NVMeoF gateway group
         in: query
         name: gw_group
         schema:
@@ -8384,6 +8386,7 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway group
         in: query
         name: gw_group
         schema:
@@ -8417,6 +8420,12 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8444,6 +8453,12 @@ paths:
         in: path
         name: nqn
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
         schema:
           type: string
       responses:
@@ -8479,6 +8494,9 @@ paths:
           application/json:
             schema:
               properties:
+                gw_group:
+                  description: NVMeoF gateway group
+                  type: string
                 host_nqn:
                   description: NVMeoF host NQN. Use "*" to allow any host.
                   type: string
@@ -8525,6 +8543,12 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -8557,6 +8581,12 @@ paths:
         in: path
         name: nqn
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
         schema:
           type: string
       responses:
@@ -8596,6 +8626,9 @@ paths:
                   default: 0
                   description: NVMeoF address family (0 - IPv4, 1 - IPv6)
                   type: integer
+                gw_group:
+                  description: NVMeoF gateway group
+                  type: string
                 host_name:
                   description: NVMeoF hostname
                   type: string
@@ -8673,6 +8706,12 @@ paths:
         name: force
         schema:
           type: boolean
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -8705,6 +8744,12 @@ paths:
         in: path
         name: nqn
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
         schema:
           type: string
       responses:
@@ -8748,6 +8793,9 @@ paths:
                   default: true
                   description: Create RBD image
                   type: boolean
+                gw_group:
+                  description: NVMeoF gateway group
+                  type: string
                 load_balancing_group:
                   description: Load balancing group
                   type: integer
@@ -8805,6 +8853,12 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -8842,6 +8896,12 @@ paths:
         in: path
         name: nsid
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
         schema:
           type: string
       responses:
@@ -8883,6 +8943,9 @@ paths:
           application/json:
             schema:
               properties:
+                gw_group:
+                  description: NVMeoF gateway group
+                  type: string
                 load_balancing_group:
                   description: Load balancing group
                   type: integer
@@ -8935,6 +8998,12 @@ paths:
         in: path
         name: nsid
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway group
+        in: query
+        name: gw_group
         schema:
           type: string
       responses:
