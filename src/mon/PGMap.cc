@@ -1266,12 +1266,14 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 }
 
 /*
-
-  Fetches all the pools present in the cluster. Any "stale", not-"active" PG's
-  of the pool are added as the values to the corresponding pool.
+  Returns a map of all pools in a cluster. Each value lists any PGs that 
+  are in any of the following states: 
+  - non-active 
+  - stale 
+  - degraded (to account for unfound objects)
 
   Eg: {1=[1.0],2=[],3=[]}
-  Here the cluster has 3 pools with id 1,2,3 and the Pool 1 has an inactive PG 1.0
+  Here the cluster has 3 pools with id 1,2,3 and pool 1 has an inactive PG 1.0
 */
 void PGMap::get_unavailable_pg_in_pool_map(const OSDMap& osdmap)
 {
@@ -1294,6 +1296,11 @@ void PGMap::get_unavailable_pg_in_pool_map(const OSDMap& osdmap)
     if (i->second.state & PG_STATE_STALE) {
       if (i->second.last_unstale < val)
 	val = i->second.last_unstale;
+    }
+
+    if (i->second.state & PG_STATE_DEGRADED) {
+      if (i->second.last_undegraded < val)
+  val = i->second.last_undegraded;
     }
 
     if (val < cutoff) {
