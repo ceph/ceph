@@ -12,15 +12,18 @@
  *
  */
 
+#include "OpenFileTable.h"
 #include "acconfig.h"
+#include "mds/Anchor.h"
 #include "mds/CInode.h"
 #include "mds/CDir.h"
+#include "mds/inode_backtrace.h" // for inode_backpointer_t
 #include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "osdc/Objecter.h"
-#include "OpenFileTable.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/errno.h"
 
 enum {
@@ -239,6 +242,14 @@ object_t OpenFileTable::get_object_name(unsigned idx) const
   char s[30];
   snprintf(s, sizeof(s), "mds%d_openfiles.%x", int(mds->get_nodeid()), idx);
   return object_t(s);
+}
+
+void OpenFileTable::_reset_states() {
+  omap_num_objs = 0;
+  omap_num_items.resize(0);
+  journal_state = JOURNAL_NONE;
+  loaded_journals.clear();
+  loaded_anchor_map.clear();
 }
 
 void OpenFileTable::_encode_header(bufferlist &bl, int j_state)
