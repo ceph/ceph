@@ -15,12 +15,10 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
-#include <condition_variable>
 #include <list>
 #include <map>
 #include <mutex>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -35,8 +33,6 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/io_context_strand.hpp>
 #include <boost/asio/post.hpp>
-
-#include <fmt/format.h>
 
 #include "include/buffer.h"
 #include "include/ceph_assert.h"
@@ -54,9 +50,11 @@
 #include "common/ceph_timer.h"
 #include "common/config_obs.h"
 #include "common/shunique_lock.h"
+#include "common/snap_types.h" // for class SnapContext
 #include "common/zipkin_trace.h"
 #include "common/tracer.h"
 #include "common/Throttle.h"
+#include "crush/crush.h" // for CRUSH_ITEM_NONE
 
 #include "mon/MonClient.h"
 
