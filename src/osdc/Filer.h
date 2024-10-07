@@ -33,9 +33,6 @@
 
 #include "common/ceph_time.h"
 
-#include "Objecter.h"
-#include "Striper.h"
-
 #include <map>
 #include <mutex>
 #include <set>
@@ -43,6 +40,7 @@
 
 class Context;
 class Messenger;
+class Objecter;
 class Finisher;
 struct SnapContext;
 class utime_t;
@@ -112,13 +110,10 @@ class Filer {
   Filer(const Filer& other);
   const Filer operator=(const Filer& other);
 
-  Filer(Objecter *o, Finisher *f) : cct(o->cct), objecter(o), finisher(f) {}
+  Filer(Objecter *o, Finisher *f);
   ~Filer() {}
 
-  bool is_active() {
-    return objecter->is_active(); // || (oc && oc->is_active());
-  }
-
+  bool is_active();
 
   /*** async file interface.  scatter/gather as needed. ***/
 
@@ -130,12 +125,7 @@ class Filer {
 	   ceph::buffer::list *bl,   // ptr to data
 	   int flags,
 	   Context *onfinish,
-	   int op_flags = 0) {
-    ceph_assert(snap);  // (until there is a non-NOSNAP write)
-    std::vector<ObjectExtent> extents;
-    Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
-    objecter->sg_read(extents, snap, bl, flags, onfinish, op_flags);
-  }
+	   int op_flags = 0);
 
   void read_trunc(inodeno_t ino,
 		 const file_layout_t *layout,
@@ -147,14 +137,7 @@ class Filer {
 		 uint64_t truncate_size,
 		 __u32 truncate_seq,
 		 Context *onfinish,
-		 int op_flags = 0) {
-    ceph_assert(snap);  // (until there is a non-NOSNAP write)
-    std::vector<ObjectExtent> extents;
-    Striper::file_to_extents(cct, ino, layout, offset, len, truncate_size,
-			     extents);
-    objecter->sg_read_trunc(extents, snap, bl, flags,
-			    truncate_size, truncate_seq, onfinish, op_flags);
-  }
+		 int op_flags = 0);
 
   void write(inodeno_t ino,
 	    const file_layout_t *layout,
@@ -165,11 +148,7 @@ class Filer {
 	    ceph::real_time mtime,
 	    int flags,
 	    Context *oncommit,
-	    int op_flags = 0) {
-    std::vector<ObjectExtent> extents;
-    Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
-    objecter->sg_write(extents, snapc, bl, mtime, flags, oncommit, op_flags);
-  }
+	    int op_flags = 0);
 
   void write_trunc(inodeno_t ino,
 		  const file_layout_t *layout,
@@ -182,13 +161,7 @@ class Filer {
 		  uint64_t truncate_size,
 		  __u32 truncate_seq,
 		  Context *oncommit,
-		  int op_flags = 0) {
-    std::vector<ObjectExtent> extents;
-    Striper::file_to_extents(cct, ino, layout, offset, len, truncate_size,
-			     extents);
-    objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
-		       truncate_size, truncate_seq, oncommit, op_flags);
-  }
+		  int op_flags = 0);
 
   void truncate(inodeno_t ino,
 	       const file_layout_t *layout,
@@ -209,33 +182,7 @@ class Filer {
 	   ceph::real_time mtime,
 	   int flags,
 	   bool keep_first,
-	   Context *oncommit) {
-    std::vector<ObjectExtent> extents;
-    Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
-    if (extents.size() == 1) {
-      if (extents[0].offset == 0 && extents[0].length == layout->object_size
-	  && (!keep_first || extents[0].objectno != 0))
-	objecter->remove(extents[0].oid, extents[0].oloc,
-			 snapc, mtime, flags, oncommit);
-      else
-	objecter->zero(extents[0].oid, extents[0].oloc, extents[0].offset,
-		       extents[0].length, snapc, mtime, flags, oncommit);
-    } else {
-      C_GatherBuilder gcom(cct, oncommit);
-      for (auto p = extents.begin(); p != extents.end(); ++p) {
-	if (p->offset == 0 && p->length == layout->object_size &&
-	    (!keep_first || p->objectno != 0))
-	  objecter->remove(p->oid, p->oloc,
-			   snapc, mtime, flags,
-			   oncommit ? gcom.new_sub():0);
-	else
-	  objecter->zero(p->oid, p->oloc, p->offset, p->length,
-			 snapc, mtime, flags,
-			 oncommit ? gcom.new_sub():0);
-      }
-      gcom.activate();
-    }
-  }
+	   Context *oncommit);
 
   void zero(inodeno_t ino,
 	   const file_layout_t *layout,
