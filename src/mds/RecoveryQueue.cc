@@ -12,13 +12,13 @@
  * 
  */
 
+#include "RecoveryQueue.h"
 #include "CInode.h"
 #include "MDCache.h"
+#include "MDSContext.h" // for MDSIOContextBase
 #include "MDSRank.h"
 #include "Locker.h"
-#include "osdc/Filer.h"
-
-#include "RecoveryQueue.h"
+#include "common/debug.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
