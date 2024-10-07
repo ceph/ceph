@@ -14,7 +14,10 @@
  *
  */
 
+#include "AsyncConnection.h"
+
 #include <fmt/core.h>
+
 #include <unistd.h>
 
 #include "common/ceph_strings.h"
@@ -26,7 +29,6 @@
 #include "include/random.h"
 #include "common/errno.h"
 #include "AsyncMessenger.h"
-#include "AsyncConnection.h"
 
 #include "ProtocolV1.h"
 #include "ProtocolV2.h"
