@@ -60,13 +60,13 @@
 #include <list>
 #include <map>
 
-#include "Objecter.h"
 #include "Filer.h"
 
 #include "common/Throttle.h"
 #include "include/common_fwd.h"
 
 class Context;
+class Objecter;
 class Finisher;
 class C_OnFinisher;
 
@@ -408,26 +408,7 @@ private:
 
 public:
   Journaler(const std::string &name_, inodeno_t ino_, int64_t pool,
-      const char *mag, Objecter *obj, PerfCounters *l, int lkey, Finisher *f) :
-    last_committed(mag),
-    cct(obj->cct), lock(ceph::make_mutex("Journaler::" + name_)), name(name_), finisher(f), last_written(mag),
-    ino(ino_), pg_pool(pool), readonly(true),
-    stream_format(-1), journal_stream(-1),
-    magic(mag),
-    objecter(obj), filer(objecter, f), logger(l), logger_key_lat(lkey),
-    delay_flush_event(0),
-    state(STATE_UNDEF), error(0),
-    prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0),
-    safe_pos(0), next_safe_pos(0),
-    write_buf_throttle(cct, "write_buf_throttle", UINT_MAX - (UINT_MAX >> 3)),
-    waiting_for_zero_pos(0),
-    read_pos(0), requested_pos(0), received_pos(0),
-    fetch_len(0), temp_fetch_len(0),
-    on_readable(0), on_write_error(NULL), called_write_error(false),
-    expire_pos(0), trimming_pos(0), trimmed_pos(0), readable(false),
-    write_iohint(0)
-  {
-  }
+	    const char *mag, Objecter *obj, PerfCounters *l, int lkey, Finisher *f);
 
   /* reset
    *
