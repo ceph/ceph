@@ -189,6 +189,12 @@ To configure a directory for mirroring, run a command of the following form:
 
    ceph fs snapshot mirror add <fs_name> <path>
 
+To list the configured directories, run a command of the following form:
+
+.. prompt:: bash $
+
+   ceph fs snapshot mirror ls <fs_name>
+
 To stop mirroring directory snapshots, run a command of the following form:
 
 .. prompt:: bash $
