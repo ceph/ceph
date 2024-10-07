@@ -1,6 +1,8 @@
 from collections import OrderedDict
 import errno
 import re
+import sys
+import logging
 from typing import Optional, List, Any, Dict
 
 
@@ -12,8 +14,9 @@ def assert_valid_host(name: str) -> None:
             assert len(part) > 0, '.-delimited name component must not be empty'
             assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
             assert p.match(part), 'name component must include only a-z, 0-9, and -'
+        return 0
     except AssertionError as e:
-        raise SpecValidationError(str(e) + f'. Got "{name}"')
+        return f"{str(e)} + . Got {name}"
 
 
 def assert_valid_oob(oob: Dict[str, str]) -> None:
