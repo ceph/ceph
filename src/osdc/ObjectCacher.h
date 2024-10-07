@@ -8,13 +8,14 @@
 #include "include/Context.h"
 #include "include/xlist.h"
 #include "include/common_fwd.h"
+#include "include/unordered_map.h"
 
 #include "common/Cond.h"
 #include "common/Finisher.h"
+#include "common/snap_types.h" // for class SnapContext
 #include "common/Thread.h"
 #include "common/zipkin_trace.h"
 
-#include "Objecter.h"
 #include "Striper.h"
 
 class WritebackHandler;
