@@ -3760,15 +3760,16 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
 {
   auto t0 = mono_clock::now();
   std::lock_guard hl(h->lock);
+  auto& fnode = h->file->fnode;
   dout(10) << __func__ << " 0x" << std::hex << offset << std::dec
-           << " file " << h->file->fnode << dendl;
+           << " file " << fnode << dendl;
   if (h->file->deleted) {
     dout(10) << __func__ << "  deleted, no-op" << dendl;
     return 0;
   }
 
   // we never truncate internal log files
-  ceph_assert(h->file->fnode.ino > 1);
+  ceph_assert(fnode.ino > 1);
 
   // truncate off unflushed data?
   if (h->pos < offset &&
@@ -3782,20 +3783,58 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
     if (r < 0)
       return r;
   }
-  if (offset == h->file->fnode.size) {
-    return 0;  // no-op!
-  }
-  if (offset > h->file->fnode.size) {
+  if (offset > fnode.size) {
     ceph_abort_msg("truncate up not supported");
   }
-  ceph_assert(h->file->fnode.size >= offset);
+  ceph_assert(offset <= fnode.size);
   _flush_bdev(h);
-
-  std::lock_guard ll(log.lock);
-  vselector->sub_usage(h->file->vselector_hint, h->file->fnode.size - offset);
-  h->file->fnode.size = offset;
-  h->file->is_dirty = true;
-  log.t.op_file_update_inc(h->file->fnode);
+  {
+    std::lock_guard ll(log.lock);
+    std::lock_guard dl(dirty.lock);
+    bool changed_extents = false;
+    vselector->sub_usage(h->file->vselector_hint, fnode);
+    uint64_t x_off = 0;
+    auto p = fnode.seek(offset, &x_off);
+    uint64_t cut_off =
+      (p == fnode.extents.end()) ? 0 : p2roundup(x_off, alloc_size[p->bdev]);
+    uint64_t new_allocated;
+    if (0 == cut_off) {
+      // whole pextent to remove
+      changed_extents = true;
+      new_allocated = offset;
+    } else if (cut_off < p->length) {
+      dirty.pending_release[p->bdev].insert(p->offset + cut_off, p->length - cut_off);
+      new_allocated = (offset - x_off) + cut_off;
+      p->length = cut_off;
+      changed_extents = true;
+      ++p;
+    } else {
+      ceph_assert(cut_off >= p->length);
+      new_allocated  = (offset - x_off) + p->length;
+      // just leave it here
+      ++p;
+    }
+    while (p != fnode.extents.end()) {
+      dirty.pending_release[p->bdev].insert(p->offset, p->length);
+      p = fnode.extents.erase(p);
+      changed_extents = true;
+    }
+    if (changed_extents) {
+      fnode.size = offset;
+      fnode.allocated = new_allocated;
+      fnode.reset_delta();
+      log.t.op_file_update(fnode);
+      // sad, but is_dirty must be set to signal flushing of the log
+      h->file->is_dirty = true;
+    } else {
+      if (offset != fnode.size) {
+        fnode.size = offset;
+        //skipping log.t.op_file_update_inc, it will be done by flush()
+        h->file->is_dirty = true;
+      }
+    }
+    vselector->add_usage(h->file->vselector_hint, fnode);
+  }
   logger->tinc(l_bluefs_truncate_lat, mono_clock::now() - t0);
   return 0;
 }
