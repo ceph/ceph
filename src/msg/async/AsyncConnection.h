@@ -19,7 +19,6 @@
 #define CEPH_MSG_ASYNCCONNECTION_H
 
 #include <atomic>
-#include <pthread.h>
 #include <climits>
 #include <deque>
 #include <list>
@@ -29,7 +28,6 @@
 #include <functional>
 #include <optional>
 
-#include "auth/AuthSessionHandler.h"
 #include "common/ceph_time.h"
 #include "common/perf_counters.h"
 #include "include/buffer.h"
