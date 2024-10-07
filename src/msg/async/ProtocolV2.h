@@ -5,6 +5,7 @@
 #define _MSG_ASYNC_PROTOCOL_V2_
 
 #include "Protocol.h"
+#include "AsyncConnection.h"
 #include "crypto_onwire.h"
 #include "compression_meta.h"
 #include "compression_onwire.h"
