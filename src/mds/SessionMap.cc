@@ -12,14 +12,17 @@
  * 
  */
 
+#include "SessionMap.h"
+#include "CInode.h"
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "Mutation.h"
-#include "SessionMap.h"
 #include "osdc/Filer.h"
+#include "osdc/Objecter.h"
 #include "common/Finisher.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/DecayCounter.h"
 #include "include/ceph_assert.h"
