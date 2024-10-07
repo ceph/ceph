@@ -273,4 +273,9 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
     super.setExpandedRow(expandedRow);
     this.router.navigate(['performance-details'], { relativeTo: this.route });
   }
+
+  refresh() {
+    this.multiClusterService.refresh();
+    this.multiClusterService.refreshTokenStatus();
+  }
 }

@@ -34,6 +34,7 @@
                     [columns]="columns"
                     columnMode="flex"
                     selectionType="single"
+                    (fetchData)="refresh()"
                     [hasDetails]="true"
                     (setExpandedRow)="setExpandedRow($event)"
                     [maxLimit]="25"
