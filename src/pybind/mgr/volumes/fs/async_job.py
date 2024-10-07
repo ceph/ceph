@@ -174,7 +174,6 @@ class AsyncJobs(threading.Thread):
         self.cancel_all_jobs()
         with lock_timeout_log(self.lock):
             self.cv.notifyAll()
-        self.join()
 
     def reconfigure_max_async_threads(self, nr_concurrent_jobs):
         """
