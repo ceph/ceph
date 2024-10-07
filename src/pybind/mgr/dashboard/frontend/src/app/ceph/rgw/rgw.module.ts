@@ -70,7 +70,8 @@ import {
   IconModule,
   LoadingModule,
   ModalModule,
-  ProgressIndicatorModule
+  ProgressIndicatorModule,
+  CodeSnippetModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 
@@ -94,6 +95,7 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     ModalModule,
     GridModule,
     ProgressIndicatorModule,
+    CodeSnippetModule,
     ButtonModule,
     LoadingModule,
     IconModule,
