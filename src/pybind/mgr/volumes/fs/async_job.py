@@ -125,8 +125,6 @@ class AsyncJobs(threading.Thread):
         # lock, cv for kickstarting jobs
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
-        # cv for job cancelation
-        self.waiting = False
         self.stopping = threading.Event()
         self.cancel_cv = threading.Condition(self.lock)
         self.nr_concurrent_jobs = nr_concurrent_jobs
