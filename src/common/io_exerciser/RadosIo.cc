@@ -154,7 +154,9 @@ void RadosIo::applyIoOp(IoOp &op)
                                       version_t ver,
                                       bufferlist bl) {
         ceph_assert(ec == boost::system::errc::success);
-        db->validate(op_info->bl1, op_info->offset1, op_info->length1);
+        ceph_assert(db->validate(op_info->bl1,
+                                 op_info->offset1,
+                                 op_info->length1));
         finish_io();
       };
       librados::async_operate(asio, io, oid,
@@ -181,8 +183,12 @@ void RadosIo::applyIoOp(IoOp &op)
                                        version_t ver,
                                        bufferlist bl) {
         ceph_assert(ec == boost::system::errc::success);
-        db->validate(op_info->bl1, op_info->offset1, op_info->length1);
-        db->validate(op_info->bl2, op_info->offset2, op_info->length2);
+        ceph_assert(db->validate(op_info->bl1,
+                                 op_info->offset1,
+                                 op_info->length1));
+        ceph_assert(db->validate(op_info->bl2,
+                                 op_info->offset2,
+                                 op_info->length2));
         finish_io();
       };
       librados::async_operate(asio, io, oid,
@@ -210,9 +216,15 @@ void RadosIo::applyIoOp(IoOp &op)
                                        version_t ver,
                                        bufferlist bl) {
         ceph_assert(ec == boost::system::errc::success);
-        db->validate(op_info->bl1, op_info->offset1, op_info->length1);
-        db->validate(op_info->bl2, op_info->offset2, op_info->length2);
-        db->validate(op_info->bl3, op_info->offset3, op_info->length3);
+        ceph_assert(db->validate(op_info->bl1,
+                                 op_info->offset1,
+                                 op_info->length1));
+        ceph_assert(db->validate(op_info->bl2,
+                                 op_info->offset2,
+                                 op_info->length2));
+        ceph_assert(db->validate(op_info->bl3,
+                                 op_info->offset3,
+                                 op_info->length3));
         finish_io();
       };
       librados::async_operate(asio, io, oid,
