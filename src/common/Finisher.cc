@@ -20,7 +20,7 @@ void Finisher::stop()
   finisher_stop = true;
   // we don't have any new work to do, but we want the worker to wake up anyway
   // to process the stop condition.
-  finisher_cond.notify_all();
+  finisher_cond.notify_one();
   finisher_lock.unlock();
   finisher_thread.join(); // wait until the worker exits completely
   ldout(cct, 10) << __func__ << " finish" << dendl;
