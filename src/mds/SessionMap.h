@@ -15,8 +15,6 @@
 #ifndef CEPH_MDS_SESSIONMAP_H
 #define CEPH_MDS_SESSIONMAP_H
 
-#include <set>
-
 #include "include/unordered_map.h"
 
 #include "include/Context.h"
@@ -28,10 +26,20 @@
 #include "common/perf_counters.h"
 #include "common/DecayCounter.h"
 
-#include "CInode.h"
 #include "Capability.h"
+#include "CDentry.h" // for struct ClientLease
 #include "MDSContext.h"
+#include "Mutation.h" // for struct MDRequestImpl
 #include "msg/Message.h"
+
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
+#include <set>
+#include <string>
 
 struct MDRequestImpl;
 
