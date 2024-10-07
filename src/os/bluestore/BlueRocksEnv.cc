@@ -221,18 +221,12 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   }
 
   rocksdb::Status Close() override {
-    fs->fsync(h);
 
-    // mimic posix env, here.  shrug.
-    size_t block_size;
-    size_t last_allocated_block;
-    GetPreallocationStatus(&block_size, &last_allocated_block);
-    if (last_allocated_block > 0) {
-      int r = fs->truncate(h, h->pos);
-      if (r < 0)
-	return err_to_status(r);
+    int r = fs->truncate(h, h->pos);
+    if (r < 0) {
+      return err_to_status(r);
     }
-
+    fs->fsync(h);
     return rocksdb::Status::OK();
   }
 
