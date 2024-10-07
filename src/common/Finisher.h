@@ -83,11 +83,12 @@ class Finisher {
   auto queue(T &ls) -> decltype(std::distance(ls.begin(), ls.end()), void()) {
     {
       const std::lock_guard l{finisher_lock};
-      if (finisher_queue.empty() && !finisher_running) {
-	finisher_cond.notify_all();
-      }
+      const bool should_notify = finisher_queue.empty() && !finisher_running;
       for (Context *i : ls) {
 	finisher_queue.push_back(std::make_pair(i, 0));
+      }
+      if (should_notify) {
+	finisher_cond.notify_all();
       }
     }
     if (logger)
