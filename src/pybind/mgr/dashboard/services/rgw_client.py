@@ -2236,7 +2236,8 @@ class RgwMultisite:
                          source_bucket: str = '',
                          destination_bucket: str = '',
                          bucket_name: str = '',
-                         update_period=False):
+                         update_period=False,
+                         user: str = '', mode: str = ''):
 
         if source_zones['added'] or destination_zones['added']:
             rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'create',
@@ -2245,17 +2246,21 @@ class RgwMultisite:
             if bucket_name:
                 rgw_sync_policy_cmd += ['--bucket', bucket_name]
 
-            if source_bucket:
-                rgw_sync_policy_cmd += ['--source-bucket', source_bucket]
+            rgw_sync_policy_cmd += ['--source-bucket', source_bucket]
 
-            if destination_bucket:
-                rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
+            rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
 
             if source_zones['added']:
                 rgw_sync_policy_cmd += ['--source-zones', ','.join(source_zones['added'])]
 
             if destination_zones['added']:
                 rgw_sync_policy_cmd += ['--dest-zones', ','.join(destination_zones['added'])]
+
+            if user:
+                rgw_sync_policy_cmd += ['--uid', user]
+
+            if mode:
+                rgw_sync_policy_cmd += ['--mode', mode]
 
             logger.info("Creating sync pipe!")
             try:
@@ -2271,13 +2276,13 @@ class RgwMultisite:
         if ((source_zones['removed'] and '*' not in source_zones['added'])
                 or (destination_zones['removed'] and '*' not in destination_zones['added'])):
             self.remove_sync_pipe(group_id, pipe_id, source_zones['removed'],
-                                  destination_zones['removed'], destination_bucket,
-                                  bucket_name)
+                                  destination_zones['removed'],
+                                  bucket_name, True)
 
     def remove_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Optional[List[str]] = None,
                          destination_zones: Optional[List[str]] = None,
-                         destination_bucket: str = '', bucket_name: str = '',
+                         bucket_name: str = '',
                          update_period=False):
         rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'remove',
                                '--group-id', group_id, '--pipe-id', pipe_id]
@@ -2290,9 +2295,6 @@ class RgwMultisite:
 
         if destination_zones:
             rgw_sync_policy_cmd += ['--dest-zones', ','.join(destination_zones)]
-
-        if destination_bucket:
-            rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
 
         logger.info("Removing sync pipe! %s", rgw_sync_policy_cmd)
         try:
