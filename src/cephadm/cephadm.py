@@ -3542,6 +3542,10 @@ def list_daemons(
                     'fsid': fsid,
                     'systemd_unit': identity.unit_name,
                 }
+                sd_path_info = systemd_unit.sidecars_from_dropin(
+                    systemd_unit.PathInfo(ctx.unit_dir, identity), missing_ok=True
+                )
+                _update_daemon_info_ext_units(val, sd_path_info)
                 if detail:
                     _update_daemon_and_container_status(
                         val,
@@ -3791,6 +3795,25 @@ def _update_daemon_and_container_status(
     val['configured'] = get_file_timestamp(
         os.path.join(data_dir, fsid, j, 'unit.configured')
     )
+
+
+def _update_daemon_info_ext_units(
+    val: Dict[str, Any], sd_path_info: systemd_unit.PathInfo
+) -> None:
+    """Add entries to the `val` dict, that describes a daemon, info pertaining
+    to extended systemd units - things like sidecars and init container services.
+    """
+    init_unit = sd_path_info.has_init_unit()
+    sc_unit = sd_path_info.has_sidecar_units()
+    if init_unit or sc_unit:
+        esd_units = val['extended_systemd_units'] = {}
+        if init_unit:
+            upath = str(sd_path_info.init_ctr_unit_file)
+            esd_units[upath] = {'unit_type': 'init'}
+        if sc_unit:
+            for sidecar in sd_path_info.sidecar_unit_files.values():
+                upath = str(sidecar)
+                esd_units[upath] = {'unit_type': 'sidecar'}
 
 
 def _parse_mem_usage(code: int, out: str) -> Tuple[int, Dict[str, int]]:
