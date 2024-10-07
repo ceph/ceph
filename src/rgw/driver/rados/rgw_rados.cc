@@ -5089,7 +5089,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                              RGWBucketInfo& bucket_info,
-                             const rgw_obj& obj,
+                             rgw_obj obj,
                              const rgw_placement_rule& placement_rule,
                              const real_time& mtime,
                              uint64_t olh_epoch,
@@ -5120,6 +5120,11 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
     return -ECANCELED;
   }
 
+  // bi expects empty instance for the entries created when bucket versioning
+  // is not enabled or suspended.
+  if (obj.key.instance == "null") {
+    obj.key.instance.clear();
+  }
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_TAIL_TAG);
 
