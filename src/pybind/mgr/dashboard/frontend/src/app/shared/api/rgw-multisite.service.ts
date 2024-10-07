@@ -2,6 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { RgwRealm, RgwZone, RgwZonegroup } from '~/app/ceph/rgw/models/rgw-multisite';
 import { RgwDaemonService } from './rgw-daemon.service';
+import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
@@ -9,6 +10,9 @@ import { RgwDaemonService } from './rgw-daemon.service';
 export class RgwMultisiteService {
   private uiUrl = 'ui-api/rgw/multisite';
   private url = 'api/rgw/multisite';
+
+  private restartGatewayMessageSource = new BehaviorSubject<boolean>(null);
+  restartGatewayMessage$ = this.restartGatewayMessageSource.asObservable();
 
   constructor(private http: HttpClient, public rgwDaemonService: RgwDaemonService) {}
 
@@ -136,5 +140,9 @@ export class RgwMultisiteService {
       `${this.url}/sync-pipe/${encodeURIComponent(group_id)}/${encodeURIComponent(pipe_id)}`,
       { params }
     );
+  }
+
+  setRestartGatewayMessage(value: boolean): void {
+    this.restartGatewayMessageSource.next(value);
   }
 }
