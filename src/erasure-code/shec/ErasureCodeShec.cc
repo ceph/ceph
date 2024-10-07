@@ -137,29 +137,6 @@ int ErasureCodeShec::minimum_to_decode_with_cost(const set<int> &want_to_read,
   return _minimum_to_decode(want_to_read, available_chunks, minimum_chunks);
 }
 
-int ErasureCodeShec::encode(const set<int> &want_to_encode,
-			    const bufferlist &in,
-			    map<int, bufferlist> *encoded)
-{
-  unsigned int k = get_data_chunk_count();
-  unsigned int m = get_chunk_count() - k;
-  bufferlist out;
-
-  if (!encoded || !encoded->empty()){
-    return -EINVAL;
-  }
-
-  int err = encode_prepare(in, *encoded);
-  if (err)
-    return err;
-  encode_chunks(want_to_encode, encoded);
-  for (unsigned int i = 0; i < k + m; i++) {
-    if (want_to_encode.count(i) == 0)
-      encoded->erase(i);
-  }
-  return 0;
-}
-
 int ErasureCodeShec::encode_chunks(const set<int> &want_to_encode,
 				   map<int, bufferlist> *encoded)
 {
