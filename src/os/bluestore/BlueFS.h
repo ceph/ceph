@@ -82,15 +82,102 @@ public:
 
   virtual ~BlueFSVolumeSelector() {
   }
+  /**
+  *  Method to learn a hint (aka logic level discriminator)  specific for
+  *  BlueFS log
+  *
+  */
   virtual void* get_hint_for_log() const = 0;
+  /**
+  *  Method to learn a hint (aka logic level discriminator) provided directory
+  *  bound to.
+  *
+  */
   virtual void* get_hint_by_dir(std::string_view dirname) const = 0;
 
-  virtual void add_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
-  virtual void sub_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
-  virtual void add_usage(void* file_hint, uint64_t fsize) = 0;
-  virtual void sub_usage(void* file_hint, uint64_t fsize) = 0;
+  /**
+  *  Increments stats for a given logical level using provided fnode as a delta,
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fnode: fnode metadata to be used as a complex delta value:
+  *           (+1 file count, +file size, +all the extents)
+  *
+  */
+  void add_usage(void* hint, const bluefs_fnode_t& fnode) {
+    for (auto& e : fnode.extents) {
+      add_usage(hint, e);
+    }
+    add_usage(hint, fnode.size, true);
+  }
+  /**
+  *  Decrements stats for a given logical level using provided fnode as a delta
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fnode: fnode metadata to be used as a complex delta value:
+  *           (-1 file count, -file size, -all the extents)
+  *
+  */
+  void sub_usage(void* hint, const bluefs_fnode_t& fnode) {
+    for (auto& e : fnode.extents) {
+      sub_usage(hint, e);
+    }
+    sub_usage(hint, fnode.size, true);
+  }
+  /**
+  *  Increments stats for a given logical level using provided extent as a delta,
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    extent: bluefs extent to be used as a complex delta value:
+  *           (.bdev determines physical location, +length)
+  *
+  */
+  virtual void add_usage(void* hint, const bluefs_extent_t& extent) = 0;
+  /**
+  *  Decrements stats for a given logical level using provided extent as a delta,
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    extent: bluefs extent to be used as a complex delta value:
+  *           (.bdev determines physical location, -length)
+  *
+  */
+  virtual void sub_usage(void* hint, const bluefs_extent_t& extent) = 0;
+  /**
+  *  Increments files count and overall files size for a given logical level
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fsize: delta value for file size
+  *    upd_files: whether or not to increment file count
+  *
+  */
+  virtual void add_usage(void* hint, uint64_t fsize, bool upd_files = false) = 0;
+  /**
+  *  Decrements files count and overall files size for a given logical level
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fsize: delta value for file size
+  *    upd_files: whether or not to decrement file count
+  *
+  */
+  virtual void sub_usage(void* hint, uint64_t fsize, bool upd_files = false) = 0;
+
+  /**
+  *  Determines preferred physical device for the given logical level
+  *  Parameters:
+  *    hint: logical level discriminator
+  *
+  */
   virtual uint8_t select_prefer_bdev(void* hint) = 0;
+  /**
+  *  Builds path set for RocksDB to use
+  *  Parameters:
+  *    base: path's root
+  *
+  */
   virtual void get_paths(const std::string& base, paths& res) const = 0;
+  /**
+  *  Dumps VSelector's state
+  *
+  */
   virtual void dump(std::ostream& sout) = 0;
 
   /* used for sanity checking of vselector */
@@ -433,9 +520,12 @@ private:
     return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
   }
   const char* get_device_name(unsigned id);
+
+  typedef std::function<void(const bluefs_extent_t)> update_fn_t;
   int _allocate(uint8_t bdev, uint64_t len,
                 uint64_t alloc_unit,
 		bluefs_fnode_t* node,
+                update_fn_t cb = nullptr,
                 size_t alloc_attempts = 0,
                 bool permit_dev_fallback = true);
 
@@ -710,19 +800,19 @@ public:
   void* get_hint_for_log() const override;
   void* get_hint_by_dir(std::string_view dirname) const override;
 
-  void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
+  void add_usage(void* hint, const bluefs_extent_t& extent) override {
     // do nothing
     return;
   }
-  void sub_usage(void* hint, const bluefs_fnode_t& fnode) override {
+  void sub_usage(void* hint, const bluefs_extent_t& extent) override {
     // do nothing
     return;
   }
-  void add_usage(void* hint, uint64_t fsize) override {
+  void add_usage(void*, uint64_t, bool) override {
     // do nothing
     return;
   }
-  void sub_usage(void* hint, uint64_t fsize) override {
+  void sub_usage(void*, uint64_t, bool) override {
     // do nothing
     return;
   }
