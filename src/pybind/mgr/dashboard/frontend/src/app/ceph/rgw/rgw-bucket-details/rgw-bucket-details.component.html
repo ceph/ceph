@@ -158,7 +158,7 @@
                 </div>
                 <td>
                   <pre *ngIf="lifecycleFormat === 'json'">{{selection.lifecycle | json}}</pre>
-                  <pre *ngIf="lifecycleFormat === 'xml'">{{ (selection.lifecycle | xml) || '-'}}</pre>
+                  <pre *ngIf="lifecycleFormat === 'xml'">{{ (selection.lifecycle | xml:{'Rules':'Rule'}) || '-'}}</pre>
                 </td>
               </tr>
               <tr>

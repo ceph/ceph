@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import xml.etree.ElementTree as ET  # noqa: N814
+from collections import defaultdict
 from enum import Enum
 from subprocess import SubprocessError
 
@@ -765,12 +766,28 @@ class RgwClient(RestClient):
             raise DashboardException(msg=str(e), component='rgw')
         return result
 
+    @staticmethod
+    def _handle_rules(pairs):
+        result = defaultdict(list)
+        for key, value in pairs:
+            if key == 'Rule':
+                result['Rules'].append(value)
+            else:
+                result[key] = value
+        return result
+
     @RestClient.api_get('/{bucket_name}?lifecycle')
     def get_lifecycle(self, bucket_name, request=None):
         # pylint: disable=unused-argument
         try:
-            result = request()  # type: ignore
-            result = {'LifecycleConfiguration': result}
+            decoded_request = request(raw_content=True).decode("utf-8")  # type: ignore
+            result = {
+                'LifecycleConfiguration':
+                json.loads(
+                    decoded_request,
+                    object_pairs_hook=RgwClient._handle_rules
+                )
+            }
         except RequestException as e:
             if e.content:
                 content = json_str_to_object(e.content)
@@ -822,15 +839,15 @@ class RgwClient(RestClient):
             lifecycle = RgwClient.dict_to_xml(lifecycle)
         try:
             if lifecycle and '<LifecycleConfiguration>' not in str(lifecycle):
-                lifecycle = f'<LifecycleConfiguration>{lifecycle}</LifecycleConfiguration>'
+                lifecycle = f'<LifecycleConfiguration>\n{lifecycle}\n</LifecycleConfiguration>'
             result = request(data=lifecycle)  # type: ignore
         except RequestException as e:
+            msg = ''
             if e.content:
                 content = json_str_to_object(e.content)
                 if content.get("Code") == "MalformedXML":
                     msg = "Invalid Lifecycle document"
-                    raise DashboardException(msg=msg, component='rgw')
-            raise DashboardException(msg=str(e), component='rgw')
+            raise DashboardException(msg=msg or str(e), component='rgw')
         return result
 
     @RestClient.api_delete('/{bucket_name}?lifecycle')

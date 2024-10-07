@@ -7,9 +7,13 @@ import { JsonToXmlService } from '../services/json-to-xml.service';
 export class XmlPipe implements PipeTransform {
   constructor(private jsonToXmlService: JsonToXmlService) {}
 
-  transform(value: string, valueFormat: string = 'json'): string {
+  transform(
+    value: string,
+    replaceKey: Record<string, string> = {},
+    valueFormat: string = 'json'
+  ): string {
     if (valueFormat === 'json') {
-      value = this.jsonToXmlService.format(value);
+      value = this.jsonToXmlService.format(value, replaceKey);
     }
     return value;
   }
