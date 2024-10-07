@@ -209,6 +209,10 @@ int ErasureCode::encode(const set<int> &want_to_encode,
                         const bufferlist &in,
                         map<int, bufferlist> *encoded)
 {
+  // TODO: switch out from taking a pointer
+  if (!encoded || !encoded->empty()){
+    return -EINVAL;
+  }
   unsigned int k = get_data_chunk_count();
   unsigned int m = get_chunk_count() - k;
   bufferlist out;
