@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw max chunk size: 4194304
+        # stripe size greater than (and not a multiple of) chunk size
+        rgw obj stripe size: 6291456
