@@ -20,6 +20,7 @@
 #include "common/entity_name.h"
 #include "common/Formatter.h"
 #include "include/buffer.h"
+#include "include/ceph_fs.h" // for CEPH_AUTH_UNKNOWN
 
 #include <cstdint>
 #include <iostream>
