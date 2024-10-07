@@ -65,7 +65,7 @@ class Finisher {
  public:
   /// Add a context to complete, optionally specifying a parameter for the complete function.
   void queue(Context *c, int r = 0) {
-    std::unique_lock ul(finisher_lock);
+    const std::lock_guard l{finisher_lock};
     bool was_empty = finisher_queue.empty();
     finisher_queue.push_back(std::make_pair(c, r));
     if (was_empty) {
@@ -79,7 +79,7 @@ class Finisher {
   template<typename T>
   auto queue(T &ls) -> decltype(std::distance(ls.begin(), ls.end()), void()) {
     {
-      std::unique_lock ul(finisher_lock);
+      const std::lock_guard l{finisher_lock};
       if (finisher_queue.empty()) {
 	finisher_cond.notify_all();
       }

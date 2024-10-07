@@ -40,7 +40,7 @@ void Finisher::wait_for_empty()
 
 bool Finisher::is_empty()
 {
-  std::unique_lock ul(finisher_lock);
+  const std::lock_guard l{finisher_lock};
   return finisher_queue.empty();
 }
 
