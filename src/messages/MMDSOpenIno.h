@@ -16,6 +16,7 @@
 #define CEPH_MDSOPENINO_H
 
 #include "messages/MMDSOp.h"
+#include "mds/inode_backtrace.h" // for inode_backpointer_t
 
 class MMDSOpenIno final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;

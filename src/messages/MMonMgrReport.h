@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "include/health.h"
 #include "mon/health_check.h"
+#include "mon/mon_types.h" // for ProgressEvent
 #include "mon/PGMap.h"
 
 class MMonMgrReport final : public PaxosServiceMessage {
