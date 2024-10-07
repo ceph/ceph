@@ -4,10 +4,7 @@
 #ifndef _MSG_ASYNC_PROTOCOL_
 #define _MSG_ASYNC_PROTOCOL_
 
-#include <list>
-#include <map>
-
-#include "AsyncConnection.h"
+#include "auth/Auth.h"
 #include "include/buffer.h"
 #include "include/msgr.h"
 
@@ -17,6 +14,9 @@
 
 #include <memory>
 #include <tuple>
+
+class AsyncConnection;
+class Message;
 
 template <class C>
 class Ct {
