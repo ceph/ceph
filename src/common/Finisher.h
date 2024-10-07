@@ -67,9 +67,9 @@ class Finisher {
   void queue(Context *c, int r = 0) {
     {
       const std::lock_guard l{finisher_lock};
-      const bool was_empty = finisher_queue.empty();
+      const bool should_notify = finisher_queue.empty() && !finisher_running;
       finisher_queue.push_back(std::make_pair(c, r));
-      if (was_empty) {
+      if (should_notify) {
 	finisher_cond.notify_one();
       }
     }
@@ -83,7 +83,7 @@ class Finisher {
   auto queue(T &ls) -> decltype(std::distance(ls.begin(), ls.end()), void()) {
     {
       const std::lock_guard l{finisher_lock};
-      if (finisher_queue.empty()) {
+      if (finisher_queue.empty() && !finisher_running) {
 	finisher_cond.notify_all();
       }
       for (Context *i : ls) {
