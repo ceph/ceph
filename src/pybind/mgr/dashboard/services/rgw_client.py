@@ -1298,7 +1298,7 @@ class RgwMultisiteAutomation:
         user_found = False
         start_time = time.time()
         while not user_found:
-            if time.time() - start_time > 120:  # Timeout after 2 minutes
+            if time.time() - start_time > 300:  # Timeout after 5 minutes
                 logger.error("Timeout reached while waiting for user %s to appear \
                              in the second cluster", username)
                 raise DashboardException(code='user_replication_timeout',
