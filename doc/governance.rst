@@ -21,57 +21,15 @@ Bodies
 Ceph Executive Council
 ======================
 
-.. _exec-council-responsibilities:
+Responsibilities
+----------------
 
-Ceph Executive Council Responsibilities
----------------------------------------
-
-- Spokesperson
-
-   - welcome/keynote for cephalocon
-     
-   - maintaining slides and presenting about the project
-
-   - Community focal point (user interaction, conference talks, mailing list,
-     etc)
+ * Arbiter in cases where decisions cannot be reached by consensus
+ * Distribute key responsibilities amongst themselves or others
+ * Point of contact for the project
+ * Representatives for Ceph foundation board meetings
+ * Ensure things get done
    
-- Community
-
-    - managing community manager
-
-    - LF Program Manager person, Social Media person
-
-    - liase with the ambassadors
-
-    - make sure ceph events happen, successfully: cephalocon, ceph days, cds, user/dev, cdm
-
-    - coordinating with LF
-
-    - creating program committee
-
-    - recordings on youtube
-
-    - getting sponsors for events
-
-    - communications, schedule, venue decisions
-
-    - coordinate blog posts
-
-
-- Ceph Foundation
-
-    - ensure foundation is healthy: financials, operations
-
-    - represent the CLT on the Board
-
-    - present project status regularly (yearly)
-
-    - collect member ideas / feedback
-
-    - ensure members feel valued
-
-    - guide the members how to support the project (events, testing, marketing, hardware, ...)
-
 Membership
 ----------
 
