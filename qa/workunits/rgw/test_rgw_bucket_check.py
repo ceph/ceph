@@ -173,6 +173,7 @@ def main():
     exec_cmd(f'radosgw-admin bucket check --fix --bucket {BUCKET_NAME}')
     out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {BUCKET_NAME} --fix --min-age-hours 0 --rgw-olh-pending-timeout-sec 0 --dump-keys')
     json_out = json.loads(out)
+    log.info(f'"bucket check unlinked" returned {json_out}, expecting {unlinked_keys}')
     assert len(json_out) == len(unlinked_keys)
     bucket.object_versions.all().delete()
     out = exec_cmd(f'radosgw-admin bucket stats --bucket {BUCKET_NAME}')
