@@ -2,7 +2,7 @@
 set -ex
 
 CEPH_ID=${CEPH_ID:-admin}
-TMP_FILES="/tmp/passphrase /tmp/passphrase2 /tmp/testdata1 /tmp/testdata2 /tmp/cmpdata /tmp/rawexport /tmp/export.qcow2"
+TMP_FILES="/tmp/passphrase /tmp/passphrase1 /tmp/passphrase2 /tmp/testdata1 /tmp/testdata2 /tmp/cmpdata /tmp/rawexport /tmp/export.qcow2"
 
 _sudo()
 {
@@ -278,8 +278,7 @@ function test_migration_clone() {
   rbd migration prepare testimg1 testimg2
 
   # test reading
-  # FIXME: https://tracker.ceph.com/issues/63184
-  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase)
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase)
   cmp $LIBRBD_DEV /tmp/cmpdata
 
   # trigger copyup for an unwritten area
@@ -297,8 +296,7 @@ function test_migration_clone() {
   _sudo rbd device unmap -t nbd $LIBRBD_DEV
 
   # test reading on a fresh mapping
-  # FIXME: https://tracker.ceph.com/issues/63184
-  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase)
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase)
   cmp $LIBRBD_DEV /tmp/cmpdata
   _sudo rbd device unmap -t nbd $LIBRBD_DEV
 
@@ -315,6 +313,85 @@ function test_migration_clone() {
   _sudo rbd device unmap -t nbd $LIBRBD_DEV
 
   rbd rm testimg2
+  rbd snap unprotect testimg@snap
+  rbd snap rm testimg@snap
+  rbd rm testimg
+}
+
+function test_migration_open_clone_chain() {
+  rbd create --size 32M testimg
+  rbd encryption format testimg luks1 /tmp/passphrase
+  rbd snap create testimg@snap
+  rbd snap protect testimg@snap
+
+  rbd clone testimg@snap testimg1
+  rbd encryption format testimg1 luks2 /tmp/passphrase1
+  rbd snap create testimg1@snap
+  rbd snap protect testimg1@snap
+
+  rbd clone testimg1@snap testimg2
+  rbd encryption format testimg2 luks1 /tmp/passphrase2
+
+  # 1. X <-- X <-- X
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase1,encryption-passphrase-file=/tmp/passphrase)
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+
+  # 2. X <-- X <-- migrating
+  rbd migration prepare testimg2 testimg2
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase1,encryption-passphrase-file=/tmp/passphrase)
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+  rbd migration abort testimg2
+
+  # 3. X <-- migrating <-- X
+  rbd migration prepare testimg1 testimg1
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase1,encryption-passphrase-file=/tmp/passphrase)
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+  rbd migration abort testimg1
+
+  # 4. migrating <-- X <-- X
+  rbd migration prepare testimg testimg
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase1,encryption-passphrase-file=/tmp/passphrase)
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+  rbd migration abort testimg
+
+  # 5. migrating <-- migrating <-- X
+  rbd migration prepare testimg testimg
+  rbd migration prepare testimg1 testimg1
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase1,encryption-passphrase-file=/tmp/passphrase)
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+  rbd migration abort testimg1
+  rbd migration abort testimg
+
+  # 6. migrating <-- X <-- migrating
+  rbd migration prepare testimg testimg
+  rbd migration prepare testimg2 testimg2
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase1,encryption-passphrase-file=/tmp/passphrase)
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+  rbd migration abort testimg2
+  rbd migration abort testimg
+
+  # 7. X <-- migrating <-- migrating
+  rbd migration prepare testimg1 testimg1
+  rbd migration prepare testimg2 testimg2
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase1,encryption-passphrase-file=/tmp/passphrase)
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+  rbd migration abort testimg2
+  rbd migration abort testimg1
+
+  # 8. migrating <-- migrating <-- migrating
+  rbd migration prepare testimg testimg
+  rbd migration prepare testimg1 testimg1
+  rbd migration prepare testimg2 testimg2
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-passphrase-file=/tmp/passphrase2,encryption-passphrase-file=/tmp/passphrase1,encryption-passphrase-file=/tmp/passphrase)
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+
+  rbd migration abort testimg2
+  rbd rm testimg2
+  rbd migration abort testimg1
+  rbd snap unprotect testimg1@snap
+  rbd snap rm testimg1@snap
+  rbd rm testimg1
+  rbd migration abort testimg
   rbd snap unprotect testimg@snap
   rbd snap rm testimg@snap
   rbd rm testimg
@@ -343,6 +420,7 @@ function clean_up {
   rbd snap unprotect testimg1@snap || true
   rbd snap remove testimg1@snap || true
   rbd remove testimg1 || true
+  rbd migration abort testimg || true
   rbd snap remove testimg@snap2 || true
   rbd snap remove testimg@snap1 || true
   rbd snap unprotect testimg@snap || true
@@ -371,6 +449,7 @@ dd if=/dev/urandom of=/tmp/testdata2 bs=4M count=4
 
 # create passphrase files
 printf "pass\0word\n" > /tmp/passphrase
+printf "  passwo\nrd 1,1" > /tmp/passphrase1
 printf "\t password2   " > /tmp/passphrase2
 
 # create an image
@@ -400,5 +479,7 @@ test_migration_clone luks1
 
 rbd create --size 48M testimg
 test_migration_clone luks2
+
+test_migration_open_clone_chain
 
 echo OK
