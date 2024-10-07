@@ -2792,6 +2792,13 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
 {
   rgw::sal::RadosPlacementTier* rtier = static_cast<rgw::sal::RadosPlacementTier*>(tier);
   map<string, bufferlist> attrs = get_attrs();
+  rgw_obj_key& obj_key = get_key();
+  // bi expects empty instance for the entries created when bucket versioning
+  // is not enabled or suspended.
+  if (obj_key.instance == "null") {
+      obj_key.instance.clear();
+  }
+
   RGWRados::Object op_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
   RGWRados::Object::Write obj_op(&op_target);
 
