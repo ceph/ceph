@@ -65,12 +65,15 @@ class Finisher {
  public:
   /// Add a context to complete, optionally specifying a parameter for the complete function.
   void queue(Context *c, int r = 0) {
-    const std::lock_guard l{finisher_lock};
-    bool was_empty = finisher_queue.empty();
-    finisher_queue.push_back(std::make_pair(c, r));
-    if (was_empty) {
-      finisher_cond.notify_one();
+    {
+      const std::lock_guard l{finisher_lock};
+      const bool was_empty = finisher_queue.empty();
+      finisher_queue.push_back(std::make_pair(c, r));
+      if (was_empty) {
+	finisher_cond.notify_one();
+      }
     }
+
     if (logger)
       logger->inc(l_finisher_queue_len);
   }
@@ -86,9 +89,9 @@ class Finisher {
       for (Context *i : ls) {
 	finisher_queue.push_back(std::make_pair(i, 0));
       }
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
     }
+    if (logger)
+      logger->inc(l_finisher_queue_len, ls.size());
     ls.clear();
   }
 
