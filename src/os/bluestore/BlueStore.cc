@@ -11235,7 +11235,7 @@ int BlueStore::_do_read(
 int BlueStore::_verify_csum(OnodeRef& o,
 			    const bluestore_blob_t* blob, uint64_t blob_xoffset,
 			    const bufferlist& bl,
-			    uint64_t logical_offset) const
+			    uint64_t logical_offset)
 {
   int bad;
   uint64_t bad_csum;
@@ -17259,12 +17259,33 @@ int BlueStore::_merge_collection(
   return r;
 }
 
+size_t BlueStore::_trim_slow_op_event_queue(mono_clock::time_point cur_time) {
+  ceph_assert(ceph_mutex_is_locked(qlock));
+  auto warn_duration = std::chrono::seconds(cct->_conf->bluestore_slow_ops_warn_lifetime);
+  while (!slow_op_event_queue.empty() && 
+    ((slow_op_event_queue.front() < cur_time - warn_duration) ||
+      (slow_op_event_queue.size() > cct->_conf->bluestore_slow_ops_warn_threshold))) {
+      slow_op_event_queue.pop();
+  }
+  return slow_op_event_queue.size();
+}
+
+void BlueStore::_add_slow_op_event() {
+  if (!cct->_conf->bluestore_slow_ops_warn_threshold) {
+    return;
+  }
+  std::lock_guard lock(qlock);
+  auto cur_time = mono_clock::now();
+  slow_op_event_queue.push(cur_time);
+  _trim_slow_op_event_queue(cur_time);
+}
+
 void BlueStore::log_latency(
   const char* name,
   int idx,
   const ceph::timespan& l,
   double lat_threshold,
-  const char* info) const
+  const char* info)
 {
   logger->tinc(idx, l);
   if (lat_threshold > 0.0 &&
@@ -17273,6 +17294,7 @@ void BlueStore::log_latency(
       << ", latency = " << l
       << info
       << dendl;
+    _add_slow_op_event();
   }
 }
 
@@ -17281,7 +17303,7 @@ void BlueStore::log_latency_fn(
   int idx,
   const ceph::timespan& l,
   double lat_threshold,
-  std::function<string (const ceph::timespan& lat)> fn) const
+  std::function<string (const ceph::timespan& lat)> fn)
 {
   logger->tinc(idx, l);
   if (lat_threshold > 0.0 &&
@@ -17290,6 +17312,7 @@ void BlueStore::log_latency_fn(
       << ", latency = " << l
       << fn(l)
       << dendl;
+    _add_slow_op_event();
   }
 }
 
@@ -17685,7 +17708,16 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
   } else if (!spillover_alert.empty()){
     spillover_alert.clear();
   }
-
+  if (cct->_conf->bluestore_slow_ops_warn_threshold) {
+    size_t qsize = _trim_slow_op_event_queue(mono_clock::now());
+    if (qsize >= cct->_conf->bluestore_slow_ops_warn_threshold) {
+      ostringstream ss;
+      ss << "observed slow operation indications in BlueStore";
+      alerts.emplace("BLUESTORE_SLOW_OP_ALERT", ss.str());
+    }
+  }
+  bdev->collect_alerts(alerts, "BLOCK");
+  bluefs->collect_alerts(alerts);
   if (!spurious_read_errors_alert.empty() &&
       cct->_conf->bluestore_warn_on_spurious_read_errors) {
     alerts.emplace(
