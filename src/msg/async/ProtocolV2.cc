@@ -439,7 +439,7 @@ void ProtocolV2::send_message(Message *m) {
     is_prepared = false;
   }
 
-  std::lock_guard<std::mutex> l(connection->write_lock);
+  std::unique_lock l{connection->write_lock};
   // "features" changes will change the payload encoding
   if (can_fast_prepare && (!can_write || connection->get_features() != f)) {
     // ensure the correctness of message encoding
@@ -463,6 +463,11 @@ void ProtocolV2::send_message(Message *m) {
                    << dendl;
     if (((!replacing && can_write) || state == STANDBY) && !write_in_progress) {
       write_in_progress = true;
+
+      /* unlock the mutex now because dispatch_event_external() may
+         block waiting for another mutex */
+      l.unlock();
+
       connection->center->dispatch_event_external(connection->write_handler);
     }
   }
@@ -470,9 +475,14 @@ void ProtocolV2::send_message(Message *m) {
 
 void ProtocolV2::send_keepalive() {
   ldout(cct, 10) << __func__ << dendl;
-  std::lock_guard<std::mutex> l(connection->write_lock);
+  std::unique_lock l{connection->write_lock};
   if (state != CLOSED) {
     keepalive = true;
+
+    /* unlock the mutex now because dispatch_event_external() may
+       block waiting for another mutex */
+    l.unlock();
+
     connection->center->dispatch_event_external(connection->write_handler);
   }
 }
