@@ -11,6 +11,9 @@
  * Foundation.  See file COPYING.
  *
  */
+
+#include "common/admin_socket.h"
+
 #include <poll.h>
 #include <signal.h>
 #include <sys/un.h>
@@ -19,11 +22,11 @@
 #include <sys/wait.h>
 #endif
 
+#include <iomanip>
 #include <optional>
 
 #include <stdlib.h>
 
-#include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -46,6 +49,10 @@
 #include "include/compat.h"
 #include "include/sock_compat.h"
 #include "fmt/format.h"
+
+#ifdef _WIN32
+#include "include/util.h" // for get_windows_version()
+#endif
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
