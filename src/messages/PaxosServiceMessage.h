@@ -5,6 +5,11 @@
 
 #include "msg/Message.h"
 #include "mon/Session.h"
+#include "include/encoding.h"
+#include "include/types.h" // for epoch_t
+
+#include <cstdint>
+#include <string_view>
 
 class PaxosServiceMessage : public Message {
 public:
