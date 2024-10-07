@@ -42,11 +42,11 @@ public:
   std::map<std::string, AdminSocketClient> clients;
   std::string metrics;
   std::pair<labels_t, std::string> add_fixed_name_metrics(std::string metric_name);
+  void update_sockets();
 
 private:
   std::mutex metrics_mutex;
   std::unique_ptr<MetricsBuilder> builder;
-  void update_sockets();
   void request_loop(boost::asio::steady_timer &timer);
 
   void dump_asok_metric(boost::json::object perf_info,
