@@ -18,7 +18,12 @@
 #define CRUSH_TREE_DUMPER_H
 
 #include "CrushWrapper.h"
+#include "common/Formatter.h"
 #include "include/stringify.h"
+
+#include <list>
+#include <map>
+#include <string>
 
 /**
  * CrushTreeDumper:
