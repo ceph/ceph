@@ -3527,16 +3527,16 @@ def list_daemons(
         elif is_fsid(i):
             fsid = str(i)  # convince mypy that fsid is a str here
             for j in os.listdir(os.path.join(data_dir, i)):
-                if '.' in j and os.path.isdir(
-                    os.path.join(data_dir, fsid, j)
+                if not (
+                    '.' in j
+                    and os.path.isdir(os.path.join(data_dir, fsid, j))
                 ):
-                    name = j
-                    if daemon_name and name != daemon_name:
-                        continue
-                    (daemon_type, daemon_id) = j.split('.', 1)
-                    unit_name = get_unit_name(fsid, daemon_type, daemon_id)
-                else:
                     continue
+                name = j
+                if daemon_name and name != daemon_name:
+                    continue
+                (daemon_type, daemon_id) = j.split('.', 1)
+                unit_name = get_unit_name(fsid, daemon_type, daemon_id)
                 val = {
                     'style': 'cephadm:v1',
                     'name': name,
