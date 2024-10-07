@@ -168,10 +168,17 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
     if (sockClientsPing) {
       bool ok;
       sock_client.ping(&ok);
+      std::string ceph_daemon_socket_up_desc(
+      "Reports the health status of a Ceph daemon, as determined by whether it is able to respond via its admin socket (1 = healthy, 0 = unhealthy).");
+      labels_t ceph_daemon_socket_up_labels;
+      ceph_daemon_socket_up_labels["hostname"] = quote(ceph_get_hostname());
+      ceph_daemon_socket_up_labels["ceph_daemon"] = quote(daemon_name);
+      add_metric(builder, static_cast<int>(ok), "ceph_daemon_socket_up", ceph_daemon_socket_up_desc,
+             "gauge", ceph_daemon_socket_up_labels);
       if (!ok) {
         failures++;
         continue;
-      } 
+      }
     }
     std::string counter_dump_response = dump_response.size() > 0 ? dump_response :
       asok_request(sock_client, "counter dump", daemon_name);
