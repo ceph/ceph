@@ -12,11 +12,13 @@
  *
  */
 
+#include "MDBalancer.h"
+
 #include "include/compat.h"
 #include "mdstypes.h"
 
 #include "mon/MonClient.h"
-#include "MDBalancer.h"
+#include "osdc/Objecter.h"
 #include "MDSRank.h"
 #include "MDSMap.h"
 #include "CInode.h"
@@ -27,6 +29,7 @@
 
 #include "include/Context.h"
 #include "msg/Messenger.h"
+#include "messages/MHeartbeat.h"
 
 #include <fstream>
 #include <vector>
@@ -35,6 +38,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/errno.h"
 
 /* Note, by default debug_mds_balancer is 1/5. For debug messages 1<lvl<=5,
