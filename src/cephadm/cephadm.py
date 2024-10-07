@@ -3536,17 +3536,16 @@ def list_daemons(
                 if daemon_name and name != daemon_name:
                     continue
                 identity = DaemonIdentity.from_name(fsid, name)
-                unit_name = identity.unit_name
                 val = {
                     'style': 'cephadm:v1',
                     'name': name,
                     'fsid': fsid,
-                    'systemd_unit': unit_name,
+                    'systemd_unit': identity.unit_name,
                 }
                 if detail:
                     # get container id
                     (val['enabled'], val['state'], _) = check_unit(
-                        ctx, unit_name
+                        ctx, identity.unit_name
                     )
                     container_id = None
                     image_name = None
