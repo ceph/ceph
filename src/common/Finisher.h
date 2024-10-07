@@ -88,7 +88,7 @@ class Finisher {
 	finisher_queue.push_back(std::make_pair(i, 0));
       }
       if (should_notify) {
-	finisher_cond.notify_all();
+	finisher_cond.notify_one();
       }
     }
     if (logger)
