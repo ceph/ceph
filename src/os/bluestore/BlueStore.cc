@@ -1312,6 +1312,7 @@ struct LruBufferCacheShard : public BlueStore::BufferCacheShard {
                  uint64_t *blobs,
                  uint64_t *buffers,
                  uint64_t *bytes) override {
+    std::lock_guard l(lock);
     *extents += num_extents;
     *blobs += num_blobs;
     *buffers += num;
@@ -1617,6 +1618,7 @@ public:
                  uint64_t *blobs,
                  uint64_t *buffers,
                  uint64_t *bytes) override {
+    std::lock_guard l(lock);
     *extents += num_extents;
     *blobs += num_blobs;
     *buffers += num;
@@ -4330,7 +4332,7 @@ void *BlueStore::MempoolThread::entry()
     _resize_shards(interval_stats_trim);
     interval_stats_trim = false;
 
-    store->_update_cache_logger();
+    store->refresh_perf_counters();
     auto wait = ceph::make_timespan(
       store->cct->_conf->bluestore_cache_trim_interval);
     cond.wait_for(l, wait);
@@ -9197,7 +9199,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       "bluestore_fsck_shared_blob_tracker_size"));
 
   dout(1) << __func__
-	  << " <<<START>>>"
+	  << " <<<STARTO>>>"
 	  << (repair ? " repair" : " check")
 	  << (depth == FSCK_DEEP ? " (deep)" :
                 depth == FSCK_SHALLOW ? " (shallow)" : " (regular)")
@@ -10667,7 +10669,7 @@ void BlueStore::_reap_collections()
   }
 }
 
-void BlueStore::_update_cache_logger()
+void BlueStore::refresh_perf_counters()
 {
   uint64_t num_onodes = 0;
   uint64_t num_pinned_onodes = 0;

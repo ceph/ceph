@@ -139,6 +139,8 @@ public:
     perf_tracker.update_from_perfcounters(*logger);
     return perf_tracker.get_cur_stats();
   }
+  void refresh_perf_counters() override {
+  }
   const PerfCounters* get_perf_counters() const override {
     return logger;
   }
