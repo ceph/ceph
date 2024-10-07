@@ -26,21 +26,26 @@
  * "files" are identified by ino.
  */
 
-
-#include <mutex>
-
+#include "osd/osd_types.h"
+#include "include/fs_types.h"
 #include "include/types.h"
+#include "include/utime.h"
 
 #include "common/ceph_time.h"
 
-#include "osd/OSDMap.h"
 #include "Objecter.h"
 #include "Striper.h"
 
+#include <map>
+#include <mutex>
+#include <set>
+#include <vector>
+
 class Context;
 class Messenger;
-class OSDMap;
 class Finisher;
+struct SnapContext;
+class utime_t;
 
 
 /**** Filer interface ***/
