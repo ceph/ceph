@@ -3480,7 +3480,8 @@ def list_daemons(
                 (daemon_type, daemon_id) = j.split('.', 1)
                 if type_of_daemon and type_of_daemon != daemon_type:
                     continue
-                unit_name = get_unit_name(fsid, daemon_type, daemon_id)
+                identity = DaemonIdentity.from_name(fsid, name)
+                unit_name = identity.unit_name
                 val = {
                     'style': 'cephadm:v1',
                     'name': name,
