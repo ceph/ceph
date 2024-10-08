@@ -211,10 +211,11 @@ void ProtocolV2::requeue_sent() {
 uint64_t ProtocolV2::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
   ldout(cct, 10) << __func__ << " " << seq << dendl;
   std::lock_guard<std::mutex> l(connection->write_lock);
-  if (out_queue.count(CEPH_MSG_PRIO_HIGHEST) == 0) {
+  const auto it = out_queue.find(CEPH_MSG_PRIO_HIGHEST);
+  if (it == out_queue.end()) {
     return seq;
   }
-  auto& rq = out_queue[CEPH_MSG_PRIO_HIGHEST];
+  auto& rq = it->second;
   uint64_t count = out_seq;
   while (!rq.empty()) {
     Message* const m = rq.front().m;
@@ -226,7 +227,7 @@ uint64_t ProtocolV2::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
     rq.pop_front();
     count++;
   }
-  if (rq.empty()) out_queue.erase(CEPH_MSG_PRIO_HIGHEST);
+  if (rq.empty()) out_queue.erase(it);
   return count;
 }
 
@@ -507,8 +508,7 @@ void ProtocolV2::read_event() {
 ProtocolV2::out_queue_entry_t ProtocolV2::_get_next_outgoing() {
   out_queue_entry_t out_entry;
 
-  if (!out_queue.empty()) {
-    auto it = out_queue.begin();
+  if (const auto it = out_queue.begin(); it != out_queue.end()) {
     auto& entries = it->second;
     ceph_assert(!entries.empty());
     out_entry = entries.front();
