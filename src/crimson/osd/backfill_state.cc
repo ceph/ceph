@@ -407,7 +407,34 @@ BackfillState::PrimaryScanning::react(PrimaryScanned evt)
   LOG_PREFIX(BackfillState::PrimaryScanning::react::PrimaryScanned);
   DEBUGDPP("", pg());
   backfill_state().backfill_info = std::move(evt.result);
-  return transit<Enqueuing>();
+  if (!backfill_state().is_cancelled()) {
+    return transit<Enqueuing>();
+  } else {
+    DEBUGDPP("backfill cancelled, not going Enqueuing", pg());
+    backfill_state().go_enqueuing_on_resume();
+  }
+  return discard_event();
+}
+
+boost::statechart::result
+BackfillState::PrimaryScanning::react(CancelBackfill evt)
+{
+  LOG_PREFIX(BackfillState::PrimaryScanning::react::CancelBackfill);
+  DEBUGDPP("cancelled within PrimaryScanning", pg());
+  backfill_state().on_cancelled();
+  return discard_event();
+}
+
+boost::statechart::result
+BackfillState::PrimaryScanning::react(Triggered evt)
+{
+  LOG_PREFIX(BackfillState::PrimaryScanning::react::Triggered);
+  ceph_assert(backfill_state().is_cancelled());
+  if (backfill_state().on_resumed()) {
+    DEBUGDPP("Backfill resumed, going Enqueuing", pg());
+    return transit<Enqueuing>();
+  }
+  return discard_event();
 }
 
 boost::statechart::result
@@ -470,7 +497,12 @@ BackfillState::ReplicasScanning::react(ReplicaScanned evt)
     if (waiting_on_backfill.empty()) {
       ceph_assert(backfill_state().peer_backfill_info.size() == \
                   peering_state().get_backfill_targets().size());
-      return transit<Enqueuing>();
+      if (!backfill_state().is_cancelled()) {
+	return transit<Enqueuing>();
+      } else {
+	DEBUGDPP("backfill cancelled, not going Enqueuing", pg());
+	backfill_state().go_enqueuing_on_resume();
+      }
     }
   } else {
     // we canceled backfill for a while due to a too full, and this
@@ -485,6 +517,20 @@ BackfillState::ReplicasScanning::react(CancelBackfill evt)
 {
   LOG_PREFIX(BackfillState::ReplicasScanning::react::CancelBackfill);
   DEBUGDPP("cancelled within ReplicasScanning", pg());
+  backfill_state().on_cancelled();
+  return discard_event();
+}
+
+boost::statechart::result
+BackfillState::ReplicasScanning::react(Triggered evt)
+{
+  LOG_PREFIX(BackfillState::ReplicasScanning::react::Triggered);
+  ceph_assert(backfill_state().is_cancelled());
+  if (backfill_state().on_resumed()) {
+    DEBUGDPP("Backfill resumed, going Enqueuing", pg());
+    return transit<Enqueuing>();
+  }
+  return discard_event();
 }
 
 boost::statechart::result
@@ -510,7 +556,34 @@ BackfillState::Waiting::react(ObjectPushed evt)
   LOG_PREFIX(BackfillState::Waiting::react::ObjectPushed);
   DEBUGDPP("Waiting::react() on ObjectPushed; evt.object={}", pg(), evt.object);
   backfill_state().progress_tracker->complete_to(evt.object, evt.stat, false);
-  return transit<Enqueuing>();
+  if (!backfill_state().is_cancelled()) {
+    return transit<Enqueuing>();
+  } else {
+    DEBUGDPP("backfill cancelled, not going Enqueuing", pg());
+    backfill_state().go_enqueuing_on_resume();
+  }
+  return discard_event();
+}
+
+boost::statechart::result
+BackfillState::Waiting::react(CancelBackfill evt)
+{
+  LOG_PREFIX(BackfillState::Waiting::react::CancelBackfill);
+  DEBUGDPP("cancelled within Waiting", pg());
+  backfill_state().on_cancelled();
+  return discard_event();
+}
+
+boost::statechart::result
+BackfillState::Waiting::react(Triggered evt)
+{
+  LOG_PREFIX(BackfillState::Waiting::react::Triggered);
+  ceph_assert(backfill_state().is_cancelled());
+  if (backfill_state().on_resumed()) {
+    DEBUGDPP("Backfill resumed, going Enqueuing", pg());
+    return transit<Enqueuing>();
+  }
+  return discard_event();
 }
 
 // -- Done
