@@ -1219,10 +1219,11 @@ void ProtocolV1::requeue_sent() {
 uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
   ldout(cct, 10) << __func__ << " " << seq << dendl;
   std::lock_guard<std::mutex> l(connection->write_lock);
-  if (out_q.count(CEPH_MSG_PRIO_HIGHEST) == 0) {
+  const auto it = out_q.find(CEPH_MSG_PRIO_HIGHEST);
+  if (it == out_q.end()) {
     return seq;
   }
-  auto &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  auto &rq = it->second;
   uint64_t count = out_seq;
   while (!rq.empty()) {
     Message* const m = rq.front().m;
@@ -1234,7 +1235,7 @@ uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
     rq.pop_front();
     count++;
   }
-  if (rq.empty()) out_q.erase(CEPH_MSG_PRIO_HIGHEST);
+  if (rq.empty()) out_q.erase(it);
   return count;
 }
 
@@ -1325,8 +1326,7 @@ void ProtocolV1::reset_recv_state()
 
 ProtocolV1::out_q_entry_t ProtocolV1::_get_next_outgoing() {
   out_q_entry_t out_entry;
-  if (!out_q.empty()) {
-    const auto it = out_q.begin();
+  if (const auto it = out_q.begin(); it != out_q.end()) {
     ceph_assert(!it->second.empty());
     const auto p = it->second.begin();
     out_entry = *p;
