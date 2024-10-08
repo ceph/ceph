@@ -388,13 +388,13 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  [[maybe_unused]]static int get_ioctx1(const DoutPrefixProvider* const dpp,
-					rgw::sal::Driver* driver,
-					RGWRados* rados,
-					const std::string &bucket_name,
-					const std::string& obj_name,
-					librados::IoCtx *p_ioctx,
-					std::string *oid)
+  static int get_ioctx1(const DoutPrefixProvider* const dpp,
+			rgw::sal::Driver* driver,
+			RGWRados* rados,
+			const std::string &bucket_name,
+			const std::string& obj_name,
+			librados::IoCtx *p_ioctx,
+			std::string *oid)
   {
     unique_ptr<rgw::sal::Bucket> bucket;
     rgw_bucket b{"", bucket_name, ""};
@@ -404,12 +404,10 @@ namespace rgw::dedup {
       return -ret;
     }
 
-    //const std::string bucket_name("b908ebb0-d7d6-431e-8bec-6ca176387468.4172.1");
     const std::string bucket_id = bucket->get_key().bucket_id;
     *oid = bucket_id + "_" + obj_name;
     //ldpp_dout(dpp, 0) << __func__ << "::OID=" << oid << " || bucket_id=" << bucket_id << dendl;
     rgw_pool data_pool;
-    //rgw_obj obj{bucket->get_key(), obj_name};
     rgw_obj obj{bucket->get_key(), *oid};
     if (!rados->get_obj_data_pool(bucket->get_placement_rule(), obj, &data_pool)) {
       ldpp_dout(dpp, 1) << "failed to get data pool for bucket '"
@@ -534,10 +532,12 @@ namespace rgw::dedup {
       return -1;
     }
 
-    // TBD: need to read target object attributes (RGW_ATTR_TAIL_TAG/RGW_ATTR_TAG)
-    // TBD2: Need to remove target RGW_ATTR_TAIL_TAG
-    // ref_tag = SRC.RGW_ATTR_TAG + '\0';
+    // TBD: Need to remove target RGW_ATTR_TAIL_TAG
+#if 0
     string ref_tag = calc_refcount_tag_hash(p_tgt_rec->bucket_name, p_tgt_rec->obj_name);
+#else
+    string ref_tag = p_tgt_rec->ref_tag + '\0';
+#endif
     ldpp_dout(dpp, 20) << __func__ << "::ref_tag=" << ref_tag << dendl;
     ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (ret == 0) {
@@ -667,6 +667,11 @@ namespace rgw::dedup {
       else {
 	p_stats->skip_sha256_cmp++;
       }
+#if 0
+      // REMOVE-ME!!!
+      // temporary solution to allow tests to finish until the ref-tag issue is solved
+      return 0;
+#endif
       ret = dedup_object(&src_rec, p_tgt_rec, has_shared_manifest, src_has_sha256);
       if (ret == 0) {
 	p_stats->deduped_objects++;

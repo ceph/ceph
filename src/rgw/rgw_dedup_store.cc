@@ -41,6 +41,7 @@ namespace rgw::dedup {
     this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
     this->s.obj_name_len    = CEPHTOH_16(p_rec->s.obj_name_len);
     this->s.bucket_name_len = CEPHTOH_16(p_rec->s.bucket_name_len);
+    this->s.ref_tag_len     = CEPHTOH_16(p_rec->s.ref_tag_len);
     this->s.pad16           = 0;
 
     const char *p = buff + sizeof(this->s);
@@ -49,6 +50,9 @@ namespace rgw::dedup {
 
     this->bucket_name = std::string(p, this->s.bucket_name_len);
     p += p_rec->s.bucket_name_len;
+
+    this->ref_tag = std::string(p, this->s.ref_tag_len);
+    p += p_rec->s.ref_tag_len;
 
     manifest_bl.append(p, this->s.manifest_len);
   }
@@ -78,6 +82,7 @@ namespace rgw::dedup {
     p_rec->s.manifest_len    = HTOCEPH_16(manifest_bl.length());
     p_rec->s.obj_name_len    = HTOCEPH_16(this->obj_name.length());
     p_rec->s.bucket_name_len = HTOCEPH_16(this->bucket_name.length());
+    p_rec->s.ref_tag_len     = HTOCEPH_16(this->ref_tag.length());
     p_rec->s.pad16           = 0;
 
     char *p = buff + sizeof(this->s);
@@ -87,6 +92,10 @@ namespace rgw::dedup {
 
     len = this->bucket_name.length();
     std::memcpy(p, this->bucket_name.data(), len);
+    p += len;
+
+    len = this->ref_tag.length();
+    std::memcpy(p, this->ref_tag.data(), len);
     p += len;
 
     const std::string & manifest = this->manifest_bl.to_str();
@@ -102,6 +111,7 @@ namespace rgw::dedup {
     unsigned len = offsetof(packed_rec_t, obj_name_len);
     return (this->obj_name    == other.obj_name    &&
 	    this->bucket_name == other.bucket_name &&
+	    this->ref_tag     == other.ref_tag &&
 	    this->manifest_bl == other.manifest_bl &&
 	    memcmp((char*)&this->s.flags, (char*)&other.s.flags, len) == 0);
   }
@@ -109,8 +119,11 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   size_t disk_record_t::length() const
   {
-    return (sizeof(this->s) + obj_name.length() + bucket_name.length() +
-	    manifest_bl.length());
+    return (sizeof(this->s) +
+	    this->obj_name.length() +
+	    this->bucket_name.length() +
+	    this->ref_tag.length() +
+	    this->manifest_bl.length());
   }
 
   //---------------------------------------------------------------------------
@@ -118,6 +131,7 @@ namespace rgw::dedup {
   {
     stream << rec.obj_name << "::" << rec.s.obj_name_len << "\n";
     stream << rec.bucket_name << "::" << rec.s.bucket_name_len << "\n";
+    stream << rec.ref_tag << "::" << rec.s.ref_tag_len << "\n";
     stream << "num_parts = " << rec.s.num_parts << "\n";
     stream << "obj_size  = " << 4*rec.s.size_4k_units <<" KiB"  << "\n";
     stream << "MD5       = " << std::hex << rec.s.md5_high << rec.s.md5_low << "\n";
@@ -225,7 +239,6 @@ namespace rgw::dedup {
     this->block_id  = CEPHTOH_32((uint32_t)this->block_id);
     for (unsigned i = 0; i < this->rec_count; i++) {
       this->rec_offsets[i] = CEPHTOH_16(this->rec_offsets[i]);
-      //ldpp_dout(dpp, 1) << i << "] offset = " << p_header->rec_offsets[i] << dendl;
     }
   }
 
@@ -245,16 +258,33 @@ namespace rgw::dedup {
     p_rec->bucket_name       = p_bucket->get_name();
     p_rec->s.bucket_name_len = p_rec->bucket_name.length();
     p_rec->s.pad16           = 0;
-    const rgw::sal::Attrs& attrs = p_obj->get_attrs();
-    p_rec->s.md5_high  = p_parsed_etag->md5_high;
-    p_rec->s.md5_low   = p_parsed_etag->md5_low;
-    p_rec->s.num_parts = p_parsed_etag->num_parts;
+    p_rec->s.md5_high        = p_parsed_etag->md5_high;
+    p_rec->s.md5_low         = p_parsed_etag->md5_low;
+    p_rec->s.num_parts       = p_parsed_etag->num_parts;
 
     // clear bufferlist first
     p_rec->manifest_bl.clear();
     ceph_assert(p_rec->manifest_bl.length() == 0);
 
-    auto itr = attrs.find(RGW_ATTR_MANIFEST);
+    const rgw::sal::Attrs& attrs = p_obj->get_attrs();
+    // if TAIL_TAG exists -> use it as ref-tag, eitherwise take ID_TAG
+    auto itr = attrs.find(RGW_ATTR_TAIL_TAG);
+    if (itr != attrs.end()) {
+      p_rec->ref_tag = itr->second.to_str();
+    }
+    else {
+      itr = attrs.find(RGW_ATTR_ID_TAG);
+      if (itr != attrs.end()) {
+	p_rec->ref_tag = itr->second.to_str();
+      }
+      else {
+	ldpp_dout(dpp, 1)  << __func__ << "::No TAIL_TAG and no ID_TAG" << dendl;
+	return -1;
+      }
+    }
+    p_rec->s.ref_tag_len = p_rec->ref_tag.length();
+
+    itr = attrs.find(RGW_ATTR_MANIFEST);
     if (itr != attrs.end()) {
       const bufferlist &bl = itr->second;
       RGWObjManifest manifest;

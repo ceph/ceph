@@ -2854,6 +2854,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << ((duration > ntl.max_lock_duration) ? "was expired" : "is valid") << std::endl;
       ntl_display_progress(ntl);
     }
+    else {
+      string s(bl.c_str(), bl.length());
+      cout << s;
+    }
   } else if (strcmp(nargs[0], "rmxattr") == 0) {
     if (!pool_name || nargs.size() < (obj_name ? 2 : 3)) {
       usage(cerr);
