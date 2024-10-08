@@ -3105,9 +3105,7 @@ Then run the following:
                 deps.append(build_url(host=dd.hostname, port=port).lstrip('/'))
             deps = sorted(deps)
         elif daemon_type == 'mgmt-gateway':
-            # url_prefix for monitoring daemons depends on the presence of mgmt-gateway
-            # while dashboard urls depend on the mgr daemons
-            deps += get_daemon_names(['grafana', 'prometheus', 'alertmanager', 'oauth2-proxy'])
+            deps = MgmtGatewayService.get_dependencies(self)
         else:
             # this daemon type doesn't need deps mgmt
             pass

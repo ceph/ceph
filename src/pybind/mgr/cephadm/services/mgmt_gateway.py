@@ -5,6 +5,8 @@ from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
 
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -81,14 +83,20 @@ class MgmtGatewayService(CephadmService):
             sd_endpoints.append(f"{addr}:{self.mgr.service_discovery_port}")
         return sd_endpoints
 
-    def get_mgmt_gateway_deps(self) -> List[str]:
+    @staticmethod
+    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
         # url_prefix for the following services depends on the presence of mgmt-gateway
-        deps: List[str] = []
-        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('prometheus')]
-        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('alertmanager')]
-        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('grafana')]
-        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('oauth2-proxy')]
-
+        deps = [
+            f'{d.name()}:{d.ports[0]}' if d.ports else d.name()
+            for service in ['prometheus', 'alertmanager', 'grafana', 'oauth2-proxy']
+            for d in mgr.cache.get_daemons_by_service(service)
+        ]
+        # dashboard and service discovery urls depend on the mgr daemons
+        deps += [
+            f'{d.name()}'
+            for service in ['mgr']
+            for d in mgr.cache.get_daemons_by_service(service)
+        ]
         return deps
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
@@ -146,7 +154,7 @@ class MgmtGatewayService(CephadmService):
             daemon_config["files"]["nginx.crt"] = cert
             daemon_config["files"]["nginx.key"] = key
 
-        return daemon_config, sorted(self.get_mgmt_gateway_deps())
+        return daemon_config, sorted(MgmtGatewayService.get_dependencies(self.mgr))
 
     def pre_remove(self, daemon: DaemonDescription) -> None:
         """
