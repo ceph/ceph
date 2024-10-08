@@ -93,7 +93,12 @@ private:
     bool is_prepared {false};
     Message* m {nullptr};
   };
-  std::map<int, std::list<out_queue_entry_t>> out_queue;
+
+  /**
+   * A queue for each priority value, highest priority first.
+   */
+  std::map<int, std::list<out_queue_entry_t>, std::greater<int>> out_queue;
+
   std::list<Message *> sent;
   std::atomic<uint64_t> out_seq{0};
   std::atomic<uint64_t> in_seq{0};
