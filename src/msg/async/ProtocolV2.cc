@@ -660,7 +660,10 @@ void ProtocolV2::write_event() {
     bool more;
     do {
       if (connection->is_queued()) {
-	if (r = connection->_try_send(); r!= 0) {
+	connection->write_lock.unlock();
+	r = connection->_try_send();
+	connection->write_lock.lock();
+	if (r!= 0) {
 	  // either fails to send or not all queued buffer is sent
 	  break;
 	}
