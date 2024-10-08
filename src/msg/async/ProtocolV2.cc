@@ -266,7 +266,7 @@ void ProtocolV2::reset_recv_state() {
 
   // clean read and write callbacks
   connection->pendingReadLen.reset();
-  connection->writeCallback.reset();
+  connection->writeCallback = {};
 
   next_tag = static_cast<Tag>(0);
 
