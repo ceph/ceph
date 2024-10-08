@@ -223,7 +223,7 @@ private:
 
   std::unique_ptr<Protocol> protocol;
 
-  std::optional<std::function<void(ssize_t)>> writeCallback;
+  std::function<void(ssize_t)> writeCallback;
   std::function<void(char *, ssize_t)> readCallback;
   std::optional<unsigned> pendingReadLen;
   char *read_buffer;
