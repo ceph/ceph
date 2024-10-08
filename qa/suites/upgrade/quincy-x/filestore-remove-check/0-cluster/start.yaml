@@ -44,4 +44,3 @@ roles:
   - mgr.x
   - osd.0
   - osd.1
-  - osd.2
