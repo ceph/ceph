@@ -177,7 +177,7 @@ void ioring_queue_t::shutdown()
 
 int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
                                  void *priv,
-                                 int *retries)
+                                 int *retries, int submit_retries, int initial_delay_us)
 {
   (void)retries;
 
@@ -245,7 +245,7 @@ void ioring_queue_t::shutdown()
 
 int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
                                  void *priv,
-                                 int *retries)
+                                 int *retries, int submit_retries, int initial_delay_us)
 {
   ceph_assert(0);
 }
