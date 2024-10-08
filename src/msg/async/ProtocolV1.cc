@@ -1294,7 +1294,7 @@ void ProtocolV1::reset_recv_state()
 
   // clean read and write callbacks
   connection->pendingReadLen.reset();
-  connection->writeCallback.reset();
+  connection->writeCallback = {};
 
   if (state > THROTTLE_MESSAGE && state <= READ_FOOTER_AND_DISPATCH &&
       connection->policy.throttler_messages) {
