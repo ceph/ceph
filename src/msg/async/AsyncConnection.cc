@@ -310,7 +310,7 @@ ssize_t AsyncConnection::write(ceph::buffer::list &bl,
     outgoing_bl.claim_append(bl);
     ssize_t r = _try_send(more);
     if (r > 0) {
-      writeCallback = callback;
+      writeCallback = std::move(callback);
     }
     return r;
 }
