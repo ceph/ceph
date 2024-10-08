@@ -1326,12 +1326,12 @@ void ProtocolV1::reset_recv_state()
 ProtocolV1::out_q_entry_t ProtocolV1::_get_next_outgoing() {
   out_q_entry_t out_entry;
   if (!out_q.empty()) {
-    const auto it = out_q.rbegin();
+    const auto it = out_q.begin();
     ceph_assert(!it->second.empty());
     const auto p = it->second.begin();
     out_entry = *p;
     it->second.erase(p);
-    if (it->second.empty()) out_q.erase(it->first);
+    if (it->second.empty()) out_q.erase(it);
   }
   return out_entry;
 }
