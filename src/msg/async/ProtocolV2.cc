@@ -508,13 +508,13 @@ ProtocolV2::out_queue_entry_t ProtocolV2::_get_next_outgoing() {
   out_queue_entry_t out_entry;
 
   if (!out_queue.empty()) {
-    auto it = out_queue.rbegin();
+    auto it = out_queue.begin();
     auto& entries = it->second;
     ceph_assert(!entries.empty());
     out_entry = entries.front();
     entries.pop_front();
     if (entries.empty()) {
-      out_queue.erase(it->first);
+      out_queue.erase(it);
     }
   }
   return out_entry;
