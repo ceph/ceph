@@ -210,11 +210,15 @@ public:
       sc::custom_reaction<ObjectPushed>,
       sc::custom_reaction<PrimaryScanned>,
       sc::transition<RequestDone, Done>,
+      sc::custom_reaction<CancelBackfill>,
+      sc::custom_reaction<Triggered>,
       sc::transition<sc::event_base, Crashed>>;
     explicit PrimaryScanning(my_context);
     sc::result react(ObjectPushed);
     // collect scanning result and transit to Enqueuing.
     sc::result react(PrimaryScanned);
+    sc::result react(CancelBackfill);
+    sc::result react(Triggered);
   };
 
   struct ReplicasScanning : sc::state<ReplicasScanning, BackfillMachine>,
@@ -223,6 +227,7 @@ public:
       sc::custom_reaction<ObjectPushed>,
       sc::custom_reaction<ReplicaScanned>,
       sc::custom_reaction<CancelBackfill>,
+      sc::custom_reaction<Triggered>,
       sc::transition<RequestDone, Done>,
       sc::transition<sc::event_base, Crashed>>;
     explicit ReplicasScanning(my_context);
@@ -231,6 +236,7 @@ public:
     sc::result react(ObjectPushed);
     sc::result react(ReplicaScanned);
     sc::result react(CancelBackfill);
+    sc::result react(Triggered);
 
     // indicate whether a particular peer should be scanned to retrieve
     // BackfillInterval for new range of hobject_t namespace.
@@ -249,9 +255,13 @@ public:
     using reactions = boost::mpl::list<
       sc::custom_reaction<ObjectPushed>,
       sc::transition<RequestDone, Done>,
+      sc::custom_reaction<CancelBackfill>,
+      sc::custom_reaction<Triggered>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Waiting(my_context);
     sc::result react(ObjectPushed);
+    sc::result react(CancelBackfill);
+    sc::result react(Triggered);
   };
 
   struct Done : sc::state<Done, BackfillMachine>,
@@ -296,6 +306,26 @@ public:
     }
   }
 private:
+  struct backfill_suspend_state_t {
+    bool suspended = false;
+    bool should_go_enqueuing = false;
+  } backfill_suspend_state;
+  bool is_suspended() const {
+    return backfill_suspend_state.suspended;
+  }
+  void on_suspended() {
+    ceph_assert(!is_suspended());
+    backfill_suspend_state = {true, false};
+  }
+  bool on_resumed() {
+    auto go_enqueuing = backfill_suspend_state.should_go_enqueuing;
+    backfill_suspend_state = {false, false};
+    return go_enqueuing;
+  }
+  void go_enqueuing_on_resume() {
+    ceph_assert(is_suspended());
+    backfill_suspend_state.should_go_enqueuing = true;
+  }
   hobject_t last_backfill_started;
   BackfillInterval backfill_info;
   std::map<pg_shard_t, BackfillInterval> peer_backfill_info;
