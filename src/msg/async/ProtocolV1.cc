@@ -1245,18 +1245,16 @@ uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
 void ProtocolV1::discard_out_queue() {
   ldout(cct, 10) << __func__ << " started" << dendl;
 
-  for (list<Message *>::iterator p = sent.begin(); p != sent.end(); ++p) {
-    ldout(cct, 20) << __func__ << " discard " << *p << dendl;
-    (*p)->put();
+  for (Message *msg : sent) {
+    ldout(cct, 20) << __func__ << " discard " << msg << dendl;
+    msg->put();
   }
   sent.clear();
-  for (map<int, list<out_q_entry_t>>::iterator p =
-           out_q.begin();
-       p != out_q.end(); ++p) {
-    for (list<out_q_entry_t>::iterator r = p->second.begin();
-         r != p->second.end(); ++r) {
-      ldout(cct, 20) << __func__ << " discard " << r->m << dendl;
-      r->m->put();
+  for (auto& [ prio, entries ] : out_q) {
+    static_cast<void>(prio);
+    for (auto& entry : entries) {
+      ldout(cct, 20) << __func__ << " discard " << entry.m << dendl;
+      entry.m->put();
     }
   }
   out_q.clear();

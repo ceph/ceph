@@ -127,9 +127,9 @@ bool ProtocolV2::is_connected() { return can_write; }
 void ProtocolV2::discard_out_queue() {
   ldout(cct, 10) << __func__ << " started" << dendl;
 
-  for (auto p = sent.begin(); p != sent.end(); ++p) {
-    ldout(cct, 20) << __func__ << " discard " << *p << dendl;
-    (*p)->put();
+  for (Message *msg : sent) {
+    ldout(cct, 20) << __func__ << " discard " << msg << dendl;
+    msg->put();
   }
   sent.clear();
   for (auto& [ prio, entries ] : out_queue) {
