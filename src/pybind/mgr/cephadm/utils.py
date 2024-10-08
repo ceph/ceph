@@ -5,6 +5,7 @@ from enum import Enum
 from functools import wraps
 from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING, Any, NamedTuple
 from orchestrator import OrchestratorError
+import hashlib
 
 if TYPE_CHECKING:
     from cephadm import CephadmOrchestrator
@@ -154,3 +155,9 @@ def file_mode_to_str(mode: int) -> str:
             f'{"x" if (mode >> shift) & 1 else "-"}'
         ) + r
     return r
+
+
+def md5_hash(input_value: str) -> str:
+    input_str = str(input_value).encode('utf-8')
+    hash_object = hashlib.md5(input_str)
+    return hash_object.hexdigest()
