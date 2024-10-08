@@ -1,58 +1,91 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+<cds-modal size="sm"
+           [open]="open"
+           [hasScrollingContent]="false"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
+  <div cdsModalContent>
     <form name="multisiteRealmForm"
           #formDir="ngForm"
           [formGroup]="multisiteRealmForm"
           novalidate>
-    <div class="modal-body">
-      <div class="form-group row">
-        <label class="cd-col-form-label required"
-               for="realmName"
-               i18n>Realm Name</label>
-        <div class="cd-col-form-input">
-          <input class="form-control"
-                 type="text"
-                 placeholder="Realm name..."
-                 id="realmName"
-                 name="realmName"
-                 formControlName="realmName">
-          <span class="invalid-feedback"
-                *ngIf="multisiteRealmForm.showError('realmName', formDir, 'required')"
-                i18n>This field is required.</span>
-          <span class="invalid-feedback"
-                *ngIf="multisiteRealmForm.showError('realmName', formDir, 'uniqueName')"
-                i18n>The chosen realm name is already in use.</span>
-          <div class="custom-control custom-checkbox">
-            <input class="form-check-input"
-                   id="default_realm"
-                   name="default_realm"
-                   formControlName="default_realm"
-                   [attr.disabled]="action === 'edit' ? true: null"
-                   type="checkbox">
-            <label class="form-check-label"
-                   for="default_realm"
-                   i18n>Default</label>
-            <cd-helper *ngIf="action === 'edit' && info.data.is_default">
-              <span i18n>You cannot unset the default flag.</span>
-            </cd-helper>
-            <cd-helper *ngIf="action === 'edit' && !info.data.is_default">
-              <span i18n>Please consult the&nbsp;<a href="{{ docUrl }}">documentation</a>&nbsp;to follow the failover mechanism</span>
-            </cd-helper>
-            <cd-helper *ngIf="defaultRealmDisabled && action === 'create'">
-              <span i18n>Default realm already exists.</span>
-            </cd-helper>
-          </div>
-        </div>
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="realmName"
+          [invalid]="
+            multisiteRealmForm.controls.realmName.invalid &&
+            (multisiteRealmForm.controls.realmName.touched ||
+              multisiteRealmForm.controls.realmName.dirty)
+          "
+          [invalidText]="realmNameError"
+          cdRequiredField="Realm Name"
+          i18n
+          >Realm Name
+          <input
+            cdsText
+            type="text"
+            placeholder="Realm name..."
+            id="realmName"
+            name="realmName"
+            formControlName="realmName"
+            [invalid]="
+              multisiteRealmForm.controls.realmName.invalid &&
+              (multisiteRealmForm.controls.realmName.touched ||
+                multisiteRealmForm.controls.realmName.dirty)
+            "
+            [autofocus]="true"
+            modal-primary-focus
+          />
+        </cds-text-label>
+        <ng-template #realmNameError>
+          <span
+            class="invalid-feedback"
+            *ngIf="multisiteRealmForm.showError('realmName', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="multisiteRealmForm.showError('realmName', formDir, 'uniqueName')"
+            i18n
+            >The chosen realm name is already in use.</span
+          >
+        </ng-template>
       </div>
-    </div>
-    <div class="modal-footer">
-      <cd-form-button-panel (submitActionEvent)="submit()"
-                            [form]="multisiteRealmForm"
-                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-    </div>
+
+      <div class="form-item">
+        <cds-checkbox
+          label="Default"
+          for="default_realm"
+          formControlName="default_realm"
+          name="default_realm"
+          [disabled]="action === actionLabels.EDIT"
+          i18n
+          >Default
+          <cd-help-text *ngIf="action === actionLabels.EDIT && info.data.is_default">
+            <span>You cannot unset the default flag.</span>
+          </cd-help-text>
+          <cd-help-text *ngIf="action === actionLabels.EDIT && !info.data.is_default">
+            <span
+              >Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover
+              mechanism</span
+            >
+          </cd-help-text>
+          <cd-help-text *ngIf="defaultRealmDisabled && action === actionLabels.CREATE">
+            <span>Default realm already exists.</span>
+          </cd-help-text>
+        </cds-checkbox>
+      </div>
     </form>
-  </ng-container>
-</cd-modal>
+  </div>
+  <cd-form-button-panel
+    (submitActionEvent)="submit()"
+    [form]="multisiteRealmForm"
+    [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+    [modalForm]="true"
+  >
+  </cd-form-button-panel>
+</cds-modal>
