@@ -819,7 +819,7 @@ CtPtr ProtocolV1::read_message_data_prepare() {
 #if 0
     // rx_buffers is broken by design... see
     //  http://tracker.ceph.com/issues/22480
-    map<ceph_tid_t, pair<ceph::buffer::list, int> >::iterator p =
+    const auto p =
         connection->rx_buffers.find(current_header.tid);
     if (p != connection->rx_buffers.end()) {
       ldout(cct, 10) << __func__ << " seleting rx buffer v " << p->second.second
@@ -1204,7 +1204,7 @@ void ProtocolV1::requeue_sent() {
     return;
   }
 
-  list<out_q_entry_t> &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  auto &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
   out_seq -= sent.size();
   while (!sent.empty()) {
     Message *m = sent.back();
@@ -1222,7 +1222,7 @@ uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
   if (out_q.count(CEPH_MSG_PRIO_HIGHEST) == 0) {
     return seq;
   }
-  list<out_q_entry_t> &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  auto &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
   uint64_t count = out_seq;
   while (!rq.empty()) {
     Message* const m = rq.front().m;
@@ -1326,10 +1326,9 @@ void ProtocolV1::reset_recv_state()
 ProtocolV1::out_q_entry_t ProtocolV1::_get_next_outgoing() {
   out_q_entry_t out_entry;
   if (!out_q.empty()) {
-    map<int, list<out_q_entry_t>>::reverse_iterator it =
-        out_q.rbegin();
+    const auto it = out_q.rbegin();
     ceph_assert(!it->second.empty());
-    list<out_q_entry_t>::iterator p = it->second.begin();
+    const auto p = it->second.begin();
     out_entry = *p;
     it->second.erase(p);
     if (it->second.empty()) out_q.erase(it->first);
