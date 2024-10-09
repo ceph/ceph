@@ -191,7 +191,12 @@ class NFSGaneshaExports(RESTController):
             'clients': clients
         }
 
+        existing_export = mgr.remote('nfs', 'export_get', cluster_id, export_id)
         export_mgr = mgr.remote('nfs', 'fetch_nfs_export_obj')
+        if existing_export and raw_ex:
+            ss_export_fsal = existing_export.get('fsal', {})
+            for key, value in ss_export_fsal.items():
+                raw_ex['fsal'][key] = value
         applied_exports = export_mgr.apply_export(cluster_id, json.dumps(raw_ex))
         if not applied_exports.has_error:
             return self._get_schema_export(

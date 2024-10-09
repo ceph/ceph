@@ -26,6 +26,11 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
 import { SUPPORTED_FSAL } from '../models/nfs.fsal';
 
+export enum RgwExportType {
+  BUCKET = 'bucket',
+  USER = 'user'
+}
+
 @Component({
   selector: 'cd-nfs-list',
   templateUrl: './nfs-list.component.html',
@@ -37,6 +42,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   nfsState: TemplateRef<any>;
   @ViewChild('nfsFsal', { static: true })
   nfsFsal: TemplateRef<any>;
+  @ViewChild('pathTmpl', { static: true })
+  pathTmpl: TemplateRef<any>;
 
   @ViewChild('table', { static: true })
   table: TableComponent;
@@ -93,7 +100,15 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const editAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
-      routerLink: () => `/${prefix}/nfs/edit/${getNfsUri()}`,
+      routerLink: () => [
+        `/${prefix}/nfs/edit/${getNfsUri()}`,
+        {
+          rgw_export_type:
+            this.fsal === SUPPORTED_FSAL.RGW && !_.isEmpty(this.selection?.first()?.path)
+              ? RgwExportType.BUCKET
+              : RgwExportType.USER
+        }
+      ],
       name: this.actionLabels.EDIT
     };
 
@@ -110,10 +125,16 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   ngOnInit() {
     this.columns = [
       {
+        name: $localize`User`,
+        prop: 'fsal.user_id',
+        flexGrow: 2,
+        cellTransformation: CellTemplate.executing
+      },
+      {
         name: this.fsal === SUPPORTED_FSAL.CEPH ? $localize`Path` : $localize`Bucket`,
         prop: 'path',
         flexGrow: 2,
-        cellTransformation: CellTemplate.executing
+        cellTemplate: this.pathTmpl
       },
       {
         name: $localize`Pseudo`,

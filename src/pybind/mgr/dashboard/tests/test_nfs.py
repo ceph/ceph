@@ -112,12 +112,17 @@ class NFSGaneshaExportsTest(ControllerTestCase):
 
     def test_set_export(self):
         export_mgr = Mock()
+        existing_export = deepcopy(self._nfs_module_export)
         updated_nfs_export = deepcopy(self._nfs_module_export)
         applied_nfs_export = deepcopy(self._applied_export)
+
+        existing_export['fsal']['user_id'] = 'dashboard'
+
+        mgr.remote = Mock(side_effect=[existing_export, export_mgr])
+
         updated_nfs_export['pseudo'] = 'updated-pseudo'
         export_mgr.get_export_by_pseudo.return_value = updated_nfs_export
         export_mgr.apply_export.return_value = applied_nfs_export
-        mgr.remote.return_value = export_mgr
 
         updated_export_body = deepcopy(self._expected_export)
         updated_export_body['pseudo'] = updated_nfs_export['pseudo']
@@ -235,7 +240,10 @@ class NFSGaneshaUiControllerTest(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody({'paths': []})
 
-    def test_status_available(self):
+    @patch('dashboard.controllers.nfs.mgr.remote')
+    def test_status_available(self, mock_remote):
+        mock_remote.return_value = ['cluster1', 'cluster2']
+
         self._get('/ui-api/nfs-ganesha/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': True, 'message': None})
