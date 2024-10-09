@@ -15,9 +15,9 @@ Finisher::Finisher(CephContext *cct_) :
   thread_name("fn_anonymous"),
   finisher_thread(this) {}
 
-Finisher::Finisher(CephContext *cct_, std::string name, std::string tn) :
+Finisher::Finisher(CephContext *cct_, std::string_view name, std::string &&tn) :
   cct(cct_), finisher_lock(ceph::make_mutex(fmt::format("Finisher::{}", name))),
-  thread_name(tn),
+  thread_name(std::move(tn)),
   finisher_thread(this) {
   PerfCountersBuilder b(cct, fmt::format("finisher-{}", name),
 			l_finisher_first, l_finisher_last);
