@@ -105,12 +105,12 @@ Example: header get/set
       "write_pos": 4274947,
       "expire_pos": 4194304,
       "trimmed_pos": 4194303,
+      "stream_format": 1,
       "layout": { "stripe_unit": 4194304,
-          "stripe_count": 4194304,
+          "stripe_count": 1,
           "object_size": 4194304,
-          "cas_hash": 4194304,
-          "object_stripe_unit": 4194304,
-          "pg_pool": 4194304}}
+          "pool_id": 2,
+          "pool_ns": ""}}
 
     # cephfs-journal-tool header set trimmed_pos 4194303
     Updating trimmed_pos 0x400000 -> 0x3fffff
