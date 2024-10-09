@@ -81,7 +81,7 @@ RadosIo::AsyncOpInfo::AsyncOpInfo(uint64_t offset1, uint64_t length1,
 
 bool RadosIo::readyForIoOp(IoOp &op)
 {
-  ceph_assert(lock.is_locked_by_me()); //Must be called with lock held
+  ceph_assert(ceph_mutex_is_locked_by_me(lock)); //Must be called with lock held
   if (!om->readyForIoOp(op)) {
     return false;
   }
