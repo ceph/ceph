@@ -22,7 +22,6 @@
 #include "common/perf_counters.h"
 #include "common/Cond.h"
 
-
 /// Finisher queue length performance counter ID.
 enum {
   l_finisher_first = 997082,
@@ -76,41 +75,15 @@ class Finisher {
       logger->inc(l_finisher_queue_len);
   }
 
-  void queue(std::list<Context*>& ls) {
+  // TODO use C++20 concept checks instead of SFINAE
+  template<typename T>
+  auto queue(T &ls) -> decltype(std::distance(ls.begin(), ls.end()), void()) {
     {
       std::unique_lock ul(finisher_lock);
       if (finisher_queue.empty()) {
 	finisher_cond.notify_all();
       }
-      for (auto i : ls) {
-	finisher_queue.push_back(std::make_pair(i, 0));
-      }
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
-    }
-    ls.clear();
-  }
-  void queue(std::deque<Context*>& ls) {
-    {
-      std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_all();
-      }
-      for (auto i : ls) {
-	finisher_queue.push_back(std::make_pair(i, 0));
-      }
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
-    }
-    ls.clear();
-  }
-  void queue(std::vector<Context*>& ls) {
-    {
-      std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_all();
-      }
-      for (auto i : ls) {
+      for (Context *i : ls) {
 	finisher_queue.push_back(std::make_pair(i, 0));
       }
       if (logger)
