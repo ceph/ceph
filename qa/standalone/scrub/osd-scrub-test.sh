@@ -683,6 +683,168 @@ function TEST_pg_dump_objects_scrubbed() {
     teardown $dir || return 1
 }
 
+
+# Overdure targets should have priority over other periodic scrubs,
+# but are subject to time/load restrictions.
+#
+# In this test:
+# With scrubs disabled, a combination of scrubs with different priorities
+#    and deadlines is scheduled. The queue order is then verified.
+function TEST_overdue_scheduling() {
+    local dir=$1
+    local -A cluster_conf=(
+        ['osds_num']="3" 
+        ['pgs_in_pool']="8"
+        ['pool_name']="testpool"
+        ['extras']=" --osd_deep_scrub_interval_cv=0.0"
+    )
+
+    standard_scrub_wpq_cluster $dir cluster_conf
+    local poolid=${cluster_conf['pool_id']}
+    local poolname=${cluster_conf['pool_name']}
+    echo "Pool: $poolname : $poolid"
+
+    # make sure no scrubbing will start by itself
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+
+    # write to all PGs
+    TESTDATA="testdata.$$"
+    local objects=45
+    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
+    for i in `seq 1 $objects`
+    do
+        rados -p $poolname put obj${i} $TESTDATA
+    done
+    rm -f $TESTDATA
+
+    # dump the scrub schedule
+        ceph --admin-daemon $(get_asok_path osd.0) dump_scrubs
+
+
+
+    local dir=$1
+    local poolname=test
+    local OSDS=3
+    local objects=15
+
+    TESTDATA="testdata.$$"
+
+    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
+
+    # Set scheduler to "wpq" until there's a reliable way to query scrub states
+    # with "--osd-scrub-sleep" set to 0. The "mclock_scheduler" overrides the
+    # scrub sleep to 0 and as a result the checks in the test fail.
+    local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
+            --osd_scrub_interval_randomize_ratio=0 \
+            --osd_scrub_backoff_ratio=0.0 \
+            --osd_op_queue=wpq \
+            --osd_stats_update_period_not_scrubbing=1 \
+            --osd_stats_update_period_scrubbing=1 \
+            --osd_scrub_sleep=0.2"
+
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd $ceph_osd_args|| return 1
+    done
+
+    # Create a pool with a single pg
+    create_pool $poolname 1 1
+    wait_for_clean || return 1
+    poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+
+    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
+    for i in `seq 1 $objects`
+    do
+        rados -p $poolname put obj${i} $TESTDATA
+    done
+    rm -f $TESTDATA
+
+    local pgid="${poolid}.0"
+    #local now_is=`date -I"ns"` # note: uses a comma for the ns part
+    local now_is=`date +'%Y-%m-%dT%H:%M:%S.%N%:z'`
+
+    # before the scrubbing starts
+
+    # last scrub duration should be 0. The scheduling data should show
+    # a time in the future:
+    # e.g. 'periodic scrub scheduled @ 2021-10-12T20:32:43.645168+0000'
+
+    declare -A expct_starting=( ['query_active']="false" ['query_is_future']="true" ['query_schedule']="scrub scheduled" )
+    declare -A sched_data
+    extract_published_sch $pgid $now_is "2019-10-12T20:32:43.645168+0000" sched_data
+    schedule_against_expected sched_data expct_starting "initial"
+    (( ${sched_data['dmp_last_duration']} == 0)) || return 1
+    echo "last-scrub  --- " ${sched_data['query_last_scrub']}
+
+    #
+    # step 1: scrub once (mainly to ensure there is no urgency to scrub)
+    #
+
+    saved_last_stamp=${sched_data['query_last_stamp']}
+    ceph tell osd.* config set osd_scrub_sleep "0"
+    ceph tell $pgid deep-scrub
+
+    # wait for the 'last duration' entries to change. Note that the 'dump' one will need
+    # up to 5 seconds to sync
+
+    sleep 5
+    sched_data=()
+    declare -A expct_qry_duration=( ['query_last_duration']="0" ['query_last_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_qry_duration "WaitingAfterScrub " sched_data || return 1
+    # verify that 'pg dump' also shows the change in last_scrub_duration
+    sched_data=()
+    declare -A expct_dmp_duration=( ['dmp_last_duration']="0" ['dmp_last_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_dmp_duration "WaitingAfterScrub_dmp " sched_data || return 1
+
+    sleep 2
+
+    #
+    # step 2: set noscrub and request a "periodic scrub". Watch for the change in the 'is the scrub
+    #         scheduled for the future' value
+    #
+
+    ceph tell osd.* config set osd_shallow_scrub_chunk_max "3" || return 1
+    ceph tell osd.* config set osd_scrub_sleep "2.0" || return 1
+    ceph osd set noscrub || return 1
+    sleep 2
+    saved_last_stamp=${sched_data['query_last_stamp']}
+
+    ceph tell $pgid schedule-scrub
+    sleep 1
+    sched_data=()
+    declare -A expct_scrub_peri_sched=( ['query_is_future']="false" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_scrub_peri_sched "waitingBeingScheduled" sched_data || return 1
+
+    # note: the induced change in 'last_scrub_stamp' that we've caused above, is by itself not a publish-stats
+    # trigger. Thus it might happen that the information in 'pg dump' will not get updated here. Do not expect
+    # 'dmp_is_future' to follow 'query_is_future' without a good reason
+    ## declare -A expct_scrub_peri_sched_dmp=( ['dmp_is_future']="false" )
+    ## wait_any_cond $pgid 15 $saved_last_stamp expct_scrub_peri_sched_dmp "waitingBeingScheduled" sched_data || echo "must be fixed"
+
+    #
+    # step 3: allow scrubs. Watch for the conditions during the scrubbing
+    #
+
+    saved_last_stamp=${sched_data['query_last_stamp']}
+    ceph osd unset noscrub
+
+    declare -A cond_active=( ['query_active']="true" )
+    sched_data=()
+    wait_any_cond $pgid 10 $saved_last_stamp cond_active "WaitingActive " sched_data || return 1
+
+    # check for pg-dump to show being active. But if we see 'query_active' being reset - we've just
+    # missed it.
+    declare -A cond_active_dmp=( ['dmp_state_has_scrubbing']="true" ['query_active']="false" )
+    sched_data=()
+    wait_any_cond $pgid 10 $saved_last_stamp cond_active_dmp "WaitingActive " sched_data
+    sleep 4
+    perf_counters $dir $OSDS
+}
+
+
+
 main osd-scrub-test "$@"
 
 # Local Variables:
