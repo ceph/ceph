@@ -19,7 +19,6 @@
 #include "include/common_fwd.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
-#include "common/perf_counters.h"
 #include "common/Cond.h"
 
 /// Finisher queue length performance counter ID.
@@ -116,32 +115,11 @@ class Finisher {
 
   /// Construct an anonymous Finisher.
   /// Anonymous finishers do not log their queue length.
-  explicit Finisher(CephContext *cct_) :
-    cct(cct_), finisher_lock(ceph::make_mutex("Finisher::finisher_lock")),
-    thread_name("fn_anonymous"),
-    finisher_thread(this) {}
+  explicit Finisher(CephContext *cct_);
 
   /// Construct a named Finisher that logs its queue length.
-  Finisher(CephContext *cct_, std::string name, std::string tn) :
-    cct(cct_), finisher_lock(ceph::make_mutex("Finisher::" + name)),
-    thread_name(tn),
-    finisher_thread(this) {
-    PerfCountersBuilder b(cct, std::string("finisher-") + name,
-			  l_finisher_first, l_finisher_last);
-    b.add_u64(l_finisher_queue_len, "queue_len");
-    b.add_time_avg(l_finisher_complete_lat, "complete_latency");
-    logger = b.create_perf_counters();
-    cct->get_perfcounters_collection()->add(logger);
-    logger->set(l_finisher_queue_len, 0);
-    logger->set(l_finisher_complete_lat, 0);
-  }
-
-  ~Finisher() {
-    if (logger && cct) {
-      cct->get_perfcounters_collection()->remove(logger);
-      delete logger;
-    }
-  }
+  Finisher(CephContext *cct_, std::string name, std::string tn);
+  ~Finisher();
 };
 
 /// Context that is completed asynchronously on the supplied finisher.
