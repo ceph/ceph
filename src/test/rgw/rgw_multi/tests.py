@@ -609,21 +609,21 @@ def test_bucket_recreate():
         assert check_all_buckets_exist(zone, buckets)
 
 def test_bucket_remove():
-    zonegroup = realm.master_zonegroup()
-    zonegroup_conns = ZonegroupConns(zonegroup)
-    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
-    zonegroup_meta_checkpoint(zonegroup)
+    for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        buckets, zone_buckets = create_bucket_per_zone(zonegroup_conns)
+        zonegroup_meta_checkpoint(zonegroup)
 
-    for zone in zonegroup_conns.zones:
-        assert check_all_buckets_exist(zone, buckets)
+        for zone in zonegroup_conns.zones:
+            assert check_all_buckets_exist(zone, buckets)
 
-    for zone, bucket_name in zone_bucket:
-        zone.conn.delete_bucket(bucket_name)
+        for zone, bucket_name in zone_buckets:
+            zone.conn.delete_bucket(bucket_name)
 
-    zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_meta_checkpoint(zonegroup)
 
-    for zone in zonegroup_conns.zones:
-        assert check_all_buckets_dont_exist(zone, buckets)
+        for zone in zonegroup_conns.zones:
+            assert check_all_buckets_dont_exist(zone, buckets)
 
 def get_bucket(zone, bucket_name):
     return zone.conn.get_bucket(bucket_name)
