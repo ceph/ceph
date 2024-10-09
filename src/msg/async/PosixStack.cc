@@ -64,11 +64,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   }
 
   ssize_t read(char *buf, size_t len) override {
-    #ifdef _WIN32
     ssize_t r = ::recv(_fd, buf, len, 0);
-    #else
-    ssize_t r = ::read(_fd, buf, len);
-    #endif
     if (r < 0)
       r = -ceph_sock_errno();
     return r;
