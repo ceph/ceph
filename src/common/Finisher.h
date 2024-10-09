@@ -36,7 +36,7 @@ enum {
  * contexts to complete is thread-safe.
  */
 class Finisher {
-  CephContext *cct;
+  CephContext *const cct;
   ceph::mutex finisher_lock; ///< Protects access to queues and finisher_running.
   ceph::condition_variable finisher_cond; ///< Signaled when there is something to process.
   ceph::condition_variable finisher_empty_cond; ///< Signaled when the finisher has nothing more to process.
@@ -48,7 +48,7 @@ class Finisher {
   std::vector<std::pair<Context*,int>> finisher_queue;
   std::vector<std::pair<Context*,int>> in_progress_queue;
 
-  std::string thread_name;
+  const std::string thread_name;
 
   /// Performance counter for the finisher's queue length.
   /// Only active for named finishers.
