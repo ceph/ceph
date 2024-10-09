@@ -70,6 +70,36 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     return r;
   }
 
+#ifndef _WIN32
+  ssize_t readv(std::span<const std::span<char>> dest) override {
+#ifndef IOV_MAX
+    static constexpr std::size_t IOV_MAX = 1024;
+#endif
+
+    std::array<struct iovec, IOV_MAX> iov;
+
+    if (dest.size() > iov.size())
+      dest = dest.first(iov.size());
+
+    std::transform(dest.begin(), dest.end(), iov.begin(), [](auto i) -> struct iovec {
+      return {
+	.iov_base = i.data(),
+	.iov_len = i.size(),
+      };
+    });
+
+    struct msghdr msg{
+      .msg_iov = iov.data(),
+      .msg_iovlen = dest.size(),
+    };
+
+    ssize_t nbytes = recvmsg(_fd, &msg, 0);
+    if (nbytes < 0)
+      nbytes = -ceph_sock_errno();
+    return nbytes;
+  }
+#endif
+
   // return the sent length
   // < 0 means error occurred
   #ifndef _WIN32

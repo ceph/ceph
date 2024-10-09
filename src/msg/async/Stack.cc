@@ -33,6 +33,30 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "stack "
 
+ssize_t ConnectedSocketImpl::readv(std::span<const std::span<char>> dest)
+{
+  // fallback implementations using read()
+
+  ssize_t total = 0;
+  for (const auto i : dest) {
+    ssize_t nbytes = read(i);
+    if (nbytes < 0) {
+      if ((nbytes == -EAGAIN || nbytes == -EINTR) && total > 0)
+	/* there's no more data for now */
+	break;
+
+      /* discard data received so far, return only the error code */
+      return nbytes;
+    } else if (nbytes == 0)
+      /* no more data (ever) */
+      break;
+
+    total += nbytes;
+  }
+
+  return total;
+}
+
 std::function<void ()> NetworkStack::add_thread(Worker* w)
 {
   return [this, w]() {
