@@ -123,10 +123,9 @@ class NvmeofService(CephService):
             gateways = json.loads(out)['gateways']
             cmd_dicts = []
 
-            spec = cast(NvmeofServiceSpec,
-                        self.mgr.spec_store.all_specs.get(daemon_descrs[0].service_name(), None))
-
             for dd in daemon_descrs:
+                spec = cast(NvmeofServiceSpec,
+                            self.mgr.spec_store.all_specs.get(dd.service_name(), None))
                 service_name = dd.service_name()
                 if dd.hostname is None:
                     err_msg = ('Trying to config_dashboard nvmeof but no hostname is defined')
