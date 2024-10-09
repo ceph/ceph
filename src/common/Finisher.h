@@ -40,9 +40,9 @@ class Finisher {
   ceph::mutex finisher_lock; ///< Protects access to queues and finisher_running.
   ceph::condition_variable finisher_cond; ///< Signaled when there is something to process.
   ceph::condition_variable finisher_empty_cond; ///< Signaled when the finisher has nothing more to process.
-  bool         finisher_stop; ///< Set when the finisher should stop.
-  bool         finisher_running; ///< True when the finisher is currently executing contexts.
-  bool	       finisher_empty_wait; ///< True mean someone wait finisher empty.
+  bool         finisher_stop = false; ///< Set when the finisher should stop.
+  bool         finisher_running = false; ///< True when the finisher is currently executing contexts.
+  bool	       finisher_empty_wait = false; ///< True mean someone wait finisher empty.
 
   /// Queue for contexts for which complete(0) will be called.
   std::vector<std::pair<Context*,int>> finisher_queue;
@@ -52,7 +52,7 @@ class Finisher {
 
   /// Performance counter for the finisher's queue length.
   /// Only active for named finishers.
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
 
   void *finisher_thread_entry();
 
@@ -118,15 +118,13 @@ class Finisher {
   /// Anonymous finishers do not log their queue length.
   explicit Finisher(CephContext *cct_) :
     cct(cct_), finisher_lock(ceph::make_mutex("Finisher::finisher_lock")),
-    finisher_stop(false), finisher_running(false), finisher_empty_wait(false),
-    thread_name("fn_anonymous"), logger(0),
+    thread_name("fn_anonymous"),
     finisher_thread(this) {}
 
   /// Construct a named Finisher that logs its queue length.
   Finisher(CephContext *cct_, std::string name, std::string tn) :
     cct(cct_), finisher_lock(ceph::make_mutex("Finisher::" + name)),
-    finisher_stop(false), finisher_running(false), finisher_empty_wait(false),
-    thread_name(tn), logger(0),
+    thread_name(tn),
     finisher_thread(this) {
     PerfCountersBuilder b(cct, std::string("finisher-") + name,
 			  l_finisher_first, l_finisher_last);
