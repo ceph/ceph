@@ -720,6 +720,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.iscsi_service: IscsiService = cast(IscsiService, self.cephadm_services['iscsi'])
         self.nvmeof_service: NvmeofService = cast(NvmeofService, self.cephadm_services['nvmeof'])
         self.node_proxy_service: NodeProxy = cast(NodeProxy, self.cephadm_services['node-proxy'])
+        self.rgw_service: RgwService = cast(RgwService, self.cephadm_services['rgw'])
 
         self.scheduled_async_actions: List[Callable] = []
 
