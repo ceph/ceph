@@ -753,6 +753,7 @@ public:
                         const MonCommand *this_cmd);
   void get_mon_status(ceph::Formatter *f);
   void _quorum_status(ceph::Formatter *f, std::ostream& ss);
+  void get_mon_subs(ceph::Formatter *f);
   bool _add_bootstrap_peer_hint(std::string_view cmd, const cmdmap_t& cmdmap,
 				std::ostream& ss);
   void handle_tell_command(MonOpRequestRef op);
