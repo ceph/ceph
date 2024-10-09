@@ -29,6 +29,7 @@ from glob import glob
 from io import StringIO
 from threading import Thread, Event
 from pathlib import Path
+from configparser import ConfigParser
 
 from cephadmlib.constants import (
     # default images
@@ -142,6 +143,7 @@ from cephadmlib.container_types import (
     SidecarContainer,
     extract_uid_gid,
     is_container_running,
+    get_mgr_images,
 )
 from cephadmlib.decorators import (
     deprecated_command,
@@ -4679,6 +4681,13 @@ def command_rescan_disks(ctx: CephadmContext) -> str:
     return f'Ok. {len(all_scan_files)} adapters detected: {len(scan_files)} rescanned, {len(skipped)} skipped, {len(failures)} failed ({elapsed:.2f}s)'
 
 
+def command_list_images(ctx: CephadmContext) -> None:
+    """this function will list the default images used by different services"""
+    cp_obj = ConfigParser()
+    cp_obj['mgr'] = get_mgr_images()
+    # print default images
+    cp_obj.write(sys.stdout)
+
 ##################################
 
 
@@ -5542,6 +5551,9 @@ def _get_parser():
         'disk-rescan', help='rescan all HBAs to detect new/removed devices')
     parser_disk_rescan.set_defaults(func=command_rescan_disks)
 
+    parser_list_images = subparsers.add_parser(
+        'list-images', help='list all the default images')
+    parser_list_images.set_defaults(func=command_list_images)
     return parser
 
 
