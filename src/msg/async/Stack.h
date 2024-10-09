@@ -22,6 +22,8 @@
 #include "include/spinlock.h"
 #include "msg/async/Event.h"
 #include "msg/msg_types.h"
+
+#include <span>
 #include <string>
 
 class Worker;
@@ -29,7 +31,7 @@ class ConnectedSocketImpl {
  public:
   virtual ~ConnectedSocketImpl() {}
   virtual int is_connected() = 0;
-  virtual ssize_t read(char*, size_t) = 0;
+  virtual ssize_t read(std::span<char> dest) = 0;
   virtual ssize_t send(ceph::buffer::list &bl, bool more) = 0;
   virtual void shutdown() = 0;
   virtual void close() = 0;
@@ -93,8 +95,8 @@ class ConnectedSocket {
   /// Read the input stream with copy.
   ///
   /// Copy an object returning data sent from the remote endpoint.
-  ssize_t read(char* buf, size_t len) {
-    return _csi->read(buf, len);
+  ssize_t read(std::span<char> buffer) {
+    return _csi->read(buffer);
   }
   /// Gets the output stream.
   ///
