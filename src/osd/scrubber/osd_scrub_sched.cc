@@ -153,6 +153,13 @@ void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
 	f->dump_bool(
 	    "forced",
 	    e.schedule.scheduled_at == PgScrubber::scrub_must_stamp());
+        f->dump_stream("level") << (e.level == scrub_level_t::shallow
+                                       ? "shallow"
+                                       : "deep");
+        f->dump_stream("urgency") << fmt::format("{}", e.urgency);
+        f->dump_bool("eligible", e.schedule.not_before <= ceph_clock_now());
+        f->dump_bool("overdue", e.schedule.deadline < ceph_clock_now());
+        f->dump_stream("last_issue") << fmt::format("{}", e.last_issue);
 	f->close_section();
       },
       std::numeric_limits<int>::max());

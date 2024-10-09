@@ -98,6 +98,15 @@ static inline std::weak_ordering cmp_ripe_entries(
   if (auto cmp = r.urgency <=> l.urgency; cmp != 0) {
     return cmp;
   }
+
+  // if any of the two is overdue - it is considered 'higher'
+  const auto now = ceph_clock_now();
+  const bool l_overdue = l.schedule.deadline < now;
+  const bool r_overdue = r.schedule.deadline < now;
+  if (auto cmp = r_overdue <=> l_overdue; cmp != 0) {
+    return cmp;
+  }
+
   // if we are comparing the two targets of the same PG, once both are
   // ripe - the 'deep' scrub is considered 'higher' than the 'shallow' one.
   if (l.pgid == r.pgid && r.level < l.level) {
