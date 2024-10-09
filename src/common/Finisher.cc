@@ -4,6 +4,8 @@
 #include "Finisher.h"
 #include "common/perf_counters.h"
 
+#include <fmt/core.h>
+
 #define dout_subsys ceph_subsys_finisher
 #undef dout_prefix
 #define dout_prefix *_dout << "finisher(" << this << ") "
@@ -14,10 +16,10 @@ Finisher::Finisher(CephContext *cct_) :
   finisher_thread(this) {}
 
 Finisher::Finisher(CephContext *cct_, std::string name, std::string tn) :
-  cct(cct_), finisher_lock(ceph::make_mutex("Finisher::" + name)),
+  cct(cct_), finisher_lock(ceph::make_mutex(fmt::format("Finisher::{}", name))),
   thread_name(tn),
   finisher_thread(this) {
-  PerfCountersBuilder b(cct, std::string("finisher-") + name,
+  PerfCountersBuilder b(cct, fmt::format("finisher-{}", name),
 			l_finisher_first, l_finisher_last);
   b.add_u64(l_finisher_queue_len, "queue_len");
   b.add_time_avg(l_finisher_complete_lat, "complete_latency");
