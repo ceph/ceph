@@ -238,7 +238,7 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
   if (left > (uint64_t)recv_max_prefetch) {
     /* this was a large read, we don't prefetch for these */
     do {
-      r = read_bulk(p+state_offset, left);
+      r = read_bulk({p+state_offset, left});
       ldout(async_msgr->cct, 25) << __func__ << " read_bulk left is " << left << " got " << r << dendl;
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " read failed" << dendl;
@@ -252,7 +252,7 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
     } while (r > 0);
   } else {
     do {
-      r = read_bulk(recv_buf+recv_end, recv_max_prefetch);
+      r = read_bulk({recv_buf+recv_end, recv_max_prefetch});
       ldout(async_msgr->cct, 25) << __func__ << " read_bulk recv_end is " << recv_end
                                  << " left is " << left << " got " << r << dendl;
       if (r < 0) {
@@ -279,11 +279,11 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
 
 /* return -1 means `fd` occurs error or closed, it should be closed
  * return 0 means EAGAIN or EINTR */
-ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
+ssize_t AsyncConnection::read_bulk(std::span<char> dest)
 {
   ssize_t nread;
  again:
-  nread = cs.read(buf, len);
+  nread = cs.read(dest);
   if (nread < 0) {
     if (nread == -EAGAIN) {
       nread = 0;

@@ -63,8 +63,8 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     }
   }
 
-  ssize_t read(char *buf, size_t len) override {
-    ssize_t r = ::recv(_fd, buf, len, 0);
+  ssize_t read(const std::span<char> dest) override {
+    ssize_t r = ::recv(_fd, dest.data(), dest.size(), 0);
     if (r < 0)
       r = -ceph_sock_errno();
     return r;
