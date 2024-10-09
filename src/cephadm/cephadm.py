@@ -3559,7 +3559,7 @@ def list_daemons(
                         seen_cpuperc_cid_len,
                         seen_cpuperc,
                     )
-
+                    _update_daemon_status_ext_units(val, ctx, sd_path_info)
                 ls.append(val)
     return ls
 
@@ -3808,12 +3808,54 @@ def _update_daemon_info_ext_units(
     if init_unit or sc_unit:
         esd_units = val['extended_systemd_units'] = {}
         if init_unit:
-            upath = str(sd_path_info.init_ctr_unit_file)
+            upath = str(sd_path_info.init_ctr_unit_file.name)
             esd_units[upath] = {'unit_type': 'init'}
         if sc_unit:
             for sidecar in sd_path_info.sidecar_unit_files.values():
-                upath = str(sidecar)
+                upath = str(sidecar.name)
                 esd_units[upath] = {'unit_type': 'sidecar'}
+
+
+def _update_daemon_status_ext_units(
+    val: Dict[str, Any],
+    ctx: CephadmContext,
+    sd_path_info: systemd_unit.PathInfo,
+) -> None:
+    aggregate_state: Optional[str] = None
+    for unit, unit_info in val.get('extended_systemd_units', {}).items():
+        utype = unit_info.get('unit_type')
+        if utype == 'init':
+            status = _check_daemon_status_ext_unit(ctx, unit)
+        elif utype == 'sidecar':
+            status = _check_daemon_status_ext_unit(ctx, unit)
+        else:
+            raise ValueError('unexpected unit type: {utype!r}')
+        unit_info.update(status)
+        aggregate_state = aggregate_state or ''
+        if status['state'] in ('error', 'unknown'):
+            # state is always str but mypy needs a little help with str(...)
+            # this probably ought to be a TypedDict.
+            aggregate_state = str(status['state'])
+    # if aggregate_state is None we had nothing in extended_systemd_units.
+    # we can leave the val as it was before. However, if aggregate_state is
+    # a string we had at least one ext'd unit and will report the aggregate
+    # state as state when in an error condition.
+    if aggregate_state is not None:
+        assert aggregate_state is not None
+        val['unit_state'] = val['state']
+        val['state'] = aggregate_state or val['state']
+
+
+def _check_daemon_status_ext_unit(
+    ctx: CephadmContext, unit: str
+) -> Dict[str, Union[str, bool]]:
+    _, state, installed = check_unit(ctx, unit)
+    # enabled is assumed to be always false because these are pulled in
+    # by the primary. no point in reporting it.
+    return {
+        'installed': installed,
+        'state': state,
+    }
 
 
 def _parse_mem_usage(code: int, out: str) -> Tuple[int, Dict[str, int]]:
