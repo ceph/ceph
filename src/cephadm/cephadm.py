@@ -1246,7 +1246,14 @@ def deploy_daemon_units(
         call_throws(ctx, ['systemctl', 'enable', unit_name])
     if start:
         clean_cgroup(ctx, ident.fsid, unit_name)
-        call_throws(ctx, ['systemctl', 'start', unit_name])
+        start_cmd = ['systemctl', 'start']
+        if init_containers or sidecars:
+            # we don't want to freeze here waiting for the init container to
+            # run to completion. its possible it will take a long time or even
+            # fail.
+            start_cmd.append('--no-block')
+        start_cmd.append(unit_name)
+        call_throws(ctx, start_cmd)
 
 
 def _osd_unit_run_commands(
