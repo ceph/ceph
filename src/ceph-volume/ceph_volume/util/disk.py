@@ -1370,8 +1370,8 @@ class UdevData:
         """
         result: str = self.path
         if self.is_lvm:
-            vg: str = self.environment.get('DM_VG_NAME')
-            lv: str = self.environment.get('DM_LV_NAME')
+            vg: str = self.environment.get('DM_VG_NAME', '')
+            lv: str = self.environment.get('DM_LV_NAME', '')
             result = f'/dev/{vg}/{lv}'
         return result
 
@@ -1385,6 +1385,6 @@ class UdevData:
         """
         result: str = self.path
         if self.is_lvm:
-            name: str = self.environment.get('DM_NAME')
+            name: str = self.environment.get('DM_NAME', '')
             result = f'/dev/mapper/{name}'
         return result
