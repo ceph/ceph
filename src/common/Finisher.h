@@ -122,7 +122,7 @@ class Finisher {
   explicit Finisher(CephContext *cct_);
 
   /// Construct a named Finisher that logs its queue length.
-  Finisher(CephContext *cct_, std::string name, std::string tn);
+  Finisher(CephContext *cct_, std::string_view name, std::string &&tn);
   ~Finisher();
 };
 
