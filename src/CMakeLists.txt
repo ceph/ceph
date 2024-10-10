@@ -200,8 +200,10 @@ if(HAS_GLIBCXX_ASSERTIONS AND CMAKE_BUILD_TYPE STREQUAL Debug)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-D_GLIBCXX_ASSERTIONS>)
 endif()
 
-# add BLAKE3 before we clobber CMAKE_ASM_COMPILER
-add_subdirectory(BLAKE3/c EXCLUDE_FROM_ALL)
+if(NOT WITH_SYSTEM_BLAKE3)
+  # add BLAKE3 before we clobber CMAKE_ASM_COMPILER
+  add_subdirectory(BLAKE3/c EXCLUDE_FROM_ALL)
+endif()
 
 include(SIMDExt)
 if(HAVE_INTEL)
@@ -335,7 +337,9 @@ list(APPEND mds_files
 
 add_subdirectory(json_spirit)
 
-include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
+if(NOT WITH_SYSTEM_XXHASH)
+  add_subdirectory(xxHash/cmake_unofficial)
+endif()
 
 # use the rapidjson headers from s3select's submodule
 if(NOT TARGET RapidJSON::RapidJSON)
@@ -428,7 +432,6 @@ set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
   global/global_context.cc
-  xxHash/xxhash.c
   common/error_code.cc
   common/tracer.cc
   log/Log.cc
@@ -498,6 +501,7 @@ set(ceph_common_deps
   Boost::date_time
   Boost::iostreams
   StdFilesystem::filesystem
+  xxHash::xxhash
   ${FMT_LIB}
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}

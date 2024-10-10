@@ -122,7 +122,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/OSDMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${PROJECT_SOURCE_DIR}/src/common/scrub_types.cc
-  ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
   ${crimson_common_srcs}
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:common-options-objs>)
@@ -137,7 +136,9 @@ set(crimson_common_deps
   Boost::random
   json_spirit)
 
-set(crimson_common_public_deps crimson::cflags)
+set(crimson_common_public_deps
+  crimson::cflags
+  xxHash::xxhash)
 if(WITH_JAEGER)
   list(APPEND crimson_common_public_deps jaeger_base)
 endif()
