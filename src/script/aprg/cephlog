@@ -1,0 +1,8 @@
+compress
+/ceph/build/out/osd.*.log {
+	rotate 10 
+	daily
+	size 500M
+	#sharedscripts
+	maxage 5
+}

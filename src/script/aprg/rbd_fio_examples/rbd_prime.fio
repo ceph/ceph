@@ -1,0 +1,42 @@
+######################################################################
+# Priming volume for the RBD engine.
+#
+# Runs a 4k random write test against a single RBD volume via librbd
+#
+# NOTE: make sure you define the env vars RBD_NAME
+#       for the RBD image name,.and RBD_SIZE for the total
+#       size of the image to exercise.
+######################################################################
+[global]
+#logging
+#write_iops_log=write_iops_log
+#write_bw_log=write_bw_log
+#write_lat_log=write_lat_log
+ioengine=rbd
+clientname=admin
+pool=rbd
+rbdname=${RBD_NAME}
+bs=4k
+direct=1
+#runtime=30m
+time_based
+group_reporting=1
+numjobs=2 # num concurrent clients/processes
+ramp_time=30s
+
+#Use posix threads instead of fork
+thread=1
+#When fio reaches this number, it will exit normally and report status.
+#number_ios=
+
+# Number of I/O units to keep in flight, per job
+iodepth=4
+
+[priming]
+rw=randwrite
+# Full image size
+size=${RBD_SIZE}
+#io_size=20GiB
+time_based=1
+runtime=5m
+time_based

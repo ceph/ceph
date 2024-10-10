@@ -1,0 +1,99 @@
+# Ceph container images
+# https://quay.io/repository/ceph/ceph
+FROM quay.io/centos/centos:stream9
+RUN yum update -y
+RUN yum install epel-release -y
+RUN dnf config-manager --set-enabled crb
+# Basic toolchain
+RUN yum group install "Development Tools" -y
+RUN yum install jq -y
+RUN yum install ccache -y
+RUN yum install iproute -y
+RUN yum install hostname -y
+RUN yum install python-bcrypt -y
+RUN yum install lldb -y
+
+RUN yum install pdsh -y
+RUN yum install pdsh-rcmd-ssh -y
+RUN yum install targetcli -y
+RUN yum install wget -y
+RUN yum install e2fsprogs -y
+RUN yum install blktrace -y
+RUN yum install lsof -y
+RUN yum install sysstat -y
+RUN yum install ipmitool -y
+RUN yum install dstat -y
+RUN yum install iftop -y
+RUN yum install iperf3 -y
+RUN yum install chrony -y
+RUN yum install irqbalance -y
+RUN yum install smartmontools -y
+RUN yum install logrotate -y
+RUN yum install perf -y
+# Extra packages needed to run cbt
+RUN yum install python3-lxml -y
+RUN yum install python3-yaml -y
+# Add perf
+RUN yum install protobuf-devel -y
+RUN yum install binutils-devel -y
+RUN git clone https://git.kernel.org/pub/scm/linux/kernel/git/acme/linux.git/
+RUN cd linux/tools/perf && HAVE_CPLUS_DEMANGLE_SUPPORT=1 make && make install
+RUN rm -rf /linux
+# Utilities
+RUN git clone https://git.kernel.dk/fio.git
+RUN git clone https://github.com/ceph/cbt
+RUN git clone https://github.com/andikleen/pmu-tools.git
+RUN git clone https://github.com/brendangregg/FlameGraph.git
+RUN git clone https://github.com/rstudio/tinytex.git
+RUN cd /tinytex/tools/ && make all; exit 0
+RUN git clone https://github.com/sharkcz/collectl
+RUN cd /collectl && ./INSTALL
+RUN rm -rf /collectl
+RUN echo '[ -f "/ceph/build/vstart_environment.sh" ] && source /ceph/build/vstart_environment.sh' >>/etc/profile.d/ceph.sh
+RUN echo "Defaults    env_keep += \"LD_LIBRARY_PATH\"" >>/etc/sudoers
+RUN yum install gnuplot -y
+RUN yum install vim -y
+RUN yum install perl-JSON -y
+RUN yum install perl-JSON-XS -y
+# Ceph
+RUN git clone --depth=1 https://github.com/ceph/ceph.git
+RUN cd ceph && WITH_SEASTAR=true ./install-deps.sh
+#RUN rm -rf /ceph
+# Update profile so that cmake generates build commands by default
+RUN echo "export CMAKE_EXPORT_COMPILE_COMMANDS=ON" >/etc/profile.d/cmake.sh
+# Update profile so that vstart.sh uses the same port numbers each time a ceph cluster is created
+RUN echo "export CEPH_PORT=40000" >/etc/profile.d/ceph.sh
+# Expose the dashboard port
+EXPOSE 41000/tcp
+# Setup ssh
+RUN yum install openssh-server -y
+#ADD ssh.tar.gz /root/
+RUN chmod 700 /root/
+RUN chmod 600 /root/.ssh
+RUN ssh-keygen -A
+RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+RUN sed -i 's/AuthorizedKeysFile/#AuthorizedKeysFile/' /etc/ssh/sshd_config
+RUN systemctl enable sshd
+CMD /usr/sbin/init
+EXPOSE 22/tcp
+# Add config files
+ADD bashrc /root/.bashrc
+ADD gitconfig  /root/.gitconfig
+ADD toprc /root/.config/procps/toprc
+ADD cephlog /etc/logrotate.d/ceph
+#Now part of the toolkit in src/script/aprg
+#ADD vimrc  /root/.vimrc
+#COPY bin/rbd_fio_workloads.zip /root/bin/
+#COPY --chmod=755 bin/fio-parse-jsons.py /root/bin/
+#COPY --chmod=755 bin/run_fio.sh /root/bin/run_fio.sh
+#COPY --chmod=755 bin/cpu-map.sh /root/bin/cpu-map.sh
+#COPY --chmod=755 bin/parse-top.pl /root/bin/parse-top.pl
+#COPY --chmod=755 bin/run_batch_02.sh /root/bin/run_batch_02.sh
+#COPY --chmod=755 bin/run_batch_single.sh /root/bin/run_batch_single.sh
+#COPY --chmod=755 bin/run_batch_double.sh /root/bin/run_batch_double.sh
+#COPY --chmod=755 bin/run_batch_range_alien.sh /root/bin/run_batch_range_alien.sh
+#COPY --chmod=755 bin/cephlogoff.sh /root/bin/cephlogoff.sh
+#COPY --chmod=755 bin/cephmkrbd.sh /root/bin/cephmkrbd.sh
+#COPY --chmod=755 bin/cephteardown.sh /root/bin/cephteardown.sh
+#COPY --chmod=755 bin/fio_generate_plots /root/bin/fio_generate_plots
+###RUN unzip -od /fio/examples /root/bin/rbd_fio_workloads.zip

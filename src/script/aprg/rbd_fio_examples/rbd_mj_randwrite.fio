@@ -1,0 +1,60 @@
+######################################################################
+[global]
+#logging
+write_iops_log=${LOG_NAME}
+write_bw_log=${LOG_NAME}
+write_lat_log=${LOG_NAME}
+ioengine=rbd
+clientname=admin
+pool=rbd
+bs=4k
+rw=randwrite
+direct=1
+runtime=5m
+time_based
+group_reporting=1
+#new_group
+ramp_time=30s
+
+#Use posix threads instead of fork
+thread=1
+#When fio reaches this number, it will exit normally and report status.
+#number_ios=
+
+# Number of I/O units to keep in flight
+iodepth=${IO_DEPTH}
+
+# If required each job below can trigger this number of threads
+#numjobs=${NUM_JOBS} # num concurrent clients/processes
+#############
+[fio_test_0]
+rbdname=fio_test_0
+max_latency=1s
+#############
+[fio_test_1]
+rbdname=fio_test_1
+max_latency=1s
+#############
+[fio_test_2]
+rbdname=fio_test_2
+max_latency=1s
+#############
+[fio_test_3]
+rbdname=fio_test_3
+max_latency=1s
+#############
+[fio_test_4]
+rbdname=fio_test_4
+max_latency=1s
+#############
+[fio_test_5]
+rbdname=fio_test_5
+max_latency=1s
+#############
+[fio_test_6]
+rbdname=fio_test_6
+max_latency=1s
+#############
+[fio_test_7]
+rbdname=fio_test_7
+max_latency=1s

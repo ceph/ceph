@@ -1,0 +1,43 @@
+######################################################################
+# Example test for the RBD engine.
+#
+# Runs a 4k random write test against a RBD via librbd
+#
+# NOTE: Make sure you define the env vars for volume name ${RBD_NAME},
+#       the number of FIO jobs ${NUM_JOBS} and the FIO iodepth ${IO_DEPTH}.
+######################################################################
+[global]
+#logging
+write_iops_log=${LOG_NAME}
+write_bw_log=${LOG_NAME}
+write_lat_log=${LOG_NAME}
+ioengine=rbd
+clientname=admin
+pool=rbd
+rbdname=${RBD_NAME}
+bs=4k
+direct=1
+runtime=5m
+time_based
+group_reporting=1
+#new_group
+numjobs=${NUM_JOBS} # num concurrent clients/processes
+ramp_time=30s
+
+# Whether to Invalidate the buffer/page cache prior to starting IO
+# Default is yes (1)
+#invalidate=0
+
+#Use posix threads instead of fork
+thread=1
+#When fio reaches this number, it will exit normally and report status.
+#number_ios=
+
+# Number of I/O units to keep in flight
+# ToDO: include the figures obtained during discovery sprint, for the single Crimson OSD
+#iodepth=128
+iodepth=${IO_DEPTH}
+
+[randwrite]
+rw=randwrite
+max_latency=1s
