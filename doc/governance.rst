@@ -21,6 +21,8 @@ Bodies
 Ceph Executive Council
 ======================
 
+See :ref:`Ceph Executive Council Responsibilities <ceph-executive-council-responsibilities>`.
+
 Responsibilities
 ----------------
 
