@@ -2221,6 +2221,14 @@ options:
   level: advanced
   default: 3
   with_legacy: true
+- name: mon_client_target_rank
+  type: int
+  level: advanced
+  default: -1
+  min: -1
+  flags:
+  - runtime
+  fmt_desc: automatically target mon rank for client communication
 # try new mon every N seconds until we connect
 - name: mon_client_hunt_interval
   type: float

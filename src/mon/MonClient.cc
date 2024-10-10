@@ -749,6 +749,10 @@ void MonClient::_reopen_session(int rank)
 
   _start_hunting();
 
+  if (rank == -1) {
+    rank = cct->_conf.get_val<int64_t>("mon_client_target_rank");
+  }
+
   if (rank >= 0) {
     _add_conn(rank);
   } else {
