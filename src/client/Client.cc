@@ -6125,6 +6125,10 @@ int Client::may_open(Inode *in, int flags, const UserPerm& perms)
   int r = 0;
   switch (in->mode & S_IFMT) {
     case S_IFLNK:
+#if defined(__linux__) && defined(O_PATH)
+      if (flags & O_PATH)
+        break;
+#endif
       r = -CEPHFS_ELOOP;
       goto out;
     case S_IFDIR:
@@ -7951,6 +7955,12 @@ int Client::readlinkat(int dirfd, const char *relpath, char *buf, loff_t size, c
   int r = get_fd_inode(dirfd, &dirinode);
   if (r < 0) {
     return r;
+  }
+
+  if (!strcmp(relpath, "")) {
+    if (!dirinode.get()->is_symlink())
+      return -CEPHFS_ENOENT;
+    return _readlink(dirinode.get(), buf, size);
   }
 
   InodeRef in;
