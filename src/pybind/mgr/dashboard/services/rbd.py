@@ -458,8 +458,8 @@ class RbdService(object):
         return namespaces
 
     @classmethod
-    def _rbd_image_stat(cls, ioctx, pool_name, namespace, image_name):
-        return cls._rbd_image(ioctx, pool_name, namespace, image_name)
+    def _rbd_image_stat(cls, ioctx, pool_name, namespace, image_name, omit_usage=False):
+        return cls._rbd_image(ioctx, pool_name, namespace, image_name, omit_usage)
 
     @classmethod
     def _rbd_image_stat_removing(cls, ioctx, pool_name, namespace, image_id):
@@ -490,7 +490,7 @@ class RbdService(object):
 
     @classmethod
     def rbd_pool_list(cls, pool_names: List[str], namespace: Optional[str] = None, offset: int = 0,
-                      limit: int = 5, search: str = '', sort: str = ''):
+                      limit: int = 5, search: str = '', sort: str = '', omit_usage=False):
         image_refs = cls._rbd_pool_image_refs(pool_names, namespace)
         params = ['name', 'pool_name', 'namespace']
         paginator = ListPaginator(offset, limit, sort, search, image_refs,
@@ -506,7 +506,8 @@ class RbdService(object):
 
                 try:
                     stat = cls._rbd_image_stat(
-                        ioctx, image_ref['pool_name'], image_ref['namespace'], image_ref['name'])
+                        ioctx, image_ref['pool_name'], image_ref['namespace'], image_ref['name'],
+                        omit_usage)
                 except rbd.ImageNotFound:
                     try:
                         stat = cls._rbd_image_stat_removing(
