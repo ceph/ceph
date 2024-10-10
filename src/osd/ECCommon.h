@@ -843,3 +843,15 @@ void ECCommon::ReadPipeline::filter_read_op(
     on_schedule_recovery(op);
   }
 }
+
+// Error inject interfaces
+std::string ec_inject_read_error(const ghobject_t& o, const int64_t type, const int64_t when, const int64_t duration);
+std::string ec_inject_write_error(const ghobject_t& o, const int64_t type, const int64_t when, const int64_t duration);
+std::string ec_inject_clear_read_error(const ghobject_t& o, const int64_t type);
+std::string ec_inject_clear_write_error(const ghobject_t& o, const int64_t type);
+bool ec_inject_test_read_error0(const ghobject_t& o);
+bool ec_inject_test_read_error1(const ghobject_t& o);
+bool ec_inject_test_write_error0(const hobject_t& o,const osd_reqid_t& reqid);
+bool ec_inject_test_write_error1(const ghobject_t& o);
+bool ec_inject_test_write_error2(const hobject_t& o);
+bool ec_inject_test_write_error3(const hobject_t& o);

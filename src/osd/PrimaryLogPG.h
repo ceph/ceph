@@ -622,6 +622,12 @@ public:
     Message *m, const ConnectionRef& con) override {
     osd->send_message_osd_cluster(m, con);
   }
+  void start_mon_command(
+    const std::vector<std::string>& cmd, const bufferlist& inbl,
+    bufferlist *outbl, std::string *outs,
+    Context *onfinish) override {
+    osd->monc->start_mon_command(cmd, inbl, outbl, outs, onfinish);
+  }
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) override;
   entity_name_t get_cluster_msgr_name() override {
     return osd->get_cluster_msgr_name();
