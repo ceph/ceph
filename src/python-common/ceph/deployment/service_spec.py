@@ -1762,7 +1762,7 @@ class IngressSpec(ServiceSpec):
         if not self.keepalive_only and not self.frontend_port:
             raise SpecValidationError(
                 'Cannot add ingress: No frontend_port specified')
-        if not self.monitor_port:
+        if not self.keepalive_only and not self.monitor_port:
             raise SpecValidationError(
                 'Cannot add ingress: No monitor_port specified')
         if not self.virtual_ip and not self.virtual_ips_list:
@@ -1805,6 +1805,7 @@ class MgmtGatewaySpec(ServiceSpec):
                  ssl_protocols: Optional[List[str]] = None,
                  ssl_ciphers: Optional[List[str]] = None,
                  enable_health_check_endpoint: bool = False,
+                 virtual_ip: Optional[str] = None,
                  preview_only: bool = False,
                  unmanaged: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
@@ -1851,6 +1852,7 @@ class MgmtGatewaySpec(ServiceSpec):
         #: List of supported secure SSL ciphers. Changing this list may reduce system security.
         self.ssl_ciphers = ssl_ciphers
         self.enable_health_check_endpoint = enable_health_check_endpoint
+        self.virtual_ip = virtual_ip
 
     def get_port_start(self) -> List[int]:
         ports = []
