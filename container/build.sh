@@ -136,9 +136,9 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
     branch_repo_tag=$repopath/ceph:${BRANCH}
     sha1_repo_tag=$repopath/ceph:${CEPH_SHA1}
 
-    if [[ "${ARCH}" == "aarch64" ]] ; then
-        branch_repo_tag=${branch_repo_tag}-aarch64
-        sha1_repo_tag=${sha1_repo_tag}-aarch64
+    if [[ "${ARCH}" == "arm64" ]] ; then
+        branch_repo_tag=${branch_repo_tag}-arm64
+        sha1_repo_tag=${sha1_repo_tag}-arm64
     fi
 
     podman tag ${image_id} ${full_repo_tag}
