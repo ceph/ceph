@@ -2556,11 +2556,31 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  // This section will be remove dlater, just for testing
+  auto finisher_val = py_modules.get_module(mod_name)->get_threshold_val();
+  auto queue_len = py_modules.get_mod_finisher_queue_len(mod_name);
+  ss << "Module '" << mod_name << "' has passed its finisher thread " << finisher_val <<" value"
+          "  QUEUE len" << queue_len;
+  dout(4) << ss.str() << dendl;
+
+  if (py_modules.get_module(mod_name)->get_threshold_val() != 0)  {
+    if (py_modules.get_mod_finisher_queue_len(mod_name) > py_modules.get_module(mod_name)->get_threshold_val())
+    {
+      ss << "Module '" << mod_name << "' has passed its finisher thread limit. "
+              "Set the threshold limit using `ceph mgr module set queue threshold` "
+              "and use `ceph mgr module unset queue threshold` to unset the limit ";
+        dout(4) << ss.str() << dendl;
+        cmdctx->reply(-EAGAIN, ss);
+        return true;
+    }
+  }
+
   op->mark_queued_for_module();
 
   dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
   Finisher& mod_finisher = py_modules.get_active_module_finisher(mod_name);
 
+  py_modules.inc_mod_finisher_queue_len(mod_name);
   mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op]
                                        (int r_) mutable {
     std::stringstream ss;
@@ -2577,6 +2597,7 @@ bool DaemonServer::_handle_command(
             << py_handler_name << "` to enable it";
       dout(4) << ss.str() << dendl;
       cmdctx->reply(-EOPNOTSUPP, ss);
+      py_modules.dec_mod_finisher_queue_len(py_handler_name);
       return;
     }
 
@@ -2609,6 +2630,7 @@ bool DaemonServer::_handle_command(
     if (!accept_command) {
       dout(4) << ss.str() << dendl;
       cmdctx->reply(-EIO, ss);
+      py_modules.dec_mod_finisher_queue_len(py_handler_name);
       return;
     }
 
@@ -2624,6 +2646,7 @@ bool DaemonServer::_handle_command(
     cmdctx->odata.append(ds);
     cmdctx->reply(r, ss);
     dout(10) << " command returned " << r << dendl;
+    py_modules.dec_mod_finisher_queue_len(py_handler_name);
   }));
   return true;
 }

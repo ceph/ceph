@@ -237,5 +237,17 @@ public:
     return active_modules->get_module_finisher(name);
   }
 
+  void inc_mod_finisher_queue_len(const std::string &name) {
+    active_modules->inc_mod_finisher_cnt(name);
+  }
+
+  void dec_mod_finisher_queue_len(const std::string &name) {
+    active_modules->dec_mod_finisher_cnt(name);
+  }
+
+  auto& get_mod_finisher_queue_len(const std::string &name) {
+    return active_modules->get_mod_finisher_cnt(name);
+  }
+
   // <<< (end of ActivePyModules cheeky call-throughs)
 };

@@ -297,6 +297,8 @@ public:
   // active version.
   std::map<uint32_t, std::set<std::string>> always_on_modules;
 
+  std::map<std::string, int64_t> modules_threshold_value;
+
   // Modules which are reported to exist
   std::vector<ModuleInfo> available_modules;
 
@@ -370,6 +372,27 @@ public:
   {
     return modules.find(module_name) != modules.end();
   }
+
+  int get_module_threshold_value(const std::string& module_name)
+  {
+    if (modules_threshold_value.find(module_name) != modules_threshold_value.end())
+      return modules_threshold_value[module_name];
+    return 0;
+  }
+
+  // void set_module_finisherthread_queue_threshold_value(
+  //             const std::string& module_name, const int threshold) {
+  //   if (get_module_threshold_value(module_name)) {
+  //     modules_threshold_value[module_name] = threshold;
+  //   } else {
+  //     modules_threshold_value.insert({module_name, threshold});
+  //   }
+  // }
+
+  // void unset_module_finisherthread_queue_threshold_value(
+  //               const std::string& module_name) {
+  //     modules_threshold_value.erase(module_name);
+  // }
 
   bool any_supports_module(const std::string& module) const {
     if (have_module(module)) {
@@ -448,7 +471,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(13, 6, bl);
+    ENCODE_START(14, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -473,13 +496,14 @@ public:
     encode(clients_addrs, bl, features);
     encode(clients_names, bl, features);
     encode(flags, bl);
+    encode(modules_threshold_value, bl);
     ENCODE_FINISH(bl);
     return;
   }
 
   void decode(ceph::buffer::list::const_iterator& p)
   {
-    DECODE_START(13, p);
+    DECODE_START(14, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -548,6 +572,9 @@ public:
     }
     if (struct_v >= 13) {
       decode(flags, p);
+    }
+    if (struct_v >= 14) {
+      decode(modules_threshold_value, p);
     }
     DECODE_FINISH(p);
   }

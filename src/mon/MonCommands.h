@@ -1357,6 +1357,15 @@ COMMAND("mgr module enable "
 COMMAND("mgr module disable "
 	"name=module,type=CephString",
 	"disable mgr module", "mgr", "rw")
+COMMAND("mgr module set queue threshold "
+	"name=module,type=CephString "
+	"name=threshold,type=CephInt,range=1|5",
+	"set threshold value for finisherthread queue",
+	"mgr", "rw")
+COMMAND("mgr module unset queue threshold "
+	"name=module,type=CephString ",
+	"unset threshold value for finisherthread queue",
+	"mgr", "rw")
 COMMAND("mgr metadata name=who,type=CephString,req=false",
 	"dump metadata for all daemons or a specific daemon",
 	"mgr", "r")

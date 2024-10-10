@@ -59,6 +59,8 @@ private:
   // Did the MgrMap flag this module as always on?
   bool always_on = false;
 
+  int threshold = 0;
+
   // Did we successfully import this python module and look up symbols?
   // (i.e. is it possible to instantiate a MgrModule subclass instance?)
   bool loaded = false;
@@ -123,6 +125,14 @@ public:
 
   void set_always_on(const bool always_on_) {
     always_on = always_on_;
+  }
+
+  void set_threshold_val(const int threshold_) {
+    threshold = threshold_;
+  }
+
+  int get_threshold_val() {
+    return threshold;
   }
 
   /**
