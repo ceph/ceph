@@ -11746,7 +11746,12 @@ paths:
       - RgwMultisite
   /api/rgw/multisite/sync_status:
     get:
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '200':
           content:
