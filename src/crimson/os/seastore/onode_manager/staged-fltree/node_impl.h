@@ -68,6 +68,7 @@ class NodeImpl {
   virtual nextent_state_t get_extent_state() const = 0;
   virtual void prepare_mutate(context_t) = 0;
   virtual bool is_level_tail() const = 0;
+  virtual bool is_level_head() const = 0;
 
   /* Invariants for num_keys and num_values:
    * - for leaf node and non-tail internal node, num_keys == num_values;
@@ -179,7 +180,8 @@ class InternalNodeImpl : public NodeImpl {
       return {std::move(impl), mut};
     }
   };
-  static eagain_ifuture<fresh_impl_t> allocate(context_t, laddr_hint_t, field_type_t, bool, level_t);
+  static eagain_ifuture<fresh_impl_t> allocate(
+    context_t, laddr_hint_t, field_type_t, bool, bool, level_t);
 
   static InternalNodeImplURef load(NodeExtentRef, field_type_t);
 
@@ -259,7 +261,8 @@ class LeafNodeImpl : public NodeImpl {
       return {std::move(impl), mut};
     }
   };
-  static eagain_ifuture<fresh_impl_t> allocate(context_t, laddr_hint_t, field_type_t, bool);
+  static eagain_ifuture<fresh_impl_t> allocate(
+    context_t, laddr_hint_t, field_type_t, bool, bool);
 
   static LeafNodeImplURef load(NodeExtentRef, field_type_t);
 

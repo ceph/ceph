@@ -592,7 +592,8 @@ class InternalNode final : public Node {
       return std::make_pair(Ref<Node>(node), mut);
     }
   };
-  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_hint_t, field_type_t, bool, level_t);
+  static eagain_ifuture<fresh_node_t> allocate(
+    context_t, laddr_hint_t, field_type_t, bool, bool, level_t);
 
  private:
   /**
@@ -724,7 +725,8 @@ class LeafNode final : public Node {
       return std::make_pair(Ref<Node>(node), mut);
     }
   };
-  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_hint_t, field_type_t, bool);
+  static eagain_ifuture<fresh_node_t> allocate(
+    context_t, laddr_hint_t, field_type_t, bool, bool);
 
  private:
   /**

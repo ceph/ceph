@@ -1234,7 +1234,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::allocate_root(
 {
   // support tree height up to 256
   ceph_assert(old_root_level < MAX_LEVEL);
-  return InternalNode::allocate(c, hint, field_type_t::N0, true, old_root_level + 1
+  return InternalNode::allocate(c, hint, field_type_t::N0, true, true, old_root_level + 1
   ).si_then([c, old_root_addr,
                super = std::move(super)](auto fresh_node) mutable {
     auto root = fresh_node.node;
@@ -1395,7 +1395,8 @@ eagain_ifuture<> InternalNode::test_clone_root(
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
   Ref<const Node> this_ref = this;
-  return InternalNode::allocate(c_other, gen_global_random_hint(), field_type_t::N0, true, impl->level()
+  return InternalNode::allocate(
+    c_other, gen_global_random_hint(), field_type_t::N0, true, true, impl->level()
   ).si_then([this, c_other, &tracker_other](auto fresh_other) {
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
@@ -1518,7 +1519,8 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
   return (is_root() ? upgrade_root(c, left_hint) : eagain_iertr::now()
   ).si_then([this, c, right_hint] {
     return InternalNode::allocate(
-        c, right_hint, impl->field_type(), impl->is_level_tail(), impl->level());
+        c, right_hint, impl->field_type(), impl->is_level_tail(),
+	impl->is_level_head(), impl->level());
   }).si_then([this, insert_key, insert_child, insert_pos,
                 insert_stage=insert_stage, insert_size=insert_size,
                 outdated_child, c, FNAME](auto fresh_right) mutable {
@@ -1762,9 +1764,11 @@ void InternalNode::validate_child_inconsistent(const Node& child) const
 }
 
 eagain_ifuture<InternalNode::fresh_node_t> InternalNode::allocate(
-    context_t c, laddr_hint_t hint, field_type_t field_type, bool is_level_tail, level_t level)
+    context_t c, laddr_hint_t hint, field_type_t field_type,
+    bool is_level_tail, bool is_level_head, level_t level)
 {
-  return InternalNodeImpl::allocate(c, hint, field_type, is_level_tail, level
+  return InternalNodeImpl::allocate(c, hint, field_type, is_level_tail,
+				    is_level_head, level
   ).si_then([](auto&& fresh_impl) {
     auto *derived_ptr = fresh_impl.impl.get();
     auto node = Ref<InternalNode>(new InternalNode(
@@ -2042,7 +2046,8 @@ eagain_ifuture<> LeafNode::test_clone_root(
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
   Ref<const Node> this_ref = this;
-  return LeafNode::allocate(c_other, gen_global_random_hint(), field_type_t::N0, true
+  return LeafNode::allocate(
+    c_other, gen_global_random_hint(), field_type_t::N0, true, true
   ).si_then([this, c_other, &tracker_other](auto fresh_other) {
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
@@ -2101,7 +2106,8 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
   }
   return (is_root() ? upgrade_root(c, left_hint) : eagain_iertr::now()
   ).si_then([this, c, right_hint] {
-    return LeafNode::allocate(c, right_hint, impl->field_type(), impl->is_level_tail());
+    return LeafNode::allocate(
+      c, right_hint, impl->field_type(), impl->is_level_tail(), impl->is_level_head());
   }).si_then([this_ref = std::move(this_ref), this, c, &key, vconf, FNAME,
                 insert_pos, insert_stage=insert_stage, insert_size=insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
@@ -2139,7 +2145,8 @@ eagain_ifuture<Ref<LeafNode>> LeafNode::allocate_root(
     context_t c, RootNodeTracker& root_tracker)
 {
   LOG_PREFIX(OTree::LeafNode::allocate_root);
-  return LeafNode::allocate(c, gen_global_random_hint(), field_type_t::N0, true
+  return LeafNode::allocate(
+    c, gen_global_random_hint(), field_type_t::N0, true, true
   ).si_then([c, &root_tracker, FNAME](auto fresh_node) {
     auto root = fresh_node.node;
     return c.nm.get_super(c.t, root_tracker
@@ -2262,9 +2269,10 @@ void LeafNode::track_erase(
 }
 
 eagain_ifuture<LeafNode::fresh_node_t> LeafNode::allocate(
-    context_t c, laddr_hint_t hint, field_type_t field_type, bool is_level_tail)
+    context_t c, laddr_hint_t hint, field_type_t field_type,
+    bool is_level_tail, bool is_level_head)
 {
-  return LeafNodeImpl::allocate(c, hint, field_type, is_level_tail
+  return LeafNodeImpl::allocate(c, hint, field_type, is_level_tail, is_level_head
   ).si_then([](auto&& fresh_impl) {
     auto *derived_ptr = fresh_impl.impl.get();
     auto node = Ref<LeafNode>(new LeafNode(

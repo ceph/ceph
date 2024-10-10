@@ -11,10 +11,11 @@ namespace crimson::os::seastore::onode {
 class NodeExtentMutable;
 
 struct node_header_t {
-  static constexpr unsigned FIELD_TYPE_BITS = 6u;
+  static constexpr unsigned FIELD_TYPE_BITS = 5u;
   static_assert(static_cast<uint8_t>(field_type_t::_MAX) <= 1u << FIELD_TYPE_BITS);
   static constexpr unsigned NODE_TYPE_BITS = 1u;
   static constexpr unsigned B_LEVEL_TAIL_BITS = 1u;
+  static constexpr unsigned B_LEVEL_HEAD_BITS = 1u;
   using bits_t = uint8_t;
 
   node_header_t() {}
@@ -32,17 +33,23 @@ struct node_header_t {
   bool get_is_level_tail() const {
     return is_level_tail;
   }
+  bool get_is_level_head() const {
+    return is_level_head;
+  }
 
   static void bootstrap_extent(
-      NodeExtentMutable&, field_type_t, node_type_t, bool, level_t);
+      NodeExtentMutable&, field_type_t, node_type_t, bool, bool, level_t);
 
   static void update_is_level_tail(NodeExtentMutable&, const node_header_t&, bool);
+  static void update_is_level_head(NodeExtentMutable&, const node_header_t&, bool);
+
 
   bits_t field_type : FIELD_TYPE_BITS;
   bits_t node_type : NODE_TYPE_BITS;
   bits_t is_level_tail : B_LEVEL_TAIL_BITS;
+  bits_t is_level_head : B_LEVEL_HEAD_BITS;
   static_assert(sizeof(bits_t) * 8 ==
-                FIELD_TYPE_BITS + NODE_TYPE_BITS + B_LEVEL_TAIL_BITS);
+    FIELD_TYPE_BITS + NODE_TYPE_BITS + B_LEVEL_TAIL_BITS + B_LEVEL_HEAD_BITS);
   level_t level;
 
  private:
@@ -55,12 +62,16 @@ struct node_header_t {
   void set_is_level_tail(bool value) {
     is_level_tail = static_cast<uint8_t>(value);
   }
+  void set_is_level_head(bool value) {
+    is_level_head = static_cast<uint8_t>(value);
+  }
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const node_header_t& header) {
   auto field_type = header.get_field_type();
   if (field_type.has_value()) {
     os << "header" << header.get_node_type() << *field_type
        << "(is_level_tail=" << header.get_is_level_tail()
+       << ", is_level_head=" << header.get_is_level_head()
        << ", level=" << (unsigned)header.level << ")";
   } else {
     os << "header(INVALID)";
@@ -143,6 +154,7 @@ struct _node_fields_013_t {
   static constexpr node_offset_t ITEM_OVERHEAD = SlotType::OVERHEAD;
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
+  bool is_level_head() const { return header.get_is_level_head(); }
   extent_len_t total_size(extent_len_t node_size) const {
     return node_size;
   }
@@ -237,6 +249,8 @@ struct node_fields_2_t {
   static constexpr node_offset_t ITEM_OVERHEAD = sizeof(node_offset_t);
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
+  bool is_level_head() const { return header.get_is_level_head(); }
+
   extent_len_t total_size(extent_len_t node_size) const {
     return node_size;
   }
@@ -331,6 +345,8 @@ struct internal_fields_3_t {
   static constexpr node_offset_t ITEM_OVERHEAD = 0u;
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
+  bool is_level_head() const { return header.get_is_level_head(); }
+
   extent_len_t total_size(extent_len_t node_size) const {
     if (is_level_tail()) {
       return node_size - sizeof(snap_gen_t);
