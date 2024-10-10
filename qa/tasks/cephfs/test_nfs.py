@@ -8,6 +8,7 @@ from io import BytesIO, StringIO
 from tasks.mgr.mgr_test_case import MgrTestCase
 from teuthology import contextutil
 from teuthology.exceptions import CommandFailedError
+from teuthology.orchestra.run import Raw
 
 log = logging.getLogger(__name__)
 
@@ -319,7 +320,7 @@ class TestNFS(MgrTestCase):
                     else:
                         log.warning(f'{e}, retrying')
 
-    def _test_mnt(self, pseudo_path, port, ip, check=True):
+    def _test_mnt(self, pseudo_path, port, ip, check=True, datarw=False):
         '''
         Test mounting of created exports
         :param pseudo_path: It is the pseudo root name
@@ -347,11 +348,26 @@ class TestNFS(MgrTestCase):
         self.ctx.cluster.run(args=['sudo', 'chmod', '1777', '/mnt'])
 
         try:
+            # Clean up volumes directory created by subvolume create by some tests
+            self.ctx.cluster.run(args=['sudo', 'rm', '-rf', '/mnt/volumes'])
             self.ctx.cluster.run(args=['touch', '/mnt/test'])
             out_mnt = self._sys_cmd(['ls', '/mnt'])
             self.assertEqual(out_mnt,  b'test\n')
+            if datarw:
+              self.ctx.cluster.run(args=['echo', 'test data', Raw('|'), 'tee', '/mnt/test1'])
+              out_test1 = self._sys_cmd(['cat', '/mnt/test1'])
+              self.assertEqual(out_test1,  b'test data\n')
         finally:
             self.ctx.cluster.run(args=['sudo', 'umount', '/mnt'])
+
+    def _test_data_read_write(self, pseudo_path, port, ip):
+        '''
+        Check if read/write works fine
+        '''
+        try:
+            self._test_mnt(pseudo_path, port, ip, True, True)
+        except CommandFailedError as e:
+            self.fail(f"expected read/write of a file to be successful but failed with {e.exitstatus}")
 
     def _write_to_read_only_export(self, pseudo_path, port, ip):
         '''
@@ -597,6 +613,18 @@ class TestNFS(MgrTestCase):
         port, ip = self._get_port_ip_info()
         self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
         self._write_to_read_only_export(self.pseudo_path, port, ip)
+        self._test_delete_cluster()
+
+    def test_data_read_write(self):
+        '''
+        Test date read and write on export.
+        '''
+        self._test_create_cluster()
+        self._create_export(export_id='1', create_fs=True,
+                            extra_cmd=['--pseudo-path', self.pseudo_path])
+        port, ip = self._get_port_ip_info()
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
+        self._test_data_read_write(self.pseudo_path, port, ip)
         self._test_delete_cluster()
 
     def test_cluster_info(self):

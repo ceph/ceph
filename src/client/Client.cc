@@ -10798,7 +10798,6 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
         goto success;
     }
 
-    clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
     // reverify size
     {
       r = clnt->_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
@@ -10809,14 +10808,6 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
     // eof?  short read.
     if ((uint64_t)pos >= in->size)
       goto success;
-
-    {
-      int have_caps2 = 0;
-      r = clnt->get_caps(f, CEPH_CAP_FILE_RD, have_caps, &have_caps2, -1);
-      if (r < 0) {
-        goto error;
-      }
-    }
 
     wanted = left;
     retry();
@@ -10971,6 +10962,20 @@ retry:
     // branch below but in a non-blocking fashion. The code in _read_sync
     // is duplicated and modified and exists in
     // C_Read_Sync_NonBlocking::finish().
+
+    // trim read based on file size?
+    if ((offset >= in->size) || (size == 0)) {
+      // read is requested at the EOF or the read len is zero, therefore just
+      // release managed pointers and complete the C_Read_Finisher immediately with 0 bytes
+
+      Context *iof = iofinish.release();
+      crf.release();
+      iof->complete(0);
+
+      // Signal async completion
+      return 0;
+    }
+
     C_Read_Sync_NonBlocking *crsa =
       new C_Read_Sync_NonBlocking(this, iofinish.release(), f, in, f->pos,
                                   offset, size, bl, filer.get(), have);
@@ -11399,9 +11404,17 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
   return r;
 }
 
+void Client::C_Lock_Client_Finisher::finish(int r)
+{
+  std::scoped_lock lock(clnt->client_lock);
+  onfinish->complete(r);
+}
+
 void Client::C_Write_Finisher::finish_io(int r)
 {
   bool fini;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
 
   clnt->put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
@@ -11437,6 +11450,8 @@ void Client::C_Write_Finisher::finish_fsync(int r)
 {
   bool fini;
   client_t const whoami = clnt->whoami;  // For the benefit of ldout prefix
+
+  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
 
   ldout(clnt->cct, 3) << "finish_fsync r = " << r << dendl;
 
@@ -11598,6 +11613,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   std::unique_ptr<Context> iofinish = nullptr;
   std::unique_ptr<C_Write_Finisher> cwf = nullptr;
+  std::unique_ptr<Context> filer_iofinish = nullptr;
   
   if (in->inline_version < CEPH_INLINE_NONE) {
     if (endoff > cct->_conf->client_max_inline_size ||
@@ -11709,7 +11725,10 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     if (onfinish == nullptr) {
       // We need a safer condition to wait on.
       cond_iofinish = new C_SaferCond();
-      iofinish.reset(cond_iofinish);
+      filer_iofinish.reset(cond_iofinish);
+    } else {
+      //Register a wrapper callback for the C_Write_Finisher which takes 'client_lock'
+      filer_iofinish.reset(new C_Lock_Client_Finisher(this, iofinish.get()));
     }
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
@@ -11717,11 +11736,12 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		       offset, size, bl, ceph::real_clock::now(), 0,
 		       in->truncate_size, in->truncate_seq,
-		       iofinish.get());
+		       filer_iofinish.get());
 
     if (onfinish) {
       // handle non-blocking caller (onfinish != nullptr), we can now safely
       // release all the managed pointers
+      filer_iofinish.release();
       iofinish.release();
       onuninline.release();
       cwf.release();
