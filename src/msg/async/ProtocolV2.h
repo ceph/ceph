@@ -218,6 +218,8 @@ public:
   virtual void write_event() override;
   virtual bool is_queued() override;
 
+  virtual void dump(Formatter *f) override;
+
 private:
   // Client Protocol
   CONTINUATION_DECL(ProtocolV2, start_client_banner_exchange);
