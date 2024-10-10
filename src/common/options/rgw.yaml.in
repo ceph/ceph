@@ -3828,6 +3828,18 @@ options:
   default: 60
   services:
   - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: d4n_writecache_enabled
+  type: bool
+  level: advanced
+  desc: The d4n write cache
+  default: false
+  services: 
+  - rgw
+  flags:
+  - startup
   with_legacy: true
 - name: rgw_backend_store
   type: str
@@ -4092,6 +4104,16 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_d4n_cache_cleaning_interval
+  type: int
+  level: advanced
+  desc: This is the interval for invoking write cache cleaning process
+  default: 1000
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced
@@ -4238,6 +4260,16 @@ options:
     does not use this option.
   default: 127.0.0.1:6379
   services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_backend_address
+  type: str
+  level: advanced
+  desc: The backend address used by D4N cache 
+  default: 127.0.0.1:6379
+  services: 
   - rgw
   flags:
   - startup
