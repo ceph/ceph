@@ -1827,6 +1827,9 @@ class TestFSFail(TestAdminCommands):
         health_warn = 'MDS_CACHE_OVERSIZED'
         self.gen_health_warn_mds_cache_oversized()
 
+        # Failing the file system breaks this mount
+        self.mount_a.umount_wait(require_clean=True)
+
         # actual testing begins now.
         self.negtest_ceph_cmd(args=f'fs fail {self.fs.name}',
                               retval=1, errmsgs=health_warn)
@@ -1845,6 +1848,9 @@ class TestFSFail(TestAdminCommands):
         '''
         health_warn = 'MDS_TRIM'
         self.gen_health_warn_mds_trim()
+
+        # Failing the file system breaks this mount
+        self.mount_a.umount_wait(require_clean=True)
 
         # actual testing begins now.
         self.negtest_ceph_cmd(args=f'fs fail {self.fs.name}',
@@ -1866,6 +1872,9 @@ class TestFSFail(TestAdminCommands):
         health_warn = 'MDS_CACHE_OVERSIZED'
         self.fs.set_max_mds(2)
         self.gen_health_warn_mds_cache_oversized()
+
+        # Failing the file system breaks this mount
+        self.mount_a.umount_wait(require_clean=True)
 
         # actual testing begins now.
         self.negtest_ceph_cmd(args=f'fs fail {self.fs.name}',
