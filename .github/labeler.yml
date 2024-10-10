@@ -263,6 +263,19 @@ rbd:
   - systemd/rbdmap.service.in
   - udev/50-rbd.rules
 
+nvmeof:
+  - qa/suites/nvmeof/**
+  - qa/tasks/nvmeof.py
+  - qa/workunits/nvmeof/**
+  - src/ceph_nvmeof_monitor_client.cc
+  - src/cephadm/cephadmlib/daemons/nvmeof.py
+  - src/messages/MNVMeofGw*
+  - src/mon/NVMeofGw*
+  - src/nvmeof/**
+  - src/pybind/mgr/cephadm/services/nvmeof.py
+  - src/pybind/mgr/cephadm/templates/services/nvmeof/**
+  - src/tools/ceph-dencoder/nvmeof*
+
 rgw:
   - qa/suites/rgw/**
   - qa/tasks/rgw*
