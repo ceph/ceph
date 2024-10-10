@@ -75,7 +75,7 @@ typename ObserverMgr<ConfigObs>::config_obs_wptr ObserverMgr<ConfigObs>::remove_
   for (auto o = observers.begin(); o != observers.end(); ) {
     if (*o->second == observer) {
       ptr = std::move(o->second);
-      observers.erase(o++);
+      o = observers.erase(o);
       found_obs = true;
     } else {
       ++o;

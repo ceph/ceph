@@ -73,7 +73,7 @@ void SloppyCRCMap::truncate(uint64_t offset)
   offset -= offset % block_size;
   std::map<uint64_t,uint32_t>::iterator p = crc_map.lower_bound(offset);
   while (p != crc_map.end())
-    crc_map.erase(p++);
+    p = crc_map.erase(p);
 }
 
 void SloppyCRCMap::zero(uint64_t offset, uint64_t len)

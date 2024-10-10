@@ -207,8 +207,8 @@ struct Option {
   typedef std::function<int(std::string *, std::string *)> validator_fn_t;
   validator_fn_t validator;
 
-  Option(std::string const &name, type_t t, level_t l)
-    : name(name), type(t), level(l)
+  Option(std::string &&name, type_t t, level_t l)
+    : name(std::move(name)), type(t), level(l)
   {
     // While value_t is nullable (via std::monostate), we don't ever
     // want it set that way in an Option instance: within an instance,
