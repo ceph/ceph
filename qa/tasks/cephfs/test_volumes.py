@@ -2388,7 +2388,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
 
         # set earmark
-        earmark = "smb.test"
+        earmark = "smb"
         self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, "--earmark", earmark)
 
         # get earmark
@@ -2401,7 +2401,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
 
         # set earmark
-        earmark = "smb.test"
+        earmark = "smb"
         self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, "--earmark", earmark)
 
         # remove earmark
@@ -2559,7 +2559,7 @@ class TestSubvolumes(TestVolumesHelper):
             self.assertIn(feature, subvol_info["features"], msg="expected feature '{0}' in subvolume".format(feature))
 
         # set earmark
-        earmark = "smb.test"
+        earmark = "smb"
         self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, "--earmark", earmark)
 
         subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
