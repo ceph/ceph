@@ -767,20 +767,26 @@ seastar::future<> ShardServices::dispatch_context_transaction(
   LOG_PREFIX(OSDSingletonState::dispatch_context_transaction);
   if (ctx.transaction.empty()) {
     DEBUG("empty transaction");
-    return seastar::now();
+    co_await get_store().flush(col);
+    Context* on_commit(
+      ceph::os::Transaction::collect_all_contexts(ctx.transaction));
+    if (on_commit) {
+      on_commit->complete(0);
+    }
+    co_return;
   }
 
   DEBUG("do_transaction ...");
-  auto ret = get_store().do_transaction(
+  co_await get_store().do_transaction(
     col,
     ctx.transaction.claim_and_reset());
-  return ret;
+  co_return;
 }
 
 seastar::future<> ShardServices::dispatch_context_messages(
   BufferedRecoveryMessages &&ctx)
 {
-  LOG_PREFIX(OSDSingletonState::dispatch_context_transaction);
+  LOG_PREFIX(OSDSingletonState::dispatch_context_messages);
   auto ret = seastar::parallel_for_each(std::move(ctx.message_map),
     [FNAME, this](auto& osd_messages) {
       auto& [peer, messages] = osd_messages;
