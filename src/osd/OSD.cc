@@ -7604,9 +7604,8 @@ void OSD::ms_fast_dispatch(Message *m)
   OID_EVENT_TRACE_WITH_MSG(m, "MS_FAST_DISPATCH_END", false);
 }
 
-int OSD::ms_handle_fast_authentication(Connection *con)
+bool OSD::ms_handle_fast_authentication(Connection *con)
 {
-  int ret = 0;
   auto s = ceph::ref_cast<Session>(con->get_priv());
   if (!s) {
     s = ceph::make_ref<Session>(cct, con);
@@ -7624,6 +7623,7 @@ int OSD::ms_handle_fast_authentication(Connection *con)
   AuthCapsInfo &caps_info = con->get_peer_caps_info();
   if (caps_info.allow_all) {
     s->caps.set_allow_all();
+    return true;
   } else if (caps_info.caps.length() > 0) {
     bufferlist::const_iterator p = caps_info.caps.cbegin();
     string str;
@@ -7633,23 +7633,22 @@ int OSD::ms_handle_fast_authentication(Connection *con)
     catch (ceph::buffer::error& e) {
       dout(10) << __func__ << " session " << s << " " << s->entity_name
 	       << " failed to decode caps string" << dendl;
-      ret = -EACCES;
+      return false;
     }
-    if (!ret) {
-      bool success = s->caps.parse(str);
-      if (success) {
-	dout(10) << __func__ << " session " << s
-		 << " " << s->entity_name
-		 << " has caps " << s->caps << " '" << str << "'" << dendl;
-	ret = 1;
-      } else {
-	dout(10) << __func__ << " session " << s << " " << s->entity_name
-		 << " failed to parse caps '" << str << "'" << dendl;
-	ret = -EACCES;
-      }
+    bool success = s->caps.parse(str);
+    if (success) {
+      dout(10) << __func__ << " session " << s
+               << " " << s->entity_name
+               << " has caps " << s->caps << " '" << str << "'" << dendl;
+      return true;
+    } else {
+      dout(10) << __func__ << " session " << s << " " << s->entity_name
+               << " failed to parse caps '" << str << "'" << dendl;
+      return false;
     }
+  } else {
+    return false;
   }
-  return ret;
 }
 
 void OSD::do_waiters()
