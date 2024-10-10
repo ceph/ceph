@@ -27,6 +27,8 @@
 #include "PyModuleRunner.h"
 #include "PyModule.h"
 
+#include <fmt/core.h>
+
 #include <vector>
 #include <string>
 
@@ -54,7 +56,7 @@ public:
   ActivePyModule(const PyModuleRef &py_module_,
       LogChannelRef clog_)
     : PyModuleRunner(py_module_, clog_),
-      fin_thread_name(std::string("m-fin-" + py_module->get_name()).substr(0,15)),
+      fin_thread_name(fmt::format("m-fin-{}", py_module->get_name()).substr(0,15)),
       finisher(g_ceph_context, thread_name, fin_thread_name)
 
   {
