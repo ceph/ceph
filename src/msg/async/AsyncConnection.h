@@ -54,7 +54,7 @@ class AsyncConnection : public Connection {
   ssize_t read(unsigned len, char *buffer,
                std::function<void(char *, ssize_t)> callback);
   ssize_t read_until(unsigned needed, char *p);
-  ssize_t read_bulk(char *buf, unsigned len);
+  ssize_t read_bulk(std::span<const std::span<char>> dest);
 
   ssize_t write(ceph::buffer::list &bl, std::function<void(ssize_t)> callback,
                 bool more=false);
@@ -186,6 +186,13 @@ private:
   // lockfree, only used in own thread
   ceph::buffer::list outgoing_bl;
   bool open_write = false;
+
+  /**
+   * True when we know that the kernel's socket receive buffer has run
+   * empty.  Until we get a notification from the kernel, we skip all
+   * further read calls.
+   */
+  bool skip_read = false;
 
   std::mutex write_lock;
 
