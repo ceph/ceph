@@ -693,6 +693,21 @@ void rgw_bucket_dir::dump(Formatter *f) const
   f->close_section();
 }
 
+void rgw_s3select_usage_data::generate_test_instances(list<rgw_s3select_usage_data*>& o)
+{
+  rgw_s3select_usage_data *s = new rgw_s3select_usage_data;
+  s->bytes_processed = 1024;
+  s->bytes_returned = 512;
+  o.push_back(s);
+  o.push_back(new rgw_s3select_usage_data);
+}
+
+void rgw_s3select_usage_data::dump(Formatter *f) const
+{
+  f->dump_unsigned("bytes_processed", bytes_processed);
+  f->dump_unsigned("bytes_returned", bytes_returned);
+}
+
 void rgw_usage_data::generate_test_instances(list<rgw_usage_data*>& o)
 {
   rgw_usage_data *s = new rgw_usage_data;
@@ -773,12 +788,18 @@ void rgw_usage_log_entry::dump(Formatter *f) const
     }
   }
   f->close_section();
+
+  f->open_object_section("s3select");
+  f->dump_unsigned("bytes_processed", s3select_usage.bytes_processed);
+  f->dump_unsigned("bytes_returned", s3select_usage.bytes_returned);
+  f->close_section();
 }
 
 void rgw_usage_log_entry::generate_test_instances(list<rgw_usage_log_entry *> &o)
 {
   rgw_usage_log_entry *entry = new rgw_usage_log_entry;
   rgw_usage_data usage_data{1024, 2048};
+  rgw_s3select_usage_data s3select_usage_data{8192, 4096};
   entry->owner = rgw_user("owner");
   entry->payer = rgw_user("payer");
   entry->bucket = "bucket";
@@ -788,6 +809,7 @@ void rgw_usage_log_entry::generate_test_instances(list<rgw_usage_log_entry *> &o
   entry->total_usage.ops = usage_data.ops;
   entry->total_usage.successful_ops = usage_data.successful_ops;
   entry->usage_map["get_obj"] = usage_data;
+  entry->s3select_usage = s3select_usage_data;
   o.push_back(entry);
   o.push_back(new rgw_usage_log_entry);
 }
