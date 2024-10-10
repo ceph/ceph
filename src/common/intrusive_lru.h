@@ -166,6 +166,10 @@ public:
     evict();
   }
 
+  ~intrusive_lru() {
+    set_target_size(0);
+  }
+
   friend void intrusive_ptr_add_ref<>(intrusive_lru_base<Config> *);
   friend void intrusive_ptr_release<>(intrusive_lru_base<Config> *);
 };
