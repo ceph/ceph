@@ -143,7 +143,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
     // parts would end up in the same PG so that they could be clone_range'd into
     // the same object via librados, but that's not how multipart upload works
     // anymore and we no longer support clone_range via librados.
-    get_handle().exit();
     co_await reply_op_error(pgref, -ENOTSUP);
     co_return;
   }
