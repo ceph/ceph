@@ -18,6 +18,8 @@
 #include <memory>
 #include <optional>
 #include <thread>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <gtest/gtest.h>
@@ -35,6 +37,12 @@ void rethrow(std::exception_ptr eptr)
 auto capture(std::optional<std::exception_ptr>& eptr)
 {
   return [&eptr] (std::exception_ptr e) { eptr = e; };
+}
+
+auto capture(asio::cancellation_signal& signal,
+             std::optional<std::exception_ptr>& eptr)
+{
+  return bind_cancellation_slot(signal.slot(), capture(eptr));
 }
 
 
@@ -71,6 +79,36 @@ TEST(YieldWaiterVoid, wait_complete)
   EXPECT_TRUE(ctx.stopped());
 }
 
+TEST(YieldWaiterVoid, wait_cancel)
+{
+  asio::io_context ctx;
+  yield_waiter<void> waiter;
+  asio::cancellation_signal signal;
+  std::optional<std::exception_ptr> eptr;
+
+  asio::spawn(ctx, [&waiter] (asio::yield_context yield) {
+        waiter.async_wait(yield);
+      }, capture(signal, eptr));
+
+  ctx.poll();
+  ASSERT_FALSE(ctx.stopped());
+  ASSERT_TRUE(waiter);
+
+  signal.emit(asio::cancellation_type::all);
+
+  ctx.poll();
+  ASSERT_TRUE(ctx.stopped());
+  ASSERT_TRUE(eptr);
+  ASSERT_TRUE(*eptr);
+  try {
+    std::rethrow_exception(*eptr);
+  } catch (const boost::system::system_error& e) {
+    EXPECT_EQ(e.code(), asio::error::operation_aborted);
+  } catch (const std::exception&) {
+    EXPECT_THROW(throw, boost::system::system_error);
+  }
+}
+
 TEST(YieldWaiterVoid, wait_error)
 {
   asio::io_context ctx;
@@ -85,7 +123,7 @@ TEST(YieldWaiterVoid, wait_error)
   ASSERT_FALSE(ctx.stopped());
 
   ASSERT_TRUE(waiter);
-  waiter.complete(make_error_code(asio::error::operation_aborted));
+  waiter.complete(make_error_code(std::errc::no_such_file_or_directory));
   EXPECT_FALSE(waiter);
 
   ctx.poll();
@@ -95,7 +133,7 @@ TEST(YieldWaiterVoid, wait_error)
   try {
     std::rethrow_exception(*eptr);
   } catch (const boost::system::system_error& e) {
-    EXPECT_EQ(e.code(), asio::error::operation_aborted);
+    EXPECT_EQ(e.code(), std::errc::no_such_file_or_directory);
   } catch (const std::exception&) {
     EXPECT_THROW(throw, boost::system::system_error);
   }
@@ -136,6 +174,38 @@ TEST(YieldWaiterInt, wait_complete)
   EXPECT_TRUE(ctx.stopped());
   ASSERT_TRUE(result);
   EXPECT_EQ(42, *result);
+}
+
+TEST(YieldWaiterInt, wait_cancel)
+{
+  asio::io_context ctx;
+  yield_waiter<int> waiter;
+  asio::cancellation_signal signal;
+  std::optional<int> result;
+  std::optional<std::exception_ptr> eptr;
+
+  asio::spawn(ctx, [&waiter, &result] (asio::yield_context yield) {
+        result = waiter.async_wait(yield);
+      }, capture(signal, eptr));
+
+  ctx.poll();
+  ASSERT_FALSE(ctx.stopped());
+  ASSERT_TRUE(waiter);
+
+  signal.emit(asio::cancellation_type::all);
+
+  ctx.poll();
+  ASSERT_TRUE(ctx.stopped());
+  EXPECT_FALSE(result);
+  ASSERT_TRUE(eptr);
+  ASSERT_TRUE(*eptr);
+  try {
+    std::rethrow_exception(*eptr);
+  } catch (const boost::system::system_error& e) {
+    EXPECT_EQ(e.code(), asio::error::operation_aborted);
+  } catch (const std::exception&) {
+    EXPECT_THROW(throw, boost::system::system_error);
+  }
 }
 
 TEST(YieldWaiterInt, wait_error)
@@ -207,6 +277,37 @@ TEST(YieldWaiterPtr, wait_complete)
   ASSERT_TRUE(result);
   ASSERT_TRUE(*result);
   EXPECT_EQ(42, **result);
+}
+
+TEST(YieldWaiterPtr, wait_cancel)
+{
+  asio::io_context ctx;
+  yield_waiter<std::unique_ptr<int>> waiter;
+  asio::cancellation_signal signal;
+  std::optional<std::unique_ptr<int>> result;
+  std::optional<std::exception_ptr> eptr;
+
+  asio::spawn(ctx, [&waiter, &result] (asio::yield_context yield) {
+        result = waiter.async_wait(yield);
+      }, capture(signal, eptr));
+
+  ctx.poll();
+  ASSERT_FALSE(ctx.stopped());
+
+  signal.emit(asio::cancellation_type::all);
+
+  ctx.poll();
+  ASSERT_TRUE(ctx.stopped());
+  EXPECT_FALSE(result);
+  ASSERT_TRUE(eptr);
+  ASSERT_TRUE(*eptr);
+  try {
+    std::rethrow_exception(*eptr);
+  } catch (const boost::system::system_error& e) {
+    EXPECT_EQ(e.code(), asio::error::operation_aborted);
+  } catch (const std::exception&) {
+    EXPECT_THROW(throw, boost::system::system_error);
+  }
 }
 
 TEST(YieldWaiterPtr, wait_error)
