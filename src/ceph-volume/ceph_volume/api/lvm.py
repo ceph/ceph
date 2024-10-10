@@ -10,6 +10,8 @@ from itertools import repeat
 from math import floor
 from ceph_volume import process, util, conf
 from ceph_volume.exceptions import SizeAllocationError
+from typing import Any, Dict
+
 
 logger = logging.getLogger(__name__)
 
@@ -807,13 +809,16 @@ LV_CMD_OPTIONS =  ['--noheadings', '--readonly', '--separator=";"', '-a',
                    '--units=b', '--nosuffix']
 
 
-class Volume(object):
+class Volume:
     """
     Represents a Logical Volume from LVM, with some top-level attributes like
     ``lv_name`` and parsed tags as a dictionary of key/value pairs.
     """
 
-    def __init__(self, **kw):
+    def __init__(self, **kw: str) -> None:
+        self.lv_path: str = ''
+        self.lv_name: str = ''
+        self.lv_uuid: str = ''
         for k, v in kw.items():
             setattr(self, k, v)
         self.lv_api = kw
@@ -824,13 +829,13 @@ class Volume(object):
         self.encrypted = self.tags.get('ceph.encrypted', '0') == '1'
         self.used_by_ceph = 'ceph.osd_id' in self.tags
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '<%s>' % self.lv_api['lv_path']
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def as_dict(self):
+    def as_dict(self) -> Dict[str, Any]:
         obj = {}
         obj.update(self.lv_api)
         obj['tags'] = self.tags
@@ -839,7 +844,7 @@ class Volume(object):
         obj['path'] = self.lv_path
         return obj
 
-    def report(self):
+    def report(self) -> Dict[str, Any]:
         if not self.used_by_ceph:
             return {
                 'name': self.lv_name,

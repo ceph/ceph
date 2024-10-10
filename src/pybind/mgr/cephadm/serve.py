@@ -96,7 +96,10 @@ class CephadmServe:
                 if not self.mgr.paused:
                     self._run_async_actions()
 
-                    self.mgr.to_remove_osds.process_removal_queue()
+                    removal_queue_result = self.mgr.to_remove_osds.process_removal_queue()
+                    self.log.debug(f'process_removal_queue() returned = {removal_queue_result}')
+                    if removal_queue_result:
+                        continue
 
                     self.mgr.migration.migrate()
                     if self.mgr.migration.is_migration_ongoing():

@@ -857,13 +857,14 @@ def get_devices(_sys_block_path='/sys/block', device=''):
             device_slaves = os.listdir(os.path.join(sysdir, 'slaves'))
             metadata['partitions'] = get_partitions_facts(sysdir)
 
+        metadata['device_nodes'] = []
         if device_slaves:
-            metadata['device_nodes'] = ','.join(device_slaves)
+            metadata['device_nodes'].extend(device_slaves)
         else:
             if block[2] == 'part':
-                metadata['device_nodes'] = block[3]
+                metadata['device_nodes'].append(block[3])
             else:
-                metadata['device_nodes'] = devname
+                metadata['device_nodes'].append(devname)
 
         metadata['actuators'] = None
         if os.path.isdir(sysdir + "/queue/independent_access_ranges/"):
@@ -1370,8 +1371,8 @@ class UdevData:
         """
         result: str = self.path
         if self.is_lvm:
-            vg: str = self.environment.get('DM_VG_NAME')
-            lv: str = self.environment.get('DM_LV_NAME')
+            vg: str = self.environment.get('DM_VG_NAME', '')
+            lv: str = self.environment.get('DM_LV_NAME', '')
             result = f'/dev/{vg}/{lv}'
         return result
 
@@ -1385,6 +1386,6 @@ class UdevData:
         """
         result: str = self.path
         if self.is_lvm:
-            name: str = self.environment.get('DM_NAME')
+            name: str = self.environment.get('DM_NAME', '')
             result = f'/dev/mapper/{name}'
         return result

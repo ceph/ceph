@@ -159,6 +159,7 @@ class TestRawBlueStore:
 
     @patch('ceph_volume.objectstore.rawbluestore.encryption_utils.rename_mapper', Mock(return_value=MagicMock()))
     @patch('ceph_volume.util.disk.get_bluestore_header')
+    @patch('ceph_volume.objectstore.rawbluestore.encryption_utils.luks_close', Mock(return_value=MagicMock()))
     @patch('ceph_volume.objectstore.rawbluestore.encryption_utils.luks_open', Mock(return_value=MagicMock()))
     def test_activate_dmcrypt_tpm(self, m_bs_header, rawbluestore, fake_lsblk_all, mock_raw_direct_report, is_root) -> None:
         m_bs_header.return_value = {
