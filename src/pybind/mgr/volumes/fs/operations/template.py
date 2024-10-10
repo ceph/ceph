@@ -68,6 +68,9 @@ class SubvolumeOpType(Enum):
     SNAP_METADATA_GET     = 'snap-metadata-get'
     SNAP_METADATA_LIST    = 'snap-metadata-ls'
     SNAP_METADATA_REMOVE  = 'snap-metadata-rm'
+    EARMARK_GET           = 'earmark-get'
+    EARMARK_SET           = 'earmark-set'
+    EARMARK_CLEAR          = 'earmark-clear'
 
 class SubvolumeTemplate(object):
     VERSION = None # type: int
