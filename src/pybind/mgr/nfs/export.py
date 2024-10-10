@@ -14,10 +14,9 @@ from typing import (
 from os.path import normpath
 import cephfs
 
-from rados import TimedOut, ObjectNotFound, Rados, LIBRADOS_ALL_NSPACES
+from rados import TimedOut, ObjectNotFound, Rados
 
 from object_format import ErrorResponse
-from orchestrator import NoOrchestrator
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 
 from .ganesha_conf import (
@@ -29,7 +28,6 @@ from .ganesha_conf import (
     format_block)
 from .exception import NFSException, NFSInvalidOperation, FSNotFound, NFSObjectNotFound
 from .utils import (
-    CONF_PREFIX,
     EXPORT_PREFIX,
     NonFatalError,
     USER_CONF_PREFIX,
@@ -49,11 +47,7 @@ log = logging.getLogger(__name__)
 
 def known_cluster_ids(mgr: 'Module') -> Set[str]:
     """Return the set of known cluster IDs."""
-    try:
-        clusters = set(available_clusters(mgr))
-    except NoOrchestrator:
-        clusters = nfs_rados_configs(mgr.rados)
-    return clusters
+    return set(available_clusters(mgr))
 
 
 def _check_rados_notify(ioctx: Any, obj: str) -> None:
@@ -142,21 +136,6 @@ class NFSRados:
                 if obj.key.startswith(USER_CONF_PREFIX):
                     return True
         return False
-
-
-def nfs_rados_configs(rados: 'Rados', nfs_pool: str = POOL_NAME) -> Set[str]:
-    """Return a set of all the namespaces in the nfs_pool where nfs
-    configuration objects are found. The namespaces also correspond
-    to the cluster ids.
-    """
-    ns: Set[str] = set()
-    prefixes = (EXPORT_PREFIX, CONF_PREFIX, USER_CONF_PREFIX)
-    with rados.open_ioctx(nfs_pool) as ioctx:
-        ioctx.set_namespace(LIBRADOS_ALL_NSPACES)
-        for obj in ioctx.list_objects():
-            if obj.key.startswith(prefixes):
-                ns.add(obj.nspace)
-    return ns
 
 
 class AppliedExportResults:
