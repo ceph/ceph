@@ -350,7 +350,7 @@ public:
 	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
 	<< ", paddr=" << get_paddr()
 	<< ", prior_paddr=" << prior_poffset_str
-	<< ", length=" << get_length()
+	<< std::hex << ", length=0x" << get_length() << std::dec
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
 	<< ", refcount=" << use_count()
