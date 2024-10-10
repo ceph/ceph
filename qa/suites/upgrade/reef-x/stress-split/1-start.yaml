@@ -53,37 +53,33 @@ first-half-sequence:
       - ceph config set mgr mgr/cephadm/daemon_cache_timeout 60
       - ceph config set global log_to_journald false --force
 
-      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
-      - ceph orch ps
+      - echo wait for mgr daemons to upgrade
+      # upgrade the mgr daemons first
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mgr
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
 
       - echo wait for minority of mons to upgrade
-      - while ! ceph mon versions | grep $sha1 ; do sleep 2 ; done
-      - ceph orch ps
-      - ceph orch upgrade pause
+      # upgrade 1 of 3 mon daemons, then wait 60 seconds
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon --limit 1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
       - sleep 60
-      - ceph orch upgrade resume
 
       - echo wait for majority of mons to upgrade
-      - "while ! ceph mon versions | grep $sha1 | egrep ': [23]' ; do sleep 2 ; done"
-      - ceph orch ps
-      - ceph orch upgrade pause
+      # upgrade one more mon daemon (to get us to 2/3 upgraded) and wait 60 seconds
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon --limit 1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
       - sleep 60
-      - ceph orch upgrade resume
 
       - echo wait for all mons to upgrade
-      - "while ! ceph mon versions | grep $sha1 | grep ': 3' ; do sleep 2 ; done"
-      - ceph orch ps
-      - ceph orch upgrade pause
+      # upgrade final mon daemon and wait 60 seconds
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
       - sleep 60
-      - ceph orch upgrade resume
 
       - echo wait for half of osds to upgrade
-      - "while ! ceph osd versions | grep $sha1 | egrep ': [45678]'; do sleep 2 ; done"
-      - ceph orch upgrade pause
-      - ceph orch ps
-
-      - ceph orch ps
-      - ceph versions
+      # upgrade 4 of the 8 OSDs
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types osd --limit 4
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
 
 
 #################
@@ -108,11 +104,12 @@ second-half-sequence:
     - cephadm.shell:
         env: [sha1]
         mon.a:
-          - ceph orch upgrade resume
           - sleep 60
 
           - echo wait for upgrade to complete
-          - while ceph orch upgrade status | jq '.in_progress' | grep true ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+          # upgrade whatever is left
+          - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+          - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
 
           - echo upgrade complete
           - ceph orch ps
