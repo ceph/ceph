@@ -181,6 +181,7 @@ int RocksDBStore::set_merge_operator(
 class CephRocksdbLogger : public rocksdb::Logger {
   CephContext *cct;
 public:
+  static thread_local int32_t left_to_print;
   explicit CephRocksdbLogger(CephContext *c) : cct(c) {
     cct->get();
   }
@@ -199,6 +200,17 @@ public:
   // printed.
   void Logv(const rocksdb::InfoLogLevel log_level, const char* format,
 	    va_list ap) override {
+    if (left_to_print != -1) {
+      if (left_to_print == 0) {
+        return;
+      }
+      if (left_to_print == 1) {
+        dout(5) << "-- muted rest of DB::Open() output --" << dendl;
+        left_to_print = 0;
+        return;
+      }
+      left_to_print--;
+    }
     int v = rocksdb::NUM_INFO_LOG_LEVELS - log_level - 1;
     dout(ceph::dout::need_dynamic(v));
     char buf[65536];
@@ -206,6 +218,7 @@ public:
     *_dout << buf << dendl;
   }
 };
+thread_local int32_t CephRocksdbLogger::left_to_print = -1;
 
 rocksdb::Logger *create_rocksdb_ceph_logger()
 {
@@ -1128,6 +1141,7 @@ int RocksDBStore::do_open(ostream &out,
     return r;
   }
   rocksdb::Status status;
+  CephRocksdbLogger::left_to_print = cct->_conf.get_val<int64_t>("rocksdb_log_opendb_count");
   if (create_if_missing) {
     status = rocksdb::DB::Open(opt, path, &db);
     if (!status.ok()) {
@@ -1236,6 +1250,7 @@ int RocksDBStore::do_open(ostream &out,
       }
     }
   }
+  CephRocksdbLogger::left_to_print = -1;
   ceph_assert(default_cf != nullptr);
   
   PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
