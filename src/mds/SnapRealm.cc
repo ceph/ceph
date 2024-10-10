@@ -107,6 +107,48 @@ void SnapRealm::build_snap_set() const
   }
 }
 
+void SnapRealm::check_cache(std::vector<SnapRealm*>& related_realms) const
+{
+  snapid_t seq;
+  snapid_t last_created;
+  snapid_t last_destroyed = mdcache->mds->snapclient->get_last_destroyed();
+  if (global || srnode.is_parent_global()) {
+    last_created = mdcache->mds->snapclient->get_last_created();
+    seq = std::max(last_created, last_destroyed);
+  } else {
+    last_created = srnode.last_created;
+    seq = srnode.seq;
+  }
+
+  if (cached_seq >= seq &&
+      cached_last_destroyed == last_destroyed &&
+      related_realms.empty())
+    return;
+
+  cached_snap_context.clear();
+
+  cached_seq = seq;
+  cached_last_created = last_created;
+  cached_last_destroyed = last_destroyed;
+
+  cached_subvolume_ino = 0;
+  if (parent)
+    cached_subvolume_ino = parent->get_subvolume_ino();
+  if (!cached_subvolume_ino && srnode.is_subvolume())
+    cached_subvolume_ino = inode->ino();
+
+  build_snap_set();
+
+  build_snap_trace(related_realms);
+
+  dout(10) << "check_cache rebuilt " << cached_snaps
+	   << " seq " << seq
+	   << " cached_seq " << cached_seq
+	   << " cached_last_created " << cached_last_created
+	   << " cached_last_destroyed " << cached_last_destroyed
+	   << ")" << dendl;
+}
+
 void SnapRealm::check_cache() const
 {
   snapid_t seq;
@@ -137,8 +179,9 @@ void SnapRealm::check_cache() const
 
   build_snap_set();
 
-  build_snap_trace();
-  
+  std::vector<SnapRealm*> related_realms = {}; //empty
+  build_snap_trace(related_realms);
+
   dout(10) << "check_cache rebuilt " << cached_snaps
 	   << " seq " << seq
 	   << " cached_seq " << cached_seq
@@ -419,7 +462,13 @@ const bufferlist& SnapRealm::get_snap_trace_new() const
   return cached_snap_trace_new;
 }
 
-void SnapRealm::build_snap_trace() const
+const bufferlist& SnapRealm::get_snap_trace_new(std::vector<SnapRealm*>& related_realms) const
+{
+  check_cache(related_realms);
+  return cached_snap_trace_new;
+}
+
+void SnapRealm::build_snap_trace(std::vector<SnapRealm*>& related_realms) const
 {
   cached_snap_trace.clear();
   cached_snap_trace_new.clear();
@@ -438,7 +487,21 @@ void SnapRealm::build_snap_trace() const
     return;
   }
 
-  SnapRealmInfo info(inode->ino(), srnode.created, srnode.seq, srnode.current_parent_since);
+  dout(10) << "build_snap_trace related_realms " << related_realms << dendl;
+  // Get the snaps_size and latest snapshot id among the related snaprealms
+  uint64_t snaps_size = 0;
+  snapid_t rr_max_seq = 0;
+  for (const auto& r_realm : related_realms) {
+    snaps_size+= r_realm->srnode.snaps.size();
+    if (rr_max_seq < r_realm->srnode.seq)
+      rr_max_seq = r_realm->srnode.seq;
+    dout(10) << "build_snap_trace related_realm " << r_realm << " snap size " << snaps_size  << " max seq " << rr_max_seq << dendl;
+  }
+
+  if (srnode.seq > rr_max_seq)
+    rr_max_seq = srnode.seq;
+
+  SnapRealmInfo info(inode->ino(), srnode.created, rr_max_seq, srnode.current_parent_since);
   if (parent) {
     info.h.parent = parent->inode->ino();
 
@@ -460,11 +523,20 @@ void SnapRealm::build_snap_trace() const
     }
   }
 
-  info.my_snaps.reserve(srnode.snaps.size());
+  info.my_snaps.reserve(snaps_size + srnode.snaps.size());
   for (auto p = srnode.snaps.rbegin();
        p != srnode.snaps.rend();
        ++p)
     info.my_snaps.push_back(p->first);
+
+  // Add snaps of related realms (realms, where hard linked referent inodes are present)
+  for (const auto& r_realm : related_realms) {
+    for (auto p = r_realm->srnode.snaps.rbegin();
+         p != r_realm->srnode.snaps.rend();
+         ++p)
+      info.my_snaps.push_back(p->first);
+  }
+
   dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
 
   SnapRealmInfoNew ninfo(info, srnode.last_modified, srnode.change_attr);

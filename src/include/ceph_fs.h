@@ -446,7 +446,8 @@ enum {
 #define IS_CEPH_MDS_OP_NEWINODE(op) (op == CEPH_MDS_OP_CREATE     || \
 				     op == CEPH_MDS_OP_MKNOD      || \
 				     op == CEPH_MDS_OP_MKDIR      || \
-				     op == CEPH_MDS_OP_SYMLINK)
+				     op == CEPH_MDS_OP_SYMLINK)   || \
+				     op == CEPH_MDS_OP_LINK
 
 extern const char *ceph_mds_op_name(int op);
 
