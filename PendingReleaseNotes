@@ -121,6 +121,49 @@
   level storage operator (like Rook) to recreate the missing file system.
   See https://docs.ceph.com/en/latest/cephfs/administration/#file-systems
   docs for more information.
+* RGW: The SNS CreateTopic API now enforces the same topic naming requirements as AWS:
+  Topic names must be made up of only uppercase and lowercase ASCII letters, numbers,
+  underscores, and hyphens, and must be between 1 and 256 characters long.
+* RBD: When diffing against the beginning of time (`fromsnapname == NULL`) in
+  fast-diff mode (`whole_object == true` with `fast-diff` image feature enabled
+  and valid), diff-iterate is now guaranteed to execute locally if exclusive
+  lock is available.  This brings a dramatic performance improvement for QEMU
+  live disk synchronization and backup use cases.
+* RBD: The ``try-netlink`` mapping option for rbd-nbd has become the default
+  and is now deprecated. If the NBD netlink interface is not supported by the
+  kernel, then the mapping is retried using the legacy ioctl interface.
+* RADOS: Read balancing may now be managed automatically via the balancer
+  manager module. Users may choose between two new modes: ``upmap-read``, which
+  offers upmap and read optimization simultaneously, or ``read``, which may be used
+  to only optimize reads. For more detailed information see https://docs.ceph.com/en/latest/rados/operations/read-balancer/#online-optimization.
+* CephFS: MDS log trimming is now driven by a separate thread which tries to
+  trim the log every second (`mds_log_trim_upkeep_interval` config). Also,
+  a couple of configs govern how much time the MDS spends in trimming its
+  logs. These configs are `mds_log_trim_threshold` and `mds_log_trim_decay_rate`.
+* RGW: Notification topics are now owned by the user that created them. 
+  By default, only the owner can read/write their topics. Topic policy documents
+  are now supported to grant these permissions to other users. Preexisting topics
+  are treated as if they have no owner, and any user can read/write them using the SNS API. 
+  If such a topic is recreated with CreateTopic, the issuing user becomes the new owner.
+  For backward compatibility, all users still have permission to publish bucket 
+  notifications to topics owned by other users. A new configuration parameter:
+  ``rgw_topic_require_publish_policy`` can be enabled to deny ``sns:Publish``
+  permissions unless explicitly granted by topic policy.
+* RGW: Fix issue with persistent notifications where the changes to topic param that
+  were modified while persistent notifications were in the queue will be reflected in notifications.
+  So if user sets up topic with incorrect config (password/ssl) causing failure while delivering the
+  notifications to broker, can now modify the incorrect topic attribute and on retry attempt to delivery
+  the notifications, new configs will be used.
+* RBD: The option ``--image-id`` has been added to `rbd children` CLI command,
+  so it can be run for images in the trash.
+* PG dump: The default output of `ceph pg dump --format json` has changed. The
+  default json format produces a rather massive output in large clusters and
+  isn't scalable. So we have removed the 'network_ping_times' section from
+  the output. Details in the tracker: https://tracker.ceph.com/issues/57460
+* mgr/REST: The REST manager module will trim requests based on the 'max_requests' option.
+  Without this feature, and in the absence of manual deletion of old requests,
+  the accumulation of requests in the array can lead to Out Of Memory (OOM) issues, 
+  resulting in the Manager crashing.
 
 * CephFS: The `subvolume snapshot clone` command now depends on the config option
   `snapshot_clone_no_wait` which is used to reject the clone operation when
