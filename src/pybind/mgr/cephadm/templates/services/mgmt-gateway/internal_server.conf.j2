@@ -1,5 +1,8 @@
 
 server {
+    ssl_client_certificate /etc/nginx/ssl/ca.crt;
+    ssl_verify_client on;
+
     listen              {{ internal_port }} ssl;
     listen              [::]:{{ internal_port }} ssl;
     ssl_certificate     /etc/nginx/ssl/nginx_internal.crt;
