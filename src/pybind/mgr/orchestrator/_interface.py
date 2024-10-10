@@ -576,7 +576,12 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     @handle_orch_error
-    def apply(self, specs: Sequence["GenericSpec"], no_overwrite: bool = False) -> List[str]:
+    def apply(
+        self,
+        specs: Sequence["GenericSpec"],
+        no_overwrite: bool = False,
+        continue_on_error: bool = False
+    ) -> List[str]:
         """
         Applies any spec
         """
