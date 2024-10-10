@@ -835,8 +835,10 @@ void BlueFS::_stop_alloc()
 {
   dout(20) << __func__ << dendl;
   for (auto p : bdev) {
-    if (p)
+    if (p) {
+      p->set_discard_thread_notify();
       p->discard_drain();
+    }
   }
 
   for (size_t i = 0; i < alloc.size(); ++i) {

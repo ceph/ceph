@@ -184,6 +184,7 @@ protected:
   bool support_discard = false;
   bool rotational = true;
   bool lock_exclusive = true;
+  bool need_notify = false;
 
   // HM-SMR specific properties.  In HM-SMR drives the LBA space is divided into
   // fixed-size zones.  Typically, the first few zones are randomly writable;
@@ -243,6 +244,9 @@ public:
   uint64_t get_block_size() const { return block_size; }
   uint64_t get_optimal_io_size() const { return optimal_io_size; }
   bool is_discard_supported() const { return support_discard; }
+  void set_discard_thread_notify() {
+    need_notify = true;
+  }
 
   /// hook to provide utilization of thinly-provisioned device
   virtual int get_ebd_state(ExtBlkDevState &state) const {

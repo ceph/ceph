@@ -769,7 +769,8 @@ void KernelDevice::_discard_thread(uint64_t tid)
       if (thr->stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
-      discard_cond.notify_all(); // for the thread trying to drain...
+      if (need_notify)
+        discard_cond.notify_all(); // for the thread trying to drain...
       discard_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
