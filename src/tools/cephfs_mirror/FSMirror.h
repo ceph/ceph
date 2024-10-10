@@ -47,9 +47,14 @@ public:
 
   bool is_failed() {
     std::scoped_lock locker(m_lock);
-    return m_init_failed ||
-           m_instance_watcher->is_failed() ||
-           m_mirror_watcher->is_failed();
+    bool failed = m_init_failed;
+    if (m_instance_watcher) {
+      failed |= m_instance_watcher->is_failed();
+    }
+    if (m_mirror_watcher) {
+      failed |= m_mirror_watcher->is_failed();
+    }
+    return failed;
   }
 
   utime_t get_failed_ts() {
