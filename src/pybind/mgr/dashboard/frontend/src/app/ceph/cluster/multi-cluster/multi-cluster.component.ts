@@ -18,6 +18,7 @@ import {
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { HealthIcon } from '~/app/shared/enum/health-icon.enum';
 
 @Component({
   selector: 'cd-multi-cluster',
@@ -27,6 +28,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 export class MultiClusterComponent implements OnInit, OnDestroy {
   COUNT_OF_UTILIZATION_CHARTS = 5;
 
+  @ViewChild('connectionPopoverTpl', { static: true })
+  connectionPopoverTpl: TemplateRef<any>;
   @ViewChild('clusterUsageTpl', { static: true })
   clusterUsageTpl: TemplateRef<any>;
   @ViewChild('nameTpl', { static: true })
@@ -62,6 +65,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
   dashboardClustersMap: Map<string, string> = new Map<string, string>();
   icons = Icons;
+  healthIcons = HealthIcon;
   loading = true;
   bsModalRef: NgbModalRef;
   isMultiCluster = true;
@@ -96,6 +100,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   clusterDetailsArray: any[];
   prometheusConnectionErrors: any[] = [];
   reconnectionError: string;
+  clusterFederationStatus: number[] = [];
 
   constructor(
     private multiClusterService: MultiClusterService,
@@ -133,14 +138,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         prop: 'cluster_connection_status',
         name: $localize`Connection`,
         flexGrow: 2,
-        cellTransformation: CellTemplate.badge,
-        customTemplateConfig: {
-          map: {
-            1: { value: 'DISCONNECTED', class: 'badge-danger' },
-            0: { value: 'CONNECTED', class: 'badge-success' },
-            2: { value: 'CHECKING..', class: 'badge-info' }
-          }
-        }
+        cellTemplate: this.connectionPopoverTpl
       },
       {
         prop: 'status',
@@ -327,9 +325,11 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
       hosts: number;
       version: string;
       cluster_connection_status: number;
+      cluster_federate_status: number;
     }
 
     const clusters: ClusterInfo[] = [];
+    this.clusterFederationStatus = [1]; // for hub cluster the prometheus status would be 1, and federate_(i) will give us prometheus status for connected cluster
     this.queriesResults.TOTAL_CAPACITY?.forEach((totalCapacityMetric: any, index: number) => {
       const clusterName = totalCapacityMetric.metric.cluster;
       const totalCapacity = parseInt(totalCapacityMetric.value[1]);
@@ -360,8 +360,16 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         osds,
         hosts,
         version,
-        cluster_connection_status: 2
+        cluster_connection_status: 2,
+        cluster_federate_status: 2
       });
+
+      if (
+        this.clusterFederationStatus.length > 0 &&
+        this.clusterFederationStatus[index] != undefined
+      ) {
+        clusters[index].cluster_federate_status = this.clusterFederationStatus[index];
+      }
     });
 
     if (this.clusterTokenStatus) {
@@ -416,6 +424,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
       const instanceIp = instanceIpPort.split(':')[0];
       const instancePort = instanceIpPort.split(':')[1];
       const federationStatus = metricEntry.value[1];
+      this.clusterFederationStatus.push(parseInt(federationStatus));
 
       this.clusterDetailsArray?.forEach((clusterDetails) => {
         if (clusterDetails.name !== this.localClusterName) {
