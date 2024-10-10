@@ -24,6 +24,7 @@
 #include "include/types.h"
 #include "include/stringify.h"
 #include "include/unordered_map.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
 #include "MemStore.h"
