@@ -5,7 +5,7 @@ from __future__ import absolute_import
 import json
 
 from .helper import (DashboardTestCase, JAny, JLeaf, JList, JObj, JTuple,
-                     devices_schema)
+                     devices_schema, log, retry)
 
 
 class OsdTest(DashboardTestCase):
@@ -283,13 +283,18 @@ class OsdFlagsTest(DashboardTestCase):
                     if osd['osd'] == osd_initial['osd']:
                         self.assertGreater(len(osd['flags']), len(osd_initial['flags']))
 
-        self._ceph_cmd(['osd', 'unset-group', 'noout,noin', 'osd.0', 'osd.1', 'osd.2'])
-        flags_removed = self._get('/api/osd/flags/individual')
-        self.assertStatus(200)
-        for osd in flags_removed:
-            if osd['osd'] in [0, 1, 2]:
-                self.assertNotIn('noout', osd['flags'])
-                self.assertNotIn('noin', osd['flags'])
+        ret = self._ceph_cmd_result(['osd', 'unset-group', 'noout,noin', 'osd.0', 'osd.1', 'osd.2'])
+        self.assertEqual(ret, 0)
+
+        @retry(on_exception=AssertionError, tries=2, delay=0.5, logger=log)
+        def check_osd_flags():
+            flags_removed = self._get('/api/osd/flags/individual')
+            self.assertStatus(200)
+            for osd in flags_removed:
+                if osd['osd'] in [0, 1, 2]:
+                    self.assertNotIn('noout', osd['flags'])
+                    self.assertNotIn('noin', osd['flags'])
+        check_osd_flags()
 
     def test_add_indiv_flag(self):
         flags_update = {'noup': None, 'nodown': None, 'noin': None, 'noout': True}
