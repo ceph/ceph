@@ -89,7 +89,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
 		     const char *snap, IoCtx& p, bool ro)
     : cct((CephContext*)p.cct()),
-      config(cct->_conf),
+      config(cct),
       perfcounter(NULL),
       snap_id(CEPH_NOSNAP),
       snap_exists(true),
