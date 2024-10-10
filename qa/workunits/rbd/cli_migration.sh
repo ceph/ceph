@@ -6,11 +6,14 @@ IMAGE1=image1
 IMAGE2=image2
 IMAGE3=image3
 IMAGES="${IMAGE1} ${IMAGE2} ${IMAGE3}"
+NAMESPACE1=namespace1
+NAMESPACE2=namespace2
 
 cleanup() {
     kill_nbd_server
     cleanup_tempdir
     remove_images
+    remove_namespaces
 }
 
 setup_tempdir() {
@@ -67,6 +70,17 @@ remove_images() {
     do
         remove_image ${image}
     done
+}
+
+remove_namespace() {
+    local namespace=$1
+
+    rbd namespace remove rbd/${namespace} || true
+}
+
+remove_namespaces() {
+    rbd namespace remove rbd/${NAMESPACE1} || true
+    rbd namespace remove rbd/${NAMESPACE2} || true
 }
 
 kill_nbd_server() {
@@ -197,6 +211,58 @@ EOF
     compare_images "${base_image}@2" "${dest_image}@2"
 
     remove_image "${dest_image}"
+}
+
+test_import_native_format_with_namespace() {
+    local base_namespace=$1
+    local base_image=$2
+    local dest_namespace=$3
+    local dest_image=$4
+
+    # Fetch pool_id for RBD pool
+    local pool_id=$(ceph osd pool ls detail --format xml | xmlstarlet sel -t -v "//pools/pool[pool_name='rbd']/pool_id")
+
+    # Function to generate the source spec JSON
+    create_spec() {
+        local namespace=$1
+        local image_name=$2
+        cat > ${TEMPDIR}/spec.json <<EOF
+{
+  "type": "native",
+  "pool_id": ${pool_id},
+  "pool_namespace": "${namespace}",
+  "image_name": "${image_name}",
+  "snap_name": "2"
+}
+EOF
+    }
+
+    # Function to handle image migration
+    perform_migration() {
+        local source_image=$1
+        local dest_image=$2
+        rbd migration prepare --import-only --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+        rbd migration execute ${dest_image}
+        rbd migration commit ${dest_image}
+        compare_images "${source_image}@1" "${dest_image}@1"
+        compare_images "${source_image}@2" "${dest_image}@2"
+        remove_image "${dest_image}"
+    }
+
+     # Migration from namespace to namespace
+    perform_migration "rbd/${base_namespace}/${base_image}" "rbd/${dest_namespace}/${dest_image}"
+
+    # Migration from namespace to non-namespace
+    create_spec "${base_namespace}" "${base_image}"
+    perform_migration "rbd/${base_namespace}/${base_image}" "${dest_image}"
+
+    # Migration from non-namespace to namespace
+    create_spec "" "${base_image}"
+    perform_migration "${base_image}" "rbd/${dest_namespace}/${dest_image}"
+
+    # Cleanup namespaces
+    remove_namespace "rbd/${base_namespace}"
+    remove_namespace "rbd/${dest_namespace}"
 }
 
 test_import_qcow_format() {
@@ -586,5 +652,10 @@ test_import_nbd_stream_qcow2 ${IMAGE2} ${IMAGE3}
 
 test_import_raw_format ${IMAGE1} ${IMAGE2}
 test_import_nbd_stream_raw ${IMAGE1} ${IMAGE2}
+
+rbd namespace create rbd/${NAMESPACE1}
+rbd namespace create rbd/${NAMESPACE2}
+create_base_image rbd/${NAMESPACE1}/${IMAGE1}
+test_import_native_format_with_namespace ${NAMESPACE1} ${IMAGE1} ${NAMESPACE2} ${IMAGE2}
 
 echo OK
