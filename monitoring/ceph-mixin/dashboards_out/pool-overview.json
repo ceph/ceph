@@ -85,7 +85,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "count(ceph_pool_metadata{job=~\"$job\"})",
+               "expr": "count(ceph_pool_metadata{cluster=~\"$cluster\", })",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -168,7 +168,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "count(ceph_pool_metadata{job=~\"$job\", compression_mode!=\"none\"})",
+               "expr": "count(ceph_pool_metadata{compression_mode!=\"none\", cluster=~\"$cluster\", })",
                "format": "",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -250,7 +250,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(ceph_osd_stat_bytes{job=~\"$job\"})",
+               "expr": "sum(ceph_osd_stat_bytes{cluster=~\"$cluster\", })",
                "format": "",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -332,7 +332,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(ceph_pool_bytes_used{job=~\"$job\"})",
+               "expr": "sum(ceph_pool_bytes_used{cluster=~\"$cluster\", })",
                "format": "",
                "instant": true,
                "intervalFactor": 1,
@@ -415,7 +415,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(ceph_pool_stored{job=~\"$job\"})",
+               "expr": "sum(ceph_pool_stored{cluster=~\"$cluster\", })",
                "format": "",
                "instant": true,
                "intervalFactor": 1,
@@ -498,7 +498,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(\n  ceph_pool_compress_under_bytes{job=~\"$job\"} -\n    ceph_pool_compress_bytes_used{job=~\"$job\"}\n)\n",
+               "expr": "sum(\n  ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } -\n    ceph_pool_compress_bytes_used{cluster=~\"$cluster\", }\n)\n",
                "format": "",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -580,7 +580,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "(\n  sum(ceph_pool_compress_under_bytes{job=~\"$job\"} > 0) /\n    sum(ceph_pool_stored_raw{job=~\"$job\"} and ceph_pool_compress_under_bytes{job=~\"$job\"} > 0)\n) * 100\n",
+               "expr": "(\n  sum(ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0) /\n    sum(ceph_pool_stored_raw{cluster=~\"$cluster\", } and ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0)\n) * 100\n",
                "format": "table",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -662,7 +662,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(\n  ceph_pool_compress_under_bytes{job=~\"$job\"} > 0)\n    / sum(ceph_pool_compress_bytes_used{job=~\"$job\"} > 0\n)\n",
+               "expr": "sum(\n  ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0)\n    / sum(ceph_pool_compress_bytes_used{cluster=~\"$cluster\", } > 0\n)\n",
                "format": "",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -1161,7 +1161,7 @@
          "styles": "",
          "targets": [
             {
-               "expr": "(\n  ceph_pool_compress_under_bytes{job=~\"$job\"} /\n    ceph_pool_compress_bytes_used{job=~\"$job\"} > 0\n) and on(pool_id) (\n  (\n    (ceph_pool_compress_under_bytes{job=~\"$job\"} > 0) /\n      ceph_pool_stored_raw{job=~\"$job\"}\n  ) * 100 > 0.5\n)\n",
+               "expr": "(\n  ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } /\n    ceph_pool_compress_bytes_used{cluster=~\"$cluster\", } > 0\n) and on(pool_id) (\n  (\n    (ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0) /\n      ceph_pool_stored_raw{cluster=~\"$cluster\", }\n  ) * 100 > 0.5\n)\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1169,7 +1169,7 @@
                "refId": "A"
             },
             {
-               "expr": "ceph_pool_max_avail{job=~\"$job\"} *\n  on(pool_id) group_left(name) ceph_pool_metadata{job=~\"$job\"}\n",
+               "expr": "ceph_pool_max_avail{cluster=~\"$cluster\", } *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", }\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1177,7 +1177,7 @@
                "refId": "B"
             },
             {
-               "expr": "(\n  (ceph_pool_compress_under_bytes{job=~\"$job\"} > 0) /\n    ceph_pool_stored_raw{job=~\"$job\"}\n) * 100\n",
+               "expr": "(\n  (ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0) /\n    ceph_pool_stored_raw{cluster=~\"$cluster\", }\n) * 100\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1185,7 +1185,7 @@
                "refId": "C"
             },
             {
-               "expr": "ceph_pool_percent_used{job=~\"$job\"} *\n  on(pool_id) group_left(name) ceph_pool_metadata{job=~\"$job\"}\n",
+               "expr": "ceph_pool_percent_used{cluster=~\"$cluster\", } *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", }\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1193,7 +1193,7 @@
                "refId": "D"
             },
             {
-               "expr": "ceph_pool_compress_under_bytes{job=~\"$job\"} -\n  ceph_pool_compress_bytes_used{job=~\"$job\"} > 0\n",
+               "expr": "ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } -\n  ceph_pool_compress_bytes_used{cluster=~\"$cluster\", } > 0\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1201,7 +1201,7 @@
                "refId": "E"
             },
             {
-               "expr": "delta(ceph_pool_stored{job=~\"$job\"}[5d])",
+               "expr": "delta(ceph_pool_stored{cluster=~\"$cluster\", }[5d])",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1209,7 +1209,7 @@
                "refId": "F"
             },
             {
-               "expr": "rate(ceph_pool_rd{job=~\"$job\"}[$__rate_interval])\n  + rate(ceph_pool_wr{job=~\"$job\"}[$__rate_interval])\n",
+               "expr": "rate(ceph_pool_rd{cluster=~\"$cluster\", }[$__rate_interval])\n  + rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval])\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1217,7 +1217,7 @@
                "refId": "G"
             },
             {
-               "expr": "rate(ceph_pool_rd_bytes{job=~\"$job\"}[$__rate_interval]) +\n  rate(ceph_pool_wr_bytes{job=~\"$job\"}[$__rate_interval])\n",
+               "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster\", }[$__rate_interval]) +\n  rate(ceph_pool_wr_bytes{cluster=~\"$cluster\", }[$__rate_interval])\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1225,7 +1225,7 @@
                "refId": "H"
             },
             {
-               "expr": "ceph_pool_metadata{job=~\"$job\"}",
+               "expr": "ceph_pool_metadata{cluster=~\"$cluster\", }",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1233,7 +1233,7 @@
                "refId": "I"
             },
             {
-               "expr": "ceph_pool_stored{job=~\"$job\"} * on(pool_id) group_left ceph_pool_metadata{job=~\"$job\"}",
+               "expr": "ceph_pool_stored{cluster=~\"$cluster\", } * on(pool_id) group_left ceph_pool_metadata{cluster=~\"$cluster\", }",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1241,7 +1241,7 @@
                "refId": "J"
             },
             {
-               "expr": "ceph_pool_metadata{job=~\"$job\", compression_mode!=\"none\"}",
+               "expr": "ceph_pool_metadata{compression_mode!=\"none\", cluster=~\"$cluster\", }",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1348,14 +1348,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "topk($topk,\n  round(\n    (\n      rate(ceph_pool_rd{job=~\"$job\"}[$__rate_interval]) +\n        rate(ceph_pool_wr{job=~\"$job\"}[$__rate_interval])\n    ), 1\n  ) * on(pool_id) group_left(instance,name) ceph_pool_metadata{job=~\"$job\"})\n",
+               "expr": "topk($topk,\n  round(\n    (\n      rate(ceph_pool_rd{cluster=~\"$cluster\", }[$__rate_interval]) +\n        rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval])\n    ), 1\n  ) * on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", })\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}} ",
                "refId": "A"
             },
             {
-               "expr": "topk($topk,\n  rate(ceph_pool_wr{job=~\"$job\"}[$__rate_interval]) +\n    on(pool_id) group_left(instance,name) ceph_pool_metadata{job=~\"$job\"}\n)\n",
+               "expr": "topk($topk,\n  rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval]) +\n    on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", }\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}} - write",
@@ -1450,7 +1450,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "topk($topk,\n  (\n    rate(ceph_pool_rd_bytes{job=~\"$job\"}[$__rate_interval]) +\n      rate(ceph_pool_wr_bytes{job=~\"$job\"}[$__rate_interval])\n  ) * on(pool_id) group_left(instance, name) ceph_pool_metadata{job=~\"$job\"}\n)\n",
+               "expr": "topk($topk,\n  (\n    rate(ceph_pool_rd_bytes{cluster=~\"$cluster\", }[$__rate_interval]) +\n      rate(ceph_pool_wr_bytes{cluster=~\"$cluster\", }[$__rate_interval])\n  ) * on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", }\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}}",
@@ -1545,7 +1545,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "ceph_pool_bytes_used{job=~\"$job\"} * on(pool_id) group_right ceph_pool_metadata{job=~\"$job\"}",
+               "expr": "ceph_pool_bytes_used{cluster=~\"$cluster\", } * on(pool_id) group_right ceph_pool_metadata{cluster=~\"$cluster\", }",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}}",
@@ -1613,36 +1613,16 @@
             "type": "datasource"
          },
          {
-            "allValue": ".+",
-            "current": { },
-            "datasource": "$datasource",
-            "hide": 2,
-            "includeAll": true,
-            "label": "cluster",
-            "multi": true,
-            "name": "cluster",
-            "options": [ ],
-            "query": "label_values(ceph_osd_metadata, cluster)",
-            "refresh": 1,
-            "regex": "(.*)",
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [ ],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-         },
-         {
-            "allValue": ".+",
+            "allValue": null,
             "current": { },
             "datasource": "$datasource",
             "hide": 0,
-            "includeAll": true,
-            "label": "job",
-            "multi": true,
-            "name": "job",
+            "includeAll": false,
+            "label": "cluster",
+            "multi": false,
+            "name": "cluster",
             "options": [ ],
-            "query": "label_values(ceph_osd_metadata{}, job)",
+            "query": "label_values(ceph_health_status, cluster)",
             "refresh": 1,
             "regex": "(.*)",
             "sort": 1,
