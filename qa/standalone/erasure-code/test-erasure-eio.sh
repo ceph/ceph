@@ -178,9 +178,19 @@ function rados_put_get_data() {
         wait_for_clean || return 1
         # Won't check for eio on get here -- recovery above might have fixed it
     else
-        shard_id=$(expr $shard_id + 1)
-        inject_$inject ec data $poolname $objname $dir $shard_id || return 1
-        rados_get $dir $poolname $objname fail || return 1
+        local another_shard_id=$(expr $shard_id + 1)
+        inject_$inject ec data $poolname $objname $dir $another_shard_id || return 1
+        if [ $shard_id -eq 1 -a $another_shard_id -eq 2 ];
+        then
+            # we're reading 4 kb long object while the stripe size is 8 kb.
+            # as we do partial reads and this request can be satisfied
+            # from the undamaged shard 0, we expect a success.
+            rados_get $dir $poolname $objname || return 1
+        else
+            # both shards 0 and 1 are demaged. there is no way no serve
+            # the requests, regardless of partial reads
+            rados_get $dir $poolname $objname fail || return 1
+        fi
         rm $dir/ORIGINAL
     fi
 
@@ -238,9 +248,19 @@ function rados_get_data_bad_size() {
     rados_get $dir $poolname $objname || return 1
 
     # Leave objname and modify another shard
-    shard_id=$(expr $shard_id + 1)
-    set_size $objname $dir $shard_id $bytes $mode || return 1
-    rados_get $dir $poolname $objname fail || return 1
+    local another_shard_id=$(expr $shard_id + 1)
+    set_size $objname $dir $another_shard_id $bytes $mode || return 1
+    if [ $shard_id -eq 1 -a $another_shard_id -eq 2 ];
+    then
+	# we're reading 4 kb long object while the stripe size is 8 kb.
+	# as we do partial reads and this request can be satisfied
+	# from the undamaged shard 0, we expect a success.
+	rados_get $dir $poolname $objname || return 1
+    else
+	# both shards 0 and 1 are demaged. there is no way no serve
+	# the requests, regardless of partial reads
+	rados_get $dir $poolname $objname fail || return 1
+    fi
     rm $dir/ORIGINAL
 }
 
