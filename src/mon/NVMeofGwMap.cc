@@ -254,7 +254,7 @@ void NVMeofGwMap::track_deleting_gws(const NvmeGroupKey& group_key,
   }
 }
 
-int NVMeofGwMap::process_gw_map_gw_no_subsystems(
+int NVMeofGwMap::process_gw_map_gw_no_subsys_no_listeners(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending)
 {
   int rc = 0;
@@ -424,7 +424,6 @@ void NVMeofGwMap::find_failback_gw(
   auto& gws_states = created_gws[group_key];
   auto& gw_state = created_gws[group_key][gw_id];
   bool do_failback = false;
-
   dout(10) << "Find failback GW for GW " << gw_id << dendl;
   for (auto& gw_state_it: gws_states) {
     auto& st = gw_state_it.second;
