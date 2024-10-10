@@ -121,6 +121,21 @@ std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
   return "";
 }
 
+std::string set_allow_ec_overwrites_pp(const std::string &pool_name, Rados &cluster, bool allow)
+{
+  std::ostringstream oss;
+  bufferlist inbl;
+  int ret = cluster.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name + "\", \"var\": \"allow_ec_overwrites\", \"val\": \"" + (allow ? "true" : "false") + "\"}",
+    inbl, NULL, NULL);
+  if (ret) {
+    cluster.shutdown();
+    oss << "mon_command osd pool set pool:" << pool_name << " pool_type:erasure allow_ec_overwrites true failed with error " << ret;
+    return oss.str();
+  }
+  return "";
+}
+
 std::string connect_cluster_pp(librados::Rados &cluster)
 {
   return connect_cluster_pp(cluster, {});
