@@ -287,16 +287,13 @@ See :ref:`kubernetes-dev`
 Backporting
 -----------
 
-All bugfixes should be merged to the ``main`` branch before being
-backported. To flag a bugfix for backporting, make sure it has a
-`tracker issue`_ associated with it and set the ``Backport`` field to a
-comma-separated list of previous releases (e.g. "hammer,jewel") that you think
-need the backport.
-The rest (including the actual backporting) will be taken care of by the
-`Stable Releases and Backports`_ team.
+All bugfixes should be merged to the ``main`` branch before being backported.
+To flag a bugfix for backporting, make sure it has a `tracker issue`_
+associated with it and set the ``Backport`` field to a comma-separated list of
+previous releases (e.g. "hammer,jewel") that you think need the backport. You
+are responsible for the backporting of pull requests that you raise.
 
 .. _`tracker issue`: http://tracker.ceph.com/
-.. _`Stable Releases and Backports`: http://tracker.ceph.com/projects/ceph-releases/wiki
 
 Dependabot
 ----------
