@@ -83,3 +83,8 @@ supported_distros as distros$ will be run just once: either on centos, rhel or
 ubuntu, chosen randomly.
 
 The teuthology code can be found in https://github.com/ceph/teuthology.git
+
+Note: The performance suites clone CBT from master here: https://github.com/ceph/cbt.git
+CBT will not support cosbench beyond release tag v0.3, therefore no qa suite should use cosbench.
+cosbench support has been removed from qa/tasks/cbt.py.
+
