@@ -631,6 +631,7 @@ void PGLog::check() {
 
 // non-static
 void PGLog::write_log_and_missing(
+  CephContext* cct,
   ObjectStore::Transaction& t,
   map<string,bufferlist> *km,
   const coll_t& coll,
@@ -647,7 +648,7 @@ void PGLog::write_log_and_missing(
 	     << ", clear_divergent_priors: " << clear_divergent_priors
 	     << dendl;
     _write_log_and_missing(
-      t, km, log, coll, log_oid,
+      cct, t, km, log, coll, log_oid,
       dirty_to,
       dirty_from,
       writeout_from,
@@ -671,6 +672,7 @@ void PGLog::write_log_and_missing(
 
 // static
 void PGLog::write_log_and_missing_wo_missing(
+    CephContext* cct,
     ObjectStore::Transaction& t,
     map<string,bufferlist> *km,
     pg_log_t &log,
@@ -681,7 +683,7 @@ void PGLog::write_log_and_missing_wo_missing(
     )
 {
   _write_log_and_missing_wo_missing(
-    t, km, log, coll, log_oid,
+    cct, t, km, log, coll, log_oid,
     divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
     true, true, require_rollback,
     eversion_t::max(), eversion_t(), eversion_t(), nullptr, dpp);
@@ -689,6 +691,7 @@ void PGLog::write_log_and_missing_wo_missing(
 
 // static
 void PGLog::write_log_and_missing(
+    CephContext* cct,
     ObjectStore::Transaction& t,
     map<string,bufferlist> *km,
     pg_log_t &log,
@@ -700,7 +703,7 @@ void PGLog::write_log_and_missing(
     const DoutPrefixProvider *dpp)
 {
   _write_log_and_missing(
-    t, km, log, coll, log_oid,
+    cct, t, km, log, coll, log_oid,
     eversion_t::max(),
     eversion_t(),
     eversion_t(),
@@ -716,6 +719,7 @@ void PGLog::write_log_and_missing(
 
 // static
 void PGLog::_write_log_and_missing_wo_missing(
+  CephContext* cct,
   ObjectStore::Transaction& t,
   map<string,bufferlist> *km,
   pg_log_t &log,
@@ -811,7 +815,15 @@ void PGLog::_write_log_and_missing_wo_missing(
   for (const auto& entry : log.dups) {
     if (entry.version > dirty_to_dups)
       break;
-    bufferlist bl;
+    size_t encode_bound = 0;
+    entry.bound_encode(encode_bound);
+    if (encode_bound > cct->_conf->osd_warn_on_max_pglog_size) {
+      lgeneric_subdout(cct, osd, 6) << __func__ << " dups pg log entry <"
+         << entry.version << "> with a size of " << encode_bound << " bytes "
+         << "exceeds osd_warn_on_max_pglog_size <" << cct->_conf->osd_warn_on_max_pglog_size << "> "
+         << dendl;
+    }
+    bufferlist bl(encode_bound);
     encode(entry, bl);
     (*km)[entry.get_key_name()] = std::move(bl);
   }
@@ -822,7 +834,15 @@ void PGLog::_write_log_and_missing_wo_missing(
 	 (p->version >= dirty_from_dups || p->version >= write_from_dups) &&
 	 p->version >= dirty_to_dups;
        ++p) {
-    bufferlist bl;
+    size_t encode_bound = 0;
+    p->bound_encode(encode_bound);
+    if (encode_bound > cct->_conf->osd_warn_on_max_pglog_size) {
+      lgeneric_subdout(cct, osd, 6) << __func__ << " dups pg log entry <"
+         << p->version << "> with a size of " << encode_bound << " bytes "
+         << "exceeds osd_warn_on_max_pglog_size <" << cct->_conf->osd_warn_on_max_pglog_size << ">"
+         << dendl;
+    }
+    bufferlist bl(encode_bound);
     encode(*p, bl);
     (*km)[p->get_key_name()] = std::move(bl);
   }
@@ -847,6 +867,7 @@ void PGLog::_write_log_and_missing_wo_missing(
 
 // static
 void PGLog::_write_log_and_missing(
+  CephContext* cct,
   ObjectStore::Transaction& t,
   map<string,bufferlist>* km,
   pg_log_t &log,
@@ -884,7 +905,6 @@ void PGLog::_write_log_and_missing(
     to_remove.emplace(std::move(key));
   }
   trimmed.clear();
-
   if (touch_log)
     t.touch(coll, log_oid);
   if (dirty_to != eversion_t()) {
@@ -905,7 +925,15 @@ void PGLog::_write_log_and_missing(
   for (auto p = log.log.begin();
        p != log.log.end() && p->version <= dirty_to;
        ++p) {
-    bufferlist bl(sizeof(*p) * 2);
+    size_t encode_bound = 0;
+    p->bound_encode(encode_bound);
+    if (encode_bound > cct->_conf->osd_warn_on_max_pglog_size) {
+      lgeneric_subdout(cct, osd, 6) << __func__ << " pg log entry <"
+         << p->version << "> with a size of " << encode_bound << " bytes "
+         << "exceeds osd_warn_on_max_pglog_size <" << cct->_conf->osd_warn_on_max_pglog_size << ">"
+         << dendl;
+    }
+    bufferlist bl(encode_bound * 2);
     p->encode_with_checksum(bl);
     (*km)[p->get_key_name()] = std::move(bl);
   }
@@ -915,7 +943,15 @@ void PGLog::_write_log_and_missing(
 	 (p->version >= dirty_from || p->version >= writeout_from) &&
 	 p->version >= dirty_to;
        ++p) {
-    bufferlist bl(sizeof(*p) * 2);
+    size_t encode_bound = 0;
+    p->bound_encode(encode_bound);
+    if (encode_bound > cct->_conf->osd_warn_on_max_pglog_size) {
+      lgeneric_subdout(cct, osd, 6) << __func__ << " pg log entry <"
+         << p->version << "> with a size of " << encode_bound << " bytes "
+         << "exceeds osd_warn_on_max_pglog_size <" << cct->_conf->osd_warn_on_max_pglog_size << ">"
+         << dendl;
+    }
+    bufferlist bl(encode_bound * 2);
     p->encode_with_checksum(bl);
     (*km)[p->get_key_name()] = std::move(bl);
   }
@@ -959,7 +995,15 @@ void PGLog::_write_log_and_missing(
   for (const auto& entry : log.dups) {
     if (entry.version > dirty_to_dups)
       break;
-    bufferlist bl;
+    size_t encode_bound = 0;
+    entry.bound_encode(encode_bound);
+    if (encode_bound > cct->_conf->osd_warn_on_max_pglog_size) {
+      lgeneric_subdout(cct, osd, 6) << __func__ << " dups pg log entry <"
+         << entry.version << "> with a size of " << encode_bound << " bytes "
+         << "exceeds osd_warn_on_max_pglog_size <" << cct->_conf->osd_warn_on_max_pglog_size << ">"
+         << dendl;
+    }
+    bufferlist bl(encode_bound);
     encode(entry, bl);
     (*km)[entry.get_key_name()] = std::move(bl);
   }
@@ -971,7 +1015,16 @@ void PGLog::_write_log_and_missing(
 	 (p->version >= dirty_from_dups || p->version >= write_from_dups) &&
 	 p->version >= dirty_to_dups;
        ++p) {
-    bufferlist bl;
+
+    size_t encode_bound = 0;
+    p->bound_encode(encode_bound);
+    if (encode_bound > cct->_conf->osd_warn_on_max_pglog_size) {
+      lgeneric_subdout(cct, osd, 6) << __func__ << " dups pg log entry <"
+         << p->version << "> with a size of " << encode_bound << " bytes "
+         << "exceeds osd_warn_on_max_pglog_size <" << cct->_conf->osd_warn_on_max_pglog_size << ">"
+         << dendl;
+    }
+    bufferlist bl(encode_bound);
     encode(*p, bl);
     (*km)[p->get_key_name()] = std::move(bl);
   }

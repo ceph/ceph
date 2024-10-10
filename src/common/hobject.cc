@@ -107,58 +107,6 @@ string hobject_t::to_str() const
   return out;
 }
 
-void hobject_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(4, 3, bl);
-  encode(key, bl);
-  encode(oid, bl);
-  encode(snap, bl);
-  encode(hash, bl);
-  encode(max, bl);
-  encode(nspace, bl);
-  encode(pool, bl);
-  ceph_assert(!max || (*this == hobject_t(hobject_t::get_max())));
-  ENCODE_FINISH(bl);
-}
-
-void hobject_t::decode(bufferlist::const_iterator& bl)
-{
-  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
-  if (struct_v >= 1)
-    decode(key, bl);
-  decode(oid, bl);
-  decode(snap, bl);
-  decode(hash, bl);
-  if (struct_v >= 2)
-    decode(max, bl);
-  else
-    max = false;
-  if (struct_v >= 4) {
-    decode(nspace, bl);
-    decode(pool, bl);
-    // for compat with hammer, which did not handle the transition
-    // from pool -1 -> pool INT64_MIN for MIN properly.  this object
-    // name looks a bit like a pgmeta object for the meta collection,
-    // but those do not ever exist (and is_pgmeta() pool >= 0).
-    if (pool == -1 &&
-	snap == 0 &&
-	hash == 0 &&
-	!max &&
-	oid.name.empty()) {
-      pool = INT64_MIN;
-      ceph_assert(is_min());
-    }
-
-    // for compatibility with some earlier verisons which might encoded
-    // a non-canonical max object
-    if (max) {
-      *this = hobject_t::get_max();
-    }
-  }
-  DECODE_FINISH(bl);
-  build_hash_cache();
-}
-
 void hobject_t::decode(json_spirit::Value& v)
 {
   using namespace json_spirit;
@@ -180,6 +128,68 @@ void hobject_t::decode(json_spirit::Value& v)
     else if (p.name_ == "namespace")
       nspace = p.value_.get_str();
   }
+  build_hash_cache();
+}
+
+DENC_HELPERS
+void hobject_t::bound_encode(size_t& p) const {
+  DENC_START_COMPAT_CHECK(4, 3, p);
+  denc(key, p);
+  denc(oid, p);
+  denc(snap, p);
+  denc(hash, p);
+  denc(max, p);
+  denc(nspace, p);
+  denc(pool, p);
+  DENC_FINISH(p);
+}
+
+void hobject_t::encode(ceph::buffer::list::contiguous_appender& p) const {
+  DENC_START_COMPAT_CHECK(4, 3, p);
+  denc(key, p);
+  denc(oid, p);
+  denc(snap, p);
+  denc(hash, p);
+  denc(max, p);
+  denc(nspace, p);
+  denc(pool, p);
+  ceph_assert(!max || (*this == hobject_t(hobject_t::get_max())));
+  DENC_FINISH(p);
+}
+void hobject_t::decode(ceph::buffer::ptr::const_iterator& p) {
+  DENC_START_COMPAT_CHECK(4, 3, p);
+  if (struct_v >= 1)
+    denc(key, p);
+  denc(oid, p);
+  denc(snap, p);
+  denc(hash, p);
+  if (struct_v >= 2)
+    denc(max, p);
+  else
+    max = false;
+  if (struct_v >= 4) {
+    denc(nspace, p);
+    denc(pool, p);
+    // for compat with hammer, which did not handle the transition
+    // from pool -1 -> pool INT64_MIN for MIN properly.  this object
+    // name looks a bit like a pgmeta object for the meta collection,
+    // but those do not ever exist (and is_pgmeta() pool >= 0).
+    if (pool == -1 &&
+	snap == 0 &&
+	hash == 0 &&
+	!max &&
+	oid.name.empty()) {
+      pool = INT64_MIN;
+      ceph_assert(is_min());
+    }
+
+    // for compatibility with some earlier verisons which might encoded
+    // a non-canonical max object
+    if (max) {
+      *this = hobject_t::get_max();
+    }
+  }
+  DENC_FINISH(p);
   build_hash_cache();
 }
 

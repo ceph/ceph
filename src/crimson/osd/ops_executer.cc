@@ -1252,7 +1252,7 @@ static PG::interruptible_future<> do_pgnls_filtered(
 
   hobject_t lower_bound;
   try {
-    lower_bound.decode(bp);
+    ceph::decode(lower_bound, bp);
   } catch (const buffer::error&) {
     throw std::invalid_argument("unable to decode PGNLS_FILTER description");
   }
@@ -1342,7 +1342,7 @@ static PG::interruptible_future<> do_pgls(
   hobject_t lower_bound;
   auto bp = osd_op.indata.cbegin();
   try {
-    lower_bound.decode(bp);
+    ceph::decode(lower_bound, bp);
   } catch (const buffer::error&) {
     throw std::invalid_argument{"unable to decode PGLS handle"};
   }
@@ -1381,7 +1381,7 @@ static PG::interruptible_future<> do_pgls_filtered(
 
   hobject_t lower_bound;
   try {
-    lower_bound.decode(bp);
+    ceph::decode(lower_bound, bp);
   } catch (const buffer::error&) {
     throw std::invalid_argument("unable to decode PGLS_FILTER description");
   }
