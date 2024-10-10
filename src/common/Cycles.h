@@ -84,6 +84,10 @@ class Cycles {
     uint64_t tsc;
     asm volatile("stck %0" : "=Q" (tsc) : : "cc");
     return tsc;
+#elif defined(__loongarch__)
+    struct timeval tv; 
+    gettimeofday(&tv, nullptr);
+    return static_cast<int64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
 #else
 #warning No high-precision counter available for your OS/arch
     return 0;
