@@ -1087,6 +1087,9 @@ class CephFSShell(Cmd):
     rm_parser = argparse.ArgumentParser(description='Remove File.')
     rm_parser.add_argument('paths', help='File Path.', nargs='+',
                            action=path_to_bytes)
+    rm_parser.add_argument('-r', '--recursive', action='store_true', default=False,
+                           help="recursively delete the directory and "
+                           "all the subdirectories and files it contains.")
 
     @with_argparser(rm_parser)
     def do_rm(self, args):
@@ -1100,7 +1103,16 @@ class CephFSShell(Cmd):
                     path) if is_file_exists(i)])
             else:
                 try:
-                    cephfs.unlink(path)
+                    if is_dir_exists(path) and args.recursive:
+                        filepaths = list(sorted(set(dirwalk(path)), reverse=True))
+                        for filepath in filepaths:
+                            if is_dir_exists(filepath):
+                                cephfs.rmdir(filepath)
+                            else:
+                                cephfs.unlink(filepath)
+                        cephfs.rmdir(path)
+                    else:
+                        cephfs.unlink(path)
                 except libcephfs.Error as e:
                     # NOTE: perhaps we need a better msg here
                     if e.get_error_code() == 2:
