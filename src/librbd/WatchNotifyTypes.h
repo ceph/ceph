@@ -36,6 +36,7 @@ struct AsyncRequestId {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<AsyncRequestId*>& ls);
 
   inline bool operator<(const AsyncRequestId &rhs) const {
     if (client_id != rhs.client_id) {
@@ -521,9 +522,9 @@ std::ostream &operator<<(std::ostream &out,
 std::ostream &operator<<(std::ostream &out,
                          const AsyncRequestId &request);
 
-WRITE_CLASS_ENCODER(AsyncRequestId);
-WRITE_CLASS_ENCODER(NotifyMessage);
-WRITE_CLASS_ENCODER(ResponseMessage);
+WRITE_CLASS_ENCODER(librbd::watch_notify::AsyncRequestId);
+WRITE_CLASS_ENCODER(librbd::watch_notify::NotifyMessage);
+WRITE_CLASS_ENCODER(librbd::watch_notify::ResponseMessage);
 
 } // namespace watch_notify
 } // namespace librbd
