@@ -139,7 +139,10 @@ class RGWMultisite(Task):
 
                 if cluster != cluster1: # already created on master cluster
                     log.info('pulling realm configuration to %s', cluster.name)
-                    realm.pull(cluster, master_zone.gateways[0], creds)
+
+                    is_default = self.config['realm'].get('is_default', False)
+                    args = ['--default'] if is_default else []
+                    realm.pull(cluster, master_zone.gateways[0], creds, args)
 
                 # use the first zone's cluster to create the zonegroup
                 if not zonegroup:
