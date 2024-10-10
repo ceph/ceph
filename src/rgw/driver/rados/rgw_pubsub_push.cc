@@ -19,7 +19,7 @@
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
-#include <boost/asio/yield.hpp>
+//#include <boost/asio/yield.hpp>
 #include <boost/algorithm/string.hpp>
 #include <functional>
 #include "rgw_perf_counters.h"
@@ -136,7 +136,6 @@ namespace {
 class Waiter {
   using Signature = void(boost::system::error_code);
   using Completion = ceph::async::Completion<Signature>;
-  using CompletionInit = boost::asio::async_completion<spawn::yield_context, Signature>;
   std::unique_ptr<Completion> completion = nullptr;
   int ret;
 
@@ -152,12 +151,13 @@ public:
     }
     if (y) {
       boost::system::error_code ec;
-      auto&& token = y.get_yield_context()[ec];
-      CompletionInit init(token);
-      completion = Completion::create(y.get_io_context().get_executor(),
-          std::move(init.completion_handler));
-      l.unlock();
-      init.result.get();
+      auto yield = y.get_yield_context();
+      auto&& token = yield[ec];
+      boost::asio::async_initiate<boost::asio::yield_context, Signature>(
+          [this, &l] (auto handler, auto ex) {
+            completion = Completion::create(ex, std::move(handler));
+            l.unlock(); // unlock before suspend
+          }, token, yield.get_executor());
       return -ec.value();
     }
     cond.wait(l, [this]{return (done==true);});

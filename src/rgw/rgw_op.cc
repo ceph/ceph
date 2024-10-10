@@ -6788,7 +6788,8 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   char* buf;
   std::optional<boost::asio::deadline_timer> formatter_flush_cond;
   if (y) {
-    formatter_flush_cond = std::make_optional<boost::asio::deadline_timer>(y.get_io_context());  
+    auto ex = y.get_yield_context().get_executor();
+    formatter_flush_cond = std::make_optional<boost::asio::deadline_timer>(ex);
   }
 
   buf = data.c_str();
@@ -6856,9 +6857,11 @@ void RGWDeleteMultiObj::execute(optional_yield y)
         return aio_count < max_aio;
       });
       aio_count++;
-      spawn::spawn(y.get_yield_context(), [this, &y, &aio_count, obj_key, &formatter_flush_cond] (spawn::yield_context yield) {
-        handle_individual_object(obj_key, optional_yield { y.get_io_context(), yield }, &*formatter_flush_cond); 
+      boost::asio::spawn(y.get_yield_context(), [this, &aio_count, obj_key, &formatter_flush_cond] (boost::asio::yield_context yield) {
+        handle_individual_object(obj_key, yield, &*formatter_flush_cond);
         aio_count--;
+      }, [] (std::exception_ptr eptr) {
+        if (eptr) std::rethrow_exception(eptr);
       }); 
     } else {
       handle_individual_object(obj_key, y, nullptr);

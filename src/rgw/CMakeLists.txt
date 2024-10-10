@@ -297,8 +297,9 @@ target_link_libraries(rgw_common
   PUBLIC
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
-    spawn
-    ${FMT_LIB})
+    Boost::context
+    ${FMT_LIB}
+    OpenSSL::SSL)
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
@@ -432,7 +433,7 @@ target_link_libraries(rgw_a
     OATH::OATH
   PUBLIC
     rgw_common
-    spawn)
+    Boost::context)
 
 if(WITH_CURL_OPENSSL)
   # used by rgw_http_client_curl.cc
@@ -448,7 +449,7 @@ set(rgw_schedulers_srcs
 
 add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
 target_link_libraries(rgw_schedulers
-  PUBLIC dmclock::dmclock spawn)
+  PUBLIC dmclock::dmclock Boost::context)
 
 set(radosgw_srcs
   rgw_main.cc)
