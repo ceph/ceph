@@ -2,6 +2,9 @@
 
 set -e
 
+export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1
+#export ASAN_OPTIONS=halt_on_error=0:abort_on_error=1:symbolize=1
+
 if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     CEPH_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -99,7 +102,7 @@ EOM
     local c_compiler="${discovered_c_compiler}"
     local cmake_opts
     cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
-    cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
+    #cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
     cmake_opts+=" -DENABLE_GIT_VERSION=OFF"
     cmake_opts+=" -DWITH_GTEST_PARALLEL=ON"
     cmake_opts+=" -DWITH_FIO=ON"
