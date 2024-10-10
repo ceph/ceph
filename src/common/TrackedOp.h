@@ -53,9 +53,9 @@ public:
 };
 
 enum {
-  l_osd_slow_op_first = 1000,
-  l_osd_slow_op_count,
-  l_osd_slow_op_last,
+  l_trackedop_slow_op_first = 1000,
+  l_trackedop_slow_op_count,
+  l_trackedop_slow_op_last,
 };
 
 class OpHistory {
@@ -76,9 +76,11 @@ class OpHistory {
 
 public:
   OpHistory(CephContext *c) : cct(c), opsvc(this) {
-    PerfCountersBuilder b(cct, "osd-slow-ops",
-                         l_osd_slow_op_first, l_osd_slow_op_last);
-    b.add_u64_counter(l_osd_slow_op_count, "slow_ops_count",
+    PerfCountersBuilder b(cct, "trackedop",
+                         l_trackedop_slow_op_first, l_trackedop_slow_op_last);
+    b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+
+    b.add_u64_counter(l_trackedop_slow_op_count, "slow_ops_count",
                       "Number of operations taking over ten second");
 
     logger.reset(b.create_perf_counters());
