@@ -4,4 +4,4 @@ meta:
 tasks:
 - cephfs-mirror:
     client: client.mirror
-    valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
+    valgrind: [--tool=memcheck, --leak-check=full]
