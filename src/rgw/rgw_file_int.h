@@ -2312,8 +2312,8 @@ public:
     return (iter != attrs.end()) ? &(iter->second) : nullptr;
   }
 
-  real_time get_ctime() const {
-    return bucket->get_creation_time();
+  real_time get_ctime() {
+    return get_state()->bucket->get_creation_time();
   }
 
   bool only_bucket() override { return false; }
@@ -2342,21 +2342,18 @@ public:
     return 0;
   }
 
-  virtual int get_params() {
-    return 0;
-  }
+  int get_params(optional_yield) override { return 0; }
 
   void send_response() override {
-    bucket->get_creation_time() = get_state()->bucket->get_info().creation_time;
     bs.size = stats.size;
     bs.size_rounded = stats.size_rounded;
-    bs.creation_time = bucket->get_creation_time();
+    bs.creation_time = get_state()->bucket->get_info().creation_time;
     bs.num_entries = stats.num_objects;
     std::swap(attrs, get_state()->bucket_attrs);
   }
 
   bool matched() {
-    return (bucket->get_name().length() > 0);
+    return (get_state()->bucket->get_name().length() > 0);
   }
 
 }; /* RGWStatBucketRequest */
