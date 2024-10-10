@@ -498,10 +498,12 @@ class CephadmServe:
                     daemon_id = s.get('id')
                     assert daemon_id
                     name = self._service_reference_name(s.get('type'), daemon_id)
+                    self.log.debug("daemon %s on host %s" % (name, host))
                     managed.extend(stray_filter(s.get('type'), daemon_id, name))
                     # Don't mark daemons we just created/removed in the last minute as stray.
                     # It may take some time for the mgr to become aware the daemon
                     # had been created/removed.
+                    self.log.debug("final managed daemons %s", managed)  # Added temporarily
                     if name in self.mgr.recently_altered_daemons:
                         continue
                     if host not in self.mgr.inventory:
@@ -550,6 +552,7 @@ class CephadmServe:
             for dd in managed
         }
         _services = [self.mgr.cephadm_services[dt] for dt in svcs]
+        self.log.debug(f"Building stray filter for {_services}")
 
         def _filter(
             service_type: str, daemon_id: str, name: str
