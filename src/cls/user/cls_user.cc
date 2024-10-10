@@ -482,10 +482,6 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
     add_header_stats(&ret.acc_stats, e);
   }
 
-  /* try-update marker */
-  if(!keys.empty())
-    ret.marker = (--keys.cend())->first;
-
   if (! ret.truncated) {
     buffer::list bl;
     header.last_stats_update = op.time;
@@ -499,6 +495,10 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
     encode(ret, *out);
     return rc;
   }
+
+  /* try-update marker */
+  if(!keys.empty())
+    ret.marker = (--keys.cend())->first;
 
   /* return partial result */
   encode(ret, *out);
