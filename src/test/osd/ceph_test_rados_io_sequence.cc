@@ -323,7 +323,7 @@ ceph::io_sequence::tester::SelectErasurePlugin::SelectErasurePlugin(
 
 
 ceph::io_sequence::tester::SelectErasureChunkSize::SelectErasureChunkSize(ceph::util::random_number_generator<int>& rng, po::variables_map vm)
-  : ProgramOptionSelector(rng, vm, "stripe_unit", true, false)
+  : ProgramOptionSelector(rng, vm, "chunksize", true, false)
 {
 }
 
