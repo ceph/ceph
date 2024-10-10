@@ -14670,6 +14670,25 @@ int OSDMonitor::_prepare_remove_pool(
       }
     }
   }
+  // remove any old pg_upmap_primary mapping for this pool
+  for (auto& p : osdmap.pg_upmap_primaries) {
+    if (p.first.pool() == pool) {
+      dout(10) << __func__ << " " << pool
+               << " removing obsolete pg_upmap_primaries " << p.first
+               << dendl;
+      pending_inc.old_pg_upmap_primary.insert(p.first);
+    }
+  }
+
+  // remove any pending pg_upmap_primary mapping for this pool
+  for (auto& p : osdmap.pg_upmap_primaries) {
+    if (p.first.pool() == pool) {
+      dout(10) << __func__ << " " << pool
+               << " removing pending pg_upmap_primaries " << p.first
+               << dendl;
+      pending_inc.new_pg_upmap_primary.erase(p.first);
+    }
+  }
 
   // remove any choose_args for this pool
   CrushWrapper newcrush = _get_pending_crush();
