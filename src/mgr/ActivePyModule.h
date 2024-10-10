@@ -97,12 +97,12 @@ public:
     uri = str;
   }
 
-  std::string get_uri() const
+  std::string_view get_uri() const
   {
     return uri;
   }
 
-  std::string get_fin_thread_name() const
+  std::string_view get_fin_thread_name() const
   {
     return fin_thread_name;
   }
