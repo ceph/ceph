@@ -437,7 +437,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
   size_t recv_body(char* buf, size_t max) override;
 
   /* rgw::auth::Completer. */
-  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s_rw) override;
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s_rw, optional_yield y) override;
   bool complete() override;
 
   /* Factories. */
@@ -475,7 +475,7 @@ public:
   size_t recv_body(char* buf, size_t max) override;
 
   /* rgw::auth::Completer. */
-  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s_rw) override;
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s_rw, optional_yield y) override;
   bool complete() override;
 
   /* Factories. */

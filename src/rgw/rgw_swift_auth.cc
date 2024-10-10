@@ -36,7 +36,7 @@ namespace auth {
 namespace swift {
 
 /* TempURL: applier */
-void TempURLApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const       /* in/out */
+void TempURLApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const       /* in/out */
 {
   bool inline_exists = false;
   const std::string& filename = s->info.args.get("filename");

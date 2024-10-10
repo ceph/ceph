@@ -28,7 +28,7 @@ public:
                    std::nullopt, LocalApplier::NO_ACCESS_KEY)
   {}
 
-  void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override; /* in/out */
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state * s, optional_yield y) const override; /* in/out */
   void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   struct Factory {

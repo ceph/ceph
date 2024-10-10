@@ -117,12 +117,12 @@ public:
     return get_decoratee().get_account();
   }
 
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override {  /* out */
-    return get_decoratee().load_acct_info(dpp, user_info);
+  void load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override {  /* out */
+    return get_decoratee().load_acct_info(dpp, s, y);
   }
 
-  void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override {     /* in/out */
-    return get_decoratee().modify_request_state(dpp, s);
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override {     /* in/out */
+    return get_decoratee().modify_request_state(dpp, s, y);
   }
 
   void write_ops_log_entry(rgw_log_entry& entry) const override {
@@ -152,7 +152,7 @@ public:
   }
 
   void to_str(std::ostream& out) const override;
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override;   /* out */
+  void load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override;   /* out */
 };
 
 /* static declaration: UNKNOWN_ACCT will be an empty rgw_user that is a result
@@ -169,16 +169,17 @@ void ThirdPartyAccountApplier<T>::to_str(std::ostream& out) const
 }
 
 template <typename T>
-void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const
+void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const
 {
+  RGWUserInfo& user_info = s->user->get_info();
   if (UNKNOWN_ACCT == acct_user_override) {
     /* There is no override specified by the upper layer. This means that we'll
      * load the account owned by the authenticated identity (aka auth_user). */
-    DecoratedApplier<T>::load_acct_info(dpp, user_info);
+    DecoratedApplier<T>::load_acct_info(dpp, s, y);
   } else if (DecoratedApplier<T>::is_owner_of(acct_user_override)) {
     /* The override has been specified but the account belongs to the authenticated
      * identity. We may safely forward the call to a next stage. */
-    DecoratedApplier<T>::load_acct_info(dpp, user_info);
+    DecoratedApplier<T>::load_acct_info(dpp, s, y);
   } else if (this->is_anonymous()) {
     /* If the user was authed by the anonymous engine then scope the ANON user
      * to the correct tenant */
@@ -248,8 +249,8 @@ public:
   }
 
   void to_str(std::ostream& out) const override;
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override;   /* out */
-  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;       /* in/out */
+  void load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override;   /* in/out */
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override;       /* in/out */
 
   ACLOwner get_aclowner() const override {
     if (effective_owner) {
@@ -271,9 +272,10 @@ void SysReqApplier<T>::to_str(std::ostream& out) const
 }
 
 template <typename T>
-void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const
+void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const
 {
-  DecoratedApplier<T>::load_acct_info(dpp, user_info);
+  RGWUserInfo& user_info = s->user->get_info();
+  DecoratedApplier<T>::load_acct_info(dpp, s, y);
   is_system = user_info.system;
 
   if (is_system) {
@@ -293,22 +295,32 @@ void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo
         effective_owner->display_name = user->get_display_name();
       }
     }
+  } else {
+    // attrs are needed for rate limiting
+    try {
+      int ret = s->user->read_attrs(dpp, y);
+      if (ret != 0) {
+        ldpp_dout(dpp, 0) << "couldn't get user attrs: user_id=" << s->user->get_id() << ", ret=" << ret << dendl;
+      }
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, -1) << "Error reading User Attrs: " << e.what() << dendl;
+    }
   }
 }
 
 template <typename T>
-void SysReqApplier<T>::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s) const
+void SysReqApplier<T>::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s, optional_yield y) const
 {
   if (boost::logic::indeterminate(is_system)) {
     RGWUserInfo unused_info;
-    load_acct_info(dpp, unused_info);
+    load_acct_info(dpp, s, y);
   }
 
   if (is_system) {
     s->info.args.set_system();
     s->system_request = true;
   }
-  DecoratedApplier<T>::modify_request_state(dpp, s);
+  DecoratedApplier<T>::modify_request_state(dpp, s, y);
 }
 
 template <typename T> static inline

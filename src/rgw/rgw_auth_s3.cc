@@ -1473,7 +1473,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
   return total;
 }
 
-void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
+void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw, optional_yield y)
 {
   const char* const decoded_length = \
     s_rw->info.env->get("HTTP_X_AMZ_DECODED_CONTENT_LENGTH");
@@ -1671,7 +1671,7 @@ size_t AWSv4ComplSingle::recv_body(char* const buf, const size_t max)
   return received;
 }
 
-void AWSv4ComplSingle::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
+void AWSv4ComplSingle::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw, optional_yield y)
 {
   /* Install the filter over rgw::io::RestfulClient. */
   AWS_AUTHv4_IO(s_rw)->add_filter(

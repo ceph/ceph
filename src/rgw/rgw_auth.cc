@@ -295,11 +295,11 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
     }
 
     void load_acct_info(const DoutPrefixProvider* dpp,
-                        RGWUserInfo& user_info) const override {
+                        req_state* s, optional_yield y) const override {
       // noop, this user info was passed in on construction
     }
 
-    void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const {
+    void modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const {
       // copy our identity policies into req_state
       s->iam_identity_policies.insert(s->iam_identity_policies.end(),
                                       policies.begin(), policies.end());
@@ -523,15 +523,15 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
 
       /* Account used by a given RGWOp is decoupled from identity employed
        * in the authorization phase (RGWOp::verify_permissions). */
-      applier->load_acct_info(dpp, s->user->get_info());
+      applier->load_acct_info(dpp, s, y);
       s->perm_mask = applier->get_perm_mask();
 
       /* This is the single place where we pass req_state as a pointer
        * to non-const and thus its modification is allowed. In the time
        * of writing only RGWTempURLEngine needed that feature. */
-      applier->modify_request_state(dpp, s);
+      applier->modify_request_state(dpp, s, y);
       if (completer) {
-        completer->modify_request_state(dpp, s);
+        completer->modify_request_state(dpp, s, y);
       }
 
       s->auth.identity = std::move(applier);
@@ -631,7 +631,8 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
   user_info = user->get_info();
 }
 
-void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const {
+void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const {
+  RGWUserInfo& user_info = s->user->get_info();
   rgw_user federated_user;
   federated_user.id = this->sub;
   federated_user.tenant = role_tenant;
@@ -687,7 +688,7 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   create_account(dpp, federated_user, this->user_name, user_info);
 }
 
-void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
+void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s, optional_yield y) const
 {
   s->info.args.append("sub", this->sub);
   s->info.args.append("aud", this->aud);
@@ -936,7 +937,7 @@ void rgw::auth::RemoteApplier::write_ops_log_entry(rgw_log_entry& entry) const
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */
-void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const      /* out */
+void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const      /* out */
 {
   /* It's supposed that RGWRemoteAuthApplier tries to load account info
    * that belongs to the authenticated identity. Another policy may be
@@ -946,6 +947,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   bool implicit_tenant = implicit_value.implicit_tenants_for_(implicit_tenant_bit);
   bool split_mode = implicit_value.is_split_mode();
   std::unique_ptr<rgw::sal::User> user;
+  RGWUserInfo& user_info = s->user->get_info();
 
   /* Normally, empty "tenant" field of acct_user means the authenticated
    * identity has the legacy, global tenant. However, due to inclusion
@@ -1001,7 +1003,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   /* Succeeded if we are here (create_account() hasn't throwed). */
 }
 
-void rgw::auth::RemoteApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
+void rgw::auth::RemoteApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const
 {
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
@@ -1098,14 +1100,15 @@ uint32_t rgw::auth::LocalApplier::get_perm_mask(const std::string& subuser_name,
   }
 }
 
-void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const /* out */
+void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const /* out */
 {
   /* Load the account that belongs to the authenticated identity. An extra call
    * to RADOS may be safely skipped in this case. */
+  RGWUserInfo& user_info = s->user->get_info();
   user_info = this->user_info;
 }
 
-void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
+void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const
 {
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
@@ -1183,9 +1186,10 @@ bool rgw::auth::RoleApplier::is_identity(const Principal& p) const {
   return false;
 }
 
-void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const /* out */
+void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const /* out */
 {
   /* Load the user id */
+  RGWUserInfo& user_info = s->user->get_info();
   user_info.user_id = this->token_attrs.user_id;
 }
 
@@ -1197,7 +1201,7 @@ void rgw::auth::RoleApplier::write_ops_log_entry(rgw_log_entry& entry) const
   entry.role_id = role.id;
 }
 
-void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
+void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s, optional_yield y) const
 {
   // non-account identity policy is restricted to the current tenant
   const std::string* policy_tenant = role.account ? nullptr : &role.tenant;

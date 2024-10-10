@@ -139,11 +139,11 @@ public:
    *
    * XXX: be aware that the "account" term refers to rgw_user. The naming
    * is legacy. */
-  virtual void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const = 0; /* out */
+  virtual void load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const = 0; /* in/out */
 
   /* Apply any changes to request state. This method will be most useful for
    * TempURL of Swift API. */
-  virtual void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const {}      /* in/out */
+  virtual void modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const {}      /* in/out */
 };
 
 
@@ -179,7 +179,7 @@ public:
 
   /* Apply any changes to request state. The initial use case was injecting
    * the AWSv4 filter over rgw::io::RestfulClient in req_state. */
-  virtual void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) = 0;     /* in/out */
+  virtual void modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) = 0;     /* in/out */
 };
 
 
@@ -462,7 +462,7 @@ public:
       }
   }
 
-  void modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const override;
+  void modify_request_state(const DoutPrefixProvider *dpp, req_state* s, optional_yield y) const override;
 
   ACLOwner get_aclowner() const override;
 
@@ -484,7 +484,7 @@ public:
 
   bool is_identity(const Principal& p) const override;
 
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override;
+  void load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override;
 
   uint32_t get_identity_type() const override {
     return TYPE_WEB;
@@ -656,8 +656,8 @@ public:
 
   uint32_t get_perm_mask() const override { return info.perm_mask; }
   void to_str(std::ostream& out) const override;
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
-  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
+  void load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override; /* in/out */
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override;
   void write_ops_log_entry(rgw_log_entry& entry) const override;
   uint32_t get_identity_type() const override { return info.acct_type; }
   std::string get_acct_name() const override { return info.acct_name; }
@@ -732,8 +732,8 @@ public:
     }
   }
   void to_str(std::ostream& out) const override;
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
-  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
+  void load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override; /* in/out */
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override;
   uint32_t get_identity_type() const override { return user_info.type; }
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return subuser; }
@@ -803,7 +803,7 @@ public:
     return RGW_PERM_NONE; 
   }
   void to_str(std::ostream& out) const override;
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
+  void load_acct_info(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override; /* in/out */
   uint32_t get_identity_type() const override { return TYPE_ROLE; }
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return {}; }
@@ -813,7 +813,7 @@ public:
   }
   void write_ops_log_entry(rgw_log_entry& entry) const override;
 
-  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s, optional_yield y) const override;
 
   struct Factory {
     virtual ~Factory() {}
