@@ -331,6 +331,11 @@ void MetricsHandler::handle_payload(Session *session, const UnknownPayload &payl
 }
 
 void MetricsHandler::handle_client_metrics(const cref_t<MClientMetrics> &m) {
+  if (!mds->is_active_lockless()) {
+    dout(20) << ": dropping metrics message during recovery" << dendl;
+    return;
+  }
+
   std::scoped_lock locker(lock);
 
   Session *session = mds->get_session(m);
