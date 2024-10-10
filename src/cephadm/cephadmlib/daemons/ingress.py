@@ -130,7 +130,6 @@ class HAproxy(ContainerDaemonForm):
         return [
             '# IP forwarding and non-local bind',
             'net.ipv4.ip_forward = 1',
-            'net.ipv4.ip_nonlocal_bind = 1',
         ]
 
     def container(self, ctx: CephadmContext) -> CephContainer:
@@ -254,7 +253,6 @@ class Keepalived(ContainerDaemonForm):
         return [
             '# IP forwarding and non-local bind',
             'net.ipv4.ip_forward = 1',
-            'net.ipv4.ip_nonlocal_bind = 1',
         ]
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
