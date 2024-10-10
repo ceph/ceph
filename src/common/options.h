@@ -116,6 +116,18 @@ struct Option {
     }
   }
 
+  static level_t str_to_level(std::string_view s) {
+    if (s == "basic") {
+      return LEVEL_BASIC;
+    } else if (s == "advanced") {
+      return LEVEL_ADVANCED;
+    } else if (s == "dev") {
+      return LEVEL_DEV;
+    } else {
+      return LEVEL_UNKNOWN;
+    }
+  }
+
   enum flag_t {
     FLAG_RUNTIME = 0x1,         ///< option can be changed at runtime
     FLAG_NO_MON_UPDATE = 0x2,   ///< option cannot be changed via mon config
