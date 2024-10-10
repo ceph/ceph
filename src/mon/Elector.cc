@@ -722,6 +722,11 @@ bool Elector::peer_tracker_is_clean()
   return peer_tracker.is_clean(mon->rank, paxos_size());
 }
 
+std::set<std::pair<unsigned, unsigned>> Elector::get_netsplit_peer_tracker()
+{
+  return peer_tracker.get_netsplit();
+}
+
 bool Elector::is_tiebreaker(int rank) const
 {
   return mon->monmap->tiebreaker_mon == mon->monmap->get_name(rank);

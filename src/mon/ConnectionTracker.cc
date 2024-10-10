@@ -270,6 +270,57 @@ void ConnectionTracker::notify_rank_removed(int rank_removed, int new_rank)
   increase_version();
 }
 
+std::set<std::pair<unsigned, unsigned>> ConnectionTracker::get_netsplit()
+{
+  ldout(cct, 20) << __func__ << dendl;
+  // check if we have a netsplit.
+  // if I can reach everyone but I can see that
+  // there is netsplit between two other nodes,
+  // then I should report a potential netsplit.
+  // we can separate them by CRUSH, if it belongs
+  // to different CRUSH buckets, then we have a netsplit.
+  std::set<std::pair<unsigned, unsigned>> disconnect_set;
+
+  for (const auto& i : peer_reports) {
+    const ConnectionReport& report = i.second;
+    if (i.first < 0) {
+      ldout(cct, 20) << "ignoring rank < 0 ..."<< dendl;
+      continue;
+    }
+    // check we are connected to everyone
+    if (i.first == rank) {
+      for (const auto& j : report.current) {
+        if (!j.second) {
+          // no point in checking further if we are not connected to everyone.
+          // so we return an empty set.
+          ldout(cct, 20) << "I am not connected to " << j.first << dendl;
+          disconnect_set.clear();
+          return disconnect_set;
+        }
+      }
+      continue;
+    }
+    // check if there are any disconnections between two peers
+    // in our peer_tracker.
+    for (const auto& j : report.current) {
+      if (!j.second) {
+        ldout(cct, 20) << i.first << "not connected to" << j.first << dendl;
+        std::pair<unsigned, unsigned> pair = std::make_pair(
+          i.first, j.first);
+        if (pair.first > pair.second) {
+          // sort the pair so we can compare it with the set.
+          std::swap(pair.first, pair.second);
+        }
+        if (disconnect_set.find(pair) == disconnect_set.end()) {
+          // if it doesn't exist we add it.
+          disconnect_set.insert(pair);
+        }
+      }
+    }
+  }
+  return disconnect_set;
+}
+
 bool ConnectionTracker::is_clean(int mon_rank, int monmap_size)
 {
   ldout(cct, 30) << __func__ << dendl;
