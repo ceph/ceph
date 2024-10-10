@@ -621,6 +621,7 @@ Use a command of the following form to fetch a snapshot's information:
 
 The output format is JSON and contains the following fields.
 
+* ``bytes_quota``: quota size in bytes if quota is set; else ``infinite``
 * ``created_at``: creation time of the snapshot in the format ``YYYY-MM-DD
   HH:MM:SS:ffffff``
 * ``data_pool``: data pool to which the snapshot belongs
@@ -640,6 +641,7 @@ Sample output when snapshot clones are in progress or pending:
 ::
 
     {
+        "bytes_quota": 3072,
         "created_at": "2022-06-14 13:54:58.618769",
         "data_pool": "cephfs.cephfs.data",
         "has_pending_clones": "yes",
@@ -667,6 +669,7 @@ Sample output when no snapshot clone is in progress or pending:
 ::
 
     {
+        "bytes_quota": 3072,
         "created_at": "2022-06-14 13:54:58.618769",
         "data_pool": "cephfs.cephfs.data",
         "has_pending_clones": "no"
