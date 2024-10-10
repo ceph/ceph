@@ -466,8 +466,9 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
     uint64_t snap_id;
     if (is_remote) {
       if (!info.nr_snap_metadata) {
-        derr << ": snap_path=" << snap_path << " has invalid metadata in remote snapshot"
-             << dendl;
+        std::string failed_reason = "snapshot '" + snap  + "' has invalid metadata";
+        derr << ": " << failed_reason << dendl;
+        m_snap_sync_stats.at(dir_root).last_failed_reason = failed_reason;
         rv = -EINVAL;
       } else {
         auto metadata = decode_snap_metadata(info.snap_metadata, info.nr_snap_metadata);
@@ -1489,7 +1490,7 @@ void PeerReplayer::sync_snaps(const std::string &dir_root,
 void PeerReplayer::run(SnapshotReplayerThread *replayer) {
   dout(10) << ": snapshot replayer=" << replayer << dendl;
 
-  time last_directory_scan = clock::zero();
+  monotime last_directory_scan = clock::zero();
   auto scan_interval = g_ceph_context->_conf.get_val<uint64_t>(
     "cephfs_mirror_directory_scan_interval");
 
@@ -1542,6 +1543,9 @@ void PeerReplayer::peer_status(Formatter *f) {
     f->open_object_section(dir_root);
     if (sync_stat.failed) {
       f->dump_string("state", "failed");
+      if (sync_stat.last_failed_reason) {
+	f->dump_string("failure_reason", *sync_stat.last_failed_reason);
+      }
     } else if (!sync_stat.current_syncing_snap) {
       f->dump_string("state", "idle");
     } else {

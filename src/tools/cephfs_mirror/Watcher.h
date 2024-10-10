@@ -28,6 +28,13 @@ public:
   void register_watch(Context *on_finish);
   void unregister_watch(Context *on_finish);
 
+  struct ErrorListener {
+    virtual ~ErrorListener() {
+    }
+    virtual void set_blocklisted_ts() = 0;
+    virtual void set_failed_ts() = 0;
+  };
+
 protected:
   std::string m_oid;
 

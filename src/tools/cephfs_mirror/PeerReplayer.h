@@ -132,9 +132,6 @@ private:
     }
   };
 
-  using clock = ceph::coarse_mono_clock;
-  using time = ceph::coarse_mono_time;
-
   // stats sent to service daemon
   struct ServiceDaemonStats {
     uint64_t failed_dir_count = 0;
@@ -143,14 +140,15 @@ private:
 
   struct SnapSyncStat {
     uint64_t nr_failures = 0; // number of consecutive failures
-    boost::optional<time> last_failed; // lat failed timestamp
+    boost::optional<monotime> last_failed; // lat failed timestamp
+    boost::optional<std::string> last_failed_reason;
     bool failed = false; // hit upper cap for consecutive failures
     boost::optional<std::pair<uint64_t, std::string>> last_synced_snap;
     boost::optional<std::pair<uint64_t, std::string>> current_syncing_snap;
     uint64_t synced_snap_count = 0;
     uint64_t deleted_snap_count = 0;
     uint64_t renamed_snap_count = 0;
-    time last_synced = clock::zero();
+    monotime last_synced = clock::zero();
     boost::optional<double> last_sync_duration;
   };
 
@@ -178,6 +176,7 @@ private:
     sync_stat.nr_failures = 0;
     sync_stat.failed = false;
     sync_stat.last_failed = boost::none;
+    sync_stat.last_failed_reason = boost::none;
   }
 
   void _set_last_synced_snap(const std::string &dir_root, uint64_t snap_id,

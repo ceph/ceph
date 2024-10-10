@@ -52,16 +52,14 @@ public:
            m_mirror_watcher->is_failed();
   }
 
-  utime_t get_failed_ts() {
+  monotime get_failed_ts() {
     std::scoped_lock locker(m_lock);
-    if (m_instance_watcher) {
-      return m_instance_watcher->get_failed_ts();
-    }
-    if (m_mirror_watcher) {
-      return m_mirror_watcher->get_failed_ts();
-    }
+    return m_failed_ts;
+  }
 
-    return utime_t();
+  void set_failed_ts() {
+    std::scoped_lock locker(m_lock);
+    m_failed_ts = clock::now();
   }
 
   bool is_blocklisted() {
@@ -69,16 +67,14 @@ public:
     return is_blocklisted(locker);
   }
 
-  utime_t get_blocklisted_ts() {
+  monotime get_blocklisted_ts() {
     std::scoped_lock locker(m_lock);
-    if (m_instance_watcher) {
-      return m_instance_watcher->get_blocklisted_ts();
-    }
-    if (m_mirror_watcher) {
-      return m_mirror_watcher->get_blocklisted_ts();
-    }
+    return m_blocklisted_ts;
+  }
 
-    return utime_t();
+  void set_blocklisted_ts() {
+    std::scoped_lock locker(m_lock);
+    m_blocklisted_ts = clock::now();
   }
 
   Peers get_peers() {
@@ -123,8 +119,24 @@ private:
     void release_directory(std::string_view dir_path) override {
       fs_mirror->handle_release_directory(dir_path);
     }
+
   };
 
+  struct TimestampListener: public Watcher::ErrorListener {
+    FSMirror *fs_mirror;
+    TimestampListener(FSMirror *fs_mirror)
+      : fs_mirror(fs_mirror) {
+    }
+    void set_blocklisted_ts() {
+      fs_mirror->set_blocklisted_ts();
+    }
+    void set_failed_ts() {
+      fs_mirror->set_failed_ts();
+    }
+  };
+
+  monotime m_blocklisted_ts;
+  monotime m_failed_ts;
   CephContext *m_cct;
   Filesystem m_filesystem;
   uint64_t m_pool_id;
@@ -134,6 +146,7 @@ private:
 
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::fs_mirror");
   SnapListener m_snap_listener;
+  TimestampListener m_ts_listener;
   std::set<std::string, std::less<>> m_directories;
   Peers m_all_peers;
   std::map<Peer, std::unique_ptr<PeerReplayer>> m_peer_replayers;
