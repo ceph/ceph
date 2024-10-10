@@ -874,7 +874,7 @@ class Bucket {
       std::string zonegroup_id;
       rgw_placement_rule placement_rule;
       // zone placement is optional on buckets created for another zonegroup
-      const RGWZonePlacementInfo* zone_placement;
+      const RGWZonePlacementInfo* zone_placement = nullptr;
       RGWAccessControlPolicy policy;
       Attrs attrs;
       bool obj_lock_enabled = false;
