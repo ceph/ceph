@@ -18,9 +18,6 @@ tasks:
       mon:
         mon_warn_on_insecure_global_id_reclaim: false
         mon_warn_on_insecure_global_id_reclaim_allowed: false
-    log-ignorelist:
-      - Not found or unloadable
-      - evicting unresponsive client
 - exec:
     osd.0:
       - ceph osd require-osd-release quincy
@@ -30,14 +27,3 @@ overrides:
     conf:
       mon:
         mon warn on osd down out interval zero: false
-    log-ignorelist:
-      - \(POOL_APP_NOT_ENABLED\)
-      - OSD_DOWN
-      - mons down
-      - mon down
-      - MON_DOWN
-      - out of quorum
-      - PG_DEGRADED
-      - Reduced data availability
-      - Degraded data redundancy
-      - OSDMAP_FLAGS
