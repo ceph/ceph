@@ -411,6 +411,426 @@
 	...
 }
 {
+        rocksdb ObjectLibrary AddFactory centos 9 leak
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:_ZN7rocksdb13ObjectLibrary15AddFactoryEntryEPKcOSt10unique_ptrINS0_5EntryESt14default_deleteIS4_EE
+        fun:UnknownInlinedFun
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        rocksdb ObjectLibrary DefaultEv centos 9 leak 1
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:_ZN7rocksdb13ObjectLibrary7DefaultEv
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        static_initalization_and_destruction centos 9 leak
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.140
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        malloc centos 9 leak 1
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:malloc
+        fun:strdup
+        fun:_dl_load_cache_lookup
+        fun:_dl_map_object
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        malloc centos 9 leak 2
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:UnknownInlinedFun
+        fun:_dl_new_object
+        fun:_dl_map_object_from_fd
+        fun:_dl_map_object
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        static_initialization_and_destruction centos 9 leak 2
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:_ZN7rocksdb13ObjectLibrary12PatternEntryC1ERKS1_
+        fun:UnknownInlinedFun
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        static_initialization_and_destruction centos 9 leak 3
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        rocksdb ObjectLibrary AddFactoryEntry centos 9 leak
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:_ZN7rocksdb13ObjectLibrary15AddFactoryEntryEPKcOSt10unique_ptrINS0_5EntryESt14default_deleteIS4_EE
+        fun:UnknownInlinedFun
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        malloc centos 9 leak 3
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:malloc
+        fun:strdup
+        fun:_dl_load_cache_lookup
+        fun:_dl_map_object
+        fun:openaux
+        fun:_dl_catch_exception
+        fun:_dl_map_object_deps
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        malloc centos 9 leak 4
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:UnknownInlinedFun
+        fun:_dl_new_object
+        fun:_dl_map_object_from_fd
+        fun:_dl_map_object
+        fun:openaux
+        fun:_dl_catch_exception
+        fun:_dl_map_object_deps
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        HashtableHash_node rocksdb centos 9 leak
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:_ZNSt8__detail16_Hashtable_allocISaINS_10_Hash_nodeISt4pairIKjN7rocksdb6DBImpl24MultiGetColumnFamilyDataEELb0EEEEE19_M_allocate_bucketsEm.constprop.0
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:_ZN7rocksdb13ObjectLibrary15AddFactoryEntryEPKcOSt10unique_ptrINS0_5EntryESt14default_deleteIS4_EE
+        fun:UnknownInlinedFun
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        rocksdb ObjectLibrary DefaultEv centos 9 leak 2
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:_ZN7rocksdb13ObjectLibrary7DefaultEv
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        rockdb malloc centos 9 leak 5
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:UnknownInlinedFun
+        fun:add_dependency
+        fun:_dl_lookup_symbol_x
+        fun:elf_machine_rela
+        fun:elf_dynamic_do_Rela
+        fun:_dl_relocate_object
+        fun:_dl_open_relocate_one_object
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        rocksdb malloc centos 9 leak 6
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:UnknownInlinedFun
+        fun:add_to_global_resize
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        rocksdb malloc centos 9 leak 7
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:calloc
+        fun:UnknownInlinedFun
+        fun:_dl_check_map_versions
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        rocksdb malloc centos 9 leak 8
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:calloc
+        fun:UnknownInlinedFun
+        fun:_dl_new_object
+        fun:_dl_map_object_from_fd
+        fun:_dl_map_object
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        rocksdb calloc centos 9 leak
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:calloc
+        fun:UnknownInlinedFun
+        fun:_dl_new_object
+        fun:_dl_map_object_from_fd
+        fun:_dl_map_object
+        fun:openaux
+        fun:_dl_catch_exception
+        fun:_dl_map_object_deps
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
 	libstdc++ leak on xenial
 	Memcheck:Leak
 	fun:malloc
