@@ -370,6 +370,8 @@ class CTDBDaemonContainer(SambaContainerCommon):
         # make conditional?
         # CAP_NET_ADMIN is needed for event script to add public ips to iface
         cargs.append('--cap-add=NET_ADMIN')
+        # CAP_NET_RAW allows to send gratuitous ARPs/tickle ACKs via raw sockets
+        cargs.append('--cap-add=NET_RAW')
         return cargs
 
 
