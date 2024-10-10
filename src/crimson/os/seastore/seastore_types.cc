@@ -92,8 +92,37 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   }
 }
 
+template <typename T>
+concept is_convertible_to_stream = std::is_convertible_v<T, std::ostream &>;
+
+template <typename T>
+concept is_streamable = requires(std::ostream &os, const T &value) {
+  { os << value } -> is_convertible_to_stream;
+};
+
+template <typename T>
+struct laddr_formatter_t;
+
+template <typename T>
+requires fmt::is_formattable<T>::value
+struct laddr_formatter_t<T> {
+  static std::ostream &format(std::ostream &out, const T &v) {
+    // fmt support format __int128
+    fmt::format_to(std::ostreambuf_iterator<char>(out), "L{:x}", v);
+    return out;
+  }
+};
+template <typename T>
+requires is_streamable<T>
+struct laddr_formatter_t<T> {
+  static std::ostream &format(std::ostream &out, const T &v) {
+    // boost uint128_t support stream operator but __int128 doesn't
+    return out << 'L' << std::hex << v << std::dec;
+  }
+};
+
 std::ostream &operator<<(std::ostream &out, const laddr_t &laddr) {
-  return out << 'L' << std::hex << laddr.value << std::dec;
+  return laddr_formatter_t<laddr_t::Unsigned>::format(out, laddr.value);
 }
 
 std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) {
@@ -101,13 +130,223 @@ std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) 
 	     << "+" << std::hex << laddr_offset.get_offset() << std::dec;
 }
 
+std::ostream &operator<<(std::ostream &out, const laddr_printer_t &p) {
+  out << p.addr;
+  if (p.addr.is_object_address()) {
+    out << std::hex << "(shard=" << static_cast<int>(p.addr.get_shard())
+	<< ", pool=" << p.addr.get_pool()
+	<< ", reversed_hash=" << p.addr.get_reversed_hash()
+	<< ", local_object_id=" << p.addr.get_local_object_id()
+	<< ", local_clone_id=" << p.addr.get_local_clone_id()
+	<< ", is_metadata=" << p.addr.is_metadata()
+	<< ", block_offset=" << p.addr.get_block_offset()
+	<< ")" << std::dec;
+  }
+
+  return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const laddr_hint_t &hint) {
+  out << "laddr_hint_t(hint=" << laddr_printer_t{hint.addr} << ", conflict_level=";
+  switch(hint.conflict_level) {
+  case laddr_conflict_level_t::object_content:
+    out << "object_content";
+    break;
+  case laddr_conflict_level_t::local_object_id:
+    out << "local_object_id";
+    break;
+  case laddr_conflict_level_t::local_clone_id:
+    out << "local_clone_id";
+    break;
+  case laddr_conflict_level_t::block_offset:
+    out << "block_offset";
+    break;
+  case laddr_conflict_level_t::never:
+    out << "never";
+    break;
+  default:
+    __builtin_unreachable();
+  }
+  out << ", conflict_policy=";
+  switch(hint.conflict_policy) {
+  case laddr_conflict_policy_t::gen_random:
+    out << "gen_random";
+    break;
+  case laddr_conflict_policy_t::linear_search:
+    out << "linear_search";
+    break;
+  default:
+    __builtin_unreachable();
+  }
+  return out << ")";
+}
+
+namespace {
+struct random_generator_t {
+  static random_generator_t &get() {
+    static thread_local random_generator_t r{};
+    return r;
+  }
+  random_generator_t()
+      : eng(std::rand()),
+        global(0, std::numeric_limits<uint64_t>::max()) {}
+  std::default_random_engine eng;
+  std::uniform_int_distribution<uint64_t> global;
+  uint64_t operator()() { return global(eng); }
+};
+uint64_t rand_field() { return random_generator_t::get()(); }
+} // namespace
+
+laddr_hint_t gen_global_random_hint() {
+  return {
+    L_ADDR_MIN.with_object_content(rand_field()),
+    laddr_conflict_level_t::object_content,
+    laddr_conflict_policy_t::linear_search
+  };
+}
+
+laddr_hint_t gen_global_onode_hint(
+  shard_t shard,
+  pool_t pool,
+  crush_hash_t crush) {
+  uint64_t value =
+      ((uint64_t)(shard & 0xFF) << 44) |
+      ((uint64_t)(pool & 0xFFF) << 32) |
+      ((uint64_t)crush);
+  return {
+    L_ADDR_MIN.with_object_content(value),
+    laddr_conflict_level_t::object_content,
+    laddr_conflict_policy_t::linear_search
+  };
+}
+
+laddr_hint_t gen_object_hint(
+  shard_t shard,
+  pool_t pool,
+  crush_hash_t crush,
+  std::optional<local_object_id_t> object_id,
+  std::optional<local_clone_id_t> clone_id,
+  bool is_metadata)
+{
+  auto addr = L_ADDR_MIN;
+  auto level = laddr_conflict_level_t::local_object_id;
+  auto policy = laddr_conflict_policy_t::gen_random;
+
+  addr.set_shard(shard);
+  addr.set_pool(pool);
+  addr.set_reversed_hash(crush);
+  if (object_id) {
+    // The object has other clones.
+    addr.set_local_object_id(*object_id);
+    assert(addr.get_local_object_id() == *object_id);
+    assert(addr.is_object_address());
+
+    if (clone_id) {
+      // The data or metadata extents of this clone exist
+      addr.set_local_clone_id(*clone_id);
+      assert(addr.get_local_clone_id() == *clone_id);
+
+      if (is_metadata) {
+	// data exists, allocating metadata
+	addr.set_block_offset(rand_field() << laddr_t::UNIT_SHIFT);
+	level = laddr_conflict_level_t::block_offset;
+      } else {
+	// metadata exists, allocating data
+	assert(addr.get_block_offset() == 0);
+	level = laddr_conflict_level_t::never;
+      }
+    } else {
+      // New clone of existing object, no data/metadata extents
+      // of this clone exist.
+      level = laddr_conflict_level_t::local_clone_id;
+      addr.set_local_clone_id(rand_field());
+    }
+  } else {
+    // Fresh object, no data/metadata extents exist
+    assert(!clone_id);
+    do {
+      addr.set_local_object_id(rand_field());
+    } while (!addr.is_object_address());
+    addr.set_local_clone_id(rand_field());
+  }
+
+  addr.set_metadata(is_metadata);
+  if (is_metadata) {
+    addr.set_block_offset(rand_field() << laddr_t::UNIT_SHIFT);
+  }
+
+  assert(addr.match_pool_bits(pool));
+  assert(addr.match_shard_bits(shard));
+  assert(addr.match_reversed_hash_bits(crush));
+  assert(addr.is_metadata() == is_metadata);
+  return {addr, level, policy};
+}
+
+laddr_hint_t gen_next_hint(laddr_hint_t hint) {
+  assert(hint.conflict_level != laddr_conflict_level_t::never);
+  assert(hint.conflict_policy == laddr_conflict_policy_t::gen_random);
+
+  auto orig_addr = hint.addr;
+  switch (hint.conflict_level) {
+  case laddr_conflict_level_t::object_content:
+    // for global metadata
+    assert(orig_addr.is_global_address());
+    do {
+      hint.addr.set_object_content(rand_field());
+    } while (orig_addr.get_object_content() == hint.addr.get_object_content());
+    assert(orig_addr.get_object_info() == hint.addr.get_object_info());
+    break;
+
+  case laddr_conflict_level_t::local_object_id:
+    // object hint(data and md), regenerate a new local object id
+    assert(orig_addr.is_object_address());
+    do {
+      hint.addr.set_local_object_id(rand_field());
+    } while (orig_addr == hint.addr || !hint.addr.is_object_address());
+    assert(orig_addr.get_shard() == hint.addr.get_shard());
+    assert(orig_addr.get_pool() == hint.addr.get_pool());
+    assert(orig_addr.get_reversed_hash() == hint.addr.get_reversed_hash());
+    assert(orig_addr.get_object_content() == hint.addr.get_object_content());
+    break;
+
+  case laddr_conflict_level_t::local_clone_id:
+    do {
+      hint.addr.set_local_clone_id(rand_field());
+    } while (orig_addr.get_local_clone_id() == hint.addr.get_local_clone_id());
+    assert(orig_addr.get_object_info() == hint.addr.get_object_info());
+    assert(orig_addr.is_metadata() == hint.addr.is_metadata());
+    assert(orig_addr.get_block_offset() == hint.addr.get_block_offset());
+    break;
+
+  case laddr_conflict_level_t::block_offset:
+    // object md hint
+    assert(orig_addr.is_metadata());
+    do {
+      hint.addr.set_block_offset(rand_field() << laddr_t::UNIT_SHIFT);
+    } while (orig_addr.get_block_offset() == hint.addr.get_block_offset());
+    assert(orig_addr.get_object_info() == hint.addr.get_object_info());
+    assert(orig_addr.get_local_clone_id() == hint.addr.get_local_clone_id());
+    assert(orig_addr.is_metadata() == hint.addr.is_metadata());
+    break;
+
+  default:
+    __builtin_unreachable();
+  }
+
+  return hint;
+}
+
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
 {
+  out << "pladdr(";
   if (pladdr.is_laddr()) {
-    return out << pladdr.get_laddr();
+    // pladdr(local_clone_id=...)
+    out << "local_clone_id=" << pladdr.get_local_clone_id();
   } else {
-    return out << pladdr.get_paddr();
+    // pladdr(paddr<...>)
+    out << pladdr.get_paddr();
   }
+  return out << ")";
 }
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
