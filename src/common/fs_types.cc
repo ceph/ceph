@@ -5,6 +5,7 @@
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
 #include "common/ceph_json.h"
+#include "include/denc.h"
 
 void dump(const ceph_file_layout& l, ceph::Formatter *f)
 {
@@ -86,10 +87,12 @@ void file_layout_t::encode(ceph::buffer::list& bl, uint64_t features) const
   }
 
   ENCODE_START(2, 2, bl);
-  encode(stripe_unit, bl);
-  encode(stripe_count, bl);
-  encode(object_size, bl);
-  encode(pool_id, bl);
+  encode(std::tuple{
+    stripe_unit,
+    stripe_count,
+    object_size,
+    pool_id,
+  }, bl, 0);
   encode(pool_ns, bl);
   ENCODE_FINISH(bl);
 }
