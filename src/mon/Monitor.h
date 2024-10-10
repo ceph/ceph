@@ -311,8 +311,6 @@ private:
    * @defgroup Monitor_h_scrub
    * @{
    */
-  version_t scrub_version;            ///< paxos version we are scrubbing
-  std::map<int,ScrubResult> scrub_result;  ///< results so far
 
   /**
    * trigger a cross-mon scrub
@@ -345,7 +343,21 @@ private:
     ScrubState() : finished(false) { }
     virtual ~ScrubState() { }
   };
-  std::shared_ptr<ScrubState> scrub_state; ///< keeps track of current scrub
+
+  struct ScrubContext {
+    ScrubState scrub_state;       ///< keeps track of current scrub
+    version_t scrub_version;      ///< paxos version we are scrubbing
+    std::map<int,ScrubResult> scrub_result;  ///< result so far
+    ScrubContext() {
+      scrub_version = 0;
+      scrub_result.clear();
+    }
+    ~ScrubContext() {
+      scrub_version = 0;
+      scrub_result.clear();
+     }
+  };
+  std::atomic<std::shared_ptr<ScrubContext>> scrub_con; ///< keeps track of scrub_context
 
   /**
    * @defgroup Monitor_h_sync Synchronization
