@@ -27,7 +27,14 @@ class RunCephCmd:
             if len(args) == 1:
                 args = args[0]
             kwargs['args'] = args
-        return self.mon_manager.run_cluster_cmd(**kwargs)
+        kwargs['stderr'] = kwargs.pop('stderr', StringIO())
+        kwargs['check_status'] = kwargs.pop('check_status', StringIO())
+
+        proc = self.mon_manager.run_cluster_cmd(**kwargs)
+        if 'error' in proc.stderr.getvalue().lower():
+            if kwargs['check_status']:
+                raise CommandFailedError(kwargs['args'], exitstatus=0)
+        return proc
 
     def get_ceph_cmd_result(self, *args, **kwargs):
         """
