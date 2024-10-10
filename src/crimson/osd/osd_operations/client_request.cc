@@ -154,7 +154,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 	std::ref(get_foreign_connection()), m->get_map_epoch()
       ));
     DEBUGDPP("{}: discarding {}", *pgref, *this, this_instance_id);
-    complete_request(pg);
     co_return;
   }
   DEBUGDPP("{}.{}: entering await_map stage",
@@ -243,7 +242,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{}.{}: process[_pg]_op complete,"
 	   "removing request from orderer",
 	   *pgref, *this, this_instance_id);
-  complete_request(pg);
 }
 
 seastar::future<> ClientRequest::with_pg_process(
@@ -260,7 +258,11 @@ seastar::future<> ClientRequest::with_pg_process(
   auto &ihref = *instance_handle;
   return interruptor::with_interruption(
     [this, pgref, this_instance_id, &ihref]() mutable {
-      return with_pg_process_interruptible(pgref, this_instance_id, ihref);
+      return with_pg_process_interruptible(
+	pgref, this_instance_id, ihref
+      ).then_interruptible([this, pgref] {
+	complete_request(*pgref);
+      });
     }, [FNAME, this, this_instance_id, pgref](std::exception_ptr eptr) {
       DEBUGDPP("{}.{}: interrupted due to {}",
 	       *pgref, *this, this_instance_id, eptr);
