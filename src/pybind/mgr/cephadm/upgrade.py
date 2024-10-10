@@ -29,17 +29,17 @@ CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 def normalize_image_digest(digest: str, default_registry: str) -> str:
     """
     Normal case:
-    >>> normalize_image_digest('ceph/ceph', 'docker.io')
-    'docker.io/ceph/ceph'
+    >>> normalize_image_digest('ceph/ceph', 'quay.io')
+    'quay.io/ceph/ceph'
 
     No change:
-    >>> normalize_image_digest('quay.ceph.io/ceph/ceph', 'docker.io')
+    >>> normalize_image_digest('quay.ceph.io/ceph/ceph', 'quay.io')
     'quay.ceph.io/ceph/ceph'
 
-    >>> normalize_image_digest('docker.io/ubuntu', 'docker.io')
-    'docker.io/ubuntu'
+    >>> normalize_image_digest('quay.io/centos', 'quay.io')
+    'quay.io/centos'
 
-    >>> normalize_image_digest('localhost/ceph', 'docker.io')
+    >>> normalize_image_digest('localhost/ceph', 'quay.io')
     'localhost/ceph'
     """
     known_shortnames = [
