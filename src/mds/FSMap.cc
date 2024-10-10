@@ -664,7 +664,7 @@ void FSMap::decode(bufferlist::const_iterator& p)
   struct_version = 0;
   DECODE_START(STRUCT_VERSION, p);
   DECODE_OLDEST(7);
-  struct_version = struct_v;
+  struct_version = struct_v.v;
   decode(epoch, p);
   decode(next_filesystem_id, p);
   decode(legacy_client_fscid, p);
