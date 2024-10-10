@@ -116,6 +116,7 @@ about Ceph, see our `Architecture`_ section.
    Developer Guide <dev/developer_guide/index>
    dev/internals
    governance
+   exec_council/index
    foundation
    ceph-volume/index
    releases/general
