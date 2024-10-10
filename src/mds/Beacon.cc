@@ -474,9 +474,15 @@ void Beacon::notify_health(MDSRank const *mds)
   if (mds->mdcache->cache_overfull()) {
     CachedStackStringStream css;
     *css << "MDS cache is too large (" << bytes2str(mds->mdcache->cache_size())
-        << "/" << bytes2str(mds->mdcache->cache_limit_memory()) << "); "
-        << mds->mdcache->num_inodes_with_caps << " inodes in use by clients, "
-        << mds->mdcache->get_num_strays() << " stray files";
+        << "/" << bytes2str(mds->mdcache->cache_limit_memory()) << ")";
+    // Don't include inode and stray counters in the report for standby-replay
+    // MDSs. Since it is standby-replay, both will be zero, which might
+    // confuse users.
+    if (!mds->is_standby_replay()) {
+	*css << "; " << mds->mdcache->num_inodes_with_caps << " inodes in "
+	     << "use by clients, " << mds->mdcache->get_num_strays()
+	     << " stray files";
+    }
 
     MDSHealthMetric m(MDS_HEALTH_CACHE_OVERSIZED, HEALTH_WARN, css->strv());
     health.metrics.push_back(m);
