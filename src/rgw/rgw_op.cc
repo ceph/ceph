@@ -6397,10 +6397,59 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  op_ret = upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch, s->object.get());
+  RGWObjVersionTracker& objv_tracker = meta_obj->get_version_tracker();
+
+  using prefix_map_t = rgw::sal::MultipartUpload::prefix_map_t;
+  prefix_map_t processed_prefixes;
+
+  op_ret =
+    upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
+                     compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
+                     s->object.get(), processed_prefixes);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
+  }
+
+  remove_objs.clear();
+
+  // use cls_version_check() when deleting the meta object to detect part uploads that raced
+  // with upload->complete(). any parts that finish after that won't be part of the final
+  // upload, so they need to be gc'd and removed from the bucket index before retrying
+  // deletion of the multipart meta object
+  static constexpr auto MAX_DELETE_RETRIES = 15u;
+  for (auto i = 0u; i < MAX_DELETE_RETRIES; i++) {
+    // remove the upload meta object ; the meta object is not versioned
+    // when the bucket is, as that would add an unneeded delete marker
+    int ret = meta_obj->delete_object(this, y, rgw::sal::FLAG_PREVENT_VERSIONING, &remove_objs, &objv_tracker);
+    if (ret != -ECANCELED || i == MAX_DELETE_RETRIES - 1) {
+      if (ret >= 0) {
+        /* serializer's exclusive lock is released */
+        serializer->clear_locked();
+      } else {
+        ldpp_dout(this, 1) << "ERROR: failed to remove object " << meta_obj << ", ret: " << ret << dendl;
+      }
+      break;
+    }
+
+    ldpp_dout(this, 20) << "deleting meta_obj is cancelled due to mismatch cls_version: " << objv_tracker << dendl;
+    objv_tracker.clear();
+
+    ret = meta_obj->get_obj_attrs(s->yield, this);
+    if (ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to get obj attrs, obj=" << meta_obj
+			 << " ret=" << ret << dendl;
+
+      if (ret != -ENOENT) {
+	ldpp_dout(this, 0) << "ERROR: failed to remove object " << meta_obj << dendl;
+      }
+      break;
+    }
+
+    ret = upload->cleanup_orphaned_parts(this, s->cct, y, meta_obj->get_obj(), remove_objs, processed_prefixes);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "ERROR: failed to clenup orphaned parts. ret=" << ret << dendl;
+    }
   }
 
   const ceph::real_time upload_time = upload->get_mtime();
@@ -6412,17 +6461,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
-
-  // remove the upload meta object ; the meta object is not versioned
-  // when the bucket is, as that would add an unneeded delete marker
-  ret = meta_obj->delete_object(this, y, rgw::sal::FLAG_PREVENT_VERSIONING);
-  if (ret >= 0) {
-    /* serializer's exclusive lock is released */
-    serializer->clear_locked();
-  } else {
-    ldpp_dout(this, 4) << "WARNING: failed to remove object " << meta_obj << ", ret: " << ret << dendl;
-  }
-
 } // RGWCompleteMultipart::execute
 
 bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUpload* parts)
