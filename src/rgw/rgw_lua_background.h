@@ -153,9 +153,8 @@ private:
 
   void run();
 
-protected:
   std::string rgw_script;
-  virtual int read_script();
+  int read_script();
 
 public:
   Background(rgw::sal::Driver* _driver,
@@ -173,7 +172,7 @@ public:
     std::unique_lock cond_lock(table_mutex);
     rgw_map[key] = value;
   }
-   
+
   // update the manager after 
   void set_manager(rgw::sal::LuaManager* _lua_manager);
   void pause() override;
