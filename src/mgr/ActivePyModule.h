@@ -48,7 +48,6 @@ private:
 
   std::string m_command_perms;
   const MgrSession* m_session = nullptr;
-  std::string fin_thread_name;
 public:
   Finisher finisher; // per active module finisher to execute commands
 
@@ -56,8 +55,7 @@ public:
   ActivePyModule(const PyModuleRef &py_module_,
       LogChannelRef clog_)
     : PyModuleRunner(py_module_, clog_),
-      fin_thread_name(fmt::format("m-fin-{}", py_module->get_name()).substr(0,15)),
-      finisher(g_ceph_context, thread_name, fin_thread_name)
+      finisher(g_ceph_context, thread_name, fmt::format("m-fin-{}", py_module->get_name()).substr(0,15))
 
   {
   }
@@ -106,7 +104,7 @@ public:
 
   std::string_view get_fin_thread_name() const
   {
-    return fin_thread_name;
+    return finisher.get_thread_name();
   }
 
   bool is_authorized(const std::map<std::string, std::string>& arguments) const;

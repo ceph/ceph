@@ -113,6 +113,10 @@ class Finisher {
 
   bool is_empty();
 
+  std::string_view get_thread_name() const noexcept {
+    return thread_name;
+  }
+
   /// Construct an anonymous Finisher.
   /// Anonymous finishers do not log their queue length.
   explicit Finisher(CephContext *cct_);
