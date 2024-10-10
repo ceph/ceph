@@ -758,7 +758,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         try:
             if self.has_pending_clones(snapname):
-                pending_track_id_list = self.metadata_mgr.list_all_keys_with_specified_values_from_section('clone snaps', snapname)
+                pending_track_id_list = self.metadata_mgr.filter_keys('clone snaps', snapname)
             else:
                 return pending_clones_info
         except MetadataMgrException as me:
@@ -780,9 +780,9 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                     raise VolumeException(-e.args[0], e.args[1])
                 else:
                     try:
-                        # If clone is completed between 'list_all_keys_with_specified_values_from_section'
-                        # and readlink(track_id_path) call then readlink will fail with error ENOENT (2)
-                        # Hence we double check whether track_id is exist in .meta file or not.
+                        # If clone is completed between 'filter_keys' and readlink(track_id_path) call
+                        # then readlink will fail with error ENOENT (2). Hence we double check whether
+                        # track_id exists in .meta file or not.
                         # Edge case scenario.
                         # If track_id for clone exist but path /volumes/_index/clone/{track_id} not found
                         # then clone is orphan.
