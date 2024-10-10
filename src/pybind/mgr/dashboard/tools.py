@@ -9,9 +9,9 @@ import threading
 import time
 import urllib
 from datetime import datetime, timedelta
-from distutils.util import strtobool
 
 import cherrypy
+from ceph.utils import strtobool
 from mgr_util import build_url
 
 from . import mgr
