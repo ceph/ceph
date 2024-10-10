@@ -1,5 +1,6 @@
 #include "common/perf_counters_cache.h"
 #include "common/perf_counters_key.h"
+#include "include/utime.h"
 
 namespace ceph::perf_counters {
 

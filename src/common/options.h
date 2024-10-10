@@ -11,6 +11,8 @@
 #include "msg/msg_types.h"
 #include "include/uuid.h"
 
+#include <iostream> // for std::cerr
+
 struct Option {
   enum type_t {
     TYPE_UINT = 0,

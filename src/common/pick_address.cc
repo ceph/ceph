@@ -21,6 +21,7 @@
 #include <ws2ipdef.h>
 #else
 #include <arpa/inet.h> // inet_pton()
+#include <ifaddrs.h> // for struct ifaddrs
 #include <net/if.h> // IFF_UP
 #endif
 #include <string>
@@ -40,6 +41,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/numa.h"
+#include "common/safe_io.h"
 
 #ifndef HAVE_IN_ADDR_T
 typedef uint32_t in_addr_t;

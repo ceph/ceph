@@ -23,6 +23,7 @@
 #include "log/SubsystemMap.h"
 #include "msg/msg_fmt.h"
 
+#include <iostream> // for std::cerr
 
 namespace ceph::logging {
 

@@ -7,6 +7,8 @@
 #include "log/Entry.h"
 #include "log/SubsystemMap.h"
 
+#include <iostream> // for std::cerr
+
 using std::cerr;
 
 namespace ceph::logging {

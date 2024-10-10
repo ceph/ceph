@@ -12,6 +12,7 @@
  *
  */
 #include <poll.h>
+#include <signal.h>
 #include <sys/un.h>
 #include <optional>
 
@@ -40,6 +41,10 @@
 #include "include/compat.h"
 #include "include/sock_compat.h"
 #include "fmt/format.h"
+
+#ifndef WIN32
+#include <sys/wait.h>
+#endif
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix

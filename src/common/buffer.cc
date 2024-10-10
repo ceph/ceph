@@ -38,6 +38,8 @@
 #include "include/spinlock.h"
 #include "include/scope_guard.h"
 
+#include <iostream>
+
 using std::cerr;
 using std::make_pair;
 using std::pair;
