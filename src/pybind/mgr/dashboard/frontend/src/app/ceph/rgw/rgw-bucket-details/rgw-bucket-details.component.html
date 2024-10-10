@@ -158,8 +158,10 @@
                   </div>
                 </td>
                 <td>
-                  <pre *ngIf="lifecycleFormat === 'json'">{{selection.lifecycle | json}}</pre>
-                  <pre *ngIf="lifecycleFormat === 'xml'">{{ (selection.lifecycle | xml) || '-'}}</pre>
+                  <cds-code-snippet display="multi">
+                    <pre *ngIf="lifecycleFormat === 'json'">{{selection.lifecycle | json}}</pre>
+                    <pre *ngIf="lifecycleFormat === 'xml'">{{ (selection.lifecycle | xml:{'Rules':'Rule'}) || '-'}}</pre>
+                  </cds-code-snippet>
                 </td>
               </tr>
               <tr>
