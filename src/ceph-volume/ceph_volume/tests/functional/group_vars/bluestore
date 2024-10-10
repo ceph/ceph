@@ -1,10 +1,8 @@
 ---
 
 ceph_dev: True
-cluster: test
 public_network: "192.168.3.0/24"
 cluster_network: "192.168.4.0/24"
-monitor_interface: eth1
 osd_objectstore: "bluestore"
 osd_scenario: lvm
 num_osds: 2
