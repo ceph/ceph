@@ -497,8 +497,19 @@ void dump_epoch_header(req_state *s, const char *name, real_time t)
 void dump_time(req_state *s, const char *name, real_time t)
 {
   char buf[TIME_BUF_SIZE];
-  rgw_to_iso8601(t, buf, sizeof(buf));
+  struct tm tmp;
+  utime_t ut(t);
+  time_t secs = (time_t)ut.sec();
+  gmtime_r(&secs, &tmp);
+  strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp);
 
+  s->formatter->dump_string(name, buf);
+}
+
+void dump_time_iso8601(req_state *s, const char *name, real_time t)
+{
+  char buf[TIME_BUF_SIZE];
+  rgw_to_iso8601(t, buf, sizeof(buf));
   s->formatter->dump_string(name, buf);
 }
 
