@@ -56,7 +56,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
      "size of the buffer to be encoded")
     ("iterations,i", po::value<int>()->default_value(1),
      "number of encode/decode runs")
-    ("plugin,p", po::value<string>()->default_value("jerasure"),
+    ("plugin,p", po::value<string>()->default_value("isa"),
      "erasure code plugin name")
     ("workload,w", po::value<string>()->default_value("encode"),
      "run either encode or decode")
@@ -343,7 +343,7 @@ int main(int argc, char** argv) {
  * compile-command: "cd ../../../build ; make -j4 ceph_erasure_code_benchmark &&
  *   valgrind --tool=memcheck --leak-check=full \
  *      ./bin/ceph_erasure_code_benchmark \
- *      --plugin jerasure \
+ *      --plugin isa \
  *      --parameter directory=lib \
  *      --parameter technique=reed_sol_van \
  *      --parameter k=2 \

@@ -63,7 +63,7 @@ Set the CRUSH failure domain to osd (instead of host, which is the default)::
  $ ceph osd erasure-code-profile get myprofile
  k=2
  m=2
- plugin=jerasure
+ plugin=isa
  technique=reed_sol_van
  crush-failure-domain=osd
  $ ceph osd pool create ecpool erasure myprofile
@@ -75,7 +75,7 @@ Control the parameters of the erasure code plugin::
  $ ceph osd erasure-code-profile get myprofile
  k=3
  m=2
- plugin=jerasure
+ plugin=isa
  technique=reed_sol_van
  $ ceph osd pool create ecpool erasure myprofile
 
@@ -98,7 +98,7 @@ Display the default erasure code profile::
   $ ceph osd erasure-code-profile get default
   k=2
   m=2
-  plugin=jerasure
+  plugin=isa
   technique=reed_sol_van
 
 Create a profile to set the data to be distributed on six OSDs (k+m=6) and sustain the loss of three OSDs (m=3) without losing data::
@@ -107,7 +107,7 @@ Create a profile to set the data to be distributed on six OSDs (k+m=6) and susta
   $ ceph osd erasure-code-profile get myprofile
   k=3
   m=3
-  plugin=jerasure
+  plugin=isa
   technique=reed_sol_van
   $ ceph osd erasure-code-profile ls
   default
@@ -129,7 +129,7 @@ Set the rule to ssd (instead of default)::
  $ ceph osd erasure-code-profile get myprofile
  k=2
  m=2
- plugin=jerasure
+ plugin=isa
  technique=reed_sol_van
  crush-root=ssd
 
