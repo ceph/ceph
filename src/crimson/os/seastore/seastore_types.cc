@@ -54,7 +54,9 @@ std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id)
   } else if (_id == DEVICE_ID_ROOT) {
     return out << "Dev(ROOT)";
   } else {
-    return out << "Dev(" << (unsigned)_id << ")";
+    return out << "Dev(0x"
+               << std::hex << (unsigned)_id << std::dec
+               << ")";
   }
 }
 
@@ -64,7 +66,7 @@ std::ostream &operator<<(std::ostream &out, const segment_id_t &segment)
     return out << "Seg[NULL]";
   } else {
     return out << "Seg[" << device_id_printer_t{segment.device_id()}
-               << "," << segment.device_segment_id()
+               << ",0x" << std::hex << segment.device_segment_id() << std::dec
                << "]";
   }
 }
@@ -93,12 +95,12 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
 }
 
 std::ostream &operator<<(std::ostream &out, const laddr_t &laddr) {
-  return out << 'L' << std::hex << laddr.value << std::dec;
+  return out << "L0x" << std::hex << laddr.value << std::dec;
 }
 
 std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) {
   return out << laddr_offset.get_aligned_laddr()
-	     << "+" << std::hex << laddr_offset.get_offset() << std::dec;
+	     << "+0x" << std::hex << laddr_offset.get_offset() << std::dec;
 }
 
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
@@ -123,18 +125,18 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
   } else if (has_device_off(id)) {
     auto &s = rhs.as_res_paddr();
     out << device_id_printer_t{id}
-        << ","
-        << s.get_device_off();
+        << ",0x"
+        << std::hex << s.get_device_off() << std::dec;
   } else if (rhs.get_addr_type() == paddr_types_t::SEGMENT) {
     auto &s = rhs.as_seg_paddr();
     out << s.get_segment_id()
-        << ","
-        << s.get_segment_off();
+        << ",0x"
+        << std::hex << s.get_segment_off() << std::dec;
   } else if (rhs.get_addr_type() == paddr_types_t::RANDOM_BLOCK) {
     auto &s = rhs.as_blk_paddr();
     out << device_id_printer_t{s.get_device_id()}
-        << ","
-        << s.get_device_off();
+        << ",0x"
+        << std::hex << s.get_device_off() << std::dec;
   } else {
     out << "INVALID!";
   }

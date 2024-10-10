@@ -392,4 +392,6 @@ inline std::ostream &operator<<(std::ostream &lhs, const object_stat_sum_t &sum)
 
 #if FMT_VERSION >= 90000
 template <bool TrackChanges> struct fmt::formatter<pg_missing_set<TrackChanges>> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<pool_opts_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<store_statfs_t> : fmt::ostream_formatter {};
 #endif

@@ -48,7 +48,7 @@ TransactionManager::TransactionManager(
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
   LOG_PREFIX(TransactionManager::mkfs);
-  INFO("enter");
+  INFO("...");
   return epm->mount(
   ).safe_then([this] {
     return journal->open_for_mkfs();
@@ -94,14 +94,15 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   }).safe_then([this] {
     return close();
   }).safe_then([FNAME] {
-    INFO("completed");
+    INFO("done");
   });
 }
 
-TransactionManager::mount_ertr::future<> TransactionManager::mount()
+TransactionManager::mount_ertr::future<>
+TransactionManager::mount()
 {
   LOG_PREFIX(TransactionManager::mount);
-  INFO("enter");
+  INFO("...");
   cache->init();
   return epm->mount(
   ).safe_then([this] {
@@ -168,16 +169,17 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     return epm->open_for_write();
   }).safe_then([FNAME, this] {
     epm->start_background();
-    INFO("completed");
+    INFO("done");
   }).handle_error(
     mount_ertr::pass_further{},
     crimson::ct_error::assert_all{"unhandled error"}
   );
 }
 
-TransactionManager::close_ertr::future<> TransactionManager::close() {
+TransactionManager::close_ertr::future<>
+TransactionManager::close() {
   LOG_PREFIX(TransactionManager::close);
-  INFO("enter");
+  INFO("...");
   return epm->stop_background(
   ).then([this] {
     return cache->close();
@@ -187,7 +189,7 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
   }).safe_then([this] {
     return epm->close();
   }).safe_then([FNAME] {
-    INFO("completed");
+    INFO("done");
     return seastar::now();
   });
 }
@@ -229,28 +231,26 @@ TransactionManager::ref_ret TransactionManager::remove(
   LogicalCachedExtentRef &ref)
 {
   LOG_PREFIX(TransactionManager::remove);
-  TRACET("{}", t, *ref);
+  DEBUGT("{} ...", t, *ref);
   return lba_manager->decref_extent(t, ref->get_laddr()
   ).si_then([this, FNAME, &t, ref](auto result) {
-    DEBUGT("extent refcount is decremented to {} -- {}",
-           t, result.refcount, *ref);
     if (result.refcount == 0) {
       cache->retire_extent(t, ref);
     }
+    DEBUGT("removed {}~0x{:x} refcount={} -- {}",
+           t, result.addr, result.length, result.refcount, *ref);
     return result.refcount;
   });
 }
 
-TransactionManager::ref_ret TransactionManager::_dec_ref(
+TransactionManager::ref_ret TransactionManager::remove(
   Transaction &t,
   laddr_t offset)
 {
-  LOG_PREFIX(TransactionManager::_dec_ref);
-  TRACET("{}", t, offset);
+  LOG_PREFIX(TransactionManager::remove);
+  DEBUGT("{} ...", t, offset);
   return lba_manager->decref_extent(t, offset
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
-    DEBUGT("extent refcount is decremented to {} -- {}~{}, {}",
-           t, result.refcount, offset, result.length, result.addr);
     auto fut = ref_iertr::now();
     if (result.refcount == 0) {
       if (result.addr.is_paddr() &&
@@ -259,8 +259,9 @@ TransactionManager::ref_ret TransactionManager::_dec_ref(
           t, result.addr.get_paddr(), result.length);
       }
     }
-
-    return fut.si_then([result=std::move(result)] {
+    return fut.si_then([result=std::move(result), offset, &t, FNAME] {
+      DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
+             t, result.addr, result.length, result.refcount, offset);
       return result.refcount;
     });
   });
@@ -271,19 +272,21 @@ TransactionManager::refs_ret TransactionManager::remove(
   std::vector<laddr_t> offsets)
 {
   LOG_PREFIX(TransactionManager::remove);
-  DEBUG("{} offsets", offsets.size());
+  DEBUGT("{} offsets ...", t, offsets.size());
   return seastar::do_with(std::move(offsets), std::vector<unsigned>(),
-      [this, &t] (auto &&offsets, auto &refcnt) {
-      return trans_intr::do_for_each(offsets.begin(), offsets.end(),
-        [this, &t, &refcnt] (auto &laddr) {
-        return this->remove(t, laddr).si_then([&refcnt] (auto ref) {
-          refcnt.push_back(ref);
-          return ref_iertr::now();
-        });
-      }).si_then([&refcnt] {
-        return ref_iertr::make_ready_future<std::vector<unsigned>>(std::move(refcnt));
+    [this, &t, FNAME](auto &&offsets, auto &refcnts) {
+    return trans_intr::do_for_each(offsets.begin(), offsets.end(),
+      [this, &t, &refcnts](auto &laddr) {
+      return this->remove(t, laddr
+      ).si_then([&refcnts](auto ref) {
+        refcnts.push_back(ref);
+        return ref_iertr::now();
       });
+    }).si_then([&refcnts, &t, FNAME] {
+      DEBUGT("removed {} offsets", t, refcnts.size());
+      return ref_iertr::make_ready_future<std::vector<unsigned>>(std::move(refcnts));
     });
+  });
 }
 
 TransactionManager::submit_transaction_iertr::future<>
@@ -340,6 +343,7 @@ TransactionManager::update_lba_mappings(
         return;
       }
       if (extent->is_logical()) {
+        assert(is_logical_type(extent->get_type()));
         // for rewritten extents, last_committed_crc should have been set
         // because the crc of the original extent may be reused.
         // also see rewrite_logical_extent()
@@ -359,6 +363,7 @@ TransactionManager::update_lba_mappings(
 #endif
         lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
       } else {
+        assert(is_physical_type(extent->get_type()));
         pextents.emplace_back(extent);
       }
     };
@@ -515,7 +520,6 @@ TransactionManager::rewrite_logical_extent(
     ERRORT("extent has been invalidated -- {}", t, *extent);
     ceph_abort();
   }
-  TRACET("rewriting extent -- {}", t, *extent);
 
   auto lextent = extent->cast<LogicalCachedExtent>();
   cache->retire_extent(t, extent);
@@ -529,7 +533,7 @@ TransactionManager::rewrite_logical_extent(
       lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
     nlextent->rewrite(t, *lextent, 0);
 
-    DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
+    DEBUGT("rewriting meta -- {} to {}", t, *lextent, *nlextent);
 
 #ifndef NDEBUG
     if (get_checksum_needed(lextent->get_paddr())) {
@@ -566,16 +570,16 @@ TransactionManager::rewrite_logical_extent(
       0,
       lextent->get_length(),
       extent_ref_count_t(0),
-      [this, lextent, &t](auto &extents, auto &off, auto &left, auto &refcount) {
+      [this, FNAME, lextent, &t]
+      (auto &extents, auto &off, auto &left, auto &refcount) {
       return trans_intr::do_for_each(
         extents,
-        [lextent, this, &t, &off, &left, &refcount](auto &nextent) {
-        LOG_PREFIX(TransactionManager::rewrite_logical_extent);
+        [lextent, this, FNAME, &t, &off, &left, &refcount](auto &nextent) {
         bool first_extent = (off == 0);
         ceph_assert(left >= nextent->get_length());
         auto nlextent = nextent->template cast<LogicalCachedExtent>();
         nlextent->rewrite(t, *lextent, off);
-        DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
+        DEBUGT("rewriting data -- {} to {}", t, *lextent, *nlextent);
 
         /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
          * extents since we're going to do it again once we either do the ool write
@@ -629,10 +633,18 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   {
     auto updated = cache->update_extent_from_transaction(t, extent);
     if (!updated) {
-      DEBUGT("extent is already retired, skipping -- {}", t, *extent);
+      DEBUGT("target={} {} already retired, skipping -- {}", t,
+             rewrite_gen_printer_t{target_generation},
+             sea_time_point_printer_t{modify_time},
+             *extent);
       return rewrite_extent_iertr::now();
     }
+
     extent = updated;
+    DEBUGT("target={} {} -- {} ...", t,
+           rewrite_gen_printer_t{target_generation},
+           sea_time_point_printer_t{modify_time},
+           *extent);
     ceph_assert(!extent->is_pending_io());
   }
 
@@ -650,9 +662,9 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
       // FIXME: is_dirty() is true for mutation pending extents
       // which shouldn't do inplace rewrite because a pending transaction
       // may fail.
-      DEBUGT("delta overwriting extent -- {}", t, *extent);
       t.add_inplace_rewrite_extent(extent);
       extent->set_inplace_rewrite_generation();
+      DEBUGT("rewritten as inplace rewrite -- {}", t, *extent);
       return rewrite_extent_iertr::now();
     }
     extent->set_target_rewrite_generation(INIT_GENERATION);
@@ -665,23 +677,25 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     t.get_rewrite_stats().account_n_dirty();
   }
 
-  if (is_backref_node(extent->get_type())) {
-    DEBUGT("rewriting backref extent -- {}", t, *extent);
-    return backref_manager->rewrite_extent(t, extent);
-  }
-
   if (is_root_type(extent->get_type())) {
-    DEBUGT("rewriting root extent -- {}", t, *extent);
     cache->duplicate_for_write(t, extent);
+    DEBUGT("rewritten root {}", t, *extent);
     return rewrite_extent_iertr::now();
   }
 
+  auto fut = rewrite_extent_iertr::now();
   if (extent->is_logical()) {
-    return rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
+    assert(is_logical_type(extent->get_type()));
+    fut = rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
+  } else if (is_backref_node(extent->get_type())) {
+    fut = backref_manager->rewrite_extent(t, extent);
   } else {
-    DEBUGT("rewriting physical extent -- {}", t, *extent);
-    return lba_manager->rewrite_extent(t, extent);
+    assert(is_lba_node(extent->get_type()));
+    fut = lba_manager->rewrite_extent(t, extent);
   }
+  return fut.si_then([FNAME, &t] {
+    DEBUGT("rewritten", t);
+  });
 }
 
 TransactionManager::get_extents_if_live_ret
@@ -693,7 +707,7 @@ TransactionManager::get_extents_if_live(
   extent_len_t len)
 {
   LOG_PREFIX(TransactionManager::get_extents_if_live);
-  TRACET("{} {}~{} {}", t, type, laddr, len, paddr);
+  DEBUGT("{} {}~0x{:x} {} ...", t, type, laddr, len, paddr);
 
   // This only works with segments to check if alive,
   // as parallel transactions may split the extent at the same time.
@@ -703,7 +717,7 @@ TransactionManager::get_extents_if_live(
   ).si_then([=, this, &t](auto extent)
 	    -> get_extents_if_live_ret {
     if (extent && extent->get_length() == len) {
-      DEBUGT("{} {}~{} {} is live in cache -- {}",
+      DEBUGT("{} {}~0x{:x} {} is cached and alive -- {}",
              t, type, laddr, len, paddr, *extent);
       std::list<CachedExtentRef> res;
       res.emplace_back(std::move(extent));
@@ -757,7 +771,9 @@ TransactionManager::get_extents_if_live(
               list.emplace_back(std::move(ret));
               return seastar::now();
             });
-          }).si_then([&list] {
+          }).si_then([&list, &t, FNAME, type, laddr, len, paddr] {
+            DEBUGT("{} {}~0x{:x} {} is alive as {} extents",
+                   t, type, laddr, len, paddr, list.size());
             return get_extents_if_live_ret(
               interruptible::ready_future_marker{},
               std::move(list));
@@ -778,11 +794,11 @@ TransactionManager::get_extents_if_live(
       ).si_then([=, &t](auto ret) {
         std::list<CachedExtentRef> res;
         if (ret) {
-          DEBUGT("{} {}~{} {} is live as physical extent -- {}",
+          DEBUGT("{} {}~0x{:x} {} is absent and alive as physical extent -- {}",
                  t, type, laddr, len, paddr, *ret);
           res.emplace_back(std::move(ret));
         } else {
-          DEBUGT("{} {}~{} {} is not live as physical extent",
+          DEBUGT("{} {}~0x{:x} {} is not alive as physical extent",
                  t, type, laddr, len, paddr);
         }
         return get_extents_if_live_ret(

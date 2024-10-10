@@ -925,7 +925,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     std::ostringstream sos;
     sos << "Node" << NODE_TYPE << FIELD_TYPE
         << "@" << extent.get_laddr()
-        << "+" << std::hex << extent.get_length() << std::dec
+        << "+0x" << std::hex << extent.get_length() << std::dec
         << "Lv" << (unsigned)level()
         << (is_level_tail() ? "$" : "");
     name = sos.str();
