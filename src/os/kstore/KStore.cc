@@ -28,6 +28,7 @@
 #include "os/kv.h"
 #include "include/compat.h"
 #include "include/stringify.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Formatter.h"
