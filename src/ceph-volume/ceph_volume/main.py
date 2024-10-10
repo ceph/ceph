@@ -9,14 +9,24 @@ import logging
 # `entry_points` from `importlib.metadata` does not.
 try:
     from importlib.metadata import entry_points
+    from importlib.metadata import EntryPoints
 
     def get_entry_points(group: str):  # type: ignore
-        return entry_points().get(group, [])  # type: ignore
+        eps = entry_points()
+        if isinstance(eps, EntryPoints) and hasattr(eps, 'select'):
+            # New importlib.metadata uses .select()
+            return eps.select(group=group)
+        else:
+            # Fallback to older EntryPoints that returns dicts
+            return eps.get(group, [])  # type: ignore
+
 except ImportError:
+    # Fallback to `pkg_resources` for older versions
     from pkg_resources import iter_entry_points as entry_points  # type: ignore
 
     def get_entry_points(group: str):  # type: ignore
         return entry_points(group=group)  # type: ignore
+
 
 from ceph_volume.decorators import catches
 from ceph_volume import log, devices, configuration, conf, exceptions, terminal, inventory, drive_group, activate
