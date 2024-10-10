@@ -396,7 +396,6 @@ public:
                     bool ignore_public_acls=false) const;
   bool verify_permission(const DoutPrefixProvider* dpp,
                          const rgw::auth::Identity& auth_identity,
-                         uint32_t user_perm_mask,
                          uint32_t perm,
                          const char * http_referer = nullptr,
                          bool ignore_public_acls=false) const;
