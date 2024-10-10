@@ -1455,6 +1455,23 @@ out:
   }
 }
 
+bool MDSMonitor::has_health_warnings(vector<mds_metric_t> warnings)
+{
+  for (auto& [gid, health] : pending_daemon_health) {
+    for (auto& metric : health.metrics) {
+      // metric.type here is the type of health warning. We are only
+      // looking for types of health warnings passed to this func member
+      // through variable "warnings".
+      auto it = std::find(warnings.begin(), warnings.end(), metric.type);
+      if (it != warnings.end()) {
+	return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 int MDSMonitor::filesystem_command(
     FSMap &fsmap,
     MonOpRequestRef op,
@@ -1492,6 +1509,8 @@ int MDSMonitor::filesystem_command(
   } else if (prefix == "mds fail") {
     string who;
     cmd_getval(cmdmap, "role_or_gid", who);
+    bool confirm = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
 
     MDSMap::mds_info_t failed_info;
     mds_gid_t gid = gid_from_arg(fsmap, who, ss);
@@ -1508,6 +1527,12 @@ int MDSMonitor::filesystem_command(
     string_view fs_name = fsmap.fs_name_from_gid(gid);
     if (!op->get_session()->fs_name_capable(fs_name, MON_CAP_W)) {
       ss << "Permission denied.";
+      return -EPERM;
+    }
+
+    if (!confirm &&
+        has_health_warnings({MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED})) {
+      ss << errmsg_for_unhealthy_mds;
       return -EPERM;
     }
 
