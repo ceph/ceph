@@ -65,7 +65,7 @@ protected:
 
   void load_all_metadata();
   std::map<std::string, std::string> load_store();
-  void init();
+  void init(Context *init_complete);
 
   bool initialized;
   bool initializing;
