@@ -43,15 +43,17 @@ void ClientRequest::Orderer::clear_and_cancel(PG &pg)
 {
   LOG_PREFIX(ClientRequest::Orderer::clear_and_cancel);
   for (auto i = list.begin(); i != list.end(); ) {
-    DEBUGDPP("{}", pg, *i);
-    i->complete_request();
-    remove_request(*(i++));
+    auto &req = *i;
+    DEBUGDPP("{}", pg, req);
+    ++i;
+    req.complete_request(pg);
   }
 }
 
-void ClientRequest::complete_request()
+void ClientRequest::complete_request(PG &pg)
 {
   track_event<CompletionEvent>();
+  pg.client_request_orderer.remove_request(*this);
   on_complete.set_value();
 }
 
@@ -152,8 +154,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 	std::ref(get_foreign_connection()), m->get_map_epoch()
       ));
     DEBUGDPP("{}: discarding {}", *pgref, *this, this_instance_id);
-    pgref->client_request_orderer.remove_request(*this);
-    complete_request();
+    complete_request(pg);
     co_return;
   }
   DEBUGDPP("{}.{}: entering await_map stage",
@@ -242,8 +243,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{}.{}: process[_pg]_op complete,"
 	   "removing request from orderer",
 	   *pgref, *this, this_instance_id);
-  pgref->client_request_orderer.remove_request(*this);
-  complete_request();
+  complete_request(pg);
 }
 
 seastar::future<> ClientRequest::with_pg_process(
