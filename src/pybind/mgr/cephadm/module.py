@@ -491,6 +491,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'the host (in seconds)'
         ),
         Option(
+            'ssh_keepalive_interval',
+            type='int',
+            default=7,
+            desc='How often ssh connections are checked for liveness'
+        ),
+        Option(
+            'ssh_keepalive_count_max',
+            type='int',
+            default=3,
+            desc='How many times ssh connections can fail liveness checks '
+            'before the host is marked offline'
+        ),
+        Option(
             'oob_default_addr',
             type='str',
             default='169.254.1.1',
@@ -581,6 +594,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.log_refresh_metadata = False
             self.default_cephadm_command_timeout = 0
             self.oob_default_addr = ''
+            self.ssh_keepalive_interval = 0
+            self.ssh_keepalive_count_max = 0
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
