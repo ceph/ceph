@@ -103,8 +103,15 @@ def get_grafana_dashboards(base_dir):
                 title = dashboard_config['title']
                 assert len(title) > 0, \
                     "Title not found in '{}'".format(json_file)
-                assert len(dashboard_config.get('links', [])) == 0, \
-                    "Links found in '{}'".format(json_file)
+                if 'ceph-cluster.json' or 'multi-cluster-overview.json' in json_file:
+                    allowed_links = ["Browse Dashboards"]
+                    actual_links = [link['title'] for link in dashboard_config.get('links', [])]
+                    assert set(actual_links) == set(allowed_links), \
+                        f"Unexpected links found in '{json_file}'"
+                else:
+                    assert len(dashboard_config.get('links', [])) == 0, \
+                        "Links found in '{}'".format(json_file)
+
                 if not uid:
                     continue
                 if uid in dashboards:
