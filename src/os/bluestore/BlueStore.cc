@@ -5519,7 +5519,6 @@ BlueStore::OmapIteratorImpl::OmapIteratorImpl(
   if (o->onode.has_omap()) {
     o->get_omap_key(string(), &head);
     o->get_omap_tail(&tail);
-    it->lower_bound(head);
   }
 }
 BlueStore::OmapIteratorImpl::~OmapIteratorImpl()
