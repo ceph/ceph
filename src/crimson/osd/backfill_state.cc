@@ -225,7 +225,7 @@ bool BackfillState::Enqueuing::should_rescan_primary(
   const BackfillInterval& backfill_info) const
 {
   return backfill_info.begin <= earliest_peer_backfill(peer_backfill_info) &&
-	 !backfill_info.extends_to_end();
+	 !backfill_info.extends_to_end() && backfill_info.empty();
 }
 
 void BackfillState::Enqueuing::trim_backfilled_object_from_intervals(
@@ -327,15 +327,28 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
   }
   trim_backfill_infos();
 
-  while (!all_emptied(primary_bi, backfill_state().peer_backfill_info)) {
+  if (should_rescan_primary(backfill_state().peer_backfill_info,
+				   primary_bi)) {
+    // need to grab one another chunk of the object namespace and restart
+    // the queueing.
+    logger().debug("{}: reached end for current local chunk", __func__);
+    post_event(RequestPrimaryScanning{});
+    return;
+  }
+
+  do {
     if (!backfill_listener().budget_available()) {
       post_event(RequestWaiting{});
       return;
     } else if (should_rescan_replicas(backfill_state().peer_backfill_info,
-                                      primary_bi)) {
+				      primary_bi)) {
       // Count simultaneous scans as a single op and let those complete
       post_event(RequestReplicasScanning{});
       return;
+    }
+
+    if (all_emptied(primary_bi, backfill_state().peer_backfill_info)) {
+      break;
     }
     // Get object within set of peers to operate on and the set of targets
     // for which that object applies.
@@ -355,30 +368,23 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
       trim_backfilled_object_from_intervals(std::move(result),
 					    backfill_state().last_backfill_started,
 					    backfill_state().peer_backfill_info);
-      primary_bi.pop_front();
+      if (!primary_bi.empty()) {
+	primary_bi.pop_front();
+      }
     }
     backfill_listener().maybe_flush();
-  }
+  } while (!all_emptied(primary_bi, backfill_state().peer_backfill_info));
 
-  if (should_rescan_primary(backfill_state().peer_backfill_info,
-                            primary_bi)) {
-    // need to grab one another chunk of the object namespace and restart
-    // the queueing.
-    logger().debug("{}: reached end for current local chunk",
-                   __func__);
-    post_event(RequestPrimaryScanning{});
-  } else {
-    if (backfill_state().progress_tracker->tracked_objects_completed()
-	&& Enqueuing::all_enqueued(peering_state(),
-				   backfill_state().backfill_info,
-				   backfill_state().peer_backfill_info)) {
-      backfill_state().last_backfill_started = hobject_t::get_max();
-      backfill_listener().update_peers_last_backfill(hobject_t::get_max());
-    }
-    logger().debug("{}: reached end for both local and all peers "
-                   "but still has in-flight operations", __func__);
-    post_event(RequestWaiting{});
+  if (backfill_state().progress_tracker->tracked_objects_completed()
+      && Enqueuing::all_enqueued(peering_state(),
+				 backfill_state().backfill_info,
+				 backfill_state().peer_backfill_info)) {
+    backfill_state().last_backfill_started = hobject_t::get_max();
+    backfill_listener().update_peers_last_backfill(hobject_t::get_max());
   }
+  logger().debug("{}: reached end for both local and all peers "
+		 "but still has in-flight operations", __func__);
+  post_event(RequestWaiting{});
 }
 
 // -- PrimaryScanning
