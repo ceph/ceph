@@ -58,6 +58,10 @@ public:
     friend class LogMissingRequestReply;
   };
 
+  epoch_t get_map_epoch() const {
+    return m->get_map_epoch();
+  }
+
   /**
    * instance_handle_t
    *
