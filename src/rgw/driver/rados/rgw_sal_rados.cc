@@ -2299,7 +2299,13 @@ int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, o
   state.obj = target;
   set_atomic();
   state.attrset[attr_name] = attr_val;
-  r = set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
+
+  if (r = should_log_op(store, bucket->get_key(), target.key.name, state.attrset, dpp, y); r < 0) {
+    return r;
+  }
+  const bool log_op = r;
+
+  r = set_obj_attrs(dpp, &state.attrset, nullptr, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   /* Restore target */
   state.obj = save;
 
@@ -2313,7 +2319,18 @@ int RadosObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* att
 
   set_atomic();
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
+
+  int r = get_obj_attrs(y, dpp);
+  if (r < 0) {
+    return r;
+  }
+
+  if (r = should_log_op(store, bucket->get_key(), get_name(), get_attrs(), dpp, y); r < 0) {
+    return r;
+  }
+  const bool log_op = r;
+
+  return set_obj_attrs(dpp, nullptr, &rmattr, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
 bool RadosObject::is_expired() {
@@ -2466,7 +2483,13 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
   set_atomic();
   map<string, bufferlist> attrs;
   attrs[RGW_ATTR_ACL] = bl;
-  r = set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+
+  if (r = should_log_op(store, bucket->get_key(), get_name(), get_attrs(), dpp, y); r < 0) {
+    return r;
+  }
+  const bool log_op = r;
+
+  r = set_obj_attrs(dpp, &attrs, nullptr, y, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: modify attr failed " << cpp_strerror(-r) << dendl;
     return r;
@@ -2777,7 +2800,12 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
   if (is_expired()) {
     ldpp_dout(dpp, 10) << "Deleting expired obj:" << get_key() << dendl;
 
-    ret = obj->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
+    if (ret = should_log_op(store, bucket->get_key(), obj->get_name(), attrs, dpp, y); ret < 0) {
+      return ret;
+    }
+    const bool log_op = ret;
+
+    ret = obj->delete_object(dpp, null_yield, log_op ? rgw::sal::FLAG_LOG_OP : 0, nullptr, nullptr);
   }
 
   return ret;

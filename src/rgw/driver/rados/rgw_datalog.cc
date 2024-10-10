@@ -15,6 +15,8 @@
 #include "cls/fifo/cls_fifo_types.h"
 #include "cls/log/cls_log_client.h"
 
+#include "rgw_sal_rados.h"
+#include "rgw_bucket_sync.h"
 #include "cls_fifo_legacy.h"
 #include "rgw_bucket_layout.h"
 #include "rgw_datalog.h"
@@ -417,8 +419,9 @@ public:
   }
 };
 
-RGWDataChangesLog::RGWDataChangesLog(CephContext* cct)
+RGWDataChangesLog::RGWDataChangesLog(CephContext* cct, rgw::sal::RadosStore* driver)
   : cct(cct),
+    driver(driver),
     num_shards(cct->_conf->rgw_data_log_num_shards),
     prefix(get_prefix()),
     changes(cct->_conf->rgw_data_log_changes_size) {}
@@ -536,8 +539,9 @@ int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
 
 int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
 {
-  if (!zone->log_data)
+  if (!may_log_data(null_yield, dpp)) {
     return 0;
+  }
 
   /* we can't keep the bucket name as part of the cls_log_entry, and we need
    * it later, so we keep two lists under the map */
@@ -631,17 +635,6 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
   return choose_oid(bs);
 }
 
-bool RGWDataChangesLog::filter_bucket(const DoutPrefixProvider *dpp, 
-                                      const rgw_bucket& bucket,
-				      optional_yield y) const
-{
-  if (!bucket_filter) {
-    return true;
-  }
-
-  return bucket_filter(bucket, y, dpp);
-}
-
 std::string RGWDataChangesLog::get_oid(uint64_t gen_id, int i) const {
   return (gen_id > 0 ?
 	  fmt::format("{}@G{}.{}", prefix, gen_id, i) :
@@ -653,15 +646,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
 				 const rgw::bucket_log_layout_generation& gen,
 				 int shard_id, optional_yield y)
 {
-  if (!zone->log_data) {
-    return 0;
-  }
-
   auto& bucket = bucket_info.bucket;
-
-  if (!filter_bucket(dpp, bucket, y)) {
-    return 0;
-  }
 
   if (observer) {
     observer->on_bucket_changed(bucket.get_key());
@@ -1105,4 +1090,38 @@ void RGWDataChangesLogInfo::decode_json(JSONObj *obj)
   last_update = ut.to_real_time();
 }
 
+int RGWDataChangesLog::bucket_exports_data(const rgw_bucket& bucket,
+                                           optional_yield y,
+                                           const DoutPrefixProvider *dpp) const
+{
+  RGWBucketSyncPolicyHandlerRef handler;
 
+  int r = driver->get_sync_policy_handler(dpp, std::nullopt, bucket, &handler, y);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get sync policy handler for bucket=" << bucket << " ret=" << r << dendl;
+    return r;
+  }
+
+  return handler->bucket_exports_data();
+}
+
+int RGWDataChangesLog::may_log_data(optional_yield y,
+                                    const DoutPrefixProvider *dpp) const
+{
+  RGWBucketSyncPolicyHandlerRef handler;
+
+  int r = driver->get_sync_policy_handler(dpp, rgw_zone_id(zone->id), std::nullopt, &handler, y);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get sync policy handler for my zone=" << zone->id << " ret=" << r << dendl;
+    return r;
+  }
+
+  std::set<rgw_zone_id> target_zones;
+  handler->reflect(dpp, nullptr, nullptr,
+                   nullptr, nullptr,
+                   nullptr,
+                   &target_zones,
+                   false); /* relaxed: get all zones that we allow to sync to/from */
+
+  return !target_zones.empty();
+}

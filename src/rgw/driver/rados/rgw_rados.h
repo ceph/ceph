@@ -1620,6 +1620,8 @@ public:
 		  optional_yield y, bool check_size_only = false);
 
   void calculate_preferred_shards(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  const RGWBucketInfo& bucket_info,
 				  const uint64_t num_objs,
 				  const uint32_t current_shard_count,
 				  bool& need_resharding,

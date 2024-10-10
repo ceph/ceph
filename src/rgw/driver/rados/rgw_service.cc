@@ -61,7 +61,7 @@ int RGWServices_Def::init(CephContext *cct,
   bilog_rados = std::make_unique<RGWSI_BILog_RADOS>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
-  datalog_rados = std::make_unique<RGWDataChangesLog>(cct);
+  datalog_rados = std::make_unique<RGWDataChangesLog>(cct, driver);
   mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync);
   notify = std::make_unique<RGWSI_Notify>(cct);
   zone = std::make_unique<RGWSI_Zone>(cct);
@@ -131,14 +131,6 @@ int RGWServices_Def::init(CephContext *cct,
     r = zone->start(y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start zone service (" << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
-    r = datalog_rados->start(dpp, &zone->get_zone(),
-			     zone->get_zone_params(),
-			     driver->getRados()->get_rados_handle());
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
       return r;
     }
 
@@ -215,6 +207,14 @@ int RGWServices_Def::init(CephContext *cct,
     r = user_rados->start(y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start user_rados service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    r = datalog_rados->start(dpp, &zone->get_zone(),
+			     zone->get_zone_params(),
+			     driver->getRados()->get_rados_handle());
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
       return r;
     }
   }
@@ -367,7 +367,7 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
       svc.zone->get_zone_params(), *meta.topic_cache);
 
   user->init(bucket.get());
-  bucket->init(user.get(), svc.datalog_rados, dpp);
+  bucket->init(user.get());
 
   return 0;
 }

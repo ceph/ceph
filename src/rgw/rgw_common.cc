@@ -3204,3 +3204,43 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
 }
 
+int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                  const std::string& object_name, const RGWObjTags& tagset,
+                  const DoutPrefixProvider *dpp, optional_yield y)
+{
+  RGWBucketSyncPolicyHandlerRef policy_handler;
+  int ret = driver->get_sync_policy_handler(dpp, std::nullopt, bucket, &policy_handler, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed to read sync policy for bucket=" << bucket << " ret=" << ret << dendl;
+    return ret;
+  }
+
+  return policy_handler && policy_handler->bucket_exports_object(object_name, tagset);
+}
+
+int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                  const std::string& object_name, const rgw::sal::Attrs& obj_attrs,
+                  const DoutPrefixProvider *dpp, optional_yield y)
+{
+  RGWBucketSyncPolicyHandlerRef policy_handler;
+  int ret = driver->get_sync_policy_handler(dpp, std::nullopt, bucket, &policy_handler, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed to read sync policy for bucket=" << bucket << " ret=" << ret << dendl;
+    return ret;
+  } else if (!policy_handler) { // no policy, no logging
+    return false;
+  }
+
+  RGWObjTags obj_tags;
+  const auto& tags = obj_attrs.find(RGW_ATTR_TAGS);
+  if (tags != obj_attrs.end()) {
+    try {
+      bufferlist::const_iterator iter{&tags->second};
+      obj_tags.decode(iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+    }
+  }
+
+  return policy_handler->bucket_exports_object(object_name, obj_tags);
+}

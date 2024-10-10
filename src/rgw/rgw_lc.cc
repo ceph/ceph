@@ -632,7 +632,12 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   del_op->params.bucket_owner = bucket_info.owner;
   del_op->params.unmod_since = meta.mtime;
 
-  uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
+  if (ret = should_log_op(driver, oc.bucket->get_key(), obj->get_name(), obj->get_attrs(), dpp, null_yield); ret < 0) {
+    return ret;
+  }
+  const bool log_op = ret;
+
+  uint32_t flags = (log_op && (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone())))
                    ? rgw::sal::FLAG_LOG_OP : 0;
   ret =  del_op->delete_obj(dpp, null_yield, flags);
   if (ret < 0) {
@@ -1481,7 +1486,12 @@ public:
         return -EINVAL;
       }
 
-      uint32_t flags = !zonegroup_lc_check(oc.dpp, oc.driver->get_zone())
+      if (r = should_log_op(oc.driver, oc.bucket->get_key(), oc.obj->get_name(), oc.obj->get_attrs(), oc.dpp, null_yield); r < 0) {
+        return r;
+      }
+      const bool log_op = r;
+
+      uint32_t flags = (log_op && !zonegroup_lc_check(oc.dpp, oc.driver->get_zone()))
                        ? rgw::sal::FLAG_LOG_OP : 0;
       int r = oc.obj->transition(oc.bucket, target_placement, o.meta.mtime,
                                  o.versioned_epoch, oc.dpp, null_yield, flags);

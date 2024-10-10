@@ -21,6 +21,7 @@
 
 #include "rgw_common.h"
 #include "common/fault_injector.h"
+#include "rgw_datalog.h"
 
 
 class RGWReshard;
@@ -186,8 +187,10 @@ public:
   // until the old logs get trimmed
   static constexpr size_t max_bilog_history = 4;
 
-  static bool should_zone_reshard_now(const RGWBucketInfo& bucket,
-				      const RGWSI_Zone* zone_svc);
+  static bool should_zone_reshard_now(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      const RGWBucketInfo& bucket,
+                                      const RGWDataChangesLog* datalog_rados);
 }; // RGWBucketReshard
 
 

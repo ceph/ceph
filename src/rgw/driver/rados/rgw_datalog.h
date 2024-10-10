@@ -239,6 +239,7 @@ class RGWDataChangesLog {
   rgw::BucketChangeObserver *observer = nullptr;
   const RGWZone* zone;
   std::unique_ptr<DataLogBackends> bes;
+  rgw::sal::RadosStore* driver;
 
   const int num_shards;
   std::string get_prefix() { return "data_log"; }
@@ -282,14 +283,17 @@ class RGWDataChangesLog {
   void renew_stop();
   std::thread renew_thread;
 
-  std::function<bool(const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp)> bucket_filter;
   bool going_down() const;
-  bool filter_bucket(const DoutPrefixProvider *dpp, const rgw_bucket& bucket, optional_yield y) const;
+  int bucket_exports_data(const rgw_bucket& bucket,
+                          optional_yield y,
+                          const DoutPrefixProvider *dpp) const;
+  int may_log_data(optional_yield y,
+                   const DoutPrefixProvider *dpp) const;
   int renew_entries(const DoutPrefixProvider *dpp);
 
 public:
 
-  RGWDataChangesLog(CephContext* cct);
+  RGWDataChangesLog(CephContext* cct, rgw::sal::RadosStore* driver);
   ~RGWDataChangesLog();
 
   int start(const DoutPrefixProvider *dpp, const RGWZone* _zone, const RGWZoneParams& zoneparams,
@@ -330,8 +334,14 @@ public:
     this->observer = observer;
   }
 
-  void set_bucket_filter(decltype(bucket_filter)&& f) {
-    bucket_filter = std::move(f);
+  bool may_log_bucket(const DoutPrefixProvider* dpp,
+                      const RGWBucketInfo& bucket_info,
+                      optional_yield y) const {
+    if (bucket_info.layout.logs.empty()) {
+      return false;
+    }
+
+    return bucket_exports_data(bucket_info.bucket, y, dpp);
   }
   // a marker that compares greater than any other
   std::string max_marker() const;

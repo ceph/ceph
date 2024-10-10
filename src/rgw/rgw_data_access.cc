@@ -208,6 +208,15 @@ int RGWDataAccess::Object::put(bufferlist& data,
     puser_data = &(*user_data);
   }
 
+  if (ret = obj->get_obj_attrs(y, dpp); ret < 0) {
+    return ret;
+  }
+
+  if (ret = should_log_op(driver, b->get_key(), obj->get_name(), obj->get_attrs(), dpp, y); ret < 0) {
+    return ret;
+  }
+  const bool log_op = ret;
+
   const req_context rctx{dpp, y, nullptr};
   return processor->complete(obj_size, etag,
 			     &mtime, mtime, attrs,
@@ -216,7 +225,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 			     nullptr, nullptr,
 			     puser_data,
 			     nullptr, nullptr,
-			     rctx, rgw::sal::FLAG_LOG_OP);
+			     rctx, log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
 void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)
