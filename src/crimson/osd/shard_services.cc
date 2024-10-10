@@ -642,6 +642,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	      return seastar::make_ready_future<
 		std::tuple<Ref<PG>, OSDMapService::cached_map_t>
 		>(std::make_tuple(Ref<PG>(), startmap));
+        g_conf().set_val("mon_warn_on_pool_pg_creation_blocked", "true");
 	    }
 	    ceph_assert(get_map()->require_osd_release >=
 			ceph_release_t::octopus);
