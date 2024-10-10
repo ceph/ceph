@@ -23,6 +23,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPeeringOp.h"
 #include "messages/MOSDPGCreate2.h"
+#include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MOSDRepOpReply.h"
@@ -863,6 +864,8 @@ OSD::do_ms_dispatch(
     [[fallthrough]];
   case MSG_OSD_PG_LOG:
     return handle_peering_op(conn, boost::static_pointer_cast<MOSDPeeringOp>(m));
+  case MSG_OSD_PG_REMOVE:
+    return handle_pg_remove(conn, boost::static_pointer_cast<MOSDPGRemove>(m));
   case MSG_OSD_REPOP:
     return handle_rep_op(conn, boost::static_pointer_cast<MOSDRepOp>(m));
   case MSG_OSD_REPOPREPLY:
@@ -1553,6 +1556,27 @@ seastar::future<> OSD::handle_peering_op(
     pg_shard_t{from, m->get_spg().shard},
     m->get_spg(),
     std::move(*evt)).second;
+}
+
+seastar::future<> OSD::handle_pg_remove(
+  crimson::net::ConnectionRef conn,
+  Ref<MOSDPGRemove> m)
+{
+  LOG_PREFIX(OSD::handle_pg_remove);
+  const int from = m->get_source().num();
+  std::vector<seastar::future<>> futs;
+  for (auto &pg : m->pg_list) {
+    DEBUG("{} from {}", pg, from);
+    futs.emplace_back(
+      pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
+	conn,
+	pg_shard_t{from, pg.shard},
+	pg,
+	m->get_epoch(),
+	m->get_epoch(),
+	PeeringState::DeleteStart()).second);
+  }
+  return seastar::when_all_succeed(std::move(futs));
 }
 
 seastar::future<> OSD::check_osdmap_features()
