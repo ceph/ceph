@@ -20,13 +20,17 @@
 #include <string_view>
 #include <system_error>
 #include <thread>
+#include <cstring>
 
 #include <pthread.h>
 #include <sys/types.h>
 
+#include "include/ceph_assert.h"
 #include "include/compat.h"
+#include "include/spinlock.h"
 
 extern pid_t ceph_gettid();
+extern thread_local unsigned int global_thread_id;
 
 class Thread {
  private:
@@ -34,6 +38,10 @@ class Thread {
   pid_t pid;
   int cpuid;
   std::string thread_name;
+  using ThreadID_Name_Map = std::unordered_map<uint32_t, std::array<char, 16>>;
+  static inline ThreadID_Name_Map threadid_name;
+  static inline ceph::spinlock threadid_name_spinlock;
+  static inline std::atomic_uint global_thread_count;
 
   void *entry_wrapper();
 
@@ -43,6 +51,37 @@ class Thread {
 
   Thread();
   virtual ~Thread();
+
+  // !!!IMPORTANT!!!
+  // this infra is to help Log::dump_recent() print the correct thread
+  // names just before exit which otherwise causes pthread_getname_np()
+  // to SEGFAULT due to a bad/non-existant pthread_t id, probably
+  // because the thread ceases to exist by the time pthread_getname_np()
+  // is called
+  // thread names are never cleaned up from the map
+  static void save_thread_name(unsigned int global_id, std::string& name) {
+    Thread::threadid_name_spinlock.lock();
+
+    ceph_assert(Thread::threadid_name.find(global_id) == Thread::threadid_name.end());
+    
+    global_thread_id = global_id;
+    strncpy(Thread::threadid_name[global_id].data(), name.data(), 16);
+    Thread::threadid_name[global_id][15] = '\0';
+
+    Thread::threadid_name_spinlock.unlock();
+  }
+  static std::string fetch_thread_name(unsigned int global_id) {
+    Thread::threadid_name_spinlock.lock();
+
+    auto it = Thread::threadid_name.find(global_id);
+    if (it == Thread::threadid_name.end()) {
+      Thread::threadid_name_spinlock.unlock();
+      return std::string("unnamed");
+    }
+    std::string name = static_cast<char*>(it->second.data());
+    Thread::threadid_name_spinlock.unlock();
+    return name;
+  }
 
  protected:
   virtual void *entry() = 0;

@@ -18,6 +18,8 @@
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
 #endif
 
+#include <unordered_map>
+
 #ifdef WITH_SEASTAR
 #include "crimson/os/alienstore/alien_store.h"
 #endif
@@ -31,6 +33,8 @@
 #include <sched.h>
 #endif
 
+// Thread Local Storage
+thread_local unsigned int global_thread_id = 0;
 
 pid_t ceph_gettid(void)
 {
@@ -84,6 +88,7 @@ void *Thread::entry_wrapper()
     _set_affinity(cpuid);
 
   ceph_pthread_setname(pthread_self(), thread_name.c_str());
+  Thread::save_thread_name(++global_thread_count, thread_name);
   return entry();
 }
 
