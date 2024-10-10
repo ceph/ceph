@@ -1,0 +1,7 @@
+teuthology:
+  postmerge:
+    - if not is_fuse() then reject() end
+- cephfs_test_runner:
+    fail_on_skip: false
+    modules:
+      - tasks.cephfs.test_misc.TestForwardAuth
