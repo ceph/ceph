@@ -33,7 +33,7 @@ struct onode_item_t {
     auto &ftvalue = static_cast<FLTreeOnode&>(value);
     ftvalue.update_onode_size(t, size);
     auto oroot = omap_root_t(laddr_t::from_raw_uint(id), cnt_modify,
-      value.get_metadata_hint(block_size));
+      value.get_metadata_hint(block_size), omap_type_t::OMAP_SMALL_LEAF);
     ftvalue.update_omap_root(t, oroot);
     validate(value);
   }
@@ -41,8 +41,8 @@ struct onode_item_t {
   void validate(Onode& value) const {
     auto& layout = value.get_layout();
     ceph_assert(uint64_t(layout.size) == uint64_t{size});
-    ceph_assert(layout.omap_root.get(value.get_metadata_hint(block_size)).addr == laddr_t::from_raw_uint(id));
-    ceph_assert(layout.omap_root.get(value.get_metadata_hint(block_size)).depth == cnt_modify);
+    ceph_assert(layout.get_omap_root(omap_type_t::OMAP_SMALL_LEAF).get(value.get_metadata_hint(block_size)).addr == laddr_t::from_raw_uint(id));
+    ceph_assert(layout.get_omap_root(omap_type_t::OMAP_SMALL_LEAF).get(value.get_metadata_hint(block_size)).depth == cnt_modify);
   }
 
   void modify(Transaction& t, Onode& value) {

@@ -31,13 +31,27 @@ struct onode_layout_t {
   ceph_le32 size{0};
   ceph_le32 oi_size{0};
   ceph_le32 ss_size{0};
-  omap_root_le_t omap_root;
+  omap_root_le_t omap_root_large_leaf;
+  omap_root_le_t omap_root_small_leaf;
   omap_root_le_t xattr_root;
 
   object_data_le_t object_data;
 
-  char oi[MAX_OI_LENGTH];
-  char ss[MAX_SS_LENGTH];
+  char oi[MAX_OI_LENGTH] = {0};
+  char ss[MAX_SS_LENGTH] = {0};
+
+  const omap_root_le_t& get_omap_root(omap_type_t type) const {
+    if (type == omap_type_t::OMAP_SMALL_LEAF) {
+      return omap_root_small_leaf;
+    } 
+    ceph_assert(type == omap_type_t::OMAP_LARGE_LEAF);
+    return omap_root_large_leaf;
+  }
+
+  onode_layout_t() {
+    omap_root_large_leaf.set_type(omap_type_t::OMAP_LARGE_LEAF);
+    omap_root_small_leaf.set_type(omap_type_t::OMAP_SMALL_LEAF);
+  }
 } __attribute__((packed));
 
 class Transaction;

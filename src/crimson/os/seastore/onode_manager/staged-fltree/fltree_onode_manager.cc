@@ -24,9 +24,15 @@ void FLTreeOnode::Recorder::apply_value_delta(
       DEBUG("update onode size");
       bliter.copy(sizeof(mlayout.size), (char *)&mlayout.size);
       break;
-    case delta_op_t::UPDATE_OMAP_ROOT:
-      DEBUG("update omap root");
-      bliter.copy(sizeof(mlayout.omap_root), (char *)&mlayout.omap_root);
+    case delta_op_t::UPDATE_OMAP_ROOT_LARGE_LEAF:
+      DEBUG("update omap root large leaf");
+      bliter.copy(sizeof(mlayout.omap_root_large_leaf),
+	(char *)&mlayout.omap_root_large_leaf);
+      break;
+    case delta_op_t::UPDATE_OMAP_ROOT_SMALL_LEAF:
+      DEBUG("update omap root small leaf");
+      bliter.copy(sizeof(mlayout.omap_root_small_leaf),
+	(char *)&mlayout.omap_root_small_leaf);
       break;
     case delta_op_t::UPDATE_XATTR_ROOT:
       DEBUG("update xattr root");
@@ -82,11 +88,17 @@ void FLTreeOnode::Recorder::encode_update(
       (const char *)&layout.size,
       sizeof(layout.size));
     break;
-  case delta_op_t::UPDATE_OMAP_ROOT:
-    DEBUG("update omap root");
+  case delta_op_t::UPDATE_OMAP_ROOT_LARGE_LEAF:
+    DEBUG("update omap root large leaf");
     encoded.append(
-      (const char *)&layout.omap_root,
-      sizeof(layout.omap_root));
+      (const char *)&layout.omap_root_large_leaf,
+      sizeof(layout.omap_root_large_leaf));
+    break;
+  case delta_op_t::UPDATE_OMAP_ROOT_SMALL_LEAF:
+    DEBUG("update omap root small leaf");
+    encoded.append(
+      (const char *)&layout.omap_root_small_leaf,
+      sizeof(layout.omap_root_small_leaf));
     break;
   case delta_op_t::UPDATE_XATTR_ROOT:
     DEBUG("update xattr root");
