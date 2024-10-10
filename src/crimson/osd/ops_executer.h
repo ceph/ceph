@@ -170,13 +170,9 @@ public:
 
   object_stat_sum_t delta_stats;
 private:
-  // an operation can be divided into two stages: main and effect-exposing
-  // one. The former is performed immediately on call to `do_osd_op()` while
-  // the later on `submit_changes()` – after successfully processing main
-  // stages of all involved operations. When any stage fails, none of all
-  // scheduled effect-exposing stages will be executed.
-  // when operation requires this division, some variant of `with_effect()`
-  // should be used.
+  // with_effect can be used to schedule operations to be performed
+  // at commit time.  effects will be discarded if the operation does
+  // not commit.
   struct effect_t {
     // an effect can affect PG, i.e. create a watch timeout
     virtual seastar::future<> execute(Ref<PG> pg) = 0;
