@@ -132,6 +132,7 @@ public:
   int get_pool_stats(std::list<std::string>& ls, std::map<std::string,::pool_stat_t> *result,
     bool *per_pool);
   int get_fs_stats(ceph_statfs& result);
+  int get_pool_fs_stats(int64_t pool_id, ceph_statfs& result);
   int pool_is_in_selfmanaged_snaps_mode(const std::string& pool);
 
   /*

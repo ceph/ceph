@@ -289,6 +289,8 @@ typedef void *rados_omap_iter_t;
 struct rados_pool_stat_t {
   /// space used in bytes
   uint64_t num_bytes;
+  /// space available in bytes
+  uint64_t num_bytes_available;
   /// space used in KB
   uint64_t num_kb;
   /// number of objects in the pool
