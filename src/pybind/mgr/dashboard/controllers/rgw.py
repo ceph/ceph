@@ -176,6 +176,10 @@ class RgwMultisiteController(RESTController):
         if all_policy:
             sync_policy_list = []
             buckets = json.loads(RgwBucket().list(stats=False))
+            default_zonegroup = ''
+            for zonegroup in RgwMultisite().get_all_zonegroups_info()['zonegroups']:
+                if zonegroup['id'] == RgwMultisite().get_all_zonegroups_info()['default_zonegroup']:
+                    default_zonegroup = zonegroup['name']
             for bucket in buckets:
                 sync_policy = multisite_instance.get_sync_policy(bucket, zonegroup_name)
                 for policy in sync_policy['groups']:
@@ -183,6 +187,7 @@ class RgwMultisiteController(RESTController):
                     sync_policy_list.append(policy)
             other_sync_policy = multisite_instance.get_sync_policy(bucket_name, zonegroup_name)
             for policy in other_sync_policy['groups']:
+                policy['zonegroup'] = default_zonegroup
                 sync_policy_list.append(policy)
             return sync_policy_list
         return multisite_instance.get_sync_policy(bucket_name, zonegroup_name)
