@@ -231,6 +231,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   confirmation flag when some MDSs exhibit health warning MDS_TRIM or
   MDS_CACHE_OVERSIZED. This is to prevent accidental MDS failover causing
   further delays in recovery.
+* NFS: The export create/apply of CephFS based exports will now have a additional parameter `cmount_path` under FSAL block,
+* NFS: The export create/apply of CephFS based exports will now have a additional parameter `cmount_path` under the FSAL block,
+  which specifies the path within the CephFS to mount this export on. If this and the other
+  `EXPORT { FSAL {} }` options are the same between multiple exports, those exports will share a single CephFS client. If not specified, the default is `/`.
 
 >=18.0.0
 
