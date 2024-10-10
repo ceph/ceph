@@ -33,6 +33,8 @@ import {
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
 import { OsdListComponent } from './osd-list.component';
 import { ResizeObserver as ResizeObserverPolyfill } from '@juggle/resize-observer';
+import { PaginateObservable } from '~/app/shared/api/paginate.model';
+import { Osd } from '~/app/shared/models/osd.model';
 
 describe('OsdListComponent', () => {
   let component: OsdListComponent;
@@ -141,11 +143,13 @@ describe('OsdListComponent', () => {
   });
 
   describe('getOsdList', () => {
-    let osds: any[];
+    let osds: Osd[];
     let flagsSpy: jasmine.Spy;
 
     const createOsd = (n: number) =>
       <Record<string, any>>{
+        id: n,
+        host: 'test_host',
         in: 'in',
         up: 'up',
         tree: {
@@ -172,7 +176,7 @@ describe('OsdListComponent', () => {
       expect(component.osds.every((osd) => Boolean(_.get(osd, attr)))).toBeTruthy();
 
     beforeEach(() => {
-      spyOn(osdService, 'getList').and.callFake(() => of(osds));
+      spyOn(osdService, 'getList').and.callFake(() => new PaginateObservable<Osd[]>(of(osds)));
       flagsSpy = spyOn(osdService, 'getFlags').and.callFake(() => of([]));
       osds = [createOsd(1), createOsd(2), createOsd(3)];
       component.getOsdList();
@@ -556,8 +560,9 @@ describe('OsdListComponent', () => {
 
     beforeEach(() => {
       component.permissions = fakeAuthStorageService.getPermissions();
-      spyOn(osdService, 'getList').and.callFake(() => of(fakeOsds));
+      spyOn(osdService, 'getList').and.callFake(() => new PaginateObservable<Osd[]>(of(fakeOsds)));
       spyOn(osdService, 'getFlags').and.callFake(() => of([]));
+      component.getOsdList();
     });
 
     const testTableActions = async (
