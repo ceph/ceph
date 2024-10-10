@@ -770,9 +770,9 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
   std::map<std::string, std::string> result;
   std::lock_guard l(lock);
   for (const auto& [name, module] : modules) {
-    std::string svc_str = module->get_uri();
+    const std::string_view svc_str = module->get_uri();
     if (!svc_str.empty()) {
-      result[name] = svc_str;
+      result.emplace(name, svc_str);
     }
   }
 
