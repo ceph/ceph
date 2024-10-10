@@ -244,11 +244,13 @@ class RgwMultisiteController(RESTController):
                          source_zones: Dict[str, Any],
                          destination_zones: Dict[str, Any],
                          source_bucket: str = '',
-                         destination_bucket: str = '', bucket_name: str = ''):
+                         destination_bucket: str = '', bucket_name: str = '',
+                         user: str = '', mode: str = ''):
         multisite_instance = RgwMultisite()
         return multisite_instance.create_sync_pipe(group_id, pipe_id, source_zones,
                                                    destination_zones, source_bucket,
-                                                   destination_bucket, bucket_name, True)
+                                                   destination_bucket, bucket_name, True,
+                                                   user, mode)
 
     @Endpoint(method='DELETE', path='/sync-pipe')
     @EndpointDoc("Remove the sync pipe")
@@ -256,12 +258,10 @@ class RgwMultisiteController(RESTController):
     def remove_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Optional[List[str]] = None,
                          destination_zones: Optional[List[str]] = None,
-                         destination_bucket: str = '',
                          bucket_name: str = ''):
         multisite_instance = RgwMultisite()
         return multisite_instance.remove_sync_pipe(group_id, pipe_id, source_zones,
-                                                   destination_zones, destination_bucket,
-                                                   bucket_name, True)
+                                                   destination_zones, bucket_name, True)
 
 
 @APIRouter('/rgw/daemon', Scope.RGW)

@@ -18,6 +18,8 @@ import { ZoneData } from '../models/rgw-multisite-zone-selector';
 import { SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
 
 const ALL_ZONES = $localize`All zones (*)`;
+const ALL_BUCKET_SELECTED_HELP_TEXT =
+  'If no value is provided, all the buckets in the zone group will be selected.';
 
 @Component({
   selector: 'cd-rgw-multisite-sync-pipe-modal',
@@ -33,6 +35,7 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
   sourceZones = new ZoneData(false, 'Filter Zones');
   destZones = new ZoneData(false, 'Filter Zones');
   icons = Icons;
+  allBucketSelectedHelpText = ALL_BUCKET_SELECTED_HELP_TEXT;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -187,7 +190,9 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
       .createEditSyncPipe({
         ...this.pipeForm.getRawValue(),
         source_zones: sourceZones,
-        destination_zones: destZones
+        destination_zones: destZones,
+        user: this.editing ? this.pipeSelectedRow?.params?.user : '',
+        mode: this.editing ? this.pipeSelectedRow?.params?.mode : ''
       })
       .subscribe(
         () => {
