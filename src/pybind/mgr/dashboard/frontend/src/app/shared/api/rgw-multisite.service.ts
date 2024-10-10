@@ -129,8 +129,15 @@ export class RgwMultisiteService {
     );
   }
 
-  createEditSyncPipe(payload: any) {
-    return this.http.put(`${this.url}/sync-pipe`, payload);
+  createEditSyncPipe(payload: any, user?: string, mode?: string) {
+    let params = new HttpParams();
+    if (user) {
+      params = params.append('user', user);
+    }
+    if (mode) {
+      params = params.append('mode', mode);
+    }
+    return this.http.put(`${this.url}/sync-pipe`, payload, { params });
   }
 
   removeSyncPipe(pipe_id: string, group_id: string, bucket_name?: string) {
