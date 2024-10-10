@@ -33,6 +33,7 @@ set(mgr_modules
   k8sevents
   localpool
   mds_autoscaler
+  mds_partitioner
   mirroring
   nfs
   orchestrator
