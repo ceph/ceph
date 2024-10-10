@@ -539,7 +539,7 @@ void rgw::AppMain::init_lua()
   r = rgw::lua::install_packages(dpp, driver, null_yield, path,
                                  failed_packages, output);
   if (r < 0) {
-    dout(1) << "WARNING: failed to install lua packages from allowlist"
+    dout(1) << "WARNING: failed to install lua packages from allowlist. error: " << r
             << dendl;
   }
   if (!output.empty()) {
