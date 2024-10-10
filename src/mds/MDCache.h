@@ -1485,7 +1485,7 @@ private:
   void fragment_frozen(const MDRequestRef& mdr, int r);
   void fragment_unmark_unfreeze_dirs(const std::vector<CDir*>& dirs);
   void fragment_drop_locks(fragment_info_t &info);
-  void fragment_maybe_finish(const fragment_info_iterator& it);
+  fragment_info_iterator fragment_maybe_finish(const fragment_info_iterator it);
   void dispatch_fragment_dir(const MDRequestRef& mdr, bool abort_if_freezing=false);
   void _fragment_logged(const MDRequestRef& mdr);
   void _fragment_stored(const MDRequestRef& mdr);
