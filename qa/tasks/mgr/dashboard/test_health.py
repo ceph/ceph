@@ -28,6 +28,7 @@ class HealthTest(DashboardTestCase):
         'in': JList(int),
         'last_failure': int,
         'max_file_size': int,
+        'max_xattr_size': int,
         'explicitly_allowed_features': int,
         'damaged': JList(int),
         'tableserver': int,
