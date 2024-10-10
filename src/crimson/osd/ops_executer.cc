@@ -504,7 +504,7 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
       auto p = ss.clone_snaps.find(clone);
       if (p == ss.clone_snaps.end()) {
 	logger().error(
-	  "OpsExecutor::do_list_snaps: {} has inconsistent "
+	  "OpsExecuter::do_list_snaps: {} has inconsistent "
 	  "clone_snaps, missing clone {}",
 	  os.oi.soid,
 	  clone);
@@ -518,7 +518,7 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
       auto p = ss.clone_overlap.find(clone);
       if (p == ss.clone_overlap.end()) {
 	logger().error(
-	  "OpsExecutor::do_list_snaps: {} has inconsistent "
+	  "OpsExecuter::do_list_snaps: {} has inconsistent "
 	  "clone_overlap, missing clone {}",
 	  os.oi.soid,
 	  clone);
@@ -532,7 +532,7 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
       auto p = ss.clone_size.find(clone);
       if (p == ss.clone_size.end()) {
 	logger().error(
-	  "OpsExecutor::do_list_snaps: {} has inconsistent "
+	  "OpsExecuter::do_list_snaps: {} has inconsistent "
 	  "clone_size, missing clone {}",
 	  os.oi.soid,
 	  clone);
@@ -551,7 +551,7 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
   }
   resp.seq = ss.seq;
   logger().error(
-    "OpsExecutor::do_list_snaps: {}, resp.clones.size(): {}",
+    "OpsExecuter::do_list_snaps: {}, resp.clones.size(): {}",
     os.oi.soid,
     resp.clones.size());
   resp.encode(osd_op.outdata);
@@ -957,7 +957,7 @@ void OpsExecuter::CloningContext::apply_to(
   processed_obc.ssc->snapset = std::move(new_snapset);
 }
 
-OpsExecuter::interruptible_future<std::vector<pg_log_entry_t>>
+std::vector<pg_log_entry_t>
 OpsExecuter::flush_clone_metadata(
   std::vector<pg_log_entry_t>&& log_entries,
   SnapMapper& snap_mapper,
@@ -965,7 +965,6 @@ OpsExecuter::flush_clone_metadata(
   ceph::os::Transaction& txn)
 {
   assert(!txn.empty());
-  auto maybe_snap_mapped = interruptor::now();
   update_clone_overlap();
   if (cloning_ctx) {
     std::move(*cloning_ctx).apply_to(log_entries, *obc);
@@ -977,12 +976,7 @@ OpsExecuter::flush_clone_metadata(
   }
   logger().debug("{} done, initial snapset={}, new snapset={}",
     __func__, obc->obs.oi.soid, obc->ssc->snapset);
-  return std::move(
-    maybe_snap_mapped
-  ).then_interruptible([log_entries=std::move(log_entries)]() mutable {
-    return interruptor::make_ready_future<std::vector<pg_log_entry_t>>(
-      std::move(log_entries));
-  });
+  return std::move(log_entries);
 }
 
 ObjectContextRef OpsExecuter::prepare_clone(
