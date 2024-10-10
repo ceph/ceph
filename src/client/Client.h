@@ -16,6 +16,7 @@
 #ifndef CEPH_CLIENT_H
 #define CEPH_CLIENT_H
 
+#include "common/admin_socket.h"
 #include "common/CommandTable.h"
 #include "common/Finisher.h"
 #include "common/Timer.h"
@@ -54,6 +55,8 @@
 using std::set;
 using std::map;
 using std::fstream;
+
+namespace boost::asio { class io_context; }
 
 class FSMap;
 class FSMapUser;
