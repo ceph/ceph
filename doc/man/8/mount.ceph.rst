@@ -192,12 +192,13 @@ Advanced
 :command:`wsync`
     Execute all namespace operations synchronously. This ensures that the
     namespace operation will only complete after receiving a reply from
-    the MDS. This is the default.
+    the MDS. 
 
 :command:`nowsync`
     Allow the client to do namespace operations asynchronously. When this
     option is enabled, a namespace operation may complete before the MDS
-    replies, if it has sufficient capabilities to do so.
+    replies, if it has sufficient capabilities to do so. This has been the
+    default since kernel version 5.16.
 
 :command:`crush_location=x`
     Specify the location of the client in terms of CRUSH hierarchy (since 5.8).
