@@ -559,20 +559,6 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                  << " src=" << entity_name_t(messenger->get_myname())
                  << " off=" << header2.data_off
                  << dendl;
-  ssize_t total_send_size = connection->outgoing_bl.length();
-  ssize_t rc = connection->_try_send(more);
-  if (rc < 0) {
-    ldout(cct, 1) << __func__ << " error sending " << m << ", "
-                  << cpp_strerror(rc) << dendl;
-  } else {
-    const auto sent_bytes = total_send_size - connection->outgoing_bl.length();
-    connection->logger->inc(l_msgr_send_bytes, sent_bytes);
-    if (session_stream_handlers.tx) {
-      connection->logger->inc(l_msgr_send_encrypted_bytes, sent_bytes);
-    }
-    ldout(cct, 10) << __func__ << " sending " << m
-                   << (rc ? " continuely." : " done.") << dendl;
-  }
 
 #if defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
@@ -582,7 +568,7 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
 #endif
   m->put();
 
-  return rc;
+  return 0;
 }
 
 template <class F>
