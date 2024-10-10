@@ -6,6 +6,19 @@
   `migration_prepare` methods.
 * RBD: `RBD_IMAGE_OPTION_FLATTEN` option has been exposed in Python bindings via
   `flatten` optional parameter to `deep_copy` and `migration_prepare` methods.
+* Based on tests performed at scale on a HDD based Ceph cluster, it was found
+  that scheduling with mClock was not optimal with multiple OSD shards. For
+  example, in the test cluster with multiple OSD node failures, the client
+  throughput was found to be inconsistent across test runs coupled with multiple
+  reported slow requests. However, the same test with a single OSD shard and
+  with multiple worker threads yielded significantly better results in terms of
+  consistency of client and recovery throughput across multiple test runs.
+  Therefore, as an interim measure until the issue with multiple OSD shards
+  (or multiple mClock queues per OSD) is investigated and fixed, the following
+  change to the default HDD OSD shard configuration is made:
+   - osd_op_num_shards_hdd = 1 (was 5)
+   - osd_op_num_threads_per_shard_hdd = 5 (was 1)
+  For more details see https://tracker.ceph.com/issues/66289.
 
 >=18.2.2
 --------

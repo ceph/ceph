@@ -187,6 +187,9 @@ Operations
 .. confval:: osd_op_num_shards
 .. confval:: osd_op_num_shards_hdd
 .. confval:: osd_op_num_shards_ssd
+.. confval:: osd_op_num_threads_per_shard
+.. confval:: osd_op_num_threads_per_shard_hdd
+.. confval:: osd_op_num_threads_per_shard_ssd
 .. confval:: osd_op_queue
 .. confval:: osd_op_queue_cut_off
 .. confval:: osd_client_op_priority
@@ -290,6 +293,9 @@ of the current time. The ultimate lesson is that values for weight
 should not be too large. They should be under the number of requests
 one expects to be serviced each second.
 
+
+.. _dmclock-qos-caveats:
+
 Caveats
 ```````
 
@@ -301,6 +307,11 @@ number of shards can be controlled with the configuration options
 :confval:`osd_op_num_shards`, :confval:`osd_op_num_shards_hdd`, and
 :confval:`osd_op_num_shards_ssd`. A lower number of shards will increase the
 impact of the mClock queues, but may have other deleterious effects.
+This is especially the case if there are insufficient shard worker
+threads. The number of shard worker threads can be controlled with the
+configuration options :confval:`osd_op_num_threads_per_shard`,
+:confval:`osd_op_num_threads_per_shard_hdd` and
+:confval:`osd_op_num_threads_per_shard_ssd`.
 
 Second, requests are transferred from the operation queue to the
 operation sequencer, in which they go through the phases of
