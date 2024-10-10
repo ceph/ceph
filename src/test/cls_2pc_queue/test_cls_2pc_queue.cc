@@ -716,7 +716,7 @@ TEST_F(TestCls2PCQueue, MultiProducer)
             const auto ret = cls_2pc_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
             consume_count += entries.size();
-            cls_2pc_queue_remove_entries(op, end_marker); 
+            cls_2pc_queue_remove_entries(op, end_marker, max_elements);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
        });
@@ -771,7 +771,7 @@ TEST_F(TestCls2PCQueue, AsyncConsumer)
     ASSERT_EQ(rc, 0);
     ASSERT_EQ(cls_2pc_queue_list_entries_result(bl, entries, &truncated, end_marker), 0);
     consume_count += entries.size();
-    cls_2pc_queue_remove_entries(wop, end_marker); 
+    cls_2pc_queue_remove_entries(wop, end_marker, max_elements);
 		marker = end_marker;
   }
 
@@ -849,7 +849,7 @@ TEST_F(TestCls2PCQueue, MultiProducerConsumer)
               // queue is empty, let it fill
               std::this_thread::sleep_for(std::chrono::milliseconds(100));
             } else {
-              cls_2pc_queue_remove_entries(op, end_marker); 
+              cls_2pc_queue_remove_entries(op, end_marker, max_elements);
               ASSERT_EQ(0, ioctx.operate(queue_name, &op));
             }
           }
