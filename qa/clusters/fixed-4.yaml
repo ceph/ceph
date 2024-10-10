@@ -3,6 +3,10 @@ roles:
 - [mon.b, osd.1, osd.5, osd.9, osd.13] 
 - [mon.c, osd.2, osd.6, osd.10, osd.14] 
 - [mgr.x, osd.3, osd.7, osd.11, osd.15, client.0]
+openstack:
+- volumes: # attached to each instance
+    count: 4
+    size: 10 # GB
 overrides:
   ceph:
     conf:
