@@ -352,21 +352,22 @@ class RgwClient(RestClient):
 
         daemon_keys = RgwClient._daemons.keys()
         if not daemon_name:
-            if len(daemon_keys) > 1:
-                try:
-                    multiiste = RgwMultisite()
-                    default_zonegroup = multiiste.get_all_zonegroups_info()['default_zonegroup']
-
-                    # Iterate through _daemons.values() to find the daemon with the
-                    # matching zonegroup_id
-                    for daemon in RgwClient._daemons.values():
-                        if daemon.zonegroup_id == default_zonegroup:
-                            daemon_name = daemon.name
-                            break
-                except Exception:  # pylint: disable=broad-except
-                    daemon_name = next(iter(daemon_keys))
-            else:
-                # Handle the case where there is only one or no key in _daemons
+            try:
+                if len(daemon_keys) > 1:
+                    default_zonegroup = (
+                        RgwMultisite()
+                        .get_all_zonegroups_info()['default_zonegroup']
+                    )
+                    if default_zonegroup:
+                        daemon_name = next(
+                            (daemon.name
+                             for daemon in RgwClient._daemons.values()
+                             if daemon.zonegroup_id == default_zonegroup),
+                            None
+                        )
+                daemon_name = daemon_name or next(iter(daemon_keys))
+            except Exception as e:  # pylint: disable=broad-except
+                logger.exception('Failed to determine default RGW daemon: %s', str(e))
                 daemon_name = next(iter(daemon_keys))
 
         # Discard all cached instances if any rgw setting has changed
