@@ -497,6 +497,8 @@ public:
 
   void mark_complete();
 
+  bool is_dir() const override { return true; }
+
   // -- reference counting --
   void first_get() override;
   void last_put() override;

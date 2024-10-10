@@ -2263,6 +2263,30 @@ TEST(LibCephFS, TestFutimens) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, TesDirectoryMtime) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char c_dir[512];
+  char c_subdir[1024];
+  sprintf(c_dir, "/mtime_dir_%d", getpid());
+  ASSERT_EQ(0, ceph_mkdir(cmount, c_dir, 0777));
+
+  struct ceph_statx stx1, stx2;
+  ASSERT_EQ(ceph_statx(cmount, c_dir, &stx1, CEPH_STATX_MTIME, 0), 0);
+  sleep(1);
+  sprintf(c_subdir, "%s/%s", c_dir, "mtime_subdir");
+  ASSERT_EQ(0, ceph_mkdir(cmount, c_subdir, 0777));
+
+  ASSERT_EQ(ceph_statx(cmount, c_dir, &stx2, CEPH_STATX_MTIME, 0), 0);
+  ASSERT_NE(utime_t(stx1.stx_mtime), utime_t(stx2.stx_mtime));
+
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, OperationsOnDotDot) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
