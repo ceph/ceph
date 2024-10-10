@@ -3,12 +3,15 @@ import { AsyncValidatorFn, UntypedFormControl, ValidatorFn, Validators } from '@
 
 import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
+import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdFormModalFieldConfig } from '~/app/shared/models/cd-form-modal-field-config';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { ComboBoxItem } from '../../models/combo-box.model';
 
 @Component({
   selector: 'cd-form-modal',
@@ -18,6 +21,8 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 export class FormModalComponent extends BaseModal implements OnInit {
   // Internal
   formGroup: CdFormGroup;
+
+  searchSubject = new Subject<{ searchString: string; fieldName: string }>();
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -37,6 +42,21 @@ export class FormModalComponent extends BaseModal implements OnInit {
 
   ngOnInit() {
     this.createForm();
+    // subscribe to the searchSubject to add new options to the combobox
+    this.searchSubject
+      .pipe(debounceTime(500), distinctUntilChanged())
+      .subscribe(({ searchString, fieldName }) => {
+        const field = this.fields.find((f) => f.name === fieldName);
+        if (field) {
+          // to make sure only unique values exists in the list
+          const exists = field.typeConfig.options.some(
+            (option: ComboBoxItem) => option.content === searchString
+          );
+          if (!exists) {
+            field.typeConfig.options = field.typeConfig.options.concat({ content: searchString });
+          }
+        }
+      });
   }
 
   createForm() {
@@ -135,5 +155,12 @@ export class FormModalComponent extends BaseModal implements OnInit {
     const field = this.formGroup.get(name);
     field.setAsyncValidators(validator);
     field.updateValueAndValidity();
+  }
+
+  onSearch(searchString: string, fieldName: string) {
+    // only add to the list if the search string is more than 1 character
+    if (searchString.length > 1) {
+      this.searchSubject.next({ searchString, fieldName });
+    }
   }
 }
