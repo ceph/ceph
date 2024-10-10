@@ -6,13 +6,15 @@ function getIframe() {
   return cy.iframe();
 }
 
+const WAIT_TO_LOAD = 1000;
+
 Then('I should see the grafana panel {string}', (panels: string) => {
   getIframe().within(() => {
     for (const panel of panels.split(', ')) {
       cy.get('.grafana-app')
-        .wait(100)
+        .wait(WAIT_TO_LOAD)
         .within(() => {
-          cy.get(`[aria-label="${panel} panel"]`).should('be.visible');
+          cy.get(`[title="${panel}"]`).should('be.visible');
         });
     }
   });
@@ -22,13 +24,13 @@ When('I view the grafana panel {string}', (panels: string) => {
   getIframe().within(() => {
     for (const panel of panels.split(', ')) {
       cy.get('.grafana-app')
-        .wait(100)
+        .wait(WAIT_TO_LOAD)
         .within(() => {
-          cy.get(`[aria-label="${panel} panel"]`).within(() => {
-            cy.get('h2').click();
-          });
-          cy.get('[aria-label="Panel header item View"]').click();
+          cy.get(`[data-testid="data-testid Panel header ${panel}"]`).click();
+          cy.get(`[aria-label="Menu for panel with title ${panel}"]`).click();
         });
+
+      cy.get('[data-testid="data-testid Panel menu item View"]').click();
     }
   });
 });
@@ -37,9 +39,9 @@ Then('I should not see {string} in the panel {string}', (value: string, panels: 
   getIframe().within(() => {
     for (const panel of panels.split(', ')) {
       cy.get('.grafana-app')
-        .wait(100)
+        .wait(WAIT_TO_LOAD)
         .within(() => {
-          cy.get(`[aria-label="${panel} panel"]`)
+          cy.get(`[data-testid="data-testid Panel header ${panel}"]`)
             .should('be.visible')
             .within(() => {
               cy.get('span').first().should('not.have.text', value);
@@ -55,9 +57,9 @@ Then(
     getIframe().within(() => {
       for (const panel of panels.split(', ')) {
         cy.get('.grafana-app')
-          .wait(100)
+          .wait(WAIT_TO_LOAD)
           .within(() => {
-            cy.get(`[aria-label="${panel} panel"]`)
+            cy.get(`[data-testid="data-testid Panel header ${panel}"]`)
               .should('be.visible')
               .within(() => {
                 for (const legend of legends.split(', ')) {
@@ -74,9 +76,9 @@ Then('I should not see No Data in the graph {string}', (panels: string) => {
   getIframe().within(() => {
     for (const panel of panels.split(', ')) {
       cy.get('.grafana-app')
-        .wait(100)
+        .wait(WAIT_TO_LOAD)
         .within(() => {
-          cy.get(`[aria-label="${panel} panel"]`)
+          cy.get(`[data-testid="data-testid Panel header ${panel}"]`)
             .should('be.visible')
             .within(() => {
               cy.get('div.datapoints-warning').should('not.exist');
