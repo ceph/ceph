@@ -127,7 +127,10 @@ class AsyncJobs(threading.Thread):
         self.cv = threading.Condition(self.lock)
         # cv for job cancelation
         self.waiting = False
-        self.stopping = threading.Event()
+
+        # Indicates whether or not entire async job machinery is being shutdown.
+        self.stopping = False
+
         self.cancel_cv = threading.Condition(self.lock)
         self.nr_concurrent_jobs = nr_concurrent_jobs
         self.name_pfx = name_pfx
@@ -155,7 +158,7 @@ class AsyncJobs(threading.Thread):
     def run(self):
         log.debug("tick thread {} starting".format(self.name))
         with lock_timeout_log(self.lock):
-            while not self.stopping.is_set():
+            while not self.stopping:
                 c = len(self.threads)
                 if c > self.nr_concurrent_jobs:
                     # Decrease concurrency: notify threads which are waiting for a job to terminate.
@@ -170,7 +173,8 @@ class AsyncJobs(threading.Thread):
                 self.cv.wait(timeout=5)
 
     def shutdown(self):
-        self.stopping.set()
+        self.stopping = True
+
         self.cancel_all_jobs()
         with lock_timeout_log(self.lock):
             self.cv.notifyAll()
