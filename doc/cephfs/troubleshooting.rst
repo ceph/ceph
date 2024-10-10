@@ -128,6 +128,13 @@ things to do:
 
   That prevents any clients from establishing new sessions with the MDS.
 
+* **Turn off async purge threads** The volumes plugin spawns threads for
+  asychronously purging trashed/deleted subvolumes. To help troubleshooting or
+  recovery effort, these purge threads can be disabled using:
+
+.. code:: bash
+
+    ceph config set mgr mgr/volumes/pause_purging_trash true
 
 
 Expediting MDS journal trim
