@@ -139,8 +139,8 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
       multisiteInfo: this.multisiteInfo
     };
     if (entityName === 'realm') {
-      this.bsModalRef = this.modalService.show(RgwMultisiteRealmFormComponent, initialState, {
-        size: 'lg'
+      this.bsModalRef = this.cdsModalService.show(RgwMultisiteRealmFormComponent, {
+        data: initialState
       });
     } else if (entityName === 'zonegroup') {
       this.bsModalRef = this.modalService.show(RgwMultisiteZonegroupFormComponent, initialState, {
