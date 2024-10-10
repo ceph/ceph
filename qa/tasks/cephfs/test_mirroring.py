@@ -1486,8 +1486,21 @@ class TestMirroring(CephFSTestCase):
         """
         That get/set ceph.mirror.dirty_snap_id attribute succeeds in a remote filesystem.
         """
+        log.debug('reconfigure client auth caps')
+        self.get_ceph_cmd_result(
+            'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
+                'mds', 'allow rw',
+                'mon', 'allow r',
+                'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
+                    self.backup_fs.get_data_pool_name(),
+                    self.backup_fs.get_data_pool_name()))
+        log.debug(f'mounting filesystem {self.secondary_fs_name}')
+        self.mount_b.umount_wait()
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
+        log.debug('setting ceph.mirror.dirty_snap_id attribute')
         self.mount_b.run_shell(["mkdir", "-p", "d1/d2/d3"])
         attr = str(random.randint(1, 10))
         self.mount_b.setfattr("d1/d2/d3", "ceph.mirror.dirty_snap_id", attr)
+        log.debug('getting ceph.mirror.dirty_snap_id attribute')
         val = self.mount_b.getfattr("d1/d2/d3", "ceph.mirror.dirty_snap_id")
         self.assertEqual(attr, val, f"Mismatch for ceph.mirror.dirty_snap_id value: {attr} vs {val}")
