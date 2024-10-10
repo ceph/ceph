@@ -73,10 +73,10 @@ template <typename FieldType, node_type_t NODE_TYPE>
 void NODE_T::bootstrap_extent(
     NodeExtentMutable& mut,
     field_type_t field_type, node_type_t node_type,
-    bool is_level_tail, level_t level)
+    bool is_level_tail, bool is_level_head, level_t level)
 {
   node_header_t::bootstrap_extent(
-      mut, field_type, node_type, is_level_tail, level);
+      mut, field_type, node_type, is_level_tail, is_level_head, level);
   mut.copy_in_relative(
       sizeof(node_header_t), typename FieldType::num_keys_t(0u));
 }

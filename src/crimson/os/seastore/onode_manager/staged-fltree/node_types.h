@@ -10,7 +10,7 @@
 
 namespace crimson::os::seastore::onode {
 
-constexpr uint8_t FIELD_TYPE_MAGIC = 0x25;
+constexpr uint8_t FIELD_TYPE_MAGIC = 0x15;
 enum class field_type_t : uint8_t {
   N0 = FIELD_TYPE_MAGIC,
   N1,

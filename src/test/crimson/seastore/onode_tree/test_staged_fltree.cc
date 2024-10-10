@@ -38,11 +38,11 @@ using namespace crimson::os::seastore::onode;
     }                                   \
   )
 
-#define INTR_WITH_PARAM(fun, c, b, v)   \
+#define INTR_WITH_PARAM(fun, c, b, h, v)   \
   with_trans_intr(                      \
     c.t,                                \
     [=] (auto &t) {                     \
-      return fun(c, L_ADDR_MIN, b, v);  \
+      return fun(c, L_ADDR_MIN, b, h, v);  \
     }                                   \
   )
 
@@ -169,22 +169,22 @@ TEST_F(a_basic_test_t, 2_node_sizes)
     ValueBuilderImpl<UnboundedValue> vb;
     context_t c{*nm, vb, *t};
     std::array<std::pair<NodeImplURef, NodeExtentMutable>, 16> nodes = {
-      INTR_WITH_PARAM(InternalNode0::allocate, c, false, 1u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(InternalNode1::allocate, c, false, 1u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(InternalNode2::allocate, c, false, 1u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(InternalNode3::allocate, c, false, 1u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(InternalNode0::allocate, c, true, 1u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(InternalNode1::allocate, c, true, 1u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(InternalNode2::allocate, c, true, 1u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(InternalNode3::allocate, c, true, 1u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(LeafNode0::allocate, c, false, 0u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(LeafNode1::allocate, c, false, 0u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(LeafNode2::allocate, c, false, 0u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(LeafNode3::allocate, c, false, 0u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(LeafNode0::allocate, c, true, 0u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(LeafNode1::allocate, c, true, 0u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(LeafNode2::allocate, c, true, 0u).unsafe_get().make_pair(),
-      INTR_WITH_PARAM(LeafNode3::allocate, c, true, 0u).unsafe_get().make_pair()
+      INTR_WITH_PARAM(InternalNode0::allocate, c, false, true, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode1::allocate, c, false, true, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode2::allocate, c, false, false, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode3::allocate, c, false, false, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode0::allocate, c, true, true, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode1::allocate, c, true, true, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode2::allocate, c, true, false, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode3::allocate, c, true, false, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode0::allocate, c, false, true, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode1::allocate, c, false, true, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode2::allocate, c, false, false, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode3::allocate, c, false, false, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode0::allocate, c, true, true, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode1::allocate, c, true, true, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode2::allocate, c, true, false, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode3::allocate, c, true, false, 0u).unsafe_get().make_pair()
     };
     std::ostringstream oss;
     oss << "\nallocated nodes:";
@@ -841,8 +841,10 @@ class DummyChildPool {
   class DummyChildImpl final : public NodeImpl {
    public:
     using URef = std::unique_ptr<DummyChildImpl>;
-    DummyChildImpl(const std::set<ghobject_t>& keys, bool is_level_tail, laddr_t laddr)
-        : keys{keys}, _is_level_tail{is_level_tail}, _laddr{laddr} {
+    DummyChildImpl(const std::set<ghobject_t>& keys, bool is_level_tail,
+		   bool is_level_head, laddr_t laddr)
+        : keys{keys}, _is_level_tail{is_level_tail},
+	  _is_level_head{is_level_head}, _laddr{laddr} {
       std::tie(key_view, p_mem_key_view) = build_key_view(*keys.crbegin());
       build_name();
     }
@@ -852,9 +854,10 @@ class DummyChildPool {
 
     const std::set<ghobject_t>& get_keys() const { return keys; }
 
-    void reset(const std::set<ghobject_t>& _keys, bool level_tail) {
+    void reset(const std::set<ghobject_t>& _keys, bool level_tail, bool level_head) {
       keys = _keys;
       _is_level_tail = level_tail;
+      _is_level_head = level_head;
       std::free(p_mem_key_view);
       std::tie(key_view, p_mem_key_view) = build_key_view(*keys.crbegin());
       build_name();
@@ -863,6 +866,7 @@ class DummyChildPool {
    public:
     laddr_t laddr() const override { return _laddr; }
     bool is_level_tail() const override { return _is_level_tail; }
+    bool is_level_head() const override { return _is_level_head; }
     std::optional<key_view_t> get_pivot_index() const override { return {key_view}; }
     bool is_extent_retired() const override { return _is_extent_retired; }
     const std::string& get_name() const override { return name; }
@@ -929,12 +933,14 @@ class DummyChildPool {
           << "@0x" << std::hex << laddr() << std::dec
           << "Lv" << (unsigned)level()
           << (is_level_tail() ? "$" : "")
+	  << (is_level_head() ? "&" : "")
           << "(" << key_view << ")";
       name = sos.str();
     }
 
     std::set<ghobject_t> keys;
     bool _is_level_tail;
+    bool _is_level_head;
     laddr_t _laddr;
     std::string name;
     bool _is_extent_retired = false;
@@ -967,8 +973,8 @@ class DummyChildPool {
       std::set<ghobject_t> left_keys(keys.begin(), iter);
       std::set<ghobject_t> right_keys(iter, keys.end());
       bool right_is_tail = impl->is_level_tail();
-      impl->reset(left_keys, false);
-      auto right_child = DummyChild::create_new(right_keys, right_is_tail, pool);
+      impl->reset(left_keys, false, impl->is_level_head());
+      auto right_child = DummyChild::create_new(right_keys, right_is_tail, false, pool);
       if (!can_split()) {
         splitable_nodes.erase(this);
       }
@@ -991,7 +997,7 @@ class DummyChildPool {
       std::set<ghobject_t> new_keys;
       new_keys.insert(insert_key);
       new_keys.insert(key);
-      impl->reset(new_keys, impl->is_level_tail());
+      impl->reset(new_keys, impl->is_level_tail(), impl->is_level_head());
 
       splitable_nodes.clear();
       splitable_nodes.insert(this);
@@ -1028,7 +1034,7 @@ class DummyChildPool {
 
       std::set<ghobject_t> new_keys;
       new_keys.insert(new_key);
-      impl->reset(new_keys, impl->is_level_tail());
+      impl->reset(new_keys, impl->is_level_tail(), impl->is_level_head());
       Ref<Node> this_ref = this;
       return fix_parent_index<true>(c, std::move(this_ref), false);
     }
@@ -1040,21 +1046,24 @@ class DummyChildPool {
 
     static Ref<DummyChild> create(
         const std::set<ghobject_t>& keys, bool is_level_tail,
-        laddr_t addr, DummyChildPool& pool) {
-      auto ref_impl = std::make_unique<DummyChildImpl>(keys, is_level_tail, addr);
+	bool is_level_head, laddr_t addr, DummyChildPool& pool) {
+      auto ref_impl = std::make_unique<DummyChildImpl>(
+	keys, is_level_tail, is_level_head, addr);
       return new DummyChild(ref_impl.get(), std::move(ref_impl), pool);
     }
 
     static Ref<DummyChild> create_new(
-        const std::set<ghobject_t>& keys, bool is_level_tail, DummyChildPool& pool) {
+        const std::set<ghobject_t>& keys, bool is_level_tail,
+	bool is_level_head, DummyChildPool& pool) {
       static uint64_t seed = 0;
-      return create(keys, is_level_tail, laddr_t::from_raw_uint(seed++), pool);
+      return create(keys, is_level_tail, is_level_head,
+	laddr_t::from_raw_uint(seed++), pool);
     }
 
     static eagain_ifuture<Ref<DummyChild>> create_initial(
         context_t c, const std::set<ghobject_t>& keys,
         DummyChildPool& pool, RootNodeTracker& root_tracker) {
-      auto initial = create_new(keys, true, pool);
+      auto initial = create_new(keys, true, true, pool);
       return c.nm.get_super(c.t, root_tracker
       ).handle_error_interruptible(
         eagain_iertr::pass_further{},
@@ -1074,7 +1083,8 @@ class DummyChildPool {
       auto p_pool_clone = pool.pool_clone_in_progress;
       ceph_assert(p_pool_clone != nullptr);
       auto clone = create(
-          impl->get_keys(), impl->is_level_tail(), impl->laddr(), *p_pool_clone);
+          impl->get_keys(), impl->is_level_tail(),
+	  impl->is_level_head(), impl->laddr(), *p_pool_clone);
       clone->as_child(parent_info().position, new_parent);
       return eagain_iertr::now();
     }
@@ -1113,7 +1123,7 @@ class DummyChildPool {
       } else {
         p_keys = &left->impl->get_keys();
       }
-      left->impl->reset(*p_keys, left_is_tail);
+      left->impl->reset(*p_keys, left_is_tail, left->impl->is_level_head());
       auto left_addr = left->impl->laddr();
       return left->parent_info().ptr->apply_children_merge<true>(
           c, std::move(left), left_addr, std::move(right), !stole_key);
