@@ -1,0 +1,1 @@
+This file is being used to test Go upload capabilities to Ceph RGW cluster.
