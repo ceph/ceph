@@ -333,6 +333,15 @@ class TestVolumesHelper(CephFSTestCase):
         # XXX: construct the trash dir path (note that there is no mgr
         # [sub]volume interface for this).
         trashdir = os.path.join("./", "volumes", "_deleting")
+
+        try:
+            self.mount_a.run_shell(f'stat {trashdir}')
+        except CommandFailedError as e:
+            if e.exitstatus == 1:
+                return
+            else:
+                raise
+
         self.mount_a.wait_for_dir_empty(trashdir, timeout=timeout)
 
     def _wait_for_subvol_trash_empty(self, subvol, group="_nogroup", timeout=30):
