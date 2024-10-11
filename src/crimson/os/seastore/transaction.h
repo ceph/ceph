@@ -80,6 +80,11 @@ struct rewrite_stats_t {
   }
 };
 
+struct rbm_pending_ool_t {
+  bool is_conflicted = false;
+  std::list<CachedExtentRef> pending_extents;
+};
+
 /**
  * Transaction
  *
@@ -554,6 +559,18 @@ public:
     return static_cast<T&>(*view);
   }
 
+  void set_pending_ool(seastar::lw_shared_ptr<rbm_pending_ool_t> ptr) {
+    pending_ool = ptr;
+  }
+
+  seastar::lw_shared_ptr<rbm_pending_ool_t> get_pending_ool() {
+    return pending_ool;
+  }
+
+  const auto& get_pre_alloc_list() {
+    return pre_alloc_list;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -650,6 +667,8 @@ private:
   const src_t src;
 
   transaction_id_t trans_id = TRANS_ID_NULL;
+
+  seastar::lw_shared_ptr<rbm_pending_ool_t> pending_ool;
 };
 using TransactionRef = Transaction::Ref;
 
