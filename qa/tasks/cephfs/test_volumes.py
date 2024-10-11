@@ -4447,6 +4447,140 @@ class TestPausePurging(TestVolumesHelper):
         self._wait_for_trash_empty()
 
 
+class TestPauseCloning(TestVolumesHelper):
+    '''
+    Tests related to config "mgr/volumes/pause_cloning".
+    '''
+
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 1
+
+    CONF_OPT = 'mgr/volumes/pause_cloning'
+
+    def setUp(self):
+        super().setUp()
+
+        self.NUM_OF_CLONER_THREADS = 4
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', self.NUM_OF_CLONER_THREADS)
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+
+    def tearDown(self):
+        # every test will change value of this config option as per its need.
+        # assure that this config option's default value is re-stored during
+        # tearDown() so that there's zero chance that it interferes with next
+        # test.
+        self.config_set('mgr', self.CONF_OPT, False)
+
+        # ensure purge threads have no jobs left from previous test so that
+        # next test doesn't have to face unnecessary complications.
+        self._wait_for_trash_empty()
+
+        super().tearDown()
+
+    def test_pausing_prevents_news_clones_from_starting(self):
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = 'ss1c1'
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, 1, 10)
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} '
+                                           f'{sv}')[1:].strip()
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.run_ceph_cmd(f'config set mgr {self.CONF_OPT} true')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        time.sleep(10)
+
+        # n = num of files, value returned by "wc -l"
+        n = self.mount_a.get_shell_stdout(f'ls {sv_path}/{sv}/ | wc -l')
+        # num of files should be 0, cloning should've not begun
+        self.assertEqual(int(n), 0)
+
+    def test_pausing_halts_ongoing_cloning(self):
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = 'ss1c1'
+
+        NUM_OF_FILES = 3
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, NUM_OF_FILES, 1024)
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} '
+                                           f'{sv}')[1:].strip()
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        # let few cloning begin...
+        time.sleep(2)
+        # ...and now let's pause cloning
+        self.run_ceph_cmd(f'config set mgr {self.CONF_OPT} true')
+
+        path = os.path.dirname(os.path.dirname(sv_path))
+        uuid = self.mount_a.get_shell_stdout(f'ls {path}/{c}').strip()
+        # n = num of files, value returned by "wc -l"
+        n = self.mount_a.get_shell_stdout(f'ls {path}/{c}/{uuid} | wc -l')
+        # num of files should be less or equal number of cloner threads
+        self.assertLessEqual(int(n), self.NUM_OF_CLONER_THREADS)
+
+    def test_resuming_begins_pending_cloning(self):
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = 'ss1c1'
+
+        NUM_OF_FILES = 3
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, NUM_OF_FILES, 1024)
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} '
+                                           f'{sv}')[1:].strip()
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.run_ceph_cmd(f'config set mgr {self.CONF_OPT} true')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        time.sleep(2)
+
+        # n = num of files, value returned by "wc -l"
+        n = self.mount_a.get_shell_stdout(f'ls {sv_path}/{sv}/ | wc -l')
+        # num of files should be 0, cloning should've not begun
+        self.assertEqual(int(n), 0)
+
+        self.run_ceph_cmd(f'config set mgr {self.CONF_OPT} false')
+        # test that cloning begun and reached completion
+        with safe_while(tries=3, sleep=10) as proceed:
+            while proceed():
+                n = self.mount_a.get_shell_stdout(f'ls {sv_path} | wc -l')
+                if int(n) == NUM_OF_FILES:
+                    break
+
+    def test_resuming_causes_partly_cloned_subvol_to_clone_fully(self):
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = 'ss1c1'
+
+        NUM_OF_FILES = 3
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, NUM_OF_FILES, 1024)
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} '
+                                           f'{sv}')[1:].strip()
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        time.sleep(2)
+        self.run_ceph_cmd(f'config set mgr {self.CONF_OPT} true')
+        time.sleep(2)
+
+        self.run_ceph_cmd(f'config set mgr {self.CONF_OPT} false')
+        # test that cloning was resumed and reached completion
+        with safe_while(tries=3, sleep=10) as proceed:
+            while proceed():
+                n = self.mount_a.get_shell_stdout(f'ls {sv_path} | wc -l')
+                if int(n) == NUM_OF_FILES:
+                    break
+
+
 class TestSubvolumeGroupSnapshots(TestVolumesHelper):
     """Tests for FS subvolume group snapshot operations."""
     @unittest.skip("skipping subvolumegroup snapshot tests")

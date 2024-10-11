@@ -3,3 +3,4 @@ tasks:
       fail_on_skip: false
       modules:
         - tasks.cephfs.test_volumes.TestPausePurging
+        - tasks.cephfs.test_volumes.TestPauseCloning
