@@ -29,6 +29,7 @@ from .enums import (
     JoinSourceType,
     LoginAccess,
     LoginCategory,
+    SMBClustering,
     State,
     UserGroupSourceType,
 )
@@ -869,6 +870,25 @@ def _check_cluster_modifications(
                 'domain/realm value may not be changed',
                 status={'existing_domain_realm': prev.domain_settings.realm},
             )
+    if cluster.is_clustered() != prev.is_clustered():
+        prev_clustering = prev.is_clustered()
+        cterms = {True: 'enabled', False: 'disabled'}
+        msg = (
+            f'a cluster resource with clustering {cterms[prev_clustering]}'
+            f' may not be changed to clustering {cterms[not prev_clustering]}'
+        )
+        opt_terms = {
+            True: SMBClustering.ALWAYS.value,
+            False: SMBClustering.NEVER.value,
+        }
+        hint = {
+            'note': (
+                'Set "clustering" to an explicit value that matches the'
+                ' current clustering behavior'
+            ),
+            'value': opt_terms[prev_clustering],
+        }
+        raise ErrorResult(cluster, msg, status={'hint': hint})
 
 
 def _parse_earmark(earmark: str) -> dict:
