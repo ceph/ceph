@@ -813,6 +813,8 @@ def _check_cluster_removed(cluster: ClusterRef, staging: _Staging) -> None:
 def _check_cluster_present(cluster: ClusterRef, staging: _Staging) -> None:
     assert isinstance(cluster, resources.Cluster)
     cluster.validate()
+    if not staging.is_new(cluster):
+        _check_cluster_modifications(cluster, staging)
     for auth_ref in _auth_refs(cluster):
         auth = staging.get_join_auth(auth_ref)
         if (
@@ -838,6 +840,34 @@ def _check_cluster_present(cluster: ClusterRef, staging: _Staging) -> None:
                 status={
                     'other_cluster_id': ug.linked_to_cluster,
                 },
+            )
+
+
+def _check_cluster_modifications(
+    cluster: resources.Cluster, staging: _Staging
+) -> None:
+    """cluster has some fields we do not permit changing after the cluster has
+    been created.
+    """
+    prev = ClusterEntry.from_store(
+        staging.destination_store, cluster.cluster_id
+    ).get_cluster()
+    if cluster.auth_mode != prev.auth_mode:
+        raise ErrorResult(
+            cluster,
+            'auth_mode value may not be changed',
+            status={'existing_auth_mode': prev.auth_mode},
+        )
+    if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
+        assert prev.domain_settings
+        if not cluster.domain_settings:
+            # should not occur
+            raise ErrorResult(cluster, "domain settings missing from cluster")
+        if cluster.domain_settings.realm != prev.domain_settings.realm:
+            raise ErrorResult(
+                cluster,
+                'domain/realm value may not be changed',
+                status={'existing_domain_realm': prev.domain_settings.realm},
             )
 
 
