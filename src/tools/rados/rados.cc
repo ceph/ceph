@@ -1056,10 +1056,10 @@ void LoadGen::cleanup()
   }
 }
 
-enum OpWriteDest {
-  OP_WRITE_DEST_OBJ = 2 << 0,
-  OP_WRITE_DEST_OMAP = 2 << 1,
-  OP_WRITE_DEST_XATTR = 2 << 2,
+enum OpDest {
+  OP_DEST_OBJ = 2 << 0,
+  OP_DEST_OMAP = 2 << 1,
+  OP_DEST_XATTR = 2 << 2,
 };
 
 class RadosBencher : public ObjBencher {
@@ -1068,7 +1068,7 @@ class RadosBencher : public ObjBencher {
   librados::IoCtx& io_ctx;
   librados::NObjectIterator oi;
   bool iterator_valid;
-  OpWriteDest write_destination;
+  OpDest destination;
 
 protected:
   int completions_init(int concurrentios) override {
@@ -1101,7 +1101,7 @@ protected:
 		size_t offset) override {
     librados::ObjectWriteOperation op;
 
-    if (write_destination & OP_WRITE_DEST_OBJ) {
+    if (destination & OP_DEST_OBJ) {
       if (data.hints)
 	op.set_alloc_hint2(data.object_size, data.op_size,
 			   ALLOC_HINT_FLAG_SEQUENTIAL_WRITE |
@@ -1111,13 +1111,13 @@ protected:
       op.write(offset, bl);
     }
 
-    if (write_destination & OP_WRITE_DEST_OMAP) {
+    if (destination & OP_DEST_OMAP) {
       std::map<std::string, librados::bufferlist> omap;
       omap[string("bench-omap-key-") + stringify(offset)] = bl;
       op.omap_set(omap);
     }
 
-    if (write_destination & OP_WRITE_DEST_XATTR) {
+    if (destination & OP_DEST_XATTR) {
       char key[80];
       snprintf(key, sizeof(key), "bench-xattr-key-%d", (int)offset);
       op.setxattr(key, bl);
@@ -1183,11 +1183,11 @@ protected:
 
 public:
   RadosBencher(CephContext *cct_, librados::Rados& _r, librados::IoCtx& _i)
-    : ObjBencher(cct_), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false), write_destination(OP_WRITE_DEST_OBJ) {}
+    : ObjBencher(cct_), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false), destination(OP_DEST_OBJ) {}
   ~RadosBencher() override { }
 
-  void set_write_destination(OpWriteDest dest) {
-    write_destination = dest;
+  void set_destination(OpDest dest) {
+    destination = dest;
   }
 };
 
@@ -1885,7 +1885,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   uint64_t obj_offset = 0;
   bool obj_offset_specified = false;
   bool block_size_specified = false;
-  int bench_write_dest = 0;
+  int bench_dest = 0;
   bool cleanup = true;
   bool hints = true; // for rados bench
   bool reuse_bench = false;
@@ -2106,17 +2106,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     output = i->second.c_str();
   }
-  i = opts.find("write-dest-obj");
+  i = opts.find("dest-obj");
   if (i != opts.end()) {
-    bench_write_dest |= static_cast<int>(OP_WRITE_DEST_OBJ);
+    bench_dest |= static_cast<int>(OP_DEST_OBJ);
   }
-  i = opts.find("write-dest-omap");
+  i = opts.find("dest-omap");
   if (i != opts.end()) {
-    bench_write_dest |= static_cast<int>(OP_WRITE_DEST_OMAP);
+    bench_dest |= static_cast<int>(OP_DEST_OMAP);
   }
-  i = opts.find("write-dest-xattr");
+  i = opts.find("dest-xattr");
   if (i != opts.end()) {
-    bench_write_dest |= static_cast<int>(OP_WRITE_DEST_XATTR);
+    bench_dest |= static_cast<int>(OP_DEST_XATTR);
   }
   i = opts.find("with-clones");
   if (i != opts.end()) {
@@ -3327,15 +3327,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
              << std::endl;
         return 1;
       }
-      if (bench_write_dest != 0) {
-        cerr << "--write-object, --write-omap and --write-xattr options can "
-                "only be used with the 'write' bench test"
-             << std::endl;
-        return 1;
-      }
     }
-    else if (bench_write_dest == 0) {
-      bench_write_dest = OP_WRITE_DEST_OBJ;
+    if (bench_dest == 0) {
+      bench_dest = OP_DEST_OBJ;
     }
 
     if (!formatter && output) {
@@ -3345,7 +3339,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
-    bencher.set_write_destination(static_cast<OpWriteDest>(bench_write_dest));
+    bencher.set_destination(static_cast<OpDest>(bench_dest));
 
     ostream *outstream = NULL;
     if (formatter) {
@@ -4235,11 +4229,12 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--output", (char*)NULL)) {
       opts["output"] = val;
     } else if (ceph_argparse_flag(args, i, "--write-omap", (char*)NULL)) {
-      opts["write-dest-omap"] = "true";
+      // write- prefixed dests are legacy
+      opts["dest-omap"] = "true";
     } else if (ceph_argparse_flag(args, i, "--write-object", (char*)NULL)) {
-      opts["write-dest-obj"] = "true";
+      opts["dest-obj"] = "true";
     } else if (ceph_argparse_flag(args, i, "--write-xattr", (char*)NULL)) {
-      opts["write-dest-xattr"] = "true";
+      opts["dest-xattr"] = "true";
     } else if (ceph_argparse_flag(args, i, "--with-clones", (char*)NULL)) {
       opts["with-clones"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--omap-key-file", (char*)NULL)) {
