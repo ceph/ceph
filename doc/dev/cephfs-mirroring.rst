@@ -17,11 +17,9 @@ Key Idea
 --------
 
 For a given snapshot pair in a directory, `cephfs-mirror` daemon will rely on
-readdir diff to identify changes in a directory tree. The diffs are applied to
+`CephFS Snapdiff Feature` to identify changes in a directory tree. The diffs are applied to
 directory in the remote file system thereby only synchronizing files that have
 changed between two snapshots.
-
-This feature is tracked here: https://tracker.ceph.com/issues/47034.
 
 Currently, snapshot data is synchronized by bulk copying to the remote
 filesystem.
@@ -407,3 +405,5 @@ Feature Status
 --------------
 
 `cephfs-mirror` daemon is built by default (follows `WITH_CEPHFS` CMake rule).
+
+.. _CephFS Snapdiff Feature: https://croit.io/blog/cephfs-snapdiff-feature
