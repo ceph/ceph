@@ -788,22 +788,29 @@ def order_resources(
 
 def _check_cluster(cluster: ClusterRef, staging: _Staging) -> None:
     """Check that the cluster resource can be updated."""
-    if cluster.intent == Intent.REMOVED:
-        share_ids = ShareEntry.ids(staging)
-        clusters_used = {cid for cid, _ in share_ids}
-        if cluster.cluster_id in clusters_used:
-            raise ErrorResult(
-                cluster,
-                msg="cluster in use by shares",
-                status={
-                    'shares': [
-                        shid
-                        for cid, shid in share_ids
-                        if cid == cluster.cluster_id
-                    ]
-                },
-            )
-        return
+    if cluster.intent == Intent.PRESENT:
+        return _check_cluster_present(cluster, staging)
+    return _check_cluster_removed(cluster, staging)
+
+
+def _check_cluster_removed(cluster: ClusterRef, staging: _Staging) -> None:
+    share_ids = ShareEntry.ids(staging)
+    clusters_used = {cid for cid, _ in share_ids}
+    if cluster.cluster_id in clusters_used:
+        raise ErrorResult(
+            cluster,
+            msg="cluster in use by shares",
+            status={
+                'shares': [
+                    shid
+                    for cid, shid in share_ids
+                    if cid == cluster.cluster_id
+                ]
+            },
+        )
+
+
+def _check_cluster_present(cluster: ClusterRef, staging: _Staging) -> None:
     assert isinstance(cluster, resources.Cluster)
     cluster.validate()
     for auth_ref in _auth_refs(cluster):
