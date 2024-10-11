@@ -135,34 +135,10 @@ public:
     explicit Crashed();
   };
 
-  struct Cancelled : sc::state<Cancelled, BackfillMachine>,
-                     StateHelper<Cancelled> {
-    using reactions = boost::mpl::list<
-      sc::custom_reaction<Triggered>,
-      sc::custom_reaction<PrimaryScanned>,
-      sc::custom_reaction<ReplicaScanned>,
-      sc::custom_reaction<ObjectPushed>,
-      sc::transition<sc::event_base, Crashed>>;
-    explicit Cancelled(my_context);
-    // resume after triggering backfill by on_activate_complete().
-    // transit to Enqueuing.
-    sc::result react(const Triggered&);
-    sc::result react(const PrimaryScanned&) {
-      return discard_event();
-    }
-    sc::result react(const ReplicaScanned&) {
-      return discard_event();
-    }
-    sc::result react(const ObjectPushed&) {
-      return discard_event();
-    }
-  };
-
   struct Initial : sc::state<Initial, BackfillMachine>,
                    StateHelper<Initial> {
     using reactions = boost::mpl::list<
       sc::custom_reaction<Triggered>,
-      sc::transition<CancelBackfill, Cancelled>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Initial(my_context);
     // initialize after triggering backfill by on_activate_complete().
@@ -173,12 +149,9 @@ public:
   struct Enqueuing : sc::state<Enqueuing, BackfillMachine>,
                      StateHelper<Enqueuing> {
     using reactions = boost::mpl::list<
-      sc::transition<CancelBackfill, Cancelled>,
       sc::transition<RequestPrimaryScanning, PrimaryScanning>,
       sc::transition<RequestReplicasScanning, ReplicasScanning>,
       sc::transition<RequestWaiting, Waiting>,
-      sc::transition<RequestDone, Done>,
-      sc::transition<CancelBackfill, Cancelled>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Enqueuing(my_context);
 
@@ -236,12 +209,15 @@ public:
       sc::custom_reaction<ObjectPushed>,
       sc::custom_reaction<PrimaryScanned>,
       sc::transition<RequestDone, Done>,
-      sc::transition<CancelBackfill, Cancelled>,
+      sc::custom_reaction<CancelBackfill>,
+      sc::custom_reaction<Triggered>,
       sc::transition<sc::event_base, Crashed>>;
     explicit PrimaryScanning(my_context);
     sc::result react(ObjectPushed);
     // collect scanning result and transit to Enqueuing.
     sc::result react(PrimaryScanned);
+    sc::result react(CancelBackfill);
+    sc::result react(Triggered);
   };
 
   struct ReplicasScanning : sc::state<ReplicasScanning, BackfillMachine>,
@@ -250,6 +226,7 @@ public:
       sc::custom_reaction<ObjectPushed>,
       sc::custom_reaction<ReplicaScanned>,
       sc::custom_reaction<CancelBackfill>,
+      sc::custom_reaction<Triggered>,
       sc::transition<RequestDone, Done>,
       sc::transition<sc::event_base, Crashed>>;
     explicit ReplicasScanning(my_context);
@@ -258,6 +235,7 @@ public:
     sc::result react(ObjectPushed);
     sc::result react(ReplicaScanned);
     sc::result react(CancelBackfill);
+    sc::result react(Triggered);
 
     // indicate whether a particular peer should be scanned to retrieve
     // BackfillInterval for new range of hobject_t namespace.
@@ -276,10 +254,13 @@ public:
     using reactions = boost::mpl::list<
       sc::custom_reaction<ObjectPushed>,
       sc::transition<RequestDone, Done>,
-      sc::transition<CancelBackfill, Cancelled>,
+      sc::custom_reaction<CancelBackfill>,
+      sc::custom_reaction<Triggered>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Waiting(my_context);
     sc::result react(ObjectPushed);
+    sc::result react(CancelBackfill);
+    sc::result react(Triggered);
   };
 
   struct Done : sc::state<Done, BackfillMachine>,
@@ -311,12 +292,30 @@ public:
     }
   }
 private:
+  enum go_enqueuing_t : uint8_t {
+    NO,
+    YES
+  };
+  void on_cancelled() {
+    ceph_assert(!next);
+    next = go_enqueuing_t::NO;
+  }
+  bool on_resumed() {
+    auto go_enqueuing = *next;
+    next.reset();
+    return go_enqueuing;
+  }
+  void go_enqueuing_on_resume() {
+    ceph_assert(next);
+    next = go_enqueuing_t::YES;
+  }
   hobject_t last_backfill_started;
   BackfillInterval backfill_info;
   std::map<pg_shard_t, BackfillInterval> peer_backfill_info;
   BackfillMachine backfill_machine;
   std::unique_ptr<ProgressTracker> progress_tracker;
   size_t replicas_in_backfill = 0;
+  std::optional<go_enqueuing_t> next;
 };
 
 // BackfillListener -- an interface used by the backfill FSM to request
@@ -383,8 +382,10 @@ struct BackfillState::PeeringFacade {
 // of behaviour that must be provided by a unit test's mock.
 struct BackfillState::PGFacade {
   virtual const eversion_t& get_projected_last_update() const = 0;
+  virtual std::ostream &print(std::ostream &out) const = 0;
   virtual ~PGFacade() {}
 };
+std::ostream &operator<<(std::ostream &out, const BackfillState::PGFacade &pg);
 
 class BackfillState::ProgressTracker {
   // TODO: apply_stat,
@@ -411,6 +412,9 @@ class BackfillState::ProgressTracker {
   BackfillListener& backfill_listener() {
     return backfill_machine.backfill_listener;
   }
+  PGFacade& pg() {
+    return *backfill_machine.pg;
+  }
 
 public:
   ProgressTracker(BackfillMachine& backfill_machine)
@@ -425,3 +429,9 @@ public:
 };
 
 } // namespace crimson::osd
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::BackfillState::PGFacade>
+  : fmt::ostream_formatter {};
+#endif
+
