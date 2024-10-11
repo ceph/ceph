@@ -211,6 +211,12 @@ void usage(ostream& out)
 "        set the max number of objects for write benchmarking\n"
 "   --obj-name-file file\n"
 "        use the content of the specified file in place of <obj-name>\n"
+"   --omap-read-start-after\n"
+"        set the start_after parameter for OMAP list benchmarking\n"
+"   --omap-read-filter-prefix\n"
+"        set the filter_prefix parameter for OMAP list benchmarking\n"
+"   --omap-read-max-return\n"
+"        set the max number of entries for OMAP list benchmarking\n"
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
@@ -1062,6 +1068,12 @@ enum OpDest {
   OP_DEST_XATTR = 2 << 2,
 };
 
+struct omap_read_params_t {
+  std::string start_after;
+  std::string filter_prefix;
+  uint64_t max_return{MAX_OMAP_BYTES_PER_REQUEST};
+};
+
 class RadosBencher : public ObjBencher {
   librados::AioCompletion **completions;
   librados::Rados& rados;
@@ -1069,6 +1081,7 @@ class RadosBencher : public ObjBencher {
   librados::NObjectIterator oi;
   bool iterator_valid;
   OpDest destination;
+  omap_read_params_t omap_read;
 
 protected:
   int completions_init(int concurrentios) override {
@@ -1094,7 +1107,28 @@ protected:
 
   int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len,
 	       size_t offset) override {
-    return io_ctx.aio_read(oid, completions[slot], pbl, len, offset);
+    int ret = 0;
+    if (destination & OP_DEST_OBJ) {
+      ret = io_ctx.aio_read(oid, completions[slot], pbl, len, offset);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
+    if (destination & OP_DEST_OMAP) {
+      std::map<std::string, librados::bufferlist> values;
+      ObjectReadOperation rop;
+      rop.omap_get_vals2(omap_read.start_after, omap_read.filter_prefix, omap_read.max_return, nullptr, nullptr, nullptr);
+      ret = io_ctx.aio_operate(oid, completions[slot], &rop, pbl);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
+    if (destination & OP_DEST_XATTR) {
+      ceph_abort("not supported yet");
+    }
+    return ret;
   }
 
   int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len,
@@ -1188,6 +1222,9 @@ public:
 
   void set_destination(OpDest dest) {
     destination = dest;
+  }
+  void set_omap_read_patams(const omap_read_params_t& omap_read_params) {
+    omap_read = omap_read_params;
   }
 };
 
@@ -1886,6 +1923,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool obj_offset_specified = false;
   bool block_size_specified = false;
   int bench_dest = 0;
+  omap_read_params_t omap_read;
   bool cleanup = true;
   bool hints = true; // for rados bench
   bool reuse_bench = false;
@@ -2132,6 +2170,22 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
     omap_key = std::string(indata.c_str(), indata.length());
+  }
+  i = opts.find("omap-read-start-after");
+  if (i != opts.end()) {
+    omap_read.start_after = i->second;
+  } else {
+    // fall back to empty string which is set by the omap_read_params_t's ctor
+  }
+  i = opts.find("omap-read-filter-prefix");
+  if (i != opts.end()) {
+    omap_read.filter_prefix = i->second;
+  }
+  i = opts.find("omap-read-max-return");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &omap_read.max_return)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("obj-name-file");
   if (i != opts.end()) {
@@ -3340,6 +3394,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
     bencher.set_destination(static_cast<OpDest>(bench_dest));
+    bencher.set_omap_read_patams(omap_read);
 
     ostream *outstream = NULL;
     if (formatter) {
@@ -4235,8 +4290,20 @@ int main(int argc, const char **argv)
       opts["dest-obj"] = "true";
     } else if (ceph_argparse_flag(args, i, "--write-xattr", (char*)NULL)) {
       opts["dest-xattr"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--read-omap", (char*)NULL)) {
+      opts["dest-omap"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--read-object", (char*)NULL)) {
+      opts["dest-obj"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--read-xattr", (char*)NULL)) {
+      opts["dest-xattr"] = "true";
     } else if (ceph_argparse_flag(args, i, "--with-clones", (char*)NULL)) {
       opts["with-clones"] = "true";
+    } else if (ceph_argparse_witharg(args, i, &val, "--omap-read-start-after", (char*)NULL)) {
+      opts["omap-read-start-after"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--omap-read-filter-prefix", (char*)NULL)) {
+      opts["omap-read-filter-prefix"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--omap-read-max-return", (char*)NULL)) {
+      opts["omap-read-max-return"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--omap-key-file", (char*)NULL)) {
       opts["omap-key-file"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--obj-name-file", (char*)NULL)) {
