@@ -183,7 +183,7 @@ else:
             force: bool = False,
             gw_group: Optional[str] = None
         ):
-            return NVMeoFClient(gw_group=gw_group).stub.delete_listener(
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.delete_listener(
                 NVMeoFClient.pb2.delete_listener_req(
                     nqn=nqn,
                     host_name=host_name,
