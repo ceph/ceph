@@ -3446,6 +3446,9 @@ class TestMgmtGateway:
                                              }"""),
                     "nginx_internal_server.conf": dedent("""
                                              server {
+                                                 ssl_client_certificate /etc/nginx/ssl/ca.crt;
+                                                 ssl_verify_client on;
+
                                                  listen              29443 ssl;
                                                  listen              [::]:29443 ssl;
                                                  ssl_certificate     /etc/nginx/ssl/nginx_internal.crt;
@@ -3760,6 +3763,9 @@ class TestMgmtGateway:
                                              }"""),
                     "nginx_internal_server.conf": dedent("""
                                              server {
+                                                 ssl_client_certificate /etc/nginx/ssl/ca.crt;
+                                                 ssl_verify_client on;
+
                                                  listen              29443 ssl;
                                                  listen              [::]:29443 ssl;
                                                  ssl_certificate     /etc/nginx/ssl/nginx_internal.crt;
