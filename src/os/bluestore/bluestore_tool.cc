@@ -746,20 +746,25 @@ int main(int argc, char **argv)
   else if (action == "show-label") {
     JSONFormatter jf(true);
     jf.open_object_section("devices");
+    bool any_success = false;
     for (auto& i : devs) {
+      jf.open_object_section(i.c_str());
       bluestore_bdev_label_t label;
       int r = BlueStore::read_bdev_label(cct.get(), i, &label);
       if (r < 0) {
-	cerr << "unable to read label for " << i << ": "
-	     << cpp_strerror(r) << std::endl;
-	exit(EXIT_FAILURE);
+        cerr << "unable to read label for " << i << ": "
+             << cpp_strerror(r) << std::endl;
+      } else {
+        any_success = true;
+        label.dump(&jf);
       }
-      jf.open_object_section(i.c_str());
-      label.dump(&jf);
       jf.close_section();
     }
     jf.close_section();
     jf.flush(cout);
+    if (!any_success) {
+      exit(EXIT_FAILURE);
+    }
   }
   else if (action == "set-label-key") {
     bluestore_bdev_label_t label;
