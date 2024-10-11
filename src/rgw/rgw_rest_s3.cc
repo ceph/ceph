@@ -3938,7 +3938,9 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
 	      s->formatter->open_object_section("Part");
 	      s->formatter->dump_int("PartNumber", part.part_number);
 	      s->formatter->dump_unsigned("Size", part.part_size);
-	      s->formatter->dump_string(part.cksum.element_name(), part.cksum.to_armor());
+	      if (part.cksum.type != rgw::cksum::Type::none) {
+		s->formatter->dump_string(part.cksum.element_name(), part.cksum.to_armor());
+	      }
 	      s->formatter->close_section(); /* Part */
 	      return 0;
 	    }, s->yield);
