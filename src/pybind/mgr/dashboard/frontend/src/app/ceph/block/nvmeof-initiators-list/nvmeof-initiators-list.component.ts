@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -20,9 +20,11 @@ const BASE_URL = 'block/nvmeof/subsystems';
   templateUrl: './nvmeof-initiators-list.component.html',
   styleUrls: ['./nvmeof-initiators-list.component.scss']
 })
-export class NvmeofInitiatorsListComponent implements OnInit, OnChanges {
+export class NvmeofInitiatorsListComponent implements OnInit {
   @Input()
   subsystemNQN: string;
+  @Input()
+  group: string;
 
   @ViewChild('hostTpl', { static: true })
   hostTpl: TemplateRef<any>;
@@ -58,10 +60,10 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnChanges {
         permission: 'create',
         icon: Icons.add,
         click: () =>
-          this.router.navigate([
-            BASE_URL,
-            { outlets: { modal: [URLVerbs.ADD, this.subsystemNQN, 'initiator'] } }
-          ]),
+          this.router.navigate(
+            [BASE_URL, { outlets: { modal: [URLVerbs.ADD, this.subsystemNQN, 'initiator'] } }],
+            { queryParams: { group: this.group } }
+          ),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
@@ -79,17 +81,13 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnChanges {
     return this.selection.selected.findIndex((selected) => selected.nqn === '*');
   }
 
-  ngOnChanges() {
-    this.listInitiators();
-  }
-
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
 
   listInitiators() {
     this.nvmeofService
-      .getInitiators(this.subsystemNQN)
+      .getInitiators(this.subsystemNQN, this.group)
       .subscribe((initiators: NvmeofSubsystemInitiator[]) => {
         this.initiators = initiators;
       });
@@ -118,7 +116,10 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnChanges {
             nqn: this.subsystemNQN,
             plural: itemNames.length > 1
           }),
-          call: this.nvmeofService.removeInitiators(this.subsystemNQN, { host_nqn })
+          call: this.nvmeofService.removeInitiators(this.subsystemNQN, {
+            host_nqn,
+            gw_group: this.group
+          })
         })
     });
   }

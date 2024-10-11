@@ -463,16 +463,17 @@ else:
                      parameters={
                          'subsystem_nqn': (str, 'Subsystem NQN'),
                          "host_nqn": Param(str, 'Comma separated list of NVMeoF host NQNs'),
+                         "gw_group": Param(str, "NVMeoF gateway group")
                      })
         @empty_response
         @handle_nvmeof_error
         @CreatePermission
-        def add(self, subsystem_nqn: str, host_nqn: str = ""):
+        def add(self, subsystem_nqn: str, gw_group: str, host_nqn: str = ""):
             response = None
             all_host_nqns = host_nqn.split(',')
 
             for nqn in all_host_nqns:
-                response = NVMeoFClient().stub.add_host(
+                response = NVMeoFClient(gw_group=gw_group).stub.add_host(
                     NVMeoFClient.pb2.add_host_req(subsystem_nqn=subsystem_nqn, host_nqn=nqn)
                 )
                 if response.status != 0:
@@ -484,16 +485,17 @@ else:
                      parameters={
                          "subsystem_nqn": Param(str, "NVMeoF subsystem NQN"),
                          "host_nqn": Param(str, 'Comma separated list of NVMeoF host NQN.'),
+                         "gw_group": Param(str, "NVMeoF gateway group")
                      })
         @empty_response
         @handle_nvmeof_error
         @DeletePermission
-        def remove(self, subsystem_nqn: str, host_nqn: str):
+        def remove(self, subsystem_nqn: str, host_nqn: str, gw_group: str):
             response = None
             to_delete_nqns = host_nqn.split(',')
 
             for del_nqn in to_delete_nqns:
-                response = NVMeoFClient().stub.remove_host(
+                response = NVMeoFClient(gw_group=gw_group).stub.remove_host(
                     NVMeoFClient.pb2.remove_host_req(subsystem_nqn=subsystem_nqn, host_nqn=del_nqn)
                 )
                 if response.status != 0:

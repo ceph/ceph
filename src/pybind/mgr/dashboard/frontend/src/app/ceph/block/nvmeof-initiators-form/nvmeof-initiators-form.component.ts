@@ -10,7 +10,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ActivatedRoute, Router } from '@angular/router';
-import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { InitiatorRequest, NvmeofService } from '~/app/shared/api/nvmeof.service';
 
 @Component({
   selector: 'cd-nvmeof-initiators-form',
@@ -26,6 +26,7 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
   remove: boolean = false;
   subsystemNQN: string;
   removeHosts: { name: string; value: boolean; id: number }[] = [];
+  group: string;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -52,6 +53,9 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
   );
 
   ngOnInit() {
+    this.route.queryParams.subscribe((params) => {
+      this.group = params?.['group'];
+    });
     this.createForm();
     this.action = this.actionLabels.ADD;
     this.route.params.subscribe((params: { subsystem_nqn: string }) => {
@@ -108,8 +112,9 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
     const hosts: string[] = this.addedHosts.value;
     let taskUrl = `nvmeof/initiator/${URLVerbs.ADD}`;
 
-    const request = {
-      host_nqn: hosts.join(',')
+    const request: InitiatorRequest = {
+      host_nqn: hosts.join(','),
+      gw_group: this.group
     };
 
     if (allowAnyHost) {
