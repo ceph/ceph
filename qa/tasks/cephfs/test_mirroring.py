@@ -432,6 +432,34 @@ class TestMirroring(CephFSTestCase):
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.mount_a.run_shell(["rmdir", "d1"])
 
+    def test_directory_command_ls(self):
+        dir1 = 'dls1'
+        dir2 = 'dls2'
+        self.mount_a.run_shell(["mkdir", dir1])
+        self.mount_a.run_shell(["mkdir", dir2])
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        try:
+            self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir1}')
+            self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir2}')
+            time.sleep(10)
+            dirs_list = json.loads(self.get_ceph_cmd_stdout("fs", "snapshot", "mirror", "ls", self.primary_fs_name))
+            # verify via asok
+            res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                             'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+            dir_count = res['snap_dirs']['dir_count']
+            self.assertTrue(len(dirs_list) == dir_count and f'/{dir1}' in dirs_list and f'/{dir2}' in dirs_list)
+        except CommandFailedError:
+            raise RuntimeError('Error listing directories')
+        except AssertionError:
+            raise RuntimeError('Wrong number of directories listed')
+        finally:
+            self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir1}')
+            self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir2}')
+
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.mount_a.run_shell(["rmdir", dir1])
+        self.mount_a.run_shell(["rmdir",  dir2])
+
     def test_add_relative_directory_path(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
         try:
@@ -560,7 +588,7 @@ class TestMirroring(CephFSTestCase):
 
         # create a bunch of files in a directory to snap
         self.mount_a.run_shell(["mkdir", "d0"])
-        for i in range(50):
+        for i in range(100):
             self.mount_a.write_n_mb(os.path.join('d0', f'file.{i}'), 1)
 
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
@@ -574,7 +602,7 @@ class TestMirroring(CephFSTestCase):
         # take a snapshot
         self.mount_a.run_shell(["mkdir", "d0/.snap/snap0"])
 
-        time.sleep(30)
+        time.sleep(60)
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                "client.mirror_remote@ceph", '/d0', 'snap0', 1)
         self.verify_snapshot('d0', 'snap0')
@@ -586,10 +614,10 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(second["counters"]["last_synced_start"], first["counters"]["last_synced_start"])
         self.assertGreater(second["counters"]["last_synced_end"], second["counters"]["last_synced_start"])
         self.assertGreater(second["counters"]["last_synced_duration"], 0)
-        self.assertEquals(second["counters"]["last_synced_bytes"], 52428800) # last_synced_bytes = 50 files of 1MB size each
+        self.assertEquals(second["counters"]["last_synced_bytes"], 104857600) # last_synced_bytes = 100 files of 1MB size each
 
         # some more IO
-        for i in range(75):
+        for i in range(150):
             self.mount_a.write_n_mb(os.path.join('d0', f'more_file.{i}'), 1)
 
         time.sleep(60)
@@ -597,7 +625,7 @@ class TestMirroring(CephFSTestCase):
         # take another snapshot
         self.mount_a.run_shell(["mkdir", "d0/.snap/snap1"])
 
-        time.sleep(60)
+        time.sleep(120)
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                "client.mirror_remote@ceph", '/d0', 'snap1', 2)
         self.verify_snapshot('d0', 'snap1')
@@ -609,7 +637,7 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(third["counters"]["last_synced_start"], second["counters"]["last_synced_end"])
         self.assertGreater(third["counters"]["last_synced_end"], third["counters"]["last_synced_start"])
         self.assertGreater(third["counters"]["last_synced_duration"], 0)
-        self.assertEquals(third["counters"]["last_synced_bytes"], 78643200) # last_synced_bytes = 75 files of 1MB size each
+        self.assertEquals(third["counters"]["last_synced_bytes"], 157286400) # last_synced_bytes = 150 files of 1MB size each
 
         # delete a snapshot
         self.mount_a.run_shell(["rmdir", "d0/.snap/snap0"])
@@ -1372,7 +1400,7 @@ class TestMirroring(CephFSTestCase):
         self.mount_b.umount_wait()
         self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
 
-        # create a bunch of files in a directory to snap
+        # create some large files in 3 directories to snap
         self.mount_a.run_shell(["mkdir", "d0"])
         self.mount_a.run_shell(["mkdir", "d1"])
         self.mount_a.run_shell(["mkdir", "d2"])
@@ -1395,30 +1423,38 @@ class TestMirroring(CephFSTestCase):
         vbefore = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         # take snapshots
         log.debug('taking snapshots')
-        self.mount_a.run_shell(["mkdir", "d0/.snap/snap0"])
-        self.mount_a.run_shell(["mkdir", "d1/.snap/snap0"])
-        self.mount_a.run_shell(["mkdir", "d2/.snap/snap0"])
+        snap_name = "snap0"
+        self.mount_a.run_shell(["mkdir", f"d0/.snap/{snap_name}"])
+        self.mount_a.run_shell(["mkdir", f"d1/.snap/{snap_name}"])
+        self.mount_a.run_shell(["mkdir", f"d2/.snap/{snap_name}"])
 
-        time.sleep(10)
         log.debug('checking snap in progress')
-        self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
-                                         "client.mirror_remote@ceph", '/d0', 'snap0')
-        self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
-                                         "client.mirror_remote@ceph", '/d1', 'snap0')
-        self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
-                                         "client.mirror_remote@ceph", '/d2', 'snap0')
+        peer_spec = "client.mirror_remote@ceph"
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        with safe_while(sleep=3, tries=100, action=f'wait for status: {peer_spec}') as proceed:
+            while proceed():
+                res = self.mirror_daemon_command(f'peer status for fs: {self.primary_fs_name}',
+                                                 'fs', 'mirror', 'peer', 'status',
+                                                 f'{self.primary_fs_name}@{self.primary_fs_id}',
+                                                 peer_uuid)
+                if ('syncing' == res["/d0"]['state'] and 'syncing' == res["/d1"]['state'] and \
+                    'syncing' == res["/d2"]['state']):
+                    break
 
-        log.debug('removing directories 1')
+        log.debug('removing directory 1')
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
-        log.debug('removing directories 2')
+        log.debug('removing directory 2')
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d1')
-        log.debug('removing directories 3')
+        log.debug('removing directory 3')
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d2')
 
+        # Wait a while for the sync backoff
+        time.sleep(500)
+
         log.debug('removing snapshots')
-        self.mount_a.run_shell(["rmdir", "d0/.snap/snap0"])
-        self.mount_a.run_shell(["rmdir", "d1/.snap/snap0"])
-        self.mount_a.run_shell(["rmdir", "d2/.snap/snap0"])
+        self.mount_a.run_shell(["rmdir", f"d0/.snap/{snap_name}"])
+        self.mount_a.run_shell(["rmdir", f"d1/.snap/{snap_name}"])
+        self.mount_a.run_shell(["rmdir", f"d2/.snap/{snap_name}"])
 
         for i in range(4):
             filename = f'file.{i}'
@@ -1438,26 +1474,27 @@ class TestMirroring(CephFSTestCase):
         self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d2')
 
         log.debug('creating new snapshots...')
-        self.mount_a.run_shell(["mkdir", "d0/.snap/snap0"])
-        self.mount_a.run_shell(["mkdir", "d1/.snap/snap0"])
-        self.mount_a.run_shell(["mkdir", "d2/.snap/snap0"])
+        self.mount_a.run_shell(["mkdir", f"d0/.snap/{snap_name}"])
+        self.mount_a.run_shell(["mkdir", f"d1/.snap/{snap_name}"])
+        self.mount_a.run_shell(["mkdir", f"d2/.snap/{snap_name}"])
 
-        time.sleep(60)
-        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
-                               "client.mirror_remote@ceph", '/d0', 'snap0', 1)
-        self.verify_snapshot('d0', 'snap0')
+        # Wait for the threads to finish
+        time.sleep(500)
 
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
-                               "client.mirror_remote@ceph", '/d1', 'snap0', 1)
-        self.verify_snapshot('d1', 'snap0')
+                               "client.mirror_remote@ceph", '/d0', f'{snap_name}', 1)
+        self.verify_snapshot('d0', f'{snap_name}')
 
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
-                               "client.mirror_remote@ceph", '/d2', 'snap0', 1)
-        self.verify_snapshot('d2', 'snap0')
+                               "client.mirror_remote@ceph", '/d1', f'{snap_name}', 1)
+        self.verify_snapshot('d1', f'{snap_name}')
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d2', f'{snap_name}', 1)
+        self.verify_snapshot('d2', f'{snap_name}')
         res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
         vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         self.assertGreater(vafter["counters"]["snaps_synced"], vbefore["counters"]["snaps_synced"])
-        self.assertGreater(vafter["counters"]["snaps_deleted"], vbefore["counters"]["snaps_deleted"])
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 

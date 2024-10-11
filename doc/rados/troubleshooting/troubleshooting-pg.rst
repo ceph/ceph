@@ -5,16 +5,16 @@
 Placement Groups Never Get Clean
 ================================
 
-If, after you have created your cluster, any Placement Groups (PGs) remain in
-the ``active`` status, the ``active+remapped`` status or the
-``active+degraded`` status and never achieves an ``active+clean`` status, you
-likely have a problem with your configuration.
+Placement Groups (PGs) that remain in the ``active`` status, the
+``active+remapped`` status or the ``active+degraded`` status and never achieve
+an ``active+clean`` status might indicate a problem with the configuration of
+the Ceph cluster. 
 
-In such a situation, it may be necessary to review the settings in the `Pool,
-PG and CRUSH Config Reference`_ and make appropriate adjustments.
+In such a situation, review the settings in the `Pool, PG and CRUSH Config
+Reference`_ and make appropriate adjustments.
 
 As a general rule, run your cluster with more than one OSD and a pool size
-greater than two object replicas.
+of greater than two object replicas.
 
 .. _one-node-cluster:
 

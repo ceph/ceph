@@ -79,25 +79,8 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
           this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.CREATE] } }], {
             queryParams: { group: this.group }
           }),
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
-      },
-      {
-        name: this.actionLabels.EDIT,
-        permission: 'update',
-        icon: Icons.edit,
-        click: () =>
-          this.router.navigate([
-            BASE_URL,
-            {
-              outlets: {
-                modal: [
-                  URLVerbs.EDIT,
-                  this.selection.first().nqn,
-                  this.selection.first().max_namespaces
-                ]
-              }
-            }
-          ])
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
+        disable: () => !this.group
       },
       {
         name: this.actionLabels.DELETE,
@@ -114,12 +97,16 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   }
 
   getSubsystems() {
-    this.nvmeofService
-      .listSubsystems(this.group)
-      .subscribe((subsystems: NvmeofSubsystem[] | NvmeofSubsystem) => {
-        if (Array.isArray(subsystems)) this.subsystems = subsystems;
-        else this.subsystems = [subsystems];
-      });
+    if (this.group) {
+      this.nvmeofService
+        .listSubsystems(this.group)
+        .subscribe((subsystems: NvmeofSubsystem[] | NvmeofSubsystem) => {
+          if (Array.isArray(subsystems)) this.subsystems = subsystems;
+          else this.subsystems = [subsystems];
+        });
+    } else {
+      this.subsystems = [];
+    }
   }
 
   deleteSubsystemModal() {

@@ -21,6 +21,11 @@ may encounter crashes during `pthread_create`. For workarounds, refer to the rel
 upgrading your OS to avoid this unsupported combination.
 Related tracker: https://tracker.ceph.com/issues/66989
 
+Release Date
+------------
+
+July 24, 2024
+
 Notable Changes
 ---------------
 
@@ -445,6 +450,11 @@ v18.2.2 Reef
 
 This is a hotfix release that resolves several flaws including Prometheus crashes and an encoder fix.
 
+Release Date
+------------
+
+March 11, 2024
+
 Notable Changes
 ---------------
 
@@ -462,6 +472,11 @@ v18.2.1 Reef
 
 This is the first backport release in the Reef series, and the first with Debian packages,
 for Debian Bookworm. We recommend that all users update to this release.
+
+Release Date
+------------
+
+December 18, 2023
 
 Notable Changes
 ---------------
@@ -962,6 +977,11 @@ This is the first stable release of Ceph Reef.
    soon as this bug is resolved in Debian stable.
 
    *last updated 2023 Aug 04*
+
+Release Date
+------------
+
+August 7, 2023
 
 Major Changes from Quincy
 --------------------------

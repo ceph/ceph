@@ -221,7 +221,7 @@ public:
 
   write_ertr::future<> write(
     uint64_t offset,
-    bufferptr &&bptr,
+    bufferptr bptr,
     uint16_t stream = 0) override;
 
   using RBMDevice::read;

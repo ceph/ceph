@@ -43,7 +43,7 @@ public:
    */
 
   read_ertr::future<> read(paddr_t addr, bufferptr &buffer) final;
-  write_ertr::future<> write(paddr_t addr, bufferptr &buf) final;
+  write_ertr::future<> write(paddr_t addr, bufferptr buf) final;
   open_ertr::future<> open() final;
   close_ertr::future<> close() final;
 
@@ -126,6 +126,8 @@ public:
   size_t get_journal_size() const final {
     return device->get_journal_size();
   }
+
+  bool check_valid_range(rbm_abs_addr paddr, bufferptr &bptr);
 
 #ifdef UNIT_TESTS_BUILT
   void prefill_fragmented_device() final;

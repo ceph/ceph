@@ -107,7 +107,9 @@ struct rbm_test_t :
       std::numeric_limits<char>::max()
     );
     char contents = distribution(generator);
-    return buffer::ptr(buffer::create(blocks * block_size, contents));
+    auto bp = bufferptr(ceph::buffer::create_page_aligned(blocks * block_size));
+    memset(bp.c_str(), contents, bp.length());
+    return bp;
   }
 
   void close() {

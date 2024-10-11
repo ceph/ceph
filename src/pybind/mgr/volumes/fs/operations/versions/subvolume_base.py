@@ -18,7 +18,7 @@ from ...exception import MetadataMgrException, VolumeException
 from .auth_metadata import AuthMetadataManager
 from .subvolume_attrs import SubvolumeStates
 
-from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException  # type: ignore
+from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException
 
 log = logging.getLogger(__name__)
 

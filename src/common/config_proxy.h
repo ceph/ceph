@@ -31,7 +31,6 @@ class ConfigProxy {
   using rev_obs_map_t = ObsMgr::rev_obs_map;
 
   void _call_observers(rev_obs_map_t& rev_obs) {
-    ceph_assert(!ceph::mutex_debugging || !ceph_mutex_is_locked_by_me(lock));
     for (auto& [obs, keys] : rev_obs) {
       (*obs)->handle_conf_change(*this, keys);
     }

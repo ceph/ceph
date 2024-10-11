@@ -1355,6 +1355,20 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
       retain_head_object = false;
     }
   }
+  if (config.exists("allow_read_through")) {
+    string s = config["allow_read_through"];
+    if (s == "true") {
+      allow_read_through = true;
+    } else {
+      allow_read_through = false;
+    }
+  }
+  if (config.exists("read_through_restore_days")) {
+    r = conf_to_uint64(config, "read_through_restore_days", &read_through_restore_days);
+    if (r < 0) {
+      read_through_restore_days = DEFAULT_READ_THROUGH_RESTORE_DAYS;
+    }
+  }
 
   if (tier_type == "cloud-s3") {
     r = t.s3.update_params(config);
@@ -1367,6 +1381,12 @@ int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
 {
   if (config.exists("retain_head_object")) {
     retain_head_object = false;
+  }
+  if (config.exists("allow_read_through")) {
+    allow_read_through = false;
+  }
+  if (config.exists("read_through_restore_days")) {
+    read_through_restore_days = DEFAULT_READ_THROUGH_RESTORE_DAYS;
   }
 
   if (tier_type == "cloud-s3") {

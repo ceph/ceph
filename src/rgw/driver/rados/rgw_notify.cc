@@ -151,6 +151,9 @@ private:
  
     struct token {
       tokens_waiter& waiter;
+      token(const token& other) : waiter(other.waiter) {
+        ++waiter.pending_tokens;
+      }
       token(tokens_waiter& _waiter) : waiter(_waiter) {
         ++waiter.pending_tokens;
       }
@@ -469,11 +472,10 @@ private:
         entries_persistency_tracker& notifs_persistency_tracker = topics_persistency_tracker[queue_name];
         boost::asio::spawn(yield, std::allocator_arg, make_stack_allocator(),
           [this, &notifs_persistency_tracker, &queue_name, entry_idx,
-           total_entries, &end_marker, &remove_entries, &has_error, &waiter,
-           &entry, &needs_migration_vector,
+           total_entries, &end_marker, &remove_entries, &has_error,
+           token = waiter.make_token(), &entry, &needs_migration_vector,
            push_endpoint = push_endpoint.get(),
            &topic_info](boost::asio::yield_context yield) {
-            const auto token = waiter.make_token();
             auto& persistency_tracker = notifs_persistency_tracker[entry.marker];
             auto result =
                 process_entry(this->get_cct()->_conf, persistency_tracker,

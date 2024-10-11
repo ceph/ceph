@@ -99,6 +99,8 @@ int NVMeofGwMap::cfg_add_gw(
         return 0;
       }
     }
+  }
+  for (auto& itr: created_gws[group_key]) {
     if (itr.second.availability == gw_availability_t::GW_DELETING) {
       //Was found some GW in "Deleting" state. Just to inherit its ANA group
       NvmeGwMonState & gw_created = created_gws[group_key][itr.first];
@@ -166,6 +168,7 @@ int NVMeofGwMap::cfg_delete_gw(
         dout(4) << " Deleting  GW :"<< gw_id  << " in state  "
             << state.availability <<  " Resulting GW availability: "
             << state.availability  << dendl;
+        state.subsystems.clear();//ignore subsystems of this GW
         return 0;
       }
     }
@@ -217,10 +220,13 @@ int NVMeofGwMap::do_delete_gw(
 int NVMeofGwMap::get_num_namespaces(const NvmeGwId &gw_id,
     const NvmeGroupKey& group_key,  const BeaconSubsystems&  subs)
 {
-  auto grpid = created_gws[group_key][gw_id].ana_grp_id ;
+  auto grpid = created_gws[group_key][gw_id].ana_grp_id;
   int num_ns = 0;
-  for (auto & subs_it:subs) {
-    for (auto & ns :subs_it.namespaces) {
+  if (subs.size() == 0) {
+    dout(20) << "Empty subsystems  for GW " << gw_id  << dendl;
+  }
+  for (auto & subsystem:subs) {
+    for (auto & ns :subsystem.namespaces) {
       if (ns.anagrpid == (grpid+1)) {
          num_ns++;
       }
@@ -241,7 +247,8 @@ void NVMeofGwMap::track_deleting_gws(const NvmeGroupKey& group_key,
         do_delete_gw(gw_id, group_key);
         propose_pending =  true;
       }
-      dout(4) << " to delete ? " << gw_id  << " num_ns " << num_ns << dendl;
+      dout(4) << " to delete ? " << gw_id  << " num_ns " << num_ns
+          << " subsystems size "<< subs.size() << dendl;
       break; // handle just one GW in "Deleting" state in time.
     }
   }

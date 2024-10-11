@@ -9,6 +9,10 @@ tasks:
     - ceph orch host ls
     - ceph orch device ls
 - install:
-    extra_packages:
+    extra_system_packages:
+      deb:
+      - open-iscsi
+      - multipath-tools
+      rpm:
       - iscsi-initiator-utils
       - device-mapper-multipath

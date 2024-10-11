@@ -191,6 +191,7 @@ static inline void get_v2_qs_map(const req_info& info,
  * compute a request's signature
  */
 bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
+                                    RGWOpType op_type,
                                     const req_info& info,
                                     utime_t* const header_time,
                                     std::string& dest,
@@ -253,7 +254,8 @@ bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
     request_uri = info.effective_uri;
   }
 
-  rgw_create_s3_canonical_header(dpp, info.method, content_md5, content_type,
+  auto method = rgw::auth::s3::get_canonical_method(dpp, op_type, info);
+  rgw_create_s3_canonical_header(dpp, method.c_str(), content_md5, content_type,
                                  date.c_str(), meta_map, qs_map,
 				 request_uri.c_str(), sub_resources, dest);
   return true;
@@ -702,35 +704,6 @@ std::string gen_v4_canonical_qs(const req_info& info, bool is_non_s3_op)
   }
 
   return canonical_qs;
-}
-
-std::string get_v4_canonical_method(const req_state* s)
-{
-  /* If this is a OPTIONS request we need to compute the v4 signature for the
-   * intended HTTP method and not the OPTIONS request itself. */
-  if (s->op_type == RGW_OP_OPTIONS_CORS) {
-    const char *cors_method = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
-
-    if (cors_method) {
-      /* Validate request method passed in access-control-request-method is valid. */
-      auto cors_flags = get_cors_method_flags(cors_method);
-      if (!cors_flags) {
-          ldpp_dout(s, 1) << "invalid access-control-request-method header = "
-                          << cors_method << dendl;
-          throw -EINVAL;
-      }
-
-      ldpp_dout(s, 10) << "canonical req method = " << cors_method
-                       << ", due to access-control-request-method header" << dendl;
-      return cors_method;
-    } else {
-      ldpp_dout(s, 1) << "invalid http options req missing "
-                      << "access-control-request-method header" << dendl;
-      throw -EINVAL;
-    }
-  }
-
-  return s->info.method;
 }
 
 boost::optional<std::string>
@@ -1740,4 +1713,32 @@ AWSv4ComplSingle::create(const req_state* const s,
   return std::make_shared<AWSv4ComplSingle>(s);
 }
 
+std::string get_canonical_method(const DoutPrefixProvider *dpp, RGWOpType op_type, const req_info& info)
+{
+  /* If this is a OPTIONS request we need to compute the v4 signature for the
+   * intended HTTP method and not the OPTIONS request itself. */
+  if (op_type == RGW_OP_OPTIONS_CORS) {
+    const char *cors_method = info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
+
+    if (cors_method) {
+      /* Validate request method passed in access-control-request-method is valid. */
+      auto cors_flags = get_cors_method_flags(cors_method);
+      if (!cors_flags) {
+          ldpp_dout(dpp, 1) << "invalid access-control-request-method header = "
+                          << cors_method << dendl;
+          throw -EINVAL;
+      }
+
+      ldpp_dout(dpp, 10) << "canonical req method = " << cors_method
+                       << ", due to access-control-request-method header" << dendl;
+      return cors_method;
+    } else {
+      ldpp_dout(dpp, 1) << "invalid http options req missing "
+                      << "access-control-request-method header" << dendl;
+      throw -EINVAL;
+    }
+  }
+
+  return info.method;
+}
 } // namespace rgw::auth::s3

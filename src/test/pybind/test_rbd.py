@@ -49,7 +49,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
                  RBD_WRITE_ZEROES_FLAG_THICK_PROVISION,
                  RBD_ENCRYPTION_FORMAT_LUKS1, RBD_ENCRYPTION_FORMAT_LUKS2,
-                 RBD_ENCRYPTION_FORMAT_LUKS, RBD_GROUP_SNAP_STATE_COMPLETE)
+                 RBD_ENCRYPTION_FORMAT_LUKS, RBD_GROUP_SNAP_STATE_COMPLETE,
+                 RBD_GROUP_SNAP_NAMESPACE_TYPE_USER)
 
 rados = None
 ioctx = None
@@ -2836,7 +2837,8 @@ def test_list_groups_after_removed():
 
 class TestGroups(object):
     img_snap_keys = ['image_name', 'pool_id', 'snap_id']
-    gp_snap_keys = ['id', 'image_snap_name', 'image_snaps', 'name', 'state']
+    gp_snap_keys = ['id', 'image_snap_name', 'image_snaps', 'name',
+                    'namespace_type', 'state']
 
     def setup_method(self, method):
         global snap_name
@@ -2925,6 +2927,7 @@ class TestGroups(object):
         assert sorted(snap_info_dict.keys()) == self.gp_snap_keys
         assert snap_info_dict['name'] == snap_name
         assert snap_info_dict['state'] == RBD_GROUP_SNAP_STATE_COMPLETE
+        assert snap_info_dict['namespace_type'] == RBD_GROUP_SNAP_NAMESPACE_TYPE_USER
         for image_snap in snap_info_dict['image_snaps']:
             assert sorted(image_snap.keys()) == self.img_snap_keys
             assert image_snap['pool_id'] == pool_id
@@ -2946,6 +2949,7 @@ class TestGroups(object):
         assert sorted(snap_info_dict.keys()) == self.gp_snap_keys
         assert snap_info_dict['name'] == snap_name
         assert snap_info_dict['state'] == RBD_GROUP_SNAP_STATE_COMPLETE
+        assert snap_info_dict['namespace_type'] == RBD_GROUP_SNAP_NAMESPACE_TYPE_USER
         assert snap_info_dict['image_snap_name'] == ""
         assert snap_info_dict['image_snaps'] == []
 

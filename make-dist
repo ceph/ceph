@@ -23,7 +23,7 @@ version=$1
 [ -z "$version" ] && version=$(git describe --long --match 'v*' | sed 's/^v//')
 if expr index $version '-' > /dev/null; then
     rpm_version=$(echo $version | cut -d - -f 1-1)
-    rpm_release=$(echo $version | cut -d - -f 2- | sed 's/-/./')
+    rpm_release=$(echo $version | cut -d - -f 2- | sed 's/-/./g')
 else
     rpm_version=$version
     rpm_release=0

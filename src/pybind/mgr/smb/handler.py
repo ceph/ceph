@@ -18,6 +18,7 @@ import operator
 import time
 
 from ceph.deployment.service_spec import SMBSpec
+from ceph.fs.earmarking import EarmarkTopScope
 
 from . import config_store, external, resources
 from .enums import (
@@ -43,6 +44,7 @@ from .proto import (
     AccessAuthorizer,
     ConfigEntry,
     ConfigStore,
+    EarmarkResolver,
     EntryKey,
     OrchSubmitter,
     PathResolver,
@@ -110,6 +112,22 @@ class _FakePathResolver:
         return f'/{path}'
 
     resolve_exists = resolve
+
+
+class _FakeEarmarkResolver:
+    """A stub EarmarkResolver for unit testing."""
+
+    def __init__(self) -> None:
+        self._earmarks: Dict[Tuple[str, str], str] = {}
+
+    def get_earmark(self, path: str, volume: str) -> Optional[str]:
+        return None
+
+    def set_earmark(self, path: str, volume: str, earmark: str) -> None:
+        pass
+
+    def check_earmark(self, earmark: str, top_level_scope: str) -> bool:
+        return True
 
 
 class _FakeAuthorizer:
@@ -325,6 +343,7 @@ class ClusterConfigHandler:
         path_resolver: Optional[PathResolver] = None,
         authorizer: Optional[AccessAuthorizer] = None,
         orch: Optional[OrchSubmitter] = None,
+        earmark_resolver: Optional[EarmarkResolver] = None,
     ) -> None:
         self.internal_store = internal_store
         self.public_store = public_store
@@ -336,6 +355,9 @@ class ClusterConfigHandler:
             authorizer = _FakeAuthorizer()
         self._authorizer: AccessAuthorizer = authorizer
         self._orch = orch  # if None, disables updating the spec via orch
+        if earmark_resolver is None:
+            earmark_resolver = cast(EarmarkResolver, _FakeEarmarkResolver())
+        self._earmark_resolver = earmark_resolver
         log.info(
             'Initialized new ClusterConfigHandler with'
             f' internal store {self.internal_store!r},'
@@ -343,7 +365,8 @@ class ClusterConfigHandler:
             f' priv store {self.priv_store!r},'
             f' path resolver {self._path_resolver!r},'
             f' authorizer {self._authorizer!r},'
-            f' orch {self._orch!r}'
+            f' orch {self._orch!r},'
+            f' earmark resolver {self._earmark_resolver!r}'
         )
 
     def apply(
@@ -474,7 +497,12 @@ class ClusterConfigHandler:
             elif isinstance(
                 resource, (resources.Share, resources.RemovedShare)
             ):
-                _check_share(resource, staging, self._path_resolver)
+                _check_share(
+                    resource,
+                    staging,
+                    self._path_resolver,
+                    self._earmark_resolver,
+                )
             elif isinstance(resource, resources.JoinAuth):
                 _check_join_auths(resource, staging)
             elif isinstance(resource, resources.UsersAndGroups):
@@ -806,8 +834,24 @@ def _check_cluster(cluster: ClusterRef, staging: _Staging) -> None:
             )
 
 
+def _parse_earmark(earmark: str) -> dict:
+    parts = earmark.split('.')
+
+    # If it only has one part (e.g., 'smb'), return None for cluster_id
+    if len(parts) == 1:
+        return {'scope': parts[0], 'cluster_id': None}
+
+    return {
+        'scope': parts[0],
+        'cluster_id': parts[2] if len(parts) > 2 else None,
+    }
+
+
 def _check_share(
-    share: ShareRef, staging: _Staging, resolver: PathResolver
+    share: ShareRef,
+    staging: _Staging,
+    resolver: PathResolver,
+    earmark_resolver: EarmarkResolver,
 ) -> None:
     """Check that the share resource can be updated."""
     if share.intent == Intent.REMOVED:
@@ -822,7 +866,7 @@ def _check_share(
         )
     assert share.cephfs is not None
     try:
-        resolver.resolve_exists(
+        volpath = resolver.resolve_exists(
             share.cephfs.volume,
             share.cephfs.subvolumegroup,
             share.cephfs.subvolume,
@@ -832,6 +876,43 @@ def _check_share(
         raise ErrorResult(
             share, msg="path is not a valid directory in volume"
         )
+    if earmark_resolver:
+        earmark = earmark_resolver.get_earmark(
+            volpath,
+            share.cephfs.volume,
+        )
+        if not earmark:
+            smb_earmark = (
+                f"{EarmarkTopScope.SMB.value}.cluster.{share.cluster_id}"
+            )
+            earmark_resolver.set_earmark(
+                volpath,
+                share.cephfs.volume,
+                smb_earmark,
+            )
+        else:
+            parsed_earmark = _parse_earmark(earmark)
+
+            # Check if the top-level scope is not SMB
+            if not earmark_resolver.check_earmark(
+                earmark, EarmarkTopScope.SMB
+            ):
+                raise ErrorResult(
+                    share,
+                    msg=f"earmark has already been set by {parsed_earmark['scope']}",
+                )
+
+            # Check if the earmark is set by a different cluster
+            if (
+                parsed_earmark['cluster_id']
+                and parsed_earmark['cluster_id'] != share.cluster_id
+            ):
+                raise ErrorResult(
+                    share,
+                    msg="earmark has already been set by smb cluster "
+                    f"{parsed_earmark['cluster_id']}",
+                )
+
     name_used_by = _share_name_in_use(staging, share)
     if name_used_by:
         raise ErrorResult(

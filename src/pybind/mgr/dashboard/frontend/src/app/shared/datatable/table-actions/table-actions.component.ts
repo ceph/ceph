@@ -147,7 +147,9 @@ export class TableActionsComponent implements OnChanges, OnInit {
   useDisableDesc(action: CdTableAction) {
     if (action.disable) {
       const result = action.disable(this.selection);
-      return _.isString(result) ? result : undefined;
+      return _.isString(result) ? result : action.title ? action.title : undefined;
+    } else if (action.title) {
+      return action.title;
     }
     return undefined;
   }

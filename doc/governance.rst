@@ -29,7 +29,7 @@ Responsibilities
  * Point of contact for the project
  * Representatives for Ceph foundation board meetings
  * Ensure things get done
-
+   
 Membership
 ----------
 
@@ -82,7 +82,7 @@ Current Members
  * Casey Bodley <cbodley@redhat.com>
  * Dan van der Ster <dan.vanderster@clyso.com>
  * David Orman <ormandj@1111systems.com>
- * Ernesto Puerta <epuerta@redhat.com>
+ * Ernesto Puerta <epuertat@redhat.com>
  * Gregory Farnum <gfarnum@redhat.com>
  * Haomai Wang <haomai@xsky.com>
  * Ilya Dryomov <idryomov@redhat.com>
@@ -103,7 +103,7 @@ Current Members
  * Yehuda Sadeh <yehuda@redhat.com>
  * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
- * Zac Dover <zac.dover@gmail.com>
+ * Zac Dover <zac.dover@proton.me>
 
 .. _ctl:
 

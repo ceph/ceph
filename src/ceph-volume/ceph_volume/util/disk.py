@@ -771,9 +771,20 @@ def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_pat
         result.append([name, kname, "part", partitions[partition]])
     return sorted(result, key=lambda x: x[0])
 
-def get_partitions(_sys_dev_block_path ='/sys/dev/block') -> List[str]:
+def get_partitions(_sys_dev_block_path: str ='/sys/dev/block') -> Dict[str, str]:
+    """
+    Retrieves a dictionary mapping partition system names to their parent device names.
+
+    Args:
+        _sys_dev_block_path (str, optional): The path to the system's block device directory.
+                                             Defaults to '/sys/dev/block'.
+
+    Returns:
+        Dict[str, str]: A dictionary where the keys are partition system names, and the values are
+                        the corresponding parent device names.
+    """
     devices: List[str] = os.listdir(_sys_dev_block_path)
-    result: Dict[str, str] = dict()
+    result: Dict[str, str] = {}
     for device in devices:
         device_path: str = os.path.join(_sys_dev_block_path, device)
         is_partition: bool = int(get_file_contents(os.path.join(device_path, 'partition'), '0')) > 0
@@ -807,7 +818,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     for block in block_devs:
         metadata: Dict[str, Any] = {}
         if block[2] == 'lvm':
-            block[1] = lvm.get_lv_path_from_mapper(block[1])
+            block[1] = UdevData(block[1]).slashed_path
         devname = os.path.basename(block[0])
         diskname = block[1]
         if block[2] not in block_types:
@@ -1075,6 +1086,21 @@ def get_block_device_holders(sys_block: str = '/sys/block') -> Dict[str, Any]:
 
     return result
 
+def has_holders(device: str) -> bool:
+    """Check if a given device has any associated holders.
+
+    This function determines whether the specified device has associated holders
+    (e.g., other devices that depend on it) by checking if the device's real path
+    appears in the values of the dictionary returned by `get_block_device_holders`.
+
+    Args:
+        device (str): The path to the device (e.g., '/dev/sdX') to check.
+
+    Returns:
+        bool: True if the device has holders, False otherwise.
+    """
+    return os.path.realpath(device) in get_block_device_holders().values()
+
 def get_parent_device_from_mapper(mapper: str, abspath: bool = True) -> str:
     """Get the parent device corresponding to a given device mapper.
 
@@ -1105,10 +1131,8 @@ def get_parent_device_from_mapper(mapper: str, abspath: bool = True) -> str:
             pass
     return result
 
-
 def get_lvm_mapper_path_from_dm(path: str, sys_block: str = '/sys/block') -> str:
-    """_summary_
-    Retrieve the logical volume path for a given device.
+    """Retrieve the logical volume path for a given device.
 
     This function takes the path of a device and returns the corresponding
     logical volume path by reading the 'dm/name' file within the sysfs
@@ -1119,7 +1143,7 @@ def get_lvm_mapper_path_from_dm(path: str, sys_block: str = '/sys/block') -> str
         sys_block (str, optional): The base sysfs block directory. Defaults to '/sys/block'.
 
     Returns:
-        str: The device mapper path in the form of '/dev/dm-X'.
+        str: The device mapper path in the 'dashed form' of '/dev/mapper/vg-lv'.
     """
     result: str = ''
     dev: str = os.path.basename(path)
@@ -1128,4 +1152,239 @@ def get_lvm_mapper_path_from_dm(path: str, sys_block: str = '/sys/block') -> str
         with open(sys_block_path, 'r') as f:
             content: str = f.read()
             result = f'/dev/mapper/{content}'
-    return result
+    return result.strip()
+
+
+class BlockSysFs:
+    def __init__(self,
+                 path: str,
+                 sys_dev_block: str = '/sys/dev/block',
+                 sys_block: str = '/sys/block') -> None:
+        """
+        Initializes a BlockSysFs object.
+
+        Args:
+            path (str): The path to the block device.
+            sys_dev_block (str, optional): Path to the sysfs directory containing block devices.
+                                           Defaults to '/sys/dev/block'.
+            sys_block (str, optional): Path to the sysfs directory containing block information.
+                                       Defaults to '/sys/block'.
+        """
+        self.path: str = path
+        self.name: str = os.path.basename(os.path.realpath(self.path))
+        self.sys_dev_block: str = sys_dev_block
+        self.sys_block: str = sys_block
+
+    @property
+    def is_partition(self) -> bool:
+        """
+        Checks if the current block device is a partition.
+
+        Returns:
+            bool: True if it is a partition, False otherwise.
+        """
+        path: str = os.path.join(self.get_sys_dev_block_path, 'partition')
+        return os.path.exists(path)
+
+    @property
+    def holders(self) -> List[str]:
+        """
+        Retrieves the holders of the current block device.
+
+        Returns:
+            List[str]: A list of holders (other devices) associated with this block device.
+        """
+        result: List[str] = []
+        path: str = os.path.join(self.get_sys_dev_block_path, 'holders')
+        if os.path.exists(path):
+            result = os.listdir(path)
+        return result
+
+    @property
+    def get_sys_dev_block_path(self) -> str:
+        """
+        Gets the sysfs path for the current block device.
+
+        Returns:
+            str: The sysfs path corresponding to this block device.
+        """
+        sys_dev_block_path: str = ''
+        devices: List[str] = os.listdir(self.sys_dev_block)
+        for device in devices:
+            path = os.path.join(self.sys_dev_block, device)
+            if os.path.realpath(path).split('/')[-1:][0] == self.name:
+                sys_dev_block_path = path
+        return sys_dev_block_path
+
+    @property
+    def has_active_mappers(self) -> bool:
+        """
+        Checks if there are any active device mappers for the current block device.
+
+        Returns:
+            bool: True if active mappers exist, False otherwise.
+        """
+        return len(self.active_mappers()) > 0
+
+    @property
+    def has_active_dmcrypt_mapper(self) -> bool:
+        """
+        Checks if there is an active dm-crypt (disk encryption) mapper for the current block device.
+
+        Returns:
+            bool: True if an active dm-crypt mapper exists, False otherwise.
+        """
+        return any(value.get('type') == 'CRYPT' for value in self.active_mappers().values())
+
+    def active_mappers(self) -> Dict[str, Any]:
+        """
+        Retrieves information about active device mappers for the current block device.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing details about active device mappers.
+                            Keys are the holders, and values provide details like type,
+                            dm-crypt metadata, and LVM UUIDs.
+        """
+        result: Dict[str, Any] = {}
+        for holder in self.holders:
+            path: str = os.path.join(self.sys_block, holder, 'dm/uuid')
+            if os.path.exists(path):
+                result[holder] = {}
+                with open(path, 'r') as f:
+                    content: str = f.read().strip()
+                    content_split: List[str] = content.split('-', maxsplit=3)
+                    mapper_type: str = content_split[0]
+                    result[holder]['type'] = mapper_type
+                    if mapper_type == 'CRYPT':
+                        result[holder]['dmcrypt_type'] = content_split[1]
+                        result[holder]['dmcrypt_uuid'] = content_split[2]
+                        result[holder]['dmcrypt_mapping'] = content_split[3]
+                    if mapper_type == 'LVM':
+                        result[holder]['uuid'] = content_split[1]
+        return result
+
+class UdevData:
+    """
+    Class representing udev data for a specific device.
+    This class extracts and stores relevant information about the device from udev files.
+
+    Attributes:
+    -----------
+    path : str
+        The initial device path (e.g., /dev/sda).
+    realpath : str
+        The resolved real path of the device.
+    stats : os.stat_result
+        The result of the os.stat() call to retrieve device metadata.
+    major : int
+        The device's major number.
+    minor : int
+        The device's minor number.
+    udev_data_path : str
+        The path to the udev metadata for the device (e.g., /run/udev/data/b<major>:<minor>).
+    symlinks : List[str]
+        A list of symbolic links pointing to the device.
+    id : str
+        A unique identifier for the device.
+    environment : Dict[str, str]
+        A dictionary containing environment variables extracted from the udev data.
+    group : str
+        The group associated with the device.
+    queue : str
+        The queue associated with the device.
+    version : str
+        The version of the device or its metadata.
+    """
+    def __init__(self, path: str) -> None:
+        """Initialize an instance of the UdevData class and load udev information.
+
+        Args:
+            path (str): The path to the device to be analyzed (e.g., /dev/sda).
+
+        Raises:
+            RuntimeError: Raised if no udev data file is found for the specified device.
+        """
+        if not os.path.exists(path):
+            raise RuntimeError(f'{path} not found.')
+        self.path: str = path
+        self.realpath: str = os.path.realpath(self.path)
+        self.stats: os.stat_result = os.stat(self.realpath)
+        self.major: int = os.major(self.stats.st_rdev)
+        self.minor: int = os.minor(self.stats.st_rdev)
+        self.udev_data_path: str = f'/run/udev/data/b{self.major}:{self.minor}'
+        self.symlinks: List[str] = []
+        self.id: str = ''
+        self.environment: Dict[str, str] = {}
+        self.group: str = ''
+        self.queue: str = ''
+        self.version: str = ''
+
+        if not os.path.exists(self.udev_data_path):
+            raise RuntimeError(f'No udev data could be retrieved for {self.path}')
+
+        with open(self.udev_data_path, 'r') as f:
+            content: str = f.read().strip()
+            self.raw_data: List[str] = content.split('\n')
+
+        for line in self.raw_data:
+            data_type, data = line.split(':', 1)
+            if data_type == 'S':
+                self.symlinks.append(data)
+            if data_type == 'I':
+                self.id = data
+            if data_type == 'E':
+                key, value = data.split('=')
+                self.environment[key] = value
+            if data_type == 'G':
+                self.group = data
+            if data_type == 'Q':
+                self.queue = data
+            if data_type == 'V':
+                self.version = data
+
+    @property
+    def is_dm(self) -> bool:
+        """Check if the device is a device mapper (DM).
+
+        Returns:
+            bool: True if the device is a device mapper, otherwise False.
+        """
+        return 'DM_UUID' in self.environment.keys()
+
+    @property
+    def is_lvm(self) -> bool:
+        """Check if the device is a Logical Volume Manager (LVM) volume.
+
+        Returns:
+            bool: True if the device is an LVM volume, otherwise False.
+        """
+        return self.environment.get('DM_UUID', '').startswith('LVM')
+
+    @property
+    def slashed_path(self) -> str:
+        """Get the LVM path structured with slashes.
+
+        Returns:
+            str: A path using slashes if the device is an LVM volume (e.g., /dev/vgname/lvname),
+                 otherwise the original path.
+        """
+        result: str = self.path
+        if self.is_lvm:
+            vg: str = self.environment.get('DM_VG_NAME')
+            lv: str = self.environment.get('DM_LV_NAME')
+            result = f'/dev/{vg}/{lv}'
+        return result
+
+    @property
+    def dashed_path(self) -> str:
+        """Get the LVM path structured with dashes.
+
+        Returns:
+            str: A path using dashes if the device is an LVM volume (e.g., /dev/mapper/vgname-lvname),
+            otherwise the original path.
+        """
+        result: str = self.path
+        if self.is_lvm:
+            name: str = self.environment.get('DM_NAME')
+            result = f'/dev/mapper/{name}'
+        return result

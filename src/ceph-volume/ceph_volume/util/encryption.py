@@ -191,6 +191,7 @@ def luks_open(key: str,
     :param key: dmcrypt secret key
     :param device: absolute path to device
     :param mapping: mapping name used to correlate device. Usually a UUID
+    :param with_tpm: whether to use tpm2 token enrollment.
     """
     command: List[str] = []
     if with_tpm:
@@ -199,7 +200,7 @@ def luks_open(key: str,
                    mapping,
                    device,
                    '-',
-                   'tpm2-device=auto,discard']
+                   'tpm2-device=auto,discard,headless=true,nofail']
         if bypass_workqueue(device):
             command[-1] += ',no-read-workqueue,no-write-workqueue'
     else:

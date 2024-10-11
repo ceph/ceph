@@ -6,6 +6,7 @@ from ceph_volume import terminal, decorators, conf, process
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
+from ceph_volume.util.device import Device
 from ceph_volume.devices.lvm.common import rollback_osd
 from ceph_volume.devices.raw.list import direct_report
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -170,7 +171,12 @@ class RawBlueStore(BlueStore):
                     self.pre_activate_tpm2(device)
         found = direct_report(self.devices)
 
+        holders = disk.get_block_device_holders()
         for osd_uuid, meta in found.items():
+            realpath_device = os.path.realpath(meta['device'])
+            parent_device = holders.get(realpath_device)
+            if parent_device and any('ceph.cluster_fsid' in lv.lv_tags for lv in Device(parent_device).lvs):
+                continue
             osd_id = meta['osd_id']
             if self.osd_id is not None and str(osd_id) != str(self.osd_id):
                 continue
@@ -205,19 +211,22 @@ class RawBlueStore(BlueStore):
         self.with_tpm = 1
         self.temp_mapper: str = f'activating-{os.path.basename(device)}'
         self.temp_mapper_path: str = f'/dev/mapper/{self.temp_mapper}'
-        encryption_utils.luks_open(
-            '',
-            device,
-            self.temp_mapper,
-            self.with_tpm
-        )
-        bluestore_header: Dict[str, Any] = disk.get_bluestore_header(self.temp_mapper_path)
-        if not bluestore_header:
-            raise RuntimeError(f"{device} doesn't have BlueStore signature.")
+        if not disk.BlockSysFs(device).has_active_dmcrypt_mapper:
+            encryption_utils.luks_open(
+                '',
+                device,
+                self.temp_mapper,
+                self.with_tpm
+            )
+            bluestore_header: Dict[str, Any] = disk.get_bluestore_header(self.temp_mapper_path)
+            if not bluestore_header:
+                raise RuntimeError(f"{device} doesn't have BlueStore signature.")
 
-        kname: str = disk.get_parent_device_from_mapper(self.temp_mapper_path, abspath=False)
-        device_type = bs_mapping_type[bluestore_header[self.temp_mapper_path]['description']]
-        new_mapper: str = f'ceph-{self.osd_fsid}-{kname}-{device_type}-dmcrypt'
-        self.block_device_path = f'/dev/mapper/{new_mapper}'
-        self.devices.append(self.block_device_path)
-        encryption_utils.rename_mapper(self.temp_mapper, new_mapper)
+            kname: str = disk.get_parent_device_from_mapper(self.temp_mapper_path, abspath=False)
+            device_type = bs_mapping_type[bluestore_header[self.temp_mapper_path]['description']]
+            new_mapper: str = f'ceph-{self.osd_fsid}-{kname}-{device_type}-dmcrypt'
+            self.block_device_path = f'/dev/mapper/{new_mapper}'
+            self.devices.append(self.block_device_path)
+            # An option could be to simply rename the mapper but the uuid remains unchanged in sysfs
+            encryption_utils.luks_close(self.temp_mapper)
+            encryption_utils.luks_open('', device, new_mapper, self.with_tpm)

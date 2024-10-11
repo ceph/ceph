@@ -50,6 +50,7 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
   currentUrl: string;
   icons = Icons;
   managedByConfig$: Observable<any>;
+  prometheusConnectionError: any[] = [];
 
   constructor(
     private multiClusterService: MultiClusterService,
@@ -271,5 +272,10 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
   setExpandedRow(expandedRow: any) {
     super.setExpandedRow(expandedRow);
     this.router.navigate(['performance-details'], { relativeTo: this.route });
+  }
+
+  refresh() {
+    this.multiClusterService.refresh();
+    this.multiClusterService.refreshTokenStatus();
   }
 }

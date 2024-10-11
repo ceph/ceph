@@ -1029,12 +1029,13 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   onSelect(selectedRowIndex: number) {
     const selectedData = _.get(this.model.data?.[selectedRowIndex], [0, 'selected']);
-    this.model.selectRow(selectedRowIndex, true);
     if (this.selectionType === 'single') {
+      this.model.selectAll(false);
       this.selection.selected = [selectedData];
     } else {
       this.selection.selected = [...this.selection.selected, selectedData];
     }
+    this.model.selectRow(selectedRowIndex, true);
     this.updateSelection.emit(this.selection);
   }
 
@@ -1205,7 +1206,6 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
 
       if (this.search.length > 0 && rows?.length) {
-        this.expanded = undefined;
         const columns = this.localColumns.filter(
           (c) => c.cellTransformation !== CellTemplate.sparkline
         );

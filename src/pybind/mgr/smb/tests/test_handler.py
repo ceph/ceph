@@ -1,6 +1,7 @@
 import pytest
 
 import smb
+from smb.handler import _FakeEarmarkResolver
 
 
 def _cluster(**kwargs):
@@ -880,6 +881,7 @@ def test_apply_remove_all_clusters(thandler):
             self.deployed.remove(service_name)
 
     thandler._orch = FakeOrch()
+    thandler._earmark_resolver = _FakeEarmarkResolver()
     test_apply_full_cluster_create(thandler)
 
     to_apply = [

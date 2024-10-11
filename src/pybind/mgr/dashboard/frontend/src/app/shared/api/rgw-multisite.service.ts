@@ -2,6 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { RgwRealm, RgwZone, RgwZonegroup } from '~/app/ceph/rgw/models/rgw-multisite';
 import { RgwDaemonService } from './rgw-daemon.service';
+import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
@@ -9,6 +10,9 @@ import { RgwDaemonService } from './rgw-daemon.service';
 export class RgwMultisiteService {
   private uiUrl = 'ui-api/rgw/multisite';
   private url = 'api/rgw/multisite';
+
+  private restartGatewayMessageSource = new BehaviorSubject<boolean>(null);
+  restartGatewayMessage$ = this.restartGatewayMessageSource.asObservable();
 
   constructor(private http: HttpClient, public rgwDaemonService: RgwDaemonService) {}
 
@@ -28,7 +32,9 @@ export class RgwMultisiteService {
   }
 
   getSyncStatus() {
-    return this.http.get(`${this.url}/sync_status`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/sync_status`, { params: params });
+    });
   }
 
   status() {
@@ -79,7 +85,9 @@ export class RgwMultisiteService {
     zoneName: string,
     zoneEndpoints: string,
     username: string,
-    cluster?: string
+    cluster?: string,
+    replicationZoneName?: string,
+    clusterDetailsArray?: any
   ) {
     let params = new HttpParams()
       .set('realm_name', realmName)
@@ -91,6 +99,14 @@ export class RgwMultisiteService {
 
     if (cluster) {
       params = params.set('cluster_fsid', cluster);
+    }
+
+    if (clusterDetailsArray) {
+      params = params.set('cluster_details', JSON.stringify(clusterDetailsArray));
+    }
+
+    if (replicationZoneName) {
+      params = params.set('replication_zone_name', replicationZoneName);
     }
 
     return this.http.post(`${this.uiUrl}/multisite-replications`, null, { params: params });
@@ -113,8 +129,15 @@ export class RgwMultisiteService {
     );
   }
 
-  createEditSyncPipe(payload: any) {
-    return this.http.put(`${this.url}/sync-pipe`, payload);
+  createEditSyncPipe(payload: any, user?: string, mode?: string) {
+    let params = new HttpParams();
+    if (user) {
+      params = params.append('user', user);
+    }
+    if (mode) {
+      params = params.append('mode', mode);
+    }
+    return this.http.put(`${this.url}/sync-pipe`, payload, { params });
   }
 
   removeSyncPipe(pipe_id: string, group_id: string, bucket_name?: string) {
@@ -126,5 +149,9 @@ export class RgwMultisiteService {
       `${this.url}/sync-pipe/${encodeURIComponent(group_id)}/${encodeURIComponent(pipe_id)}`,
       { params }
     );
+  }
+
+  setRestartGatewayMessage(value: boolean): void {
+    this.restartGatewayMessageSource.next(value);
   }
 }

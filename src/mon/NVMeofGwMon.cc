@@ -115,18 +115,21 @@ void NVMeofGwMon::tick()
       _propose_pending |= propose;
       last_beacon.erase(lb);
     } else {
-      BeaconSubsystems  *subsystems =
-         &pending_map.created_gws[lb.group_key][lb.gw_id].subsystems;
-      if (subsystems && subsystems->size() && old_group_key != lb.group_key) {
-        // to call track_deleting_gws once per each group-key
-        pending_map.track_deleting_gws(lb.group_key, *subsystems, propose);
-        old_group_key = lb.group_key;
-        _propose_pending |= propose;
-      }
       dout(20) << "beacon live for GW key: " << lb.gw_id << dendl;
     }
   }
-
+  BeaconSubsystems empty_subsystems;
+  for (auto &[group_key, gws_states]: pending_map.created_gws) {
+    BeaconSubsystems *subsystems = &empty_subsystems;
+    for (auto& gw_state : gws_states) { // loop for GWs inside nqn group
+      subsystems = &gw_state.second.subsystems;
+      if (subsystems->size()) { // Set subsystems to the valid value
+        break;
+      }
+    }
+    pending_map.track_deleting_gws(group_key, *subsystems, propose);
+    _propose_pending |= propose;
+  }
   // Periodic: take care of not handled ANA groups
   pending_map.handle_abandoned_ana_groups(propose);
   _propose_pending |= propose;
@@ -567,10 +570,18 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 
   // At this stage the gw has to be in the Created_gws
   if (gw == group_gws.end()) {
-    dout(4) << "Administratively deleted GW sends beacon " << gw_id << dendl;
+    dout(4) << "GW that does not appear in the map sends beacon, ignore "
+       << gw_id << dendl;
+    mon.no_reply(op);
     goto false_return; // not sending ack to this beacon
   }
-
+  if (pending_map.created_gws[group_key][gw_id].availability ==
+    gw_availability_t::GW_DELETING) {
+    dout(4) << "GW sends beacon in DELETING state, ignore "
+       << gw_id << dendl;
+    mon.no_reply(op);
+    goto false_return; // not sending ack to this beacon
+  }
   // deep copy the whole nonce map of this GW
   if (m->get_nonce_map().size()) {
     if (pending_map.created_gws[group_key][gw_id].nonce_map !=

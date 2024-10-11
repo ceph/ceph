@@ -1166,9 +1166,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         entity: str,
         _end_positional_: int = 0,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> HandleCommandResult:
-        completion = self.cert_store_get_cert(entity, service_name, hostname)
+        completion = self.cert_store_get_cert(
+            entity,
+            service_name,
+            hostname,
+            no_exception_when_missing
+        )
         cert = raise_if_exception(completion)
         return HandleCommandResult(stdout=cert)
 
@@ -1178,9 +1184,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         entity: str,
         _end_positional_: int = 0,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> HandleCommandResult:
-        completion = self.cert_store_get_key(entity, service_name, hostname)
+        completion = self.cert_store_get_key(
+            entity,
+            service_name,
+            hostname,
+            no_exception_when_missing
+        )
         key = raise_if_exception(completion)
         return HandleCommandResult(stdout=key)
 
@@ -1254,6 +1266,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         completion = self.get_prometheus_access_info()
         access_info = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(access_info))
+
+    @_cli_write_command('orch get-security-config')
+    def _get_security_config(self) -> HandleCommandResult:
+        completion = self.get_security_config()
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
 
     @_cli_write_command('orch alertmanager get-credentials')
     def _get_alertmanager_access_info(self) -> HandleCommandResult:
@@ -1548,7 +1566,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = NvmeofServiceSpec(
-            service_id='nvmeof',
+            service_id=f'{pool}.{group}' if group else pool,
             pool=pool,
             group=group,
             placement=PlacementSpec.from_string(placement),
@@ -1875,7 +1893,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = NvmeofServiceSpec(
-            service_id=f'{pool}.{group}',
+            service_id=f'{pool}.{group}' if group else pool,
             pool=pool,
             group=group,
             placement=PlacementSpec.from_string(placement),

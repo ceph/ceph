@@ -519,6 +519,22 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 	}
       }
     } /* checksum_mode */
+    auto attr_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+    if (attr_iter != attrs.end()) {
+      rgw::sal::RGWRestoreType rt;
+      bufferlist bl = attr_iter->second;
+      auto iter = bl.cbegin();
+      decode(rt, iter);
+
+      if (rt == rgw::sal::RGWRestoreType::Temporary) {
+        // temporary restore; set storage-class to cloudtier storage class
+        auto c_iter = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+
+        if (c_iter != attrs.end()) {
+          attrs[RGW_ATTR_STORAGE_CLASS] = c_iter->second;
+        }
+      }
+    }
 
     for (struct response_attr_param *p = resp_attr_params; p->param; p++) {
       bool exists;
@@ -3435,6 +3451,106 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
   return res;
 }
 
+struct RestoreObjectRequest {
+  std::optional<uint64_t> days;
+
+  void decode_xml(XMLObj *obj) {
+    RGWXMLDecoder::decode_xml("Days", days, obj);
+  }
+
+  void dump_xml(Formatter *f) const {
+    encode_xml("Days", days, f);
+  }
+};
+
+int RGWRestoreObj_ObjStore_S3::get_params(optional_yield y)
+{ 
+  std::string expected_bucket_owner;
+
+  if (s->info.env->get("x-amz-expected-bucket-owner") != nullptr) {
+    expected_bucket_owner = s->info.env->get("x-amz-expected-bucket-owner");
+  }
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+
+  RGWXMLDecoder::XMLParser parser;
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = read_all_input(s, max_size, false);
+
+  if (r < 0) {
+    return r;
+  }
+
+  if(!parser.init()) {
+    return -EINVAL;
+  }
+
+   if (!parser.parse(data.c_str(), data.length(), 1)) {
+    return -ERR_MALFORMED_XML;
+  }
+
+  RestoreObjectRequest request;
+
+  try {
+    RGWXMLDecoder::decode_xml("RestoreRequest", request, &parser);
+  }
+  catch (RGWXMLDecoder::err &err) {
+    ldpp_dout(this, 5) << "Malformed restore request: " << err << dendl;
+    return -EINVAL;
+  }
+
+  if (request.days) {
+    expiry_days = request.days.value();
+    ldpp_dout(this, 10) << "expiry_days=" << expiry_days << dendl;
+  } else {
+    expiry_days=nullopt;
+    ldpp_dout(this, 10) << "expiry_days=" << expiry_days << dendl;
+  }
+
+  return 0;
+}
+
+void RGWRestoreObj_ObjStore_S3::send_response()
+{
+  if (op_ret < 0)
+  {
+    set_req_state_err(s, op_ret);
+    dump_errno(s);
+    end_header(s, this);
+    dump_start(s);
+    return;
+  }
+
+  rgw::sal::Attrs attrs = s->object->get_attrs();
+  auto attr_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
+  rgw::sal::RGWRestoreStatus restore_status;
+  if (attr_iter != attrs.end()) {
+    bufferlist bl = attr_iter->second;
+    auto iter = bl.cbegin();
+    decode(restore_status, iter);
+  }
+  ldpp_dout(this, 10) << "restore_status=" << restore_status << dendl;
+  
+  if (attr_iter == attrs.end() || restore_status != rgw::sal::RGWRestoreStatus::None) {
+    s->err.http_ret = 202; //Accepted
+    dump_header(s, "x-amz-restore", rgw_bl_str(restore_status));
+  } else if (restore_status != rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
+    s->err.http_ret = 409; // Conflict
+    dump_header_if_nonempty(s, "x-amz-restore", rgw_bl_str(restore_status));
+  } else if (restore_status != rgw::sal::RGWRestoreStatus::CloudRestored) {
+    s->err.http_ret = 200; // OK
+    dump_header_if_nonempty(s, "x-amz-restore", rgw_bl_str(restore_status));
+  } else {
+    s->err.http_ret = 202; // Accepted
+    dump_header_if_nonempty(s, "x-amz-restore", rgw_bl_str(restore_status));
+  }
+
+  dump_errno(s);
+  end_header(s, this);
+  dump_start(s);
+}
+
 int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
 {
   const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
@@ -4894,6 +5010,9 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
   if (s->info.args.exists("uploads"))
     return new RGWInitMultipart_ObjStore_S3;
   
+  if (s->info.args.exists("restore"))
+    return new RGWRestoreObj_ObjStore_S3;
+  
   if (is_select_op())
     return rgw::s3select::create_s3select_op();
 
@@ -5845,7 +5964,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   auto canonical_qs = rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);
 
   /* Craft canonical method. */
-  auto canonical_method = rgw::auth::s3::get_v4_canonical_method(s);
+  auto canonical_method = rgw::auth::s3::get_canonical_method(s, s->op_type, s->info);
 
   /* Craft canonical request. */
   auto canonical_req_hash = \
@@ -5945,6 +6064,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 	case RGW_OP_PUT_BUCKET_TAGGING:
 	case RGW_OP_PUT_BUCKET_REPLICATION:
         case RGW_OP_PUT_LC:
+        case RGW_OP_RESTORE_OBJ:
         case RGW_OP_SET_REQUEST_PAYMENT:
         case RGW_OP_PUBSUB_NOTIF_CREATE:
         case RGW_OP_PUBSUB_NOTIF_DELETE:
@@ -6109,7 +6229,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   /* Let's canonize the HTTP headers that are covered by the AWS auth v2. */
   std::string string_to_sign;
   utime_t header_time;
-  if (! rgw_create_s3_canonical_header(s, s->info, &header_time, string_to_sign,
+  if (! rgw_create_s3_canonical_header(s, s->op_type, s->info, &header_time, string_to_sign,
         qsr)) {
     ldpp_dout(s, 10) << "failed to create the canonized auth header\n"
                    << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;

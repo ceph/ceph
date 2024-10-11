@@ -1702,8 +1702,12 @@ public:
                       lease_cr, bucket_shard_cache, nullptr, error_repo, tn, false);
           tn->log(10, SSTR("full sync: syncing shard_id " << sid << " of gen " << each->gen));
           if (first_shard) {
-            yield call(shard_cr);
             first_shard = false;
+            yield call(shard_cr);
+            if (retcode < 0) {
+              drain_all();
+              return set_cr_error(retcode);
+            }
           } else {
             yield_spawn_window(shard_cr, sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window),
                               [&](uint64_t stack_id, int ret) {
@@ -1862,12 +1866,7 @@ public:
 				 error_repo, entry_timestamp, lease_cr,
 				 bucket_shard_cache, &*marker_tracker, tn),
 			       sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window),
-			       [&](uint64_t stack_id, int ret) {
-                                if (ret < 0) {
-                                  retcode = ret;
-                                }
-                                return retcode;
-                                });
+             std::nullopt);
           }
           sync_marker.marker = iter->first;
         }
@@ -2551,6 +2550,7 @@ public:
       }
 
       notify_stack->cancel();
+      drain_all();
 
       return set_cr_done();
     }
@@ -6052,12 +6052,13 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
               } else {
                 tn->log(20, SSTR("logged prev gen entry (bucket=" << source_bs.bucket << ", shard_id=" << source_bs.shard_id << ", gen=" << current_gen << " in error repo: retcode=" << retcode));
 	      }
-	    }
+	    } else {
             retcode = -EAGAIN;
             tn->log(10, SSTR("ERROR: requested sync of future generation "
                              << *gen << " > " << current_gen
                              << ", returning " << retcode << " for later retry"));
             return set_cr_error(retcode);
+            }
           } else if (*gen < current_gen) {
             tn->log(10, SSTR("WARNING: requested sync of past generation "
                              << *gen << " < " << current_gen

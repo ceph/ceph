@@ -82,3 +82,37 @@ while [[ -z $(kcli ssh -u root -- ceph-node-00 'journalctl --no-tail --no-pager 
     fi
     kcli ssh -u root -- ceph-node-00 'journalctl -n 100 --no-pager -t cloud-init'
 done
+
+kcli ssh -u root ceph-node-00 'cephadm shell "ceph config set mgr mgr/prometheus/exclude_perf_counters false"'
+
+get_prometheus_running_count() {
+    echo $(kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch ls --service_name=prometheus --format=json"' | jq -r '.[] | .status.running')
+}
+
+# check if the prometheus daemon is running on jenkins node
+# before starting the e2e tests
+if [[ -n "${JENKINS_HOME}" ]]; then
+    retry=0
+    PROMETHEUS_RUNNING_COUNT=$(get_prometheus_running_count)
+    # retrying for 10 times to see if we can get the prometheus count
+    # otherwise this would run indefinitely and bloat up the machine
+    while [[ $retry -lt 10 && $PROMETHEUS_RUNNING_COUNT -lt 1 ]]; do
+        if [[ ${retry} -gt 0 ]]; then
+            echo "Retry attempt to get the prometheus count..." ${retry}
+        fi
+        PROMETHEUS_RUNNING_COUNT=$(get_prometheus_running_count)
+        retry=$((retry +1))
+        sleep 10
+    done
+
+    if [[ ${retry} -ge 10 ]]; then
+        exit 1
+    fi
+
+    # grafana ip address is set to the fqdn by default.
+    # kcli is not working with that, so setting the IP manually.
+    kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-alertmanager-api-host http://192.168.100.100:9093"'
+    kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-prometheus-api-host http://192.168.100.100:9095"'
+    kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-grafana-api-url https://192.168.100.100:3000"'
+    kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch apply node-exporter --placement 'count:2'"'
+fi

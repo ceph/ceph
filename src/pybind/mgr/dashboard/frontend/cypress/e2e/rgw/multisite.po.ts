@@ -22,21 +22,22 @@ export class MultisitePageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.create.url)
-  create(group_id: string, status: string) {
+  create(group_id: string, status: string, bucket_name: string) {
     // Enter in group_id
     cy.get('#group_id').type(group_id);
     // Show Status
     this.selectOption('status', status);
     cy.get('#status').should('have.class', 'ng-valid');
-
+    // Enter the bucket_name
+    cy.get('#bucket_name').type(bucket_name);
     // Click the create button and wait for policy to be made
     cy.contains('button', 'Create Sync Policy Group').wait(WAIT_TIMER).click();
     this.getFirstTableCell(group_id).should('exist');
   }
 
   @PageHelper.restrictTo(pages.index.url)
-  edit(group_id: string, status: string) {
-    cy.visit(`${pages.edit.url}/${group_id})`);
+  edit(group_id: string, status: string, bucket_name: string) {
+    cy.visit(`${pages.edit.url}/${group_id}/${bucket_name})`);
 
     // Change the status field
     this.selectOption('status', status);

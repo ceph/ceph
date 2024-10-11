@@ -83,7 +83,6 @@ namespace ceph {
     return {};
   }
 
-  static constexpr bool mutex_debugging = false;
   #define ceph_mutex_is_locked(m) true
   #define ceph_mutex_is_locked_by_me(m) true
 }
@@ -130,8 +129,6 @@ namespace ceph {
   shared_mutex make_shared_mutex(Args&& ...args) {
     return {std::forward<Args>(args)...};
   }
-
-  static constexpr bool mutex_debugging = true;
 
   // debug methods
   #define ceph_mutex_is_locked(m) ((m).is_locked())
@@ -185,8 +182,6 @@ namespace ceph {
   shared_mutex make_shared_mutex(Args&& ...args) {
     return {};
   }
-
-  static constexpr bool mutex_debugging = false;
 
   // debug methods.  Note that these can blindly return true
   // because any code that does anything other than assert these

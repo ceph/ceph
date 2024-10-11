@@ -561,7 +561,8 @@ class Orchestrator(object):
         self,
         entity: str,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
@@ -569,7 +570,8 @@ class Orchestrator(object):
         self,
         entity: str,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
@@ -785,6 +787,10 @@ class Orchestrator(object):
 
     def get_prometheus_access_info(self) -> OrchResult[Dict[str, str]]:
         """get prometheus access information"""
+        raise NotImplementedError()
+
+    def get_security_config(self) -> OrchResult[Dict[str, bool]]:
+        """get security config"""
         raise NotImplementedError()
 
     def set_alertmanager_access_info(self, user: str, password: str) -> OrchResult[str]:

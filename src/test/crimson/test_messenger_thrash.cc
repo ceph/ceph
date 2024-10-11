@@ -447,15 +447,16 @@ class SyntheticWorkload {
    }
 
    seastar::future<> wait_for_done() {
-     int i = 0;
-     return seastar::do_until(
-       [this] { return !dispatcher.get_num_pending_msgs(); },
-       [this, &i]
-     {
-       if (i++ % 50 == 0){
-         print_internal_state(true);
-       }
-       return seastar::sleep(100ms);
+     return seastar::do_with(0, [this] (int &i) {
+       return seastar::do_until(
+         [this] { return !dispatcher.get_num_pending_msgs(); },
+         [this, &i] {
+           if (i++ % 50 == 0) {
+             print_internal_state(true);
+           }
+           return seastar::sleep(100ms);
+         }
+       );
      }).then([this] {
        return seastar::do_for_each(available_servers, [] (auto server) {
 	 if (verbose) {

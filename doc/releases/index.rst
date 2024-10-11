@@ -21,6 +21,7 @@ security fixes.
    :maxdepth: 1
    :hidden:
 
+   Squid (v19.2.*) <squid>
    Reef (v18.2.*) <reef>
    Quincy (v17.2.*) <quincy>
 
@@ -59,8 +60,11 @@ receive bug fixes or backports).
 Release timeline
 ----------------
 
-.. ceph_timeline_gantt:: releases.yml reef quincy
-.. ceph_timeline:: releases.yml reef quincy
+.. ceph_timeline_gantt:: releases.yml squid reef quincy
+.. ceph_timeline:: releases.yml squid reef quincy
+
+.. _Squid: squid
+.. _19.2.0: squid#v19-2-0-squid
 
 .. _Reef: reef
 .. _18.2.0: reef#v18-2-0-reef

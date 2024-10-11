@@ -40,6 +40,7 @@ import { Router } from '@angular/router';
 import { RgwMultisiteWizardComponent } from '../rgw-multisite-wizard/rgw-multisite-wizard.component';
 import { RgwMultisiteSyncPolicyComponent } from '../rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 
 const BASE_URL = 'rgw/multisite/configuration';
 
@@ -121,7 +122,8 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     public rgwDaemonService: RgwDaemonService,
     public mgrModuleService: MgrModuleService,
     private notificationService: NotificationService,
-    private cdsModalService: ModalCdsService
+    private cdsModalService: ModalCdsService,
+    private rgwMultisiteService: RgwMultisiteService
   ) {
     this.permission = this.authStorageService.getPermissions().rgw;
   }
@@ -412,18 +414,30 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     this.realmIds = [];
     this.zoneIds = [];
     this.evaluateMigrateAndReplicationActions();
-    this.rgwDaemonService.list().subscribe((data: any) => {
-      const realmName = data.map((item: { [x: string]: any }) => item['realm_name']);
-      if (
-        this.defaultRealmId != '' &&
-        this.defaultZonegroupId != '' &&
-        this.defaultZoneId != '' &&
-        realmName.includes('')
-      ) {
-        this.restartGatewayMessage = true;
+    this.rgwMultisiteService.restartGatewayMessage$.subscribe((value) => {
+      if (value !== null) {
+        this.restartGatewayMessage = value;
+      } else {
+        this.checkRestartGatewayMessage();
       }
     });
     return allNodes;
+  }
+
+  checkRestartGatewayMessage() {
+    this.rgwDaemonService.list().subscribe((data: any) => {
+      const realmName = data.map((item: { [x: string]: any }) => item['realm_name']);
+      if (
+        this.defaultRealmId !== '' &&
+        this.defaultZonegroupId !== '' &&
+        this.defaultZoneId !== '' &&
+        realmName.includes('')
+      ) {
+        this.restartGatewayMessage = true;
+      } else {
+        this.restartGatewayMessage = false;
+      }
+    });
   }
 
   getDefaultsEntities(
@@ -431,18 +445,16 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     defaultZonegroupId: string,
     defaultZoneId: string
   ): any {
-    const defaultRealm = this.realms.find((x: { id: string }) => x.id === defaultRealmId);
-    const defaultZonegroup = this.zonegroups.find(
+    const defaultRealm = this.realms?.find((x: { id: string }) => x.id === defaultRealmId);
+    const defaultZonegroup = this.zonegroups?.find(
       (x: { id: string }) => x.id === defaultZonegroupId
     );
-    const defaultZone = this.zones.find((x: { id: string }) => x.id === defaultZoneId);
-    const defaultRealmName = defaultRealm !== undefined ? defaultRealm.name : null;
-    const defaultZonegroupName = defaultZonegroup !== undefined ? defaultZonegroup.name : null;
-    const defaultZoneName = defaultZone !== undefined ? defaultZone.name : null;
+    const defaultZone = this.zones?.find((x: { id: string }) => x.id === defaultZoneId);
+
     return {
-      defaultRealmName: defaultRealmName,
-      defaultZonegroupName: defaultZonegroupName,
-      defaultZoneName: defaultZoneName
+      defaultRealmName: defaultRealm?.name,
+      defaultZonegroupName: defaultZonegroup?.name,
+      defaultZoneName: defaultZone?.name
     };
   }
 
@@ -544,20 +556,20 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
 
   delete(node: TreeNode) {
     if (node.data.type === 'realm') {
-      this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      const modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
         itemDescription: $localize`${node.data.type} ${node.data.name}`,
         itemNames: [`${node.data.name}`],
         submitAction: () => {
           this.rgwRealmService.delete(node.data.name).subscribe(
             () => {
-              this.modalRef.close();
               this.notificationService.show(
                 NotificationType.success,
                 $localize`Realm: '${node.data.name}' deleted successfully`
               );
+              this.cdsModalService.dismissAll();
             },
             () => {
-              this.modalRef.componentInstance.stopLoadingSpinner();
+              this.cdsModalService.stopLoadingSpinner(modalRef.deletionForm);
             }
           );
         }

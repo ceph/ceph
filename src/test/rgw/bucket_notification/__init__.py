@@ -31,7 +31,7 @@ def setup():
 
     global default_cluster
     default_cluster = defaults.get("cluster")
-    
+
     version = defaults.get("version")
     if version == "v1":
         _, result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], default_cluster)

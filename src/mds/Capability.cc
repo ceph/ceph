@@ -73,14 +73,8 @@ void Capability::Export::dump(ceph::Formatter *f) const
 
 void Capability::Export::generate_test_instances(std::list<Capability::Export*>& ls)
 {
-  ls.push_back(new Export);
-  ls.push_back(new Export);
-  ls.back()->wanted = 1;
-  ls.back()->issued = 2;
-  ls.back()->pending = 3;
-  ls.back()->client_follows = 4;
-  ls.back()->mseq = 5;
-  ls.back()->last_issue_stamp = utime_t(6, 7);
+  ls.push_back(new Export());
+  ls.push_back(new Export(1, 2, 3, 4, 5, 6, 7, utime_t(8, 9), 10));
 }
 
 void Capability::Import::encode(ceph::buffer::list &bl) const
@@ -108,6 +102,11 @@ void Capability::Import::dump(ceph::Formatter *f) const
   f->dump_unsigned("migrate_seq", mseq);
 }
 
+void Capability::Import::generate_test_instances(std::list<Capability::Import*>& ls)
+{
+  ls.push_back(new Import());
+  ls.push_back(new Import(1, 2, 3));
+}
 /*
  * Capability::revoke_info
  */

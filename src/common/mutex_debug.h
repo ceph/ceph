@@ -169,20 +169,16 @@ public:
   }
 
   bool try_lock(bool no_lockdep = false) {
-    bool locked = try_lock_impl();
-    if (locked) {
-      if (enable_lockdep(no_lockdep))
-	_locked();
-      _post_lock();
-    }
-    return locked;
+    ceph_assert(recursive || !is_locked_by_me());
+    return _try_lock(no_lockdep);
   }
 
   void lock(bool no_lockdep = false) {
+    ceph_assert(recursive || !is_locked_by_me());
     if (enable_lockdep(no_lockdep))
       _will_lock(recursive);
 
-    if (try_lock(no_lockdep))
+    if (_try_lock(no_lockdep))
       return;
 
     lock_impl();
@@ -198,6 +194,16 @@ public:
     unlock_impl();
   }
 
+private:
+  bool _try_lock(bool no_lockdep) {
+    bool locked = try_lock_impl();
+    if (locked) {
+      if (enable_lockdep(no_lockdep))
+	_locked();
+      _post_lock();
+    }
+    return locked;
+  }
 };
 
 

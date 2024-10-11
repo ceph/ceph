@@ -191,7 +191,7 @@ class ReleasesGantt(Directive):
 
 class CephTimeline(Directive):
     has_content = False
-    required_arguments = 3
+    required_arguments = 4
     optional_arguments = 0
     option_spec = {}
 

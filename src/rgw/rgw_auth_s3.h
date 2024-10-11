@@ -500,16 +500,17 @@ void rgw_create_s3_canonical_header(
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str);
 bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
+                                    RGWOpType op_type,
                                     const req_info& info,
                                     utime_t *header_time,       /* out */
                                     std::string& dest,          /* out */
                                     bool qsr);
 static inline std::tuple<bool, std::string, utime_t>
-rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp, const req_info& info, const bool qsr) {
+rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp, RGWOpType op_type, const req_info& info, const bool qsr) {
   std::string dest;
   utime_t header_time;
 
-  const bool ok = rgw_create_s3_canonical_header(dpp, info, &header_time, dest, qsr);
+  const bool ok = rgw_create_s3_canonical_header(dpp, op_type, info, &header_time, dest, qsr);
   return std::make_tuple(ok, dest, header_time);
 }
 
@@ -704,8 +705,6 @@ std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
 std::string gen_v4_canonical_qs(const req_info& info, bool is_non_s3_op);
 
-std::string get_v4_canonical_method(const req_state* s);
-
 boost::optional<std::string>
 get_v4_canonical_headers(const req_info& info,
                          const std::string_view& signedheaders,
@@ -745,6 +744,8 @@ extern AWSEngine::VersionAbstractor::server_signature_t
 get_v2_signature(CephContext*,
                  const std::string& secret_key,
                  const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
+
+std::string get_canonical_method(const DoutPrefixProvider *dpp, RGWOpType op_type, const req_info& info);
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */

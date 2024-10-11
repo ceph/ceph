@@ -483,6 +483,7 @@ int GroupSnapshot_to_group_snap_info2(
   group_snap->id = cls_group_snap.id;
   group_snap->name = cls_group_snap.name;
   group_snap->state = static_cast<group_snap_state_t>(cls_group_snap.state);
+  group_snap->namespace_type = RBD_GROUP_SNAP_NAMESPACE_TYPE_USER;
   if (!image_snaps.empty()) {
     group_snap->image_snap_name = calc_ind_image_snap_name(
         group_ioctx.get_id(), group_id, cls_group_snap.id);

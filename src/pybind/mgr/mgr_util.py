@@ -1,5 +1,12 @@
 import os
 
+from ceph.fs.earmarking import (
+    CephFSVolumeEarmarking,
+    EarmarkParseError,
+    EarmarkTopScope,
+    EarmarkException
+)
+
 if 'UNITTEST' in os.environ:
     import tests  # noqa
 
@@ -333,6 +340,93 @@ class CephfsClient(Generic[Module_T]):
             for fs in fs_map['filesystems']:
                 fs_list.append(fs['mdsmap']['fs_name'])
         return fs_list
+
+
+class CephFSEarmarkResolver:
+    def __init__(self, mgr: Module_T, *, client: Optional[CephfsClient] = None) -> None:
+        self._mgr = mgr
+        self._cephfs_client = client or CephfsClient(mgr)
+
+    def _extract_path_component(self, path: str, index: int) -> Optional[str]:
+        """
+        Extracts a specific component from the path based on the given index.
+
+        :param path: The path in the format '/volumes/{subvolumegroup}/{subvolume}/..'
+        :param index: The index of the component to extract (1 for subvolumegroup, 2 for subvolume)
+        :return: The component at the specified index
+        """
+        parts = path.strip('/').split('/')
+        if len(parts) >= 3 and parts[0] == "volumes":
+            return parts[index]
+        return None
+
+    def _fetch_subvolumegroup_from_path(self, path: str) -> Optional[str]:
+        """
+        Extracts and returns the subvolume group name from the given path.
+
+        :param path: The path in the format '/volumes/{subvolumegroup}/{subvolume}/..'
+        :return: The subvolume group name
+        """
+        return self._extract_path_component(path, 1)
+
+    def _fetch_subvolume_from_path(self, path: str) -> Optional[str]:
+        """
+        Extracts and returns the subvolume name from the given path.
+
+        :param path: The path in the format '/volumes/{subvolumegroup}/{subvolume}/..'
+        :return: The subvolume name
+        """
+        return self._extract_path_component(path, 2)
+
+    def _manage_earmark(self, path: str, volume: str, operation: str, earmark: Optional[str] = None) -> Optional[str]:
+        """
+        Manages (get or set) the earmark for a subvolume based on the provided parameters.
+
+        :param path: The path of the subvolume
+        :param volume: The volume name
+        :param earmark: The earmark to set (None if only getting the earmark)
+        :return: The earmark if getting, otherwise None
+        """
+        with open_filesystem(self._cephfs_client, volume) as fs:
+            earmark_manager = CephFSVolumeEarmarking(fs, path)
+            try:
+                if operation == 'set' and earmark is not None:
+                    earmark_manager.set_earmark(earmark)
+                    return None
+                elif operation == 'get':
+                    return earmark_manager.get_earmark()
+            except EarmarkException as e:
+                logger.error(f"Failed to manage earmark: {e}")
+                return None
+        return None
+
+    def get_earmark(self, path: str, volume: str) -> Optional[str]:
+        """
+        Get earmark for a subvolume.
+        """
+        return self._manage_earmark(path, volume, 'get')
+
+    def set_earmark(self, path: str, volume: str, earmark: str) -> None:
+        """
+        Set earmark for a subvolume.
+        """
+        self._manage_earmark(path, volume, 'set', earmark)
+
+    def check_earmark(self, earmark: str, top_level_scope: EarmarkTopScope) -> bool:
+        """
+        Check if the earmark belongs to the mentioned top level scope.
+
+        :param earmark: The earmark string to check.
+        :param top_level_scope: The expected top level scope.
+        :return: True if the earmark matches the top level scope, False otherwise.
+        """
+        try:
+            parsed = CephFSVolumeEarmarking.parse_earmark(earmark)
+            if parsed is None:
+                return False
+            return parsed.top == top_level_scope
+        except EarmarkParseError:
+            return False
 
 
 @contextlib.contextmanager

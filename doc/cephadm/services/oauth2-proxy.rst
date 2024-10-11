@@ -119,17 +119,17 @@ A non-exhaustive list of important limitations for the `oauth2-proxy` service fo
 * Proper configuration of the IDP and OAuth2 parameters is crucial to avoid authentication failures. Misconfigurations can lead to access issues.
 
 
-Default images
-~~~~~~~~~~~~~~
+Container images
+~~~~~~~~~~~~~~~~
 
-The `oauth2-proxy` service typically uses the default container image:
+The container image the `oauth2-proxy` service will use can be found by running:
 
 ::
 
-    DEFAULT_OAUTH2_PROXY = 'quay.io/oauth2-proxy/oauth2-proxy:v7.2.0'
+    ceph config get mgr mgr/cephadm/container_image_oauth2_proxy
 
-Admins can specify the image to be used by changing the `container_image_oauth2_proxy` cephadm module option. If there were already running daemon(s),
-you must redeploy the daemon(s) to apply the new image.
+Admins can specify a custom image to be used by changing the `container_image_oauth2_proxy` cephadm module option.
+If there were already running daemon(s), you must also redeploy the daemon(s) for them to use the new image.
 
 For example:
 

@@ -12,6 +12,7 @@ if(WIN32)
   add_library(dlfcn_win32 STATIC win32/dlfcn.cc win32/errno.cc)
 endif()
 
+add_subdirectory(io_exerciser)
 add_subdirectory(options)
 
 set(common_srcs
