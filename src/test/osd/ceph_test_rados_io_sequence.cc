@@ -17,6 +17,8 @@
 #include "common/dout.h"
 #include "common/split.h"
 #include "common/strtol.h" // for strict_iecstrtoll()
+#include "common/ceph_json.h"
+#include "common/Formatter.h"
 
 #include "common/io_exerciser/DataGenerator.h"
 #include "common/io_exerciser/Model.h"
@@ -24,6 +26,11 @@
 #include "common/io_exerciser/RadosIo.h"
 #include "common/io_exerciser/IoOp.h"
 #include "common/io_exerciser/IoSequence.h"
+#include "common/io_exerciser/JsonStructures.h"
+
+#include "json_spirit/json_spirit.h"
+
+#include "fmt/format.h"
 
 #define dout_subsys ceph_subsys_rados
 #define dout_context g_ceph_context
@@ -40,6 +47,9 @@ using TripleReadOp = ceph::io_exerciser::TripleReadOp;
 using SingleWriteOp = ceph::io_exerciser::SingleWriteOp;
 using DoubleWriteOp = ceph::io_exerciser::DoubleWriteOp;
 using TripleWriteOp = ceph::io_exerciser::TripleWriteOp;
+using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
+using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
+using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
 
 namespace {
   struct Size {};
@@ -132,9 +142,11 @@ namespace {
     "\t are specified with unit of blocksize. Supported commands:",
     "\t\t create <len>",
     "\t\t remove",
-    "\t\t read|write <off> <len>",
-    "\t\t read2|write2 <off> <len> <off> <len>",
-    "\t\t read3|write3 <off> <len> <off> <len> <off> <len>",
+    "\t\t read|write|failedwrite <off> <len>",
+    "\t\t read2|write2|failedwrite2 <off> <len> <off> <len>",
+    "\t\t read3|write3|failedwrite3 <off> <len> <off> <len> <off> <len>",
+    "\t\t injecterror <type> <shard> <good_count> <fail_count>",
+    "\t\t clearinject <type> <shard>",
     "\t\t done"
   };
 
@@ -175,7 +187,15 @@ namespace {
       ("parallel,p", po::value<int>()->default_value(1),
         "number of objects to exercise in parallel")
       ("interactive",
-        "interactive mode, execute IO commands from stdin");
+        "interactive mode, execute IO commands from stdin")
+      ("allow_pool_autoscaling",
+        "Allows pool autoscaling. Disabled by default.")
+      ("allow_pool_balancer",
+        "Enables pool balancing. Disabled by default.")
+      ("allow_pool_deep_scrubbing",
+        "Enables pool deep scrub. Disabled by default.")
+      ("allow_pool_scrubbing",
+        "Enables pool scrubbing. Disabled by default.");
 
     return desc;
   }
@@ -336,8 +356,10 @@ ceph::io_sequence::tester::SelectErasurePlugin::SelectErasurePlugin(
 
 
 
-ceph::io_sequence::tester::SelectErasureChunkSize::SelectErasureChunkSize(ceph::util::random_number_generator<int>& rng, po::variables_map vm)
-  : ProgramOptionSelector(rng, vm, "stripe_unit", true, false)
+ceph::io_sequence::tester::SelectErasureChunkSize::SelectErasureChunkSize(
+    ceph::util::random_number_generator<int>& rng,
+    po::variables_map vm)
+  : ProgramOptionSelector(rng, vm, "chunksize", true, false)
 {
 }
 
@@ -347,10 +369,18 @@ ceph::io_sequence::tester::SelectECPool::SelectECPool(
   ceph::util::random_number_generator<int>& rng,
   po::variables_map vm,
   librados::Rados& rados,
-  bool dry_run)
+  bool dry_run,
+  bool allow_pool_autoscaling,
+  bool allow_pool_balancer,
+  bool allow_pool_deep_scrubbing,
+  bool allow_pool_scrubbing)
   : ProgramOptionSelector(rng, vm, "pool", false, false),
     rados(rados),
     dry_run(dry_run),
+    allow_pool_autoscaling(allow_pool_autoscaling),
+    allow_pool_balancer(allow_pool_balancer),
+    allow_pool_deep_scrubbing(allow_pool_deep_scrubbing),
+    allow_pool_scrubbing(allow_pool_scrubbing),
     skm(SelectErasureKM(rng, vm)),
     spl(SelectErasurePlugin(rng, vm)),
     scs(SelectErasureChunkSize(rng, vm))
@@ -396,28 +426,95 @@ void ceph::io_sequence::tester::SelectECPool::create_pool(
 {
   int rc;
   bufferlist inbl, outbl;
-  std::string profile_create =
-    "{\"prefix\": \"osd erasure-code-profile set\", \
-    \"name\": \"testprofile-" + pool_name + "\", \
-    \"profile\": [ \"plugin=" + plugin + "\", \
-    \"k=" + std::to_string(k) + "\", \
-    \"m=" + std::to_string(m) + "\", \
-    \"stripe_unit=" + std::to_string(chunk_size) + "\", \
-    \"crush-failure-domain=osd\"]}";
-  rc = rados.mon_command(profile_create, inbl, &outbl, nullptr);
+  auto formatter = std::make_shared<JSONFormatter>(false);
+
+  ceph::io_exerciser::json::OSDECProfileSetRequest ecProfileSetRequest(
+    fmt::format("testprofile-{}", pool_name),
+    { fmt::format("plugin={}", plugin),
+      fmt::format("k={}", k),
+      fmt::format("m={}", m),
+      fmt::format("stripe_unit={}", chunk_size),
+      fmt::format("crush-failure-domain=osd")},
+    formatter);
+  rc = rados.mon_command(ecProfileSetRequest.encode_json(), inbl, &outbl, nullptr);
   ceph_assert(rc == 0);
-  std::string cmdstr =
-    "{\"prefix\": \"osd pool create\", \
-    \"pool\": \"" + pool_name + "\", \
-    \"pool_type\": \"erasure\", \
-    \"pg_num\": 8, \
-    \"pgp_num\": 8, \
-    \"erasure_code_profile\": \"testprofile-" + pool_name + "\"}";
-  rc = rados.mon_command(cmdstr, inbl, &outbl, nullptr);
+
+  ceph::io_exerciser::json::OSDECPoolCreateRequest poolCreateRequest(pool_name,
+    fmt::format("testprofile-{}", pool_name),
+    formatter);
+  rc = rados.mon_command(poolCreateRequest.encode_json(), inbl, &outbl, nullptr);
+  ceph_assert(rc == 0);
+
+  if (allow_pool_autoscaling)
+  {
+    ceph::io_exerciser::json::OSDSetRequest setNoAutoscaleRequest("noautoscale",
+      std::nullopt,
+      formatter);
+    rc = rados.mon_command(setNoAutoscaleRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+  }
+
+  if (allow_pool_balancer)
+  {
+    ceph::io_exerciser::json::BalancerOffRequest balancerOffRequest(formatter);
+    rc = rados.mon_command(balancerOffRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    ceph::io_exerciser::json::BalancerStatusRequest balancerStatusRequest(formatter);
+    rc = rados.mon_command(balancerStatusRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    JSONParser p;
+    bool success = p.parse(outbl.c_str(), outbl.length());
+    ceph_assert(success);
+
+    ceph::io_exerciser::json::BalancerStatusReply reply{formatter};
+    reply.decode_json(&p);
+    ceph_assert(!reply.active);
+  }
+
+  if (allow_pool_deep_scrubbing)
+  {
+    ceph::io_exerciser::json::OSDSetRequest setNoDeepScrubRequest("nodeep-scrub",
+      std::nullopt,
+      formatter);
+    rc = rados.mon_command(setNoDeepScrubRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+  }
+
+  if (allow_pool_scrubbing)
+  {
+    ceph::io_exerciser::json::OSDSetRequest setNoScrubRequest("noscrub",
+      std::nullopt,
+      formatter);
+    rc = rados.mon_command(setNoScrubRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+  }
+
+  ceph::io_exerciser::json
+    ::ConfigSetRequest configSetBluestoreDebugRequest("global",
+                                                      "bluestore_debug_inject_read_err",
+                                                      "true",
+                                                      std::nullopt,
+                                                      formatter);
+  rc = rados.mon_command(configSetBluestoreDebugRequest.encode_json(),
+                         inbl,
+                         &outbl,
+                         nullptr);
+  ceph_assert(rc == 0);
+
+  ceph::io_exerciser::json
+    ::ConfigSetRequest configSetMaxMarkdownRequest("global",
+                                                   "osd_max_markdown_count",
+                                                   "99999999",
+                                                   std::nullopt,
+                                                   formatter);
+  rc = rados.mon_command(configSetMaxMarkdownRequest.encode_json(),
+                         inbl,
+                         &outbl,
+                         nullptr);
   ceph_assert(rc == 0);
 }
-
-
 
 ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
                         librados::Rados& rados,
@@ -443,10 +540,34 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
   } else {
     const std::string pool = spo.choose();
     int threads = snt.choose();
+
+    bufferlist inbl, outbl;
+
+    std::optional<std::vector<int>> cached_shard_order = std::nullopt;
+
+    if (!spo.get_allow_pool_autoscaling() &&
+        !spo.get_allow_pool_balancer() &&
+        !spo.get_allow_pool_deep_scrubbing() &&
+        !spo.get_allow_pool_scrubbing())
+    {
+      ceph::io_exerciser::json::OSDMapRequest osdMapRequest(pool, oid, "");
+      int rc = rados.mon_command(osdMapRequest.encode_json(), inbl, &outbl, nullptr);
+      ceph_assert(rc == 0);
+
+      JSONParser p;
+      bool success = p.parse(outbl.c_str(), outbl.length());
+      ceph_assert(success);
+
+      ceph::io_exerciser::json::OSDMapReply reply{};
+      reply.decode_json(&p);
+      cached_shard_order = reply.acting;
+    }
+
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(rados,
                                                                     asio,
                                                                     pool,
                                                                     oid,
+                                                                    cached_shard_order,
                                                                     sbs.choose(),
                                                                     rng(),
                                                                     threads,
@@ -539,7 +660,12 @@ ceph::io_sequence::tester::TestRunner::TestRunner(po::variables_map& vm,
   rng(ceph::util::random_number_generator<int>(seed)),
   sbs{rng, vm},
   sos{rng, vm},
-  spo{rng, vm, rados, vm.contains("dryrun")},
+  spo{rng, vm, rados,
+      vm.contains("dryrun"),
+      vm.contains("allow_pool_autoscaling"),
+      vm.contains("allow_pool_balancer"),
+      vm.contains("allow_pool_deep_scrubbing"),
+      vm.contains("allow_pool_scrubbing")},
   snt{rng, vm},
   ssr{rng, vm}
 {
@@ -555,6 +681,11 @@ ceph::io_sequence::tester::TestRunner::TestRunner(po::variables_map& vm,
   num_objects = vm["parallel"].as<int>();
   object_name = vm["object"].as<std::string>();
   interactive = vm.contains("interactive");
+
+  allow_pool_autoscaling = vm.contains("allow_pool_autoscaling");
+  allow_pool_balancer = vm.contains("allow_pool_balancer");
+  allow_pool_deep_scrubbing = vm.contains("allow_pool_deep_scrubbing");
+  allow_pool_scrubbing = vm.contains("allow_pool_scrubbing");
 
   if (!dryrun)
   {
@@ -601,13 +732,17 @@ void ceph::io_sequence::tester::TestRunner::list_sequence()
   }
 }
 
+void ceph::io_sequence::tester::TestRunner::clear_tokens()
+{
+  tokens = split.end();
+}
+
 std::string ceph::io_sequence::tester::TestRunner::get_token()
 {
-  static std::string line;
-  static ceph::split split = ceph::split("");
-  static ceph::spliterator tokens;
-  while (line.empty() || tokens == split.end()) {
-    if (!std::getline(std::cin, line)) {
+  while (line.empty() || tokens == split.end())
+  {
+    if (!std::getline(std::cin, line))
+    {
       throw std::runtime_error("End of input");
     }
     split = ceph::split(line);
@@ -616,15 +751,45 @@ std::string ceph::io_sequence::tester::TestRunner::get_token()
   return std::string(*tokens++);
 }
 
+std::optional<std::string> ceph::io_sequence::tester::TestRunner
+  ::get_optional_token()
+{
+  std::optional<std::string> ret = std::nullopt;
+  if (tokens != split.end())
+  {
+    ret = std::string(*tokens++);
+  }
+  return ret;
+}
+
 uint64_t ceph::io_sequence::tester::TestRunner::get_numeric_token()
 {
   std::string parse_error;
   std::string token = get_token();
   uint64_t num = strict_iecstrtoll(token, &parse_error);
-  if (!parse_error.empty()) {
+  if (!parse_error.empty())
+  {
     throw std::runtime_error("Invalid number "+token);
   }
   return num;
+}
+
+std::optional<uint64_t> ceph::io_sequence::tester::TestRunner
+  ::get_optional_numeric_token()
+{
+  std::string parse_error;
+  std::optional<std::string> token = get_optional_token();
+  if (token)
+  {
+    uint64_t num = strict_iecstrtoll(*token, &parse_error);
+    if (!parse_error.empty())
+    {
+      throw std::runtime_error("Invalid number "+*token);
+    }
+    return num;
+  }
+
+  return std::optional<uint64_t>(std::nullopt);
 }
 
 bool ceph::io_sequence::tester::TestRunner::run_test()
@@ -664,43 +829,60 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test()
   else
   {
     const std::string pool = spo.choose();
+
+    bufferlist inbl, outbl;
+
+    ceph::io_exerciser::json::OSDMapRequest osdMapRequest(pool, object_name, "");
+    int rc = rados.mon_command(osdMapRequest.encode_json(),
+                               inbl,
+                               &outbl,
+                               nullptr);
+    ceph_assert(rc == 0);
+
+    JSONParser p;
+    bool success = p.parse(outbl.c_str(), outbl.length());
+    ceph_assert(success);
+
+    ceph::io_exerciser::json::OSDMapReply reply{};
+    reply.decode_json(&p);
+
     model = std::make_unique<ceph::io_exerciser::RadosIo>(rados, asio, pool,
-                                                          object_name, sbs.choose(),
-                                                          rng(), 1, // 1 thread
+                                                          object_name, reply.acting,
+                                                          sbs.choose(), rng(),
+                                                          1, // 1 thread
                                                           lock, cond);
   }
 
   while (!done)
   {
     const std::string op = get_token();
-    if (!op.compare("done")  || !op.compare("q") || !op.compare("quit"))
+    if (op == "done"  || op == "q" || op == "quit")
     {
-      ioop = DoneOp::generate();
+      ioop = ceph::io_exerciser::DoneOp::generate();
     }
-    else if (!op.compare("create"))
+    else if (op == "create")
     {
-      ioop = CreateOp::generate(get_numeric_token());
+      ioop = ceph::io_exerciser::CreateOp::generate(get_numeric_token());
     }
-    else if (!op.compare("remove") || !op.compare("delete"))
+    else if (op == "remove" || op == "delete")
     {
-      ioop = RemoveOp::generate();
+      ioop = ceph::io_exerciser::RemoveOp::generate();
     }
-    else if (!op.compare("read"))
+    else if (op == "read")
     {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
-      ioop = SingleReadOp::generate(offset, length);
+      ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length);
     }
-    else if (!op.compare("read2"))
+    else if (op == "read2")
     {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
       uint64_t offset2 = get_numeric_token();
       uint64_t length2 = get_numeric_token();
-      ioop = DoubleReadOp::generate(offset1, length1,
-                                                        offset2, length2);
+      ioop = DoubleReadOp::generate(offset1, length1, offset2, length2);
     }
-    else if (!op.compare("read3"))
+    else if (op == "read3")
     {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
@@ -709,25 +891,24 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test()
       uint64_t offset3 = get_numeric_token();
       uint64_t length3 = get_numeric_token();
       ioop = TripleReadOp::generate(offset1, length1,
-                                                        offset2, length2,
-                                                        offset3, length3);
+                                    offset2, length2,
+                                    offset3, length3);
     }
-    else if (!op.compare("write"))
+    else if (op == "write")
     {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
       ioop = SingleWriteOp::generate(offset, length);
     }
-    else if (!op.compare("write2"))
+    else if (op == "write2")
     {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
       uint64_t offset2 = get_numeric_token();
       uint64_t length2 = get_numeric_token();
-      ioop = DoubleWriteOp::generate(offset1, length1,
-                                                        offset2, length2);
+      ioop = DoubleWriteOp::generate(offset1, length1, offset2, length2);
     }
-    else if (!op.compare("write3"))
+    else if (op == "write3")
     {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
@@ -736,19 +917,104 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test()
       uint64_t offset3 = get_numeric_token();
       uint64_t length3 = get_numeric_token();
       ioop = TripleWriteOp::generate(offset1, length1,
-                                                         offset2, length2,
-                                                         offset3, length3);
+                                     offset2, length2,
+                                     offset3, length3);
+    }
+    else if (op == "failedwrite")
+    {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      ioop = SingleFailedWriteOp::generate(offset, length);
+    }
+    else if (op == "failedwrite2")
+    {
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      ioop = DoubleFailedWriteOp::generate(offset1, length1, offset2, length2);
+    }
+    else if (op == "failedwrite3")
+    {
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      uint64_t offset3 = get_numeric_token();
+      uint64_t length3 = get_numeric_token();
+      ioop = TripleFailedWriteOp::generate(offset1, length1,
+                                     offset2, length2,
+                                     offset3, length3);
+    }
+    else if (op == "injecterror")
+    {
+      std::string inject_type = get_token();
+      int shard = get_numeric_token();
+      std::optional<int> type = get_optional_numeric_token();
+      std::optional<int> when = get_optional_numeric_token();
+      std::optional<int> duration = get_optional_numeric_token();
+      if (inject_type == "read")
+      {
+        ioop = ceph::io_exerciser::InjectReadErrorOp::generate(shard,
+                                                               type,
+                                                               when,
+                                                               duration);
+      }
+      else if (inject_type == "write")
+      {
+        ioop = ceph::io_exerciser::InjectWriteErrorOp::generate(shard,
+                                                                type,
+                                                                when,
+                                                                duration);
+      }
+      else
+      {
+        clear_tokens();
+        ioop.reset();
+        dout(0) << fmt::format("Invalid error inject {}. No action performed.",
+                   inject_type) << dendl;
+      }
+    }
+    else if (op == "clearinject")
+    {
+      std::string inject_type = get_token();
+      int shard = get_numeric_token();
+      std::optional<int> type = get_optional_numeric_token();
+      if (inject_type == "read")
+      {
+        ioop = ceph::io_exerciser::ClearReadErrorInjectOp::generate(shard,
+                                                                    type);
+      }
+      else if (inject_type == "write")
+      {
+        ioop = ceph::io_exerciser::ClearWriteErrorInjectOp::generate(shard,
+                                                                     type);
+      }
+      else
+      {
+        clear_tokens();
+        ioop.reset();
+        dout(0) << fmt::format("Invalid error inject {}. No action performed.",
+                   inject_type) << dendl;
+      }
     }
     else
     {
-      throw std::runtime_error("Invalid operation "+op);
+      clear_tokens();
+      ioop.reset();
+      dout(0) << fmt::format("Invalid op {}. No action performed.",
+                              op) << dendl;
     }
-    dout(0) << ioop->to_string(model->get_block_size()) << dendl;
-    model->applyIoOp(*ioop);
-    done = ioop->getOpType() == OpType::Done;
-    if (!done) {
-      ioop = BarrierOp::generate();
+    if (ioop)
+    {
+      dout(0) << ioop->to_string(model->get_block_size()) << dendl;
       model->applyIoOp(*ioop);
+      done = ioop->getOpType() == ceph::io_exerciser::OpType::Done;
+      if (!done)
+      {
+        ioop = ceph::io_exerciser::BarrierOp::generate();
+        model->applyIoOp(*ioop);
+      }
     }
   }
 
@@ -791,12 +1057,15 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test()
 
   bool started_io = true;
   bool need_wait = true;
-  while (started_io || need_wait) {
+  while (started_io || need_wait)
+  {
     started_io = false;
     need_wait = false;
-    for (auto obj = test_objects.begin(); obj != test_objects.end(); ++obj) {
+    for (auto obj = test_objects.begin(); obj != test_objects.end(); ++obj)
+    {
       std::shared_ptr<ceph::io_sequence::tester::TestObject> to = *obj;
-      if (!to->finished()) {
+      if (!to->finished())
+      {
 	lock.lock();
 	bool ready = to->readyForIo();
 	lock.unlock();
@@ -809,12 +1078,15 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test()
 	}
       }
     }
-    if (!started_io && need_wait) {
+    if (!started_io && need_wait)
+    {
       std::unique_lock l(lock);
       // Recheck with lock incase anything has changed
-      for (auto obj = test_objects.begin(); obj != test_objects.end(); ++obj) {
+      for (auto obj = test_objects.begin(); obj != test_objects.end(); ++obj)
+      {
         std::shared_ptr<ceph::io_sequence::tester::TestObject> to = *obj;
-        if (!to->finished()) {
+        if (!to->finished())
+        {
           need_wait = !to->readyForIo();
           if (!need_wait)
           {
@@ -827,7 +1099,8 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test()
   }
 
   int total_io = 0;
-  for (auto obj = test_objects.begin(); obj != test_objects.end(); ++obj) {
+  for (auto obj = test_objects.begin(); obj != test_objects.end(); ++obj)
+  {
     std::shared_ptr<ceph::io_sequence::tester::TestObject> to = *obj;
     total_io += to->get_num_io();
     ceph_assert(to->finished());

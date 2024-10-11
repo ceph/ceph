@@ -26,6 +26,7 @@ namespace ceph {
       std::unique_ptr<ObjectModel> om;
       std::unique_ptr<ceph::io_exerciser::data_generation::DataGenerator> db;
       std::string pool;
+      std::optional<std::vector<int>> cached_shard_order;
       int threads;
       ceph::mutex& lock;
       ceph::condition_variable& cond;
@@ -41,6 +42,7 @@ namespace ceph {
               boost::asio::io_context& asio,
               const std::string& pool,
               const std::string& oid,
+              const std::optional<std::vector<int>>& cached_shard_order,
               uint64_t block_size,
               int seed,
               int threads,
@@ -68,6 +70,10 @@ namespace ceph {
       // Must be called with lock held
       bool readyForIoOp(IoOp& op);
       void applyIoOp(IoOp& op);
+
+    private:
+      void applyReadWriteOp(IoOp& op);
+      void applyInjectOp(IoOp& op);
     };
   }
 }

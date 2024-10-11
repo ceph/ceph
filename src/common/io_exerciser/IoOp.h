@@ -1,9 +1,9 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <string>
 #include <memory>
-#include "include/ceph_assert.h"
 
 #include "OpType.h"
 
@@ -144,6 +144,136 @@ namespace ceph {
                                                        uint64_t length2,
                                                        uint64_t offset3,
                                                        uint64_t length3);
+    };
+
+    class SingleFailedWriteOp : public ReadWriteOp<OpType::FailedWrite, 1>
+    {
+      public:
+        SingleFailedWriteOp(uint64_t offset, uint64_t length);
+        static std::unique_ptr<SingleFailedWriteOp> generate(uint64_t offset,
+                                                             uint64_t length);
+    };
+
+    class DoubleFailedWriteOp : public ReadWriteOp<OpType::FailedWrite2, 2>
+    {
+      public:
+        DoubleFailedWriteOp(uint64_t offset1, uint64_t length1,
+                            uint64_t offset2, uint64_t length2);
+        static std::unique_ptr<DoubleFailedWriteOp> generate(uint64_t offset1,
+                                                             uint64_t length1,
+                                                             uint64_t offset2,
+                                                             uint64_t length2);
+    };
+
+    class TripleFailedWriteOp : public ReadWriteOp<OpType::FailedWrite3, 3>
+    {
+      public:
+        TripleFailedWriteOp(uint64_t offset1, uint64_t length1,
+                            uint64_t offset2, uint64_t length2,
+                            uint64_t offset3, uint64_t length3);
+        static std::unique_ptr<TripleFailedWriteOp> generate(uint64_t offset1,
+                                                             uint64_t length1,
+                                                             uint64_t offset2,
+                                                             uint64_t length2,
+                                                             uint64_t offset3,
+                                                             uint64_t length3);
+    };
+
+    template <ceph::io_exerciser::OpType opType>
+    class InjectErrorOp : public TestOp<opType>
+    {
+      public:
+        InjectErrorOp(int shard,
+                      const std::optional<uint64_t>& type,
+                      const std::optional<uint64_t>& when,
+                      const std::optional<uint64_t>& duration);
+
+        std::string to_string(uint64_t block_size) const override;
+
+        int shard;
+        std::optional<uint64_t> type;
+        std::optional<uint64_t> when;
+        std::optional<uint64_t> duration;
+
+      protected:
+        virtual inline constexpr std::string_view get_inject_type_string() const = 0;
+    };
+
+    class InjectReadErrorOp : public InjectErrorOp<OpType::InjectReadError>
+    {
+      public:
+        InjectReadErrorOp(int shard,
+                          const std::optional<uint64_t>& type,
+                          const std::optional<uint64_t>& when,
+                          const std::optional<uint64_t>& duration);
+
+        static std::unique_ptr<InjectReadErrorOp> generate(int shard,
+                                                           const std::optional<uint64_t>& type,
+                                                           const std::optional<uint64_t>& when,
+                                                           const std::optional<uint64_t>& duration);
+
+      protected:
+        inline constexpr std::string_view get_inject_type_string() const override
+          { return "read"; }
+    };
+
+    class InjectWriteErrorOp : public InjectErrorOp<OpType::InjectWriteError>
+    {
+      public:
+        InjectWriteErrorOp(int shard,
+                           const std::optional<uint64_t>& type,
+                           const std::optional<uint64_t>& when,
+                           const std::optional<uint64_t>& duration);
+
+        static std::unique_ptr<InjectWriteErrorOp> generate(int shard,
+                                                            const std::optional<uint64_t>& type,
+                                                            const std::optional<uint64_t>& when,
+                                                            const std::optional<uint64_t>& duration);
+
+      protected:
+        inline constexpr std::string_view get_inject_type_string() const override
+          { return "write"; }
+    };
+
+    template <ceph::io_exerciser::OpType opType>
+    class ClearErrorInjectOp : public TestOp<opType>
+    {
+      public:
+        ClearErrorInjectOp(int shard, const std::optional<uint64_t>& type);
+
+        std::string to_string(uint64_t block_size) const override;
+
+        int shard;
+        std::optional<uint64_t> type;
+
+      protected:
+        virtual inline constexpr std::string_view get_inject_type_string() const = 0;
+    };
+
+    class ClearReadErrorInjectOp : public ClearErrorInjectOp<OpType::ClearReadErrorInject>
+    {
+      public:
+        ClearReadErrorInjectOp(int shard, const std::optional<uint64_t>& type);
+
+        static std::unique_ptr<ClearReadErrorInjectOp> generate(int shard,
+                                                                const std::optional<uint64_t>& type);
+
+      protected:
+        inline constexpr std::string_view get_inject_type_string() const override
+          { return "read"; }
+    };
+
+    class ClearWriteErrorInjectOp : public ClearErrorInjectOp<OpType::ClearWriteErrorInject>
+    {
+      public:
+        ClearWriteErrorInjectOp(int shard, const std::optional<uint64_t>& type);
+
+        static std::unique_ptr<ClearWriteErrorInjectOp> generate(int shard,
+                                                                 const std::optional<uint64_t>& type);
+
+      protected:
+        inline constexpr std::string_view get_inject_type_string() const override
+          { return "write"; }
     };
   }
 }

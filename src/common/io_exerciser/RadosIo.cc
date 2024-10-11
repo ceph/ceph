@@ -2,6 +2,13 @@
 
 #include "DataGenerator.h"
 
+#include <fmt/format.h>
+#include <json_spirit/json_spirit.h>
+
+#include "common/ceph_json.h"
+
+#include "JsonStructures.h"
+
 #include <ranges>
 
 using RadosIo = ceph::io_exerciser::RadosIo;
@@ -10,6 +17,7 @@ RadosIo::RadosIo(librados::Rados& rados,
         boost::asio::io_context& asio,
         const std::string& pool,
         const std::string& oid,
+        const std::optional<std::vector<int>>& cached_shard_order,
         uint64_t block_size,
         int seed,
 	int threads,
@@ -20,8 +28,9 @@ RadosIo::RadosIo(librados::Rados& rados,
   asio(asio),
   om(std::make_unique<ObjectModel>(oid, block_size, seed)),
   db(data_generation::DataGenerator::create_generator(
-      data_generation::GenerationType::HeaderedSeededRandom, *om)),
+     data_generation::GenerationType::HeaderedSeededRandom, *om)),
   pool(pool),
+  cached_shard_order(cached_shard_order),
   threads(threads),
   lock(lock),
   cond(cond),
@@ -72,7 +81,8 @@ void RadosIo::allow_ec_overwrites(bool allow)
 }
 
 template <int N>
-RadosIo::AsyncOpInfo<N>::AsyncOpInfo(const std::array<uint64_t, N>& offset, const std::array<uint64_t, N>& length) :
+RadosIo::AsyncOpInfo<N>::AsyncOpInfo(const std::array<uint64_t, N>& offset,
+                                     const std::array<uint64_t, N>& length) :
   offset(offset), length(length)
 {
 
@@ -104,32 +114,112 @@ void RadosIo::applyIoOp(IoOp& op)
   // at least one I/O to complete
   wait_for_io(threads-1);
 
+  switch (op.getOpType())
+  {
+  case OpType::Done:
+  [[ fallthrough ]];
+  case OpType::Barrier:
+    // Wait for all outstanding I/O to complete
+    wait_for_io(0);
+    break;
+
+  case OpType::Create:
+  {
+    start_io();
+    uint64_t opSize = static_cast<CreateOp&>(op).size;
+    std::shared_ptr<AsyncOpInfo<1>> op_info
+      = std::make_shared<AsyncOpInfo<1>>(std::array<uint64_t,1>{0},
+                                         std::array<uint64_t,1>{opSize});
+    op_info->bufferlist[0] = db->generate_data(0, opSize);
+    op_info->wop.write_full(op_info->bufferlist[0]);
+    auto create_cb = [this](boost::system::error_code ec,
+                             version_t ver)
+    {
+      ceph_assert(ec == boost::system::errc::success);
+      finish_io();
+    };
+    librados::async_operate(asio, io, oid,
+                            &op_info->wop, 0, nullptr, create_cb);
+    break;
+  }
+
+  case OpType::Remove:
+  {
+    start_io();
+    auto op_info = std::make_shared<AsyncOpInfo<0>>();
+    op_info->wop.remove();
+    auto remove_cb = [this] (boost::system::error_code ec,
+                             version_t ver)
+    {
+      ceph_assert(ec == boost::system::errc::success);
+      finish_io();
+    };
+    librados::async_operate(asio, io, oid,
+                            &op_info->wop, 0, nullptr, remove_cb);
+    break;
+  }
+  case OpType::Read:
+    [[ fallthrough ]];
+  case OpType::Read2:
+    [[ fallthrough ]];
+  case OpType::Read3:
+    [[ fallthrough ]];
+  case OpType::Write:
+    [[ fallthrough ]];
+  case OpType::Write2:
+    [[ fallthrough ]];
+  case OpType::Write3:
+    [[ fallthrough ]];
+  case OpType::FailedWrite:
+    [[ fallthrough ]];
+  case OpType::FailedWrite2:
+    [[ fallthrough ]];
+  case OpType::FailedWrite3:
+    applyReadWriteOp(op);
+    break;
+  case OpType::InjectReadError:
+    [[ fallthrough ]];
+  case OpType::InjectWriteError:
+    [[ fallthrough ]];
+  case OpType::ClearReadErrorInject:
+    [[ fallthrough ]];
+  case OpType::ClearWriteErrorInject:
+    applyInjectOp(op);
+    break;
+  default:
+    ceph_abort_msg("Unrecognised Op");
+    break;
+  }
+}
+
+void RadosIo::applyReadWriteOp(IoOp& op)
+{
   auto applyReadOp = [this]<OpType opType, int N>(ReadWriteOp<opType, N> readOp)
   {
     auto op_info = std::make_shared<AsyncOpInfo<N>>(readOp.offset, readOp.length);
 
+    for (int i = 0; i < N; i++)
+    {
+      op_info->rop.read(readOp.offset[i] * block_size,
+                        readOp.length[i] * block_size,
+                        &op_info->bufferlist[i], nullptr);
+    }
+    auto read_cb = [this, op_info] (boost::system::error_code ec,
+                                      version_t ver,
+                                      bufferlist bl)
+    {
+      ceph_assert(ec == boost::system::errc::success);
       for (int i = 0; i < N; i++)
       {
-        op_info->rop.read(readOp.offset[i] * block_size,
-                          readOp.length[i] * block_size,
-                          &op_info->bufferlist[i], nullptr);
+        ceph_assert(db->validate(op_info->bufferlist[i],
+                                  op_info->offset[i],
+                                  op_info->length[i]));
       }
-      auto read_cb = [this, op_info] (boost::system::error_code ec,
-                                       version_t ver,
-                                       bufferlist bl)
-      {
-        ceph_assert(ec == boost::system::errc::success);
-        for (int i = 0; i < N; i++)
-        {
-          ceph_assert(db->validate(op_info->bufferlist[i],
-                                   op_info->offset[i],
-                                   op_info->length[i]));
-        }
-        finish_io();
-      };
-      librados::async_operate(asio, io, oid,
-                              &op_info->rop, 0, nullptr, read_cb);
-      num_io++;
+      finish_io();
+    };
+    librados::async_operate(asio, io, oid,
+                            &op_info->rop, 0, nullptr, read_cb);
+    num_io++;
   };
 
   auto applyWriteOp = [this]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp)
@@ -151,96 +241,191 @@ void RadosIo::applyIoOp(IoOp& op)
     num_io++;
   };
 
+  auto applyFailedWriteOp = [this]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp)
+  {
+    auto op_info = std::make_shared<AsyncOpInfo<N>>(writeOp.offset, writeOp.length);
+    for (int i = 0; i < N; i++)
+    {
+      op_info->bufferlist[i] = db->generate_data(writeOp.offset[i], writeOp.length[i]);
+      op_info->wop.write(writeOp.offset[i] * block_size, op_info->bufferlist[i]);
+    }
+    auto write_cb = [this, writeOp] (boost::system::error_code ec,
+                            version_t ver)
+    {
+      ceph_assert(ec != boost::system::errc::success);
+      finish_io();
+    };
+    librados::async_operate(asio, io, oid,
+                            &op_info->wop, 0, nullptr, write_cb);
+    num_io++;
+  };
+
   switch (op.getOpType())
   {
-  case OpType::Done:
-  [[ fallthrough ]];
-  case OpType::Barrier:
-    // Wait for all outstanding I/O to complete
-    wait_for_io(0);
-    break;
-
-  case OpType::Create:
-    {
-      start_io();
-      uint64_t opSize = static_cast<CreateOp&>(op).size;
-      std::shared_ptr<AsyncOpInfo<1>> op_info = std::make_shared<AsyncOpInfo<1>>(std::array<uint64_t,1>{0}, std::array<uint64_t,1>{opSize});
-      op_info->bufferlist[0] = db->generate_data(0, opSize);
-      op_info->wop.write_full(op_info->bufferlist[0]);
-      auto create_cb = [this] (boost::system::error_code ec,
-                               version_t ver) {
-        ceph_assert(ec == boost::system::errc::success);
-        finish_io();
-      };
-      librados::async_operate(asio, io, oid,
-                              &op_info->wop, 0, nullptr, create_cb);
-    }
-    break;
-
-  case OpType::Remove:
-    {
-      start_io();
-      auto op_info = std::make_shared<AsyncOpInfo<0>>();
-      op_info->wop.remove();
-      auto remove_cb = [this] (boost::system::error_code ec,
-                               version_t ver) {
-        ceph_assert(ec == boost::system::errc::success);
-        finish_io();
-      };
-      librados::async_operate(asio, io, oid,
-                              &op_info->wop, 0, nullptr, remove_cb);
-    }
-    break;
-
   case OpType::Read:
-    {
+  {
       start_io();
       SingleReadOp& readOp = static_cast<SingleReadOp&>(op);
       applyReadOp(readOp);
-    }
-    break;
-
+      break;
+  }
   case OpType::Read2:
-    {
-      start_io();
-      DoubleReadOp& readOp = static_cast<DoubleReadOp&>(op);
-      applyReadOp(readOp);
-    }
+  {
+    start_io();
+    DoubleReadOp& readOp = static_cast<DoubleReadOp&>(op);
+    applyReadOp(readOp);
     break;
-
+  }
   case OpType::Read3:
-    {
-      start_io();
-      TripleReadOp& readOp = static_cast<TripleReadOp&>(op);
-      applyReadOp(readOp);
-    }
+  {
+    start_io();
+    TripleReadOp& readOp = static_cast<TripleReadOp&>(op);
+    applyReadOp(readOp);
     break;
-
+  }
   case OpType::Write:
-    {
-      start_io();
-      SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);
-      applyWriteOp(writeOp);
-    }
+  {
+    start_io();
+    SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);
+    applyWriteOp(writeOp);
     break;
-
+  }
   case OpType::Write2:
-    {
-      start_io();
-      DoubleWriteOp& writeOp = static_cast<DoubleWriteOp&>(op);
-      applyWriteOp(writeOp);
-    }
+  {
+    start_io();
+    DoubleWriteOp& writeOp = static_cast<DoubleWriteOp&>(op);
+    applyWriteOp(writeOp);
     break;
-
+  }
   case OpType::Write3:
-    {
-      start_io();
-      TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
-      applyWriteOp(writeOp);
-    }
+  {
+    start_io();
+    TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
+    applyWriteOp(writeOp);
     break;
+  }
+
+  case OpType::FailedWrite:
+  {
+    start_io();
+    SingleFailedWriteOp& writeOp = static_cast<SingleFailedWriteOp&>(op);
+    applyFailedWriteOp(writeOp);
+    break;
+  }
+  case OpType::FailedWrite2:
+  {
+    start_io();
+    DoubleFailedWriteOp& writeOp = static_cast<DoubleFailedWriteOp&>(op);
+    applyFailedWriteOp(writeOp);
+    break;
+  }
+  case OpType::FailedWrite3:
+  {
+    start_io();
+    TripleFailedWriteOp& writeOp = static_cast<TripleFailedWriteOp&>(op);
+    applyFailedWriteOp(writeOp);
+    break;
+  }
 
   default:
+    ceph_abort_msg(fmt::format("Unsupported Read/Write operation ({})",
+                               op.getOpType()));
     break;
+  }
+}
+
+void RadosIo::applyInjectOp(IoOp& op)
+{
+  bufferlist osdmap_inbl, inject_inbl, osdmap_outbl, inject_outbl;
+  auto formatter = std::make_shared<JSONFormatter>(false);
+
+  int osd = -1;
+
+  ceph::io_exerciser::json::OSDMapRequest osdMapRequest(pool,
+                                                        get_oid(),
+                                                        "",
+                                                        formatter);
+  int rc = rados.mon_command(osdMapRequest.encode_json(),
+                              osdmap_inbl,
+                              &osdmap_outbl,
+                              nullptr);
+  ceph_assert(rc == 0);
+
+  JSONParser p;
+  bool success = p.parse(osdmap_outbl.c_str(), osdmap_outbl.length());
+  ceph_assert(success);
+
+  ceph::io_exerciser::json::OSDMapReply reply{formatter};
+  reply.decode_json(&p);
+
+  osd = reply.acting_primary;
+
+  switch(op.getOpType())
+  {
+    case OpType::InjectReadError:
+    {
+      InjectReadErrorOp& errorOp = static_cast<InjectReadErrorOp&>(op);
+
+      ceph::io_exerciser::json::InjectECErrorRequest injectErrorRequest(json::InjectOpType::Read,
+                                                                        pool,
+                                                                        oid,
+                                                                        errorOp.shard,
+                                                                        errorOp.type,
+                                                                        errorOp.when,
+                                                                        errorOp.duration,
+                                                                        formatter);
+
+      int rc = rados.osd_command(osd, injectErrorRequest.encode_json(), inject_inbl, &inject_outbl, nullptr);
+      ceph_assert(rc == 0);
+      break;
+    }
+    case OpType::InjectWriteError:
+    {
+      InjectWriteErrorOp& errorOp = static_cast<InjectWriteErrorOp&>(op);
+
+      ceph::io_exerciser::json::InjectECErrorRequest injectErrorRequest(json::InjectOpType::Write,
+                                                                        pool,
+                                                                        oid,
+                                                                        errorOp.shard,
+                                                                        errorOp.type,
+                                                                        errorOp.when,
+                                                                        errorOp.duration,
+                                                                        formatter);
+
+      int rc = rados.osd_command(osd, injectErrorRequest.encode_json(), inject_inbl, &inject_outbl, nullptr);
+      ceph_assert(rc == 0);
+      break;
+    }
+    case OpType::ClearReadErrorInject:
+    {
+      ClearReadErrorInjectOp& errorOp = static_cast<ClearReadErrorInjectOp&>(op);
+
+      ceph::io_exerciser::json::InjectECClearErrorRequest clearErrorInject(json::InjectOpType::Read,
+                                                                           pool,
+                                                                           oid,
+                                                                           errorOp.shard,
+                                                                           errorOp.type);
+
+      int rc = rados.osd_command(osd, clearErrorInject.encode_json(), inject_inbl, &inject_outbl, nullptr);
+      ceph_assert(rc == 0);
+      break;
+    }
+    case OpType::ClearWriteErrorInject:
+    {
+      ClearReadErrorInjectOp& errorOp = static_cast<ClearReadErrorInjectOp&>(op);
+
+      ceph::io_exerciser::json::InjectECClearErrorRequest clearErrorInject(json::InjectOpType::Write,
+                                                                           pool,
+                                                                           oid,
+                                                                           errorOp.shard,
+                                                                           errorOp.type);
+
+      int rc = rados.osd_command(osd, clearErrorInject.encode_json(), inject_inbl, &inject_outbl, nullptr);
+      ceph_assert(rc == 0);
+      break;
+    }
+    default:
+      ceph_abort_msg(fmt::format("Unsupported inject operation ({})", op.getOpType()));
+      break;
   }
 }

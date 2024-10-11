@@ -2,6 +2,8 @@
 
 #include <fmt/format.h>
 
+#include <include/ceph_assert.h>
+
 /* Overview
  *
  * enum OpType
@@ -15,16 +17,23 @@ namespace ceph
   {
     enum class OpType
     {
-      Done,       // End of I/O sequence
-      Barrier,    // Barrier - all prior I/Os must complete
-      Create,     // Create object and pattern with data
-      Remove,     // Remove object
-      Read,       // Read
-      Read2,      // Two reads in a single op
-      Read3,      // Three reads in a single op
-      Write,      // Write
-      Write2,     // Two writes in a single op
-      Write3      // Three writes in a single op
+      Done,                   // End of I/O sequence
+      Barrier,                // Barrier - all prior I/Os must complete
+      Create,                 // Create object and pattern with data
+      Remove,                 // Remove object
+      Read,                   // Read
+      Read2,                  // Two reads in a single op
+      Read3,                  // Three reads in a single op
+      Write,                  // Write
+      Write2,                 // Two writes in a single op
+      Write3,                 // Three writes in a single op
+      FailedWrite,            // A write which should fail
+      FailedWrite2,           // Two writes in one op which should fail
+      FailedWrite3,           // Three writes in one op which should fail
+      InjectReadError,        // Op to tell OSD to inject read errors
+      InjectWriteError,       // Op to tell OSD to inject write errors
+      ClearReadErrorInject,   // Op to tell OSD to clear read error injects
+      ClearWriteErrorInject   // Op to tell OSD to clear write error injects
     };
   }
 }
@@ -61,6 +70,23 @@ struct fmt::formatter<ceph::io_exerciser::OpType>
         return fmt::format_to(ctx.out(), "Write2");
       case ceph::io_exerciser::OpType::Write3:
         return fmt::format_to(ctx.out(), "Write3");
+      case ceph::io_exerciser::OpType::FailedWrite:
+        return fmt::format_to(ctx.out(), "FailedWrite");
+      case ceph::io_exerciser::OpType::FailedWrite2:
+        return fmt::format_to(ctx.out(), "FailedWrite2");
+      case ceph::io_exerciser::OpType::FailedWrite3:
+        return fmt::format_to(ctx.out(), "FailedWrite3");
+      case ceph::io_exerciser::OpType::InjectReadError:
+        return fmt::format_to(ctx.out(), "InjectReadError");
+      case ceph::io_exerciser::OpType::InjectWriteError:
+        return fmt::format_to(ctx.out(), "InjectWriteError");
+      case ceph::io_exerciser::OpType::ClearReadErrorInject:
+        return fmt::format_to(ctx.out(), "ClearReadErrorInject");
+      case ceph::io_exerciser::OpType::ClearWriteErrorInject:
+        return fmt::format_to(ctx.out(), "ClearWriteErrorInject");
+      default:
+        ceph_abort_msg("Unknown OpType");
+        return fmt::format_to(ctx.out(), "Unknown OpType");
     }
   }
 };

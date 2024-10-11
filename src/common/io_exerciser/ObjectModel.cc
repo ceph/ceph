@@ -104,6 +104,27 @@ void ObjectModel::applyIoOp(IoOp& op)
     num_io++;
   };
 
+  auto verify_failed_write_and_record = [ &contents = contents,
+                                          &created = created,
+                                          &num_io = num_io,
+                                          &reads = reads,
+                                          &writes = writes  ]
+                                        <OpType opType, int N>
+                                        (ReadWriteOp<opType, N> writeOp)
+  {
+    // Ensure write should still be valid, even though we are expecting OSD failure
+    ceph_assert(created);
+    for (int i = 0; i < N; i++)
+    {
+      // Not allowed: write overlapping with parallel read or write
+      ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
+      ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
+      writes.union_insert(writeOp.offset[i], writeOp.length[i]);
+      ceph_assert(writeOp.offset[i] + writeOp.length[i] <= contents.size());
+    }
+    num_io++;
+  };
+
   switch (op.getOpType()) {
   case OpType::Barrier:
     reads.clear();
@@ -164,6 +185,25 @@ void ObjectModel::applyIoOp(IoOp& op)
   {
     TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
     verify_write_and_record_and_generate_seed(writeOp);
+  }
+  break;
+  case OpType::FailedWrite:
+  {
+    ceph_assert(created);
+    SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);
+    verify_failed_write_and_record(writeOp);
+  }
+  break;
+  case OpType::FailedWrite2:
+  {
+    DoubleWriteOp& writeOp = static_cast<DoubleWriteOp&>(op);
+    verify_failed_write_and_record(writeOp);
+  }
+  break;
+  case OpType::FailedWrite3:
+  {
+    TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
+    verify_failed_write_and_record(writeOp);
   }
   break;
   default:

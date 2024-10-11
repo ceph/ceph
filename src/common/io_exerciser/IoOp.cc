@@ -2,6 +2,8 @@
 
 #include "fmt/format.h"
 
+#include "include/ceph_assert.h"
+
 using IoOp = ceph::io_exerciser::IoOp;
 using OpType = ceph::io_exerciser::OpType;
 
@@ -15,6 +17,9 @@ using TripleReadOp = ceph::io_exerciser::TripleReadOp;
 using SingleWriteOp = ceph::io_exerciser::SingleWriteOp;
 using DoubleWriteOp = ceph::io_exerciser::DoubleWriteOp;
 using TripleWriteOp = ceph::io_exerciser::TripleWriteOp;
+using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
+using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
+using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
 
 namespace
 {
@@ -164,17 +169,23 @@ std::string ceph::io_exerciser::ReadWriteOp<opType, numIOs>
   switch(opType)
   {
     case OpType::Read:
-      [[fallthrough]];
+      [[ fallthrough ]];
     case OpType::Read2:
-      [[fallthrough]];
+      [[ fallthrough ]];
     case OpType::Read3:
       return fmt::format("Read{} ({})", numIOs, offset_length_desc);
     case OpType::Write:
-      [[fallthrough]];
+      [[ fallthrough ]];
     case OpType::Write2:
-      [[fallthrough]];
+      [[ fallthrough ]];
     case OpType::Write3:
       return fmt::format("Write{} ({})", numIOs, offset_length_desc);
+    case OpType::FailedWrite:
+      [[ fallthrough ]];
+    case OpType::FailedWrite2:
+      [[ fallthrough ]];
+    case OpType::FailedWrite3:
+      return fmt::format("FailedWrite{} ({})", numIOs, offset_length_desc);
     default:
       ceph_abort_msg(fmt::format("Unsupported op type by ReadWriteOp ({})", opType));
   }
@@ -262,4 +273,159 @@ std::unique_ptr<TripleWriteOp> TripleWriteOp::generate(uint64_t offset1, uint64_
   return std::make_unique<TripleWriteOp>(offset1, length1,
                                          offset2, length2,
                                          offset3, length3);
+}
+
+SingleFailedWriteOp::SingleFailedWriteOp(uint64_t offset, uint64_t length) :
+  ReadWriteOp<OpType::FailedWrite, 1>({offset}, {length})
+{
+
+}
+
+std::unique_ptr<SingleFailedWriteOp> SingleFailedWriteOp::generate(uint64_t offset,
+                                                                   uint64_t length)
+{
+  return std::make_unique<SingleFailedWriteOp>(offset, length);
+}
+
+DoubleFailedWriteOp::DoubleFailedWriteOp(uint64_t offset1, uint64_t length1,
+                                         uint64_t offset2, uint64_t length2) :
+  ReadWriteOp<OpType::FailedWrite2, 2>({offset1, offset2}, {length1, length2})
+{
+
+}
+
+std::unique_ptr<DoubleFailedWriteOp> DoubleFailedWriteOp::generate(uint64_t offset1,
+                                                                   uint64_t length1,
+                                                                   uint64_t offset2,
+                                                                   uint64_t length2)
+{
+  return std::make_unique<DoubleFailedWriteOp>(offset1, length1, offset2, length2);
+}
+
+TripleFailedWriteOp::TripleFailedWriteOp(uint64_t offset1, uint64_t length1,
+                                         uint64_t offset2, uint64_t length2,
+                                         uint64_t offset3, uint64_t length3) :
+  ReadWriteOp<OpType::FailedWrite3, 3>({offset1, offset2, offset3},
+                                       {length1, length2, length3})
+{
+
+}
+
+std::unique_ptr<TripleFailedWriteOp> TripleFailedWriteOp::generate(uint64_t offset1,
+                                                                   uint64_t length1,
+                                                                   uint64_t offset2,
+                                                                   uint64_t length2,
+                                                                   uint64_t offset3,
+                                                                   uint64_t length3)
+{
+  return std::make_unique<TripleFailedWriteOp>(offset1, length1,
+                                               offset2, length2,
+                                               offset3, length3);
+}
+
+template <ceph::io_exerciser::OpType opType>
+ceph::io_exerciser::InjectErrorOp<opType>
+  ::InjectErrorOp(int shard,
+                  const std::optional<uint64_t>& type,
+                  const std::optional<uint64_t>& when,
+                  const std::optional<uint64_t>& duration) :
+  TestOp<opType>(),
+  shard(shard),
+  type(type),
+  when(when),
+  duration(duration)
+{
+
+}
+
+template <ceph::io_exerciser::OpType opType>
+std::string ceph::io_exerciser::InjectErrorOp<opType>::to_string(uint64_t blocksize) const
+{
+  std::string_view inject_type = get_inject_type_string();
+  return fmt::format("Inject {} error on shard {} of type {}"
+                      " after {} successful inject(s) lasting {} inject(s)",
+                      inject_type, shard, type.value_or(0),
+                      when.value_or(0), duration.value_or(1));
+}
+
+ceph::io_exerciser::InjectReadErrorOp::InjectReadErrorOp(int shard,
+                                                         const std::optional<uint64_t>& type,
+                                                         const std::optional<uint64_t>& when,
+                                                         const std::optional<uint64_t>& duration) :
+  InjectErrorOp<OpType::InjectReadError>(shard, type, when, duration)
+{
+
+}
+
+std::unique_ptr<ceph::io_exerciser::InjectReadErrorOp> ceph::io_exerciser
+  ::InjectReadErrorOp::generate(int shard,
+                                const std::optional<uint64_t>& type,
+                                const std::optional<uint64_t>& when,
+                                const std::optional<uint64_t>& duration)
+{
+  return std::make_unique<InjectReadErrorOp>(shard, type, when, duration);
+}
+
+ceph::io_exerciser::InjectWriteErrorOp::InjectWriteErrorOp(int shard,
+                                                           const std::optional<uint64_t>& type,
+                                                           const std::optional<uint64_t>& when,
+                                                           const std::optional<uint64_t>& duration) :
+  InjectErrorOp<OpType::InjectWriteError>(shard, type, when, duration)
+{
+
+}
+
+std::unique_ptr<ceph::io_exerciser::InjectWriteErrorOp> ceph::io_exerciser
+  ::InjectWriteErrorOp::generate(int shard,
+                                 const std::optional<uint64_t>& type,
+                                 const std::optional<uint64_t>& when,
+                                 const std::optional<uint64_t>& duration)
+{
+  return std::make_unique<InjectWriteErrorOp>(shard, type, when, duration);
+}
+
+
+
+template <ceph::io_exerciser::OpType opType>
+ceph::io_exerciser::ClearErrorInjectOp<opType>
+  ::ClearErrorInjectOp(int shard, const std::optional<uint64_t>& type) :
+  TestOp<opType>(),
+  shard(shard),
+  type(type)
+{
+
+}
+
+template <ceph::io_exerciser::OpType opType>
+std::string ceph::io_exerciser::ClearErrorInjectOp<opType>::to_string(uint64_t blocksize) const
+{
+  std::string_view inject_type = get_inject_type_string();
+  return fmt::format("Clear {} injects on shard {} of type {}",
+                      inject_type, shard, type.value_or(0));
+}
+
+ceph::io_exerciser::ClearReadErrorInjectOp::ClearReadErrorInjectOp(int shard,
+                                                                   const std::optional<uint64_t>& type) :
+  ClearErrorInjectOp<OpType::ClearReadErrorInject>(shard, type)
+{
+
+}
+
+std::unique_ptr<ceph::io_exerciser::ClearReadErrorInjectOp> ceph::io_exerciser
+  ::ClearReadErrorInjectOp::generate(int shard, const std::optional<uint64_t>& type)
+{
+  return std::make_unique<ClearReadErrorInjectOp>(shard, type);
+}
+
+ceph::io_exerciser::ClearWriteErrorInjectOp::ClearWriteErrorInjectOp(int shard,
+                                                                     const std::optional<uint64_t>& type) :
+  ClearErrorInjectOp<OpType::ClearWriteErrorInject>(shard, type)
+{
+
+}
+
+std::unique_ptr<ceph::io_exerciser::ClearWriteErrorInjectOp> ceph::io_exerciser
+  ::ClearWriteErrorInjectOp::generate(int shard, const std::optional<uint64_t>& type)
+{
+  return std::make_unique<ClearWriteErrorInjectOp>(shard, type);
 }
