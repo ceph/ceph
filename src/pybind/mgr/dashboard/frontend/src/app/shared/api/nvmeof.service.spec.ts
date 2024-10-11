@@ -27,6 +27,7 @@ describe('NvmeofService', () => {
     expect(service).toBeTruthy();
   });
 
+  // gateways
   it('should call listGatewayGroups', () => {
     service.listGatewayGroups().subscribe();
     const req = httpTesting.expectOne('api/nvmeof/gateway/group');
@@ -39,6 +40,7 @@ describe('NvmeofService', () => {
     expect(req.request.method).toBe('GET');
   });
 
+  // subsystems
   it('should call listSubsystems', () => {
     service.listSubsystems(mockGroupName).subscribe();
     const req = httpTesting.expectOne(`api/nvmeof/subsystem?gw_group=${mockGroupName}`);
@@ -69,9 +71,12 @@ describe('NvmeofService', () => {
     expect(req.request.method).toBe('DELETE');
   });
 
+  // initiators
   it('should call getInitiators', () => {
-    service.getInitiators(mockNQN).subscribe();
-    const req = httpTesting.expectOne(`api/nvmeof/subsystem/${mockNQN}/host`);
+    service.getInitiators(mockNQN, mockGroupName).subscribe();
+    const req = httpTesting.expectOne(
+      `api/nvmeof/subsystem/${mockNQN}/host?gw_group=${mockGroupName}`
+    );
     expect(req.request.method).toBe('GET');
   });
 });

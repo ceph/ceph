@@ -24,14 +24,18 @@
       <a ngbNavLink
          i18n>Namespaces</a>
       <ng-template ngbNavContent>
-        <cd-nvmeof-namespaces-list [subsystemNQN]="subsystemNQN"></cd-nvmeof-namespaces-list>
+        <cd-nvmeof-namespaces-list [subsystemNQN]="subsystemNQN"
+                                   [group]="group">
+        </cd-nvmeof-namespaces-list>
       </ng-template>
     </ng-container>
     <ng-container ngbNavItem="initiators">
       <a ngbNavLink
          i18n>Initiators</a>
       <ng-template ngbNavContent>
-        <cd-nvmeof-initiators-list [subsystemNQN]="subsystemNQN"></cd-nvmeof-initiators-list>
+        <cd-nvmeof-initiators-list [subsystemNQN]="subsystemNQN"
+                                   [group]="group">
+        </cd-nvmeof-initiators-list>
       </ng-template>
     </ng-container>
   </nav>

@@ -8,6 +8,7 @@ import { catchError, mapTo } from 'rxjs/operators';
 export const MAX_NAMESPACE = 1024;
 
 export interface ListenerRequest {
+  gw_group: string;
   host_name: string;
   traddr: string;
   trsvcid: number;
@@ -17,14 +18,17 @@ export interface NamespaceCreateRequest {
   rbd_image_name: string;
   rbd_pool: string;
   size: number;
+  gw_group: string;
 }
 
 export interface NamespaceEditRequest {
   rbd_image_size: number;
+  gw_group: string;
 }
 
 export interface InitiatorRequest {
   host_nqn: string;
+  gw_group: string;
 }
 
 const API_PATH = 'api/nvmeof';
@@ -81,8 +85,8 @@ export class NvmeofService {
   }
 
   // Initiators
-  getInitiators(subsystemNQN: string) {
-    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host`);
+  getInitiators(subsystemNQN: string, group: string) {
+    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`);
   }
 
   addInitiators(subsystemNQN: string, request: InitiatorRequest) {
@@ -92,14 +96,17 @@ export class NvmeofService {
   }
 
   removeInitiators(subsystemNQN: string, request: InitiatorRequest) {
-    return this.http.delete(`${UI_API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}`, {
-      observe: 'response'
-    });
+    return this.http.delete(
+      `${UI_API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}/${request.gw_group}`,
+      {
+        observe: 'response'
+      }
+    );
   }
 
   // Listeners
-  listListeners(subsystemNQN: string) {
-    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/listener`);
+  listListeners(subsystemNQN: string, group: string) {
+    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/listener?gw_group=${group}`);
   }
 
   createListener(subsystemNQN: string, request: ListenerRequest) {
@@ -121,12 +128,14 @@ export class NvmeofService {
   }
 
   // Namespaces
-  listNamespaces(subsystemNQN: string) {
-    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/namespace`);
+  listNamespaces(subsystemNQN: string, group: string) {
+    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/namespace?gw_group=${group}`);
   }
 
-  getNamespace(subsystemNQN: string, nsid: string) {
-    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/namespace/${nsid}`);
+  getNamespace(subsystemNQN: string, nsid: string, group: string) {
+    return this.http.get(
+      `${API_PATH}/subsystem/${subsystemNQN}/namespace/${nsid}?gw_group=${group}`
+    );
   }
 
   createNamespace(subsystemNQN: string, request: NamespaceCreateRequest) {
@@ -141,9 +150,12 @@ export class NvmeofService {
     });
   }
 
-  deleteNamespace(subsystemNQN: string, nsid: string) {
-    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}/namespace/${nsid}`, {
-      observe: 'response'
-    });
+  deleteNamespace(subsystemNQN: string, nsid: string, group: string) {
+    return this.http.delete(
+      `${API_PATH}/subsystem/${subsystemNQN}/namespace/${nsid}?gw_group=${group}`,
+      {
+        observe: 'response'
+      }
+    );
   }
 }

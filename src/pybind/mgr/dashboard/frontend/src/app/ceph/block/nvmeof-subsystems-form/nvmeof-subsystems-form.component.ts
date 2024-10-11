@@ -118,9 +118,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
           component.subsystemForm.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.router.navigate([this.pageURL, { outlets: { modal: null } }], {
-            queryParams: { group: this.group }
-          });
+          this.router.navigate([this.pageURL, { outlets: { modal: null } }]);
         }
       });
   }

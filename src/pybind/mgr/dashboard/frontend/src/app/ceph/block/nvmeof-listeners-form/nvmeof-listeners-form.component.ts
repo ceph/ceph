@@ -103,7 +103,8 @@ export class NvmeofListenersFormComponent implements OnInit {
     const host = this.listenerForm.getValue('host');
     let trsvcid = Number(this.listenerForm.getValue('trsvcid'));
     if (!trsvcid) trsvcid = 4420;
-    const request = {
+    const request: ListenerRequest = {
+      gw_group: this.group,
       host_name: host.hostname,
       traddr: host.addr,
       trsvcid
@@ -128,9 +129,7 @@ export class NvmeofListenersFormComponent implements OnInit {
           component.listenerForm.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.router.navigate([this.pageURL, { outlets: { modal: null } }], {
-            queryParams: { group: this.group }
-          });
+          this.router.navigate([this.pageURL, { outlets: { modal: null } }]);
         }
       });
   }
