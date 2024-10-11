@@ -17,6 +17,8 @@
 #ifndef CEPH_MSG_TIMEOUT_H
 #define CEPH_MSG_TIMEOUT_H
 
+#include "include/intarith.h" // for div_round_up()
+
 #include <time.h> // for struct timeval
 
 /**
@@ -28,7 +30,8 @@
 constexpr int
 timeout_to_milliseconds(const struct timeval &tv) noexcept
 {
-  return tv.tv_sec * 1000 + tv.tv_usec / 1000;
+  /* round up to the next millisecond so we don't wake up too early */
+  return tv.tv_sec * 1000 + div_round_up(tv.tv_usec, 1000);
 }
 
 /**
