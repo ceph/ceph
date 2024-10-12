@@ -7755,27 +7755,34 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bool truncated = false;
 	bufferlist bl;
 	if (oi.is_omap()) {
-	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    ch, ghobject_t(soid)
-	    );
-          if (!iter) {
-            result = -ENOENT;
-            goto fail;
-          }
-	  iter->upper_bound(start_after);
-	  if (filter_prefix > start_after) iter->lower_bound(filter_prefix);
-	  for (num = 0;
-	       iter->valid() &&
-		 iter->key().substr(0, filter_prefix.size()) == filter_prefix;
-	       ++num, iter->next()) {
-	    dout(20) << "Found key " << iter->key() << dendl;
-	    if (num >= max_return ||
-		bl.length() >= cct->_conf->osd_max_omap_bytes_per_request) {
-	      truncated = true;
-	      break;
-	    }
-	    encode(iter->key(), bl);
-	    encode(iter->value(), bl);
+	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+	  result = osd->store->omap_iterate(
+	    ch, ghobject_t(soid),
+	    // try to seek as many keys-at-once as possible for the sake of performance.
+	    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
+	    // than just seek(n).
+	    ObjectStore::omap_iter_seek_t{
+	      .seek_position = std::max(start_after, filter_prefix),
+	      .seek_type = filter_prefix > start_after ? omap_iter_seek_t::LOWER_BOUND
+						       : omap_iter_seek_t::UPPER_BOUND
+	    },
+	    [&bl, &truncated, &filter_prefix, &num, max_return,
+	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
+	    (std::string_view key, std::string_view value) mutable {
+	      if (key.substr(0, filter_prefix.size()) != filter_prefix) {
+	        return ObjectStore::omap_iter_ret_t::STOP;
+	      }
+	      if (num >= max_return || bl.length() >= max_bytes) {
+	        truncated = true;
+	        return ObjectStore::omap_iter_ret_t::STOP;
+	      }
+	      encode(key, bl);
+	      encode(value, bl);
+	      ++num;
+	      return ObjectStore::omap_iter_ret_t::NEXT;
+	    });
+	  if (result < 0) {
+	    goto fail;
 	  }
 	} // else return empty out_set
 	encode(num, osd_op.outdata);
