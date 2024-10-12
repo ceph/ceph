@@ -1651,6 +1651,13 @@ bufferlist KStore::OmapIteratorImpl::value()
   return it->value();
 }
 
+std::string_view KStore::OmapIteratorImpl::value_as_sv()
+{
+  std::shared_lock l{c->lock};
+  ceph_assert(it->valid());
+  return it->value_as_sv();
+}
+
 int KStore::omap_get(
   CollectionHandle& ch,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap

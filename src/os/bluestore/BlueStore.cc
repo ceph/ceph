@@ -5654,6 +5654,13 @@ bufferlist BlueStore::OmapIteratorImpl::value()
   return it->value();
 }
 
+std::string_view BlueStore::OmapIteratorImpl::value_as_sv()
+{
+  std::shared_lock l(c->lock);
+  ceph_assert(it->valid());
+  return it->value_as_sv();
+}
+
 
 // =====================================
 
