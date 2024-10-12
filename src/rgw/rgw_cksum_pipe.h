@@ -20,6 +20,7 @@
 #include <tuple>
 #include <cstring>
 #include <boost/algorithm/string/case_conv.hpp>
+#include "rgw_cksum.h"
 #include "rgw_cksum_digest.h"
 #include "rgw_common.h"
 #include "rgw_putobj.h"
@@ -28,6 +29,38 @@ namespace rgw::putobj {
 
   namespace cksum = rgw::cksum;
   using cksum_hdr_t = std::pair<const char*, const char*>;
+
+  static inline const cksum_hdr_t cksum_algorithm_hdr(rgw::cksum::Type t) {
+    static constexpr std::string_view hdr =
+      "HTTP_X_AMZ_SDK_CHECKSUM_ALGORITHM";
+    using rgw::cksum::Type;
+    switch (t) {
+    case Type::sha256:
+      return cksum_hdr_t(hdr.data(), "SHA256");
+      break;
+    case Type::crc32:
+      return cksum_hdr_t(hdr.data(), "CRC32");
+      break;
+    case Type::crc32c:
+      return cksum_hdr_t(hdr.data(), "CRC32C");
+      break;
+    case Type::xxh3:
+      return cksum_hdr_t(hdr.data(), "XX3");
+      break;
+    case Type::sha1:
+      return cksum_hdr_t(hdr.data(), "SHA1");
+      break;
+    case Type::sha512:
+      return cksum_hdr_t(hdr.data(), "SHA512");
+      break;
+    case Type::blake3:
+      return cksum_hdr_t(hdr.data(), "BLAKE3");
+      break;
+    default:
+      break;
+    };
+    return cksum_hdr_t(nullptr, nullptr);;
+  }
 
   static inline const cksum_hdr_t cksum_algorithm_hdr(const RGWEnv& env) {
     /* If the individual checksum value you provide through
@@ -102,7 +135,8 @@ namespace rgw::putobj {
     using VerifyResult = std::tuple<bool, const cksum::Cksum&>;
 
     static std::unique_ptr<RGWPutObj_Cksum> Factory(
-      rgw::sal::DataProcessor* next, const RGWEnv&);
+      rgw::sal::DataProcessor* next, const RGWEnv&,
+      rgw::cksum::Type override_type);
 
     RGWPutObj_Cksum(rgw::sal::DataProcessor* next, rgw::cksum::Type _type,
 		    cksum_hdr_t&& _hdr);

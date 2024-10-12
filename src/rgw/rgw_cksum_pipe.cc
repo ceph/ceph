@@ -18,6 +18,7 @@
 #include <string>
 #include <fmt/format.h>
 #include <boost/algorithm/string.hpp>
+#include "rgw_cksum.h"
 #include "rgw_common.h"
 #include "common/dout.h"
 #include "rgw_client_io.h"
@@ -34,7 +35,8 @@ namespace rgw::putobj {
   {}
 
   std::unique_ptr<RGWPutObj_Cksum> RGWPutObj_Cksum::Factory(
-    rgw::sal::DataProcessor* next, const RGWEnv& env)
+    rgw::sal::DataProcessor* next, const RGWEnv& env,
+    rgw::cksum::Type override_type)
   {
     /* look for matching headers */
     auto algo_header = cksum_algorithm_hdr(env);
@@ -49,6 +51,13 @@ namespace rgw::putobj {
       throw rgw::io::Exception(EINVAL, std::system_category());
     }
     /* no checksum header */
+    if (override_type != rgw::cksum::Type::none) {
+      /* XXXX safe? do we need to fixup env as well? */
+      auto algo_header = cksum_algorithm_hdr(override_type);
+      return
+	std::make_unique<RGWPutObj_Cksum>(
+			   next, override_type, std::move(algo_header));
+    }
     return std::unique_ptr<RGWPutObj_Cksum>();
   }
 
