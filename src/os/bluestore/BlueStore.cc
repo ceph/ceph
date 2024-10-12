@@ -13774,15 +13774,27 @@ int BlueStore::omap_iterate(
   {
     std::string key;
     o->get_omap_key(start_from.seek_position, &key);
+    auto start = ceph::mono_clock::now();
     if (start_from.seek_type == omap_iter_seek_t::LOWER_BOUND) {
       it->lower_bound(key);
+      c->store->log_latency(
+        __func__,
+        l_bluestore_omap_lower_bound_lat,
+        ceph::mono_clock::now() - start,
+        c->store->cct->_conf->bluestore_log_omap_iterator_age);
     } else {
       it->upper_bound(key);
+      c->store->log_latency(
+        __func__,
+        l_bluestore_omap_upper_bound_lat,
+        ceph::mono_clock::now() - start,
+        c->store->cct->_conf->bluestore_log_omap_iterator_age);
     }
   }
 
   // iterate!
   std::string tail;
+  ceph::timespan next_lat_acc{0};
   o->get_omap_tail(&tail);
   while (it->valid()) {
     std::string user_key;
@@ -13795,12 +13807,17 @@ int BlueStore::omap_iterate(
     if (ret == omap_iter_ret_t::STOP) {
       break;
     } else if (ret == omap_iter_ret_t::NEXT) {
+      ceph::time_guard<ceph::mono_clock>{next_lat_acc};
       it->next();
     } else {
       ceph_abort();
     }
   }
-
+  c->store->log_latency(
+    __func__,
+    l_bluestore_omap_next_lat,
+    next_lat_acc,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age);
   return 0;
 }
 
