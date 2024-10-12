@@ -13734,6 +13734,76 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(logger,c, o, it));
 }
 
+int BlueStore::omap_iterate(
+  CollectionHandle &c_,   ///< [in] collection
+  const ghobject_t &oid, ///< [in] object
+  ObjectStore::omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+  std::function<omap_iter_ret_t(std::string_view, std::string_view)> f
+  )
+{
+  Collection *c = static_cast<Collection *>(c_.get());
+  dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
+  if (!c->exists) {
+    return -ENOENT;
+  }
+  std::shared_lock l(c->lock);
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o || !o->exists) {
+    dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
+    return -ENOENT;
+  }
+  o->flush();
+  dout(10) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
+  if (!o->onode.has_omap()) {
+    // nothing to do
+    return 0;
+  }
+
+  KeyValueDB::Iterator it;
+  {
+    auto bounds = KeyValueDB::IteratorBounds();
+    std::string lower_bound, upper_bound;
+    o->get_omap_key(string(), &lower_bound);
+    o->get_omap_tail(&upper_bound);
+    bounds.lower_bound = std::move(lower_bound);
+    bounds.upper_bound = std::move(upper_bound);
+    it = db->get_iterator(o->get_omap_prefix(), 0, std::move(bounds));
+  }
+
+  // seek the iterator
+  {
+    std::string key;
+    o->get_omap_key(start_from.seek_position, &key);
+    if (start_from.seek_type == omap_iter_seek_t::LOWER_BOUND) {
+      it->lower_bound(key);
+    } else {
+      it->upper_bound(key);
+    }
+  }
+
+  // iterate!
+  std::string tail;
+  o->get_omap_tail(&tail);
+  while (it->valid()) {
+    std::string user_key;
+    if (const auto& db_key = it->raw_key().second; db_key >= tail) {
+      break;
+    } else {
+      o->decode_omap_key(db_key, &user_key);
+    }
+    omap_iter_ret_t ret = f(user_key, it->value_as_sv());
+    if (ret == omap_iter_ret_t::STOP) {
+      break;
+    } else if (ret == omap_iter_ret_t::NEXT) {
+      it->next();
+    } else {
+      ceph_abort();
+    }
+  }
+
+  return 0;
+}
+
 // -----------------
 // write helpers
 
