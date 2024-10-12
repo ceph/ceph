@@ -1244,6 +1244,7 @@ protected:
   std::string multipart_upload_id;
   std::string multipart_part_str;
   int multipart_part_num = 0;
+  rgw::cksum::Type multipart_cksum_type{rgw::cksum::Type::none};
   jspan_ptr multipart_trace;
 
   boost::optional<ceph::real_time> delete_at;
