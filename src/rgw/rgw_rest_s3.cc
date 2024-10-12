@@ -3865,6 +3865,8 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
   dump_errno(s);
 
   if (op_ret == 0) {
+    version_id = s->object->get_instance();
+
     // x-amz-delete-marker: DeleteMarker // not sure we can plausibly do this?
     dump_last_modified(s, lastmod);
     dump_header_if_nonempty(s, "x-amz-version-id", version_id);
