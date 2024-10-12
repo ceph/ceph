@@ -622,6 +622,10 @@ public:
     std::lock_guard lock{o->omap_mutex};
     return it->second;
   }
+  std::string_view value_as_sv() override {
+    std::lock_guard lock{o->omap_mutex};
+    return std::string_view{it->second.c_str(), it->second.length()};
+  }
   int status() override {
     return 0;
   }

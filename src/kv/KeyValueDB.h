@@ -9,6 +9,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
 #include "common/Formatter.h"
@@ -205,6 +206,7 @@ public:
       return "";
     }
     virtual ceph::buffer::list value() = 0;
+    virtual std::string_view value_as_sv() = 0;
     virtual int status() = 0;
     virtual ~SimplestIteratorImpl() {}
   };
@@ -252,6 +254,7 @@ public:
         return ceph::buffer::ptr();
       }
     }
+    virtual std::string_view value_as_sv() = 0;
     virtual int status() = 0;
     virtual size_t key_size() {
       return 0;
@@ -317,6 +320,9 @@ private:
     }
     ceph::buffer::ptr value_as_ptr() override {
       return generic_iter->value_as_ptr();
+    }
+    std::string_view value_as_sv() override {
+      return generic_iter->value_as_sv();
     }
     int status() override {
       return generic_iter->status();

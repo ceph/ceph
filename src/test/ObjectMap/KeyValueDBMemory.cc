@@ -150,6 +150,13 @@ public:
       return bufferlist();
   }
 
+  std::string_view value_as_sv() override {
+    if (valid())
+      return std::string_view{it->second.c_str(), it->second.length()};
+    else
+      return std::string_view();
+  }
+
   int status() override {
     return 0;
   }

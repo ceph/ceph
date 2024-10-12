@@ -384,6 +384,7 @@ public:
     bool raw_key_is_prefixed(const std::string &prefix) override;
     ceph::bufferlist value() override;
     ceph::bufferptr value_as_ptr() override;
+    std::string_view value_as_sv() override;
     int status() override;
     size_t key_size() override;
     size_t value_size() override;

@@ -2249,6 +2249,12 @@ bufferptr RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_as_ptr()
   return bufferptr(val.data(), val.size());
 }
 
+std::string_view RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_as_sv()
+{
+  rocksdb::Slice val = dbiter->value();
+  return std::string_view{val.data(), val.size()};
+}
+
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::status()
 {
   return dbiter->status().ok() ? 0 : -1;
@@ -2339,6 +2345,10 @@ public:
   bufferptr value_as_ptr() override {
     rocksdb::Slice val = dbiter->value();
     return bufferptr(val.data(), val.size());
+  }
+  std::string_view value_as_sv() override {
+    rocksdb::Slice val = dbiter->value();
+    return std::string_view{val.data(), val.size()};
   }
   int status() override {
     return dbiter->status().ok() ? 0 : -1;
@@ -2677,6 +2687,15 @@ public:
     }
   }
 
+  std::string_view value_as_sv() override
+  {
+    if (smaller == on_main) {
+      return main->value_as_sv();
+    } else {
+      return current_shard->second->value_as_sv();
+    }
+  }
+
   int status() override
   {
     //because we already had to inspect key, it must be ok
@@ -3008,6 +3027,10 @@ public:
   bufferptr value_as_ptr() override {
     rocksdb::Slice val = iters[0]->value();
     return bufferptr(val.data(), val.size());
+  }
+  std::string_view value_as_sv() override {
+    rocksdb::Slice val = iters[0]->value();
+    return std::string_view{val.data(), val.size()};
   }
   int status() override {
     return iters[0]->status().ok() ? 0 : -1;
