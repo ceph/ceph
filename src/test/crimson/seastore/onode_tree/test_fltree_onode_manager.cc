@@ -116,20 +116,20 @@ struct fltree_onode_manager_test_t
   void with_onode_write(iterator_t& it, F&& f) {
     with_transaction([this, &it, f=std::move(f)] (auto& t) {
       auto p_kv = *it;
-      auto onode = with_trans_intr(t, [&](auto &t) {
+      auto onodes = with_trans_intr(t, [&](auto &t) {
         return manager->get_or_create_onode(t, p_kv->key);
       }).unsafe_get();
-      std::invoke(f, t, *onode, p_kv->value);
+      std::invoke(f, t, *onodes.onode, p_kv->value);
     });
   }
 
   void validate_onode(iterator_t& it) {
     with_transaction([this, &it] (auto& t) {
       auto p_kv = *it;
-      auto onode = with_trans_intr(t, [&](auto &t) {
+      auto onodes = with_trans_intr(t, [&](auto &t) {
         return manager->get_onode(t,  p_kv->key);
       }).unsafe_get();
-      p_kv->value.validate(*onode);
+      p_kv->value.validate(*onodes.onode);
     });
   }
 
@@ -185,10 +185,10 @@ struct fltree_onode_manager_test_t
         ghobject_t oid;
         onode_item_t* p_item;
         boost::tie(oid, p_item) = tup;
-        auto onode = with_trans_intr(t, [&](auto &t) {
+        auto onodes = with_trans_intr(t, [&](auto &t) {
           return manager->get_onode(t, oid);
         }).unsafe_get();
-        p_item->validate(*onode);
+        p_item->validate(*onodes.onode);
       }
     });
   }

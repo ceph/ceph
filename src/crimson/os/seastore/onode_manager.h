@@ -34,10 +34,15 @@ public:
     Transaction &trans,
     const ghobject_t &hoid) = 0;
 
+  struct adjacent_onodes_t {
+    OnodeRef left;
+    OnodeRef onode;
+    OnodeRef right;
+  };
   using get_onode_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
   using get_onode_ret = get_onode_iertr::future<
-    OnodeRef>;
+    adjacent_onodes_t>;
   virtual get_onode_ret get_onode(
     Transaction &trans,
     const ghobject_t &hoid) = 0;
@@ -45,7 +50,7 @@ public:
   using get_or_create_onode_iertr = base_iertr::extend<
     crimson::ct_error::value_too_large>;
   using get_or_create_onode_ret = get_or_create_onode_iertr::future<
-    OnodeRef>;
+    adjacent_onodes_t>;
   virtual get_or_create_onode_ret get_or_create_onode(
     Transaction &trans,
     const ghobject_t &hoid) = 0;
