@@ -342,6 +342,21 @@ public:
   }
 };
 
+template <class ClockT = mono_clock>
+class time_guard {
+  const typename ClockT::time_point start;
+  timespan& diff_accumulator;
+
+public:
+  time_guard(timespan& diff_accumulator)
+    : start(ClockT::now()),
+      diff_accumulator(diff_accumulator) {
+  }
+  ~time_guard() {
+    diff_accumulator += ClockT::now() - start;
+  }
+};
+
 namespace time_detail {
 // So that our subtractions produce negative spans rather than
 // arithmetic underflow.
