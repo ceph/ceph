@@ -237,12 +237,11 @@ end
 local function cleanup(keys, args)
     local name = "reserve:" .. keys[1]
     local timeout = args[1]
-    local timestamps = {}
+
     local values = redis.call('LRANGE', name, 0, -1)
     local index = -1
     for i, value in ipairs(values) do
         local message = cjson.decode(value)
-        timestamps[i] = message.timestamp
         if message.timestamp + timeout < tonumber(redis.call("TIME")[1]) then
             index = i - 1
             break
@@ -253,7 +252,7 @@ local function cleanup(keys, args)
     else
         redis.call('LTRIM', name, 0, index)
     end
-    return format_response(0, "", tostring({index, tostring(timestamps), timeout, redis.call("TIME")[1]}))
+    return format_response(0, "", index)
 end
 
 --- Register the functions.
