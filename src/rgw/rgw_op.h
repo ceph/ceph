@@ -1649,9 +1649,9 @@ class RGWGetObjAttrs : public RGWGetObj {
 protected:
   std::string version_id;
   std::string expected_bucket_owner;
-  int marker;
-  int max_parts;
-  uint16_t requested_attributes;
+  int marker{0};
+  int max_parts{0};
+  uint16_t requested_attributes{0};
 #if 0
   /* used to decrypt attributes for objects stored with SSE-C */
   x-amz-server-side-encryption-customer-algorithm
