@@ -25,6 +25,7 @@
 #include "common/ceph_json.h"
 #include "common/static_ptr.h"
 #include "common/perf_counters_key.h"
+#include "rgw_cksum.h"
 #include "rgw_cksum_digest.h"
 #include "rgw_common.h"
 #include "common/split.h"
@@ -4333,6 +4334,9 @@ void RGWPutObj::execute(optional_yield y)
       }
       return;
     }
+
+    multipart_cksum_type = upload->cksum_type;
+
     /* upload will go out of scope, so copy the dest placement for later use */
     s->dest_placement = *pdest_placement;
     pdest_placement = &s->dest_placement;
@@ -4463,11 +4467,12 @@ void RGWPutObj::execute(optional_yield y)
     /* optional streaming checksum */
     try {
       cksum_filter =
-	rgw::putobj::RGWPutObj_Cksum::Factory(filter, *s->info.env);
+	rgw::putobj::RGWPutObj_Cksum::Factory(filter, *s->info.env, multipart_cksum_type);
     } catch (const rgw::io::Exception& e) {
       op_ret = -e.code().value();
       return;
     }
+
     if (cksum_filter) {
       filter = &*cksum_filter;
     }
@@ -4614,10 +4619,12 @@ void RGWPutObj::execute(optional_yield y)
 
   if (cksum_filter) {
     const auto& hdr = cksum_filter->header();
+    auto expected_ck = cksum_filter->expected(*s->info.env);
     auto cksum_verify =
       cksum_filter->verify(*s->info.env); // valid or no supplied cksum
     cksum = get<1>(cksum_verify);
-    if (std::get<0>(cksum_verify)) {
+    if ((!expected_ck) ||
+	std::get<0>(cksum_verify)) {
       buffer::list cksum_bl;
 
       ldpp_dout_fmt(this, 16,
@@ -4625,14 +4632,13 @@ void RGWPutObj::execute(optional_yield y)
 		    "\n\tcomputed={} == \n\texpected={}",
 		    hdr.second,
 		    cksum->to_armor(),
-		    cksum_filter->expected(*s->info.env));
+		    (!!expected_ck) ? expected_ck : "(checksum unavailable)");
 
       cksum->encode(cksum_bl);
       emplace_attr(RGW_ATTR_CKSUM, std::move(cksum_bl));
     } else {
       /* content checksum mismatch */
       auto computed_ck = cksum->to_armor();
-      auto expected_ck = cksum_filter->expected(*s->info.env);
 
       ldpp_dout_fmt(this, 4,
 		    "{} content checksum mismatch"
@@ -4835,7 +4841,8 @@ void RGWPostObj::execute(optional_yield y)
     /* optional streaming checksum */
     try {
       cksum_filter =
-	rgw::putobj::RGWPutObj_Cksum::Factory(filter, *s->info.env);
+	rgw::putobj::RGWPutObj_Cksum::Factory(
+	  filter, *s->info.env, rgw::cksum::Type::none /* no override */);
     } catch (const rgw::io::Exception& e) {
       op_ret = -e.code().value();
       return;
