@@ -1753,6 +1753,7 @@ public:
     int next() override;
     std::string key() override;
     ceph::buffer::list value() override;
+    std::string_view value_as_sv() override;
     std::string tail_key() override {
       return tail;
     }

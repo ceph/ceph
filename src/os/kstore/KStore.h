@@ -180,6 +180,7 @@ public:
     int next() override;
     std::string key() override;
     ceph::buffer::list value() override;
+    std::string_view value_as_sv() override;
     int status() override {
       return 0;
     }
