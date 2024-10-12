@@ -73,6 +73,13 @@ tree_cursor_t::get_next(context_t c)
   return ref_leaf_node->get_next_cursor(c, position);
 }
 
+eagain_ifuture<Ref<tree_cursor_t>>
+tree_cursor_t::get_prev(context_t c)
+{
+  assert(is_tracked());
+  return ref_leaf_node->get_prev_cursor(c, position);
+}
+
 void tree_cursor_t::assert_next_to(
     const tree_cursor_t& prv, value_magic_t magic) const
 {
@@ -96,6 +103,13 @@ void tree_cursor_t::assert_next_to(
     ceph_abort("impossible");
   }
 #endif
+}
+
+bool tree_cursor_t::is_head() const
+{
+  auto ret = !!ref_leaf_node && position == search_position_t::begin();
+  assert(ret ? ref_leaf_node->is_level_head() : true);
+  return ret;
 }
 
 template <bool FORCE_MERGE>
@@ -541,6 +555,14 @@ Node::get_next_cursor_from_parent(context_t c)
   return parent_info().ptr->get_next_cursor(c, parent_info().position);
 }
 
+eagain_ifuture<Ref<tree_cursor_t>>
+Node::get_prev_cursor_from_parent(context_t c)
+{
+  assert(!impl->is_level_head());
+  assert(!is_root());
+  return parent_info().ptr->get_prev_cursor(c, parent_info().position);
+}
+
 template <bool FORCE_MERGE>
 eagain_ifuture<>
 Node::try_merge_adjacent(
@@ -828,6 +850,25 @@ InternalNode::get_next_cursor(context_t c, const search_position_t& pos)
       return child->lookup_smallest(c);
     });
   }
+}
+
+eagain_ifuture<Ref<tree_cursor_t>>
+InternalNode::get_prev_cursor(context_t c, const search_position_t& pos)
+{
+  impl->validate_non_empty();
+  if (pos == search_position_t::begin()) {
+    ceph_assert(!impl->is_level_head());
+    return get_prev_cursor_from_parent(c);
+  }
+
+  search_position_t prev_pos = pos;
+  const laddr_packed_t* p_child_addr = nullptr;
+  impl->get_prev_slot(prev_pos, nullptr, &p_child_addr);
+  assert(p_child_addr);
+  return get_or_track_child(c, prev_pos, p_child_addr->value
+  ).si_then([c](auto child) {
+    return child->lookup_largest(c);
+  });
 }
 
 eagain_ifuture<> InternalNode::apply_child_split(
@@ -1789,6 +1830,11 @@ bool LeafNode::is_level_tail() const
   return impl->is_level_tail();
 }
 
+bool LeafNode::is_level_head() const
+{
+  return impl->is_level_head();
+}
+
 node_version_t LeafNode::get_version() const
 {
   return {layout_version, impl->get_extent_state()};
@@ -1831,6 +1877,23 @@ LeafNode::get_next_cursor(context_t c, const search_position_t& pos)
   } else {
     return eagain_iertr::make_ready_future<Ref<tree_cursor_t>>(
         get_or_track_cursor(next_pos, index_key, p_value_header));
+  }
+}
+
+eagain_ifuture<Ref<tree_cursor_t>>
+LeafNode::get_prev_cursor(context_t c, const search_position_t& pos)
+{
+  impl->validate_non_empty();
+  if (pos != search_position_t::begin()) {
+    search_position_t prev_pos = pos;
+    key_view_t index_key;
+    const value_header_t* p_value_header = nullptr;
+    impl->get_prev_slot(prev_pos, &index_key, &p_value_header);
+    return eagain_iertr::make_ready_future<Ref<tree_cursor_t>>(
+        get_or_track_cursor(prev_pos, index_key, p_value_header));
+  } else {
+    ceph_assert(!is_level_head());
+    return get_prev_cursor_from_parent(c);
   }
 }
 

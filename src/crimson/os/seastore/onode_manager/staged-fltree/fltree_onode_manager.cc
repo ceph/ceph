@@ -171,9 +171,8 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
     auto val = OnodeRef(new FLTreeOnode(
 	hoid.hobj,
 	cursor.value()));
-    return get_onode_iertr::make_ready_future<OnodeRef>(
-      val
-    );
+    return get_onode_iertr::make_ready_future<adjacent_onodes_t>(
+      adjacent_onodes_t{nullptr, val, nullptr});
   });
 }
 
@@ -188,15 +187,59 @@ FLTreeOnodeManager::get_or_create_onode(
     OnodeTree::tree_value_config_t{sizeof(onode_layout_t)}
   ).si_then([&trans, &hoid, FNAME](auto p)
               -> get_or_create_onode_ret {
-    auto [cursor, created] = std::move(p);
-    auto onode = new FLTreeOnode(
-	hoid.hobj,
-	cursor.value());
-    if (created) {
-      DEBUGT("created onode for entry for {}", trans, hoid);
-      onode->create_default_layout(trans);
-    }
-    return get_or_create_onode_iertr::make_ready_future<OnodeRef>(onode);
+    return seastar::do_with(
+      std::move(p),
+      adjacent_onodes_t{},
+      [&hoid, &trans, FNAME](auto &p, auto &onodes) {
+      auto [cursor, created] = std::move(p);
+      auto onode = new FLTreeOnode(
+	  hoid.hobj,
+	  cursor.value());
+      onodes.onode = onode;
+      if (created) {
+	DEBUGT("created onode for entry for {}", trans, hoid);
+	onode->create_default_layout(trans);
+	auto fut = get_or_create_onode_iertr::make_ready_future<
+	  OnodeTree::Cursor>(cursor);
+	if (!cursor.is_head()) {
+	  DEBUGT("cursor not head, getting prev for {}", trans, hoid);
+	  fut = fut.si_then([&trans](auto cursor) {
+	    return cursor.get_prev(trans);
+	  }).si_then([&onodes, &hoid, &trans](auto cursor) {
+	    auto hobj = cursor.get_ghobj();
+	    hobj.hobj.snap = hoid.hobj.snap;
+	    if (hobj == hoid) {
+	      onodes.left = new FLTreeOnode(
+		hoid.hobj,
+		cursor.value());
+	    }
+	    return cursor.get_next(trans);
+	  });
+	}
+	return fut.si_then([&trans, &onodes, &hoid](auto cursor) mutable {
+	  if (cursor.is_end()) {
+	    return eagain_iertr::make_ready_future<
+	      adjacent_onodes_t>(std::move(onodes));
+	  }
+	  return cursor.get_next(trans
+	  ).si_then([&onodes, &hoid](auto cursor) {
+	    if (!cursor.is_end()) {
+	      auto hobj = cursor.get_ghobj();
+	      hobj.hobj.snap = hoid.hobj.snap;
+	      if (hobj == hoid) {
+		onodes.right = new FLTreeOnode(
+		  hoid.hobj,
+		  cursor.value());
+	      }
+	    }
+	    return std::move(onodes);
+	  });
+	});
+      } else {
+	return get_or_create_onode_iertr::make_ready_future<
+	  adjacent_onodes_t>(onodes);
+      }
+    });
   });
 }
 
@@ -213,8 +256,8 @@ FLTreeOnodeManager::get_or_create_onodes(
         hoids,
         [this, &trans, &ret](auto &hoid) {
           return get_or_create_onode(trans, hoid
-          ).si_then([&ret](auto &&onoderef) {
-            ret.push_back(std::move(onoderef));
+          ).si_then([&ret](auto &&onodes) {
+            ret.push_back(std::move(onodes.onode));
           });
         }).si_then([&ret] {
           return std::move(ret);

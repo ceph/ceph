@@ -450,6 +450,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     if (!p_index_key && pp_value) {
       stage_t::template get_prev_slot<false, true>(
           extent.read(), _pos, nullptr, pp_value);
+    } else if (p_index_key && pp_value) {
+      stage_t::template get_prev_slot<true, true>(
+	  extent.read(), _pos, p_index_key, pp_value);
     } else {
       ceph_abort("not implemented");
     }
