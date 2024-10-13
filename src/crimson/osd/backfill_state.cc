@@ -403,7 +403,7 @@ BackfillState::PrimaryScanning::react(ObjectPushed evt)
 {
   logger().debug("PrimaryScanning::react() on ObjectPushed; evt.object={}",
                  evt.object);
-  backfill_state().progress_tracker->complete_to(evt.object, evt.stat);
+  backfill_state().progress_tracker->complete_to(evt.object, evt.stat, true);
   return discard_event();
 }
 
@@ -480,7 +480,7 @@ BackfillState::ReplicasScanning::react(ObjectPushed evt)
 {
   logger().debug("ReplicasScanning::react() on ObjectPushed; evt.object={}",
                  evt.object);
-  backfill_state().progress_tracker->complete_to(evt.object, evt.stat);
+  backfill_state().progress_tracker->complete_to(evt.object, evt.stat, true);
   return discard_event();
 }
 
@@ -496,16 +496,8 @@ BackfillState::Waiting::react(ObjectPushed evt)
 {
   logger().debug("Waiting::react() on ObjectPushed; evt.object={}",
                  evt.object);
-  backfill_state().progress_tracker->complete_to(evt.object, evt.stat);
-  if (!Enqueuing::all_enqueued(peering_state(),
-                               backfill_state().backfill_info,
-                               backfill_state().peer_backfill_info)) {
-    return transit<Enqueuing>();
-  } else {
-    // we still have something to wait on
-    logger().debug("Waiting::react() on ObjectPushed; still waiting");
-    return discard_event();
-  }
+  backfill_state().progress_tracker->complete_to(evt.object, evt.stat, false);
+  return transit<Enqueuing>();;
 }
 
 // -- Done
@@ -559,7 +551,8 @@ void BackfillState::ProgressTracker::enqueue_drop(const hobject_t& obj)
 
 void BackfillState::ProgressTracker::complete_to(
   const hobject_t& obj,
-  const pg_stat_t& stats)
+  const pg_stat_t& stats,
+  bool may_push_to_max)
 {
   logger().debug("{}: obj={}",
                  __func__, obj);
@@ -580,7 +573,8 @@ void BackfillState::ProgressTracker::complete_to(
       soid,
       *item.stats);
   }
-  if (Enqueuing::all_enqueued(peering_state(),
+  if (may_push_to_max &&
+      Enqueuing::all_enqueued(peering_state(),
                               backfill_state().backfill_info,
                               backfill_state().peer_backfill_info) &&
       tracked_objects_completed()) {
