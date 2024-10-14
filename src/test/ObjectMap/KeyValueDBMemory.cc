@@ -132,7 +132,21 @@ public:
       return "";
   }
 
+  string_view key_as_sv() override {
+    if (valid())
+      return (*it).first.second;
+    else
+      return "";
+  }
+
   pair<string,string> raw_key() override {
+    if (valid())
+      return (*it).first;
+    else
+      return make_pair("", "");
+  }
+
+  pair<string_view,string_view> raw_key_as_sv() override {
     if (valid())
       return (*it).first;
     else

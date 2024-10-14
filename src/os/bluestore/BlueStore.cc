@@ -4843,6 +4843,19 @@ void BlueStore::Onode::decode_omap_key(const string& key, string *user_key)
   *user_key = key.substr(pos);
 }
 
+void BlueStore::Onode::decode_omap_key(const std::string_view& key, std::string_view *user_key)
+{
+  size_t pos = sizeof(uint64_t) + 1;
+  if (!onode.is_pgmeta_omap()) {
+    if (onode.is_perpg_omap()) {
+      pos += sizeof(uint64_t) + sizeof(uint32_t);
+    } else if (onode.is_perpool_omap()) {
+      pos += sizeof(uint64_t);
+    }
+  }
+  *user_key = key.substr(pos);
+}
+
 void BlueStore::Onode::finish_write(TransContext* txc, uint32_t offset, uint32_t length)
 {
   while (true) {
@@ -13797,12 +13810,12 @@ int BlueStore::omap_iterate(
   ceph::timespan next_lat_acc{0};
   o->get_omap_tail(&tail);
   while (it->valid()) {
-    std::string user_key;
-    if (const auto& db_key = it->raw_key().second; db_key >= tail) {
+    const auto& db_key = it->raw_key_as_sv().second;
+    if (db_key >= tail) {
       break;
-    } else {
-      o->decode_omap_key(db_key, &user_key);
     }
+    std::string_view user_key;
+    o->decode_omap_key(db_key, &user_key);
     omap_iter_ret_t ret = f(user_key, it->value_as_sv());
     if (ret == omap_iter_ret_t::STOP) {
       break;
