@@ -15,6 +15,7 @@
 #include "common/ceph_argparse.h"
 
 #include "gtest/gtest.h"
+#include <iostream> // for std::cout
 #include <vector>
 #include "include/stringify.h"
 

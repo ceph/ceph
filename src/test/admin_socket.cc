@@ -27,6 +27,8 @@
 #include <sys/un.h>
 #include <signal.h>
 
+#include <iostream> // for std::cout
+
 using namespace std;
 
 class AdminSocketTest
