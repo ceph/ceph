@@ -6001,11 +6001,11 @@ def check_ports_on_host(host, ports_to_check):
         if is_open:
             process_info = get_process_on_port(host, port)
             if process_info:
-                results.append([port, "Open", process_info])
+                results.append([port, "Closed", process_info])
             else:
-                results.append([port, "Open", "No process"])
+                results.append([port, "Closed", "No process"])
         else:
-            results.append([port, "Closed", "-"])
+            results.append([port, "Open", "-"])
     print_table(results)
 
 def distribute_ssh_key(ssh_user, ip):
