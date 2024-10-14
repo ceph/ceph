@@ -1,17 +1,36 @@
-import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import {
-  ITreeOptions,
-  TreeComponent,
-  TreeModel,
-  TreeNode,
-  TREE_ACTIONS
-} from '@circlon/angular-tree-component';
+import { TreeViewComponent } from 'carbon-components-angular';
+import { Node } from 'carbon-components-angular/treeview/tree-node.types';
 import { Observable, Subscription } from 'rxjs';
 
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { TimerService } from '~/app/shared/services/timer.service';
+
+export interface CrushmapInfo {
+  names: string[];
+  nodes: CrushmapNode[];
+  roots: number[];
+  [key: string]: any;
+}
+
+export interface CrushmapNode {
+  id: number;
+  name: string;
+  type?: string;
+  type_id: number;
+  children?: number[];
+  pool_weights?: Record<string, any>;
+  device_class?: string;
+  crush_weight?: number;
+  depth?: number;
+  exists?: number;
+  status?: string;
+  reweight?: number;
+  primary_affinity?: number;
+  [key: string]: any;
+}
 
 @Component({
   selector: 'cd-crushmap',
@@ -21,21 +40,12 @@ import { TimerService } from '~/app/shared/services/timer.service';
 export class CrushmapComponent implements OnDestroy, OnInit {
   private sub = new Subscription();
 
-  @ViewChild('tree') tree: TreeComponent;
+  @ViewChild('tree') tree: TreeViewComponent;
+  @ViewChild('badge') labelTpl: TemplateRef<any>;
 
   icons = Icons;
   loadingIndicator = true;
-  nodes: any[] = [];
-  treeOptions: ITreeOptions = {
-    useVirtualScroll: true,
-    nodeHeight: 22,
-    actionMapping: {
-      mouse: {
-        click: this.onNodeSelected.bind(this)
-      }
-    }
-  };
-
+  nodes: Node[] = [];
   metadata: any;
   metadataTitle: string;
   metadataKeyMap: { [key: number]: any } = {};
@@ -46,7 +56,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
   ngOnInit() {
     this.sub = this.timerService
       .get(() => this.crushRuleService.getInfo(), 5000)
-      .subscribe((data: any) => {
+      .subscribe((data: CrushmapInfo) => {
         this.loadingIndicator = false;
         this.nodes = this.abstractTreeData(data);
       });
@@ -56,7 +66,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
     this.sub.unsubscribe();
   }
 
-  private abstractTreeData(data: any): any[] {
+  private abstractTreeData(data: CrushmapInfo): Node[] {
     const nodes = data.nodes || [];
     const rootNodes = data.roots || [];
     const treeNodeMap: { [key: number]: any } = {};
@@ -64,13 +74,13 @@ export class CrushmapComponent implements OnDestroy, OnInit {
     if (0 === nodes.length) {
       return [
         {
-          name: 'No nodes!'
+          label: 'No nodes!'
         }
       ];
     }
 
     const roots: any[] = [];
-    nodes.reverse().forEach((node: any) => {
+    nodes.reverse().forEach((node: CrushmapNode) => {
       if (rootNodes.includes(node.id)) {
         roots.push(node.id);
       }
@@ -84,7 +94,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
     return children;
   }
 
-  private generateTreeLeaf(node: any, treeNodeMap: any) {
+  private generateTreeLeaf(node: CrushmapNode, treeNodeMap: Record<number, any>) {
     const cdId = node.id;
     this.metadataKeyMap[cdId] = node;
 
@@ -92,9 +102,19 @@ export class CrushmapComponent implements OnDestroy, OnInit {
     const status: string = node.status;
 
     const children: any[] = [];
-    const resultNode = { name, status, cdId, type: node.type };
-    if (node.children) {
-      node.children.sort().forEach((childId: any) => {
+    const resultNode: Record<string, any> = {
+      label: this.labelTpl,
+      labelContext: { name, status, type: node?.type },
+      value: name,
+      id: cdId,
+      expanded: true,
+      name,
+      status,
+      cdId,
+      type: node.type
+    };
+    if (node?.children?.length) {
+      node.children.sort().forEach((childId: number) => {
         children.push(treeNodeMap[childId]);
       });
 
@@ -104,19 +124,14 @@ export class CrushmapComponent implements OnDestroy, OnInit {
     return resultNode;
   }
 
-  onNodeSelected(tree: TreeModel, node: TreeNode) {
-    TREE_ACTIONS.ACTIVATE(tree, node, true);
-    if (node.data.cdId !== undefined) {
-      const { name, type, status, ...remain } = this.metadataKeyMap[node.data.cdId];
+  onNodeSelected(node: Node) {
+    if (node.id !== undefined) {
+      const { name, type, status, ...remain } = this.metadataKeyMap[Number(node.id)];
       this.metadata = remain;
       this.metadataTitle = name + ' (' + type + ')';
     } else {
       delete this.metadata;
       delete this.metadataTitle;
     }
-  }
-
-  onUpdateData() {
-    this.tree.treeModel.expandAll();
   }
 }

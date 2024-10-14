@@ -2,7 +2,6 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
-import { TreeModule } from '@circlon/angular-tree-component';
 import {
   NgbDatepickerModule,
   NgbNavModule,
@@ -47,7 +46,8 @@ import {
   NumberModule,
   PlaceholderModule,
   SelectModule,
-  TimePickerModule
+  TimePickerModule,
+  TreeviewModule
 } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
@@ -60,7 +60,7 @@ import Trash from '@carbon/icons/es/trash-can/32';
     SharedModule,
     AppRoutingModule,
     NgChartsModule,
-    TreeModule,
+    TreeviewModule,
     NgbNavModule,
     FormsModule,
     ReactiveFormsModule,

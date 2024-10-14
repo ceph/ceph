@@ -8,24 +8,40 @@
           <div class="col-sm-6 col-lg-6 tree-container">
             <i *ngIf="loadingIndicator"
                [ngClass]="[icons.large, icons.spinner, icons.spin]"></i>
-
-            <tree-root #tree
-                       [nodes]="nodes"
-                       [options]="treeOptions"
-                       (updateData)="onUpdateData()">
-              <ng-template #treeNodeTemplate
-                           let-node>
-                <span *ngIf="node.data.status"
+            <cds-tree-view #tree
+                           [isMultiSelect]="false"
+                           (select)="onNodeSelected($event)">
+              <ng-template #nodeTemplateRef
+                           let-node="node"
+                           let-depth="depth">
+                <cds-tree-node [node]="node"
+                               [depth]="depth">
+                  <ng-container *ngIf="node?.children && node?.children?.length">
+                    <ng-container *ngFor="let child of node.children; let i = index;">
+                      <!-- Increase the depth by 1 -->
+                      <ng-container *ngTemplateOutlet="nodeTemplateRef; context: { node: child, depth: depth + 1 };">
+                      </ng-container>
+                    </ng-container>
+                  </ng-container>
+                </cds-tree-node>
+              </ng-template>
+              <ng-template #badge
+                           let-data>
+                <span *ngIf="data?.status"
                       class="badge"
-                      [ngClass]="{'badge-success': ['in', 'up'].includes(node.data.status), 'badge-danger': ['down', 'out', 'destroyed'].includes(node.data.status)}">
-                  {{ node.data.status }}
+                      [ngClass]="{'badge-success': ['in', 'up'].includes(data?.status), 'badge-danger': ['down', 'out', 'destroyed'].includes(data?.status)}">
+                  {{ data.status }}
                 </span>
                 <span>&nbsp;</span>
                 <span class="node-name"
-                      [ngClass]="{'type-osd': node.data.type === 'osd'}"
-                      [innerHTML]="node.data.name"></span>
+                      [ngClass]="{'type-osd': data?.type === 'osd'}"
+                      [innerHTML]="data?.name"></span>
               </ng-template>
-            </tree-root>
+              <ng-container *ngFor="let node of nodes">
+                <ng-container *ngTemplateOutlet="nodeTemplateRef; context: { node: node, depth: 0 };">
+                </ng-container>
+              </ng-container>
+            </cds-tree-view>
           </div>
           <div class="col-sm-6 col-lg-6 metadata"
                *ngIf="metadata">

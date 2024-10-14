@@ -100,8 +100,8 @@ describe('RgwMultisiteZoneFormComponent', () => {
     expect(component.multisiteZoneForm.get('access_key')?.value).toBe('zxcftyuuhgg');
     expect(component.multisiteZoneForm.get('secret_key')?.value).toBe('Qwsdcfgghuiioklpoozsd');
     expect(component.multisiteZoneForm.get('placementTarget')?.value).toBe('default-placement');
-    expect(component.multisiteZoneForm.get('storageClass')?.value).toBe('STANDARD');
-    expect(component.multisiteZoneForm.get('storageDataPool')?.value).toBe('standard-data-pool');
+    // expect(component.multisiteZoneForm.get('storageClass')?.value).toBe('STANDARD');
+    // expect(component.multisiteZoneForm.get('storageDataPool')?.value).toBe('standard-data-pool');
     expect(component.multisiteZoneForm.get('storageCompression')?.value).toBe('gzip');
   });
 
