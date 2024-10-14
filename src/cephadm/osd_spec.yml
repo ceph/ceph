@@ -3,23 +3,10 @@ placement:
   - ceph-node-1
   - ceph-node-2
   - ceph-node-3
-service_id: osd_spec_ssd
+service_id: osd_spec_hdd
 service_type: osd
 spec:
   data_devices:
-    rotational: 0
-    size: '6500G:'
-  osds_per_device: 1
----
-placement:
-  hosts:
-  - ceph-node-1
-  - ceph-node-2
-  - ceph-node-3
-service_id: osd_spec_ssd
-service_type: osd
-spec:
-  data_devices:
-    rotational: 0
-    size: '6500G:'
-  osds_per_device: 1
+    rotational: 1
+    size: 100G
+  osds_per_device: 3

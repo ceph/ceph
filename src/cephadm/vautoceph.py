@@ -3191,7 +3191,13 @@ def command_shell(ctx):
         distribute_ceph_pub_key(problem_hosts, f'{ctx.output_dir}/ceph.pub')
     else:
         logger.info('All hosts connect, processing to the next steps')
-    # Check fsid
+
+    logger.info('-------------------------CHECKING FOR PORTS------------------------')
+    for host in ctx.hosts: 
+        logger.info(f'Checking ports connectivity on host {host['name']}: ')
+        ports_to_check = [3300, 6789, *range(6800, 7301), 9283, 18080, 9100, 9222]
+        check_ports_on_host(host['ipaddresses'], ports_to_check)
+    logger.info('All hosts checked, processing to the next step')
     logger.info('---------------------START EXECUTING BASH FILES--------------------')
     if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
@@ -5689,7 +5695,8 @@ def _get_parser():
     )
     parser_ctxlogsclear.set_defaults(func=command_context_log_clear)
     #End custom parser
-
+    parser_apply = subparsers.add_parser(
+        'apply <.yaml>', help='apply .yaml file to configure the cluster')
     return parser
 
 #Custom fuction:
@@ -5782,7 +5789,6 @@ def load_context_from_file(file_path: str):
         else:
             raise ValueError(f"Function '{func_name}' not found in function_map")
     ctx.funcs = funcs
-    _conf = ctx_dict["_conf"]
     return ctx
 
 
@@ -5946,10 +5952,55 @@ def check_and_generate_ssh_key():
     else:
         logger.info(f"SSH key already exists at {ssh_key_path}.")
 
+def check_port(host, port):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)  
+            result = sock.connect_ex((host, port))
+            if result == 0:
+                return True  
+            else:
+                return False 
+    except Exception as e:
+        print(f"Error checking port {port} on {host}: {e}")
+        return False
+    
+def print_table(data):
+    """Print a simple table."""
+    # Define the column headers
+    headers = ["Port", "Status", "Process"]
+    # Calculate the width of each column
+    col_widths = [max(len(str(item)) for item in col) for col in zip(*data, headers)]
+    
+    # Print the headers
+    header_row = " | ".join(f"{headers[i]:<{col_widths[i]}}" for i in range(len(headers)))
+    print(header_row)
+    print("-" * len(header_row))  # Separator
+
+    # Print each row
+    for row in data:
+        print(" | ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(row)))
+
+def check_ports_on_host(host, ports_to_check):
+    results = []
+    for port in ports_to_check:
+        is_open = check_port(host, port)
+        if is_open:
+            process_info = get_process_on_port(host, port)
+            if process_info:
+                results.append([port, "Open", process_info])
+            else:
+                results.append([port, "Open", "No process"])
+        else:
+            results.append([port, "Closed", "-"])
+    
+    print_table(results)
+
 def distribute_ssh_key(ssh_user, ip):
     logger.info(f"Distributing SSH key to {ip}...")
     distribute_key_cmd = f"ssh-copy-id -i ~/.ssh/id_rsa.pub {ssh_user}@{ip}"
     subprocess.run(distribute_key_cmd, shell=True)
+
 
 def preparing_remote_host(host):
     name = host['name']
@@ -6050,7 +6101,8 @@ def generate_ceph_commands(hosts, services):
         labels = [label.strip("'").lower() for label in labels]
         if service_type == 'rgw':
             service_pod = find_service_name(f'{service_type}.{service_name}', hostname)
-        service_pod = find_service_name(service_type, hostname)
+        else:
+            service_pod = find_service_name(service_type, hostname)
         if service_type in labels and service_pod is None:
             print(f"Adding {service_type} on {hostname} with count_per_host={count_per_host}...")
             spec = f' \'--placement=label:{service_type} count-per-host:{count_per_host}\' '
@@ -6183,7 +6235,6 @@ function_map = {
     "command_rm_cluster": command_rm_cluster,
     "command_context_write": command_context_write,
     "command_shell": command_shell
-    #"command_context_log_clear": command_context_log_clear,
 }
 
 
@@ -6191,28 +6242,36 @@ function_map = {
 def main() -> None:
     av: List[str] = []
     av = sys.argv[1:]
-
     # ctx = load_context_from_file('context/context-bootstrap.json')
+    if av[0] == 'apply':
+        try:
+            json_data = translate_yaml_to_json(av[1])
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.json') as temp_file:
+                json.dump(json_data, temp_file, indent=4)
+                temp_file_path = temp_file.name
+            ctx = load_context_from_file(temp_file_path)
+        except:
+            sys.stderr.write('No .yaml file specified or .yaml file doesn\'t exist, please pass a .yaml file\n')
+            sys.exit(1)
+    else:
+        ctx = cephadm_init_ctx(av)
 
-    json_data = translate_yaml_to_json(av[0])
-    with tempfile.NamedTemporaryFile('w', delete=False, suffix='.json') as temp_file:
-        json.dump(json_data, temp_file, indent=4)
-        temp_file_path = temp_file.name
-    ctx = load_context_from_file(temp_file_path)
-
-    if not ctx.funcs:
+    if not ctx.has_function():
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
-
     cephadm_require_root()
     cephadm_init_logging(ctx, logger, av)
 
     r = 0
-    for func in ctx.funcs:
+    if ctx.func:
+        ctx.funcs = []
+        ctx.funcs.append(ctx.func)
+
+    for f in ctx.funcs:
         try:
             # Determine the container engine (podman or docker)
             ctx.container_engine = find_container_engine(ctx)
-            if func not in [
+            if f not in [
                 command_check_host,
                 command_prepare_host,
                 command_add_repo,
@@ -6225,7 +6284,7 @@ def main() -> None:
                 # End custom functions
             ]:
                 check_container_engine(ctx)
-            result = func(ctx)
+            result = f(ctx)
             if result:
                 r = result
 
