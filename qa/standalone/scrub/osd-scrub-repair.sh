@@ -442,7 +442,6 @@ function TEST_auto_repair_bluestore_basic() {
         ['pool_name']="testpool"
         ['extras']=" --osd_scrub_auto_repair=true"
     )
-    local extr_dbg=3
     standard_scrub_cluster $dir cluster_conf
     local poolid=${cluster_conf['pool_id']}
     local poolname=${cluster_conf['pool_name']}
@@ -6250,6 +6249,254 @@ function TEST_request_scrub_priority() {
 
     # Verify that the requested scrub ran first
     grep "log_channel.*scrub ok" $dir/osd.${primary}.log | grep -v purged_snaps | head -1 | sed 's/.*[[]DBG[]]//' | grep -q $pg || return 1
+}
+
+#
+# Testing the "split scrub store" feature: shallow scrubs do not
+# purge deep errors from the store.
+#
+# Corrupt one copy of a replicated pool, creating both shallow and deep errors.
+# Then shallow-scrub the pool and verify that the deep errors are still present.
+#
+function TEST_dual_store_replicated_cluster() {
+    local dir=$1
+    local poolname=csr_pool
+    local total_objs=19
+    local extr_dbg=1 # note: 3 and above leave some temp files around
+
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 --osd_stats_update_period_not_scrubbing=3 "
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2 --osd_op_queue=wpq --osd_scrub_auto_repair=0 "
+    for osd in $(seq 0 1)
+    do
+      run_osd $dir $osd $ceph_osd_args || return 1
+    done
+
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+
+    create_pool foo 1 || return 1
+    create_pool $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    ceph osd pool set $poolname noscrub 1
+    ceph osd pool set $poolname nodeep-scrub 1
+
+    for i in $(seq 1 $total_objs) ; do
+        objname=ROBJ${i}
+        add_something $dir $poolname $objname || return 1
+
+        rados --pool $poolname setomapheader $objname hdr-$objname || return 1
+        rados --pool $poolname setomapval $objname key-$objname val-$objname || return 1
+    done
+
+    # Increase file 1 MB + 1KB
+    dd if=/dev/zero of=$dir/new.ROBJ19 bs=1024 count=1025
+    rados --pool $poolname put $objname $dir/new.ROBJ19 || return 1
+    rm -f $dir/new.ROBJ19
+
+    local pg=$(get_pg $poolname ROBJ0)
+    local primary=$(get_primary $poolname ROBJ0)
+
+    # Compute an old omap digest and save oi
+    CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) \
+        config set osd_deep_scrub_update_digest_min_age 0
+    CEPH_ARGS='' ceph daemon $(get_asok_path osd.1) \
+        config set osd_deep_scrub_update_digest_min_age 0
+    pg_deep_scrub $pg
+
+    for i in $(seq 1 $total_objs) ; do
+        objname=ROBJ${i}
+
+        # Alternate corruption between osd.0 and osd.1
+        local osd=$(expr $i % 2)
+
+        case $i in
+        1)
+            # Size (deep scrub data_digest too)
+            local payload=UVWXYZZZ
+            echo $payload > $dir/CORRUPT
+            objectstore_tool $dir $osd $objname set-bytes $dir/CORRUPT || return 1
+            ;;
+
+        2)
+            # digest (deep scrub only)
+            local payload=UVWXYZ
+            echo $payload > $dir/CORRUPT
+            objectstore_tool $dir $osd $objname set-bytes $dir/CORRUPT || return 1
+            ;;
+
+        3)
+             # missing
+             objectstore_tool $dir $osd $objname remove || return 1
+             ;;
+
+         4)
+             # Modify omap value (deep scrub only)
+             objectstore_tool $dir $osd $objname set-omap key-$objname $dir/CORRUPT || return 1
+             ;;
+
+         5)
+            # Delete omap key (deep scrub only)
+            objectstore_tool $dir $osd $objname rm-omap key-$objname || return 1
+            ;;
+
+         6)
+            # Add extra omap key (deep scrub only)
+            echo extra > $dir/extra-val
+            objectstore_tool $dir $osd $objname set-omap key2-$objname $dir/extra-val || return 1
+            rm $dir/extra-val
+            ;;
+
+         7)
+            # Modify omap header (deep scrub only)
+            echo -n newheader > $dir/hdr
+            objectstore_tool $dir $osd $objname set-omaphdr $dir/hdr || return 1
+            rm $dir/hdr
+            ;;
+
+         8)
+            rados --pool $poolname setxattr $objname key1-$objname val1-$objname || return 1
+            rados --pool $poolname setxattr $objname key2-$objname val2-$objname || return 1
+
+            # Break xattrs
+            echo -n bad-val > $dir/bad-val
+            objectstore_tool $dir $osd $objname set-attr _key1-$objname $dir/bad-val || return 1
+            objectstore_tool $dir $osd $objname rm-attr _key2-$objname || return 1
+            echo -n val3-$objname > $dir/newval
+            objectstore_tool $dir $osd $objname set-attr _key3-$objname $dir/newval || return 1
+            rm $dir/bad-val $dir/newval
+            ;;
+
+        9)
+            objectstore_tool $dir $osd $objname get-attr _ > $dir/robj9-oi
+            echo -n D > $dir/change
+            rados --pool $poolname put $objname $dir/change
+            objectstore_tool $dir $osd $objname set-attr _ $dir/robj9-oi
+            rm $dir/oi $dir/change
+            ;;
+
+          # ROBJ10 must be handled after digests are re-computed by a deep scrub below
+          # ROBJ11 must be handled with config change before deep scrub
+          # ROBJ12 must be handled with config change before scrubs
+          # ROBJ13 must be handled before scrubs
+
+        14)
+            echo -n bad-val > $dir/bad-val
+            objectstore_tool $dir 0 $objname set-attr _ $dir/bad-val || return 1
+            objectstore_tool $dir 1 $objname rm-attr _ || return 1
+            rm $dir/bad-val
+            ;;
+
+        15)
+            objectstore_tool $dir $osd $objname rm-attr _ || return 1
+            ;;
+
+        16)
+            objectstore_tool $dir 0 $objname rm-attr snapset || return 1
+            echo -n bad-val > $dir/bad-val
+            objectstore_tool $dir 1 $objname set-attr snapset $dir/bad-val || return 1
+	    ;;
+
+	17)
+	    # Deep-scrub only (all replicas are diffent than the object info
+           local payload=ROBJ17
+           echo $payload > $dir/new.ROBJ17
+	   objectstore_tool $dir 0 $objname set-bytes $dir/new.ROBJ17 || return 1
+	   objectstore_tool $dir 1 $objname set-bytes $dir/new.ROBJ17 || return 1
+	   ;;
+
+	18)
+	    # Deep-scrub only (all replicas are diffent than the object info
+           local payload=ROBJ18
+           echo $payload > $dir/new.ROBJ18
+	   objectstore_tool $dir 0 $objname set-bytes $dir/new.ROBJ18 || return 1
+	   objectstore_tool $dir 1 $objname set-bytes $dir/new.ROBJ18 || return 1
+	   # Make one replica have a different object info, so a full repair must happen too
+	   objectstore_tool $dir $osd $objname corrupt-info || return 1
+	   ;;
+
+	19)
+	   # Set osd-max-object-size smaller than this object's size
+
+        esac
+    done
+
+    local pg=$(get_pg $poolname ROBJ0)
+
+    ceph tell osd.\* injectargs -- --osd-max-object-size=1048576
+
+    inject_eio rep data $poolname ROBJ11 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
+    inject_eio rep mdata $poolname ROBJ12 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
+    inject_eio rep data $poolname ROBJ13 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
+
+    # first sequence: the final shallow scrub should not override any of the deep errors
+    pg_scrub $pg
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | python3 -c "$sortkeys" | jq '.'  > /tmp/WQR_1.json
+    pg_scrub $pg
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | python3 -c "$sortkeys" | jq '.'  > /tmp/WQR_1b.json
+    rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/sh1_results.json
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | \
+        python3 -c "$sortkeys" > /tmp/WQR_1b_s.json
+
+    pg_deep_scrub $pg
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | python3 -c "$sortkeys" | jq '.'  > /tmp/WQR_2.json
+    rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/dp_results.json
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | \
+        python3 -c "$sortkeys" > /tmp/WQR_2s.json
+
+    pg_scrub $pg
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | python3 -c "$sortkeys" | jq '.'  > /tmp/WQR_3.json
+    rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/sh2_results.json
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | \
+        python3 -c "$sortkeys" > /tmp/WQR_3s.json
+
+    diff -u $dir/dp_results.json $dir/sh2_results.json || return 1
+
+    # inject a read error, which is a special case: the scrub encountering the read error
+    # would override the previously collected shard info.
+    inject_eio rep mdata $poolname ROBJ13 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
+
+    pg_deep_scrub $pg
+
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | python3 -c "$sortkeys" | jq '.'  > /tmp/WQR_4.json
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | \
+        python3 -c "$sortkeys" > /tmp/WQR_4s_w13.json
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | jq "$jqfilter" | \
+        jq 'del(.inconsistents[] | select(.object.name == "ROBJ13"))' | \
+        jq '.inconsistents' | python3 -c "$sortkeys" > /tmp/WQR_4s_wo13.json
+
+    rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | \
+        python3 -c "$sortkeys" > $dir/dpPart2_w13_results.json
+    # Remove the entry with "name":"ROBJ13" from the $dir/d*_results.json
+    rados list-inconsistent-obj $pg | jq "$jqfilter" | jq 'del(.inconsistents[] | select(.object.name == "ROBJ13"))' | \
+        jq '.inconsistents' | python3 -c "$sortkeys" > $dir/dpPart2_wo13_results.json
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | \
+        python3 -c "$sortkeys" > /tmp/WQR_4s.json
+
+    pg_scrub $pg
+
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | python3 -c "$sortkeys" | jq '.'  > /tmp/WQR_5.json
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | \
+        python3 -c "$sortkeys" > /tmp/WQR_5s_w13.json
+    (( extr_dbg >= 3 )) && rados list-inconsistent-obj $pg | jq "$jqfilter" | \
+        jq 'del(.inconsistents[] | select(.object.name == "ROBJ13"))' |\
+        jq '.inconsistents' | python3 -c "$sortkeys" > /tmp/WQR_5s_wo13.json
+
+    rados list-inconsistent-obj $pg | jq "$jqfilter" | jq '.inconsistents' | python3 -c "$sortkeys" > \
+        $dir/sh2Part2_w13_results.json
+    rados list-inconsistent-obj $pg | jq "$jqfilter" | jq 'del(.inconsistents[] | select(.object.name == "ROBJ13"))' |\
+        jq '.inconsistents' | python3 -c "$sortkeys" > $dir/shPart2_wo13_results.json
+
+    # the shallow scrub results should differ from the results of the deep
+    # scrub preceding it, but the difference should be limited to ROBJ13
+    diff -u $dir/dpPart2_w13_results.json $dir/sh2Part2_w13_results.json && return 1
+    diff -u $dir/dpPart2_wo13_results.json $dir/shPart2_wo13_results.json || return 1
+
+    ceph osd pool rm $poolname $poolname --yes-i-really-really-mean-it
+    return 0
 }
 
 

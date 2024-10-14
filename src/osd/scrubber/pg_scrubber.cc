@@ -1183,6 +1183,7 @@ void PgScrubber::_request_scrub_map(pg_shard_t replica,
   m_osds->send_message_osd_cluster(replica.osd, repscrubop, get_osdmap_epoch());
 }
 
+// only called on interval change. Both DBs are to be removed.
 void PgScrubber::cleanup_store(ObjectStore::Transaction* t)
 {
   if (!m_store)
@@ -1199,6 +1200,38 @@ void PgScrubber::cleanup_store(ObjectStore::Transaction* t)
   t->register_on_complete(new OnComplete(std::move(m_store)));
   ceph_assert(!m_store);
 }
+
+
+void PgScrubber::reinit_scrub_store()
+{
+  // Entering, 0 to 3 of the following objects(*) may exist:
+  // ((*)'objects' here: both code objects (the ScrubStore object) and
+  // actual Object Store objects).
+  // 1. The ScrubStore object itself.
+  // 2,3. The two special hobjects in the coll (the PG data) holding the last
+  //      scrub's results.
+  //
+  // The Store object can be deleted and recreated, as a way to guarantee
+  // no junk is left. We won't do it here, but we will clear the at_level_t
+  // structures.
+  // The hobjects: possibly. The shallow DB object is always cleared. The
+  // deep one - only if running a deep scrub.
+  ObjectStore::Transaction t;
+  if (m_store) {
+    dout(10) << __func__ << " reusing existing store" << dendl;
+    m_store->flush(&t);
+  } else {
+    dout(10) << __func__ << " creating new store" << dendl;
+    m_store = std::make_unique<Scrub::Store>(
+	*this, *m_pg->osd->store, &t, m_pg->info.pgid, m_pg->coll);
+  }
+
+  // regardless of whether the ScrubStore object was recreated or reused, we need to
+  // (possibly) clear the actual DB objects in the Object Store.
+  m_store->reinit(&t, m_active_target->level());
+  m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
+}
+
 
 void PgScrubber::on_init()
 {
@@ -1217,14 +1250,8 @@ void PgScrubber::on_init()
     m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow,
     m_pg->get_actingset());
 
-  //  create a new store
-  {
-    ObjectStore::Transaction t;
-    cleanup_store(&t);
-    m_store.reset(
-      Scrub::Store::create(m_pg->osd->store, &t, m_pg->info.pgid, m_pg->coll));
-    m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
-  }
+  // create or reuse the 'known errors' store
+  reinit_scrub_store();
 
   m_start = m_pg->info.pgid.pgid.get_hobj_start();
   m_active = true;
