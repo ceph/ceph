@@ -367,6 +367,13 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
 	std::stringstream  sstrm1;
 	sstrm1 << state.availability;
 	f->dump_string("Availability", sstrm1.str());
+	uint32_t num_listeners = 0;
+	if (state.availability == gw_availability_t::GW_AVAILABLE) {
+	  for (auto &subs: state.subsystems) {
+	    num_listeners += subs.listeners.size();
+	  }
+	  f->dump_unsigned("num-listeners", num_listeners);
+	}
 	sstrm1.str("");
 	for (auto &state_itr: map.created_gws[group_key][gw_id].sm_state) {
 	  sstrm1 << " " << state_itr.first + 1 << ": "
@@ -476,7 +483,7 @@ void NVMeofGwMon::process_gw_down(const NvmeGwId &gw_id,
     if (avail == gw_availability_t::GW_UNAVAILABLE) {
       pending_map.process_gw_map_gw_down(gw_id, group_key, propose_pending);
     } else {
-      pending_map.process_gw_map_gw_no_subsystems(gw_id, group_key, propose_pending);
+      pending_map.process_gw_map_gw_no_subsys_no_listeners(gw_id, group_key, propose_pending);
     }
 
   }
@@ -600,7 +607,18 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 
   if (sub.size() == 0) {
     avail = gw_availability_t::GW_CREATED;
-  }
+  } else {
+    bool listener_found = false;
+    for (auto &subs: sub) {
+      if (subs.listeners.size()) {
+        listener_found = true;
+        break;
+      }
+    }
+    if (!listener_found) {
+     avail = gw_availability_t::GW_CREATED;
+    }
+  }// for HA no-subsystems and no-listeners are same usecases
   if (pending_map.created_gws[group_key][gw_id].subsystems != sub) {
     dout(10) << "subsystems of GW changed, propose pending " << gw_id << dendl;
     pending_map.created_gws[group_key][gw_id].subsystems =  sub;
