@@ -23,6 +23,8 @@ endif()
 if(libblk_srcs)
   add_library(blk STATIC ${libblk_srcs})
   target_include_directories(blk PRIVATE "./")
+else()
+  add_library(blk INTERFACE)
 endif()
 
 if(HAVE_LIBAIO)
