@@ -48,6 +48,8 @@ def check_unit(ctx, unit_name):
             state = 'stopped'
         elif out in ['failed', 'auto-restart']:
             state = 'error'
+        elif out in ['activating']:
+            state = 'starting'
         else:
             state = 'unknown'
     except Exception as e:
