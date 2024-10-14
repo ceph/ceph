@@ -28,6 +28,9 @@
 * CephFS: It is now possible to pause the threads that asynchronously purge
   the deleted subvolumes by using the config option
   "mgr/volumes/pause_purging".
+* CephFS: It is now possible to pause the threads that asynchronously clone
+  the subvolume snapshots by using the config option
+  "mgr/volumes/pause_cloning".
 
 >=19.0.0
 
