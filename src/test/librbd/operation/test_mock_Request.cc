@@ -8,6 +8,8 @@
 #include "librbd/AsyncRequest.h"
 #include "librbd/operation/Request.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 namespace librbd {
 namespace {
 

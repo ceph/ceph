@@ -5,6 +5,7 @@
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  */
 #include <iostream>
+#include <boost/random/mersenne_twister.hpp> // for boost::mt11213b
 #include <boost/scoped_ptr.hpp>
 #include <gtest/gtest.h>
 

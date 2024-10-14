@@ -12,6 +12,8 @@
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 #include "common/Checksummer.h"
+#include "common/Clock.h" // for ceph_clock_now()
+#include "common/config_proxy.h" // for class ConfigProxy
 #include "global/global_context.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"

@@ -22,6 +22,8 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 void register_test_journal_replay() {
 }
 

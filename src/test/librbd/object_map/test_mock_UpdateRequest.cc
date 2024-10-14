@@ -14,6 +14,8 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 namespace librbd {
 namespace object_map {
 
