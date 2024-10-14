@@ -392,7 +392,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
           fs_name: this.selectedFsName
         }
       });
-      this.volumeChangeHandler();
+      this.getSubVolGrp(this.selectedFsName);
     }
     if (!_.isEmpty(this.selectedSubvolGroup)) {
       this.nfsForm.patchValue({
