@@ -136,6 +136,15 @@ things to do:
 
     ceph config set mgr mgr/volumes/pause_purging true
 
+* **Turn off async cloner threads** The volumes plugin spawns threads for
+  asynchronously cloning subvolume snapshots. To help troubleshooting or
+  recovery effort, these cloner threads can be disabled using:
+
+.. code:: bash
+
+    ceph config set mgr mgr/volumes/pause_cloning true
+
+
 
 Expediting MDS journal trim
 ===========================

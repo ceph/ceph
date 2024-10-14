@@ -958,6 +958,13 @@ useful during cluster recovery scenarios:
 
     ceph config set mgr/volumes/pause_purging
 
+Pause the threads that asynchronously clone subvolume snapshots. This option is
+useful during cluster recovery scenarios:
+
+.. prompt:: bash #
+
+    ceph config set mgr/volumes/pause_cloning
+
 Configure the ``snapshot_clone_no_wait`` option:
 
 The ``snapshot_clone_no_wait`` config option is used to reject clone-creation
