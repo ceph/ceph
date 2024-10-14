@@ -20,6 +20,8 @@
 #include "common/Cond.h"
 #include <boost/scope_exit.hpp>
 
+#include <shared_mutex> // for std::shared_lock
+
 void register_test_migration() {
 }
 

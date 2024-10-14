@@ -20,6 +20,7 @@
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
 #include "osdc/ObjectCacher.h"
+#include "osdc/Objecter.h"
 #include "client/MetaRequest.h"
 #include "client/Client.h"
 #include "messages/MClientReclaim.h"
