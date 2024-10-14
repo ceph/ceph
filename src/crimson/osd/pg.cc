@@ -481,6 +481,7 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
   auto [objs_to_rm, next] = fut.get();
   if (objs_to_rm.empty()) {
     logger().info("all objs removed, removing coll for {}", pgid);
+    t.remove(coll_ref->get_cid(), pgid.make_snapmapper_oid());
     t.remove(coll_ref->get_cid(), pgmeta_oid);
     t.remove_collection(coll_ref->get_cid());
     (void) shard_services.get_store().do_transaction(
@@ -490,7 +491,7 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
     return {next, false};
   } else {
     for (auto &obj : objs_to_rm) {
-      if (obj == pgmeta_oid) {
+      if (obj == pgmeta_oid || obj.is_internal_pg_local()) {
         continue;
       }
       logger().trace("pg {}, removing obj {}", pgid, obj);
