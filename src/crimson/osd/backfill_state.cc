@@ -569,6 +569,7 @@ void BackfillState::ProgressTracker::complete_to(
   } else {
     ceph_abort_msg("completing untracked object shall not happen");
   }
+  auto new_last_backfill = peering_state().earliest_backfill();
   for (auto it = std::begin(registry);
        it != std::end(registry) &&
          it->second.stage != op_stage_t::enqueued_push;
@@ -578,6 +579,8 @@ void BackfillState::ProgressTracker::complete_to(
     peering_state().update_complete_backfill_object_stats(
       soid,
       *item.stats);
+    assert(soid > new_last_backfill);
+    new_last_backfill = soid;
   }
   if (may_push_to_max &&
       Enqueuing::all_enqueued(peering_state(),
@@ -587,7 +590,7 @@ void BackfillState::ProgressTracker::complete_to(
     backfill_state().last_backfill_started = hobject_t::get_max();
     backfill_listener().update_peers_last_backfill(hobject_t::get_max());
   } else {
-    backfill_listener().update_peers_last_backfill(obj);
+    backfill_listener().update_peers_last_backfill(new_last_backfill);
   }
 }
 
