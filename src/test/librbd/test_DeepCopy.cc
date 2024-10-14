@@ -11,6 +11,8 @@
 #include "librbd/io/ReadResult.h"
 #include "test/librados/crimson_utils.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 void register_test_deep_copy() {
 }
 

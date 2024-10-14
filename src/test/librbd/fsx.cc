@@ -60,6 +60,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.h"
 #include "include/rbd/librbd.hpp"
+#include "include/rbd_types.h" // for RBD_DATA_PREFIX
 #include "common/Cond.h"
 #include "common/SubProcess.h"
 #include "common/safe_io.h"

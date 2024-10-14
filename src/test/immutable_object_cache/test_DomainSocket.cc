@@ -6,6 +6,7 @@
 
 #include "gtest/gtest.h"
 #include "include/Context.h"
+#include "include/unordered_set.h"
 #include "global/global_init.h"
 #include "global/global_context.h"
 
@@ -13,6 +14,7 @@
 #include "tools/immutable_object_cache/CacheClient.h"
 #include "tools/immutable_object_cache/CacheServer.h"
 
+using ceph::unordered_set;
 using namespace ceph::immutable_obj_cache;
 
 class TestCommunication :public ::testing::Test {

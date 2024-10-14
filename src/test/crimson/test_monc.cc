@@ -2,6 +2,7 @@
 #include "common/ceph_argparse.h"
 #include "crimson/common/auth_handler.h"
 #include "crimson/common/config_proxy.h"
+#include "crimson/common/perf_counters_collection.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
