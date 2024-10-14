@@ -2,6 +2,7 @@ import os
 import uuid
 import logging
 import errno
+from time import monotonic
 from contextlib import contextmanager
 from collections import deque
 
@@ -56,7 +57,7 @@ class Trash(GroupTemplate):
         """
         return self._get_single_dir_entry(exclude_list)
 
-    def purge(self, trashpath, should_cancel):
+    def purge(self, trashpath, should_cancel, purge_queue):
         """
         Purge a trash entry with non-recursive depth-first approach.
         Non-recursive aspect prevents hitting Python's recursion limit and
@@ -73,8 +74,66 @@ class Trash(GroupTemplate):
         """
         log.debug(f'purge(): trashpath = {trashpath}')
 
+        class MeasurePurgeRate:
+
+            def __init__(self, period, purge_queue):
+                # measuring period -- period during which attempt to measure
+                # current purge rate is made
+                self.period = period
+                # this instance variable allows measuring only when measuring
+                # period is on
+                self.measuring = True
+
+                self.count = 0
+                self.rate = 0
+                self.time1 = None
+                self.time2 = None
+
+            def inc_count(self):
+                if not self.measuring:
+                    return
+
+                if self.count == 0:
+                    self.time1 = monotonic()
+                else:
+                    assert self.time1
+                    self.time2 = monotonic()
+                self.count += 1
+
+                if self.time2:
+                    time_diff = self.time2 - self.time1
+                    if time_diff >= self.period:
+                        self.rate = round(self.count / time_diff, 3)
+                        log.debug(f'purge rate = {self.rate}')
+                        purge_queue.purge_rate = self.rate
+                        self.reset()
+
+            def pause(self):
+                '''
+                Stop measuring purge rate.
+                '''
+                self.measuring = False
+
+            def resume(self):
+                '''
+                Stop measuring purge rate.
+                '''
+                self.measuring = True
+
+            def reset(self):
+                self.count = 0
+                self.rate = 0
+
+                self.time1 = None
+                self.time2 = None
+
+        # mpr = measure purge rate. It is an instance of class MeasurePurgeRate
+        # (see below) for counting number of calls to unlink() and rmdir() and
+        # then compute number of these calls made per second.
+        mpr = MeasurePurgeRate(0.001, purge_queue)
+
         try:
-            self.fs.rmtree(trashpath, should_cancel, suppress_errors=True)
+            self.fs.rmtree(trashpath, should_cancel, suppress_errors=True, mpr=mpr)
         except cephfs.ObjectNotFound:
             return
         except cephfs.Error as e:
