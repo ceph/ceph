@@ -68,6 +68,39 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
 
 template <typename I>
 void ObjectCopyRequest<I>::send() {
+  check_for_clone_mirroring();
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::check_for_clone_mirroring() {
+  
+  /* This only matters if it is not the first mirror sync
+   * for a clone image
+   */
+
+  if (m_src_snap_id_start > 0 && m_src_image_ctx->parent != nullptr) {
+    // If the dst object exists, the copyup data has already been synced.
+    bool object_does_not_exist = false;
+
+    m_dst_image_ctx->image_lock.lock_shared();
+    object_does_not_exist = m_dst_image_ctx->object_map->object_may_not_exist(m_dst_object_number);
+    m_dst_image_ctx->image_lock.unlock_shared();
+
+    if (object_does_not_exist == true) {
+      m_src_image_ctx->image_lock.lock_shared();
+      // Check if the starting snap is a mirror snapshot
+      auto snap_info_it = m_src_image_ctx->snap_info.find(m_src_snap_id_start);
+      if (snap_info_it != m_src_image_ctx->snap_info.end()) {
+	auto snap_ns = snap_info_it->second.snap_namespace;
+	if (std::holds_alternative<cls::rbd::MirrorSnapshotNamespace>(snap_ns)) {
+	  m_check_older_snaps = true;
+	}
+      }
+      m_src_image_ctx->image_lock.unlock_shared();
+    }
+  }
+  ldout(m_cct, 20) << "NITHYA: m_check_older_snaps" << m_check_older_snaps << dendl;
+
   send_list_snaps();
 }
 
@@ -90,14 +123,20 @@ void ObjectCopyRequest<I>::send_list_snaps() {
     return;
   }
 
+  ldout(m_cct, 20) << "NITHYA: m_check_older_snaps = " << m_check_older_snaps << dendl;
   io::SnapIds snap_ids;
-  snap_ids.reserve(1 + m_snap_map.size());
+  snap_ids.reserve(2 + m_snap_map.size());
+
+  if (m_check_older_snaps) {
+    snap_ids.push_back(0);
+  }
   snap_ids.push_back(m_src_snap_id_start);
   for (auto& [src_snap_id, _] : m_snap_map) {
     if (m_src_snap_id_start < src_snap_id) {
       snap_ids.push_back(src_snap_id);
     }
   }
+  ldout(m_cct, 20) << "NITHYA: snap_ids = " << snap_ids << dendl;
 
   auto list_snaps_flags = io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT;
 
@@ -320,7 +359,7 @@ void ObjectCopyRequest<I>::send_write_object() {
   SnapIds dst_snap_ids;
   librados::snap_t dst_snap_seq = 0;
   librados::snap_t src_snap_seq = m_snapshot_sparse_bufferlist.begin()->first;
-  if (src_snap_seq != 0) {
+  if (src_snap_seq != 0 && src_snap_seq > m_src_snap_id_start) {
     auto snap_map_it = m_snap_map.find(src_snap_seq);
     ceph_assert(snap_map_it != m_snap_map.end());
 
