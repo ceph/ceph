@@ -3198,6 +3198,12 @@ def command_shell(ctx):
         ports_to_check = [3300, 6789, 6800, 9283, 18080, 9100, 9222]
         check_ports_on_host(host['ipaddresses'], ports_to_check)
     logger.info('\nAll hosts checked, processing to the next steps')
+
+    logger.info('------------------------CHECKING FOR DEVICES-----------------------')
+    for host in ctx.hosts: 
+        logger.info(f"\nChecking devices on host {host['name']}: \n")
+        check_devices_on_host(host)
+    logger.info('\nAll hosts checked, processing to the next steps')
     logger.info('---------------------START EXECUTING BASH FILES--------------------')
     if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
@@ -5965,9 +5971,7 @@ def check_port(host, port):
         print(f"Error checking port {port} on {host}: {e}")
         return False
     
-def print_table(data):
-    headers = ["Port", "Status", "Process"]
-    # Calculate the width of each column
+def print_table(data, headers):
     col_widths = [max(len(str(item)) for item in col) for col in zip(*data, headers)]
     
     # Print the headers
@@ -6006,7 +6010,41 @@ def check_ports_on_host(host, ports_to_check):
                 results.append([port, "Closed", "-"])
         else:
             results.append([port, "Open", "-"])
-    print_table(results)
+    headers = ["Port", "Status", "Process"]
+    print_table(results, headers)
+
+def check_devices_on_host(host):
+    """Check available devices on the host for Ceph usage."""
+    
+    # SSH into the node and use lsblk to get device information
+    try:
+        result = subprocess.run(f"ssh {host['ipaddresses']} lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE", shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Error running lsblk on {host}: {result.stderr}")
+            return None
+        devices_info = result.stdout.strip().splitlines()
+    except Exception as e:
+        print(f"Error checking devices on {host}: {e}")
+        return None
+
+    table_data = []
+
+    for line in devices_info[1:]:  
+        parts = line.split()
+        device_name = parts[0]
+        device_size = parts[1]
+        device_type = parts[2]
+        mountpoint = parts[3] if len(parts) > 3 else ''
+        fstype = parts[4] if len(parts) > 4 else ''
+        
+        if device_type == "disk" and not mountpoint and not fstype:
+            status = "Available"
+        else:
+            status = "In Use"
+        table_data.append([device_name, device_size, device_type, mountpoint, fstype, status])
+
+    headers = ["Device", "Size", "Type", "Mountpoint", "Filesystem", "Status"]
+    print_table(table_data, headers)
 
 def distribute_ssh_key(ssh_user, ip):
     logger.info(f"Distributing SSH key to {ip}...")
