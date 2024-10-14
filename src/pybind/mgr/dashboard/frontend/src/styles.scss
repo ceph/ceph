@@ -1,8 +1,6 @@
 /* You can add global styles to this file, and also import other style files */
 @use './src/styles/defaults' as *;
 @import './src/styles/carbon-defaults.scss';
-// Angular2-Tree Component
-@import '@circlon/angular-tree-component/css/angular-tree-component.css';
 
 // Fork-Awesome
 $fa-font-path: '~fork-awesome/fonts';
@@ -135,14 +133,6 @@ $grid-breakpoints: (
   background-color: $light-green-300;
   color: $white;
   font-weight: bolder;
-}
-
-// angular-tree-component
-tree-root {
-  tree-viewport {
-    // Fix visual bug when tree is empty
-    min-height: 1em;
-  }
 }
 
 // Other

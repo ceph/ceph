@@ -168,7 +168,10 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       }
     }
     if (this.action === 'edit') {
-      this.placementTargets = this.info.parent ? this.info.parent.data.placement_targets : [];
+      this.placementTargets =
+        this.info.data?.parent || this.info.parent
+          ? (this.info.data?.parentNode || this.info.parent.data)?.placement_targets
+          : [];
       this.rgwZoneService.getPoolNames().subscribe((pools: object[]) => {
         this.poolList = pools;
       });
@@ -181,7 +184,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.multisiteZoneForm.get('secret_key').setValue(this.info.data.secret_key);
       this.multisiteZoneForm
         .get('placementTarget')
-        .setValue(this.info.parent.data.default_placement);
+        .setValue((this.info.data?.parentNode || this.info.parent.data)?.default_placement);
       this.getZonePlacementData(this.multisiteZoneForm.getValue('placementTarget'));
       if (this.info.data.is_default) {
         this.isDefaultZone = true;
