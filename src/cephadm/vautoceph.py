@@ -3194,7 +3194,7 @@ def command_shell(ctx):
 
     logger.info('-------------------------CHECKING FOR PORTS------------------------')
     for host in ctx.hosts: 
-        logger.info(f"Checking ports connectivity on host {host['name']}: ")
+        logger.info(f"\nChecking ports connectivity on host {host['name']}: \n")
         ports_to_check = [3300, 6789, 6800, 9283, 18080, 9100, 9222]
         check_ports_on_host(host['ipaddresses'], ports_to_check)
     logger.info('All hosts checked, processing to the next step')
