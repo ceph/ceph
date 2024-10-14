@@ -27,6 +27,7 @@
 #include <boost/scope_exit.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/assign/list_of.hpp>
+#include <shared_mutex> // for std::shared_lock
 #include <utility>
 #include <vector>
 #include "test/librados/crimson_utils.h"

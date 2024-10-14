@@ -16,6 +16,8 @@
 #include "gtest/gtest.h"
 #include <boost/variant.hpp>
 
+#include <shared_mutex> // for std::shared_lock
+
 namespace librbd {
 namespace {
 

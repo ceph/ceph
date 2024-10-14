@@ -16,6 +16,7 @@
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 #include "common/Checksummer.h"
+#include "common/config_proxy.h" // for class ConfigProxy
 #include "mds/mdstypes.h"
 #include "global/global_context.h"
 #include "test/librados/testcase_cxx.h"

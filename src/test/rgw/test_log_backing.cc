@@ -20,6 +20,7 @@
 
 #include <fmt/format.h>
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 

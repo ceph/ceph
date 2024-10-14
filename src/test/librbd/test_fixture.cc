@@ -17,6 +17,7 @@
 #include "test/librados/test.h"
 #include "test/librados/test_cxx.h"
 #include <iostream>
+#include <shared_mutex> // for std::shared_lock
 #include <sstream>
 #include <stdlib.h>
 
