@@ -11,6 +11,7 @@ from .helper import (DashboardTestCase, JAny, JLeaf, JList, JObj, JTuple,
 class OsdTest(DashboardTestCase):
 
     AUTH_ROLES = ['cluster-manager']
+    _VERSION = '1.1'
 
     @classmethod
     def setUpClass(cls):
@@ -24,7 +25,7 @@ class OsdTest(DashboardTestCase):
 
     @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
     def test_access_permissions(self):
-        self._get('/api/osd')
+        self._get('/api/osd', version=self._VERSION)
         self.assertStatus(403)
         self._get('/api/osd/0')
         self.assertStatus(403)
@@ -33,7 +34,7 @@ class OsdTest(DashboardTestCase):
         self.assertSchema(data, JObj({p: JAny(none=False) for p in properties}, allow_unknown=True))
 
     def test_list(self):
-        data = self._get('/api/osd')
+        data = self._get('/api/osd', version=self._VERSION)
         self.assertStatus(200)
 
         self.assertGreaterEqual(len(data), 1)
