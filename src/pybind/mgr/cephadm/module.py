@@ -1080,6 +1080,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 status_desc = d['state']
                 status = {
                     'running': DaemonDescriptionStatus.running,
+                    'starting': DaemonDescriptionStatus.starting,
                     'stopped': DaemonDescriptionStatus.stopped,
                     'error': DaemonDescriptionStatus.error,
                     'unknown': DaemonDescriptionStatus.error,
