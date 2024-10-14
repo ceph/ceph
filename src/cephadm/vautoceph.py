@@ -5981,6 +5981,18 @@ def print_table(data):
     for row in data:
         print(" | ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(row)))
 
+def get_process_on_port(host, port):
+    """Get the process running on the given port."""
+    try:
+        result = subprocess.run(f"ssh {host} lsof -i :{port}", shell=True, capture_output=True, text=True)
+        if result.stdout:
+            return result.stdout.strip()
+        else:
+            return None  # No process found
+    except Exception as e:
+        print(f"Error checking process on port {port}: {e}")
+        return None
+    
 def check_ports_on_host(host, ports_to_check):
     results = []
     for port in ports_to_check:
@@ -5993,7 +6005,6 @@ def check_ports_on_host(host, ports_to_check):
                 results.append([port, "Open", "No process"])
         else:
             results.append([port, "Closed", "-"])
-    
     print_table(results)
 
 def distribute_ssh_key(ssh_user, ip):
@@ -6263,7 +6274,7 @@ def main() -> None:
     cephadm_init_logging(ctx, logger, av)
 
     r = 0
-    if ctx.func:
+    if hasattr(ctx, 'func'):
         ctx.funcs = []
         ctx.funcs.append(ctx.func)
 
