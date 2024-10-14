@@ -48,7 +48,6 @@
 #include "include/function2.hpp"
 #include "include/neorados/RADOS_Decodable.hpp"
 
-#include "common/async/completion.h"
 #include "common/admin_socket.h"
 #include "common/ceph_time.h"
 #include "common/ceph_mutex.h"
@@ -1968,30 +1967,6 @@ public:
     }
   }
 
-  boost::asio::any_completion_handler<void(boost::system::error_code)>
-  OpCompletionVert(std::unique_ptr<ceph::async::Completion<
-		     void(boost::system::error_code)>> c) {
-    if (c)
-      return [c = std::move(c)](boost::system::error_code ec) mutable {
-	c->dispatch(std::move(c), ec);
-      };
-    else
-      return nullptr;
-  }
-
-  template<typename T>
-  boost::asio::any_completion_handler<void(boost::system::error_code, T)>
-  OpCompletionVert(std::unique_ptr<ceph::async::Completion<
-		     void(boost::system::error_code, T)>> c) {
-    if (c) {
-      return [c = std::move(c)](boost::system::error_code ec, T t) mutable {
-	c->dispatch(std::move(c), ec, std::move(t));
-      };
-    } else {
-      return nullptr;
-    }
-  }
-
   struct Op : public RefCountedObject {
     OSDSession *session = nullptr;
     int incarnation = 0;
@@ -3268,18 +3243,6 @@ public:
     return linger_watch(info, op, snapc, mtime, inbl,
 			OpContextVert<ceph::buffer::list>(onfinish, nullptr), objver);
   }
-  ceph_tid_t linger_watch(LingerOp *info,
-			  ObjectOperation& op,
-			  const SnapContext& snapc, ceph::real_time mtime,
-			  ceph::buffer::list& inbl,
-			  std::unique_ptr<ceph::async::Completion<
-			    void(boost::system::error_code,
-			         ceph::buffer::list)>> onfinish,
-			  version_t *objver) {
-    return linger_watch(info, op, snapc, mtime, inbl,
-			OpCompletionVert<ceph::buffer::list>(
-			  std::move(onfinish)), objver);
-  }
   ceph_tid_t linger_notify(LingerOp *info,
 			   ObjectOperation& op,
 			   snapid_t snap, ceph::buffer::list& inbl,
@@ -3294,17 +3257,6 @@ public:
     return linger_notify(info, op, snap, inbl,
 			 OpContextVert(onack, poutbl),
 			 objver);
-  }
-  ceph_tid_t linger_notify(LingerOp *info,
-			   ObjectOperation& op,
-			   snapid_t snap, ceph::buffer::list& inbl,
-			   std::unique_ptr<ceph::async::Completion<
-			     void(boost::system::error_code,
-			          ceph::buffer::list)>> onack,
-			   version_t *objver) {
-    return linger_notify(info, op, snap, inbl,
-			 OpCompletionVert<ceph::buffer::list>(
-			   std::move(onack)), objver);
   }
   tl::expected<ceph::timespan,
 	       boost::system::error_code> linger_check(LingerOp *info);
@@ -3886,12 +3838,6 @@ public:
     create_pool_snap(pool, snapName,
 		     OpContextVert<ceph::buffer::list>(c, nullptr));
   }
-  void create_pool_snap(
-    int64_t pool, std::string_view snapName,
-    std::unique_ptr<ceph::async::Completion<PoolOp::OpSig>> c) {
-    create_pool_snap(pool, snapName,
-		     OpCompletionVert<ceph::buffer::list>(std::move(c)));
-  }
   void allocate_selfmanaged_snap(int64_t pool,
 				 boost::asio::any_completion_handler<
 				 void(boost::system::error_code,
@@ -3901,24 +3847,12 @@ public:
     allocate_selfmanaged_snap(pool,
 			      OpContextVert(c, psnapid));
   }
-  void allocate_selfmanaged_snap(int64_t pool,
-				 std::unique_ptr<ceph::async::Completion<void(
-				   boost::system::error_code, snapid_t)>> c) {
-    allocate_selfmanaged_snap(pool,
-			      OpCompletionVert<snapid_t>(std::move(c)));
-  }
   void delete_pool_snap(int64_t pool, std::string_view snapName,
 			decltype(PoolOp::onfinish)&& onfinish);
   void delete_pool_snap(int64_t pool, std::string_view snapName,
 			Context* c) {
     delete_pool_snap(pool, snapName,
 		     OpContextVert<ceph::buffer::list>(c, nullptr));
-  }
-  void delete_pool_snap(int64_t pool, std::string_view snapName,
-			std::unique_ptr<ceph::async::Completion<void(
-                          boost::system::error_code, ceph::buffer::list)>> c) {
-    delete_pool_snap(pool, snapName,
-		     OpCompletionVert<ceph::buffer::list>(std::move(c)));
   }
 
   void delete_selfmanaged_snap(int64_t pool, snapid_t snap,
@@ -3927,12 +3861,6 @@ public:
 			       Context* c) {
     delete_selfmanaged_snap(pool, snap,
 			    OpContextVert<ceph::buffer::list>(c, nullptr));
-  }
-  void delete_selfmanaged_snap(int64_t pool, snapid_t snap,
-			       std::unique_ptr<ceph::async::Completion<void(
-                                 boost::system::error_code, ceph::buffer::list)>> c) {
-    delete_selfmanaged_snap(pool, snap,
-			    OpCompletionVert<ceph::buffer::list>(std::move(c)));
   }
 
 
@@ -3945,24 +3873,11 @@ public:
 		OpContextVert<ceph::buffer::list>(onfinish, nullptr),
 		crush_rule);
   }
-  void create_pool(std::string_view name,
-		   std::unique_ptr<ceph::async::Completion<void(
-                     boost::system::error_code, ceph::buffer::list)>> c,
-		   int crush_rule=-1) {
-    create_pool(name,
-		OpCompletionVert<ceph::buffer::list>(std::move(c)),
-		crush_rule);
-  }
   void delete_pool(int64_t pool,
 		   decltype(PoolOp::onfinish)&& onfinish);
   void delete_pool(int64_t pool,
 		   Context* onfinish) {
     delete_pool(pool, OpContextVert<ceph::buffer::list>(onfinish, nullptr));
-  }
-  void delete_pool(int64_t pool,
-		   std::unique_ptr<ceph::async::Completion<void(
-                    boost::system::error_code, ceph::buffer::list)>> c) {
-    delete_pool(pool, OpCompletionVert<ceph::buffer::list>(std::move(c)));
   }
 
   void delete_pool(std::string_view name,
@@ -3971,11 +3886,6 @@ public:
   void delete_pool(std::string_view name,
 		   Context* onfinish) {
     delete_pool(name, OpContextVert<ceph::buffer::list>(onfinish, nullptr));
-  }
-  void delete_pool(std::string_view name,
-		   std::unique_ptr<ceph::async::Completion<void(
-                     boost::system::error_code, ceph::buffer::list)>> c) {
-    delete_pool(name, OpCompletionVert<ceph::buffer::list>(std::move(c)));
   }
 
   void handle_pool_op_reply(MPoolOpReply *m);
@@ -4025,11 +3935,6 @@ public:
   void get_fs_stats(struct ceph_statfs& result, std::optional<int64_t> poolid,
 		    Context *onfinish) {
     get_fs_stats_(poolid, OpContextVert(onfinish, result));
-  }
-  void get_fs_stats(std::optional<int64_t> poolid,
-		    std::unique_ptr<ceph::async::Completion<void(
-                      boost::system::error_code, struct ceph_statfs)>> c) {
-    get_fs_stats_(poolid, OpCompletionVert<struct ceph_statfs>(std::move(c)));
   }
   int statfs_op_cancel(ceph_tid_t tid, int r);
   void _finish_statfs_op(StatfsOp *op, int r);
