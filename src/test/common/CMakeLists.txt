@@ -386,7 +386,7 @@ target_link_libraries(unittest_async_spawn_throttle ceph-common Boost::system Bo
 
 add_executable(unittest_async_lease test_async_lease.cc)
 add_ceph_unittest(unittest_async_lease)
-target_link_libraries(unittest_async_lease ceph-common Boost::system Boost::context)
+target_link_libraries(unittest_async_lease ceph-common Boost::system Boost::context librados)
 
 add_executable(unittest_async_yield_waiter test_async_yield_waiter.cc)
 add_ceph_unittest(unittest_async_yield_waiter)
