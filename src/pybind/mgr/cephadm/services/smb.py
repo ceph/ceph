@@ -1,5 +1,8 @@
+import errno
 import logging
 from typing import Any, Dict, List, Tuple, cast, Optional
+
+from mgr_module import HandleCommandResult
 
 from ceph.deployment.service_spec import ServiceSpec, SMBSpec
 
@@ -116,6 +119,23 @@ class SMBService(CephService):
             logger.debug('ignoring possibly stray ctdb service: %s', name)
             return True
         return False
+
+    def ok_to_stop(
+        self, daemon_ids: List[str], force: bool = False, known: Optional[List[str]] = None
+    ) -> HandleCommandResult:
+        # if only 1 smb, alert user (this is not passable with --force)
+        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, "SMB", 1, True)
+        if warn:
+            return HandleCommandResult(-errno.EBUSY, "", warn_message)
+
+        # if reached here, there is > 1 smb daemon.
+        if force:
+            return HandleCommandResult(0, warn_message, "")
+
+        # if reached here, > 1 smb daemon and no force flag.
+        # Provide warning
+        warn_message = "WARNING: Removing SMB daemons can cause clients to lose connectivity. "
+        return HandleCommandResult(-errno.EBUSY, "", warn_message)
 
     def _allow_config_key_command(self, name: str) -> str:
         # permit the samba container config access to the mon config key store
