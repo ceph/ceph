@@ -2,6 +2,7 @@ import os
 import uuid
 import logging
 import errno
+from time import monotonic
 from contextlib import contextmanager
 from collections import deque
 
@@ -56,7 +57,7 @@ class Trash(GroupTemplate):
         """
         return self._get_single_dir_entry(exclude_list)
 
-    def purge(self, trashpath, should_cancel):
+    def purge(self, trashpath, should_cancel, purge_queue):
         """
         Purge a trash entry with non-recursive depth-first approach.
         Non-recursive aspect prevents hitting Python's recursion limit and
@@ -73,8 +74,13 @@ class Trash(GroupTemplate):
         """
         log.debug(f'purge(): trashpath = {trashpath}')
 
+        # mpr = measure purge rate. It is an instance of class MeasurePurgeRate
+        # (see below) for counting number of calls to unlink() and rmdir() and
+        # then compute number of these calls made per second.
+        mpr = MeasurePurgeRate(0.001)
+
         try:
-            self.fs.rmtree(trashpath, should_cancel, suppress_errors=True)
+            self.fs.rmtree(trashpath, should_cancel, suppress_errors=True, mpr)
         except cephfs.ObjectNotFound:
             return
         except cephfs.Error as e:
