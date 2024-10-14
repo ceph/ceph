@@ -12,6 +12,7 @@
 
 //#define BOOST_ASIO_ENABLE_HANDLER_TRACKING
 #include "common/async/lease.h"
+#include "common/async/lock_rados.h"
 
 #include <optional>
 #include <utility>
