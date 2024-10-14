@@ -5980,13 +5980,16 @@ def print_table(data):
         print(" | ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(row)))
 
 def get_process_on_port(host, port):
-    """Get the process running on the given port."""
     try:
         result = subprocess.run(f"ssh {host} lsof -i :{port}", shell=True, capture_output=True, text=True)
         if result.stdout:
-            return result.stdout.strip()
-        else:
-            return None  # No process found
+            lines = result.stdout.strip().splitlines()
+            # The first line is the header, the process details are in subsequent lines
+            for line in lines[1:]:  # Skip the header
+                parts = line.split()  # Split by whitespace
+                if len(parts) > 0:
+                    return parts[0]  # Return the process name (first column)
+        return None  # No process found
     except Exception as e:
         print(f"Error checking process on port {port}: {e}")
         return None
