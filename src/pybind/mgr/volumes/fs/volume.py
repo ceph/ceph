@@ -1039,8 +1039,6 @@ class VolumeClient(CephfsClient["Module"]):
 
         try:
             with open_trashcan_in_vol(self, volname, self.volspec) as (_, trashcan):
-                # TODO: report number of unlink() + rmdir() calls executed per
-                # second
                 total_files = self.purge_stats[volname]['total_files']
                 total_subvols = self.purge_stats[volname]['total_subvols']
 
@@ -1066,17 +1064,23 @@ class VolumeClient(CephfsClient["Module"]):
                                 {'state': 'ongoing',
                                  'progress_report':
                                      {'percentage_purged': {},
-                                      'amount_left': {}}}}
+                                      'amount_left': {},
+                                      'purge_rate': 0}}}
                     percent_purged = status['status']['progress_report']['percentage_purged'] # type: ignore
                     amount_left = status['status']['progress_report']['amount_left'] # type: ignore
                     percent_purged['files'] = f'{files_purged_percent}%'
                     percent_purged['subvols'] = f'{subvols_purged_percent}%'
                     amount_left['files'] = stats['files_left']
                     amount_left['subvols'] = stats['subvols_left']
+
+                    if self.purge_queue.purge_rate:
+                        purge_rate_str = f'{self.purge_queue.purge_rate} unlink+rmdir per sec'
+                        status['status']['progress_report']['purge_rate'] = purge_rate_str # type: ignore
                 else:
                     status = {'status': {'state': 'complete'}}
                     self.purge_stats[volname]['total_files'] = 0
                     self.purge_stats[volname]['total_subvols'] = 0
+                    self.purge_queue.purge_rate = None
                 ret = 0, json.dumps(status, indent=2), ''
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT and '/volumes/_deleting' in ve.error_str:

@@ -1,3 +1,4 @@
+from time import time
 import os
 import uuid
 import logging
@@ -60,7 +61,7 @@ class Trash(GroupTemplate):
         """
         return listdir_by_ctime_order(self.fs, self.path)
 
-    def purge(self, trashpath, should_cancel):
+    def purge(self, trashpath, should_cancel, purge_queue):
         """
         purge a trash entry.
 
@@ -69,6 +70,8 @@ class Trash(GroupTemplate):
         :return: None
         """
         def rmtree(root_path):
+            nonlocal mpr # type: ignore
+
             log.debug("rmtree {0}".format(root_path))
             try:
                 with self.fs.opendir(root_path) as dir_handle:
@@ -80,6 +83,8 @@ class Trash(GroupTemplate):
                                 rmtree(d_full)
                             else:
                                 self.fs.unlink(d_full)
+                                mpr.inc_count()
+
                         d = self.fs.readdir(dir_handle)
             except cephfs.ObjectNotFound:
                 return
@@ -89,6 +94,62 @@ class Trash(GroupTemplate):
             # (else we would fail to remove this anyway)
             if not should_cancel():
                 self.fs.rmdir(root_path)
+                mpr.inc_count()
+
+        class MeasurePurgeRate:
+
+            def __init__(self, period, purge_queue):
+                # measuring period -- period during which attempt to measure
+                # current purge rate is made
+                self.period = period
+                # this instance variable allows measuring only when measuring
+                # period is on
+                self.measuring = True
+
+                self.count = 0
+                self.rate = 0
+                self.time1 = None
+                self.time2 = None
+
+            def inc_count(self):
+                if not self.measuring:
+                    return
+
+                if self.count == 0:
+                    self.time1 = time()
+                else:
+                    assert self.time1
+                    self.time2 = time()
+                self.count += 1
+
+                if self.time2:
+                    time_diff = self.time2 - self.time1
+                    if time_diff >= self.period:
+                        self.rate = round(self.count / time_diff, 3)
+                        log.debug(f'purge rate = {self.rate}')
+                        purge_queue.purge_rate = self.rate
+                        self.reset()
+
+            def pause(self):
+                '''
+                Stop measuring purge rate.
+                '''
+                self.measuring = False
+
+            def resume(self):
+                '''
+                Stop measuring purge rate.
+                '''
+                self.measuring = True
+
+            def reset(self):
+                self.count = 0
+                self.rate = 0
+
+                self.time1 = None
+                self.time2 = None
+
+        mpr = MeasurePurgeRate(0.001, purge_queue)
 
         # catch any unlink errors
         try:
