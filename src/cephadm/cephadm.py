@@ -3839,7 +3839,7 @@ def _update_daemon_status_ext_units(
             raise ValueError('unexpected unit type: {utype!r}')
         unit_info.update(status)
         aggregate_state = aggregate_state or ''
-        if status['state'] in ('error', 'unknown'):
+        if status['state'] in ('error', 'unknown', 'starting'):
             # state is always str but mypy needs a little help with str(...)
             # this probably ought to be a TypedDict.
             aggregate_state = str(status['state'])
