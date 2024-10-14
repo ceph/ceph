@@ -1,6 +1,8 @@
 #include <errno.h>
 #include <time.h>
 
+#include <iostream> // for std::cout
+
 #include <boost/container/small_vector.hpp>
 
 #include "gtest/gtest.h"

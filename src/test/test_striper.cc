@@ -3,6 +3,8 @@
 
 #include "osdc/Striper.h"
 
+#include <iostream> // for std::cout
+
 using namespace std;
 
 TEST(Striper, Stripe1)

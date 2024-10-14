@@ -23,6 +23,7 @@
 #include "MemWriteback.h"
 
 #include <atomic>
+#include <iostream> // for std::cout
 
 using namespace std;
 
