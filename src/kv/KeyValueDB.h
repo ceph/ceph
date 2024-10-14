@@ -216,7 +216,9 @@ public:
     virtual ~IteratorImpl() {}
     virtual int seek_to_last() = 0;
     virtual int prev() = 0;
+    virtual std::string_view key_as_sv() = 0;
     virtual std::pair<std::string, std::string> raw_key() = 0;
+    virtual std::pair<std::string_view, std::string_view> raw_key_as_sv() = 0;
     virtual ceph::buffer::ptr value_as_ptr() {
       ceph::buffer::list bl = value();
       if (bl.length() == 1) {
@@ -243,7 +245,9 @@ public:
     virtual int next() = 0;
     virtual int prev() = 0;
     virtual std::string key() = 0;
+    virtual std::string_view key_as_sv() = 0;
     virtual std::pair<std::string,std::string> raw_key() = 0;
+    virtual std::pair<std::string_view, std::string_view> raw_key_as_sv() = 0;
     virtual bool raw_key_is_prefixed(const std::string &prefix) = 0;
     virtual ceph::buffer::list value() = 0;
     virtual ceph::buffer::ptr value_as_ptr() {
@@ -312,8 +316,14 @@ private:
     std::string key() override {
       return generic_iter->key();
     }
+    std::string_view key_as_sv() override {
+      return generic_iter->key_as_sv();
+    }
     std::pair<std::string, std::string> raw_key() override {
       return generic_iter->raw_key();
+    }
+    std::pair<std::string_view, std::string_view> raw_key_as_sv() override {
+      return generic_iter->raw_key_as_sv();
     }
     ceph::buffer::list value() override {
       return generic_iter->value();
