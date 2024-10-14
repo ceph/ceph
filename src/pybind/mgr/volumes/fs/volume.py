@@ -1122,7 +1122,9 @@ class VolumeClient(CephfsClient["Module"]):
                     {'state': 'ongoing',
                      'progress_report':
                          {'amount_purged': {},
-                          'percentage_purged': {}}}}
+                          'percentage_purged': {},
+                          'purge_rate': 'N/A'}}}
+
         amount_purged = status['status']['progress_report']\
             ['amount_purged'] # type: ignore
         percent_purged = status['status']['progress_report']\
