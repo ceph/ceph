@@ -96,7 +96,7 @@ Current Members
  * Mike Perez <miperez@redhat.com>
  * Myoungwon Oh <myoungwon.oh@samsung.com>
  * Neha Ojha <nojha@redhat.com>
- * Patrick Donnelly <pdonnell@redhat.com>
+ * Patrick Donnelly <pdonnell@ibm.com>
  * Sam Just <sjust@redhat.com>
  * Vikhyat Umrao <vikhyat@redhat.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
