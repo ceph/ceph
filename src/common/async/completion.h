@@ -202,7 +202,7 @@ class CompletionImpl final : public Completion<void(Args...), T> {
     auto f = bind_and_forward(ex2, std::move(handler), std::move(args));
     RebindTraits2::destroy(alloc2, this);
     RebindTraits2::deallocate(alloc2, this, 1);
-    boost::asio::defer(boost::asio::bind_executor(ex2, std::move(f)));
+    boost::asio::defer(std::move(f));
   }
   void destroy_dispatch(std::tuple<Args...>&& args) override {
     auto w = std::move(work);
