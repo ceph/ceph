@@ -25,6 +25,7 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <shared_mutex> // for std::shared_lock
 #include <sstream>
 #include <vector>
 

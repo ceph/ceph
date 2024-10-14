@@ -14,6 +14,7 @@
 #include "mon/PGMap.h"
 #include "gtest/gtest.h"
 
+#include "common/TextTable.h"
 #include "include/stringify.h"
 
 using namespace std;

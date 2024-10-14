@@ -24,6 +24,8 @@
 #include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 void register_test_image_sync() {
 }
 

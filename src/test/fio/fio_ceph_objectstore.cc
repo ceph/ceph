@@ -15,6 +15,7 @@
 
 #include "os/ObjectStore.h"
 #include "global/global_init.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "include/intarith.h"
 #include "include/stringify.h"
@@ -28,6 +29,12 @@
 
 #include "include/ceph_assert.h" // fio.h clobbers our assert.h
 #include <algorithm>
+
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_

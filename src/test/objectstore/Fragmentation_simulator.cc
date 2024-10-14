@@ -7,6 +7,7 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_mutex.h"
 #include "common/common_init.h"
+#include "common/debug.h"
 #include "common/hobject.h"
 
 #include "global/global_context.h"
@@ -18,6 +19,7 @@
 #include "os/ObjectStore.h"
 #include "test/objectstore/ObjectStoreImitator.h"
 #include <fstream>
+#include <boost/random/mersenne_twister.hpp> // for boost::mt11213b
 #include <boost/random/uniform_int.hpp>
 #include <fmt/core.h>
 #include <mutex>

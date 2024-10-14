@@ -10,6 +10,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/random_string.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 #include "global/global_context.h"
 #include "test/librados/test_cxx.h"
 

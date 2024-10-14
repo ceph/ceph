@@ -47,6 +47,8 @@
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 void register_test_rbd_mirror() {
 }
 
