@@ -3197,7 +3197,7 @@ def command_shell(ctx):
         logger.info(f"\nChecking ports connectivity on host {host['name']}: \n")
         ports_to_check = [3300, 6789, 6800, 9283, 18080, 9100, 9222]
         check_ports_on_host(host['ipaddresses'], ports_to_check)
-    logger.info('All hosts checked, processing to the next step')
+    logger.info('\nAll hosts checked, processing to the next steps')
     logger.info('---------------------START EXECUTING BASH FILES--------------------')
     if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
