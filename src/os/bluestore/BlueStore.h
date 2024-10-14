@@ -1429,6 +1429,7 @@ public:
 
     void rewrite_omap_key(const std::string& old, std::string *out);
     void decode_omap_key(const std::string& key, std::string *user_key);
+    void decode_omap_key(const std::string_view& key, std::string_view *user_key);
 
 private:
     void _decode(const ceph::buffer::list& v);
