@@ -771,6 +771,16 @@ class PgScrubber : public ScrubPgIF,
 
   std::unique_ptr<Scrub::Store> m_store;
 
+  /**
+   * the ScrubStore sub-object caches and manages the database of known
+   * scrub errors. reinit_scrub_store() clears the database and re-initializes
+   * the ScrubStore object.
+   *
+   * in the next iteration - reinit_..() potentially deletes only the
+   * shallow errors part of the database.
+   */
+  void reinit_scrub_store();
+
   int num_digest_updates_pending{0};
   hobject_t m_start, m_end;  ///< note: half-closed: [start,end)
 
