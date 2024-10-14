@@ -6267,7 +6267,7 @@ def main() -> None:
     else:
         ctx = cephadm_init_ctx(av)
 
-    if not ctx.has_function():
+    if hasattr(ctx, 'func') and not ctx.has_function():
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
     cephadm_require_root()
