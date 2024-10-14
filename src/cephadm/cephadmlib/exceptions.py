@@ -19,3 +19,16 @@ class UnauthorizedRegistryError(Error):
 
 class PortOccupiedError(Error):
     pass
+
+
+class DaemonStartException(Exception):
+    """
+    Special exception type we raise when the
+    systemctl start command fails during daemon
+    deployment. Necessary because the cephadm mgr module
+    needs to handle this case differently than a failure
+    earlier in the deploy process where no attempt was made
+    to actually start the daemon
+    """
+
+    pass
