@@ -5966,9 +5966,7 @@ def check_port(host, port):
         return False
     
 def print_table(data):
-    """Print a simple table."""
-    # Define the column headers
-    headers = ["Port", "Status", "Process"]
+    headers = ["Port", "Status"]
     # Calculate the width of each column
     col_widths = [max(len(str(item)) for item in col) for col in zip(*data, headers)]
     
