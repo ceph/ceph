@@ -12,6 +12,7 @@
 
 #include "global/global_init.h"
 
+#include "common/debug.h"
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
 

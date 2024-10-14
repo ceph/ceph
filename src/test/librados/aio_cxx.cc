@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <deque>
 #include <sstream>
 #include <string>
 #include <utility>

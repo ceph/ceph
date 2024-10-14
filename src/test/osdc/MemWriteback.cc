@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "MemWriteback.h"
+
 #include <errno.h>
 #include <time.h>
 
@@ -11,8 +13,7 @@
 #include "common/ceph_mutex.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_time.h"
-
-#include "MemWriteback.h"
+#include "common/snap_types.h" // for class SnapContext
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_objectcacher

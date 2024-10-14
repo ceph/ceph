@@ -5,6 +5,7 @@
 #include "test/librados_test_stub/TestMemCluster.h"
 #include "test/librados_test_stub/TestMemIoCtxImpl.h"
 #include <errno.h>
+#include <shared_mutex> // for std::shared_lock
 #include <sstream>
 
 namespace librados {

@@ -16,6 +16,7 @@
 #include "common/debug.h"
 #include "common/dout.h"
 #include "common/split.h"
+#include "common/strtol.h" // for strict_iecstrtoll()
 
 #include "common/io_exerciser/DataGenerator.h"
 #include "common/io_exerciser/Model.h"
