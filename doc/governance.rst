@@ -68,8 +68,7 @@ Current CLT members are:
  * Mike Perez <miperez@redhat.com>
  * Myoungwon Oh <myoungwon.oh@samsung.com>
  * Neha Ojha <nojha@redhat.com>
- * Patrick Donnelly <pdonnell@redhat.com>
- * Sage Weil <sage@redhat.com>
+ * Patrick Donnelly <pdonnell@ibm.com>
  * Sam Just <sjust@redhat.com>
  * Sebastian Wagner <sewagner@redhat.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
