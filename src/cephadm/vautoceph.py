@@ -6001,9 +6001,9 @@ def check_ports_on_host(host, ports_to_check):
         if is_open:
             process_info = get_process_on_port(host, port)
             if process_info:
-                results.append([port, "Closed", process_info])
+                results.append([port, "Occupied", process_info])
             else:
-                results.append([port, "Closed", "No process"])
+                results.append([port, "Closed", "-"])
         else:
             results.append([port, "Open", "-"])
     print_table(results)
