@@ -298,7 +298,11 @@ class VolumeClient(CephfsClient["Module"]):
         groupname = groupname if groupname else '_nogroup'
         subvol_path = '/volumes/' + groupname + '/' + subvolname
         log.debug(f'here123 subvol_path = {subvol_path}')
-        num_of_trash_files = int(fs.getxattr(subvol_path, 'ceph.dir.rfiles'))
+        try:
+            num_of_trash_files = int(fs.getxattr(subvol_path, 'ceph.dir.rfiles'))
+        except:
+            log.debug('trash file went missing, perhaps it was purged.')
+            return
 
         if not self.purge_stats.get(volname, None):
             self.purge_stats[volname] = {'total_files': num_of_trash_files,
@@ -1109,17 +1113,23 @@ class VolumeClient(CephfsClient["Module"]):
                                 {'state': 'ongoing',
                                  'progress_report':
                                      {'percentage_purged': {},
-                                      'amount_left': {}}}}
+                                      'amount_left': {},
+                                      'purge_rate': 0}}}
                     percent_purged = status['status']['progress_report']['percentage_purged'] # type: ignore
                     amount_left = status['status']['progress_report']['amount_left'] # type: ignore
                     percent_purged['files'] = f'{files_purged_percent}%'
                     percent_purged['subvols'] = f'{subvols_purged_percent}%'
                     amount_left['files'] = stats['files_left']
                     amount_left['subvols'] = stats['subvols_left']
+
+                    if self.purge_queue.purge_rate:
+                        purge_rate_str = f'{self.purge_queue.purge_rate} unlink+rmdir per sec'
+                        status['status']['progress_report']['purge_rate'] = purge_rate_str # type: ignore
                 else:
                     status = {'status': {'state': 'complete'}}
                     self.purge_stats[volname]['total_files'] = 0
                     self.purge_stats[volname]['total_subvols'] = 0
+                    self.purge_queue.purge_rate = None
 
                 ret = 0, json.dumps(status, indent=2), ''
         except VolumeException as ve:
