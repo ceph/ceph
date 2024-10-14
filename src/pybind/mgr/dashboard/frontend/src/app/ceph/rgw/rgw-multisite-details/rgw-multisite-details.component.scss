@@ -2,6 +2,7 @@
 
 .tree-container {
   height: calc(100vh - vv.$tree-container-height);
+  overflow-y: auto;
 }
 
 .align-inline-btns {
@@ -10,4 +11,9 @@
 
 .btn:disabled {
   pointer-events: none;
+}
+
+::ng-deep .cds--tree-node__label__details {
+  padding-block: 0.5rem;
+  width: 100%;
 }

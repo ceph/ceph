@@ -57,57 +57,79 @@
     <div class="col-sm-6 col-lg-6 tree-container">
       <i *ngIf="loadingIndicator"
          [ngClass]="[icons.large, icons.spinner, icons.spin]"></i>
-      <tree-root #tree
-                 [nodes]="nodes"
-                 [options]="treeOptions"
-                 (updateData)="onUpdateData()">
+      <cds-tree-view #tree
+                     [isMultiSelect]="false"
+                     (select)="onNodeSelected($event)">
+        <ng-template #nodeTemplateRef
+                     let-node="node"
+                     let-depth="depth">
+          <cds-tree-node [node]="node"
+                         [depth]="depth">
+            <ng-container *ngIf="node?.children && node?.children?.length">
+              <ng-container *ngFor="let child of node.children; let i = index;">
+                <ng-container *ngTemplateOutlet="nodeTemplateRef; context: { node: child, depth: depth + 1 };">
+                </ng-container>
+              </ng-container>
+            </ng-container>
+          </cds-tree-node>
+        </ng-template>
         <ng-template #treeNodeTemplate
                      let-node>
-          <span *ngIf="node.data.name"
-                class="me-3">
-            <span *ngIf="(node.data.show_warning)">
-              <i  class="text-danger"
-                  i18n-title
-                  [title]="node.data.warning_message"
-                  [ngClass]="icons.danger"></i>
-            </span>
-            <i [ngClass]="node.data.icon"></i>
-            {{ node.data.name }}
-          </span>
-          <span class="badge badge-success me-2"
-                *ngIf="node.data.is_default">
-              default
-          </span>
-          <span class="badge badge-warning me-2"
-                *ngIf="node.data.is_master"> master </span>
-          <span class="badge badge-warning me-2"
-                *ngIf="node.data.secondary_zone">
-            secondary-zone
-          </span>
-          <div class="btn-group align-inline-btns"
-               *ngIf="node.isFocused"
-               role="group">
-            <div [title]="editTitle"
-                 i18n-title>
-              <button type="button"
-                      class="btn btn-light dropdown-toggle-split ms-1"
-                      (click)="openModal(node, true)"
-                      [disabled]="getDisable() || node.data.secondary_zone">
-                <i [ngClass]="[icons.edit]"></i>
-              </button>
+          <div class="w-100 d-flex justify-content-between align-items-center pe-1">
+            <div>
+              <span *ngIf="node?.data?.name"
+                    class="me-3">
+                <span *ngIf="(node?.data?.show_warning)">
+                  <i  class="text-danger"
+                      i18n-title
+                      [title]="node?.data?.warning_message"
+                      [ngClass]="icons.danger"></i>
+                </span>
+                <i [ngClass]="node?.data?.icon"></i>
+                {{ node?.data?.name }}
+              </span>
+              <span class="badge badge-success me-2"
+                    *ngIf="node?.data?.is_default">
+                  default
+              </span>
+              <span class="badge badge-warning me-2"
+                    *ngIf="node?.data?.is_master"> master </span>
+              <span class="badge badge-warning me-2"
+                    *ngIf="node?.data?.secondary_zone">
+                secondary-zone
+              </span>
             </div>
-            <div [title]="deleteTitle"
-                 i18n-title>
-              <button type="button"
-                      class="btn btn-light ms-1"
-                      [disabled]="isDeleteDisabled(node) || node.data.secondary_zone"
-                      (click)="delete(node)">
-                <i [ngClass]="[icons.destroy]"></i>
-              </button>
+            <div class="btn-group align-inline-btns"
+                 [ngStyle]="{'visibility': activeNodeId === node?.data?.id ? 'visible' : 'hidden'}"
+                 role="group">
+              <div [title]="editTitle"
+                   i18n-title>
+                <button type="button"
+                        class="btn btn-light dropdown-toggle-split ms-1"
+                        (click)="openModal(node, true)"
+                        [disabled]="getDisable() || node?.data?.secondary_zone">
+                  <i [ngClass]="[icons.edit]"></i>
+                </button>
+              </div>
+              <ng-container *ngIf="isDeleteDisabled(node) as nodeDeleteData">
+                <div [title]="nodeDeleteData.deleteTitle"
+                     i18n-title>
+                  <button type="button"
+                          class="btn btn-light ms-1"
+                          [disabled]="nodeDeleteData.isDisabled || node?.data?.secondary_zone"
+                          (click)="delete(node)">
+                    <i [ngClass]="[icons.destroy]"></i>
+                  </button>
+                </div>
+              </ng-container>
             </div>
           </div>
         </ng-template>
-      </tree-root>
+        <ng-container *ngFor="let node of nodes">
+          <ng-container *ngTemplateOutlet="nodeTemplateRef; context: { node: node, depth: 0 };">
+          </ng-container>
+        </ng-container>
+      </cds-tree-view>
     </div>
     <div class="col-sm-6 col-lg-6 metadata"
          *ngIf="metadata">
