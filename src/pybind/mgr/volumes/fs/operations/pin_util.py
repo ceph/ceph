@@ -3,7 +3,7 @@ import errno
 import cephfs
 
 from ..exception import VolumeException
-from distutils.util import strtobool
+from ceph.utils import strtobool
 
 _pin_value = {
     "export": lambda x: int(x),
