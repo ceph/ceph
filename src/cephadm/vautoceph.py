@@ -3205,7 +3205,8 @@ def command_shell(ctx):
         distribute_ceph_pub_key(problem_hosts, f'{ctx.output_dir}/ceph.pub')
     else:
         logger.info('All hosts connect, processing to the next steps')
-    command_precheck(ctx)
+    if ctx.precheck:
+        command_precheck(ctx)
     logger.info('---------------------START EXECUTING BASH FILES--------------------')
     if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
@@ -5698,6 +5699,10 @@ def _get_parser():
         type=str,
     )
 
+    parser_precheck = subparsers.add_parser(
+        'precheck', help='Checking the port and devices on each hosts')
+    parser_precheck.set_defaults(func=command_precheck)
+
     parser_ctxlogsclear = subparsers.add_parser(
         'ctxlogsclear', help='FOR TESTING PURPOSE - Clean all the context logs in /context-logs'
     )
@@ -5921,6 +5926,7 @@ def translate_yaml_to_json(yaml_file):
                 "registry_json": None,
                 "container_init": True,
                 "cluster_network": None,
+                "precheck": False,
                 "single_host_defaults": False,
                 "log_to_file": False,
                 "deploy_cephadm_agent": False,
@@ -6015,12 +6021,45 @@ def check_ports_on_host(host, ports_to_check):
     headers = ["Port", "Status", "Process"]
     print_table(results, headers)
 
-def check_devices_on_host(host):
+# def check_devices_on_host(host):
+#     """Check available devices on the host for Ceph usage."""
+    
+#     # SSH into the node and use lsblk to get device information
+#     try:
+#         result = subprocess.run(f"ssh {host['ipaddresses']} lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE", shell=True, capture_output=True, text=True)
+#         if result.returncode != 0:
+#             print(f"Error running lsblk on {host}: {result.stderr}")
+#             return None
+#         devices_info = result.stdout.strip().splitlines()
+#     except Exception as e:
+#         print(f"Error checking devices on {host}: {e}")
+#         return None
+
+#     table_data = []
+
+#     for line in devices_info[1:]:  
+#         parts = line.split()
+#         device_name = parts[0]
+#         device_size = parts[1]
+#         device_type = parts[2]
+#         mountpoint = parts[3] if len(parts) > 3 else ''
+#         fstype = parts[4] if len(parts) > 4 else ''
+        
+#         if device_type == "disk" and not mountpoint and not fstype:
+#             status = "Available"
+#         else:
+#             status = "In Use"
+#         table_data.append([device_name, device_size, device_type, mountpoint, fstype, status])
+
+#     headers = ["Device", "Size", "Type", "Mountpoint", "Filesystem", "Status"]
+#     print_table(table_data, headers)
+
+def check_devices_on_node(host):
     """Check available devices on the host for Ceph usage."""
     
     # SSH into the node and use lsblk to get device information
     try:
-        result = subprocess.run(f"ssh {host['ipaddresses']} lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE", shell=True, capture_output=True, text=True)
+        result = subprocess.run(f"ssh {host} lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE", shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"Error running lsblk on {host}: {result.stderr}")
             return None
@@ -6030,22 +6069,46 @@ def check_devices_on_host(host):
         return None
 
     table_data = []
+    device_status = {}  # To track parent-child relationships (e.g., vda -> vda1)
 
-    for line in devices_info[1:]:  
+    # Filter to show only devices of type 'disk' that are not mounted and have no filesystem
+    for line in devices_info[1:]:  # Skip header line
         parts = line.split()
         device_name = parts[0]
         device_size = parts[1]
         device_type = parts[2]
         mountpoint = parts[3] if len(parts) > 3 else ''
         fstype = parts[4] if len(parts) > 4 else ''
+
+        # Track parent-child device relations (e.g., vda -> vda1)
+        if device_name.startswith("└─") or device_name.startswith("├─"):
+            parent_device = device_name[2:]  # Remove the └─ or ├─ prefix
+            device_status[parent_device] = "In Use"
         
+        # Mark device as available or in use
         if device_type == "disk" and not mountpoint and not fstype:
-            status = "Available"
+            device_status[device_name] = "Available"
         else:
-            status = "In Use"
-        table_data.append([device_name, device_size, device_type, mountpoint, fstype, status])
+            device_status[device_name] = "In Use"
+
+    # Now generate the table while excluding the parent devices (e.g., vda) if partitions are in use
+    for line in devices_info[1:]:
+        parts = line.split()
+        device_name = parts[0]
+        device_size = parts[1]
+        device_type = parts[2]
+        mountpoint = parts[3] if len(parts) > 3 else ''
+        fstype = parts[4] if len(parts) > 4 else ''
+
+        # Only add to table if the device is not excluded (e.g., vda if vda1 is mounted)
+        if device_type == "disk" and device_status.get(device_name) == "Available":
+            table_data.append([device_name, device_size, device_type, mountpoint, fstype, "Available"])
+        else:
+            table_data.append([device_name, device_size, device_type, mountpoint, fstype, "In Use"])
 
     headers = ["Device", "Size", "Type", "Mountpoint", "Filesystem", "Status"]
+
+    print(f"\nAvailable devices on {host}:")
     print_table(table_data, headers)
 
 def distribute_ssh_key(ssh_user, ip):
