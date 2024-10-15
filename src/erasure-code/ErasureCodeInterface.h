@@ -467,6 +467,75 @@ namespace ceph {
     virtual int decode_concat(const std::map<int, bufferlist> &chunks,
 			      bufferlist *decoded) = 0;
 
+    /**
+     * Return a set of flags indicating which EC optimizations are supported
+     * by the plugin.
+     *
+     * @return logical OR of the supported performance optimizations
+     */
+    virtual uint64_t get_supported_optimizations() const = 0;
+    enum {
+      /* Partial read optimization assumes that the erasure code is systematic
+       * and that concatenating the data chunks in the order returned by
+       * get_chunk_mapping will create the data encoded for a stripe. The
+       * optimization permits small reads to read data directly from the data
+       * chunks without calling decode.
+       */
+      FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION = 1<<0,
+      /* Partial write optimization assumes that a write to less than one
+       * chunk only needs to read this fragment from each data chunk in the
+       * stripe and can then use encode to create the corresponding coding
+       * fragments.
+       */
+      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION = 1<<1,
+      /* Zero input zero output optimization means the erasure code has the
+       * property that if all the data chunks are zero then the coding parity
+       * chunks will also be zero.
+       */
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION = 1<<2,
+      /* Zero padding optimization permits the encode and decode methods to
+       * be called with buffers that are zero length. The plugin treats
+       * this as a chunk of all zeros.
+       */
+      FLAG_EC_PLUGIN_ZERO_PADDING_OPTIMIZATION = 1<<3,
+      /* Parity delta write optimization means the encode_delta and
+       * apply_delta methods are supported which allows small updates
+       * to a stripe to be applied using a read-modify-write of a
+       * data chunk and the coding parity chunks.
+       */
+      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION = 1<<4,
+    };
+    static const char *get_optimization_flag_name(const uint64_t flag) {
+      switch (flag) {
+      case FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION: return "partialread";
+      case FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION: return "partialwrite";
+      case FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION: return "zeroinout";
+      case FLAG_EC_PLUGIN_ZERO_PADDING_OPTIMIZATION: return "zeropadding";
+      case FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION: return "paritydelta";
+      default: return "???";
+      }
+    }
+    static std::string get_optimization_flags_string(const uint64_t flags) {
+      std::string s;
+      for (unsigned n=0; flags && n<64; ++n) {
+	if (flags & (1ull << n)) {
+	  if (s.length())
+	    s += ",";
+	  s += get_optimization_flag_name(1ull << n);
+	}
+      }
+      return s;
+    }
+
+    /**
+     * Return a string describing which EC optimizations are supported
+     * by the plugin.
+     *
+     * @return string of optimizations supported by the plugin
+     */
+    virtual std::string get_optimizations_flags_string() const {
+      return get_optimization_flags_string(get_supported_optimizations());
+    }
   };
 
   typedef std::shared_ptr<ErasureCodeInterface> ErasureCodeInterfaceRef;
