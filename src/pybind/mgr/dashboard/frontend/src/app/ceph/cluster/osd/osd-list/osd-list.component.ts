@@ -38,6 +38,8 @@ import { OsdPgScrubModalComponent } from '../osd-pg-scrub-modal/osd-pg-scrub-mod
 import { OsdRecvSpeedModalComponent } from '../osd-recv-speed-modal/osd-recv-speed-modal.component';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.component';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { Osd } from '~/app/shared/models/osd.model';
 
 const BASE_URL = 'osd';
 
@@ -70,6 +72,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   clusterWideActions: CdTableAction[];
   icons = Icons;
   osdSettings = new OsdSettings();
+  count = 0;
 
   selection = new CdTableSelection();
   osds: any[] = [];
@@ -424,10 +427,13 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     }
   }
 
-  getOsdList() {
-    const observables = [this.osdService.getList(), this.osdService.getFlags()];
-    observableForkJoin(observables).subscribe((resp: [any[], string[]]) => {
-      this.osds = resp[0].map((osd) => {
+  getOsdList(context?: CdTableFetchDataContext) {
+    if (!context) context = new CdTableFetchDataContext();
+    const pagination_obs = this.osdService.getList(context.toParams());
+    const observables = [pagination_obs.observable, this.osdService.getFlags()];
+    observableForkJoin(observables).subscribe((resp: any) => {
+      this.osds = resp[0].map((osd: Osd) => {
+        this.count = pagination_obs.count;
         osd.collectedStates = OsdListComponent.collectStates(osd);
         osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i: string) => i[1]);
         osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i: string) => i[1]);

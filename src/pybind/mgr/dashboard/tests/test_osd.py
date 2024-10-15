@@ -8,6 +8,7 @@ from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec  # type:
 from ceph.deployment.service_spec import PlacementSpec
 
 from .. import mgr
+from ..controllers._version import APIVersion
 from ..controllers.osd import Osd, OsdUi
 from ..services.osd import OsdDeploymentOptions
 from ..tests import ControllerTestCase
@@ -274,7 +275,7 @@ class OsdTest(ControllerTestCase):
         osds_leftover = [0, 1, 2]
         with self._mock_osd_list(osd_stat_ids=osds_actual, osdmap_tree_node_ids=osds_leftover,
                                  osdmap_ids=osds_actual):
-            self._get('/api/osd')
+            self._get('/api/osd', version=APIVersion(1, 1))
             self.assertEqual(len(self.json_body()), 2, 'It should display two OSDs without failure')
             self.assertStatus(200)
 
