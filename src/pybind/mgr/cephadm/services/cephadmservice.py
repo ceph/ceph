@@ -984,10 +984,9 @@ class RgwService(CephService):
     def allow_colo(self) -> bool:
         return True
 
-    def config(self, spec: RGWSpec) -> None:  # type: ignore
+    def set_realm_zg_zone(self, spec: RGWSpec) -> None:
         assert self.TYPE == spec.service_type
 
-        # set rgw_realm rgw_zonegroup and rgw_zone, if present
         if spec.rgw_realm:
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config set',
@@ -1009,6 +1008,12 @@ class RgwService(CephService):
                 'name': 'rgw_zone',
                 'value': spec.rgw_zone,
             })
+
+    def config(self, spec: RGWSpec) -> None:  # type: ignore
+        assert self.TYPE == spec.service_type
+
+        # set rgw_realm rgw_zonegroup and rgw_zone, if present
+        self.set_realm_zg_zone(spec)
 
         if spec.generate_cert and not spec.rgw_frontend_ssl_certificate:
             # generate a self-signed cert for the rgw service
