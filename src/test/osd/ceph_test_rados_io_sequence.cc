@@ -26,6 +26,7 @@
 #include "common/io_exerciser/RadosIo.h"
 #include "common/io_exerciser/IoOp.h"
 #include "common/io_exerciser/IoSequence.h"
+#include "common/io_exerciser/EcIoSequence.h"
 #include "common/io_exerciser/JsonStructures.h"
 
 #include "json_spirit/json_spirit.h"
@@ -186,6 +187,8 @@ namespace {
         "number of threads of I/O per object (default 1)")
       ("parallel,p", po::value<int>()->default_value(1),
         "number of objects to exercise in parallel")
+      ("testrecovery",
+        "Inject errors during sequences to test recovery processes of OSDs")
       ("interactive",
         "interactive mode, execute IO commands from stdin")
       ("allow_pool_autoscaling",
@@ -330,7 +333,9 @@ const std::pair<ceph::io_exerciser::Sequence,ceph::io_exerciser::Sequence>
   if (force_value.has_value())
   {
     return *force_value;
-  } else {
+  }
+  else
+  {
     return std::make_pair(ceph::io_exerciser::Sequence::SEQUENCE_BEGIN,
                           ceph::io_exerciser::Sequence::SEQUENCE_END);
   }
@@ -396,12 +401,38 @@ const std::string ceph::io_sequence::tester::SelectECPool::choose()
 {
   std::pair<int,int> value;
   if (!skm.isForced() && force_value.has_value()) {
+    int rc;
+    bufferlist inbl, outbl;
+    auto formatter = std::make_shared<JSONFormatter>(false);
+
+    ceph::io_exerciser::json::OSDPoolGetRequest osdPoolGetRequest(*force_value, formatter);
+    rc = rados.mon_command(osdPoolGetRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    JSONParser p;
+    bool success = p.parse(outbl.c_str(), outbl.length());
+    ceph_assert(success);
+
+    ceph::io_exerciser::json::OSDPoolGetReply osdPoolGetReply(formatter);
+    osdPoolGetReply.decode_json(&p);
+
+    ceph::io_exerciser::json::OSDECProfileGetRequest osdECProfileGetRequest(osdPoolGetReply.erasure_code_profile, formatter);
+    rc = rados.mon_command(osdECProfileGetRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    success = p.parse(outbl.c_str(), outbl.length());
+    ceph_assert(success);
+
+    ceph::io_exerciser::json::OSDECProfileGetReply reply(formatter);
+    reply.decode_json(&p);
+    k = reply.k;
+    m = reply.m;
     return *force_value;
   } else {
     value = skm.choose();
   }
-  int k = value.first;
-  int m = value.second;
+  k = value.first;
+  m = value.second;
 
   const std::string plugin = std::string(spl.choose());
   const uint64_t chunk_size = scs.choose();
@@ -529,16 +560,19 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
                         ceph::condition_variable& cond,
                         bool dryrun,
                         bool verbose,
-                        std::optional<int>  seqseed) :
-  rng(rng), verbose(verbose), seqseed(seqseed)
+                        std::optional<int>  seqseed,
+                        bool testrecovery) :
+  rng(rng), verbose(verbose), seqseed(seqseed), testrecovery(testrecovery)
 {
   if (dryrun) {
-    verbose = true;
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(oid,
                                                                         sbs.choose(),
                                                                         rng());
   } else {
     const std::string pool = spo.choose();
+    poolK = spo.getChosenK();
+    poolM = spo.getChosenM();
+
     int threads = snt.choose();
 
     bufferlist inbl, outbl;
@@ -581,14 +615,27 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
   obj_size_range = sos.choose();
   seq_range = ssr.choose();
   curseq = seq_range.first;
-  seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
-                                                          obj_size_range,
-                                                          seqseed.value_or(rng()));
+
+  if (testrecovery)
+  {
+    seq = ceph::io_exerciser::EcIoSequence::generate_sequence(curseq,
+                                                              obj_size_range,
+                                                              poolK,
+                                                              poolM,
+                                                              seqseed.value_or(rng()));
+  }
+  else
+  {
+    seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
+                                                            obj_size_range,
+                                                            seqseed.value_or(rng()));
+  }
+
   op = seq->next();
   done = false;
   dout(0) << "== " << exerciser_model->get_oid() << " "
           << curseq << " "
-          << seq->get_name()
+          << seq->get_name_with_seqseed()
           << " ==" <<dendl;
 }
 
@@ -616,8 +663,8 @@ bool ceph::io_sequence::tester::TestObject::next()
     exerciser_model->applyIoOp(*op);
     if (op->getOpType() == ceph::io_exerciser::OpType::Done)
     {
-      ++curseq;
-      if (curseq == seq_range.second)
+      curseq = seq->getNextSupportedSequenceId();
+      if (curseq >= seq_range.second)
       {
         done = true;
         dout(0) << exerciser_model->get_oid()
@@ -626,11 +673,22 @@ bool ceph::io_sequence::tester::TestObject::next()
       }
       else
       {
-        seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
-                                                                obj_size_range,
-                                                                seqseed.value_or(rng()));
+        if (testrecovery)
+        {
+          seq = ceph::io_exerciser::EcIoSequence::generate_sequence(curseq,
+                                                                    obj_size_range,
+                                                                    poolK, poolM,
+                                                                    seqseed.value_or(rng()));
+        }
+        else
+        {
+          seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
+                                                                  obj_size_range,
+                                                                  seqseed.value_or(rng()));
+        }
+
         dout(0) << "== " << exerciser_model->get_oid() << " "
-                << curseq << " " << seq->get_name()
+                << curseq << " " << seq->get_name_with_seqseed()
                 << " ==" <<dendl;
         op = seq->next();
       }
@@ -681,6 +739,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(po::variables_map& vm,
   num_objects = vm["parallel"].as<int>();
   object_name = vm["object"].as<std::string>();
   interactive = vm.contains("interactive");
+  testrecovery = vm.contains("testrecovery");
 
   allow_pool_autoscaling = vm.contains("allow_pool_autoscaling");
   allow_pool_balancer = vm.contains("allow_pool_balancer");
@@ -716,20 +775,30 @@ void ceph::io_sequence::tester::TestRunner::help()
   }
 }
 
-void ceph::io_sequence::tester::TestRunner::list_sequence()
+void ceph::io_sequence::tester::TestRunner::list_sequence(bool testrecovery)
 {
   // List seqeunces
   std::pair<int,int> obj_size_range = sos.choose();
-  for (ceph::io_exerciser::Sequence s
-        = ceph::io_exerciser::Sequence::SEQUENCE_BEGIN;
-        s < ceph::io_exerciser::Sequence::SEQUENCE_END; ++s)
+  ceph::io_exerciser::Sequence s = ceph::io_exerciser::Sequence::SEQUENCE_BEGIN;
+  std::unique_ptr<ceph::io_exerciser::IoSequence> seq;
+  if (testrecovery)
   {
-    std::unique_ptr<ceph::io_exerciser::IoSequence> seq =
-    ceph::io_exerciser::IoSequence::generate_sequence(s,
-                                                      obj_size_range,
-                                                      seqseed.value_or(rng()));
-    dout(0) << s << " " << seq->get_name() << dendl;
+    seq = ceph::io_exerciser::EcIoSequence::generate_sequence(s, obj_size_range,
+                                                              spo.getChosenK(),
+                                                              spo.getChosenM(),
+                                                              seqseed.value_or(rng()));
   }
+  else
+  {
+    seq = ceph::io_exerciser::IoSequence::generate_sequence(s, obj_size_range,
+                                                            seqseed.value_or(rng()));
+  }
+
+  do
+  {
+    dout(0) << s << " " << seq->get_name_with_seqseed() << dendl;
+    s = seq->getNextSupportedSequenceId();
+  } while (s != ceph::io_exerciser::Sequence::SEQUENCE_END);
 }
 
 void ceph::io_sequence::tester::TestRunner::clear_tokens()
@@ -801,7 +870,7 @@ bool ceph::io_sequence::tester::TestRunner::run_test()
   }
   else if (show_sequence)
   {
-    list_sequence();
+    list_sequence(testrecovery);
     return true;
   }
   else if (interactive)
@@ -1041,7 +1110,7 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test()
             sbs, spo, sos, snt, ssr,
             rng, lock, cond,
             dryrun, verbose,
-            seqseed
+            seqseed, testrecovery
       )
     );
   }

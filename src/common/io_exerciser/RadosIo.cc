@@ -340,6 +340,7 @@ void RadosIo::applyInjectOp(IoOp& op)
   auto formatter = std::make_shared<JSONFormatter>(false);
 
   int osd = -1;
+  std::vector<int> shard_order;
 
   ceph::io_exerciser::json::OSDMapRequest osdMapRequest(pool,
                                                         get_oid(),
@@ -359,6 +360,9 @@ void RadosIo::applyInjectOp(IoOp& op)
   reply.decode_json(&p);
 
   osd = reply.acting_primary;
+  shard_order = reply.acting;
+
+  InjectOpType injectOpType;
 
   switch(op.getOpType())
   {
@@ -366,7 +370,20 @@ void RadosIo::applyInjectOp(IoOp& op)
     {
       InjectReadErrorOp& errorOp = static_cast<InjectReadErrorOp&>(op);
 
-      ceph::io_exerciser::json::InjectECErrorRequest injectErrorRequest(json::InjectOpType::Read,
+      if (errorOp.type == 0)
+      {
+        injectOpType = InjectOpType::ReadEIO;
+      }
+      else if (errorOp.type == 1)
+      {
+        injectOpType = InjectOpType::ReadMissingShard;
+      }
+      else
+      {
+        ceph_abort_msg("Unsupported inject type");
+      }
+
+      ceph::io_exerciser::json::InjectECErrorRequest injectErrorRequest(injectOpType,
                                                                         pool,
                                                                         oid,
                                                                         errorOp.shard,
@@ -383,7 +400,23 @@ void RadosIo::applyInjectOp(IoOp& op)
     {
       InjectWriteErrorOp& errorOp = static_cast<InjectWriteErrorOp&>(op);
 
-      ceph::io_exerciser::json::InjectECErrorRequest injectErrorRequest(json::InjectOpType::Write,
+      if (errorOp.type == 0)
+      {
+        injectOpType = InjectOpType::WriteFailAndRollback;
+      }
+      else if (errorOp.type == 3)
+      {
+        injectOpType = InjectOpType::WriteOSDAbort;
+
+         // This inject is sent directly to the shard we want to inject the error on
+        osd = shard_order[errorOp.shard];
+      }
+      else
+      {
+        ceph_abort("Unsupported inject type");
+      }
+
+      ceph::io_exerciser::json::InjectECErrorRequest injectErrorRequest(injectOpType,
                                                                         pool,
                                                                         oid,
                                                                         errorOp.shard,
@@ -400,7 +433,20 @@ void RadosIo::applyInjectOp(IoOp& op)
     {
       ClearReadErrorInjectOp& errorOp = static_cast<ClearReadErrorInjectOp&>(op);
 
-      ceph::io_exerciser::json::InjectECClearErrorRequest clearErrorInject(json::InjectOpType::Read,
+      if (errorOp.type == 0)
+      {
+        injectOpType = InjectOpType::ReadEIO;
+      }
+      else if (errorOp.type == 1)
+      {
+        injectOpType = InjectOpType::ReadMissingShard;
+      }
+      else
+      {
+        ceph_abort("Unsupported inject type");
+      }
+
+      ceph::io_exerciser::json::InjectECClearErrorRequest clearErrorInject(injectOpType,
                                                                            pool,
                                                                            oid,
                                                                            errorOp.shard,
@@ -414,7 +460,20 @@ void RadosIo::applyInjectOp(IoOp& op)
     {
       ClearReadErrorInjectOp& errorOp = static_cast<ClearReadErrorInjectOp&>(op);
 
-      ceph::io_exerciser::json::InjectECClearErrorRequest clearErrorInject(json::InjectOpType::Write,
+      if (errorOp.type == 0)
+      {
+        injectOpType = InjectOpType::WriteFailAndRollback;
+      }
+      else if (errorOp.type == 3)
+      {
+        injectOpType = InjectOpType::WriteOSDAbort;
+      }
+      else
+      {
+        ceph_abort("Unsupported inject type");
+      }
+
+      ceph::io_exerciser::json::InjectECClearErrorRequest clearErrorInject(injectOpType,
                                                                            pool,
                                                                            oid,
                                                                            errorOp.shard,

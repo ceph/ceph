@@ -6,6 +6,7 @@ add_library(object_io_exerciser STATIC
   ObjectModel.cc
   RadosIo.cc
   JsonStructures.cc
+  EcIoSequence.cc
 )
 
 target_link_libraries(object_io_exerciser
