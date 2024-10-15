@@ -3177,6 +3177,20 @@ def command_run(ctx):
 
 #.sh function, this function have been modified to run using only bash file.
 
+def command_precheck(ctx):
+    logger.info('-------------------------CHECKING FOR PORTS------------------------')
+    for host in ctx.hosts: 
+        logger.info(f"\nChecking ports connectivity on host {host['name']}: \n")
+        ports_to_check = [3300, 6789, 6800, 9283, 18080, 9100, 9222]
+        check_ports_on_host(host['ipaddresses'], ports_to_check)
+    logger.info('\nAll hosts checked, processing to the next steps\n')
+    logger.info('------------------------CHECKING FOR DEVICES-----------------------')
+    for host in ctx.hosts: 
+        logger.info(f"\nChecking devices on host {host['name']}: \n")
+        check_devices_on_host(host)
+    logger.info('\nAll hosts checked, processing to the next steps\n')
+
+
 def command_shell(ctx):
     # Write context
     cp = read_config(ctx.config)
@@ -3191,19 +3205,7 @@ def command_shell(ctx):
         distribute_ceph_pub_key(problem_hosts, f'{ctx.output_dir}/ceph.pub')
     else:
         logger.info('All hosts connect, processing to the next steps')
-
-    logger.info('-------------------------CHECKING FOR PORTS------------------------')
-    for host in ctx.hosts: 
-        logger.info(f"\nChecking ports connectivity on host {host['name']}: \n")
-        ports_to_check = [3300, 6789, 6800, 9283, 18080, 9100, 9222]
-        check_ports_on_host(host['ipaddresses'], ports_to_check)
-    logger.info('\nAll hosts checked, processing to the next steps')
-
-    logger.info('------------------------CHECKING FOR DEVICES-----------------------')
-    for host in ctx.hosts: 
-        logger.info(f"\nChecking devices on host {host['name']}: \n")
-        check_devices_on_host(host)
-    logger.info('\nAll hosts checked, processing to the next steps')
+    command_precheck(ctx)
     logger.info('---------------------START EXECUTING BASH FILES--------------------')
     if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
