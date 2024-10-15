@@ -3180,15 +3180,24 @@ def command_run(ctx):
 def command_precheck(ctx):
     logger.info('-------------------------CHECKING FOR PORTS------------------------')
     for host in ctx.hosts: 
-        logger.info(f"\nChecking ports connectivity on host {host['name']}: \n")
+        logger.info(f"\nChecking ports connectivity on host {host['name']}:\n")
         ports_to_check = [3300, 6789, 6800, 9283, 18080, 9100, 9222]
         check_ports_on_host(host['ipaddresses'], ports_to_check)
+    
     logger.info('\nAll hosts checked, processing to the next steps\n')
+    
     logger.info('------------------------CHECKING FOR DEVICES-----------------------')
+    total_available_storage = {}
+    
     for host in ctx.hosts: 
-        logger.info(f"\nChecking devices on host {host['name']}: \n")
-        check_devices_on_host(host)
-    logger.info('\nAll hosts checked, processing to the next steps\n')
+        logger.info(f"\nChecking devices on host {host['name']}:\n")
+        available_storage = check_devices_on_host(host)
+        
+        # Combine available storage from all hosts
+        for rotation, size in available_storage.items():
+            if rotation not in total_available_storage:
+                total_available_storage[rotation] = 0
+            total_available_storage[rotation] += size
 
 
 def command_shell(ctx):
@@ -6024,15 +6033,16 @@ def check_ports_on_host(host, ports_to_check):
 
 def check_devices_on_host(host):
     """Check available devices on the host for Ceph usage."""
+    available_storage = {}
     
     try:
         result = subprocess.run(f"ssh {host['ipaddresses']} lsblk -o NAME,SIZE,TYPE,ROTA,MOUNTPOINT,FSTYPE", shell=True, capture_output=True, text=True)
         if result.returncode != 0:
-            print(f"Error running lsblk on {host['name']}: {result.stderr}")
+            logger.error(f"Error running lsblk on {host['name']}: {result.stderr}")
             return None
         devices_info = result.stdout.strip().splitlines()
     except Exception as e:
-        print(f"Error checking devices on {host}: {e}")
+        logger.error(f"Error checking devices on {host}: {e}")
         return None
 
     table_data = []
@@ -6043,7 +6053,7 @@ def check_devices_on_host(host):
         device_name = parts[0]
         device_size = parts[1]
         device_type = parts[2]
-        rotation = parts[3]
+        rotation = int(parts[3])
         mountpoint = parts[4] if len(parts) > 4 else ''
         fstype = parts[5] if len(parts) > 5 else ''
 
@@ -6057,6 +6067,10 @@ def check_devices_on_host(host):
         status = 'In Use' 
         if device_type == 'disk' and not mountpoint and not fstype:
             status = 'Available'
+            # Add to available storage
+            if rotation not in available_storage:
+                available_storage[rotation] = 0
+            available_storage[rotation] += parse_size(device_size)
         
         # Append device information to the table
         last_device_index = len(table_data)  # Update the index to the current length
@@ -6070,10 +6084,18 @@ def check_devices_on_host(host):
             status 
         ])
 
-    headers = ["Device", "Size", "Type","Rotation", "Mountpoint", "Filesystem", "Status"]
-
-    print(f"\nAvailable devices on {host['name']}:")
+    headers = ["Device", "Size", "Type", "Rotation", "Mountpoint", "Filesystem", "Status"]
     print_table(table_data, headers)
+
+    return available_storage
+
+def parse_size(size_str):
+    """Convert size string to bytes for easier summation."""
+    size_mult = {'K': 1024, 'M': 1024**2, 'G': 1024**3, 'T': 1024**4}
+    if size_str[-1] in size_mult:
+        return int(float(size_str[:-1]) * size_mult[size_str[-1]])
+    else:
+        return int(size_str)
 
 
 def distribute_ssh_key(ssh_user, ip):
