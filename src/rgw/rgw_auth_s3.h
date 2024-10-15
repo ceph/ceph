@@ -55,14 +55,14 @@ class STSAuthStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
-                            const RGWUserInfo& user_info,
+                            std::unique_ptr<rgw::sal::User> user,
                             std::optional<RGWAccountInfo> account,
                             std::vector<IAM::Policy> policies,
                             const std::string& subuser,
                             const std::optional<uint32_t>& perm_mask,
                             const std::string& access_key_id) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      LocalApplier(cct, user_info, std::move(account), std::move(policies),
+      LocalApplier(cct, std::move(user), std::move(account), std::move(policies),
                    subuser, perm_mask, access_key_id));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -72,7 +72,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             RoleApplier::Role role,
                             RoleApplier::TokenAttrs token_attrs) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      rgw::auth::RoleApplier(cct, std::move(role), std::move(token_attrs)));
+      rgw::auth::RoleApplier(cct, driver, std::move(role), std::move(token_attrs)));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -176,14 +176,14 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
-                            const RGWUserInfo& user_info,
+                            std::unique_ptr<rgw::sal::User> user,
                             std::optional<RGWAccountInfo> account,
                             std::vector<IAM::Policy> policies,
                             const std::string& subuser,
                             const std::optional<uint32_t>& perm_mask,
                             const std::string& access_key_id) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      LocalApplier(cct, user_info, std::move(account), std::move(policies),
+      LocalApplier(cct, std::move(user), std::move(account), std::move(policies),
                    subuser, perm_mask, access_key_id));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
