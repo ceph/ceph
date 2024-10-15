@@ -13748,44 +13748,54 @@ int BlueStore::omap_iterate(
   if (!c->exists) {
     return -ENOENT;
   }
-  std::shared_lock l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
-    return -ENOENT;
-  }
-  o->flush();
-  dout(10) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
-  if (!o->onode.has_omap()) {
-    // nothing to do
-    return 0;
-  }
 
   KeyValueDB::Iterator it;
+  std::string tail;
+  std::string seek_key;
+  std::string_view::size_type userkey_offset_in_dbkey;
   {
-    auto bounds = KeyValueDB::IteratorBounds();
-    std::string lower_bound, upper_bound;
-    o->get_omap_key(string(), &lower_bound);
-    o->get_omap_tail(&upper_bound);
-    bounds.lower_bound = std::move(lower_bound);
-    bounds.upper_bound = std::move(upper_bound);
-    it = db->get_iterator(o->get_omap_prefix(), 0, std::move(bounds));
+    std::shared_lock l(c->lock);
+
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
+      return -ENOENT;
+    }
+    o->flush();
+    dout(10) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
+    if (!o->onode.has_omap()) {
+      return 0; // nothing to do
+    }
+
+    // acquire data depedencies for seek & iterate
+    o->get_omap_key(start_from.seek_position, &seek_key);
+    o->get_omap_tail(&tail);
+    userkey_offset_in_dbkey = o->calc_userkey_offset_in_omap_key();
+
+    // acquire the iterator
+    {
+      auto bounds = KeyValueDB::IteratorBounds();
+      std::string lower_bound, upper_bound;
+      o->get_omap_key(string(), &lower_bound);
+      o->get_omap_tail(&upper_bound);
+      bounds.lower_bound = std::move(lower_bound);
+      bounds.upper_bound = std::move(upper_bound);
+      it = db->get_iterator(o->get_omap_prefix(), 0, std::move(bounds));
+    }
   }
 
   // seek the iterator
   {
-    std::string key;
-    o->get_omap_key(start_from.seek_position, &key);
     auto start = ceph::mono_clock::now();
     if (start_from.seek_type == omap_iter_seek_t::LOWER_BOUND) {
-      it->lower_bound(key);
+      it->lower_bound(seek_key);
       c->store->log_latency(
         __func__,
         l_bluestore_omap_lower_bound_lat,
         ceph::mono_clock::now() - start,
         c->store->cct->_conf->bluestore_log_omap_iterator_age);
     } else {
-      it->upper_bound(key);
+      it->upper_bound(seek_key);
       c->store->log_latency(
         __func__,
         l_bluestore_omap_upper_bound_lat,
@@ -13795,10 +13805,6 @@ int BlueStore::omap_iterate(
   }
 
   // iterate!
-  std::string tail;
-  o->get_omap_tail(&tail);
-  const std::string_view::size_type userkey_offset_in_dbkey =
-    o->calc_userkey_offset_in_omap_key();
   ceph::timespan next_lat_acc{0};
   while (it->valid()) {
     const auto& db_key = it->raw_key_as_sv().second;
