@@ -6083,12 +6083,11 @@ def check_devices_on_host(host):
                 for entry in table_data:
                     if entry[0] == previous_device_name:
                         entry[5] = "Partitioned"
-        else:
-            status = 'In Use' 
-            if not mountpoint and not fstype:
-                status = 'Available'
-
-            previous_device_name = device_name
+                        
+        status = 'In Use' 
+        if not mountpoint and not fstype:
+            status = 'Available'
+        previous_device_name = device_name
         table_data.append([
             device_name,
             device_size,
