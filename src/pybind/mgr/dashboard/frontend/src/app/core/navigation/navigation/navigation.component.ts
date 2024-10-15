@@ -148,10 +148,10 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.multiClusterService.setCluster(value).subscribe(
       (resp: any) => {
         if (value['cluster_alias'] === 'local-cluster') {
-          localStorage.setItem('cluster_api_url', '');
+          window.localStorage.setItem('cluster_api_url', '');
         } else {
-          localStorage.setItem('current_cluster_name', `${value['name']}-${value['user']}`);
-          localStorage.setItem('cluster_api_url', value['url']);
+          window.localStorage.setItem('current_cluster_name', `${value['name']}-${value['user']}`);
+          window.localStorage.setItem('cluster_api_url', value['url']);
         }
         this.selectedCluster = this.clustersMap.get(`${value['url']}-${value['user']}`) || {};
         const clustersConfig = resp['config'];
