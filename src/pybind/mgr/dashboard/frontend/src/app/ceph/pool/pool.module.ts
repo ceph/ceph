@@ -2,6 +2,9 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
+import {
+  TabsModule
+} from 'carbon-components-angular';
 
 import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 
@@ -24,7 +27,8 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     RouterModule,
     ReactiveFormsModule,
     NgbTooltipModule,
-    BlockModule
+    BlockModule,
+    TabsModule
   ],
   exports: [PoolListComponent, PoolFormComponent],
   declarations: [

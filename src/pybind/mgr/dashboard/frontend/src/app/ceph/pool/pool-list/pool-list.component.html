@@ -1,11 +1,8 @@
-<nav ngbNav
-     #nav="ngbNav"
-     class="nav-tabs">
-  <ng-container ngbNavItem>
-    <a ngbNavLink
-       i18n>Pools List</a>
-    <ng-template ngbNavContent>
-      <cd-table #table
+<cds-tabs
+      type="contained"
+      theme="light">
+      <cds-tab heading="Pools List">
+        <cd-table #table
                 id="pool-list"
                 [data]="pools"
                 [columns]="columns"
@@ -16,39 +13,30 @@
                 (fetchData)="taskListService.fetch()"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)">
-        <cd-table-actions id="pool-list-actions"
-                          class="table-actions"
-                          [permission]="permissions.pool"
-                          [selection]="selection"
-                          [tableActions]="tableActions">
-        </cd-table-actions>
-        <cd-pool-details *cdTableDetail
-                         id="pool-list-details"
-                         [selection]="expandedRow"
-                         [permissions]="permissions"
-                         [cacheTiers]="cacheTiers">
-        </cd-pool-details>
-      </cd-table>
-    </ng-template>
-  </ng-container>
-
-  <ng-container ngbNavItem
-                *cdScope="'grafana'">
-    <a ngbNavLink
-       i18n>Overall Performance</a>
-    <ng-template ngbNavContent>
-      <cd-grafana i18n-title
+          <cd-table-actions id="pool-list-actions"
+                            class="table-actions"
+                            [permission]="permissions.pool"
+                            [selection]="selection"
+                            [tableActions]="tableActions">
+          </cd-table-actions>
+          <cd-pool-details *cdTableDetail
+                          id="pool-list-details"
+                          [selection]="expandedRow"
+                          [permissions]="permissions"
+                          [cacheTiers]="cacheTiers">
+          </cd-pool-details>
+        </cd-table>
+      </cds-tab>
+      <cds-tab heading="Overall Performance">
+        <cd-grafana i18n-title
                   title="Ceph pools overview"
                   [grafanaPath]="'ceph-pools-overview?'"
                   [type]="'metrics'"
                   uid="z99hzWtmk"
                   grafanaStyle="two">
-      </cd-grafana>
-    </ng-template>
-  </ng-container>
-</nav>
-
-<div [ngbNavOutlet]="nav"></div>
+        </cd-grafana>
+      </cds-tab>
+    </cds-tabs>
 
 <ng-template #poolUsageTpl
              let-row="data.row">
