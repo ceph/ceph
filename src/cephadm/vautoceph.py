@@ -6070,7 +6070,6 @@ def check_devices_on_host(host):
     table_data = []
     device_status = {}  # To track parent-child relationships (e.g., vda -> vda1)
 
-    Filter to show only devices of type 'disk' that are not mounted and have no filesystem
     for line in devices_info[1:]:  # Skip header line
         parts = line.split()
         device_name = parts[0]
@@ -6079,18 +6078,15 @@ def check_devices_on_host(host):
         mountpoint = parts[3] if len(parts) > 3 else ''
         fstype = parts[4] if len(parts) > 4 else ''
 
-        Track parent-child device relations (e.g., vda -> vda1)
         if device_name.startswith("└─") or device_name.startswith("├─"):
             parent_device = device_name[2:]  # Remove the └─ or ├─ prefix
             device_status[parent_device] = "In Use"
         
-        Mark device as available or in use
         if device_type == "disk" and not mountpoint and not fstype:
             device_status[device_name] = "Available"
         else:
             device_status[device_name] = "In Use"
 
-    Now generate the table while excluding the parent devices (e.g., vda) if partitions are in use
     for line in devices_info[1:]:
         parts = line.split()
         device_name = parts[0]
@@ -6099,7 +6095,6 @@ def check_devices_on_host(host):
         mountpoint = parts[3] if len(parts) > 3 else ''
         fstype = parts[4] if len(parts) > 4 else ''
 
-        Only add to table if the device is not excluded (e.g., vda if vda1 is mounted)
         if device_type == "disk" and device_status.get(device_name) == "Available":
             table_data.append([device_name, device_size, device_type, mountpoint, fstype, "Available"])
         else:
