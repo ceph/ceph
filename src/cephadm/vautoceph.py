@@ -6068,9 +6068,8 @@ def check_devices_on_host(host):
         return None
 
     table_data = []
-    device_status = {}  # To track parent-child relationships (e.g., vda -> vda1)
 
-    for line in devices_info[1:]:  # Skip header line
+    for line in devices_info[1:]:  
         parts = line.split()
         device_name = parts[0]
         device_size = parts[1]
@@ -6079,26 +6078,13 @@ def check_devices_on_host(host):
         fstype = parts[4] if len(parts) > 4 else ''
 
         if device_name.startswith("└─") or device_name.startswith("├─"):
-            parent_device = device_name[2:]  
-            device_status[parent_device] = "In Use"
-        
-        if device_type == "disk" and not mountpoint and not fstype:
-            device_status[device_name] = "Available"
+            status = "Child"
+        elif device_type == "disk" and not mountpoint and not fstype:
+            status = "Available"
         else:
-            device_status[device_name] = "In Use"
+            status = "In Use"
 
-    for line in devices_info[1:]:
-        parts = line.split()
-        device_name = parts[0]
-        device_size = parts[1]
-        device_type = parts[2]
-        mountpoint = parts[3] if len(parts) > 3 else ''
-        fstype = parts[4] if len(parts) > 4 else ''
-
-        if device_type == "disk" and device_status.get(device_name) == "Available":
-            table_data.append([device_name, device_size, device_type, mountpoint, fstype, "Available"])
-        else:
-            table_data.append([device_name, device_size, device_type, mountpoint, fstype, "In Use"])
+        table_data.append([device_name, device_size, device_type, mountpoint, fstype, status])
 
     headers = ["Device", "Size", "Type", "Mountpoint", "Filesystem", "Status"]
 

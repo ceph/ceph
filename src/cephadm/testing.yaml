@@ -53,7 +53,7 @@ funcs:
 #  - "command_prepare_host"
 #  - "command_bootstrap"
   - "command_precheck"
-  - "command_shell"
+#  - "command_shell"
 
 #Setting up cluster
 setup: true
