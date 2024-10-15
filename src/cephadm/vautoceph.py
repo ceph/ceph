@@ -6069,6 +6069,7 @@ def check_devices_on_host(host):
 
     table_data = []
     previous_device = None  # Track the last seen disk device
+    partitioned_devices = set()  # Track partitioned devices
 
     for i, line in enumerate(devices_info[1:]):  
         parts = line.split()
@@ -6078,15 +6079,20 @@ def check_devices_on_host(host):
         mountpoint = parts[3] if len(parts) > 3 else ''
         fstype = parts[4] if len(parts) > 4 else ''
 
-        # Check if the previous line was a disk and current line is a partition
+        # Check if the previous line was a disk and the current line is a partition
         if previous_device and line.startswith(" "):
-            table_data[i-1][5] = "Partitioned"  # Update the status of the previous device
+            # Mark the previous device as "Partitioned"
+            partitioned_devices.add(previous_device)
 
         # Determine status for the current device
         status = 'In Use'  # Default status for disks
         if device_type == 'disk':
             if not mountpoint and not fstype:
                 status = 'Available'
+        
+        # If the device is in the partitioned set, mark it as "Partitioned"
+        if device_name in partitioned_devices:
+            status = 'Partitioned'
 
         # Append device information to the table
         table_data.append([
@@ -6107,6 +6113,7 @@ def check_devices_on_host(host):
     print(f"\nAvailable devices on {host['name']}:")
     print_table(table_data, headers)
 
+    
 def distribute_ssh_key(ssh_user, ip):
     logger.info(f"Distributing SSH key to {ip}...")
     distribute_key_cmd = f"ssh-copy-id -i ~/.ssh/id_rsa.pub {ssh_user}@{ip}"
