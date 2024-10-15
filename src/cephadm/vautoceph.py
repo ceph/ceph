@@ -6068,10 +6068,9 @@ def check_devices_on_host(host):
         return None
 
     table_data = []
-    previous_device = None  # Track the last seen disk device
-    partitioned_devices = set()  # Track partitioned devices
+    previous_device_name = None  # Track the last seen disk device
 
-    for i, line in enumerate(devices_info[1:]):  
+    for line in devices_info[1:]:  
         parts = line.split()
         device_name = parts[0]
         device_size = parts[1]
@@ -6079,41 +6078,32 @@ def check_devices_on_host(host):
         mountpoint = parts[3] if len(parts) > 3 else ''
         fstype = parts[4] if len(parts) > 4 else ''
 
-        # Check if the previous line was a disk and the current line is a partition
-        if previous_device and line.startswith(" "):
-            # Mark the previous device as "Partitioned"
-            partitioned_devices.add(previous_device)
-
-        # Determine status for the current device
-        status = 'In Use'  # Default status for disks
-        if device_type == 'disk':
+        if device_name.startswith("└─"):  
+            if previous_device_name:
+                for entry in table_data:
+                    if entry[0] == previous_device_name:
+                        entry[5] = "Partitioned"
+        else:
+            status = 'In Use' 
             if not mountpoint and not fstype:
                 status = 'Available'
-        
-        # If the device is in the partitioned set, mark it as "Partitioned"
-        if device_name in partitioned_devices:
-            status = 'Partitioned'
 
-        # Append device information to the table
+            previous_device_name = device_name
         table_data.append([
             device_name,
             device_size,
             device_type,
             mountpoint,
             fstype,
-            status
+            status 
         ])
-
-        # Update previous_device if it's a disk
-        if device_type == 'disk':
-            previous_device = device_name
 
     headers = ["Device", "Size", "Type", "Mountpoint", "Filesystem", "Status"]
 
     print(f"\nAvailable devices on {host['name']}:")
     print_table(table_data, headers)
 
-    
+
 def distribute_ssh_key(ssh_user, ip):
     logger.info(f"Distributing SSH key to {ip}...")
     distribute_key_cmd = f"ssh-copy-id -i ~/.ssh/id_rsa.pub {ssh_user}@{ip}"
