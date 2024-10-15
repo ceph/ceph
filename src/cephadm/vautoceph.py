@@ -3178,32 +3178,33 @@ def command_run(ctx):
 #.sh function, this function have been modified to run using only bash file.
 
 def command_precheck(ctx):
-    logger.info('-------------------------CHECKING FOR PORTS------------------------')
-    for host in ctx.hosts: 
-        logger.info(f"\nChecking ports connectivity on host {host['name']}:\n")
-        ports_to_check = [3300, 6789, 6800, 9283, 18080, 9100, 9222]
-        check_ports_on_host(host['ipaddresses'], ports_to_check)
-    
-    logger.info('\nAll hosts checked, processing to the next steps\n')
-    
-    logger.info('------------------------CHECKING FOR DEVICES-----------------------')
-    total_available_storage = {}
-    
-    for host in ctx.hosts: 
-        logger.info(f"\nChecking devices on host {host['name']}:\n")
-        available_storage = check_devices_on_host(host)
+    if ctx.precheck_port is not None:
+        logger.info('-------------------------CHECKING FOR PORTS------------------------')
+        for host in ctx.hosts: 
+            logger.info(f"\nChecking ports connectivity on host {host['name']}:\n")
+            ports_to_check = [3300, 6789, 6800, 9283, 18080, 9100, 9222]
+            check_ports_on_host(host['ipaddresses'], ports_to_check)
         
-        # Combine available storage from all hosts
-        for rotation, size in available_storage.items():
-            if rotation not in total_available_storage:
-                total_available_storage[rotation] = 0
-            total_available_storage[rotation] += size    
-    # Print total available storage
-    logger.info("Available storage:")
-    for rotation, total_size in total_available_storage.items():
-        logger.info(f"- Rotational: {rotation}\n  - Size: {total_size} bytes")
+        logger.info('\nAll hosts checked, processing to the next steps\n')
 
-    logger.info('\nAll hosts checked, processing to the next steps\n')
+    if ctx.precheck_device:
+        logger.info('------------------------CHECKING FOR DEVICES-----------------------')
+        total_available_storage = {}
+        for host in ctx.hosts: 
+            logger.info(f"\nChecking devices on host {host['name']}:\n")
+            available_storage = check_devices_on_host(host)
+            
+            # Combine available storage from all hosts
+            for rotation, size in available_storage.items():
+                if rotation not in total_available_storage:
+                    total_available_storage[rotation] = 0
+                total_available_storage[rotation] += size    
+        # Print total available storage
+        logger.info("Available storage:")
+        for rotation, total_size in total_available_storage.items():
+            logger.info(f"- Rotational: {rotation}\n  - Size: {total_size} bytes")
+
+        logger.info('\nAll hosts checked, processing to the next steps\n')
 
 
 def command_shell(ctx):
@@ -5957,6 +5958,8 @@ def translate_yaml_to_json(yaml_file):
                 "hosts": None,
                 "no_hosts": False,
                 "dry_run": False,
+                "precheck_port": None,
+                "precheck_devices": False,
                 "funcs": [
                     "command_shell"
                 ]
@@ -6354,7 +6357,6 @@ function_map = {
 def main() -> None:
     av: List[str] = []
     av = sys.argv[1:]
-    # ctx = load_context_from_file('context/context-bootstrap.json')
     if av[0] == 'apply':
         try:
             json_data = translate_yaml_to_json(av[1])
