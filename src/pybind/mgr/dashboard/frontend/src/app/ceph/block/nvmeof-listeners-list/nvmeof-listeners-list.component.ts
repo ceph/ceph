@@ -74,7 +74,7 @@ export class NvmeofListenersListComponent implements OnInit, OnChanges {
         name: this.actionLabels.DELETE,
         permission: 'delete',
         icon: Icons.destroy,
-        click: () => this.deleteSubsystemModal()
+        click: () => this.deleteListenerModal()
       }
     ];
   }
@@ -99,7 +99,7 @@ export class NvmeofListenersListComponent implements OnInit, OnChanges {
       });
   }
 
-  deleteSubsystemModal() {
+  deleteListenerModal() {
     const listener = this.selection.first();
     this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'Listener',
