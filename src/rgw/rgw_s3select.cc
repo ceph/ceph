@@ -287,6 +287,7 @@ RGWSelectObj_ObjStore_S3::RGWSelectObj_ObjStore_S3():
   m_object_size_for_processing(0),
   m_parquet_type(false),
   m_json_type(false),
+  m_outputFormat(OutputFormat::CSV),
   chunk_number(0),
   m_requested_range(0),
   m_scan_offset(1024),
@@ -426,7 +427,9 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
   } else if (m_header_info.compare("USE")==0) {
     csv.use_header_info=true;
   }
-
+  if (m_outputFormat == OutputFormat::JSON) {
+    csv.output_json_format = true;
+  }
   m_s3_csv_object.set_csv_query(&s3select_syntax, csv);
 
   m_s3_csv_object.set_external_system_functions(fp_s3select_continue,
@@ -621,6 +624,10 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
     ldpp_dout(this, 10) << "s3select: engine is set to process Parquet objects" << dendl;
   }
 
+  if (m_s3select_query.find(output_tag+"><JSON") != std::string::npos) {
+    m_outputFormat = OutputFormat::JSON;
+  }
+
   extract_by_tag(m_s3select_query, "Expression", sql_query);
   extract_by_tag(m_s3select_query, "Enabled", m_enable_progress);
   size_t _qi = m_s3select_query.find("<" + input_tag + ">", 0);
@@ -752,10 +759,7 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
       op_ret = -ERR_INVALID_REQUEST;
       return;
     }
-    s3select_syntax.parse_query(m_sql_query.c_str());
-    //the run_s3select_on_parquet() calling the s3select-query-engine, that read and process the parquet object with RGW::range_request, 
-    //upon query-engine finish the processing, the control is back to execute()
-    //the parquet-reader indicates the end of the parquet object.
+
     status = run_s3select_on_parquet(m_sql_query.c_str());
     if (status) {
       ldout(s->cct, 10) << "S3select: failed to process query <" << m_sql_query << "> on object " << s->object->get_name() << dendl;
