@@ -267,6 +267,7 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
                     
                                         uint64_t len = 0, offset = 0;
                                         std::string localWeightStr;
+					std::string invalidStr;
                                         if (parts.size() == 2) {
                                             rgw::sal::Attrs attrs;
                                             get_attrs(dpp, file_entry.path(), attrs, null_yield);
@@ -328,8 +329,13 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
                                                 ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): deleteMarker: " << deleteMarker << dendl;
                                             }
 
+                                            if (attrs.find(RGW_CACHE_ATTR_INVALID) != attrs.end()) {
+                                                invalidStr = attrs[RGW_CACHE_ATTR_INVALID].to_str();
+                                                ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): invalidStr: " << invalidStr << dendl;
+                                            }
+
                                             ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): calling func for: " << key << dendl;
-                                            obj_func(dpp, key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, null_yield);
+                                            obj_func(dpp, key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, null_yield, invalidStr);
                                             block_func(dpp, key, offset, len, version, dirty, null_yield, localWeightStr);
                                             parsed = true;
                                         } //end-if part.size() == 2
