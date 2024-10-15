@@ -6080,8 +6080,7 @@ def check_devices_on_host(host):
 
         # Check if the previous line was a disk and current line is a partition
         if previous_device and line.startswith(" "):
-            # Mark the previous device as "Partitioned"
-            table_data[-1][5] = "Partitioned"  # Update the status of the previous device
+            table_data[i-1][5] = "Partitioned"  # Update the status of the previous device
 
         # Determine status for the current device
         status = 'In Use'  # Default status for disks
