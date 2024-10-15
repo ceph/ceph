@@ -3187,7 +3187,7 @@ def command_precheck(ctx):
         
         logger.info('\nAll hosts checked, processing to the next steps\n')
 
-    if ctx.precheck_device:
+    if ctx.precheck_devices == True:
         logger.info('------------------------CHECKING FOR DEVICES-----------------------')
         total_available_storage = {}
         for host in ctx.hosts: 

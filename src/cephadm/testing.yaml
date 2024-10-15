@@ -48,6 +48,10 @@ zap_osds: true
 name:
 keyring:
 mount:
+precheck_port:
+  - 3300
+  - 6789
+precheck_devices: true
 funcs:
 #  - "command_rm_cluster"
 #  - "command_prepare_host"
