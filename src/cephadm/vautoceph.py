@@ -6013,52 +6013,20 @@ def check_ports_on_host(host, ports_to_check):
         if is_open:
             process_info = get_process_on_port(host, port)
             if process_info:
-                results.append([port, "Occupied", process_info])
+                results.append([port, "In Use", process_info])
             else:
                 results.append([port, "Closed", "-"])
         else:
-            results.append([port, "Open", "-"])
+            results.append([port, "Available", "-"])
     headers = ["Port", "Status", "Process"]
     print_table(results, headers)
 
-# def check_devices_on_host(host):
-#     """Check available devices on the host for Ceph usage."""
-    
-#     # SSH into the node and use lsblk to get device information
-#     try:
-#         result = subprocess.run(f"ssh {host['ipaddresses']} lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE", shell=True, capture_output=True, text=True)
-#         if result.returncode != 0:
-#             print(f"Error running lsblk on {host}: {result.stderr}")
-#             return None
-#         devices_info = result.stdout.strip().splitlines()
-#     except Exception as e:
-#         print(f"Error checking devices on {host}: {e}")
-#         return None
-
-#     table_data = []
-
-#     for line in devices_info[1:]:  
-#         parts = line.split()
-#         device_name = parts[0]
-#         device_size = parts[1]
-#         device_type = parts[2]
-#         mountpoint = parts[3] if len(parts) > 3 else ''
-#         fstype = parts[4] if len(parts) > 4 else ''
-        
-#         if device_type == "disk" and not mountpoint and not fstype:
-#             status = "Available"
-#         else:
-#             status = "In Use"
-#         table_data.append([device_name, device_size, device_type, mountpoint, fstype, status])
-
-#     headers = ["Device", "Size", "Type", "Mountpoint", "Filesystem", "Status"]
-#     print_table(table_data, headers)
 
 def check_devices_on_host(host):
     """Check available devices on the host for Ceph usage."""
     
     try:
-        result = subprocess.run(f"ssh {host['ipaddresses']} lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE", shell=True, capture_output=True, text=True)
+        result = subprocess.run(f"ssh {host['ipaddresses']} lsblk -o NAME,SIZE,TYPE,ROTA,MOUNTPOINT,FSTYPE", shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"Error running lsblk on {host['name']}: {result.stderr}")
             return None
@@ -6075,14 +6043,15 @@ def check_devices_on_host(host):
         device_name = parts[0]
         device_size = parts[1]
         device_type = parts[2]
-        mountpoint = parts[3] if len(parts) > 3 else ''
-        fstype = parts[4] if len(parts) > 4 else ''
+        rotation = parts[3]
+        mountpoint = parts[4] if len(parts) > 3 else ''
+        fstype = parts[5] if len(parts) > 4 else ''
 
         # Check if the current line represents a partition
         if line.startswith("└─") or line.startswith("├─"):  
             # Update the last added device's status to "Partitioned"
             if last_device_index != -1:
-                table_data[last_device_index][5] = "Partitioned"
+                table_data[last_device_index][6] = "Partitioned"
 
         # Determine status for the current device
         status = 'In Use' 
@@ -6095,12 +6064,13 @@ def check_devices_on_host(host):
             device_name,
             device_size,
             device_type,
+            rotation,
             mountpoint,
             fstype,
             status 
         ])
 
-    headers = ["Device", "Size", "Type", "Mountpoint", "Filesystem", "Status"]
+    headers = ["Device", "Size", "Type","Rotation", "Mountpoint", "Filesystem", "Status"]
 
     print(f"\nAvailable devices on {host['name']}:")
     print_table(table_data, headers)
