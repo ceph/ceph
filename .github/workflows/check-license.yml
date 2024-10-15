@@ -1,0 +1,13 @@
+---
+name: "Check Incomatible Licenses"
+on: [pull_request]
+
+jobs:
+  check_pr:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check PR
+      uses: JJ/github-pr-contains-action@526dfe784d8604ea1c39b6c26609074de95b1ffd  # releases/v14.1
+      with:
+        github-token: ${{github.token}}
+        diffDoesNotContain: "GNU General Public License"
