@@ -3198,6 +3198,12 @@ def command_precheck(ctx):
             if rotation not in total_available_storage:
                 total_available_storage[rotation] = 0
             total_available_storage[rotation] += size
+    logger.info('\nAll hosts checked, processing to the next steps\n')
+    
+    # Print total available storage
+    logger.info("Available storage:")
+    for rotation, total_size in total_available_storage.items():
+        logger.info(f"- Rotational: {rotation}\n  - Size: {total_size} bytes")
 
 
 def command_shell(ctx):
