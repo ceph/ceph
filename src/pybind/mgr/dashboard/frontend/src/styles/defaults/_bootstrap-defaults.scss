@@ -1,0 +1,156 @@
+// Color system
+
+$white: #fff !default;
+$gray-100: #f8f9fa !default;
+$gray-200: #e9ecef !default;
+$gray-300: #dee2e6 !default;
+$gray-400: #ced4da !default;
+$gray-500: #adb5bd !default;
+$gray-600: #6c757d !default;
+$gray-700: #495057 !default;
+$gray-800: #343a40 !default;
+$gray-900: #212529 !default;
+$black: #000 !default;
+
+$blue: #007bff !default;
+$indigo: #6610f2 !default;
+$purple: #6f42c1 !default;
+$purple-dim: #6f42c180 !default;
+$pink: #a94442 !default;
+$red: #dc3545 !default;
+$red-dim: #dc354580 !default;
+$orange: #fd7e14 !default;
+$orange-dim: #fd7e1480 !default;
+$yellow: #d48200 !default;
+$green: #008a00 !default;
+$green-dim: #008a0080 !default;
+$teal: #20c997 !default;
+$cyan: #17a2b8 !default;
+$cyan-dim: #17a2b880 !default;
+$barley-white: #fcecba !default;
+
+$primary: #25828e !default;
+$primary-500: #2b99a8 !default;
+$secondary: #374249 !default;
+$success: $green !default;
+$info: $primary !default;
+$warning: $yellow !default;
+$danger: $red !default;
+$light: $gray-100 !default;
+$dark: $gray-800 !default;
+
+//badges colors
+$green-300: #6ec664;
+$cyan-300: #009596;
+$purple-300: #a18fff;
+$light-blue-300: #35caed;
+$gold-300: #f4c145;
+$light-green-300: #ace12e;
+
+// Extra theme colors.
+$accent: $primary !default;
+$warning-dark: $orange !default;
+
+$fg-color-over-dark-bg: $white !default;
+$fg-hover-color-over-dark-bg: $gray-500 !default;
+
+$theme-colors: (
+  'accent': $accent,
+  'warning-dark': $warning-dark,
+  'primary': $accent,
+  'secondary': $secondary,
+  'success': $success,
+  'info': $info,
+  'warning': $warning,
+  'danger': $danger,
+  'light': $light,
+  'dark': $dark
+) !default;
+
+// Button colors
+$btn-primary-hover: #1f6f79 !default;
+$btn-primary-active: #1e6872 !default;
+
+// Body
+$body-color-bright: $light !default;
+$body-bg: $white !default;
+$body-color: $gray-900 !default;
+$body-bg-alt: $gray-200 !default;
+// Health colors.
+$health-color-error: $red !default;
+$health-color-healthy: $green !default;
+$health-color-warning: $yellow !default;
+$health-color-warning-800: #9d6d10 !default;
+
+// Chart colors.
+$chart-color-red: $red !default;
+$chart-color-yellow: #f6d173 !default;
+$chart-color-translucent-red: $red-dim !default;
+$chart-color-blue: $blue !default;
+$chart-color-orange: $orange !default;
+$chart-color-translucent-orange: $orange-dim !default;
+$chart-color-translucent-green: $green-dim !default;
+$chart-color-translucent-cyan: $cyan-dim !default;
+$chart-color-yellow: $yellow !default;
+$chart-color-green: $green !default;
+$chart-color-gray: #ededed !default;
+$chart-color-cyan: $primary-500 !default;
+$chart-color-light-gray: #f0f0f0 !default;
+$chart-color-slight-dark-gray: #d7d7d7 !default;
+$chart-color-dark-gray: #afafaf !default;
+$chart-color-purple: $purple !default;
+$chart-color-translucent-purple: $purple-dim !default;
+$chart-color-white: #fff !default;
+$chart-color-center-text: #151515 !default;
+$chart-color-center-text-description: #72767b !default;
+$chart-color-tooltip-background: $black !default;
+$chart-danger: #c9190b !default;
+$chart-color-strong-blue: #0078c8 !default;
+$chart-color-translucent-blue: #0096dc80 !default;
+$chart-color-border: #00000020 !default;
+$chart-color-translucent-yellow: #ef923472 !default;
+
+$code-block-bg: #f7f7f9 !default;
+
+// Typography
+
+// WARNING: This was clashing with Carbon's font-family
+// $font-family-sans-serif: 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', sans-serif,
+//   'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji' !default;
+
+// Card
+
+$card-cap-bg: $gray-100 !default;
+
+// Grid
+
+$grid-gutter-width: 30px !default;
+
+// Table
+
+$datatable-divider-color: rgba($black, 0.09) !default;
+
+// Navs
+
+$nav-tabs-margin-bottom: 1rem !default;
+
+// Tooltips
+
+$tooltip-color: $white !default;
+$tooltip-bg: $body-color !default;
+$tooltip-opacity: 1 !default;
+
+// Misc
+
+$screen-sm-min: 576px !default;
+$screen-md-min: 768px !default;
+$screen-lg-min: 992px !default;
+$screen-xl-min: 1200px !default;
+$tree-container-height: 200px !default;
+
+$screen-xs-max: calc(#{$screen-sm-min} - 1px) !default;
+$screen-sm-max: calc(#{$screen-md-min} - 1px) !default;
+$screen-md-max: calc(#{$screen-lg-min} - 1px) !default;
+$screen-lg-max: calc(#{$screen-xl-min} - 1px) !default;
+
+$navbar-height: 43px !default;
