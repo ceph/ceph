@@ -1,0 +1,20 @@
+meta:
+- desc: |
+   install upgrade ceph/-x on cluster
+   restart : mons, osd.*
+tasks:
+- install.upgrade:
+    mon.a:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release quincy
+- print: "**** done install.upgrade of nodes"
+- ceph.restart:
+    daemons: [mon.a,mgr.x,osd.0,osd.1,osd.2]
+    mon-health-to-clog: false
+    wait-for-healthy: false
+    wait-for-osds-up: false
+    wait-for-scrub: false
+    skip_stop_pg_num_changes: true
+    expected-failure: "FileStore has been deprecated and is no longer supported"
+- print: "**** done ceph.restart of all mons and osds"
