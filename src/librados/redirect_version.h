@@ -64,7 +64,7 @@ struct redirect_version_signature<void(boost::system::error_code, version_t, buf
   using type = void(boost::system::error_code, bufferlist);
 };
 template <typename Signature>
-using redirect_version_signature_t = redirect_version_signature<Signature>::type;
+using redirect_version_signature_t = typename redirect_version_signature<Signature>::type;
 
 } // namespace detail
 
