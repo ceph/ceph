@@ -1,5 +1,33 @@
 #!/bin/sh
 
+# Deploy a vstart.sh cluster in a named subdirectory. This makes it possible to
+# start multiple clusters in different subdirectories. See mstop.sh for cleanup.
+#
+# Example:
+#
+# ~/ceph/build $ MON=1 OSD=1 RGW=1 MDS=0 MGR=0 ../src/mstart.sh c1 -n -d
+# ~/ceph/build $ MON=1 OSD=1 RGW=1 MDS=0 MGR=0 ../src/mstart.sh c2 -n -d
+#
+# ~/ceph/build $ ls run
+# c1  c2
+# ~/ceph/build $ ls run/c1
+# asok  ceph.conf  dev  keyring  out
+#
+# ~/ceph/build $ ../src/mrun c1 radosgw-admin user list
+# [
+#     "56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234",
+#     "testx$9876543210abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+#     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+#     "testacct1user",
+#     "test",
+#     "testacct2root",
+#     "testacct1root",
+#     "testid"
+# ]
+#
+# ~/ceph/build $ ../src/mstop.sh c1
+# ~/ceph/build $ ../src/mstop.sh c2
+
 usage="usage: $0 <name> [vstart options]..\n"
 
 usage_exit() {
