@@ -3901,6 +3901,7 @@ class TestMgmtGateway:
                                                      # clear any Authorization header as Prometheus and Alertmanager are using basic-auth browser
                                                      # will send this header if Grafana is running on the same node as one of those services
                                                      proxy_set_header Authorization "";
+                                                     proxy_buffering off;
                                                  }
 
                                                  location /prometheus {
@@ -4175,6 +4176,7 @@ class TestMgmtGateway:
                                                      # clear any Authorization header as Prometheus and Alertmanager are using basic-auth browser
                                                      # will send this header if Grafana is running on the same node as one of those services
                                                      proxy_set_header Authorization "";
+                                                     proxy_buffering off;
                                                      auth_request /oauth2/auth;
                                                      error_page 401 = /oauth2/sign_in;
 
