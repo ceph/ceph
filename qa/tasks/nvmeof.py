@@ -32,6 +32,7 @@ class Nvmeof(Task):
             gateway_config:
                 namespaces_count: 10
                 cli_version: latest
+                create_mtls_secrets: False 
                     
     """
 
@@ -69,6 +70,7 @@ class Nvmeof(Task):
         self.serial = gateway_config.get('serial', 'SPDK00000000000001')
         self.port = gateway_config.get('port', '4420')
         self.srport = gateway_config.get('srport', '5500')
+        self.create_mtls_secrets = gateway_config.get('create_mtls_secrets', False)
 
     def deploy_nvmeof(self):
         """
@@ -147,7 +149,38 @@ class Nvmeof(Task):
                 started=True,
             )
         log.info("[nvmeof]: executed deploy_nvmeof successfully!")
-        
+
+    def write_mtls_config(self, gateway_ips):
+        log.info("[nvmeof]: writing mtls config...")
+        allowed_ips = ""
+        for ip in gateway_ips:
+            allowed_ips += ("IP:" + ip + ",")
+        self.remote.run(
+            args=[
+                "sudo", "openssl", "req", "-x509", "-newkey", "rsa:4096", "-nodes", "-keyout", "/etc/ceph/server.key",
+                "-out", "/etc/ceph/server.crt", "-days", "3650", "-subj", "/CN=my.server", "-addext", f"subjectAltName={allowed_ips[:-1]}" 
+            ]
+        )
+        self.remote.run(
+            args=[
+                "sudo", "openssl", "req", "-x509", "-newkey", "rsa:4096", "-nodes", "-keyout", "/etc/ceph/client.key",
+                "-out", "/etc/ceph/client.crt", "-days", "3650", "-subj", "/CN=client1"
+            ]
+        )
+        secrets_files = {"/etc/ceph/server.key": None, 
+                 "/etc/ceph/server.crt": None, 
+                 "/etc/ceph/client.key": None, 
+                 "/etc/ceph/client.crt": None, 
+                }
+        for file in secrets_files.keys():
+            secrets_files[file] = self.remote.read_file(path=file, sudo=True)
+
+        for remote in self.ctx.cluster.remotes.keys():
+            for remote_file in secrets_files.keys():
+                data = secrets_files[remote_file]
+                remote.sudo_write_file(path=remote_file, data=data, mode='0644')
+        log.info("[nvmeof]: written mtls config!")
+
     def set_gateway_cfg(self):
         log.info('[nvmeof]: running set_gateway_cfg...')
         ip_address = self.remote.ip_address
@@ -174,6 +207,8 @@ class Nvmeof(Task):
                 data=conf_data,
                 sudo=True
             )
+        if self.create_mtls_secrets: 
+            self.write_mtls_config(gateway_ips)
         log.info("[nvmeof]: executed set_gateway_cfg successfully!")
 
 
