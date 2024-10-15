@@ -52,6 +52,7 @@ funcs:
 #  - "command_rm_cluster"
 #  - "command_prepare_host"
 #  - "command_bootstrap"
+  - "command_precheck"
   - "command_shell"
 
 #Setting up cluster
