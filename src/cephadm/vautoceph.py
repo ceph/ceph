@@ -6068,8 +6068,9 @@ def check_devices_on_host(host):
         return None
 
     table_data = []
+    previous_device = None  # Track the last seen disk device
 
-    for line in devices_info[1:]:  
+    for i, line in enumerate(devices_info[1:]):  
         parts = line.split()
         device_name = parts[0]
         device_size = parts[1]
@@ -6077,14 +6078,30 @@ def check_devices_on_host(host):
         mountpoint = parts[3] if len(parts) > 3 else ''
         fstype = parts[4] if len(parts) > 4 else ''
 
-        if device_name.startswith("└─") or device_name.startswith("├─"):
-            status = "Child"
-        elif device_type == "disk" and not mountpoint and not fstype:
-            status = "Available"
-        else:
-            status = "In Use"
+        # Check if the previous line was a disk and current line is a partition
+        if previous_device and line.startswith(" "):
+            # Mark the previous device as "Partitioned"
+            table_data[-1][5] = "Partitioned"  # Update the status of the previous device
 
-        table_data.append([device_name, device_size, device_type, mountpoint, fstype, status])
+        # Determine status for the current device
+        status = 'In Use'  # Default status for disks
+        if device_type == 'disk':
+            if not mountpoint and not fstype:
+                status = 'Available'
+
+        # Append device information to the table
+        table_data.append([
+            device_name,
+            device_size,
+            device_type,
+            mountpoint,
+            fstype,
+            status
+        ])
+
+        # Update previous_device if it's a disk
+        if device_type == 'disk':
+            previous_device = device_name
 
     headers = ["Device", "Size", "Type", "Mountpoint", "Filesystem", "Status"]
 
