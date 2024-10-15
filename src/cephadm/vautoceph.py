@@ -6054,14 +6054,14 @@ def check_ports_on_host(host, ports_to_check):
 #     headers = ["Device", "Size", "Type", "Mountpoint", "Filesystem", "Status"]
 #     print_table(table_data, headers)
 
-def check_devices_on_node(host):
+def check_devices_on_host(host):
     """Check available devices on the host for Ceph usage."""
     
     # SSH into the node and use lsblk to get device information
     try:
-        result = subprocess.run(f"ssh {host} lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE", shell=True, capture_output=True, text=True)
+        result = subprocess.run(f"ssh {host['ipaddresses']} lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE", shell=True, capture_output=True, text=True)
         if result.returncode != 0:
-            print(f"Error running lsblk on {host}: {result.stderr}")
+            print(f"Error running lsblk on {host['name']}: {result.stderr}")
             return None
         devices_info = result.stdout.strip().splitlines()
     except Exception as e:
@@ -6108,7 +6108,7 @@ def check_devices_on_node(host):
 
     headers = ["Device", "Size", "Type", "Mountpoint", "Filesystem", "Status"]
 
-    print(f"\nAvailable devices on {host}:")
+    print(f"\nAvailable devices on {host['name']}:")
     print_table(table_data, headers)
 
 def distribute_ssh_key(ssh_user, ip):
