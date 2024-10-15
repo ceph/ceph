@@ -75,6 +75,7 @@ target_include_directories(ceph_test_rgw_redis_lock
   ${rgw_libs}
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  Boost::json
  )
 install(TARGETS ceph_test_rgw_redis_lock DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -87,6 +88,7 @@ target_include_directories(ceph_test_rgw_redis_queue
   ${rgw_libs}
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  Boost::json
  )
 install(TARGETS ceph_test_rgw_redis_queue DESTINATION ${CMAKE_INSTALL_BINDIR})
 
