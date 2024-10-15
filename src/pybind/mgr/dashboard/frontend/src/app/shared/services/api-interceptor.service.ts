@@ -62,6 +62,7 @@ export class ApiInterceptorService implements HttpInterceptor {
       'api/auth/login',
       'api/auth/logout',
       'api/multi-cluster/set_config',
+      'api/multi-cluster/set_cluster_token',
       'api/multi-cluster/get_config',
       'api/multi-cluster/auth'
     ];
@@ -71,7 +72,7 @@ export class ApiInterceptorService implements HttpInterceptor {
       !ALWAYS_TO_HUB_APIs.includes(request.url) &&
       apiUrl &&
       !apiUrl.includes(origin)
-    ) {
+    ) {      
       const token = this.cookieService.getToken(localStorage.getItem('current_cluster_name'));
       reqWithVersion = reqWithVersion.clone({
         url: `${apiUrl}${reqWithVersion.url}`,
@@ -166,4 +167,6 @@ export class ApiInterceptorService implements HttpInterceptor {
       );
     });
   }
+
+  
 }

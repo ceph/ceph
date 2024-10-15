@@ -12,7 +12,8 @@ export class MultiClusterPageHelper extends PageHelper {
 
   columnIndex = {
     alias: 2,
-    connection: 3
+    connection: 3,
+    fsid: 4
   };
 
   auth(url: string, alias: string, username: string, password: string) {
@@ -70,4 +71,17 @@ export class MultiClusterPageHelper extends PageHelper {
         expect(status).to.include(expectedStatus);
       });
   }
+
+  getClusterFsid(alias: string) {
+    let aliasIndex = this.columnIndex.alias;
+  
+    return this.getTableCell(aliasIndex, alias)
+      .parent()
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.fsid})`)
+      .invoke('text')
+      .then((fsidText) => {
+        return fsidText.trim();
+      });
+  }
+  
 }

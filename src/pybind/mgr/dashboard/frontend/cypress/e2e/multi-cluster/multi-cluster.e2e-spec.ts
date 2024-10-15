@@ -26,9 +26,32 @@ describe('Muti-cluster management page', () => {
 
   it('should switch to the second cluster and back to hub', () => {
     multiCluster.checkConnectionStatus(alias, 'CONNECTED');
+    multiCluster.getClusterFsid(alias).then((fsid) => {
+      cy.window().then((window) => {
+        window.localStorage.setItem('current_cluster_name', `${fsid}-${username}`);
+        window.localStorage.setItem('cluster_api_url', url);
+      });
+    });
     dashboard.navigateTo();
     cy.get('[data-testid="selected-cluster"]').click();
     cy.get('[data-testid="select-a-cluster"]').contains(alias).click();
+    cy.getCookies().then((cookies) => {
+      cy.log('Printing all cookies');
+      cookies.forEach((cookie) => {
+        cy.log(`${cookie.name}: ${cookie.value}`);
+        console.log(`${cookie.name}: ${cookie.value}`);
+      });
+    });
+    cy.window().then((window) => {
+      const currentClusterName = window.localStorage.getItem('current_cluster_name');
+      const clusterApiUrl = window.localStorage.getItem('cluster_api_url');
+      
+      cy.log(`current_cluster_name: ${currentClusterName}`);
+      cy.log(`cluster_api_url: ${clusterApiUrl}`);
+      
+      console.log(`current_cluster_name: ${currentClusterName}`);
+      console.log(`cluster_api_url: ${clusterApiUrl}`);
+    });
     cy.get('[data-testid="selected-cluster"]').contains(alias);
     cy.get('cd-dashboard-v3').should('exist');
 
