@@ -28,13 +28,11 @@ class Nvmeof(Task):
             version: default
             rbd:
                 pool_name: mypool
-                image_name: myimage
                 rbd_size: 1024
             gateway_config:
-                source: host.a 
-                target: client.2
-                vars:
-                    cli_version: latest
+                namespaces_count: 10
+                cli_version: latest
+                create_mtls_secrets: False 
                     
     """
 
@@ -58,7 +56,7 @@ class Nvmeof(Task):
 
         rbd_config = self.config.get('rbd', {})
         self.poolname = rbd_config.get('pool_name', 'mypool')
-        self.rbd_image_name = rbd_config.get('image_name', 'myimage')
+        self.image_name_prefix = rbd_config.get('image_name_prefix', 'myimage')
         self.rbd_size = rbd_config.get('rbd_size', 1024*8)
 
         gateway_config = self.config.get('gateway_config', {})
@@ -72,6 +70,7 @@ class Nvmeof(Task):
         self.serial = gateway_config.get('serial', 'SPDK00000000000001')
         self.port = gateway_config.get('port', '4420')
         self.srport = gateway_config.get('srport', '5500')
+        self.create_mtls_secrets = gateway_config.get('create_mtls_secrets', False)
 
     def deploy_nvmeof(self):
         """
@@ -104,7 +103,6 @@ class Nvmeof(Task):
                 ])
 
             poolname = self.poolname
-            imagename = self.rbd_image_name
 
             log.info(f'[nvmeof]: ceph osd pool create {poolname}')
             _shell(self.ctx, self.cluster_name, self.remote, [
@@ -151,17 +149,43 @@ class Nvmeof(Task):
                 started=True,
             )
         log.info("[nvmeof]: executed deploy_nvmeof successfully!")
-        
+
+    def write_mtls_config(self, gateway_ips):
+        log.info("[nvmeof]: writing mtls config...")
+        allowed_ips = ""
+        for ip in gateway_ips:
+            allowed_ips += ("IP:" + ip + ",")
+        self.remote.run(
+            args=[
+                "sudo", "openssl", "req", "-x509", "-newkey", "rsa:4096", "-nodes", "-keyout", "/etc/ceph/server.key",
+                "-out", "/etc/ceph/server.crt", "-days", "3650", "-subj", "/CN=my.server", "-addext", f"subjectAltName={allowed_ips[:-1]}" 
+            ]
+        )
+        self.remote.run(
+            args=[
+                "sudo", "openssl", "req", "-x509", "-newkey", "rsa:4096", "-nodes", "-keyout", "/etc/ceph/client.key",
+                "-out", "/etc/ceph/client.crt", "-days", "3650", "-subj", "/CN=client1"
+            ]
+        )
+        secrets_files = {"/etc/ceph/server.key": None, 
+                 "/etc/ceph/server.crt": None, 
+                 "/etc/ceph/client.key": None, 
+                 "/etc/ceph/client.crt": None, 
+                }
+        for file in secrets_files.keys():
+            secrets_files[file] = self.remote.read_file(path=file, sudo=True)
+
+        for remote in self.ctx.cluster.remotes.keys():
+            for remote_file in secrets_files.keys():
+                data = secrets_files[remote_file]
+                remote.sudo_write_file(path=remote_file, data=data, mode='0644')
+        log.info("[nvmeof]: written mtls config!")
+
     def set_gateway_cfg(self):
         log.info('[nvmeof]: running set_gateway_cfg...')
-        gateway_config = self.config.get('gateway_config', {})
-        source_host = gateway_config.get('source')
-        target_host = gateway_config.get('target')
-        if not (source_host and target_host):
-            raise ConfigError('gateway_config requires "source" and "target"')
-        remote = list(self.ctx.cluster.only(source_host).remotes.keys())[0]
-        ip_address = remote.ip_address
-        gateway_name = ""
+        ip_address = self.remote.ip_address
+        gateway_names = []
+        gateway_ips = []
         nvmeof_daemons = self.ctx.daemons.iter_daemons_of_role('nvmeof', cluster=self.cluster_name)
         for daemon in nvmeof_daemons:
             gateway_names += [daemon.remote.shortname]
@@ -177,12 +201,14 @@ class Nvmeof(Task):
             NVMEOF_PORT={self.port}
             NVMEOF_SRPORT={self.srport}
             """)
-        target_remote = list(self.ctx.cluster.only(target_host).remotes.keys())[0]
-        target_remote.write_file(
-            path=conf_file,
-            data=conf_data,
-            sudo=True
-        )
+        for remote in self.ctx.cluster.remotes.keys():
+            remote.write_file(
+                path=conf_file,
+                data=conf_data,
+                sudo=True
+            )
+        if self.create_mtls_secrets: 
+            self.write_mtls_config(gateway_ips)
         log.info("[nvmeof]: executed set_gateway_cfg successfully!")
 
 
