@@ -288,12 +288,12 @@ string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 string SnapMapper::to_raw_key(
   const pair<snapid_t, hobject_t> &in) const
 {
-  return get_prefix(in.second.pool, in.first) + shard_prefix + in.second.to_str();
+  return fmt::format("{}{}{}", get_prefix(in.second.pool, in.first), shard_prefix, in.second.to_str());
 }
 
 std::string SnapMapper::to_raw_key(snapid_t snap, const hobject_t &clone) const
 {
-  return get_prefix(clone.pool, snap) + shard_prefix + clone.to_str();
+  return fmt::format("{}{}{}", get_prefix(clone.pool, snap), shard_prefix, clone.to_str());
 }
 
 pair<string, ceph::buffer::list> SnapMapper::to_raw(
@@ -332,7 +332,7 @@ bool SnapMapper::is_mapping(const string &to_test)
 
 string SnapMapper::to_object_key(const hobject_t &hoid) const
 {
-  return OBJECT_PREFIX + shard_prefix + hoid.to_str();
+  return fmt::format("{}{}{}", OBJECT_PREFIX, shard_prefix, hoid.to_str());
 }
 
 void SnapMapper::object_snaps::encode(ceph::buffer::list &bl) const
