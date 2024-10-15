@@ -369,7 +369,7 @@ static int check_bad_index_multipart(rgw::sal::RadosStore* const rados_store,
   std::string prev_entry_prefix;
   do {
     entries_read.clear();
-    ret = store->bi_list(bs, "", marker, -1,
+    ret = store->bi_list(dpp, bs, "", marker, -1,
 			 &entries_read, &is_truncated, false, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR bi_list(): " << cpp_strerror(-ret) <<
@@ -631,7 +631,7 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
   *count_out = 0;
   do {
     entries.clear();
-    ret = store->bi_list(bs, "", marker, -1, &entries, &is_truncated, false, y);
+    ret = store->bi_list(dpp, bs, "", marker, -1, &entries, &is_truncated, false, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR bi_list(): " << cpp_strerror(-ret) << dendl;
       break;
@@ -858,7 +858,7 @@ static int check_index_unlinked(rgw::sal::RadosStore* const rados_store,
   *count_out = 0;
   do {
     entries.clear();
-    ret = store->bi_list(bs, "", marker, -1, &entries, &is_truncated, false, y);
+    ret = store->bi_list(dpp, bs, "", marker, -1, &entries, &is_truncated, false, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR bi_list(): " << cpp_strerror(-ret) << dendl;
       break;
