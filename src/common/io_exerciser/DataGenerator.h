@@ -65,7 +65,7 @@ namespace ceph {
             : DataGenerator(model) {}
 
           virtual bufferptr generate_block(uint64_t offset);
-          virtual bufferlist generate_data(uint64_t length, uint64_t offset);
+          virtual bufferlist generate_data(uint64_t length, uint64_t offset) override;
           virtual bufferptr generate_wrong_block(uint64_t offset);
           virtual bufferlist generate_wrong_data(uint64_t offset, uint64_t length) override;
       };

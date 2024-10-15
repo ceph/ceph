@@ -38,11 +38,19 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os, const Sequence& s
     case Sequence::SEQUENCE_SEQ9:
       os << "SEQUENCE_SEQ9";
       break;
+    case Sequence::SEQUENCE_SEQ10:
+      os << "SEQUENCE_SEQ10";
+      break;
     case Sequence::SEQUENCE_END:
       os << "SEQUENCE_END";
       break;
   }
   return os;
+}
+
+bool IoSequence::is_supported(Sequence sequence) const
+{
+  return sequence != Sequence::SEQUENCE_SEQ10;
 }
 
 std::unique_ptr<IoSequence> IoSequence::generate_sequence(Sequence s,
@@ -70,6 +78,10 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(Sequence s,
       return std::make_unique<Seq8>(obj_size_range, seed);
     case Sequence::SEQUENCE_SEQ9:
       return std::make_unique<Seq9>(obj_size_range, seed);
+    case Sequence::SEQUENCE_SEQ10:
+      ceph_abort_msg("Sequence 10 only supported for erasure coded pools "
+                     "through the EcIoSequence interface");
+      return nullptr;
     default:
       break;
   }
@@ -77,12 +89,17 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(Sequence s,
 }
 
 IoSequence::IoSequence(std::pair<int,int> obj_size_range,
-                                           int seed) :
+                       int seed) :
         min_obj_size(obj_size_range.first), max_obj_size(obj_size_range.second),
         create(true), barrier(false), done(false), remove(false),
         obj_size(min_obj_size), step(-1), seed(seed)
 {
   rng.seed(seed);
+}
+
+std::string ceph::io_exerciser::IoSequence::get_name_with_seqseed() const
+{
+  return get_name() + " (seqseed " + std::to_string(get_seed()) + ")";
 }
 
 int IoSequence::get_step() const
@@ -133,6 +150,22 @@ std::unique_ptr<IoOp> IoSequence::increment_object_size()
   return BarrierOp::generate();
 }
 
+Sequence IoSequence::getNextSupportedSequenceId() const
+{
+  Sequence sequence = get_id();
+  ++sequence;
+  for (;sequence < Sequence::SEQUENCE_END;
+       ++sequence)
+  {
+    if (is_supported(sequence))
+    {
+      return sequence;
+    }
+  }
+
+  return Sequence::SEQUENCE_END;
+}
+
 std::unique_ptr<IoOp> IoSequence::next()
 {
   step++;
@@ -164,10 +197,15 @@ ceph::io_exerciser::Seq0::Seq0(std::pair<int,int> obj_size_range, int seed) :
   length = 1 + rng(obj_size - 1);
 }
 
+Sequence ceph::io_exerciser::Seq0::get_id() const
+{
+  return Sequence::SEQUENCE_SEQ0;
+}
+
 std::string ceph::io_exerciser::Seq0::get_name() const
 {
   return "Sequential reads of length " + std::to_string(length) +
-    " with queue depth 1 (seqseed " + std::to_string(get_seed()) + ")";
+    " with queue depth 1";
 }
 
 std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq0::_next()
@@ -197,10 +235,14 @@ ceph::io_exerciser::Seq1::Seq1(std::pair<int,int> obj_size_range, int seed) :
   count = 3 * obj_size;
 }
 
+Sequence ceph::io_exerciser::Seq1::get_id() const
+{
+  return Sequence::SEQUENCE_SEQ1;
+}
+
 std::string ceph::io_exerciser::Seq1::get_name() const
 {
-  return "Random offset, random length read/write I/O with queue depth 1 (seqseed "
-    + std::to_string(get_seed()) + ")";
+  return "Random offset, random length read/write I/O with queue depth 1";
 }
 
 std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq1::_next()
@@ -228,7 +270,15 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq1::_next()
 
 
 ceph::io_exerciser::Seq2::Seq2(std::pair<int,int> obj_size_range, int seed) :
-  IoSequence(obj_size_range, seed), offset(0), length(0) {}
+  IoSequence(obj_size_range, seed), offset(0), length(0)
+{
+
+}
+
+Sequence ceph::io_exerciser::Seq2::get_id() const
+{
+  return Sequence::SEQUENCE_SEQ2;
+}
 
 std::string ceph::io_exerciser::Seq2::get_name() const
 {
@@ -256,6 +306,11 @@ ceph::io_exerciser::Seq3::Seq3(std::pair<int,int> obj_size_range, int seed) :
   IoSequence(obj_size_range, seed), offset1(0), offset2(0)
 {
   set_min_object_size(2);
+}
+
+Sequence ceph::io_exerciser::Seq3::get_id() const
+{
+  return Sequence::SEQUENCE_SEQ3;
 }
 
 std::string ceph::io_exerciser::Seq3::get_name() const
@@ -286,6 +341,11 @@ ceph::io_exerciser::Seq4::Seq4(std::pair<int,int> obj_size_range, int seed) :
   set_min_object_size(3);
 }
 
+Sequence ceph::io_exerciser::Seq4::get_id() const
+{
+  return Sequence::SEQUENCE_SEQ4;
+}
+
 std::string ceph::io_exerciser::Seq4::get_name() const
 {
   return "Permutations of offset 3-region 1-block read I/O";
@@ -310,7 +370,15 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq4::_next()
 
 ceph::io_exerciser::Seq5::Seq5(std::pair<int,int> obj_size_range, int seed) :
   IoSequence(obj_size_range, seed), offset(0), length(1),
-  doneread(false), donebarrier(false) {}
+  doneread(false), donebarrier(false)
+{
+
+}
+
+Sequence ceph::io_exerciser::Seq5::get_id() const
+{
+  return Sequence::SEQUENCE_SEQ5;
+}
 
 std::string ceph::io_exerciser::Seq5::get_name() const
 {
@@ -348,7 +416,15 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq5::_next()
 
 ceph::io_exerciser::Seq6::Seq6(std::pair<int,int> obj_size_range, int seed) :
   IoSequence(obj_size_range, seed), offset(0), length(1),
-  doneread(false), donebarrier(false) {}
+  doneread(false), donebarrier(false)
+{
+
+}
+
+Sequence ceph::io_exerciser::Seq6::get_id() const
+{
+  return Sequence::SEQUENCE_SEQ6;
+}
 
 std::string ceph::io_exerciser::Seq6::get_name() const
 {
@@ -394,6 +470,11 @@ ceph::io_exerciser::Seq7::Seq7(std::pair<int,int> obj_size_range, int seed) :
   offset = obj_size;
 }
 
+Sequence ceph::io_exerciser::Seq7::get_id() const
+{
+  return Sequence::SEQUENCE_SEQ7;
+}
+
 std::string ceph::io_exerciser::Seq7::get_name() const
 {
   return "Permutations of offset 2-region 1-block writes";
@@ -433,6 +514,11 @@ ceph::io_exerciser::Seq8::Seq8(std::pair<int,int> obj_size_range, int seed) :
   set_min_object_size(3);
 }
 
+Sequence ceph::io_exerciser::Seq8::get_id() const
+{
+  return Sequence::SEQUENCE_SEQ8;
+}
+
 std::string ceph::io_exerciser::Seq8::get_name() const
 {
   return "Permutations of offset 3-region 1-block write I/O";
@@ -470,6 +556,11 @@ ceph::io_exerciser::Seq9::Seq9(std::pair<int,int> obj_size_range, int seed) :
   IoSequence(obj_size_range, seed), offset(0), length(0)
 {
 
+}
+
+Sequence ceph::io_exerciser::Seq9::get_id() const
+{
+  return Sequence::SEQUENCE_SEQ9;
 }
 
 std::string ceph::io_exerciser::Seq9::get_name() const
