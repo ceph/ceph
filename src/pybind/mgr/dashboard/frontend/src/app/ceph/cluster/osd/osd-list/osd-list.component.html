@@ -6,13 +6,15 @@
        i18n>OSDs List</a>
     <ng-template ngbNavContent>
       <cd-table [data]="osds"
-                (fetchData)="getOsdList()"
+                (fetchData)="getOsdList($event)"
                 [columns]="columns"
                 selectionType="multiClick"
                 [hasDetails]="true"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)"
-                [updateSelectionOnRefresh]="'never'">
+                [updateSelectionOnRefresh]="'never'"
+                [serverSide]="true"
+                [count]="count">
 
         <div class="table-actions btn-toolbar">
           <cd-table-actions [permission]="permissions.osd"

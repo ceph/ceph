@@ -34,6 +34,8 @@ import {
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
 import { OsdListComponent } from './osd-list.component';
 import { ResizeObserver as ResizeObserverPolyfill } from '@juggle/resize-observer';
+import { PaginateObservable } from '~/app/shared/api/paginate.model';
+import { Osd } from '~/app/shared/models/osd.model';
 
 describe('OsdListComponent', () => {
   let component: OsdListComponent;
@@ -142,38 +144,42 @@ describe('OsdListComponent', () => {
   });
 
   describe('getOsdList', () => {
-    let osds: any[];
+    let osds: Osd[];
     let flagsSpy: jasmine.Spy;
 
-    const createOsd = (n: number) =>
-      <Record<string, any>>{
-        in: 'in',
-        up: 'up',
-        tree: {
-          device_class: 'ssd'
-        },
-        stats_history: {
-          op_out_bytes: [
-            [n, n],
-            [n * 2, n * 2]
-          ],
-          op_in_bytes: [
-            [n * 3, n * 3],
-            [n * 4, n * 4]
-          ]
-        },
-        stats: {
-          stat_bytes_used: n * n,
-          stat_bytes: n * n * n
-        },
-        state: []
-      };
+    const createOsd = (n: number): Osd => ({
+      id: n,
+      host: {
+        id: 0,
+        name: 'test_host'
+      },
+      in: 1,
+      up: 1,
+      tree: {
+        device_class: 'ssd'
+      },
+      stats_history: {
+        op_out_bytes: [
+          [n, n],
+          [n * 2, n * 2]
+        ],
+        op_in_bytes: [
+          [n * 3, n * 3],
+          [n * 4, n * 4]
+        ]
+      },
+      stats: {
+        stat_bytes_used: n * n,
+        stat_bytes: n * n * n
+      },
+      state: []
+    });
 
     const expectAttributeOnEveryOsd = (attr: string) =>
       expect(component.osds.every((osd) => Boolean(_.get(osd, attr)))).toBeTruthy();
 
     beforeEach(() => {
-      spyOn(osdService, 'getList').and.callFake(() => of(osds));
+      spyOn(osdService, 'getList').and.callFake(() => new PaginateObservable<Osd[]>(of(osds)));
       flagsSpy = spyOn(osdService, 'getFlags').and.callFake(() => of([]));
       osds = [createOsd(1), createOsd(2), createOsd(3)];
       component.getOsdList();
@@ -531,8 +537,9 @@ describe('OsdListComponent', () => {
 
     beforeEach(() => {
       component.permissions = fakeAuthStorageService.getPermissions();
-      spyOn(osdService, 'getList').and.callFake(() => of(fakeOsds));
+      spyOn(osdService, 'getList').and.callFake(() => new PaginateObservable<Osd[]>(of(fakeOsds)));
       spyOn(osdService, 'getFlags').and.callFake(() => of([]));
+      component.getOsdList();
     });
 
     const testTableActions = async (
