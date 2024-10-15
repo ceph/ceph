@@ -488,7 +488,7 @@ int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_e
   return 0;
 }
 
-void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, const rgw_cls_bi_entry& entry)
+void cls_rgw_bi_put(ObjectWriteOperation& op, const rgw_cls_bi_entry& entry)
 {
   bufferlist in, out;
   rgw_cls_bi_put_op call;
