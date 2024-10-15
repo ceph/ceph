@@ -3221,7 +3221,6 @@ def command_shell(ctx):
     else:
         logger.info('All hosts connect, processing to the next steps')
     # if ctx.precheck == True:
-    command_precheck(ctx)
     logger.info('---------------------START EXECUTING BASH FILES--------------------')
     if cp.has_option('global', 'fsid') and cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
@@ -6063,20 +6062,14 @@ def check_devices_on_host(host):
         mountpoint = parts[4] if len(parts) > 4 else ''
         fstype = parts[5] if len(parts) > 5 else ''
 
-        # Check if the current line represents a partition
         if line.startswith("└─") or line.startswith("├─"):  
-            # Update the last added device's status to "Partitioned"
             if last_device_index != -1:
                 table_data[last_device_index][6] = "Partitioned"
 
         # Determine status for the current device
         status = 'In Use' 
-        if device_type == 'disk' and not mountpoint and not fstype:
+        if not mountpoint and not fstype:
             status = 'Available'
-            # Add to available storage
-            if rotation not in available_storage:
-                available_storage[rotation] = 0
-            available_storage[rotation] += parse_size(device_size)
         
         # Append device information to the table
         last_device_index = len(table_data)  # Update the index to the current length
@@ -6089,6 +6082,16 @@ def check_devices_on_host(host):
             fstype,
             status 
         ])
+
+    available_storage = {}
+    for entry in table_data:
+        device_name, device_size, device_type, rotation, mountpoint, fstype, status = entry
+        
+        if status == 'Available':
+            if rotation not in available_storage:
+                available_storage[rotation] = 0
+            available_storage[rotation] += parse_size(device_size)
+    
 
     headers = ["Device", "Size", "Type", "Rotation", "Mountpoint", "Filesystem", "Status"]
     print_table(table_data, headers)
