@@ -7937,7 +7937,7 @@ next:
       do {
         entries.clear();
 	// if object is specified, we use that as a filter to only retrieve some entries
-        ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bi_list(bs, object, marker, max_entries, &entries, &is_truncated, false, null_yield);
+        ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bi_list(dpp(), bs, object, marker, max_entries, &entries, &is_truncated, false, null_yield);
         if (ret < 0) {
           ldpp_dout(dpp(), 0) << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
           return -ret;
@@ -11096,7 +11096,7 @@ next:
       marker.clear();
       do {
         entries.clear();
-        ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bi_list(bs, "", marker, max_entries,
+        ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bi_list(dpp(), bs, "", marker, max_entries,
                                                                               &entries, &is_truncated,
                                                                               true, null_yield);
         if (ret < 0) {
