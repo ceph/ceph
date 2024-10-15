@@ -82,14 +82,7 @@ InternalClientRequest::interruptible_future<>
 InternalClientRequest::with_interruption()
 {
   LOG_PREFIX(InternalClientRequest::with_interruption);
-  co_await enter_stage<interruptor>(
-    client_pp().wait_for_active
-  );
-
-  co_await with_blocking_event<PGActivationBlocker::BlockingEvent,
-			       interruptor>([this] (auto&& trigger) {
-    return pg->wait_for_active_blocker.wait(std::move(trigger));
-  });
+  assert(pg->is_active());
 
   co_await enter_stage<interruptor>(client_pp().recover_missing);
 

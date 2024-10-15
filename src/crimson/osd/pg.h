@@ -518,6 +518,9 @@ public:
 
 
   // Utility
+  bool is_active() const {
+    return peering_state.is_active();
+  }
   bool is_active_clean() const {
     return peering_state.is_active() && peering_state.is_clean();
   }
