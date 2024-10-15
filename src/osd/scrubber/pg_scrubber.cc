@@ -2687,9 +2687,53 @@ void PgScrubber::log_cluster_warning(const std::string& warning) const
   m_osds->clog->do_log(CLOG_WARN, warning);
 }
 
-ostream& PgScrubber::show(ostream& out) const
+
+ostream& PgScrubber::show_concise(ostream& out) const
 {
-  return out << " [ " << m_pg_id << ": " << m_flags << " ] ";
+  /*
+  * 'show_concise()' is only used when calling operator<< thru the ScrubPgIF,
+  * i.e. only by the PG when creating a standard log entry.
+  *
+  * desired outcome (only relevant for Primaries):
+  *
+  * if scrubbing:
+  *   (urgency,flags)
+  *   or (if blocked)
+  *   (*blocked*,urgency,flags)
+  *
+  * if not scrubbing:
+  *   either nothing (if only periodic scrubs are scheduled)
+  *   or [next-scrub: effective-lvl, urgency]
+  */
+  if (!is_primary()) {
+    return out;
+  }
+
+  if (m_active) {
+    const auto flags_txt = fmt::format("{}", m_flags);
+    const std::string sep = (flags_txt.empty() ? "" : ",");
+    if (m_active_target) {
+      return out << fmt::format(
+		 "({}{}{}{})", (m_scrub_job->blocked ? "*blocked*," : ""),
+		 m_active_target->urgency(), sep, flags_txt);
+    } else {
+      // only expected in a couple of messages during scrub termination
+      return out << fmt::format(
+		 "(teardown{}{}{})", (m_scrub_job->blocked ? "-*blocked*" : ""),
+		 sep, flags_txt);
+    }
+  }
+
+  // not actively scrubbing now. Show some info about the next scrub
+  const auto now_is = ceph_clock_now();
+  const auto& next_scrub = m_scrub_job->earliest_target(now_is);
+  if (!next_scrub.is_high_priority()) {
+    // no interesting flags to report
+    return out;
+  }
+  return out << fmt::format(
+	     "[next-scrub:{},{:10.10}]", (next_scrub.is_deep() ? "dp" : "sh"),
+	     next_scrub.urgency());
 }
 
 int PgScrubber::asok_debug(std::string_view cmd,
