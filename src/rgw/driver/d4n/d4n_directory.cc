@@ -351,7 +351,7 @@ int ObjectDirectory::zadd(const DoutPrefixProvider* dpp, CacheObj* object, doubl
     if (!multi) {
       if (std::get<0>(resp).value() != "1") {
         ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() Response value is: " << std::get<0>(resp).value() << dendl;
-        return -EINVAL;
+        return -ENOENT;
       }
     }
 
@@ -382,7 +382,7 @@ int ObjectDirectory::zrange(const DoutPrefixProvider* dpp, CacheObj* object, int
 
     if (std::get<0>(resp).value().empty()) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() Empty response" << dendl;
-      return -EINVAL;
+      return -ENOENT;
     }
 
     members = std::get<0>(resp).value();
@@ -440,7 +440,7 @@ int ObjectDirectory::zrem(const DoutPrefixProvider* dpp, CacheObj* object, const
     if (!multi) {
       if (std::get<0>(resp).value() != "1") {
         ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
-        return -EINVAL;
+        return -ENOENT;
       }
     }
 
@@ -471,7 +471,7 @@ int ObjectDirectory::zremrangebyscore(const DoutPrefixProvider* dpp, CacheObj* o
     if (!multi) {
       if (std::get<0>(resp).value() == "0") {
         ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() No element removed!" << dendl;
-        return -EINVAL;
+        return -ENOENT;
       }
     }
 
@@ -729,7 +729,7 @@ int BlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, option
     } else { //if delete is called as part of a transaction, the command will be queued, hence the response will be a string
       response<std::string> resp;
       redis_exec(conn, ec, req, resp, y);
-      }
+    }
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
       std::cout << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << std::endl;
