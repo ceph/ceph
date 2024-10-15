@@ -17,6 +17,12 @@ namespace sys = boost::system;
 
 static std::string empty = std::string();
 
+enum class State { // state machine for dirty objects in the cache
+  INIT,
+  IN_PROGRESS, // object is being written to the backend
+  INVALID // object is to be deleted during cleanup 
+};
+
 class CachePolicy {
   protected:
     struct Entry : public boost::intrusive::list_base_hook<> {
@@ -65,9 +71,10 @@ class CachePolicy {
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, bool dirty, optional_yield y, std::string& restore_val=empty) = 0;
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, 
 			    time_t creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
-			    const rgw_obj_key& obj_key, optional_yield y) = 0;
+			    const rgw_obj_key& obj_key, optional_yield y, std::string& restore_val=empty) = 0;
     virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) = 0;
     virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) = 0;
+    virtual bool invalidate_dirty_object(const DoutPrefixProvider* dpp, std::string& key) = 0;
     virtual void cleaning(const DoutPrefixProvider* dpp) = 0;
 };
 
@@ -125,10 +132,11 @@ class LFUDAPolicy : public CachePolicy {
     Heap entries_heap;
     Object_Heap object_heap; //This heap contains dirty objects ordered by their creation time, used for cleaning method
     std::unordered_map<std::string, LFUDAEntry*> entries_map;
-    std::unordered_map<std::string, LFUDAObjEntry*> o_entries_map; //Contains only dirty objects, used for look-up
+    std::unordered_map<std::string, std::pair<LFUDAObjEntry*, State> > o_entries_map; //Contains only dirty objects, used for look-up
     std::mutex lfuda_lock;
     std::mutex lfuda_cleaning_lock;
     std::condition_variable cond;
+    std::condition_variable state_cond;
     bool quit{false};
 
     int age = 1, weightSum = 0, postedSum = 0;
@@ -158,6 +166,7 @@ class LFUDAPolicy : public CachePolicy {
         return nullptr;
       return it->second;
     }
+    int delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y);
 
   public:
     LFUDAPolicy(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver) : CachePolicy(), 
@@ -184,15 +193,16 @@ class LFUDAPolicy : public CachePolicy {
     void save_y(optional_yield y) { this->y = y; }
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, 
 			    time_t creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
-			    const rgw_obj_key& obj_key, optional_yield y) override;
-    virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y);
+			    const rgw_obj_key& obj_key, optional_yield y, std::string& restore_val=empty) override;
+    virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
+    virtual bool invalidate_dirty_object(const DoutPrefixProvider* dpp, std::string& key) override;
     virtual void cleaning(const DoutPrefixProvider* dpp) override;
     LFUDAObjEntry* find_obj_entry(std::string key) {
       auto it = o_entries_map.find(key);
       if (it == o_entries_map.end()) {
         return nullptr;
       }
-      return it->second;
+      return it->second.first;
     }
 };
 
@@ -217,9 +227,10 @@ class LRUPolicy : public CachePolicy {
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, bool dirty, optional_yield y, std::string& restore_val=empty) override;
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, 
 			    time_t creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
-			    const rgw_obj_key& obj_key, optional_yield y) override;
+    			    const rgw_obj_key& obj_key, optional_yield y, std::string& restore_val=empty) override;
     virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
+    virtual bool invalidate_dirty_object(const DoutPrefixProvider* dpp, std::string& key) override { return false; }
     virtual void cleaning(const DoutPrefixProvider* dpp) override {}
 };
 

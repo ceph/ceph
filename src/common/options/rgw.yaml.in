@@ -4120,7 +4120,7 @@ options:
 - name: rgw_d4n_cache_cleaning_interval
   type: int
   level: advanced
-  desc: This is the interval for invoking write cache cleaning process
+  desc: This is the interval in seconds for invoking write cache cleaning process
   default: 1000
   services: 
   - rgw
