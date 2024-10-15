@@ -95,6 +95,12 @@ public:
 			     CrushWrapper &crush,
 			     std::ostream *ss) const override;
 
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION;
+  }
+
   unsigned int get_chunk_count() const override {
     return chunk_count;
   }
