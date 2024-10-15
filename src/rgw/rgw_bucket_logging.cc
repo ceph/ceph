@@ -299,6 +299,7 @@ S3 bucket short (ceph) log record
   - The time at which the request was received at UTC time. The format, as follows: [%d/%b/%Y:%H:%M:%S %z]
   - REST.HTTP_method.resource_type or S3.action.resource_type for Lifecycle and logging
   - The key (object name) part of the request (source key in case of copy)
+  - Object version in case of versioned bucket
   - Object Size
   - eTag
 };*/
@@ -307,6 +308,7 @@ int log_record(rgw::sal::Driver* driver,
     const req_state* s, 
     const std::string& op_name, 
     const std::string& etag, 
+    size_t size,
     const configuration& conf,
     const DoutPrefixProvider *dpp, 
     optional_yield y,
@@ -361,7 +363,7 @@ int log_record(rgw::sal::Driver* driver,
   }
   switch (conf.logging_type) {
     case LoggingType::Standard:
-      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} REST.{}.{} {} \"{} {}{}{} HTTP/1.1\" {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} REST.{}.{} {} \"{} {}{}{} HTTP/1.1\" {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
         dash_if_empty(to_string(s->bucket->get_owner())),
         dash_if_empty(s->bucket->get_name()),
         t,
@@ -378,7 +380,7 @@ int log_record(rgw::sal::Driver* driver,
         dash_if_zero(s->err.http_ret),
         dash_if_empty(s->err.err_code),
         dash_if_zero(s->content_length),
-        dash_if_zero_or_null(s->object, s->object->get_size()),
+        dash_if_zero(size),
         "-", // no total time when logging record
         std::chrono::duration_cast<std::chrono::milliseconds>(s->time_elapsed()),
         "-", // TODO: referer
@@ -394,14 +396,15 @@ int log_record(rgw::sal::Driver* driver,
         (s->has_acl_header) ? "Yes" : "-");
       break;
     case LoggingType::Journal:
-      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} REST.{}.{} {} {}",
+      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] REST.{}.{} {} {} {} {}",
         dash_if_empty(to_string(s->bucket->get_owner())),
         dash_if_empty(s->bucket->get_name()),
         t,
-        dash_if_empty_or_null(s->object, s->object->get_key().name),
         s->info.method,
         op_name,
-        dash_if_zero_or_null(s->object, s->object->get_size()),
+        dash_if_empty_or_null(s->object, s->object->get_key().name),
+        dash_if_zero(size),
+        dash_if_empty_or_null(s->object, s->object->get_instance()),
         dash_if_empty(etag));
       break;
   }

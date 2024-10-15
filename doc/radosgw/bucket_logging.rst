@@ -80,8 +80,8 @@ Log Records
 
 The log records are space separated string columns and have the following possible formats:
 
-Short
-`````
+Journal
+```````
 minimum amount of data used for journaling bucket changes (this is a Ceph extension).
 
   - bucket owner (or dash if empty)
@@ -89,14 +89,15 @@ minimum amount of data used for journaling bucket changes (this is a Ceph extens
   - time in the following format: ``[day/month/year:hour:minute:second timezone]``
   - object key (or dash if empty)
   - operation in the following format: ``REST.<HTTP method>.<RGW OP name>``
+  - object size (or dash if empty)
+  - version id (dash if empty or question mark if unknown)
   - eTag
 
 For example:
 
 ::
 
-  testid fish [06/Aug/2024:09:40:09 +0000] myfile REST.PUT.put_obj 4cfdfc1f58e762d3e116787cb92fac60
-  testid fish [06/Aug/2024:09:40:09 +0000] myfile REST.GET.get_obj 4cfdfc1f58e762d3e116787cb92fac60
+  testid fish [06/Aug/2024:09:40:09 +0000] myfile - REST.PUT.put_obj 4cfdfc1f58e762d3e116787cb92fac60
   testid fish [06/Aug/2024:09:40:28 +0000] myfile REST.DELETE.delete_obj 4cfdfc1f58e762d3e116787cb92fac60
 
 
