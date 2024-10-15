@@ -10970,12 +10970,18 @@ paths:
                   type: string
                 group_id:
                   type: string
+                mode:
+                  default: ''
+                  type: string
                 pipe_id:
                   type: string
                 source_bucket:
                   default: ''
                   type: string
                 source_zones:
+                  type: string
+                user:
+                  default: ''
                   type: string
               required:
               - group_id
@@ -11029,11 +11035,6 @@ paths:
       - allowEmptyValue: true
         in: query
         name: destination_zones
-        schema:
-          type: string
-      - default: ''
-        in: query
-        name: destination_bucket
         schema:
           type: string
       - default: ''
