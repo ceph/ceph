@@ -6091,7 +6091,7 @@ def check_devices_on_host(host):
 
 def parse_size(size_str):
     """Convert size string to bytes for easier summation."""
-    size_mult = {'K': 1024, 'M': 1024**2, 'G': 1024**3, 'T': 1024**4}
+    size_mult = {'B':1,'K': 1024, 'M': 1024**2, 'G': 1024**3, 'T': 1024**4}
     if size_str[-1] in size_mult:
         return int(float(size_str[:-1]) * size_mult[size_str[-1]])
     else:
