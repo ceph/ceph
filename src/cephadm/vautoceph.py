@@ -6044,8 +6044,8 @@ def check_devices_on_host(host):
         device_size = parts[1]
         device_type = parts[2]
         rotation = parts[3]
-        mountpoint = parts[4] if len(parts) > 3 else ''
-        fstype = parts[5] if len(parts) > 4 else ''
+        mountpoint = parts[4] if len(parts) > 4 else ''
+        fstype = parts[5] if len(parts) > 5 else ''
 
         # Check if the current line represents a partition
         if line.startswith("└─") or line.startswith("├─"):  
