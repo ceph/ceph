@@ -6079,7 +6079,7 @@ def check_devices_on_host(host):
         fstype = parts[4] if len(parts) > 4 else ''
 
         if device_name.startswith("└─") or device_name.startswith("├─"):
-            parent_device = device_name[2:]  # Remove the └─ or ├─ prefix
+            parent_device = device_name[2:]  
             device_status[parent_device] = "In Use"
         
         if device_type == "disk" and not mountpoint and not fstype:
@@ -6343,7 +6343,8 @@ function_map = {
     "command_install": command_install,
     "command_rm_cluster": command_rm_cluster,
     "command_context_write": command_context_write,
-    "command_shell": command_shell
+    "command_shell": command_shell,
+    "command_precheck": command_precheck
 }
 
 
