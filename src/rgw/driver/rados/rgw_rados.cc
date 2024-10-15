@@ -9512,12 +9512,6 @@ int RGWRados::bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_
   return cls_rgw_bi_get(ref.ioctx, ref.obj.oid, index_type, key, entry);
 }
 
-void RGWRados::bi_put(ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry, optional_yield y)
-{
-  auto& ref = bs.bucket_obj;
-  cls_rgw_bi_put(op, ref.obj.oid, entry);
-}
-
 int RGWRados::bi_put(BucketShard& bs, rgw_cls_bi_entry& entry, optional_yield y)
 {
   auto& ref = bs.bucket_obj;
