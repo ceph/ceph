@@ -288,6 +288,9 @@ rgw:
   - src/cls/rgw_gc/**
   - src/cls/timeindex/**
   - src/mrgw.sh
+  - src/mrun
+  - src/mstart.sh
+  - src/mstop.sh
   - src/rgw/**
   - src/test/cls_rgw/**
   - src/test/librgw_*
