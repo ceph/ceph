@@ -678,16 +678,32 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       whiteout = true;
     }
     return do_write_op([this, whiteout](auto& backend, auto& os, auto& txn) {
-      int num_bytes = 0;
-      // Calculate num_bytes to be removed
-      if (obc->obs.oi.soid.is_snap()) {
-        ceph_assert(obc->ssc->snapset.clone_overlap.count(obc->obs.oi.soid.snap));
-        num_bytes = obc->ssc->snapset.get_clone_bytes(obc->obs.oi.soid.snap);
-      } else {
-        num_bytes = obc->obs.oi.size;
-      }
-      return backend.remove(os, txn, *osd_op_params,
-                            delta_stats, whiteout, num_bytes);
+      struct emptyctx_t {};
+      return with_effect_on_obc(
+	emptyctx_t{},
+	[&](auto &ctx) {
+	  int num_bytes = 0;
+	  // Calculate num_bytes to be removed
+	  if (obc->obs.oi.soid.is_snap()) {
+	    ceph_assert(obc->ssc->snapset.clone_overlap.count(
+			  obc->obs.oi.soid.snap));
+	    num_bytes = obc->ssc->snapset.get_clone_bytes(
+	      obc->obs.oi.soid.snap);
+	  } else {
+	    num_bytes = obc->obs.oi.size;
+	  }
+	  return backend.remove(os, txn, *osd_op_params,
+				delta_stats, whiteout, num_bytes);
+	},
+	[](auto &&ctx, ObjectContextRef obc, Ref<PG>) {
+	  return seastar::do_for_each(
+	    obc->watchers,
+	    [](auto &p) { return p.second->remove(); }
+	  ).then([obc] {
+	    obc->watchers.clear();
+	    return seastar::now();
+	  });
+	});
     });
   }
   case CEPH_OSD_OP_CALL:
