@@ -475,11 +475,11 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
-int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_entry& entry)
+int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string& oid, rgw_cls_bi_entry entry)
 {
   bufferlist in, out;
   rgw_cls_bi_put_op call;
-  call.entry = entry;
+  call.entry = std::move(entry);
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_PUT, in, out);
   if (r < 0)
@@ -488,11 +488,11 @@ int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_e
   return 0;
 }
 
-void cls_rgw_bi_put(ObjectWriteOperation& op, const rgw_cls_bi_entry& entry)
+void cls_rgw_bi_put(ObjectWriteOperation& op, rgw_cls_bi_entry entry)
 {
   bufferlist in, out;
   rgw_cls_bi_put_op call;
-  call.entry = entry;
+  call.entry = std::move(entry);
   encode(call, in);
   op.exec(RGW_CLASS, RGW_BI_PUT, in);
 }
