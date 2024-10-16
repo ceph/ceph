@@ -568,6 +568,7 @@ class TestMDSMetrics(CephFSTestCase):
     def test_perf_stats_stale_metrics_with_multiple_filesystem(self):
         self.mount_a.umount_wait()
         self.mount_b.umount_wait()
+        self.fs.delete_all_filesystems()
 
         self.run_ceph_cmd("fs", "flag", "set", "enable_multiple",
             "true", "--yes-i-really-mean-it")
