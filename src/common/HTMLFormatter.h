@@ -3,7 +3,7 @@
 #ifndef CEPH_HTML_FORMATTER_H
 #define CEPH_HTML_FORMATTER_H
 
-#include "Formatter.h"
+#include "XMLFormatter.h"
 
 namespace ceph {
   class HTMLFormatter : public XMLFormatter {

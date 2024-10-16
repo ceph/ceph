@@ -31,7 +31,7 @@
 #include "common/Cond.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/obj_bencher.h"
 #include "common/strtol.h" // for strict_strtoll()
 #include "common/TextTable.h"

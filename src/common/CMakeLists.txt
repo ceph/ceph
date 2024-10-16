@@ -29,6 +29,7 @@ set(common_srcs
   FixedCDC.cc
   Formatter.cc
   Graylog.cc
+  JSONFormatter.cc
   HTMLFormatter.cc
   HeartbeatMap.cc
   LogClient.cc
@@ -39,12 +40,14 @@ set(common_srcs
   Readahead.cc
   RefCountedObj.cc
   SloppyCRCMap.cc
+  TableFormatter.cc
   Thread.cc
   Throttle.cc
   Timer.cc
   TracepointProvider.cc
   TrackedOp.cc
   WorkQueue.cc
+  XMLFormatter.cc
   admin_socket.cc
   admin_socket_client.cc
   assert.cc
