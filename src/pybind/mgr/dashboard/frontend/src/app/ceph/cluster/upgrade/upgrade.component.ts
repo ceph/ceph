@@ -42,6 +42,7 @@ export class UpgradeComponent implements OnInit, OnDestroy {
   upgradeStatus$: Observable<any>;
   subject = new ReplaySubject<any>();
   private subs = new Subscription();
+  isOpen: boolean = false;
 
   constructor(
     private summaryService: SummaryService,
@@ -133,7 +134,9 @@ export class UpgradeComponent implements OnInit, OnDestroy {
       }
     });
   }
-
+  togglePopover() {
+    this.isOpen = !this.isOpen;
+  }
   ngOnDestroy() {
     this.interval?.unsubscribe();
     this.subs?.unsubscribe();

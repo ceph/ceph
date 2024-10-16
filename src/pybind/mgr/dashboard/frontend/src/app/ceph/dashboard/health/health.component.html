@@ -17,16 +17,25 @@
                   contentClass="content-highlight"
                   *ngIf="healthData.health?.status">
       <ng-container *ngIf="healthData.health?.checks?.length > 0">
-        <ng-template #healthChecks>
-          <cd-health-checks [healthData]="healthData"></cd-health-checks>
-        </ng-template>
-        <div class="info-card-content-clickable"
-             [ngStyle]="healthData.health.status | healthColor"
-             [ngbPopover]="healthChecks"
-             popoverClass="info-card-popover-cluster-status">
-          {{ healthData.health.status | healthLabel | uppercase }}
-          <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
-             class="fa fa-exclamation-triangle"></i>
+        <div cdsPopover
+            [isOpen]="popovers.cluserStatus"
+            [dropShadow]="true"
+            [caret]="true"
+            placement="bottom"
+            (close)="closePopover('cluserStatus')">
+            <div class="popover-trigger">
+            <span [ngStyle]="healthData.health.status | healthColor"
+                  class="info-card-content-clickable"
+                  (click)="togglePopover('cluserStatus')"
+                  popoverClass="info-card-popover-cluster-status" >
+                  {{ healthData.health.status | healthLabel | uppercase }}
+                  <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
+                  class="fa fa-exclamation-triangle"></i>
+              </span>
+            </div>
+            <cds-popover-content>
+              <cd-health-checks [healthData]="healthData"></cd-health-checks>
+            </cds-popover-content>
         </div>
       </ng-container>
       <ng-container *ngIf="!healthData.health?.checks?.length">
@@ -146,21 +155,29 @@
                   class="cd-capacity-card cd-chart-card"
                   contentClass="content-chart"
                   *ngIf="healthData.pg_info">
-      <ng-template #pgStatus>
-        <ng-container *ngTemplateOutlet="logsLink"></ng-container>
-        <ul>
-          <li *ngFor="let pgStatesText of healthData.pg_info.statuses | keyvalue">
-            {{ pgStatesText.key }}: {{ pgStatesText.value }}
-          </li>
-        </ul>
-      </ng-template>
-      <div class="pg-status-popover-wrapper">
-        <div [ngbPopover]="pgStatus">
-          <cd-health-pie [data]="healthData"
-                         [config]="pgStatusChartConfig"
-                         (prepareFn)="preparePgStatus($event[0], $event[1])">
-          </cd-health-pie>
+      <div cdsPopover
+        [isOpen]="popovers.pgStatus"
+        [dropShadow]="true"
+        [caret]="true"
+        placement="bottom"
+        (close)="closePopover('pgStatus')"
+        class="pg-status-popover-wrapper">
+
+      <div class="popover-trigger">
+        <cd-health-pie [data]="healthData"
+                      [config]="pgStatusChartConfig"
+                      (prepareFn)="preparePgStatus($event[0], $event[1])"
+                      (click)="togglePopover('pgStatus')">
+        </cd-health-pie>
         </div>
+        <cds-popover-content>
+        <ng-container *ngTemplateOutlet="logsLink"></ng-container>
+          <ul>
+            <li *ngFor="let pgStatesText of healthData.pg_info.statuses | keyvalue">
+             {{ pgStatesText.key }}: {{ pgStatesText.value }}
+            </li>
+          </ul>
+        </cds-popover-content>
       </div>
     </cd-info-card>
 
