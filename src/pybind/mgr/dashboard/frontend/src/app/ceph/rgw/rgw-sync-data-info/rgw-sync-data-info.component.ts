@@ -11,6 +11,10 @@ export class RgwSyncDataInfoComponent {
 
   @Input()
   zone: any = {};
-
+  isOpen: boolean = false;
   constructor() {}
+
+  togglePopover() {
+    this.isOpen = !this.isOpen;
+  }
 }
