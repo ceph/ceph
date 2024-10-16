@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio/detached.hpp>
+#include <boost/json.hpp>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -32,33 +33,6 @@ struct RedisResponse {
         data(std::get<0>(resp).value().at("data")) {}
 };
 
-// <<<<<<< HEAD
-// =======
-// BOOST_DESCRIBE_STRUCT(RedisWriteResponse, (), (errorCode, errorMessage))
-
-// inline void boost_redis_from_bulk(RedisWriteResponse& resp, std::string_view
-// sv,
-//                            boost::system::error_code& ec) {
-//   resp = boost::json::value_to<RedisWriteResponse>(boost::json::parse(sv));
-// }
-
-// struct RedisReadResponse {
-//   int errorCode;
-//   std::string errorMessage;
-//   int elementCount;
-//   std::vector<std::string> data;
-// };
-
-// BOOST_DESCRIBE_STRUCT(RedisReadResponse, (),
-//                       (errorCode, errorMessage, elementCount, data))
-
-// inline void boost_redis_from_bulk(RedisReadResponse& resp, std::string_view
-// sv,
-//                            boost::system::error_code& ec) {
-//   resp = boost::json::value_to<RedisReadResponse>(boost::json::parse(sv));
-// }
-
-// >>>>>>> 94026556cbb (rgw/redis: fix linking issues)
 
 struct initiate_exec {
   connection* conn;

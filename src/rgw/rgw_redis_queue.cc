@@ -95,6 +95,38 @@ int locked_read(connection* conn, const std::string& name,
   return ret.errorCode;
 }
 
+int locked_read(connection* conn, const std::string& name,
+                std::string& lock_cookie, std::vector<std::string>& res,
+                int count, optional_yield y) {
+  boost::redis::request req;
+  rgw::redis::RedisResponseMap resp;
+
+  req.push("FCALL", "locked_read_multi", 1, name, lock_cookie, count);
+  rgw::redis::RedisResponse ret =
+      rgw::redis::do_redis_func(conn, req, resp, __func__, y);
+  if (ret.errorCode == 0) {
+    // Parse the json string
+    boost::json::value v = boost::json::parse(ret.data);
+    // Check if the json value is an array
+    if (!v.is_array()) {
+      std::cerr << "RGW Redis Queue:: " << __func__
+                << "(): ERROR: JSON value is not an array" << std::endl;
+      return -EINVAL;
+    }
+
+    // Iterate over the json array and add each element to the vector
+    for (auto& element : v.as_array()) {
+      res.push_back(element.as_string().c_str());
+    }
+
+  } else {
+    std::cerr << "RGW Redis Queue:: " << __func__
+              << "(): ERROR: " << ret.errorMessage << std::endl;
+  }
+
+  return ret.errorCode;
+}
+
 int ack(connection* conn, const std::string& name, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
@@ -109,6 +141,15 @@ int locked_ack(connection* conn, const std::string& name,
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "locked_ack", 1, name, lock_cookie);
+  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+}
+
+int locked_ack(connection* conn, const std::string& name,
+               const std::string& lock_cookie, int count, optional_yield y) {
+  boost::redis::request req;
+  rgw::redis::RedisResponseMap resp;
+
+  req.push("FCALL", "locked_ack_multi", 1, name, lock_cookie, count);
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 

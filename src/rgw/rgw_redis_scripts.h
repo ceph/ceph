@@ -205,6 +205,28 @@ local function locked_read(keys, args)
     return lock_status
 end
 
+--- Option one
+--- Have a separate read if lock is held
+--- @param keys table A single element list - queue name
+--- @param args table A two element list - cookie, count
+--- @return pair of number (error code) and string (message)
+local function locked_read_multi(keys, args)
+    local name = "queue:" .. keys[1]
+    local cookie = args[1]
+    local count = args[2]
+
+    local assert_lock_keys = {"lock:" .. keys[1]}
+    local assert_lock_args = {cookie}
+
+    local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
+    if lock_status.map.errorCode == 0 then
+        local values = redis.call('LRANGE', name, -count, -1)
+        local data = cjson.encode(values)
+        return format_response(0, "", data)
+    end
+    return lock_status
+end
+
 local function ack(keys)
     local name = "queue:" .. keys[1]
     redis.call('RPOP', name)
@@ -225,6 +247,26 @@ local function locked_ack(keys, args)
     local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
     if lock_status.map.errorCode == 0 then
         redis.call('RPOP', name)
+        return format_response(0, "", "")
+    end
+    return lock_status
+end
+
+--- Acknowledge the Read
+--- @param keys table A single element list - queue name
+--- @param args table A single element list - cookie
+--- @return number 0 if the message is acknowledged
+local function locked_ack_multi(keys, args)
+    local name = "queue:" .. keys[1]
+    local cookie = args[1]
+    local count = args[2]
+
+    local assert_lock_keys = {"lock:" .. keys[1]}
+    local assert_lock_args = {cookie}
+
+    local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
+    if lock_status.map.errorCode == 0 then
+        redis.call('RPOP', name, count)
         return format_response(0, "", "")
     end
     return lock_status
@@ -261,7 +303,9 @@ redis.register_function('commit', commit)
 redis.register_function('abort', abort)
 redis.register_function('read', read)
 redis.register_function('locked_read', locked_read)
+redis.register_function('locked_read_multi', locked_read_multi)
 redis.register_function('ack', ack)
 redis.register_function('locked_ack', locked_ack)
+redis.register_function('locked_ack_multi', locked_ack_multi)
 redis.register_function('cleanup', cleanup)
 )";
