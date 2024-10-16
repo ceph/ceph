@@ -82,7 +82,8 @@ import {
   TabsModule,
   AccordionModule,
   TagModule,
-  TooltipModule
+  TooltipModule,
+  ToggletipModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
@@ -132,7 +133,8 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
     SelectModule,
     NumberModule,
     TagModule,
-    TooltipModule
+    TooltipModule,
+    ToggletipModule
   ],
   exports: [
     RgwDaemonListComponent,
