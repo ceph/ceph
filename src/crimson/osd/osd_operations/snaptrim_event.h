@@ -112,10 +112,6 @@ public:
 private:
   object_stat_sum_t delta_stats;
 
-  ObjectContextLoader::load_obc_iertr::future<> process_and_submit(
-    ObjectContextRef head_obc,
-    ObjectContextRef clone_obc);
-
   snap_trim_obj_subevent_ret_t remove_clone(
     ObjectContextRef obc,
     ObjectContextRef head_obc,
