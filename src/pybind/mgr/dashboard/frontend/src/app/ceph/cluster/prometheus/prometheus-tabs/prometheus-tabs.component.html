@@ -6,10 +6,10 @@
        ariaCurrentWhenActive="page"
        [routerLinkActiveOptions]="{exact: true}"
        i18n>Active Alerts
-    <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
-        class="badge badge-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
-    <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
-        class="badge badge-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</small></a>
+    <cds-tag *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
+        class="tag-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</cds-tag>
+    <cds-tag *ngIf="prometheusAlertService.activeWarningAlerts > 0"
+        class="tag-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</cds-tag></a>
   </li>
   <li class="nav-item">
     <a class="nav-link"
