@@ -233,7 +233,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         flexGrow: 1,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
-          class: 'badge-dark'
+          class: 'tags-dark'
         }
       },
       {
@@ -243,8 +243,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            maintenance: { class: 'badge-warning' },
-            available: { class: 'badge-success' }
+            maintenance: { class: 'tags-warning' },
+            available: { class: 'tags-success' }
           }
         }
       },

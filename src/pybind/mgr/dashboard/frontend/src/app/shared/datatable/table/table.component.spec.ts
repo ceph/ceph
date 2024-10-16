@@ -677,7 +677,7 @@ describe('TableComponent', () => {
   describe('useCustomClass', () => {
     beforeEach(() => {
       component.customCss = {
-        'badge badge-danger': 'active',
+        'tags-danger': 'active',
         'secret secret-number': 123.456,
         btn: (v) => _.isString(v) && v.startsWith('http'),
         secure: (v) => _.isString(v) && v.startsWith('https')
@@ -696,7 +696,7 @@ describe('TableComponent', () => {
     });
 
     it('should match a string and return the corresponding class', () => {
-      expect(component.useCustomClass('active')).toBe('badge badge-danger');
+      expect(component.useCustomClass('active')).toBe('tags-danger');
     });
 
     it('should match a number and return the corresponding class', () => {
