@@ -3,7 +3,6 @@
 #ifndef CEPH_FORMATTER_H
 #define CEPH_FORMATTER_H
 
-#include "include/int_types.h"
 #include "include/buffer_fwd.h"
 
 #include <deque>
