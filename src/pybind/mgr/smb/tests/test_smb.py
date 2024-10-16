@@ -410,72 +410,6 @@ def test_cmd_apply_share(tmodule):
     assert bdata["results"][0]["state"] == "created"
 
 
-def test_share_dump_config(tmodule):
-    _example_cfg_1(tmodule)
-
-    cfg = tmodule.dump_config('foo')
-    assert cfg == {
-        'samba-container-config': "v0",
-        'configs': {
-            'foo': {
-                'instance_name': 'foo',
-                'instance_features': [],
-                'shares': ['Ess One', 'Ess Two'],
-                'globals': ['default', 'foo'],
-            },
-        },
-        'shares': {
-            'Ess One': {
-                'options': {
-                    'path': '/',
-                    'read only': 'No',
-                    'browseable': 'Yes',
-                    'kernel share modes': 'no',
-                    'x:ceph:id': 'foo.s1',
-                    'vfs objects': 'acl_xattr ceph_new',
-                    'acl_xattr:security_acl_name': 'user.NTACL',
-                    'ceph_new:config_file': '/etc/ceph/ceph.conf',
-                    'ceph_new:filesystem': 'cephfs',
-                    'ceph_new:user_id': 'smb.fs.cluster.foo',
-                },
-            },
-            'Ess Two': {
-                'options': {
-                    'path': '/two',
-                    'read only': 'No',
-                    'browseable': 'Yes',
-                    'kernel share modes': 'no',
-                    'x:ceph:id': 'foo.stwo',
-                    'vfs objects': 'acl_xattr ceph_new',
-                    'acl_xattr:security_acl_name': 'user.NTACL',
-                    'ceph_new:config_file': '/etc/ceph/ceph.conf',
-                    'ceph_new:filesystem': 'cephfs',
-                    'ceph_new:user_id': 'smb.fs.cluster.foo',
-                },
-            },
-        },
-        'globals': {
-            'default': {
-                'options': {
-                    'load printers': 'No',
-                    'printing': 'bsd',
-                    'printcap name': '/dev/null',
-                    'disable spoolss': 'Yes',
-                },
-            },
-            'foo': {
-                'options': {
-                    'idmap config * : backend': 'autorid',
-                    'idmap config * : range': '2000-9999999',
-                    'realm': 'dom1.example.com',
-                    'security': 'ads',
-                    'workgroup': 'DOM1',
-                },
-            },
-        },
-    }
-
-
 def test_cluster_create_ad1(tmodule):
     _example_cfg_1(tmodule)
 
@@ -611,29 +545,6 @@ def test_cluster_rm(tmodule):
     assert result.success
     result = tmodule.cluster_rm('foo')
     assert result.success
-
-
-def test_dump_service_spec(tmodule):
-    _example_cfg_1(tmodule)
-    tmodule._public_store.overwrite(
-        {
-            'foo.config.smb': '',
-        }
-    )
-    tmodule._priv_store.overwrite(
-        {
-            'foo.join.2b9902c05d08bcba.json': '',
-            'foo.join.08129d4d3b8c37c7.json': '',
-        }
-    )
-
-    cfg = tmodule.dump_service_spec('foo')
-    assert cfg
-    assert cfg['service_id'] == 'foo'
-    assert cfg['spec']['cluster_id'] == 'foo'
-    assert cfg['spec']['features'] == ['domain']
-    assert cfg['spec']['config_uri'] == 'mem:foo/config.smb'
-    assert len(cfg['spec']['join_sources']) == 2
 
 
 def test_cmd_show_resource_json(tmodule):

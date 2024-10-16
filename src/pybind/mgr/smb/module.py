@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, Any, List, Optional, cast
 
 import logging
 
@@ -349,45 +349,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         if len(resources) == 1:
             return resources[0].to_simplified()
         return {'resources': [r.to_simplified() for r in resources]}
-
-    @cli.SMBCommand('dump cluster-config', perm='r')
-    def dump_config(self, cluster_id: str) -> Dict[str, Any]:
-        """DEBUG: Generate an example configuration"""
-        # TODO: Remove this command prior to release
-        return self._handler.generate_config(cluster_id)
-
-    @cli.SMBCommand('dump service-spec', perm='r')
-    def dump_service_spec(self, cluster_id: str) -> Dict[str, Any]:
-        """DEBUG: Generate an example smb service spec"""
-        # TODO: Remove this command prior to release
-        return dict(
-            self._handler.generate_smb_service_spec(cluster_id).to_json()
-        )
-
-    @cli.SMBCommand('dump everything', perm='r')
-    def dump_everything(self) -> Dict[str, Any]:
-        """DEBUG: Show me everything"""
-        # TODO: Remove this command prior to release
-        everything: Dict[str, Any] = {}
-        everything['PUBLIC'] = {}
-        log.warning('dumping PUBLIC')
-        for key in self._public_store:
-            e = self._public_store[key]
-            log.warning('dumping e: %s %r', e.uri, e.full_key)
-            everything['PUBLIC'][e.uri] = e.get()
-        log.warning('dumping PRIV')
-        everything['PRIV'] = {}
-        for key in self._priv_store:
-            e = self._priv_store[key]
-            log.warning('dumping e: %s %r', e.uri, e.full_key)
-            everything['PRIV'][e.uri] = e.get()
-        log.warning('dumping INTERNAL')
-        everything['INTERNAL'] = {}
-        for key in self._internal_store:
-            e = self._internal_store[key]
-            log.warning('dumping e: %s %r', e.uri, e.full_key)
-            everything['INTERNAL'][e.uri] = e.get()
-        return everything
 
     def submit_smb_spec(self, spec: SMBSpec) -> None:
         """Submit a new or updated smb spec object to ceph orchestration."""
