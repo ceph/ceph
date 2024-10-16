@@ -41,6 +41,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   nsid: string;
   currentBytes: number;
   invalidSizeError: boolean;
+  group: string;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -62,6 +63,9 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   }
 
   init() {
+    this.route.queryParams.subscribe((params) => {
+      this.group = params?.['group'];
+    });
     this.createForm();
     this.action = this.actionLabels.CREATE;
     this.route.params.subscribe((params: { subsystem_nqn: string; nsid: string }) => {
@@ -74,7 +78,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     this.edit = true;
     this.action = this.actionLabels.EDIT;
     this.nvmeofService
-      .getNamespace(this.subsystemNQN, this.nsid)
+      .getNamespace(this.subsystemNQN, this.nsid, this.group)
       .subscribe((res: NvmeofSubsystemNamespace) => {
         const convertedSize = this.dimlessBinaryPipe.transform(res.rbd_image_size).split(' ');
         this.currentBytes = res.rbd_image_size;
@@ -120,6 +124,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     const image_size = this.nsForm.getValue('image_size');
     const image_size_unit = this.nsForm.getValue('unit');
     const request = {} as NamespaceCreateRequest | NamespaceEditRequest;
+    request['gw_group'] = this.group;
     if (image_size) {
       const key: string = this.edit ? 'rbd_image_size' : 'size';
       const value: number = this.formatterService.toBytes(image_size + image_size_unit);
