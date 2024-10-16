@@ -30,6 +30,7 @@
 #include "common/admin_socket_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/JSONFormatterFile.h"
 #include "common/safe_io.h"
 #include "common/Thread.h"
 #include "common/version.h"

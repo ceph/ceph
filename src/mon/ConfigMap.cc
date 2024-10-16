@@ -6,6 +6,7 @@
 #include "ConfigMap.h"
 #include "crush/CrushWrapper.h"
 #include "common/entity_name.h"
+#include "common/JSONFormatter.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

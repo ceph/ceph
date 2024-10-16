@@ -3,6 +3,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "common/Timer.h"
 #include "include/stringify.h"
 #include "ServiceDaemon.h"
