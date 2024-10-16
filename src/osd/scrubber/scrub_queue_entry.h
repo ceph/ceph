@@ -98,11 +98,6 @@ static inline std::weak_ordering cmp_ripe_entries(
   if (auto cmp = r.urgency <=> l.urgency; cmp != 0) {
     return cmp;
   }
-  // if we are comparing the two targets of the same PG, once both are
-  // ripe - the 'deep' scrub is considered 'higher' than the 'shallow' one.
-  if (l.pgid == r.pgid && r.level < l.level) {
-    return std::weak_ordering::less;
-  }
   // the 'utime_t' operator<=> is 'partial_ordering', it seems.
   if (auto cmp = std::weak_order(
 	  double(l.schedule.scheduled_at), double(r.schedule.scheduled_at));
