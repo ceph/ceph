@@ -83,7 +83,7 @@ FormatterAttrs::FormatterAttrs(const char *attr, ...)
     if (!val)
       break;
 
-    attrs.push_back(make_pair(std::string(s), std::string(val)));
+    attrs.emplace_back(s, val);
     s = va_arg(ap, char *);
   } while (s);
   va_end(ap);
