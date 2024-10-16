@@ -201,7 +201,8 @@ class Context:
     def from_image(self):
         return {
             "centos9": "quay.io/centos/centos:stream9",
-            "centos8": "quay.io/centos/centos:stream8",
+            # "centos8": "quay.io/centos/centos:stream8",
+            "centos8": "quay.io/phlogistonjohn/devcentos:stream8",
             "ubuntu22.04": "docker.io/ubuntu:22.04",
         }[self.cli.distro]
 
