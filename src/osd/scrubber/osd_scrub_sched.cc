@@ -86,8 +86,6 @@ std::optional<Scrub::SchedEntry> ScrubQueue::pop_ready_entry(
     OSDRestrictions restrictions,
     utime_t time_now)
 {
-  /// \todo must handle 'only_deadlined'!
-
   auto eligible_filtr = [&, rst = restrictions](
 				  const SchedEntry& e) -> bool {
       return eligibility_pred(e, rst, time_now);

@@ -212,11 +212,8 @@ options:
   long_desc: Use osd_scrub_begin_hour=0 and osd_scrub_end_hour=0 for the entire day.
   fmt_desc: This restricts scrubbing to this hour of the day or later.
     Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0``
-    to allow scrubbing the entire day.  Along with ``osd_scrub_end_hour``, they define a time
-    window, in which the scrubs can happen.
-    But a scrub will be performed
-    no matter whether the time window allows or not, as long as the placement
-    group's scrub interval exceeds ``osd_scrub_max_interval``.
+    to allow scrubbing the entire day.  Along with ``osd_scrub_end_hour`` they define a time
+    window, only in which will periodic scrubs be initiated.
   default: 0
   see_also:
   - osd_scrub_end_hour
@@ -228,12 +225,10 @@ options:
   level: advanced
   desc: Restrict scrubbing to hours of the day earlier than this
   long_desc: Use osd_scrub_begin_hour=0 and osd_scrub_end_hour=0 for the entire day.
-  fmt_desc: This restricts scrubbing to the hour earlier than this.
+  fmt_desc: This restricts scrubbing to the hours earlier than this.
     Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0`` to allow scrubbing
     for the entire day.  Along with ``osd_scrub_begin_hour``, they define a time
-    window, in which the scrubs can happen. But a scrub will be performed
-    no matter whether the time window allows or not, as long as the placement
-    group's scrub interval exceeds ``osd_scrub_max_interval``.
+    window, only in which can periodic scrubs be automatically initiated.
   default: 0
   see_also:
   - osd_scrub_begin_hour
@@ -250,9 +245,7 @@ options:
     0  = Sunday, 1 = Monday, etc. Use ``osd_scrub_begin_week_day = 0``
     and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
     Along with ``osd_scrub_end_week_day``, they define a time window in which
-    scrubs can happen. But a scrub will be performed
-    no matter whether the time window allows or not, when the PG's
-    scrub interval exceeds ``osd_scrub_max_interval``.
+    periodic scrubs can be automatically initiated.
   default: 0
   see_also:
   - osd_scrub_end_week_day
@@ -269,9 +262,7 @@ options:
     0 = Sunday, 1 = Monday, etc.  Use ``osd_scrub_begin_week_day = 0``
     and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
     Along with ``osd_scrub_begin_week_day``, they define a time
-    window, in which the scrubs can happen. But a scrub will be performed
-    no matter whether the time window allows or not, as long as the placement
-    group's scrub interval exceeds ``osd_scrub_max_interval``.
+    window, in which periodic scrubs can be automatically initiated.
   default: 0
   see_also:
   - osd_scrub_begin_week_day
@@ -282,8 +273,9 @@ options:
   type: float
   level: advanced
   desc: Allow scrubbing when system load divided by number of CPUs is below this value
-  fmt_desc: The normalized maximum load. Ceph will not scrub when the system load
-    (as defined by ``getloadavg() / number of online CPUs``) is higher than this number.
+  fmt_desc: The normalized maximum load. Ceph will not initiate periodic (regular)
+    scrubs when the system load (as defined by ``getloadavg() / number of online CPUs``)
+    is higher than this number.
     Default is ``0.5``.
   default: 0.5
   with_legacy: true
@@ -292,8 +284,7 @@ options:
   type: float
   level: advanced
   desc: The desired interval between scrubs of a specific PG.
-  fmt_desc: The desired interval in seconds between scrubs of a specific PG
-    when the Ceph Storage Cluster load is low.
+  fmt_desc: The desired interval in seconds between scrubs of a specific PG.
   default: 1_day
   see_also:
   - osd_scrub_max_interval
@@ -303,8 +294,7 @@ options:
   type: float
   level: advanced
   desc: Scrub each PG no less often than this interval
-  fmt_desc: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
-    irrespective of cluster load.
+  fmt_desc: The maximum interval in seconds for scrubbing each PG.
   default: 7_day
   see_also:
   - osd_scrub_min_interval
@@ -315,7 +305,7 @@ options:
   level: advanced
   desc: Ratio of scrub interval to randomly vary
   long_desc: This prevents a scrub 'stampede' by randomly varying the scrub intervals
-    so that they are soon uniformly distributed over the week
+    so that they are uniformly distributed over time.
   fmt_desc: Add a random delay to ``osd_scrub_min_interval`` when scheduling
     the next scrub job for a PG. The delay is a random
     value less than ``osd_scrub_min_interval`` \*
