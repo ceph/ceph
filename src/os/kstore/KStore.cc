@@ -31,7 +31,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/pretty_binary.h"
 
 #include <shared_mutex> // for std::shared_lock

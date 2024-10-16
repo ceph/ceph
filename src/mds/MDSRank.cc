@@ -17,6 +17,7 @@
 #include <typeinfo>
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/JSONFormatterFile.h"
 #include "common/likely.h"
 #include "common/async/blocked_completion.h"
 #include "common/cmdparse.h"

@@ -14,6 +14,7 @@
 
 #include "ScrubStack.h"
 #include "common/Finisher.h"
+#include "common/JSONFormatter.h"
 #include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "mds/MDSContinuation.h"
