@@ -6912,8 +6912,19 @@ int BlueStore::_check_main_bdev_label()
     return -EIO;
   }
   if (bluestore_bdev_label_require_all && r != 0) {
-    derr << __func__ << " not all labels read properly" << dendl;
-    return -EIO;
+    // We are about to complain that some labels failed.
+    // But in case if we expanded block device some labels will not be good.
+    uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+    uint32_t valid_locations = 0;
+    for (uint64_t loc : bdev_label_positions) {
+      if (loc + lsize <= bdev_label.size) {
+        ++valid_locations;
+      }
+    }
+    if (valid_locations != bdev_label_valid_locations.size()) {
+      derr << __func__ << " not all labels read properly" << dendl;
+      return -EIO;
+    }
   }
   return 0;
 }
@@ -8949,11 +8960,25 @@ int BlueStore::expand_devices(ostream& out)
     _close_db_and_around();
 
     // mount in read/write to sync expansion changes
+    if (bdev_label_multi) {
+      // We need not do fsck, because we can be broken - size is increased,
+      // but we might not have labels set.
+      cct->_conf.set_val_or_die("bluestore_fsck_on_mount", "false");
+    }
     r = _mount();
     ceph_assert(r == 0);
     if (fm && fm->is_null_manager()) {
       // we grow the allocation range, must reflect it in the allocation file
       alloc->init_add_free(size0, size - size0);
+      if (bdev_label_multi) {
+        uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+        for (uint64_t loc : bdev_label_positions) {
+          if ((loc >= size0) && (loc + lsize <= size)) {
+            bdev_label_valid_locations.push_back(loc);
+          }
+        }
+        _write_bdev_label(cct, bdev, path + "/block", bdev_label, bdev_label_valid_locations);
+      }
       need_to_destage_allocation_file = true;
     }
     umount();
