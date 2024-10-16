@@ -744,6 +744,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('list', '--subvol', 'sv06', path='.', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv06', '--group', 'mygrp06', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv06', 'mygrp06')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv06', '--group_name', 'mygrp06')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp06')
 
@@ -759,6 +761,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('list', '--group', 'mygrp07', path='.', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv07', '--group', 'mygrp07', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv07', 'mygrp07')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv07', '--group_name', 'mygrp07')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp07')
 
@@ -773,6 +777,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
         self.fs_snap_schedule_cmd('list', '--subvol', 'sv08', '--group', 'mygrp08', path='.', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv08', '--group', 'mygrp08', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv08', 'mygrp08')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv08', '--group_name', 'mygrp08')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp08')
 
@@ -788,6 +794,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('retention', 'add', '--subvol', 'sv09', path='.', retention_spec_or_period='h', retention_count='5')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv09', '--group', 'mygrp09', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv09', 'mygrp09')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv09', '--group_name', 'mygrp09')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp09')
 
@@ -803,6 +811,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('retention', 'add', '--group', 'mygrp10', path='.', retention_spec_or_period='h', retention_count='5')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv10', '--group', 'mygrp10', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv10', 'mygrp10')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv10', '--group_name', 'mygrp10')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp10')
 
@@ -817,6 +827,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
         self.fs_snap_schedule_cmd('retention', 'add', '--subvol', 'sv11', '--group', 'mygrp11', path='.', retention_spec_or_period='h', retention_count=5, fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv11', '--group', 'mygrp11', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv11', 'mygrp11')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv11', '--group_name', 'mygrp11')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp11')
 
@@ -833,6 +845,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('activate', '--subvol', 'sv12', path='.', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv12', '--group', 'mygrp12', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv12', 'mygrp12')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv12', '--group_name', 'mygrp12')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp12')
 
@@ -849,6 +863,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('activate', '--group', 'mygrp13', path='.', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv13', '--group', 'mygrp13', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv13', 'mygrp13')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv13', '--group_name', 'mygrp13')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp13')
 
@@ -885,6 +901,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('deactivate', '--subvol', 'sv15', path='.', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv15', '--group', 'mygrp15', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv15', 'mygrp15')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv15', '--group_name', 'mygrp15')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp15')
 
@@ -902,6 +920,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('deactivate', '--group', 'mygrp16', path='.', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv16', '--group', 'mygrp16', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv16', 'mygrp16')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv16', '--group_name', 'mygrp16')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp16')
 
@@ -941,6 +961,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('retention', 'remove', '--subvol', 'sv18', path='.', retention_spec_or_period='h', retention_count='5', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv18', '--group', 'mygrp18', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv18', 'mygrp18')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv18', '--group_name', 'mygrp18')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp18')
 
@@ -959,6 +981,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('retention', 'remove', '--group', 'mygrp19', path='.', retention_spec_or_period='h', retention_count='5', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv19', '--group', 'mygrp19', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv19', 'mygrp19')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv19', '--group_name', 'mygrp19')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp19')
 
@@ -976,6 +1000,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
         self.fs_snap_schedule_cmd('retention', 'remove', '--subvol', 'sv20', '--group', 'mygrp20', path='.', retention_spec_or_period='h', retention_count='5', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv20', '--group', 'mygrp20', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv20', 'mygrp20')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv20', '--group_name', 'mygrp20')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp20')
 
@@ -995,6 +1021,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('remove', '--subvol', 'sv21', path='.', snap_schedule='1m', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv21', '--group', 'mygrp21', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv21', 'mygrp21')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv21', '--group_name', 'mygrp21')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp21')
 
@@ -1014,6 +1042,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('remove', '--group', 'mygrp22', path='.', snap_schedule='1m', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv22', '--group', 'mygrp22', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv22', 'mygrp22')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv22', '--group_name', 'mygrp22')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp22')
 
@@ -1031,6 +1061,8 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
         self.fs_snap_schedule_cmd('retention', 'remove', '--subvol', 'sv23', '--group', 'mygrp23', path='.', retention_spec_or_period='h', retention_count='5', fs='cephfs')
         self.fs_snap_schedule_cmd('remove', '--subvol', 'sv23', '--group', 'mygrp23', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv23', 'mygrp23')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv23', '--group_name', 'mygrp23')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp23')
 
