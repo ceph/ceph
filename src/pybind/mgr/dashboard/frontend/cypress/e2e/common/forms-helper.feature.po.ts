@@ -50,7 +50,7 @@ And('{string} option {string}', (action: string, labels: string) => {
     } else {
       for (const label of labels.split(', ')) {
         cy.contains('cd-modal .badge', new RegExp(`^${label}$`))
-          .find('.badge-remove')
+          .find('.tags-remove')
           .click();
       }
     }
