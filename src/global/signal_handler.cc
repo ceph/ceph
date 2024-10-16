@@ -20,6 +20,7 @@
 #include "common/ceph_mutex.h"
 #include "common/BackTrace.h"
 #include "common/debug.h"
+#include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "common/version.h"
 
