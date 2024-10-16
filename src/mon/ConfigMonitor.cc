@@ -10,6 +10,7 @@
 #include "messages/MGetConfig.h"
 #include "messages/MMonCommand.h"
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/TextTable.h"
 #include "common/cmdparse.h"
 #include "include/stringify.h"

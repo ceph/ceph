@@ -2,6 +2,7 @@
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
 #include "common/config_proxy.h"
+#include "common/JSONFormatter.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 #ifndef _WIN32

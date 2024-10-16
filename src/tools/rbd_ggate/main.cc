@@ -18,6 +18,7 @@
 #include <regex>
 
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/Preforker.h"
 #include "common/TextTable.h"
 #include "common/ceph_argparse.h"
