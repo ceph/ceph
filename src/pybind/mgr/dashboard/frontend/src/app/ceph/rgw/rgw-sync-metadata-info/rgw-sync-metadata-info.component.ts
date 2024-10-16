@@ -13,4 +13,5 @@ export class RgwSyncMetadataInfoComponent {
   metadataSyncInfo: any = {};
 
   constructor() {}
+
 }

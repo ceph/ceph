@@ -3,7 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgChartsModule } from 'ng2-charts';
 
 import { SharedModule } from '~/app/shared/shared.module';
@@ -19,6 +19,7 @@ import { MdsSummaryPipe } from './mds-summary.pipe';
 import { MgrSummaryPipe } from './mgr-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
 import { OsdSummaryPipe } from './osd-summary.pipe';
+import { ToggletipModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -28,10 +29,10 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     SharedModule,
     NgChartsModule,
     RouterModule,
-    NgbPopoverModule,
     FormsModule,
     ReactiveFormsModule,
-    DashboardV3Module
+    DashboardV3Module,
+    ToggletipModule
   ],
 
   declarations: [

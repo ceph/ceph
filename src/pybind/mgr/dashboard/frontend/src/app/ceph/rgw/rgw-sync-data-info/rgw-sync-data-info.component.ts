@@ -11,6 +11,6 @@ export class RgwSyncDataInfoComponent {
 
   @Input()
   zone: any = {};
-
   constructor() {}
+
 }
