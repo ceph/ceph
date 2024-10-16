@@ -10,6 +10,7 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "Watcher.h"
+#include "Types.h"
 
 class ContextWQ;
 
@@ -30,11 +31,11 @@ public:
   };
 
   static InstanceWatcher *create(librados::IoCtx &ioctx,
-                                 Listener &listener, ContextWQ *work_queue) {
-    return new InstanceWatcher(ioctx, listener, work_queue);
+                                 Listener &listener, ErrorListener &elistener, ContextWQ *work_queue) {
+    return new InstanceWatcher(ioctx, listener, elistener, work_queue);
   }
 
-  InstanceWatcher(librados::IoCtx &ioctx, Listener &listener, ContextWQ *work_queue);
+  InstanceWatcher(librados::IoCtx &ioctx, Listener &listener, ErrorListener &elistener, ContextWQ *work_queue);
   ~InstanceWatcher();
 
   void init(Context *on_finish);
@@ -49,24 +50,15 @@ public:
     return m_blocklisted;
   }
 
-  utime_t get_blocklisted_ts() {
-    std::scoped_lock locker(m_lock);
-    return m_blocklisted_ts;
-  }
-
   bool is_failed() {
     std::scoped_lock locker(m_lock);
     return m_failed;
   }
 
-  utime_t get_failed_ts() {
-    std::scoped_lock locker(m_lock);
-    return m_failed_ts;
-  }
-
 private:
   librados::IoCtx &m_ioctx;
   Listener &m_listener;
+  ErrorListener &m_elistener;
   ContextWQ *m_work_queue;
 
   ceph::mutex m_lock;
@@ -75,9 +67,6 @@ private:
 
   bool m_blocklisted = false;
   bool m_failed = false;
-
-  utime_t m_blocklisted_ts;
-  utime_t m_failed_ts;
 
   void create_instance();
   void handle_create_instance(int r);

@@ -145,6 +145,17 @@ class TestMirroring(CephFSTestCase):
         self.assertTrue(res[dir_name]['last_synced_snap']['name'] == expected_snap_name)
         self.assertTrue(res[dir_name]['snaps_synced'] == expected_snap_count)
 
+    def check_peer_status_idle(self, fs_name, fs_id, peer_spec, dir_name, expected_snap_name,
+                               expected_snap_count):
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        res = self.mirror_daemon_command(f'peer status for fs: {fs_name}',
+                                         'fs', 'mirror', 'peer', 'status',
+                                         f'{fs_name}@{fs_id}', peer_uuid)
+        self.assertTrue(dir_name in res)
+        self.assertTrue('idle' == res[dir_name]['state'])
+        self.assertTrue(expected_snap_name == res[dir_name]['last_synced_snap']['name'])
+        self.assertTrue(expected_snap_count == res[dir_name]['snaps_synced'])
+
     def check_peer_status_deleted_snap(self, fs_name, fs_id, peer_spec, dir_name,
                                       expected_delete_count):
         peer_uuid = self.get_peer_uuid(peer_spec)
@@ -216,7 +227,8 @@ class TestMirroring(CephFSTestCase):
         """return the rados addr used by cephfs-mirror instance"""
         res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
                                          'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
-        return res['rados_inst']
+        if 'rados_inst' in res:
+            return res['rados_inst']
 
     def mirror_daemon_command(self, cmd_label, *args):
         asok_path = self.get_daemon_admin_socket()
@@ -432,6 +444,7 @@ class TestMirroring(CephFSTestCase):
 
         # fetch rados address for blacklist check
         rados_inst = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
+        self.assertTrue(rados_inst)
 
         # simulate non-responding mirror daemon by sending SIGSTOP
         pid = self.get_mirror_daemon_pid()
@@ -450,9 +463,16 @@ class TestMirroring(CephFSTestCase):
         # check if the rados addr is blocklisted
         self.assertTrue(self.mds_cluster.is_addr_blocklisted(rados_inst))
 
-        # wait enough so that the mirror daemon restarts blocklisted instances
-        time.sleep(40)
-        rados_inst_new = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
+        # wait for restart, which is after 30 seconds timeout (cephfs_mirror_restart_mirror_on_blocklist_interval)
+        time.sleep(60)
+
+        # get the new rados_inst
+        rados_inst_new = ""
+        with safe_while(sleep=2, tries=20, action='wait for mirror status rados_inst') as proceed:
+            while proceed():
+                rados_inst_new = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
+                if rados_inst_new:
+                    break
 
         # and we should get a new rados instance
         self.assertTrue(rados_inst != rados_inst_new)
@@ -1314,3 +1334,68 @@ class TestMirroring(CephFSTestCase):
         self.mount_b.setfattr("d1/d2/d3", "ceph.mirror.dirty_snap_id", attr)
         val = self.mount_b.getfattr("d1/d2/d3", "ceph.mirror.dirty_snap_id")
         self.assertEqual(attr, val, f"Mismatch for ceph.mirror.dirty_snap_id value: {attr} vs {val}")
+
+    def test_cephfs_mirror_remote_snap_corrupt_fails_synced_snapshot(self):
+        """
+        That making manual changes to the remote .snap directory shows 'peer status' state: "failed"
+        for a synced snapshot and then restores to "idle" when those changes are reverted.
+        """
+        log.debug('reconfigure client auth caps')
+        self.get_ceph_cmd_result(
+            'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
+            'mds', 'allow rwps',
+            'mon', 'allow r',
+            'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
+                self.backup_fs.get_data_pool_name(),
+                self.backup_fs.get_data_pool_name()))
+        log.debug(f'mounting filesystem {self.secondary_fs_name}')
+        self.mount_b.umount_wait()
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec, self.secondary_fs_name)
+        dir_name = 'd0'
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+
+        # take a snapshot
+        snap_name = "snap_a"
+        expected_snap_count = 1
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap_name}'])
+
+        time.sleep(30)
+        # confirm snapshot synced and status 'idle'
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    peer_spec, f'/{dir_name}', snap_name, expected_snap_count)
+
+        remote_snap_name = 'snap_b'
+        remote_snap_path = f'{dir_name}/.snap/{remote_snap_name}'
+        failure_reason = f"snapshot '{remote_snap_name}' has invalid metadata"
+        dir_name = f'/{dir_name}'
+
+        # create a directory in the remote fs and check status 'failed'
+        self.mount_b.run_shell(['sudo', 'mkdir', remote_snap_path], omit_sudo=False)
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        with safe_while(sleep=1, tries=60, action=f'wait for failed status: {peer_spec}') as proceed:
+            while proceed():
+                res = self.mirror_daemon_command(f'peer status for fs: {self.primary_fs_name}',
+                                                 'fs', 'mirror', 'peer', 'status',
+                                                 f'{self.primary_fs_name}@{self.primary_fs_id}', peer_uuid)
+                if('failed' == res[dir_name]['state'] and \
+                   failure_reason == res.get(dir_name, {}).get('failure_reason', {}) and \
+                   snap_name == res[dir_name]['last_synced_snap']['name'] and \
+                   expected_snap_count == res[dir_name]['snaps_synced']):
+                    break
+        # remove the directory in the remote fs and check status restores to 'idle'
+        self.mount_b.run_shell(['sudo', 'rmdir', remote_snap_path], omit_sudo=False)
+        with safe_while(sleep=1, tries=60, action=f'wait for idle status: {peer_spec}') as proceed:
+            while proceed():
+                res = self.mirror_daemon_command(f'peer status for fs: {self.primary_fs_name}',
+                                                 'fs', 'mirror', 'peer', 'status',
+                                                 f'{self.primary_fs_name}@{self.primary_fs_id}', peer_uuid)
+                if('idle' == res[dir_name]['state'] and 'failure_reason' not in res and \
+                   snap_name == res[dir_name]['last_synced_snap']['name'] and \
+                   expected_snap_count == res[dir_name]['snaps_synced']):
+                    break
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
