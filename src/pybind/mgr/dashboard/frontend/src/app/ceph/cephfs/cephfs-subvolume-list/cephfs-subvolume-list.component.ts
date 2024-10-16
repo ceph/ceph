@@ -111,7 +111,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         flexGrow: 0.7,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
-          class: 'badge-background-primary'
+          class: 'tags-background-primary'
         }
       },
       {

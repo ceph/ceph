@@ -74,10 +74,10 @@ export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements 
         cellTransformation: CellTemplate.tooltip,
         customTemplateConfig: {
           map: {
-            Enabled: { class: 'badge-success', tooltip: 'sync is allowed and enabled' },
-            Allowed: { class: 'badge-info', tooltip: 'sync is allowed' },
+            Enabled: { class: 'tags-success', tooltip: 'sync is allowed and enabled' },
+            Allowed: { class: 'tags-info', tooltip: 'sync is allowed' },
             Forbidden: {
-              class: 'badge-warning',
+              class: 'tags-warning',
               tooltip:
                 'sync (as defined by this group) is not allowed and can override other groups'
             }
