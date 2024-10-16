@@ -104,7 +104,15 @@ def listdir_by_ctime_order(fs, path):
     ens_with_ctime = []
     for en in entry_names:
         d_path = os.path.join(path, en)
-        stb = fs.lstat(d_path)
+        try:
+            stb = fs.lstat(d_path)
+        except cephfs.Error as e:
+            if e.args[0] == errno.ENOENT:
+                log.debug('directory "{d_path}" went missing, perhaps it was '
+                          'in trash directory and has been purged.')
+                continue
+            else:
+                raise
 
         # add ctime next to clone entry
         ens_with_ctime.append((en, stb.st_ctime))
