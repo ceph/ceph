@@ -106,7 +106,6 @@
                       [invalid]="nfsForm.controls.fsal.controls.user_id.invalid && (nfsForm.controls.fsal.controls.user_id.dirty)"
                       [invalidText]="userIdError"
                       [skeleton]="allRGWUsers === null"
-                      (valueChange)="pathChangeHandler()"
                       i18n>
             <option *ngIf="allRGWUsers === null"
                     value="">Loading...</option>
@@ -223,8 +222,6 @@
                  name="path"
                  formControlName="path"
                  [ngbTypeahead]="pathDataSource"
-                 (selectItem)="pathChangeHandler()"
-                 (blur)="pathChangeHandler()"
                  [invalid]="nfsForm.controls.path.invalid && (nfsForm.controls.path.dirty)">
         </cds-text-label>
         <ng-template #pathError>
@@ -259,8 +256,6 @@
                  name="path"
                  formControlName="path"
                  [ngbTypeahead]="bucketDataSource"
-                 (selectItem)="pathChangeHandler()"
-                 (blur)="pathChangeHandler()"
                  [invalid]="nfsForm.controls.path.invalid && (nfsForm.controls.path.dirty)">
         </cds-text-label>
         <ng-template #bucketPathError>
