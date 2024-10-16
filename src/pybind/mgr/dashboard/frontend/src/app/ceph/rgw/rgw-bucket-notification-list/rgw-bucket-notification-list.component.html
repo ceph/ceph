@@ -34,7 +34,7 @@
           <div [cdsStack]="'horizontal'"
                *ngFor="let rule of item.value.FilterRule">
             <cds-tag size="sm"
-                     class="badge-background-gray">{{ rule.Name }}: {{ rule.Value }}</cds-tag>
+                     class="tag-background-gray">{{ rule.Name }}: {{ rule.Value }}</cds-tag>
           </div>
           <br>
         </ng-container>
@@ -46,7 +46,7 @@
   <ng-container *ngIf="events && events.length">
     <cds-tag *ngFor="let event of events"
              size="sm"
-             class="badge-background-primary">
+             class="tag-background-primary">
       {{ event }}
     </cds-tag>
   </ng-container>

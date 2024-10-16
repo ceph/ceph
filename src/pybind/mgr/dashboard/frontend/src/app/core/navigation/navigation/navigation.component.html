@@ -179,10 +179,14 @@
                             *ngIf="permissions.rbdMirroring.read && enabledFeature.mirroring"
                             class="tc_submenuitem tc_submenuitem_block_mirroring">
             <span i18n>Mirroring
-              <small *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
-                     class="badge badge-warning">{{ summaryData?.rbd_mirroring?.warnings }}</small>
-              <small *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
-                     class="badge badge-danger">{{ summaryData?.rbd_mirroring?.errors }}</small>
+              <cds-tag *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
+                       class="tag-warning">
+                {{ summaryData?.rbd_mirroring?.warnings }}
+              </cds-tag>
+              <cds-tag *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
+                       class="tag-danger">
+                {{ summaryData?.rbd_mirroring?.errors }}
+              </cds-tag>
             </span>
           </cds-sidenav-item>
           <cds-sidenav-item route="/block/iscsi"
@@ -301,10 +305,10 @@
                             class="tc_submenuitem tc_submenuitem_observe_monitoring">
             <span i18n>
               <ng-container>Alerts</ng-container>
-              <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
-                     class="badge badge-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
-              <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
-                     class="badge badge-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</small>
+              <cds-tag *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
+                     class="tag-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</cds-tag>
+              <cds-tag *ngIf="prometheusAlertService.activeWarningAlerts > 0"
+                     class="tag-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</cds-tag>
             </span>
           </cds-sidenav-item>
         </cds-sidenav-menu>

@@ -37,10 +37,10 @@
 
 <ng-template #statusTpl
              let-row="data.row">
-  <span class="badge"
-        [ngClass]="row | pipeFunction:getStatusClass">
+  <cds-tag *ngIf="row.status_desc"
+           [class]="row | pipeFunction:getStatusClass">
     {{ row.status_desc }}
-  </span>
+</cds-tag>
 </ng-template>
 
 <ng-template #listTpl
@@ -50,7 +50,7 @@
     <li class="list-group-item"
         *ngFor="let event of events; trackBy:trackByFn">
       <b>{{ event.created | relativeDate }} - </b>
-      <span class="badge badge-info">{{ event.subject }}</span><br>
+      <cds-tag class="tag-info">{{ event.subject }}</cds-tag><br>
       <span *ngIf="event.level === 'INFO'">
         <svg [cdsIcon]="icons.infoCircle"
              [size]="icons.size16"

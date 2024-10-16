@@ -57,17 +57,23 @@
         <td>
           <span *ngFor="let flag of selection.flags">
             <span title="{{ flags[flag] }}">
-              <span class="badge badge-dark me-2">{{ flag | uppercase }}</span>
+              <cds-tag class="tag-dark me-2">{{ flag | uppercase }}</cds-tag>
             </span>
           </span>
         </td>
       </tr>
       <tr>
         <td i18n
-            class="bold">Services</td>
+            class="bold">
+            Services
+        </td>
         <td>
           <span *ngFor="let service of selection.services">
-            <span class="badge badge-dark me-2">{{ service }}</span>
+            <cds-tag
+                 *ngIf="service"
+                 class="tag-dark me-2">
+            {{ service }}
+          </cds-tag>
           </span>
         </td>
       </tr>
