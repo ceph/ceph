@@ -254,7 +254,7 @@ end
 
 --- Acknowledge the Read
 --- @param keys table A single element list - queue name
---- @param args table A single element list - cookie
+--- @param args table A two element list - cookie and count
 --- @return number 0 if the message is acknowledged
 local function locked_ack_multi(keys, args)
     local name = "queue:" .. keys[1]

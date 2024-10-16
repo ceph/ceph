@@ -123,6 +123,40 @@ TEST_F(RGWRedisLockTest, RenewBeforeLeaseExpiry) {
       });
 }
 
+TEST_F(RGWRedisLockTest, AcquireAfterRenew) {
+  io.restart();
+  boost::asio::spawn(
+      io,
+      [this](boost::asio::yield_context yield) {
+        const std::string name = "lock:renewacquire";
+        const std::string cookie1 = "mycookie1";
+        const std::string cookie2 = "mycookie2";
+        int duration = 1000;
+
+        int return_code =
+            rgw::redislock::lock(conn, name, cookie1, duration, yield);
+        ASSERT_EQ(return_code, 0);
+
+        boost::asio::steady_timer timer(io, std::chrono::milliseconds(500));
+        timer.async_wait(yield);
+
+        return_code =
+            rgw::redislock::lock(conn, name, cookie1, duration, yield);
+        ASSERT_EQ(return_code, 0);
+
+        // Try to acquire the lock with another client after the initial client
+        // has renewed it
+        return_code =
+            rgw::redislock::lock(conn, name, cookie2, duration, yield);
+        ASSERT_EQ(return_code, -EBUSY);
+      },
+      [this](std::exception_ptr eptr) {
+        conn->cancel();
+        if (eptr) std::rethrow_exception(eptr);
+      });
+  io.run();
+}
+
 // Lock is expired and then taken over by another client
 // A renew attempt shall fail with EBUSY
 TEST_F(RGWRedisLockTest, RenewAfterReacquisition) {
@@ -130,7 +164,7 @@ TEST_F(RGWRedisLockTest, RenewAfterReacquisition) {
   boost::asio::spawn(
       io,
       [this](boost::asio::yield_context yield) {
-        const std::string name = "lock:renew";
+        const std::string name = "lock:renewreacquire";
         const std::string cookie = "mycookie";
         int duration = 500;
 
