@@ -29,7 +29,6 @@ import { Permissions } from '~/app/shared/models/permissions';
 import { EmptyPipe } from '~/app/shared/pipes/empty.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CdTableServerSideService } from '~/app/shared/services/cd-table-server-side.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -125,7 +124,6 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     private emptyPipe: EmptyPipe,
     private hostService: HostService,
     private actionLabels: ActionLabelsI18n,
-    private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     private router: Router,
     private notificationService: NotificationService,
@@ -153,7 +151,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         click: () =>
           this.router.url.includes('/hosts')
             ? this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.ADD] } }])
-            : (this.bsModalRef = this.modalService.show(HostFormComponent, {
+            : (this.bsModalRef = this.cdsModalService.show(HostFormComponent, {
                 hideMaintenance: this.hideMaintenance
               })),
         disable: (selection: CdTableSelection) => this.getDisable('add', selection)

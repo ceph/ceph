@@ -1,108 +1,104 @@
-<cd-modal [pageURL]="pageURL"
-          [modalRef]="activeModal">
-  <span class="modal-title"
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
-
-  <ng-container class="modal-content">
-
-    <div *cdFormLoading="loading">
-      <form name="hostForm"
-            #formDir="ngForm"
-            [formGroup]="hostForm"
-            novalidate>
-
-        <div class="modal-body">
-
-          <!-- Hostname -->
-          <div class="form-group row">
-            <label class="cd-col-form-label required"
-                   for="hostname">
-            <ng-container i18n>Hostname</ng-container>
-            <cd-helper>
-              <p i18n>To add multiple hosts at once, you can enter:</p>
-              <ul>
-                <li i18n>a comma-separated list of hostnames <samp>(e.g.: example-01,example-02,example-03)</samp>,</li>
-                <li i18n>a range expression <samp>(e.g.: example-[01-03].ceph)</samp>,</li>
-                <li i18n>a comma separated range expression <samp>(e.g.: example-[01-05].lab.com,example2-[1-4].lab.com,example3-[001-006].lab.com)</samp></li>
-              </ul>
-            </cd-helper>
-            </label>
-            <div class="cd-col-form-input">
-              <input class="form-control"
-                     type="text"
-                     placeholder="mon-123"
-                     id="hostname"
-                     name="hostname"
-                     formControlName="hostname"
-                     autofocus
-                     (keyup)="checkHostNameValue()">
-              <span class="invalid-feedback"
-                    *ngIf="hostForm.showError('hostname', formDir, 'required')"
-                    i18n>This field is required.</span>
-              <span class="invalid-feedback"
-                    *ngIf="hostForm.showError('hostname', formDir, 'uniqueName')"
-                    i18n>The chosen hostname is already in use.</span>
-            </div>
-          </div>
-
-          <!-- Address -->
-          <div class="form-group row"
-               *ngIf="!hostPattern">
-            <label class="cd-col-form-label"
-                   for="addr"
-                   i18n>Network address</label>
-            <div class="cd-col-form-input">
-              <input class="form-control"
-                     type="text"
-                     placeholder="192.168.0.1"
-                     id="addr"
-                     name="addr"
-                     formControlName="addr">
-              <span class="invalid-feedback"
-                    *ngIf="hostForm.showError('addr', formDir, 'pattern')"
-                    i18n>The value is not a valid IP address.</span>
-            </div>
-          </div>
-
-          <!-- Labels -->
-          <div class="form-group row">
-            <label i18n
-                   for="labels"
-                   class="cd-col-form-label">Labels</label>
-            <div class="cd-col-form-input">
-              <cd-select-badges id="labels"
-                                [data]="hostForm.controls.labels.value"
-                                [options]="labelsOption"
-                                [customBadges]="true"
-                                [messages]="messages">
-              </cd-select-badges>
-            </div>
-          </div>
-
-          <!-- Maintenance Mode -->
-          <div class="form-group row"
-               *ngIf="!hideMaintenance">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="maintenance"
-                       type="checkbox"
-                       formControlName="maintenance">
-                <label class="custom-control-label"
-                       for="maintenance"
-                       i18n>Maintenance Mode</label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-footer">
-          <cd-form-button-panel (submitActionEvent)="submit()"
-                                [form]="hostForm"
-                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                                wrappingClass="text-right"></cd-form-button-panel>
-        </div>
-      </form>
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+  </cds-modal-header>
+  <ng-container *cdFormLoading="loading">
+  <form name="hostForm"
+        #formDir="ngForm"
+        [formGroup]="hostForm"
+        novalidate>
+    <div cdsModalContent>
+      <!-- Hostname -->
+      <div class="form-item">
+        <cds-text-label label="Hostname"
+                        for="hostname"
+                        cdRequiredField="Hostname"
+                        [invalid]="!hostForm.controls.hostname.valid && hostForm.controls.hostname.dirty"
+                        [invalidText]="hostnameError"
+                        i18n>Hostname
+          <input cdsText
+                 type="text"
+                 placeholder="mon-123"
+                 id="hostname"
+                 name="hostname"
+                 formControlName="hostname"
+                 autofocus
+                 (keyup)="checkHostNameValue()">
+        </cds-text-label>
+        <ng-template #hostnameError>
+          <span *ngIf="hostForm.showError('hostname', formDir, 'required')"
+                class="invalid-feedback">
+            <ng-container i18n> This field is required. </ng-container>
+          </span>
+          <span *ngIf="hostForm.showError('hostname', formDir, 'uniqueName')"
+                class="invalid-feedback">
+            <ng-container i18n> The chosen hostname is already in use. </ng-container>
+          </span>
+        </ng-template>
+        <cd-help-text>
+          To add multiple hosts at once, you can enter:
+          <ul>
+            <li>a comma-separated list of hostnames <samp>(e.g.: example-01,example-02,example-03)</samp>,</li>
+            <li>a range expression <samp>(e.g.: example-[01-03].ceph)</samp>,</li>
+            <li>a comma separated range expression <samp>(e.g.: example-[01-05].lab.com,example2-[1-4].lab.com,example3-[001-006].lab.com)</samp></li>
+          </ul>
+        </cd-help-text>
+      </div>
+      <!-- Address -->
+      <div class="form-item"
+           *ngIf="!hostPattern">
+        <cds-text-label label="Network address"
+                        for="addr"
+                        i18n>Network address
+          <input cdsText
+                 type="text"
+                 placeholder="192.168.0.1"
+                 id="addr"
+                 name="addr"
+                 formControlName="addr"/>
+        </cds-text-label>
+        <ng-template #hostaddrError>
+          <span *ngIf="hostForm.showError('addr', formDir, 'pattern')">
+            <ng-container i18n> The value is not a valid IP address. </ng-container>
+          </span>
+        </ng-template>
+      </div>
+      <!-- Labels -->
+      <div class="form-item">
+        <cds-combo-box label="Labels"
+                       type="multi"
+                       selectionFeedback="top-after-reopen"
+                       for="labels"
+                       name="labels"
+                       formControlName="labels"
+                       placeholder="Select Labels..."
+                       i18n-placeholder
+                       [appendInline]="true"
+                       [items]="labelsOption"
+                       itemValueKey="value"
+                       id="labels"
+                       i18n>
+          <cds-dropdown-list></cds-dropdown-list>
+        </cds-combo-box>
+      </div>
+      <!-- Maintenance Mode -->
+      <div *ngIf="!hideMaintenance">
+        <cds-checkbox id="maintenance"
+                      type="checkbox"
+                      formControlName="maintenance"
+                      i18n>Maintenance Mode
+        </cds-checkbox>
+      </div>
     </div>
-  </ng-container>
-</cd-modal>
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="hostForm"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                          [modalForm]="true">
+    </cd-form-button-panel>
+  </form>
+</ng-container>
+</cds-modal>
