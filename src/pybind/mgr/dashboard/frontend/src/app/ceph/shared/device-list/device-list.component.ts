@@ -53,11 +53,11 @@ export class DeviceListComponent implements OnChanges, OnInit {
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            good: { value: $localize`Good`, class: 'badge-success' },
-            warning: { value: $localize`Warning`, class: 'badge-warning' },
-            bad: { value: $localize`Bad`, class: 'badge-danger' },
-            stale: { value: $localize`Stale`, class: 'badge-info' },
-            unknown: { value: $localize`Unknown`, class: 'badge-dark' }
+            good: { value: $localize`Good`, class: 'tags-success' },
+            warning: { value: $localize`Warning`, class: 'tags-warning' },
+            bad: { value: $localize`Bad`, class: 'tags-danger' },
+            stale: { value: $localize`Stale`, class: 'tags-info' },
+            unknown: { value: $localize`Unknown`, class: 'tags-dark' }
           }
         }
       },

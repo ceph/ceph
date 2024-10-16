@@ -130,7 +130,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         name: $localize`Data Protection`,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
-          class: 'badge-background-gray'
+          class: 'tags-background-gray'
         },
         flexGrow: 1.3
       },
@@ -139,7 +139,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         name: $localize`Applications`,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
-          class: 'badge-background-primary'
+          class: 'tags-background-primary'
         },
         flexGrow: 1.5
       },

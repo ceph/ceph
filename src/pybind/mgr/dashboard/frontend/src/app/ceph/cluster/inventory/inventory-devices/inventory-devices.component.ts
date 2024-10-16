@@ -121,8 +121,8 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            hdd: { value: 'HDD', class: 'badge-hdd' },
-            ssd: { value: 'SSD', class: 'badge-ssd' }
+            hdd: { value: 'HDD', class: 'tags-hdd' },
+            ssd: { value: 'SSD', class: 'tags-ssd' }
           }
         }
       },
@@ -155,7 +155,7 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
         flexGrow: 1,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
-          class: 'badge-dark',
+          class: 'tags-dark',
           prefix: 'osd.'
         }
       }

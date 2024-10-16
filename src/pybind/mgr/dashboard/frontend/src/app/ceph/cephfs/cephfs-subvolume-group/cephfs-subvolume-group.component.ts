@@ -84,7 +84,7 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
         flexGrow: 0.7,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
-          class: 'badge-background-primary'
+          class: 'tags-background-primary'
         }
       },
       {

@@ -131,8 +131,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            true: { value: $localize`PROTECTED`, class: 'badge-success' },
-            false: { value: $localize`UNPROTECTED`, class: 'badge-info' }
+            true: { value: $localize`PROTECTED`, class: 'tags-success' },
+            false: { value: $localize`UNPROTECTED`, class: 'tags-info' }
           }
         }
       },

@@ -2,8 +2,10 @@
 @use './src/styles/defaults' as *;
 @use '@carbon/charts/styles.css' as *;
 
+@use '@carbon/colors';
 @import './src/styles/carbon-defaults.scss';
-
+// Angular2-Tree Component
+@import '@circlon/angular-tree-component/css/angular-tree-component.css';
 // Fork-Awesome
 $fa-font-path: '~fork-awesome/fonts';
 $font-family-icon: 'ForkAwesome';
@@ -88,49 +90,50 @@ $grid-breakpoints: (
 }
 
 // Custom badges.
-.badge-background-gray,
-.badge-hdd {
-  background-color: $gray-600;
-  color: $white;
+
+.tags-background-gray,
+.tags-hdd {
+  background-color: colors.$gray-60;
+  color: colors.$white;
 }
 
-.badge-background-primary,
-.badge-ssd {
+.tags-background-primary,
+.tags-ssd {
   background-color: $primary;
-  color: $white;
+  color: colors.$white;
 }
 
-.badge-tab {
+.tags-tab {
   background-color: $gray-200;
   color: $gray-700;
 }
 
-.badge-cd-label-green {
+.tags-cd-label-green {
   background-color: $green-300;
   color: $white;
 }
 
-.badge-cd-label-cyan {
+.tags-cd-label-cyan {
   background-color: $cyan-300;
   color: $white;
 }
 
-.badge-cd-label-purple {
+.tags-cd-label-purple {
   background-color: $purple-300;
   color: $white;
 }
 
-.badge-cd-label-light-blue {
+.tags-cd-label-light-blue {
   background-color: $light-blue-300;
   color: $white;
 }
 
-.badge-cd-label-gold {
+.tags-cd-label-gold {
   background-color: $gold-300;
   color: $white;
 }
 
-.badge-cd-label-light-green {
+.tags-cd-label-light-green {
   background-color: $light-green-300;
   color: $white;
   font-weight: bolder;
@@ -169,39 +172,6 @@ a.btn-light {
 // Overrides the badge to rounded-pill
 .badge {
   @extend .badge, .mb-1;
-}
-
-// Overriding badges to match the class name of badges in Bootstrap v5
-.badge-primary {
-  @extend .badge, .bg-primary;
-}
-
-.badge-secondary {
-  @extend .badge, .bg-secondary;
-}
-
-.badge-success {
-  @extend .badge, .bg-success;
-}
-
-.badge-danger {
-  @extend .badge, .bg-danger;
-}
-
-.badge-info {
-  @extend .badge, .bg-primary;
-}
-
-.badge-warning {
-  @extend .badge, .bg-warning, .text-dark;
-}
-
-.badge-light {
-  @extend .badge, .bg-light, .text-dark;
-}
-
-.badge-dark {
-  @extend .badge, .bg-dark;
 }
 
 formly-form {
