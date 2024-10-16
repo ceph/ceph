@@ -33,10 +33,8 @@ export class HealthComponent implements OnInit, OnDestroy {
   enabledFeature$: FeatureTogglesMap$;
   icons = Icons;
   color: string;
-
   clientStatsConfig: any = {};
   rawCapacityChartConfig: any = {};
-
   pgStatusChartConfig = {
     options: {
       events: ['']
