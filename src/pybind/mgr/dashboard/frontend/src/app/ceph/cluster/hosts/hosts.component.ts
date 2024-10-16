@@ -245,8 +245,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            maintenance: { class: 'badge-warning' },
-            available: { class: 'badge-success' }
+            maintenance: { class: 'tags-warning' },
+            available: { class: 'tags-success' }
           }
         }
       },

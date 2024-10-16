@@ -4,6 +4,7 @@
   $use-flexbox-grid: true,
 );
 @use '@carbon/colors';
+
 @use './src/styles/vendor/variables' as vv;
 @use './themes/default';
 @use '@carbon/styles/scss/compat/themes' as compat;
@@ -37,6 +38,10 @@ Custom theme
 ******************************************/
 @forward './themes/content';
 
+//Importing carbon tags token
+
+@use '@carbon/styles/scss/components/tag/tokens' as tag-tokens;
+
 /******************************************
 Datatable
 ******************************************/
@@ -62,6 +67,58 @@ th {
   padding-block: 0 !important;
 }
 
+//  Overriding badges to match the class name of tags
+.tags-success {
+  background-color: tag-tokens.$tag-border-green;
+  color: colors.$white;
+}
+
+.tags-secondary {
+  background: tag-tokens.$tag-color-warm-gray;
+  color: colors.$white;
+}
+
+.tags-warning {
+  background: tag-tokens.$tag-background-red;
+  color: colors.$white;
+}
+
+.tags-danger {
+  background: tag-tokens.$tag-color-red;
+  color: colors.$white;
+}
+
+.tags-info {
+  background-color: colors.$teal-60;
+  color: colors.$white;
+}
+
+.tags-light {
+  background: colors.$white;
+  border: tag-tokens.$tag-color-gray;
+}
+
+.tags-dark {
+  background: tag-tokens.$tag-color-cool-gray;
+  color: colors.$white;
+}
+
+//custom tags
+.tags-background-gray,
+.tags-hdd {
+  background-color: colors.$gray-60;
+  color: colors.$white;
+}
+
+.tags-background-primary,
+.tags-ssd {
+  background-color: colors.$teal-60;
+  color: colors.$white;
+}
+// .tag-tab {
+//   background-color: $gray-200;
+//   color: $gray-700;
+// }
 /******************************************
 Side nav
 ******************************************/

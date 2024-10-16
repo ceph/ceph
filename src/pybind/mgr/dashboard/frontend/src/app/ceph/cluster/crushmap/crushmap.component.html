@@ -17,7 +17,7 @@
                            let-node>
                 <span *ngIf="node.data.status"
                       class="badge"
-                      [ngClass]="{'badge-success': ['in', 'up'].includes(node.data.status), 'badge-danger': ['down', 'out', 'destroyed'].includes(node.data.status)}">
+                      [class]="{'tags-success': ['in', 'up'].includes(node.data.status), 'tags-danger': ['down', 'out', 'destroyed'].includes(node.data.status)}">
                   {{ node.data.status }}
                 </span>
                 <span>&nbsp;</span>
