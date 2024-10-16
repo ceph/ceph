@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "common/Formatter.h"
+#include "common/XMLFormatter.h"
 #include <sstream>
 #include <string>
 
