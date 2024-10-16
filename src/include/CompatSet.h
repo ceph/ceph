@@ -15,14 +15,14 @@
 #ifndef CEPH_COMPATSET_H
 #define CEPH_COMPATSET_H
 
-#include <iostream>
+#include <iosfwd>
 #include <map>
 #include <string>
 
 #include "include/buffer.h"
 #include "include/encoding.h"
-#include "include/types.h"
-#include "common/Formatter.h"
+
+namespace ceph { class Formatter; }
 
 struct CompatSet {
 
@@ -77,47 +77,10 @@ struct CompatSet {
       remove(f.id);
     }
 
-    void encode(ceph::buffer::list& bl) const {
-      using ceph::encode;
-      /* See below, mask always has the lowest bit set in memory, but
-       * unset in the encoding */
-      encode(mask & (~(uint64_t)1), bl);
-      encode(names, bl);
-    }
+    void encode(ceph::buffer::list& bl) const;
+    void decode(ceph::buffer::list::const_iterator& bl);
 
-    void decode(ceph::buffer::list::const_iterator& bl) {
-      using ceph::decode;
-      decode(mask, bl);
-      decode(names, bl);
-      /**
-       * Previously, there was a bug where insert did
-       * mask |= f.id rather than mask |= (1 << f.id).
-       * In FeatureSets from those version, mask always
-       * has the lowest bit set.  Since then, masks always
-       * have the lowest bit unset.
-       *
-       * When we encounter such a FeatureSet, we have to
-       * reconstruct the mask from the names map.
-       */
-      if (mask & 1) {
-	mask = 1;
-	std::map<uint64_t, std::string> temp_names;
-	temp_names.swap(names);
-	for (auto i = temp_names.begin(); i != temp_names.end(); ++i) {
-	  insert(Feature(i->first, i->second));
-	}
-      } else {
-	mask |= 1;
-      }
-    }
-
-    void dump(ceph::Formatter *f) const {
-      for (auto p = names.cbegin(); p != names.cend(); ++p) {
-	char s[18];
-	snprintf(s, sizeof(s), "feature_%llu", (unsigned long long)p->first);
-	f->dump_string(s, p->second);
-      }
-    }
+    void dump(ceph::Formatter *f) const;
   };
 
   // These features have no impact on the read / write status
@@ -222,13 +185,7 @@ struct CompatSet {
     return true;
   }
 
-  std::ostream& printlite(std::ostream& o) const {
-    o << "{c=[" << std::hex << compat.mask << "]";
-    o << ",r=[" << std::hex << ro_compat.mask << "]";
-    o << ",i=[" << std::hex << incompat.mask << "]}";
-    o << std::dec;
-    return o;
-  }
+  std::ostream& printlite(std::ostream& o) const;
 
   void encode(ceph::buffer::list& bl) const {
     compat.encode(bl);
@@ -242,44 +199,14 @@ struct CompatSet {
     incompat.decode(bl);
   }
 
-  void dump(ceph::Formatter *f) const {
-    f->open_object_section("compat");
-    compat.dump(f);
-    f->close_section();
-    f->open_object_section("ro_compat");
-    ro_compat.dump(f);
-    f->close_section();
-    f->open_object_section("incompat");
-    incompat.dump(f);
-    f->close_section();
-  }
+  void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(std::list<CompatSet*>& o) {
-    o.push_back(new CompatSet);
-    o.push_back(new CompatSet);
-    o.back()->compat.insert(Feature(1, "one"));
-    o.back()->compat.insert(Feature(2, "two"));
-    o.back()->ro_compat.insert(Feature(4, "four"));
-    o.back()->incompat.insert(Feature(3, "three"));
-  }
+  static void generate_test_instances(std::list<CompatSet*>& o);
 };
 WRITE_CLASS_ENCODER(CompatSet)
 
-inline std::ostream& operator<<(std::ostream& out, const CompatSet::Feature& f)
-{
-  return out << "F(" << f.id << ", \"" << f.name << "\")";
-}
-
-inline std::ostream& operator<<(std::ostream& out, const CompatSet::FeatureSet& fs)
-{
-  return out << fs.names;
-}
-
-inline std::ostream& operator<<(std::ostream& out, const CompatSet& compat)
-{
-  return out << "compat=" << compat.compat
-	     << ",rocompat=" << compat.ro_compat
-	     << ",incompat=" << compat.incompat;
-}
+std::ostream& operator<<(std::ostream& out, const CompatSet::Feature& f);
+std::ostream& operator<<(std::ostream& out, const CompatSet::FeatureSet& fs);
+std::ostream& operator<<(std::ostream& out, const CompatSet& compat);
 
 #endif
