@@ -411,34 +411,21 @@ SnapTrimObjSubEvent::start()
     crimson::ct_error::assert_all{"unexpected error in SnapTrimObjSubEvent"}
   );
 
-  co_await process_and_submit(
-    obc_manager.get_head_obc(), obc_manager.get_obc()
-  ).handle_error_interruptible(
-    remove_or_update_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error in SnapTrimObjSubEvent"}
-  );
-
-  logger().debug("{}: completed", *this);
-  co_await interruptor::make_interruptible(handle.complete());
-}
-
-ObjectContextLoader::load_obc_iertr::future<>
-SnapTrimObjSubEvent::process_and_submit(ObjectContextRef head_obc,
-                                        ObjectContextRef clone_obc) {
-  logger().debug("{}: got clone_obc={}", *this, clone_obc->get_oid());
+  logger().debug("{}: got obc={}", *this, obc_manager.get_obc()->get_oid());
 
   co_await enter_stage<interruptor>(client_pp().process);
 
-  logger().debug("{}: processing clone_obc={}", *this, clone_obc->get_oid());
+  logger().debug("{}: processing obc={}", *this, obc_manager.get_obc()->get_oid());
 
-  auto txn = co_await remove_or_update(clone_obc, head_obc);
+  auto txn = co_await remove_or_update(
+    obc_manager.get_obc(), obc_manager.get_head_obc());
 
   auto [submitted, all_completed] = co_await pg->submit_transaction(
-	  std::move(clone_obc),
-	  nullptr,
-	  std::move(txn),
-	  std::move(osd_op_p),
-	  std::move(log_entries)
+    ObjectContextRef(obc_manager.get_obc()),
+    nullptr,
+    std::move(txn),
+    std::move(osd_op_p),
+    std::move(log_entries)
   );
 
   co_await std::move(submitted);
@@ -447,7 +434,8 @@ SnapTrimObjSubEvent::process_and_submit(ObjectContextRef head_obc,
 
   co_await std::move(all_completed);
 
-  co_return;
+  logger().debug("{}: completed", *this);
+  co_await interruptor::make_interruptible(handle.complete());
 }
 
 void SnapTrimObjSubEvent::print(std::ostream &lhs) const
