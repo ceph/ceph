@@ -1,7 +1,7 @@
 from io import StringIO
 
 from tasks.cephfs.fuse_mount import FuseMount
-from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, classhook
 from teuthology.exceptions import CommandFailedError
 from textwrap import dedent
 from threading import Thread
@@ -401,6 +401,86 @@ class TestMisc(CephFSTestCase):
 
     def test_client_ls(self):
         self._session_client_ls(['client', 'ls'])
+
+
+@classhook('_add_session_client_evictions')
+class TestSessionClientEvict(CephFSTestCase):
+    CLIENTS_REQUIRED = 3
+
+    def _evict_without_filter(self, cmd):
+        info_initial = self.fs.rank_asok(cmd + ['ls'])
+        # without any filter or flags
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_asok(cmd + ['evict'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        # without any filter but with existing flag
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_asok(cmd + ['evict', '--help'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), len(info_initial))
+        # without any filter but with non-existing flag
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_asok(cmd + ['evict', '--foo'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), len(info_initial))
+
+    def _evict_with_id_zero(self, cmd):
+        # with id=0
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_tell(cmd + ['evict', 'id=0'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+
+    def _evict_with_invalid_id(self, cmd):
+        info_initial = self.fs.rank_asok(cmd + ['ls'])
+        # with invalid id
+        self.fs.rank_tell(cmd + ['evict', 'id=1'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), len(info_initial)) # session list is status-quo
+
+    def _evict_with_negative_id(self, cmd):
+        info_initial = self.fs.rank_asok(cmd + ['ls'])
+        # with negative id
+        self.fs.rank_tell(cmd + ['evict', 'id=-9'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), len(info_initial)) # session list is status-quo
+
+    def _evict_with_valid_id(self, cmd):
+        info_initial = self.fs.rank_asok(cmd + ['ls'])
+        mount_a_client_id = self.mount_a.get_global_id()
+        # with a valid id
+        self.fs.rank_asok(cmd + ['evict', f'id={mount_a_client_id}'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), len(info_initial) - 1) # client with id provided is evicted
+        self.assertNotIn(mount_a_client_id, [val['id'] for val in info])
+
+    def _evict_all_clients(self, cmd):
+        # with id=* to evict all clients
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertGreater(len(info), 0)
+        self.fs.rank_asok(cmd + ['evict', 'id=*'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), 0) # multiple clients are evicted
+    
+    @classmethod
+    def _add_session_client_evictions(cls):
+        tests = [
+            "_evict_without_filter",
+            "_evict_with_id_zero",
+            "_evict_with_invalid_id",
+            "_evict_with_negative_id",
+            "_evict_with_valid_id",
+            "_evict_all_clients",
+        ]
+        def create_test(t, cmd):
+            def test(self):
+                getattr(self, t)(cmd)
+            return test
+        for t in tests:
+            setattr(cls, 'test_session' + t, create_test(t, ['session']))
+            setattr(cls, 'test_client' + t, create_test(t, ['client']))
+
         
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
