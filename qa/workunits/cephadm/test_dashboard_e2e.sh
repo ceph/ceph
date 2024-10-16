@@ -20,6 +20,9 @@ install_common () {
         $SUDO apt-get update
         $SUDO apt-get install nodejs
     elif grep -q rhel /etc/*-release; then
+        if grep -q "CentOS Stream 9" /etc/*-release; then
+            NODEJS_VERSION="18"
+        fi
         $SUDO yum module -y enable nodejs:$NODEJS_VERSION
         $SUDO yum install -y jq npm
     else
