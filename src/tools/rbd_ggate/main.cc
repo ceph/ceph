@@ -17,7 +17,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <regex>
 
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 #include "common/Preforker.h"
 #include "common/TextTable.h"
 #include "common/ceph_argparse.h"

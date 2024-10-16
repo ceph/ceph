@@ -48,8 +48,6 @@ using std::unique_ptr;
 using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
-using ceph::Formatter;
-using ceph::JSONFormatter;
 using ceph::mono_clock;
 using ceph::mono_time;
 using ceph::timespan_str;
