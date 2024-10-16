@@ -120,10 +120,14 @@
 
 <ng-template #flagsTpl
              let-row="data.row">
-  <span *ngFor="let flag of row.cdClusterFlags;"
-        class="badge badge-hdd me-1">{{ flag }}</span>
-  <span *ngFor="let flag of row.cdIndivFlags;"
-        class="badge badge-info me-1">{{ flag }}</span>
+  <cds-tag *ngFor="let flag of row.cdClusterFlags;"
+           class="tag-hdd me-1">
+    {{ flag }}
+  </cds-tag>
+  <cds-tag *ngFor="let flag of row.cdIndivFlags;"
+           class="tag-info me-1">
+        {{ flag }}
+  </cds-tag>
 </ng-template>
 
 <ng-template #osdUsageTpl

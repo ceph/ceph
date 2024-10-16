@@ -102,3 +102,15 @@ $scrollbar-track-color: transparent;
 .scrollable-expanded-row::-webkit-scrollbar-track {
   background: transparent;
 }
+
+tr .edit-btn {
+  opacity: 0;
+}
+
+tr:hover .edit-btn {
+  opacity: 1;
+}
+
+.table-tag {
+  white-space: nowrap;
+}

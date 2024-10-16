@@ -7,8 +7,11 @@
 <span *ngIf="metadataSyncInfo !== 'no sync (zone is master)'">
   <ul class="me-2">
     <ng-template #upToDateTpl>
-      <li class="badge badge-success"
-          i18n>Up to Date</li>
+      <li i18n>
+        <cds-tag class="tag-success">
+          Up to Date
+        </cds-tag>
+      </li>
     </ng-template>
     <cds-toggletip  [dropShadow]="true"
                     [align]="align">
@@ -54,7 +57,10 @@
         i18n>
         Last Synced:
     </li>
-    <li class="badge badge-info"
-        *ngIf="metadataSyncInfo.timestamp; else upToDateTpl">{{ metadataSyncInfo.timestamp | relativeDate }}</li>
+    <li *ngIf="metadataSyncInfo.timestamp; else upToDateTpl">
+      <cds-tag class="tag-info">
+        {{ metadataSyncInfo.timestamp | relativeDate }}
+      </cds-tag>
+    </li>
   </ul>
 </span>

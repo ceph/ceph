@@ -61,8 +61,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   executingTpl: TemplateRef<any>;
   @ViewChild('classAddingTpl', { static: true })
   classAddingTpl: TemplateRef<any>;
-  @ViewChild('badgeTpl', { static: true })
-  badgeTpl: TemplateRef<any>;
+  @ViewChild('tagTpl', { static: true })
+  tagTpl: TemplateRef<any>;
   @ViewChild('mapTpl', { static: true })
   mapTpl: TemplateRef<any>;
   @ViewChild('truncateTpl', { static: true })
@@ -829,7 +829,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.cellTemplates.perSecond = this.perSecondTpl;
     this.cellTemplates.executing = this.executingTpl;
     this.cellTemplates.classAdding = this.classAddingTpl;
-    this.cellTemplates.badge = this.badgeTpl;
+    this.cellTemplates.tag = this.tagTpl;
     this.cellTemplates.map = this.mapTpl;
     this.cellTemplates.truncate = this.truncateTpl;
     this.cellTemplates.timeAgo = this.timeAgoTpl;
