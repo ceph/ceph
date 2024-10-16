@@ -62,7 +62,7 @@ struct CompatSet {
     /**
      * Getter instead of using name[] to be const safe
      */
-    std::string get_name(uint64_t const f) const {
+    std::string_view get_name(uint64_t const f) const noexcept {
       std::map<uint64_t, std::string>::const_iterator i = names.find(f);
       ceph_assert(i != names.end());
       return i->second;
