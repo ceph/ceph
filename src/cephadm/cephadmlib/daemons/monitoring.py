@@ -3,13 +3,15 @@ import os
 from typing import Dict, List, Tuple
 
 from ..call_wrappers import call, CallVerbosity
-from ..constants import (
+from ceph.cephadm.images import (
     DEFAULT_ALERT_MANAGER_IMAGE,
     DEFAULT_GRAFANA_IMAGE,
     DEFAULT_LOKI_IMAGE,
     DEFAULT_NODE_EXPORTER_IMAGE,
     DEFAULT_PROMETHEUS_IMAGE,
     DEFAULT_PROMTAIL_IMAGE,
+)
+from ..constants import (
     UID_NOBODY,
     GID_NOGROUP,
 )

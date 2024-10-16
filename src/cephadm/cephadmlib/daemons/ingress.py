@@ -2,9 +2,11 @@ import os
 
 from typing import Dict, List, Optional, Tuple, Union
 
-from ..constants import (
+from ceph.cephadm.images import (
     DEFAULT_HAPROXY_IMAGE,
     DEFAULT_KEEPALIVED_IMAGE,
+)
+from ..constants import (
     DATA_DIR_MODE,
 )
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
