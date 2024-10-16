@@ -70,11 +70,11 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         name: $localize`Severity`,
         prop: 'labels.severity',
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            critical: { class: 'badge-danger' },
-            warning: { class: 'badge-warning' }
+            critical: { class: 'tags-danger' },
+            warning: { class: 'tags-warning' }
           }
         }
       },
@@ -82,12 +82,12 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         name: $localize`State`,
         prop: 'status.state',
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            active: { class: 'badge-info' },
-            unprocessed: { class: 'badge-warning' },
-            suppressed: { class: 'badge-dark' }
+            active: { class: 'tags-info' },
+            unprocessed: { class: 'tags-warning' },
+            suppressed: { class: 'tags-dark' }
           }
         }
       },
