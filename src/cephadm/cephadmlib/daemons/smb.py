@@ -72,6 +72,7 @@ class Config:
     instance_id: str
     source_config: str
     samba_debug_level: int
+    ctdb_log_level: str
     debug_delay: int
     domain_member: bool
     clustered: bool
@@ -98,6 +99,7 @@ class Config:
         domain_member: bool,
         clustered: bool,
         samba_debug_level: int = 0,
+        ctdb_log_level: str = '',
         debug_delay: int = 0,
         join_sources: Optional[List[str]] = None,
         user_sources: Optional[List[str]] = None,
@@ -119,6 +121,7 @@ class Config:
         self.domain_member = domain_member
         self.clustered = clustered
         self.samba_debug_level = samba_debug_level
+        self.ctdb_log_level = ctdb_log_level
         self.debug_delay = debug_delay
         self.join_sources = join_sources or []
         self.user_sources = user_sources or []
@@ -758,7 +761,7 @@ class SMB(ContainerDaemonForm):
     def _write_ctdb_stub_config(self, path: pathlib.Path) -> None:
         reclock_cmd = ' '.join(_MUTEX_SUBCMD + [self._cfg.cluster_lock_uri])
         nodes_cmd = ' '.join(_NODES_SUBCMD)
-        stub_config = {
+        stub_config: Dict[str, Any] = {
             'samba-container-config': 'v0',
             'ctdb': {
                 # recovery_lock is passed directly to ctdb: needs '!' prefix
@@ -770,6 +773,8 @@ class SMB(ContainerDaemonForm):
                 ),
             },
         }
+        if self._cfg.ctdb_log_level:
+            stub_config['ctdb']['log_level'] = self._cfg.ctdb_log_level
         with file_utils.write_new(path) as fh:
             json.dump(stub_config, fh)
 
