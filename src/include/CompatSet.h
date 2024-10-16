@@ -29,9 +29,9 @@ struct CompatSet {
 
   struct Feature {
     uint64_t id;
-    std::string name;
+    std::string_view name;
 
-    Feature(uint64_t _id, const std::string& _name) : id(_id), name(_name) {}
+    constexpr Feature(uint64_t _id, const std::string_view _name) : id(_id), name(_name) {}
   };
 
   class FeatureSet {
