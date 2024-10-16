@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "os/Transaction.h"
 

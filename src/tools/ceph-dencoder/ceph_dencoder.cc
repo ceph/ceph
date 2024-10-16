@@ -20,7 +20,7 @@
 
 #include "ceph_ver.h"
 #include "include/types.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
 #include "denc_plugin.h"
