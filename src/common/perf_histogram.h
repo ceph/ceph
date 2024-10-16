@@ -17,10 +17,11 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "common/Formatter.h"
-#include "include/int_types.h"
 #include "include/ceph_assert.h"
 
 class PerfHistogramCommon {
