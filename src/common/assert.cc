@@ -12,8 +12,17 @@
  *
  */
 
+#include "include/ceph_assert.h"
+
+#include <sstream>
+
 #include "include/compat.h"
+#include "common/BackTrace.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
+#include "log/Log.h"
+
+#include <stdarg.h>
 
 using std::ostringstream;
 
