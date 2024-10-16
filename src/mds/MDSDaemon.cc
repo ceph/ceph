@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "include/compat.h"
+#include "include/Context.h"
 #include "include/types.h"
 #include "include/str_list.h"
 
@@ -25,6 +26,7 @@
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
@@ -32,6 +34,14 @@
 #include "common/version.h"
 
 #include "global/signal_handler.h"
+#include "log/Log.h"
+
+#include "messages/MCommand.h"
+#include "messages/MCommandReply.h"
+#include "messages/MGenericMessage.h"
+#include "messages/MMDSMap.h"
+#include "messages/MMonCommand.h"
+#include "messages/MRemoveSnaps.h"
 
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
@@ -39,6 +49,7 @@
 #include "osdc/Objecter.h"
 
 #include "MDSMap.h"
+#include "MDSRank.h"
 
 #include "Server.h"
 #include "Locker.h"
