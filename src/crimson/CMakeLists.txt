@@ -73,6 +73,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/utf8.c
   ${PROJECT_SOURCE_DIR}/src/common/version.cc
   ${PROJECT_SOURCE_DIR}/src/common/BackTrace.cc
+  ${PROJECT_SOURCE_DIR}/src/common/CompatSet.cc
   ${PROJECT_SOURCE_DIR}/src/common/ConfUtils.cc
   ${PROJECT_SOURCE_DIR}/src/common/DecayCounter.cc
   ${PROJECT_SOURCE_DIR}/src/common/HTMLFormatter.cc
