@@ -17,7 +17,6 @@
 #include "HTMLFormatter.h"
 #include "Formatter.h"
 
-#include <sstream>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>

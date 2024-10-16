@@ -17,6 +17,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "include/random.h"
 #include "mon/health_check.h"
