@@ -79,6 +79,9 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/DecayCounter.cc
   ${PROJECT_SOURCE_DIR}/src/common/HTMLFormatter.cc
   ${PROJECT_SOURCE_DIR}/src/common/Formatter.cc
+  ${PROJECT_SOURCE_DIR}/src/common/JSONFormatter.cc
+  ${PROJECT_SOURCE_DIR}/src/common/TableFormatter.cc
+  ${PROJECT_SOURCE_DIR}/src/common/XMLFormatter.cc
   ${PROJECT_SOURCE_DIR}/src/common/Graylog.cc
   ${PROJECT_SOURCE_DIR}/src/common/Journald.cc
   ${PROJECT_SOURCE_DIR}/src/common/ostream_temp.cc
