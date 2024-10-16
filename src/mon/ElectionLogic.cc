@@ -16,6 +16,7 @@
 
 #include "include/ceph_assert.h"
 #include "common/dout.h"
+#include "common/JSONFormatter.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
