@@ -76,13 +76,13 @@ export class HostsPageHelper extends PageHelper {
     if (add) {
       cy.get('cd-modal').find('.select-menu-edit').click();
       for (const label of labels) {
-        cy.contains('cd-modal .badge', new RegExp(`^${label}$`)).should('not.exist');
+        cy.contains('cd-modal .tag', new RegExp(`^${label}$`)).should('not.exist');
         cy.get('.popover-body input').type(`${label}{enter}`);
       }
     } else {
       for (const label of labels) {
-        cy.contains('cd-modal .badge', new RegExp(`^${label}$`))
-          .find('.badge-remove')
+        cy.contains('cd-modal .tag', new RegExp(`^${label}$`))
+          .find('.tags-remove')
           .click();
       }
     }
@@ -96,7 +96,7 @@ export class HostsPageHelper extends PageHelper {
     this.getTableCell(this.columnIndex.hostname, hostname, true).as('row').click();
     cy.get('@row')
       .parent()
-      .find(`[cdstabledata]:nth-child(${this.columnIndex.labels}) .badge`)
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.labels}) .tag`)
       .should(($ele) => {
         const newLabels = $ele.toArray().map((v) => v.innerText);
         for (const label of labels) {
@@ -121,7 +121,7 @@ export class HostsPageHelper extends PageHelper {
 
       this.getTableCell(this.columnIndex.hostname, hostname, true)
         .parent()
-        .find(`[cdstabledata]:nth-child(${this.columnIndex.status}) .badge`)
+        .find(`[cdstabledata]:nth-child(${this.columnIndex.status}) .tag`)
         .should(($ele) => {
           const status = $ele.toArray().map((v) => v.innerText);
           expect(status).to.include('maintenance');
@@ -151,7 +151,7 @@ export class HostsPageHelper extends PageHelper {
 
       this.getTableCell(this.columnIndex.hostname, hostname, true)
         .parent()
-        .find(`[cdstabledata]:nth-child(${this.columnIndex.status}) .badge`)
+        .find(`[cdstabledata]:nth-child(${this.columnIndex.status}) .tag`)
         .should(($ele) => {
           const status = $ele.toArray().map((v) => v.innerText);
           expect(status).to.include('maintenance');
@@ -175,7 +175,7 @@ export class HostsPageHelper extends PageHelper {
   checkServiceInstancesExist(hostname: string, instances: string[]) {
     this.getTableCell(this.columnIndex.hostname, hostname, true)
       .parent()
-      .find(`[cdstabledata]:nth-child(${this.columnIndex.services}) .badge`)
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.services}) .tag`)
       .should(($ele) => {
         const serviceInstances = $ele.toArray().map((v) => v.innerText);
         for (const instance of instances) {
