@@ -2954,7 +2954,7 @@ def command_bootstrap(ctx):
         mounts = {}
         mounts[pathify(ctx.apply_spec)] = '/tmp/spec.yml:ro'
         try:
-            out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
+            out = cli(['orch', 'apply', '--continue-on-error', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
             logger.info(out)
         except Exception:
             ctx.error_code = -errno.EINVAL
