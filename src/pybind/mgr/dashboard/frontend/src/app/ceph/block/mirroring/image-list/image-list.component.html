@@ -48,7 +48,10 @@
 <ng-template #stateTmpl
              let-row="data.row"
              let-value="data.value">
-  <span [ngClass]="row.state_color | mirrorHealthColor">{{ value }}</span>
+
+<cds-tag size="sm"
+         [class]="row.state_color | mirrorHealthColor">{{ value }}</cds-tag>
+
 </ng-template>
 
 <ng-template #progressTmpl

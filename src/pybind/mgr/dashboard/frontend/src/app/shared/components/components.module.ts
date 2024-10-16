@@ -40,7 +40,8 @@ import {
   LayoutModule,
   TilesModule,
   PopoverModule,
-  InlineLoadingModule
+  InlineLoadingModule,
+  TagModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/20';
 import CodeIcon from '@carbon/icons/es/code/16';
@@ -142,7 +143,8 @@ import CloseIcon from '@carbon/icons/es/close/16';
     LayoutModule,
     TilesModule,
     PopoverModule,
-    InlineLoadingModule
+    InlineLoadingModule,
+    TagModule
   ],
   declarations: [
     SparklineComponent,

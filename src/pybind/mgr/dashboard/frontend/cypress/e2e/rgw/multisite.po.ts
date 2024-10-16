@@ -59,7 +59,7 @@ export class MultisitePageHelper extends PageHelper {
 
     this.searchTable(group_id);
     cy.get(`[cdstabledata]:nth-child(${this.columnIndex.status})`)
-      .find('.badge-warning')
+      .find('.tag-warning')
       .should('contain', status);
   }
 

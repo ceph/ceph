@@ -20,7 +20,7 @@ export enum CellTemplate {
   // supports an optional custom configuration:
   // {
   //   ...
-  //   cellTransformation: CellTemplate.badge,
+  //   cellTransformation: CellTemplate.tag,
   //   customTemplateConfig: {
   //     class?: string; // Additional class name.
   //     prefix?: any;   // Prefix of the value to be displayed.
@@ -30,7 +30,7 @@ export enum CellTemplate {
   //     }
   //   }
   // }
-  badge = 'badge',
+  tag = 'tag',
   // Maps the value using the given dictionary.
   // {
   //   ...
