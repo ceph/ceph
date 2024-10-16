@@ -7,7 +7,8 @@
 #include "include/rbd/features.h"
 #include "common/config_proxy.h"
 #include "common/strtol.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 #include "global/global_context.h"
 #include <iostream>
 #include <boost/tokenizer.hpp>

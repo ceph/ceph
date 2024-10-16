@@ -13,8 +13,9 @@
  */
 
 #include "gtest/gtest.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/HTMLFormatter.h"
+#include "common/XMLFormatter.h"
 
 #include <sstream>
 #include <string>

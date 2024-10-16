@@ -8,6 +8,7 @@
 
 #include "common/debug.h"
 #include "common/ceph_json.h"
+#include "common/JSONFormatter.h"
 
 #include "rgw_sync_trace.h"
 #include "rgw_rados.h"

@@ -8,8 +8,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 #include "ceph_ver.h"
-#include "common/Formatter.h"
 #include "common/HTMLFormatter.h"
+#include "common/XMLFormatter.h"
 #include "common/utf8.h"
 #include "include/str_list.h"
 #include "rgw_common.h"

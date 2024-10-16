@@ -48,6 +48,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/ceph_mutex.h"
+#include "common/JSONFormatter.h"
 #include "common/strtol.h"
 #include "common/LogEntry.h"
 #include "auth/KeyRing.h"

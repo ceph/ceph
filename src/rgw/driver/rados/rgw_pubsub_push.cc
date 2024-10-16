@@ -9,6 +9,7 @@
 #include <curl/curl.h>
 #include "common/Formatter.h"
 #include "common/iso_8601.h"
+#include "common/JSONFormatter.h"
 #include "common/async/completion.h"
 #include "common/async/yield_waiter.h"
 #include "common/async/waiter.h"

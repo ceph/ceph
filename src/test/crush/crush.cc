@@ -17,6 +17,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
+#include "common/JSONFormatter.h"
 #include "include/stringify.h"
 
 #include "crush/CrushWrapper.h"

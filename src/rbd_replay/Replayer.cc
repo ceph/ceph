@@ -14,6 +14,7 @@
 
 #include "Replayer.hpp"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "include/scope_guard.h"
 #include "rbd_replay/ActionTypes.h"
 #include "rbd_replay/BufferReader.h"

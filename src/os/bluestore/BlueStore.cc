@@ -42,6 +42,7 @@
 #include "include/util.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "common/PriorityCache.h"
 #include "common/url_escape.h"

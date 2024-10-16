@@ -17,7 +17,7 @@
 #include "RetryMessage.h"
 #include "SnapRealm.h"
 #include "common/debug.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "mds/MDLog.h"
 #include "mds/MDSRank.h"
 #include "mds/MDCache.h"

@@ -17,6 +17,7 @@
 
 #include "common/dout.h"
 #include "include/scope_guard.h"
+#include "common/XMLFormatter.h"
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/async/spawn_throttle.h"

@@ -20,6 +20,7 @@
 
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/TableFormatter.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 #include "include/btree_map.h"
