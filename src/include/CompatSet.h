@@ -35,7 +35,7 @@ struct CompatSet {
   };
 
   class FeatureSet {
-    uint64_t mask;
+    uint64_t mask = 1;
     std::map<uint64_t, std::string> names;
 
   public:
@@ -45,7 +45,7 @@ struct CompatSet {
     friend class CephCompatSet_merge_Test;
     friend std::ostream& operator<<(std::ostream& out, const CompatSet::FeatureSet& fs);
     friend std::ostream& operator<<(std::ostream& out, const CompatSet& compat);
-    FeatureSet() : mask(1), names() {}
+
     void insert(const Feature& f) {
       ceph_assert(f.id > 0);
       ceph_assert(f.id < 64);
