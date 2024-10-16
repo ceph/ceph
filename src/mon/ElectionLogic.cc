@@ -16,6 +16,7 @@
 
 #include "include/ceph_assert.h"
 #include "common/dout.h"
+#include "common/JSONFormatter.h"
 
 #include <iomanip>
 #include <ostream>
