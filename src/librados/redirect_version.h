@@ -28,8 +28,9 @@ struct redirect_version_t {
 /// removing the version_t argument, optionally redirecting its value into
 /// the given pointer.
 template <typename CompletionToken>
-auto redirect_version(CompletionToken&& token, version_t* ver = nullptr) {
-  return redirect_version_t{std::forward<CompletionToken>(token), ver};
+auto redirect_version(CompletionToken&& token, version_t* ver = nullptr)
+    -> redirect_version_t<CompletionToken> {
+  return {std::forward<CompletionToken>(token), ver};
 }
 
 namespace detail {
