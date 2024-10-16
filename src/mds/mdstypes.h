@@ -11,27 +11,15 @@
 #include <string>
 #include <string_view>
 
-#include "common/config.h"
-#include "common/Clock.h"
 #include "common/DecayCounter.h"
 #include "common/StackStringStream.h"
 #include "common/entity_name.h"
 
-#include "include/compat.h"
-#include "include/Context.h"
 #include "include/frag.h"
-#include "include/xlist.h"
 #include "include/interval_set.h"
-#include "include/compact_set.h"
 #include "include/fs_types.h"
-#include "include/ceph_fs.h"
 
-#include "inode_backtrace.h"
-
-#include <boost/spirit/include/qi.hpp>
-#include <boost/pool/pool.hpp>
 #include "include/ceph_assert.h"
-#include "common/ceph_json.h"
 #include "include/cephfs/types.h"
 
 #define MDS_PORT_CACHE   0x200
@@ -64,6 +52,8 @@
 #define MDS_INO_STRAY_INDEX(i) (((unsigned (i)) - MDS_INO_STRAY_OFFSET) % NUM_STRAY)
 
 #define MDS_IS_PRIVATE_INO(i) ((i) < MDS_INO_SYSTEM_BASE && (i) >= MDS_INO_MDSDIR_OFFSET)
+
+class JSONObj;
 
 class mds_role_t {
 public:
