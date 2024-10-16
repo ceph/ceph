@@ -17,6 +17,7 @@
 
 #include "common/ceph_json.h"
 #include "common/Clock.h"
+#include "common/JSONFormatter.h"
 #include "common/StackStringStream.h"
 
 #include <sstream>
