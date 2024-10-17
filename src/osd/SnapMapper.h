@@ -172,43 +172,67 @@ public:
   static const char *PURGED_SNAP_EPOCH_PREFIX;
   static const char *PURGED_SNAP_PREFIX;
 
-#ifndef WITH_SEASTAR
   struct Scrubber {
-    CephContext *cct;
-    ObjectStore *store;
-    ObjectStore::CollectionHandle ch;
+#ifdef WITH_SEASTAR
+    using ObjectStoreT = crimson::os::FuturizedStore::Shard;
+    using CollectionHandleT = ObjectStoreT::CollectionRef;
+#else
+    using ObjectStoreT = ObjectStore;
+    using CollectionHandleT = ObjectStoreT::CollectionHandle;
+#endif
+    ObjectStoreT *store;
     ghobject_t mapping_hoid;
     ghobject_t purged_snaps_hoid;
-
-    ObjectMap::ObjectMapIterator psit;
     int64_t pool;
     snapid_t begin, end;
 
-    bool _parse_p();   ///< advance the purged_snaps pointer
-
-    ObjectMap::ObjectMapIterator mapit;
     Mapping mapping;
     shard_id_t shard;
 
-    bool _parse_m();   ///< advance the (object) mapper pointer
-
     std::vector<std::tuple<int64_t, snapid_t, uint32_t, shard_id_t>> stray;
-
+#ifndef WITH_SEASTAR
+    CephContext *cct;
+    CollectionHandleT ch;
+    ObjectMap::ObjectMapIterator psit;
+    ObjectMap::ObjectMapIterator mapit;
+    bool _parse_p();   ///< advance the purged_snaps pointer
+    bool _parse_m();   ///< advance the (object) mapper pointer
     Scrubber(
       CephContext *cct,
       ObjectStore *store,
       ObjectStore::CollectionHandle& ch,
       ghobject_t mapping_hoid,
       ghobject_t purged_snaps_hoid)
-      : cct(cct),
-	store(store),
-	ch(ch),
-	mapping_hoid(mapping_hoid),
-	purged_snaps_hoid(purged_snaps_hoid) {}
-
+      : store(store),
+    mapping_hoid(mapping_hoid),
+    purged_snaps_hoid(purged_snaps_hoid),
+    cct(cct),
+    ch(ch) {}
     void run();
+#else
+    std::string next_key_p, next_key_m;
+    CollectionHandleT ch_p;
+    CollectionHandleT ch_m;
+    seastar::future<bool> _parse_p();   ///< advance the purged_snaps pointer
+    seastar::future<bool> _parse_m();   ///< advance the (object) mapper pointer
+    Scrubber(
+      ObjectStoreT *store,
+      CollectionHandleT ch_p,
+      CollectionHandleT ch_m,
+      ghobject_t mapping_hoid,
+      ghobject_t purged_snaps_hoid)
+      : store(store),
+    mapping_hoid(std::move(mapping_hoid)),
+    purged_snaps_hoid(std::move(purged_snaps_hoid)),
+    next_key_p(PURGED_SNAP_PREFIX),
+    next_key_m(MAPPING_PREFIX),
+    ch_p(std::move(ch_p)),
+    ch_m(std::move(ch_m)) {}
+    seastar::future<> run();
+#endif
   };
 
+#ifndef WITH_SEASTAR
   static std::string convert_legacy_key(
     const std::string& old_key,
     const bufferlist& value);
@@ -315,6 +339,7 @@ private:
   }
 
   static bool is_mapping(const std::string &to_test);
+  static bool is_purged(const std::string &to_test);
 
   uint32_t mask_bits;
   const uint32_t match;
