@@ -36,7 +36,7 @@ class RedisDriver : public CacheDriver {
                                           const rgw::sal::Attrs& attrs, uint64_t cost, uint64_t id) override;
     virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) override;
     virtual rgw::AioResultList get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) override;
-    virtual int del(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
+    virtual int del(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override { return -1; } // TODO: implement
     virtual int append_data(const DoutPrefixProvider* dpp, const::std::string& key, const bufferlist& bl_data, optional_yield y) override;
     virtual int delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y) override;
     virtual int rename(const DoutPrefixProvider* dpp, const::std::string& oldKey, const::std::string& newKey, optional_yield y) override;
