@@ -198,17 +198,21 @@ int rgw_delete_system_obj(const DoutPrefixProvider *dpp,
 
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
-                      optional_yield y, int flags, const jspan_context* trace_info)
+                      optional_yield y, int flags, const jspan_context* trace_info,
+                      version_t* pver)
 {
   // given a yield_context, call async_operate() to yield the coroutine instead
   // of blocking
   if (y) {
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    auto bl = librados::async_operate(
+    auto [ver, bl] = librados::async_operate(
       yield, ioctx, oid, op, flags, trace_info, yield[ec]);
     if (pbl) {
       *pbl = std::move(bl);
+    }
+    if (pver) {
+      *pver = ver;
     }
     return -ec.value();
   }
@@ -219,17 +223,25 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
 #endif
   }
-  return ioctx.operate(oid, op, nullptr, flags);
+  int r = ioctx.operate(oid, op, nullptr, flags);
+  if (pver) {
+    *pver = ioctx.get_last_version();
+  }
+  return r;
 }
 
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
-		      int flags, const jspan_context* trace_info)
+		      int flags, const jspan_context* trace_info, version_t* pver)
 {
   if (y) {
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    librados::async_operate(yield, ioctx, oid, op, flags, trace_info, yield[ec]);
+    version_t ver = librados::async_operate(yield, ioctx, oid, op, flags,
+                                            trace_info, yield[ec]);
+    if (pver) {
+      *pver = ver;
+    }
     return -ec.value();
   }
   if (is_asio_thread) {
@@ -238,7 +250,11 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
 #endif
   }
-  return ioctx.operate(oid, op, flags, trace_info);
+  int r = ioctx.operate(oid, op, flags, trace_info);
+  if (pver) {
+    *pver = ioctx.get_last_version();
+  }
+  return r;
 }
 
 int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
@@ -248,8 +264,8 @@ int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, cons
   if (y) {
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    auto reply = librados::async_notify(yield, ioctx, oid,
-                                        bl, timeout_ms, yield[ec]);
+    auto [ver, reply] = librados::async_notify(yield, ioctx, oid,
+                                               bl, timeout_ms, yield[ec]);
     if (pbl) {
       *pbl = std::move(reply);
     }
