@@ -636,7 +636,7 @@ class RGWCoroutinesManager {
   RGWIOIDProvider io_id_provider;
 
   void handle_unblocked_stack(std::set<RGWCoroutinesStack *>& context_stacks, std::list<RGWCoroutinesStack *>& scheduled_stacks,
-                              RGWCompletionManager::io_completion& io, int *waiting_count);
+                              RGWCompletionManager::io_completion& io, int *waiting_count, int *interval_wait_count);
 protected:
   RGWCompletionManager *completion_mgr;
   RGWCoroutinesManagerRegistry *cr_registry;
