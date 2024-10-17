@@ -184,9 +184,7 @@
                    id="path"
                    data-testid="fs_path"
                    formControlName="path"
-                   [ngbTypeahead]="pathDataSource"
-                   (selectItem)="pathChangeHandler()"
-                   (blur)="pathChangeHandler()">
+                   [ngbTypeahead]="pathDataSource">
             <cd-help-text>
             <p i18n>A path in a CephFS file system.</p>
           </cd-help-text>
