@@ -36,7 +36,6 @@ struct LttngBackend
     ClientRequest::PGPipeline::RecoverMissing::
       BlockingEvent::ExitBarrierEvent::Backend,
     ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::GetOBC::BlockingEvent::Backend,
     ClientRequest::PGPipeline::LockOBC::BlockingEvent::Backend,
     ClientRequest::PGPipeline::LockOBC::BlockingEvent::ExitBarrierEvent::Backend,
     ClientRequest::PGPipeline::Process::BlockingEvent::Backend,
@@ -117,10 +116,6 @@ struct LttngBackend
               const ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc& blocker) override {
   }
 
-  void handle(ClientRequest::PGPipeline::GetOBC::BlockingEvent& ev,
-              const Operation& op,
-              const ClientRequest::PGPipeline::GetOBC& blocker) override {
-  }
 
   void handle(ClientRequest::PGPipeline::LockOBC::BlockingEvent& ev,
               const Operation& op,
@@ -171,7 +166,6 @@ struct HistoricBackend
     ClientRequest::PGPipeline::RecoverMissing::
       BlockingEvent::ExitBarrierEvent::Backend,
     ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::GetOBC::BlockingEvent::Backend,
     ClientRequest::PGPipeline::LockOBC::BlockingEvent::Backend,
     ClientRequest::PGPipeline::LockOBC::BlockingEvent::ExitBarrierEvent::Backend,
     ClientRequest::PGPipeline::Process::BlockingEvent::Backend,
@@ -250,11 +244,6 @@ struct HistoricBackend
   void handle(ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent& ev,
               const Operation& op,
               const ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc& blocker) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::GetOBC::BlockingEvent& ev,
-              const Operation& op,
-              const ClientRequest::PGPipeline::GetOBC& blocker) override {
   }
 
   void handle(ClientRequest::PGPipeline::LockOBC::BlockingEvent& ev,

@@ -9,7 +9,6 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/common/subop_blocker.h"
-#include "crimson/osd/osd_operations/common/pg_pipeline.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_activation_blocker.h"
 #include "osd/osd_types.h"
@@ -170,7 +169,7 @@ public:
 
   std::tuple<
     StartEvent,
-    CommonPGPipeline::GetOBC::BlockingEvent,
+    CommonPGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
     CommonPGPipeline::WaitRepop::BlockingEvent,
     CompletionEvent
