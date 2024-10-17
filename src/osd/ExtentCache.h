@@ -361,6 +361,7 @@ private:
 
     using list_member_options = boost::intrusive::member_hook<
       extent,
+      boost::intrusive::constant_time_size<false>,
       boost::intrusive::list_member_hook<>,
       &extent::pin_list_member>;
     using list = boost::intrusive::list<extent, list_member_options>;
