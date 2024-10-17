@@ -283,7 +283,7 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create cephfs --cluster-id <cluster_id> --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>] [--sectype <value>...]
+    $ ceph nfs export create cephfs --cluster-id <cluster_id> --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>] [--sectype <value>...] [--cmount_path <value>]
 
 This creates export RADOS objects containing the export block, where
 
@@ -317,6 +317,12 @@ multiple times (example: ``--sectype=krb5p --sectype=krb5i``) or multiple
 values may be separated by a comma (example: ``--sectype krb5p,krb5i``). The
 server will negotatiate a supported security type with the client preferring
 the supplied methods left-to-right.
+
+``<cmount_path>`` specifies the path within the CephFS to mount this export on. It is
+allowed to be any complete path hierarchy between ``/`` and the ``EXPORT {path}``. (i.e. if ``EXPORT { Path }`` parameter is ``/foo/bar`` then cmount_path could be ``/``, ``/foo`` or ``/foo/bar``).
+
+.. note:: If this and the other ``EXPORT { FSAL {} }`` options are the same between multiple exports, those exports will share a single CephFS client.
+          If not specified, the default is ``/``.
 
 .. note:: Specifying values for sectype that require Kerberos will only function on servers
           that are configured to support Kerberos. Setting up NFS-Ganesha to support Kerberos
@@ -478,9 +484,9 @@ For example,::
      ],
      "fsal": {
        "name": "CEPH",
-       "user_id": "nfs.mynfs.1",
        "fs_name": "a",
-       "sec_label_xattr": ""
+       "sec_label_xattr": "",
+       "cmount_path": "/"
      },
      "clients": []
    }
@@ -494,6 +500,9 @@ provided JSON should fully describe the new state of the export (just
 as when creating a new export), with the exception of the
 authentication credentials, which will be carried over from the
 previous state of the export where possible.
+
+!! NOTE: The ``user_id`` in the ``fsal`` block should not be modified or mentioned in the JSON file as it is auto-generated for CephFS exports.
+It's auto-generated in the format ``nfs.<cluster_id>.<fs_name>.<hash_id>``.
 
 ::
 
@@ -515,9 +524,9 @@ previous state of the export where possible.
      ],
      "fsal": {
        "name": "CEPH",
-       "user_id": "nfs.mynfs.1",
        "fs_name": "a",
-       "sec_label_xattr": ""
+       "sec_label_xattr": "",
+       "cmount_path": "/"
      },
      "clients": []
    }
