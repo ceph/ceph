@@ -133,7 +133,6 @@ struct SnapsetMockData {
   using clone_snaps_cooker = CookedCloneSnaps (*)();
 
   snapid_t seq;
-  std::vector<snapid_t> snaps;	 // descending
   std::vector<snapid_t> clones;	 // ascending
 
   std::map<snapid_t, interval_set<uint64_t>> clone_overlap;  // overlap w/ next
@@ -143,13 +142,11 @@ struct SnapsetMockData {
 
 
   SnapsetMockData(snapid_t seq,
-		  std::vector<snapid_t> snaps,
 		  std::vector<snapid_t> clones,
 		  std::map<snapid_t, interval_set<uint64_t>> clone_overlap,
 		  std::map<snapid_t, uint64_t> clone_size,
 		  std::map<snapid_t, std::vector<snapid_t>> clone_snaps)
       : seq(seq)
-      , snaps(snaps)
       , clones(clones)
       , clone_overlap(clone_overlap)
       , clone_size(clone_size)
@@ -157,11 +154,9 @@ struct SnapsetMockData {
   {}
 
   SnapsetMockData(snapid_t seq,
-		  std::vector<snapid_t> snaps,
 		  std::vector<snapid_t> clones,
 		  clone_snaps_cooker func)
       : seq{seq}
-      , snaps{snaps}
       , clones(clones)
   {
     auto [clone_size_, clone_snaps_, clone_overlap_] = func();
@@ -174,7 +169,6 @@ struct SnapsetMockData {
   {
     SnapSet ss;
     ss.seq = seq;
-    ss.snaps = snaps;
     ss.clones = clones;
     ss.clone_overlap = clone_overlap;
     ss.clone_size = clone_size;
@@ -257,10 +251,10 @@ struct fmt::formatter<ScrubGenerator::RealObj> {
   {
     using namespace ScrubGenerator;
     return fmt::format_to(ctx.out(),
-			  "RealObj(gh:{}, dt:{}, snaps:{})",
+			  "RealObj(gh:{}, dt:{}, clones:{})",
 			  rlo.ghobj,
 			  rlo.data.size,
-			  (rlo.snapset_mock_data ? rlo.snapset_mock_data->snaps
+			  (rlo.snapset_mock_data ? rlo.snapset_mock_data->clones
 						 : std::vector<snapid_t>{}));
   }
 };
