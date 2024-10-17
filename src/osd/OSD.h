@@ -749,6 +749,14 @@ public:
     *pp = osd_stat.hb_pingtime;
     return;
   }
+  uint64_t get_num_deletes_in_pgs() const {
+    return num_deletes_in_pgs;
+  }
+  void inc_num_deletes_in_pgs(uint64_t delta) {
+    num_deletes_in_pgs += delta;
+  }
+private:
+  std::atomic<uint64_t> num_deletes_in_pgs = 0;
 
   // -- OSD Full Status --
 private:

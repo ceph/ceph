@@ -8262,7 +8262,7 @@ void BlueStore::_open_statfs()
         st.decode(p);
         vstatfs += st;
 
-        dout(10) << __func__ << " pool " << std::hex << pool_id
+        dout(10) << __func__ << " pool 0x" << std::hex << pool_id
 		 << " statfs(hex) " << st
 		 << std::dec << dendl;
       } catch (ceph::buffer::error& e) {
@@ -9435,7 +9435,7 @@ void BlueStore::_fsck_check_statfs(
           continue;
         }
         derr << __func__ << "::fsck error: " << std::hex
-             << "pool " << op0->first << " has got no statfs to match against: "
+             << "pool 0x" << op0->first << " has got no statfs to match against: "
              << s
              << std::dec << dendl;
         ++errors;
@@ -9447,7 +9447,7 @@ void BlueStore::_fsck_check_statfs(
         if (!(s == it_expected->second)) {
           derr << "fsck error: actual " << s
 	       << " != expected " << it_expected->second
-	       << " for pool "
+	       << " for pool 0x"
 	       << std::hex << op->first << std::dec << dendl;
 	  ++errors;
 	  if (repairer) {
@@ -9470,7 +9470,7 @@ void BlueStore::_fsck_check_statfs(
       }
       get_pool_stat_key(p.first, &key);
       derr << __func__ << "::fsck error: " << std::hex
-           << "pool " << p.first << " has got no actual statfs: "
+           << "pool 0x" << p.first << " has got no actual statfs: "
            << std::dec << p.second
            << dendl;
       ++errors;
@@ -12016,14 +12016,14 @@ int BlueStore::statfs(struct store_statfs_t *buf,
     buf->data_compressed_allocated = vstatfs.compressed_allocated();
   }
 
-  dout(20) << __func__ << " " << *buf << dendl;
+  dout(10) << __func__ << " " << *buf << dendl;
   return 0;
 }
 
 int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
 			   bool *out_per_pool_omap)
 {
-  dout(20) << __func__ << " pool " << pool_id<< dendl;
+  dout(20) << __func__ << " pool " << (int64_t)pool_id<< dendl;
 
   if (!per_pool_stat_collection) {
     dout(20) << __func__ << " not supported in legacy mode " << dendl;
@@ -12036,18 +12036,27 @@ int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
     osd_pools[pool_id].publish(buf);
   }
 
-  string key_prefix;
-  _key_encode_u64(pool_id, &key_prefix);
   *out_per_pool_omap = per_pool_omap != OMAP_BULK;
   // stop calls after db was closed
   if (*out_per_pool_omap && db) {
+    string key_prefix;
     auto prefix = per_pool_omap == OMAP_PER_POOL ?
       PREFIX_PERPOOL_OMAP :
       PREFIX_PERPG_OMAP;
-    buf->omap_allocated = db->estimate_prefix_size(prefix, key_prefix);
+    if ((int64_t)pool_id != META_POOL_ID) {
+      _key_encode_u64((int64_t)pool_id, &key_prefix);
+      buf->omap_allocated = db->estimate_prefix_size(prefix, key_prefix);
+    } else {
+      _key_encode_u64(0, &key_prefix); ; // we erroneously use pool==0 for
+                                         // meta(-1) pool objects omaps keys
+	                                 // (see #64153)
+	                                 // hence provide 0 as pool_id here
+      buf->omap_allocated = db->estimate_prefix_size(prefix, key_prefix);
+      buf->internal_metadata = db->estimate_prefix_size(PREFIX_PGMETA_OMAP, "");
+    }
   }
 
-  dout(10) << __func__ << *buf << dendl;
+  dout(10) << __func__ << " " << int64_t(pool_id) << " " << *buf << dendl;
   return 0;
 }
 
@@ -17863,6 +17872,7 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   int r;
   auto p = bl.cbegin();
   __u32 num;
+  const string* prefix;
   if (!o->onode.has_omap()) {
     if (o->oid.is_pgmeta()) {
       o->onode.set_omap_flags_pgmeta();
@@ -17871,15 +17881,15 @@ int BlueStore::_omap_setkeys(TransContext *txc,
     }
     txc->write_onode(o);
 
-    const string& prefix = o->get_omap_prefix();
+    prefix = &o->get_omap_prefix();
     string key_tail;
     bufferlist tail;
     o->get_omap_tail(&key_tail);
-    txc->t->set(prefix, key_tail, tail);
+    txc->t->set(*prefix, key_tail, tail);
   } else {
     txc->note_modified_object(o);
+    prefix = &o->get_omap_prefix();
   }
-  const string& prefix = o->get_omap_prefix();
   string final_key;
   o->get_omap_key(string(), &final_key);
   size_t base_key_len = final_key.size();
@@ -17895,7 +17905,7 @@ int BlueStore::_omap_setkeys(TransContext *txc,
     final_key += key;
     dout(20) << __func__ << "  " << pretty_binary_string(final_key)
 	     << " <- " << key << dendl;
-    txc->t->set(prefix, final_key, value);
+    txc->t->set(*prefix, final_key, value);
     total_bytes += value.length();
   }
   logger->inc(l_bluestore_omap_setkeys_count);
