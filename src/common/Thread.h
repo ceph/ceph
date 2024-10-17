@@ -20,11 +20,14 @@
 #include <string_view>
 #include <system_error>
 #include <thread>
+#include <cstring>
 
 #include <pthread.h>
 #include <sys/types.h>
 
+#include "include/ceph_assert.h"
 #include "include/compat.h"
+#include "include/spinlock.h"
 
 extern pid_t ceph_gettid();
 
@@ -33,7 +36,7 @@ class Thread {
   pthread_t thread_id;
   pid_t pid;
   int cpuid;
-  std::string thread_name;
+  static inline thread_local std::string thread_name;
 
   void *entry_wrapper();
 
@@ -61,6 +64,9 @@ class Thread {
   int join(void **prval = 0);
   int detach();
   int set_affinity(int cpuid);
+  static const std::string get_thread_name() {
+    return Thread::thread_name;
+  }
 };
 
 // Functions for with std::thread

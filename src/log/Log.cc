@@ -493,13 +493,13 @@ void Log::dump_recent()
   _flush(m_flush, false);
 
   _log_message("--- begin dump of recent events ---", true);
-  std::set<pthread_t> recent_pthread_ids;
+  std::set<std::pair<pthread_t, const char *>> recent_pthread_ids;
   {
     EntryVector t;
     t.insert(t.end(), std::make_move_iterator(m_recent.begin()), std::make_move_iterator(m_recent.end()));
     m_recent.clear();
     for (const auto& e : t) {
-      recent_pthread_ids.emplace(e.m_thread);
+      recent_pthread_ids.emplace(std::make_pair(e.m_thread, e.m_thread_name));
     }
     _flush(t, true);
   }
@@ -515,14 +515,11 @@ void Log::dump_recent()
 			   m_stderr_log, m_stderr_crash), true);
 
   _log_message("--- pthread ID / name mapping for recent threads ---", true);
-  for (const auto pthread_id : recent_pthread_ids)
+  for (auto& [pthread_id, pthread_name] : recent_pthread_ids)
   {
-    char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
-    ceph_pthread_getname(pthread_id, pthread_name, sizeof(pthread_name));
     // we want the ID to be printed in the same format as we use for a log entry.
     // The reason is easier grepping.
-    _log_message(fmt::format("  {:x} / {}",
-			     tid_to_int(pthread_id), pthread_name), true);
+    _log_message(fmt::format("  {:x} / {}", tid_to_int(pthread_id), pthread_name), true);
   }
 
   _log_message(fmt::format("  max_recent {:9}", m_recent.capacity()), true);
