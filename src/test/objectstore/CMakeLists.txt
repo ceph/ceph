@@ -6,14 +6,14 @@ install(TARGETS ceph_perf_objectstore
 
 add_library(store_test_fixture OBJECT store_test_fixture.cc)
 target_include_directories(store_test_fixture PRIVATE
-  $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>
+  $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(store_test_fixture PUBLIC
+  os
   legacy-option-headers)
 
-add_executable(ceph_test_objectstore
-  store_test.cc
-  $<TARGET_OBJECTS:store_test_fixture>)
+add_executable(ceph_test_objectstore store_test.cc)
 target_link_libraries(ceph_test_objectstore
-  os
+  store_test_fixture
   ceph-common
   ${UNITTEST_LIBS}
   global

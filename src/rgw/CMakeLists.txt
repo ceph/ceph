@@ -273,7 +273,6 @@ endif()
 target_link_libraries(rgw_common
   PRIVATE
     legacy-option-headers
-    global
     cls_2pc_queue_client
     cls_cmpomap_client
     cls_lock_client
@@ -297,6 +296,7 @@ target_link_libraries(rgw_common
     ${ARROW_FLIGHT_LIBRARIES}
     ${LMDB_LIBRARIES}
   PUBLIC
+    global
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     Boost::context
@@ -347,7 +347,7 @@ if(WITH_JAEGER)
 endif()
 
 if(WITH_RADOSGW_DBSTORE)
-  target_link_libraries(rgw_common PRIVATE global dbstore)
+  target_link_libraries(rgw_common PRIVATE dbstore)
 endif()
 
 if(WITH_RADOSGW_MOTR)
@@ -427,7 +427,7 @@ endif()
 target_link_libraries(rgw_a
   PRIVATE
     legacy-option-headers
-    common_utf8 global
+    common_utf8
     ${CRYPTO_LIBS}
     ${ARROW_LIBRARIES}
     ${ARROW_FLIGHT_LIBRARIES}
@@ -501,7 +501,7 @@ target_link_libraries(radosgw-admin
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
-  global ${LIB_RESOLV}
+  ${LIB_RESOLV}
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 
@@ -520,7 +520,7 @@ target_link_libraries(radosgw-es ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
-  global ${LIB_RESOLV}
+  ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-es DESTINATION bin)
 
@@ -540,7 +540,7 @@ target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
-  global ${LIB_RESOLV}
+  ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
@@ -600,15 +600,11 @@ install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
 if(WITH_TESTS)
   add_executable(ceph_rgw_jsonparser
     rgw_jsonparser.cc)
-  target_link_libraries(ceph_rgw_jsonparser
-    ${rgw_libs}
-    global)
+  target_link_libraries(ceph_rgw_jsonparser ${rgw_libs})
 
   add_executable(ceph_rgw_multiparser
     rgw_multiparser.cc)
-  target_link_libraries(ceph_rgw_multiparser
-    ${rgw_libs}
-    global)
+  target_link_libraries(ceph_rgw_multiparser ${rgw_libs})
 
   install(TARGETS
     ceph_rgw_jsonparser

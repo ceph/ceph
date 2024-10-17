@@ -8,7 +8,7 @@
 #include "include/byteorder.h"
 #include "include/ceph_assert.h"
 
-#include "xxHash/xxhash.h"
+#include <xxhash.h>
 
 class Checksummer {
 public:
