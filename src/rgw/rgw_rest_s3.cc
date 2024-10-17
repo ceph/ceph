@@ -6476,6 +6476,7 @@ rgw::auth::s3::LocalEngine::authenticate(
       throw -EPERM;
     }
   }*/
+  s->user->set_attrs(user->get_attrs());
 
   std::optional<RGWAccountInfo> account;
   std::vector<IAM::Policy> policies;
@@ -6714,6 +6715,7 @@ rgw::auth::s3::STSEngine::authenticate(
       ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
       return result_t::reject(-EPERM);
     }
+    s->user->set_attrs(user->get_attrs());
 
     std::optional<RGWAccountInfo> account;
     std::vector<IAM::Policy> policies;
