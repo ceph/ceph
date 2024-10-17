@@ -530,9 +530,18 @@ typedef std::unordered_map<connection_id_t, connection_t_ptr, connection_id_hash
 typedef boost::lockfree::queue<message_wrapper_t*, boost::lockfree::fixed_sized<true>> MessageQueue;
 
 // macros used inside a loop where an iterator is either incremented or erased
+#define INCREMENT(IT) \
+          { \
+            std::lock_guard lock(connections_lock); \
+            ++IT; \
+          }
+
 #define INCREMENT_AND_CONTINUE(IT) \
-          ++IT; \
-          continue;
+          { \
+            std::lock_guard lock(connections_lock); \
+            ++IT; \
+            continue; \
+          }
 
 #define ERASE_AND_CONTINUE(IT,CONTAINER) \
           { \
@@ -796,7 +805,7 @@ private:
           ldout(cct, 10) << "AMQP run: unsolicited n/ack received with tag=" << tag << dendl;
         }
         // just increment the iterator
-        ++conn_it;
+        INCREMENT(conn_it);
       }
       // if no messages were received or published, sleep for 100ms
       if (count == 0 && !incoming_message) {
