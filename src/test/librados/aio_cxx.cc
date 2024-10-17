@@ -2466,3 +2466,110 @@ TEST(LibRadosAio, MultiReads) {
     ASSERT_EQ(0, memcmp(buf, bl.c_str(), sizeof(buf)));
   }
 }
+
+TEST(LibRadosAio, ReadOperationCancel)
+{
+  Rados cluster;
+  auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_info()->name());
+  std::string pool_name = get_temp_pool_name(pool_prefix);
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+
+  auto pool_cleanup = make_scope_guard([&] {
+        destroy_one_pool_pp(pool_name, cluster);
+      });
+
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ObjectReadOperation op;
+  op.assert_exists();
+  ioctx.aio_operate("test_obj", c.get(), &op, nullptr);
+
+  c->cancel();
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, c->wait_for_complete());
+  }
+  EXPECT_EQ(-ECANCELED, c->get_return_value());
+}
+
+TEST(LibRadosAio, ReadOperationCancelAfterComplete)
+{
+  Rados cluster;
+  auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_info()->name());
+  std::string pool_name = get_temp_pool_name(pool_prefix);
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+
+  auto pool_cleanup = make_scope_guard([&] {
+        destroy_one_pool_pp(pool_name, cluster);
+      });
+
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ObjectReadOperation op;
+  op.assert_exists();
+  ioctx.aio_operate("test_obj", c.get(), &op, nullptr);
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, c->wait_for_complete());
+  }
+  c->cancel();
+  EXPECT_EQ(-ENOENT, c->get_return_value());
+}
+
+TEST(LibRadosAio, WriteOperationCancel)
+{
+  Rados cluster;
+  auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_info()->name());
+  std::string pool_name = get_temp_pool_name(pool_prefix);
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+
+  auto pool_cleanup = make_scope_guard([&] {
+        destroy_one_pool_pp(pool_name, cluster);
+      });
+
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ObjectWriteOperation op;
+  op.assert_exists();
+  ioctx.aio_operate("test_obj", c.get(), &op);
+
+  c->cancel();
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, c->wait_for_complete());
+  }
+  EXPECT_EQ(-ECANCELED, c->get_return_value());
+}
+
+TEST(LibRadosAio, WriteOperationCancelAfterComplete)
+{
+  Rados cluster;
+  auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_info()->name());
+  std::string pool_name = get_temp_pool_name(pool_prefix);
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+
+  auto pool_cleanup = make_scope_guard([&] {
+        destroy_one_pool_pp(pool_name, cluster);
+      });
+
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ObjectWriteOperation op;
+  op.assert_exists();
+  ioctx.aio_operate("test_obj", c.get(), &op);
+
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, c->wait_for_complete());
+  }
+  c->cancel();
+  EXPECT_EQ(-ENOENT, c->get_return_value());
+}
