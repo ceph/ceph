@@ -25,7 +25,10 @@ cleanup_tempdir() {
 create_base_image() {
     local image=$1
 
-    rbd create --size 1G ${image}
+    # size is not a multiple of object size to trigger an edge case in
+    # list-snaps
+    rbd create --size 1025M ${image}
+
     rbd bench --io-type write --io-pattern rand --io-size=4K --io-total 256M ${image}
     rbd snap create ${image}@1
     rbd bench --io-type write --io-pattern rand --io-size=4K --io-total 64M ${image}
