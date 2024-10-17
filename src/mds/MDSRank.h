@@ -15,6 +15,7 @@
 #ifndef MDS_RANK_H_
 #define MDS_RANK_H_
 
+#include <atomic>
 #include <string_view>
 
 #include <boost/asio/io_context.hpp>
@@ -225,6 +226,8 @@ class MDSRank {
     bool is_stopped() const { return mdsmap->is_stopped(whoami); }
     bool is_cluster_degraded() const { return cluster_degraded; }
     bool allows_multimds_snaps() const { return mdsmap->allows_multimds_snaps(); }
+
+    bool is_active_lockless() const { return m_is_active.load(); }
 
     bool is_cache_trimmable() const {
       return is_standby_replay() || is_clientreplay() || is_active() || is_stopping();
@@ -669,6 +672,8 @@ private:
 
     mono_time starttime = mono_clock::zero();
     boost::asio::io_context& ioc;
+
+    std::atomic_bool m_is_active = false; /* accessed outside mds_lock */
 };
 
 class C_MDS_RetryMessage : public MDSInternalContext {
