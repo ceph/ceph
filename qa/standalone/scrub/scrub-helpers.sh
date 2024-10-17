@@ -241,14 +241,16 @@ function standard_scrub_cluster() {
     set +x
 
     run_mon $dir a --osd_pool_default_size=$OSDS || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
 
     local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
-            --osd_scrub_interval_randomize_ratio=0 \
+            --osd_scrub_interval_randomize_ratio=0.1 \
             --osd_scrub_backoff_ratio=0.0 \
             --osd_pool_default_pg_autoscale_mode=off \
             --osd_pg_stat_report_interval_max_seconds=1 \
             --osd_pg_stat_report_interval_max_epochs=1 \
+            --osd_stats_update_period_not_scrubbing=1 \
+            --osd_stats_update_period_scrubbing=1 \
             --osd_scrub_retry_after_noscrub=5 \
             --osd_scrub_retry_pg_state=5 \
             --osd_scrub_retry_delay=3 \
