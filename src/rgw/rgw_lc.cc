@@ -1166,7 +1166,7 @@ public:
 		       << " " << oc.wq->thr_name() << dendl;
     } else {
       /* ! o.is_delete_marker() */
-      r = remove_expired_obj(oc.dpp, oc, !oc.bucket->versioned(),
+      r = remove_expired_obj(oc.dpp, oc, oc.bucket->versioned(),
 			     rgw::notify::ObjectExpirationCurrent);
       if (r < 0) {
 	ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj "
