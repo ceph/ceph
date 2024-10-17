@@ -24,6 +24,9 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
   // use that.
 #if defined(__i386__) || defined(__x86_64__)
   if (ceph_arch_intel_sse42 && ceph_crc32c_intel_fast_exists()) {
+    if (ceph_arch_intel_pclmul) {
+      return ceph_crc32c_intel_fast_pclmul;
+    }
     return ceph_crc32c_intel_fast;
   }
 #elif defined(__arm__) || defined(__aarch64__)
