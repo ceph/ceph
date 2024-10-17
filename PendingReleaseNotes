@@ -25,6 +25,10 @@
    - osd_op_num_shards_hdd = 1 (was 5)
    - osd_op_num_threads_per_shard_hdd = 5 (was 1)
   For more details see https://tracker.ceph.com/issues/66289.
+* CephFS: EOPNOTSUPP (Operation not supported ) is now returned by the CephFS
+  fuse client for `fallocate` for the default case (i.e. mode == 0) since
+  CephFS does not support disk space reservation. The only flags supported are
+  `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
 
 >=19.0.0
 
