@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-
+# type: ignore
 import logging
 import os
 from functools import total_ordering
-from ceph_volume import sys_info, allow_loop_devices
+from ceph_volume import sys_info, allow_loop_devices, BEING_REPLACED_HEADER
 from ceph_volume.api import lvm
 from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
+from typing import List, Tuple
 
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,7 @@ class Device(object):
         'sys_api',
         'device_id',
         'lsm_data',
+        'being_replaced'
     ]
     pretty_report_sys_fields = [
         'actuators',
@@ -136,6 +138,7 @@ class Device(object):
         self._exists = None
         self._is_lvm_member = None
         self.ceph_device = False
+        self.being_replaced: bool = self.is_being_replaced
         self._parse()
         if self.path in sys_info.devices.keys():
             self.device_nodes = sys_info.devices[self.path]['device_nodes']
@@ -298,7 +301,7 @@ class Device(object):
             rot=self.rotational,
             available=self.available,
             model=self.model,
-            device_nodes=self.device_nodes
+            device_nodes=','.join(self.device_nodes)
         )
 
     def json_report(self):
@@ -590,7 +593,7 @@ class Device(object):
             return [vg_free]
 
     @property
-    def has_partitions(self):
+    def has_partitions(self) -> bool:
         '''
         Boolean to determine if a given device has partitions.
         '''
@@ -598,7 +601,14 @@ class Device(object):
             return True
         return False
 
-    def _check_generic_reject_reasons(self):
+    @property
+    def is_being_replaced(self) -> bool:
+        '''
+        Boolean to indicate if the device is being replaced.
+        '''
+        return disk._dd_read(self.path, 26) == BEING_REPLACED_HEADER
+
+    def _check_generic_reject_reasons(self) -> List[str]:
         reasons = [
             ('id_bus', 'usb', 'id_bus'),
             ('ro', '1', 'read-only'),
@@ -639,9 +649,11 @@ class Device(object):
             rejected.append('Has partitions')
         if self.has_fs:
             rejected.append('Has a FileSystem')
+        if self.is_being_replaced:
+            rejected.append('Is being replaced')
         return rejected
 
-    def _check_lvm_reject_reasons(self):
+    def _check_lvm_reject_reasons(self) -> Tuple[bool, List[str]]:
         rejected = []
         if self.vgs:
             available_vgs = [vg for vg in self.vgs if int(vg.vg_free_count) > 10]
@@ -654,7 +666,7 @@ class Device(object):
 
         return len(rejected) == 0, rejected
 
-    def _check_raw_reject_reasons(self):
+    def _check_raw_reject_reasons(self) -> Tuple[bool, List[str]]:
         rejected = self._check_generic_reject_reasons()
         if len(self.vgs) > 0:
             rejected.append('LVM detected')

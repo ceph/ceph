@@ -6,6 +6,7 @@ from collections import namedtuple
 sys_info = namedtuple('sys_info', ['devices'])
 sys_info.devices = dict()
 logger = logging.getLogger(__name__)
+BEING_REPLACED_HEADER: str = 'CEPH_DEVICE_BEING_REPLACED'
 
 
 class AllowLoopDevices:
