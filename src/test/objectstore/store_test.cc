@@ -7622,6 +7622,155 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, ManyManyExtents) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  const size_t max_iterations = 129;
+  const size_t max_txn_ops = 512;
+  bufferlist bl;
+  {
+    for (size_t i = 0; i < max_iterations; i++) {
+      ObjectStore::Transaction t;
+      for (size_t j = 0; j < max_txn_ops; j++) {
+        bl.clear();
+        bl.append(std::string(1, 'a' + j % 26));
+        t.write(cid, hoid, (i * max_txn_ops + j) * 4096, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+      }
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+      cerr << "iter " << i << "/" << max_iterations - 1 << std::endl;
+    }
+  }
+  ch.reset();
+  store->umount();
+  store->mount();
+  ch = store->open_collection(cid);
+  {
+    bl.clear();
+    size_t len = (max_iterations * max_txn_ops) * 4096 - 4095;
+    cerr << "reading in a single chunk, size =" << len << std::endl;
+    r = store->read(ch, hoid,
+      0, len,
+      bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, len);
+    ASSERT_EQ(r, bl.length());
+    size_t idx = 0;
+    for (size_t i = 0; i < max_iterations; i++) {
+      for (size_t j = 0; j < max_txn_ops; j++) {
+        ASSERT_EQ(bl[idx], 'a' + j % 26);
+        idx += 4096;
+      }
+    }
+  }
+  ch.reset();
+  store->umount();
+  store->mount();
+  ch = store->open_collection(cid);
+  {
+    cerr << "reading in multiple chunks..." << std::endl;
+    bl.clear();
+    store->fiemap(ch, hoid, 0, 1ull << 31, bl);
+    map<uint64_t,uint64_t> m;
+    auto p = bl.cbegin();
+    decode(m, p);
+
+    bl.clear();
+    interval_set<uint64_t> im(std::move(m));
+    r = store->readv(ch, hoid, im, bl, 0);
+    ASSERT_EQ(r, max_txn_ops * max_iterations);
+    ASSERT_EQ(r, bl.length());
+    size_t idx = 0;
+    for (size_t i = 0; i < max_iterations; i++) {
+      for (size_t j = 0; j < max_txn_ops; j++) {
+        ASSERT_EQ(bl[idx++], 'a' + j % 26);
+      }
+    }
+  }
+  store->refresh_perf_counters();
+  cerr << "blobs = " << logger->get(l_bluestore_blobs)
+       << " extents = " << logger->get(l_bluestore_extents)
+       << std::endl;
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, ManyManyExtents2) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(1024 * 1024, 'a'));
+    t.write(cid, hoid, 0, bl.length(), bl, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ch.reset();
+  store->umount();
+  store->mount();
+  ch = store->open_collection(cid);
+  {
+    cerr << "reading in multiple chunks..." << std::endl;
+    bufferlist bl;
+    interval_set<uint64_t> im;
+    for (int i=0; i < 100000;i++) {
+      im.insert(i * 2, 1);
+    }
+    r = store->readv(ch, hoid, im, bl, 0);
+    ASSERT_EQ(r, 100000);
+    ASSERT_EQ(r, bl.length());
+  }
+  store->refresh_perf_counters();
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionSmallAppend) {
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
   if (string(GetParam()) != "bluestore" || !cct->_conf->bluestore_zero_block_detection) {
