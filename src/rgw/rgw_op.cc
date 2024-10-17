@@ -3644,6 +3644,7 @@ int RGWPutObj::init_processing(optional_yield y) {
       return ret;
     }
     copy_source_bucket_info = bucket->get_info();
+    copy_source_bucket_attrs = bucket->get_attrs();
 
     /* handle x-amz-copy-source-range */
     if (copy_source_range) {
@@ -3689,7 +3690,6 @@ int RGWPutObj::verify_permission(optional_yield y)
 
     RGWAccessControlPolicy cs_acl(s->cct);
     boost::optional<Policy> policy;
-    map<string, bufferlist> cs_attrs;
     std::unique_ptr<rgw::sal::Bucket> cs_bucket;
     int ret = driver->get_bucket(NULL, copy_source_bucket_info, &cs_bucket);
     if (ret < 0)
@@ -3702,7 +3702,7 @@ int RGWPutObj::verify_permission(optional_yield y)
     cs_object->set_prefetch_data();
 
     /* check source object permissions */
-    if (ret = read_obj_policy(this, driver, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
+    if (ret = read_obj_policy(this, driver, s, copy_source_bucket_info, copy_source_bucket_attrs, &cs_acl, nullptr,
 			policy, cs_bucket.get(), cs_object.get(), y, true); ret < 0) {
       return ret;
     }
