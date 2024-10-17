@@ -32,6 +32,7 @@ import CheckMarkIcon from '@carbon/icons/es/checkmark/32';
 import ResetIcon from '@carbon/icons/es/reset/32';
 import DocumentAddIcon from '@carbon/icons/es/document--add/16';
 import DocumentImportIcon from '@carbon/icons/es/document--import/16';
+import { PoolPeersComponent } from './pool-list/pool-peers/pool-peers/pool-peers.component';
 
 @NgModule({
   imports: [
@@ -60,7 +61,8 @@ import DocumentImportIcon from '@carbon/icons/es/document--import/16';
     PoolEditModeModalComponent,
     PoolEditPeerModalComponent,
     PoolListComponent,
-    MirrorHealthColorPipe
+    MirrorHealthColorPipe,
+    PoolPeersComponent
   ],
   exports: [OverviewComponent]
 })
