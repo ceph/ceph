@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Stop a named cluster started by mstart.sh
+
 set -e
 
 script_root=`dirname $0`

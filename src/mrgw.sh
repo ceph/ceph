@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Start/restart a radosgw instance on the given mstart.sh cluster.
+
 set -e
 
 rgw_frontend=${RGW_FRONTEND:-"beast"}

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Run a ceph command against the given mstart.sh cluster.
+
 [ $# -lt 2 ] && echo "usage: $0 <name> <command> [params...]" && exit 1
 
 root=`dirname $0`
