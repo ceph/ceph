@@ -246,7 +246,7 @@ TEST_F(RedisDriverFixture, GetAsyncYield)
   io.run();
 }
 
-TEST_F(RedisDriverFixture, DelYield)
+TEST_F(RedisDriverFixture, DeleteDataYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
@@ -263,7 +263,7 @@ TEST_F(RedisDriverFixture, DelYield)
       EXPECT_EQ(std::get<0>(resp).value(), 1);
     }
 
-    ASSERT_EQ(0, cacheDriver->del(env->dpp, "testName", yield));
+    ASSERT_EQ(0, cacheDriver->delete_data(env->dpp, "testName", yield));
     cacheDriver->shutdown();
 
     {
@@ -319,45 +319,6 @@ TEST_F(RedisDriverFixture, AppendDataYield)
 
       ASSERT_EQ((bool)ec, false);
       EXPECT_EQ(std::get<0>(resp).value(), "test data has been written");
-    }
-
-    conn->cancel();
-  }, rethrow);
-
-  io.run();
-}
-
-TEST_F(RedisDriverFixture, DeleteDataYield)
-{
-  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
-
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("HEXISTS", "RedisCache/testName", "data");
-      response<int> resp;
-
-      conn->async_exec(req, resp, yield[ec]);
-
-      ASSERT_EQ((bool)ec, false);
-      EXPECT_EQ(std::get<0>(resp).value(), 1);
-    }
-
-    ASSERT_EQ(0, cacheDriver->delete_data(env->dpp, "testName", yield));
-    cacheDriver->shutdown();
-
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("HEXISTS", "RedisCache/testName", "data");
-      req.push("FLUSHALL");
-      response<int, boost::redis::ignore_t> resp;
-
-      conn->async_exec(req, resp, yield[ec]);
-
-      ASSERT_EQ((bool)ec, false);
-      EXPECT_EQ(std::get<0>(resp).value(), 0);
     }
 
     conn->cancel();
