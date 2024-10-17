@@ -3634,4 +3634,17 @@ def test_copy_object_different_bucket():
         CopySource = source_bucket.name + '/' + objname)
     
     zonegroup_bucket_checkpoint(zonegroup_conns, dest_bucket.name)
+
+
+def test_bucket_location_constraint():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket_name = secondary.create_bucket(gen_bucket_name(), location=zonegroup)
+    log.debug('created bucket=%s', bucket.name)
+    
+    assert primary.get_bucket(bucket_name)
+
     
