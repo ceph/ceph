@@ -73,6 +73,11 @@ def run_rabbitmq(ctx, config):
              'sudo', 'systemctl', 'enable', 'rabbitmq-server.service'
             ],
         )
+        
+        ctx.cluster.only(client).run(args=[
+             'echo', 'loopback_users.guest = false', run.Raw('|'), 'sudo', 'tee', '-a', '/etc/rabbitmq/rabbitmq.conf'
+            ],
+        )
 
         ctx.cluster.only(client).run(args=[
              'sudo', '/sbin/service', 'rabbitmq-server', 'start'
