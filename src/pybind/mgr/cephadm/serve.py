@@ -519,10 +519,10 @@ class CephadmServe:
                             host, len(missing_names), missing_names))
             if self.mgr.warn_on_stray_hosts and host_detail:
                 self.mgr.set_health_warning(
-                    'CEPHADM_STRAY_HOST', f'{len(host_detail)} stray host(s) with {host_num_daemons} daemon(s) not managed by cephadm', len(host_detail), host_detail)
+                    'CEPHADM_STRAY_HOST', f'{len(host_detail)} stray host(s) with {host_detail} daemon(s) not managed by cephadm', len(host_detail), host_detail)
             if self.mgr.warn_on_stray_daemons and daemon_detail:
                 self.mgr.set_health_warning(
-                    'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
+                    'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) {daemon_detail} not managed by cephadm', len(daemon_detail), daemon_detail)
 
     def _service_reference_name(self, service_type: str, daemon_id: str) -> str:
         if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
@@ -1005,7 +1005,7 @@ class CephadmServe:
                 self.mgr.cache.append_tmp_daemon(slot.hostname, sd)
 
             if daemon_place_fails:
-                self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
+                self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s) {daemon_place_fails}', len(
                     daemon_place_fails), daemon_place_fails)
 
             if service_type == 'mgr':
