@@ -161,7 +161,7 @@ class Module(MgrModule):
 
                 if output_format in ('json', 'json-pretty'):
                     json_output['mdsmap'].append({
-                        'rank': rank,
+                        'rank': f"{daemon_info['rank']}-s",
                         'name': daemon_info['name'],
                         'state': 'standby-replay',
                         'events': events,
