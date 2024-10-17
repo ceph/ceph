@@ -550,7 +550,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   auto& name_entry_map = new_dir.m; // map of keys to entries
 
   int rc = 0;
-  if (true) {
+  if (op.want_header) {
     new_dir.header.emplace();
     rc = read_bucket_header(hctx, &(*new_dir.header));
     if (rc < 0) {

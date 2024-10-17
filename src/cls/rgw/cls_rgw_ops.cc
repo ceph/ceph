@@ -315,6 +315,7 @@ void rgw_cls_list_op::dump(Formatter *f) const
 {
   f->dump_string("start_obj", start_obj.name);
   f->dump_unsigned("num_entries", num_entries);
+  f->dump_bool("want_header", want_header);
 }
 
 void rgw_cls_list_ret::generate_test_instances(list<rgw_cls_list_ret*>& o)
