@@ -84,7 +84,7 @@ struct NotifyMessage {
   static void generate_test_instances(std::list<NotifyMessage *> &o);
 };
 
-WRITE_CLASS_ENCODER(NotifyMessage);
+WRITE_CLASS_ENCODER(librbd::trash_watcher::NotifyMessage);
 
 std::ostream &operator<<(std::ostream &out, const NotifyOp &op);
 

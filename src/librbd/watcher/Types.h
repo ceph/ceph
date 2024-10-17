@@ -26,6 +26,7 @@ struct ClientId {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<ClientId *> &o);
 
   inline bool is_valid() const {
     return (*this != ClientId());
