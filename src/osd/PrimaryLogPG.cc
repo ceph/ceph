@@ -7762,8 +7762,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
             result = -ENOENT;
             goto fail;
           }
-	  iter->upper_bound(start_after);
-	  if (filter_prefix > start_after) iter->lower_bound(filter_prefix);
+          if (filter_prefix > start_after) {
+            iter->lower_bound(filter_prefix);
+          } else {
+            iter->upper_bound(start_after);
+          }
 	  for (num = 0;
 	       iter->valid() &&
 		 iter->key().substr(0, filter_prefix.size()) == filter_prefix;
