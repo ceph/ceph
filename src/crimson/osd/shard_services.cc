@@ -21,6 +21,7 @@
 #include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
+#include "crimson/osd/osd_operations/pg_splitting.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
 
@@ -93,12 +94,21 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
   return seastar::parallel_for_each(
     pgs.begin(), pgs.end(),
     [=, &shard_services](auto& pg) {
+      auto old_map = pg.second->get_osdmap();
       return shard_services.start_operation<PGAdvanceMap>(
 	pg.second,
 	shard_services,
 	epoch,
-	PeeringCtx{}, false).second;
-    });
+	PeeringCtx{}, false).second.then(
+     [this, old_map, epoch, &shard_services, &pg] {
+      return shard_services.start_operation<PGSplitting>(
+        pg.second,
+        shard_services,
+        old_map,
+        epoch,
+        PeeringCtx{}).second;
+     });
+  });
 }
 
 Ref<PG> PerShardState::get_pg(spg_t pgid)
