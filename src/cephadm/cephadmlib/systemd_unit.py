@@ -41,6 +41,21 @@ class PathInfo:
         dname = f'{identity.service_name}.d'
         self.drop_in_file = unit_dir / dname / _DROP_IN_FILENAME
 
+    def has_init_unit(self) -> bool:
+        return self.init_ctr_unit_file.exists()
+
+    def has_sidecar_units(self, validate: bool = False) -> bool:
+        # validate defaults to false because there are "races" between
+        # cephadm ls and cephadm rm-daemon and we don't want errors
+        # to occur randomly during cleanup.
+        has_unit = False
+        for sidecar in self.sidecar_unit_files.values():
+            if sidecar.exists():
+                has_unit = True
+            elif validate:
+                raise RuntimeError(f'missing expected unit file: {sidecar}')
+        return has_unit
+
 
 def _write_drop_in(
     dest: IO,
@@ -82,6 +97,7 @@ def _write_sidecar_unit_file(
     ctx: CephadmContext,
     primary: DaemonIdentity,
     sidecar: DaemonSubIdentity,
+    has_init_containers: bool,
 ) -> None:
     has_docker_engine = isinstance(ctx.container_engine, Docker)
     has_podman_engine = isinstance(ctx.container_engine, Podman)
@@ -97,6 +113,7 @@ def _write_sidecar_unit_file(
         has_podman_split_version=(
             has_podman_engine and ctx.container_engine.supports_split_cgroups
         ),
+        has_init_containers=has_init_containers,
     )
 
 
@@ -121,7 +138,9 @@ def _install_extended_systemd_services(
         sids = []
         for si, sup in pinfo.sidecar_unit_files.items():
             sufh = estack.enter_context(write_new(sup, perms=None))
-            _write_sidecar_unit_file(sufh, ctx, identity, si)
+            _write_sidecar_unit_file(
+                sufh, ctx, identity, si, enable_init_containers
+            )
             sids.append(si)
 
         # create a drop-in to create a relationship between the primary
