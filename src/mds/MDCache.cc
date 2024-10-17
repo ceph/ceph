@@ -10997,7 +10997,7 @@ void MDCache::decode_replica_dir(CDir *&dir, bufferlist::const_iterator& p, CIno
 
 void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p, CDir *dir, MDSContext::vec& finished)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   string name;
   snapid_t last;
   decode(name, p);

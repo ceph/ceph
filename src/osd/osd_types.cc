@@ -1497,7 +1497,7 @@ void pool_opts_t::encode(ceph::buffer::list& bl, uint64_t features) const
 
 void pool_opts_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   __u32 n;
   decode(n, bl);
   opts.clear();
@@ -4536,7 +4536,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
   auto bp = bl.cbegin();
   try {
     while (!bp.end()) {
-      DECODE_START(max_required_version, bp);
+      DECODE_START_UNSAFE(max_required_version, bp);
       uint8_t code;
       decode(code, bp);
       switch (code) {
