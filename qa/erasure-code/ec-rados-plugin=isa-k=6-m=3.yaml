@@ -4,13 +4,13 @@ tasks:
     ops: 4000
     objects: 50
     ec_pool: true
-    min_size: 2
+    min_size: 6
     write_append_excl: false
     erasure_code_profile:
-      name: isa21profile
+      name: isa63profile
       plugin: isa
-      k: 2
-      m: 1
+      k: 6
+      m: 3
       technique: reed_sol_van
       crush-failure-domain: osd
     op_weights:
