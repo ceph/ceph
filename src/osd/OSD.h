@@ -28,6 +28,7 @@
 #include "common/config_cacher.h"
 #include "common/zipkin_trace.h"
 #include "common/ceph_timer.h"
+#include "common/MemoryModel.h"
 
 #include "mgr/MgrClient.h"
 
@@ -1222,6 +1223,9 @@ private:
   void clear_temp_objects();
 
   CompatSet osd_compat;
+
+  // Memory usage baseline snapshot for monitoring
+  MemoryModel::snap baseline;
 
   // -- state --
 public:
