@@ -1327,6 +1327,7 @@ static int bucket_stats(rgw::sal::Driver* driver,
   formatter->dump_int("num_shards",
 		      bucket->get_info().layout.current_index.layout.normal.num_shards);
   formatter->dump_string("tenant", bucket->get_tenant());
+  formatter->dump_string("versioning", bucket->versioned() ? (bucket->versioning_enabled() ? "enabled" : "suspended") : "off");
   formatter->dump_string("zonegroup", bucket->get_info().zonegroup);
   formatter->dump_string("placement_rule", bucket->get_info().placement_rule.to_str());
   ::encode_json("explicit_placement", bucket->get_key().explicit_placement, formatter);
