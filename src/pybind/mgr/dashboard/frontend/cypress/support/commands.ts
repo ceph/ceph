@@ -28,6 +28,7 @@ const fillAuth = () => {
   window.localStorage.setItem('user_pwd_update_required', auth.pwdUpdateRequired);
   window.localStorage.setItem('sso', auth.sso);
   window.localStorage.setItem('telemetry_notification_hidden', 'true'); // disable telemetry notification in e2e
+  window.localStorage.setItem('cluster_api_url', window.location.origin);
 };
 
 Cypress.Commands.add('login', (username, password) => {
@@ -70,6 +71,7 @@ Cypress.Commands.add('ceph2Login', (username, password) => {
           window.localStorage.setItem('user_pwd_update_required', pwdUpdateRequired);
           window.localStorage.setItem('sso', sso);
           window.localStorage.setItem('telemetry_notification_hidden', 'true'); // disable telemetry notification in e2e
+          window.localStorage.setItem('cluster_api_url', url);
         }
       );
     });
