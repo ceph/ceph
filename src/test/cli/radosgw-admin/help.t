@@ -248,6 +248,7 @@
      --shard-id=<shard-id>             optional for:
                                          mdlog list
                                          data sync status
+                                         sync error trim
                                        required for:
                                          mdlog trim
      --gen=<gen-id>                    optional for:
