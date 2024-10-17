@@ -68,7 +68,9 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     return _conn.is_connected();
   }
 
-  virtual ssize_t read(char *buf, size_t len) override {
+  virtual ssize_t read(std::span<char> dest) override {
+    char *const buf = dest.data();
+    const size_t len = dest.size();
     size_t left = len;
     ssize_t r = 0;
     size_t off = 0;
