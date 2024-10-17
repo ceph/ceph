@@ -291,6 +291,8 @@ class CephMgrCommands(Directive):
                          'pecan.hooks',
                          'werkzeug',
                          'werkzeug.serving']
+        # make mds_partitioner happy
+        mock_imports += ['pandas']
 
         for m in mock_imports:
             args = {}
