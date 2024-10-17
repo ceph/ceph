@@ -45,8 +45,6 @@ private:
     crimson::osd::ObjectContextRef obc,
     std::vector<OSDOp> &osd_ops);
 
-  seastar::future<> do_process();
-
   Ref<PG> pg;
   epoch_t start_epoch;
   OpInfo op_info;
