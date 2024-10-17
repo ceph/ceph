@@ -274,6 +274,10 @@ void MgrStandby::send_beacon()
       m->set_command_descs(commands);
       dout(4) << "going active, including " << m->get_command_descs().size()
               << " commands in beacon" << dendl;
+    } else {
+      dout(10) << "already available in map, not sending command descs" << dendl;
+      m->clear_command_descs();
+      m->clear_modules();
     }
 
     m->set_services(active_mgr->get_services());
