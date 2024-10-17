@@ -41,18 +41,25 @@ class Config:
 # implementations of these interfaces by calling init_multi()
 realm = None
 user = None
+alt_user = None
 config = None
-def init_multi(_realm, _user, _config=None):
+def init_multi(_realm, _user, _alt_user, _config=None):
     global realm
     realm = _realm
     global user
     user = _user
+    global alt_user
+    alt_user = _alt_user
+    log.debug('created alt_user=%s', alt_user.name)
     global config
     config = _config or Config()
     realm_meta_checkpoint(realm)
 
 def get_user():
     return user.id if user is not None else ''
+
+def get_alt_user():
+    return alt_user.id if alt_user is not None else ''
 
 def get_tenant():
     return config.tenant if config is not None and config.tenant is not None else ''
@@ -472,7 +479,8 @@ class ZonegroupConns:
         self.master_zone = None
 
         for z in zonegroup.zones:
-            zone_conn = z.get_conn(user.credentials)
+            log.debug('ZonegroupConns::__init__ alt_user=%s', alt_user.name)
+            zone_conn = z.get_conn(user.credentials, alt_user.credentials)
             self.zones.append(zone_conn)
             if z.is_read_only():
                 self.ro_zones.append(zone_conn)
@@ -764,6 +772,9 @@ def check_oidc_providers_eq(zone_conn1, zone_conn2):
     for p1, p2 in zip(providers1, providers2):
         eq(p1, p2)
         check_oidc_provider_eq(zone_conn1, zone_conn2, p1['Arn'])
+
+def test_assume_role_bucket_create(zone_conn, bucket, role_arn, session_name):
+    zone_conn.assume_role_create_bucket(bucket, role_arn, session_name)
 
 def test_object_sync():
     zonegroup = realm.master_zonegroup()
@@ -2022,6 +2033,32 @@ def test_object_acl():
     after_set_acl = bucket2.get_acl(k)
     assert(len(after_set_acl.acl.grants) == 2) # read grant added on AllUsers
 
+def test_assume_role_after_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    role_name = gen_role_name()
+    log.info('create role zone=%s name=%s', zonegroup_conns.master_zone.name, role_name)
+    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/alt_tester\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
+    role = zonegroup_conns.master_zone.create_role("", role_name, policy_document, "")
+    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Resource\":\"*\",\"Action\":\"s3:*\"}]}"
+    zonegroup_conns.master_zone.put_role_policy(role_name, "Policy1", policy_document)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone in zonegroup_conns.zones:
+        log.info(f'checking if zone: {zone.name} has role: {role_name}')
+        assert(zone.has_role(role_name))
+        log.info(f'success, zone: {zone.name} has role: {role_name}')
+    
+    for zone in zonegroup_conns.zones:
+        if zone == zonegroup_conns.master_zone:
+            log.info(f'creating bucket in primary zone')
+            bucket = "bucket1"
+            test_assume_role_bucket_create(zone, bucket, role['create_role_response']['create_role_result']['role']['arn'], "primary")
+        if zone != zonegroup_conns.master_zone:
+            log.info(f'creating bucket in secondary zone')
+            bucket = "bucket2"
+            test_assume_role_bucket_create(zone, bucket, role['create_role_response']['create_role_result']['role']['arn'], "secondary")
 
 @attr('fails_with_rgw')
 @attr('data_sync_init')
