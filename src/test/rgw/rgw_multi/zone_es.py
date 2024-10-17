@@ -246,6 +246,12 @@ class ESZone(Zone):
         def create_role(self, path, rolename, policy_document, tag_list):
             assert False
 
+        def delete_role(self, role_name):
+            assert False
+
+        def has_role(self, role_name):
+            assert False
+
     def get_conn(self, credentials):
         return self.Conn(self, credentials)
 
