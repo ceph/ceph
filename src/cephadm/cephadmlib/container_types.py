@@ -8,7 +8,28 @@ import os
 from typing import Dict, List, Optional, Any, Union, Tuple, Iterable, cast
 
 from .call_wrappers import call, call_throws, CallVerbosity
-from .constants import DEFAULT_TIMEOUT
+from .constants import (
+    DEFAULT_TIMEOUT,
+    # default container images
+    DEFAULT_ALERT_MANAGER_IMAGE,
+    DEFAULT_GRAFANA_IMAGE,
+    DEFAULT_LOKI_IMAGE,
+    DEFAULT_NODE_EXPORTER_IMAGE,
+    DEFAULT_PROMETHEUS_IMAGE,
+    DEFAULT_PROMTAIL_IMAGE,
+    DEFAULT_HAPROXY_IMAGE,
+    DEFAULT_KEEPALIVED_IMAGE,
+    DEFAULT_NVMEOF_IMAGE,
+    DEFAULT_SNMP_GATEWAY_IMAGE,
+    DEFAULT_ELASTICSEARCH_IMAGE,
+    DEFAULT_JAEGER_COLLECTOR_IMAGE,
+    DEFAULT_JAEGER_AGENT_IMAGE,
+    DEFAULT_JAEGER_QUERY_IMAGE,
+    DEFAULT_SMB_IMAGE,
+    DEFAULT_SMBMETRICS_IMAGE,
+    DEFAULT_NGINX_IMAGE,
+    DEFAULT_OAUTH2_PROXY_IMAGE,
+)
 from .container_engines import Docker, Podman
 from .context import CephadmContext
 from .daemon_identity import DaemonIdentity, DaemonSubIdentity
@@ -660,3 +681,30 @@ def enable_shared_namespaces(
     cc = f'container:{name}'
     for n in ns:
         _replace_container_arg(args, n.to_option(cc))
+
+
+def get_mgr_images() -> dict:
+    """Return dict of default mgr images"""
+    mgr_prefix = 'mgr/cephadm/container_image_'
+    mgr_images = {}
+    mgr_images[mgr_prefix + 'prometheus'] = DEFAULT_PROMETHEUS_IMAGE
+    mgr_images[mgr_prefix + 'alertmanager'] = DEFAULT_ALERT_MANAGER_IMAGE
+    mgr_images[mgr_prefix + 'graphana'] = DEFAULT_GRAFANA_IMAGE
+    mgr_images[mgr_prefix + 'loki'] = DEFAULT_LOKI_IMAGE
+    mgr_images[mgr_prefix + 'promtail'] = DEFAULT_PROMTAIL_IMAGE
+    mgr_images[mgr_prefix + 'node_exporter'] = DEFAULT_NODE_EXPORTER_IMAGE
+    mgr_images[mgr_prefix + 'haproxy'] = DEFAULT_HAPROXY_IMAGE
+    mgr_images[mgr_prefix + 'keepalived'] = DEFAULT_KEEPALIVED_IMAGE
+    mgr_images[mgr_prefix + 'nvmeof'] = DEFAULT_NVMEOF_IMAGE
+    mgr_images[mgr_prefix + 'snmp_gateway'] = DEFAULT_SNMP_GATEWAY_IMAGE
+    mgr_images[mgr_prefix + 'elasticsearch'] = DEFAULT_ELASTICSEARCH_IMAGE
+    mgr_images[
+        mgr_prefix + 'jaeger_collector'
+    ] = DEFAULT_JAEGER_COLLECTOR_IMAGE
+    mgr_images[mgr_prefix + 'jaeger_agent'] = DEFAULT_JAEGER_AGENT_IMAGE
+    mgr_images[mgr_prefix + 'jaeger_query'] = DEFAULT_JAEGER_QUERY_IMAGE
+    mgr_images[mgr_prefix + 'smb'] = DEFAULT_SMB_IMAGE
+    mgr_images[mgr_prefix + 'smbmetrics'] = DEFAULT_SMBMETRICS_IMAGE
+    mgr_images[mgr_prefix + 'nginx'] = DEFAULT_NGINX_IMAGE
+    mgr_images[mgr_prefix + 'oauth2_proxy'] = DEFAULT_OAUTH2_PROXY_IMAGE
+    return mgr_images
