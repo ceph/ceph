@@ -156,10 +156,6 @@
         <source>Hostname</source>
         <target>Hostname</target>
       </trans-unit>
-      <trans-unit id="7143579180750436311" datatype="html">
-        <source>Services</source>
-        <target>Services</target>
-      </trans-unit>
       <trans-unit id="546766753072101168" datatype="html">
         <source>Labels</source>
         <target>Labels</target>
@@ -596,18 +592,6 @@
         <source>{VAR_SELECT, select, true {OSD is} other {OSDs are}}</source>
         <target>{VAR_SELECT, select, true {OSD is} other {OSDs are}}</target>
       </trans-unit>
-      <trans-unit id="262a49e60d5f6ed9825582ccf3d5ae39daa1da60" datatype="html">
-        <source>The 
-          <x id="ICU" equiv-text="{selection.hasSingleSelection, select, true {OSD is} other {OSDs are}} "/> not safe to be 
-          <x id="INTERPOLATION" equiv-text="     {{ actionDescripti"/>! 
-          <x id="INTERPOLATION_1" equiv-text=" }}! {{ messa"/>
-        </source>
-        <target>The 
-          <x id="ICU" equiv-text="{selection.hasSingleSelection, select, true {OSD is} other {OSDs are}} "/> not safe to be 
-          <x id="INTERPOLATION" equiv-text="     {{ actionDescripti"/>! 
-          <x id="INTERPOLATION_1" equiv-text=" }}! {{ messa"/>
-        </target>
-      </trans-unit>
       <trans-unit id="8cf121660bed7098516a1efe85831d6f415a9411" datatype="html">
         <source>Preserve OSD ID(s) for replacement.</source>
         <target>Preserve OSD ID(s) for replacement.</target>
@@ -615,10 +599,6 @@
       <trans-unit id="6343323763459782070" datatype="html">
         <source>Create Silence</source>
         <target>Create Silence</target>
-      </trans-unit>
-      <trans-unit id="1895957424873987405" datatype="html">
-        <source>Job</source>
-        <target>Job</target>
       </trans-unit>
       <trans-unit id="6491474782694268231" datatype="html">
         <source>Severity</source>
@@ -794,16 +774,6 @@
         <source>Unmanaged</source>
         <target>Unmanaged</target>
       </trans-unit>
-      <trans-unit id="e4ab7c51475b19b27b73ab3047d4a7e094230854" datatype="html">
-        <source>The value does not match the pattern 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>&lt;realm_name&gt;.&lt;zone_name&gt;[.&lt;subcluster&gt;]
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong>"/>.
-        </source>
-        <target>The value does not match the pattern 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>&lt;realm_name&gt;.&lt;zone_name&gt;[.&lt;subcluster&gt;]
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong>"/>.
-        </target>
-      </trans-unit>
       <trans-unit id="c15fa461935e0f600bc5d1660af1da67f024fc2a" datatype="html">
         <source>Placement</source>
         <target>Placement</target>
@@ -831,10 +801,6 @@
       <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
         <source>Pool</source>
         <target>Pool</target>
-      </trans-unit>
-      <trans-unit id="130fd872c78271a8f86b1ab16a76e823969c47d9" datatype="html">
-        <source>Namespace</source>
-        <target>Namensraum</target>
       </trans-unit>
       <trans-unit id="94516fa213706c67ce5a5b5765681d7fb032033a" datatype="html">
         <source>Loading...</source>
@@ -910,14 +876,6 @@
         <source>Invalid SSL private key.</source>
         <target>Invalid SSL private key.</target>
       </trans-unit>
-      <trans-unit id="640149150608991757" datatype="html">
-        <source>Container image name</source>
-        <target>Container image name</target>
-      </trans-unit>
-      <trans-unit id="8241690340007109774" datatype="html">
-        <source>Container image ID</source>
-        <target>Container image ID</target>
-      </trans-unit>
       <trans-unit id="5869780110608474933" datatype="html">
         <source>Placement</source>
         <target>Placement</target>
@@ -929,10 +887,6 @@
       <trans-unit id="335348913532561915" datatype="html">
         <source>Last Refreshed</source>
         <target>Last Refreshed</target>
-      </trans-unit>
-      <trans-unit id="4739887277393389324" datatype="html">
-        <source>Your settings have been applied successfully.  Due to privacy/legal reasons the Telemetry module is now disabled until you  complete the next step and accept the license.</source>
-        <target>Your settings have been applied successfully.  Due to privacy/legal reasons the Telemetry module is now disabled until you  complete the next step and accept the license.</target>
       </trans-unit>
       <trans-unit id="8293060085588842566" datatype="html">
         <source>The Telemetry module has been configured and activated successfully.</source>
@@ -1136,18 +1090,6 @@
         <source>The actual telemetry data that will be submitted.</source>
         <target>The actual telemetry data that will be submitted.</target>
       </trans-unit>
-      <trans-unit id="60900bc663571f852a04950a123508b106d97204" datatype="html">
-        <source>Report preview 
-          <x id="START_TAG_CD_HELPER" equiv-text="<cd-helper i18n-html                            html=&quot;The actual telemetry data that will be submitted.&quot;>                 </cd-helper>"/>
-          <x id="CLOSE_TAG_CD_HELPER" equiv-text="</cd-helper>"/>
-        </source>
-        <target>Report preview 
-          <x id="START_TAG_CD_HELPER" equiv-text="<cd-helper i18n-html
-                           html=&quot;The actual telemetry data that will be submitted.&quot;>
-                </cd-helper>"/>
-          <x id="CLOSE_TAG_CD_HELPER" equiv-text="</cd-helper>"/>
-        </target>
-      </trans-unit>
       <trans-unit id="933a2b6f087670ff42c95876e6ecfb2faa3e3867" datatype="html">
         <source>I agree to my telemetry data being submitted under the 
           <x id="START_LINK" equiv-text="<a href=&quot;https://cdla.io/sharing-1-0/&quot;>"/>Community Data License Agreement - Sharing - Version 1.0
@@ -1158,25 +1100,9 @@
           <x id="CLOSE_LINK" equiv-text="</a>"/>
         </target>
       </trans-unit>
-      <trans-unit id="d2bcd3296d2850de762fb943060b7e086a893181" datatype="html">
-        <source>Health</source>
-        <target>Integrität</target>
-      </trans-unit>
-      <trans-unit id="61e0f26d843eec0b33ff475e111b0c2f7a80b835" datatype="html">
-        <source>Statistics</source>
-        <target>Statistiken</target>
-      </trans-unit>
-      <trans-unit id="1343735409646758166" datatype="html">
-        <source>There are no daemons available.</source>
-        <target>There are no daemons available.</target>
-      </trans-unit>
       <trans-unit id="2691935247101074756" datatype="html">
         <source>NFS export</source>
         <target>NFS export</target>
-      </trans-unit>
-      <trans-unit id="b3f6ba7fe84d6508705cdfe234f0fcc8ff85c9cf" datatype="html">
-        <source>Storage Backend</source>
-        <target>Speicher-Back-End</target>
       </trans-unit>
       <trans-unit id="bee6900143996c0e908a10564532eba3da0b30fb" datatype="html">
         <source>NFS Protocol</source>
@@ -1226,53 +1152,9 @@
         <source>Daemons</source>
         <target>Daemons</target>
       </trans-unit>
-      <trans-unit id="cf85b1ee58326aa9da63da41b2629c9db7c9a5b9" datatype="html">
-        <source>Add daemon</source>
-        <target>Daemon hinzufügen</target>
-      </trans-unit>
-      <trans-unit id="72963c74cb9aa346f4ec34fd976d6f6550438041" datatype="html">
-        <source>Add all daemons</source>
-        <target>Add all daemons</target>
-      </trans-unit>
-      <trans-unit id="c1ea7d32a20b071a42d7107bf78d96028bcfc38f" datatype="html">
-        <source>Remove all daemons</source>
-        <target>Remove all daemons</target>
-      </trans-unit>
       <trans-unit id="151c80ea931037cd92e854442927f8a0f6ae7795" datatype="html">
         <source>-- No data pools available --</source>
         <target>-- Keine Datenpools verfügbar --</target>
-      </trans-unit>
-      <trans-unit id="b6fee356d1db954255a56d8169405a89595246b9" datatype="html">
-        <source>-- Select the storage backend --</source>
-        <target>-- Speicher-Back-End auswählen --</target>
-      </trans-unit>
-      <trans-unit id="76d67035c3ab3d8e56f725859f820f03fda41cfc" datatype="html">
-        <source>Object Gateway User</source>
-        <target>Objektgatewaybenutzer</target>
-      </trans-unit>
-      <trans-unit id="fade7788bace74337f306ae209f10fc187ef4671" datatype="html">
-        <source>-- No users available --</source>
-        <target>-- Keine Benutzer verfügbar --</target>
-      </trans-unit>
-      <trans-unit id="6d30b7b36cf8f6364167321bdb4ba35d4cefce7b" datatype="html">
-        <source>-- Select the object gateway user --</source>
-        <target>-- Objektgatewaybenutzer auswählen --</target>
-      </trans-unit>
-      <trans-unit id="589ce20d3ba3e3ac44f75decfaadc4ea8f0aec2d" datatype="html">
-        <source>CephFS User ID</source>
-        <target>CephFS-Benutzer-ID</target>
-      </trans-unit>
-      <trans-unit id="c4b88a53ac3b0ece46ba9b3ad72355a3c190cce7" datatype="html">
-        <source>-- No clients available --</source>
-        <target>-- keine Clients verfügbar --</target>
-      </trans-unit>
-      <trans-unit id="da52835b80497a0002d24414b057dc46ae44ce38" datatype="html">
-        <source>-- Select the cephx client --</source>
-        <target>-- cephx-Client auswählen --</target>
-      </trans-unit>
-      <trans-unit id="fd3419e8957d928d7f7ba19c93356a0dbff02871" datatype="html">
-        <source>CephFS Name</source>
-        <target>CephFS-Name</target>
       </trans-unit>
       <trans-unit id="ee3ba0ab5f0ccd597b3e44021c71e9aaad14df0a" datatype="html">
         <source>-- No CephFS filesystem available --</source>
@@ -1298,61 +1180,9 @@
         <source>Path need to start with a '/' and can be followed by a word</source>
         <target>Pfad muss mit einem '/' beginnen und kann von einem Wort gefolgt werden</target>
       </trans-unit>
-      <trans-unit id="2d02916f44fc63e13ab16d1cbe72aa6cb51feab3" datatype="html">
-        <source>New directory will be created</source>
-        <target>Neues Verzeichnis wird erstellt</target>
-      </trans-unit>
-      <trans-unit id="766c66ad5cc981c531aaf3fe3a2a7a346ddc8d83" datatype="html">
-        <source>Path</source>
-        <target>Pfad</target>
-      </trans-unit>
-      <trans-unit id="7ec35c722a50b976620f22612f7be619c12ceb90" datatype="html">
-        <source>Path can only be a single '/' or a word</source>
-        <target>Pfad darf nur ein einzelner '/' oder ein Wort sein</target>
-      </trans-unit>
-      <trans-unit id="aebb6a5090c24511de4530195694bb3f3dcf0342" datatype="html">
-        <source>New bucket will be created</source>
-        <target>Neuer Bucket wird erstellt</target>
-      </trans-unit>
-      <trans-unit id="92488963d23095985a47c0d6e62304e11d333f19" datatype="html">
-        <source>NFS Tag</source>
-        <target>NFS-Tag</target>
-      </trans-unit>
-      <trans-unit id="aae93362720aea94623682996dd3fcd0f906f056" datatype="html">
-        <source>Alternative access for 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>NFS v3
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> mounts (it must not have a leading /).
-        </source>
-        <target>Alternative access for 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>NFS v3
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> mounts (it must not have a leading /).
-        </target>
-      </trans-unit>
-      <trans-unit id="45d6db77dcf1a3eeb921033abc7882e517a541cc" datatype="html">
-        <source>Clients may not mount subdirectories (i.e. if Tag = foo, the client may not mount foo/baz).</source>
-        <target>Clients können Unterverzeichnisse möglicherweise nicht mounten (d. h. wenn der Pfad = foo ist, kann der Client foo/baz möglicherweise nicht mounten).</target>
-      </trans-unit>
-      <trans-unit id="a1c7a8676b55e882a97c6a6fb205204f9c761afa" datatype="html">
-        <source>By using different Tag options, the same Path may be exported multiple times.</source>
-        <target>Wenn unterschiedliche Tag-Optionen verwendet werden, wird derselbe Pfad möglicherweise mehrfach exportiert.</target>
-      </trans-unit>
       <trans-unit id="6d2c39708a32910f89701dd7e1cfb9ec1c195768" datatype="html">
         <source>Pseudo</source>
         <target>Pseudo</target>
-      </trans-unit>
-      <trans-unit id="1f8be2ae25947bec0b84c2338201580ea053f34e" datatype="html">
-        <source>The position that this 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>NFS v4
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> export occupies in the 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>Pseudo FS
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> (it must be unique).
-        </source>
-        <target>The position that this 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>NFS v4
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> export occupies in the 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>Pseudo FS
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> (it must be unique).
-        </target>
       </trans-unit>
       <trans-unit id="f3af55f7fd5b1d9e5a53e030c80116dc635bfb9f" datatype="html">
         <source>By using different Pseudo options, the same Path may be exported multiple times.</source>
@@ -1365,10 +1195,6 @@
       <trans-unit id="27eb35c4b4ac08781a7253a2ab40f8f7d957ba51" datatype="html">
         <source>-- No access type available --</source>
         <target>-- Kein Zugriffstyp verfügbar --</target>
-      </trans-unit>
-      <trans-unit id="509ce016c9110a54028dafd741f15ceacbe74b5a" datatype="html">
-        <source>-- Select the access type --</source>
-        <target>-- Zugriffstyp auswählen --</target>
       </trans-unit>
       <trans-unit id="67ce207d0b7eada1fe3d3187a39ba0c07be76b6c" datatype="html">
         <source>The Object Gateway NFS backend has a number of limitations which will seriously affect applications writing to the share. Please consult the 
@@ -1384,10 +1210,6 @@
       <trans-unit id="4deda03573eaaff77e63f6a238a1f0ca7816950a" datatype="html">
         <source>-- No squash available --</source>
         <target>-- Kein Squash verfügbar --</target>
-      </trans-unit>
-      <trans-unit id="a0e82a4da88e7fdf270444f838d45849676e9d4b" datatype="html">
-        <source>--Select what kind of user id squashing is performed --</source>
-        <target>-- Durchzuführende Benutzer-ID-Squashing-Art auswählen --</target>
       </trans-unit>
       <trans-unit id="8911059720204770105" datatype="html">
         <source>Path</source>
@@ -1485,22 +1307,6 @@
         <target>
           <x id="START_BOLD_TEXT" equiv-text="<b>"/>Page not Found
           <x id="CLOSE_BOLD_TEXT" equiv-text="</b>"/>
-        </target>
-      </trans-unit>
-      <trans-unit id="4aee9d027170f84774f2980537556f5099369b82" datatype="html">
-        <source>Sorry, we couldn’t find what you were looking for. The page you requested may have been changed or moved.</source>
-        <target>Sorry, we couldn’t find what you were looking for. The page you requested may have been changed or moved.</target>
-      </trans-unit>
-      <trans-unit id="a2b46fe9a975c6531af77fee858ccd37327980f7" datatype="html">
-        <source>Please consult the 
-          <x id="START_LINK" equiv-text="<a href=&quot;{{ docUrl }}&quot;>"/>documentation
-          <x id="CLOSE_LINK" equiv-text="</a> "/> on how to configure and enable the 
-          <x id="INTERPOLATION" equiv-text="   the {{ section_"/> management functionality.
-        </source>
-        <target>Please consult the 
-          <x id="START_LINK" equiv-text="<a href=&quot;{{ docUrl }}&quot;>"/>documentation
-          <x id="CLOSE_LINK" equiv-text="</a> "/> on how to configure and enable the 
-          <x id="INTERPOLATION" equiv-text="   the {{ section_"/> management functionality.
         </target>
       </trans-unit>
       <trans-unit id="7911416166208830577" datatype="html">
@@ -2275,14 +2081,6 @@
     "/>'
         </target>
       </trans-unit>
-      <trans-unit id="2235495382025026939" datatype="html">
-        <source>Service '
-          <x id="PH" equiv-text="metadata.service_name"/>'
-        </source>
-        <target>Service '
-          <x id="PH" equiv-text="metadata.service_name"/>'
-        </target>
-      </trans-unit>
       <trans-unit id="8770134622386151776" datatype="html">
         <source>Telemetry activation reminder muted</source>
         <target>Telemetry activation reminder muted</target>
@@ -2290,17 +2088,6 @@
       <trans-unit id="8352450862052130357" datatype="html">
         <source>You can activate the module on the Telemetry configuration page (&lt;b&gt;Dashboard Settings&lt;/b&gt; -&gt; &lt;b&gt;Telemetry configuration&lt;/b&gt;) at any time.</source>
         <target>You can activate the module on the Telemetry configuration page (&lt;b&gt;Dashboard Settings&lt;/b&gt; -&gt; &lt;b&gt;Telemetry configuration&lt;/b&gt;) at any time.</target>
-      </trans-unit>
-      <trans-unit id="e9e6aaf48f7e1eb9bd6e71e1f46ae8969057279b" datatype="html">
-        <source>The Telemetry module is not submitting telemetry data at the moment. Click 
-          <x id="START_LINK" equiv-text="<a routerLink=&quot;/telemetry&quot;      class=&quot;alert-link&quot;>"/>here
-          <x id="CLOSE_LINK" equiv-text="</a> "/> to activate it now.
-        </source>
-        <target>The Telemetry module is not submitting telemetry data at the moment. Click 
-          <x id="START_LINK" equiv-text="<a routerLink=&quot;/telemetry&quot;
-     class=&quot;alert-link&quot;>"/>here
-          <x id="CLOSE_LINK" equiv-text="</a> "/> to activate it now.
-        </target>
       </trans-unit>
       <trans-unit id="c8d1785038d461ec66b5799db21864182b35900a" datatype="html">
         <source>Refresh</source>
@@ -2628,14 +2415,6 @@
         <source>Toggle navigation</source>
         <target>Navigation umschalten</target>
       </trans-unit>
-      <trans-unit id="f65253954b66e929a8b4d5ecaf61f9129f8cec64" datatype="html">
-        <source>Dashboard</source>
-        <target>Dashboard</target>
-      </trans-unit>
-      <trans-unit id="2cc3ecb16e348fcf2f2fbfd2f997d4d22f37475b" datatype="html">
-        <source>Inventory</source>
-        <target>Inventar</target>
-      </trans-unit>
       <trans-unit id="624f596cc3320f5e0a0d7c7346c364e5af9bdd8c" datatype="html">
         <source>Monitors</source>
         <target>Monitore</target>
@@ -2656,17 +2435,9 @@
         <source>Logs</source>
         <target>Protokolle</target>
       </trans-unit>
-      <trans-unit id="17fc3efe5f9fa4e0289c900cb6202265215a1a27" datatype="html">
-        <source>Monitoring</source>
-        <target>Überwachung</target>
-      </trans-unit>
       <trans-unit id="92899fa68e8ca108912163ff58edc8540e453787" datatype="html">
         <source>Pools</source>
         <target>Pools</target>
-      </trans-unit>
-      <trans-unit id="7f5d0c10614e8a34f0e2dad33a0568277c50cf69" datatype="html">
-        <source>Block</source>
-        <target>Block</target>
       </trans-unit>
       <trans-unit id="b73f7f5060fb22a1e9ec462b1bb02493fa3ab866" datatype="html">
         <source>Images</source>
@@ -2684,10 +2455,6 @@
         <source>NFS</source>
         <target>NFS</target>
       </trans-unit>
-      <trans-unit id="a4eff72d97b7ced051398d581f10968218057ddc" datatype="html">
-        <source>Filesystems</source>
-        <target>Dateisysteme</target>
-      </trans-unit>
       <trans-unit id="4d13a9cd5ed3dcee0eab22cb25198d43886942be" datatype="html">
         <source>Users</source>
         <target>Benutzer</target>
@@ -2699,22 +2466,6 @@
       <trans-unit id="049dfd9fe6c78914ad58cf89ac6a631fca28ec74" datatype="html">
         <source>Logged in user</source>
         <target>Angemeldeter Benutzer</target>
-      </trans-unit>
-      <trans-unit id="c5022c5ae3ae921c07bf5f881e9b026b4a6708a7" datatype="html">
-        <source>Signed in as 
-          <x id="START_TAG_STRONG" equiv-text="<strong>{{ username }}"/>
-          <x id="INTERPOLATION" equiv-text="{{ username }}</strong>"/>
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong>"/>
-        </source>
-        <target>Signed in as 
-          <x id="START_TAG_STRONG" equiv-text="<strong>{{ username }}"/>
-          <x id="INTERPOLATION" equiv-text="{{ username }}</strong>"/>
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong>"/>
-        </target>
-      </trans-unit>
-      <trans-unit id="5d22c795daf43877a5f708dca2bccd549eb0471d" datatype="html">
-        <source>Sign out</source>
-        <target>Abmelden</target>
       </trans-unit>
       <trans-unit id="739516c2ca75843d5aec9cf0e6b3e4335c4227b9" datatype="html">
         <source>Change password</source>
@@ -2890,20 +2641,6 @@
         <source>here</source>
         <target>here</target>
       </trans-unit>
-      <trans-unit id="795e8a00db46b750113d5db93e8d97e2b3079894" datatype="html">
-        <source>For an overview of 
-          <x id="INTERPOLATION" equiv-text="{{ groupTitle|lowercase }}"/> widgets click 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;dashboard-landing-page-{{ groupTitle|lowercase }}&quot;             docText=&quot;here&quot;             i18n-docText></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>"/>
-        </source>
-        <target>For an overview of 
-          <x id="INTERPOLATION" equiv-text="{{ groupTitle|lowercase }}"/> widgets click 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;dashboard-landing-page-{{ groupTitle|lowercase }}&quot;
-            docText=&quot;here&quot;
-            i18n-docText></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>"/>
-        </target>
-      </trans-unit>
       <trans-unit id="7520247697658334435" datatype="html">
         <source>Reads</source>
         <target>Reads</target>
@@ -3034,26 +2771,6 @@
           <x id="CLOSE_LINK" equiv-text="</a> "/> for more details.
         </target>
       </trans-unit>
-      <trans-unit id="3474944817987674409" datatype="html">
-        <source>Daemon type</source>
-        <target>Daemon type</target>
-      </trans-unit>
-      <trans-unit id="3136939605470297323" datatype="html">
-        <source>Daemon ID</source>
-        <target>Daemon ID</target>
-      </trans-unit>
-      <trans-unit id="8171022601808215887" datatype="html">
-        <source>Container ID</source>
-        <target>Container ID</target>
-      </trans-unit>
-      <trans-unit id="8859473568390700297" datatype="html">
-        <source>Container Image name</source>
-        <target>Container Image name</target>
-      </trans-unit>
-      <trans-unit id="5623167616584404899" datatype="html">
-        <source>Container Image ID</source>
-        <target>Container Image ID</target>
-      </trans-unit>
       <trans-unit id="5518753745858598442" datatype="html">
         <source>no spec</source>
         <target>no spec</target>
@@ -3101,10 +2818,6 @@
       <trans-unit id="77fc5c63497fc031ddc97645484e3d94ad27766c" datatype="html">
         <source>Use regular expression</source>
         <target>Regulären Ausdruck verwenden</target>
-      </trans-unit>
-      <trans-unit id="880ad4df5a2051a437321443d69c9a866699e5ad" datatype="html">
-        <source>Active Alerts</source>
-        <target>Aktive Warnungen</target>
       </trans-unit>
       <trans-unit id="9fe218829514884cdd0ca2300573a4e0428c324f" datatype="html">
         <source>Alerts</source>
@@ -3636,14 +3349,6 @@
         <source>Allows only operations that do not modify the server</source>
         <target>Allows only operations that do not modify the server</target>
       </trans-unit>
-      <trans-unit id="8698816728892760483" datatype="html">
-        <source>Does not allow read or write operations, but allows any other operation</source>
-        <target>Does not allow read or write operations, but allows any other operation</target>
-      </trans-unit>
-      <trans-unit id="1921203953053799929" datatype="html">
-        <source>Does not allow read, write, or any operation that modifies file attributes or directory content</source>
-        <target>Does not allow read, write, or any operation that modifies file attributes or directory content</target>
-      </trans-unit>
       <trans-unit id="990071930378308183" datatype="html">
         <source>Allows no access at all</source>
         <target>Allows no access at all</target>
@@ -3881,10 +3586,6 @@
       <trans-unit id="795890916060309463" datatype="html">
         <source>Roles</source>
         <target>Roles</target>
-      </trans-unit>
-      <trans-unit id="6877445485286599988" datatype="html">
-        <source>Password expiration date</source>
-        <target>Password expiration date</target>
       </trans-unit>
       <trans-unit id="705657168061753072" datatype="html">
         <source>Deleted user '
@@ -4338,10 +4039,6 @@
         <source>The entered value must be &gt;= 0.</source>
         <target>Der eingegebene Wert muss &gt;=0 sein.</target>
       </trans-unit>
-      <trans-unit id="8011e20c5bbe51602d459a860fbf29b599b55edd" datatype="html">
-        <source>System</source>
-        <target>System</target>
-      </trans-unit>
       <trans-unit id="db18a2772988415466a7f75dc42663ce78c9c1d3" datatype="html">
         <source>Maximum buckets</source>
         <target>Maximale Buckets</target>
@@ -4357,10 +4054,6 @@
       <trans-unit id="1221ca97d19eaa9a7bc0c5243d5fc5befe1d2314" datatype="html">
         <source>-- Select a type --</source>
         <target>-- Typ auswählen --</target>
-      </trans-unit>
-      <trans-unit id="479488ab6e91ecb375484edc78bee3d13467f33f" datatype="html">
-        <source>Daemons List</source>
-        <target>Liste der Daemons</target>
       </trans-unit>
       <trans-unit id="ca2dee83bb58290d93fb0d17ee8bc9f095a4576f" datatype="html">
         <source>Sync Performance</source>
@@ -4389,10 +4082,6 @@
       <trans-unit id="8713861779825116442" datatype="html">
         <source>Object Limit %</source>
         <target>Object Limit %</target>
-      </trans-unit>
-      <trans-unit id="7683612458321319524" datatype="html">
-        <source>The bucket list data might be stale. If needed, you can manually reload it.</source>
-        <target>The bucket list data might be stale. If needed, you can manually reload it.</target>
       </trans-unit>
       <trans-unit id="4349284625269221231" datatype="html">
         <source>bucket</source>
@@ -4478,14 +4167,6 @@
         <source>Mode</source>
         <target>Modus</target>
       </trans-unit>
-      <trans-unit id="9af1b4baa2dd8ed2bfc3cc756b12a2271c2dd793" datatype="html">
-        <source>Compliance</source>
-        <target>Compliance</target>
-      </trans-unit>
-      <trans-unit id="edd600fa489d1b4a4448dce694ed932e52ce8fda" datatype="html">
-        <source>Governance</source>
-        <target>Governance</target>
-      </trans-unit>
       <trans-unit id="a5c3d9d2296f7886e8289b9f623323803deacfc6" datatype="html">
         <source>Days</source>
         <target>Days</target>
@@ -4498,22 +4179,6 @@
         <source>The entered value must be a positive integer.</source>
         <target>The entered value must be a positive integer.</target>
       </trans-unit>
-      <trans-unit id="def9fc628134d3a044b7c0ad2a83c846bdad56f1" datatype="html">
-        <source>Retention period requires either Days or Years.</source>
-        <target>Retention period requires either Days or Years.</target>
-      </trans-unit>
-      <trans-unit id="003c94fc143882ac8af6251a1595fe62978fe3e6" datatype="html">
-        <source>Years</source>
-        <target>Years</target>
-      </trans-unit>
-      <trans-unit id="14c6189ead0951f13049c7bf9af7642d0c41957a" datatype="html">
-        <source>The number of years that you want to specify for the default retention period that will be applied to new objects placed in this bucket.</source>
-        <target>The number of years that you want to specify for the default retention period that will be applied to new objects placed in this bucket.</target>
-      </trans-unit>
-      <trans-unit id="45cc8ca94b5a50842a9a8ef804a5ab089a38ae5c" datatype="html">
-        <source>ID</source>
-        <target>ID</target>
-      </trans-unit>
       <trans-unit id="e5c51963a9c553b29427ef783bbb69fa6634fa8c" datatype="html">
         <source>Index type</source>
         <target>Indextyp</target>
@@ -4522,29 +4187,9 @@
         <source>Placement rule</source>
         <target>Platzierungsregel</target>
       </trans-unit>
-      <trans-unit id="6972d213e31c4ea4f887e60db99d9881bc8fcd3e" datatype="html">
-        <source>Marker</source>
-        <target>Marker</target>
-      </trans-unit>
-      <trans-unit id="47b02acd2d3254d1ace1926f840523f154ebef71" datatype="html">
-        <source>Maximum marker</source>
-        <target>Maximum für Marker</target>
-      </trans-unit>
       <trans-unit id="8fe73a4787b8068b2ba61f54ab7e0f9af2ea1fc9" datatype="html">
         <source>Version</source>
         <target>Version</target>
-      </trans-unit>
-      <trans-unit id="092fa3a7df9168b14d3f83a77a4035e92b92ce15" datatype="html">
-        <source>Master version</source>
-        <target>Masterversion</target>
-      </trans-unit>
-      <trans-unit id="97434cc5001d407f90c7447a12d9e8e6848a2aa3" datatype="html">
-        <source>Modification time</source>
-        <target>Änderungszeit</target>
-      </trans-unit>
-      <trans-unit id="90fe2e41e7fde38453ce4e619efeea9bc6adea9c" datatype="html">
-        <source>Zonegroup</source>
-        <target>Zonengruppe</target>
       </trans-unit>
       <trans-unit id="62a923f047ca49e7a4782629e91fea1ba32db68f" datatype="html">
         <source>MFA Delete</source>
@@ -4678,14 +4323,6 @@
         <source>Restore Image</source>
         <target>Image wiederherstellen</target>
       </trans-unit>
-      <trans-unit id="7369384817e0ad61ce871c9afdfbb538df2f97c1" datatype="html">
-        <source>To restore</source>
-        <target>Zum Wiederherstellen</target>
-      </trans-unit>
-      <trans-unit id="e7f0abefc608f7fb452c2dc9b1cdc3dec432160e" datatype="html">
-        <source>type the image's new name and click</source>
-        <target>Neuen Namen des Images eingeben und klicken</target>
-      </trans-unit>
       <trans-unit id="41307dd56fea669eed72e12a6c23af275f6bfd82" datatype="html">
         <source>New Name</source>
         <target>Neuer Name</target>
@@ -4694,17 +4331,9 @@
         <source>Purge Trash</source>
         <target>Papierkorb bereinigen</target>
       </trans-unit>
-      <trans-unit id="681501eecd7f44d4b7a2f619605b36676e04c5b6" datatype="html">
-        <source>To purge, select one or</source>
-        <target>To purge, select one or</target>
-      </trans-unit>
       <trans-unit id="dfc3c34e182ea73c5d784ff7c8135f087992dac1" datatype="html">
         <source>All</source>
         <target>Alle</target>
-      </trans-unit>
-      <trans-unit id="ea5d338dcef50ff5c24439fd784f6a67b594c33f" datatype="html">
-        <source>pools and click</source>
-        <target>pools and click</target>
       </trans-unit>
       <trans-unit id="55a4f598a4894b7fd5cb88f0ffd3c37ad009dd70" datatype="html">
         <source>Pool:</source>
@@ -4759,22 +4388,6 @@
       <trans-unit id="f0b5d789d42c0e69348e5fe0037fcbf5b5fbbdcc" datatype="html">
         <source>Move an image to trash</source>
         <target>Image in Papierkorb verschieben</target>
-      </trans-unit>
-      <trans-unit id="b4b3ced4f8aad4c446f348b14c3d94be2e2c350c" datatype="html">
-        <source>To move 
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ imageSpecStr }}</kbd>"/>
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/> to trash, click 
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Move Image
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
-        </source>
-        <target>To move 
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ imageSpecStr }}</kbd>"/>
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/> to trash, click 
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Move Image
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
-        </target>
       </trans-unit>
       <trans-unit id="88f27d390844aad53b4240360e928156c5f0d326" datatype="html">
         <source>Protection expires at</source>
@@ -4839,10 +4452,6 @@
       <trans-unit id="8063651736083474594" datatype="html">
         <source>High</source>
         <target>High</target>
-      </trans-unit>
-      <trans-unit id="178418048502923560" datatype="html">
-        <source>Provisioned</source>
-        <target>Provisioned</target>
       </trans-unit>
       <trans-unit id="6240400332778072187" datatype="html">
         <source>PROTECTED</source>
@@ -4912,10 +4521,6 @@
         <source>Object size</source>
         <target>Object size</target>
       </trans-unit>
-      <trans-unit id="7638291694671392137" datatype="html">
-        <source>Total provisioned</source>
-        <target>Total provisioned</target>
-      </trans-unit>
       <trans-unit id="8621797738551294959" datatype="html">
         <source>Parent</source>
         <target>Parent</target>
@@ -4956,17 +4561,9 @@
         <source>Object map (requires exclusive-lock)</source>
         <target>Object map (requires exclusive-lock)</target>
       </trans-unit>
-      <trans-unit id="240933649452133654" datatype="html">
-        <source>Journaling (requires exclusive-lock)</source>
-        <target>Journaling (requires exclusive-lock)</target>
-      </trans-unit>
       <trans-unit id="3713046526850391848" datatype="html">
         <source>Fast diff (interlocked with object-map)</source>
         <target>Fast diff (interlocked with object-map)</target>
-      </trans-unit>
-      <trans-unit id="49449943d8cbf59d8c401c8bd2e76f92e207cc5f" datatype="html">
-        <source>Use a dedicated data pool</source>
-        <target>Dedizierten Datenpool verwenden</target>
       </trans-unit>
       <trans-unit id="7faaaa08f56427999f3be41df1093ce4089bbd75" datatype="html">
         <source>Size</source>
@@ -4976,10 +4573,6 @@
         <source>e.g., 10GiB</source>
         <target>z. B. 10GiB</target>
       </trans-unit>
-      <trans-unit id="bc2e854e111ecf2bd7db170da5e3c2ed08181d88" datatype="html">
-        <source>Advanced</source>
-        <target>Erweitert</target>
-      </trans-unit>
       <trans-unit id="3562a3778695a5f9c0445660e35301f0a39aaf73" datatype="html">
         <source>Striping</source>
         <target>Striping</target>
@@ -4988,17 +4581,9 @@
         <source>Object size</source>
         <target>Objektgröße</target>
       </trans-unit>
-      <trans-unit id="ef3c3f3b5f562a5cdbe0ee2874287db1534b5958" datatype="html">
-        <source>Stripe unit</source>
-        <target>Stripe-Einheit</target>
-      </trans-unit>
       <trans-unit id="84471be1049006edecbcaef1a32ae0893c229c50" datatype="html">
         <source>-- Select stripe unit --</source>
         <target>-- Stripe-Einheit auswählen --</target>
-      </trans-unit>
-      <trans-unit id="a682f49f9b761591661276d7c6f550e641a130a4" datatype="html">
-        <source>Stripe count</source>
-        <target>Stripe-Anzahl</target>
       </trans-unit>
       <trans-unit id="6547c9c4d5f62942ac4b1fe459cf9a03d4dbf5a0" datatype="html">
         <source>
@@ -5027,10 +4612,6 @@
       <trans-unit id="870aee0dd31a9643bf62007beb8f1ae1deb34d42" datatype="html">
         <source>Data pool</source>
         <target>Datenpool</target>
-      </trans-unit>
-      <trans-unit id="3792ca829d9b9f687e1f5d7733d30e9bb0bfec47" datatype="html">
-        <source>Dedicated pool that stores the object-data of the RBD.</source>
-        <target>Dedizierter Pool zur Speicherung von RBD-Objektdaten.</target>
       </trans-unit>
       <trans-unit id="0a88bbee20570aaf9615332fb27020627044874d" datatype="html">
         <source>You have to increase the size.</source>
@@ -5138,10 +4719,6 @@
         <source>The minimum value is 0</source>
         <target>The minimum value is 0</target>
       </trans-unit>
-      <trans-unit id="6450386891540681425" datatype="html">
-        <source>Edit Site Name</source>
-        <target>Edit Site Name</target>
-      </trans-unit>
       <trans-unit id="4645993115976933405" datatype="html">
         <source>Create Bootstrap Token</source>
         <target>Create Bootstrap Token</target>
@@ -5149,10 +4726,6 @@
       <trans-unit id="4130053543590533787" datatype="html">
         <source>Import Bootstrap Token</source>
         <target>Import Bootstrap Token</target>
-      </trans-unit>
-      <trans-unit id="40b7acea5b43f45e0bbd1efeba5200af4687981d" datatype="html">
-        <source>Site Name:</source>
-        <target>Site-Name:</target>
       </trans-unit>
       <trans-unit id="4626760504772708998" datatype="html">
         <source>Size has to be at least 
@@ -5636,18 +5209,6 @@
         <source>Progress</source>
         <target>Progress</target>
       </trans-unit>
-      <trans-unit id="66db799d67958d4b0765181d072df62e2d1c16f5" datatype="html">
-        <source>Issues</source>
-        <target>Probleme</target>
-      </trans-unit>
-      <trans-unit id="ef06d69259e587e28d52372455f44c7153cda7e7" datatype="html">
-        <source>Syncing</source>
-        <target>Wird synchronisiert</target>
-      </trans-unit>
-      <trans-unit id="0b0901877d837d3fda16ba161eb74368d1c75b7a" datatype="html">
-        <source>Ready</source>
-        <target>Fertig</target>
-      </trans-unit>
       <trans-unit id="6407712033679505505" datatype="html">
         <source>Edit Mode</source>
         <target>Edit Mode</target>
@@ -5786,20 +5347,6 @@
         <source>Peer clusters must be removed prior to disabling mirror.</source>
         <target>Vor dem Deaktivieren der Spiegelung müssen Peer-Cluster entfernt werden.</target>
       </trans-unit>
-      <trans-unit id="b87bd96249f8afc23f5301cddb57b1464a98e71a" datatype="html">
-        <source>Edit site name</source>
-        <target>Site-Namen bearbeiten</target>
-      </trans-unit>
-      <trans-unit id="cfff72c667274c12eb1ff71eadc25871c10c42dc" datatype="html">
-        <source>Edit the site name and click  
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Update
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
-        </source>
-        <target>Edit the site name and click  
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Update
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
-        </target>
-      </trans-unit>
       <trans-unit id="660f97cd3188f8a04bd03b79e703fec72c6df04c" datatype="html">
         <source>Site Name</source>
         <target>Site-Name</target>
@@ -5863,10 +5410,6 @@
       <trans-unit id="f4e529ae5ffd73001d1ff4bbdeeb0a72e342e5c8" datatype="html">
         <source>Close</source>
         <target>Schließen</target>
-      </trans-unit>
-      <trans-unit id="3473055924346204357" datatype="html">
-        <source>Parent image must support Layering</source>
-        <target>Parent image must support Layering</target>
       </trans-unit>
       <trans-unit id="1152535233999495900" datatype="html">
         <source>Snapshot must be protected in order to clone.</source>
@@ -6074,14 +5617,6 @@
         <source>-- Select a crush rule --</source>
         <target>-- Crush-Regel auswählen --</target>
       </trans-unit>
-      <trans-unit id="e7d4894e770f8853050b1f6dd55bdd77a51a8ac6" datatype="html">
-        <source>Placement and
-                            replication strategies or distribution policies that allow to
-                            specify how CRUSH places data replicas.</source>
-        <target>Placement and
-                            replication strategies or distribution policies that allow to
-                            specify how CRUSH places data replicas.</target>
-      </trans-unit>
       <trans-unit id="ea91d648f92002bc9f96d9b26b735c83ca0b53c6" datatype="html">
         <source>This rule can't be deleted as it is in use.</source>
         <target>This rule can't be deleted as it is in use.</target>
@@ -6233,10 +5768,6 @@
       <trans-unit id="1548d5c76f0406ddd1ba3c557e1e6db22e95b340" datatype="html">
         <source>Crush device class</source>
         <target>Crush-Geräteklasse</target>
-      </trans-unit>
-      <trans-unit id="72d80e0c07bfea1b693a33ef2245007de92a6780" datatype="html">
-        <source>Let Ceph decide</source>
-        <target>Let Ceph decide</target>
       </trans-unit>
       <trans-unit id="f3f657ffa19dc6ac504b83c86209709522dcf065" datatype="html">
         <source>Available OSDs: 
@@ -6432,10 +5963,6 @@
         <source>The type of CRUSH nodes across which we should separate replicas.</source>
         <target>The type of CRUSH nodes across which we should separate replicas.</target>
       </trans-unit>
-      <trans-unit id="3874278445824365480" datatype="html">
-        <source>The device class data should be placed on.</source>
-        <target>The device class data should be placed on.</target>
-      </trans-unit>
       <trans-unit id="675628105428950215" datatype="html">
         <source>Each object is split in data-chunks parts, each stored on a different OSD.</source>
         <target>Each object is split in data-chunks parts, each stored on a different OSD.</target>
@@ -6579,12 +6106,6 @@
         <target>Ensure that no two chunks are in a bucket with the same failure
       domain. For instance, if the failure domain is host no two chunks will be stored on the same
       host. It is used to create a CRUSH rule step such as step chooseleaf host.</target>
-      </trans-unit>
-      <trans-unit id="7737703816676512224" datatype="html">
-        <source>Restrict placement to devices of a specific class
-      (e.g., ssd or hdd), using the crush device class names in the CRUSH map.</source>
-        <target>Restrict placement to devices of a specific class
-      (e.g., ssd or hdd), using the crush device class names in the CRUSH map.</target>
       </trans-unit>
       <trans-unit id="9049698214199657456" datatype="html">
         <source>Set the directory name from which the erasure code plugin is loaded.</source>

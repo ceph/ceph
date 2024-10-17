@@ -5,7 +5,7 @@
   "languages": "cs,de-DE,es-ES,fr-FR,id-ID,it-IT,ja-JP,ko-KR,pl-PL,pt-BR,zh-CN,zh-TW",
   "organization": "ceph",
   "project": "ceph-dashboard",
-  "resource": "Master:master",
+  "resource": "Squid:squid",
   "removeUnusedIds": true,
   "automate": true,
   "quiet": false
