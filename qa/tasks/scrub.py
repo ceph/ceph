@@ -59,7 +59,7 @@ def task(ctx, config):
         yield
     finally:
         log.info('joining scrub')
-        scrub_proc.do_join()
+        scrub_proc.stop_and_join()
 
 class Scrubber:
     """
@@ -91,10 +91,18 @@ class Scrubber:
 
         self.thread = gevent.spawn(self.do_scrub)
 
-    def do_join(self):
-        """Scrubbing thread finished"""
+    def stop(self):
+        """Stop scrubbing"""
         self.stopping = True
+
+    def join(self):
+        """Scrubbing thread finished"""
         self.thread.get()
+
+    def stop_and_join(self):
+        """Stop scrubbing thread"""
+        self.stop()
+        return self.join()
 
     def do_scrub(self):
         """Perform the scrub operation"""
