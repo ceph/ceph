@@ -6,11 +6,15 @@ IMAGE1=image1
 IMAGE2=image2
 IMAGE3=image3
 IMAGES="${IMAGE1} ${IMAGE2} ${IMAGE3}"
+NAMESPACE1=namespace1
+NAMESPACE2=namespace2
+NAMESPACES="${NAMESPACE1} ${NAMESPACE2}"
 
 cleanup() {
     kill_nbd_server
     cleanup_tempdir
     remove_images
+    remove_namespaces
 }
 
 setup_tempdir() {
@@ -40,10 +44,12 @@ create_base_image() {
 }
 
 export_raw_image() {
-    local image=$1
+    local image_path=$1
+    # If image is from namespace
+    local image=$(basename "$image_path")
 
     rm -rf "${TEMPDIR}/${image}"
-    rbd export ${image} "${TEMPDIR}/${image}"
+    rbd export "${image_path}" "${TEMPDIR}/${image}"
 }
 
 export_base_image() {
@@ -69,6 +75,24 @@ remove_images() {
     done
 }
 
+remove_namespace() {
+    local namespace=$1
+
+    local images=$(rbd ls --namespace ${namespace})
+    for IMAGE in ${images}; do
+        remove_image rbd/${namespace}/${IMAGE} || true
+    done
+
+    rbd namespace remove rbd/${namespace} || true
+}
+
+remove_namespaces() {
+    for namespace in ${NAMESPACES}
+    do
+        remove_namespace ${namespace}
+    done
+}
+
 kill_nbd_server() {
     pkill -9 qemu-nbd || true
 }
@@ -82,6 +106,25 @@ show_diff()
     xxd "${file2}" > "${file2}.xxd"
     sdiff -s "${file1}.xxd" "${file2}.xxd" | head -n 64
     rm -f "${file1}.xxd" "${file2}.xxd"
+}
+
+compare_namespace_images() {
+    local source=$1
+    local destination=$2
+    local source_image=$(basename "$source")
+    local dest_image=$(basename "$destination")
+    local ret=0
+
+    export_raw_image "${source}"
+    export_raw_image "${destination}"
+
+    # Compare the two exported images
+    if ! cmp "${TEMPDIR}/${source_image}" "${TEMPDIR}/${dest_image}"
+    then
+        show_diff "${TEMPDIR}/${source_image}" "${TEMPDIR}/${dest_image}"
+        ret=1
+    fi
+    return ${ret}
 }
 
 compare_images() {
@@ -197,6 +240,61 @@ EOF
     compare_images "${base_image}@2" "${dest_image}@2"
 
     remove_image "${dest_image}"
+}
+
+test_import_native_format_with_namespace() {
+    local base_namespace=$1
+    local base_image=$2
+    local dest_namespace=$3
+    local dest_image=$4
+
+    # Fetch pool_id for RBD pool
+    local pool_id=$(ceph osd pool ls detail --format xml | xmlstarlet sel -t -v "//pools/pool[pool_name='rbd']/pool_id")
+
+    # Function to generate the source spec JSON
+    create_spec() {
+        local namespace=$1
+        local image_name=$2
+        cat > ${TEMPDIR}/spec.json <<EOF
+{
+  "type": "native",
+  "pool_id": ${pool_id},
+  "pool_namespace": "${namespace}",
+  "image_name": "${image_name}",
+  "snap_name": "2"
+}
+EOF
+        cat ${TEMPDIR}/spec.json
+    }
+
+    # Function to handle image migration
+    perform_migration() {
+        local source=$1
+        local source_image=$(basename "$source")
+        local destination=$2
+        local dest_image=$(basename "$destination")
+
+        rbd migration prepare --import-only --source-spec-path ${TEMPDIR}/spec.json ${destination}
+        rbd migration execute ${destination}
+        rbd migration commit ${destination}
+
+        compare_namespace_images "${source}@1" "${destination}@1"
+        compare_namespace_images "${source}@2" "${destination}@2"
+
+        remove_image "${destination}"
+    }
+
+    # Migration from namespace to namespace
+    create_spec "${base_namespace}" "${base_image}"
+    perform_migration "rbd/${base_namespace}/${base_image}" "rbd/${dest_namespace}/${dest_image}"
+
+    # Migration from namespace to non-namespace
+    create_spec "${base_namespace}" "${base_image}"
+    perform_migration "rbd/${base_namespace}/${base_image}" "${dest_image}"
+
+    # Migration from non-namespace to namespace
+    create_spec "" "${base_image}"
+    perform_migration "${base_image}" "rbd/${dest_namespace}/${dest_image}"
 }
 
 test_import_qcow_format() {
@@ -586,5 +684,10 @@ test_import_nbd_stream_qcow2 ${IMAGE2} ${IMAGE3}
 
 test_import_raw_format ${IMAGE1} ${IMAGE2}
 test_import_nbd_stream_raw ${IMAGE1} ${IMAGE2}
+
+rbd namespace create rbd/${NAMESPACE1}
+rbd namespace create rbd/${NAMESPACE2}
+create_base_image rbd/${NAMESPACE1}/${IMAGE1}
+test_import_native_format_with_namespace ${NAMESPACE1} ${IMAGE1} ${NAMESPACE2} ${IMAGE2}
 
 echo OK
