@@ -266,7 +266,7 @@ int ConfigMap::add_option(
     ldout(cct, 10) << __func__ << " unrecognized option '" << name << "'" << dendl;
     stray_options.push_back(
       std::unique_ptr<Option>(
-	new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+	new Option(std::string{name}, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
     opt = stray_options.back().get();
   }
 
