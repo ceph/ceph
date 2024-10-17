@@ -143,7 +143,7 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
 
 ReadResult::C_ImageReadRequest::C_ImageReadRequest(
     AioCompletion *aio_completion, uint64_t buffer_offset,
-    const Extents image_extents)
+    const Extents& image_extents)
   : aio_completion(aio_completion), buffer_offset(buffer_offset),
     image_extents(image_extents) {
   aio_completion->add_request();
