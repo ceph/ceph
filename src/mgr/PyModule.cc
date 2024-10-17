@@ -609,6 +609,13 @@ int PyModule::load_options()
 	option.type = t;
       }
     }
+    p = PyDict_GetItemString(pOption, "level");
+    if (p && PyLong_Check(p)) {
+      long v = PyLong_AsLong(p);
+      option.level = static_cast<Option::level_t>(v);
+    } else {
+      option.level = Option::level_t::LEVEL_ADVANCED;
+    }
     p = PyDict_GetItemString(pOption, "desc");
     if (p && PyObject_TypeCheck(p, &PyUnicode_Type)) {
       option.desc = PyUnicode_AsUTF8(p);
