@@ -63,8 +63,9 @@ void test_stats(librados::IoCtx& ioctx, const string& oid, RGWObjCategory catego
   uint64_t size = 0;
   map<int, struct rgw_cls_list_ret>::iterator iter = results.begin();
   for (; iter != results.end(); ++iter) {
-    entries += (iter->second).dir.header.stats[category].num_entries;
-    size += (iter->second).dir.header.stats[category].total_size;
+    ASSERT_TRUE((iter->second).dir.header.has_value());
+    entries += (iter->second).dir.header->stats[category].num_entries;
+    size += (iter->second).dir.header->stats[category].total_size;
   }
   ASSERT_EQ(total_size, size);
   ASSERT_EQ(num_entries, entries);
@@ -1440,7 +1441,8 @@ void reshardlog_entries(librados::IoCtx& ioctx, const std::string& oid, uint32_t
   uint32_t entries = 0;
   map<int, struct rgw_cls_list_ret>::iterator iter = results.begin();
   for (; iter != results.end(); ++iter) {
-    entries += (iter->second).dir.header.reshardlog_entries;
+    ASSERT_TRUE((iter->second).dir.header.has_value());
+    entries += (iter->second).dir.header->reshardlog_entries;
   }
   ASSERT_EQ(entries, num_entries);
 }

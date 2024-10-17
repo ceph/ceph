@@ -10456,7 +10456,8 @@ int RGWRados::cls_bucket_head(const DoutPrefixProvider *dpp, const RGWBucketInfo
 
   map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
   for(; iter != list_results.end(); ++iter) {
-    headers.push_back(std::move(iter->second.dir.header));
+    ceph_assert(iter->second.dir.header.has_value());
+    headers.push_back(std::move(*iter->second.dir.header));
   }
   return 0;
 }

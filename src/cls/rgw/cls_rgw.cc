@@ -549,10 +549,14 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   rgw_bucket_dir& new_dir = ret.dir;
   auto& name_entry_map = new_dir.m; // map of keys to entries
 
-  int rc = read_bucket_header(hctx, &new_dir.header);
-  if (rc < 0) {
-    CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
-    return rc;
+  int rc = 0;
+  if (true) {
+    new_dir.header.emplace();
+    rc = read_bucket_header(hctx, &(*new_dir.header));
+    if (rc < 0) {
+      CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
+      return rc;
+    }
   }
 
   // some calls just want the header and request 0 entries
@@ -837,9 +841,8 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return -EINVAL;
   }
 
-  rgw_bucket_dir dir;
-
-  return write_bucket_header(hctx, &dir.header);
+  rgw_bucket_dir_header header;
+  return write_bucket_header(hctx, &header);
 }
 
 int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, bufferlist *out)

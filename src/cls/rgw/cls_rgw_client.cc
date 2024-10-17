@@ -828,7 +828,8 @@ public:
     } catch (ceph::buffer::error& err) {
       r = -EIO;
     }
-    cb->handle_response(r, ret.dir.header);
+    ceph_assert(ret.dir.header.has_value());
+    cb->handle_response(r, *ret.dir.header);
   }
 };
 

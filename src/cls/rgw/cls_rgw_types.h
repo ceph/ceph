@@ -894,19 +894,28 @@ struct rgw_bucket_dir_header {
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
 struct rgw_bucket_dir {
-  rgw_bucket_dir_header header;
+  std::optional<rgw_bucket_dir_header> header;
   boost::container::flat_map<std::string, rgw_bucket_dir_entry> m;
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(2, 2, bl);
-    encode(header, bl);
+    ENCODE_START(3, 2, bl);
+    encode(header.value_or(rgw_bucket_dir_header{}), bl);
     encode(m, bl);
+    encode(header.has_value(), bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    decode(header, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    rgw_bucket_dir_header maybe_header;
+    decode(maybe_header, bl);
     decode(m, bl);
+    if (struct_v > 2) {
+      bool header_present;
+      decode(header_present, bl);
+      if (header_present) {
+        header = maybe_header;
+      }
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
