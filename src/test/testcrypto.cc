@@ -1,6 +1,8 @@
 #include "auth/Crypto.h"
-#include "common/Clock.h"
 
+#include <iostream> // for std::cout
+
+#include "common/Clock.h"
 #include "common/config.h"
 #include "common/debug.h"
 

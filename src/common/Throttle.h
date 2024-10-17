@@ -6,7 +6,7 @@
 
 #include <atomic>
 #include <chrono>
-#include <iostream>
+#include <iosfwd>
 #include <list>
 #include <map>
 

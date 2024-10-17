@@ -15,6 +15,8 @@
  */
 
 #include <stdio.h>
+
+#include <iostream> // for std::cout
 #include <numeric>
 
 #include "global/global_init.h"

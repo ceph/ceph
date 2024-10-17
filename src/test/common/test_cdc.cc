@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <cstring>
+#include <iostream> // for std::cout
 #include <random>
 
 #include "include/types.h"

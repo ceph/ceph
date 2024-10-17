@@ -1,6 +1,9 @@
 #include "gtest/gtest.h"
 
 #include "common/WorkQueue.h"
+
+#include <iostream> // for std::cout
+
 #include "common/ceph_argparse.h"
 
 using namespace std;

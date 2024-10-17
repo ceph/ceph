@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+#include <iostream> // for std::cout
 #include <iterator>
 #include <map>
 #include <set>

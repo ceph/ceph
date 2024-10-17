@@ -23,6 +23,8 @@
 #include <errno.h>
 #include <sys/uio.h>
 
+#include <iostream> // for std::cout
+
 #include "include/buffer.h"
 #include "include/buffer_raw.h"
 #include "include/compat.h"
