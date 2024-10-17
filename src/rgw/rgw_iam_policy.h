@@ -114,6 +114,8 @@ enum {
   s3GetBucketEncryption,
   s3PutBucketEncryption,
   s3DescribeJob,
+  s3GetObjectAttributes,
+  s3GetObjectVersionAttributes,
   s3All,
 
   s3objectlambdaGetObject,
@@ -246,6 +248,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectVersionTagging:
   case s3GetObjectRetention:
   case s3GetObjectLegalHold:
+  case s3GetObjectAttributes:
   case s3ListAllMyBuckets:
   case s3ListBucket:
   case s3ListBucketMultipartUploads:

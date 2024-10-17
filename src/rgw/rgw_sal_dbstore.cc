@@ -496,6 +496,14 @@ namespace rgw::sal {
     return std::make_unique<DBLuaManager>(this);
   }
 
+  int DBObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			   int max_parts, int marker, int* next_marker,
+			   bool* truncated, list_parts_each_t each_func,
+			   optional_yield y)
+  {
+    return -EOPNOTSUPP;
+  }
+
   int DBObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
   {
     RGWObjState* astate;
