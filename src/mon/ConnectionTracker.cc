@@ -344,7 +344,9 @@ void ConnectionReport::generate_test_instances(std::list<ConnectionReport*>& o)
   o.back()->epoch = 2;
   o.back()->epoch_version = 3;
   o.back()->current[0] = true;
+  o.back()->current[1] = false;
   o.back()->history[0] = .4;
+  o.back()->history[1] = 99.9999;
 }
 
 void ConnectionTracker::dump(ceph::Formatter *f) const
