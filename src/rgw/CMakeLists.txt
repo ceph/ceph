@@ -198,6 +198,7 @@ set(librgw_common_srcs
   driver/rados/rgw_trim_mdlog.cc
   driver/rados/rgw_user.cc
   driver/rados/rgw_zone.cc
+  driver/rados/reshard_writer.cc
   driver/rados/role.cc
   driver/rados/roles.cc
   driver/rados/sync_fairness.cc
@@ -286,7 +287,6 @@ target_link_libraries(rgw_common
     cls_user_client
     cls_version_client
     librados
-    libneorados
     rt
     ICU::uc
     OATH::OATH
@@ -297,6 +297,7 @@ target_link_libraries(rgw_common
     ${ARROW_FLIGHT_LIBRARIES}
     ${LMDB_LIBRARIES}
   PUBLIC
+    libneorados
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     Boost::context
