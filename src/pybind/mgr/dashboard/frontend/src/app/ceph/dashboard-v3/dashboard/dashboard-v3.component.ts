@@ -26,6 +26,8 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
+import { HostService } from '~/app/shared/api/host.service';
+import { HostList } from '~/app/shared/models/host-schema';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -54,6 +56,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   alertType: string;
   alertClass = AlertClass;
   healthData: any;
+  hosts: HostList;
   categoryPgAmount: Record<string, number> = {};
   totalPgs = 0;
   queriesResults: { [key: string]: [] } = {
@@ -92,7 +95,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     private mgrModuleService: MgrModuleService,
     private refreshIntervalService: RefreshIntervalService,
     public prometheusAlertService: PrometheusAlertService,
-    private hardwareService: HardwareService
+    private hardwareService: HardwareService,
+    private hostService: HostService
   ) {
     super(prometheusService);
     this.permissions = this.authStorageService.getPermissions();
@@ -142,6 +146,9 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   getHealth() {
     this.healthService.getMinimalHealth().subscribe((data: any) => {
       this.healthData = data;
+    });
+    this.hostService.getAllHosts().subscribe((hosts: HostList) => {
+      this.hosts = hosts;
     });
   }
 
