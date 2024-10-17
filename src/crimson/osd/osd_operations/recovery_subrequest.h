@@ -39,6 +39,9 @@ public:
   }
   PipelineHandle &get_handle() { return handle; }
   epoch_t get_epoch() const { return m->get_min_epoch(); }
+  epoch_t get_map_epoch() const {
+    return m->get_map_epoch();
+  }
 
   ConnectionPipeline &get_connection_pipeline();
 
