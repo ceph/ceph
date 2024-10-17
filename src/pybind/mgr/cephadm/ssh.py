@@ -168,7 +168,9 @@ class SSHManager:
             with self.redirect_log(host, addr):
                 try:
                     ssh_options = asyncssh.SSHClientConnectionOptions(
-                        keepalive_interval=7, keepalive_count_max=3)
+                        keepalive_interval=self.mgr.ssh_keepalive_interval,
+                        keepalive_count_max=self.mgr.ssh_keepalive_count_max
+                    )
                     conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name],
                                                   known_hosts=None, config=[self.mgr.ssh_config_fname],
                                                   preferred_auth=['publickey'], options=ssh_options)
@@ -240,10 +242,6 @@ class SSHManager:
         if log_command:
             logger.debug(f'Running command: {rcmd}')
         try:
-            test_cmd = RemoteSudoCommand(
-                Executables.TRUE, [], use_sudo=use_sudo
-            )
-            r = await conn.run(str(test_cmd), check=True, timeout=5)  # host quick check
             r = await conn.run(str(rcmd), input=stdin)
         # handle these Exceptions otherwise you might get a weird error like
         # TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
