@@ -748,6 +748,8 @@ mClock Config Options
 .. confval:: osd_mclock_skip_benchmark
 .. confval:: osd_mclock_override_recovery_settings
 .. confval:: osd_mclock_iops_capacity_threshold_hdd
+.. confval:: osd_mclock_iops_capacity_low_threshold_hdd
 .. confval:: osd_mclock_iops_capacity_threshold_ssd
+.. confval:: osd_mclock_iops_capacity_low_threshold_ssd
 
 .. _the dmClock algorithm: https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Gulati.pdf
