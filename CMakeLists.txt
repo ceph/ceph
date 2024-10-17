@@ -23,6 +23,20 @@ if(NOT CMAKE_BUILD_TYPE)
   endif()
 endif()
 
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  option(UPDATE_SUBMODULES "Update git submodules during build." ON)
+  if(UPDATE_SUBMODULES)
+    message(STATUS "Updating submodules.")
+    execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive --progress --recommend-shallow
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		    RESULT_VARIABLE SUBMOD_UPDATE_EXIT)
+    if(NOT SUBMOD_UPDATE_EXIT EQUAL "0")
+      message(FATAL_ERROR "Submodule checkout failed, please run it manually.")
+    endif()
+  endif()
+endif()
+
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
   FIND_PACKAGE(Threads)
