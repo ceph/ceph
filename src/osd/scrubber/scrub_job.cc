@@ -14,17 +14,6 @@ using ScrubJob = Scrub::ScrubJob;
 using delay_ready_t = Scrub::delay_ready_t;
 using namespace std::chrono;
 
-namespace {
-utime_t add_double(utime_t t, double d)
-{
-  double int_part;
-  double frac_as_ns = 1'000'000'000 * std::modf(d, &int_part);
-  return utime_t{
-      t.sec() + static_cast<int>(int_part),
-      static_cast<int>(t.nsec() + frac_as_ns)};
-}
-}  // namespace
-
 using SchedEntry = Scrub::SchedEntry;
 
 // ////////////////////////////////////////////////////////////////////////// //
