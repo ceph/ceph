@@ -290,7 +290,8 @@ the supplied methods left-to-right.
 
 .. note:: Specifying values for sectype that require Kerberos will only function on servers
           that are configured to support Kerberos. Setting up NFS-Ganesha to support Kerberos
-          is outside the scope of this document.
+          can be found here `Kerberos setup for NFS Ganesha in Ceph <https://github.com/nfs-ganesha/nfs-ganesha/wiki/Kerberos-setup-for-NFS-Ganesha-in-Ceph>`_.
+
 
 .. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
 
