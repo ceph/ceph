@@ -760,6 +760,18 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_fsmap_prune_threshold
+  type: secs
+  level: advanced
+  desc: prune fsmap older than this threshold in seconds
+  fmt_desc: The monitors keep historical fsmaps in memory to optimize asking
+    when an MDS daemon was last seen in the FSMap. This option controls
+    how far back in time the monitors will look.
+  default: 300
+  flags:
+  - runtime
+  services:
+  - mon
 - name: mds_beacon_mon_down_grace
   type: secs
   level: advanced
