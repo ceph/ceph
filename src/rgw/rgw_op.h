@@ -1218,6 +1218,7 @@ protected:
   std::string copy_source;
   const char *copy_source_range;
   RGWBucketInfo copy_source_bucket_info;
+  rgw::sal::Attrs copy_source_bucket_attrs;
   std::string copy_source_tenant_name;
   std::string copy_source_bucket_name;
   std::string copy_source_object_name;
