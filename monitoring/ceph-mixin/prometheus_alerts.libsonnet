@@ -617,7 +617,7 @@
         {
           alert: 'CephPoolNearFull',
           'for': '5m',
-          expr: 'ceph_health_detail{name="POOL_NEAR_FULL"} > 0',
+          expr: 'ceph_health_detail{name="POOL_NEARFULL"} > 0',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'One or more Ceph pools are nearly full%(cluster)s' % $.MultiClusterSummary(),
