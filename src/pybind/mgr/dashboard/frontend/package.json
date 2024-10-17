@@ -44,15 +44,15 @@
   },
   "private": true,
   "dependencies": {
-    "@angular/animations": "15.2.9",
-    "@angular/common": "15.2.9",
-    "@angular/compiler": "15.2.9",
-    "@angular/core": "15.2.9",
-    "@angular/forms": "15.2.9",
-    "@angular/localize": "15.2.9",
-    "@angular/platform-browser": "15.2.9",
-    "@angular/platform-browser-dynamic": "15.2.9",
-    "@angular/router": "15.2.9",
+    "@angular/animations": "18.2.0",
+    "@angular/common": "18.2.0",
+    "@angular/compiler": "18.2.0",
+    "@angular/core": "18.2.0",
+    "@angular/forms": "18.2.0",
+    "@angular/localize": "18.2.0",
+    "@angular/platform-browser": "18.2.0",
+    "@angular/platform-browser-dynamic": "18.2.0",
+    "@angular/router": "18.2.0",
     "@carbon/icons": "11.41.0",
     "@carbon/styles": "1.57.0",
     "@circlon/angular-tree-component": "10.0.0",
@@ -85,18 +85,18 @@
     "timers-browserify": "2.0.12",
     "tslib": "2.3.1",
     "xml2js": "0.6.2",
-    "zone.js": "0.11.8"
+    "zone.js": "0.14.10"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "15.2.9",
     "@angular-eslint/builder": "13.5.0",
     "@angular-eslint/eslint-plugin": "13.5.0",
     "@angular-eslint/eslint-plugin-template": "13.5.0",
     "@angular-eslint/schematics": "13.5.0",
     "@angular-eslint/template-parser": "13.5.0",
-    "@angular/cli": "15.2.9",
-    "@angular/compiler-cli": "15.2.9",
-    "@angular/language-service": "15.2.9",
+    "@angular/build": "^18.2.0",
+    "@angular/cli": "18.2.0",
+    "@angular/compiler-cli": "18.2.0",
+    "@angular/language-service": "18.2.0",
     "@applitools/eyes-cypress": "3.22.5",
     "@compodoc/compodoc": "1.1.18",
     "@cypress/browserify-preprocessor": "3.0.2",
@@ -138,7 +138,7 @@
     "table": "6.8.0",
     "transifex-i18ntool": "1.1.0",
     "ts-node": "9.0.0",
-    "typescript": "4.9.5"
+    "typescript": "5.4.5"
   },
   "cypress-cucumber-preprocessor": {
     "stepDefinitions": "cypress/e2e/common"
