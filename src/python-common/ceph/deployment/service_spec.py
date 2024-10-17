@@ -1224,6 +1224,7 @@ class RGWSpec(ServiceSpec):
                  update_endpoints: Optional[bool] = False,
                  zone_endpoints: Optional[str] = None,  # comma separated endpoints list
                  zonegroup_hostnames: Optional[List[str]] = None,
+                 data_pool_attributes: Optional[Dict[str, str]] = None,
                  rgw_user_counters_cache: Optional[bool] = False,
                  rgw_user_counters_cache_size: Optional[int] = None,
                  rgw_bucket_counters_cache: Optional[bool] = False,
@@ -1281,6 +1282,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_bucket_counters_cache_size = rgw_bucket_counters_cache_size
         #: Whether we should generate a cert/key for the user if not provided
         self.generate_cert = generate_cert
+        #: Attributes for <zone-name>.rgw.buckets.data pool created in rgw realm bootstrap command
+        self.data_pool_attributes = data_pool_attributes
 
     def get_port_start(self) -> List[int]:
         return [self.get_port()]
