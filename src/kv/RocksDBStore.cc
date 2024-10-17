@@ -1402,7 +1402,9 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
       string start = key_prefix + string(1, '\x00');
       string limit = key_prefix + string("\xff\xff\xff\xff");
       rocksdb::Range r(start, limit);
-      db->GetApproximateSizes(cf, &r, 1, &s);
+      db->GetApproximateSizes(cf, &r, 1, &s,
+        rocksdb::DB::SizeApproximationFlags::INCLUDE_FILES |
+        rocksdb::DB::SizeApproximationFlags::INCLUDE_MEMTABLES);
       size += s;
     }
   } else {
