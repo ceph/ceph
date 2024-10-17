@@ -863,18 +863,14 @@ class TestMirroring(CephFSTestCase):
         # failing to enable mirroring due to absence of `cephfs_mirror` index object.
         self.run_ceph_cmd("fs", "mirror", "enable", self.primary_fs_name)
 
-        with safe_while(sleep=5, tries=10, action='wait for failed state') as proceed:
+        time.sleep(120)
+        with safe_while(sleep=5, tries=20, action='wait for failed state') as proceed:
             while proceed():
-                try:
-                    # verify via asok
-                    res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
-                                                     'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
-                    if not 'state' in res:
-                        return
-                    self.assertTrue(res['state'] == "failed")
-                    return True
-                except:
-                    pass
+                # verify via asok
+                res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                                 'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+                if res['state'] == "failed":
+                    break
 
         self.run_ceph_cmd("fs", "mirror", "disable", self.primary_fs_name)
         time.sleep(10)
@@ -901,18 +897,15 @@ class TestMirroring(CephFSTestCase):
         self.run_ceph_cmd("fs", "mirror", "enable", self.primary_fs_name)
         # need safe_while since non-failed status pops up as mirroring is restarted
         # internally in mirror daemon.
+
+        time.sleep(120)
         with safe_while(sleep=5, tries=20, action='wait for failed state') as proceed:
             while proceed():
-                try:
-                    # verify via asok
-                    res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
-                                                     'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
-                    if not 'state' in res:
-                        return
-                    self.assertTrue(res['state'] == "failed")
-                    return True
-                except:
-                    pass
+                # verify via asok
+                res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                                 'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+                if res['state'] == "failed":
+                    break
 
         # create the index object and check daemon recovery
         try:
