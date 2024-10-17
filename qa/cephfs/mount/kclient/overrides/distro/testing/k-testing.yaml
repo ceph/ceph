@@ -1,3 +1,18 @@
+teuthology:
+  premerge: |
+    log.debug("base kernel %s", base_config.kernel)
+    local kernel = base_config.kernel
+    if kernel.branch ~= "distro" then
+      log.debug("overriding testing kernel with %s", kernel)
+      yaml_fragment.kernel.client = kernel
+    end
+# remove the default for non-client nodes:
+  postmerge:
+    - attr(yaml.kernel).pop('branch', nil)
+    - attr(yaml.kernel).pop('flavor', nil)
+    - attr(yaml.kernel).pop('kdb', nil)
+    - attr(yaml.kernel).pop('sha1', nil)
+
 kernel:
   client:
     branch: testing
