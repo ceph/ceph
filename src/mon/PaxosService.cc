@@ -401,6 +401,7 @@ void PaxosService::maybe_trim()
   const version_t trim_min = g_conf().get_val<version_t>("paxos_service_trim_min");
   if (trim_min > 0 &&
       to_remove < trim_min) {
+    last_to_remove = to_remove;
     dout(10) << __func__ << " trim_to " << trim_to << " would only trim " << to_remove
 	     << " < paxos_service_trim_min " << trim_min << dendl;
     return;
@@ -432,6 +433,7 @@ void PaxosService::maybe_trim()
   trim(t, first_committed, trim_to);
   put_first_committed(t, trim_to);
   cached_first_committed = trim_to;
+  last_to_remove = to_remove;
 
   // let the service add any extra stuff
   encode_trim_extra(t, trim_to);
