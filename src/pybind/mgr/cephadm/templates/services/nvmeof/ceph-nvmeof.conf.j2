@@ -55,6 +55,9 @@ timeout = {{ spec.spdk_timeout }}
 bdevs_per_cluster = {{ spec.bdevs_per_cluster }}
 log_level = {{ spec.spdk_log_level }}
 conn_retries = {{ spec.conn_retries }}
+{% if spec.spdk_mem_size %}
+mem_size = {{ spec.spdk_mem_size }}
+{% endif %}
 transports = {{ spec.transports }}
 {% if transport_tcp_options %}
 transport_tcp_options = {{ transport_tcp_options }}
