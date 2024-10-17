@@ -82,6 +82,8 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Storage Class**               | Supported       | See :ref:`storage_classes`             |
 +---------------------------------+-----------------+----------------------------------------+
+| **Bucket Logging**              | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
 
 Unsupported Header Fields
 -------------------------
