@@ -300,8 +300,6 @@ namespace {
  */
   static void fio_librgw_cleanup(struct thread_data *td)
   {
-    int r = 0;
-
     dprint(FD_IO, "fio_librgw_cleanup\n");
 
     /* cleanup specific data */
@@ -312,9 +310,9 @@ namespace {
       data->release_handles();
 
       if (data->bucket_fh) {
-	r = rgw_fh_rele(data->fs, data->bucket_fh, 0 /* flags */);
+	rgw_fh_rele(data->fs, data->bucket_fh, 0 /* flags */);
       }
-      r = rgw_umount(data->fs, RGW_UMOUNT_FLAG_NONE);
+      rgw_umount(data->fs, RGW_UMOUNT_FLAG_NONE);
       librgw_shutdown(data->rgw_h);
       td->io_ops_data = nullptr;
       delete data;
