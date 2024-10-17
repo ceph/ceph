@@ -784,7 +784,7 @@ public:
   virtual void inject_data_error(const ghobject_t &oid) {}
   virtual void inject_mdata_error(const ghobject_t &oid) {}
 
-  virtual void compact() {}
+  virtual int compact() { return -ENOTSUP; }
   virtual bool has_builtin_csum() const {
     return false;
   }
