@@ -532,12 +532,12 @@ class TestCephAdm(object):
 
     def test_get_image_info_from_inspect(self):
         # podman
-        out = """204a01f9b0b6710dd0c0af7f37ce7139c47ff0f0105d778d7104c69282dfbbf1,[docker.io/ceph/ceph@sha256:1cc9b824e1b076cdff52a9aa3f0cc8557d879fb2fbbba0cafed970aca59a3992]"""
+        out = """204a01f9b0b6710dd0c0af7f37ce7139c47ff0f0105d778d7104c69282dfbbf1,[quay.io/ceph/ceph@sha256:1cc9b824e1b076cdff52a9aa3f0cc8557d879fb2fbbba0cafed970aca59a3992]"""
         r = _cephadm.get_image_info_from_inspect(out, 'registry/ceph/ceph:latest')
         print(r)
         assert r == {
             'image_id': '204a01f9b0b6710dd0c0af7f37ce7139c47ff0f0105d778d7104c69282dfbbf1',
-            'repo_digests': ['docker.io/ceph/ceph@sha256:1cc9b824e1b076cdff52a9aa3f0cc8557d879fb2fbbba0cafed970aca59a3992']
+            'repo_digests': ['quay.io/ceph/ceph@sha256:1cc9b824e1b076cdff52a9aa3f0cc8557d879fb2fbbba0cafed970aca59a3992']
         }
 
         # docker
@@ -549,13 +549,13 @@ class TestCephAdm(object):
         }
 
         # multiple digests (podman)
-        out = """e935122ab143a64d92ed1fbb27d030cf6e2f0258207be1baf1b509c466aeeb42,[docker.io/prom/prometheus@sha256:e4ca62c0d62f3e886e684806dfe9d4e0cda60d54986898173c1083856cfda0f4 docker.io/prom/prometheus@sha256:efd99a6be65885c07c559679a0df4ec709604bcdd8cd83f0d00a1a683b28fb6a]"""
+        out = """e935122ab143a64d92ed1fbb27d030cf6e2f0258207be1baf1b509c466aeeb42,[quay.io/prom/prometheus@sha256:e4ca62c0d62f3e886e684806dfe9d4e0cda60d54986898173c1083856cfda0f4 quay.io/prom/prometheus@sha256:efd99a6be65885c07c559679a0df4ec709604bcdd8cd83f0d00a1a683b28fb6a]"""
         r = _cephadm.get_image_info_from_inspect(out, 'registry/prom/prometheus:latest')
         assert r == {
             'image_id': 'e935122ab143a64d92ed1fbb27d030cf6e2f0258207be1baf1b509c466aeeb42',
             'repo_digests': [
-                'docker.io/prom/prometheus@sha256:e4ca62c0d62f3e886e684806dfe9d4e0cda60d54986898173c1083856cfda0f4',
-                'docker.io/prom/prometheus@sha256:efd99a6be65885c07c559679a0df4ec709604bcdd8cd83f0d00a1a683b28fb6a',
+                'quay.io/prom/prometheus@sha256:e4ca62c0d62f3e886e684806dfe9d4e0cda60d54986898173c1083856cfda0f4',
+                'quay.io/prom/prometheus@sha256:efd99a6be65885c07c559679a0df4ec709604bcdd8cd83f0d00a1a683b28fb6a',
             ]
         }
 
@@ -603,7 +603,7 @@ class TestCephAdm(object):
                                  '')
         out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|main|2022-03-23 16:29:19 +0000 UTC
         quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
-        docker.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
+        quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
         with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
             with mock.patch('cephadm.get_container_info', return_value=cinfo):
                 image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
@@ -612,7 +612,7 @@ class TestCephAdm(object):
         # make sure first valid image is used when no container_info is found
         out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|main|2022-03-23 16:29:19 +0000 UTC
         quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
-        docker.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
+        quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
         with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
             with mock.patch('cephadm.get_container_info', return_value=None):
                 image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
@@ -620,12 +620,12 @@ class TestCephAdm(object):
 
         # make sure images without digest are discarded (no container_info is found)
         out = '''quay.ceph.io/ceph-ci/ceph@|||
-        docker.io/ceph/ceph@|||
-        docker.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
+        quay.io/ceph/ceph@|||
+        quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
         with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
             with mock.patch('cephadm.get_container_info', return_value=None):
                 image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
-                assert image == 'docker.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508'
+                assert image == 'quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508'
 
 
 
@@ -2408,7 +2408,7 @@ class TestSNMPGateway:
 
     def test_unit_run_V2c(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=docker.io/maxwo/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
+        with with_cephadm_ctx(['--image=quay.io/ceph/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
             import json
             ctx.config_json = json.dumps(self.V2c_config)
             ctx.fsid = fsid
@@ -2433,11 +2433,11 @@ class TestSNMPGateway:
             )
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/unit.run', 'r') as f:
                 run_cmd = f.readlines()[-1].rstrip()
-                assert run_cmd.endswith('docker.io/maxwo/snmp-notifier:v1.2.1 --web.listen-address=:9464 --snmp.destination=192.168.1.10:162 --snmp.version=V2c --log.level=info --snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl')
+                assert run_cmd.endswith('quay.io/ceph/snmp-notifier:v1.2.1 --web.listen-address=:9464 --snmp.destination=192.168.1.10:162 --snmp.version=V2c --log.level=info --snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl')
 
     def test_unit_run_V3_noPriv(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=docker.io/maxwo/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
+        with with_cephadm_ctx(['--image=quay.io/ceph/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
             import json
             ctx.config_json = json.dumps(self.V3_no_priv_config)
             ctx.fsid = fsid
@@ -2462,11 +2462,11 @@ class TestSNMPGateway:
             )
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/unit.run', 'r') as f:
                 run_cmd = f.readlines()[-1].rstrip()
-                assert run_cmd.endswith('docker.io/maxwo/snmp-notifier:v1.2.1 --web.listen-address=:9465 --snmp.destination=192.168.1.10:162 --snmp.version=V3 --log.level=info --snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl --snmp.authentication-enabled --snmp.authentication-protocol=SHA --snmp.security-engine-id=8000C53F00000000')
+                assert run_cmd.endswith('quay.io/ceph/snmp-notifier:v1.2.1 --web.listen-address=:9465 --snmp.destination=192.168.1.10:162 --snmp.version=V3 --log.level=info --snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl --snmp.authentication-enabled --snmp.authentication-protocol=SHA --snmp.security-engine-id=8000C53F00000000')
 
     def test_unit_run_V3_Priv(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=docker.io/maxwo/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
+        with with_cephadm_ctx(['--image=quay.io/ceph/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
             import json
             ctx.config_json = json.dumps(self.V3_priv_config)
             ctx.fsid = fsid
@@ -2491,11 +2491,11 @@ class TestSNMPGateway:
             )
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/unit.run', 'r') as f:
                 run_cmd = f.readlines()[-1].rstrip()
-                assert run_cmd.endswith('docker.io/maxwo/snmp-notifier:v1.2.1 --web.listen-address=:9464 --snmp.destination=192.168.1.10:162 --snmp.version=V3 --log.level=info --snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl --snmp.authentication-enabled --snmp.authentication-protocol=SHA --snmp.security-engine-id=8000C53F00000000 --snmp.private-enabled --snmp.private-protocol=DES')
+                assert run_cmd.endswith('quay.io/ceph/snmp-notifier:v1.2.1 --web.listen-address=:9464 --snmp.destination=192.168.1.10:162 --snmp.version=V3 --log.level=info --snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl --snmp.authentication-enabled --snmp.authentication-protocol=SHA --snmp.security-engine-id=8000C53F00000000 --snmp.private-enabled --snmp.private-protocol=DES')
 
     def test_unit_run_no_dest(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=docker.io/maxwo/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
+        with with_cephadm_ctx(['--image=quay.io/ceph/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
             import json
             ctx.config_json = json.dumps(self.no_destination_config)
             ctx.fsid = fsid
@@ -2511,7 +2511,7 @@ class TestSNMPGateway:
 
     def test_unit_run_bad_version(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=docker.io/maxwo/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
+        with with_cephadm_ctx(['--image=quay.io/ceph/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
             import json
             ctx.config_json = json.dumps(self.bad_version_config)
             ctx.fsid = fsid

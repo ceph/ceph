@@ -2066,7 +2066,7 @@ class TestCephadm(object):
             ), CephadmOrchestrator.apply_iscsi),
             (CustomContainerSpec(
                 service_id='hello-world',
-                image='docker.io/library/hello-world:latest',
+                image='quay.io/hello-world/hello-world:latest',
                 uid=65534,
                 gid=65534,
                 dirs=['foo/bar'],
