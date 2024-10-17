@@ -17,6 +17,7 @@
 #include "common/likely.h"
 #include "common/HeartbeatMap.h"
 
+#include "include/compat.h" // for ceph_pthread_setname()
 #include "include/stringify.h"
 #include "include/util.h"
 
@@ -73,6 +74,7 @@ void Beacon::init(const MDSMap &mdsmap)
   _notify_mdsmap(mdsmap);
 
   sender = std::thread([this]() {
+    ceph_pthread_setname(pthread_self(), "beacon");
     std::unique_lock<std::mutex> lock(mutex);
     bool sent;
     while (!finished) {
