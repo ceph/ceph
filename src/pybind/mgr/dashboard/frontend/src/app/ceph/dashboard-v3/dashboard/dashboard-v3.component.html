@@ -31,12 +31,15 @@
           </dd>
           <ng-container>
             <dt>Telemetry Dashboard
-              <span
-                class="badge"
-                [ngClass]="telemetryEnabled ? 'badge-success' : 'badge-secondary'"
-                [ngbTooltip]="getTelemetryText()" >
-                {{ telemetryEnabled ? 'Active' : 'Inactive' }}
-              </span>
+              <cds-tag *ngIf="telemetryEnabled === true"
+                       class="tags-success"
+                       [ngbTooltip]="getTelemetryText()">
+                Active
+              </cds-tag>
+              <cds-tag *ngIf="!telemetryEnabled"
+                       class="tags-secondary"
+                       [ngbTooltip]="getTelemetryText()">Inactive
+              </cds-tag>
             </dt>
             <dd>
               <a target="_blank"
