@@ -1231,8 +1231,7 @@ SeaStore::Shard::_get_attr(
   DEBUGT("name={} ...", t, name);
   return _omap_get_value(
     t,
-    layout.xattr_root.get(
-      onode.get_metadata_hint(device->get_block_size())),
+    layout.xattr_root.get(onode.get_metadata_hint()),
     name);
 }
 
@@ -1378,7 +1377,7 @@ SeaStore::Shard::do_omap_get_values(
   LOG_PREFIX(SeaStoreS::do_omap_get_values);
   DEBUGT("{} keys ...", t, keys.size());
   omap_root_t omap_root = onode.get_layout().omap_root.get(
-    onode.get_metadata_hint(device->get_block_size()));
+    onode.get_metadata_hint());
   return _omap_get_values(
     t,
     std::move(omap_root),
@@ -1486,7 +1485,7 @@ SeaStore::Shard::omap_list(
   OMapManager::omap_list_config_t config) const
 {
   auto root = omap_root.get(
-    onode.get_metadata_hint(device->get_block_size()));
+    onode.get_metadata_hint());
   if (root.is_null()) {
     return seastar::make_ready_future<omap_list_bare_ret>(
       true, omap_values_t{}
@@ -1753,7 +1752,8 @@ SeaStore::Shard::_do_transaction_step(
 
   using onode_iertr = OnodeManager::get_onode_iertr::extend<
     crimson::ct_error::value_too_large>;
-  auto fut = onode_iertr::make_ready_future<OnodeRef>(OnodeRef());
+  auto fut = onode_iertr::make_ready_future<
+    crimson::os::seastore::OnodeManager::adjacent_onodes_t>();
   bool create = false;
   if (op->op == Transaction::OP_TOUCH ||
       op->op == Transaction::OP_CREATE ||
@@ -1773,7 +1773,8 @@ SeaStore::Shard::_do_transaction_step(
       fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
     }
   }
-  return fut.si_then([&, op, this, FNAME](auto get_onode) {
+  return fut.si_then([&, op, this, FNAME](auto onodevec) {
+    auto get_onode = onodevec.onode;
     OnodeRef &o = onodes[op->oid];
     if (!o) {
       assert(get_onode);
@@ -1789,19 +1790,23 @@ SeaStore::Shard::_do_transaction_step(
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
       return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
-      ).si_then([&onodes, &d_onodes, op](auto dest_onode) {
+      ).si_then([&onodes, &d_onodes, op,
+		 onodevec=std::move(onodevec)](auto d_onodevec) {
+	auto dest_onode = d_onodevec.onode;
 	assert(dest_onode);
 	auto &d_o = onodes[op->dest_oid];
 	assert(!d_o);
 	assert(!d_onodes[op->dest_oid]);
 	d_o = dest_onode;
 	d_onodes[op->dest_oid] = dest_onode;
-	return seastar::now();
+	return OnodeManager::get_or_create_onode_iertr::make_ready_future<
+	  OnodeManager::adjacent_onodes_t>(std::move(onodevec));
       });
     } else {
-      return OnodeManager::get_or_create_onode_iertr::now();
+      return OnodeManager::get_or_create_onode_iertr::make_ready_future<
+	OnodeManager::adjacent_onodes_t>(std::move(onodevec));
     }
-  }).si_then([&ctx, &i, &onodes, &d_onodes, op, this, FNAME]() -> tm_ret {
+  }).si_then([&ctx, &i, &onodes, &d_onodes, op, this, FNAME](auto onodevec) -> tm_ret {
     const ghobject_t& oid = i.get_oid(op->oid);
     try {
       switch (op->op) {
@@ -1818,7 +1823,30 @@ SeaStore::Shard::_do_transaction_step(
       case Transaction::OP_TOUCH:
       {
         DEBUGT("op CREATE/TOUCH, oid={} ...", *ctx.transaction, oid);
-        return _touch(ctx, onodes[op->oid]);
+	OnodeRef &left = onodevec.left;
+	OnodeRef &right = onodevec.right;
+	auto id = LOCAL_OBJECT_ID_NULL;
+	if (left) {
+	  auto left_id = left->get_local_object_id();
+	  ceph_assert(left_id);
+	  id = *left_id;
+	}
+
+	if (right) {
+	  auto right_id = right->get_local_object_id();
+	  ceph_assert(right_id);
+	  if (id == LOCAL_OBJECT_ID_NULL) {
+	    id = *right_id;
+	  } else {
+	    ceph_assert(*right_id == id);
+	  }
+	}
+
+	auto onode = onodes[op->oid];
+	if (id != LOCAL_OBJECT_ID_NULL) {
+	  onode->update_local_object_id(*ctx.transaction, id);
+	}
+	return _touch(ctx, onode);
       }
       case Transaction::OP_WRITE:
       {
@@ -1984,9 +2012,9 @@ SeaStore::Shard::_rename(
   auto olayout = onode->get_layout();
   uint32_t size = olayout.size;
   auto omap_root = olayout.omap_root.get(
-    d_onode->get_metadata_hint(device->get_block_size()));
+    d_onode->get_metadata_hint());
   auto xattr_root = olayout.xattr_root.get(
-    d_onode->get_metadata_hint(device->get_block_size()));
+    d_onode->get_metadata_hint());
   auto object_data = olayout.object_data.get();
   auto oi_bl = ceph::bufferlist::static_from_mem(
     &olayout.oi[0],
@@ -2044,13 +2072,13 @@ SeaStore::Shard::_remove(
     ctx,
     onode,
     onode->get_layout().omap_root.get(
-      onode->get_metadata_hint(device->get_block_size()))
+      onode->get_metadata_hint())
   ).si_then([this, &ctx, onode]() mutable {
     return _remove_omaps(
       ctx,
       onode,
       onode->get_layout().xattr_root.get(
-	onode->get_metadata_hint(device->get_block_size())));
+	onode->get_metadata_hint()));
   }).si_then([this, &ctx, onode] {
     return seastar::do_with(
       ObjectDataHandler(max_object_size),
@@ -2178,6 +2206,19 @@ SeaStore::Shard::_clone(
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
+  LOG_PREFIX(SeaStore::_clone);
+  DEBUGT("onode={} d_onode={}", *ctx.transaction, *onode, *d_onode);
+  auto src_id = onode->get_local_object_id();
+  ceph_assert(src_id);
+  if (auto dest_id = d_onode->get_local_object_id();
+      !dest_id) {
+    DEBUGT("update d_onode local_object_id to: {}",
+	   *ctx.transaction, *src_id);
+    d_onode->update_local_object_id(*ctx.transaction, *src_id);
+  } else {
+    ceph_assert(*src_id == *dest_id);
+  }
+
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [this, &ctx, &onode, &d_onode](auto &objHandler) {
@@ -2236,13 +2277,13 @@ SeaStore::Shard::_omap_set_kvs(
 {
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
-    omap_root.get(onode->get_metadata_hint(device->get_block_size())),
+    omap_root.get(onode->get_metadata_hint()),
     [&, keys=std::move(kvs)](auto &omap_manager, auto &root) {
       tm_iertr::future<> maybe_create_root =
         !root.is_null() ?
         tm_iertr::now() :
         omap_manager.initialize_omap(
-          t, onode->get_metadata_hint(device->get_block_size())
+          t, onode->get_metadata_hint()
         ).si_then([&root](auto new_root) {
           root = new_root;
         });
@@ -2293,14 +2334,14 @@ SeaStore::Shard::_omap_clear(
   return _xattr_rmattr(ctx, onode, std::string(OMAP_HEADER_XATTR_KEY)
   ).si_then([this, &ctx, &onode]() -> tm_ret {
     if (auto omap_root = onode->get_layout().omap_root.get(
-      onode->get_metadata_hint(device->get_block_size()));
+      onode->get_metadata_hint());
       omap_root.is_null()) {
       return seastar::now();
     } else {
       return seastar::do_with(
         BtreeOMapManager(*transaction_manager),
         onode->get_layout().omap_root.get(
-          onode->get_metadata_hint(device->get_block_size())),
+          onode->get_metadata_hint()),
         [&ctx, &onode](
         auto &omap_manager,
         auto &omap_root) {
@@ -2324,14 +2365,14 @@ SeaStore::Shard::_omap_rmkeys(
   omap_keys_t &&keys)
 {
   auto omap_root = onode->get_layout().omap_root.get(
-    onode->get_metadata_hint(device->get_block_size()));
+    onode->get_metadata_hint());
   if (omap_root.is_null()) {
     return seastar::now();
   } else {
     return seastar::do_with(
       BtreeOMapManager(*transaction_manager),
       onode->get_layout().omap_root.get(
-        onode->get_metadata_hint(device->get_block_size())),
+        onode->get_metadata_hint()),
       std::move(keys),
       [&ctx, &onode](
 	auto &omap_manager,
@@ -2369,14 +2410,14 @@ SeaStore::Shard::_omap_rmkeyrange(
     ceph_abort();
   }
   auto omap_root = onode->get_layout().omap_root.get(
-    onode->get_metadata_hint(device->get_block_size()));
+    onode->get_metadata_hint());
   if (omap_root.is_null()) {
     return seastar::now();
   } else {
     return seastar::do_with(
       BtreeOMapManager(*transaction_manager),
       onode->get_layout().omap_root.get(
-        onode->get_metadata_hint(device->get_block_size())),
+        onode->get_metadata_hint()),
       std::move(first),
       std::move(last),
       [&ctx, &onode](
@@ -2514,14 +2555,14 @@ SeaStore::Shard::_xattr_rmattr(
   LOG_PREFIX(SeaStoreS::_xattr_rmattr);
   DEBUGT("onode={}", *ctx.transaction, *onode);
   auto xattr_root = onode->get_layout().xattr_root.get(
-    onode->get_metadata_hint(device->get_block_size()));
+    onode->get_metadata_hint());
   if (xattr_root.is_null()) {
     return seastar::now();
   } else {
     return seastar::do_with(
       BtreeOMapManager(*transaction_manager),
       onode->get_layout().xattr_root.get(
-        onode->get_metadata_hint(device->get_block_size())),
+        onode->get_metadata_hint()),
       std::move(name),
       [&ctx, &onode](auto &omap_manager, auto &xattr_root, auto &name) {
         return omap_manager.omap_rm_key(xattr_root, *ctx.transaction, name)
@@ -2552,14 +2593,14 @@ SeaStore::Shard::_xattr_clear(
   LOG_PREFIX(SeaStoreS::_xattr_clear);
   DEBUGT("onode={}", *ctx.transaction, *onode);
   auto xattr_root = onode->get_layout().xattr_root.get(
-    onode->get_metadata_hint(device->get_block_size()));
+    onode->get_metadata_hint());
   if (xattr_root.is_null()) {
     return seastar::now();
   } else {
     return seastar::do_with(
       BtreeOMapManager(*transaction_manager),
       onode->get_layout().xattr_root.get(
-	onode->get_metadata_hint(device->get_block_size())),
+	onode->get_metadata_hint()),
       [&ctx, &onode](auto &omap_manager, auto &xattr_root) {
         return omap_manager.omap_clear(xattr_root, *ctx.transaction)
 	  .si_then([&] {

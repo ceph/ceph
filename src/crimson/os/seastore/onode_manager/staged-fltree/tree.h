@@ -72,6 +72,13 @@ class Btree {
       }
     }
 
+    bool is_head() const {
+      if (p_cursor->is_invalid()) {
+	return false;
+      }
+      return p_cursor->is_head();
+    }
+
     /// Invalidate the Cursor before submitting transaction.
     void invalidate() {
       p_cursor.reset();
@@ -106,6 +113,23 @@ class Btree {
             *this_obj.p_cursor, this_obj.p_tree->value_builder.get_header_magic());
         auto ret = Cursor{this_obj.p_tree, next_cursor};
         assert(this_obj < ret);
+        return ret;
+      });
+    }
+
+    eagain_ifuture<Cursor> get_prev(Transaction& t) {
+      if (unlikely(p_cursor->is_invalid())) {
+	return p_tree->last(t);
+      }
+
+      assert(!p_cursor->is_head());
+      auto this_obj = *this;
+      return p_cursor->get_prev(p_tree->get_context(t)
+      ).si_then([this_obj] (Ref<tree_cursor_t> prev_cursor) {
+        this_obj.p_cursor->assert_next_to(
+            *prev_cursor, this_obj.p_tree->value_builder.get_header_magic());
+        auto ret = Cursor{this_obj.p_tree, prev_cursor};
+        assert(this_obj >= ret);
         return ret;
       });
     }

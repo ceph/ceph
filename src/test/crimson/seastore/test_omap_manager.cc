@@ -273,7 +273,9 @@ struct omap_manager_test_t :
     omap_root_t omap_root = with_trans_intr(
       *t,
       [this](auto &t) {
-	return omap_manager->initialize_omap(t, L_ADDR_MIN);
+	auto hint = gen_global_random_hint();
+	hint.conflict_policy = laddr_conflict_policy_t::gen_random;
+	return omap_manager->initialize_omap(t, hint);
       }).unsafe_get();
     submit_transaction(std::move(t));
     return omap_root;

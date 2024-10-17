@@ -93,6 +93,13 @@ class tree_cursor_t final
   bool is_end() const { return !!ref_leaf_node && position.is_end(); }
 
   /**
+   * is_head
+   *
+   * Represents the first key-value pair in the current onode extent.
+   */
+  bool is_head() const;
+
+  /**
    * is_tracked
    *
    * Represents a key-value pair stored in the tree, which is always tracked
@@ -116,6 +123,10 @@ class tree_cursor_t final
 
   /// Returns the next tree_cursor_t in tree, can be end if there's no next.
   eagain_ifuture<Ref<tree_cursor_t>> get_next(context_t);
+
+  /// Returns the previous tree_cursor_t in tree, the current cursor can't
+  //  be the first entry
+  eagain_ifuture<Ref<tree_cursor_t>> get_prev(context_t);
 
   /// Check that this is next to prv
   void assert_next_to(const tree_cursor_t&, value_magic_t) const;
@@ -417,7 +428,7 @@ class Node
     make_root(c, std::move(_super));
   }
   void as_root(Super::URef&& _super);
-  eagain_ifuture<> upgrade_root(context_t, laddr_t);
+  eagain_ifuture<> upgrade_root(context_t, laddr_hint_t);
 
   Super::URef deref_super();
 
@@ -435,6 +446,7 @@ class Node
 
   eagain_ifuture<> apply_split_to_parent(context_t, Ref<Node>&&, Ref<Node>&&, bool);
   eagain_ifuture<Ref<tree_cursor_t>> get_next_cursor_from_parent(context_t);
+  eagain_ifuture<Ref<tree_cursor_t>> get_prev_cursor_from_parent(context_t);
   template <bool FORCE_MERGE = false>
   eagain_ifuture<> try_merge_adjacent(context_t, bool, Ref<Node>&&);
   eagain_ifuture<> erase_node(context_t, Ref<Node>&&);
@@ -487,6 +499,7 @@ class InternalNode final : public Node {
   InternalNode& operator=(InternalNode&&) = delete;
 
   eagain_ifuture<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
+  eagain_ifuture<Ref<tree_cursor_t>> get_prev_cursor(context_t, const search_position_t&);
 
   eagain_ifuture<> apply_child_split(context_t, Ref<Node>&& left, Ref<Node>&& right, bool);
 
@@ -551,7 +564,7 @@ class InternalNode final : public Node {
   void track_make_tail(const search_position_t&);
 
   static eagain_ifuture<Ref<InternalNode>> allocate_root(
-      context_t, laddr_t, level_t, laddr_t, Super::URef&&);
+      context_t, laddr_hint_t, level_t, laddr_t, Super::URef&&);
 
  protected:
   eagain_ifuture<Ref<tree_cursor_t>> lookup_smallest(context_t) override;
@@ -592,7 +605,8 @@ class InternalNode final : public Node {
       return std::make_pair(Ref<Node>(node), mut);
     }
   };
-  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_t, field_type_t, bool, level_t);
+  static eagain_ifuture<fresh_node_t> allocate(
+    context_t, laddr_hint_t, field_type_t, bool, bool, level_t);
 
  private:
   /**
@@ -623,11 +637,13 @@ class LeafNode final : public Node {
   LeafNode& operator=(LeafNode&&) = delete;
 
   bool is_level_tail() const;
+  bool is_level_head() const;
   node_version_t get_version() const;
   const char* read() const;
   extent_len_t get_node_size() const;
   std::tuple<key_view_t, const value_header_t*> get_kv(const search_position_t&) const;
   eagain_ifuture<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
+  eagain_ifuture<Ref<tree_cursor_t>> get_prev_cursor(context_t, const search_position_t&);
 
   /**
    * erase
@@ -724,7 +740,8 @@ class LeafNode final : public Node {
       return std::make_pair(Ref<Node>(node), mut);
     }
   };
-  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_t, field_type_t, bool);
+  static eagain_ifuture<fresh_node_t> allocate(
+    context_t, laddr_hint_t, field_type_t, bool, bool);
 
  private:
   /**
