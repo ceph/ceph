@@ -1,10 +1,13 @@
 from collections import OrderedDict
 import errno
 import re
+import sys
+import logging
 from typing import Optional, List, Any, Dict
 
 
 def assert_valid_host(name: str) -> None:
+    sys.tracebacklimit = 0
     p = re.compile('^[a-zA-Z0-9-]+$')
     try:
         assert len(name) <= 250, 'name is too long (max 250 chars)'
@@ -13,7 +16,8 @@ def assert_valid_host(name: str) -> None:
             assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
             assert p.match(part), 'name component must include only a-z, 0-9, and -'
     except AssertionError as e:
-        raise SpecValidationError(str(e) + f'. Got "{name}"')
+        logging.error(str(e) + f'. Got "{name}"')
+        raise
 
 
 def assert_valid_oob(oob: Dict[str, str]) -> None:
