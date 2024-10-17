@@ -10,6 +10,7 @@
 
 #include "include/rados.h"
 
+#include "common/interval_map.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/acked_peers.h"
@@ -431,6 +432,86 @@ protected:
   virtual seastar::future<> request_committed(
     const osd_reqid_t& reqid,
     const eversion_t& at_version) = 0;
+  struct inflight_ioreq_t
+    : public boost::intrusive_ref_counter<
+	inflight_ioreq_t, boost::thread_unsafe_counter> {
+    using Ref = boost::intrusive_ptr<inflight_ioreq_t>;
+    hobject_t inflight;
+    seastar::promise<> io_promise;
+    using io_hook_t = boost::intrusive::set_member_hook<>;
+    io_hook_t io_hook;
+    using io_hook_options = boost::intrusive::member_hook<
+      inflight_ioreq_t,
+      io_hook_t,
+      &inflight_ioreq_t::io_hook>;
+    struct cmp_t {
+      using is_transparent = hobject_t;
+      bool operator()(const inflight_ioreq_t &lreq,
+		      const inflight_ioreq_t &rreq) const {
+	return lreq.inflight < rreq.inflight;
+      }
+      bool operator()(const hobject_t &obj,
+		      const inflight_ioreq_t &rreq) const {
+	return obj < rreq.inflight;
+      }
+      bool operator()(const inflight_ioreq_t &lreq,
+		      const hobject_t &obj) const {
+	return lreq.inflight < obj;
+      }
+    };
+    using mset_t = boost::intrusive::multiset<
+      inflight_ioreq_t,
+      io_hook_options,
+      boost::intrusive::compare<cmp_t>>;
+    explicit inflight_ioreq_t(const hobject_t &obj) : inflight(obj) {}
+  };
+  class BackfillScanSynchronizer {
+  public:
+    interruptible_future<inflight_ioreq_t::Ref>
+    set_io_wait_for_scan(const hobject_t &under_io) {
+      auto fut = seastar::now();
+      if (scan_promise && scan_start < under_io) {
+	fut = scan_promise->get_future();
+      }
+      return fut.then([this, under_io] {
+	auto ioreq = inflight_ioreq_t::Ref(
+	  new inflight_ioreq_t(under_io));
+	std::ignore = ios.insert(*ioreq);
+	return ioreq;
+      });
+    }
+    interruptible_future<> set_scan_wait_for_io(const hobject_t &to_scan) {
+      assert(scan_start == hobject_t());
+      ceph_assert(!scan_promise);
+      scan_promise = seastar::promise();
+      scan_start = to_scan;
+      std::vector<seastar::future<>> futs;
+      if (!ios.empty()) {
+	for (auto it = ios.lower_bound(to_scan, inflight_ioreq_t::cmp_t());
+	    it != ios.end(); it++) {
+	  auto &io = *it;
+	  futs.emplace_back(io.io_promise.get_future());
+	}
+	return seastar::when_all_succeed(std::move(futs));
+      }
+      return seastar::now();
+    }
+    void finish_io(inflight_ioreq_t::Ref &io) {
+      ceph_assert(io);
+      io->io_promise.set_value();
+      ios.erase(inflight_ioreq_t::mset_t::s_iterator_to(*io));
+    }
+    void finish_scan(const hobject_t &to_scan) {
+      assert(scan_start == to_scan || scan_start == hobject_t());
+      scan_start = hobject_t();
+      scan_promise->set_value();
+      scan_promise.reset();
+    }
+  private:
+    hobject_t scan_start;
+    std::optional<seastar::promise<>> scan_promise;
+    inflight_ioreq_t::mset_t ios;
+  } backfill_scan_sync;
 public:
   struct loaded_object_md_t {
     ObjectState os;
