@@ -2208,6 +2208,18 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_bucket_stats_on_head_bucket
+  type: bool
+  level: advanced
+  desc: Consider "x-rgw-get-bucket-stats" to include Bucket Stats in HTTP Headers for HEAD Bucket Responses
+  long_desc: Enabling this option allows RGW to include bucket statistics in HTTP headers
+    for HEAD bucket requests when the "x-rgw-get-bucket-stats" header is present in the request.
+    If the header is provided and this configuration is enabled, RGW calculates and returns the
+    statistics for each HEAD request made to the bucket.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_frontends
   type: str
   level: basic
