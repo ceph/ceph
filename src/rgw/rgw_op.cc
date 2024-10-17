@@ -4883,6 +4883,7 @@ void RGWPostObj::execute(optional_yield y)
 
     s->obj_size = ofs;
     s->object->set_obj_size(ofs);
+    obj->set_obj_size(ofs);
 
 
     op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
