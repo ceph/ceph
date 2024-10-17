@@ -59,6 +59,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_parquet_buffer_size
+  type: size
+  level: advanced
+  desc: the Maximum parquet buffer size, a limit to memory consumption for parquet reading operations.
+  default: 16_M
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_rados_tracing
   type: bool
   level: advanced
