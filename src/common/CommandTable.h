@@ -23,6 +23,8 @@ class CommandOp
   public:
   ConnectionRef con;
   ceph_tid_t tid;
+  // multi_target_id == 0 means single target command
+  ceph_tid_t multi_target_id;
 
   std::vector<std::string> cmd;
   ceph::buffer::list    inbl;
@@ -48,9 +50,11 @@ class CommandOp
     }
   }
 
-  CommandOp(const ceph_tid_t t) : tid(t), on_finish(nullptr),
+  CommandOp(const ceph_tid_t t) : tid(t), multi_target_id(0), on_finish(nullptr),
                                   outbl(nullptr), outs(nullptr) {}
   CommandOp() : tid(0), on_finish(nullptr), outbl(nullptr), outs(nullptr) {}
+  CommandOp(const ceph_tid_t t, const ceph_tid_t multi_id) : tid(t), multi_target_id(multi_id),
+                                                             on_finish(nullptr), outbl(nullptr), outs(nullptr) {}
 };
 
 /**
@@ -62,23 +66,38 @@ class CommandTable
 {
 protected:
   ceph_tid_t last_tid;
+  ceph_tid_t last_multi_target_id;
+
   std::map<ceph_tid_t, T> commands;
+  std::map<ceph_tid_t, std::set<ceph_tid_t> > multi_targets;
 
 public:
 
   CommandTable()
-    : last_tid(0)
+    : last_tid(0), last_multi_target_id(0)
   {}
 
   ~CommandTable()
   {
     ceph_assert(commands.empty());
+    for (const auto& pair : multi_targets) {
+      ceph_assert(pair.second.empty());
+    }
   }
 
-  T& start_command()
+  ceph_tid_t get_new_multi_target_id()
+  {
+    return ++last_multi_target_id;
+  }
+
+  T& start_command(ceph_tid_t multi_id=0)
   {
     ceph_tid_t tid = last_tid++;
-    commands.insert(std::make_pair(tid, T(tid)) );
+    commands.insert(std::make_pair(tid, T(tid, multi_id)) );
+
+    if (multi_id != 0) {
+      multi_targets[multi_id].insert(tid);
+    }
 
     return commands.at(tid);
   }
@@ -93,6 +112,11 @@ public:
     return commands.count(tid) > 0;
   }
 
+  std::size_t count_multi_commands(ceph_tid_t multi_id)
+  {
+    return multi_targets[multi_id].size();
+  }
+
   T& get_command(ceph_tid_t tid)
   {
     return commands.at(tid);
@@ -100,11 +124,18 @@ public:
 
   void erase(ceph_tid_t tid)
   {
+    ceph_tid_t multi_id = commands.at(tid).multi_target_id;
     commands.erase(tid);
+    multi_targets[multi_id].erase(tid);
+
+    if(count_multi_commands(multi_id) == 0) {
+      multi_targets.erase(multi_id);
+    }
   }
 
   void clear() {
     commands.clear();
+    multi_targets.clear();
   }
 };
 
