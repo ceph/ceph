@@ -1310,7 +1310,7 @@ struct sb_info_space_efficient_map_t {
       if (aux_items.size() != 0) {
 	auto it = std::lower_bound(
 	  aux_items.begin(),
-	  aux_items.end(),
+	  aux_items.end() - 1,
 	  id,
 	  [](const sb_info_t& a, const uint64_t& b) {
 	    return a < b;
