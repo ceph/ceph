@@ -18,7 +18,6 @@ struct TestLRUItem : public ceph::common::intrusive_lru_base<
     unsigned, TestLRUItem, item_to_unsigned<TestLRUItem>>> {
   unsigned key = 0;
   int value = 0;
-  bool seen = false;
 
   TestLRUItem(unsigned key) : key(key) {}
 };
