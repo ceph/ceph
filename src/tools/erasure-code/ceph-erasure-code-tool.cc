@@ -260,6 +260,8 @@ int do_decode(const std::vector<const char*> &args) {
   ceph::bufferlist decoded_data;
   std::string fname = args[3];
 
+  std::set<int> want_to_read;
+  const auto chunk_mapping = ec_impl->get_chunk_mapping();
   for (auto &[shard, bl] : encoded_data) {
     std::string name = fname + "." + stringify(shard);
     std::string error;
@@ -268,9 +270,12 @@ int do_decode(const std::vector<const char*> &args) {
       std::cerr << "failed to read " << name << ": " << error << std::endl;
       return 1;
     }
+    auto chunk = static_cast<ssize_t>(chunk_mapping.size()) > shard ?
+      chunk_mapping[shard] : shard;
+    want_to_read.insert(chunk);
   }
 
-  r = ECUtil::decode(*sinfo, ec_impl, encoded_data, &decoded_data);
+  r = ECUtil::decode(*sinfo, ec_impl, want_to_read, encoded_data, &decoded_data);
   if (r < 0) {
     std::cerr << "failed to decode: " << cpp_strerror(r) << std::endl;
     return 1;

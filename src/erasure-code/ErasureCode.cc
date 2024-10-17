@@ -348,21 +348,35 @@ int ErasureCode::to_string(const std::string &name,
   return 0;
 }
 
-int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
+int ErasureCode::decode_concat(const set<int>& want_to_read,
+			       const map<int, bufferlist> &chunks,
 			       bufferlist *decoded)
 {
-  set<int> want_to_read;
-
-  for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
-    want_to_read.insert(chunk_index(i));
-  }
   map<int, bufferlist> decoded_map;
   int r = _decode(want_to_read, chunks, &decoded_map);
   if (r == 0) {
     for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
-      decoded->claim_append(decoded_map[chunk_index(i)]);
+      // XXX: the ErasureCodeInterface allows `decode()` to return
+      // *at least* `want_to_read chunks`; that is, they may more.
+      // Some implementations are consistently exact but jerasure
+      // is quirky: it outputs more only when deailing with degraded.
+      // The check below uniforms the behavior.
+      if (want_to_read.contains(chunk_index(i)) &&
+	  decoded_map.contains(chunk_index(i))) {
+        decoded->claim_append(decoded_map[chunk_index(i)]);
+      }
     }
   }
   return r;
+}
+
+int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
+			       bufferlist *decoded)
+{
+  set<int> want_to_read;
+  for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
+    want_to_read.insert(chunk_index(i));
+  }
+  return decode_concat(want_to_read, chunks, decoded);
 }
 }
