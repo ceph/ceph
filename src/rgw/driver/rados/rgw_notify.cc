@@ -1097,8 +1097,8 @@ int publish_reserve(const DoutPrefixProvider* dpp,
 
       // reload the topic in case it changed since the notification was added
       const std::string& topic_tenant = std::visit(fu2::overload(
-          [] (const rgw_user& u) -> const std::string& { return u.tenant; },
-          [] (const rgw_account_id& a) -> const std::string& { return a; }
+          [] (const rgw_user& u) -> std::string { return u.tenant; },
+          [] (const rgw_account_id& a) -> std::string { return a; }
           ), topic_cfg.owner);
       const RGWPubSub ps(res.store, topic_tenant, site);
       int ret = ps.get_topic(res.dpp, topic_cfg.dest.arn_topic,
