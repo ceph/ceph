@@ -163,13 +163,15 @@ void ObjectDispatcher<I>::extent_overwritten(
   ldout(cct, 20) << object_no << " " << object_off << "~" << object_len
                  << dendl;
 
-  std::shared_lock locker{this->m_lock};
+  this->m_op_tracker->start_op();
   for (auto it : this->m_dispatches) {
     auto& object_dispatch_meta = it.second;
     auto object_dispatch = object_dispatch_meta.dispatch;
     object_dispatch->extent_overwritten(object_no, object_off, object_len,
                                         journal_tid, new_journal_tid);
   }
+  this->m_op_tracker->finish_op();
+
 }
 
 template <typename I>
@@ -179,17 +181,19 @@ int ObjectDispatcher<I>::prepare_copyup(
   auto cct = this->m_image_ctx->cct;
   ldout(cct, 20) << "object_no=" << object_no << dendl;
 
-  std::shared_lock locker{this->m_lock};
+  this->m_op_tracker->start_op();
   for (auto it : this->m_dispatches) {
     auto& object_dispatch_meta = it.second;
     auto object_dispatch = object_dispatch_meta.dispatch;
     auto r = object_dispatch->prepare_copyup(
             object_no, snapshot_sparse_bufferlist);
     if (r < 0) {
+      this->m_op_tracker->finish_op();
       return r;
     }
   }
 
+  this->m_op_tracker->finish_op();
   return 0;
 }
 
