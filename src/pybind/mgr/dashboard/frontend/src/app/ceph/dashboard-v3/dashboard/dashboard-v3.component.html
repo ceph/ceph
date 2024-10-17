@@ -147,29 +147,38 @@
               </a>
             </div>
             <div class="d-flex flex-column ms-4 me-4 mt-4 mb-4">
-              <ng-template #healthChecks>
-                <cd-health-checks *ngIf="healthData?.health?.checks"
-                                  [healthData]="healthData.health.checks"></cd-health-checks>
-              </ng-template>
 
               <div class="d-flex flex-row col-md-3 ms-4">
                 <i *ngIf="healthData.health?.status"
-                   [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"
-                   [ngStyle]="healthData.health.status | healthColor"
-                   [title]="healthData.health.status"></i>
+                    [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"
+                    [ngStyle]="healthData.health.status | healthColor"
+                    [title]="healthData.health.status">
+              </i>
+              <span class="ms-2 mt-n1 lead"
+              *ngIf="!healthData.health?.checks?.length"
+              i18n>Cluster</span>
+              <div cdsPopover
+                  [isOpen]="isOpen"
+                  [dropShadow]="true"
+                  [align]="bottom"
+                  [caret]="true"
+                  [highContrast]="highContrast">
+              <div class="popover-trigger">
                 <a class="ms-2 mt-n1 lead text-primary"
-                   [ngbPopover]="healthChecks"
                    popoverClass="info-card-popover-cluster-status"
-                   [openDelay]="300"
-                   [closeDelay]="500"
-                   triggers="mouseenter"
                    *ngIf="healthData.health?.checks?.length"
+                   (click)="togglePopover()"
                    i18n>Cluster</a>
-                <span class="ms-2 mt-n1 lead"
-                      *ngIf="!healthData.health?.checks?.length"
-                      i18n>Cluster</span>
               </div>
+              <cds-popover-content #healthCheck>
+                  <cd-health-checks
+                    *ngIf="healthData?.health?.checks"
+                    [healthData]="healthData.health.checks">
+                  </cd-health-checks>
+              </cds-popover-content>
             </div>
+          </div>
+          </div>
 
             <div class="d-flex flex-column col-md-3">
               <div *ngIf="hasHardwareError"

@@ -46,18 +46,28 @@
              i18n-aria-label
              id="clusterStatus">
       <div class="d-flex flex-column justify-content-center align-items-center">
-        <ng-template #healthChecks>
-          <cd-health-checks [healthData]="healthData.health.checks"></cd-health-checks>
-        </ng-template>
+
         <ng-template #healthWarningAndError>
         <div class="info-card-content-clickable mt-1"
+             cdsPopover
              [ngStyle]="healthData.health.status | healthColor"
-             [ngbPopover]="healthChecks"
+             [isOpen]="isOpen"
+             [dropShadow]="true"
+             [caret]="true"
+             placement="bottom"
              popoverClass="info-card-popover-cluster-status">
+
+        <div class="popover-trigger"
+            (click)="togglePopover()">
             {{ healthData.health.status | healthLabel | uppercase }}
           <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
              class="fa fa-exclamation-triangle"></i>
-        </div></ng-template>
+        </div>
+        <cds-popover-content>
+          <cd-health-checks [healthData]="healthData.health.checks"></cd-health-checks>
+        </cds-popover-content>
+        </div>
+      </ng-template>
 
       <ng-container *ngIf="!healthData.health?.checks?.length; else healthWarningAndError">
         <div [ngStyle]="healthData.health.status | healthColor">
