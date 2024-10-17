@@ -133,7 +133,7 @@ void LCFilter_S3::dump_xml(Formatter *f) const
     }
   }
   if (has_size_gt()) {
-    encode_xml("ObjectSizeGreaterThanw", size_gt, f);
+    encode_xml("ObjectSizeGreaterThan", size_gt, f);
   }
   if (has_size_lt()) {
     encode_xml("ObjectSizeLessThan", size_lt, f);
