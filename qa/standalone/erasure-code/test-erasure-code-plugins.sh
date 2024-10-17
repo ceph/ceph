@@ -14,7 +14,7 @@ case $arch in
     aarch64*|arm*)
         legacy_jerasure_plugins=(jerasure_generic jerasure_neon)
         legacy_shec_plugins=(shec_generic shec_neon)
-        plugins=(jerasure shec lrc)
+        plugins=(jerasure shec lrc isa)
         ;;
     *)
         echo "unsupported platform ${arch}."
