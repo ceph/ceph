@@ -273,6 +273,8 @@ class StoreObject : public Object {
       return -ENOENT;
     }
 
+    virtual RGWObjVersionTracker& get_version_tracker() override { return state.objv_tracker; }
+
     virtual void print(std::ostream& out) const override {
       if (bucket)
 	out << bucket << ":";

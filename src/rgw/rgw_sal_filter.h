@@ -727,7 +727,9 @@ public:
 
   virtual int delete_object(const DoutPrefixProvider* dpp,
 			    optional_yield y,
-			    uint32_t flags) override;
+			    uint32_t flags,
+			    std::list<rgw_obj_index_key>* remove_objs,
+			    RGWObjVersionTracker* objv) override;
   virtual int copy_object(const ACLOwner& owner,
                const rgw_user& remote_user,
                req_info* info, const rgw_zone_id& source_zone,
@@ -833,6 +835,8 @@ public:
   virtual int get_torrent_info(const DoutPrefixProvider* dpp,
                                optional_yield y, bufferlist& bl) override;
 
+  virtual RGWObjVersionTracker& get_version_tracker() override { return next->get_version_tracker(); }
+
   virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
 				    const std::string& oid,
 				    const std::set<std::string>& keys,
@@ -907,7 +911,13 @@ public:
 		       RGWCompressionInfo& cs_info, off_t& ofs,
 		       std::string& tag, ACLOwner& owner,
 		       uint64_t olh_epoch,
-		       rgw::sal::Object* target_obj) override;
+		       rgw::sal::Object* target_obj,
+		       prefix_map_t& processed_prefixes) override;
+  virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+                                     CephContext *cct, optional_yield y,
+                                     const rgw_obj& obj,
+                                     std::list<rgw_obj_index_key>& remove_objs,
+                                     prefix_map_t& processed_prefixes) override;
 
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y,
 		       rgw_placement_rule** rule,
