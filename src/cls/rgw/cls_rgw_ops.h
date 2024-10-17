@@ -35,11 +35,12 @@ struct rgw_cls_obj_prepare_op
   bool log_op;
   uint16_t bilog_flags;
   rgw_zone_set zones_trace;
+  std::string log_zonegroup;
 
   rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN), log_op(false), bilog_flags(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(7, 5, bl);
+    ENCODE_START(8, 5, bl);
     uint8_t c = (uint8_t)op;
     encode(c, bl);
     encode(tag, bl);
@@ -48,10 +49,11 @@ struct rgw_cls_obj_prepare_op
     encode(key, bl);
     encode(bilog_flags, bl);
     encode(zones_trace, bl);
+    encode(log_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     uint8_t c;
     decode(c, bl);
     op = (RGWModifyOp)c;
@@ -74,6 +76,9 @@ struct rgw_cls_obj_prepare_op
     if (struct_v >= 7) {
       decode(zones_trace, bl);
     }
+    if (struct_v >= 8) {
+      decode(log_zonegroup, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -94,11 +99,12 @@ struct rgw_cls_obj_complete_op
 
   std::list<cls_rgw_obj_key> remove_objs;
   rgw_zone_set zones_trace;
+  std::string log_zonegroup;
 
   rgw_cls_obj_complete_op() : op(CLS_RGW_OP_ADD), log_op(false), bilog_flags(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(9, 7, bl);
+    ENCODE_START(10, 7, bl);
     uint8_t c = (uint8_t)op;
     encode(c, bl);
     encode(ver.epoch, bl);
@@ -111,10 +117,11 @@ struct rgw_cls_obj_complete_op
     encode(key, bl);
     encode(bilog_flags, bl);
     encode(zones_trace, bl);
+    encode(log_zonegroup, bl);
     ENCODE_FINISH(bl);
  }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
     uint8_t c;
     decode(c, bl);
     op = (RGWModifyOp)c;
@@ -157,6 +164,9 @@ struct rgw_cls_obj_complete_op
     if (struct_v >= 9) {
       decode(zones_trace, bl);
     }
+    if (struct_v >= 10) {
+      decode(log_zonegroup, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -176,11 +186,12 @@ struct rgw_cls_link_olh_op {
   ceph::real_time unmod_since; /* only create delete marker if newer then this */
   bool high_precision_time;
   rgw_zone_set zones_trace;
+  std::string log_zonegroup;
 
   rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0), log_op(false), bilog_flags(0), high_precision_time(false) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     encode(key, bl);
     encode(olh_tag, bl);
     encode(delete_marker, bl);
@@ -194,11 +205,12 @@ struct rgw_cls_link_olh_op {
     encode(unmod_since, bl);
     encode(high_precision_time, bl);
     encode(zones_trace, bl);
+    encode(log_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     decode(key, bl);
     decode(olh_tag, bl);
     decode(delete_marker, bl);
@@ -223,6 +235,9 @@ struct rgw_cls_link_olh_op {
     if (struct_v >= 5) {
       decode(zones_trace, bl);
     }
+    if (struct_v >= 6) {
+      decode(log_zonegroup, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -239,11 +254,12 @@ struct rgw_cls_unlink_instance_op {
   uint16_t bilog_flags;
   std::string olh_tag;
   rgw_zone_set zones_trace;
+  std::string log_zonegroup;
 
   rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(key, bl);
     encode(op_tag, bl);
     encode(olh_epoch, bl);
@@ -251,11 +267,12 @@ struct rgw_cls_unlink_instance_op {
     encode(bilog_flags, bl);
     encode(olh_tag, bl);
     encode(zones_trace, bl);
+    encode(log_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(key, bl);
     decode(op_tag, bl);
     decode(olh_epoch, bl);
@@ -266,6 +283,9 @@ struct rgw_cls_unlink_instance_op {
     }
     if (struct_v >= 3) {
       decode(zones_trace, bl);
+    }
+    if (struct_v >= 4) {
+      decode(log_zonegroup, bl);
     }
     DECODE_FINISH(bl);
   }

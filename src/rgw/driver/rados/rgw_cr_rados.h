@@ -1172,7 +1172,8 @@ public:
       req(NULL),
       stat_follow_olh(_stat_follow_olh),
       source_trace_entry(source_trace_entry),
-      zones_trace(_zones_trace), counters(counters), dpp(dpp) {}
+      zones_trace(_zones_trace),
+      counters(counters), dpp(dpp) {}
 
 
   ~RGWFetchRemoteObjCR() override {
@@ -1188,7 +1189,7 @@ public:
 
   int send_request(const DoutPrefixProvider *dpp) override {
     req = new RGWAsyncFetchRemoteObj(this, stack->create_completion_notifier(), store,
-    source_zone, user_id, src_bucket, dest_placement_rule, dest_bucket_info,
+                                     source_zone, user_id, src_bucket, dest_placement_rule, dest_bucket_info,
                                      key, dest_key, versioned_epoch, copy_if_newer, filter,
                                      stat_follow_olh, source_trace_entry, zones_trace, counters, dpp);
     async_rados->queue(req);
@@ -1331,13 +1332,13 @@ public:
                          bool _if_older,
                          real_time& _timestamp,
                          rgw_zone_set* _zones_trace) : RGWAsyncRadosRequest(caller, cn), dpp(_dpp), store(_store),
-                                                      source_zone(_source_zone),
-                                                      owner(_owner),
-                                                      owner_display_name(_owner_display_name),
-                                                      versioned(_versioned),
-                                                      versioned_epoch(_versioned_epoch),
-                                                      del_if_older(_if_older),
-                                                      timestamp(_timestamp) {
+                                                       source_zone(_source_zone),
+                                                       owner(_owner),
+                                                       owner_display_name(_owner_display_name),
+                                                       versioned(_versioned),
+                                                       versioned_epoch(_versioned_epoch),
+                                                       del_if_older(_if_older),
+                                                       timestamp(_timestamp) {
     if (_delete_marker) {
       marker_version_id = _key.instance;
     }
@@ -1385,13 +1386,14 @@ public:
                       bool _delete_marker,
                       real_time *_timestamp,
                       rgw_zone_set *_zones_trace) : RGWSimpleCoroutine(_store->ctx()), dpp(_dpp), cct(_store->ctx()),
-                                       async_rados(_async_rados), store(_store),
-                                       source_zone(_source_zone),
-                                       bucket_info(_bucket_info),
-                                       key(_key),
-                                       versioned(_versioned),
-                                       versioned_epoch(_versioned_epoch),
-                                       delete_marker(_delete_marker), req(NULL), zones_trace(_zones_trace) {
+                                                    async_rados(_async_rados), store(_store),
+                                                    source_zone(_source_zone),
+                                                    bucket_info(_bucket_info),
+                                                    key(_key),
+                                                    versioned(_versioned),
+                                                    versioned_epoch(_versioned_epoch),
+                                                    delete_marker(_delete_marker), req(NULL),
+                                                    zones_trace(_zones_trace) {
     del_if_older = (_timestamp != NULL);
     if (_timestamp) {
       timestamp = *_timestamp;

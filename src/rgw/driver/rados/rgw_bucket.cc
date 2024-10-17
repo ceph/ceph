@@ -147,10 +147,20 @@ bool rgw_bucket_object_check_filter(const std::string& oid)
 
 int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key, optional_yield y)
 {
-
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 
-  return object->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
+  int ret;
+  if (ret = object->get_obj_attrs(y, dpp); ret < 0) {
+    return ret;
+  }
+
+  std::string log_zonegroup;
+  if (ret = should_log_op(driver, bucket->get_key(), object->get_name(), object->get_attrs(), dpp, y, &log_zonegroup); ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  const bool log_op = ret;
+
+  return object->delete_object(dpp, y, &log_zonegroup, log_op ? rgw::sal::FLAG_LOG_OP : 0, nullptr, nullptr);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
@@ -671,7 +681,7 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
             continue;
           }
 	  RGWObjState& state = static_cast<rgw::sal::RadosObject*>(object.get())->get_state();
-          ret = store->update_olh(dpp, obj_ctx, &state, bucket->get_info(), obj, y);
+          ret = store->update_olh(dpp, obj_ctx, &state, bucket->get_info(), obj, y, nullptr, nullptr, false, false);
           if (ret < 0) {
             ldpp_dout(dpp, -1) << "ERROR failed to update olh for: " << olh_entry.key.name << " update_olh(): " << cpp_strerror(-ret) << dendl;
             continue;
@@ -3004,16 +3014,9 @@ RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
   svc.user = user_svc;
 }
 
-void RGWBucketCtl::init(RGWUserCtl *user_ctl,
-                        RGWDataChangesLog *datalog,
-                        const DoutPrefixProvider *dpp)
+void RGWBucketCtl::init(RGWUserCtl *user_ctl)
 {
   ctl.user = user_ctl;
-
-  datalog->set_bucket_filter(
-    [this](const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp) {
-      return bucket_exports_data(bucket, y, dpp);
-    });
 }
 
 int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
@@ -3447,21 +3450,6 @@ int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,
     return r;
   }
   return 0;
-}
-
-int RGWBucketCtl::bucket_exports_data(const rgw_bucket& bucket,
-                                      optional_yield y,
-                                      const DoutPrefixProvider *dpp)
-{
-
-  RGWBucketSyncPolicyHandlerRef handler;
-
-  int r = get_sync_policy_handler(std::nullopt, bucket, &handler, y, dpp);
-  if (r < 0) {
-    return r;
-  }
-
-  return handler->bucket_exports_data();
 }
 
 int RGWBucketCtl::bucket_imports_data(const rgw_bucket& bucket,

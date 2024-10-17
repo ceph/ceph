@@ -3204,3 +3204,110 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
 }
 
+int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, optional_yield y, RGWObjTags& obj_tags)
+{
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
+
+  bufferlist tags_bl;
+  int ret = rop->get_attr(dpp, RGW_ATTR_TAGS, tags_bl, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to read obj tags, ret=" << ret << dendl;
+    return ret;
+  }
+
+  try {
+    auto iter = tags_bl.cbegin();
+    obj_tags.decode(iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                  const std::string& object_name, const RGWObjTags& tagset,
+                  const DoutPrefixProvider *dpp, optional_yield y,
+                  std::string* log_zonegroup)
+{
+  RGWBucketSyncPolicyHandlerRef policy_handler;
+  int ret = driver->get_sync_policy_handler(dpp, std::nullopt, bucket, &policy_handler, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed to read sync policy for bucket=" << bucket << " ret=" << ret << dendl;
+    return ret;
+  } else if (!policy_handler) { // no policy, no logging
+    return false;
+  }
+
+  rgw_sync_bucket_pipe pipe;
+  if (!policy_handler->bucket_exports_object(object_name, tagset, &pipe)) {
+    return false;
+  }
+
+  if (!log_zonegroup) {
+    return true;
+  }
+
+  if (pipe.dest.bucket) {
+    // load bucket zonegroup everytime by discarding the bucket id
+    // so if the bucket is moved to a different zonegroup, the new zonegroup is used
+    // bucket info is already cached, so this should be cheap
+    rgw_bucket dest_bucket_key(pipe.dest.bucket->tenant, pipe.dest.bucket->name); // to discard bucket_id
+
+    std::unique_ptr<rgw::sal::Bucket> dest_bucket;
+    if (int ret = driver->load_bucket(dpp, dest_bucket_key, &dest_bucket, y); ret < 0) {
+      if (ret != -ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: failed to load bucket info for bucket=" << dest_bucket_key << " ret=" << ret << dendl;
+      }
+
+      return ret;
+    }
+
+    *log_zonegroup = dest_bucket->get_info().zonegroup;
+  } else if (pipe.dest.zone) {
+    std::unique_ptr<rgw::sal::Zone> zone;
+    if (int ret = driver->get_zone()->get_zonegroup().get_zone_by_id(pipe.dest.zone->id, &zone); ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to get zone info for zone=" << pipe.dest.zone->id << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    *log_zonegroup = zone->get_zonegroup().get_id();
+  } else {
+    *log_zonegroup = ""; // log for all zones
+  }
+
+  return true;
+}
+
+int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                  const std::string& object_name, const rgw::sal::Attrs& obj_attrs,
+                  const DoutPrefixProvider *dpp, optional_yield y,
+                  std::string* log_zonegroup)
+{
+  RGWObjTags obj_tags;
+  const auto& tags = obj_attrs.find(RGW_ATTR_TAGS);
+  if (tags != obj_attrs.end()) {
+    try {
+      bufferlist::const_iterator iter{&tags->second};
+      obj_tags.decode(iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+    }
+  }
+
+  return should_log_op(driver, bucket, object_name, obj_tags, dpp, y, log_zonegroup);
+}
+
+int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                  rgw::sal::Object *object,
+                  const DoutPrefixProvider *dpp, optional_yield y,
+                  std::string* log_zonegroup)
+{
+  RGWObjTags obj_tags;
+  if (int ret = read_obj_tags(dpp, object, y, obj_tags); ret < 0) {
+    return ret;
+  }
+
+  return should_log_op(driver, bucket, object->get_name(), obj_tags, dpp, y, log_zonegroup);
+}
