@@ -23,15 +23,6 @@ class ShardServices;
 class PG;
 class BackfillRecovery;
 
-  struct PGPeeringPipeline {
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name = "PeeringEvent::PGPipeline::await_map";
-    } await_map;
-    struct Process : OrderedExclusivePhaseT<Process> {
-      static constexpr auto type_name = "PeeringEvent::PGPipeline::process";
-    } process;
-  };
-
 template <class T>
 class PeeringEvent : public PhasedOperationT<T> {
   T* that() {

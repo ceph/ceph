@@ -40,7 +40,7 @@ namespace crimson::osd {
 class PG;
 
 // OpsExecuter -- a class for executing ops targeting a certain object.
-class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
+class OpsExecuter {
   friend class SnapTrimObjSubEvent;
 
   using call_errorator = crimson::errorator<
@@ -170,16 +170,12 @@ public:
 
   object_stat_sum_t delta_stats;
 private:
-  // an operation can be divided into two stages: main and effect-exposing
-  // one. The former is performed immediately on call to `do_osd_op()` while
-  // the later on `submit_changes()` – after successfully processing main
-  // stages of all involved operations. When any stage fails, none of all
-  // scheduled effect-exposing stages will be executed.
-  // when operation requires this division, some variant of `with_effect()`
-  // should be used.
+  // with_effect can be used to schedule operations to be performed
+  // at commit time.  effects will be discarded if the operation does
+  // not commit.
   struct effect_t {
     // an effect can affect PG, i.e. create a watch timeout
-    virtual osd_op_errorator::future<> execute(Ref<PG> pg) = 0;
+    virtual seastar::future<> execute(Ref<PG> pg) = 0;
     virtual ~effect_t() = default;
   };
 
@@ -213,10 +209,10 @@ private:
    * execute_clone
    *
    * If snapc contains a snap which occurred logically after the last write
-   * seen by this object (see OpsExecutor::should_clone()), we first need
+   * seen by this object (see OpsExecuter::should_clone()), we first need
    * make a clone of the object at its current state.  execute_clone primes
    * txn with that clone operation and returns an
-   * OpsExecutor::CloningContext which will allow us to fill in the corresponding
+   * OpsExecuter::CloningContext which will allow us to fill in the corresponding
    * metadata and log_entries once the operations have been processed.
    *
    * Note that this strategy differs from classic, which instead performs this
@@ -267,7 +263,7 @@ private:
   */
   void update_clone_overlap();
 
-  interruptible_future<std::vector<pg_log_entry_t>> flush_clone_metadata(
+  std::vector<pg_log_entry_t> flush_clone_metadata(
     std::vector<pg_log_entry_t>&& log_entries,
     SnapMapper& snap_mapper,
     OSDriver& osdriver,
@@ -400,7 +396,7 @@ public:
   execute_op(OSDOp& osd_op);
 
   using rep_op_fut_tuple =
-    std::tuple<interruptible_future<>, osd_op_ierrorator::future<>>;
+    std::tuple<interruptible_future<>, interruptible_future<>>;
   using rep_op_fut_t =
     interruptible_future<rep_op_fut_tuple>;
   template <typename MutFunc>
@@ -475,7 +471,7 @@ auto OpsExecuter::with_effect_on_obc(
          effect_func(std::move(effect_func)),
          obc(std::move(obc)) {
     }
-    osd_op_errorator::future<> execute(Ref<PG> pg) final {
+    seastar::future<> execute(Ref<PG> pg) final {
       return std::move(effect_func)(std::move(ctx),
                                     std::move(obc),
                                     std::move(pg));
@@ -502,15 +498,14 @@ OpsExecuter::flush_changes_n_do_ops_effects(
   assert(obc);
 
   auto submitted = interruptor::now();
-  auto all_completed =
-    interruptor::make_interruptible(osd_op_errorator::now());
+  auto all_completed = interruptor::now();
 
   if (cloning_ctx) {
     ceph_assert(want_mutate);
   }
 
   if (want_mutate) {
-    auto log_entries = co_await flush_clone_metadata(
+    auto log_entries = flush_clone_metadata(
       prepare_transaction(ops),
       snap_mapper,
       osdriver,
@@ -536,7 +531,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(
     // need extra ref pg due to apply_stats() which can be executed after
     // informing snap mapper
     all_completed =
-      std::move(all_completed).safe_then_interruptible([this, pg=this->pg] {
+      std::move(all_completed).then_interruptible([this, pg=this->pg] {
       // let's do the cleaning of `op_effects` in destructor
       return interruptor::do_for_each(op_effects,
         [pg=std::move(pg)](auto& op_effect) {
@@ -552,21 +547,19 @@ OpsExecuter::flush_changes_n_do_ops_effects(
 
 template <class Func>
 struct OpsExecuter::RollbackHelper {
-  void rollback_obc_if_modified(const std::error_code& e);
-  seastar::lw_shared_ptr<OpsExecuter> ox;
+  void rollback_obc_if_modified();
+  OpsExecuter *ox;
   Func func;
 };
 
 template <class Func>
 inline OpsExecuter::RollbackHelper<Func>
 OpsExecuter::create_rollbacker(Func&& func) {
-  return {shared_from_this(), std::forward<Func>(func)};
+  return {this, std::forward<Func>(func)};
 }
 
-
 template <class Func>
-void OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified(
-  const std::error_code& e)
+void OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified()
 {
   // Oops, an operation had failed. do_osd_ops() altogether with
   // OpsExecuter already dropped the ObjectStore::Transaction if
@@ -584,10 +577,9 @@ void OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified(
   assert(ox);
   const auto need_rollback = ox->has_seen_write();
   crimson::get_logger(ceph_subsys_osd).debug(
-    "{}: object {} got error {}, need_rollback={}",
+    "{}: object {} got error, need_rollback={}",
     __func__,
     ox->obc->get_oid(),
-    e,
     need_rollback);
   if (need_rollback) {
     func(ox->obc);

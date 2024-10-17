@@ -90,7 +90,7 @@ static inline seastar::log_level to_log_level(int level) {
 #define SUBLOGDPP(subname_, level_, MSG, dpp, ...) \
   LOGGER(subname_).log(level_, "{} {}: " MSG, dpp, FNAME , ##__VA_ARGS__)
 #define SUBLOGDPPI(subname_, level_, MSG, dpp, ...) \
-  LOGGER(subname_).log(level_, "{} {}: " MSG, \
+  LOGGER(subname_).log(level_, "{} {} {}: " MSG,			\
   interruptor::get_interrupt_cond(), dpp, FNAME , ##__VA_ARGS__)
 #define SUBTRACEDPP(subname_, ...) SUBLOGDPP(subname_, seastar::log_level::trace, __VA_ARGS__)
 #define SUBTRACEDPPI(subname_, ...) SUBLOGDPPI(subname_, seastar::log_level::trace, __VA_ARGS__)
@@ -106,7 +106,7 @@ static inline seastar::log_level to_log_level(int level) {
 #define LOGDPP(level_, MSG, dpp, ...) \
   LOCAL_LOGGER.log(level_, "{} {}: " MSG, dpp, FNAME , ##__VA_ARGS__)
 #define LOGDPPI(level_, MSG, dpp, ...) \
-  LOCAL_LOGGER.log(level_, "{} {}: " MSG, \
+  LOCAL_LOGGER.log(level_, "{} {} {}: " MSG, \
   interruptor::get_interrupt_cond(), dpp, FNAME , ##__VA_ARGS__)
 #define TRACEDPP(...) LOGDPP(seastar::log_level::trace, __VA_ARGS__)
 #define TRACEDPPI(...) LOGDPPI(seastar::log_level::trace, __VA_ARGS__)
