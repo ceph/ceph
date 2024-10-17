@@ -124,8 +124,27 @@ std::string_view to_string(RGWObjCategory c)
     case RGWObjCategory::Shadow: return "rgw.shadow";
     case RGWObjCategory::MultiMeta: return "rgw.multimeta";
     case RGWObjCategory::CloudTiered: return "rgw.cloudtiered";
+    case RGWObjCategory::Standard: return "rgw.standard";
+    case RGWObjCategory::Glacier: return "rgw.glacier";
     default: return "unknown";
   }
+}
+
+const std::map<std::string, RGWObjCategory> storage_class_map = {
+  {"standard", RGWObjCategory::Standard},
+  {"glacier", RGWObjCategory::Glacier}
+  // Thêm các ánh xạ khác nếu cần
+};
+
+RGWObjCategory get_category_from_storage_class(const std::string& storage_class) {
+  std::string sc_lower = storage_class;
+  std::transform(sc_lower.begin(), sc_lower.end(), sc_lower.begin(), ::tolower);
+
+  auto it = storage_class_map.find(sc_lower);
+  if (it != storage_class_map.end()) {
+    return it->second;
+  }
+  return RGWObjCategory::Main; // Giá trị mặc định nếu không tìm thấy
 }
 
 void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_info*>& o)
