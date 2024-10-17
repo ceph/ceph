@@ -1192,7 +1192,6 @@ int libradosstriper::RadosStriperImpl::aio_write_in_open_object(const std::strin
   // we need 3 references as striper_write_aio_req_complete will release two and
   // striper_write_aio_req_safe will release one
   auto cdata = ceph::make_ref<WriteCompletionData>(this, soid, lockCookie, c);
-  m_ioCtxImpl->get();
   c->io = m_ioCtxImpl;
   // create a completion object for the unlocking of the striped object at the end of the write
   librados::AioCompletion *unlock_completion =
