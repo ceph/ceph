@@ -52,33 +52,6 @@ CommonPGPipeline& InternalClientRequest::client_pp()
 }
 
 InternalClientRequest::interruptible_future<>
-InternalClientRequest::do_process(
-  crimson::osd::ObjectContextRef obc,
-  std::vector<OSDOp> &osd_ops)
-{
-  LOG_PREFIX(InternalClientRequest::do_process);
-  auto params = get_do_osd_ops_params();
-  OpsExecuter ox(
-    pg, obc, op_info, params, params.get_connection(), SnapContext{});
-  co_await pg->run_executer(
-    ox, obc, op_info, osd_ops
-  ).handle_error_interruptible(
-    crimson::ct_error::all_same_way(
-      [this, FNAME](auto e) {
-	ERRORDPPI("{}: got unexpected error {}", *pg, *this, e);
-	ceph_assert(0 == "should not return an error");
-	return interruptor::now();
-      })
-  );
-
-  auto [submitted, completed] = co_await pg->submit_executer(
-    std::move(ox), osd_ops);
-
-  co_await std::move(submitted);
-  co_await std::move(completed);
-}
-
-InternalClientRequest::interruptible_future<>
 InternalClientRequest::with_interruption()
 {
   LOG_PREFIX(InternalClientRequest::with_interruption);
@@ -122,11 +95,28 @@ InternalClientRequest::with_interruption()
 	   *pg, *this, obc_manager.get_obc()->obs);
   co_await enter_stage<interruptor>(client_pp().process);
 
-  DEBUGDPP("{}: in process stage, calling do_process",
-	   *pg, *this);
-  co_await do_process(obc_manager.get_obc(), osd_ops);
+  auto params = get_do_osd_ops_params();
+  OpsExecuter ox(
+    pg, obc_manager.get_obc(), op_info, params, params.get_connection(),
+    SnapContext{});
+  co_await pg->run_executer(
+    ox, obc_manager.get_obc(), op_info, osd_ops
+  ).handle_error_interruptible(
+    crimson::ct_error::all_same_way(
+      [this, FNAME](auto e) {
+	ERRORDPPI("{}: got unexpected error {}", *pg, *this, e);
+	ceph_assert(0 == "should not return an error");
+	return interruptor::now();
+      })
+  );
 
-  logger().debug("{}: complete", *this);
+  auto [submitted, completed] = co_await pg->submit_executer(
+    std::move(ox), osd_ops);
+
+  co_await std::move(submitted);
+  co_await std::move(completed);
+
+  DEBUGDPP("{}: complete", *pg, *this);
   co_await interruptor::make_interruptible(handle.complete());
   co_return;
 }
