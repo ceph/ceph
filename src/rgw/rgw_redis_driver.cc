@@ -162,41 +162,6 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   return 0;
 }
 
-int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
-{
-  std::string entry = partition_info.location + key;
-  response<int> resp;
-
-  try {
-    boost::system::error_code ec;
-    response<
-      ignore_t,
-      ignore_t,
-      ignore_t,
-      response<std::optional<int>, std::optional<int>>
-    > resp;
-    request req;
-    req.push("MULTI");
-    req.push("HSTRLEN", entry, "data");
-    req.push("DEL", entry);
-    req.push("EXEC");
-
-    redis_exec(conn, ec, req, resp, y);
-
-    if (ec) {
-      ldpp_dout(dpp, 0) << "RedisDriver::" << __func__ << "(): ERROR: " << ec.what() << dendl;
-      return -ec.value();
-    }
-
-    this->free_space += std::get<0>(std::get<3>(resp).value()).value().value();
-  } catch (std::exception &e) {
-    ldpp_dout(dpp, 0) << "RedisDriver::" << __func__ << "(): ERROR: " << e.what() << dendl;
-    return -EINVAL;
-  }
-
-  return 0; 
-}
-
 int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, const bufferlist& bl_data, optional_yield y) 
 {
   std::string value = "";
@@ -251,19 +216,20 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
+  response<int> resp;
 
   try {
     boost::system::error_code ec;
-    request req;
     response<
       ignore_t,
       ignore_t,
       ignore_t,
       response<std::optional<int>, std::optional<int>>
     > resp;
+    request req;
     req.push("MULTI");
     req.push("HSTRLEN", entry, "data");
-    req.push("HDEL", entry, "data");
+    req.push("DEL", entry);
     req.push("EXEC");
 
     redis_exec(conn, ec, req, resp, y);
@@ -279,7 +245,7 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
     return -EINVAL;
   }
 
-  return 0;
+  return 0; 
 }
 
 int RedisDriver::rename(const DoutPrefixProvider* dpp, const::std::string& oldKey, const::std::string& newKey, optional_yield y) {
