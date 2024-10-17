@@ -6389,7 +6389,9 @@ int Monitor::handle_auth_request(
       &auth_meta->connection_secret,
       &auth_meta->authorizer_challenge);
     if (isvalid) {
-      ms_handle_fast_authentication(con);
+      if (!ms_handle_fast_authentication(con)) {
+        return -EACCES;
+      }
       return 1;
     }
     if (!more && !was_challenge && auth_meta->authorizer_challenge) {
@@ -6510,7 +6512,9 @@ int Monitor::handle_auth_request(
   }
   if (r > 0 &&
       !s->authenticated) {
-    ms_handle_fast_authentication(con);
+    if (!ms_handle_fast_authentication(con)) {
+      return -EACCES;
+    }
   }
 
   dout(30) << " r " << r << " reply:\n";
@@ -6548,12 +6552,12 @@ void Monitor::ms_handle_accept(Connection *con)
   }
 }
 
-int Monitor::ms_handle_fast_authentication(Connection *con)
+bool Monitor::ms_handle_fast_authentication(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     // mon <-> mon connections need no Session, and setting one up
     // creates an awkward ref cycle between Session and Connection.
-    return 1;
+    return true;
   }
 
   auto priv = con->get_priv();
@@ -6563,7 +6567,7 @@ int Monitor::ms_handle_fast_authentication(Connection *con)
     if (state == STATE_SHUTDOWN) {
       dout(10) << __func__ << " ignoring new con " << con << " (shutdown)" << dendl;
       con->mark_down();
-      return -EACCES;
+      return false;
     }
     s = session_map.new_session(
       entity_name_t(con->get_peer_type(), -1),  // we don't know yet
@@ -6581,11 +6585,10 @@ int Monitor::ms_handle_fast_authentication(Connection *con)
 	   << " " << *s << dendl;
 
   AuthCapsInfo &caps_info = con->get_peer_caps_info();
-  int ret = 0;
   if (caps_info.allow_all) {
     s->caps.set_allow_all();
     s->authenticated = true;
-    ret = 1;
+    return true;
   } else if (caps_info.caps.length()) {
     bufferlist::const_iterator p = caps_info.caps.cbegin();
     string str;
@@ -6594,22 +6597,19 @@ int Monitor::ms_handle_fast_authentication(Connection *con)
     } catch (const ceph::buffer::error &err) {
       derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
 	   << " in auth db" << dendl;
-      str.clear();
-      ret = -EACCES;
+      return false;
     }
-    if (ret >= 0) {
-      if (s->caps.parse(str, NULL)) {
-	s->authenticated = true;
-	ret = 1;
-      } else {
-	derr << __func__ << " unparseable caps '" << str << "' for "
-	     << con->get_peer_entity_name() << dendl;
-	ret = -EACCES;
-      }
+    if (s->caps.parse(str, NULL)) {
+      s->authenticated = true;
+      return true;
+    } else {
+      derr << __func__ << " unparseable caps '" << str << "' for "
+           << con->get_peer_entity_name() << dendl;
+      return false;
     }
+  } else {
+    return false;
   }
-
-  return ret;
 }
 
 void Monitor::set_mon_crush_location(const string& loc)
