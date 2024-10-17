@@ -295,6 +295,15 @@ void RGWUserAdminOpState::set_user_version_tracker(RGWObjVersionTracker& objv_tr
   user->get_version_tracker() = objv_tracker;
 }
 
+void RGWUserAdminOpState::set_attrs(rgw::sal::Attrs& attrs)
+{
+  user->get_attrs() = attrs;
+}
+
+rgw::sal::Attrs RGWUserAdminOpState::get_attrs() {
+  return user->get_attrs();
+}
+
 const rgw_user& RGWUserAdminOpState::get_user_id()
 {
   return user->get_id();
@@ -1386,6 +1395,7 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   
   op_state.set_existing_user(found);
   if (found) {
+    op_state.set_attrs(user->get_attrs());
     op_state.set_user_info(user->get_info());
     op_state.set_populated();
     op_state.objv = user->get_version_tracker();
