@@ -165,6 +165,9 @@ public:
   // replay state
   std::map<inodeno_t, std::set<inodeno_t>> pending_exports;
 
+  // beacon needs me too
+  bool is_trim_slow() const;
+
 protected:
   struct PendingEvent {
     PendingEvent(LogEvent *e, Context* c, bool f=false) : le(e), fin(c), flush(f) {}
@@ -305,6 +308,7 @@ private:
   std::set<LogSegment*> expired_segments;
   std::set<LogSegment*> expiring_segments;
   uint64_t events_since_last_major_segment = 0;
+  double log_warn_factor;
 
   // log trimming decay counter
   DecayCounter log_trim_counter;

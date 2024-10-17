@@ -58,6 +58,7 @@ MDLog::MDLog(MDSRank* m)
   max_events = g_conf().get_val<int64_t>("mds_log_max_events");
   skip_corrupt_events = g_conf().get_val<bool>("mds_log_skip_corrupt_events");
   skip_unbounded_events = g_conf().get_val<bool>("mds_log_skip_unbounded_events");
+  log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
   upkeep_thread = std::thread(&MDLog::log_trim_upkeep, this);
 }
 
@@ -612,6 +613,10 @@ void MDLog::try_to_commit_open_file_table(uint64_t last_seq)
                                          last_seq, CEPH_MSG_PRIO_HIGH);
     submit_mutex.lock();
   }
+}
+
+bool MDLog::is_trim_slow() const {
+  return (segments.size() > (size_t)(max_segments * log_warn_factor));
 }
 
 void MDLog::log_trim_upkeep(void) {
@@ -1613,5 +1618,8 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   }
   if (changed.count("mds_log_trim_decay_rate")){
     log_trim_counter = DecayCounter(g_conf().get_val<double>("mds_log_trim_decay_rate"));
+  }
+  if (changed.count("mds_log_warn_factor")) {
+    log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
   }
 }
