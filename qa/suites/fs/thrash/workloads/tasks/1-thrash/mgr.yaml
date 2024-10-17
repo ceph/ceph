@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MGR_DOWN\)
+      - cluster \[WRN\] evicting unresponsive client
+tasks:
+  - mgr_thrash:
+      revive_delay: 20
+      thrash_delay: 10
