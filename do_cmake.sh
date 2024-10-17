@@ -41,9 +41,11 @@ if [ -r /etc/os-release ]; then
           ;;
       ubuntu)
           MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
-          if [ "$MAJOR_VER" -ge "22" ] ; then
-              PYBUILD="3.10"
-          fi
+          case $MAJOR_VER in
+            24) PYBUILD="3.12";;
+            22) PYBUILD="3.10";;
+            *);;
+          esac
           ;;
 
   esac
