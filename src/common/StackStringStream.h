@@ -77,6 +77,8 @@ protected:
     if (traits_type::not_eof(c)) {
       char str = traits_type::to_char_type(c);
       vec.push_back(str);
+      setp(vec.data(), vec.data() + vec.size());
+      pbump(vec.size());
       return c;
     } else {
       return traits_type::eof();
