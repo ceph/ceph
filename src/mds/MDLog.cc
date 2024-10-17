@@ -60,6 +60,8 @@ MDLog::MDLog(MDSRank* m)
   skip_unbounded_events = g_conf().get_val<bool>("mds_log_skip_unbounded_events");
   log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
   upkeep_thread = std::thread(&MDLog::log_trim_upkeep, this);
+  last_trim = ceph::coarse_mono_clock::zero();
+  oversegmented_idle_interval = g_conf().get_val<std::chrono::seconds>("mds_log_oversegmented_trim_idle_interval").count();
 }
 
 MDLog::~MDLog()
@@ -736,12 +738,14 @@ void MDLog::trim()
       break;
     }
 
+    auto interval = std::chrono::duration<double>(last_trim - trim_start);
+    auto should_trim = is_oversegmented() && (interval.count() >= oversegmented_idle_interval);
     unsigned num_remaining_segments = (segments.size() - expired_segments.size() - expiring_segments.size());
     dout(10) << __func__ << ": new_expiring_segments=" << new_expiring_segments
 	     << ", num_remaining_segments=" << num_remaining_segments
 	     << ", max_segments=" << max_segments << dendl;
 
-    if ((num_remaining_segments <= max_segments) &&
+    if (!should_trim && (num_remaining_segments <= max_segments) &&
 	(max_ev < 0 || (num_events - expiring_events - expired_events) <= (uint64_t)max_ev)) {
       dout(10) << __func__ << ": breaking out of trim loop - segments/events fell below ceiling"
 	       << " max_segments/max_ev" << dendl;
@@ -774,7 +778,7 @@ void MDLog::trim()
       uint64_t last_seq = ls->seq;
       try_expire(ls, op_prio);
       log_trim_counter.hit();
-      trim_end = ceph::coarse_mono_clock::now();
+      trim_end = last_trim = ceph::coarse_mono_clock::now();
 
       locker.lock();
       p = segments.lower_bound(last_seq + 1);
@@ -1649,5 +1653,9 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   }
   if (changed.count("mds_log_warn_factor")) {
     log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
+  }
+  if (changed.count("mds_log_oversegmented_trim_idle_interval")) {
+    oversegmented_idle_interval =
+      g_conf().get_val<std::chrono::seconds>("mds_log_oversegmented_trim_idle_interval").count();
   }
 }

@@ -327,6 +327,9 @@ private:
   std::condition_variable_any cond;
   std::atomic<bool> upkeep_log_trim_shutdown{false};
 
+  ceph::coarse_mono_time last_trim;
+  double oversegmented_idle_interval;
+
   std::map<uint64_t, std::vector<Context*>> waiting_for_expire; // protected by mds_lock
 };
 #endif
