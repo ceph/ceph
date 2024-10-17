@@ -1,6 +1,8 @@
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "common/config_proxy.h"
+#include "common/admin_socket.h"
+#include "common/admin_socket_client.h"
 #include <gmock/gmock.h>
 #include "gtest/gtest.h"
 #include "common/ceph_context.h"
@@ -8,6 +10,7 @@
 #include "global/global_init.h"
 #include "exporter/util.h"
 #include "exporter/DaemonMetricCollector.h"
+#include <filesystem>
 
 #include <regex>
 #include <string>
@@ -674,6 +677,27 @@ static std::vector<std::pair<std::string, std::string>> promethize_data = {
   {"rocksdb.submit_sync_latency_sum", "ceph_rocksdb_submit_sync_latency_sum"}
 };
 
+
+class AdminSocketTest
+{
+public:
+  explicit AdminSocketTest(AdminSocket *asokc)
+    : m_asokc(asokc)
+  {
+  }
+  bool init(const std::string &uri) {
+    return m_asokc->init(uri);
+  }
+  std::string bind_and_listen(const std::string &sock_path, int *fd) {
+    return m_asokc->bind_and_listen(sock_path, fd);
+  }
+  bool shutdown() {
+    m_asokc->shutdown();
+    return true;
+  }
+  AdminSocket *m_asokc;
+};
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
@@ -1289,8 +1313,11 @@ ceph_mon_session_rm{ceph_daemon="mon.a"} 577
 # TYPE ceph_mon_session_trim counter
 ceph_mon_session_trim{ceph_daemon="mon.a"} 9
 )";
-  
-  ASSERT_TRUE(collector.metrics.find(expectedMetrics) != std::string::npos);
+
+  std::string actualMetrics = collector.metrics;
+  std::cout << "Actual MON Metrics: " << actualMetrics << std::endl;
+  ASSERT_TRUE(actualMetrics.find(expectedMetrics) != std::string::npos);
+  //ASSERT_TRUE(collector.metrics.find(expectedMetrics) != std::string::npos);
 
   // Test for labeled metrics - RGW
   daemon = "ceph-client.rgw.foo.ceph-node-00.aayrrj.2.93993527376064";
@@ -1451,4 +1478,83 @@ TEST(Exporter, add_fixed_name_metrics) {
     expected_metric_name = "ceph_data_sync_from_zone_fetch_bytes_count";
     EXPECT_EQ(new_metric.first, expected_labels);
     ASSERT_TRUE(new_metric.second == expected_metric_name);
+}
+
+TEST(Exporter, UpdateSockets) {
+    const std::string mock_dir = "/tmp/fake_sock_dir";
+
+    // Create the mock directory
+    std::filesystem::create_directories(mock_dir);
+
+    // Create a mix of vstart and real cluster mock .asok files
+    std::ofstream(mock_dir + "/ceph-osd.0.asok").close();
+    std::ofstream(mock_dir + "/ceph-mds.a.asok").close();
+    std::ofstream(mock_dir + "/ceph-mgr.chatest-node-00.ijzynn.asok").close();
+    std::ofstream(mock_dir + "/ceph-client.rgw.rgwfoo.chatest-node-00.yqaoen.2.94354846193952.asok").close();
+    std::ofstream(mock_dir + "/ceph-client.ceph-exporter.chatest-node-00.asok").close();
+    std::ofstream(mock_dir + "/ceph-mon.chatest-node-00.asok").close();
+
+    g_conf().set_val("exporter_sock_dir", mock_dir);
+
+    DaemonMetricCollector collector;
+
+    // Run the function that interacts with the mock directory
+    collector.update_sockets();
+
+    // Verify the expected results
+    ASSERT_EQ(collector.clients.size(), 4);
+    ASSERT_TRUE(collector.clients.find("ceph-osd.0") != collector.clients.end());
+    ASSERT_TRUE(collector.clients.find("ceph-mds.a") != collector.clients.end());
+    ASSERT_TRUE(collector.clients.find("ceph-mon.chatest-node-00") != collector.clients.end());
+    ASSERT_TRUE(collector.clients.find("ceph-client.rgw.rgwfoo.chatest-node-00.yqaoen.2.94354846193952") != collector.clients.end());
+
+
+    // Remove the mock directory and files
+    std::filesystem::remove_all(mock_dir);
+}
+
+
+TEST(Exporter, HealthMetrics) {
+    std::map<std::string, AdminSocketClient> clients;
+    DaemonMetricCollector &collector = collector_instance();
+    std::string daemon = "test_daemon";
+    std::string expectedCounterDump = "";
+    std::string expectedCounterSchema = "";
+    std::string metricName = "ceph_daemon_socket_up";
+
+    // Fake admin socket
+    std::string asok_path = "/tmp/" + daemon + ".asok";
+    std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
+    AdminSocketClient client(asok_path);
+
+    // Add the daemon clients to the collector
+    clients.insert({daemon, std::move(client)});
+    collector.clients = clients;
+
+    auto verifyMetricValue = [&](const std::string &metricValue, bool shouldInitializeSocket) {
+        collector.metrics = "";
+
+        if (shouldInitializeSocket) {
+            AdminSocketTest asoct(asokc.get());
+            ASSERT_TRUE(asoct.init(asok_path));
+        }
+
+        collector.dump_asok_metrics(true, 5, true, expectedCounterDump, expectedCounterSchema, false);
+
+        if (shouldInitializeSocket) {
+            AdminSocketTest asoct(asokc.get());
+            ASSERT_TRUE(asoct.shutdown());
+        }
+
+        std::string retrievedMetrics = collector.metrics;
+        std::string pattern = metricName + R"(\{[^}]*ceph_daemon=\")" + daemon + R"(\"[^}]*\}\s+)" + metricValue + R"(\b)";
+        std::regex regexPattern(pattern);
+        ASSERT_TRUE(std::regex_search(retrievedMetrics, regexPattern));
+    };
+
+    // Test an admin socket not answering: metric value should be "0"
+    verifyMetricValue("0", false);
+
+    // Test an admin socket answering: metric value should be "1"
+    verifyMetricValue("1", true);
 }
