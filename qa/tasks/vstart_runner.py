@@ -250,7 +250,10 @@ class LocalRemoteProcess(object):
                 return
 
         out, err = self.subproc.communicate(timeout=timeout)
-        out, err = rm_nonascii_chars(out), rm_nonascii_chars(err)
+        stdout_is_string_io = isinstance(self.stdout, StringIO)
+        stderr_is_string_io = isinstance(self.stderr, StringIO)
+        out = rm_nonascii_chars(out) if stdout_is_string_io else out
+        err = rm_nonascii_chars(err) if stderr_is_string_io else err
         self._write_stdout(out)
         self._write_stderr(err)
 
