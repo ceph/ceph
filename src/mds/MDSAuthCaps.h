@@ -101,30 +101,17 @@ private:
 struct MDSCapMatch {
   static const int64_t MDS_AUTH_UID_ANY = -1;
 
-  MDSCapMatch() : uid(MDS_AUTH_UID_ANY), fs_name(std::string()) {}
+  MDSCapMatch() {}
 
-  MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_) :
-    uid(uid_), gids(gids_), fs_name(std::string()) {}
+  MDSCapMatch(const std::string& fsname_, const std::string& path_,
+	      bool root_squash_, int64_t uid_=MDS_AUTH_UID_ANY,
+	      const std::vector<gid_t>& gids_={}) {
+    fs_name = std::move(fsname_);
+    path = std::move(path_);
+    root_squash = root_squash_;
+    uid = (uid_ == 0) ? -1 : uid_;
+    gids = gids_;
 
-  explicit MDSCapMatch(const std::string &path_)
-    : uid(MDS_AUTH_UID_ANY), path(path_), fs_name(std::string()) {
-    normalize_path();
-  }
-
-  explicit MDSCapMatch(std::string path, std::string fs_name) :
-    uid(MDS_AUTH_UID_ANY), path(std::move(path)), fs_name(std::move(fs_name))
-  {
-    normalize_path();
-  }
-
-  explicit MDSCapMatch(std::string path, std::string fs_name, bool root_squash_) :
-    uid(MDS_AUTH_UID_ANY), path(std::move(path)), fs_name(std::move(fs_name)), root_squash(root_squash_)
-  {
-    normalize_path();
-  }
-
-  MDSCapMatch(const std::string& path_, int64_t uid_, std::vector<gid_t>& gids_)
-    : uid(uid_), gids(gids_), path(path_), fs_name(std::string()) {
     normalize_path();
   }
 
@@ -149,7 +136,8 @@ struct MDSCapMatch {
    */
   bool match_path(std::string_view target_path) const;
 
-  int64_t uid;       // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
+  // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
+  int64_t uid = MDS_AUTH_UID_ANY;
   std::vector<gid_t> gids;  // Use these GIDs
   std::string path;  // Require path to be child of this (may be "" or "/" for any)
   std::string fs_name;
