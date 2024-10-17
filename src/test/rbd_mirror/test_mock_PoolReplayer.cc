@@ -363,6 +363,14 @@ public:
           Return(0)));
   }
 
+  void expect_clone(librados::MockTestMemIoCtxImpl* mock_io_ctx) {
+    EXPECT_CALL(*mock_io_ctx, clone())
+      .WillRepeatedly(Invoke([mock_io_ctx]() {
+          mock_io_ctx->get();
+          return mock_io_ctx;
+        }));
+  }
+
   void expect_leader_watcher_init(MockLeaderWatcher& mock_leader_watcher,
                                   int r) {
     EXPECT_CALL(mock_leader_watcher, init())
@@ -727,6 +735,7 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   auto mock_remote_rados_client = mock_cluster.do_create_rados_client(
       g_ceph_context);
 
+  expect_clone(mock_local_io_ctx);
   expect_mirror_mode_get(mock_local_io_ctx);
 
   InSequence seq;
@@ -845,6 +854,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
   auto mock_remote_rados_client = mock_cluster.do_create_rados_client(
       g_ceph_context);
 
+  expect_clone(mock_local_io_ctx);
   expect_mirror_mode_get(mock_local_io_ctx);
 
   InSequence seq;
