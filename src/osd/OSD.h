@@ -480,6 +480,15 @@ public:
   void clear_sent_ready_to_merge();
   void prune_sent_ready_to_merge(const OSDMapRef& osdmap);
 
+  // -- pg deleting --
+  ceph::mutex pg_delete = ceph::make_mutex("OSDService::pg_delete");
+  std::map<pg_t, pg_stat_t> osd_deleting_pgs;
+  std::map<pg_t, pg_stat_t> osd_deleted_pgs;
+  std::map<pg_t, pg_stat_t>& get_osd_deleting_pgs() { return osd_deleting_pgs; }
+  std::map<pg_t, pg_stat_t>& get_osd_deleted_pgs() { return osd_deleted_pgs; }
+  void update_deleting_pgs(const pg_t pgid);
+  void update_deleted_pgs(const pg_t pgid);
+
   // -- pg_temp --
 private:
   ceph::mutex pg_temp_lock = ceph::make_mutex("OSDService::pg_temp_lock");
