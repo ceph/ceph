@@ -15,6 +15,7 @@
  */
 
 #include "include/compat.h"
+#include "include/intarith.h" // for div_round_up()
 #include "common/errno.h"
 #include <cerrno>
 #include "Event.h"
@@ -414,7 +415,7 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
   bool blocking = pollers.empty() && !external_num_events.load();
   if (!blocking)
     timeout_microseconds = 0;
-  tv.tv_sec = timeout_microseconds / 1000000;
+  tv.tv_sec = div_round_up(timeout_microseconds, 1000000);
   tv.tv_usec = timeout_microseconds % 1000000;
 
   ldout(cct, 30) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
