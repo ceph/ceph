@@ -913,6 +913,7 @@ class LocalCephCluster(tasks.cephfs.filesystem.CephClusterBase):
         self._write_conf()
 
 tasks.cephfs.filesystem.CephCluster = LocalCephCluster
+gen_fsname = tasks.cephfs.filesystem.gen_fsname
 
 class LocalMDSCluster(LocalCephCluster, tasks.cephfs.filesystem.MDSClusterBase):
     def __init__(self, ctx, cluster_name='ceph'):
@@ -934,7 +935,8 @@ class LocalMDSCluster(LocalCephCluster, tasks.cephfs.filesystem.MDSClusterBase):
         # FIXME: unimplemented
         pass
 
-    def newfs(self, name='cephfs', create=True, **kwargs):
+    def newfs(self, name=None, create=True, **kwargs):
+        name = gen_fsname() if name is None else name
         return LocalFilesystem(self._ctx, name=name, create=create, **kwargs)
 
     def delete_all_filesystems(self):
