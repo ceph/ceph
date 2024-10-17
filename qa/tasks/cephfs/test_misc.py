@@ -590,7 +590,7 @@ class TestSkipReplayInoTable(CephFSTestCase):
         status = self.fs.status()
         rank0 = self.fs.get_rank(rank=0, status=status)
 
-        self.fs.mds_asok(['config', 'set', 'mds_kill_skip_replaying_inotable', "true"])
+        self.fs.mds_asok(['config', 'set', 'mds_kill_after_journal_logs_flushed', "true"])
         # This will make the MDS crash, since we only have one MDS in the
         # cluster and without the "wait=False" it will stuck here forever.
         self.mount_a.run_shell(["mkdir", "test_alloc_ino/dir1"], wait=False)
