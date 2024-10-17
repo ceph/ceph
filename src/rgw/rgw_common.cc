@@ -3203,4 +3203,3 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
   write_version.tag.clear();
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
 }
-
