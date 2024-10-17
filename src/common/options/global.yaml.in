@@ -3148,7 +3148,7 @@ options:
     OSD refuses to create new PGs. An OSD stops creating new PGs if the number
     of PGs it serves exceeds
     ``osd_max_pg_per_osd_hard_ratio`` \* ``mon_max_pg_per_osd``.
-  default: 3
+  default: 10
   see_also:
   - mon_max_pg_per_osd
   min: 1
