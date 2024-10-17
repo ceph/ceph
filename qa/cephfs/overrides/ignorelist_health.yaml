@@ -24,3 +24,4 @@ overrides:
       - BLUESTORE_SLOW_OP_ALERT
       - slow operation indications in BlueStore
       - experiencing slow operations in BlueStore
+      - MGR_MODULE_ERROR
