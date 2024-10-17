@@ -44,6 +44,8 @@ private:
   // Optional, URI exposed by plugins that implement serve()
   std::string uri;
 
+  std::atomic_uint mod_finisher_cnt{0};
+
   std::string m_command_perms;
   const MgrSession* m_session = nullptr;
   std::string fin_thread_name;
@@ -105,6 +107,18 @@ public:
   std::string get_fin_thread_name() const
   {
     return fin_thread_name;
+  }
+
+  void inc_mod_finisher_cnt() {
+    ++mod_finisher_cnt;
+  }
+
+  void dec_mod_finisher_cnt() {
+    --mod_finisher_cnt;
+  }
+
+  auto get_mod_finisher_cnt() {
+    return mod_finisher_cnt.load();
   }
 
   bool is_authorized(const std::map<std::string, std::string>& arguments) const;

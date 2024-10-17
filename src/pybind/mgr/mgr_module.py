@@ -919,6 +919,8 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
             Option(name='log_to_file', type='bool', default=False, runtime=True))
         cls.MODULE_OPTIONS.append(
             Option(name='sqlite3_killpoint', level=OptionLevel.DEV, type='int', default=0, runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='max_command_queue_length', type='int', default=0, runtime=True))
         if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
             cls.MODULE_OPTIONS.append(
                 Option(name='log_to_cluster', type='bool', default=False,
@@ -1123,6 +1125,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             Option(name='log_to_file', type='bool', default=False, runtime=True))
         cls.MODULE_OPTIONS.append(
             Option(name='sqlite3_killpoint', level=OptionLevel.DEV, type='int', default=0, runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='max_command_queue_length', type='int', default=0, runtime=True))
         if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
             cls.MODULE_OPTIONS.append(
                 Option(name='log_to_cluster', type='bool', default=False,
