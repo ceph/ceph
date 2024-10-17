@@ -5,6 +5,6 @@ jobs:
     runs-on: ubuntu-latest
     name: Check PR Dependencies
     steps:
-    - uses: gregsdennis/dependencies-action@f98d55eee1f66e7aaea4a60e71892736ae2548c7
+    - uses: gregsdennis/dependencies-action@ae6e0529ef70f1366a21972f40b1ad0e1b5e3218
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
