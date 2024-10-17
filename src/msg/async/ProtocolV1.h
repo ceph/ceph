@@ -230,6 +230,8 @@ public:
   virtual void write_event() override;
   virtual bool is_queued() override;
 
+  virtual void dump(Formatter *f) override;
+
   // Client Protocol
 private:
   int global_seq;

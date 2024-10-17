@@ -36,6 +36,7 @@
 #include "Event.h"
 
 #include "include/ceph_assert.h"
+#include "common/admin_socket.h"
 
 class AsyncMessenger;
 
@@ -62,6 +63,23 @@ class Processor {
 	   entity_addrvec_t* bound_addrs);
   void start();
   void accept();
+  friend class AsyncMessenger;
+};
+
+class AsyncMessengerSocketHook : public AdminSocketHook {
+  AdminSocket& m_asok;
+  AsyncMessenger& m_msgr;
+  const std::string m_name;
+  const std::string m_command;
+
+ public:
+  AsyncMessengerSocketHook(
+      AdminSocket&, AsyncMessenger& m, const std::string& name);
+  ~AsyncMessengerSocketHook();
+  int call(
+      std::string_view command, const cmdmap_t& cmdmap, const bufferlist&,
+      Formatter* f, std::ostream& errss, ceph::buffer::list& out) override;
+  const std::string_view command() const { return m_command; };
 };
 
 /*
@@ -135,6 +153,8 @@ public:
   int start() override;
   void wait() override;
   int shutdown() override;
+
+  void dump(Formatter* f) override;
 
   /** @} // Startup/Shutdown */
 
@@ -215,6 +235,7 @@ private:
   std::vector<Processor*> processors;
   friend class Processor;
   DispatchQueue dispatch_queue;
+  std::unique_ptr<AsyncMessengerSocketHook> asok_hook;
 
   // the worker run messenger's cron jobs
   Worker *local_worker;
