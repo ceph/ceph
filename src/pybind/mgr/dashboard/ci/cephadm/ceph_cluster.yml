@@ -1,5 +1,5 @@
 parameters:
- nodes: 4
+ nodes: 1
  node_ip_offset: 100
  pool: ceph-dashboard
  network: ceph-dashboard
@@ -8,7 +8,7 @@ parameters:
  prefix: ceph
  numcpus: 1
  memory: 2048
- image: fedora36
+ image: fedora40
  notify: false
  admin_password: password
  disks:
@@ -36,7 +36,18 @@ parameters:
  files:
   - bootstrap-cluster.sh
  cmds:
+ # updating the dnf.conf to make the dnf faster
+ - echo -e "[main]\nfastestmirror=true\nmax_parallel_downloads=10\nmetadata_expire=1h\nclean_requirements_on_remove=true\nassumeyes=true\ngpgcheck=1\nkeepcache=0\nplugins=1\ninstallonly_limit=3" | sudo tee /etc/dnf/dnf.conf
  - dnf -y install python3 chrony lvm2 podman
+ # setting up an insecure podman registry and then loading the ceph image to all hosts
+ {% if quick_install is defined %}
+ - echo -e "[registries.insecure]\nregistries = ['localhost:5000']" | sudo tee /etc/containers/registries.conf
+ - podman run -d -p 5000:5000 --name my-registry registry:2
+ - podman load -i /root/ceph_image.tar
+ - podman tag quay.ceph.io/ceph-ci/ceph:main localhost:5000/ceph
+ - podman push localhost:5000/ceph
+ - rm -f /root/ceph_image.tar
+ {% endif %}
  - sed -i "s/SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config
  - setenforce 0
  {% if number == 0 %}
