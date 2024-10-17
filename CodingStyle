@@ -108,6 +108,12 @@ by section.
    portability since `#pragma once` is widely supported and is known
    to work on GCC and Clang.
 
+* Header Files -> Forward declarations:
+
+    Forward declarations of structs, unions, classes and enums can be
+    used to reduce header dependencies.  This speeds up compile times
+    because the compiler has to process less code.
+
 
 The following guidelines have not been followed in the legacy code,
 but are worth mentioning and should be followed strictly for new code:
