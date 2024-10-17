@@ -2,6 +2,7 @@ overrides:
   ceph:
     conf:
       mgr:
+        client mount timeout: 30
         debug client: 20
         debug mgr: 20
         debug ms: 1
