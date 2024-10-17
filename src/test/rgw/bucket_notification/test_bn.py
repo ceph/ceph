@@ -735,18 +735,44 @@ def test_ps_s3_notification_configuration_admin_on_master():
                  'arn:aws:sns:' + zonegroup + '::' + topic_name + '_1')
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name+'_1',
+    topic_conf_list = [
+                    {
+                        'Id': notification_name+'_1',
                         'TopicArn': topic_arn,
-                        'Events': ['s3:ObjectCreated:*']
-                        },
-                       {'Id': notification_name+'_2',
+                        'Events': ['s3:ObjectCreated:*'],
+                        'Filter': {
+                            'Key': {
+                                'FilterRules': [
+                                    {'Name': 'prefix', 'Value': 'test'},
+                                    {'Name': 'suffix', 'Value': 'txt'}
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        'Id': notification_name+'_2',
                         'TopicArn': topic_arn,
-                        'Events': ['s3:ObjectRemoved:*']
-                        },
-                       {'Id': notification_name+'_3',
+                        'Events': ['s3:ObjectRemoved:*'],
+                        'Filter': {
+                            'Metadata': {
+                                'FilterRules': [
+                                    {'Name': 'x-amz-meta-foo', 'Value': 'bar'},
+                                    {'Name': 'x-amz-meta-hello', 'Value': 'world'}]
+                            },
+                        }
+                    },
+                    {
+                        'Id': notification_name+'_3',
                         'TopicArn': topic_arn,
-                        'Events': []
-                        }]
+                        'Events': [],
+                        'Filter': {
+                            'Tags': {
+                                'FilterRules': [
+                                    {'Name': 'tag1', 'Value': 'value1'},
+                                    {'Name': 'tag2', 'Value': 'value2'}]
+                            }
+                        }
+                    }]
     s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
