@@ -25,6 +25,18 @@
    - osd_op_num_shards_hdd = 1 (was 5)
    - osd_op_num_threads_per_shard_hdd = 5 (was 1)
   For more details see https://tracker.ceph.com/issues/66289.
+* RGW: deleted buckets are automatically cleaned up as part of trimming process.
+* RGW: deleted buckets are automatically cleaned up as part of trimming process,
+  i.e deleted buckets don't leave behind their bucket instance metadata and
+  index objects anymore.
+  DeleteBucket will start returning 409 BucketNotEmpty errors until empty
+  on all zones when sync policy is enabled. it is possible that there may still
+  be some deleted buckets that have objects in them discovered by the trim
+  process. such buckets get appended to an omap list called `deleted_buckets`.
+  a new command `radosgw-admin bucket list-deleted` lists such buckets. the admin is
+  expected to inspect each zone and take action by either moving/deleting those
+  objects from those buckets and then run `radosgw-admin bucket rm` with parameters
+  `--bucket-id` and `--remove-deleted` to remove the bucket entry from the omap list.
 
 >=19.0.0
 
