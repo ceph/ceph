@@ -9,7 +9,8 @@ import re
 import string
 import time
 from collections import namedtuple
-from typing import List
+from functools import wraps
+from typing import List, Optional, Tuple, Type, Union
 
 import requests
 from tasks.mgr.mgr_test_case import MgrTestCase
@@ -343,16 +344,16 @@ class DashboardTestCase(MgrTestCase):
 
     @classmethod
     def _view_cache_get(cls, url, retries=5):
-        retry = True
-        while retry and retries > 0:
-            retry = False
+        _retry = True
+        while _retry and retries > 0:
+            _retry = False
             res = cls._get(url, version=DEFAULT_API_VERSION)
             if isinstance(res, dict):
                 res = [res]
             for view in res:
                 assert 'value' in view
                 if not view['value']:
-                    retry = True
+                    _retry = True
             retries -= 1
         if retries == 0:
             raise Exception("{} view cache exceeded number of retries={}"
@@ -722,3 +723,25 @@ def _validate_json(val, schema, path=[]):
         return _validate_json(val, JLeaf(schema), path)
 
     assert False, str(path)
+
+
+def retry(
+        on_exception: Union[Type[Exception], Tuple[Type[Exception], ...]],
+        tries=3,
+        delay=0,
+        logger: Optional[logging.Logger] = None,
+):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for i in range(tries):
+                try:
+                    return func(*args, **kwargs)
+                except on_exception as e:
+                    err = e
+                    if logger:
+                        logger.warn(f"Retried #{i+1}/{tries}: '{func.__name__}' raised '{e}'")
+                    time.sleep(delay)
+            raise err
+        return wrapper
+    return decorator
