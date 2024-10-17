@@ -3174,12 +3174,49 @@ will start to track new ops received afterwards.";
     // the superblock's oldest_map. The superblock won't
     // be updated. Only the stored stale (no longer referenced)
     // osdmaps are removed.
-    int ret = trim_stale_maps();
+    ret = trim_stale_maps();
     if (ret < 0) {
      ss << " Error trimming stale osdmaps: " << cpp_strerror(ret);
      goto out;
     }
     dout(20) << fmt::format("Trimmed {} osdmaps", ret) << dendl;
+    bool force_unsafe_trim = false;
+    cmd_getval(cmdmap, "force_unsafe_trim", force_unsafe_trim);
+    if (force_unsafe_trim) {
+      std::string map_epoch_str;
+      if (!cmd_getval(cmdmap, "map_epoch", map_epoch_str)) {
+	ss << "no osdmap epoch specified";
+	ret = -EINVAL;
+	goto out;
+      }
+      epoch_t map_epoch;
+      try {
+	map_epoch = std::stoul(map_epoch_str);
+      } catch (std::invalid_argument const& ex) {
+	ss << "invalid map epoch: " << ex.what();
+	ret = -EINVAL;
+	goto out;
+      } catch (std::out_of_range const& ex) {
+	ss << "map epoch out of range: " << ex.what();
+	ret = -ERANGE;
+	goto out;
+      }
+      if (map_epoch > min_last_epoch_clean.load()) {
+	ss << "map epoch " << map_epoch
+	   << " larger than min_last_epoch_clean "
+	   << min_last_epoch_clean;
+	ret = -EINVAL;
+	goto out;
+      }
+      dout(20) << fmt::format("force unsafe trim to {}", map_epoch) << dendl;
+      while (map_epoch > superblock.get_oldest_map()) {
+	lock_guard l(osd_lock); // release osd_lock after each trim,
+				// so that other threads may proceed
+	if (!trim_maps(map_epoch)) {
+	  goto out;
+	}
+      }
+    }
   }
 
   else if (prefix == "cache drop") {
@@ -4407,10 +4444,15 @@ void OSD::final_init()
     "reset pg recovery statistics");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "trim stale osdmaps",
+    "trim stale osdmaps " \
+    "name=map_epoch,type=CephString,req=false " \
+    "name=force_unsafe_trim,type=CephBool,req=false",
     asok_hook,
     "cleanup any existing osdmap from the store "
-    "in the range of 0 up to the superblock's oldest_map.");
+    "in the range of 0 up to the superblock's oldest_map. "
+    "--force-unsafe-trim force trim osdmaps ealier than the specified epoch, "
+    "this is dangerous, make sure that all pools for which the OSD stores "
+    "data are clean");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
     "cache drop",
@@ -7783,7 +7825,7 @@ MPGStats* OSD::collect_pg_stats()
     }
     pg->with_pg_stats(now_is, [&](const pg_stat_t& s, epoch_t lec) {
 	m->pg_stat[pg->pg_id.pgid] = s;
-	min_last_epoch_clean = std::min(min_last_epoch_clean, lec);
+	min_last_epoch_clean = std::min(min_last_epoch_clean.load(), lec);
 	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
       });
   }
@@ -7961,13 +8003,13 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
-void OSD::trim_maps(epoch_t oldest)
+bool OSD::trim_maps(epoch_t oldest)
 {
   epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
   dout(20) <<  __func__ << ": min=" << min << " oldest_map="
            << superblock.get_oldest_map() << dendl;
   if (min <= superblock.get_oldest_map())
-    return;
+    return false;
 
   // Trim from the superblock's oldest_map up to `min`.
   // Break if we have exceeded the txn target size.
@@ -7988,6 +8030,7 @@ void OSD::trim_maps(epoch_t oldest)
   // we should not trim past service.map_cache.cached_key_lower_bound() 
   // as there may still be PGs with those map epochs recorded.
   ceph_assert(min <= service.map_cache.cached_key_lower_bound());
+  return true;
 }
 
 std::optional<epoch_t> OSD::get_epoch_from_osdmap_object(const ghobject_t& osdmap) {

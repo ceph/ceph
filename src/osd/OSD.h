@@ -1701,7 +1701,8 @@ protected:
                                        const OSDMapRef& current_added_map,
                                        epoch_t current_added_map_epoch);
   void _committed_osd_maps(epoch_t first, epoch_t last, class MOSDMap *m);
-  void trim_maps(epoch_t oldest);
+  // return true if trimming actually happend, false otherwise
+  bool trim_maps(epoch_t oldest);
   void note_down_osd(int osd);
   void note_up_osd(int osd);
   friend struct C_OnMapCommit;
@@ -1853,7 +1854,7 @@ protected:
 
   ceph::coarse_mono_clock::time_point last_sent_beacon;
   ceph::mutex min_last_epoch_clean_lock = ceph::make_mutex("OSD::min_last_epoch_clean_lock");
-  epoch_t min_last_epoch_clean = 0;
+  std::atomic<epoch_t> min_last_epoch_clean = 0;
   // which pgs were scanned for min_lec
   std::vector<pg_t> min_last_epoch_clean_pgs;
   void send_beacon(const ceph::coarse_mono_clock::time_point& now);
