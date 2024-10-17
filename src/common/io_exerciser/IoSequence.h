@@ -42,6 +42,16 @@ namespace ceph {
       SEQUENCE_SEQ7,
       SEQUENCE_SEQ8,
       SEQUENCE_SEQ9,
+      SEQUENCE_SEQ10,
+      SEQUENCE_SEQ11,
+      SEQUENCE_SEQ12,
+      SEQUENCE_SEQ13,
+      SEQUENCE_SEQ14,
+      SEQUENCE_SEQ15,
+      SEQUENCE_SEQ16,
+      SEQUENCE_SEQ17,
+      SEQUENCE_SEQ18,
+      SEQUENCE_SEQ19,
       //
       SEQUENCE_END,
       SEQUENCE_BEGIN = SEQUENCE_SEQ0
@@ -64,10 +74,14 @@ namespace ceph {
       int get_step() const;
       int get_seed() const;
 
-      std::unique_ptr<IoOp> next();
+      virtual std::unique_ptr<IoOp> next();
 
       static std::unique_ptr<IoSequence>
-        generate_sequence(Sequence s, std::pair<int,int> obj_size_range, int seed );
+        generate_sequence(Sequence s,
+                          std::pair<int,int> obj_size_range,
+                          int k,
+                          int m,
+                          int seed );
 
     protected:
       uint64_t min_obj_size;
@@ -76,7 +90,11 @@ namespace ceph {
       bool barrier;
       bool done;
       bool remove;
+      bool setup_inject;
+      bool clear_inject;
       uint64_t obj_size;
+      std::optional<uint64_t> shard_to_inject;
+      InjectOpType inject_op_type;
       int step;
       int seed;
       ceph::util::random_number_generator<int> rng =
@@ -91,6 +109,13 @@ namespace ceph {
       void select_random_object_size();
       std::unique_ptr<IoOp> increment_object_size();
 
+      // Writes cannot be sent to injected on shard zero, so selections seperated out
+      void select_random_data_shard_to_inject_read_error(int k, int m);
+      void select_random_data_shard_to_inject_write_error(int k, int m);
+      void select_random_shard_to_inject_read_error(int k, int m);
+      void select_random_shard_to_inject_write_error(int k, int m);
+      void generate_random_read_inject_type();
+      void generate_random_write_inject_type();
     };
 
     class Seq0: public IoSequence {
@@ -105,7 +130,7 @@ namespace ceph {
       uint64_t length;
     };
 
-    class Seq1: public IoSequence {  
+    class Seq1: public IoSequence {
     public:
       Seq1(std::pair<int,int> obj_size_range, int seed);
 
@@ -217,6 +242,86 @@ namespace ceph {
 
       std::string get_name() const override;
 
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+    class Seq10: public Seq0 {
+    public:
+      Seq10(std::pair<int,int> obj_size_range, int seed, int k, int m);
+
+      std::string get_name() const override;
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+    class Seq11: public Seq1 {
+    public:
+      Seq11(std::pair<int,int> obj_size_range, int seed, int k, int m);
+
+      std::string get_name() const override;
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+    class Seq12: public Seq2 {
+    public:
+      Seq12(std::pair<int,int> obj_size_range, int seed, int k, int m);
+
+      std::string get_name() const override;
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+    class Seq13: public Seq3 {
+    public:
+      Seq13(std::pair<int,int> obj_size_range, int seed, int k, int m);
+
+      std::string get_name() const override;
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+    class Seq14: public Seq4 {
+    public:
+      Seq14(std::pair<int,int> obj_size_range, int seed, int k, int m);
+
+      std::string get_name() const override;
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+    class Seq15: public Seq5 {
+    public:
+      Seq15(std::pair<int,int> obj_size_range, int seed, int k, int m);
+
+      std::string get_name() const override;
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+    class Seq16: public Seq6 {
+    public:
+      Seq16(std::pair<int,int> obj_size_range, int seed, int k, int m);
+
+      std::string get_name() const override;
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+    class Seq17: public Seq7 {
+    public:
+      Seq17(std::pair<int,int> obj_size_range, int seed, int k, int m);
+
+      std::string get_name() const override;
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+    class Seq18: public Seq8 {
+    public:
+      Seq18(std::pair<int,int> obj_size_range, int seed, int k, int m);
+
+      std::string get_name() const override;
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+    class Seq19: public Seq9 {
+    public:
+      Seq19(std::pair<int,int> obj_size_range, int seed, int k, int m);
+
+      std::string get_name() const override;
       std::unique_ptr<IoOp> _next() override;
     };
   }

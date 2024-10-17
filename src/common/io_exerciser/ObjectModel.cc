@@ -59,23 +59,23 @@ void ObjectModel::applyIoOp(IoOp& op)
     return rng();
   };
 
-  switch (op.op) {
-  case OpType::BARRIER:
+  switch (op.getOpType()) {
+  case OpType::Barrier:
     reads.clear();
     writes.clear();
     break;
 
-  case OpType::CREATE:
+  case OpType::Create:
     ceph_assert(!created);
     ceph_assert(reads.empty());
     ceph_assert(writes.empty());
     created = true;
-    contents.resize(op.length1);
+    contents.resize(static_cast<CreateOp&>(op).size);
     std::generate(std::execution::seq, contents.begin(), contents.end(),
                   generate_random);
     break;
 
-  case OpType::REMOVE:
+  case OpType::Remove:
     ceph_assert(created);
     ceph_assert(reads.empty());
     ceph_assert(writes.empty());
@@ -83,70 +83,104 @@ void ObjectModel::applyIoOp(IoOp& op)
     contents.resize(0);
     break;
 
-  case OpType::READ3:
+  case OpType::Read3:
+  {
     ceph_assert(created);
-    ceph_assert(op.offset3 + op.length3 <= contents.size());
-    // Not allowed: read overlapping with parallel write
-    ceph_assert(!writes.intersects(op.offset3, op.length3));
-    reads.union_insert(op.offset3, op.length3);
-    [[fallthrough]];
-
-  case OpType::READ2:
-    ceph_assert(created);
-    ceph_assert(op.offset2 + op.length2 <= contents.size());
-    // Not allowed: read overlapping with parallel write
-    ceph_assert(!writes.intersects(op.offset2, op.length2));
-    reads.union_insert(op.offset2, op.length2);
-    [[fallthrough]];
-
-  case OpType::READ:
-    ceph_assert(created);
-    ceph_assert(op.offset1 + op.length1 <= contents.size());
-    // Not allowed: read overlapping with parallel write
-    ceph_assert(!writes.intersects(op.offset1, op.length1));
-    reads.union_insert(op.offset1, op.length1);
+    TripleReadOp& readOp = static_cast<TripleReadOp&>(op);
+    for (int i = 0; i < 3; i++)
+    {
+      ceph_assert(readOp.offset[i] + readOp.length[i] <= contents.size());
+      // Not allowed: read overlapping with parallel write
+      ceph_assert(!writes.intersects(readOp.offset[i], readOp.length[i]));
+      reads.union_insert(readOp.offset[i], readOp.length[i]);
+    }
     num_io++;
-    break;
-
-  case OpType::WRITE3:
+  }
+  break;
+  case OpType::Read2:
+  {
     ceph_assert(created);
-    // Not allowed: write overlapping with parallel read or write
-    ceph_assert(!reads.intersects(op.offset3, op.length3));
-    ceph_assert(!writes.intersects(op.offset3, op.length3));
-    writes.union_insert(op.offset3, op.length3);
-    ceph_assert(op.offset3 + op.length3 <= contents.size());
-    std::generate(std::execution::seq,
-                  std::next(contents.begin(), op.offset3),
-                  std::next(contents.begin(), op.offset3 + op.length3),
-                  generate_random);
-    [[fallthrough]];
-
-  case OpType::WRITE2:
-    ceph_assert(created);
-    // Not allowed: write overlapping with parallel read or write
-    ceph_assert(!reads.intersects(op.offset2, op.length2));
-    ceph_assert(!writes.intersects(op.offset2, op.length2));
-    writes.union_insert(op.offset2, op.length2);
-    ceph_assert(op.offset2 + op.length2 <= contents.size());
-    std::generate(std::execution::seq,
-                  std::next(contents.begin(), op.offset2),
-                  std::next(contents.begin(), op.offset2 + op.length2),
-                  generate_random);
-    [[fallthrough]];
-
-  case OpType::WRITE:
-    ceph_assert(created);
-    // Not allowed: write overlapping with parallel read or write
-    ceph_assert(!reads.intersects(op.offset1, op.length1));
-    ceph_assert(!writes.intersects(op.offset1, op.length1));
-    writes.union_insert(op.offset1, op.length1);
-    ceph_assert(op.offset1 + op.length1 <= contents.size());
-    std::generate(std::execution::seq,
-                  std::next(contents.begin(), op.offset1),
-                  std::next(contents.begin(), op.offset1 + op.length1),
-                  generate_random);
+    DoubleReadOp& readOp = static_cast<DoubleReadOp&>(op);
+    for (int i = 0; i < 2; i++)
+    {
+      ceph_assert(readOp.offset[i] + readOp.length[i] <= contents.size());
+      // Not allowed: read overlapping with parallel write
+      ceph_assert(!writes.intersects(readOp.offset[i], readOp.length[i]));
+      reads.union_insert(readOp.offset[i], readOp.length[i]);
+    }
     num_io++;
-    break;
+  }
+  break;
+
+  case OpType::Read:
+  {
+    ceph_assert(created);
+    SingleReadOp& readOp = static_cast<SingleReadOp&>(op);
+    ceph_assert(readOp.offset[0] + readOp.length[0] <= contents.size());
+    // Not allowed: read overlapping with parallel write
+    ceph_assert(!writes.intersects(readOp.offset[0], readOp.length[0]));
+    reads.union_insert(readOp.offset[0], readOp.length[0]);
+    num_io++;
+  }
+  break;
+
+  case OpType::Write3:
+  {
+    ceph_assert(created);
+    TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
+    for (int i = 0; i < 3; i++)
+    {
+      // Not allowed: write overlapping with parallel read or write
+      ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
+      ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
+      writes.union_insert(writeOp.offset[i], writeOp.length[i]);
+      ceph_assert(writeOp.offset[i] + writeOp.length[i] <= contents.size());
+      std::generate(std::execution::seq,
+                    std::next(contents.begin(), writeOp.offset[i]),
+                    std::next(contents.begin(), writeOp.offset[i] + writeOp.length[i]),
+                    generate_random);
+    }
+    num_io++;
+  }
+  break;
+
+  case OpType::Write2:
+  {
+    ceph_assert(created);
+    DoubleWriteOp& writeOp = static_cast<DoubleWriteOp&>(op);
+    for (int i = 0; i < 2; i++)
+    {
+      // Not allowed: write overlapping with parallel read or write
+      ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
+      ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
+      writes.union_insert(writeOp.offset[i], writeOp.length[i]);
+      ceph_assert(writeOp.offset[i] + writeOp.length[i] <= contents.size());
+      std::generate(std::execution::seq,
+                    std::next(contents.begin(), writeOp.offset[i]),
+                    std::next(contents.begin(), writeOp.offset[i] + writeOp.length[i]),
+                    generate_random);
+    }
+    num_io++;
+  }
+  break;
+
+  case OpType::Write:
+  {
+    ceph_assert(created);
+    SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);
+    // Not allowed: write overlapping with parallel read or write
+    ceph_assert(!reads.intersects(writeOp.offset[0], writeOp.length[0]));
+    ceph_assert(!writes.intersects(writeOp.offset[0], writeOp.length[0]));
+    writes.union_insert(writeOp.offset[0], writeOp.length[0]);
+    ceph_assert(writeOp.offset[0] + writeOp.length[0] <= contents.size());
+    std::generate(std::execution::seq,
+                  std::next(contents.begin(), writeOp.offset[0]),
+                  std::next(contents.begin(), writeOp.offset[0] + writeOp.length[0]),
+                  generate_random);
+
+    num_io++;
+  }
+  break;
   default:
     break;
   }

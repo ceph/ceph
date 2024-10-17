@@ -15,7 +15,8 @@
 #include "common/Thread.h"
 #include "common/debug.h"
 #include "common/dout.h"
-#include "common/split.h"
+#include "common/ceph_json.h"
+#include "common/Formatter.h"
 
 #include "common/io_exerciser/DataGenerator.h"
 #include "common/io_exerciser/Model.h"
@@ -23,9 +24,203 @@
 #include "common/io_exerciser/RadosIo.h"
 #include "common/io_exerciser/IoOp.h"
 #include "common/io_exerciser/IoSequence.h"
+#include "common/io_exerciser/JsonStructures.h"
+
+#include "json_spirit/json_spirit.h"
+
+#include "fmt/format.h"
 
 #define dout_subsys ceph_subsys_rados
 #define dout_context g_ceph_context
+
+namespace {
+  struct Size {};
+  void validate(boost::any& v, const std::vector<std::string>& values,
+                Size *target_type, int) {
+    po::validators::check_first_occurrence(v);
+    const std::string &s = po::validators::get_single_string(values);
+
+    std::string parse_error;
+    uint64_t size = strict_iecstrtoll(s, &parse_error);
+    if (!parse_error.empty()) {
+      throw po::validation_error(po::validation_error::invalid_option_value);
+    }
+    v = boost::any(size);
+  }
+
+  struct Pair {};
+  void validate(boost::any& v, const std::vector<std::string>& values,
+                Pair *target_type, int) {
+    po::validators::check_first_occurrence(v);
+    const std::string &s = po::validators::get_single_string(values);
+    auto part = ceph::split(s).begin();
+    std::string parse_error;
+    int first = strict_iecstrtoll(*part++, &parse_error);
+    int second = strict_iecstrtoll(*part, &parse_error);
+    if (!parse_error.empty()) {
+      throw po::validation_error(po::validation_error::invalid_option_value);
+    }
+    v = boost::any(std::pair<int,int>{first,second});
+  }
+
+  struct PluginString {};
+  void validate(boost::any& v, const std::vector<std::string>& values,
+                PluginString *target_type, int) {
+    po::validators::check_first_occurrence(v);
+    const std::string &s = po::validators::get_single_string(values);
+
+    const std::string_view* pluginIt = std::find(
+          ceph::io_sequence::tester::pluginChoices.begin(),
+          ceph::io_sequence::tester::pluginChoices.end(), 
+          s
+    );
+    if(ceph::io_sequence::tester::pluginChoices.end() == pluginIt)
+    {
+      throw po::validation_error(po::validation_error::invalid_option_value);
+    }
+
+    v = boost::any(*pluginIt);
+  }
+
+  constexpr std::string_view usage[] = {
+    "Basic usage:",
+    "",
+    "ceph_test_rados_io_sequence",
+    "\t Test I/O to a single object using default settings. Good for",
+    "\t testing boundary conditions",
+    "",
+    "ceph_test_rados_io_sequence --parallel <n>",
+    "\t Run parallel test to multiple objects. First object is tested with",
+    "\t default settings, other objects are tested with random settings",
+    "",
+    "Advanced usage:",
+    "",
+    "ceph_test_rados_io_sequence --blocksize <b> --km <k,m> --plugin <p>",
+    "                            --objectsize <min,max> --threads <t>",
+    "ceph_test_rados_io_sequence --blocksize <b> --pool <p> --object <oid>",
+    "                            --objectsize <min,max> --threads <t>",
+    "\tCustomize the test, if a pool is specified then it defines the",
+    "\tReplica/EC configuration",
+    "",
+    "ceph_test_rados_io_sequence --listsequence",
+    "\t Display list of supported I/O sequences",
+    "",
+    "ceph_test_rados_io_sequence --dryrun --sequence <n>",
+    "\t Show I/O that will be generated for a sequence, validate",
+    "\t seqeunce has correct I/O barriers to restrict concurrency",
+    "",
+    "ceph_test_rados_io_sequence --seed <seed>",
+    "\t Repeat a previous test with the same random numbers (seed is",
+    "\t displayed at start of test), if threads = 1 then this will produce",
+    "\t the exact same sequence of I/O, if threads > 1 then I/Os are issued",
+    "\t in parallel so ordering might be slightly different",
+    "",
+    "ceph_test_rados_io_sequence --sequence <n> --seqseed <n>",
+    "\t Repeat a sequence from a previous test with the same random",
+    "\t numbers (seqseed is displayed at start of sequence)",
+    "",
+    "ceph_test_rados_io_sequence --pool <p> --object <oid> --interactive",
+    "\t Execute sequence of I/O commands from stdin. Offset and length",
+    "\t are specified with unit of blocksize. Supported commands:",
+    "\t\t create <len>",
+    "\t\t remove",
+    "\t\t read|write <off> <len>",
+    "\t\t read2|write2 <off> <len> <off> <len>",
+    "\t\t read3|write3 <off> <len> <off> <len> <off> <len>",
+    "\t\t injecterror <type> <shard> <good_count> <fail_count>",
+    "\t\t clearinject <type> <shard>",
+    "\t\t done"
+  };
+
+  po::options_description get_options_description()
+  {
+    po::options_description desc("ceph_test_rados_io options");
+    desc.add_options()
+      ("help,h",
+        "show help message")
+      ("listsequence,l",
+        "show list of sequences")
+      ("dryrun,d",
+        "test sequence, do not issue any I/O")
+      ("verbose",
+        "more verbose output during test")
+      ("sequence,s", po::value<int>(),
+        "test specified sequence")
+      ("seed", po::value<int>(),
+        "seed for whole test")
+      ("seqseed", po::value<int>(),
+        "seed for sequence")
+      ("blocksize,b", po::value<Size>(),
+        "block size (default 2048)")
+      ("chunksize,c", po::value<Size>(),
+        "chunk size (default 4096)")
+      ("pool,p", po::value<std::string>(),
+        "pool name")
+      ("object,o", po::value<std::string>()->default_value("test"),
+        "object name")
+      ("km", po::value<Pair>(),
+        "k,m EC pool profile (default 2,2)")
+      ("plugin", po::value<PluginString>(),
+        "EC plugin (isa or jerasure)")
+      ("objectsize", po::value<Pair>(),
+        "min,max object size in blocks (default 1,32)")
+      ("threads,t", po::value<int>(),
+        "number of threads of I/O per object (default 1)")
+      ("parallel,p", po::value<int>()->default_value(1),
+        "number of objects to exercise in parallel")
+      ("interactive",
+        "interactive mode, execute IO commands from stdin")
+      ("allow_pool_autoscaling",
+        "Allows pool autoscaling. Disabled by default.")
+      ("allow_pool_balancer",
+        "Enables pool balancing. Disabled by default.")
+      ("allow_pool_deep_scrubbing",
+        "Enables pool deep scrub. Disabled by default.")
+      ("allow_pool_scrubbing",
+        "Enables pool scrubbing. Disabled by default.");
+
+    return desc;
+  }
+
+  int parse_io_seq_options(
+      po::variables_map& vm,
+      int argc,
+      char** argv)
+  {
+    std::vector<std::string> unrecognized_options;
+    try {
+      po::options_description desc = get_options_description();
+
+      auto parsed = po::command_line_parser(argc, argv)
+        .options(desc)
+        .allow_unregistered()
+        .run();
+      po::store(parsed, vm);
+      po::notify(vm);
+      unrecognized_options = po::collect_unrecognized(parsed.options,
+                                                      po::include_positional);
+
+      if (!unrecognized_options.empty())
+      {
+        std::stringstream ss;
+        ss << "Unrecognised command options supplied: ";
+        while (unrecognized_options.size() > 1)
+        {
+          ss << unrecognized_options.back().c_str() << ", ";
+          unrecognized_options.pop_back();
+        }
+        ss << unrecognized_options.back();
+        dout(0) << ss.str() << dendl;
+        return 1;
+      }
+    } catch(const po::error& e) {
+      std::cerr << "error: " << e.what() << std::endl;
+      return 1;
+    }
+
+    return 0;
+  }
+}
 
 template <typename T, int N, const std::array<T, N>& Ts>
 ceph::io_sequence::tester::ProgramOptionSelector<T, N, Ts>
@@ -33,9 +228,8 @@ ceph::io_sequence::tester::ProgramOptionSelector<T, N, Ts>
                           po::variables_map vm,
                           const std::string& option_name,
                           bool set_forced,
-                          bool select_first) 
+                          bool select_first)
   : rng(rng),
-    // choices(choices),
     option_name(option_name) {
   if (set_forced && vm.count(option_name)) {
     force_value = vm[option_name].as<T>();
@@ -86,7 +280,7 @@ ceph::io_sequence::tester::SelectBlockSize::SelectBlockSize(
 
 ceph::io_sequence::tester::SelectNumThreads::SelectNumThreads(
     ceph::util::random_number_generator<int>& rng,
-    po::variables_map vm) 
+    po::variables_map vm)
   : ProgramOptionSelector(rng, vm, "threads", true, true)
 {
 }
@@ -99,9 +293,9 @@ ceph::io_sequence::tester::SelectSeqRange::SelectSeqRange(
   : ProgramOptionSelector(rng, vm, "sequence", false, false)
 {
   if (vm.count(option_name)) {
-    ceph::io_exerciser::Sequence s = 
+    ceph::io_exerciser::Sequence s =
       static_cast<ceph::io_exerciser::Sequence>(vm["sequence"].as<int>());
-    if (s < ceph::io_exerciser::Sequence::SEQUENCE_BEGIN || 
+    if (s < ceph::io_exerciser::Sequence::SEQUENCE_BEGIN ||
         s >= ceph::io_exerciser::Sequence::SEQUENCE_END) {
       dout(0) << "Sequence argument out of range" << dendl;
       throw po::validation_error(po::validation_error::invalid_option_value);
@@ -127,7 +321,7 @@ const std::pair<ceph::io_exerciser::Sequence,ceph::io_exerciser::Sequence>
 
 
 ceph::io_sequence::tester::SelectErasureKM::SelectErasureKM(
-  ceph::util::random_number_generator<int>& rng, 
+  ceph::util::random_number_generator<int>& rng,
   po::variables_map vm)
   : ProgramOptionSelector(rng, vm, "km", true, true)
 {
@@ -145,7 +339,7 @@ ceph::io_sequence::tester::SelectErasurePlugin::SelectErasurePlugin(
 
 
 ceph::io_sequence::tester::SelectErasureChunkSize::SelectErasureChunkSize(ceph::util::random_number_generator<int>& rng, po::variables_map vm)
-  : ProgramOptionSelector(rng, vm, "stripe_unit", true, false)
+  : ProgramOptionSelector(rng, vm, "chunksize", true, false)
 {
 }
 
@@ -155,10 +349,18 @@ ceph::io_sequence::tester::SelectECPool::SelectECPool(
   ceph::util::random_number_generator<int>& rng,
   po::variables_map vm,
   librados::Rados& rados,
-  bool dry_run)
+  bool dry_run,
+  bool allow_pool_autoscaling,
+  bool allow_pool_balancer,
+  bool allow_pool_deep_scrubbing,
+  bool allow_pool_scrubbing)
   : ProgramOptionSelector(rng, vm, "pool", false, false),
     rados(rados),
     dry_run(dry_run),
+    allow_pool_autoscaling(allow_pool_autoscaling),
+    allow_pool_balancer(allow_pool_balancer),
+    allow_pool_deep_scrubbing(allow_pool_deep_scrubbing),
+    allow_pool_scrubbing(allow_pool_scrubbing),
     skm(SelectErasureKM(rng, vm)),
     spl(SelectErasurePlugin(rng, vm)),
     scs(SelectErasureChunkSize(rng, vm))
@@ -174,17 +376,41 @@ const std::string ceph::io_sequence::tester::SelectECPool::choose()
 {
   std::pair<int,int> value;
   if (!skm.isForced() && force_value.has_value()) {
+    int rc;
+    bufferlist inbl, outbl;
+    auto formatter = std::make_shared<JSONFormatter>(false);
+
+    ceph::io_exerciser::json::OSDPoolGetRequest osdPoolGetRequest(*force_value, formatter);
+    rc = rados.mon_command(osdPoolGetRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    JSONParser p;
+    bool success = p.parse(outbl.c_str(), outbl.length());
+    ceph_assert(success);
+
+    ceph::io_exerciser::json::OSDPoolGetReply osdPoolGetReply(&p, formatter);
+
+    ceph::io_exerciser::json::OSDECProfileGetRequest osdECProfileGetRequest(osdPoolGetReply.erasure_code_profile, formatter);
+    rc = rados.mon_command(osdECProfileGetRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    success = p.parse(outbl.c_str(), outbl.length());
+    ceph_assert(success);
+
+    ceph::io_exerciser::json::OSDECProfileGetReply reply(&p, formatter);
+    k = reply.k;
+    m = reply.m;
     return *force_value;
   } else {
     value = skm.choose();
   }
-  int k = value.first;
-  int m = value.second;
-  
+  k = value.first;
+  m = value.second;
+
   const std::string plugin = std::string(spl.choose());
   const uint64_t chunk_size = scs.choose();
 
-  std::string pool_name = "ec_" + plugin + 
+  std::string pool_name = "ec_" + plugin +
                           "_cs" + std::to_string(chunk_size) +
                           "_k" + std::to_string(k) +
                           "_m" + std::to_string(m);
@@ -204,28 +430,78 @@ void ceph::io_sequence::tester::SelectECPool::create_pool(
 {
   int rc;
   bufferlist inbl, outbl;
-  std::string profile_create =
-    "{\"prefix\": \"osd erasure-code-profile set\", \
-    \"name\": \"testprofile-" + pool_name + "\", \
-    \"profile\": [ \"plugin=" + plugin + "\", \
-    \"k=" + std::to_string(k) + "\", \
-    \"m=" + std::to_string(m) + "\", \
-    \"stripe_unit=" + std::to_string(chunk_size) + "\", \
-    \"crush-failure-domain=osd\"]}";
-  rc = rados.mon_command(profile_create, inbl, &outbl, nullptr);
+  auto formatter = std::make_shared<JSONFormatter>(false);
+
+  ceph::io_exerciser::json::OSDECProfileSetRequest ecProfileSetRequest(
+    fmt::format("testprofile-{}", pool_name),
+    { fmt::format("plugin={}", plugin),
+      fmt::format("k={}", k),
+      fmt::format("m={}", m),
+      fmt::format("stripe_unit={}", chunk_size),
+      fmt::format("crush-failure-domain=osd")},
+    formatter);
+  rc = rados.mon_command(ecProfileSetRequest.encode_json(), inbl, &outbl, nullptr);
   ceph_assert(rc == 0);
-  std::string cmdstr =
-    "{\"prefix\": \"osd pool create\", \
-    \"pool\": \"" + pool_name + "\", \
-    \"pool_type\": \"erasure\", \
-    \"pg_num\": 8, \
-    \"pgp_num\": 8, \
-    \"erasure_code_profile\": \"testprofile-" + pool_name + "\"}";
-  rc = rados.mon_command(cmdstr, inbl, &outbl, nullptr);
+
+  ceph::io_exerciser::json::OSDECPoolCreateRequest poolCreateRequest(pool_name,
+    fmt::format("testprofile-{}", pool_name),
+    formatter);
+  rc = rados.mon_command(poolCreateRequest.encode_json(), inbl, &outbl, nullptr);
+  ceph_assert(rc == 0);
+
+  if (allow_pool_autoscaling)
+  {
+    ceph::io_exerciser::json::OSDSetRequest setNoAutoscaleRequest("noautoscale",
+      std::nullopt,
+      formatter);
+    rc = rados.mon_command(setNoAutoscaleRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+  }
+
+  if (allow_pool_balancer)
+  {
+    ceph::io_exerciser::json::BalancerOffRequest balancerOffRequest(formatter);
+    rc = rados.mon_command(balancerOffRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    ceph::io_exerciser::json::BalancerStatusRequest balancerStatusRequest(formatter);
+    rc = rados.mon_command(balancerStatusRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    JSONParser p;
+    bool success = p.parse(outbl.c_str(), outbl.length());
+    ceph_assert(success);
+
+    ceph::io_exerciser::json::BalancerStatusReply reply(&p, formatter);
+    ceph_assert(!reply.active);
+  }
+
+  if (allow_pool_deep_scrubbing)
+  {
+    ceph::io_exerciser::json::OSDSetRequest setNoDeepScrubRequest("nodeep-scrub",
+      std::nullopt,
+      formatter);
+    rc = rados.mon_command(setNoDeepScrubRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+  }
+
+  if (allow_pool_scrubbing)
+  {
+    ceph::io_exerciser::json::OSDSetRequest setNoScrubRequest("noscrub",
+      std::nullopt,
+      formatter);
+    rc = rados.mon_command(setNoScrubRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+  }
+
+  ceph::io_exerciser::json::ConfigSetRequest configSetBluestoreDebugRequest("global", "bluestore_debug_inject_read_err", "true", std::nullopt, formatter);
+  rc = rados.mon_command(configSetBluestoreDebugRequest.encode_json(), inbl, &outbl, nullptr);
+  ceph_assert(rc == 0);
+
+  ceph::io_exerciser::json::ConfigSetRequest configSetMaxMarkdownRequest("global", "osd_max_markdown_count", "99999999", std::nullopt, formatter);
+  rc = rados.mon_command(configSetMaxMarkdownRequest.encode_json(), inbl, &outbl, nullptr);
   ceph_assert(rc == 0);
 }
-
-
 
 ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
                         librados::Rados& rados,
@@ -234,33 +510,58 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
                         SelectECPool& spo,
                         SelectObjectSize& sos,
                         SelectNumThreads& snt,
-                        SelectSeqRange & ssr,
+                        SelectSeqRange& ssr,
                         ceph::util::random_number_generator<int>& rng,
                         ceph::mutex& lock,
                         ceph::condition_variable& cond,
                         bool dryrun,
                         bool verbose,
-                        bool has_seqseed,
-                        int  seqseed) :
-  rng(rng), verbose(verbose), has_seqseed(has_seqseed), seqseed(seqseed)
+                        std::optional<int>  seqseed) :
+  rng(rng), verbose(verbose), seqseed(seqseed)
 {
   if (dryrun) {
     verbose = true;
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(oid,
-                                        sbs.choose(),
-                                        rng());
+                                                                        sbs.choose(),
+                                                                        rng());
   } else {
     const std::string pool = spo.choose();
+    poolK = spo.getChosenK();
+    poolM = spo.getChosenM();
+
     int threads = snt.choose();
+
+    bufferlist inbl, outbl;
+
+    std::optional<std::vector<int>> cached_shard_order = std::nullopt;
+
+    if (!spo.get_allow_pool_autoscaling() &&
+        !spo.get_allow_pool_balancer() &&
+        !spo.get_allow_pool_deep_scrubbing() &&
+        !spo.get_allow_pool_scrubbing())
+    {
+      ceph::io_exerciser::json::OSDMapRequest osdMapRequest(pool);
+      int rc = rados.mon_command(osdMapRequest.encode_json(), inbl, &outbl, nullptr);
+      ceph_assert(rc == 0);
+
+      JSONParser p;
+      bool success = p.parse(outbl.c_str(), outbl.length());
+      ceph_assert(success);
+
+      ceph::io_exerciser::json::OSDMapReply reply(&p);
+      cached_shard_order = reply.acting;
+    }
+
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(rados,
-                                    asio,
-                                    pool,
-                                    oid,
-                                    sbs.choose(),
-                                    rng(),
-                                    threads,
-                                    lock,
-                                    cond);
+                                                                    asio,
+                                                                    pool,
+                                                                    oid,
+                                                                    cached_shard_order,
+                                                                    sbs.choose(),
+                                                                    rng(),
+                                                                    threads,
+                                                                    lock,
+                                                                    cond);
     dout(0) << "= " << oid << " pool=" << pool
             << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size()
@@ -271,14 +572,14 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
   curseq = seq_range.first;
   seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
                                                           obj_size_range,
-                                                          has_seqseed ?
-                                                            seqseed :
-                                                            rng());
+                                                          poolK,
+                                                          poolM,
+                                                          seqseed.value_or(rng()));
   op = seq->next();
   done = false;
-  dout(0) << "== " << exerciser_model->get_oid() << " " 
-          << curseq << " " 
-          << seq->get_name() 
+  dout(0) << "== " << exerciser_model->get_oid() << " "
+          << curseq << " "
+          << seq->get_name()
           << " ==" <<dendl;
 }
 
@@ -291,16 +592,16 @@ bool ceph::io_sequence::tester::TestObject::next()
 {
   if (!done) {
     if (verbose) {
-      dout(0) << exerciser_model->get_oid() 
+      dout(0) << exerciser_model->get_oid()
               << " Step " << seq->get_step() << ": "
               << op->to_string(exerciser_model->get_block_size()) << dendl;
     } else {
-      dout(5) << exerciser_model->get_oid() 
-              << " Step " << seq->get_step() << ": " 
+      dout(5) << exerciser_model->get_oid()
+              << " Step " << seq->get_step() << ": "
               << op->to_string(exerciser_model->get_block_size()) << dendl;
     }
     exerciser_model->applyIoOp(*op);
-    if (op->done()) {
+    if (op->getOpType() == ceph::io_exerciser::OpType::Done) {
       ++curseq;
       if (curseq == seq_range.second) {
         done = true;
@@ -310,10 +611,9 @@ bool ceph::io_sequence::tester::TestObject::next()
       } else {
         seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
                                                                 obj_size_range,
-                                                                has_seqseed ?
-                                                                  seqseed : 
-                                                                  rng());
-        dout(0) << "== " << exerciser_model->get_oid() << " " 
+                                                                poolK, poolM,
+                                                                seqseed.value_or(rng()));
+        dout(0) << "== " << exerciser_model->get_oid() << " "
                 << curseq << " " << seq->get_name()
                 << " ==" <<dendl;
         op = seq->next();
@@ -335,97 +635,339 @@ int ceph::io_sequence::tester::TestObject::get_num_io()
   return exerciser_model->get_num_io();
 }
 
-struct Size {};
-void validate(boost::any& v, const std::vector<std::string>& values,
-              Size *target_type, int) {
-  po::validators::check_first_occurrence(v);
-  const std::string &s = po::validators::get_single_string(values);
-
-  std::string parse_error;
-  uint64_t size = strict_iecstrtoll(s, &parse_error);
-  if (!parse_error.empty()) {
-    throw po::validation_error(po::validation_error::invalid_option_value);
-  }
-  v = boost::any(size);
-}
-
-struct Pair {};
-void validate(boost::any& v, const std::vector<std::string>& values,
-              Pair *target_type, int) {
-  po::validators::check_first_occurrence(v);
-  const std::string &s = po::validators::get_single_string(values);
-  auto part = ceph::split(s).begin();
-  std::string parse_error;
-  int first = strict_iecstrtoll(*part++, &parse_error);
-  int second = strict_iecstrtoll(*part, &parse_error);
-  if (!parse_error.empty()) {
-    throw po::validation_error(po::validation_error::invalid_option_value);
-  }
-  v = boost::any(std::pair<int,int>{first,second});
-}
-
-struct PluginString {};
-void validate(boost::any& v, const std::vector<std::string>& values,
-              PluginString *target_type, int) {
-  po::validators::check_first_occurrence(v);
-  const std::string &s = po::validators::get_single_string(values);
-
-  const std::string_view* pluginIt = std::find(
-        ceph::io_sequence::tester::pluginChoices.begin(),
-        ceph::io_sequence::tester::pluginChoices.end(), 
-        s
-  );
-  if(ceph::io_sequence::tester::pluginChoices.end() == pluginIt)
-  {
-    throw po::validation_error(po::validation_error::invalid_option_value);
-  }
-
-  v = boost::any(*pluginIt);
-}
-
-int parse_io_seq_options(
-    po::variables_map& vm,
-    const po::options_description& desc,
-    int argc,
-    char** argv)
-{  
-  std::vector<std::string> unrecognized_options;
-  try {
-    auto parsed = po::command_line_parser(argc, argv)
-      .options(desc)
-      .allow_unregistered()
-      .run();
-    po::store(parsed, vm);
-    po::notify(vm);
-    unrecognized_options = po::collect_unrecognized(parsed.options,
-						    po::include_positional);
-
-    if (!unrecognized_options.empty())
-    {
-      std::stringstream ss;
-      ss << "Unrecognised command options supplied: ";
-      while (unrecognized_options.size() > 1)
-      {
-        ss << unrecognized_options.back().c_str() << ", ";
-        unrecognized_options.pop_back();
-      }
-      ss << unrecognized_options.back();
-      dout(0) << ss.str() << dendl;
-      return 1;
-    }
-  } catch(const po::error& e) {
-    std::cerr << "error: " << e.what() << std::endl;
-    return 1;
-  }
-
-  return 0;
-}
-
-void run_test(const std::vector<
-    std::shared_ptr<ceph::io_sequence::tester::TestObject>
-  >& test_objects,
-  ceph::mutex& lock)
+ceph::io_sequence::tester::TestRunner::TestRunner(po::variables_map& vm,
+                                                  librados::Rados& rados) :
+  rados(rados),
+  seed(vm.contains("seed") ? vm["seed"].as<int>() : time(nullptr)),
+  rng(ceph::util::random_number_generator<int>(seed)),
+  sbs{rng, vm},
+  sos{rng, vm},
+  spo{rng, vm, rados,
+      vm.contains("dryrun"),
+      vm.contains("allow_pool_autoscaling"),
+      vm.contains("allow_pool_balancer"),
+      vm.contains("allow_pool_deep_scrubbing"),
+      vm.contains("allow_pool_scrubbing")},
+  snt{rng, vm},
+  ssr{rng, vm}
 {
+  dout(0) << "Test using seed " << seed << dendl;
+
+  verbose = vm.contains("verbose");
+  dryrun = vm.contains("dryrun");
+
+  seqseed = std::nullopt;
+  if (vm.contains("seqseed")) {
+    seqseed = vm["seqseed"].as<int>();
+  }
+  num_objects = vm["parallel"].as<int>();
+  object_name = vm["object"].as<std::string>();
+  interactive = vm.contains("interactive");
+
+  allow_pool_autoscaling = vm.contains("allow_pool_autoscaling");
+  allow_pool_balancer = vm.contains("allow_pool_balancer");
+  allow_pool_deep_scrubbing = vm.contains("allow_pool_deep_scrubbing");
+  allow_pool_scrubbing = vm.contains("allow_pool_scrubbing");
+
+  if (!dryrun)
+  {
+    guard.emplace(boost::asio::make_work_guard(asio));
+    thread = make_named_thread("io_thread",[&asio = asio] { asio.run(); });
+  }
+
+  show_help = vm.contains("help");
+  show_sequence = vm.contains("listsequence");
+}
+
+ceph::io_sequence::tester::TestRunner::~TestRunner()
+{
+  if (!dryrun) {
+    guard = std::nullopt;
+    asio.stop();
+    thread.join();
+    rados.shutdown();
+  }
+}
+
+void ceph::io_sequence::tester::TestRunner::help()
+{
+  std::cout << get_options_description() << std::endl;
+  for (auto line : usage) {
+    std::cout << line << std::endl;
+  }
+}
+
+void ceph::io_sequence::tester::TestRunner::list_sequence()
+{
+  // List seqeunces
+  std::pair<int,int> obj_size_range = sos.choose();
+  for (ceph::io_exerciser::Sequence s
+        = ceph::io_exerciser::Sequence::SEQUENCE_BEGIN;
+        s < ceph::io_exerciser::Sequence::SEQUENCE_END; ++s) {
+    std::unique_ptr<ceph::io_exerciser::IoSequence> seq =
+    ceph::io_exerciser::IoSequence::generate_sequence(s,
+                                                      obj_size_range,
+                                                      spo.getChosenK(),
+                                                      spo.getChosenM(),
+                                                      seqseed.value_or(rng()));
+    dout(0) << s << " " << seq->get_name() << dendl;
+  }
+}
+
+void ceph::io_sequence::tester::TestRunner::clear_tokens()
+{
+  tokens = split.end();
+}
+
+std::string ceph::io_sequence::tester::TestRunner::get_token()
+{
+  while (line.empty() || tokens == split.end()) {
+    if (!std::getline(std::cin, line)) {
+      throw std::runtime_error("End of input");
+    }
+    split = ceph::split(line);
+    tokens = split.begin();
+  }
+  return std::string(*tokens++);
+}
+
+std::optional<std::string> ceph::io_sequence::tester::TestRunner::get_optional_token()
+{
+  std::optional<std::string> ret = std::nullopt;
+  if (tokens != split.end()) {
+    ret = std::string(*tokens++);
+  }
+  return ret;
+}
+
+uint64_t ceph::io_sequence::tester::TestRunner::get_numeric_token()
+{
+  std::string parse_error;
+  std::string token = get_token();
+  uint64_t num = strict_iecstrtoll(token, &parse_error);
+  if (!parse_error.empty()) {
+    throw std::runtime_error("Invalid number "+token);
+  }
+  return num;
+}
+
+std::optional<uint64_t> ceph::io_sequence::tester::TestRunner::get_optional_numeric_token()
+{
+  std::string parse_error;
+  std::optional<std::string> token = get_optional_token();
+  if (token)
+  {
+    uint64_t num = strict_iecstrtoll(*token, &parse_error);
+    if (!parse_error.empty()) {
+      throw std::runtime_error("Invalid number "+*token);
+    }
+    return num;
+  }
+
+  return std::optional<uint64_t>(std::nullopt);
+}
+
+bool ceph::io_sequence::tester::TestRunner::run_test()
+{
+  if (show_help)
+  {
+    help();
+    return true;
+  }
+  else if (show_sequence)
+  {
+    list_sequence();
+    return true;
+  }
+  else if (interactive)
+  {
+    return run_interactive_test();
+  }
+  else
+  {
+    return run_automated_test();
+  }
+}
+
+bool ceph::io_sequence::tester::TestRunner::run_interactive_test()
+{
+  bool done = false;
+  std::unique_ptr<ceph::io_exerciser::IoOp> ioop;
+  std::unique_ptr<ceph::io_exerciser::Model> model;
+
+  if (dryrun) {
+    model = std::make_unique<ceph::io_exerciser::ObjectModel>(object_name,
+				                              sbs.choose(),
+				                              rng());
+  } else {
+    const std::string pool = spo.choose();
+
+    bufferlist inbl, outbl;
+
+    ceph::io_exerciser::json::OSDMapRequest osdMapRequest(pool);
+    int rc = rados.mon_command(osdMapRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    JSONParser p;
+    bool success = p.parse(outbl.c_str(), outbl.length());
+    ceph_assert(success);
+
+    ceph::io_exerciser::json::OSDMapReply reply(&p);
+
+    model = std::make_unique<ceph::io_exerciser::RadosIo>(rados, asio, pool,
+                                                          object_name, reply.acting,
+                                                          sbs.choose(), rng(),
+                                                          1, // 1 thread
+                                                          lock, cond);
+  }
+
+  while (!done) {
+    const std::string op = get_token();
+    if (op == "done"  || op == "q" || op == "quit") {
+      ioop = ceph::io_exerciser::DoneOp::generate();
+    } else if (op == "create") {
+      ioop = ceph::io_exerciser::CreateOp::generate(get_numeric_token());
+    } else if (op == "remove" || op == "delete") {
+      ioop = ceph::io_exerciser::RemoveOp::generate();
+    } else if (op == "read") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length);
+    } else if (op == "read2") {
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      ioop = ceph::io_exerciser::DoubleReadOp::generate(offset1, length1,
+                                                        offset2, length2);
+    } else if (op == "read3") {
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      uint64_t offset3 = get_numeric_token();
+      uint64_t length3 = get_numeric_token();
+      ioop = ceph::io_exerciser::TripleReadOp::generate(offset1, length1,
+                                                        offset2, length2,
+                                                        offset3, length3);
+    } else if (op == "write") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      ioop = ceph::io_exerciser::SingleWriteOp::generate(offset, length);
+    } else if (op == "write2") {
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      ioop = ceph::io_exerciser::DoubleWriteOp::generate(offset1, length1,
+                                                        offset2, length2);
+    } else if (op == "write3") {
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      uint64_t offset3 = get_numeric_token();
+      uint64_t length3 = get_numeric_token();
+      ioop = ceph::io_exerciser::TripleWriteOp::generate(offset1, length1,
+                                                         offset2, length2,
+                                                         offset3, length3);
+    } else if (op == "injecterror") {
+      std::string inject_type = get_token();
+      int shard = get_numeric_token();
+      std::optional<int> type = get_optional_numeric_token();
+      std::optional<int> when = get_optional_numeric_token();
+      std::optional<int> duration = get_optional_numeric_token();
+      if (inject_type == "read")
+      {
+        ioop = ceph::io_exerciser::InjectReadErrorOp::generate(shard,
+                                                               type,
+                                                               when,
+                                                               duration);
+      }
+      else if (inject_type == "write")
+      {
+        ioop = ceph::io_exerciser::InjectWriteErrorOp::generate(shard,
+                                                                type,
+                                                                when,
+                                                                duration);
+      }
+      else
+      {
+        clear_tokens();
+        ioop.reset();
+        dout(0) << fmt::format("Invalid error inject {}. No action performed.",
+                   inject_type) << dendl;
+      }
+    } else if (op == "clearinject") {
+      std::string inject_type = get_token();
+      int shard = get_numeric_token();
+      std::optional<int> type = get_optional_numeric_token();
+      if (inject_type == "read")
+      {
+        ioop = ceph::io_exerciser::ClearReadErrorInjectOp::generate(shard,
+                                                                    type);
+      }
+      else if (inject_type == "write")
+      {
+        ioop = ceph::io_exerciser::ClearWriteErrorInjectOp::generate(shard,
+                                                                     type);
+      }
+      else
+      {
+        clear_tokens();
+        ioop.reset();
+        dout(0) << fmt::format("Invalid error inject {}. No action performed.",
+                   inject_type) << dendl;
+      }
+    } else {
+      clear_tokens();
+      ioop.reset();
+      dout(0) << fmt::format("Invalid op {}. No action performed.",
+                              op) << dendl;
+    }
+    if (ioop)
+    {
+      dout(0) << ioop->to_string(model->get_block_size()) << dendl;
+      model->applyIoOp(*ioop);
+      done = ioop->getOpType() == ceph::io_exerciser::OpType::Done;
+      if (!done) {
+        ioop = ceph::io_exerciser::BarrierOp::generate();
+        model->applyIoOp(*ioop);
+      }
+    }
+  }
+
+  return true;
+}
+
+bool ceph::io_sequence::tester::TestRunner::run_automated_test()
+{
+  // Create a test for each object
+  std::vector<std::shared_ptr<
+    ceph::io_sequence::tester::TestObject>> test_objects;
+
+  for (int obj = 0; obj < num_objects; obj++) {
+    std::string name;
+    if (obj == 0) {
+      name = object_name;
+    } else {
+      name = object_name + std::to_string(obj);
+    }
+    test_objects.push_back(
+      std::make_shared<ceph::io_sequence::tester::TestObject>(
+            name,
+            rados, asio,
+            sbs, spo, sos, snt, ssr,
+            rng, lock, cond,
+            dryrun, verbose,
+            seqseed
+      )
+    );
+  }
+  if (!dryrun) {
+    rados.wait_for_latest_osdmap();
+  }
+
   // Main loop of test - while not all test objects have finished
   // check to see if any are able to start a new I/O. If all test
   // objects are waiting for I/O to complete then wait on a cond
@@ -475,56 +1017,8 @@ void run_test(const std::vector<
     ceph_assert(to->finished());
   }
   dout(0) << "Total number of IOs = " << total_io << dendl;
-}
 
-namespace {
-  constexpr std::string_view usage[] = {
-    "Basic usage:",
-    "",
-    "ceph_test_rados_io_sequence",
-    "\t Test I/O to a single object using default settings. Good for",
-    "\t testing boundary conditions",
-    "",
-    "ceph_test_rados_io_sequence --parallel <n>",
-    "\t Run parallel test to multiple objects. First object is tested with",
-    "\t default settings, other objects are tested with random settings",
-    "",
-    "Advanced usage:",
-    "",
-    "ceph_test_rados_io_sequence --blocksize <b> --km <k,m> --plugin <p>",
-    "                            --objectsize <min,max> --threads <t>",
-    "ceph_test_rados_io_sequence --blocksize <b> --pool <p> --object <oid>",
-    "                            --objectsize <min,max> --threads <t>",
-    "\tCustomize the test, if a pool is specified then it defines the",
-    "\tReplica/EC configuration",
-    "",
-    "ceph_test_rados_io_sequence --listsequence",
-    "\t Display list of supported I/O sequences",
-    "",
-    "ceph_test_rados_io_sequence --dryrun --sequence <n>",
-    "\t Show I/O that will be generated for a sequence, validate",
-    "\t seqeunce has correct I/O barriers to restrict concurrency",
-    "",
-    "ceph_test_rados_io_sequence --seed <seed>",
-    "\t Repeat a previous test with the same random numbers (seed is",
-    "\t displayed at start of test), if threads = 1 then this will produce",
-    "\t the exact same sequence of I/O, if threads > 1 then I/Os are issued",
-    "\t in parallel so ordering might be slightly different",
-    "",
-    "ceph_test_rados_io_sequence --sequence <n> --seqseed <n>",
-    "\t Repeat a sequence from a previous test with the same random",
-    "\t numbers (seqseed is displayed at start of sequence)",
-    "",
-    "ceph_test_rados_io_sequence --pool <p> --object <oid> --interactive",
-    "\t Execute sequence of I/O commands from stdin. Offset and length",
-    "\t are specified with unit of blocksize. Supported commands:",
-    "\t\t create <len>",
-    "\t\t remove",
-    "\t\t read|write <off> <len>",
-    "\t\t read2|write2 <off> <len> <off> <len>",
-    "\t\t read3|write3 <off> <len> <off> <len> <off> <len>",
-    "\t\t done"
-  };
+  return true;
 }
 
 int main(int argc, char **argv)
@@ -535,161 +1029,28 @@ int main(int argc, char **argv)
 			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(cct.get());
 
-  librados::Rados rados;
-  boost::asio::io_context asio;
-  std::thread thread;
-  std::optional<boost::asio::executor_work_guard<
-                  boost::asio::io_context::executor_type>> guard;
-  ceph::mutex lock = ceph::make_mutex("RadosIo::lock");
-  ceph::condition_variable cond;
-
-  po::options_description desc("ceph_test_rados_io options");
-
-  desc.add_options()
-    ("help,h",
-      "show help message")
-    ("listsequence,l",
-      "show list of sequences")
-    ("dryrun,d",
-      "test sequence, do not issue any I/O")
-    ("verbose",
-      "more verbose output during test")
-    ("sequence,s", po::value<int>(),
-      "test specified sequence")
-    ("seed", po::value<int>(),
-      "seed for whole test")
-    ("seqseed", po::value<int>(),
-      "seed for sequence")
-    ("blocksize,b", po::value<Size>(),
-      "block size (default 2048)")
-    ("chunksize,c", po::value<Size>(),
-      "chunk size (default 4096)")
-    ("pool,p", po::value<std::string>(),
-      "pool name")
-    ("km", po::value<Pair>(),
-      "k,m EC pool profile (default 2,2)")
-    ("plugin", po::value<PluginString>(),
-      "EC plugin (isa or jerasure)")
-    ("objectsize", po::value<Pair>(),
-      "min,max object size in blocks (default 1,32)")
-    ("threads,t", po::value<int>(),
-      "number of threads of I/O per object (default 1)")
-    ("objects,o", po::value<int>()->default_value(1),
-      "number of objects to exercise in parallel");
-
   po::variables_map vm;
-  int rc = parse_io_seq_options(vm, desc, argc, argv);
+  int rc = parse_io_seq_options(vm, argc, argv);
   if (rc != 0)
   {
     return rc;
   }
 
-  if (vm.count("help")) {
-    std::cout << desc << std::endl;
-    for (auto line : usage) {
-      std::cout << line << std::endl;
-    }
-    return 0;
-  }
-
-  // Seed
-  int seed = time(nullptr);
-  if (vm.count("seed")) {
-    seed = vm["seed"].as<int>();
-  }
-  dout(0) << "Test using seed " << seed << dendl;
-  auto rng = ceph::util::random_number_generator<int>(seed);
-
-  bool verbose = vm.count("verbose");
-  bool dryrun = vm.count("dryrun");
-  bool has_seqseed = vm.count("seqseed");
-  int seqseed = 0;
-  if (has_seqseed) {
-    seqseed = vm["seqseed"].as<int>();
-  }
-  int num_objects = vm["objects"].as<int>();
-
-  if (!dryrun) {
+  librados::Rados rados;
+  if (!vm.contains("dryrun")) {
     rc = rados.init_with_context(g_ceph_context);
     ceph_assert(rc == 0);
     rc = rados.connect();
     ceph_assert(rc == 0);
-
-    guard.emplace(boost::asio::make_work_guard(asio));
-    thread = make_named_thread("io_thread",[&asio] { asio.run(); });
   }
-  
-  // Select block size
-  std::unique_ptr<ceph::io_sequence::tester::SelectBlockSize> sbs
-        = std::make_unique<ceph::io_sequence::tester::SelectBlockSize>(rng, vm);
 
-  // Select pool
-  std::unique_ptr<ceph::io_sequence::tester::SelectECPool> spo
-        = std::make_unique<ceph::io_sequence::tester::SelectECPool>(rng, vm,
-                                                                    rados,
-                                                                    dryrun);
-
-  // Select object size range
-  std::unique_ptr<ceph::io_sequence::tester::SelectObjectSize> sos
-        = std::make_unique<ceph::io_sequence::tester::SelectObjectSize>(rng,
-                                                                        vm);
-
-  // Select number of threads
-  std::unique_ptr<ceph::io_sequence::tester::SelectNumThreads> snt =
-        std::make_unique<ceph::io_sequence::tester::SelectNumThreads>(rng, vm);
-
-  // Select range of sequences
-  std::unique_ptr<ceph::io_sequence::tester::SelectSeqRange> ssr;
+  std::unique_ptr<ceph::io_sequence::tester::TestRunner> runner;
   try {
-    ssr = std::make_unique<ceph::io_sequence::tester::SelectSeqRange>(rng, vm);
+    runner = std::make_unique<ceph::io_sequence::tester::TestRunner>(vm, rados);
   } catch(const po::error& e) {
     return 1;
   }
+  runner->run_test();
 
-  // List seqeunces
-  if (vm.count("listsequence")) {
-    std::pair<int,int> obj_size_range = sos->choose();
-    for (ceph::io_exerciser::Sequence s
-          = ceph::io_exerciser::Sequence::SEQUENCE_BEGIN; 
-         s < ceph::io_exerciser::Sequence::SEQUENCE_END; ++s) {
-      std::unique_ptr<ceph::io_exerciser::IoSequence> seq =
-      ceph::io_exerciser::IoSequence::generate_sequence(s,
-                                                        obj_size_range,
-                                                        has_seqseed ?
-                                                          seqseed :
-                                                          rng());
-      dout(0) << s << " " << seq->get_name() << dendl;
-    }
-    return 0;
-  }
-
-  // Create a test for each object
-  std::vector<std::shared_ptr<
-    ceph::io_sequence::tester::TestObject>> test_objects;
-    
-  for (int obj = 0; obj < num_objects; obj++) {
-    test_objects.push_back(
-      std::make_shared<ceph::io_sequence::tester::TestObject>(
-            "test" + std::to_string(obj),
-            rados, asio,
-            *sbs, *spo, *sos, *snt, *ssr,
-            rng, lock, cond, 
-            dryrun, verbose,
-            has_seqseed, seqseed
-      )
-    );
-  }
-  if (!dryrun) {
-    rados.wait_for_latest_osdmap();
-  }
-
-  run_test(test_objects, lock); 
-
-  if (!dryrun) {
-    guard = std::nullopt;
-    asio.stop();
-    thread.join();
-    rados.shutdown();
-  }
   return 0;
 }
