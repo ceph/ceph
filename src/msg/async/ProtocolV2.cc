@@ -796,7 +796,7 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
 }
 
 template <class F>
-CtPtr ProtocolV2::write(const std::string &desc,
+CtPtr ProtocolV2::write(std::string_view desc,
                         CONTINUATION_TYPE<ProtocolV2> &next,
                         F &frame) {
   ceph::bufferlist bl;
@@ -812,7 +812,7 @@ CtPtr ProtocolV2::write(const std::string &desc,
   return write(desc, next, bl);
 }
 
-CtPtr ProtocolV2::write(const std::string &desc,
+CtPtr ProtocolV2::write(std::string_view desc,
                         CONTINUATION_TYPE<ProtocolV2> &next,
                         ceph::bufferlist &buffer) {
   if (unlikely(pre_auth.enabled)) {
