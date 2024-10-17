@@ -380,6 +380,9 @@ public:
   ~RGWGetObjAttrs_ObjStore_S3() override {}
 
   int get_params(optional_yield y) override;
+  int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
+                         RGWGetObj_Filter* cb,
+                         bufferlist* manifest_bl) override;
   void send_response() override;
 };
 
