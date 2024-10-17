@@ -937,7 +937,7 @@ int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
  * @param relpath to the file/directory to get statistics of
  * @param stx the ceph_statx struct that will be filled in with the file's statistics.
  * @param want bitfield of CEPH_STATX_* flags showing designed attributes
- * @param flags bitfield that can be used to set AT_* modifier flags (AT_STATX_SYNC_AS_STAT, AT_STATX_FORCE_SYNC, AT_STATX_DONT_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_STATX_DONT_SYNC and AT_SYMLINK_NOFOLLOW)
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_statxat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
