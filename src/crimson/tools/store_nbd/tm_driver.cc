@@ -33,7 +33,9 @@ seastar::future<> TMDriver::write(
           crimson::ct_error::pass_further_all{}
         ).si_then([this, offset, &t, &ptr] {
           logger().debug("dec_ref complete");
-          return tm->alloc_data_extents<TestBlock>(t, laddr_t::from_byte_offset(offset), ptr.length());
+	  auto hint = laddr_hint_t::never_conflict(
+	    laddr_t::from_byte_offset(offset));
+          return tm->alloc_data_extents<TestBlock>(t, hint, ptr.length());
         }).si_then([this, offset, &t, &ptr](auto extents) mutable {
 	  boost::ignore_unused(offset);  // avoid clang warning;
 	  auto off = offset;

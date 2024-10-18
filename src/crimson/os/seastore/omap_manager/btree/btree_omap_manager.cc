@@ -18,7 +18,7 @@ BtreeOMapManager::BtreeOMapManager(
   : tm(tm) {}
 
 BtreeOMapManager::initialize_omap_ret
-BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint)
+BtreeOMapManager::initialize_omap(Transaction &t, laddr_hint_t hint)
 {
   LOG_PREFIX(BtreeOMapManager::initialize_omap);
   DEBUGT("hint: {}", t, hint);
@@ -285,7 +285,7 @@ BtreeOMapManager::omap_clear(
     ).si_then([&omap_root] (auto ret) {
       omap_root.update(
 	L_ADDR_NULL,
-	0, L_ADDR_MIN);
+	0, gen_next_hint(omap_root.hint));
       return omap_clear_iertr::now();
     });
   }).handle_error_interruptible(

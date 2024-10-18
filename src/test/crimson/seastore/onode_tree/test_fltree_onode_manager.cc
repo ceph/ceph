@@ -32,8 +32,8 @@ struct onode_item_t {
   void initialize(Transaction& t, Onode& value) const {
     auto &ftvalue = static_cast<FLTreeOnode&>(value);
     ftvalue.update_onode_size(t, size);
-    auto oroot = omap_root_t(laddr_t::from_raw_uint(id), cnt_modify,
-      value.get_metadata_hint(block_size));
+    auto oroot = omap_root_t(laddr_t::from_byte_offset(id << laddr_t::UNIT_SHIFT), cnt_modify,
+      value.get_metadata_hint());
     ftvalue.update_omap_root(t, oroot);
     validate(value);
   }
@@ -41,8 +41,9 @@ struct onode_item_t {
   void validate(Onode& value) const {
     auto& layout = value.get_layout();
     ceph_assert(uint64_t(layout.size) == uint64_t{size});
-    ceph_assert(layout.omap_root.get(value.get_metadata_hint(block_size)).addr == laddr_t::from_raw_uint(id));
-    ceph_assert(layout.omap_root.get(value.get_metadata_hint(block_size)).depth == cnt_modify);
+    ceph_assert(layout.omap_root.get(value.get_metadata_hint()).addr ==
+                laddr_t::from_byte_offset(id << laddr_t::UNIT_SHIFT));
+    ceph_assert(layout.omap_root.get(value.get_metadata_hint()).depth == cnt_modify);
   }
 
   void modify(Transaction& t, Onode& value) {
@@ -116,20 +117,20 @@ struct fltree_onode_manager_test_t
   void with_onode_write(iterator_t& it, F&& f) {
     with_transaction([this, &it, f=std::move(f)] (auto& t) {
       auto p_kv = *it;
-      auto onode = with_trans_intr(t, [&](auto &t) {
+      auto onodes = with_trans_intr(t, [&](auto &t) {
         return manager->get_or_create_onode(t, p_kv->key);
       }).unsafe_get();
-      std::invoke(f, t, *onode, p_kv->value);
+      std::invoke(f, t, *onodes.onode, p_kv->value);
     });
   }
 
   void validate_onode(iterator_t& it) {
     with_transaction([this, &it] (auto& t) {
       auto p_kv = *it;
-      auto onode = with_trans_intr(t, [&](auto &t) {
+      auto onodes = with_trans_intr(t, [&](auto &t) {
         return manager->get_onode(t,  p_kv->key);
       }).unsafe_get();
-      p_kv->value.validate(*onode);
+      p_kv->value.validate(*onodes.onode);
     });
   }
 
@@ -185,10 +186,10 @@ struct fltree_onode_manager_test_t
         ghobject_t oid;
         onode_item_t* p_item;
         boost::tie(oid, p_item) = tup;
-        auto onode = with_trans_intr(t, [&](auto &t) {
+        auto onodes = with_trans_intr(t, [&](auto &t) {
           return manager->get_onode(t, oid);
         }).unsafe_get();
-        p_item->validate(*onode);
+        p_item->validate(*onodes.onode);
       }
     });
   }

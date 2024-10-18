@@ -40,7 +40,7 @@ public:
    */
   using initialize_omap_iertr = base_iertr;
   using initialize_omap_ret = initialize_omap_iertr::future<omap_root_t>;
-  virtual initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint) = 0;
+  virtual initialize_omap_ret initialize_omap(Transaction &t, laddr_hint_t hint) = 0;
 
   /**
    * get value(string) by key(string)

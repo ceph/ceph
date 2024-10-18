@@ -35,6 +35,8 @@ struct onode_layout_t {
   omap_root_le_t xattr_root;
 
   object_data_le_t object_data;
+  local_object_id_le_t local_object_id{LOCAL_OBJECT_ID_NULL};
+  local_clone_id_le_t local_clone_id{LOCAL_CLONE_ID_NULL};
 
   char oi[MAX_OI_LENGTH];
   char ss[MAX_SS_LENGTH];
@@ -54,21 +56,21 @@ class Onode : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>
 {
 protected:
-  virtual laddr_t get_hint() const = 0;
-  const uint32_t default_metadata_offset = 0;
-  const uint32_t default_metadata_range = 0;
+  virtual laddr_hint_t get_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id,
+    bool is_metadata) const = 0;
+
   const hobject_t hobj;
 public:
-  Onode(uint32_t ddr, uint32_t dmr, const hobject_t &hobj)
-    : default_metadata_offset(ddr),
-      default_metadata_range(dmr),
-      hobj(hobj)
-  {}
+  explicit Onode(const hobject_t &hobj) : hobj(hobj) {}
 
   virtual bool is_alive() const = 0;
   virtual const onode_layout_t &get_layout() const = 0;
   virtual ~Onode() = default;
 
+  virtual void update_local_object_id(Transaction&, local_object_id_t) = 0;
+  virtual void update_local_clone_id(Transaction&, local_clone_id_t) = 0;
   virtual void update_onode_size(Transaction&, uint32_t) = 0;
   virtual void update_omap_root(Transaction&, omap_root_t&) = 0;
   virtual void update_xattr_root(Transaction&, omap_root_t&) = 0;
@@ -78,16 +80,42 @@ public:
   virtual void clear_object_info(Transaction&) = 0;
   virtual void clear_snapset(Transaction&) = 0;
 
-  laddr_t get_metadata_hint(uint64_t block_size) const {
-    assert(default_metadata_offset);
-    assert(default_metadata_range);
-    uint64_t range_blocks = default_metadata_range / block_size;
-    auto random_offset = default_metadata_offset +
-        (((uint32_t)std::rand() % range_blocks) * block_size);
-    return (get_hint() + random_offset).checked_to_laddr();
+  // local object id doesn't use all of 64 bits internally,
+  // LOCAL_OBJECT_ID_NULL means this onode doesn't have
+  // local object id yet.
+  std::optional<local_object_id_t> get_local_object_id() const {
+    std::optional<local_object_id_t> id = std::nullopt;
+    if (auto loid = local_object_id_t(get_layout().local_object_id);
+        loid != LOCAL_OBJECT_ID_NULL) {
+      id = loid;
+    }
+    return id;
   }
-  laddr_t get_data_hint() const {
-    return get_hint();
+
+  std::optional<local_clone_id_t> get_local_clone_id() const {
+    std::optional<local_clone_id_t> id = std::nullopt;
+    if (auto lcid = local_clone_id_t(get_layout().local_clone_id);
+        lcid != LOCAL_CLONE_ID_NULL) {
+      ceph_assert(lcid != LOCAL_CLONE_ID_ZERO);
+      id = lcid;
+    }
+    return id;
+  }
+
+  // see gen_object_hint() in seastore_types.cc
+  laddr_hint_t get_metadata_hint() const {
+    return get_hint(
+      get_local_object_id(),
+      get_local_clone_id(),
+      /*is_metadata=*/true);
+  }
+
+  // see gen_object_hint() in seastore_types.cc
+  laddr_hint_t get_data_hint(bool gen_clone_hint = false) const {
+    return get_hint(
+      get_local_object_id(),
+      gen_clone_hint ? std::nullopt : get_local_clone_id(),
+      /*is_metadata=*/false);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
