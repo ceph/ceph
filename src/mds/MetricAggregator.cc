@@ -68,15 +68,6 @@ void MetricAggregator::shutdown() {
   }
 }
 
-bool MetricAggregator::ms_can_fast_dispatch2(const cref_t<Message> &m) const {
-  return m->get_type() == MSG_MDS_METRICS;
-}
-
-void MetricAggregator::ms_fast_dispatch2(const ref_t<Message> &m) {
-  bool handled = ms_dispatch2(m);
-  ceph_assert(handled);
-}
-
 bool MetricAggregator::ms_dispatch2(const ref_t<Message> &m) {
   if (m->get_type() == MSG_MDS_METRICS &&
       m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MDS) {
