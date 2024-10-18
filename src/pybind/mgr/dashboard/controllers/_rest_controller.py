@@ -13,7 +13,37 @@ from ._permissions import _set_func_permissions
 from ._version import APIVersion
 
 
-class RESTController(BaseController, skip_registry=True):
+class APIDocMeta(type):
+    @property
+    def doc_info(cls):
+        try:
+            return cls.__doc_info
+        except AttributeError:
+            tag = None
+            tag_descr = None
+            if cls.__doc__ is not None:
+                doc = cls.__doc__.strip()
+
+                # tag: description
+                if ":" in doc:
+                    tag, tag_descr = map(str.strip, doc.split(":", 1))
+                # tag\n\n description
+                elif "\n\n" in doc:
+                    tag, tag_descr = map(str.strip, doc.split("\n\n", 1))
+                else:
+                    tag_descr = doc
+
+            return {
+                'tag': tag,
+                'tag_descr': tag_descr
+            }
+
+    @doc_info.setter
+    def doc_info(cls, value):
+        cls.__doc_info = value
+
+
+class RESTController(BaseController, skip_registry=True, metaclass=APIDocMeta):
     """
     Base class for providing a RESTful interface to a resource.
 
