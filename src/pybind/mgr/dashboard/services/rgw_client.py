@@ -34,6 +34,8 @@ _SYNC_GROUP_ID = 'dashboard_admin_group'
 _SYNC_FLOW_ID = 'dashboard_admin_flow'
 _SYNC_PIPE_ID = 'dashboard_admin_pipe'
 
+_RGW_USER = 'dashboard'
+
 
 class NoRgwDaemonsException(Exception):
     def __init__(self):
@@ -257,7 +259,6 @@ def _get_user_keys(user: str, realm: Optional[str] = None) -> Tuple[str, str]:
 
 def configure_rgw_credentials():
     logger.info('Configuring dashboard RGW credentials')
-    user = 'dashboard'
     realms = []
     access_key = ''
     secret_key = ''
@@ -271,7 +272,7 @@ def configure_rgw_credentials():
             realm_access_keys = {}
             realm_secret_keys = {}
             for realm in realms:
-                realm_access_key, realm_secret_key = _get_user_keys(user, realm)
+                realm_access_key, realm_secret_key = _get_user_keys(_RGW_USER, realm)
                 if realm_access_key:
                     realm_access_keys[realm] = realm_access_key
                     realm_secret_keys[realm] = realm_secret_key
@@ -279,7 +280,7 @@ def configure_rgw_credentials():
                 access_key = json.dumps(realm_access_keys)
                 secret_key = json.dumps(realm_secret_keys)
         else:
-            access_key, secret_key = _get_user_keys(user)
+            access_key, secret_key = _get_user_keys(_RGW_USER)
 
         assert access_key and secret_key
         Settings.RGW_API_ACCESS_KEY = access_key
