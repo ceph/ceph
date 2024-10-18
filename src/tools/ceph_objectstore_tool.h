@@ -25,7 +25,7 @@ class ObjectStoreTool : public RadosDump
     {}
 
     int dump_export(Formatter *formatter, const std::string &dump_data_dir);
-    int do_import(ObjectStore *store, OSDSuperblock& sb, bool force,
+    int do_import(CephContext *cct, ObjectStore *store, OSDSuperblock& sb, bool force,
 		  std::string pgidstr);
     int do_export(CephContext *cct, ObjectStore *fs, coll_t coll, spg_t pgid,
           pg_info_t &info, epoch_t map_epoch, __u8 struct_ver,

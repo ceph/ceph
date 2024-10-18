@@ -42,6 +42,7 @@ extern "C" {
 #include "osd_types.h"
 #include "osd_types_fmt.h"
 #include "os/Transaction.h"
+#include "include/encoding.h"
 
 using std::list;
 using std::make_pair;
@@ -182,21 +183,6 @@ string ceph_osd_alloc_hint_flag_string(unsigned flags)
   if (s.length())
     return s;
   return string("-");
-}
-
-void pg_shard_t::encode(ceph::buffer::list &bl) const
-{
-  ENCODE_START(1, 1, bl);
-  encode(osd, bl);
-  encode(shard, bl);
-  ENCODE_FINISH(bl);
-}
-void pg_shard_t::decode(ceph::buffer::list::const_iterator &bl)
-{
-  DECODE_START(1, bl);
-  decode(osd, bl);
-  decode(shard, bl);
-  DECODE_FINISH(bl);
 }
 
 ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
@@ -1808,7 +1794,7 @@ pg_t pg_pool_t::raw_pg_to_pg(pg_t pg) const
   pg.set_ps(ceph_stable_mod(pg.ps(), pg_num, pg_num_mask));
   return pg;
 }
-  
+
 /*
  * map raw pg (full precision ps) into a placement seed.  include
  * pool id in that value so that different pools don't use the same
@@ -2484,6 +2470,7 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_objects_repaired", num_objects_repaired);
 }
 
+DENC_HELPERS
 void object_stat_sum_t::encode(ceph::buffer::list& bl) const
 {
   ENCODE_START(20, 14, bl);
@@ -2600,6 +2587,166 @@ void object_stat_sum_t::decode(ceph::buffer::list::const_iterator& bl)
     }
   }
   DECODE_FINISH(bl);
+}
+
+void object_stat_sum_t::encode(ceph::buffer::list::contiguous_appender& p) const {
+  DENC_START_COMPAT_CHECK(20, 14, p);
+#if defined(CEPH_LITTLE_ENDIAN)
+  p.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
+#else
+  denc(num_bytes, p);
+  denc(num_objects, p);
+  denc(num_object_clones, p);
+  denc(num_object_copies, p);
+  denc(num_objects_missing_on_primary, p);
+  denc(num_objects_degraded, p);
+  denc(num_objects_unfound, p);
+  denc(num_rd, p);
+  denc(num_rd_kb, p);
+  denc(num_wr, p);
+  denc(num_wr_kb, p);
+  denc(num_scrub_errors, p);
+  denc(num_objects_recovered, p);
+  denc(num_bytes_recovered, p);
+  denc(num_keys_recovered, p);
+  denc(num_shallow_scrub_errors, p);
+  denc(num_deep_scrub_errors, p);
+  denc(num_objects_dirty, p);
+  denc(num_whiteouts, p);
+  denc(num_objects_omap, p);
+  denc(num_objects_hit_set_archive, p);
+  denc(num_objects_misplaced, p);
+  denc(num_bytes_hit_set_archive, p);
+  denc(num_flush, p);
+  denc(num_flush_kb, p);
+  denc(num_evict, p);
+  denc(num_evict_kb, p);
+  denc(num_promote, p);
+  denc(num_flush_mode_high, p);
+  denc(num_flush_mode_low, p);
+  denc(num_evict_mode_some, p);
+  denc(num_evict_mode_full, p);
+  denc(num_objects_pinned, p);
+  denc(num_objects_missing, p);
+  denc(num_legacy_snapsets, p);
+  denc(num_large_omap_objects, p);
+  denc(num_objects_manifest, p);
+  denc(num_omap_bytes, p);
+  denc(num_omap_keys, p);
+  denc(num_objects_repaired, p);
+#endif
+  DENC_FINISH(p);
+}
+void object_stat_sum_t::decode(ceph::buffer::ptr::const_iterator& p) {
+  bool decode_finish = false;
+  static const int STAT_SUM_DECODE_VERSION = 20;
+  static const int compact = 14;
+  DENC_START_COMPAT_CHECK(STAT_SUM_DECODE_VERSION, compact, p);
+#if defined(CEPH_LITTLE_ENDIAN)
+  if (struct_v == STAT_SUM_DECODE_VERSION) {
+    memcpy((char*)(&num_bytes), p.get_pos_add(sizeof(object_stat_sum_t)), sizeof(object_stat_sum_t));
+    decode_finish = true;
+  }
+#endif
+  if (!decode_finish) {
+    denc(num_bytes, p);
+    denc(num_objects, p);
+    denc(num_object_clones, p);
+    denc(num_object_copies, p);
+    denc(num_objects_missing_on_primary, p);
+    denc(num_objects_degraded, p);
+    denc(num_objects_unfound, p);
+    denc(num_rd, p);
+    denc(num_rd_kb, p);
+    denc(num_wr, p);
+    denc(num_wr_kb, p);
+    denc(num_scrub_errors, p);
+    denc(num_objects_recovered, p);
+    denc(num_bytes_recovered, p);
+    denc(num_keys_recovered, p);
+    denc(num_shallow_scrub_errors, p);
+    denc(num_deep_scrub_errors, p);
+    denc(num_objects_dirty, p);
+    denc(num_whiteouts, p);
+    denc(num_objects_omap, p);
+    denc(num_objects_hit_set_archive, p);
+    denc(num_objects_misplaced, p);
+    denc(num_bytes_hit_set_archive, p);
+    denc(num_flush, p);
+    denc(num_flush_kb, p);
+    denc(num_evict, p);
+    denc(num_evict_kb, p);
+    denc(num_promote, p);
+    denc(num_flush_mode_high, p);
+    denc(num_flush_mode_low, p);
+    denc(num_evict_mode_some, p);
+    denc(num_evict_mode_full, p);
+    denc(num_objects_pinned, p);
+    denc(num_objects_missing, p);
+    if (struct_v >= 16) {
+      denc(num_legacy_snapsets, p);
+    } else {
+      num_legacy_snapsets = num_object_clones;  // upper bound
+    }
+    if (struct_v >= 17) {
+      denc(num_large_omap_objects, p);
+    }
+    if (struct_v >= 18) {
+      denc(num_objects_manifest, p);
+    }
+    if (struct_v >= 19) {
+      denc(num_omap_bytes, p);
+      denc(num_omap_keys, p);
+    }
+    if (struct_v >= 20) {
+      denc(num_objects_repaired, p);
+    }
+  }
+  DENC_FINISH(p);
+}
+void object_stat_sum_t::bound_encode(size_t& p) const {
+  DENC_START_COMPAT_CHECK(20, 14, p);
+  denc(num_bytes, p);
+  denc(num_objects, p);
+  denc(num_object_clones, p);
+  denc(num_object_copies, p);
+  denc(num_objects_missing_on_primary, p);
+  denc(num_objects_degraded, p);
+  denc(num_objects_unfound, p);
+  denc(num_rd, p);
+  denc(num_rd_kb, p);
+  denc(num_wr, p);
+  denc(num_wr_kb, p);
+  denc(num_scrub_errors, p);
+  denc(num_objects_recovered, p);
+  denc(num_bytes_recovered, p);
+  denc(num_keys_recovered, p);
+  denc(num_shallow_scrub_errors, p);
+  denc(num_deep_scrub_errors, p);
+  denc(num_objects_dirty, p);
+  denc(num_whiteouts, p);
+  denc(num_objects_omap, p);
+  denc(num_objects_hit_set_archive, p);
+  denc(num_objects_misplaced, p);
+  denc(num_bytes_hit_set_archive, p);
+  denc(num_flush, p);
+  denc(num_flush_kb, p);
+  denc(num_evict, p);
+  denc(num_evict_kb, p);
+  denc(num_promote, p);
+  denc(num_flush_mode_high, p);
+  denc(num_flush_mode_low, p);
+  denc(num_evict_mode_some, p);
+  denc(num_evict_mode_full, p);
+  denc(num_objects_pinned, p);
+  denc(num_objects_missing, p);
+  denc(num_legacy_snapsets, p);
+  denc(num_large_omap_objects, p);
+  denc(num_objects_manifest, p);
+  denc(num_omap_bytes, p);
+  denc(num_omap_keys, p);
+  denc(num_objects_repaired, p);
+  DENC_FINISH(p);
 }
 
 void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
@@ -2806,7 +2953,34 @@ void object_stat_collection_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void object_stat_collection_t::generate_test_instances(list<object_stat_collection_t*>& o)
+void object_stat_collection_t::encode(ceph::buffer::list::contiguous_appender &p) const
+{
+  DENC_START_COMPAT_CHECK(2, 2, p);
+  denc(sum, p);
+  denc((__u32)0, p);
+  DENC_FINISH(p);
+}
+
+void object_stat_collection_t::decode(ceph::buffer::ptr::const_iterator &p)
+{
+  DENC_START_COMPAT_CHECK(2, 2, p);
+  denc(sum, p);
+  {
+    map<string, object_stat_sum_t> cat_sum;
+    denc(cat_sum, p);
+  }
+  DENC_FINISH(p);
+}
+
+void object_stat_collection_t::bound_encode(size_t &p) const
+{
+  DENC_START_COMPAT_CHECK(2, 2, p);
+  denc(sum, p);
+  denc((__u32)0, p);
+  DENC_FINISH(p);
+}
+
+void object_stat_collection_t::generate_test_instances(list<object_stat_collection_t *> &o)
 {
   object_stat_collection_t a;
   o.push_back(new object_stat_collection_t(a));
@@ -2980,168 +3154,232 @@ bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
     l.m_is_periodic == r.m_is_periodic;
 }
 
-void pg_stat_t::encode(ceph::buffer::list &bl) const
+void pg_stat_t::encode(ceph::buffer::list::contiguous_appender& p) const
 {
-  ENCODE_START(29, 22, bl);
-  encode(version, bl);
-  encode(reported_seq, bl);
-  encode(reported_epoch, bl);
-  encode((__u32)state, bl);   // for older peers
-  encode(log_start, bl);
-  encode(ondisk_log_start, bl);
-  encode(created, bl);
-  encode(last_epoch_clean, bl);
-  encode(parent, bl);
-  encode(parent_split_bits, bl);
-  encode(last_scrub, bl);
-  encode(last_scrub_stamp, bl);
-  encode(stats, bl);
-  encode(log_size, bl);
-  encode(ondisk_log_size, bl);
-  encode(up, bl);
-  encode(acting, bl);
-  encode(last_fresh, bl);
-  encode(last_change, bl);
-  encode(last_active, bl);
-  encode(last_clean, bl);
-  encode(last_unstale, bl);
-  encode(mapping_epoch, bl);
-  encode(last_deep_scrub, bl);
-  encode(last_deep_scrub_stamp, bl);
-  encode(stats_invalid, bl);
-  encode(last_clean_scrub_stamp, bl);
-  encode(last_became_active, bl);
-  encode(dirty_stats_invalid, bl);
-  encode(up_primary, bl);
-  encode(acting_primary, bl);
-  encode(omap_stats_invalid, bl);
-  encode(hitset_stats_invalid, bl);
-  encode(blocked_by, bl);
-  encode(last_undegraded, bl);
-  encode(last_fullsized, bl);
-  encode(hitset_bytes_stats_invalid, bl);
-  encode(last_peered, bl);
-  encode(last_became_peered, bl);
-  encode(pin_stats_invalid, bl);
-  encode(snaptrimq_len, bl);
+  DENC_START_COMPAT_CHECK(29, 22, p);
+  denc(version, p);
+  denc(reported_seq, p);
+  denc(reported_epoch, p);
+  denc((__u32)state, p);   // for older peers
+  denc(log_start, p);
+  denc(ondisk_log_start, p);
+  denc(created, p);
+  denc(last_epoch_clean, p);
+  denc(parent, p);
+  denc(parent_split_bits, p);
+  denc(last_scrub, p);
+  denc(last_scrub_stamp, p);
+  denc(stats, p);
+  denc(log_size, p);
+  denc(ondisk_log_size, p);
+  denc(up, p);
+  denc(acting, p);
+  denc(last_fresh, p);
+  denc(last_change, p);
+  denc(last_active, p);
+  denc(last_clean, p);
+  denc(last_unstale, p);
+  denc(mapping_epoch, p);
+  denc(last_deep_scrub, p);
+  denc(last_deep_scrub_stamp, p);
+  denc(stats_invalid, p);
+  denc(last_clean_scrub_stamp, p);
+  denc(last_became_active, p);
+  denc(dirty_stats_invalid, p);
+  denc(up_primary, p);
+  denc(acting_primary, p);
+  denc(omap_stats_invalid, p);
+  denc(hitset_stats_invalid, p);
+  denc(blocked_by, p);
+  denc(last_undegraded, p);
+  denc(last_fullsized, p);
+  denc(hitset_bytes_stats_invalid, p);
+  denc(last_peered, p);
+  denc(last_became_peered, p);
+  denc(pin_stats_invalid, p);
+  denc(snaptrimq_len, p);
   __u32 top_state = (state >> 32);
-  encode(top_state, bl);
-  encode(purged_snaps, bl);
-  encode(manifest_stats_invalid, bl);
-  encode(avail_no_missing, bl);
-  encode(object_location_counts, bl);
-  encode(last_scrub_duration, bl);
-  encode(scrub_sched_status.m_scheduled_at, bl);
-  encode(scrub_sched_status.m_duration_seconds, bl);
-  encode((__u16)scrub_sched_status.m_sched_status, bl);
-  encode(scrub_sched_status.m_is_active, bl);
-  encode((scrub_sched_status.m_is_deep==scrub_level_t::deep), bl);
-  encode(scrub_sched_status.m_is_periodic, bl);
-  encode(objects_scrubbed, bl);
-  encode(scrub_duration, bl);
-  encode(objects_trimmed, bl);
-  encode(snaptrim_duration, bl);
-  encode(log_dups_size, bl);
-
-  ENCODE_FINISH(bl);
+  denc(top_state, p);
+  denc(purged_snaps, p);
+  denc(manifest_stats_invalid, p);
+  denc(avail_no_missing, p);
+  denc(object_location_counts, p);
+  denc(last_scrub_duration, p);
+  denc(scrub_sched_status.m_scheduled_at, p);
+  denc(scrub_sched_status.m_duration_seconds, p);
+  denc((__u16)scrub_sched_status.m_sched_status, p);
+  denc(scrub_sched_status.m_is_active, p);
+  denc((scrub_sched_status.m_is_deep == scrub_level_t::deep), p);
+  denc(scrub_sched_status.m_is_periodic, p);
+  denc(objects_scrubbed, p);
+  denc(scrub_duration, p);
+  denc(objects_trimmed, p);
+  denc(snaptrim_duration, p);
+  denc(log_dups_size, p);
+  DENC_FINISH(p);
 }
 
-void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
+void pg_stat_t::decode(ceph::buffer::ptr::const_iterator& p)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(29, bl);
-  decode(version, bl);
-  decode(reported_seq, bl);
-  decode(reported_epoch, bl);
-  decode(old_state, bl);
-  decode(log_start, bl);
-  decode(ondisk_log_start, bl);
-  decode(created, bl);
-  decode(last_epoch_clean, bl);
-  decode(parent, bl);
-  decode(parent_split_bits, bl);
-  decode(last_scrub, bl);
-  decode(last_scrub_stamp, bl);
-  decode(stats, bl);
-  decode(log_size, bl);
-  decode(ondisk_log_size, bl);
-  decode(up, bl);
-  decode(acting, bl);
-  decode(last_fresh, bl);
-  decode(last_change, bl);
-  decode(last_active, bl);
-  decode(last_clean, bl);
-  decode(last_unstale, bl);
-  decode(mapping_epoch, bl);
-  decode(last_deep_scrub, bl);
-  decode(last_deep_scrub_stamp, bl);
-  decode(tmp, bl);
+  DENC_START_COMPAT_CHECK(29, 22, p);
+  denc(version, p);
+  denc(reported_seq, p);
+  denc(reported_epoch, p);
+  denc(old_state, p);
+  denc(log_start, p);
+  denc(ondisk_log_start, p);
+  denc(created, p);
+  denc(last_epoch_clean, p);
+  denc(parent, p);
+  denc(parent_split_bits, p);
+  denc(last_scrub, p);
+  denc(last_scrub_stamp, p);
+  denc(stats, p);
+  denc(log_size, p);
+  denc(ondisk_log_size, p);
+  denc(up, p);
+  denc(acting, p);
+  denc(last_fresh, p);
+  denc(last_change, p);
+  denc(last_active, p);
+  denc(last_clean, p);
+  denc(last_unstale, p);
+  denc(mapping_epoch, p);
+  denc(last_deep_scrub, p);
+  denc(last_deep_scrub_stamp, p);
+  denc(tmp, p);
   stats_invalid = tmp;
-  decode(last_clean_scrub_stamp, bl);
-  decode(last_became_active, bl);
-  decode(tmp, bl);
+  denc(last_clean_scrub_stamp, p);
+  denc(last_became_active, p);
+  denc(tmp, p);
   dirty_stats_invalid = tmp;
-  decode(up_primary, bl);
-  decode(acting_primary, bl);
-  decode(tmp, bl);
+  denc(up_primary, p);
+  denc(acting_primary, p);
+  denc(tmp, p);
   omap_stats_invalid = tmp;
-  decode(tmp, bl);
+  denc(tmp, p);
   hitset_stats_invalid = tmp;
-  decode(blocked_by, bl);
-  decode(last_undegraded, bl);
-  decode(last_fullsized, bl);
-  decode(tmp, bl);
+  denc(blocked_by, p);
+  denc(last_undegraded, p);
+  denc(last_fullsized, p);
+  denc(tmp, p);
   hitset_bytes_stats_invalid = tmp;
-  decode(last_peered, bl);
-  decode(last_became_peered, bl);
-  decode(tmp, bl);
+  denc(last_peered, p);
+  denc(last_became_peered, p);
+  denc(tmp, p);
   pin_stats_invalid = tmp;
   if (struct_v >= 23) {
-    decode(snaptrimq_len, bl);
+    denc(snaptrimq_len, p);
     if (struct_v >= 24) {
       __u32 top_state;
-      decode(top_state, bl);
+      denc(top_state, p);
       state = (uint64_t)old_state | ((uint64_t)top_state << 32);
-      decode(purged_snaps, bl);
+      denc(purged_snaps, p);
     } else {
       state = old_state;
     }
     if (struct_v >= 25) {
-      decode(tmp, bl);
+      denc(tmp, p);
       manifest_stats_invalid = tmp;
     } else {
       manifest_stats_invalid = true;
     }
     if (struct_v >= 26) {
-      decode(avail_no_missing, bl);
-      decode(object_location_counts, bl);
+      denc(avail_no_missing, p);
+      denc(object_location_counts, p);
     }
     if (struct_v >= 27) {
-      decode(last_scrub_duration, bl);
-      decode(scrub_sched_status.m_scheduled_at, bl);
-      decode(scrub_sched_status.m_duration_seconds, bl);
+      denc(last_scrub_duration, p);
+      denc(scrub_sched_status.m_scheduled_at, p);
+      denc(scrub_sched_status.m_duration_seconds, p);
       __u16 scrub_sched_as_u16;
-      decode(scrub_sched_as_u16, bl);
+      denc(scrub_sched_as_u16, p);
       scrub_sched_status.m_sched_status = (pg_scrub_sched_status_t)(scrub_sched_as_u16);
-      decode(tmp, bl);
+      denc(tmp, p);
       scrub_sched_status.m_is_active = tmp;
-      decode(tmp, bl);
+      denc(tmp, p);
       scrub_sched_status.m_is_deep = tmp ? scrub_level_t::deep : scrub_level_t::shallow;
-      decode(tmp, bl);
+      denc(tmp, p);
       scrub_sched_status.m_is_periodic = tmp;
-      decode(objects_scrubbed, bl);
+      denc(objects_scrubbed, p);
     }
     if (struct_v >= 28) {
-      decode(scrub_duration, bl);
-      decode(objects_trimmed, bl);
-      decode(snaptrim_duration, bl);
+      denc(scrub_duration, p);
+      denc(objects_trimmed, p);
+      denc(snaptrim_duration, p);
     }
     if (struct_v >= 29) {
-      decode(log_dups_size, bl);
+      denc(log_dups_size, p);
     }
   }
-  DECODE_FINISH(bl);
+  DENC_FINISH(p);
+}
+
+void pg_stat_t::bound_encode(size_t &p) const
+{
+  DENC_START_COMPAT_CHECK(29, 22, p);
+  denc(version, p);
+  denc(reported_seq, p);
+  denc(reported_epoch, p);
+  denc((__u32)state, p);   // for older peers
+  denc(log_start, p);
+  denc(ondisk_log_start, p);
+  denc(created, p);
+  denc(last_epoch_clean, p);
+  denc(parent, p);
+  denc(parent_split_bits, p);
+  denc(last_scrub, p);
+  denc(last_scrub_stamp, p);
+  denc(stats, p);
+  denc(log_size, p);
+  denc(ondisk_log_size, p);
+  denc(up, p);
+  denc(acting, p);
+  denc(last_fresh, p);
+  denc(last_change, p);
+  denc(last_active, p);
+  denc(last_clean, p);
+  denc(last_unstale, p);
+  denc(mapping_epoch, p);
+  denc(last_deep_scrub, p);
+  denc(last_deep_scrub_stamp, p);
+  denc(stats_invalid, p);
+  denc(last_clean_scrub_stamp, p);
+  denc(last_became_active, p);
+  denc(dirty_stats_invalid, p);
+  denc(up_primary, p);
+  denc(acting_primary, p);
+  denc(omap_stats_invalid, p);
+  denc(hitset_stats_invalid, p);
+  denc(blocked_by, p);
+  denc(last_undegraded, p);
+  denc(last_fullsized, p);
+  denc(hitset_bytes_stats_invalid, p);
+  denc(last_peered, p);
+  denc(last_became_peered, p);
+  denc(pin_stats_invalid, p);
+  denc(snaptrimq_len, p);
+  __u32 top_state = (state >> 32);
+  denc(top_state, p);
+  denc(purged_snaps, p);
+  denc(manifest_stats_invalid, p);
+  denc(avail_no_missing, p);
+  denc(object_location_counts, p);
+  denc(last_scrub_duration, p);
+  denc(scrub_sched_status.m_scheduled_at, p);
+  denc(scrub_sched_status.m_duration_seconds, p);
+  denc((__u16)scrub_sched_status.m_sched_status, p);
+  denc(scrub_sched_status.m_is_active, p);
+  denc((scrub_sched_status.m_is_deep == scrub_level_t::deep), p);
+  denc(scrub_sched_status.m_is_periodic, p);
+  denc(objects_scrubbed, p);
+  denc(scrub_duration, p);
+  denc(objects_trimmed, p);
+  denc(snaptrim_duration, p);
+  denc(log_dups_size, p);
+  DENC_FINISH(p);
 }
 
 void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
@@ -3431,59 +3669,59 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
 
 // -- pg_history_t --
 
-void pg_history_t::encode(ceph::buffer::list &bl) const
+void pg_history_t::encode(ceph::buffer::list::contiguous_appender& p) const
 {
-  ENCODE_START(10, 4, bl);
-  encode(epoch_created, bl);
-  encode(last_epoch_started, bl);
-  encode(last_epoch_clean, bl);
-  encode(last_epoch_split, bl);
-  encode(same_interval_since, bl);
-  encode(same_up_since, bl);
-  encode(same_primary_since, bl);
-  encode(last_scrub, bl);
-  encode(last_scrub_stamp, bl);
-  encode(last_deep_scrub, bl);
-  encode(last_deep_scrub_stamp, bl);
-  encode(last_clean_scrub_stamp, bl);
-  encode(last_epoch_marked_full, bl);
-  encode(last_interval_started, bl);
-  encode(last_interval_clean, bl);
-  encode(epoch_pool_created, bl);
-  encode(prior_readable_until_ub, bl);
-  ENCODE_FINISH(bl);
+  DENC_START_COMPAT_CHECK(10, 4, p);
+  denc(epoch_created, p);
+  denc(last_epoch_started, p);
+  denc(last_epoch_clean, p);
+  denc(last_epoch_split, p);
+  denc(same_interval_since, p);
+  denc(same_up_since, p);
+  denc(same_primary_since, p);
+  denc(last_scrub, p);
+  denc(last_scrub_stamp, p);
+  denc(last_deep_scrub, p);
+  denc(last_deep_scrub_stamp, p);
+  denc(last_clean_scrub_stamp, p);
+  denc(last_epoch_marked_full, p);
+  denc(last_interval_started, p);
+  denc(last_interval_clean, p);
+  denc(epoch_pool_created, p);
+  denc(prior_readable_until_ub, p);
+  DENC_FINISH(p);
 }
 
-void pg_history_t::decode(ceph::buffer::list::const_iterator &bl)
+void pg_history_t::decode(ceph::buffer::ptr::const_iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(10, 4, 4, bl);
-  decode(epoch_created, bl);
-  decode(last_epoch_started, bl);
+  DENC_START_COMPAT_CHECK(10, 4, p);
+  denc(epoch_created, p);
+  denc(last_epoch_started, p);
   if (struct_v >= 3)
-    decode(last_epoch_clean, bl);
+    denc(last_epoch_clean, p);
   else
     last_epoch_clean = last_epoch_started;  // careful, it's a lie!
-  decode(last_epoch_split, bl);
-  decode(same_interval_since, bl);
-  decode(same_up_since, bl);
-  decode(same_primary_since, bl);
+  denc(last_epoch_split, p);
+  denc(same_interval_since, p);
+  denc(same_up_since, p);
+  denc(same_primary_since, p);
   if (struct_v >= 2) {
-    decode(last_scrub, bl);
-    decode(last_scrub_stamp, bl);
+    denc(last_scrub, p);
+    denc(last_scrub_stamp, p);
   }
   if (struct_v >= 5) {
-    decode(last_deep_scrub, bl);
-    decode(last_deep_scrub_stamp, bl);
+    denc(last_deep_scrub, p);
+    denc(last_deep_scrub_stamp, p);
   }
   if (struct_v >= 6) {
-    decode(last_clean_scrub_stamp, bl);
+    denc(last_clean_scrub_stamp, p);
   }
   if (struct_v >= 7) {
-    decode(last_epoch_marked_full, bl);
+    denc(last_epoch_marked_full, p);
   }
   if (struct_v >= 8) {
-    decode(last_interval_started, bl);
-    decode(last_interval_clean, bl);
+    denc(last_interval_started, p);
+    denc(last_interval_clean, p);
   } else {
     if (last_epoch_started >= same_interval_since) {
       last_interval_started = same_interval_since;
@@ -3497,14 +3735,37 @@ void pg_history_t::decode(ceph::buffer::list::const_iterator &bl)
     }
   }
   if (struct_v >= 9) {
-    decode(epoch_pool_created, bl);
+    denc(epoch_pool_created, p);
   } else {
     epoch_pool_created = epoch_created;
   }
   if (struct_v >= 10) {
-    decode(prior_readable_until_ub, bl);
+    denc(prior_readable_until_ub, p);
   }
-  DECODE_FINISH(bl);
+  DENC_FINISH(p);
+}
+
+void pg_history_t::bound_encode(size_t &p) const
+{
+  DENC_START_COMPAT_CHECK(10, 4, p);
+  denc(epoch_created, p);
+  denc(last_epoch_started, p);
+  denc(last_epoch_clean, p);
+  denc(last_epoch_split, p);
+  denc(same_interval_since, p);
+  denc(same_up_since, p);
+  denc(same_primary_since, p);
+  denc(last_scrub, p);
+  denc(last_scrub_stamp, p);
+  denc(last_deep_scrub, p);
+  denc(last_deep_scrub_stamp, p);
+  denc(last_clean_scrub_stamp, p);
+  denc(last_epoch_marked_full, p);
+  denc(last_interval_started, p);
+  denc(last_interval_clean, p);
+  denc(epoch_pool_created, p);
+  denc(prior_readable_until_ub, p);
+  DENC_FINISH(p);
 }
 
 void pg_history_t::dump(Formatter *f) const
@@ -3556,59 +3817,88 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 // -- pg_info_t --
 
-void pg_info_t::encode(ceph::buffer::list &bl) const
+void pg_info_t::encode(ceph::buffer::list::contiguous_appender& p) const
 {
-  ENCODE_START(32, 26, bl);
-  encode(pgid.pgid, bl);
-  encode(last_update, bl);
-  encode(last_complete, bl);
-  encode(log_tail, bl);
-  encode(hobject_t(), bl);  // old (nibblewise) last_backfill
-  encode(stats, bl);
-  history.encode(bl);
-  encode(purged_snaps, bl);
-  encode(last_epoch_started, bl);
-  encode(last_user_version, bl);
-  encode(hit_set, bl);
-  encode(pgid.shard, bl);
-  encode(last_backfill, bl);
-  encode(true, bl); // was last_backfill_bitwise
-  encode(last_interval_started, bl);
-  ENCODE_FINISH(bl);
-}
-
-void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
-{
-  DECODE_START(32, bl);
-  decode(pgid.pgid, bl);
-  decode(last_update, bl);
-  decode(last_complete, bl);
-  decode(log_tail, bl);
+  DENC_START_COMPAT_CHECK(32, 26, p);
+  denc(pgid.pgid, p);
+  denc(last_update, p);
+  denc(last_complete, p);
+  denc(log_tail, p); 
   {
     hobject_t old_last_backfill;
-    decode(old_last_backfill, bl);
+    denc(old_last_backfill, p);  // old (nibblewise) last_backfill
   }
-  decode(stats, bl);
-  history.decode(bl);
-  decode(purged_snaps, bl);
-  decode(last_epoch_started, bl);
-  decode(last_user_version, bl);
-  decode(hit_set, bl);
-  decode(pgid.shard, bl);
-  decode(last_backfill, bl);
+  denc(stats, p);
+  history.encode(p);
+  denc(purged_snaps, p);
+  denc(last_epoch_started, p);
+  denc(last_user_version, p);
+  denc(hit_set, p);
+  denc(pgid.shard, p);
+  denc(last_backfill, p);
+  auto tmp_bool = true;
+  denc(tmp_bool, p); // was last_backfill_bitwise
+  denc(last_interval_started, p);
+  DENC_FINISH(p);
+}
+
+void pg_info_t::decode(ceph::buffer::ptr::const_iterator& p)
+{
+  DENC_START_COMPAT_CHECK(32, 26, p);
+  denc(pgid.pgid, p);
+  denc(last_update, p);
+  denc(last_complete, p);
+  denc(log_tail, p);
+  {
+    hobject_t old_last_backfill;
+    denc(old_last_backfill, p);
+  }
+  denc(stats, p);
+  history.decode(p);
+  denc(purged_snaps, p);
+  denc(last_epoch_started, p);
+  denc(last_user_version, p);
+  denc(hit_set, p);
+  denc(pgid.shard, p);
+  denc(last_backfill, p);
   {
     bool last_backfill_bitwise;
-    decode(last_backfill_bitwise, bl);
+    denc(last_backfill_bitwise, p);
     // note: we may see a false value here since the default value for
     // the member was false, so it often didn't get set to true until
     // peering progressed.
   }
   if (struct_v >= 32) {
-    decode(last_interval_started, bl);
+    denc(last_interval_started, p);
   } else {
     last_interval_started = last_epoch_started;
   }
-  DECODE_FINISH(bl);
+  DENC_FINISH(p);
+}
+
+void pg_info_t::bound_encode(size_t& p) const
+{
+  DENC_START_COMPAT_CHECK(32, 26, p);
+  denc(pgid.pgid, p);
+  denc(last_update, p);
+  denc(last_complete, p);
+  denc(log_tail, p);
+  {
+    hobject_t old_last_backfill;
+    denc(old_last_backfill, p);
+  }
+  denc(stats, p);
+  history.bound_encode(p);
+  denc(purged_snaps, p);
+  denc(last_epoch_started, p);
+  denc(last_user_version, p);
+  denc(hit_set, p);
+  denc(pgid.shard, p);
+  denc(last_backfill, p);
+  auto tmp_bool = true;
+  denc(tmp_bool, p); // was last_backfill_bitwise
+  denc(last_interval_started, p);
+  DENC_FINISH(p);
 }
 
 // -- pg_info_t --
@@ -3851,19 +4141,13 @@ struct compact_interval_t {
     f->dump_stream("acting") << acting;
     f->close_section();
   }
-  void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(first, bl);
-    encode(last, bl);
-    encode(acting, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(first, bl);
-    decode(last, bl);
-    decode(acting, bl);
-    DECODE_FINISH(bl);
+
+  DENC(compact_interval_t, v, p) {
+    DENC_START_COMPAT_CHECK(1, 1, p);
+    denc(v.first, p);
+    denc(v.last, p);
+    denc(v.acting, p);
+    DENC_FINISH(p);
   }
   std::string fmt_print() const {
     return fmt::format("([{},{}] acting={})", first, last, acting);
@@ -3876,7 +4160,7 @@ ostream &operator<<(ostream &o, const compact_interval_t &rhs)
 {
   return o << rhs.fmt_print();
 }
-WRITE_CLASS_ENCODER(compact_interval_t)
+WRITE_CLASS_DENC(compact_interval_t)
 
 class pi_compact_rep : public PastIntervals::interval_rep {
   epoch_t first = 0;
@@ -3956,21 +4240,14 @@ public:
     return fmt::format("([{},{}] all_participants={} intervals={})",
                        first, last, all_participants, intervals);
   }
-  void encode(ceph::buffer::list &bl) const override {
-    ENCODE_START(1, 1, bl);
-    encode(first, bl);
-    encode(last, bl);
-    encode(all_participants, bl);
-    encode(intervals, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator &bl) override {
-    DECODE_START(1, bl);
-    decode(first, bl);
-    decode(last, bl);
-    decode(all_participants, bl);
-    decode(intervals, bl);
-    DECODE_FINISH(bl);
+
+  DENC(pi_compact_rep, v, p) {
+    DENC_START_COMPAT_CHECK(1, 1, p);
+    denc(v.first, p);
+    denc(v.last, p);
+    denc(v.all_participants, p);
+    denc(v.intervals, p);
+    DENC_FINISH(p);
   }
   void dump(Formatter *f) const override {
     f->open_object_section("PastIntervals::compact_rep");
@@ -4027,7 +4304,7 @@ public:
   }
   virtual ~pi_compact_rep() override {}
 };
-WRITE_CLASS_ENCODER(pi_compact_rep)
+WRITE_CLASS_DENC(pi_compact_rep)
 
 PastIntervals::PastIntervals()
 {
@@ -4073,11 +4350,25 @@ ostream& operator<<(ostream& out, const PastIntervals::PriorSet &pset)
   return out << pset.fmt_print();
 }
 
-void PastIntervals::decode(ceph::buffer::list::const_iterator &bl)
+void PastIntervals::encode(ceph::buffer::list::contiguous_appender &p) const
 {
-  DECODE_START(1, bl);
+  DENC_START_COMPAT_CHECK(1, 1, p);
+  if (past_intervals) {
+    __u8 type = 2;
+    denc(type, p);
+    past_intervals->encode(p);
+  } else {
+    __u8 zero_tmp = 0;
+    denc(zero_tmp, p);
+  }
+  DENC_FINISH(p);
+}
+
+void PastIntervals::decode(ceph::buffer::ptr::const_iterator &p)
+{
+  DENC_START_COMPAT_CHECK(1, 1, p);
   __u8 type = 0;
-  decode(type, bl);
+  denc(type, p);
   switch (type) {
   case 0:
     break;
@@ -4086,10 +4377,23 @@ void PastIntervals::decode(ceph::buffer::list::const_iterator &bl)
     break;
   case 2:
     past_intervals.reset(new pi_compact_rep);
-    past_intervals->decode(bl);
+    past_intervals->decode(p);
     break;
   }
-  DECODE_FINISH(bl);
+  DENC_FINISH(p);
+}
+
+void PastIntervals::bound_encode(size_t& p) const {
+  DENC_START_COMPAT_CHECK(1, 1, p);
+  if (past_intervals) {
+    __u8 type = 2;
+    denc(type, p);
+    past_intervals->bound_encode(p);
+  } else {
+    __u8 zero_tmp = 0;
+    denc(zero_tmp, p);
+  }
+  DENC_FINISH(p);
 }
 
 void PastIntervals::generate_test_instances(list<PastIntervals*> &o)
@@ -4417,29 +4721,6 @@ bool PastIntervals::PriorSet::affected_by_map(
 }
 
 // -- pg_query_t --
-
-void pg_query_t::encode(ceph::buffer::list &bl, uint64_t features) const {
-  ENCODE_START(3, 3, bl);
-  encode(type, bl);
-  encode(since, bl);
-  history.encode(bl);
-  encode(epoch_sent, bl);
-  encode(to, bl);
-  encode(from, bl);
-  ENCODE_FINISH(bl);
-}
-
-void pg_query_t::decode(ceph::buffer::list::const_iterator &bl) {
-  DECODE_START(3, bl);
-  decode(type, bl);
-  decode(since, bl);
-  history.decode(bl);
-  decode(epoch_sent, bl);
-  decode(to, bl);
-  decode(from, bl);
-  DECODE_FINISH(bl);
-}
-
 void pg_query_t::dump(Formatter *f) const
 {
   f->dump_int("from", from);
@@ -4466,24 +4747,6 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 }
 
 // -- pg_lease_t --
-
-void pg_lease_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  encode(readable_until, bl);
-  encode(readable_until_ub, bl);
-  encode(interval, bl);
-  ENCODE_FINISH(bl);
-}
-
-void pg_lease_t::decode(bufferlist::const_iterator& p)
-{
-  DECODE_START(1, p);
-  decode(readable_until, p);
-  decode(readable_until_ub, p);
-  decode(interval, p);
-  DECODE_FINISH(p);
-}
 
 void pg_lease_t::dump(Formatter *f) const
 {
@@ -4541,49 +4804,49 @@ void ObjectModDesc::visit(Visitor *visitor) const
       decode(code, bp);
       switch (code) {
       case APPEND: {
-	uint64_t size;
-	decode(size, bp);
-	visitor->append(size);
-	break;
+        uint64_t size;
+        decode(size, bp);
+        visitor->append(size);
+        break;
       }
       case SETATTRS: {
-	map<string, std::optional<ceph::buffer::list> > attrs;
-	decode(attrs, bp);
-	visitor->setattrs(attrs);
-	break;
+        map<string, std::optional<ceph::buffer::list> > attrs;
+        decode(attrs, bp);
+        visitor->setattrs(attrs);
+        break;
       }
       case DELETE: {
-	version_t old_version;
-	decode(old_version, bp);
-	visitor->rmobject(old_version);
-	break;
+        version_t old_version;
+        decode(old_version, bp);
+        visitor->rmobject(old_version);
+        break;
       }
       case CREATE: {
-	visitor->create();
-	break;
+        visitor->create();
+        break;
       }
       case UPDATE_SNAPS: {
-	set<snapid_t> snaps;
-	decode(snaps, bp);
-	visitor->update_snaps(snaps);
-	break;
+        set<snapid_t> snaps;
+        decode(snaps, bp);
+        visitor->update_snaps(snaps);
+        break;
       }
       case TRY_DELETE: {
-	version_t old_version;
-	decode(old_version, bp);
-	visitor->try_rmobject(old_version);
-	break;
+        version_t old_version;
+        decode(old_version, bp);
+        visitor->try_rmobject(old_version);
+        break;
       }
       case ROLLBACK_EXTENTS: {
-	vector<pair<uint64_t, uint64_t> > extents;
-	version_t gen;
-	decode(gen, bp);
-	decode(extents, bp);
-	visitor->rollback_extents(gen,extents);
-	break;
+        vector<pair<uint64_t, uint64_t> > extents;
+        version_t gen;
+        decode(gen, bp);
+        decode(extents, bp);
+        visitor->rollback_extents(gen,extents);
+        break;
       }
       default:
-	ceph_abort_msg("Invalid rollback code");
+        ceph_abort_msg("Invalid rollback code");
       }
       DECODE_FINISH(bp);
     }
@@ -4635,8 +4898,8 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
     f->close_section();
   }
   void rollback_extents(
-    version_t gen,
-    const vector<pair<uint64_t, uint64_t> > &extents) override {
+      version_t gen,
+      const vector<pair<uint64_t, uint64_t> > &extents) override {
     f->open_object_section("op");
     f->dump_string("code", "ROLLBACK_EXTENTS");
     f->dump_unsigned("gen", gen);
@@ -4699,6 +4962,33 @@ void ObjectModDesc::decode(ceph::buffer::list::const_iterator &_bl)
   bl.rebuild();
   bl.reassign_to_mempool(mempool::mempool_osd_pglog);
   DECODE_FINISH(_bl);
+}
+
+void ObjectModDesc::bound_encode(size_t& p) const {
+  DENC_START_COMPAT_CHECK(max_required_version, max_required_version, p);
+  denc(can_local_rollback, p);
+  denc(rollback_info_completed, p);
+  denc(bl, p);
+  DENC_FINISH(p);
+}
+
+void ObjectModDesc::encode(ceph::buffer::list::contiguous_appender& p) const {
+  DENC_START_COMPAT_CHECK(max_required_version, max_required_version, p);
+  denc(can_local_rollback, p);
+  denc(rollback_info_completed, p);
+  denc(bl, p);
+  DENC_FINISH(p);
+}
+void ObjectModDesc::decode(ceph::buffer::ptr::const_iterator& p) {
+  DENC_START_COMPAT_CHECK(2, 2, p);
+  max_required_version = struct_v;
+  denc(can_local_rollback, p);
+  denc(rollback_info_completed, p);
+  denc(bl, p);
+  // ensure bl does not pin a larger ceph::buffer in memory
+  bl.rebuild();
+  bl.reassign_to_mempool(mempool::mempool_osd_pglog);
+  DENC_FINISH(p);
 }
 
 std::atomic<uint32_t> ObjectCleanRegions::max_num_intervals = {10};
@@ -4764,10 +5054,10 @@ void ObjectCleanRegions::mark_fully_dirty()
 
 interval_set<uint64_t> ObjectCleanRegions::get_dirty_regions() const
 {
-   interval_set<uint64_t> dirty_region;
-   dirty_region.insert(0, (uint64_t)-1);
-   dirty_region.subtract(clean_offsets);
-   return dirty_region;
+	interval_set<uint64_t> dirty_region;
+	dirty_region.insert(0, (uint64_t)-1);
+	dirty_region.subtract(clean_offsets);
+	return dirty_region;
 }
 
 bool ObjectCleanRegions::omap_is_dirty() const
@@ -4798,6 +5088,30 @@ void ObjectCleanRegions::decode(bufferlist::const_iterator &bl)
   decode(clean_omap, bl);
   decode(new_object, bl);
   DECODE_FINISH(bl);
+}
+
+void ObjectCleanRegions::bound_encode(size_t& p) const {
+  DENC_START_COMPAT_CHECK(1, 1, p);
+  denc(clean_offsets, p);
+  denc(clean_omap, p);
+  denc(new_object, p);
+  DENC_FINISH(p);
+}
+
+void ObjectCleanRegions::encode(ceph::buffer::list::contiguous_appender& p) const {
+  DENC_START_COMPAT_CHECK(1, 1, p);
+  denc(clean_offsets, p);
+  denc(clean_omap, p);
+  denc(new_object, p);
+  DENC_FINISH(p);
+}
+
+void ObjectCleanRegions::decode(ceph::buffer::ptr::const_iterator& p) {
+  DENC_START_COMPAT_CHECK(1, 1, p);
+  denc(clean_offsets, p);
+  denc(clean_omap, p);
+  denc(new_object, p);
+  DENC_FINISH(p);
 }
 
 void ObjectCleanRegions::dump(Formatter *f) const
@@ -4840,7 +5154,8 @@ void pg_log_entry_t::encode_with_checksum(ceph::buffer::list& bl) const
 {
   using ceph::encode;
   ceph::buffer::list ebl(sizeof(*this)*2);
-  this->encode(ebl);
+  using ceph::encode;
+  encode(*this, ebl);
   __u32 crc = ebl.crc32c(0);
   encode(ebl, bl);
   encode(crc, bl);
@@ -4856,116 +5171,139 @@ void pg_log_entry_t::decode_with_checksum(ceph::buffer::list::const_iterator& p)
   if (crc != bl.crc32c(0))
     throw ceph::buffer::malformed_input("bad checksum on pg_log_entry_t");
   auto q = bl.cbegin();
-  this->decode(q);
+  decode(*this, q);
 }
 
-void pg_log_entry_t::encode(ceph::buffer::list &bl) const
-{
-  ENCODE_START(14, 4, bl);
-  encode(op, bl);
-  encode(soid, bl);
-  encode(version, bl);
+void pg_log_entry_t::bound_encode(size_t& p) const {
+  DENC_START_COMPAT_CHECK(14, 4, p);
+  denc(op, p);
+  denc(soid, p);
+  denc(version, p);
 
-  /**
-   * Added with reverting_to:
-   * Previous code used prior_version to encode
-   * what we now call reverting_to.  This will
-   * allow older code to decode reverting_to
-   * into prior_version as expected.
-   */
   if (op == LOST_REVERT)
-    encode(reverting_to, bl);
+    denc(reverting_to, p);
   else
-    encode(prior_version, bl);
-
-  encode(reqid, bl);
-  encode(mtime, bl);
+    denc(prior_version, p);
+  
+  denc(reqid, p);
+  denc(mtime, p);
+  
   if (op == LOST_REVERT)
-    encode(prior_version, bl);
-  encode(snaps, bl);
-  encode(user_version, bl);
-  encode(mod_desc, bl);
-  encode(extra_reqids, bl);
+    denc(prior_version, p);
+  denc(snaps, p);
+  denc(user_version, p);
+  denc(mod_desc, p);
+  denc(extra_reqids, p);
   if (op == ERROR)
-    encode(return_code, bl);
+    denc(return_code, p);
+
   if (!extra_reqids.empty())
-    encode(extra_reqid_return_codes, bl);
-  encode(clean_regions, bl);
+    denc(extra_reqid_return_codes, p);
+
+  denc(clean_regions, p);
+  
   if (op != ERROR)
-    encode(return_code, bl);
-  encode(op_returns, bl);
-  ENCODE_FINISH(bl);
+    denc(return_code, p);
+
+  denc(op_returns, p);
+  DENC_FINISH(p);
 }
 
-void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
-{
-  DECODE_START_LEGACY_COMPAT_LEN(14, 4, 4, bl);
-  decode(op, bl);
+void pg_log_entry_t::encode(ceph::buffer::list::contiguous_appender& p) const {
+  DENC_START_COMPAT_CHECK(14, 4, p);
+  denc(op, p);
+  denc(soid, p);
+  denc(version, p);
+  
+  if (op == LOST_REVERT)
+    denc(reverting_to, p);
+  else
+    denc(prior_version, p);
+  denc(reqid, p);
+  denc(mtime, p);
+  
+  if (op == LOST_REVERT)
+    denc(prior_version, p);
+  denc(snaps, p);
+  denc(user_version, p);    //varint ???
+  denc(mod_desc, p);
+  denc(extra_reqids, p);
+  if (op == ERROR)
+    denc(return_code, p);
+
+  if (!extra_reqids.empty())
+    denc(extra_reqid_return_codes, p);
+  denc(clean_regions, p);
+  if (op != ERROR)
+    denc(return_code, p);
+  
+  denc(op_returns, p);
+  DENC_FINISH(p);
+}
+
+void pg_log_entry_t::decode(ceph::buffer::ptr::const_iterator& p) {
+  DENC_START_COMPAT_CHECK(14, 4, p);
+  denc(op, p);
   if (struct_v < 2) {
     sobject_t old_soid;
-    decode(old_soid, bl);
+    denc(old_soid, p);
     soid.oid = old_soid.oid;
     soid.snap = old_soid.snap;
     invalid_hash = true;
   } else {
-    decode(soid, bl);
+    denc(soid, p);
   }
   if (struct_v < 3)
     invalid_hash = true;
-  decode(version, bl);
-
+  denc(version, p);
   if (struct_v >= 6 && op == LOST_REVERT)
-    decode(reverting_to, bl);
+    denc(reverting_to, p);
   else
-    decode(prior_version, bl);
-
-  decode(reqid, bl);
-
-  decode(mtime, bl);
+    denc(prior_version, p);
+  denc(reqid, p);
+  denc(mtime, p);
   if (struct_v < 5)
     invalid_pool = true;
 
   if (op == LOST_REVERT) {
     if (struct_v >= 6) {
-      decode(prior_version, bl);
+      denc(prior_version, p);
     } else {
       reverting_to = prior_version;
     }
   }
   if (struct_v >= 7 ||  // for v >= 7, this is for all ops.
       op == CLONE) {    // for v < 7, it's only present for CLONE.
-    decode(snaps, bl);
+    denc(snaps, p);
     // ensure snaps does not pin a larger ceph::buffer in memory
     snaps.rebuild();
     snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
   }
-
   if (struct_v >= 8)
-    decode(user_version, bl);
+    denc(user_version, p);
   else
     user_version = version.version;
-
   if (struct_v >= 9)
-    decode(mod_desc, bl);
+    denc(mod_desc, p);
   else
     mod_desc.mark_unrollbackable();
   if (struct_v >= 10)
-    decode(extra_reqids, bl);
+    denc(extra_reqids, p);
   if (struct_v >= 11 && op == ERROR)
-    decode(return_code, bl);
+    denc(return_code, p);
   if (struct_v >= 12 && !extra_reqids.empty())
-    decode(extra_reqid_return_codes, bl);
+    denc(extra_reqid_return_codes, p);
   if (struct_v >= 13)
-    decode(clean_regions, bl);
+    denc(clean_regions, p);
   else
     clean_regions.mark_fully_dirty();
   if (struct_v >= 14) {
     if (op != ERROR) {
-      decode(return_code, bl);
+      denc(return_code, p);
     }
-    decode(op_returns, bl);
+    denc(op_returns, p);
   }
-  DECODE_FINISH(bl);
+  DENC_FINISH(p);
 }
 
 void pg_log_entry_t::dump(Formatter *f) const
@@ -5081,30 +5419,6 @@ std::string pg_log_dup_t::get_key_name() const
   return key;
 }
 
-void pg_log_dup_t::encode(ceph::buffer::list &bl) const
-{
-  ENCODE_START(2, 1, bl);
-  encode(reqid, bl);
-  encode(version, bl);
-  encode(user_version, bl);
-  encode(return_code, bl);
-  encode(op_returns, bl);
-  ENCODE_FINISH(bl);
-}
-
-void pg_log_dup_t::decode(ceph::buffer::list::const_iterator &bl)
-{
-  DECODE_START(2, bl);
-  decode(reqid, bl);
-  decode(version, bl);
-  decode(user_version, bl);
-  decode(return_code, bl);
-  if (struct_v >= 2) {
-    decode(op_returns, bl);
-  }
-  DECODE_FINISH(bl);
-}
-
 void pg_log_dup_t::dump(Formatter *f) const
 {
   f->dump_stream("reqid") << reqid;
@@ -5178,6 +5492,58 @@ void pg_log_t::filter_log(spg_t import_pgid, const OSDMap &curmap,
       }
     } else {
       out.log.push_back(*i);
+    }
+  }
+}
+
+void pg_log_t::encode(ceph::buffer::list::contiguous_appender& p) const {
+  DENC_START_COMPAT_CHECK(7, 3,p);
+  denc(head, p);
+  denc(tail, p);
+  denc(log, p);
+  denc(can_rollback_to, p);
+  denc(rollback_info_trimmed_to, p);
+  denc(dups, p);
+  DENC_FINISH(p);
+}
+
+void pg_log_t::bound_encode(size_t& p) const {
+  DENC_START_COMPAT_CHECK(7, 3, p);
+  denc(head, p);
+  denc(tail, p);
+  denc(log, p);
+  denc(can_rollback_to, p);
+  denc(rollback_info_trimmed_to, p);
+  denc(dups, p);
+  DENC_FINISH(p);
+}
+
+void pg_log_t::decode(ceph::buffer::ptr::const_iterator& p, int64_t pool) {
+  DENC_START_COMPAT_CHECK(7, 3,p);
+  denc(head, p);
+  denc(tail, p);
+  if (struct_v < 2) {
+    bool backlog;
+    denc(backlog, p);
+  }
+  denc(log, p);
+  if (struct_v >= 5)
+    denc(can_rollback_to, p);
+
+  if (struct_v >= 6) {
+    denc(rollback_info_trimmed_to, p);
+  } else {
+    rollback_info_trimmed_to = tail;
+  }
+  if (struct_v >= 7)
+    denc(dups, p);
+  DENC_FINISH(p);
+
+  // handle hobject_t format change
+  if (struct_v < 4) {
+    for (auto i = log.begin(); i != log.end(); ++i) {
+      if (!i->soid.is_max() && i->soid.pool == -1)
+        i->soid.pool = pool;
     }
   }
 }
@@ -5607,28 +5973,38 @@ void pg_create_t::generate_test_instances(list<pg_create_t*>& o)
 
 // -- pg_hit_set_info_t --
 
-void pg_hit_set_info_t::encode(ceph::buffer::list& bl) const
+void pg_hit_set_info_t::encode(ceph::buffer::list::contiguous_appender& p) const
 {
-  ENCODE_START(2, 1, bl);
-  encode(begin, bl);
-  encode(end, bl);
-  encode(version, bl);
-  encode(using_gmt, bl);
-  ENCODE_FINISH(bl);
+  DENC_START_COMPAT_CHECK(2, 1, p);
+  denc(begin, p);
+  denc(end, p);
+  denc(version, p);
+  denc(using_gmt, p);
+  DENC_FINISH(p);
 }
 
-void pg_hit_set_info_t::decode(ceph::buffer::list::const_iterator& p)
+void pg_hit_set_info_t::decode(ceph::buffer::ptr::const_iterator& p)
 {
-  DECODE_START(2, p);
-  decode(begin, p);
-  decode(end, p);
-  decode(version, p);
+  DENC_START_COMPAT_CHECK(2, 1, p);
+  denc(begin, p);
+  denc(end, p);
+  denc(version, p);
   if (struct_v >= 2) {
-    decode(using_gmt, p);
+    denc(using_gmt, p);
   } else {
     using_gmt = false;
   }
-  DECODE_FINISH(p);
+  DENC_FINISH(p);
+}
+
+void pg_hit_set_info_t::bound_encode(size_t& p) const
+{
+  DENC_START_COMPAT_CHECK(2, 1, p);
+  denc(begin, p);
+  denc(end, p);
+  denc(version, p);
+  denc(using_gmt, p);
+  DENC_FINISH(p);
 }
 
 void pg_hit_set_info_t::dump(Formatter *f) const
@@ -5645,41 +6021,6 @@ void pg_hit_set_info_t::generate_test_instances(list<pg_hit_set_info_t*>& ls)
   ls.push_back(new pg_hit_set_info_t);
   ls.back()->begin = utime_t(1, 2);
   ls.back()->end = utime_t(3, 4);
-}
-
-
-// -- pg_hit_set_history_t --
-
-void pg_hit_set_history_t::encode(ceph::buffer::list& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  encode(current_last_update, bl);
-  {
-    utime_t dummy_stamp;
-    encode(dummy_stamp, bl);
-  }
-  {
-    pg_hit_set_info_t dummy_info;
-    encode(dummy_info, bl);
-  }
-  encode(history, bl);
-  ENCODE_FINISH(bl);
-}
-
-void pg_hit_set_history_t::decode(ceph::buffer::list::const_iterator& p)
-{
-  DECODE_START(1, p);
-  decode(current_last_update, p);
-  {
-    utime_t dummy_stamp;
-    decode(dummy_stamp, p);
-  }
-  {
-    pg_hit_set_info_t dummy_info;
-    decode(dummy_info, p);
-  }
-  decode(history, p);
-  DECODE_FINISH(p);
 }
 
 void pg_hit_set_history_t::dump(Formatter *f) const
@@ -6984,7 +7325,7 @@ void ScrubMap::merge_incr(const ScrubMap &l)
       objects[p->first] = p->second;
     }
   }
-}          
+}
 
 void ScrubMap::encode(ceph::buffer::list& bl) const
 {
