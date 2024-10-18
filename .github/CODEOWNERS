@@ -164,6 +164,10 @@ README*                                         @ceph/doc-writers
 /src/cls/rgw_gc                                 @ceph/rgw
 /src/cls/user                                   @ceph/rgw
 /src/cls/version                                @ceph/rgw
+/src/mrgw.sh                                    @ceph/rgw
+/src/mrun                                       @ceph/rgw
+/src/mstart.sh                                  @ceph/rgw
+/src/mstop.sh                                   @ceph/rgw
 /src/rgw                                        @ceph/rgw
 /src/s3select                                   @ceph/rgw
 /src/spawn                                      @ceph/rgw
