@@ -777,7 +777,7 @@ class CephFSMountBase(object):
 
     def get_shell_stdout(self, args, timeout=300, **kwargs):
         return self.run_shell(args=args, timeout=timeout, **kwargs).stdout.\
-            getvalue().strip()
+            getvalue()
 
     def run_shell_payload(self, payload, wait=True, timeout=900, **kwargs):
         kwargs.setdefault('cwd', self.mountpoint)
