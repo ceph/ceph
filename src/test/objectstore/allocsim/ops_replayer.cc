@@ -2,6 +2,7 @@
 #include <boost/program_options/value_semantic.hpp>
 #include <cassert>
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -10,8 +11,6 @@
 #include <condition_variable>
 #include <cstdint>
 #include <ctime>
-#include <fstream>
-#include <filesystem>
 #include <mutex>
 #include "include/rados/buffer_fwd.h"
 #include "include/rados/librados.hpp"
@@ -45,9 +44,9 @@ struct StringPtrCompare
   }
 };
 
-
 static set<shared_ptr<string>, StringPtrCompare> string_cache;
 static std::atomic<uint64_t> in_flight_ops(0);
+static std::atomic<uint64_t> ops_done(0);
 static std::condition_variable cv;
 static std::mutex in_flight_mutex;
 
@@ -69,6 +68,7 @@ struct Op {
   shared_ptr<string> who;
   librados::AioCompletion *completion;
   bufferlist read_bl;
+  uint64_t start_time_micros;
 
   Op(
     time_t at,
@@ -78,7 +78,7 @@ struct Op {
     shared_ptr<string> object,
     shared_ptr<string> collection,
     shared_ptr<string> who
-  ) : at(at), type(type), offset(offset), length(length), object(object), collection(collection), who(who), completion(nullptr) {}
+  ) : at(at), type(type), offset(offset), length(length), object(object), collection(collection), who(who), completion(nullptr), start_time_micros(0) {}
 
 };
 
@@ -90,6 +90,45 @@ struct ParserContext {
     char *start; // starts and ends in new line or eof
     char *end;
     uint64_t max_buffer_size;
+};
+
+struct TimeHistogram {
+  uint64_t increment;
+  vector<atomic<uint64_t>> buckets;
+  TimeHistogram(uint64_t increment, uint64_t nbuckets) : increment(increment) {
+    buckets = vector<atomic<uint64_t>>(nbuckets);
+    for (auto &n : buckets) {
+      n.store(0);
+    }
+  }
+
+  void put(uint64_t value, int n = 1) {
+    uint64_t index =  floor(value / increment);
+    if (index >= buckets.size()) {
+      index = buckets.size() - 1;
+    }
+    buckets[index] += n;
+  }
+
+  void print(const char* unit) {
+    for (size_t i = 0; i < buckets.size(); i++) {
+      atomic<uint64_t>& bucket = buckets[i];
+      if (bucket.load() > 0) {
+        cout << fmt::format("[{} {}] = {}", increment*i, unit, bucket.load()) << endl;
+      }
+    }
+  }
+
+  void merge(TimeHistogram& other) {
+    for (size_t i = 0; i < other.buckets.size(); i++) {
+      put(i * other.increment, other.buckets[i]);
+    }
+  }
+};
+
+struct CompletionContext {
+  TimeHistogram* latency_histogram;
+  Op* op;
 };
 
 class MemoryStreamBuf : public std::streambuf {
@@ -116,7 +155,12 @@ void gen_buffer(bufferlist& bl, uint64_t size) {
 }
 
 void completion_cb(librados::completion_t cb, void *arg) {
-  Op *op = static_cast<Op*>(arg);
+  CompletionContext *context = static_cast<CompletionContext*>(arg);
+  Op *op = context->op;
+  TimeHistogram* histogram = context->latency_histogram;
+
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count() - op->start_time_micros;
+  histogram->put(micros);
   // Process the completed operation here
   // std::cout << fmt::format("Completed op {} object={} range={}~{}", op->type, *op->object, op->offset, op->length) << std::endl;
 
@@ -125,11 +169,13 @@ void completion_cb(librados::completion_t cb, void *arg) {
   if (op->type == Read) {
    op->read_bl.clear();
   }
+  free(context);
 
   {
     std::lock_guard<std::mutex> lock(in_flight_mutex);
     in_flight_ops--;
   }
+  ops_done++;
   cv.notify_one();
 }
 
@@ -253,7 +299,10 @@ void parse_entry_point(shared_ptr<ParserContext> context) {
   }
 }
 
-void worker_thread_entry(uint64_t id, uint64_t nworker_threads, vector<Op> &ops, uint64_t max_buffer_size, uint64_t io_depth, librados::IoCtx* io) {
+
+
+void worker_thread_entry(uint64_t id, uint64_t nworker_threads, vector<Op> &ops, uint64_t max_buffer_size, uint64_t io_depth, librados::IoCtx* io, TimeHistogram* histogram) {
+
   // Create a buffer big enough for every operation. We will take enoguh bytes from it for every operation
   bufferlist bl;
   gen_buffer(bl, max_buffer_size);
@@ -269,15 +318,19 @@ void worker_thread_entry(uint64_t id, uint64_t nworker_threads, vector<Op> &ops,
     if (key != id) {
         continue;
     }
+    op.start_time_micros = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    CompletionContext* context = (CompletionContext*)malloc(sizeof(CompletionContext));
+    context->op = &op;
+    context->latency_histogram = histogram;
     // cout << fmt::format("Running op {} object={} range={}~{}", op.type, *op.object, op.offset, op.length) << endl;
-    op.completion = librados::Rados::aio_create_completion(static_cast<void*>(&op), completion_cb);
+    op.completion = librados::Rados::aio_create_completion(static_cast<void*>(context), completion_cb);
     switch (op.type) {
       case Write: {
         bufferlist trimmed;
         trimmed.substr_of(bl, 0, op.length);
         int ret = io->aio_write(*op.object, op.completion, trimmed, op.length, op.offset);
         if (ret != 0) {
-          cout << fmt::format("Error writing ecode={}", ret) << endl;;
+          cout << fmt::format("Error writing ecode={}", ret) << endl;
         }
         break;
       }
@@ -286,9 +339,9 @@ void worker_thread_entry(uint64_t id, uint64_t nworker_threads, vector<Op> &ops,
         trimmed.substr_of(bl, 0, op.length);
         int ret = io->aio_write_full(*op.object, op.completion, trimmed);
         if (ret != 0) {
-          cout << fmt::format("Error writing full ecode={}", ret) << endl;;
+          cout << fmt::format("Error writing full ecode={}", ret) << endl;
         }
-        break;
+        break ;
       }
       case Read: {
         bufferlist read;
@@ -319,6 +372,20 @@ void worker_thread_entry(uint64_t id, uint64_t nworker_threads, vector<Op> &ops,
     }
     in_flight_ops++;
   }
+  while (in_flight_ops > 0) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+}
+
+void metrics_printer_entry(size_t ops) {
+  auto start = std::chrono::high_resolution_clock::now();
+  while(ops_done.load() < ops) {
+    auto end = std::chrono::high_resolution_clock::now();
+    auto time_taken = std::chrono::duration_cast<std::chrono::microseconds>((end - start)).count();
+    cout << fmt::format("IOPS {}", ops_done.load() / (time_taken/(float)1000000)) << '\r';
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+
 }
 
 
@@ -459,16 +526,41 @@ int main(int argc, char** argv) {
 
 
   // process ops
-  vector<thread> worker_threads;
-  for (int i = 0; i < nworker_threads; i++) {
-      worker_threads.push_back(thread(worker_thread_entry, i, nworker_threads, std::ref(ops), max_buffer_size, io_depth, &io));
+  vector<TimeHistogram> histograms;
+  uint64_t microsecond_increment = 500;
+  uint64_t histogram_buckets = (500*1000) / microsecond_increment; // 500 ms / 500micro
+  for (size_t i = 0; i < nworker_threads; i++) {
+    histograms.push_back(TimeHistogram(microsecond_increment, histogram_buckets));
   }
+  vector<thread> worker_threads;
+  auto start = std::chrono::high_resolution_clock::now();
+  auto metric_thread = thread(metrics_printer_entry, ops.size());
+  for (size_t i = 0; i < nworker_threads; i++) {
+      worker_threads.push_back(thread(worker_thread_entry, i, nworker_threads, std::ref(ops), max_buffer_size, io_depth, &io, &histograms[i]));
+  }
+
   for (auto& worker : worker_threads) {
       worker.join();
   }
+  metric_thread.join();
   while (in_flight_ops > 0) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
+  auto end = std::chrono::high_resolution_clock::now();
+  auto time_taken = std::chrono::duration_cast<std::chrono::microseconds>((end - start)).count();
+
+  TimeHistogram histogram(microsecond_increment, histogram_buckets);
+  for (size_t i = 0; i < nworker_threads; i++) {
+    cout << fmt::format("histogram worker {}", i) << endl;
+    histogram.merge(histograms[i]);
+    histograms[i].print("us");
+  }
+  cout << fmt::format("merged histogram") << endl;
+  histogram.print("us");
+
+  cout << fmt::format("time {}s", time_taken/(float)1000000) << endl;
+  cout << fmt::format("IOPS {}", ops.size() / (time_taken/(float)1000000)) << endl;
+
 
   cout << ops.size() << endl;
   return EXIT_SUCCESS;
