@@ -57,7 +57,7 @@ def subvolume_purge(fs_client, volspec, volname, trashcan, subvolume_trash_entry
 
 
 # helper for starting a purge operation on a trash entry
-def purge_trash_entry_for_volume(fs_client, volspec, volname, purge_entry, should_cancel):
+def purge_trash_entry_for_volume(fs_client, volspec, volname, purge_entry, should_cancel, purge_queue):
     log.debug("purging trash entry '{0}' for volume '{1}'".format(purge_entry, volname))
 
     ret = 0
@@ -74,7 +74,7 @@ def purge_trash_entry_for_volume(fs_client, volspec, volname, purge_entry, shoul
                         log.debug("purging entry pointing to subvolume trash: {0}".format(tgt))
                         delink = True
                         try:
-                            trashcan.purge(tgt, should_cancel)
+                            trashcan.purge(tgt, should_cancel, purge_queue)
                         except VolumeException as ve:
                             if not ve.errno == -errno.ENOENT:
                                 delink = False
@@ -86,7 +86,7 @@ def purge_trash_entry_for_volume(fs_client, volspec, volname, purge_entry, shoul
                                 trashcan.delink(purge_entry)
                     else:
                         log.debug("purging entry pointing to trash: {0}".format(pth))
-                        trashcan.purge(pth, should_cancel)
+                        trashcan.purge(pth, should_cancel, purge_queue)
                 except cephfs.Error as e:
                     log.warn("failed to remove trash entry: {0}".format(e))
     except VolumeException as ve:
@@ -104,10 +104,11 @@ class ThreadPoolPurgeQueueMixin(AsyncJobs):
     """
     def __init__(self, volume_client, tp_size):
         self.vc = volume_client
+        self.purge_rate = None
         super(ThreadPoolPurgeQueueMixin, self).__init__(volume_client, "purgejob", tp_size)
 
     def get_next_job(self, volname, running_jobs):
         return get_trash_entry_for_volume(self.fs_client, self.vc.volspec, volname, running_jobs)
 
     def execute_job(self, volname, job, should_cancel):
-        purge_trash_entry_for_volume(self.fs_client, self.vc.volspec, volname, job, should_cancel)
+        purge_trash_entry_for_volume(self.fs_client, self.vc.volspec, volname, job, should_cancel, self)
