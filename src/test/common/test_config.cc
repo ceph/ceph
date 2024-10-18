@@ -19,6 +19,9 @@
  *
  *
  */
+
+#include <iostream> // for std::cout
+
 #include "common/config_proxy.h"
 #include "common/errno.h"
 #include "gtest/gtest.h"

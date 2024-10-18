@@ -16,9 +16,8 @@
 #ifndef COMMON_CEPH_ERROR_CODE
 #define COMMON_CEPH_ERROR_CODE
 
-#include <netdb.h>
-
-#include <boost/system.hpp>
+#include <boost/system/error_code.hpp>
+#include <boost/system/system_error.hpp>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"

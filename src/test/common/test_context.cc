@@ -19,6 +19,9 @@
  *
  *
  */
+
+#include <iostream> // for std::cout
+
 #include "gtest/gtest.h"
 #include "include/types.h"
 #include "include/msgr.h"
