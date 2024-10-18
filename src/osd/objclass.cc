@@ -765,6 +765,10 @@ int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, b
 // crimson-osd, it's different b/c of how the dout macro expands.
 int cls_log(int level, const char *format, ...)
 {
+   if (!ClassHandler::get_instance().cct->_conf->subsys.should_gather(dout_subsys, level)) {
+     // TODO: switch to the staic check as the dout does?
+     return 0;
+   }
    size_t size = 256;
    va_list ap;
    while (1) {
