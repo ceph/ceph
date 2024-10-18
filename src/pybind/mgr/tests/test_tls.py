@@ -15,7 +15,8 @@ class TLSchecks(unittest.TestCase):
         verify_tls(crt, key)
 
     def test_invalid_RDN(self):
-        self.assertRaises(ValueError, create_self_signed_cert, dname={'O': 'Ceph', 'Bogus': 'testsuite'})
+        self.assertRaises(ValueError, create_self_signed_cert,
+                          dname={'O': 'Ceph', 'Bogus': 'testsuite'})
 
     def test_invalid_key(self):
         crt, key = create_self_signed_cert()
