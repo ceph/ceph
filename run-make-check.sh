@@ -50,7 +50,8 @@ function run() {
         $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr="${aiomax}"
     fi
 
-    CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+    CHECK_MAKEOPTS=-j72
+    #CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     CTEST_RESOURCE_FILE=$(gen_ctest_resource_file)
     CHECK_MAKEOPTS+=" --resource-spec-file ${CTEST_RESOURCE_FILE}"
     if in_jenkins; then
