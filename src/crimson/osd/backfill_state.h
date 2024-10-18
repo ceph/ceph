@@ -93,6 +93,9 @@ public:
     BackfillListener& backfill_listener;
     std::unique_ptr<PeeringFacade> peering_state;
     std::unique_ptr<PGFacade> pg;
+    void post_event(const sc::event_base &e) {
+      sc::state_machine<BackfillMachine, Initial>::post_event(e);
+    }
   };
 
 private:
@@ -297,6 +300,10 @@ public:
   void process_event(
     boost::intrusive_ptr<const sc::event_base> evt) {
     backfill_machine.process_event(*std::move(evt));
+  }
+
+  void post_event(boost::intrusive_ptr<const sc::event_base> evt) {
+    backfill_machine.post_event(*std::move(evt));
   }
 
   hobject_t get_last_backfill_started() const {
