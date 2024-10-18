@@ -2,7 +2,9 @@
 NFS_CORE_PARAM {
         Enable_NLM = {{ enable_nlm }};
         Enable_RQUOTA = false;
-        Protocols = 4;
+        Protocols = 3, 4;
+        mount_path_pseudo = true;
+        Enable_UDP = false;
         NFS_Port = {{ port }};
         allow_set_io_flusher_fail = true;
 {% if bind_addr %}
