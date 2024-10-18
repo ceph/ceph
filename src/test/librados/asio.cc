@@ -21,9 +21,13 @@
 
 #include <boost/range/begin.hpp>
 #include <boost/range/end.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/use_future.hpp>
+
+#include <optional>
 
 #define dout_subsys ceph_subsys_rados
 #define dout_context g_ceph_context
@@ -76,6 +80,15 @@ using read_result = std::tuple<version_t, bufferlist>;
 
 void rethrow(std::exception_ptr eptr) {
   if (eptr) std::rethrow_exception(eptr);
+}
+
+auto capture(std::optional<error_code>& out) {
+  return [&out] (error_code ec, ...) { out = ec; };
+}
+
+auto capture(boost::asio::cancellation_signal& signal,
+             std::optional<error_code>& out) {
+  return boost::asio::bind_cancellation_slot(signal.slot(), capture(out));
 }
 
 TEST_F(AsioRados, AsyncReadCallback)
@@ -383,6 +396,94 @@ TEST_F(AsioRados, AsyncWriteOperationYield)
   boost::asio::spawn(service, failure_cr, rethrow);
 
   service.run();
+}
+
+TEST_F(AsioRados, AsyncReadOperationCancelTerminal)
+{
+  boost::asio::io_context service;
+  boost::asio::cancellation_signal signal;
+  std::optional<error_code> ec;
+
+  librados::ObjectReadOperation op;
+  op.assert_exists();
+  librados::async_operate(service, io, "exist", &op, 0, nullptr,
+                          capture(signal, ec));
+
+  service.poll();
+  EXPECT_FALSE(service.stopped());
+  EXPECT_FALSE(ec);
+
+  signal.emit(boost::asio::cancellation_type::terminal);
+
+  service.run();
+  ASSERT_TRUE(ec);
+  EXPECT_EQ(ec, boost::asio::error::operation_aborted);
+}
+
+TEST_F(AsioRados, AsyncReadOperationCancelTotal)
+{
+  boost::asio::io_context service;
+  boost::asio::cancellation_signal signal;
+  std::optional<error_code> ec;
+
+  librados::ObjectReadOperation op;
+  op.assert_exists();
+  librados::async_operate(service, io, "exist", &op, 0, nullptr,
+                          capture(signal, ec));
+
+  service.poll();
+  EXPECT_FALSE(service.stopped());
+  EXPECT_FALSE(ec);
+
+  signal.emit(boost::asio::cancellation_type::total);
+
+  service.run();
+  ASSERT_TRUE(ec);
+  EXPECT_EQ(ec, boost::asio::error::operation_aborted);
+}
+
+TEST_F(AsioRados, AsyncWriteOperationCancelTerminal)
+{
+  boost::asio::io_context service;
+  boost::asio::cancellation_signal signal;
+  std::optional<error_code> ec;
+
+  librados::ObjectWriteOperation op;
+  op.assert_exists();
+  librados::async_operate(service, io, "noexist", &op, 0, nullptr,
+                          capture(signal, ec));
+
+  service.poll();
+  EXPECT_FALSE(service.stopped());
+  EXPECT_FALSE(ec);
+
+  signal.emit(boost::asio::cancellation_type::terminal);
+
+  service.run();
+  ASSERT_TRUE(ec);
+  EXPECT_EQ(ec, boost::asio::error::operation_aborted);
+}
+
+TEST_F(AsioRados, AsyncWriteOperationCancelTotal)
+{
+  boost::asio::io_context service;
+  boost::asio::cancellation_signal signal;
+  std::optional<error_code> ec;
+
+  librados::ObjectWriteOperation op;
+  op.assert_exists();
+  librados::async_operate(service, io, "noexist", &op, 0, nullptr,
+                          capture(signal, ec));
+
+  service.poll();
+  EXPECT_FALSE(service.stopped());
+  EXPECT_FALSE(ec);
+
+  signal.emit(boost::asio::cancellation_type::total);
+
+  service.run();
+  ASSERT_TRUE(ec);
+  EXPECT_EQ(ec, std::errc::no_such_file_or_directory);
 }
 
 int main(int argc, char **argv)
