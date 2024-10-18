@@ -1,5 +1,6 @@
 <div ngbDropdown
-     placement="bottom-right">
+     placement="bottom-right"
+     *ngIf="textItem && objectItem">
   <button type="button"
           [title]="title"
           class="btn btn-light dropdown-toggle-split"
@@ -8,16 +9,25 @@
   </button>
   <div ngbDropdownMenu>
     <button ngbDropdownItem
-            (click)="download('json')"
-            *ngIf="objectItem">
+            (click)="download('json')">
       <i [ngClass]="[icons.json]"></i>
       <span>JSON</span>
     </button>
     <button ngbDropdownItem
-            (click)="download()"
-            *ngIf="textItem">
+            (click)="download()">
       <i [ngClass]="[icons.text]"></i>
       <span>Text</span>
     </button>
   </div>
 </div>
+<ng-template>
+  <div placement="bottom-right"
+       *ngIf="textItem || objectItem; else simpleButton">
+    <button type="button"
+            [title]="title"
+            class="btn btn-light dropdown-toggle-split"
+            (click)="download(textItem ? '' : 'json')">
+      <i [ngClass]="[icons.download]"></i>
+    </button>
+  </div>
+</ng-template>
