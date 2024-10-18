@@ -1741,3 +1741,13 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_log_oversegmented_trim_idle_interval
+  type: secs
+  level: advanced
+  desc: Idle trim interval to trigger trimming when over-segmented.
+  long_desc: Force MDS log trimming when the number of segments exceed the segment threshold and the log hasn't been trimmed for this interval.
+  default: 3
+  services:
+  - mds
+  flags:
+  - runtime

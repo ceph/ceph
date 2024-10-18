@@ -173,6 +173,9 @@ public:
   // replay state
   std::map<inodeno_t, std::set<inodeno_t>> pending_exports;
 
+  // beacon needs me too
+  bool is_oversegmented() const;
+
 protected:
   struct PendingEvent {
     PendingEvent(LogEvent *e, Context* c, bool f=false) : le(e), fin(c), flush(f) {}
@@ -313,6 +316,7 @@ private:
   std::set<LogSegment*> expired_segments;
   std::set<LogSegment*> expiring_segments;
   uint64_t events_since_last_major_segment = 0;
+  double log_warn_factor;
 
   // log trimming decay counter
   DecayCounter log_trim_counter;
@@ -322,6 +326,9 @@ private:
   // guarded by mds_lock
   std::condition_variable_any cond;
   std::atomic<bool> upkeep_log_trim_shutdown{false};
+
+  ceph::coarse_mono_time last_trim;
+  double oversegmented_idle_interval;
 
   std::map<uint64_t, std::vector<Context*>> waiting_for_expire; // protected by mds_lock
 };
