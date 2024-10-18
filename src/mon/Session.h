@@ -31,18 +31,7 @@
 #include "MonCap.h"
 
 struct MonSession;
-
-struct Subscription {
-  MonSession *session;
-  std::string type;
-  xlist<Subscription*>::item type_item;
-  version_t next;
-  bool onetime;
-  bool incremental_onetime;  // has CEPH_FEATURE_INCSUBOSDMAP
-  
-  Subscription(MonSession *s, const std::string& t) : session(s), type(t), type_item(this),
-						 next(0), onetime(false), incremental_onetime(false) {}
-};
+struct Subscription;
 
 struct MonSession : public RefCountedObject {
   ConnectionRef con;
@@ -141,6 +130,23 @@ struct MonSession : public RefCountedObject {
   }
 };
 
+struct Subscription {
+  MonSession *session;
+  std::string type;
+  xlist<Subscription*>::item type_item;
+  version_t next;
+  bool onetime;
+  bool incremental_onetime;  // has CEPH_FEATURE_INCSUBOSDMAP
+
+  Subscription(MonSession *s, const std::string& t) : session(s), type(t), type_item(this),
+                                                 next(0), onetime(false), incremental_onetime(false) {}
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_stream("name") << session->name;
+    f->dump_stream("entity_name") << session->entity_name;
+    f->dump_object("socket_addr", session->socket_addr);
+  }
+};
 
 struct MonSessionMap {
   xlist<MonSession*> sessions;
