@@ -49,6 +49,38 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
   auto log_entries = std::move(logv);
   auto txn = std::move(t);
   auto osd_op_p = std::move(opp);
+  inflight_ioreq_t::Ref io = co_await backfill_scan_sync.set_io_wait_for_scan(hoid);
+  auto ret = co_await _submit_transaction_with_io_wait(
+    pg_shards, hoid, std::move(txn), std::move(osd_op_p),
+    min_epoch, map_epoch, std::move(log_entries), io
+  ).handle_exception_interruptible([io, this](auto e) mutable {
+    if (io) {
+      backfill_scan_sync.finish_io(io);
+    }
+    return seastar::make_exception_future<rep_op_ret_t>(e);
+  }).on_interruption([io, this]() mutable {
+    if (io) {
+      backfill_scan_sync.finish_io(io);
+    }
+  });
+  co_return ret;
+}
+
+ReplicatedBackend::rep_op_fut_t
+ReplicatedBackend::_submit_transaction_with_io_wait(
+  const std::set<pg_shard_t>& pg_shards,
+  const hobject_t& hoid,
+  ceph::os::Transaction&& t,
+  osd_op_params_t&& opp,
+  epoch_t min_epoch, epoch_t map_epoch,
+  std::vector<pg_log_entry_t>&& logv,
+  inflight_ioreq_t::Ref &io)
+{
+  LOG_PREFIX(ReplicatedBackend::submit_transaction);
+  DEBUGDPP("object {}", dpp, hoid);
+  auto log_entries = std::move(logv);
+  auto txn = std::move(t);
+  auto osd_op_p = std::move(opp);
 
   const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
@@ -106,8 +138,8 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
 
   auto all_completed = interruptor::make_interruptible(
       shard_services.get_store().do_transaction(coll, std::move(txn))
-   ).then_interruptible([FNAME, this,
-			peers=pending_txn->second.weak_from_this()] {
+   ).then_interruptible([FNAME, this, io,
+			peers=pending_txn->second.weak_from_this()]() mutable {
     if (!peers) {
       // for now, only actingset_changed can cause peers
       // to be nullptr
@@ -125,6 +157,8 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
     pending_trans.erase(pending_txn);
     return seastar::make_ready_future<
       crimson::osd::acked_peers_t>(std::move(acked_peers));
+  }).finally([this, io]() mutable {
+    backfill_scan_sync.finish_io(io);
   });
 
   auto sends_complete = seastar::when_all_succeed(
