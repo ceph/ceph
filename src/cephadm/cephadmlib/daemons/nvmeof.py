@@ -8,7 +8,7 @@ from ..container_types import CephContainer
 from ..context_getters import fetch_configs, get_config_and_keyring
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
-from ..constants import DEFAULT_NVMEOF_IMAGE
+from ceph.cephadm.images import DEFAULT_NVMEOF_IMAGE
 from ..context import CephadmContext
 from ..data_utils import dict_get, is_fsid
 from ..deployment_utils import to_deployment_container
