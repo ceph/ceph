@@ -1139,7 +1139,9 @@ private:
   float _get_take_weight_osd_map(int root, std::map<int,float> *pmap) const;
   void _normalize_weight_map(float sum, const std::map<int,float>& m,
 			     std::map<int,float> *pmap) const;
-
+  void _normalize_weight_map(float sum, int choose_val, unsigned size,
+					 const std::map<int,float>& m,
+					 std::map<int,float> *pmap) const;
 public:
   /**
    * calculate a map of osds to weights for a given rule
@@ -1149,9 +1151,10 @@ public:
    *
    * @param ruleno [in] rule id
    * @param pmap [out] map of osd to weight
+   * @param size [in] pool size
    * @return 0 for success, or negative error code
    */
-  int get_rule_weight_osd_map(unsigned ruleno, std::map<int,float> *pmap) const;
+  int get_rule_weight_osd_map(unsigned ruleno, std::map<int,float> *pmap, unsigned size) const;
 
   /**
    * calculate a map of osds to weights for a given starting root
