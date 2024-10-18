@@ -129,8 +129,8 @@ public:
     return peering_state.get_pg_trim_to();
   }
 
-  eversion_t get_min_last_complete_ondisk() const {
-    return peering_state.get_min_last_complete_ondisk();
+  eversion_t get_pg_committed_to() const {
+    return peering_state.get_pg_committed_to();
   }
 
   const pg_info_t& get_info() const final {
@@ -603,7 +603,7 @@ public:
     std::vector<pg_log_entry_t>&& logv,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
-    const eversion_t &min_last_complete_ondisk,
+    const eversion_t &pg_commited_to,
     bool transaction_applied,
     ObjectStore::Transaction &txn,
     bool async = false);
