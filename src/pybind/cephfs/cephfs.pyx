@@ -923,12 +923,12 @@ cdef class LibCephFS(object):
 
         :param fd: the file descriptor of the file to fallocate.
         :param mode: the flags determines the operation to be performed on the given
-                     range. default operation (0) allocate and initialize to zero
-                     the file in the byte range, and the file size will be changed
-                     if offset + length is greater than the file size. if the
-                     FALLOC_FL_KEEP_SIZE flag is specified in the mode, the file size
-                     will not be changed. if the FALLOC_FL_PUNCH_HOLE flag is specified
-                     in the mode, the operation is deallocate space and zero the byte range.
+                     range. default operation (0) is to return -EOPNOTSUPP since
+                     cephfs does not allocate disk blocks to provide write guarantees.
+                     if the FALLOC_FL_KEEP_SIZE flag is specified in the mode,
+                     the file size will not be changed.  if the FALLOC_FL_PUNCH_HOLE
+                     flag is specified in the mode, the operation is deallocate
+                     space and zero the byte range.
         :param offset: the byte range starting.
         :param length: the length of the range.
         """
