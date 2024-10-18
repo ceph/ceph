@@ -6794,9 +6794,8 @@ void BlueStore::_main_bdev_label_try_reserve()
   vector<uint64_t> candidate_positions;
   vector<uint64_t> accepted_positions;
   uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-  for (size_t i = 1; i < bdev_label_positions.size(); i++) {
-    uint64_t location = bdev_label_positions[i];
-    if (location + lsize <= bdev->get_size()) {
+  for (uint64_t location : bdev_label_valid_locations) {
+    if (location != BDEV_FIRST_LABEL_POSITION) {
       candidate_positions.push_back(location);
     }
   }
@@ -11497,9 +11496,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     string p = path + "/block";
     _write_bdev_label(cct, bdev, p, bdev_label, bdev_labels_in_repair);
     for (uint64_t pos : bdev_labels_in_repair) {
-      if (pos != BDEV_FIRST_LABEL_POSITION) {
-        bdev_label_valid_locations.push_back(pos);
-      }
+      bdev_label_valid_locations.push_back(pos);
     }
     repaired += bdev_labels_in_repair.size();
   }
