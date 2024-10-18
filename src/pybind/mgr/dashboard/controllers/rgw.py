@@ -541,20 +541,26 @@ class RgwBucket(RgwRESTController):
         result = self.proxy(daemon_name, 'GET', 'bucket', {'bucket': bucket})
         bucket_name = RgwBucket.get_s3_bucket_name(result['bucket'],
                                                    result['tenant'])
+        owner = result['owner']
+        try:
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
+            instance.proxy('GET', 'user', {'uid': result['owner']}, None)
+        except (DashboardException, RequestException):
+            owner = 'dashboard'
 
         # Append the versioning configuration.
-        versioning = self._get_versioning(result['owner'], daemon_name, bucket_name)
-        encryption = self._get_encryption(bucket_name, daemon_name, result['owner'])
+        versioning = self._get_versioning(owner, daemon_name, bucket_name)
+        encryption = self._get_encryption(bucket_name, daemon_name, owner)
         result['encryption'] = encryption['Status']
         result['versioning'] = versioning['Status']
         result['mfa_delete'] = versioning['MfaDelete']
-        result['bucket_policy'] = self._get_policy(bucket_name, daemon_name, result['owner'])
-        result['acl'] = self._get_acl(bucket_name, daemon_name, result['owner'])
-        result['replication'] = self._get_replication(bucket_name, result['owner'], daemon_name)
-        result['lifecycle'] = self._get_lifecycle(bucket_name, daemon_name, result['owner'])
+        result['bucket_policy'] = self._get_policy(bucket_name, daemon_name, owner)
+        result['acl'] = self._get_acl(bucket_name, daemon_name, owner)
+        result['replication'] = self._get_replication(bucket_name, owner, daemon_name)
+        result['lifecycle'] = self._get_lifecycle(bucket_name, daemon_name, owner)
 
         # Append the locking configuration.
-        locking = self._get_locking(result['owner'], daemon_name, bucket_name)
+        locking = self._get_locking(owner, daemon_name, bucket_name)
         result.update(locking)
 
         return self._append_bid(result)
