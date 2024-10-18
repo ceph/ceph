@@ -78,6 +78,7 @@ int ceph_flags_sys2wire(int flags)
        ceph_sys2wire(O_TRUNC);
 
        #ifndef _WIN32
+       ceph_sys2wire(O_FMODE_EXEC);
        ceph_sys2wire(O_DIRECTORY);
        ceph_sys2wire(O_NOFOLLOW);
        // In some cases, FILE_FLAG_BACKUP_SEMANTICS may be used instead
