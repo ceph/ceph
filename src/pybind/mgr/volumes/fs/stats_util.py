@@ -106,6 +106,11 @@ class CloneProgressReporter:
         # reporting has already been initiated by calling RTimer.is_alive().
         self.update_task = RTimer(1, self._update_progress_bars)
 
+        # progress event ID for ongoing clone jobs
+        self.on_pev_id: Optional[str] = 'mgr-vol-ongoing-clones'
+        # progress event ID for ongoing+pending clone jobs
+        self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clones'
+
     def initiate_reporting(self):
         if self.update_task.is_alive():
             log.info('progress reporting thread is already alive, not '
@@ -113,11 +118,6 @@ class CloneProgressReporter:
             return
 
         log.info('initiating progress reporting for clones...')
-        # progress event ID for ongoing clone jobs
-        self.on_pev_id: Optional[str] = 'mgr-vol-ongoing-clones'
-        # progress event ID for ongoing+pending clone jobs
-        self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clones'
-
         self.update_task = RTimer(1, self._update_progress_bars)
         self.update_task.start()
         log.info('progress reporting for clones has been initiated')
@@ -294,10 +294,7 @@ class CloneProgressReporter:
         assert self.onpen_pev_id is not None
 
         self.volclient.mgr.remote('progress', 'complete', self.on_pev_id)
-        self.on_pev_id = None
-
         self.volclient.mgr.remote('progress', 'complete', self.onpen_pev_id)
-        self.onpen_pev_id = None
 
         log.info('finished removing progress bars from "ceph status" output')
 
