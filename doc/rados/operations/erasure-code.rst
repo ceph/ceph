@@ -64,7 +64,7 @@ profile can be displayed with this command:
 
    k=2
    m=2
-   plugin=jerasure
+   plugin=isa
    crush-failure-domain=host
    technique=reed_sol_van
 
