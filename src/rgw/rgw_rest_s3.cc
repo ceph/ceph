@@ -3835,7 +3835,7 @@ int RGWGetObjAttrs_ObjStore_S3::get_params(optional_yield y)
 		       << err << dendl;
       return -ERR_INVALID_PART;
     }
-    max_parts = std::min(max_parts, 1000);
+    max_parts = std::min(*max_parts, 1000);
   }
 
   hdr = env->get_optional("HTTP_X_AMZ_PART_NUMBER_MARKER");
@@ -3950,7 +3950,9 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
 
 	int ret =
 	  s->object->list_parts(
-            this, s->cct, max_parts, marker,
+            this, s->cct,
+	    max_parts ? *max_parts : 1000,
+	    marker ? *marker : 0,
 	    &next_marker, &truncated,
 	    [&](const Object::Part& part) -> int {
 	      s->formatter->open_object_section("Part");
@@ -3972,9 +3974,15 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
 	s->formatter->dump_int("PartsCount", *multipart_parts_count);
 	s->formatter->dump_int("TotalPartsCount", *multipart_parts_count);
 	s->formatter->dump_bool("IsTruncated", truncated);
-	s->formatter->dump_int("MaxParts", max_parts);
-	s->formatter->dump_int("NextPartNumberMarker", next_marker);
-	s->formatter->dump_int("PartNumberMarker", marker);
+	if (max_parts) {
+	  s->formatter->dump_int("MaxParts", *max_parts);
+	}
+	if(truncated) {
+	  s->formatter->dump_int("NextPartNumberMarker", next_marker);
+	}
+	if (marker) {
+	  s->formatter->dump_int("PartNumberMarker", *marker);
+	}
 	s->formatter->close_section();
       } /* multipart_parts_count positive */
     } /* ObjectParts */
