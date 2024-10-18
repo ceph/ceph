@@ -86,7 +86,7 @@ class Device(object):
      {attr:<25} {value}"""
 
     report_fields = [
-        'ceph_device',
+        'ceph_device_lvm',
         'rejected_reasons',
         'available',
         'path',
@@ -137,7 +137,7 @@ class Device(object):
         self.blkid_api = None
         self._exists = None
         self._is_lvm_member = None
-        self.ceph_device = False
+        self.ceph_device_lvm = False
         self.being_replaced: bool = self.is_being_replaced
         self._parse()
         if self.path in sys_info.devices.keys():
@@ -236,7 +236,7 @@ class Device(object):
             self.path = lv.lv_path
             self.vg_name = lv.vg_name
             self.lv_name = lv.name
-            self.ceph_device = lvm.is_ceph_device(lv)
+            self.ceph_device_lvm = lvm.is_ceph_device(lv)
         else:
             self.lvs = []
             if self.lsblk_all:
@@ -366,7 +366,7 @@ class Device(object):
                     self._is_lvm_member = True
                     self.lvs.extend(lvm.get_device_lvs(path))
                 if self.lvs:
-                    self.ceph_device = any([True if lv.tags.get('ceph.osd_id') else False for lv in self.lvs])
+                    self.ceph_device_lvm = any([True if lv.tags.get('ceph.osd_id') else False for lv in self.lvs])
 
     def _get_partitions(self):
         """
