@@ -402,6 +402,11 @@ class TestMisc(CephFSTestCase):
     def test_client_ls(self):
         self._session_client_ls(['client', 'ls'])
 
+    def test_ceph_tell_for_unknown_cephname_type(self):
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd('tell', 'cephfs.c', 'something')
+        self.assertEqual(ce.exception.exitstatus, 1)
+
 
 @classhook('_add_session_client_evictions')
 class TestSessionClientEvict(CephFSTestCase):
