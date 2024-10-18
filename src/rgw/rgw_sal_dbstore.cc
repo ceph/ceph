@@ -154,7 +154,8 @@ namespace rgw::sal {
 
     /* XXX: handle delete_children */
 
-    if (!delete_children) {
+    const bool own_bucket = store->get_zone()->get_zonegroup().get_id() == info.zonegroup;
+    if (!delete_children && own_bucket) {
       /* Check if there are any objects */
       rgw::sal::Bucket::ListParams params;
       params.list_versions = true;

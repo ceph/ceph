@@ -118,7 +118,7 @@ static constexpr auto S3_RUNTIME_RESOURCE_VAL = "${s3:ResourceTag";
 
 int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
-                                  const rgw_owner& effective_owner,
+                                  const std::optional<rgw_owner>& effective_owner,
                                   bufferlist* indata, JSONParser* jp,
                                   req_info& req, optional_yield y)
 {
@@ -3846,14 +3846,19 @@ void RGWDeleteBucket::execute(optional_yield y)
     }
   }
 
-  op_ret = s->bucket->sync_owner_stats(this, y, nullptr);
-  if ( op_ret < 0) {
-     ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
-  }
+  const bool own_bucket = s->penv.site->get_zonegroup().get_id() == s->bucket->get_info().zonegroup;
 
-  op_ret = s->bucket->check_empty(this, y);
-  if (op_ret < 0) {
-    return;
+  if (own_bucket) {
+    // only if we own the bucket
+    op_ret = s->bucket->sync_owner_stats(this, y, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
+    }
+
+    op_ret = s->bucket->check_empty(this, y);
+    if (op_ret < 0) {
+      return;
+    }
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
@@ -3867,9 +3872,11 @@ void RGWDeleteBucket::execute(optional_yield y)
     return;
   }
 
-  op_ret = rgw_remove_sse_s3_bucket_key(s, y);
-  if (op_ret != 0) {
-      // do nothing; it will already have been logged
+  if (own_bucket) {
+    op_ret = rgw_remove_sse_s3_bucket_key(s, y);
+    if (op_ret != 0) {
+        // do nothing; it will already have been logged
+    }
   }
 
   op_ret = s->bucket->remove(this, false, y);

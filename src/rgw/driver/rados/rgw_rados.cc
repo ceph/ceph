@@ -5346,6 +5346,12 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
 
 int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y)
 {
+  const auto& zonegroup = svc.site->get_zonegroup();
+  if (bucket_info.zonegroup != zonegroup.id) {
+    // don't check on this zone, the bucket's data belongs to another zonegroup
+    return 0;
+  }
+
   constexpr uint NUM_ENTRIES = 1000u;
 
   rgw_obj_index_key marker;
