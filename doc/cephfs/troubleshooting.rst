@@ -407,6 +407,11 @@ its associated key. A less drastic but half-fix is to change the osd cap for
 your user to just ``caps osd = "allow rw"``  and delete ``tag cephfs
 data=....``
 
+Disabling Volumes Plugin
+========================
+In certain scenarios, volumes plugin might be needed to disabled to prevent compromise
+for rest of the Ceph cluster. For details see: :ref:`disabling-volumes-plugin`
+
 Reporting Issues
 ================
 
