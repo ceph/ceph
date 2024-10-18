@@ -113,14 +113,6 @@ class TestMDSMetrics(CephFSTestCase):
         # Wait for filesystem to go healthy
         fs_a.wait_for_daemons()
 
-        # Reconfigure client auth caps
-        for mount in self.mounts:
-            self.get_ceph_cmd_result(
-                'auth', 'caps', f"client.{mount.client_id}",
-                'mds', 'allow',
-                'mon', 'allow r',
-                'osd', f'allow rw pool={fs_a.get_data_pool_name()}')
-
         return fs_a
 
     # basic check to verify if we get back metrics from each active mds rank
@@ -497,28 +489,40 @@ class TestMDSMetrics(CephFSTestCase):
             self._cleanup_test_dirs()
 
     def test_client_metrics_and_metadata(self):
-        self.mount_a.umount_wait()
-        self.mount_b.umount_wait()
-        self.fs.delete_all_filesystems()
+        self.mount_a.umount_wait(force=True)
+        self.mount_b.umount_wait(force=True)
+        self.mds_cluster.delete_all_filesystems()
 
         self.run_ceph_cmd("fs", "flag", "set", "enable_multiple",
             "true", "--yes-i-really-mean-it")
 
-        # creating filesystem
+        # create filesystems
         fs_a = self._setup_fs(fs_name="fs1")
+        fs_b = self._setup_fs(fs_name="fs2")
 
-        # Mount a client on fs_a
+        # Mount clients
         self.mount_a.mount_wait(cephfs_name=fs_a.name)
+        self.mount_b.mount_wait(cephfs_name=fs_b.name)
+
+        # Reconfigure clients auth caps
+        self.get_ceph_cmd_result(
+            'auth', 'caps', f"client.{self.mount_a.client_id}",
+            'mds', 'allow',
+            'mon', 'allow r',
+            'osd', f'allow rw pool={fs_a.get_data_pool_name()}')
+
+        self.get_ceph_cmd_result(
+            'auth', 'caps', f"client.{self.mount_b.client_id}",
+            'mds', 'allow',
+            'mon', 'allow r',
+            'osd', f'allow rw pool={fs_b.get_data_pool_name()}')
+
+        # do some I/O
         self.mount_a.write_n_mb("pad.bin", 1)
         self.mount_a.write_n_mb("test.bin", 2)
         self.mount_a.path_to_ino("test.bin")
         self.mount_a.create_files()
 
-        # creating another filesystem
-        fs_b = self._setup_fs(fs_name="fs2")
-
-        # Mount a client on fs_b
-        self.mount_b.mount_wait(cephfs_name=fs_b.name)
         self.mount_b.write_n_mb("test.bin", 1)
         self.mount_b.path_to_ino("test.bin")
         self.mount_b.create_files()
@@ -566,26 +570,39 @@ class TestMDSMetrics(CephFSTestCase):
             pass
 
     def test_perf_stats_stale_metrics_with_multiple_filesystem(self):
-        self.mount_a.umount_wait()
-        self.mount_b.umount_wait()
+        self.mount_a.umount_wait(force=True)
+        self.mount_b.umount_wait(force=True)
+        self.mds_cluster.delete_all_filesystems()
 
         self.run_ceph_cmd("fs", "flag", "set", "enable_multiple",
             "true", "--yes-i-really-mean-it")
 
-        # creating filesystem
+        # create filesystems
         fs_b = self._setup_fs(fs_name="fs2")
+        fs_a = self._setup_fs(fs_name="fs1")
 
-        # Mount a client on fs_b
+        # Mount clients
         self.mount_b.mount_wait(cephfs_name=fs_b.name)
+        self.mount_a.mount_wait(cephfs_name=fs_a.name)
+
+        # Reconfigure clients auth caps
+        self.get_ceph_cmd_result(
+            'auth', 'caps', f"client.{self.mount_b.client_id}",
+            'mds', 'allow',
+            'mon', 'allow r',
+            'osd', f'allow rw pool={fs_b.get_data_pool_name()}')
+
+        self.get_ceph_cmd_result(
+            'auth', 'caps', f"client.{self.mount_a.client_id}",
+            'mds', 'allow',
+            'mon', 'allow r',
+            'osd', f'allow rw pool={fs_a.get_data_pool_name()}')
+
+        # do some I/O
         self.mount_b.write_n_mb("test.bin", 1)
         self.mount_b.path_to_ino("test.bin")
         self.mount_b.create_files()
 
-        # creating another filesystem
-        fs_a = self._setup_fs(fs_name="fs1")
-
-        # Mount a client on fs_a
-        self.mount_a.mount_wait(cephfs_name=fs_a.name)
         self.mount_a.write_n_mb("pad.bin", 1)
         self.mount_a.write_n_mb("test.bin", 2)
         self.mount_a.path_to_ino("test.bin")
