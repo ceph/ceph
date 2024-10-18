@@ -90,7 +90,12 @@ def task(ctx, config):
         deep_merge(client_config, client_config_overrides)
         log.info(f"{entity} config is {client_config}")
 
-        cephfs_name = client_config.get("cephfs_name")
+        cephfs_name = client_config.get("cephfs_name", None)
+        if cephfs_name is None:
+            if (config.get('cephfs', None) is not None and
+                len(config.get('cephfs').get('fs')) == 1):
+                cephfs_name = config.get('cephfs').get('fs')[0]['name']
+
         if config.get("disabled", False) or not client_config.get('mounted', True):
             continue
 
