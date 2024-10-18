@@ -4255,7 +4255,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
-  bool log_op = false;
+  bool log_op = cct->_conf->rgw_data_sync_allow_chain_replication;
   rgw_log_op_info log_op_info;
 
   // use an empty owner until we decode RGW_ATTR_ACL
@@ -4546,20 +4546,22 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     }
   }
 
-  if (ret = should_log_op(driver, dest_bucket_info.bucket, dest_obj.key.name, attrs, rctx.dpp, rctx.y, log_op_info); ret < 0 && ret != -ENOENT) {
-    return ret;
-  }
-  log_op = ret;
-
-  if (log_op || ret == -ENOENT) {
-    std::string replication_status = "PENDING";
-    if (ret == -ENOENT) {
-      replication_status = "FAILED";
+  if (log_op) { // if chain replication is allowed
+    if (ret = should_log_op(driver, dest_bucket_info.bucket, dest_obj.key.name, attrs, rctx.dpp, rctx.y, log_op_info); ret < 0 && ret != -ENOENT) {
+      return ret;
     }
+    log_op = ret;
 
-    bufferlist bl;
-    bl.append(replication_status);
-    attrs.emplace(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(bl));
+    if (log_op || ret == -ENOENT) {
+      std::string replication_status = "PENDING";
+      if (ret == -ENOENT) {
+        replication_status = "FAILED";
+      }
+
+      bufferlist bl;
+      bl.append(replication_status);
+      attrs.emplace(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(bl));
+    }
   }
 
 #define MAX_COMPLETE_RETRY 100
