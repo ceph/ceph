@@ -26,7 +26,7 @@ import moment from 'moment';
 import { Validators } from '@angular/forms';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
-import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs';
+import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
 
 @Component({
   selector: 'cd-cephfs-subvolume-snapshots-list',
