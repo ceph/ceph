@@ -1453,6 +1453,7 @@ protected:
   std::string version_id;
   ceph::real_time unmod_since; /* if unmodified since */
   bool no_precondition_error;
+  rgw::sal::Attrs attrs;
   std::unique_ptr<RGWBulkDelete::Deleter> deleter;
   bool bypass_perm;
   bool bypass_governance_mode;

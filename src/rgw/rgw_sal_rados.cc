@@ -634,6 +634,7 @@ int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp, int shard_id, R
 
 int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
 {
+  ldpp_dout(dpp, 20) << "Test1231234" << ent.size << dendl;
   return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, &ent);
 }
 
@@ -856,7 +857,7 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
   list_op.params.force_check_filter = params.force_check_filter;
   list_op.params.list_versions = params.list_versions;
   list_op.params.allow_unordered = params.allow_unordered;
-
+  // cout << list_op.params.prefix << std::endl;
   int ret = list_op.list_objects(dpp, max, &results.objs, &results.common_prefixes, &results.is_truncated, y);
   if (ret >= 0) {
     results.next_marker = list_op.get_next_marker();
