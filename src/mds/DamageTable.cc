@@ -15,6 +15,7 @@
 #include "common/debug.h"
 
 #include "mds/CDir.h"
+#include "mds/CInode.h"
 
 #include "DamageTable.h"
 
@@ -198,6 +199,33 @@ bool DamageTable::notify_remote_damaged(inodeno_t ino, std::string_view path)
   }
 
   return false;
+}
+
+void DamageTable::remove_dentry_damage_entry(CDir *dir)
+{
+  if (dentries.count(
+        DirFragIdent(dir->inode->ino(), dir->frag)
+        ) > 0){
+          const auto frag_dentries =
+            dentries.at(DirFragIdent(dir->inode->ino(), dir->frag));
+          for(const auto &i : frag_dentries) {
+            erase(i.second->id);
+          }
+        }
+}
+
+void DamageTable::remove_dirfrag_damage_entry(CDir *dir)
+{
+  if (is_dirfrag_damaged(dir)){
+    erase(dirfrags.find(DirFragIdent(dir->inode->ino(), dir->frag))->second->id);
+  }
+}
+
+void DamageTable::remove_backtrace_damage_entry(inodeno_t ino)
+{  
+  if (is_remote_damaged(ino)){
+    erase(remotes.find(ino)->second->id);
+  }  
 }
 
 bool DamageTable::oversized() const

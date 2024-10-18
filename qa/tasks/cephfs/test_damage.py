@@ -498,7 +498,7 @@ class TestDamage(CephFSTestCase):
 
         # Drop everything from the MDS cache
         self.fs.fail()
-        self.fs.journal_tool(['journal', 'reset'], 0)
+        self.fs.journal_tool(['journal', 'reset', '--yes-i-really-really-mean-it'], 0)
         self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
