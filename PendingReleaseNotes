@@ -304,6 +304,13 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   which specifies the path within the CephFS to mount this export on. If this and the other
   `EXPORT { FSAL {} }` options are the same between multiple exports, those exports will share a single CephFS client. If not specified, the default is `/`.
 
+* CephFS: `fs subvolume create` command gained `--earmark` option. Support for
+  adding earmark to subvolume is added to CephFS in Squid 19.2.1.
+  The earmark serves as a unique identifier, tagging the subvolume specifically for NFS or SMB services.
+  By default, no earmark is set, allowing for flexible assignment based on administrative needs.
+  An empty string ("") can be used to remove any existing earmark from a subvolume.
+  Aditionally new commands are introduced to get/set/rm earmark from a given subvolume.
+
 >=18.0.0
 
 * The RGW policy parser now rejects unknown principals by default. If you are
