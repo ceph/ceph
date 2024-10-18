@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { NgModule } from '@angular/core';
+import {  NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
@@ -9,7 +9,9 @@ import {
   CheckboxModule,
   ButtonModule,
   GridModule,
-  ProgressIndicatorModule
+  ProgressIndicatorModule,
+  InputModule,
+  ModalModule
 } from 'carbon-components-angular';
 
 import { TreeModule } from '@circlon/angular-tree-component';
@@ -102,7 +104,10 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     CheckboxModule,
     GridModule,
     ProgressIndicatorModule,
-    ButtonModule
+    ButtonModule,
+    InputModule,
+    ButtonModule,
+    ModalModule,
   ],
   declarations: [
     HostsComponent,
