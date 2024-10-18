@@ -20,7 +20,6 @@ set -xe
 base=${1:-/tmp/release}
 releasedir=$base/$NAME/WORKDIR
 rm -fr $(dirname $releasedir)
-mkdir -p $releasedir
 #
 # remove all files not under git so they are not
 # included in the distribution.
@@ -38,6 +37,7 @@ vers=$(git describe --match "v*" | sed s/^v//)
 #
 # rename the tarbal to match debian conventions and extract it
 #
+mkdir -p $releasedir
 mv ceph-$vers.tar.bz2 $releasedir/ceph_$vers.orig.tar.bz2
 tar -C $releasedir -jxf $releasedir/ceph_$vers.orig.tar.bz2
 #
