@@ -97,11 +97,7 @@ class EventCenter {
   using clock_type = ceph::coarse_mono_clock;
 
   struct AssociatedCenters {
-    EventCenter *centers[MAX_EVENTCENTER];
-    AssociatedCenters() {
-      // FIPS zeroization audit 20191115: this memset is not security related.
-      memset(centers, 0, MAX_EVENTCENTER * sizeof(EventCenter*));
-    }
+    EventCenter *centers[MAX_EVENTCENTER]{};
   };
 
   struct FileEvent {

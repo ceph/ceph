@@ -310,7 +310,7 @@ ssize_t AsyncConnection::write(ceph::buffer::list &bl,
     outgoing_bl.claim_append(bl);
     ssize_t r = _try_send(more);
     if (r > 0) {
-      writeCallback = callback;
+      writeCallback = std::move(callback);
     }
     return r;
 }
@@ -621,7 +621,7 @@ void AsyncConnection::fault()
 }
 
 void AsyncConnection::_stop() {
-  writeCallback.reset();
+  writeCallback = {};
   dispatch_queue->discard_queue(conn_id);
   async_msgr->unregister_conn(this);
   worker->release_worker();
@@ -737,8 +737,7 @@ void AsyncConnection::handle_write_callback() {
   recv_start_time = ceph::mono_clock::now();
   write_lock.lock();
   if (writeCallback) {
-    auto callback = *writeCallback;
-    writeCallback.reset();
+    auto callback = std::move(writeCallback);
     write_lock.unlock();
     callback(0);
     return;
