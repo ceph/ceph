@@ -2011,3 +2011,20 @@ struct AioCompletionDeleter {
   void operator()(librados::AioCompletion* c) { c->release(); }
 };
 using aio_completion_ptr = std::unique_ptr<librados::AioCompletion, AioCompletionDeleter>;
+
+extern int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, optional_yield y, RGWObjTags& obj_tags);
+
+extern int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                         const std::string& object_name, const RGWObjTags& tagset,
+                         const DoutPrefixProvider *dpp, optional_yield y,
+                         std::string* log_zonegroup);
+
+extern int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                         const std::string& object_name, const rgw::sal::Attrs& obj_attrs,
+                         const DoutPrefixProvider *dpp, optional_yield y,
+                         std::string* log_zonegroup);
+
+extern int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                         rgw::sal::Object *object,
+                         const DoutPrefixProvider *dpp, optional_yield y,
+                         std::string* log_zonegroup);

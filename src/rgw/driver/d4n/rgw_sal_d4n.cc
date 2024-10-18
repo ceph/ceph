@@ -111,7 +111,7 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
 }
 
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
+                            Attrs* delattrs, optional_yield y, std::string *log_zonegroup, uint32_t flags)
 {
   if (setattrs != NULL) {
     /* Ensure setattrs and delattrs do not overlap */
@@ -142,7 +142,7 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): CacheDriver delete_attrs method failed." << dendl;
   }
 
-  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
+  return next->set_obj_attrs(dpp, setattrs, delattrs, y, log_zonegroup, flags);
 }
 
 int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -206,19 +206,20 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 }
 
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp) 
+                               optional_yield y, const DoutPrefixProvider* dpp,
+                               std::string *log_zonegroup, uint32_t flags)
 {
   Attrs update;
   update[(std::string)attr_name] = attr_val;
 
-  if (driver->get_cache_driver()->update_attrs(dpp, this->get_key().get_oid(), update, y) < 0) 
+  if (driver->get_cache_driver()->update_attrs(dpp, this->get_key().get_oid(), update, y) < 0)
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): CacheDriver update_attrs method failed." << dendl;
 
-  return next->modify_obj_attrs(attr_name, attr_val, y, dpp);  
+  return next->modify_obj_attrs(attr_name, attr_val, y, dpp, log_zonegroup, flags);
 }
 
 int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y)
+                               optional_yield y, std::string *log_zonegroup, uint32_t flags)
 {
   buffer::list bl;
   Attrs delattr;
@@ -230,10 +231,10 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
   if (std::find_if(currentattrs.begin(), currentattrs.end(),
        [&](const auto& pair) { return pair.first == attr->first; }) != currentattrs.end()) {
 
-    if (driver->get_cache_driver()->delete_attrs(dpp, this->get_key().get_oid(), delattr, y) < 0) 
+    if (driver->get_cache_driver()->delete_attrs(dpp, this->get_key().get_oid(), delattr, y) < 0)
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): CacheDriver delete_attrs method failed." << dendl;
-  } else 
-    return next->delete_obj_attrs(dpp, attr_name, y);  
+  } else
+    return next->delete_obj_attrs(dpp, attr_name, y, log_zonegroup, flags);
 
   return 0;
 }
@@ -809,15 +810,16 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
 }
 
 int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
-                       ceph::real_time *mtime, ceph::real_time set_mtime,
-                       std::map<std::string, bufferlist>& attrs,
-		       const std::optional<rgw::cksum::Cksum>& cksum,
-                       ceph::real_time delete_at,
-                       const char *if_match, const char *if_nomatch,
-                       const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx,
-                       uint32_t flags)
+                              ceph::real_time *mtime, ceph::real_time set_mtime,
+                              std::map<std::string, bufferlist>& attrs,
+                              const std::optional<rgw::cksum::Cksum>& cksum,
+                              ceph::real_time delete_at,
+                              const char *if_match, const char *if_nomatch,
+                              const std::string *user_data,
+                              rgw_zone_set *zones_trace, std::string *log_zonegroup,
+                              bool *canceled,
+                              const req_context& rctx,
+                              uint32_t flags)
 {
   rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
 				 .objName = obj->get_key().get_oid(), 
@@ -832,7 +834,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
    
   /* Retrieve complete set of attrs */
   int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
-			delete_at, if_match, if_nomatch, user_data, zones_trace,
+			delete_at, if_match, if_nomatch, user_data, zones_trace, log_zonegroup,
 			canceled, rctx, flags);
   obj->get_obj_attrs(rctx.y, save_dpp, NULL);
 

@@ -4242,3 +4242,17 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_data_sync_allow_chain_replication
+  type: bool
+  level: advanced
+  default: true
+  desc: This option controls whether replication of already replicated objects (chain replication)
+    is allowed.
+  long_desc: When enabled, an object that has been replicated to a destination zone can be further
+    replicated to other zones. Disabling this option prevents chain replication, avoiding potential
+    performance issues and redundant logging caused by circular replication patterns between zones.
+    This can be useful in scenarios where chain replication is unnecessary or undesirable for
+    optimizing sync operations.
+  services:
+  - rgw
+  with_legacy: true

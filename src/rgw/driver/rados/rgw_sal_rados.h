@@ -559,7 +559,8 @@ class RadosObject : public StoreObject {
       rados_ctx->invalidate(get_obj());
     }
     virtual int delete_object(const DoutPrefixProvider* dpp,
-			      optional_yield y, uint32_t flags,
+			      optional_yield y,
+                              std::string *log_zonegroup, uint32_t flags,
 			      std::list<rgw_obj_index_key>* remove_objs,
 			      RGWObjVersionTracker* objv) override;
     virtual int copy_object(const ACLOwner& owner,
@@ -599,10 +600,10 @@ class RadosObject : public StoreObject {
     /* For rgw_admin.cc */
     RGWObjState& get_state() { return state; }
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
-    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) override;
+    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, std::string *log_zonegroup, uint32_t flags) override;
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
-    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) override;
-    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) override;
+    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, std::string *log_zonegroup, uint32_t flags) override;
+    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y, std::string *log_zonegroup, uint32_t flags) override;
     virtual bool is_expired() override;
     virtual void gen_rand_obj_instance_name() override;
     void get_raw_obj(rgw_raw_obj* raw_obj);
@@ -617,6 +618,7 @@ class RadosObject : public StoreObject {
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y,
+                           std::string *log_zonegroup,
                            uint32_t flags) override;
     virtual int transition_to_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
@@ -627,17 +629,18 @@ class RadosObject : public StoreObject {
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) override;
     virtual int restore_obj_from_cloud(Bucket* bucket,
-			   rgw::sal::PlacementTier* tier,
-			   rgw_placement_rule& placement_rule,
-			   rgw_bucket_dir_entry& o,
-			   CephContext* cct,
-         		   RGWObjTier& tier_config,
-			   real_time& mtime,
-			   uint64_t olh_epoch,
-  		           std::optional<uint64_t> days,
-			   const DoutPrefixProvider* dpp,
-			   optional_yield y,
-		           uint32_t flags) override;
+                                       rgw::sal::PlacementTier* tier,
+                                       rgw_placement_rule& placement_rule,
+                                       rgw_bucket_dir_entry& o,
+                                       CephContext* cct,
+                                       RGWObjTier& tier_config,
+                                       real_time& mtime,
+                                       uint64_t olh_epoch,
+                                       std::optional<uint64_t> days,
+                                       const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       std::string *log_zonegroup,
+                                       uint32_t flags) override;
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
     virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
@@ -1021,7 +1024,8 @@ public:
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, std::string *log_zonegroup,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags) override;
 };
@@ -1071,7 +1075,8 @@ public:
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, std::string *log_zonegroup,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags) override;
 };
@@ -1118,7 +1123,8 @@ public:
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, std::string *log_zonegroup,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags) override;
 };

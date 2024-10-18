@@ -994,11 +994,12 @@ int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* c
 
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
+                                std::string *log_zonegroup,
 				uint32_t flags,
 				std::list<rgw_obj_index_key>* remove_objs,
 				RGWObjVersionTracker* objv)
 {
-  return next->delete_object(dpp, y, flags, remove_objs, objv);
+  return next->delete_object(dpp, y, log_zonegroup, flags, remove_objs, objv);
 }
 
 int FilterObject::copy_object(const ACLOwner& owner,
@@ -1052,9 +1053,9 @@ int FilterObject::load_obj_state(const DoutPrefixProvider *dpp,
 }
 
 int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-				Attrs* delattrs, optional_yield y, uint32_t flags)
+				Attrs* delattrs, optional_yield y, std::string *log_zonegroup, uint32_t flags)
 {
-  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
+  return next->set_obj_attrs(dpp, setattrs, delattrs, y, log_zonegroup, flags);
 }
 
 int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -1064,15 +1065,17 @@ int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
 }
 
 int FilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-				   optional_yield y, const DoutPrefixProvider* dpp)
+				   optional_yield y, const DoutPrefixProvider* dpp,
+                                   std::string *log_zonegroup, uint32_t flags)
 {
-  return next->modify_obj_attrs(attr_name, attr_val, y, dpp);
+  return next->modify_obj_attrs(attr_name, attr_val, y, dpp, log_zonegroup, flags);
 }
 
 int FilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
-				   const char* attr_name, optional_yield y)
+				   const char* attr_name, optional_yield y,
+                                   std::string *log_zonegroup, uint32_t flags)
 {
-  return next->delete_obj_attrs(dpp, attr_name, y);
+  return next->delete_obj_attrs(dpp, attr_name, y, log_zonegroup, flags);
 }
 
 bool FilterObject::is_expired()
@@ -1098,10 +1101,11 @@ int FilterObject::transition(Bucket* bucket,
 			     uint64_t olh_epoch,
 			     const DoutPrefixProvider* dpp,
 			     optional_yield y,
+                             std::string *log_zonegroup,
                              uint32_t flags)
 {
   return next->transition(nextBucket(bucket), placement_rule, mtime, olh_epoch,
-			  dpp, y, flags);
+			  dpp, y, log_zonegroup, flags);
 }
 
 int FilterObject::transition_to_cloud(Bucket* bucket,
@@ -1118,20 +1122,21 @@ int FilterObject::transition_to_cloud(Bucket* bucket,
 }
 
 int FilterObject::restore_obj_from_cloud(Bucket* bucket,
-		          rgw::sal::PlacementTier* tier,
-		          rgw_placement_rule& placement_rule,
-		          rgw_bucket_dir_entry& o,
-		          CephContext* cct,
-		          RGWObjTier& tier_config,
-		          real_time& mtime,
-		          uint64_t olh_epoch,
-		          std::optional<uint64_t> days,
-		          const DoutPrefixProvider* dpp, 
-		          optional_yield y,
-		          uint32_t flags)
+                                         rgw::sal::PlacementTier* tier,
+                                         rgw_placement_rule& placement_rule,
+                                         rgw_bucket_dir_entry& o,
+                                         CephContext* cct,
+                                         RGWObjTier& tier_config,
+                                         real_time& mtime,
+                                         uint64_t olh_epoch,
+                                         std::optional<uint64_t> days,
+                                         const DoutPrefixProvider* dpp,
+                                         optional_yield y,
+                                         std::string *log_zonegroup,
+                                         uint32_t flags)
 {
   return next->restore_obj_from_cloud(nextBucket(bucket), nextPlacementTier(tier),
-           placement_rule, o, cct, tier_config, mtime, olh_epoch, days, dpp, y, flags);
+           placement_rule, o, cct, tier_config, mtime, olh_epoch, days, dpp, y, log_zonegroup, flags);
 }
 
 bool FilterObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)
@@ -1435,12 +1440,13 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, std::string *log_zonegroup,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
 {
   return next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
-			delete_at, if_match, if_nomatch, user_data, zones_trace,
+			delete_at, if_match, if_nomatch, user_data, zones_trace, log_zonegroup,
 			canceled, rctx, flags);
 }
 

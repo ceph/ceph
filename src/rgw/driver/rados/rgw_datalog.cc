@@ -15,6 +15,7 @@
 #include "cls/fifo/cls_fifo_types.h"
 #include "cls/log/cls_log_client.h"
 
+#include "rgw_bucket_sync.h"
 #include "cls_fifo_legacy.h"
 #include "rgw_bucket_layout.h"
 #include "rgw_datalog.h"
@@ -44,6 +45,7 @@ void rgw_data_change::dump(ceph::Formatter *f) const
   utime_t ut(timestamp);
   encode_json("timestamp", ut, f);
   encode_json("gen", gen, f);
+  encode_json("log_zonegroup", log_zonegroup, f);
 }
 
 void rgw_data_change::decode_json(JSONObj *obj) {
@@ -59,6 +61,7 @@ void rgw_data_change::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("timestamp", ut, obj);
   timestamp = ut.to_real_time();
   JSONDecoder::decode_json("gen", gen, obj);
+  JSONDecoder::decode_json("log_zonegroup", log_zonegroup, obj);
 }
 
 void rgw_data_change::generate_test_instances(std::list<rgw_data_change *>& l) {
@@ -68,6 +71,7 @@ void rgw_data_change::generate_test_instances(std::list<rgw_data_change *>& l) {
   l.back()->key = "bucket_name";
   l.back()->timestamp = ceph::real_clock::zero();
   l.back()->gen = 0;
+  l.back()->log_zonegroup = "log_zonegroup";
 }
 
 void rgw_data_change_log_entry::dump(Formatter *f) const
@@ -417,8 +421,9 @@ public:
   }
 };
 
-RGWDataChangesLog::RGWDataChangesLog(CephContext* cct)
+RGWDataChangesLog::RGWDataChangesLog(CephContext* cct, RGWSI_Bucket_Sync* bucket_sync)
   : cct(cct),
+    bucket_sync(bucket_sync),
     num_shards(cct->_conf->rgw_data_log_num_shards),
     prefix(get_prefix()),
     changes(cct->_conf->rgw_data_log_changes_size) {}
@@ -536,8 +541,9 @@ int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
 
 int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
 {
-  if (!zone->log_data)
+  if (!may_log_data(null_yield, dpp)) {
     return 0;
+  }
 
   /* we can't keep the bucket name as part of the cls_log_entry, and we need
    * it later, so we keep two lists under the map */
@@ -551,7 +557,7 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
 
   auto ut = real_clock::now();
   auto be = bes->head();
-  for (const auto& [bs, gen] : entries) {
+  for (const auto& [bs, gen, log_zonegroup] : entries) {
     auto index = choose_oid(bs);
 
     rgw_data_change change;
@@ -560,9 +566,10 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
     change.key = bs.get_key();
     change.timestamp = ut;
     change.gen = gen;
+    change.log_zonegroup = log_zonegroup;
     encode(change, bl);
 
-    m[index].first.push_back({bs, gen});
+    m[index].first.push_back({bs, gen, log_zonegroup});
     be->prepare(ut, change.key, std::move(bl), m[index].second);
   }
 
@@ -582,8 +589,8 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
 
     auto expiration = now;
     expiration += ceph::make_timespan(cct->_conf->rgw_data_log_window);
-    for (auto& [bs, gen] : buckets) {
-      update_renewed(bs, gen, expiration);
+    for (auto& [bs, gen, log_zonegroup] : buckets) {
+      update_renewed(bs, gen, log_zonegroup, expiration);
     }
   }
 
@@ -591,31 +598,34 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
 }
 
 auto RGWDataChangesLog::_get_change(const rgw_bucket_shard& bs,
-				    uint64_t gen)
+				    uint64_t gen,
+                                    const std::string& log_zonegroup)
   -> ChangeStatusPtr
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ChangeStatusPtr status;
-  if (!changes.find({bs, gen}, status)) {
+  if (!changes.find({bs, gen, log_zonegroup}, status)) {
     status = std::make_shared<ChangeStatus>();
-    changes.add({bs, gen}, status);
+    changes.add({bs, gen, log_zonegroup}, status);
   }
   return status;
 }
 
 void RGWDataChangesLog::register_renew(const rgw_bucket_shard& bs,
-				       const rgw::bucket_log_layout_generation& gen)
+				       const rgw::bucket_log_layout_generation& gen,
+                                       const std::string& log_zonegroup)
 {
   std::scoped_lock l{lock};
-  cur_cycle.insert({bs, gen.gen});
+  cur_cycle.insert({bs, gen.gen, log_zonegroup});
 }
 
 void RGWDataChangesLog::update_renewed(const rgw_bucket_shard& bs,
 				       uint64_t gen,
+                                       const std::string& log_zonegroup,
 				       real_time expiration)
 {
   std::unique_lock l{lock};
-  auto status = _get_change(bs, gen);
+  auto status = _get_change(bs, gen, log_zonegroup);
   l.unlock();
 
   ldout(cct, 20) << "RGWDataChangesLog::update_renewed() bucket_name="
@@ -631,17 +641,6 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
   return choose_oid(bs);
 }
 
-bool RGWDataChangesLog::filter_bucket(const DoutPrefixProvider *dpp, 
-                                      const rgw_bucket& bucket,
-				      optional_yield y) const
-{
-  if (!bucket_filter) {
-    return true;
-  }
-
-  return bucket_filter(bucket, y, dpp);
-}
-
 std::string RGWDataChangesLog::get_oid(uint64_t gen_id, int i) const {
   return (gen_id > 0 ?
 	  fmt::format("{}@G{}.{}", prefix, gen_id, i) :
@@ -651,17 +650,10 @@ std::string RGWDataChangesLog::get_oid(uint64_t gen_id, int i) const {
 int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
 				 const RGWBucketInfo& bucket_info,
 				 const rgw::bucket_log_layout_generation& gen,
-				 int shard_id, optional_yield y)
+				 int shard_id, optional_yield y,
+                                 const std::string& log_zonegroup)
 {
-  if (!zone->log_data) {
-    return 0;
-  }
-
   auto& bucket = bucket_info.bucket;
-
-  if (!filter_bucket(dpp, bucket, y)) {
-    return 0;
-  }
 
   if (observer) {
     observer->on_bucket_changed(bucket.get_key());
@@ -671,11 +663,11 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
 
   int index = choose_oid(bs);
 
-  mark_modified(index, bs, gen.gen);
+  mark_modified(index, bs, gen.gen); // XXX: integrate log_zonegroup?
 
   std::unique_lock l(lock);
 
-  auto status = _get_change(bs, gen.gen);
+  auto status = _get_change(bs, gen.gen, log_zonegroup);
   l.unlock();
 
   auto now = real_clock::now();
@@ -689,7 +681,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
   if (now < status->cur_expiration) {
     /* no need to send, recently completed */
     sl.unlock();
-    register_renew(bs, gen);
+    register_renew(bs, gen, log_zonegroup);
     return 0;
   }
 
@@ -706,7 +698,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
     int ret = cond->wait();
     cond->put();
     if (!ret) {
-      register_renew(bs, gen);
+      register_renew(bs, gen, log_zonegroup);
     }
     return ret;
   }
@@ -732,6 +724,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
     change.key = bs.get_key();
     change.timestamp = now;
     change.gen = gen.gen;
+    change.log_zonegroup = log_zonegroup;
     encode(change, bl);
 
     ldpp_dout(dpp, 20) << "RGWDataChangesLog::add_entry() sending update with now=" << now << " cur_expiration=" << expiration << dendl;
@@ -764,7 +757,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
 int DataLogBackends::list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 			  std::vector<rgw_data_change_log_entry>& entries,
 			  std::string_view marker, std::string* out_marker,
-			  bool* truncated, optional_yield y)
+			  bool* truncated, optional_yield y, const std::string& rgwx_zonegroup)
 {
   const auto [start_id, start_cursor] = cursorgen(marker);
   auto gen_id = start_id;
@@ -786,16 +779,17 @@ int DataLogBackends::list(const DoutPrefixProvider *dpp, int shard, int max_entr
     if (out_marker && !out_cursor.empty()) {
       *out_marker = gencursor(gen_id, out_cursor);
     }
+
+    int count = 0;
     for (auto& g : gentries) {
       g.log_id = gencursor(gen_id, g.log_id);
+      if (rgwx_zonegroup.empty() || g.entry.log_zonegroup == rgwx_zonegroup || g.entry.log_zonegroup.empty()) {
+        entries.push_back(std::move(g));
+        count++;
+      }
     }
-    if (int s = gentries.size(); s < 0 || s > max_entries)
-      max_entries = 0;
-    else
-      max_entries -= gentries.size();
 
-    std::move(gentries.begin(), gentries.end(),
-	      std::back_inserter(entries));
+    max_entries -= count;
     ++gen_id;
   }
   return 0;
@@ -805,24 +799,24 @@ int RGWDataChangesLog::list_entries(const DoutPrefixProvider *dpp, int shard, in
 				    std::vector<rgw_data_change_log_entry>& entries,
 				    std::string_view marker,
 				    std::string* out_marker, bool* truncated,
-				    optional_yield y)
+				    optional_yield y, const std::string& rgwx_zonegroup)
 {
   assert(shard < num_shards);
   return bes->list(dpp, shard, max_entries, entries, marker, out_marker,
-		   truncated, y);
+		   truncated, y, rgwx_zonegroup);
 }
 
 int RGWDataChangesLog::list_entries(const DoutPrefixProvider *dpp, int max_entries,
 				    std::vector<rgw_data_change_log_entry>& entries,
 				    LogMarker& marker, bool *ptruncated,
-				    optional_yield y)
+				    optional_yield y, const std::string& rgwx_zonegroup)
 {
   bool truncated;
   entries.clear();
   for (; marker.shard < num_shards && int(entries.size()) < max_entries;
        marker.shard++, marker.marker.clear()) {
     int ret = list_entries(dpp, marker.shard, max_entries - entries.size(),
-			   entries, marker.marker, NULL, &truncated, y);
+			   entries, marker.marker, NULL, &truncated, y, rgwx_zonegroup);
     if (ret == -ENOENT) {
       continue;
     }
@@ -1105,4 +1099,38 @@ void RGWDataChangesLogInfo::decode_json(JSONObj *obj)
   last_update = ut.to_real_time();
 }
 
+int RGWDataChangesLog::bucket_exports_data(const rgw_bucket& bucket,
+                                           optional_yield y,
+                                           const DoutPrefixProvider *dpp) const
+{
+  RGWBucketSyncPolicyHandlerRef handler;
 
+  int r = bucket_sync->get_policy_handler(std::nullopt, bucket, &handler, y, dpp);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get sync policy handler for bucket=" << bucket << " ret=" << r << dendl;
+    return r;
+  }
+
+  return handler->bucket_exports_data();
+}
+
+int RGWDataChangesLog::may_log_data(optional_yield y,
+                                    const DoutPrefixProvider *dpp) const
+{
+  RGWBucketSyncPolicyHandlerRef handler;
+
+  int r = bucket_sync->get_policy_handler(rgw_zone_id(zone->id), std::nullopt, &handler, y, dpp);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get sync policy handler for my zone=" << zone->id << " ret=" << r << dendl;
+    return r;
+  }
+
+  std::set<rgw_zone_id> target_zones;
+  handler->reflect(dpp, nullptr, nullptr,
+                   nullptr, nullptr,
+                   nullptr,
+                   &target_zones,
+                   false); /* relaxed: get all zones that we allow to sync to/from */
+
+  return !target_zones.empty();
+}
