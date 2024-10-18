@@ -25,6 +25,10 @@
    - osd_op_num_shards_hdd = 1 (was 5)
    - osd_op_num_threads_per_shard_hdd = 5 (was 1)
   For more details see https://tracker.ceph.com/issues/66289.
+* pybind/rados: Fixes WriteOp.zero() in the original reversed order of arguments
+  `offset` and `length`. When pybind calls WriteOp.zero(), the argument passed
+  does not match rados_write_op_zero, and offset and length are swapped, which
+  results in an unexpected response.
 
 * CephFS: Modifying the FS setting variable "max_mds" when a cluster is
   unhealthy now requires users to pass the confirmation flag
