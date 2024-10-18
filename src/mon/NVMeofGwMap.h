@@ -27,6 +27,9 @@
 #include "NVMeofGwTypes.h"
 
 using ceph::coarse_mono_clock;
+
+class health_check_map_t;
+
 class Monitor;
 /*-------------------*/
 class NVMeofGwMap
@@ -140,6 +143,8 @@ public:
     decode(fsm_timers, bl);
     DECODE_FINISH(bl);
   }
+
+  void get_health_checks(health_check_map_t *checks) const;
 };
 
 #include "NVMeofGwSerialize.h"
