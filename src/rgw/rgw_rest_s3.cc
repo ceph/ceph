@@ -3802,6 +3802,7 @@ int RGWGetObjAttrs_ObjStore_S3::get_params(optional_yield y)
 		       << err << dendl;
       return -ERR_INVALID_PART;
     }
+    max_parts = std::min(max_parts, 1000);
   }
 
   hdr = env->get_optional("HTTP_X_AMZ_PART_NUMBER_MARKER");
