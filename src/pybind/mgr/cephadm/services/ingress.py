@@ -87,6 +87,11 @@ class IngressService(CephService):
         backend_spec = self.mgr.spec_store[spec.backend_service].spec
         daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
         deps = [d.name() for d in daemons]
+        for attr in ['ssl_cert', 'ssl_key']:
+            ssl_cert_key = getattr(spec, attr, None)
+            if ssl_cert_key:
+                assert isinstance(ssl_cert_key, str)
+                deps.append(str(hash(ssl_cert_key)))
 
         # generate password?
         pw_key = f'{spec.service_name()}/monitor_password'
@@ -197,9 +202,10 @@ class IngressService(CephService):
         }
         if spec.ssl_cert:
             ssl_cert = spec.ssl_cert
-            if isinstance(ssl_cert, list):
-                ssl_cert = '\n'.join(ssl_cert)
             config_files['files']['haproxy.pem'] = ssl_cert
+        if spec.ssl_key:
+            ssl_key = spec.ssl_key
+            config_files['files']['haproxy.pem.key'] = ssl_key
 
         return config_files, sorted(deps)
 
