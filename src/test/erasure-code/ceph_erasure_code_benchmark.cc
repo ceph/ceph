@@ -52,9 +52,9 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   desc.add_options()
     ("help,h", "produce help message")
     ("verbose,v", "explain what happens")
-    ("size,s", po::value<int>()->default_value(1024 * 1024),
+    ("size,s", po::value<int>()->default_value(80 * 1024 * 1024),
      "size of the buffer to be encoded")
-    ("iterations,i", po::value<int>()->default_value(1),
+    ("iterations,i", po::value<int>()->default_value(100),
      "number of encode/decode runs")
     ("plugin,p", po::value<string>()->default_value("jerasure"),
      "erasure code plugin name")
