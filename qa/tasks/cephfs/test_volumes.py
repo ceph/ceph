@@ -2819,6 +2819,64 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    def test_subvolume_deauthorize_with_shared_key(self):
+        """
+        That mon caps are preserved when one cephx key authorized on multiple
+        subvolumes is deauthorized on any of those.
+        """
+        subvolume1 = self._gen_subvol_name()
+        subvolume2 = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+        authid = "alice"
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolumes
+        self._fs_cmd("subvolume", "create", self.volname, subvolume1, "--group_name", group)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume2, "--group_name", group)
+
+        # authorize alice authID read-write access to both subvolumes
+        self._fs_cmd("subvolume", "authorize", self.volname, subvolume1, authid,
+                     "--group_name", group)
+        self._fs_cmd("subvolume", "authorize", self.volname, subvolume2, authid,
+                     "--group_name", group)
+
+        # verify autorized-id has access to both subvolumes
+        expected_auth_list = [{'alice': 'rw'}]
+        auth_list1 = json.loads(self._fs_cmd('subvolume', 'authorized_list', self.volname, subvolume1, "--group_name", group))
+        self.assertEqual(expected_auth_list, auth_list1)
+        auth_list2 = json.loads(self._fs_cmd('subvolume', 'authorized_list', self.volname, subvolume2, "--group_name", group))
+        self.assertEqual(expected_auth_list, auth_list2)
+
+        # check mon caps for authid
+        expected_mon_caps = 'allow r'
+        full_caps = self._raw_cmd("auth", "get", "client.alice", "--format=json-pretty")
+        self.assertEqual(expected_mon_caps, full_caps[0]['caps']['mon'])
+
+        # deauthorize guest1 authID
+        self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume2, authid,
+                     "--group_name", group)
+
+        # verify autorized-id has access to subvolume1 only
+        expected_auth_list = [{'alice': 'rw'}]
+        auth_list1 = json.loads(self._fs_cmd('subvolume', 'authorized_list', self.volname, subvolume1, "--group_name", group))
+        self.assertEqual(expected_auth_list, auth_list1)
+        auth_list2 = json.loads(self._fs_cmd('subvolume', 'authorized_list', self.volname, subvolume2, "--group_name", group))
+        self.assertEqual([], auth_list2)
+
+        # check mon caps still hold for authid
+        expected_mon_caps = 'allow r'
+        full_caps = self._raw_cmd("auth", "get", "client.alice", "--format=json-pretty")
+        self.assertEqual(expected_mon_caps, full_caps[0]['caps']['mon'])
+
+        # cleanup
+        self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, authid,
+                     "--group_name", group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
     def test_multitenant_subvolumes(self):
         """
         That subvolume access can be restricted to a tenant.
