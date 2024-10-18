@@ -173,6 +173,9 @@ class IngressService(CephService):
         frontend_port = daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port
         if ip != '[::]' and frontend_port:
             daemon_spec.port_ips = {str(frontend_port): ip}
+        bind_flags = []
+        if ip != '[::]':
+            bind_flags.append('transparent')
         haproxy_conf = self.mgr.template.render(
             'services/ingress/haproxy.cfg.j2',
             {
@@ -188,6 +191,7 @@ class IngressService(CephService):
                 'local_host_ip': host_ip,
                 'default_server_opts': server_opts,
                 'health_check_interval': spec.health_check_interval or '2s',
+                'bind_flags': bind_flags,
             }
         )
         config_files = {
