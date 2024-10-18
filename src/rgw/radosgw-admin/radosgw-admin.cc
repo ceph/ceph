@@ -10812,10 +10812,10 @@ next:
         ret = datalog_svc->list_entries(dpp(), shard_id, max_entries - count,
 					entries, marker,
 					&marker, &truncated,
-					null_yield);
+					null_yield, "");
       } else {
         ret = datalog_svc->list_entries(dpp(), max_entries - count, entries,
-					log_marker, &truncated, null_yield);
+					log_marker, &truncated, null_yield, "");
       }
       if (ret < 0) {
         cerr << "ERROR: datalog_svc->list_entries(): " << cpp_strerror(-ret) << std::endl;

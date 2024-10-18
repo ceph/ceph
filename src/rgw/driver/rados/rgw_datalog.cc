@@ -758,7 +758,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
 int DataLogBackends::list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 			  std::vector<rgw_data_change_log_entry>& entries,
 			  std::string_view marker, std::string* out_marker,
-			  bool* truncated, optional_yield y)
+			  bool* truncated, optional_yield y, const std::string& rgwx_zone)
 {
   const auto [start_id, start_cursor] = cursorgen(marker);
   auto gen_id = start_id;
@@ -780,16 +780,17 @@ int DataLogBackends::list(const DoutPrefixProvider *dpp, int shard, int max_entr
     if (out_marker && !out_cursor.empty()) {
       *out_marker = gencursor(gen_id, out_cursor);
     }
+
+    int count = 0;
     for (auto& g : gentries) {
       g.log_id = gencursor(gen_id, g.log_id);
+      if (g.entry.log_zones.contains(rgwx_zone) || rgwx_zone.empty() || g.entry.log_zones.empty()) {
+        entries.push_back(std::move(g));
+        count++;
+      }
     }
-    if (int s = gentries.size(); s < 0 || s > max_entries)
-      max_entries = 0;
-    else
-      max_entries -= gentries.size();
 
-    std::move(gentries.begin(), gentries.end(),
-	      std::back_inserter(entries));
+    max_entries -= count;
     ++gen_id;
   }
   return 0;
@@ -799,24 +800,24 @@ int RGWDataChangesLog::list_entries(const DoutPrefixProvider *dpp, int shard, in
 				    std::vector<rgw_data_change_log_entry>& entries,
 				    std::string_view marker,
 				    std::string* out_marker, bool* truncated,
-				    optional_yield y)
+				    optional_yield y, const std::string& rgwx_zone)
 {
   assert(shard < num_shards);
   return bes->list(dpp, shard, max_entries, entries, marker, out_marker,
-		   truncated, y);
+		   truncated, y, rgwx_zone);
 }
 
 int RGWDataChangesLog::list_entries(const DoutPrefixProvider *dpp, int max_entries,
 				    std::vector<rgw_data_change_log_entry>& entries,
 				    LogMarker& marker, bool *ptruncated,
-				    optional_yield y)
+				    optional_yield y, const std::string& rgwx_zone)
 {
   bool truncated;
   entries.clear();
   for (; marker.shard < num_shards && int(entries.size()) < max_entries;
        marker.shard++, marker.marker.clear()) {
     int ret = list_entries(dpp, marker.shard, max_entries - entries.size(),
-			   entries, marker.marker, NULL, &truncated, y);
+			   entries, marker.marker, NULL, &truncated, y, rgwx_zone);
     if (ret == -ENOENT) {
       continue;
     }
