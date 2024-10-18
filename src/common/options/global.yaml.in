@@ -4040,6 +4040,16 @@ options:
   level: advanced
   default: 16
   with_legacy: true
+- name: bdev_aio_submit_retry_max
+  type: int
+  level: advanced
+  default: 16
+  with_legacy: true
+- name: bdev_aio_submit_retry_initial_delay_us
+  type: int
+  level: advanced
+  default: 125
+  with_legacy: true
 - name: bdev_block_size
   type: size
   level: advanced
