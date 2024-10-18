@@ -48,15 +48,15 @@ struct heartbeat_handle_d {
   ceph::timespan suicide_grace = ceph::timespan::zero();
   std::list<heartbeat_handle_d*>::iterator list_item;
 
-  explicit heartbeat_handle_d(const std::string& n)
-    : name(n)
+  explicit heartbeat_handle_d(std::string&& n)
+    : name(std::move(n))
   { }
 };
 
 class HeartbeatMap {
  public:
   // register/unregister
-  heartbeat_handle_d *add_worker(const std::string& name, pthread_t thread_id);
+  heartbeat_handle_d *add_worker(std::string&& name, pthread_t thread_id);
   void remove_worker(const heartbeat_handle_d *h);
 
   // reset the timeout so that it expects another touch within grace amount of time
