@@ -216,6 +216,7 @@ struct ceph_mon_statfs {
 
 struct ceph_statfs {
 	__le64 kb, kb_used, kb_avail;
+	__le64 bytes, bytes_used, bytes_avail;
 	__le64 num_objects;
 } __attribute__ ((packed));
 
