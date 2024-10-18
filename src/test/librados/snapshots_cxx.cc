@@ -152,6 +152,147 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, SnapPP) {
   ASSERT_EQ(0, ioctx.remove("foo"));
 }
 
+// See clone_overlap: doc/dev/osd_internals/snaps.rst
+struct SnapOverlapPP : LibRadosSnapshotsSelfManagedPP {
+  std::string objname = "foo";
+  std::vector<snap_t> snaps;
+  IoCtx ioctx;
+  IoCtx readioctx;
+  void SetUp() override {
+    LibRadosSnapshotsSelfManagedPP::SetUp();
+    EXPECT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+    EXPECT_EQ(0, cluster.ioctx_create(pool_name.c_str(), readioctx));
+    ioctx.set_namespace(nspace);
+    readioctx.set_namespace(nspace);
+    readioctx.snap_set_read(LIBRADOS_SNAP_DIR);
+  }
+
+  void TearDown() override {
+    ioctx.close();
+    LibRadosSnapshotsSelfManagedPP::TearDown();
+  }
+
+  void write(uint64_t off, uint64_t len) {
+    bufferlist bl;
+    {
+      char buf[len];
+      memset(buf, 0xdd, sizeof(buf));
+      bl.append(buf, sizeof(buf));
+    }
+    EXPECT_EQ(0, ioctx.write(objname, bl, bl.length(), off));
+  }
+
+  snap_t snapshot() {
+    snap_t snap;
+    EXPECT_EQ(0, ioctx.selfmanaged_snap_create(&snap));
+    snaps.push_back(snap);
+
+    std::vector<snap_t> revsnaps{snaps.rbegin(), snaps.rend()};
+    EXPECT_EQ(0,
+              ioctx.selfmanaged_snap_set_write_ctx(revsnaps[0],
+                                                   revsnaps));
+    return snap;
+  }
+
+  void rollback(snap_t snap) {
+    EXPECT_EQ(0,
+              ioctx.selfmanaged_snap_rollback(objname,
+                                              snap));
+  }
+
+  void assert_overlap(
+    std::vector<snap_t> clones, // reverse order
+    std::map<snap_t, std::vector<std::pair<uint64_t, uint64_t>>> overlaps) {
+    snap_set_t ss;
+    ASSERT_EQ(0, readioctx.list_snaps(objname, &ss));
+    ASSERT_GT(ss.clones.size(), 0);
+    ASSERT_EQ(ss.clones.rbegin()->cloneid, LIBRADOS_SNAP_HEAD);
+    // remove the head from ss.clones
+    ss.clones.pop_back();
+
+    ASSERT_EQ(clones.size(), ss.clones.size());
+    ASSERT_EQ(overlaps.size(), ss.clones.size());
+    for (unsigned i = 0; i < clones.size(); ++i) {
+      ASSERT_EQ(clones[i], ss.clones[i].cloneid);
+      auto check_iter = overlaps.find(clones[i]);
+      ASSERT_NE(check_iter, overlaps.end());
+      EXPECT_EQ(ss.clones[i].overlap, check_iter->second);
+    }
+  }
+};
+
+TEST_F(SnapOverlapPP, RollbackOverlapPP) {
+  write(0, 4<<10);
+  auto snap1 = snapshot();
+  rollback(snap1);
+  assert_overlap({snap1},{{snap1, {{0, 4<<10}}}});
+}
+
+TEST_F(SnapOverlapPP, RollbackOverlap1PP) {
+  write(0, 4<<10);
+  // head:  AAAA
+  auto snap1 = snapshot();
+  write(2<<10, 2<<10);
+  // head:  AABB
+  // snap1: AAAA
+  assert_overlap({snap1},{{snap1,{{0, 2<<10}}}});
+  // rollback to snap1
+  rollback(snap1);
+  // head:  AAAA
+  // snap1: AAAA [0~4]
+  assert_overlap({snap1},{{snap1,{{0, 4<<10}}}});
+  write(0, 32<<10);
+  // head:  CCCC
+  // snap1: AAAA []
+  assert_overlap({snap1},{{snap1,{}}});
+  // rollback to snap1
+  rollback(snap1);
+  // head:  AAAA
+  // snap1: AAAA [0~4]
+  assert_overlap({snap1},{{snap1,{{0, 4<<10}}}});
+}
+
+TEST_F(SnapOverlapPP, RollbackOverlap2PP) {
+  write(0, 4<<10);
+  // head:  AAAA
+  auto snap1 = snapshot();
+  write(0, 2<<10);
+  // head:  BBAA
+  // snap1: AAAA
+  assert_overlap({snap1},{{snap1,{{2<<10, 2<<10}}}});
+  auto snap2 = snapshot();
+  write(0, 1<<10);
+  // head:  CBAA
+  // snap1: AAAA [2~2]
+  // snap2: BBAA [1~3]
+  assert_overlap({snap1, snap2},
+                 {{snap1,{{2<<10, 2<<10}}},
+                  {snap2,{{1<<10, 3<<10}}}});
+  // rollback to snap2
+  rollback(snap2);
+  // head:  BBAA
+  // snap1: AAAA [2~2]
+  // snap2: BBAA [0~4]
+  assert_overlap({snap1, snap2},
+                 {{snap1,{{2<<10, 2<<10}}},
+                  {snap2,{{0, 4<<10}}}});
+  // rollback to snap1
+  rollback(snap1);
+  // head:  AAAA
+  // snap1: AAAA [2~2]
+  // snap2: BBAA [2~2]
+  assert_overlap({snap1, snap2},
+                 {{snap1,{{2<<10, 2<<10}}},
+                  {snap2,{{2<<10, 2<<10}}}});
+  write(0, 4<<10);
+  // head:  DDDD
+  // snap1: AAAA [2~2]
+  // snap2: BBAA []
+  assert_overlap({snap1, snap2},
+                 {{snap1,{{2<<10, 2<<10}}},
+                  {snap2,{}}});
+}
+
 TEST_F(LibRadosSnapshotsSelfManagedPP, RollbackPP) {
   std::vector<uint64_t> my_snaps;
   IoCtx readioctx;
