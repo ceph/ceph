@@ -2096,6 +2096,20 @@ public:
     Throttle throttle_deferred_bytes;  ///< submit to deferred complete
 
   public:
+    ceph::mutex lock = ceph::make_mutex("BlueStoreThrottle::max_lock");
+
+    std::atomic<uint64_t> transactions = 0;
+
+    int64_t  bytes_observed_max = 0;
+    utime_t  bytes_max_ts;
+    uint64_t transactions_observed_max = 0;
+    utime_t  transactions_max_ts;
+
+    uint64_t get_current() {
+      return throttle_bytes.get_current();
+    }
+
+  public:
     BlueStoreThrottle(CephContext *cct) :
       throttle_bytes(cct, "bluestore_throttle_bytes", 0),
       throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes", 0)
@@ -2121,8 +2135,9 @@ public:
       KeyValueDB &db,
       TransContext &txc,
       ceph::mono_clock::time_point);
-    void release_kv_throttle(uint64_t cost) {
+    void release_kv_throttle(uint64_t cost, uint64_t txcs) {
       throttle_bytes.put(cost);
+      transactions -= txcs;
     }
     void release_deferred_throttle(uint64_t cost) {
       throttle_deferred_bytes.put(cost);
@@ -2485,6 +2500,7 @@ private:
 
   uint64_t kv_ios = 0;
   uint64_t kv_throttle_costs = 0;
+  uint64_t kv_throttle_txcs = 0;
 
   // cache trim control
   uint64_t cache_size = 0;       ///< total cache size
