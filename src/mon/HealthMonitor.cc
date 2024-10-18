@@ -622,6 +622,21 @@ bool HealthMonitor::check_member_health()
     d.detail.push_back(ss2.str());
   }
 
+  // OSD_POOL_DEFAULT_CRIMSON_DISABLED
+  {
+    // Warn if 'osd_pool_default_crimson' is not set.
+    // This flag is in case default Crimson pool creation is not enabled
+    // Crimson OSD won't instantiate PGs from non-Crimson pools, so we need
+    // a health warning to tell the user why OSDs are blocked from going up.
+    if (g_conf().get_val<bool>("mon_warn_on_pool_pg_creation_blocked")) {
+      std::ostringstream ss, ss2;
+      ss << "osd_pool_default_crimson is not enabled.";
+      auto& d = next.add("CRIMSON_FLAG_OFF", HEALTH_WARN, ss.str(), 1);
+      ss2 << "Run the x command to get it running.";
+      d.detail.push_back(ss2.str());
+    }
+  }
+
   // OSD_NO_DOWN_OUT_INTERVAL
   {
     // Warn if 'mon_osd_down_out_interval' is set to zero.
