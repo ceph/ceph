@@ -1,3 +1,5 @@
 roles:
-- [c1.mon.a, c1.mgr.x, c1.osd.0, c1.osd.1, c1.osd.2, c1.client.0, c1.client.1]
-- [c2.mon.a, c2.mgr.x, c2.osd.0, c2.osd.1, c2.osd.2, c2.client.0, c2.client.1]
+- [c1.mon.a, c1.osd.0, c1.osd.1, c1.osd.2, c1.client.0]
+- [c1.mgr.x, c1.osd.3, c1.osd.4, c1.osd.5, c1.client.1]
+- [c2.mon.a, c2.osd.0, c2.osd.1, c2.osd.2, c2.client.0]
+- [c2.mgr.x, c2.osd.3, c2.osd.4, c2.osd.5, c2.client.1]
