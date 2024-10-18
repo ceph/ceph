@@ -34,8 +34,7 @@ import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-moun
 import { HealthService } from '~/app/shared/api/health.service';
 import _ from 'lodash';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
-
-const DEFAULT_SUBVOLUME_GROUP = '_nogroup';
+import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
 
 @Component({
   selector: 'cd-cephfs-subvolume-list',
