@@ -3,7 +3,7 @@
   <div cdsRow>
 <cds-date-picker [label]="name"
                  i18n-label
-                 placeholder="NOT PROTECTED"
+                 [placeholder]="name"
                  formControlname="expiresAt"
                  dateFormat="Y/m/d"
                  [value]="date"
