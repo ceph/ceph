@@ -1071,6 +1071,12 @@ public:
     }; // class RGWRados::Bucket::List
   }; // class RGWRados::Bucket
 
+  static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
+		       RGWRados* store, RGWBucketInfo& bucket_info,
+		       RGWObjectCtx* rctx, RGWObjManifest* manifest,
+		       int part_num, int* parts_count, bool prefetch,
+		       RGWObjState** pstate, RGWObjManifest** pmanifest);
+
   int on_last_entry_in_listing(const DoutPrefixProvider *dpp,
                                RGWBucketInfo& bucket_info,
                                const std::string& obj_prefix,

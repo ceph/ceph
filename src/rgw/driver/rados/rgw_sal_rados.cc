@@ -29,6 +29,7 @@
 #include "common/errno.h"
 
 #include "role.h"
+#include "rgw_obj_manifest.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #include "rgw_bucket.h"
@@ -2228,7 +2229,108 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
 
   const rgw_bi_log_entry& earliest_marker = entries.front();
   return earliest_marker.timestamp > obj_mtime;
-}
+} /* is_sync_completed */
+
+int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			   int max_parts, int marker, int* next_marker,
+			   bool* truncated, list_parts_each_t each_func,
+			   optional_yield y)
+{
+  int ret{0};
+
+  /* require an object with a manifest, so call to get_obj_state() must precede this */
+  if (! manifest) {
+    return -EINVAL;
+  }
+
+  RGWObjManifest::obj_iterator end = manifest->obj_end(dpp);
+  if (end.get_cur_part_id() == 0) { // not multipart
+    ldpp_dout(dpp, 20) << __func__ << " object does not have a multipart manifest"
+		       << dendl;
+    return 0;
+  }
+
+  auto end_part_id = end.get_cur_part_id();
+  auto parts_count = (end_part_id == 1) ? 1 : end_part_id - 1;
+  if (marker > (parts_count - 1)) {
+    return 0;
+  }
+
+  RGWObjManifest::obj_iterator part_iter = manifest->obj_begin(dpp);
+
+  if (marker != 0) {
+    ldpp_dout_fmt(dpp, 20,
+		  "{} seeking to part #{} in the object manifest",
+		  __func__, marker);
+
+    part_iter  = manifest->obj_find_part(dpp, marker + 1);
+
+    if (part_iter == end) {
+      ldpp_dout_fmt(dpp, 5,
+		    "{} failed to find part #{} in the object manifest",
+		    __func__, marker + 1);
+      return 0;
+    }
+  }
+
+  RGWObjectCtx& obj_ctx = get_ctx();
+  RGWBucketInfo& bucket_info = get_bucket()->get_info();
+
+  Object::Part obj_part{};
+  for (; part_iter != manifest->obj_end(dpp); ++part_iter) {
+
+    /* we're only interested in the first object in each logical part */
+    auto cur_part_id = part_iter.get_cur_part_id();
+    if (cur_part_id == obj_part.part_number) {
+      continue;
+    }
+
+    if (max_parts < 1) {
+      *truncated = true;
+      break;
+    }
+
+    /* get_part_obj_state alters the passed manifest** to point to a part
+     * manifest, which we don't want to leak out here */
+    RGWObjManifest* obj_m = manifest;
+    RGWObjState* astate;
+    bool part_prefetch = false;
+    ret = RGWRados::get_part_obj_state(dpp, y, store->getRados(), bucket_info, &obj_ctx,
+				       obj_m, cur_part_id, &parts_count,
+				       part_prefetch, &astate, &obj_m);
+
+    if (ret < 0) {
+      ldpp_dout_fmt(dpp, 4,
+		    "{} get_part_obj_state() failed ret={}",
+		    __func__, ret);
+      break;
+    }
+
+    obj_part.part_number = part_iter.get_cur_part_id();
+    obj_part.part_size = astate->accounted_size;
+
+    if (auto iter = astate->attrset.find(RGW_ATTR_CKSUM);
+	iter != astate->attrset.end()) {
+          try {
+	    rgw::cksum::Cksum part_cksum;
+	    auto ck_iter = iter->second.cbegin();
+	    part_cksum.decode(ck_iter);
+	    obj_part.cksum = std::move(part_cksum);
+	  } catch (buffer::error& err) {
+	    ldpp_dout_fmt(dpp, 4,
+			  "WARN: {} could not decode stored cksum, "
+			  "caught buffer::error",
+			  __func__);
+	  }
+    }
+
+    each_func(obj_part);
+    *next_marker = ++marker;
+    --max_parts;
+  } /* each part */
+  
+  return ret;
+} /* RadosObject::list_parts */
 
 int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
