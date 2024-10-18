@@ -91,6 +91,7 @@
                          [invalid]="getError(field)"
                          [invalidText]="getError(field)"
                          [appendInline]="false"
+                         (search)="onSearch($event, field.name)"
                          [cdRequiredField]="field?.required === true ? field.label : ''"
                          i18n>
             <cds-dropdown-list></cds-dropdown-list>
