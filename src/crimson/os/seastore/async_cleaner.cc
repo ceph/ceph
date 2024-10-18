@@ -1132,6 +1132,8 @@ SegmentCleaner::do_reclaim_space(
         [this, &t, &reclaimed, &pin_list](auto &extents)
       {
         LOG_PREFIX(SegmentCleaner::do_reclaim_space);
+	extent_callback->register_reclaim_range(
+	  t, reclaim_state->start_pos, reclaim_state->end_pos);
         // calculate live extents
         auto cached_backref_entries =
           backref_manager.get_cached_backref_entries_in_range(
