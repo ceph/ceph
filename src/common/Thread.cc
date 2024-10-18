@@ -83,7 +83,7 @@ void *Thread::entry_wrapper()
   if (pid && cpuid >= 0)
     _set_affinity(cpuid);
 
-  ceph_pthread_setname(pthread_self(), thread_name.c_str());
+  ceph_pthread_setname(pthread_self(), Thread::thread_name.c_str());
   return entry();
 }
 
@@ -154,7 +154,7 @@ int Thread::try_create(size_t stacksize)
 void Thread::create(const char *name, size_t stacksize)
 {
   ceph_assert(strlen(name) < 16);
-  thread_name = name;
+  Thread::thread_name = name;
 
   int ret = try_create(stacksize);
   if (ret != 0) {
