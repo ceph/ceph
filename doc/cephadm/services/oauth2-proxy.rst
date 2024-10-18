@@ -42,8 +42,10 @@ a secure and flexible authentication mechanism.
 
 High availability
 ==============================
-`oauth2-proxy` is designed to integrate with an external IDP hence login high availability is not the responsibility of this
-service. In squid release high availability for the service itself is not supported yet.
+In general, `oauth2-proxy` is used in conjunction with the `mgmt-gateway`. The `oauth2-proxy` service can be deployed as multiple
+stateless instances, with the `mgmt-gateway` (nginx reverse-proxy) handling load balancing across these instances using a round-robin strategy.
+Since oauth2-proxy integrates with an external identity provider (IDP), ensuring high availability for login is managed externally
+and not the responsibility of this service.
 
 
 Accessing services with oauth2-proxy
@@ -70,8 +72,7 @@ An `oauth2-proxy` service can be applied using a specification. An example in YA
     service_type: oauth2-proxy
     service_id: auth-proxy
     placement:
-      hosts:
-        - ceph0
+      label: mgmt
     spec:
      https_address: "0.0.0.0:4180"
      provider_display_name: "My OIDC Provider"

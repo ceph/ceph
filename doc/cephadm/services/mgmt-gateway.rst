@@ -49,6 +49,55 @@ monitoring `mgmt-gateway` takes care of handling HA when several instances of Pr
 available. The reverse proxy will automatically detect healthy instances and use them to process user requests.
 
 
+High Availability for mgmt-gateway service
+==========================================
+
+In addition to providing high availability for the underlying backend services, the mgmt-gateway
+service itself can be configured for high availability, ensuring that the system remains resilient
+even if certain core components for the service fail.
+
+Multiple mgmt-gateway instances can be deployed in an active/standby configuration using keepalived
+for seamless failover. The `oauth2-proxy` service can be deployed as multiple stateless instances,
+with nginx acting as a load balancer across them using round-robin strategy. This setup removes
+single points of failure and enhances the resilience of the entire system.
+
+In this setup, the underlying internal services follow the same high availability mechanism. Instead of
+directly accessing the `mgmt-gateway` internal endpoint, services use the virtual IP specified in the spec.
+This ensures that the high availability mechanism for `mgmt-gateway` is transparent to other services.
+
+Example Configuration for High Availability
+
+To deploy the mgmt-gateway in a high availability setup, here is an example of the specification files required:
+
+`mgmt-gateway` Configuration:
+
+.. code-block:: yaml
+
+    service_type: mgmt-gateway
+    placement:
+      label: mgmt
+    spec:
+      enable_auth: true
+      virtual_ip: 192.168.100.220
+
+`Ingress` Configuration for Keepalived:
+
+.. code-block:: yaml
+
+    service_type: ingress
+    service_id: ingress-mgmt-gw
+    placement:
+      label: mgmt
+    virtual_ip: 192.168.100.220
+    backend_service: mgmt-gateway
+    keepalive_only: true
+
+The number of deployed instances is determined by the number of hosts with the mgmt label.
+The ingress is configured in `keepalive_only` mode, with labels ensuring that any changes to
+the mgmt-gateway daemons are replicated to the corresponding keepalived instances. Additionally,
+the `virtual_ip` parameter must be identical in both specifications.
+
+
 Accessing services with mgmt-gateway
 ====================================
 
@@ -123,9 +172,6 @@ The specification can then be applied by running the following command:
 Limitations
 ===========
 
-A non-exhaustive list of important limitations for the mgmt-gateway service follows:
-
-* High-availability configurations and clustering for the mgmt-gateway service itself are currently not supported.
 * Services must bind to the appropriate ports based on the applications being proxied. Ensure that there
   are no port conflicts that might disrupt service availability.
 
