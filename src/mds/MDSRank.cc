@@ -2769,6 +2769,9 @@ void MDSRankDispatcher::handle_asok_command(
     if (!op_tracker.dump_historic_ops(f, true)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
+  } else if (command == "dump_export_states") {
+    std::lock_guard l(mds_lock);
+    mdcache->migrator->dump_export_states(f);
   } else if (command == "osdmap barrier") {
     int64_t target_epoch = 0;
     bool got_val = cmd_getval(cmdmap, "target_epoch", target_epoch);

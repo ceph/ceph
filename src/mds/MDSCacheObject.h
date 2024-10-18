@@ -260,6 +260,8 @@ class MDSCacheObject {
   }
   bool is_waiter_for(waitmask_t mask);
 
+  inline size_t count_waiters(uint64_t mask) const { return waiting.count(mask); }
+
   virtual void add_waiter(uint64_t mask, MDSContext *c) {
     add_waiter(waitmask_t(mask), c);
   }
