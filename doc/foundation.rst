@@ -15,7 +15,7 @@ The Ceph Foundation is organized as a directed fund under the Linux
 Foundation. Premier and General Member organizations contribute a
 yearly fee to become members. Associate members are educational
 institutions or government organizations and are invited to join at no
-cost.
+cost. Read and download the `Ceph Foundation Charter <https://charter.cephfoundation.org>`_.
 
 For more information, see `https://ceph.com/foundation
 <https://ceph.com/foundation>`_.
