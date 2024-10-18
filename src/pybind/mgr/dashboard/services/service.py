@@ -101,6 +101,8 @@ def wait_for_daemon_to_start(service_name, timeout=30):
 
 
 class RgwServiceManager:
+    user = 'dashboard'
+
     def find_available_port(self, starting_port=80):
         orch = OrchClient.instance()
         daemons = [d.to_dict() for d in orch.services.list_daemons(daemon_type='rgw')]
@@ -172,7 +174,6 @@ class RgwServiceManager:
 
     def configure_rgw_credentials(self):
         logger.info('Configuring dashboard RGW credentials')
-        user = 'dashboard'
         realms = []
         access_key = ''
         secret_key = ''
@@ -186,7 +187,7 @@ class RgwServiceManager:
                 realm_access_keys = {}
                 realm_secret_keys = {}
                 for realm in realms:
-                    realm_access_key, realm_secret_key = self._get_user_keys(user, realm)
+                    realm_access_key, realm_secret_key = self._get_user_keys(self.user, realm)
                     if realm_access_key:
                         realm_access_keys[realm] = realm_access_key
                         realm_secret_keys[realm] = realm_secret_key
@@ -194,7 +195,7 @@ class RgwServiceManager:
                     access_key = json.dumps(realm_access_keys)
                     secret_key = json.dumps(realm_secret_keys)
             else:
-                access_key, secret_key = self._get_user_keys(user)
+                access_key, secret_key = self._get_user_keys(self.user)
 
             assert access_key and secret_key
             Settings.RGW_API_ACCESS_KEY = access_key
