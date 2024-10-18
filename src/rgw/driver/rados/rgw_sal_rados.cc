@@ -2505,12 +2505,12 @@ int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 		  "{} seeking to part #{} in the object manifest",
 		  __func__, marker);
 
-    part_iter  = manifest->obj_find_part(dpp, marker);
+    part_iter  = manifest->obj_find_part(dpp, marker + 1);
 
     if (part_iter == end) {
       ldpp_dout_fmt(dpp, 5,
 		    "{} failed to find part #{} in the object manifest",
-		    __func__, marker);
+		    __func__, marker + 1);
       return 0;
     }
   }
