@@ -1,3 +1,4 @@
+import copy
 import ipaddress
 import hashlib
 import logging
@@ -213,6 +214,13 @@ class HostAssignment(object):
                     f'Cannot place {self.spec.one_line_str()}: No matching '
                     f'hosts for label {self.spec.placement.label}')
 
+        if self.spec.placement.labels:
+            for label in self.spec.placement.labels:
+                if not self.hosts_by_label(label):
+                    raise OrchestratorValidationError(
+                        f'Cannot place {self.spec.one_line_str()}: No matching '
+                        f'hosts for label {label}')
+
     def place_per_host_daemons(
             self,
             slots: List[DaemonPlacement],
@@ -260,7 +268,7 @@ class HostAssignment(object):
 
         count = self.spec.placement.count
 
-        # get candidate hosts based on [hosts, label, host_pattern]
+        # get candidate hosts based on [hosts, label(s), host_pattern]
         candidates = self.get_candidates()  # type: List[DaemonPlacement]
         if self.primary_daemon_type in RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES:
             # remove unreachable hosts that are not in maintenance so daemons
@@ -333,7 +341,37 @@ class HostAssignment(object):
         existing = existing_active + existing_standby
 
         # build to_add
-        if not count:
+        if self.spec.placement.labels and self.spec.placement.count_per_label:
+            candidate_host_hostnames = [dd.hostname for dd in others if dd.hostname not in [
+                h.hostname for h in self.unreachable_hosts]]
+            candidate_hosts = [h for h in self.hosts if h.hostname in candidate_host_hostnames]
+            known_daemon_hosts = [h for h in self.hosts if h.hostname in [dd.hostname for dd in daemons]]
+            label_host_mapping, already_present_label_mapping = self.generate_count_per_label_placement(
+                candidate_hosts,
+                self.spec.placement.labels,
+                self.spec.placement.count_per_label,
+                known_daemon_hosts
+            )
+            logger.debug(f'count-per-host generated placement mapping: {label_host_mapping}')
+            mapped_hosts: List[orchestrator.HostSpec] = []
+            for hosts in label_host_mapping.values():
+                mapped_hosts.extend(hosts)
+            if not mapped_hosts:
+                # if we aren't adding, check if we're removing
+                selected_already_present_hosts: List[orchestrator.HostSpec] = []
+                for hosts in already_present_label_mapping.values():
+                    selected_already_present_hosts.extend(hosts)
+                selected_already_present_hostnames = [h.hostname for h in selected_already_present_hosts]
+                for slot in existing_slots:
+                    daemon = [dd for dd in existing if dd.hostname == slot.hostname][0]
+                    if slot.hostname not in selected_already_present_hostnames:
+                        to_remove.append(daemon)
+                existing_slots = [
+                    h for h in existing_slots if h.hostname in selected_already_present_hostnames
+                ]
+            to_add = [DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                      hostname=h.hostname, ports=self.ports_start) for h in mapped_hosts]
+        elif not count:
             to_add = [dd for dd in others if dd.hostname not in [
                 h.hostname for h in self.unreachable_hosts]]
         else:
@@ -415,6 +453,13 @@ class HostAssignment(object):
             ]
             if self.spec.placement.host_pattern:
                 ls = [h for h in ls if h.hostname in self.spec.placement.filter_matching_hostspecs(self.hosts)]
+        elif self.spec.placement.labels:
+            ls = []
+            for label in self.spec.placement.labels:
+                for host in self.hosts_by_label(label):
+                    if host.hostname not in [h.hostname for h in ls]:
+                        ls.append(DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                                  hostname=host.hostname, ports=self.ports_start))
         elif self.spec.placement.host_pattern:
             ls = [
                 DaemonPlacement(daemon_type=self.primary_daemon_type,
@@ -481,3 +526,90 @@ class HostAssignment(object):
         candidates = [
             c for c in candidates if c.hostname not in unreachable_hosts or in_maintenance[c.hostname]]
         return candidates
+
+    def generate_count_per_label_placement(
+        self,
+        candidate_hosts: List[orchestrator.HostSpec],
+        labels: List[str],
+        count_per_label: int,
+        known_daemon_hosts: List[orchestrator.HostSpec]
+    ) -> Tuple[Dict[str, List[orchestrator.HostSpec]], Dict[str, List[orchestrator.HostSpec]]]:
+        # For this particular case we need to sort hosts into groups by label
+        # and pick count_per_label hosts per each label to place daemons on.
+        # World's ugliest function
+        label_to_candidate_hosts: Dict[str, List[orchestrator.HostSpec]] = {label: [] for label in labels}
+        label_to_known_daemon_hosts: Dict[str, List[orchestrator.HostSpec]] = {label: [] for label in labels}
+        for label in label_to_candidate_hosts.keys():
+            label_to_candidate_hosts[label] = [
+                h
+                for h in candidate_hosts
+                if label in list(h.labels)
+            ]
+            label_to_known_daemon_hosts[label] = [
+                h
+                for h in known_daemon_hosts
+                if label in list(h.labels)
+            ]
+        count_candidate_host_per_label = {k: len(v) for k, v in label_to_candidate_hosts.items()}
+        count_known_daemon_host_per_label = {k: len(v) for k, v in label_to_known_daemon_hosts.items()}
+        matched_all = False
+        label_host_mapping: Dict[str, List[orchestrator.HostSpec]] = {}
+        label_already_present_host_mapping: Dict[str, List[orchestrator.HostSpec]] = {}
+        while not matched_all:
+            label_with_least_hosts = list(label_to_candidate_hosts.keys())[0]
+            label_with_least_hosts_host_count = (
+                count_candidate_host_per_label[label_with_least_hosts]
+                + count_known_daemon_host_per_label[label_with_least_hosts]
+            )
+            print(label_with_least_hosts)
+            print(label_with_least_hosts_host_count)
+            for label in count_candidate_host_per_label.keys():
+                host_count = (
+                    count_candidate_host_per_label[label]
+                    + count_known_daemon_host_per_label[label]
+                )
+                print(f'QWEWE - {host_count}')
+                if host_count < label_with_least_hosts_host_count:
+                    label_with_least_hosts = label
+                    label_with_least_hosts_host_count = host_count
+            potential_hosts = label_to_candidate_hosts[label_with_least_hosts]
+            selected_hosts: List[orchestrator.HostSpec] = []
+            already_present_hosts: List[orchestrator.HostSpec] = []
+            # hosts that already have daemons should not be selected
+            # as we are building a "to add" list here rather than
+            # a list of all the hosts that will have daemons
+            for host in label_to_known_daemon_hosts[label_with_least_hosts]:
+                if len(already_present_hosts) == count_per_label:
+                    break
+                already_present_hosts.append(host)
+            already_present_hostnames = [h.hostname for h in already_present_hosts]
+            for k in label_to_known_daemon_hosts.keys():
+                label_to_known_daemon_hosts[k] = [
+                    h for h in label_to_known_daemon_hosts[k] if h.hostname not in already_present_hostnames
+                ]
+            print(f'{label_with_least_hosts} - {already_present_hosts}')
+            print(f'{label_with_least_hosts} - {potential_hosts}')
+            if len(already_present_hosts + potential_hosts) < count_per_label:
+                raise OrchestratorValidationError(f'Not enough hosts with label {label_with_least_hosts} '
+                                                  f'to place {count_per_label} daemons\nSo far selected label to '
+                                                  f'host mapping is {label_host_mapping} and hosts that already '
+                                                  f'have daemons mapping is {label_already_present_host_mapping}')
+            if len(already_present_hosts) < count_per_label:
+                selected_hosts.extend(potential_hosts[:(count_per_label - len(already_present_hosts))])
+            label_host_mapping[label_with_least_hosts] = selected_hosts
+            label_already_present_host_mapping[label_with_least_hosts] = already_present_hosts
+            new_label_to_candidate_hosts = copy.deepcopy(label_to_candidate_hosts)
+            for k, v in new_label_to_candidate_hosts.items():
+                new_label_to_candidate_hosts[k] = [
+                    h for h in v if (
+                        h not in label_host_mapping[label_with_least_hosts]
+                        and h not in already_present_hosts
+                    )
+                ]
+            new_label_to_candidate_hosts.pop(label_with_least_hosts, None)
+            label_to_candidate_hosts = new_label_to_candidate_hosts
+            if not label_to_candidate_hosts:
+                matched_all = True
+            else:
+                count_candidate_host_per_label = {k: len(v) for k, v in label_to_candidate_hosts.items()}
+        return label_host_mapping, label_already_present_host_mapping
