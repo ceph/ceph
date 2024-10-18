@@ -73,8 +73,6 @@ class CephNvmeof(ContainerDaemonForm):
             os.path.join(data_dir, 'ceph-nvmeof.conf')
         ] = '/src/ceph-nvmeof.conf:z'
         mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config'
-        mounts['/dev/hugepages'] = '/dev/hugepages'
-        mounts['/dev/vfio/vfio'] = '/dev/vfio/vfio'
         mounts[log_dir] = '/var/log/ceph:z'
         if mtls_dir:
             mounts[mtls_dir] = '/src/mtls:z'
@@ -198,12 +196,6 @@ class CephNvmeof(ContainerDaemonForm):
             )
         return cmd.split()
 
-    @staticmethod
-    def get_sysctl_settings() -> List[str]:
-        return [
-            'vm.nr_hugepages = 4096',
-        ]
-
     def container(self, ctx: CephadmContext) -> CephContainer:
         ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
@@ -222,4 +214,4 @@ class CephNvmeof(ContainerDaemonForm):
         args.append(ctx.container_engine.unlimited_pids_option)
         args.extend(['--ulimit', 'memlock=-1:-1'])
         args.extend(['--ulimit', 'nofile=10240'])
-        args.extend(['--cap-add=SYS_ADMIN', '--cap-add=CAP_SYS_NICE'])
+        args.extend(['--cap-add=CAP_SYS_NICE'])
