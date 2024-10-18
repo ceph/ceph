@@ -8365,6 +8365,40 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
   if (flags & MDS_TRAVERSE_CHECK_LOCKCACHE)
     mds->locker->find_and_attach_lock_cache(mdr, cur);
 
+  if (mdr && mdr->reqid.name.is_client()) {
+    const cref_t<MClientRequest> &req = mdr->client_request;
+    Session *session = mds->get_session(req);
+    if (session && !session->info.has_feature(CEPHFS_FEATURE_ALTERNATE_NAME) &&
+	req->get_op() != CEPH_MDS_OP_LOOKUP &&
+	req->get_op() != CEPH_MDS_OP_LOOKUPHASH &&
+	req->get_op() != CEPH_MDS_OP_LOOKUPPARENT &&
+	req->get_op() != CEPH_MDS_OP_LOOKUPINO &&
+	req->get_op() != CEPH_MDS_OP_LOOKUPNAME &&
+	req->get_op() != CEPH_MDS_OP_LOOKUPSNAP &&
+	req->get_op() != CEPH_MDS_OP_RMSNAP &&
+	req->get_op() != CEPH_MDS_OP_LSSNAP &&
+	req->get_op() != CEPH_MDS_OP_GETATTR &&
+	req->get_op() != CEPH_MDS_OP_READDIR &&
+	req->get_op() != CEPH_MDS_OP_UNLINK &&
+	req->get_op() != CEPH_MDS_OP_RMDIR) {
+      MutationImpl::LockOpVec lov;
+      /* We need 'As' caps for the fscrypt context */
+      lov.add_rdlock(&cur->authlock);
+      if (!mds->locker->acquire_locks(mdr, lov)) {
+	dout(10) << "traverse: failed to rdlock" << dendl;
+	return 1; /* XXX */
+      }
+      if (!cur->get_inode()->fscrypt_auth.empty()) {
+	dout(10) << "blocking '" << ceph_mds_op_name(req->get_op())
+	  << "' operation in encrypted node" << dendl;
+	return -CEPHFS_EROFS;
+      }
+      /* Once we have made the fscrypt clients to flush the dirty caps
+       * back, we no longer need the authlock.
+       */
+      mds->locker->drop_lock(mdr.get(), &cur->authlock);
+    }
+  }
   if (mdr && mdr->lock_cache) {
     if (flags & MDS_TRAVERSE_WANT_DIRLAYOUT)
       mdr->dir_layout = mdr->lock_cache->get_dir_layout();
