@@ -5959,7 +5959,7 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 
 int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
 {
-  dout(20) << "parse_quota_vxattr name " << name << " value '" << value << "'" << dendl;
+  dout(20) << __func__ << ": name " << name << " value '" << value << "'" << dendl;
   try {
     if (name == "quota") {
       string::iterator begin = value.begin();
@@ -5974,7 +5974,7 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
         return -CEPHFS_EINVAL;
       }
       string left(begin, end);
-      dout(10) << " parsed " << m << " left '" << left << "'" << dendl;
+      dout(10) << __func__ <<": parsed " << m << " left '" << left << "'" << dendl;
       if (begin != end)
         return -CEPHFS_EINVAL;
       for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
@@ -5983,11 +5983,22 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
           return r;
       }
     } else if (name == "quota.max_bytes") {
+      /*
+       * The "quota.max_bytes" must be aligned to 4MiB if greater than or
+       * equal to 4MiB, otherwise must be aligned to 4KiB.
+       */
       string cast_err;
       int64_t q = strict_iec_cast<int64_t>(value, &cast_err);
       if(!cast_err.empty()) {
-        dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
-        << cast_err << dendl;
+        dout(10) << __func__ << ": failed to parse quota.max_bytes: "
+                 << cast_err << dendl;
+        return -CEPHFS_EINVAL;
+      }
+      if (q >= CEPH_4M_BLOCK_SIZE && !IS_ALIGNED(q, CEPH_4M_BLOCK_SIZE) ||
+          q < CEPH_4M_BLOCK_SIZE && !IS_ALIGNED(q, CEPH_4K_BLOCK_SIZE)) {
+        dout(10) << __func__ << ": bad quota.max_bytes value " << q
+                 << ", which must be aligned to 4KiB if less than 4MiB else must be aligned to 4MiB"
+                 << dendl;
         return -CEPHFS_EINVAL;
       }
       quota->max_bytes = q;
@@ -5997,11 +6008,11 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
         return -CEPHFS_EINVAL;
       quota->max_files = q;
     } else {
-      dout(10) << " unknown quota vxattr " << name << dendl;
+      dout(10) << __func__ << ": unknown quota vxattr " << name << dendl;
       return -CEPHFS_EINVAL;
     }
   } catch (boost::bad_lexical_cast const&) {
-    dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+    dout(10) << __func__ << ": bad vxattr value, unable to parse int for " << name << dendl;
     return -CEPHFS_EINVAL;
   }
 
