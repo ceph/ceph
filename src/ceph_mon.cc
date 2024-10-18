@@ -871,6 +871,10 @@ int main(int argc, const char **argv)
     derr << "done compacting" << dendl;
   }
 
+  if (ceph_using_tcmalloc() && g_conf()->mon_tcmalloc_aggressive_mem_decommit) {
+    ceph_heap_set_numeric_property("tcmalloc.aggressive_memory_decommit", 1);
+  }
+
   // bind
   err = msgr->bindv(bind_addrs, public_addrs);
   if (err < 0) {
