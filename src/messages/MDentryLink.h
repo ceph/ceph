@@ -22,31 +22,34 @@
 
 class MDentryLink final : public MMDSOp {
 private:
-  static constexpr int HEAD_VERSION = 1;
-  static constexpr int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
   
   dirfrag_t subtree;
   dirfrag_t dirfrag;
   std::string dn;
   bool is_primary = false;
+  bool is_linkmerge = false;
 
  public:
   dirfrag_t get_subtree() const { return subtree; }
   dirfrag_t get_dirfrag() const { return dirfrag; }
   const std::string& get_dn() const { return dn; }
   bool get_is_primary() const { return is_primary; }
+  bool get_is_linkmerge() const { return is_linkmerge; }
 
   ceph::buffer::list bl;
 
 protected:
   MDentryLink() :
     MMDSOp(MSG_MDS_DENTRYLINK, HEAD_VERSION, COMPAT_VERSION) { }
-  MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p) :
+  MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p, bool l) :
     MMDSOp(MSG_MDS_DENTRYLINK, HEAD_VERSION, COMPAT_VERSION),
     subtree(r),
     dirfrag(df),
     dn(n),
-    is_primary(p) {}
+    is_primary(p),
+    is_linkmerge(l) {}
   ~MDentryLink() final {}
 
 public:
@@ -62,6 +65,8 @@ public:
     decode(dirfrag, p);
     decode(dn, p);
     decode(is_primary, p);
+    if (header.version > 1)
+      decode(is_linkmerge, p);
     decode(bl, p);
   }
   void encode_payload(uint64_t features) override {
@@ -70,6 +75,7 @@ public:
     encode(dirfrag, payload);
     encode(dn, payload);
     encode(is_primary, payload);
+    encode(is_linkmerge, payload);
     encode(bl, payload);
   }
 private:
