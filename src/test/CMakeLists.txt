@@ -978,6 +978,7 @@ target_link_libraries(unittest_texttable ceph-common)
 add_executable(unittest_not_before_queue
   test_not_before_queue.cc)
 add_ceph_unittest(unittest_not_before_queue)
+target_link_libraries(unittest_not_before_queue ceph-common)
 
 if(NOT WIN32)
 # unittest_on_exit
