@@ -22,7 +22,7 @@ jobs:
           labeled: dashboard
       - name: Assign milestone based on target brach name
         # https://github.com/marketplace/actions/pull-request-milestone?version=v1.3.0
-        uses: iyu/actions-milestone@e93115c90ff7bcddee71086e9253f1b6a5f4b48a
+        uses: iyu/actions-milestone@d3a96497d18f333d0419641cc3fcfbd02939a2aa
         with:
           configuration-path: .github/milestone.yml
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
