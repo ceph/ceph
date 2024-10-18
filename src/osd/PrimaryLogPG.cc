@@ -2261,6 +2261,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     bool got = check_in_progress_op(
       m->get_reqid(), &version, &user_version, &return_code, &op_returns);
     if (got) {
+      dout(0) << __func__ << " BILL Duplicate Client Write: " << m->get_reqid()
+	      << " version " << version << dendl;
       dout(3) << __func__ << " dup " << m->get_reqid()
 	      << " version " << version << dendl;
       if (already_complete(version)) {
@@ -2274,6 +2276,16 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       }
       return;
     }
+  }
+
+  if (cct->_conf->bluestore_debug_inject_read_err &&
+      op->may_write() &&
+      pool.info.is_erasure() &&
+      ec_inject_test_write_error0(m->get_hobj(), m->get_reqid())) {
+    // Fail retried write with error
+    dout(0) << __func__ << " Error inject - Fail retried write with EINVAL" << dendl;
+    osd->reply_op_error(op, -EINVAL);
+    return;
   }
 
   ObjectContextRef obc;

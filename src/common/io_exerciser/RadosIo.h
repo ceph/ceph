@@ -26,6 +26,7 @@ namespace ceph {
       std::unique_ptr<ObjectModel> om;
       std::unique_ptr<ceph::io_exerciser::data_generation::DataGenerator> db;
       std::string pool;
+      std::optional<std::vector<int>> cached_shard_order;
       int threads;
       ceph::mutex& lock;
       ceph::condition_variable& cond;
@@ -41,6 +42,7 @@ namespace ceph {
               boost::asio::io_context& asio,
               const std::string& pool,
               const std::string& oid,
+              const std::optional<std::vector<int>>& cached_shard_order,
               uint64_t block_size,
               int seed,
               int threads,
@@ -51,30 +53,28 @@ namespace ceph {
 
       void allow_ec_overwrites(bool allow);
 
+      template <int N>
       class AsyncOpInfo {
       public:
         librados::ObjectReadOperation rop;
         librados::ObjectWriteOperation wop;
-        ceph::buffer::list bl1;
-        ceph::buffer::list bl2;
-        ceph::buffer::list bl3;
-        uint64_t offset1;
-        uint64_t length1;
-        uint64_t offset2;
-        uint64_t length2;
-        uint64_t offset3;
-        uint64_t length3;
+        std::array<ceph::bufferlist, N> bufferlist;
+        std::array<uint64_t, N> offset;
+        std::array<uint64_t, N> length;
 
-        AsyncOpInfo(uint64_t offset1 = 0, uint64_t length1 = 0,
-                uint64_t offset2 = 0, uint64_t length2 = 0,
-                uint64_t offset3 = 0, uint64_t length3 = 0 );
+        AsyncOpInfo(std::array<uint64_t, N> offset = {},
+                    std::array<uint64_t, N> length = {});
         ~AsyncOpInfo() = default;
       };
 
       // Must be called with lock held
       bool readyForIoOp(IoOp& op);
-      
+
       void applyIoOp(IoOp& op);
+
+    private:
+      void applyReadWriteOp(IoOp& op);
+      void applyInjectOp(IoOp& op);
     };
   }
 }
