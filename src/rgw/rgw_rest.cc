@@ -1668,6 +1668,13 @@ int RGWDeleteMultiObj_ObjStore::get_params(optional_yield y)
   return op_ret;
 }
 
+int RGWStatBucket_ObjStore::get_params(optional_yield y)
+{
+  report_stats = s->cct->_conf->rgw_bucket_stats_on_head_bucket &&
+                 s->info.env->exists("HTTP_X_RGW_GET_BUCKET_STATS");
+
+  return 0;
+}
 
 void RGWRESTOp::send_response()
 {
