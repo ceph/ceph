@@ -615,6 +615,9 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
       mds->send_message(reply, m->get_connection());
       return;
     }
+    if (!session->client_opened) {
+      session->client_opened = true;
+    }
     if (session->is_opening() ||
 	session->is_open() ||
 	session->is_stale() ||
@@ -1054,7 +1057,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
   return pv;
 }
 
-void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_t> >& smap,
+void Server::finish_force_open_sessions(map<client_t,pair<Session*,uint64_t> >& smap,
 					bool dec_import)
 {
   /*
@@ -1073,7 +1076,7 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
 	dout(10) << "force_open_sessions skipping changed " << session->info.inst << dendl;
       } else {
 	dout(10) << "force_open_sessions opened " << session->info.inst << dendl;
-	mds->sessionmap.set_state(session, Session::STATE_OPEN);
+	it.second.second = mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->sessionmap.touch_session(session);
         metrics_handler->add_session(session);
 
@@ -1101,6 +1104,29 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
   }
 
   dout(10) << __func__ << ": final v " << mds->sessionmap.get_version() << dendl;
+}
+
+void Server::close_forced_opened_sessions(const map<client_t,pair<Session*,uint64_t> >& smap)
+{
+  dout(10) << __func__ << " on " << smap.size() << " clients" << dendl;
+
+  for (auto &it : smap) {
+    Session *session = it.second.first;
+    uint64_t sseq = it.second.second;
+    if (sseq == 0)
+      continue;
+    if (session->get_state_seq() != sseq) {
+      dout(10) << "skipping changed session (" << session->get_state_name() << ") "
+	       << session->info.inst << dendl;
+      continue;
+    }
+    if (session->client_opened)
+      continue;
+    dout(10) << "closing forced opened session (" << session->get_state_name() << ") "
+	     << session->info.inst << dendl;
+    ceph_assert(!session->is_importing());
+    journal_close_session(session, Session::STATE_CLOSING, NULL);
+  }
 }
 
 class C_MDS_TerminatedSessions : public ServerContext {
