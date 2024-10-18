@@ -2285,6 +2285,11 @@ int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
       continue;
     }
 
+    if (max_parts < 1) {
+      *truncated = true;
+      break;
+    }
+
     /* get_part_obj_state alters the passed manifest** to point to a part
      * manifest, which we don't want to leak out here */
     RGWObjManifest* obj_m = manifest;
@@ -2321,6 +2326,7 @@ int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 
     each_func(obj_part);
     *next_marker = ++marker;
+    --max_parts;
   } /* each part */
   
   return ret;
