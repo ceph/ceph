@@ -63,6 +63,7 @@ import {
   NumberModule,
   RadioModule,
   SelectModule,
+  TagModule,
   UIShellModule
 } from 'carbon-components-angular';
 
@@ -97,7 +98,8 @@ import Reset from '@carbon/icons/es/reset/32';
     NumberModule,
     ModalModule,
     DatePickerModule,
-    ComboBoxModule
+    ComboBoxModule,
+    TagModule
   ],
   declarations: [
     RbdListComponent,

@@ -1,9 +1,9 @@
 /* You can add global styles to this file, and also import other style files */
 @use './src/styles/defaults' as *;
+@use '@carbon/colors';
 @import './src/styles/carbon-defaults.scss';
 // Angular2-Tree Component
 @import '@circlon/angular-tree-component/css/angular-tree-component.css';
-
 // Fork-Awesome
 $fa-font-path: '~fork-awesome/fonts';
 $font-family-icon: 'ForkAwesome';
@@ -181,29 +181,6 @@ a.btn-light {
 }
 
 // Overriding badges to match the class name of badges in Bootstrap v5
-.badge-primary {
-  @extend .badge, .bg-primary;
-}
-
-.badge-secondary {
-  @extend .badge, .bg-secondary;
-}
-
-.badge-success {
-  @extend .badge, .bg-success;
-}
-
-.badge-danger {
-  @extend .badge, .bg-danger;
-}
-
-.badge-info {
-  @extend .badge, .bg-primary;
-}
-
-.badge-warning {
-  @extend .badge, .bg-warning, .text-dark;
-}
 
 .badge-light {
   @extend .badge, .bg-light, .text-dark;
