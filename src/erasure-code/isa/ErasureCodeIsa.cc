@@ -117,16 +117,48 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
 // -----------------------------------------------------------------------------
 
 void
+ErasureCodeIsa::isa_xor(char **data, char **coding, int blocksize)
+{
+    // If addresses are aligned to 32 bytes, then we can use xor_gen()
+    // Otherwise, use byte_xor()
+    int i;
+    bool src_aligned = true;
+
+    for (i = 0; i < k; i++) {
+      src_aligned &= is_aligned(data[i], EC_ISA_ADDRESS_ALIGNMENT);
+    }
+
+    if (src_aligned && is_aligned(coding[0], EC_ISA_ADDRESS_ALIGNMENT)) {
+      xor_gen(k+1, blocksize, (void**) data);
+    }
+    else {
+      memcpy(coding[0], data[0], blocksize);
+      for (i = 1; i < k; i++) {
+        byte_xor(data[i], coding[0], data[i]+blocksize);
+      }
+    }
+}
+
+void
+ErasureCodeIsa::byte_xor(char *data, char *coding, char *data_end)
+{
+  while (data < data_end)
+    *coding++ ^= *data++;
+}
+
+// -----------------------------------------------------------------------------
+
+void
 ErasureCodeIsaDefault::isa_encode(char **data,
                                   char **coding,
                                   int blocksize)
 {
-  if (m == 1)
-    // single parity stripe
-    xor_gen(k+m, blocksize, (void**) data);
-  else
+  if (m == 1) {
+    isa_xor(data, coding, blocksize);
+  } else {
     ec_encode_data(blocksize, k, m, encode_tbls,
                    (unsigned char**) data, (unsigned char**) coding);
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -158,7 +190,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
 
   unsigned char *recover_source[k];
   unsigned char *recover_target[m];
-  unsigned char *recover_buf[k+1];
+  char *recover_buf[k+1];
 
   // count the errors
   for (int l = 0; erasures[l] != -1; l++) {
@@ -181,18 +213,18 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
     for (i = 0; i < (k + 1); i++) {
       if (erasure_contains(erasures, i)) {
           if (i < k) {
-            recover_buf[i] = (unsigned char*) coding[0];
-            recover_buf[k] = (unsigned char*) data[i];
+            recover_buf[i] = coding[0];
+            recover_buf[k] = data[i];
             parity_set = true;
           } else {
-            recover_buf[i] = (unsigned char*) coding[0];
+            recover_buf[i] = coding[0];
           }
       } else {
         if (i < k) {
-          recover_buf[i] = (unsigned char*) data[i];
+          recover_buf[i] = data[i];
         } else {
           if (!parity_set) {
-            recover_buf[i] = (unsigned char*) coding[0];
+            recover_buf[i] = coding[0];
           }
         }
       }
@@ -230,7 +262,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
       ((matrixtype == kVandermonde) && (nerrs == 1) && (erasures[0] < (k + 1)))) {
     // single parity decoding
     dout(20) << "isa_decode: reconstruct using xor_gen [" << erasures[0] << "]" << dendl;
-    xor_gen(k+1, blocksize, (void **) recover_buf);
+    isa_xor(recover_buf, &recover_buf[k], blocksize);
     return 0;
   }
 
