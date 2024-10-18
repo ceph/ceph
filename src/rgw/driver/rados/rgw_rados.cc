@@ -6998,6 +6998,9 @@ int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y
 
   // update the object size
   sm->state.size = part_manifest.get_obj_size();
+  if (!sm->state.attrset.count(RGW_ATTR_COMPRESSION)) {
+    sm->state.accounted_size = sm->state.size;
+  }
 
   *pmanifest = &part_manifest;
   return 0;
