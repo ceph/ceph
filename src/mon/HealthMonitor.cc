@@ -740,6 +740,8 @@ bool HealthMonitor::check_leader_health()
   if (g_conf().get_val<bool>("mon_warn_on_msgr2_not_enabled")) {
     check_if_msgr2_enabled(&next);
   }
+  // MON_NETSPLIT
+  check_netsplit(&next);
 
   if (next != leader_checks) {
     changed = true;
@@ -883,5 +885,81 @@ void HealthMonitor::check_if_msgr2_enabled(health_check_map_t *checks)
 			    details.size());
       d.detail.swap(details);
     }
+  }
+}
+
+void HealthMonitor::check_netsplit(health_check_map_t *checks)
+{
+  // Check for netsplits
+  dout(20) << __func__ << dendl;
+  if (mon.monmap->size() < 3 ||
+    mon.monmap->strategy != MonMap::CONNECTIVITY) {
+    // We need at least 3 monitors to detect netsplits
+    // and the strategy must be CONNECTIVITY.
+    return;
+  }
+  std::set<std::pair<unsigned,unsigned>> bucket_pair = mon.elector.get_netsplit_peer_tracker();
+  std::set<std::pair<std::string,std::string>> sorted_pairs;
+  for (auto i : bucket_pair) {
+    std::string first_mon = mon.monmap->get_name(i.first);
+    std::string second_mon = mon.monmap->get_name(i.second);
+    if (first_mon.empty() || second_mon.empty()) {
+      dout(10) << "Failed to get mon(s) name, either "
+        << first_mon << " or " << second_mon
+        << " was deleted or we have the wrong ranks." << dendl;
+      continue;
+    }
+    std::map<std::string,std::string> first_mon_loc;
+    std::map<std::string,std::string> second_mon_loc;
+    for(auto& mon_info : mon.monmap->mon_info) {
+      if (mon_info.second.name == first_mon) {
+        first_mon_loc = mon_info.second.crush_loc;
+      }
+      else if (mon_info.second.name == second_mon) {
+        second_mon_loc = mon_info.second.crush_loc;
+      }
+    }
+    if (first_mon_loc.empty() || second_mon_loc.empty()) {
+      dout(10) << "Failed to locate mon(s); " << first_mon
+        << " or " << second_mon << " might no longer exist in the monmap" << dendl;
+      continue;
+    }
+    // Might have multiple crush locations for the MON pair so
+    // pick the highest crush location that is common between the two mons.
+    // given we already have a hierical order of buckets, we can use that to find the first common bucket.
+    std::vector<std::string> buckets = {"region", "zone", "datacenter", "room", "pod", "pdu", "row", "rack", "chassis", "host"};
+    // iterate through the hierical order of buckets and find the first common bucket
+    for (const auto& bucket : buckets) {
+      if (first_mon_loc.count(bucket) && second_mon_loc.count(bucket)) {
+        // if we found the first common bucket, add it to sorted_pairs.
+        std::string first_bucket = first_mon_loc.at(bucket);
+        std::string second_bucket = second_mon_loc.at(bucket);
+        std::pair<std::string, std::string> pair = std::make_pair(first_bucket, second_bucket);
+        if (first_bucket > second_bucket) {
+          // This avoid adding duplicate e.g., d1-d2 and d2-d1
+          // will be treated as equal
+          std::swap(pair.first, pair.second);
+        }
+        if (sorted_pairs.find(pair) == sorted_pairs.end()) {
+          // add the pair to the sorted_pairs if it doesn't exist.
+          sorted_pairs.insert(pair);
+        }
+        break; // break since we found common bucket
+      }
+    }
+  }
+  list<string> details;
+  ostringstream ds;
+  for (auto i : sorted_pairs) {
+    // we have the sorted pairs, now we can add the details to the health check.
+    ds << "Netsplit detected between " << i.first << " and " << i.second
+      << ". Please check monitor connections using the command: ceph daemon mon.{name} connection scores dump";
+    details.push_back(ds.str());
+  }
+  ostringstream ss;
+  if (!details.empty()) {
+    ss << sorted_pairs.size() << " netsplit pairs detected";
+    auto& d = checks->add("MON_NETSPLIT", HEALTH_WARN, ss.str(), sorted_pairs.size());
+    d.detail.swap(details);
   }
 }

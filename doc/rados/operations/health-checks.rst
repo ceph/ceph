@@ -154,6 +154,15 @@ To adjust the warning threshold, run the following command:
 
    ceph config set global mon_data_size_warn <size>
 
+MON_NETSPLIT
+____________
+
+A network partition has occurred among Ceph Monitors. This health check is
+raised when one or more monitors detect that at least two Ceph Monitors have
+lost connectivity or reachability, based on their individual ``connection score``,
+which are consistently shared and updated. This warning only appears when
+the cluster is provisioned with at least three Ceph Monitors and are using the
+``connectivity election strategy``.
 
 AUTH_INSECURE_GLOBAL_ID_RECLAIM
 _______________________________
