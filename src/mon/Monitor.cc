@@ -2410,6 +2410,7 @@ void Monitor::finish_election()
   {
     std::lock_guard l(auth_lock);
     authmon()->_set_mon_num_rank(monmap->size(), rank);
+    authmon()->_reset_last_allocated_id();
   }
 
   // am i named and located properly?
