@@ -10522,8 +10522,15 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
   }
 
   uint32_t suggested_num_shards = 0;
-  const uint64_t max_objs_per_shard =
+  uint64_t max_objs_per_shard =
     cct->_conf.get_val<uint64_t>("rgw_max_objs_per_shard");
+
+  if (bucket_info.versioning_enabled()) {
+    // Since each versioned bucket requires 4 entries for the first object
+    // and 2 additional entries for each additional object, we want to
+    // trigger resharding sooner.
+    max_objs_per_shard /= 3;
+  }
 
   // TODO: consider per-bucket sync policy here?
   const bool is_multisite = svc.zone->need_to_log_data();
