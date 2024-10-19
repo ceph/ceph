@@ -111,7 +111,8 @@ seastar::future<> PGSplitting::start()
 	   return seastar::do_for_each(split_pgs, [this, &next_map] (auto& child_pg) {
 	       logger().debug(" {} advance map for {}", child_pg->get_pgid(), shard_services.get_map()->get_epoch());
 	       return shard_services.start_operation<PGAdvanceMap>(
-		 child_pg, shard_services, shard_services.get_map()->get_epoch(), std::move(rctx), true).second.then([this] {
+		 child_pg, shard_services, shard_services.get_map()->get_epoch(),
+		 std::move(rctx), true, true).second.then([this] {
 		 return seastar::now();
 	       });
 	    });
