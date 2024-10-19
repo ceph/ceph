@@ -1015,7 +1015,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
 } else if (prefix == "mgr module ls") {
     if (f) {
       // Create a mapping from module names to ModuleInfo pointers
-      std::map<std::string, const MgrMap::ModuleInfo*> module_info_map;
+      std::unordered_map<std::string, const MgrMap::ModuleInfo*> module_info_map;
       for (const auto& mi : map.available_modules) {
         module_info_map[mi.name] = &mi;
       }
