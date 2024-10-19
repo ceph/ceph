@@ -99,7 +99,7 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
 	pg.second,
 	shard_services,
 	epoch,
-	PeeringCtx{}, false).second.then(
+	PeeringCtx{}, false, false).second.then(
      [this, old_map, epoch, &shard_services, &pg] {
       return shard_services.start_operation<PGSplitting>(
         pg.second,
@@ -718,7 +718,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	    rctx->transaction
 	  ).then([this, pg=pg, rctx=std::move(rctx)] {
 	    return start_operation<PGAdvanceMap>(
-	      pg, *this, get_map()->get_epoch(), std::move(*rctx), true
+	      pg, *this, get_map()->get_epoch(), std::move(*rctx), true, false
 	    ).second.then([pg=pg] {
 	      return seastar::make_ready_future<Ref<PG>>(pg);
 	    });

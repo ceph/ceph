@@ -22,9 +22,9 @@ namespace crimson::osd {
 
 PGAdvanceMap::PGAdvanceMap(
   Ref<PG> pg, ShardServices &shard_services, epoch_t to,
-  PeeringCtx &&rctx, bool do_init)
+  PeeringCtx &&rctx, bool do_init, bool split_child)
   : pg(pg), shard_services(shard_services), to(to),
-    rctx(std::move(rctx)), do_init(do_init)
+    rctx(std::move(rctx)), do_init(do_init), split_child(split_child)
 {
   logger().debug("{}: created", *this);
 }
@@ -40,6 +40,9 @@ void PGAdvanceMap::print(std::ostream &lhs) const
   if (do_init) {
     lhs << " do_init";
   }
+  if (split_child) {
+    lhs << " pg is a split child";
+  }
   lhs << ")";
 }
 
@@ -52,6 +55,9 @@ void PGAdvanceMap::dump_detail(Formatter *f) const
   }
   f->dump_int("to", to);
   f->dump_bool("do_init", do_init);
+  if (split_child) {
+    f->dump_bool("split_child", split_child);
+  }
   f->close_section();
 }
 
@@ -102,7 +108,7 @@ seastar::future<> PGAdvanceMap::start()
 	pg->handle_activate_map(rctx);
 	logger().debug("{}: map activated", *this);
 	if (do_init) {
-	  shard_services.pg_created(pg->get_pgid(), pg);
+	  shard_services.pg_created(pg->get_pgid(), pg, split_child);
 	  logger().info("PGAdvanceMap::start new pg {}", *pg);
 	}
 	return pg->complete_rctx(std::move(rctx));
