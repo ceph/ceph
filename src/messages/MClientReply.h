@@ -338,7 +338,7 @@ public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
   epoch_t get_mdsmap_epoch() const { return head.mdsmap_epoch; }
 
-  int get_result() const {
+  __s32 get_result() const {
     // MDS now uses host errors, as defined in errno.cc, for current platform.
     // errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
     // when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
@@ -346,7 +346,7 @@ public:
     return error_code;
   }
 
-  void set_result(int r) { //
+  void set_result(__s32 r) { //
     error_code = r;
   }
 
