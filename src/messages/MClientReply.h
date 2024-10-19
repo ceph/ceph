@@ -331,7 +331,6 @@ public:
   ceph::buffer::list trace_bl;
   ceph::buffer::list extra_bl;
   ceph::buffer::list snapbl;
-  struct errorcode32_t error_code;
 
   int get_op() const { return head.op; }
 
@@ -343,11 +342,12 @@ public:
     // errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
     // when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
     // assumes this code is executing after decode_payload() function has been called
-    return error_code;
+    return head.result;
   }
 
-  void set_result(__s32 r) { //
-    error_code = r;
+  // errorcode32_t is used in decode/encode methods
+  void set_result(__s32 r) {
+    head.result = r;
   }
 
   void set_unsafe() { head.safe = 0; }
@@ -362,9 +362,6 @@ protected:
     header.tid = req.get_tid();
     head.op = req.get_op();
     head.safe = 1;
-    // MDS now uses host errors, as defined in errno.cc, for current platform.
-    // errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
-    // when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
     set_result(result);
   }
   ~MClientReply() final {}
@@ -391,27 +388,27 @@ public:
     using ceph::decode;
     auto p = payload.cbegin();
     decode(head, p);
+    // for the backward compatability, assuming LINUX error codes on the wire,
+    // errorcode32_t implements conversion from/to different host error codes
+    if (header.version >= HEAD_VERSION) {
+      errorcode32_t temp {static_cast<__s32>(head.result)};
+      temp.convert_decode();
+      head.result = static_cast<__u32>(temp.code);
+    }
     decode(trace_bl, p);
     decode(extra_bl, p);
     decode(snapbl, p);
-    // for the backward compatability, assuming LINUX error codes on the wire,
-    // we use the head.result as a value for error_code BEFORE decoding error_code.
-    // for the ver2 messages, the result is set in the error_code.result by sender
-    if (header.version < HEAD_VERSION) {
-      error_code.code = error_code.convert_decode(head.result);
-    } else {
-      decode(error_code, p);
-    }
     ceph_assert(p.end());
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
-    head.result = error_code.convert_encode();
+    // errorcode32_t implements conversion from/to different host error codes
+    errorcode32_t temp {static_cast<__s32>(head.result)};
+    head.result = static_cast<__u32>(temp.convert_encode());
     encode(head, payload);
     encode(trace_bl, payload);
     encode(extra_bl, payload);
     encode(snapbl, payload);
-    encode(error_code, payload);
   }
 
 
