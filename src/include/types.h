@@ -586,19 +586,19 @@ struct errorcode32_t {
     return hostos_to_ceph_errno(code);
   }
 
-  inline __s32 convert_decode(const __s32& err_code) const {
-    return ceph_to_hostos_errno(err_code);
+  inline void convert_decode() {
+    code = ceph_to_hostos_errno(code);
   }
 
   void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
-    __s32 newcode = convert_encode();
-    encode(newcode, bl);
+    auto new_code = convert_encode();
+    encode(new_code, bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
     decode(code, bl);
-    code = convert_decode(code);
+    convert_decode();
   }
   void dump(ceph::Formatter *f) const {
     f->dump_int("code", code);

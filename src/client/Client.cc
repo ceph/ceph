@@ -7962,7 +7962,7 @@ int Client::readlinkat(int dirfd, const char *relpath, char *buf, loff_t size, c
 
   if (!strcmp(relpath, "")) {
     if (!dirinode.get()->is_symlink())
-      return -CEPHFS_ENOENT;
+      return -ENOENT;
     return _readlink(dirinode.get(), buf, size);
   }
 
