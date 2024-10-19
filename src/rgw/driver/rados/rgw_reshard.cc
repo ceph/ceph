@@ -1653,7 +1653,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     // needed to perform the calculation before calling
     // calculating_preferred_shards() in this class
     store->getRados()->calculate_preferred_shards(
-      dpp, num_entries, current_shard_count, min_layout_shards,
+      dpp, bucket_info, num_entries, current_shard_count, min_layout_shards,
       needs_resharding, &suggested_shard_count);
 
     // if we no longer need resharding or currently need to expand
