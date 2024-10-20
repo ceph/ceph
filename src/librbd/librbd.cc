@@ -7425,6 +7425,36 @@ extern "C" int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
   return (int)expected_size;
 }
 
+extern "C" int rbd_group_list2(rados_ioctx_t p, rbd_group_spec_t *groups,
+                               size_t *size)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::map<std::string, std::string> cpp_group_name_to_id_map;
+  int r = librbd::api::Group<>::list(io_ctx, &cpp_group_name_to_id_map);
+  if (r < 0) {
+    return r;
+  }
+
+  size_t expected_size = cpp_group_name_to_id_map.size();
+  if (*size < expected_size) {
+    *size = expected_size;
+    return -ERANGE;
+  }
+
+  *size = expected_size;
+  // FIPS zeroization audit 20191117: this memset is not security related.
+  memset(groups, 0, sizeof(*groups) * *size);
+  size_t idx = 0;
+  for (const auto& [group_name, group_id] : cpp_group_name_to_id_map) {
+    groups[idx].name = strdup(group_name.c_str());
+    groups[idx].id = strdup(group_id.c_str());
+    idx++;
+  }
+  return 0;
+}
+
 extern "C" int rbd_group_rename(rados_ioctx_t p, const char *src_name,
                                 const char *dest_name)
 {
@@ -7597,6 +7627,22 @@ extern "C" int rbd_group_info_cleanup(rbd_group_info_t *group_info,
   }
 
   free(group_info->name);
+  return 0;
+}
+
+extern "C" int rbd_group_spec_list_cleanup(rbd_group_spec_t *groups,
+                                           size_t group_spec_size,
+                                           size_t num_groups)
+{
+  if (group_spec_size != sizeof(rbd_group_spec_t)) {
+    return -ERANGE;
+  }
+
+  for (size_t i = 0; i < num_groups; ++i) {
+    free(groups[i].id);
+    free(groups[i].name);
+  }
+
   return 0;
 }
 
