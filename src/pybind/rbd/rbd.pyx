@@ -1969,6 +1969,16 @@ class RBD(object):
         finally:
             free(c_names)
 
+    def group_list2(self, ioctx):
+        """
+        Iterate over the groups in the pool.
+
+        :param ioctx: determines which RADOS pool the group is in
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: :class:`GroupIterator`
+        """
+        return GroupIterator(ioctx)
+
     def group_rename(self, ioctx, src, dest):
         """
         Rename an RBD group.
@@ -6118,6 +6128,52 @@ cdef class ConfigImageIterator(object):
         if self.options:
             rbd_config_image_list_cleanup(self.options, self.num_options)
             free(self.options)
+
+cdef class GroupIterator(object):
+    """
+    Iterator over RBD groups in a pool
+
+    Yields a dictionary containing information about the groups
+
+    Keys are:
+
+    * ``id`` (str) - group id
+
+    * ``name`` (str) - group name
+    """
+    cdef rados_ioctx_t ioctx
+    cdef rbd_group_spec_t *groups
+    cdef size_t num_groups
+
+    def __init__(self, ioctx):
+        self.ioctx = convert_ioctx(ioctx)
+        self.groups = NULL
+        self.num_groups = 1024
+        while True:
+            self.groups = <rbd_group_spec_t*>realloc_chk(
+                self.groups, self.num_groups * sizeof(rbd_group_spec_t))
+            with nogil:
+                ret = rbd_group_list2(self.ioctx, self.groups, &self.num_groups)
+            if ret >= 0:
+                break
+            elif ret == -errno.ERANGE:
+                self.num_groups *= 2
+            else:
+                raise make_ex(ret, 'error listing groups.')
+
+    def __iter__(self):
+        for i in range(self.num_groups):
+            yield {
+                'id'   : decode_cstr(self.groups[i].id),
+                'name' : decode_cstr(self.groups[i].name)
+                }
+
+    def __dealloc__(self):
+        if self.groups:
+            rbd_group_spec_list_cleanup(self.groups,
+                                        sizeof(rbd_group_spec_t),
+                                        self.num_groups)
+            free(self.groups)
 
 cdef class GroupImageIterator(object):
     """
