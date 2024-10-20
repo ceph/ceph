@@ -126,8 +126,16 @@ inline std::string to_string(const Records& records) {
 }
 
 // log a bucket logging record according to the configuration
-int log_record(rgw::sal::Driver* driver, const req_state* s, const std::string& op_name, const std::string& etag, size_t size, const configuration& conf,
-    const DoutPrefixProvider *dpp, optional_yield y, bool async_completion);
+int log_record(rgw::sal::Driver* driver,
+    const sal::Object* obj,
+    const req_state* s, 
+    const std::string& op_name, 
+    const std::string& etag, 
+    size_t size, 
+    const configuration& conf,
+    const DoutPrefixProvider *dpp, 
+    optional_yield y, 
+    bool async_completion);
 
 // commit the pending log objec tto the log bucket
 // and create a new pending log object

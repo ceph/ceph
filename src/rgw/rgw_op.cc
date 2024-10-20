@@ -1079,6 +1079,7 @@ void rgw_bucket_object_pre_exec(req_state *s)
 }
 
 int do_journal_bucket_logging(rgw::sal::Driver* driver,
+    const rgw::sal::Object* obj,
     req_state* s, 
     RGWOp* op, 
     const std::string& etag, 
@@ -1100,7 +1101,7 @@ int do_journal_bucket_logging(rgw::sal::Driver* driver,
     }
     ldpp_dout(op, 20) << "INFO: found 'Journal' logging configuration of bucket '" << s->bucket->get_name() << 
       "' configuration: " << configuration.to_json_str() << dendl;
-    if (auto ret = log_record(driver, s, op->name(), etag, size, configuration, op, y, async_completion); ret < 0) { 
+    if (auto ret = log_record(driver, obj, s, op->name(), etag, size, configuration, op, y, async_completion); ret < 0) { 
       ldpp_dout(op, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_name() << 
         "'. ret=" << ret << dendl;
       return ret;
@@ -4703,7 +4704,7 @@ void RGWPutObj::execute(optional_yield y)
   }
  
   if (!multipart) {
-    op_ret = do_journal_bucket_logging(driver, s, this, etag, s->object->get_size(), y, false); 
+    op_ret = do_journal_bucket_logging(driver, s->object.get(), s, this, etag, s->object->get_size(), y, false); 
     if (op_ret  < 0) {
       return;
    }
@@ -5571,7 +5572,7 @@ void RGWDeleteObj::execute(optional_yield y)
     }
 
     if (op_ret == 0) {
-      if (auto ret = do_journal_bucket_logging(driver, s, this, etag, obj_size, y, true); 
+      if (auto ret = do_journal_bucket_logging(driver, s->object.get(), s, this, etag, obj_size, y, true); 
         ret < 0) {
           // don't reply with an error in case of failed delete logging
           ldpp_dout(this, 5) << "WARNING: DELETE operation ignores bucket logging failure: " << ret << dendl;
@@ -5923,7 +5924,7 @@ void RGWCopyObj::execute(optional_yield y)
   }
 
   etag = s->src_object->get_attrs()[RGW_ATTR_ETAG].to_str();
-  op_ret = do_journal_bucket_logging(driver, s, this, etag, obj_size, y, false); 
+  op_ret = do_journal_bucket_logging(driver, s->object.get(), s, this, etag, obj_size, y, false); 
   if (op_ret < 0) {
     return;
   }
@@ -6912,7 +6913,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   prefix_map_t processed_prefixes; 
 
   // no etag and size before completion
-  op_ret = do_journal_bucket_logging(driver, s, this, "", 0, y, false); 
+  op_ret = do_journal_bucket_logging(driver, s->object.get(), s, this, "", 0, y, false); 
   if (op_ret < 0) {
     return;
   }
@@ -7331,8 +7332,8 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
-
-  if (auto ret = do_journal_bucket_logging(driver, s, this, etag, obj_size, y, true); ret < 0) {
+      
+  if (auto ret = do_journal_bucket_logging(driver, obj.get(), s, this, etag, obj_size, y, true); ret < 0) {
     // don't reply with an error in case of failed delete logging
     ldpp_dout(this, 5) << "WARNING: multi DELETE operation ignores bucket logging failure: " << ret << dendl;
   }

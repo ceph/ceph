@@ -305,6 +305,7 @@ S3 bucket short (ceph) log record
 };*/
 
 int log_record(rgw::sal::Driver* driver, 
+    const sal::Object* obj,
     const req_state* s, 
     const std::string& op_name, 
     const std::string& etag, 
@@ -372,7 +373,7 @@ int log_record(rgw::sal::Driver* driver,
         dash_if_empty(s->req_id),
         s->info.method,
         op_name,
-        dash_if_empty_or_null(s->object, s->object->get_key().name),
+        dash_if_empty_or_null(obj, obj->get_name()),
         s->info.method,
         s->info.request_uri,
         s->info.request_params.empty() ? "" : "?",
@@ -385,7 +386,7 @@ int log_record(rgw::sal::Driver* driver,
         std::chrono::duration_cast<std::chrono::milliseconds>(s->time_elapsed()),
         "-", // TODO: referer
         "-", // TODO: user agent
-        dash_if_empty_or_null(s->object, s->object->get_instance()),
+        dash_if_empty_or_null(obj, obj->get_instance()),
         s->info.x_meta_map.contains("x-amz-id-2") ? s->info.x_meta_map.at("x-amz-id-2") : "-",
         "-", // TODO: Signature Version (SigV2 or SigV4)
         "-", // TODO: SSL cipher. e.g. "ECDHE-RSA-AES128-GCM-SHA256"
@@ -402,9 +403,9 @@ int log_record(rgw::sal::Driver* driver,
         t,
         s->info.method,
         op_name,
-        dash_if_empty_or_null(s->object, s->object->get_key().name),
+        dash_if_empty_or_null(obj, obj->get_name()),
         dash_if_zero(size),
-        dash_if_empty_or_null(s->object, s->object->get_instance()),
+        dash_if_empty_or_null(obj, obj->get_instance()),
         dash_if_empty(etag));
       break;
   }
