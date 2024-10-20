@@ -50,5 +50,29 @@ RedisResponse do_redis_func(connection* conn, boost::redis::request& req,
   }
 }
 
+RGWRedis::RGWRedis(boost::asio::io_context& io)
+    : io(io),
+      conn(std::make_unique<connection>(io)),
+      cfg(std::make_unique<config>()) {
+  boost::asio::spawn(
+      io,
+      [this, &io](boost::asio::yield_context yield) {
+        int res = load_lua_rgwlib(io, conn.get(), cfg.get(), yield);
+        if (res < 0) {
+          std::cerr << "Failed to load lua scripts to redis. error: " << res
+                    << std::endl;
+        }
+      },
+      [this, &io](std::exception_ptr eptr) {
+        if (eptr) std::rethrow_exception(eptr);
+        io.stop();
+      });
+  io.run();
+}
+
+RGWRedis::~RGWRedis() = default;
+
+connection* RGWRedis::get_conn() { return conn.get(); }
+
 }  // namespace redis
 }  // namespace rgw

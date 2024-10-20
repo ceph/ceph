@@ -33,7 +33,6 @@ struct RedisResponse {
         data(std::get<0>(resp).value().at("data")) {}
 };
 
-
 struct initiate_exec {
   connection* conn;
 
@@ -77,6 +76,24 @@ RedisResponse do_redis_func(connection* conn, boost::redis::request& req,
 
 int load_lua_rgwlib(boost::asio::io_context& io, connection* conn, config* cfg,
                     optional_yield y);
+
+#ifndef RGWREDIS_H
+#define RGWREDIS_H
+class RGWRedis {
+ public:
+  RGWRedis(boost::asio::io_context& io);
+
+  ~RGWRedis();
+
+  connection* get_conn();
+
+ private:
+  boost::asio::io_context& io;
+  std::unique_ptr<connection> conn;  
+  std::unique_ptr<config> cfg;
+};
+
+#endif  // RGWREDIS_H
 
 }  // namespace redis
 }  // namespace rgw

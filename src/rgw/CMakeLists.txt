@@ -447,7 +447,8 @@ target_link_libraries(rgw_a
     OATH::OATH
   PUBLIC
     rgw_common
-    Boost::context)
+    Boost::context
+    Boost::json)
 
 if(WITH_CURL_OPENSSL)
   # used by rgw_http_client_curl.cc

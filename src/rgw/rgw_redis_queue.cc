@@ -77,7 +77,8 @@ int read(connection* conn, const std::string& name, std::string& res,
 }
 
 int locked_read(connection* conn, const std::string& name,
-                std::string& lock_cookie, std::string& res, optional_yield y) {
+                const std::string& lock_cookie, std::string& res,
+                optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
@@ -96,8 +97,8 @@ int locked_read(connection* conn, const std::string& name,
 }
 
 int locked_read(connection* conn, const std::string& name,
-                std::string& lock_cookie, std::vector<std::string>& res,
-                int count, optional_yield y) {
+                const std::string& lock_cookie, std::vector<std::string>& res,
+                const int count, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
@@ -145,7 +146,8 @@ int locked_ack(connection* conn, const std::string& name,
 }
 
 int locked_ack(connection* conn, const std::string& name,
-               const std::string& lock_cookie, int count, optional_yield y) {
+               const std::string& lock_cookie, const int count,
+               optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 

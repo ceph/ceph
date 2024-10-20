@@ -2,8 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_notify.h"
+// Redis TODO: remove the following cls includes
 #include "cls/2pc_queue/cls_2pc_queue_client.h"
 #include "cls/lock/cls_lock_client.h"
+#include "rgw_redis_lock.h"
+#include "rgw_redis_queue.h"
 #include <memory>
 #include <boost/algorithm/hex.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
@@ -313,17 +316,15 @@ private:
   void cleanup_queue(const std::string& queue_name, boost::asio::yield_context yield) {
     while (!shutdown) {
       ldpp_dout(this, 20) << "INFO: trying to perform stale reservation cleanup for queue: " << queue_name << dendl;
-      const auto now = ceph::coarse_real_time::clock::now();
-      const auto stale_time = now - std::chrono::seconds(stale_reservations_period_s);
-      librados::ObjectWriteOperation op;
-      op.assert_exists();
-      rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
-        ClsLockType::EXCLUSIVE,
-        lock_cookie, 
-        "" /*no tag*/);
-      cls_2pc_queue_expire_reservations(op, stale_time);
-      // check ownership and do reservation cleanup in one batch
-      auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, yield);
+
+      auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+
+      auto ret = rgw::redislock::assert_locked(conn, queue_name+"_lock", lock_cookie, yield);
+      if (ret == 0)
+      {
+        ret = rgw::redisqueue::cleanup_stale_reservations(conn, queue_name, stale_reservations_period_s, yield);
+      }
+
       if (ret == -ENOENT) {
         // queue was deleted
         ldpp_dout(this, 10) << "INFO: queue: " << queue_name
