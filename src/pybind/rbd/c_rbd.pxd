@@ -112,6 +112,10 @@ cdef extern from "rbd/librbd.h" nogil:
         char *name
         int64_t pool
 
+    ctypedef struct rbd_group_spec_t:
+        char *id
+        char *name
+
     ctypedef struct rbd_image_spec_t:
         char *id
         char *name
@@ -731,6 +735,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_group_create(rados_ioctx_t p, const char *name)
     int rbd_group_remove(rados_ioctx_t p, const char *name)
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
+    int rbd_group_list2(rados_ioctx_t p, rbd_group_spec_t *groups,
+                        size_t *size);
     int rbd_group_get_id(rados_ioctx_t p, const char *group_name,
                          char *group_id, size_t *size)
     int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest)
@@ -750,6 +756,9 @@ cdef extern from "rbd/librbd.h" nogil:
                              size_t *image_size)
     void rbd_group_image_list_cleanup(rbd_group_image_info_t *images,
                                       size_t group_image_info_size, size_t len)
+    int rbd_group_spec_list_cleanup(rbd_group_spec_t *groups,
+                                    size_t group_spec_size,
+                                    size_t num_groups);
 
     int rbd_group_snap_create2(rados_ioctx_t group_p, const char *group_name,
                                const char *snap_name, uint32_t flags)
