@@ -22,12 +22,16 @@ class LevelSpec:
                  id: str,
                  pool_id: Optional[str],
                  namespace: Optional[str],
-                 image_id: Optional[str] = None) -> None:
+                 image_id: Optional[str] = None,
+                 group_id: Optional [str] = None) -> None:
+        if image_id is not None and group_id is not None:
+            raise ValueError("LevelSpec cannot have both image_id and group_id")
         self.name = name
         self.id = id
         self.pool_id = pool_id
         self.namespace = namespace
         self.image_id = image_id
+        self.group_id = group_id
 
     def __eq__(self, level_spec: Any) -> bool:
         return self.id == level_spec.id
@@ -41,8 +45,10 @@ class LevelSpec:
             return self.namespace is not None
         if level_spec.namespace != self.namespace:
             return False
-        if level_spec.image_id is None:
-            return self.image_id is not None
+        if level_spec.image_id is not None or level_spec.group_id is not None:
+            return False
+        if self.image_id is not None or self.group_id is not None:
+            return True
         return False
 
     def is_global(self) -> bool:
@@ -54,12 +60,15 @@ class LevelSpec:
     def matches(self,
                 pool_id: str,
                 namespace: str,
-                image_id: Optional[str] = None) -> bool:
+                image_id: Optional[str] = None,
+                group_id: Optional[str] = None) -> bool:
         if self.pool_id and self.pool_id != pool_id:
             return False
         if self.namespace and self.namespace != namespace:
             return False
         if self.image_id and self.image_id != image_id:
+            return False
+        if self.group_id and self.group_id != group_id:
             return False
         return True
 
@@ -72,9 +81,11 @@ class LevelSpec:
             return True
         if self.namespace != level_spec.namespace:
             return False
-        if self.image_id is None or level_spec.image_id is None:
+        if (self.image_id is None and self.group_id is None) or (level_spec.image_id is None and level_spec.group_id is None):
             return True
         if self.image_id != level_spec.image_id:
+            return False
+        if self.group_id != level_spec.group_id:
             return False
         return True
 
@@ -101,7 +112,8 @@ class LevelSpec:
                   name: str,
                   namespace_validator: Optional[Callable] = None,
                   image_validator: Optional[Callable] = None,
-                  allow_image_level: bool = True) -> 'LevelSpec':
+                  allow_image_level: bool = True,
+                  group_validator: Optional[Callable] = None) -> 'LevelSpec':
         # parse names like:
         # '', 'rbd/', 'rbd/ns/', 'rbd//image', 'rbd/image', 'rbd/ns/image'
         match = re.match(r'^(?:([^/]+)/(?:(?:([^/]*)/|)(?:([^/@]+))?)?)?$',
@@ -116,7 +128,9 @@ class LevelSpec:
         pool_id = None
         namespace = None
         image_name = None
+        group_name = None
         image_id = None
+        group_id = None
         if match.group(1):
             pool_name = match.group(1)
             try:
@@ -142,37 +156,56 @@ class LevelSpec:
                             if namespace_validator:
                                 namespace_validator(ioctx)
                         if match.group(3):
-                            image_name = match.group(3)
-                            try:
-                                with rbd.Image(ioctx, image_name,
-                                               read_only=True) as image:
-                                    image_id = image.id()
-                                    id += "/" + image_id
-                                    if image_validator:
-                                        image_validator(image)
-                            except rbd.ImageNotFound:
-                                raise ValueError("image {} does not exist".format(
-                                    image_name))
-                            except rbd.InvalidArgument:
-                                raise ValueError(
-                                    "image {} is not in snapshot mirror mode".format(
+                            if group_validator:
+                                group_name = match.group(3)
+                                try:
+                                    group = rbd.Group(ioctx, group_name)
+                                    group_id = group.id()
+                                    id += "/" + group_id
+                                    group_validator(group)
+                                except rbd.ObjectNotFound:
+                                    raise ValueError("group {} does not exist".format(
+                                        group_name))
+                                except rbd.InvalidArgument:
+                                    raise ValueError(
+                                        "group {} is not in snapshot mirror mode".format(
+                                        group_id))
+                            else:
+                                image_name = match.group(3)
+                                try:
+                                    with rbd.Image(ioctx, image_name,
+                                                read_only=True) as image:
+                                        image_id = image.id()
+                                        id += "/" + image_id
+                                        if image_validator:
+                                            image_validator(image)
+                                except rbd.ImageNotFound:
+                                    raise ValueError("image {} does not exist".format(
                                         image_name))
+                                except rbd.InvalidArgument:
+                                    raise ValueError(
+                                        "image {} is not in snapshot mirror mode".format(
+                                            image_name))
 
             except rados.ObjectNotFound:
                 raise ValueError("pool {} does not exist".format(pool_name))
 
-        # normalize possible input name like 'rbd//image'
-        if not namespace and image_name:
-            name = "{}/{}".format(pool_name, image_name)
+        # normalize possible input name like 'rbd//image' or 'rbd//group'
+        if not namespace:
+            if image_name:
+                name = "{}/{}".format(pool_name, image_name)
+            elif group_name:
+                name = "{}/{}".format(pool_name, group_name)
 
-        return LevelSpec(name, id, pool_id, namespace, image_id)
+        return LevelSpec(name, id, pool_id, namespace, image_id, group_id)
 
     @classmethod
     def from_id(cls,
                 handler: Any,
                 id: str,
                 namespace_validator: Optional[Callable] = None,
-                image_validator: Optional[Callable] = None) -> 'LevelSpec':
+                image_validator: Optional[Callable] = None,
+                group_validator: Optional[Callable] = None) -> 'LevelSpec':
         # parse ids like:
         # '', '123', '123/', '123/ns', '123//image_id', '123/ns/image_id'
         match = re.match(r'^(?:(\d+)(?:/([^/]*)(?:/([^/@]+))?)?)?$', id)
@@ -183,6 +216,7 @@ class LevelSpec:
         pool_id = None
         namespace = None
         image_id = None
+        group_id = None
         if match.group(1):
             pool_id = match.group(1)
             try:
@@ -206,26 +240,42 @@ class LevelSpec:
                         elif not match.group(3):
                             name += "/"
                         if match.group(3):
-                            image_id = match.group(3)
-                            try:
-                                with rbd.Image(ioctx, image_id=image_id,
+                            if group_validator:
+                                group_id = match.group(3)
+                                try:
+                                    group_name = rbd.RBD().group_get_name(
+                                        ioctx, group_id)
+                                    name += group_name
+                                    group = rbd.Group(ioctx, group_name)
+                                    group_validator(group)
+                                except rbd.ObjectNotFound:
+                                    raise ValueError("group {} does not exist".format(
+                                        group_id))
+                                except rbd.InvalidArgument:
+                                    raise ValueError(
+                                        "group {} is not in snapshot mirror mode".format(
+                                            group_id))
+                            else:
+                                image_id = match.group(3)
+                                try:
+                                    with rbd.Image(ioctx, image_id=image_id,
                                                read_only=True) as image:
-                                    image_name = image.get_name()
-                                    name += image_name
-                                    if image_validator:
-                                        image_validator(image)
-                            except rbd.ImageNotFound:
-                                raise ValueError("image {} does not exist".format(
-                                    image_id))
-                            except rbd.InvalidArgument:
-                                raise ValueError(
-                                    "image {} is not in snapshot mirror mode".format(
-                                        image_id))
-
+                                        image_name = image.get_name()
+                                        name += image_name
+                                        if image_validator:
+                                            image_validator(image)
+                                except rbd.ImageNotFound:
+                                    raise ValueError(
+                                        "image {} does not exist".format(
+                                         image_id))
+                                except rbd.InvalidArgument:
+                                    raise ValueError(
+                                        "image {} is not in snapshot mirror mode".format(
+                                            image_id))
             except rados.ObjectNotFound:
                 raise ValueError("pool {} does not exist".format(pool_id))
 
-        return LevelSpec(name, id, pool_id, namespace, image_id)
+        return LevelSpec(name, id, pool_id, namespace, image_id, group_id)
 
 
 class Interval:
@@ -396,7 +446,8 @@ class Schedules:
 
     def load(self,
              namespace_validator: Optional[Callable] = None,
-             image_validator: Optional[Callable] = None) -> None:
+             image_validator: Optional[Callable] = None,
+             group_validator: Optional[Callable] = None) -> None:
         self.level_specs = {}
         self.schedules = {}
 
@@ -417,7 +468,7 @@ class Schedules:
             try:
                 with self.handler.module.rados.open_ioctx2(int(pool_id)) as ioctx:
                     self.load_from_pool(ioctx, namespace_validator,
-                                        image_validator)
+                                        image_validator, group_validator)
             except rados.ConnectionShutdown:
                 raise
             except rados.Error as e:
@@ -428,7 +479,8 @@ class Schedules:
     def load_from_pool(self,
                        ioctx: rados.Ioctx,
                        namespace_validator: Optional[Callable],
-                       image_validator: Optional[Callable]) -> None:
+                       image_validator: Optional[Callable],
+                       group_validator: Optional[Callable]) -> None:
         pool_name = ioctx.get_pool_name()
         stale_keys = []
         start_after = ''
@@ -451,7 +503,7 @@ class Schedules:
                             try:
                                 level_spec = LevelSpec.from_id(
                                     self.handler, k, namespace_validator,
-                                    image_validator)
+                                    image_validator, group_validator)
                             except ValueError:
                                 self.handler.log.debug(
                                     "Stale schedule key %s in pool %s",
@@ -532,10 +584,14 @@ class Schedules:
     def find(self,
              pool_id: str,
              namespace: str,
-             image_id: Optional[str] = None) -> Optional['Schedule']:
+             image_id: Optional[str] = None,
+             group_id: Optional[str] = None) -> Optional['Schedule']:
         levels = [pool_id, namespace]
         if image_id:
             levels.append(image_id)
+        elif group_id:
+            levels.append(group_id)
+
         nr_levels = len(levels)
         while nr_levels >= 0:
             # an empty spec id implies global schedule
