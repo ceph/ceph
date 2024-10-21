@@ -8,7 +8,7 @@ from ..container_types import CephContainer
 from ..context_getters import fetch_configs, get_config_and_keyring
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
-from ceph.cephadm.images import DEFAULT_NVMEOF_IMAGE
+from ceph.cephadm.images import DefaultImages
 from ..context import CephadmContext
 from ..data_utils import dict_get, is_fsid
 from ..deployment_utils import to_deployment_container
@@ -26,14 +26,19 @@ class CephNvmeof(ContainerDaemonForm):
 
     daemon_type = 'nvmeof'
     required_files = ['ceph-nvmeof.conf']
-    default_image = DEFAULT_NVMEOF_IMAGE
+    default_image = DefaultImages.NVMEOF.value.name
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
         return cls.daemon_type == daemon_type
 
     def __init__(
-        self, ctx, fsid, daemon_id, config_json, image=DEFAULT_NVMEOF_IMAGE
+        self,
+        ctx,
+        fsid,
+        daemon_id,
+        config_json,
+        image=DefaultImages.NVMEOF.value.name,
     ):
         # type: (CephadmContext, str, Union[int, str], Dict, str) -> None
         self.ctx = ctx

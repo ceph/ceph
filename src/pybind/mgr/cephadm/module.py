@@ -30,7 +30,7 @@ import multiprocessing.pool
 import subprocess
 from prettytable import PrettyTable
 
-import ceph.cephadm.images as default_images
+from ceph.cephadm.images import DefaultImages
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
@@ -219,92 +219,92 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ),
         Option(
             'container_image_prometheus',
-            default=default_images.DEFAULT_PROMETHEUS_IMAGE,
+            default=DefaultImages.PROMETHEUS.value.name,
             desc='Prometheus container image',
         ),
         Option(
             'container_image_nvmeof',
-            default=default_images.DEFAULT_NVMEOF_IMAGE,
+            default=DefaultImages.NVMEOF.value.name,
             desc='Nvme-of container image',
         ),
         Option(
             'container_image_grafana',
-            default=default_images.DEFAULT_GRAFANA_IMAGE,
+            default=DefaultImages.GRAFANA.value.name,
             desc='Prometheus container image',
         ),
         Option(
             'container_image_alertmanager',
-            default=default_images.DEFAULT_ALERT_MANAGER_IMAGE,
+            default=DefaultImages.ALERT_MANAGER.value.name,
             desc='Prometheus container image',
         ),
         Option(
             'container_image_node_exporter',
-            default=default_images.DEFAULT_NODE_EXPORTER_IMAGE,
+            default=DefaultImages.NODE_EXPORTER.value.name,
             desc='Prometheus container image',
         ),
         Option(
             'container_image_loki',
-            default=default_images.DEFAULT_LOKI_IMAGE,
+            default=DefaultImages.LOKI.value.name,
             desc='Loki container image',
         ),
         Option(
             'container_image_promtail',
-            default=default_images.DEFAULT_PROMTAIL_IMAGE,
+            default=DefaultImages.PROMTAIL.value.name,
             desc='Promtail container image',
         ),
         Option(
             'container_image_haproxy',
-            default=default_images.DEFAULT_HAPROXY_IMAGE,
+            default=DefaultImages.HAPROXY.value.name,
             desc='HAproxy container image',
         ),
         Option(
             'container_image_keepalived',
-            default=default_images.DEFAULT_KEEPALIVED_IMAGE,
+            default=DefaultImages.KEEPALIVED.name,
             desc='Keepalived container image',
         ),
         Option(
             'container_image_snmp_gateway',
-            default=default_images.DEFAULT_SNMP_GATEWAY_IMAGE,
+            default=DefaultImages.SNMP_GATEWAY.value.name,
             desc='SNMP Gateway container image',
         ),
         Option(
             'container_image_nginx',
-            default=default_images.DEFAULT_NGINX_IMAGE,
+            default=DefaultImages.NGINX.value.name,
             desc='Nginx container image',
         ),
         Option(
             'container_image_oauth2_proxy',
-            default=default_images.DEFAULT_OAUTH2_PROXY_IMAGE,
+            default=DefaultImages.OAUTH2_PROXY.value.name,
             desc='oauth2-proxy container image',
         ),
         Option(
             'container_image_elasticsearch',
-            default=default_images.DEFAULT_ELASTICSEARCH_IMAGE,
+            default=DefaultImages.ELASTICSEARCH.value.name,
             desc='elasticsearch container image',
         ),
         Option(
             'container_image_jaeger_agent',
-            default=default_images.DEFAULT_JAEGER_AGENT_IMAGE,
+            default=DefaultImages.JAEGER_AGENT.value.name,
             desc='Jaeger agent container image',
         ),
         Option(
             'container_image_jaeger_collector',
-            default=default_images.DEFAULT_JAEGER_COLLECTOR_IMAGE,
+            default=DefaultImages.JAEGER_COLLECTOR.value.name,
             desc='Jaeger collector container image',
         ),
         Option(
             'container_image_jaeger_query',
-            default=default_images.DEFAULT_JAEGER_QUERY_IMAGE,
+            default=DefaultImages.JAEGER_QUERY.value.name,
             desc='Jaeger query container image',
         ),
         Option(
             'container_image_samba',
-            default=default_images.DEFAULT_SAMBA_IMAGE,
+            default=DefaultImages.SAMBA.value.name,
             desc='Samba/SMB container image',
         ),
         Option(
             'container_image_samba_metrics',
-            default=default_images.DEFAULT_SAMBA_METRICS_IMAGE,
+            default=DefaultImages.SAMBA_METRICS.value.name,
             desc='Samba/SMB metrics exporter container image',
         ),
         Option(
