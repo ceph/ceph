@@ -36,6 +36,13 @@
 #include "rgw_placement_types.h"
 
 #include "common/Formatter.h"
+#include "include/encoding_boost_optional.h"
+#include "include/encoding_flat_set.h"
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
 
 class JSONObj;
 
@@ -348,6 +355,8 @@ struct RGWZone {
       sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
+
     ENCODE_START(8, 1, bl);
     encode(name, bl);
     encode(endpoints, bl);
@@ -365,6 +374,8 @@ struct RGWZone {
   }
 
   void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+
     DECODE_START(8, bl);
     decode(name, bl);
     if (struct_v < 4) {

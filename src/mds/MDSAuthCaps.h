@@ -22,6 +22,8 @@
 #include <vector>
 
 #include "include/encoding.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "msg/msg_types.h" // for struct entity_addr_t
 
 #include <boost/optional.hpp>

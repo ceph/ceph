@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
 #include "include/interval_set.h"
 #include "include/buffer.h"
+#include "include/encoding_string.h"
 #include <list>
 #include <map>
 #include <set>

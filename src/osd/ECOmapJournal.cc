@@ -16,6 +16,8 @@
 
 #include <utility>
 
+#include "include/encoding_set.h"
+
 ECOmapJournalEntry::ECOmapJournalEntry(
   const eversion_t version, const bool clear_omap, std::optional<ceph::buffer::list> omap_header,
   std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates)
