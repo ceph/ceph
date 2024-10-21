@@ -18,6 +18,7 @@
 #define CEPH_MOSDPGUPDATELOGMISSING_H
 
 #include "MOSDFastDispatchOp.h"
+#include "include/encoding_list.h"
 
 class MOSDPGUpdateLogMissing final : public MOSDFastDispatchOp {
 private:

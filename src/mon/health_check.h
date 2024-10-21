@@ -8,6 +8,9 @@
 #include <string>
 
 #include "include/container_ios.h"
+#include "include/denc_list.h"
+#include "include/denc_map.h"
+#include "include/denc_string.h"
 #include "include/health.h"
 #include "include/types.h"
 #include "include/utime.h"

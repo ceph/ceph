@@ -23,6 +23,7 @@
 #include "MDSTableServer.h"
 #include "include/encoding.h"
 #include "include/object.h" // for struct snapid_t
+#include "snap.h"
 
 class MDSRank;
 class MRemoveSnaps;

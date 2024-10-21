@@ -2,6 +2,7 @@
 #define TEST_STRING_H
 
 #include "common/Formatter.h"
+#include "include/encoding_string.h"
 
 // wrapper for std::string that implements the dencoder interface
 class string_wrapper {

@@ -4,6 +4,7 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/encoding.h"
+#include "include/encoding_vector.h"
 #include "ECUtilL.h"
 
 using namespace std;
