@@ -173,3 +173,53 @@ Tabs
 .cds--tab-content {
   background: var(--cds-layer-01);
 }
+.cds-success-color {
+  fill: theme.$support-success;
+}
+
+.cds-danger-color {
+  fill: theme.$support-error;
+}
+
+.cds-info-color {
+  fill: theme.$support-info;
+}
+
+.cds-warning-color {
+  fill: theme.$support-warning;
+}
+
+.cds--btn__icon {
+  vertical-align: text-bottom !important;
+}
+
+.spin {
+  animation: spin 2s linear infinite;
+  display: inline-block;
+}
+
+.cds-white-color {
+  fill: theme.$icon-on-color;
+}
+
+.cds-margin-bottom4 {
+  margin-bottom: layout.$spacing-02;
+}
+
+.cds-size-24 {
+  height: layout.$spacing-05;
+  width: layout.$spacing-05;
+}
+
+.cds-space-5 {
+  margin-top: layout.$spacing-02;
+}
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
