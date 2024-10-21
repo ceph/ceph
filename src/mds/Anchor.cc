@@ -15,6 +15,7 @@
 #include "mds/Anchor.h"
 
 #include "common/Formatter.h"
+#include "include/encoding_set.h"
 
 void Anchor::encode(bufferlist &bl) const
 {

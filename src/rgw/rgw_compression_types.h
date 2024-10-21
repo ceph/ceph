@@ -15,6 +15,10 @@
 
 #pragma once
 
+#include "include/encoding_optional.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
+
 struct compression_block {
   uint64_t old_ofs;
   uint64_t new_ofs;
