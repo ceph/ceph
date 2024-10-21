@@ -203,7 +203,9 @@ describe('Dashbord Component', () => {
 
     getHealthSpy.and.returnValue(of(payload));
     fixture.detectChanges();
-    const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[cardTitle="Status"] i'));
+    const clusterStatusCard = fixture.debugElement.query(
+      By.css('cd-card[cardTitle="Status"] div[id="healthStatus"]')
+    );
     expect(clusterStatusCard.nativeElement.title).toEqual(`${payload.health.status}`);
 
     // HEALTH_ERR
