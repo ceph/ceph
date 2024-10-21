@@ -475,7 +475,7 @@ private:
       auto remove_entries = false;
       auto entry_idx = 1U;
       tokens_waiter waiter(io_context);
-      std::vector<bool> needs_migration_vector(entries.size(), false);
+      //std::vector<bool> needs_migration_vector(entries.size(), false);
       for (auto& entry : entries) {
         if (has_error) {
           // bail out on first error
@@ -485,7 +485,7 @@ private:
         entries_persistency_tracker& notifs_persistency_tracker = topics_persistency_tracker[queue_name];
         boost::asio::spawn(yield, std::allocator_arg, make_stack_allocator(),
           [this, &notifs_persistency_tracker, &queue_name, entry_idx, total_entries, &end_marker,
-           &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector](boost::asio::yield_context yield) {
+           &remove_entries, &has_error, &waiter, &entry/*, &needs_migration_vector*/](boost::asio::yield_context yield) {
             const auto token = waiter.make_token();
             auto& persistency_tracker = notifs_persistency_tracker[entry.marker];
             auto result = process_entry(this->get_cct()->_conf, persistency_tracker, entry, yield);
@@ -495,7 +495,7 @@ private:
                 << " (" << entry_idx << "/" << total_entries << ") from: " << queue_name << " "
                 << entryProcessingResultString[static_cast<unsigned int>(result)] << dendl;
               remove_entries = true;
-              needs_migration_vector[entry_idx - 1] = (result == EntryProcessingResult::Migrating);
+              //needs_migration_vector[entry_idx - 1] = (result == EntryProcessingResult::Migrating);
               notifs_persistency_tracker.erase(entry.marker);
             }  else {
               if (set_min_marker(end_marker, entry.marker) < 0) {
@@ -519,17 +519,17 @@ private:
       // delete all published entries from queue
       if (remove_entries) {
         // FIX ME: Remove cls_queue_entry type
-        std::vector<cls_queue_entry> entries_to_migrate;
+        //std::vector<cls_queue_entry> entries_to_migrate;
         uint64_t index = 0;
 
         for (const auto& entry: entries) {
           if (end_marker == entry.marker) {
             break;
           }
-          if (needs_migration_vector[index]) {
+          /*if (needs_migration_vector[index]) {
             ldpp_dout(this, 20) << "INFO: migrating entry " << entry.marker << " from: " << queue_name  << dendl;
             entries_to_migrate.push_back(entry);
-          }
+          }*/
           index++;
         }
 
@@ -563,6 +563,7 @@ private:
           ldpp_dout(this, 20) << "INFO: removed entries up to: " << end_marker <<  " from queue: " << queue_name << dendl;
         }
 
+        /*
         // reserving and committing the migrating entries
         if (!entries_to_migrate.empty()) {
           std::vector<bufferlist> migration_vector;
@@ -624,7 +625,7 @@ private:
           // if (ret < 0) {
           //   ldpp_dout(this, 1) << "ERROR: failed to commit reservation to queue: " << queue_name << ". error: " << ret << dendl;
           // }
-        }
+        }*/
       }
 
       // updating perfcounters with topic stats
