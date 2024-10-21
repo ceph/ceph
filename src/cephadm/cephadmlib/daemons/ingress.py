@@ -2,10 +2,7 @@ import os
 
 from typing import Dict, List, Optional, Tuple, Union
 
-from ceph.cephadm.images import (
-    DEFAULT_HAPROXY_IMAGE,
-    DEFAULT_KEEPALIVED_IMAGE,
-)
+from ceph.cephadm.images import DefaultImages
 from ..constants import (
     DATA_DIR_MODE,
 )
@@ -27,7 +24,7 @@ class HAproxy(ContainerDaemonForm):
 
     daemon_type = 'haproxy'
     required_files = ['haproxy.cfg']
-    default_image = DEFAULT_HAPROXY_IMAGE
+    default_image = DefaultImages.HAPROXY.image_ref
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
@@ -155,7 +152,7 @@ class Keepalived(ContainerDaemonForm):
 
     daemon_type = 'keepalived'
     required_files = ['keepalived.conf']
-    default_image = DEFAULT_KEEPALIVED_IMAGE
+    default_image = DefaultImages.KEEPALIVED.image_ref
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:

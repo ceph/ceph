@@ -13,7 +13,7 @@ Synopsis
 |               [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |               [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |               [--retry RETRY] [--no-container-init]
-|               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install}
+|               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install,list-images}
 |               ...
 
 
@@ -103,6 +103,8 @@ Synopsis
 |                                [--registry-username REGISTRY_USERNAME]
 |                                [--registry-password REGISTRY_PASSWORD]
 |                                [--registry-json REGISTRY_JSON] [--fsid FSID]
+
+| **cephadm** **list-images**
 
 
 
@@ -525,6 +527,12 @@ Arguments:
 
 * [--fsid FSID]           cluster FSID
 * [--name NAME, -n NAME]  daemon name (type.id)
+
+
+list-images
+-----------
+
+List the default container images for all services in ini format. The output can be modified with custom images and passed to --config flag during bootstrap.
 
 
 Availability
