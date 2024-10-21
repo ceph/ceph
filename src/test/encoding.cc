@@ -1,5 +1,7 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 
 #include <fmt/format.h>
 #include "gtest/gtest.h"

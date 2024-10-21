@@ -1,5 +1,8 @@
 #include "cyan_object.h"
 #include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
 
 namespace crimson::os {
 
