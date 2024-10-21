@@ -2591,21 +2591,9 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
   ceph_assert(!mdr->has_more() || mdr->more()->waiting_on_peer.empty());
 
   if (mdr->killed) {
-    dout(10) << "request " << *mdr << " was killed" << dendl;
-    //if the mdr is a "batch_op" and it has followers, pick a follower as
-    //the new "head of the batch ops" and go on processing the new one.
-    if (mdr->is_batch_head()) {
-      int mask = mdr->client_request->head.args.getattr.mask;
-      auto it = mdr->batch_op_map->find(mask);
-      auto new_batch_head = it->second->find_new_head();
-      if (!new_batch_head) {
-	mdr->batch_op_map->erase(it);
-	return;
-      }
-      mdr = std::move(new_batch_head);
-    } else {
-      return;
-    }
+    // Should already be reset in request_cleanup().
+    ceph_assert(!mdr->is_batch_head());
+    return;
   } else if (mdr->aborted) {
     mdr->aborted = false;
     mdcache->request_kill(mdr);
