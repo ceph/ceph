@@ -46,6 +46,7 @@ inline uint64_t get_extents_length(const Extents &extents) {
   return total_bytes;
 }
 
+void prune_extents(Extents& extents, uint64_t size);
 void unsparsify(CephContext* cct, ceph::bufferlist* bl,
                 const Extents& extent_map, uint64_t bl_off,
                 uint64_t out_bl_len);
