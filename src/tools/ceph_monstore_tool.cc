@@ -23,6 +23,7 @@
 #include "auth/KeyRing.h"
 #include "auth/cephx/CephxKeyServer.h"
 #include "global/global_init.h"
+#include "include/encoding_flat_map.h"
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 #include "mgr/mgr_commands.h"

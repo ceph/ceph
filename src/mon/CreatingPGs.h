@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "include/encoding.h"
+#include "include/encoding_set.h"
 #include "include/utime.h"
 
 #include "osd/osd_types.h"

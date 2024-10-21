@@ -10,6 +10,7 @@
 #include "include/utime.h"
 #include "include/encoding.h"
 #include "include/denc.h"
+#include "include/encoding_string_view.h"
 
 class bluefs_extent_t {
 public:
