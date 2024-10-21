@@ -15,6 +15,7 @@
 
 #include "common/histogram.h"
 #include "common/Formatter.h"
+#include "include/encoding_vector.h"
 
 // -- pow2_hist_t --
 void pow2_hist_t::dump(ceph::Formatter *f) const

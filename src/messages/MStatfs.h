@@ -22,6 +22,7 @@
 
 #include "include/ceph_fs.h" // for CEPH_MSG_STATFS
 #include "messages/PaxosServiceMessage.h"
+#include "include/encoding_optional.h"
 
 class MStatfs final : public PaxosServiceMessage {
 private:

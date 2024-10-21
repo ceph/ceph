@@ -3,6 +3,7 @@
 
 #include "common/bloom_filter.hpp"
 #include "common/Formatter.h"
+#include "include/encoding_vector.h"
 
 #include <bit>
 #include <numeric>

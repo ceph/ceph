@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "Types.h"
+#include "include/encoding_string.h"
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"

@@ -25,6 +25,8 @@
 #include "../LogSegmentRef.h"
 
 
+#include "include/encoding_list.h"
+#include "include/encoding_vector.h"
 #include "include/interval_set.h"
 #include "common/strescape.h"
 

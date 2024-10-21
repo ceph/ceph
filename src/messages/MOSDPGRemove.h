@@ -18,6 +18,7 @@
 #define CEPH_MOSDPGREMOVE_H
 
 #include "common/hobject.h"
+#include "include/encoding_vector.h"
 #include "msg/Message.h"
 
 

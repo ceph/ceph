@@ -20,6 +20,7 @@
 #include "cls/hello/cls_hello_ops.h"
 #include "include/rados/librados.hpp"
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 #include "json_spirit/json_spirit.h"

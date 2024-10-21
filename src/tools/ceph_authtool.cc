@@ -19,6 +19,7 @@
 #include "common/strtol.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include "include/encoding_string.h"
 
 #include "auth/Crypto.h"
 #include "auth/Auth.h"

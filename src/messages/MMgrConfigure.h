@@ -19,6 +19,7 @@
 #include "msg/Message.h"
 #include "mgr/MetricTypes.h"
 #include "mgr/OSDPerfMetricTypes.h"
+#include "include/encoding_boost_optional.h"
 
 /**
  * This message is sent from ceph-mgr to MgrClient, instructing it

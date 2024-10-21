@@ -4,6 +4,9 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/encoding_boost_optional.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
 #include "include/intarith.h" // for round_up_to()
 #include "common/errno.h"
 #include "objclass/objclass.h"

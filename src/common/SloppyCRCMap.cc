@@ -3,6 +3,7 @@
 
 #include "common/SloppyCRCMap.h"
 #include "common/Formatter.h"
+#include "include/encoding_map.h"
 
 using namespace std;
 using ceph::bufferlist;
