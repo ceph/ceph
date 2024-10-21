@@ -1,6 +1,7 @@
 /* You can add global styles to this file, and also import other style files */
 @use './src/styles/defaults' as *;
 @import './src/styles/carbon-defaults.scss';
+@import '~@carbon/charts/styles.css';
 
 // Fork-Awesome
 $fa-font-path: '~fork-awesome/fonts';
