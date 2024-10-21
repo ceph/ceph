@@ -5,6 +5,7 @@
 
 #include "common/Formatter.h"
 #include "include/container_ios.h"
+#include "include/encoding_vector.h"
 
 /* inode_backpointer_t */
 

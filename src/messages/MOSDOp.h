@@ -20,6 +20,8 @@
 
 #include "MOSDFastDispatchOp.h"
 #include "include/ceph_features.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "common/hobject.h"
 
 /*
@@ -308,8 +310,8 @@ struct ceph_osd_request_head {
       for (unsigned i = 0; i < ops.size(); i++)
 	encode(ops[i].op, payload);
 
-      ceph::encode_nohead(hobj.oid.name, payload);
-      ceph::encode_nohead(snaps, payload);
+      encode_nohead(hobj.oid.name, payload);
+      encode_nohead(snaps, payload);
     } else if ((features & CEPH_FEATURE_NEW_OSDOP_ENCODING) == 0) {
       header.version = 6;
       encode(client_inc, payload);

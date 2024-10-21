@@ -16,6 +16,7 @@
 
 #include <liboath/oath.h>
 
+#include "include/encoding_set.h"
 #include "include/types.h"
 #include "include/utime.h"
 #include "objclass/objclass.h"
