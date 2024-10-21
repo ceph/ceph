@@ -2,7 +2,7 @@ import logging
 
 from typing import Any, Dict, List, Tuple
 
-from ..constants import (
+from ceph.cephadm.images import (
     DEFAULT_ELASTICSEARCH_IMAGE,
     DEFAULT_JAEGER_AGENT_IMAGE,
     DEFAULT_JAEGER_COLLECTOR_IMAGE,

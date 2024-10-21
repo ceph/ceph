@@ -11,7 +11,7 @@ from ..context_getters import fetch_configs
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
-from ..constants import DEFAULT_NGINX_IMAGE
+from ceph.cephadm.images import DEFAULT_NGINX_IMAGE
 from ..data_utils import dict_get, is_fsid
 from ..file_utils import populate_files, makedirs, recursive_chown
 from ..exceptions import Error
