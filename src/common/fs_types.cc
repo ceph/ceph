@@ -6,6 +6,7 @@
 #include "include/ceph_features.h"
 #include "common/ceph_json.h"
 #include "include/denc.h"
+#include "include/denc_tuple.h"
 
 void inodeno_t::dump(ceph::Formatter *f) const {
   f->dump_unsigned("val", val);

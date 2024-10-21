@@ -18,6 +18,7 @@
 
 #include "mds/mdstypes.h"
 #include "messages/MMDSOp.h"
+#include "include/encoding_vector.h"
 
 class MMDSPeerRequest final : public MMDSOp {
   static constexpr int HEAD_VERSION = 2;
