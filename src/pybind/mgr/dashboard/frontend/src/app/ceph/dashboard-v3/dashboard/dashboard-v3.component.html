@@ -26,7 +26,9 @@
             <a routerLink="/api-docs"
                target="_blank">
                {{ origin }}/api-docs
-              <i class="fa fa-external-link"></i>
+              <svg [cdsIcon]="icons.launch"
+                 [size]="icons.sz16"
+                 class="cds--btn__icon"></svg>
             </a>
           </dd>
           <ng-container>
@@ -42,7 +44,9 @@
               <a target="_blank"
                  [href]="telemetryURL">
                  {{ telemetryURL }}
-                <i class="fa fa-external-link"></i>
+                 <svg [cdsIcon]="icons.launch"
+                 [size]="icons.sz16"
+                 class="cds--btn__icon"></svg>
               </a>
             </dd>
           </ng-container>
@@ -53,7 +57,9 @@
                 <a target="_blank"
                    [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
                   {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
-                  <i class="fa fa-external-link"></i>
+                  <svg [cdsIcon]="icons.launch"
+                 [size]="icons.sz16"
+                 class="cds--btn__icon"></svg>
                 </a>
               </dd>
             </span>
@@ -153,10 +159,14 @@
               </ng-template>
 
               <div class="d-flex flex-row col-md-3 ms-4">
-                <i *ngIf="healthData.health?.status"
-                   [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"
-                   [ngStyle]="healthData.health.status | healthColor"
-                   [title]="healthData.health.status"></i>
+                    <div [cdsIcon]="icons.warning" 
+                    *ngIf="healthData.health?.status" 
+                    [ngClass]="[healthData.health.status | healthIcon]" 
+                    [ngStyle]="healthData.health.status | healthColor"
+                    class="cds--btn__icon"
+                    [size]=[icons.sz20]
+                    [title]="healthData.health.status"></div>
+
                 <a class="ms-2 mt-n1 lead text-primary"
                    [ngbPopover]="healthChecks"
                    popoverClass="info-card-popover-cluster-status"
@@ -294,7 +304,8 @@
         <div class="row no-gutters ps-2">
           <div class="col-sm-1 text-center">
             <span [ngClass]="[icons.stack, icons.large, 'text-'+alertClass[alert.labels.severity]]">
-              <i [ngClass]="[icons.circle, icons.stack2x]"></i>
+              <!-- <i [ngClass]="[icons.circle, icons.stack2x]"></i> -->
+              <svg [cdsIcon]="icons.circle" [ngClass]="[icons.circle, icons.stack2x]" [size]='icons.sz20'></svg>
               <i [ngClass]="[icons.stack1x, icons.inverse, icons.warning]"></i>
             </span>
           </div>
