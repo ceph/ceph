@@ -19,6 +19,8 @@
 #include <vector>
 
 #include "msg/Message.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 
 class MCommand final : public Message {
 public:

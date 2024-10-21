@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 
+#include "include/encoding_string.h"
 #include "include/errorcode32.h"
 #include "msg/Message.h"
 #include "MCommand.h"
