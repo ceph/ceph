@@ -12,6 +12,7 @@
 #include <string_view>
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"

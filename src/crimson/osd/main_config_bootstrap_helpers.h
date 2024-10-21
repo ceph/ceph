@@ -13,6 +13,8 @@
 #include <seastar/core/future.hh>
 
 #include "common/ceph_argparse.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "include/expected.hpp"
 #include "include/random.h"
 

@@ -21,6 +21,7 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/encoding_map.h"
 
 namespace ceph { class Formatter; }
 

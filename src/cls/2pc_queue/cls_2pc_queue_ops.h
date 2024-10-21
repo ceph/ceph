@@ -4,6 +4,7 @@
 #pragma once
 
 #include "common/ceph_json.h"
+#include "include/encoding_vector.h"
 #include "include/types.h"
 #include "cls_2pc_queue_types.h"
 

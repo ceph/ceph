@@ -20,6 +20,7 @@
 #include "common/ceph_json.h"
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
+#include "include/encoding_map.h"
 
 struct KeyServerData {
   version_t version{0};

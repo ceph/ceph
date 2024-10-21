@@ -40,6 +40,8 @@ extern "C" {
 #include <ostream>
 
 #include "common/Formatter.h"
+#include "include/encoding_array.h"
+#include "include/encoding_string.h"
 
 #include "object.h"
 #include "intarith.h"

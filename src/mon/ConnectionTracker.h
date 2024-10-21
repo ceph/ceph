@@ -13,6 +13,8 @@
  */
 
 #pragma once
+
+#include "include/encoding_map.h"
 #include "include/types.h"
 
 struct ConnectionReport {
