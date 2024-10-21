@@ -2466,3 +2466,92 @@ TEST(LibRadosAio, MultiReads) {
     ASSERT_EQ(0, memcmp(buf, bl.c_str(), sizeof(buf)));
   }
 }
+
+// cancellation test fixture for global setup/teardown
+// parameterized to test both IoCtx::aio_cancel() and AioCompletion::cancel()
+class Cancel : public ::testing::TestWithParam<bool> {
+  static constexpr auto pool_prefix = "ceph_test_rados_api_pp";
+  static Rados rados;
+  static std::string pool_name;
+ protected:
+  static IoCtx ioctx;
+ public:
+  static void SetUpTestCase() {
+    pool_name = get_temp_pool_name(pool_prefix);
+    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  }
+  static void TearDownTestCase() {
+    destroy_one_pool_pp(pool_name, rados);
+  }
+};
+Rados Cancel::rados;
+std::string Cancel::pool_name;
+IoCtx Cancel::ioctx;
+
+TEST_P(Cancel, BeforeSubmit)
+{
+  const bool use_completion = GetParam();
+
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  if (use_completion) {
+    ASSERT_EQ(0, c->cancel());
+  } else  {
+    ASSERT_EQ(0, ioctx.aio_cancel(c.get()));
+  }
+}
+
+TEST_P(Cancel, BeforeComplete)
+{
+  const bool use_completion = GetParam();
+
+  // cancellation tests are racy, so retry if completion beats the cancellation
+  int ret = 0;
+  int tries = 10;
+  do {
+    auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+    ObjectReadOperation op;
+    op.assert_exists();
+    ioctx.aio_operate("nonexistent", c.get(), &op, nullptr);
+
+    if (use_completion) {
+      EXPECT_EQ(0, c->cancel());
+    } else  {
+      EXPECT_EQ(0, ioctx.aio_cancel(c.get()));
+    }
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, c->wait_for_complete());
+    }
+    ret = c->get_return_value();
+  } while (ret == -ENOENT && --tries);
+
+  EXPECT_EQ(-ECANCELED, ret);
+}
+
+TEST_P(Cancel, AfterComplete)
+{
+  const bool use_completion = GetParam();
+
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ObjectReadOperation op;
+  op.assert_exists();
+  ioctx.aio_operate("nonexistent", c.get(), &op, nullptr);
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, c->wait_for_complete());
+  }
+  if (use_completion) {
+    EXPECT_EQ(0, c->cancel());
+  } else {
+    EXPECT_EQ(0, ioctx.aio_cancel(c.get()));
+  }
+  EXPECT_EQ(-ENOENT, c->get_return_value());
+}
+
+std::string cancel_test_name(const testing::TestParamInfo<Cancel::ParamType>& info)
+{
+  return info.param ? "cancel" : "aio_cancel";
+}
+
+INSTANTIATE_TEST_SUITE_P(LibRadosAio, Cancel, testing::Bool(), cancel_test_name);
