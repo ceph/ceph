@@ -29,6 +29,9 @@
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
 #include "include/ceph_hash.h"
+#include "include/denc_list.h"
+#include "include/denc_optional.h"
+#include "include/denc_vector.h"
 
 namespace ceph {
   class Formatter;

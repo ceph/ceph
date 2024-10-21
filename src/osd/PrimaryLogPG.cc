@@ -103,7 +103,6 @@ using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
 using ceph::decode;
-using ceph::decode_noclear;
 using ceph::encode;
 using ceph::encode_destructively;
 

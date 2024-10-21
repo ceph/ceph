@@ -14,6 +14,9 @@
 #include "MgrMap.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_vector.h"
 
 #include <sstream>
 

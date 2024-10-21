@@ -6,6 +6,9 @@
 #include <string>
 #include <map>
 
+#include "include/denc_list.h"
+#include "include/denc_map.h"
+#include "include/denc_string.h"
 #include "include/health.h"
 #include "include/utime.h"
 #include "common/Formatter.h"
