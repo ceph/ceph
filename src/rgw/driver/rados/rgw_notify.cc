@@ -2,8 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_notify.h"
+// Redis TODO: remove the following cls includes
 #include "cls/2pc_queue/cls_2pc_queue_client.h"
 #include "cls/lock/cls_lock_client.h"
+#include "rgw_redis_lock.h"
+#include "rgw_redis_queue.h"
 #include <memory>
 #include <boost/algorithm/hex.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
@@ -267,17 +270,15 @@ private:
   void cleanup_queue(const std::string& queue_name, boost::asio::yield_context yield) {
     while (!shutdown) {
       ldpp_dout(this, 20) << "INFO: trying to perform stale reservation cleanup for queue: " << queue_name << dendl;
-      const auto now = ceph::coarse_real_time::clock::now();
-      const auto stale_time = now - std::chrono::seconds(stale_reservations_period_s);
-      librados::ObjectWriteOperation op;
-      op.assert_exists();
-      rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
-        ClsLockType::EXCLUSIVE,
-        lock_cookie, 
-        "" /*no tag*/);
-      cls_2pc_queue_expire_reservations(op, stale_time);
-      // check ownership and do reservation cleanup in one batch
-      auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, yield);
+
+      auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+
+      auto ret = rgw::redislock::assert_locked(conn, queue_name+"_lock", lock_cookie, yield);
+      if (ret == 0)
+      {
+        ret = rgw::redisqueue::cleanup_stale_reservations(conn, queue_name, stale_reservations_period_s, yield);
+      }
+
       if (ret == -ENOENT) {
         // queue was deleted
         ldpp_dout(this, 10) << "INFO: queue: " << queue_name
@@ -305,11 +306,10 @@ private:
 
   // unlock (lose ownership) queue
   int unlock_queue(const std::string& queue_name, boost::asio::yield_context yield) {
-    librados::ObjectWriteOperation op;
-    op.assert_exists();
-    rados::cls::lock::unlock(&op, queue_name+"_lock", lock_cookie);
-    auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
-    const auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
+
+    auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+    auto ret = rgw::redislock::unlock(conn, queue_name+"_lock", lock_cookie, yield);
+
     if (ret == -ENOENT) {
       ldpp_dout(this, 10) << "INFO: queue: " << queue_name
         << ". was removed. nothing to unlock" << dendl;
@@ -375,6 +375,18 @@ private:
 
     CountersManager queue_counters_container(queue_name, this->get_cct());
 
+    // FIX ME: Why is this required here?
+    // auto redis_ioctx = std::make_unique<boost::redis::connection>(io_context);
+    // // Redis TODO: add a way to configure redis connection
+    // auto redis_cfg = std::make_unique<boost::redis::config>();
+    // if (auto res = rgw::redis::load_lua_rgwlib(io_context, redis_ioctx.get(), redis_cfg.get(), yield); res < 0) {
+    //   ldpp_dout(this, 1) << "ERROR: failed to load lua scripts to redis. didn't start processing for queue " << 
+    //     queue_name << ". error: " << res << dendl;
+    //   return;
+    // }
+
+    auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+
     while (!shutdown) {
       // if queue was empty the last time, sleep for idle timeout
       if (is_idle) {
@@ -385,31 +397,18 @@ private:
       }
 
       // get list of entries in the queue
-      auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
       is_idle = true;
+      // FIX ME: What are these variables for?
       bool truncated = false;
+      // Why is marker a string? How is it used?
+      // FIX ME: What about entries, the entire process entry would need to be re-written?
       std::string end_marker;
       std::vector<cls_queue_entry> entries;
+      std::vector<std::string> redis_entries;
       auto total_entries = 0U;
       {
-        librados::ObjectReadOperation op;
-        op.assert_exists();
-        bufferlist obl;
-        int rval;
-        rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
-          ClsLockType::EXCLUSIVE,
-          lock_cookie, 
-          "" /*no tag*/);
-        cls_2pc_queue_list_entries(op, start_marker, max_elements, &obl, &rval);
-        // check ownership and list entries in one batch
-        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, nullptr, yield);
-        if (ret == -ENOENT) {
-          // queue was deleted
-          topics_persistency_tracker.erase(queue_name);
-          ldpp_dout(this, 10) << "INFO: queue: " << queue_name
-                              << ". was removed. processing will stop" << dendl;
-          return;
-        }
+        auto ret = rgw::redislock::assert_locked(conn, queue_name+"_lock", lock_cookie, yield);
+
         if (ret == -EBUSY) {
           topics_persistency_tracker.erase(queue_name);
           ldpp_dout(this, 10)
@@ -419,16 +418,38 @@ private:
           return;
         }
         if (ret < 0) {
-          ldpp_dout(this, 5) << "WARNING: failed to get list of entries in queue and/or lock queue: " 
+          ldpp_dout(this, 5) << "WARNING: failed to lock queue: " 
             << queue_name << ". error: " << ret << " (will retry)" << dendl;
           continue;
         }
-        ret = cls_2pc_queue_list_entries_result(obl, entries, &truncated, end_marker);
+
+        std::string out;
+        ret = rgw::redisqueue::locked_read(conn, queue_name, lock_cookie, redis_entries, max_elements, yield);
+        if (ret == -ENOENT) {
+          // queue was deleted
+          topics_persistency_tracker.erase(queue_name);
+          ldpp_dout(this, 10) << "INFO: queue: " << queue_name
+                              << ". was removed. processing will stop" << dendl;
+          return;
+        }
         if (ret < 0) {
-          ldpp_dout(this, 5) << "WARNING: failed to parse list of entries in queue: " 
+          ldpp_dout(this, 5) << "WARNING: failed to get list of entries: " 
             << queue_name << ". error: " << ret << " (will retry)" << dendl;
           continue;
         }
+        
+        // bufferlist obl;
+        // obl.append(out);
+        // // Redis TODO: add a similar parsing function to redisqueue
+        // FIX ME: Do we need such parsing? 
+        // The response from redisqueue::locked_read is a vector of strings
+
+        // ret = cls_2pc_queue_list_entries_result(obl, entries, &truncated, end_marker);
+        // if (ret < 0) {
+        //   ldpp_dout(this, 5) << "WARNING: failed to parse list of entries in queue: " 
+        //     << queue_name << ". error: " << ret << " (will retry)" << dendl;
+        //   continue;
+        // }
       }
       total_entries = entries.size();
       if (total_entries == 0) {
@@ -509,6 +530,7 @@ private:
 
       // delete all published entries from queue
       if (remove_entries) {
+        // FIX ME: Remove cls_queue_entry type
         std::vector<cls_queue_entry> entries_to_migrate;
         uint64_t index = 0;
 
@@ -524,21 +546,7 @@ private:
         }
 
         uint64_t entries_to_remove = index;
-        librados::ObjectWriteOperation op;
-        op.assert_exists();
-        rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
-          ClsLockType::EXCLUSIVE,
-          lock_cookie, 
-          "" /*no tag*/);
-        cls_2pc_queue_remove_entries(op, end_marker, entries_to_remove);
-        // check ownership and deleted entries in one batch
-        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
-        if (ret == -ENOENT) {
-          // queue was deleted
-          ldpp_dout(this, 10) << "INFO: queue: " << queue_name
-                              << ". was removed. processing will stop" << dendl;
-          return;
-        }
+        auto ret = rgw::redislock::assert_locked(conn, queue_name+"_lock", lock_cookie, yield);
         if (ret == -EBUSY) {
           ldpp_dout(this, 10)
               << "WARNING: queue: " << queue_name
@@ -547,7 +555,20 @@ private:
           return;
         }
         if (ret < 0) {
-          ldpp_dout(this, 1) << "ERROR: failed to remove entries and/or lock queue up to: " << end_marker <<  " from queue: " 
+          ldpp_dout(this, 5) << "WARNING: failed to lock queue: " 
+            << queue_name << ". error: " << ret << dendl;
+          return;
+        }
+
+        ret = rgw::redisqueue::locked_ack(conn, queue_name, lock_cookie, entries_to_remove, yield);
+        if (ret == -ENOENT) {
+          // queue was deleted
+          ldpp_dout(this, 10) << "INFO: queue: " << queue_name
+                              << ". was removed. processing will stop" << dendl;
+          return;
+        }
+        if (ret < 0) {
+          ldpp_dout(this, 5) << "WARNING: failed to remove entries up to: "  << end_marker <<  " from queue: "
             << queue_name << ". error: " << ret << dendl;
           return;
         } else {
@@ -592,34 +613,37 @@ private:
             migration_vector.push_back(bl);
           }
 
-          cls_2pc_reservation::id_t reservation_id;
-          buffer::list obl;
-          int rval;
-          cls_2pc_queue_reserve(op, size_to_migrate, migration_vector.size(), &obl, &rval);
-          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield, librados::OPERATION_RETURNVEC);
-          if (ret < 0) {
-            ldpp_dout(this, 1) << "ERROR: failed to reserve migration space on queue: " << queue_name << ". error: " << ret << dendl;
-            return;
-          }
-          ret = cls_2pc_queue_reserve_result(obl, reservation_id);
-          if (ret < 0) {
-            ldpp_dout(this, 1) << "ERROR: failed to parse reservation id for migration. error: " << ret << dendl;
-            return;
-          }
+          // FIX ME: What is Migration?
+          // Redis TODO: implement migration with redisqueue API
+          // cls_2pc_reservation::id_t reservation_id;
+          // buffer::list obl;
+          // int rval;
+          // cls_2pc_queue_reserve(op, size_to_migrate, migration_vector.size(), &obl, &rval);
+          // ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield, librados::OPERATION_RETURNVEC);
+          // if (ret < 0) {
+          //   ldpp_dout(this, 1) << "ERROR: failed to reserve migration space on queue: " << queue_name << ". error: " << ret << dendl;
+          //   return;
+          // }
+          // ret = cls_2pc_queue_reserve_result(obl, reservation_id);
+          // if (ret < 0) {
+          //   ldpp_dout(this, 1) << "ERROR: failed to parse reservation id for migration. error: " << ret << dendl;
+          //   return;
+          // }
 
-          cls_2pc_queue_commit(op, migration_vector, reservation_id);
-          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
-          reservation_id = cls_2pc_reservation::NO_ID;
-          if (ret < 0) {
-            ldpp_dout(this, 1) << "ERROR: failed to commit reservation to queue: " << queue_name << ". error: " << ret << dendl;
-          }
+          // cls_2pc_queue_commit(op, migration_vector, reservation_id);
+          // ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
+          // reservation_id = cls_2pc_reservation::NO_ID;
+          // if (ret < 0) {
+          //   ldpp_dout(this, 1) << "ERROR: failed to commit reservation to queue: " << queue_name << ". error: " << ret << dendl;
+          // }
         }
       }
 
       // updating perfcounters with topic stats
-      uint64_t entries_size;
-      uint32_t entries_number;
-      const auto ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, entries_number, entries_size);
+      std::tuple<uint64_t, uint32_t> stats;
+      const auto ret = rgw::redisqueue::queue_stats(conn, queue_name, stats, yield);
+      uint64_t entries_size = std::get<0>(stats);
+      uint32_t entries_number = std::get<1>(stats);
       if (ret < 0) {
         ldpp_dout(this, 1) << "ERROR: topic stats for topic: " << queue_name << ". error: " << ret << dendl;
       } else {

@@ -251,6 +251,13 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   list(APPEND librgw_common_srcs rgw_flight.cc rgw_flight_frontend.cc)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+file(READ rgw_redis_scripts.lua RGW_REDIS_LUA_FUNCTIONS)
+
+configure_file(
+  rgw_redis_scripts.h.in
+  ${CMAKE_SOURCE_DIR}/src/rgw/rgw_redis_scripts.h
+  @ONLY)
+
 if(WITH_RADOSGW_D4N)
   list(APPEND librgw_common_srcs
         rgw_redis_driver.cc
@@ -259,6 +266,11 @@ if(WITH_RADOSGW_D4N)
         driver/d4n/d4n_policy.cc
         driver/d4n/rgw_sal_d4n.cc)
 endif()
+
+list(APPEND librgw_common_srcs 
+            rgw_redis_common.cc
+            rgw_redis_lock.cc
+            rgw_redis_queue.cc)
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
 
@@ -434,7 +446,8 @@ target_link_libraries(rgw_a
     OATH::OATH
   PUBLIC
     rgw_common
-    Boost::context)
+    Boost::context
+    Boost::json)
 
 if(WITH_CURL_OPENSSL)
   # used by rgw_http_client_curl.cc
