@@ -2839,6 +2839,7 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
 
 void Client::_handle_full_flag(int64_t pool)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
   ldout(cct, 1) << __func__ << ": FULL: cancelling outstanding operations "
     << "on " << pool << dendl;
   // Cancel all outstanding ops in this pool with -CEPHFS_ENOSPC: it is necessary
@@ -2846,7 +2847,9 @@ void Client::_handle_full_flag(int64_t pool)
   // potentially lock caps forever on files with dirty pages, and we need
   // to be able to release those caps to the MDS so that it can delete files
   // and free up space.
+  client_lock.unlock();
   epoch_t cancelled_epoch = objecter->op_cancel_writes(-CEPHFS_ENOSPC, pool);
+  client_lock.lock();
 
   // For all inodes with layouts in this pool and a pending flush write op
   // (i.e. one of the ones we will cancel), we've got to purge_set their data
@@ -2878,7 +2881,7 @@ void Client::_handle_full_flag(int64_t pool)
 
 void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
 {
-  std::scoped_lock cl(client_lock);
+  std::unique_lock cl(client_lock);
 
   const auto myaddrs = messenger->get_myaddrs();
   bool new_blocklist = objecter->with_osdmap(
@@ -2898,7 +2901,9 @@ void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
     // Since we know all our OSD ops will fail, cancel them all preemtively,
     // so that on an unhealthy cluster we can umount promptly even if e.g.
     // some PGs were inaccessible.
+    cl.unlock();
     objecter->op_cancel_writes(-CEPHFS_EBLOCKLISTED);
+    cl.lock();
 
   } 
 
@@ -6865,7 +6870,9 @@ void Client::_unmount(bool abort)
     // Abort all mds sessions
     _abort_mds_sessions(-CEPHFS_ENOTCONN);
 
+    lock.unlock();
     objecter->op_cancel_writes(-CEPHFS_ENOTCONN);
+    lock.lock();
   } else {
     // flush the mdlog for pending requests, if any
     flush_mdlog_sync();
