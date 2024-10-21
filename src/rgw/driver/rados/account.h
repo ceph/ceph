@@ -22,6 +22,7 @@
 #include "include/encoding.h"
 #include "include/rados/librados_fwd.hpp"
 #include "common/async/yield_context.h"
+#include "common/ceph_time.h" // for ceph::real_time
 
 namespace ceph { class Formatter; }
 class DoutPrefixProvider;

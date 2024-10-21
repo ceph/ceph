@@ -20,6 +20,7 @@
 #include <map>
 
 #include "include/encoding.h"
+#include "include/encoding_map.h"
 #include "include/utime.h"
 #include "include/types.h" // for version_t
 #include "msg/Message.h"

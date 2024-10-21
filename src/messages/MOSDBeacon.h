@@ -8,6 +8,7 @@
 #include "PaxosServiceMessage.h"
 #include "include/container_ios.h"
 #include "include/encoding.h"
+#include "include/encoding_vector.h"
 #include "include/types.h" // for epoch_t
 #include "include/utime.h"
 #include "osd/osd_types.h" // for pg_t

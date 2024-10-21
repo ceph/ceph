@@ -10,6 +10,8 @@
 #include "opentelemetry/sdk/trace/batch_span_processor.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
 #include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
+#include "include/encoding_array.h"
+#include "include/encoding_string_view.h"
 
 #define dout_subsys ceph_subsys_trace
 #undef dout_prefix

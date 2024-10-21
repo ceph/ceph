@@ -21,6 +21,7 @@
 #include "osd/OSDMap.h"
 #include "gtest/gtest.h"
 #include "include/coredumpctl.h"
+#include "include/encoding_chrono.h"
 #include "common/Thread.h"
 #include "include/stringify.h"
 #include "osd/ReplicatedBackend.h"
