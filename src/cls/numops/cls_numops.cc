@@ -29,6 +29,7 @@
 #include <sstream>
 #include <cstdio>
 #include <include/compat.h>
+#include "include/encoding_string.h"
 
 #include "cls_numops_ops.h"
 

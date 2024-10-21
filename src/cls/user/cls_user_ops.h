@@ -5,6 +5,9 @@
 #define CEPH_CLS_USER_OPS_H
 
 #include "cls_user_types.h"
+#include "include/encoding_list.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "include/rados/cls_traits.hpp"
 
 struct cls_user_set_buckets_op {
