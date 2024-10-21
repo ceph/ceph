@@ -6,6 +6,7 @@
 
 #include "include/types.h"
 #include "include/buffer_fwd.h"
+#include "include/encoding_optional.h"
 #include "include/rbd_types.h"
 #include "common/Formatter.h"
 #include "cls/rbd/cls_rbd_types.h"

@@ -1,4 +1,6 @@
 #include "common/ceph_json.h"
+#include "include/encoding_map.h"
+#include "include/encoding_vector.h"
 #include "include/utime.h"
 
 // for testing DELETE ME
