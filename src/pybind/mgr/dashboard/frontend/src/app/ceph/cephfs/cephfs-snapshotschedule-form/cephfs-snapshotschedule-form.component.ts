@@ -19,6 +19,7 @@ import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { DirectoryStoreService } from '~/app/shared/api/directory-store.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RepeatFrequency } from '~/app/shared/enum/repeat-frequency.enum';
 import { RetentionFrequency } from '~/app/shared/enum/retention-frequency.enum';
@@ -35,7 +36,6 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 const VALIDATON_TIMER = 300;
 const DEBOUNCE_TIMER = 300;
-const DEFAULT_SUBVOLUME_GROUP = '_nogroup';
 
 @Component({
   selector: 'cd-cephfs-snapshotschedule-form',
