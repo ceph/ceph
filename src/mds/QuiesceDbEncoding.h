@@ -14,6 +14,11 @@
 #include "QuiesceDb.h"
 #include "include/cephfs/encoding.h" // for encode(mds_gid_t)
 #include "include/encoding.h"
+#include "include/encoding_chrono.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_string.h"
+#include "include/encoding_unordered_map.h" // for encoding QuiesceSet::Members
+#include "include/encoding_unordered_set.h" // for encoding QuiesceDbRequest::roots
 #include <stdint.h>
 
 inline void encode(QuiesceDbVersion const& v, bufferlist& bl, uint64_t features = 0)

@@ -24,6 +24,8 @@
 
 #include "include/ceph_features.h" // for CEPH_FEATURE_*
 #include "include/container_ios.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/util.h"
 #include "include/utime.h"
 #include "common/Formatter.h"

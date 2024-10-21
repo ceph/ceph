@@ -20,6 +20,9 @@
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
 #include "include/ceph_fs_encoder.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "mds/cephfs_features.h"
 
 void SnapPayload::encode(ceph::buffer::list &bl) const {
@@ -51,15 +54,16 @@ std::list<SnapPayload> SnapPayload::generate_test_instances() {
 
 void MClientRequest::Release::encode(ceph::buffer::list& bl) const {
   using ceph::encode;
+  using ceph::encode_nohead;
   item.dname_len = dname.length();
   encode(item, bl);
-  ceph::encode_nohead(dname, bl);
+  encode_nohead(dname, bl);
 }
 
 void MClientRequest::Release::decode(ceph::buffer::list::const_iterator& bl) {
   using ceph::decode;
   decode(item, bl);
-  ceph::decode_nohead(item.dname_len, dname, bl);
+  decode_nohead(item.dname_len, dname, bl);
 }
 
 void MClientRequest::Release::dump(ceph::Formatter *f) const {
@@ -86,6 +90,7 @@ std::list<MClientRequest::Release> MClientRequest::Release::generate_test_instan
 
 void MClientRequest::decode_payload() {
   using ceph::decode;
+  using ceph::decode_nohead;
   auto p = payload.cbegin();
 
   if (header.version >= 4) {
@@ -116,7 +121,7 @@ void MClientRequest::decode_payload() {
 
   decode(path, p);
   decode(path2, p);
-  ceph::decode_nohead(head.num_releases, releases, p);
+  decode_nohead(head.num_releases, releases, p);
   if (header.version >= 2)
     decode(stamp, p);
   if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
@@ -131,6 +136,7 @@ void MClientRequest::decode_payload() {
 
 void MClientRequest::encode_payload(uint64_t features) {
   using ceph::encode;
+  using ceph::encode_nohead;
   head.num_releases = releases.size();
   /*
    * If the peer is old version, we must skip all the
@@ -157,7 +163,7 @@ void MClientRequest::encode_payload(uint64_t features) {
 
   encode(path, payload);
   encode(path2, payload);
-  ceph::encode_nohead(releases, payload);
+  encode_nohead(releases, payload);
   encode(stamp, payload);
   encode(gid_list, payload);
   encode(alternate_name, payload);
