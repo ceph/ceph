@@ -7,6 +7,9 @@
 #include <include/types.h>
 #include <map>
 
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
+
 class RGWObjTags
 {
 public:
