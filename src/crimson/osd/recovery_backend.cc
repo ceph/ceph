@@ -262,11 +262,8 @@ RecoveryBackend::scan_for_backfill(
 	}
       });
     }).then_interruptible([version_map, start=std::move(start), next=std::move(next), this] {
-      BackfillInterval bi;
-      bi.begin = std::move(start);
-      bi.end = std::move(next);
-      bi.version = pg.get_info().last_update;
-      bi.objects = std::move(*version_map);
+      BackfillInterval bi(std::move(start), std::move(next));
+      bi.populate(std::move(*version_map), pg.get_info().last_update);
       logger().debug("{} BackfillInterval filled, leaving, {}",
                      "scan_for_backfill",
 		     bi);
@@ -320,15 +317,9 @@ RecoveryBackend::handle_scan_digest(
   // Check that from is in backfill_targets vector
   ceph_assert(pg.is_backfill_target(m.from));
 
-  BackfillInterval bi;
-  bi.begin = m.begin;
-  bi.end = m.end;
-  {
-    auto p = m.get_data().cbegin();
-    // take care to preserve ordering!
-    bi.clear_objects();
-    ::decode_noclear(bi.objects, p);
-  }
+  BackfillInterval bi(m.begin, m.end);
+  bi.populate(m.get_data());
+
   shard_services.start_operation<crimson::osd::BackfillRecovery>(
     static_cast<crimson::osd::PG*>(&pg),
     shard_services,

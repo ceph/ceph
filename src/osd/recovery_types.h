@@ -13,30 +13,54 @@
  * Represents the objects in a range [begin, end)
  *
  * Possible states:
- * 1) begin == end == hobject_t() indicates the the interval is unpopulated
- * 2) Else, objects contains all objects in [begin, end)
+ * 1) Unpopulated - only interval's range is set
+ * 2) Populatd - objects contains all objects in [begin, end)
  */
+
 struct BackfillInterval {
   // info about a backfill interval on a peer
   eversion_t version; /// version at which the scan occurred
   std::map<hobject_t,eversion_t> objects;
-  hobject_t begin;
-  hobject_t end;
+  hobject_t begin; /// object to start populating the interval from
+  hobject_t end;   /// object to start populating the interval to
+  bool populated = false;
 
-  /// clear content
-  void clear() {
-    *this = BackfillInterval();
+  BackfillInterval(hobject_t begin);
+
+  BackfillInterval(hobject_t begin,
+                   hobject_t end);
+
+  BackfillInterval() = delete;
+
+  // populate the objects in the interval
+  void populate(const ceph::buffer::list& data) {
+    ceph_assert(objects.empty() && !populated);
+    auto p = data.cbegin();
+    decode_noclear(objects, p);
+    populated = true;
   }
 
-  /// clear objects std::list only
-  void clear_objects() {
-    objects.clear();
+  // populate the objects in the interval
+  void populate(const std::map<hobject_t,eversion_t>&& _objects) {
+    ceph_assert(objects.empty() && !populated);
+    objects = std::move(_objects);
+    populated = true;
   }
 
-  /// reinstantiate with a new start+end position and sort order
-  void reset(hobject_t start) {
-    clear();
-    begin = end = start;
+  // XXX: all populate overrides should update version
+  //      see following commits
+  // populate the objects in the interval and update version
+  void populate(const std::map<hobject_t,eversion_t>&& _objects,
+                eversion_t _version) {
+    ceph_assert(objects.empty() && !populated);
+    objects = std::move(_objects);
+    version = _version;
+    populated = true;
+  }
+
+  /// true if interval is populated
+  bool is_populated() {
+    return populated;
   }
 
   /// true if there are no objects in this interval

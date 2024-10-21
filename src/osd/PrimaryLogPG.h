@@ -1127,9 +1127,11 @@ protected:
     f->close_section();
     f->dump_stream("last_backfill_started") << last_backfill_started;
     {
-      f->open_object_section("backfill_info");
-      backfill_info.dump(f);
-      f->close_section();
+      if (backfill_info) {
+        f->open_object_section("backfill_info");
+        backfill_info->dump(f);
+        f->close_section();
+      }
     }
     {
       f->open_array_section("peer_backfill_info");
