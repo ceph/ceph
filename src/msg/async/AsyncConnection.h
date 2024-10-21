@@ -36,6 +36,10 @@
 #include "Event.h"
 #include "Stack.h"
 
+#ifdef WITH_URING
+#include "util/IntrusiveList.hxx"
+#endif
+
 class AsyncMessenger;
 class DispatchQueue;
 class Worker;
@@ -182,6 +186,12 @@ public:
 private:
 
   DispatchQueue *dispatch_queue;
+
+#ifdef WITH_URING
+  class SendOperation;
+  IntrusiveList<SendOperation> send_operations;
+  void OnSendComplete(SendOperation &operation, int res) noexcept;
+#endif
 
   // lockfree, only used in own thread
   ceph::buffer::list outgoing_bl;
