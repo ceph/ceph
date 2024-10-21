@@ -15,6 +15,9 @@
 
 #include "include/ceph_fs_encoder.h"
 #include "include/cephfs/types.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 
 inline void encode(const mds_gid_t &v, bufferlist& bl, uint64_t features = 0) {
   uint64_t vv = v;

@@ -5,6 +5,7 @@
 #define CEPH_CLS_QUEUE_OPS_H
 
 #include "common/ceph_json.h"
+#include "include/encoding_vector.h"
 #include "cls/queue/cls_queue_types.h"
 
 struct cls_queue_init_op {
