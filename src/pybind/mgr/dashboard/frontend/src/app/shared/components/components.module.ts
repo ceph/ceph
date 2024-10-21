@@ -37,6 +37,7 @@ import {
   ComboBoxModule,
   ProgressIndicatorModule,
   InlineLoadingModule,
+  PanelModule,
   TagModule,
   LinkModule
 } from 'carbon-components-angular';
@@ -89,6 +90,8 @@ import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.componen
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
 import { IconComponent } from './icon/icon.component';
+import downloadIcon from '@carbon/icons/es/download/16';
+import { ChartsModule } from '@carbon/charts-angular';
 
 @NgModule({
   imports: [
@@ -129,6 +132,8 @@ import { IconComponent } from './icon/icon.component';
     ProgressIndicatorModule,
     BaseChartDirective,
     InlineLoadingModule,
+    PanelModule,
+    ChartsModule,
     TagModule,
     LinkModule
   ],
@@ -222,6 +227,6 @@ import { IconComponent } from './icon/icon.component';
 })
 export class ComponentsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([InfoIcon, CopyIcon]);
+    this.iconService.registerAll([InfoIcon, CopyIcon, downloadIcon]);
   }
 }
