@@ -15,7 +15,7 @@ class XMLObj;
 namespace ceph { class Formatter; }
 class DoutPrefixProvider;
 struct req_state;
-
+class RGWObjVersionTracker;
 
 namespace rgw::bucketlogging {
 /* S3 bucket logging configuration
@@ -145,7 +145,8 @@ int rollover_logging_object(const configuration& conf,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
     optional_yield y,
-    bool must_commit);
+    bool must_commit,
+    RGWObjVersionTracker* objv_tracker);
 
 // return the oid of the object holding the name of the temporary logging object
 // bucket - log bucket

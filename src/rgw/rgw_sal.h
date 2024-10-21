@@ -1004,9 +1004,18 @@ class Bucket {
         optional_yield y, const DoutPrefixProvider *dpp) = 0;
 
     /** Read the name of the pending bucket logging object name */
-    virtual int get_logging_object_name(std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    virtual int get_logging_object_name(std::string& obj_name, 
+        const std::string& prefix, 
+        optional_yield y, 
+        const DoutPrefixProvider *dpp,
+        RGWObjVersionTracker* objv_tracker) = 0;
     /** Update the name of the pending bucket logging object name */
-    virtual int set_logging_object_name(const std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    virtual int set_logging_object_name(const std::string& obj_name, 
+        const std::string& prefix, 
+        optional_yield y, 
+        const DoutPrefixProvider *dpp, 
+        bool new_obj,
+        RGWObjVersionTracker* objv_tracker) = 0;
     /** Move the pending bucket logging object into the bucket */
     virtual int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) = 0;
     /** Write a record to the pending bucket logging object */

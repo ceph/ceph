@@ -7587,12 +7587,13 @@ int main(int argc, const char **argv)
       return -ret;
     }
     std::string obj_name;
-    ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp());
+    RGWObjVersionTracker objv_tracker;
+    ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp(), &objv_tracker);
     if (ret < 0) {
       cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket << "'" << std::endl;
       return -ret;
     }
-    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), null_yield, true);
+    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), null_yield, true, &objv_tracker);
     if (ret < 0) {
       cerr << "ERROR: failed to flush pending logging object '" << obj_name
         << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;

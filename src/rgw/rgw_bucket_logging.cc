@@ -179,7 +179,7 @@ ceph::coarse_real_time time_from_name(const std::string& obj_name, const DoutPre
 
   std::tm t = {};
   if (const auto ret = strptime(time_str.c_str(), "%Y-%m-%d-%H-%M-%S", &t); ret == nullptr || *ret != '\0') {
-    ldpp_dout(dpp, 1) << "ERROR: invalid time format: '" << time_str <<"' in logging object name: " << obj_name << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: invalid time format: '" << time_str << "' in logging object name: " << obj_name << dendl;
     return extracted_time;
   }
   extracted_time = ceph::coarse_real_time::clock::from_time_t(mktime(&t));
@@ -191,13 +191,15 @@ int new_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& bucket,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
-    optional_yield y) {
-
+    optional_yield y,
+    bool init_obj,
+    RGWObjVersionTracker* objv_tracker) {
   const auto tt = ceph::coarse_real_time::clock::to_time_t(ceph::coarse_real_time::clock::now());
   std::tm t{};
   localtime_r(&tt, &t);
 
   const auto unique = unique_string<UniqueStringLength>();
+  const auto old_name = obj_name;
 
   switch (conf.obj_key_format) {
     case KeyFormat::Simple:
@@ -222,13 +224,22 @@ int new_logging_object(const configuration& conf,
       break;
   }
 
-  int ret = bucket->set_logging_object_name(obj_name, conf.target_prefix, y, dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to write name of logging object of bucket '" <<
-      conf.target_bucket << "', ret = " << ret << dendl;
+  int ret = bucket->set_logging_object_name(obj_name, conf.target_prefix, y, dpp, init_obj, objv_tracker);
+  if (ret == -EEXIST || ret == -ECANCELED) {
+   if (ret = bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, nullptr); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to get name of logging object of bucket '" <<
+        conf.target_bucket << "'. ret = " << ret << dendl;
+      return ret;
+    }
+    ldpp_dout(dpp, 20) << "INFO: name already set. got name of logging object '" << obj_name <<  "' of bucket '" <<
+      conf.target_bucket << "'" << dendl;
+    return -ECANCELED;
+  } else if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to write name of logging object '" << obj_name << "' of bucket '" <<
+      conf.target_bucket << "'. ret = " << ret << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 20) << "INFO: wrote name of new logging object '" << obj_name <<  "' of bucket '" <<
+  ldpp_dout(dpp, 20) << "INFO: wrote name of logging object '" << obj_name <<  "' of bucket '" <<
       conf.target_bucket << "'" << dendl;
   return 0;
 }
@@ -238,13 +249,21 @@ int rollover_logging_object(const configuration& conf,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
     optional_yield y,
-    bool must_commit) {
+    bool must_commit,
+    RGWObjVersionTracker* objv_tracker) {
   if (conf.target_bucket != bucket->get_name()) {
     ldpp_dout(dpp, 1) << "ERROR: bucket name mismatch: '" << conf.target_bucket << "' != '" << bucket->get_name() << "'" << dendl;
     return -EINVAL;
   }
   const auto old_obj = obj_name;
-  if (const auto ret = new_logging_object(conf, bucket, obj_name, dpp, y); ret < 0 ) {
+  const auto ret = new_logging_object(conf, bucket, obj_name, dpp, y, false, objv_tracker); 
+  if (ret == -ECANCELED) {
+    ldpp_dout(dpp, 20) << "INFO: rollover already performed for '" << old_obj <<  "' to bucket '" <<
+      conf.target_bucket << "'. ret = " << ret << dendl;
+    return 0;
+  } else if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to rollover logging object '" << old_obj << "' to bucket '" <<
+      conf.target_bucket << "'. ret = " << ret << dendl;
     return ret;
   }
   if (const auto ret = bucket->commit_logging_object(old_obj, y, dpp); ret < 0) {
@@ -252,7 +271,7 @@ int rollover_logging_object(const configuration& conf,
       return ret;
     }
     ldpp_dout(dpp, 5) << "WARNING: failed to commit logging object '" << old_obj << "' to bucket '" <<
-      conf.target_bucket << "', ret = " << ret << dendl;
+      conf.target_bucket << "'. ret = " << ret << dendl;
     // we still want to write the new records to the new object even if commit failed
     // will try to commit again next time
   }
@@ -322,31 +341,38 @@ int log_record(rgw::sal::Driver* driver,
   auto ret = driver->load_bucket(dpp, rgw_bucket(s->bucket_tenant, conf.target_bucket),
                                &target_bucket, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get target logging bucket '" << conf.target_bucket << "', ret = " << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to get target logging bucket '" << conf.target_bucket << "'. ret = " << ret << dendl;
     return ret;
   }
   std::string obj_name;
-  ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp);
+  RGWObjVersionTracker objv_tracker;
+  ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, &objv_tracker);
   if (ret == 0) {
     const auto time_to_commit = time_from_name(obj_name, dpp) + std::chrono::seconds(conf.obj_roll_time);
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
       ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' exceeded its time, will be committed to bucket '" <<
         conf.target_bucket << "'" << dendl;
-      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, y, false); ret < 0) {
+      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, y, false, &objv_tracker); ret < 0) {
         return ret;
       }
     } else {
       ldpp_dout(dpp, 20) << "INFO: record will be written to current logging object '" << obj_name << "'. will be comitted at: " << time_to_commit << dendl;
     }
   } else if (ret == -ENOENT) {
-    // create the temporary log object for the first time
-    ldpp_dout(dpp, 20) << "INFO: first time logging for bucket '" << conf.target_bucket << "'" << dendl;
-    if (ret = new_logging_object(conf, target_bucket, obj_name, dpp, y); ret < 0 ) {
+    // try to create the temporary log object for the first time
+    ret = new_logging_object(conf, target_bucket, obj_name, dpp, y, true, nullptr);
+    if (ret == 0) {
+      ldpp_dout(dpp, 20) << "INFO: first time logging for bucket '" << conf.target_bucket << "'" << dendl;
+    } else if (ret == -ECANCELED) {
+      ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' already exists for bucket '" << conf.target_bucket << "', will be used" << dendl;
+    } else {
+      ldpp_dout(dpp, 1) << "ERROR: failed to create logging object of bucket '" <<
+        conf.target_bucket << "' for the first time. ret = " << ret << dendl;
       return ret;
     }
   } else {
     ldpp_dout(dpp, 1) << "ERROR: failed to get name of logging object of bucket '" <<
-      conf.target_bucket << "', ret = " << ret << dendl;
+      conf.target_bucket << "'. ret = " << ret << dendl;
     return ret;
   }
 
@@ -422,7 +448,7 @@ int log_record(rgw::sal::Driver* driver,
   if (ret == -EFBIG) {
     ldpp_dout(dpp, 20) << "WARNING: logging object '" << obj_name << "' is full, will be committed to bucket '" <<
       conf.target_bucket << "'" << dendl;
-    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, y, true); ret < 0 ) {
+    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, y, true, nullptr); ret < 0 ) {
       return ret;
     }
     if (ret = target_bucket->write_logging_object(obj_name,
