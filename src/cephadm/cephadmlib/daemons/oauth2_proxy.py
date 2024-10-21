@@ -11,7 +11,7 @@ from ..context_getters import fetch_configs
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
-from ceph.cephadm.images import DEFAULT_OAUTH2_PROXY_IMAGE
+from ceph.cephadm.images import DefaultImages
 from ..constants import UID_NOBODY, GID_NOGROUP
 from ..data_utils import dict_get, is_fsid
 from ..file_utils import populate_files, makedirs, recursive_chown
@@ -25,7 +25,7 @@ logger = logging.getLogger()
 class OAuth2Proxy(ContainerDaemonForm):
     """Define the configs for the jaeger tracing containers"""
 
-    default_image = DEFAULT_OAUTH2_PROXY_IMAGE
+    default_image = DefaultImages.OAUTH2_PROXY.image_ref
     daemon_type = 'oauth2-proxy'
     required_files = [
         'oauth2-proxy.conf',
@@ -43,7 +43,7 @@ class OAuth2Proxy(ContainerDaemonForm):
         fsid: str,
         daemon_id: str,
         config_json: Dict,
-        image: str = DEFAULT_OAUTH2_PROXY_IMAGE,
+        image: str = DefaultImages.OAUTH2_PROXY.image_ref,
     ):
         self.ctx = ctx
         self.fsid = fsid
