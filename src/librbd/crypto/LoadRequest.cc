@@ -31,7 +31,7 @@ LoadRequest<I>::LoadRequest(
         Context* on_finish) : m_image_ctx(image_ctx),
                               m_on_finish(on_finish),
                               m_format_idx(0),
-                              m_is_current_format_cloned(false),
+                              m_is_current_format_assumed(false),
                               m_formats(std::move(formats)) {
 }
 
@@ -108,7 +108,7 @@ void LoadRequest<I>::handle_load(int r) {
   ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
 
   if (r < 0) {
-    if (m_is_current_format_cloned &&
+    if (m_is_current_format_assumed &&
         m_detected_format_name == UNKNOWN_FORMAT) {
       // encryption format was not detected, assume plaintext
       ldout(m_image_ctx->cct, 5) << "assuming plaintext for image "
@@ -125,19 +125,29 @@ void LoadRequest<I>::handle_load(int r) {
   }
 
   ldout(m_image_ctx->cct, 5) << "loaded format " << m_detected_format_name
-                             << (m_is_current_format_cloned ? " (cloned)" : "")
+                             << (m_is_current_format_assumed ? " (assumed)" : "")
                              << " for image " << m_current_image_ctx->name
                              << dendl;
 
   m_format_idx++;
+  if (!m_current_image_ctx->migration_info.empty()) {
+    // prepend the format to use for the migration source image
+    // it's done implicitly here because this image is moved to the
+    // trash when migration is prepared
+    ceph_assert(m_current_image_ctx->parent != nullptr);
+    ldout(m_image_ctx->cct, 20) << "under migration, cloning format" << dendl;
+    m_formats.insert(m_formats.begin() + m_format_idx,
+                     m_formats[m_format_idx - 1]->clone());
+  }
+
   m_current_image_ctx = m_current_image_ctx->parent;
   if (m_current_image_ctx != nullptr) {
     // move on to loading parent
     if (m_format_idx >= m_formats.size()) {
       // try to load next ancestor using the same format
-      ldout(m_image_ctx->cct, 20) << "cloning format" << dendl;
-      m_is_current_format_cloned = true;
+      ldout(m_image_ctx->cct, 20) << "out of formats, cloning format" << dendl;
       m_formats.push_back(m_formats[m_formats.size() - 1]->clone());
+      m_is_current_format_assumed = true;
     }
 
     load();
