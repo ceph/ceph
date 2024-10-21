@@ -24,6 +24,7 @@
 #include "common/entity_name.h"
 
 #include "include/compat.h"
+#include "include/encoding_map.h"
 #include "include/frag.h"
 #include "include/compact_set.h"
 #include "include/fs_types.h"
