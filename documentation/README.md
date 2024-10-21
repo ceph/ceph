@@ -1,0 +1,9 @@
+Summary of my contributions so far:
+
+So far the most time consuming part of working on ceph has been with setting up the virtual machine to get access to the project. This has been difficult because I am waiting on receiving access from someone from IBM. I have done my part to submit a request for access, I am waiting for them to get back to me. Because I am still waiting for this access I can not directly make edits to the branch that the rest of my group so far. Insead of this I have been creating documentation for the work I need to do. I have gone in depth learning about ceph and how the code works. Specifically the project within ceph I am working on is project 3. I spent time understanding the project and learning what the code was doing. 
+
+The project I am specifically working on intends to Extend the json output of ceph mgr module ls -f json-pretty so it displays detailed information about “enabled” and “always-on” modules to match the “disabled” module output. I spent time reviewing the code document and understanding it. 
+
+I created an understanding project 3 document that allowed for other project members to understand the code of how it works and what it does. There are multiple reasons I think are important for creating this type of document. The main purpose is I believe it would be beneficial for future project onboarding members. This will make joining ceph a lot more accessible for people in the future and will encourage more project members. Additionally this may lead to improved code quality as developers will have a better understanding of what is going on in the code. Additionally, having enough clear documentation can ensure the sustainability of projects and ensure that it can be worked on for long amounts of time with reduced bugs and errors. This documentation can be found in understanding_project3.md.
+
+
