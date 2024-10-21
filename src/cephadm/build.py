@@ -269,6 +269,9 @@ def _build(dest, src, config):
         mdir.mkdir(parents=True, exist_ok=True)
         (mdir / "__init__.py").touch(exist_ok=True)
         versioning_vars = config.cli_args.version_vars
+        shutil.copytree(
+            "../python-common/ceph", appdir / "ceph"
+        )
         if versioning_vars:
             generate_version_file(versioning_vars, mdir / "version.py")
         if dinfo:
