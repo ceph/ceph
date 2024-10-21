@@ -30,6 +30,7 @@ import multiprocessing.pool
 import subprocess
 from prettytable import PrettyTable
 
+import ceph.cephadm.images as default_images
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
@@ -130,28 +131,7 @@ def os_exit_noop(status: int) -> None:
 
 os._exit = os_exit_noop   # type: ignore
 
-
-# Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.io/ceph/ceph'
-DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.51.0'
-DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.7.0'
-DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.3.3'
-DEFAULT_LOKI_IMAGE = 'quay.io/ceph/loki:3.0.0'
-DEFAULT_PROMTAIL_IMAGE = 'quay.io/ceph/promtail:3.0.0'
-DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.27.0'
-DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:10.4.8'
-DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
-DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.2.4'
-DEFAULT_SNMP_GATEWAY_IMAGE = 'quay.io/ceph/snmp-notifier:v1.2.1'
-DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
-DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
-DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
-DEFAULT_NGINX_IMAGE = 'quay.io/ceph/nginx:sclorg-nginx-126'
-DEFAULT_OAUTH2_PROXY_IMAGE = 'quay.io/oauth2-proxy/oauth2-proxy:v7.6.0'
-DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
-DEFAULT_SAMBA_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
-DEFAULT_SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:latest'
-# ------------------------------------------------------------------------------
 
 
 def host_exists(hostname_position: int = 1) -> Callable:
@@ -239,92 +219,92 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ),
         Option(
             'container_image_prometheus',
-            default=DEFAULT_PROMETHEUS_IMAGE,
+            default=default_images.DEFAULT_PROMETHEUS_IMAGE,
             desc='Prometheus container image',
         ),
         Option(
             'container_image_nvmeof',
-            default=DEFAULT_NVMEOF_IMAGE,
+            default=default_images.DEFAULT_NVMEOF_IMAGE,
             desc='Nvme-of container image',
         ),
         Option(
             'container_image_grafana',
-            default=DEFAULT_GRAFANA_IMAGE,
+            default=default_images.DEFAULT_GRAFANA_IMAGE,
             desc='Prometheus container image',
         ),
         Option(
             'container_image_alertmanager',
-            default=DEFAULT_ALERT_MANAGER_IMAGE,
+            default=default_images.DEFAULT_ALERTMANAGER_IMAGE,
             desc='Prometheus container image',
         ),
         Option(
             'container_image_node_exporter',
-            default=DEFAULT_NODE_EXPORTER_IMAGE,
+            default=default_images.DEFAULT_NODE_EXPORTER_IMAGE,
             desc='Prometheus container image',
         ),
         Option(
             'container_image_loki',
-            default=DEFAULT_LOKI_IMAGE,
+            default=default_images.DEFAULT_LOKI_IMAGE,
             desc='Loki container image',
         ),
         Option(
             'container_image_promtail',
-            default=DEFAULT_PROMTAIL_IMAGE,
+            default=default_images.DEFAULT_PROMTAIL_IMAGE,
             desc='Promtail container image',
         ),
         Option(
             'container_image_haproxy',
-            default=DEFAULT_HAPROXY_IMAGE,
+            default=default_images.DEFAULT_HAPROXY_IMAGE,
             desc='HAproxy container image',
         ),
         Option(
             'container_image_keepalived',
-            default=DEFAULT_KEEPALIVED_IMAGE,
+            default=default_images.DEFAULT_KEEPALIVED_IMAGE,
             desc='Keepalived container image',
         ),
         Option(
             'container_image_snmp_gateway',
-            default=DEFAULT_SNMP_GATEWAY_IMAGE,
+            default=default_images.DEFAULT_SNMP_GATEWAY_IMAGE,
             desc='SNMP Gateway container image',
         ),
         Option(
             'container_image_nginx',
-            default=DEFAULT_NGINX_IMAGE,
+            default=default_images.DEFAULT_NGINX_IMAGE,
             desc='Nginx container image',
         ),
         Option(
             'container_image_oauth2_proxy',
-            default=DEFAULT_OAUTH2_PROXY_IMAGE,
+            default=default_images.DEFAULT_OAUTH2_PROXY_IMAGE,
             desc='oauth2-proxy container image',
         ),
         Option(
             'container_image_elasticsearch',
-            default=DEFAULT_ELASTICSEARCH_IMAGE,
+            default=default_images.DEFAULT_ELASTICSEARCH_IMAGE,
             desc='elasticsearch container image',
         ),
         Option(
             'container_image_jaeger_agent',
-            default=DEFAULT_JAEGER_AGENT_IMAGE,
+            default=default_images.DEFAULT_JAEGER_AGENT_IMAGE,
             desc='Jaeger agent container image',
         ),
         Option(
             'container_image_jaeger_collector',
-            default=DEFAULT_JAEGER_COLLECTOR_IMAGE,
+            default=default_images.DEFAULT_JAEGER_COLLECTOR_IMAGE,
             desc='Jaeger collector container image',
         ),
         Option(
             'container_image_jaeger_query',
-            default=DEFAULT_JAEGER_QUERY_IMAGE,
+            default=default_images.DEFAULT_JAEGER_QUERY_IMAGE,
             desc='Jaeger query container image',
         ),
         Option(
             'container_image_samba',
-            default=DEFAULT_SAMBA_IMAGE,
+            default=default_images.DEFAULT_SAMBA_IMAGE,
             desc='Samba/SMB container image',
         ),
         Option(
             'container_image_samba_metrics',
-            default=DEFAULT_SAMBA_METRICS_IMAGE,
+            default=default_images.DEFAULT_SAMBA_METRICS_IMAGE,
             desc='Samba/SMB metrics exporter container image',
         ),
         Option(
