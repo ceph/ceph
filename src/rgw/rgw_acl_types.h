@@ -24,6 +24,9 @@
 #include <list>
 #include <fmt/format.h>
 
+#include "include/encoding_chrono.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/types.h"
 #include "common/Formatter.h"
 

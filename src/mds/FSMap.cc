@@ -23,6 +23,8 @@
 #include "common/StackStringStream.h"
 #include "common/strtol.h" // for strict_strtoll()
 #include "include/cephfs/encoding.h" // for encode(mds_gid_t)
+#include "include/encoding_chrono.h"
+#include "include/encoding_set.h"
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"

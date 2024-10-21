@@ -20,6 +20,7 @@
 #include "osd/ECOmapJournal.h"
 #include "osd/ECBackend.h"
 #include "common/dout.h"
+#include "include/encoding_set.h"
 
 class MockDoutPrefixProvider : public DoutPrefixProvider {
 public:

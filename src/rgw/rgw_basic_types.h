@@ -24,6 +24,9 @@
 #include <optional>
 #include <fmt/format.h>
 
+#include "include/encoding_optional.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
 #include "include/types.h"
 #include "rgw_compression_types.h"
 #include "rgw_pool_types.h"
@@ -68,13 +71,17 @@ struct rgw_zone_id {
   rgw_zone_id(std::string&& _id) : id(std::move(_id)) {}
 
   void encode(ceph::buffer::list& bl) const {
+    using ceph::encode;
+
     /* backward compatibility, not using ENCODE_{START,END} macros */
-    ceph::encode(id, bl);
+    encode(id, bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
+    using ceph::decode;
+
     /* backward compatibility, not using DECODE_{START,END} macros */
-    ceph::decode(id, bl);
+    decode(id, bl);
   }
 
   void dump(ceph::Formatter *f) const {
