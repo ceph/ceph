@@ -12,7 +12,8 @@ import { BlankLayoutComponent } from './layouts/blank-layout/blank-layout.compon
 import { LoginLayoutComponent } from './layouts/login-layout/login-layout.component';
 import { WorkbenchLayoutComponent } from './layouts/workbench-layout/workbench-layout.component';
 import { NavigationModule } from './navigation/navigation.module';
-import { PlaceholderModule } from 'carbon-components-angular';
+import { PlaceholderModule, IconModule, IconService } from 'carbon-components-angular';
+import dangerIcon from '@carbon/icons/es/warning--filled/32';
 
 @NgModule({
   imports: [
@@ -22,7 +23,8 @@ import { PlaceholderModule } from 'carbon-components-angular';
     NgbDropdownModule,
     RouterModule,
     SharedModule,
-    PlaceholderModule
+    PlaceholderModule,
+    IconModule
   ],
   exports: [NavigationModule],
   declarations: [
@@ -33,4 +35,8 @@ import { PlaceholderModule } from 'carbon-components-angular';
     ErrorComponent
   ]
 })
-export class CoreModule {}
+export class CoreModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([dangerIcon]);
+  }
+}
