@@ -19,6 +19,7 @@
 #include "common/config.h"
 #include "common/dout.h"
 #include "common/Formatter.h"
+#include "include/encoding_map.h"
 
 #include <sstream>
 
