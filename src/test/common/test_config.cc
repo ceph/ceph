@@ -23,6 +23,7 @@
 
 #include <iostream> // for std::cout
 
+#include "common/ceph_time.h" // for parse_timespan()
 #include "common/config_proxy.h"
 #include "common/errno.h"
 #include "gtest/gtest.h"

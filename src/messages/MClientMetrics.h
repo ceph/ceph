@@ -8,6 +8,7 @@
 
 #include "msg/Message.h"
 #include "include/cephfs/metrics/Types.h"
+#include "include/encoding_vector.h"
 
 class MClientMetrics final : public SafeMessage {
 private:

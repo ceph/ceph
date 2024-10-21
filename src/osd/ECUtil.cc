@@ -8,6 +8,7 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/encoding.h"
+#include "include/encoding_vector.h"
 
 using namespace std;
 using ceph::bufferlist;

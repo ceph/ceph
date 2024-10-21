@@ -21,6 +21,7 @@
 
 #include "include/buffer.h"
 #include "include/ceph_fs_encoder.h"
+#include "include/encoding_vector.h"
 
 void MClientSnap::print(std::ostream& out) const {
   out << "client_snap(" << ceph_snap_op_name(head.op);
