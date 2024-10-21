@@ -540,7 +540,6 @@ int Migration<I>::prepare_import(
     return r;
   }
 
-  auto asio_engine = src_image_ctx->asio_engine;
   BOOST_SCOPE_EXIT_TPL(src_image_ctx) {
     src_image_ctx->state->close();
   } BOOST_SCOPE_EXIT_END;
@@ -581,11 +580,6 @@ int Migration<I>::prepare_import(
   Migration migration(src_image_ctx, dst_image_ctx, dst_migration_spec,
                       opts, nullptr);
   return migration.prepare_import();
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
 }
 
 template <typename I>

@@ -283,7 +283,7 @@ private:
     ldout(cct, 15) << "r=" << r << dendl;
 
     if (r < 0) {
-      lderr(cct) << "failed to disconnect stream: '" << cpp_strerror(r)
+      lderr(cct) << "failed to disconnect stream: " << cpp_strerror(r)
                  << dendl;
     }
 
@@ -350,7 +350,7 @@ private:
     ldout(cct, 15) << "r=" << r << dendl;
 
     if (r < 0) {
-      lderr(cct) << "failed to disconnect stream: '" << cpp_strerror(r)
+      lderr(cct) << "failed to disconnect stream: " << cpp_strerror(r)
                  << dendl;
     }
 

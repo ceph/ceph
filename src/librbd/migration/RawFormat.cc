@@ -108,8 +108,8 @@ void RawFormat<I>::handle_open(int r, Context* on_finish) {
       snapshot->close(gather_ctx->new_sub());
     }
 
-    m_image_ctx->state->close(new LambdaContext(
-      [r, on_finish=gather_ctx->new_sub()](int _) { on_finish->complete(r); }));
+    auto ctx = gather_ctx->new_sub();
+    ctx->complete(r);
 
     gather_ctx->activate();
     return;
@@ -163,7 +163,7 @@ void RawFormat<I>::get_image_size(uint64_t snap_id, uint64_t* size,
 }
 
 template <typename I>
-bool RawFormat<I>::read(
+void RawFormat<I>::read(
     io::AioCompletion* aio_comp, uint64_t snap_id, io::Extents&& image_extents,
     io::ReadResult&& read_result, int op_flags, int read_flags,
     const ZTracer::Trace &parent_trace) {
@@ -174,13 +174,12 @@ bool RawFormat<I>::read(
   auto snapshot_it = m_snapshots.find(snap_id);
   if (snapshot_it == m_snapshots.end()) {
     aio_comp->fail(-ENOENT);
-    return true;
+    return;
   }
 
   snapshot_it->second->read(aio_comp, std::move(image_extents),
                             std::move(read_result), op_flags, read_flags,
                             parent_trace);
-  return true;
 }
 
 template <typename I>
