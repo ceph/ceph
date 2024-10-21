@@ -1,0 +1,115 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.c:
+      - |
+        set -ex
+        # Deploy monitoring stack
+        ceph orch apply node-exporter
+        ceph orch apply grafana 2
+        ceph orch apply alertmanager 2
+        ceph orch apply prometheus 2
+        sleep 240
+        # generate SSL certificate
+        openssl req -x509 -newkey rsa:4096 -keyout /tmp/key.pem -out /tmp/cert.pem -sha256 -days 30 -nodes -subj "/CN=*"
+        # Generate a mgmt.spec template
+        cat << EOT > /tmp/mgmt.spec
+        service_type: mgmt-gateway
+        service_id: foo
+        placement:
+          hosts:
+            - ${HOSTNAME}
+        spec:
+          ssl_protocols:
+            - TLSv1.2
+            - TLSv1.3
+          ssl_ciphers:
+            - AES128-SHA
+            - AES256-SHA
+          enable_health_check_endpoint: True
+        EOT
+        # Add generated certificates to spec file
+        echo "  ssl_certificate: |" >> /tmp/mgmt.spec
+        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/cert.pem >> /tmp/mgmt.spec
+        echo "  ssl_certificate_key: |" >> /tmp/mgmt.spec
+        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/key.pem >> /tmp/mgmt.spec
+        # Apply spec
+        ceph orch apply -i /tmp/mgmt.spec
+- cephadm.wait_for_service:
+    service: mgmt-gateway
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+        # wait for background services to be reconfigured following mgmt-gateway installation
+        sleep 180
+
+        # get prometheus, alertmanager and grafana daemons
+        get_daemons() { ceph orch ps --daemon-type "$1" -f json | jq -e -r '.[] | .daemon_name'; }
+        PROMTEHUS_DAEMON_1=$(get_daemons prometheus | head -1)
+        PROMTEHUS_DAEMON_2=$(get_daemons prometheus | tail -1)
+        ALERTMGR_DAEMON_1=$(get_daemons alertmanager | head -1)
+        ALERTMGR_DAEMON_2=$(get_daemons alertmanager | tail -1)
+        GRAFANA_DAEMON_1=$(get_daemons grafana | head -1)
+        GRAFANA_DAEMON_2=$(get_daemons grafana | tail -1)
+
+        # retrieve mgmt hostname and ip
+        MGMT_GTW_HOST=$(ceph orch ps --daemon-type mgmt-gateway -f json | jq -e '.[]' | jq -r '.hostname')
+        MGMT_GTW_IP=$(ceph orch host ls -f json | jq -r --arg MGMT_GTW_HOST "$MGMT_GTW_HOST" '.[] | select(.hostname==$MGMT_GTW_HOST) | .addr')
+
+        # check prometheus, grafana and alertmanager endpoints are responsive and database health is okay
+        curl -k -s https://${MGMT_GTW_IP}/grafana/api/health | jq -e '.database == "ok"'
+        curl -k -s -u admin:admin https://${MGMT_GTW_IP}/prometheus/api/v1/status/config | jq -e '.status == "success"'
+        curl -k -s -u admin:admin https://${MGMT_GTW_IP}/alertmanager/api/v2/status | jq -e '.cluster.status == "ready"'
+
+        # stop the first daemon of grafana, prometheus and alertmanager
+        # wait for the stop cmd to take efect and check daemons are stopped
+        ceph orch daemon stop $PROMTEHUS_DAEMON_1
+        ceph orch daemon stop $ALERTMGR_DAEMON_1
+        ceph orch daemon stop $GRAFANA_DAEMON_1
+        sleep 40
+        ceph orch ps | grep -w $PROMTEHUS_DAEMON_1 | grep stopped
+        ceph orch ps | grep -w $ALERTMGR_DAEMON_1 | grep stopped
+        ceph orch ps | grep -w $GRAFANA_DAEMON_1 | grep stopped
+
+        # check prometheus, grafana and alertmanager endpoints are responsive and database health is okay
+        curl -k -s https://${MGMT_GTW_IP}/grafana/api/health | jq -e '.database == "ok"'
+        curl -k -s -u admin:admin https://${MGMT_GTW_IP}/prometheus/api/v1/status/config | jq -e '.status == "success"'
+        curl -k -s -u admin:admin https://${MGMT_GTW_IP}/alertmanager/api/v2/status | jq -e '.cluster.status == "ready"'
+
+        # stop the second daemon of grafana, prometheus and alertmanager
+        # start the first one and wait for the cmd to take efect
+        ceph orch daemon start $PROMTEHUS_DAEMON_1
+        ceph orch daemon stop $PROMTEHUS_DAEMON_2
+        ceph orch daemon start $ALERTMGR_DAEMON_1
+        ceph orch daemon stop $ALERTMGR_DAEMON_2
+        ceph orch daemon start $GRAFANA_DAEMON_1
+        ceph orch daemon stop $GRAFANA_DAEMON_2
+        sleep 40
+        ceph orch ps | grep -w $PROMTEHUS_DAEMON_2 | grep stopped
+        ceph orch ps | grep -w $ALERTMGR_DAEMON_2 | grep stopped
+        ceph orch ps | grep -w $GRAFANA_DAEMON_2 | grep stopped
+
+        # check prometheus, grafana and alertmanager endpoints are responsive and database health is okay
+        curl -k -s https://${MGMT_GTW_IP}/grafana/api/health | jq -e '.database == "ok"'
+        curl -k -s -u admin:admin https://${MGMT_GTW_IP}/prometheus/api/v1/status/config | jq -e '.status == "success"'
+        curl -k -s -u admin:admin https://${MGMT_GTW_IP}/alertmanager/api/v2/status | jq -e '.cluster.status == "ready"'
