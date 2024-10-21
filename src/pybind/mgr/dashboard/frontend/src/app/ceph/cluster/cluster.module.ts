@@ -14,8 +14,11 @@ import {
   ModalModule,
   TreeviewModule,
   ListModule,
-  ToggletipModule
+  ToggletipModule,
+  IconModule,
+  IconService
 } from 'carbon-components-angular';
+import ToolsIcon from '@carbon/icons/es/tools/32';
 
 import {
   NgbActiveModal,
@@ -110,7 +113,8 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     InputModule,
     ModalModule,
     ListModule,
-    ToggletipModule
+    ToggletipModule,
+    IconModule
   ],
   declarations: [
     MonitorComponent,
@@ -161,4 +165,8 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
   ],
   providers: [NgbActiveModal]
 })
-export class ClusterModule {}
+export class ClusterModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([ToolsIcon]);
+  }
+}
