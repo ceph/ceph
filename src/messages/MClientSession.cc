@@ -22,6 +22,8 @@
 #include "include/ceph_fs_encoder.h"
 #include "include/container_ios.h"
 #include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_vector.h"
 
 MClientSession::MClientSession(int o, version_t s, unsigned msg_flags) :
   SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION},

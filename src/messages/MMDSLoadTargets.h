@@ -21,6 +21,7 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 #include "messages/PaxosServiceMessage.h"
+#include "include/encoding_set.h"
 #include "include/types.h"
 #include "include/cephfs/encoding.h" // for encode(mds_gid_t)
 

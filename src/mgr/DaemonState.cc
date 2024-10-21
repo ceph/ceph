@@ -17,6 +17,8 @@
 #include <experimental/iterator>
 
 #include "MgrSession.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
 #include "common/Clock.h" // for ceph_clock_now()

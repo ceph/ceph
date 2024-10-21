@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
+#include "include/encoding_list.h"
 #include <iosfwd>
 #include <list>
 #include <string>
