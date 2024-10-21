@@ -21,6 +21,8 @@
 #include "include/ceph_features.h"
 #include "include/container_ios.h"
 #include "include/addr_parsing.h"
+#include "include/encoding_set.h"
+#include "include/encoding_vector.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
 #include "common/ceph_time_fmt.h"

@@ -24,6 +24,8 @@
 #include "MOSDFastDispatchOp.h"
 #include "include/ceph_features.h"
 #include "include/ceph_fs.h" // for CEPH_MSG_OSD_OP
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "include/rados_encoder.h"
 #include "common/hobject.h"
 
@@ -313,8 +315,8 @@ struct ceph_osd_request_head {
       for (unsigned i = 0; i < ops.size(); i++)
 	encode(ops[i].op, payload);
 
-      ceph::encode_nohead(hobj.oid.name, payload);
-      ceph::encode_nohead(snaps, payload);
+      encode_nohead(hobj.oid.name, payload);
+      encode_nohead(snaps, payload);
     } else if ((features & CEPH_FEATURE_NEW_OSDOP_ENCODING) == 0) {
       header.version = 6;
       encode(client_inc, payload);
@@ -434,6 +436,7 @@ struct ceph_osd_request_head {
 
   void decode_payload() override {
     using ceph::decode;
+    using ceph::decode_nohead;
     ceph_assert(partial_decode_needed && final_decode_needed);
     p = std::cbegin(payload);
 
@@ -496,8 +499,8 @@ struct ceph_osd_request_head {
       for (unsigned i = 0; i < num_ops; i++)
 	decode(ops[i].op, p);
 
-      ceph::decode_nohead(oid_len, hobj.oid.name, p);
-      ceph::decode_nohead(num_snaps, snaps, p);
+      decode_nohead(oid_len, hobj.oid.name, p);
+      decode_nohead(num_snaps, snaps, p);
 
       // recalculate pgid hash value
       pgid.pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,

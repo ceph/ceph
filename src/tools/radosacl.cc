@@ -19,7 +19,7 @@
 
 #include <iostream> // for std::cerr
 
-#include "include/encoding.h"
+#include "include/encoding_map.h"
 #include "include/int_types.h" // for __u32
 #include "include/types.h"
 #include "include/rados/librados.hpp"

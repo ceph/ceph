@@ -22,6 +22,7 @@
 #include <boost/scoped_ptr.hpp>
 
 #include "include/encoding.h"
+#include "include/encoding_unordered_set.h"
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
 

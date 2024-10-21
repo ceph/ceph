@@ -14,6 +14,12 @@
  */
 
 #include "ECMsgTypes.h"
+#include "include/encoding_boost_tuple.h"
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_set.h"
+#include "include/encoding_vector.h"
 
 using std::list;
 using std::make_pair;

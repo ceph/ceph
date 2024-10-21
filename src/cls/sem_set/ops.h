@@ -12,6 +12,10 @@
 #include <boost/container/flat_map.hpp>
 
 #include "include/encoding.h"
+#include "include/encoding_flat_map.h"
+#include "include/encoding_flat_set.h"
+#include "include/encoding_unordered_map.h"
+#include "include/encoding_string.h"
 
 namespace cls::sem_set {
 using namespace std::literals;

@@ -15,6 +15,7 @@
 
 #include "include/frag.h"
 #include "include/container_ios.h"
+#include "include/encoding_set.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
@@ -244,11 +245,13 @@ void fragset_t::simplify() {
 }
 
 void fragset_t::encode(ceph::buffer::list& bl) const {
-  ceph::encode(_set, bl);
+  using ceph::encode;
+  encode(_set, bl);
 }
 
 void fragset_t::decode(ceph::buffer::list::const_iterator& p) {
-  ceph::decode(_set, p);
+  using ceph::decode;
+  decode(_set, p);
 }
 
 std::ostream& operator<<(std::ostream& out, const fragset_t& fs) 

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "common/bloom_filter.hpp"
+#include "include/encoding_vector.h"
 
 #include <bit>
 #include <numeric>

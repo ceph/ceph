@@ -4,6 +4,10 @@
 #ifndef CEPH_CLS_REFCOUNT_OPS_H
 #define CEPH_CLS_REFCOUNT_OPS_H
 
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
 #include "include/types.h"
 #include "common/hobject.h"
 

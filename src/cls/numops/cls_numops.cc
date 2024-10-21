@@ -29,6 +29,7 @@
 #include <sstream>
 #include <cstdio>
 #include <include/compat.h>
+#include "include/encoding_string.h"
 
 #define DECIMAL_PRECISION 10
 

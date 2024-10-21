@@ -44,6 +44,7 @@
 #include "common/errno.h"
 #include "global/global_context.h"
 #include "include/denc.h"
+#include "include/denc_tuple.h"
 #include "include/ceph_assert.h"
 #include "include/cephfs/json.h"
 #include "include/int_types.h"

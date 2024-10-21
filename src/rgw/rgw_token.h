@@ -21,6 +21,7 @@
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
+#include "include/encoding_string.h"
 #include "rgw/rgw_b64.h"
 
 namespace rgw {

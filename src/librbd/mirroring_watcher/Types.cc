@@ -3,6 +3,7 @@
 
 #include "common/Formatter.h"
 #include "include/ceph_assert.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 #include "librbd/mirroring_watcher/Types.h"
 #include "librbd/watcher/Utils.h"

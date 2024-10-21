@@ -5,6 +5,7 @@
 #define CEPH_CLS_USER_TYPES_H
 
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "include/types.h"
 #include "include/utime.h"
 #include "common/ceph_time.h"

@@ -25,6 +25,7 @@
 #include "kv/KeyValueDB.h"
 
 #include "include/ceph_assert.h"
+#include "include/encoding_list.h"
 #include "common/JSONFormatter.h"
 #include "common/Finisher.h"
 #include "common/errno.h"
