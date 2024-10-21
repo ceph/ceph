@@ -685,17 +685,10 @@ private:
       for (const auto& queue_name : queues) {
         // try to lock the queue to check if it is owned by this rgw
         // or if ownership needs to be taken
-        librados::ObjectWriteOperation op;
-        op.assert_exists();
-        rados::cls::lock::lock(&op, queue_name+"_lock", 
-              ClsLockType::EXCLUSIVE,
-              lock_cookie, 
-              "" /*no tag*/,
-              "" /*no description*/,
-              failover_time,
-              LOCK_FLAG_MAY_RENEW);
 
-        ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
+        auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+        ret = rgw::redislock::lock(conn, queue_name+"_lock", lock_cookie, failover_time, yield);
+        
         if (ret == -EBUSY) {
           // lock is already taken by another RGW
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " owned (locked) by another daemon" << dendl;
@@ -1152,6 +1145,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         bufferlist obl;
         int rval;
         const auto& queue_name = topic_cfg.dest.persistent_queue;
+        // TODO: Replace these with Redis
         cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
         auto ret = rgw_rados_operate(
             res.dpp, res.store->getRados()->get_notif_pool_ctx(), queue_name,
@@ -1218,6 +1212,7 @@ int publish_commit(rgw::sal::Object* obj,
 			  << dendl;
         // first cancel the existing reservation
         librados::ObjectWriteOperation op;
+        // TODO: Redis
         cls_2pc_queue_abort(op, topic.res_id);
         auto ret = rgw_rados_operate(
 	  dpp, res.store->getRados()->get_notif_pool_ctx(),
