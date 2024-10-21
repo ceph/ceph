@@ -15,6 +15,7 @@
 #pragma once
 
 #include "HitSet.h"
+#include "include/encoding_unordered_set.h"
 
 #include <unordered_set>
 

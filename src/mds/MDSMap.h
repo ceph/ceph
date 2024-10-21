@@ -33,6 +33,7 @@
 #include "include/health.h"
 #include "include/CompatSet.h"
 #include "include/common_fwd.h"
+#include "include/encoding_unordered_set.h"
 
 #include "common/Clock.h"
 #include "common/ceph_releases.h"

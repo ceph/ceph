@@ -14,6 +14,7 @@
  */
 
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "cls_cephfs_types.h"
 
 /**

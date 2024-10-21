@@ -4,6 +4,8 @@
 #include "rbd_replay/ActionTypes.h"
 #include "include/ceph_assert.h"
 #include "include/byteorder.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
 #include <iostream>

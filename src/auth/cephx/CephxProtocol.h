@@ -59,6 +59,8 @@
 #include <sstream>
 
 #include "include/common_fwd.h"
+#include "include/encoding_string.h"
+
 /*
  * Authentication
  */

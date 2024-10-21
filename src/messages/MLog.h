@@ -16,6 +16,7 @@
 #ifndef CEPH_MLOG_H
 #define CEPH_MLOG_H
 
+#include "include/encoding_deque.h"
 #include "common/LogEntry.h"
 #include "messages/PaxosServiceMessage.h"
 

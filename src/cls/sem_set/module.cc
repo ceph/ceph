@@ -9,6 +9,7 @@
 
 #include <boost/system/system_error.hpp>
 
+#include "include/encoding_chrono.h"
 #include "include/rados/objclass.h"
 
 #include "cls/sem_set/ops.h"

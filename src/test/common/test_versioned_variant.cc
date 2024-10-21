@@ -14,6 +14,8 @@
  */
 
 #include "common/versioned_variant.h"
+#include "include/encoding_string.h"
+
 #include <bitset>
 #include <string>
 #include <gtest/gtest.h>
