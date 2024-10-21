@@ -8,6 +8,7 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/encoding.h"
+#include "include/encoding_vector.h"
 
 /* This file is soon going to be replaced (before next release), so we are going
  * to simply ignore all deprecated warnings.

@@ -2,6 +2,7 @@
 #include <seastar/core/temporary_buffer.hh>
 #include <gtest/gtest.h>
 #include "include/denc.h"
+#include "include/denc_string.h"
 #include "crimson/common/buffer_seastar.h"
 
 using temporary_buffer = seastar::temporary_buffer<char>;
