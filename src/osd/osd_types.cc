@@ -34,6 +34,8 @@
 
 #include "include/ceph_features.h"
 #include "include/encoding.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_tuple.h"
 #include "include/stringify.h"
 #include "common/strtol.h" // for ritoa()
 

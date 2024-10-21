@@ -17,6 +17,7 @@
 
 #include "include/errorcode32.h"
 #include "messages/PaxosServiceMessage.h"
+#include "include/encoding_vector.h"
 
 #include <sstream>
 #include <string>

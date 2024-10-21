@@ -24,6 +24,9 @@
 
 #include "include/compact_set.h"
 #include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "include/fs_types.h"
 #include "include/ceph_fs.h"
 #include "include/ceph_fs_encoder.h"
@@ -584,13 +587,15 @@ struct optmetadata_multiton {
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
     // no versioning, use payload
+    using ceph::encode;
     ENCODE_START(STRUCT_V, COMPAT_V, bl);
-    ceph::encode(opts, bl);
+    encode(opts, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& p) {
+    using ceph::decode;
     DECODE_START(STRUCT_V, p);
-    ceph::decode(opts, p);
+    decode(opts, p);
     DECODE_FINISH(p);
   }
 

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #pragma once
+#include "include/encoding_string.h"
 #include <include/types.h>
 #include "include/encoding.h"
 
