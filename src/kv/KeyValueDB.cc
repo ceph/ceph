@@ -4,6 +4,7 @@
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
 #include "include/buffer.h"
+#include "include/encoding_string.h"
 
 using std::map;
 using std::string;

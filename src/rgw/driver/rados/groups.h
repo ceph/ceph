@@ -19,6 +19,7 @@
 #include <string>
 #include "include/rados/librados_fwd.hpp"
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "rgw_sal_fwd.h"
 
 namespace ceph { class Formatter; }
