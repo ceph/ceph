@@ -11,6 +11,8 @@ from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 log = logging.getLogger(__name__)
 
+MDS_RESTART_GRACE = 60
+
 class TestMDSMetrics(CephFSTestCase):
     CLIENTS_REQUIRED = 2
     MDSS_REQUIRED = 3
@@ -456,7 +458,7 @@ class TestMDSMetrics(CephFSTestCase):
         self.fs.rank_fail(rank=0)
 
         # Wait for rank0 up:active state
-        self.fs.wait_for_state('up:active', rank=0, timeout=30)
+        self.fs.wait_for_state('up:active', rank=0, timeout=MDS_RESTART_GRACE)
 
         fscid = self.fs.id
 
@@ -606,7 +608,7 @@ class TestMDSMetrics(CephFSTestCase):
         # fail active mds of fs_a
         fs_a_mds = fs_a.get_active_names()[0]
         self.mds_cluster.mds_fail(fs_a_mds)
-        fs_a.wait_for_state('up:active', rank=0, timeout=30)
+        fs_a.wait_for_state('up:active', rank=0, timeout=MDS_RESTART_GRACE)
 
         # spread directory per rank
         self._spread_directory_on_all_ranks(fs_a.id)
