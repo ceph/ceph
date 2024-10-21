@@ -1,16 +1,15 @@
 #ifndef CEPH_MDSCACHEOBJECT_H
 #define CEPH_MDSCACHEOBJECT_H
 
+#include <bitset>
 #include <ostream>
 #include <string_view>
 
 #include "common/config.h"
 
-#include "include/Context.h"
 #include "include/ceph_assert.h"
 #include "include/mempool.h"
 #include "include/types.h"
-#include "include/xlist.h"
 
 #include "mdstypes.h"
 #include "MDSContext.h"
