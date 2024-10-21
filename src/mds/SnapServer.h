@@ -17,6 +17,7 @@
 
 #include "MDSTableServer.h"
 #include "snap.h"
+#include "include/encoding_set.h"
 
 class MDSRank;
 class MRemoveSnaps;

@@ -11,6 +11,7 @@
 #include "common/hobject.h"
 #include "crimson/os/seastore/onode.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fwd.h"
+#include "include/encoding_string_view.h"
 
 namespace crimson::os::seastore::onode {
 
@@ -250,7 +251,7 @@ class string_view_masked_t {
       ceph::encode(string_key_view_t::MARKER_MAX, bl);
     } else {
       ceph::encode(size(), bl);
-      ceph::encode_nohead(view, bl);
+      encode_nohead(view, bl);
     }
   }
   static auto min() { return string_view_masked_t{Type::MIN}; }
