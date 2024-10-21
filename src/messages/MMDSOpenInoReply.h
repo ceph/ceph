@@ -18,6 +18,7 @@
 #include <ostream>
 #include <vector>
 
+#include "include/encoding_vector.h"
 #include "messages/MMDSOp.h"
 
 class MMDSOpenInoReply final : public MMDSOp {

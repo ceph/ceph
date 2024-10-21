@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 
+#include "include/encoding_string.h"
 #include "include/uuid.h"
 
 #include "msg/Message.h"
