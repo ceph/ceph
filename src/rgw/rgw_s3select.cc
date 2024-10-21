@@ -806,11 +806,6 @@ int RGWSelectObj_ObjStore_S3::parquet_processing(bufferlist& bl, off_t ofs, off_
       }
       append_in_callback += it.length();
       ldout(s->cct, 10) << "S3select: part " << part_no++ << " it.length() = " << it.length() << dendl;
-      if ((ofs + len) > it.length()){
-	ldpp_dout(this, 10) << "s3select: offset and length may cause invalid read: ofs = " << ofs << " len = " << len << " it.length() = " << it.length() << dendl;
-	ofs = 0;
-	len = it.length();
-      }
       requested_buffer.append(&(it)[0]+ofs, len);
     }
     ldout(s->cct, 10) << "S3select:append_in_callback = " << append_in_callback << dendl;
