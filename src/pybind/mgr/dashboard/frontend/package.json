@@ -51,6 +51,7 @@
     "@angular/platform-browser": "18.2.11",
     "@angular/platform-browser-dynamic": "18.2.11",
     "@angular/router": "18.2.11",
+    "@carbon/charts-angular": "1.23.9",
     "@carbon/icons": "11.41.0",
     "@carbon/styles": "1.83.0",
     "@ibm/plex": "6.4.0",
