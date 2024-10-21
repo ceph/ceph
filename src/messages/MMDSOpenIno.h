@@ -19,6 +19,7 @@
 #include <ostream>
 #include <vector>
 
+#include "include/encoding_vector.h"
 #include "messages/MMDSOp.h"
 #include "mds/inode_backtrace.h" // for inode_backpointer_t
 

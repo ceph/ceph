@@ -26,6 +26,8 @@
 #include "include/ceph_assert.h"
 #include "include/Context.h"
 #include "include/encoding.h"
+#include "include/encoding_list.h"
+#include "include/encoding_string.h"
 #include "include/types.h" // for version_t
 #include "common/JSONFormatter.h"
 #include "common/Finisher.h"

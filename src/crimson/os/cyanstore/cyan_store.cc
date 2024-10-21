@@ -17,6 +17,7 @@
 #include "crimson/common/perf_counters_collection.h"
 #include "cyan_collection.h"
 #include "cyan_object.h"
+#include "include/encoding_set.h"
 
 namespace {
   seastar::logger& logger() {
@@ -209,11 +210,14 @@ seastar::future<> CyanStore::Shard::mkfs()
   if (!store_active) {
     return seastar::now();
   }
+
+  using ceph::encode;
+
   std::string fn =
     path + "/collections" + std::to_string(seastar::this_shard_id());
   ceph::bufferlist bl;
   std::set<coll_t> collections;
-  ceph::encode(collections, bl);
+  encode(collections, bl);
   return crimson::write_file(std::move(bl), fn);
 }
 
@@ -306,8 +310,9 @@ seastar::future<> CyanStore::Shard::umount()
         std::to_string(seastar::this_shard_id()+ seastar::smp::count * store_index));
       return crimson::write_file(std::move(bl), fn);
     }).then([&collections, this] {
+      using ceph::encode;
       ceph::bufferlist bl;
-      ceph::encode(collections, bl);
+      encode(collections, bl);
       std::string fn = fmt::format("{}/collections{}",
         path, std::to_string(seastar::this_shard_id()+ seastar::smp::count * store_index));
       return crimson::write_file(std::move(bl), fn);

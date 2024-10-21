@@ -19,6 +19,10 @@
 #include <string>
 #include <include/types.h>
 
+#include "include/encoding_list.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
+
 #define RGW_CORS_GET    0x1
 #define RGW_CORS_PUT    0x2
 #define RGW_CORS_HEAD   0x4

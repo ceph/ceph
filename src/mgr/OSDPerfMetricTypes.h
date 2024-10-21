@@ -6,6 +6,9 @@
 
 #include "common/ceph_json.h"
 #include "include/denc.h"
+#include "include/denc_map.h"
+#include "include/denc_vector.h"
+#include "include/denc_string.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
 

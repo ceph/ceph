@@ -28,6 +28,10 @@
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
 #include "include/ceph_hash.h"
+#include "include/denc_list.h"
+#include "include/denc_optional.h"
+#include "include/denc_string.h"
+#include "include/denc_vector.h"
 #include "include/intarith.h" // for round_up_to()
 
 namespace ceph {

@@ -28,6 +28,7 @@
 #define CEPH_MOSDPING_H
 
 #include "common/Clock.h"
+#include "include/encoding_optional.h"
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
