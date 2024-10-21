@@ -1,5 +1,7 @@
 #include <utility>
 
+#include "include/random.h"
+
 #include "global/global_init.h"
 #include "global/global_context.h"
 
@@ -267,8 +269,7 @@ namespace ceph
                   ceph::condition_variable& cond,
                   bool dryrun,
                   bool verbose,
-                  bool has_seqseed,
-                  int  seqseed);
+                  std::optional<int>  seqseed);
       
       int get_num_io();
       bool readyForIo();
@@ -286,8 +287,57 @@ namespace ceph
       bool done;
       ceph::util::random_number_generator<int>& rng;
       bool verbose;
-      bool has_seqseed;
-      int seqseed;
+      std::optional<int> seqseed;
+    };
+
+    class TestRunner
+    {
+    public:
+      TestRunner(po::variables_map& vm, librados::Rados& rados);
+      ~TestRunner();
+
+      bool run_test();
+
+    private:
+      librados::Rados& rados;
+      int seed;
+      ceph::util::random_number_generator<int> rng;
+
+      ceph::io_sequence::tester::SelectBlockSize sbs;
+      ceph::io_sequence::tester::SelectObjectSize sos;
+      ceph::io_sequence::tester::SelectECPool spo;
+      ceph::io_sequence::tester::SelectNumThreads snt;
+      ceph::io_sequence::tester::SelectSeqRange ssr;
+
+      boost::asio::io_context asio;
+      std::thread thread;
+      std::optional<boost::asio::executor_work_guard<
+                    boost::asio::io_context::executor_type>> guard;
+      ceph::mutex lock = ceph::make_mutex("RadosIo::lock");
+      ceph::condition_variable cond;
+
+      bool input_valid;
+
+      bool verbose;
+      bool dryrun;
+      std::optional<int> seqseed;
+      bool interactive;
+
+      bool show_sequence;
+      bool show_help;
+
+      int num_objects;
+      std::string object_name;
+
+      std::string get_token();
+      uint64_t get_numeric_token();
+
+      bool run_automated_test();
+
+      bool run_interactive_test();
+
+      void help();
+      void list_sequence();
     };
   }
 }
