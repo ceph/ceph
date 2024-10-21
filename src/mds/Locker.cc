@@ -23,6 +23,7 @@
 #include "common/debug.h"
 #include "events/EOpen.h"
 #include "events/EUpdate.h"
+#include "include/encoding_tuple.h"
 #include "MDBalancer.h"
 #include "MDCache.h"
 #include "MDLog.h"

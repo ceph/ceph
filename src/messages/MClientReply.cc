@@ -23,6 +23,8 @@
 #include "common/strescape.h"
 #include "include/container_ios.h"
 #include "include/cephfs/encoding.h"
+#include "include/encoding_set.h"
+#include "include/encoding_vector.h"
 #include "include/errorcode32.h"
 #include "mds/mdstypes.h" // for CDIR_AUTH_PARENT
 
