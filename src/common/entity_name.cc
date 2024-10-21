@@ -16,6 +16,7 @@
 #include "common/entity_name.h"
 #include "common/ceph_strings.h"
 #include "common/Formatter.h"
+#include "include/encoding_string.h"
 #include "msg/msg_types.h"
 
 #include <sstream>

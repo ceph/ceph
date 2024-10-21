@@ -10,6 +10,7 @@
 #include "crimson/osd/osd_operations/internal_client_request.h"
 
 #include "messages/MWatchNotify.h"
+#include "include/encoding_set.h"
 
 
 namespace {
@@ -316,7 +317,7 @@ seastar::future<> Notify::send_completion(
       timedout_watchers | boost::adaptors::transformed([] (auto w) {
         return std::make_pair(w->get_watcher_gid(), w->get_cookie());
       }));
-    ceph::encode(notify_replies, reply_bl);
+    encode(notify_replies, reply_bl);
     ceph::encode(missed, reply_bl);
   }
   reply->set_data(std::move(reply_bl));

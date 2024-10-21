@@ -26,6 +26,18 @@
 #include "gtest/gtest.h"
 
 #include "include/denc.h"
+#include "include/denc_boost_optional.h"
+#include "include/denc_optional.h"
+#include "include/denc_string.h"
+#include "include/encoding_array.h"
+#include "include/encoding_boost_optional.h"
+#include "include/encoding_flat_map.h"
+#include "include/encoding_flat_set.h"
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_tuple.h"
+#include "include/encoding_vector.h"
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>

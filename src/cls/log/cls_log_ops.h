@@ -9,6 +9,8 @@
 
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
+#include "include/encoding_list.h"
+#include "include/encoding_vector.h"
 
 #include "cls_log_types.h"
 

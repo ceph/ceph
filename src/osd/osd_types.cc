@@ -35,6 +35,10 @@
 
 #include "include/ceph_features.h"
 #include "include/encoding.h"
+#include "include/encoding_list.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_tuple.h"
+#include "include/encoding_vector.h"
 #include "include/stringify.h"
 #include "include/variant_print.h"
 #include "common/strtol.h" // for ritoa()

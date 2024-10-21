@@ -5,6 +5,8 @@
 #include "include/Context.h"
 #include "common/Cond.h"
 #include "include/stringify.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
 #include "common/Finisher.h"
 #include "test/librados_test_stub/TestCluster.h"
 #include "test/librados_test_stub/TestRadosClient.h"

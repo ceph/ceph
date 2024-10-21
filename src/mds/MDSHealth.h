@@ -22,6 +22,9 @@
 
 #include "common/Formatter.h"
 #include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "include/health.h" // for health_status_t
 
 /**

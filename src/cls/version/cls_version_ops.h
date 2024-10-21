@@ -6,6 +6,7 @@
 
 #include "cls_version_types.h"
 #include "common/ceph_json.h"
+#include "include/encoding_list.h"
 
 struct cls_version_set_op {
   obj_version objv;
