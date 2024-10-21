@@ -16,7 +16,7 @@
 #define CEPH_MCLIENTCAPRELEASE_H
 
 #include "msg/Message.h"
-
+#include "include/encoding_vector.h"
 
 class MClientCapRelease final : public SafeMessage {
  public:
@@ -29,7 +29,7 @@ class MClientCapRelease final : public SafeMessage {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(head, p);
-    ceph::decode_nohead(head.num, caps, p);
+    decode_nohead(head.num, caps, p);
     if (header.version >= 2) {
       decode(osd_epoch_barrier, p);
     }
@@ -38,7 +38,7 @@ class MClientCapRelease final : public SafeMessage {
     using ceph::encode;
     head.num = caps.size();
     encode(head, payload);
-    ceph::encode_nohead(caps, payload);
+    encode_nohead(caps, payload);
     encode(osd_epoch_barrier, payload);
   }
 

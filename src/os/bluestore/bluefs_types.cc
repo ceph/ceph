@@ -5,6 +5,7 @@
 #include "bluefs_types.h"
 #include "BlueFS.h"
 #include "common/Formatter.h"
+#include "include/encoding_optional.h"
 #include "include/denc.h"
 #include "include/uuid.h"
 #include "include/stringify.h"
