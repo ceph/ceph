@@ -31,7 +31,7 @@
 
 @use '@carbon/styles';
 @use '@carbon/type';
-
+@use '@carbon/themes/scss/generated/_tokens.scss' as custom-theme-token;
 /******************************************
 Custom theme
 ******************************************/
@@ -148,4 +148,11 @@ Code snippet
 ******************************************/
 .cds--snippet {
   width: fit-content;
+}
+
+/******************************************
+Progress-bar
+******************************************/
+.cds--progress-bar__track {
+  background-color: custom-theme-token.$background-selected;
 }
