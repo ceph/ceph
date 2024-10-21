@@ -57,9 +57,11 @@
       <div class="card tc_notification border-0">
         <div class="row no-gutters">
           <div class="col-md-2 text-center">
-            <span [ngClass]="[icons.stack, icons.large,  notification.textClass]">
-              <i [ngClass]="[icons.circle, icons.stack2x]"></i>
-              <i [ngClass]="[icons.stack1x, icons.inverse, notification.iconClass]"></i>
+            <span>
+              <svg [cdsIcon]="notification.iconClass"
+                   [size]="icons.size16"
+                   [ngClass]="notification.textClass"
+                   ></svg>
             </span>
           </div>
           <div class="col-md-10">

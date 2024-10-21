@@ -18,12 +18,12 @@ $indigo: #6610f2 !default;
 $purple: #6f42c1 !default;
 $purple-dim: #6f42c180 !default;
 $pink: #a94442 !default;
-$red: #dc3545 !default;
+$red: #da1e28 !default;
 $red-dim: #dc354580 !default;
 $orange: #fd7e14 !default;
 $orange-dim: #fd7e1480 !default;
 $yellow: #d48200 !default;
-$green: #008a00 !default;
+$green: #24a148 !default;
 $green-dim: #008a0080 !default;
 $teal: #20c997 !default;
 $cyan: #17a2b8 !default;
@@ -80,7 +80,7 @@ $body-bg-alt: $gray-200 !default;
 // Health colors.
 $health-color-error: $red !default;
 $health-color-healthy: $green !default;
-$health-color-warning: $yellow !default;
+$health-color-warning: #ff832b !default;
 $health-color-warning-800: #9d6d10 !default;
 
 // Chart colors.

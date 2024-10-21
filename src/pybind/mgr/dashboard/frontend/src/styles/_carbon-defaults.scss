@@ -202,6 +202,18 @@ Tabs
   width: layout.$spacing-07;
 }
 
+.cds-icon {
+  vertical-align: text-bottom !important;
+}
+
+.cds-mb-2 {
+  margin-bottom: layout.$spacing-02;
+}
+
+.cds-space-5 {
+  margin-top: layout.$spacing-02;
+}
+
 .cds-icon--size-10 {
   display: block;
   height: layout.$spacing-10;
@@ -211,4 +223,18 @@ Tabs
 
 .cds-mb-4 {
   margin-bottom: layout.$spacing-02;
+}
+
+.cds-icon-wrench {
+  display: block;
+  margin: auto;
+}
+
+.cds-mr-2 {
+  margin-right: layout.$spacing-02;
+}
+
+.health-warn-description {
+  color: theme.$support-caution-major !important;
+  fill: theme.$support-caution-major;
 }

@@ -53,9 +53,10 @@
                           class="info-card-content-clickable mt-1">
             <div cdsToggletipButton>
             {{ healthData.health.status | healthLabel | uppercase }}
-            <i  *ngIf="healthData.health?.status !== 'HEALTH_OK'"
-                class="fa fa-exclamation-triangle">
-            </i>
+            <svg [cdsIcon]="icons.warning"
+                 [size]="icons.size20"
+                 *ngIf="healthData.health?.status !== 'HEALTH_OK'"
+                 class="cds-warning-color"></svg>
             </div>
             <div cdsToggletipContent>
               <cd-health-checks [healthData]="healthData.health.checks"></cd-health-checks>
@@ -79,10 +80,10 @@
              id="mgrCount">
       <div class="d-flex flex-column justify-content-center align-items-center">
         <h5>
-          <i class="text-success"
-             [ngClass]="[icons.success]"
-             *ngIf="(healthData.mgr_map | mgrSummary).total > 1; else warningIcon">
-          </i>
+          <svg [cdsIcon]="icons.success"
+               [size]="icons.size20"
+               *ngIf="(healthData.mgr_map | mgrSummary).total > 1; else warningIcon"
+               class="cds-success-color"></svg>
           {{ (healthData.mgr_map | mgrSummary).total }}
         </h5>
       </div>
@@ -158,8 +159,9 @@
   <span class="mt-1"
         id="no-upgrades-available"
         i18n>
-    <i [ngClass]="[icons.success]"
-       class="text-success"></i>
+    <svg [cdsIcon]="icons.success"
+         [size]="icons.size20"
+         class="cds-success-color"></svg>
     Cluster is up-to-date
   </span>
   <a class="link-primary mb-2"
@@ -168,10 +170,9 @@
 </ng-template>
 
 <ng-template #warningIcon>
-  <i class="text-warning"
-     [ngClass]="[icons.warning]"
-     title="To upgrade, you need minimum 2 mgr daemons.">
-  </i>
+  <svg [cdsIcon]="icons.warning"
+       [size]="icons.size20"
+       class="cds-warning-color"></svg>
 </ng-template>
 
 <ng-template #checkingForUpgradeStatus>
@@ -202,7 +203,9 @@
     <span class="text-danger mt-2 mb-4"
           id="upgrade-status-error"
           i18n>
-      <i [ngClass]="[icons.danger]"></i>
+      <svg [cdsIcon]="icons.danger"
+           [size]="icons.size16"
+           class="cds-danger-color"></svg>
       {{ errorMessage }}
     </span>
     <a class="link-primary mb-2"
@@ -214,7 +217,9 @@
 <ng-template #upgradeInfoError>
   <span class="text-danger justify-content-center align-items-center"
         i18n>
-    <i [ngClass]="[icons.danger]"></i>
+    <svg [cdsIcon]="icons.danger"
+         [size]="icons.size16"
+         class="cds-danger-color"></svg>
     Failed to fetch registry informations
   </span>
 </ng-template>

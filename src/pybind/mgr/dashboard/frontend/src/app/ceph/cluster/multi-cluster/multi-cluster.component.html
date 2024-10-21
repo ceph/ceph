@@ -3,9 +3,9 @@
                 *ngIf="managedByConfig$ | async as managedByConfig">
     <div class="row h-100 justify-content-center align-items-center">
       <div class="blank-page">
-        <i class="mx-auto d-block"
-           [ngClass]="[icons.large, icons.wrench]">
-        </i>
+        <svg [cdsIcon]="icons.wrench"
+             [size]="icons.size20"
+             class="cds-info-color cds-icon-wrench"></svg>
       <div class="mt-4 text-center"
            *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0">
         <h3 class="fw-bold">Connect Cluster</h3>
@@ -18,7 +18,9 @@
           <a target="_blank"
              [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
              {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
-            <i class="fa fa-external-link"></i>
+            <svg [cdsIcon]="icons.launch"
+                 [size]="icons.size32"
+                 class="cds-info-color cds-mb-2"></svg>
           </a>
         </h4>
       </div>
@@ -27,9 +29,10 @@
         <div class="text-center">
           <button class="btn btn-primary"
                   (click)="openRemoteClusterInfoModal()">
-            <i class="mx-auto"
-               [ngClass]="icons.add">
-            </i> Connect Cluster
+            <svg [cdsIcon]="icons.add"
+                 [size]="icons.size20"
+                 class="cds-white mx-auto"></svg>
+            Connect Cluster
           </button>
         </div>
       </div>
@@ -108,22 +111,30 @@
                 <h3 *ngIf="queriesResults['HEALTH_ERROR_COUNT'][0][1] === '0' && queriesResults['HEALTH_OK_COUNT'][0][1] === '0' && queriesResults['HEALTH_WARNING_COUNT'][0][1] === '0'">{{ queriesResults.CLUSTER_COUNT[0][1] }}</h3>
                 <h3 class="text-danger"
                     *ngIf="queriesResults.HEALTH_ERROR_COUNT[0][1] !== '0'">
-                  <i [ngClass]="icons.danger"></i>
+                  <svg [cdsIcon]="icons.danger"
+                       [size]="icons.size20"
+                       class="cds-danger-color"></svg>
                   {{ queriesResults.HEALTH_ERROR_COUNT[0][1] }}
                 </h3>
                 <h3 class="text-warning"
                     *ngIf="queriesResults.HEALTH_WARNING_COUNT[0][1] !== '0'">
-                  <i [ngClass]="icons.warning"></i>
-                    {{ queriesResults.HEALTH_WARNING_COUNT[0][1] }}
+                  <svg [cdsIcon]="icons.warning"
+                       [size]="icons.size20"
+                       class="cds-mb-2 cds-warning-color"></svg>
+                  {{ queriesResults.HEALTH_WARNING_COUNT[0][1] }}
                 </h3>
                 <h3 class="text-danger"
                     *ngIf="queriesResults.HEALTH_ERROR_COUNT[0][1] !== '0'">
-                  <i [ngClass]="icons.danger"></i>
+                  <svg [cdsIcon]="icons.danger"
+                       [size]="icons.size20"
+                       class="cds-mb-2 cds-danger-color"></svg>
                   {{ queriesResults.HEALTH_ERROR_COUNT[0][1] }}
                 </h3>
                 <h3 class="text-success"
                     *ngIf="queriesResults.HEALTH_OK_COUNT[0][1] !== '0'">
-                  <i [ngClass]="icons.success"></i>
+                  <svg [cdsIcon]="icons.success"
+                       [size]="icons.size20"
+                       class="cds-mb-2 cds-success-color"></svg>
                     {{ queriesResults.HEALTH_OK_COUNT[0][1] }}
                 </h3>
               </span>
@@ -140,12 +151,16 @@
                 </h3>
                 <h3 class="text-danger"
                     *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0][1] !== '0'">
-                  <i [ngClass]="icons.danger"></i>
+                  <svg [cdsIcon]="icons.danger"
+                       [size]="icons.size20"
+                       class="cds-mb-2 cds-danger-color"></svg>
                   {{ queriesResults['CRITICAL_ALERTS_COUNT'][0][1] }}
                 </h3>
                 <h3 class="text-warning"
                     *ngIf="queriesResults['WARNING_ALERTS_COUNT'][0][1] !== '0'">
-                  <i [ngClass]="icons.warning"></i>
+                  <svg [cdsIcon]="icons.warning"
+                       [size]="icons.size20"
+                       class="cds-mb-2 cds-warning-color"></svg>
                     {{ queriesResults['WARNING_ALERTS_COUNT'][0][1] }}
                 </h3>
               </span>
@@ -158,8 +173,10 @@
                      aria-label="Connection Errors">
               <span class="text-center">
                 <h3 [ngClass]="{'text-danger': connectionErrorsCount > 0}">
-                  <i [ngClass]="icons.danger"
-                     *ngIf="connectionErrorsCount > 0"></i>
+                  <svg [cdsIcon]="icons.danger"
+                       [size]="icons.size20"
+                       *ngIf="connectionErrorsCount > 0"
+                       class="cds-mb-2 cds-danger-color"></svg>
                   {{ connectionErrorsCount }}
                 </h3>
               </span>

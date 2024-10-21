@@ -65,15 +65,17 @@
   <span class="fw-bold">{{row.name}}</span>
 
   <span *ngIf="row?.info?.state === 'complete'; else snapshotRetainedTpl">
-    <i [ngClass]="[icons.success, icons.large]"
-       ngbTooltip="{{row.name}} is ready to use"
-       class="text-success"></i>
+    <svg [cdsIcon]="icons.success"
+         [size]="icons.size16"
+         class="cds-success-color"
+         title="{{row.name}} is ready to use"></svg>
   </span>
 
   <ng-template #snapshotRetainedTpl>
-    <i [ngClass]="[icons.warning, icons.large]"
-       class="text-warning"
-       ngbTooltip="{{row.name}} is removed after retaining the snapshots"></i>
+    <svg [cdsIcon]="icons.warning"
+         [size]="icons.size16"
+         class="cds-warning-color"
+         title="{{row.name}} is removed after retaining the snapshots"></svg>
   </ng-template>
 
   <cd-label [value]="row.info.type"

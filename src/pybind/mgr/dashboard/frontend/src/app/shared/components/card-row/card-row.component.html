@@ -52,18 +52,18 @@
     <span *ngIf="data.categoryPgAmount?.clean">
       {{ data.categoryPgAmount?.clean }}
     </span>
-    <i class="text-success"
-       [ngClass]="[icons.success]">
-    </i>
+    <svg [cdsIcon]="icons.success"
+         [size]="icons.size16"
+         class="cds-success-color cds-icon"></svg>
   </span>
   <span *ngIf="data.info"
         class="ms-2">
     <span *ngIf="data.info">
       {{ data.info }}
     </span>
-    <i class="text-info"
-       [ngClass]="[icons.danger]">
-    </i>
+    <svg [cdsIcon]="icons.danger"
+         [size]="icons.size16"
+         class="cds-danger-color cds-icon"></svg>
   </span>
   <span *ngIf="data.warn || data.categoryPgAmount?.warning"
         class="ms-2">
@@ -73,9 +73,9 @@
     <span *ngIf="data.categoryPgAmount?.warning">
       {{ data.categoryPgAmount?.warning }}
     </span>
-    <i class="text-warning"
-       [ngClass]="[icons.warning]">
-    </i>
+    <svg [cdsIcon]="icons.warning"
+         [size]="icons.size16"
+         class="cds-warning-color cds-icon"></svg>
   </span>
   <span *ngIf="data.error || data.categoryPgAmount?.unknown"
         class="ms-2">
@@ -85,27 +85,27 @@
     <span *ngIf="data.categoryPgAmount?.unknown">
       {{ data.categoryPgAmount?.unknown }}
     </span>
-    <i class="text-danger"
-       [ngClass]="[icons.danger]">
-    </i>
+    <svg [cdsIcon]="icons.danger"
+         [size]="icons.size16"
+         class="cds-danger-color cds-icon"></svg>
   </span>
   <span *ngIf="data.categoryPgAmount?.working"
         class="ms-2">
     <span *ngIf="data.categoryPgAmount?.working">
       {{ data.categoryPgAmount?.working }}
     </span>
-    <i class="text-warning"
-       [ngClass]="[icons.spinner, icons.spin]">
-    </i>
+    <svg [cdsIcon]="icons.danger"
+         [size]="icons.size16"
+         class="cds-warning-color cds-icon spin"></svg>
   </span>
 </ng-template>
 
 <ng-template #osdSummary>
   <span *ngIf="data.up === data.in">
     {{ data.up }}
-    <i class="text-success"
-       [ngClass]="[icons.success]">
-    </i>
+    <svg [cdsIcon]="icons.success"
+         [size]="icons.size16"
+         class="cds-success-color cds-icon"></svg>
   </span>
   <span *ngIf="data.up !== data.in">
     {{ data.up }}
@@ -151,36 +151,39 @@
 <ng-template #iscsiSummary>
   <span>
     {{ data.up }}
-    <i class="text-success"
-       *ngIf="data.up || data.up === 0"
-       [ngClass]="[icons.success]">
-    </i>
+    <svg  [cdsIcon]="icons.success"
+          *ngIf="data.up || data.up === 0"
+          [size]="icons.size16"
+          class="cds-success-color cds-icon"></svg>
   </span>
   <span *ngIf="data.down"
         class="ms-2">
         {{ data.down }}
-    <i class="text-danger"
-       [ngClass]="[icons.danger]">
-    </i>
+    <svg [cdsIcon]="icons.danger"
+         [size]="icons.size16"
+         class="cds-danger-color cds-icon"></svg>
   </span>
 </ng-template>
 
 <ng-template #simplifiedSummary>
   <span *ngIf="!dropdownTotalError else showErrorNum">
     {{ data }}
-    <i class="text-success"
-       [ngClass]="[icons.success]"></i>
+    <svg [cdsIcon]="icons.success"
+         [size]="icons.size16"
+         class="cds-success-color cds-icon"></svg>
   </span>
   <ng-template #showErrorNum>
     <span *ngIf="data - dropdownTotalError  > 0">
       {{ data - dropdownTotalError  }}
-    <i class="text-success"
-       [ngClass]="[icons.success]"></i>
+      <svg [cdsIcon]="icons.success"
+           [size]="icons.size16"
+           class="cds-success-color cds-icon"></svg>
     </span>
     <span>
       {{ dropdownTotalError  }}
-      <i class="text-danger"
-         [ngClass]="[icons.danger]"></i>
+      <svg [cdsIcon]="icons.danger"
+           [size]="icons.size16"
+           class="cds-danger-color cds-icon"></svg>
     </span>
   </ng-template>
 </ng-template>
@@ -211,17 +214,17 @@
         </div>
         <span [ngClass]="data.value.error ? 'me-2' : 'me-4'">
           {{ data.value.ok }}
-          <i class="text-success"
-             *ngIf="data.value.ok"
-             [ngClass]="[icons.success]">
-          </i>
+          <svg  [cdsIcon]="icons.success"
+                *ngIf="data.value.ok"
+                [size]="icons.size16"
+                class="cds-success-color cds-icon"></svg>
         </span>
         <span *ngIf="data.value.error"
               class="me-4 ms-2">
               {{ data.value.error }}
-          <i class="text-danger"
-             [ngClass]="[icons.danger]">
-          </i>
+          <svg [cdsIcon]="icons.danger"
+               [size]="icons.size16"
+               class="cds-danger-color cds-icon"></svg>
         </span>
       </div>
     </li>

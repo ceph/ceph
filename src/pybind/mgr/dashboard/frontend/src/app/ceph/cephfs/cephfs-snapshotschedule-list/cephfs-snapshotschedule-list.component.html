@@ -20,21 +20,18 @@
     {{ row.pathForSelection?.split?.("@")?.[0] | path }}
   </span>
 
-  <span
-  *ngIf="row.active; else inactiveStatusTpl">
-    <i
-      [ngClass]="[icons.success, icons.large]"
-      ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} is active"
-      class="text-success"
-    ></i>
+  <span *ngIf="row.active; else inactiveStatusTpl">
+    <svg [cdsIcon]="icons.success"
+         [size]="icons.size16"
+         class="cds-success-color"
+         title="{{ row.pathForSelection?.split?.('@')?.[0] }} is active"></svg>
   </span>
 
   <ng-template #inactiveStatusTpl>
-    <i
-      [ngClass]="[icons.warning, icons.large]"
-      class="text-warning"
-      ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} has been deactivated"
-    ></i>
+    <svg [cdsIcon]="icons.warning"
+         [size]="icons.size16"
+         class="cds-warning-color"
+         title="{{ row.pathForSelection?.split?.('@')?.[0] }} has been deactivated"></svg>
   </ng-template>
 
   <ng-template #fullpathForSelectionTpl>

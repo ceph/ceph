@@ -14,7 +14,8 @@ import { DashboardPieComponent } from './dashboard-pie/dashboard-pie.component';
 import { DashboardTimeSelectorComponent } from './dashboard-time-selector/dashboard-time-selector.component';
 import { DashboardV3Component } from './dashboard/dashboard-v3.component';
 import { PgSummaryPipe } from './pg-summary.pipe';
-import { ToggletipModule } from 'carbon-components-angular';
+import { ToggletipModule, IconModule, IconService } from 'carbon-components-angular';
+import dangerIcon from '@carbon/icons/es/warning--alt--filled/24';
 
 @NgModule({
   imports: [
@@ -28,7 +29,8 @@ import { ToggletipModule } from 'carbon-components-angular';
     ReactiveFormsModule,
     SimplebarAngularModule,
     BaseChartDirective,
-    ToggletipModule
+    ToggletipModule,
+    IconModule
   ],
   declarations: [
     DashboardV3Component,
@@ -45,4 +47,8 @@ import { ToggletipModule } from 'carbon-components-angular';
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
-export class DashboardV3Module {}
+export class DashboardV3Module {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([dangerIcon]);
+  }
+}
