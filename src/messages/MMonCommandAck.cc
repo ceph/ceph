@@ -19,6 +19,8 @@
 
 #include "common/cmdparse.h" // for cmdmap_from_json()
 #include "include/container_ios.h"
+#include "include/encoding_vector.h"
+#include "include/encoding_string.h"
 
 using ceph::common::cmdmap_from_json;
 using ceph::common::cmd_getval;

@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 #include "include/ceph_features.h"
-
+#include "include/encoding_vector.h"
 
 class MClientReconnect final : public SafeMessage {
 private:
