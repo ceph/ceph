@@ -601,34 +601,37 @@ private:
             migration_vector.push_back(bl);
           }
 
-          cls_2pc_reservation::id_t reservation_id;
-          buffer::list obl;
-          int rval;
-          cls_2pc_queue_reserve(op, size_to_migrate, migration_vector.size(), &obl, &rval);
-          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield, librados::OPERATION_RETURNVEC);
-          if (ret < 0) {
-            ldpp_dout(this, 1) << "ERROR: failed to reserve migration space on queue: " << queue_name << ". error: " << ret << dendl;
-            return;
-          }
-          ret = cls_2pc_queue_reserve_result(obl, reservation_id);
-          if (ret < 0) {
-            ldpp_dout(this, 1) << "ERROR: failed to parse reservation id for migration. error: " << ret << dendl;
-            return;
-          }
+          // FIX ME: What is Migration?
+          // Redis TODO: implement migration with redisqueue API
+          // cls_2pc_reservation::id_t reservation_id;
+          // buffer::list obl;
+          // int rval;
+          // cls_2pc_queue_reserve(op, size_to_migrate, migration_vector.size(), &obl, &rval);
+          // ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield, librados::OPERATION_RETURNVEC);
+          // if (ret < 0) {
+          //   ldpp_dout(this, 1) << "ERROR: failed to reserve migration space on queue: " << queue_name << ". error: " << ret << dendl;
+          //   return;
+          // }
+          // ret = cls_2pc_queue_reserve_result(obl, reservation_id);
+          // if (ret < 0) {
+          //   ldpp_dout(this, 1) << "ERROR: failed to parse reservation id for migration. error: " << ret << dendl;
+          //   return;
+          // }
 
-          cls_2pc_queue_commit(op, migration_vector, reservation_id);
-          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
-          reservation_id = cls_2pc_reservation::NO_ID;
-          if (ret < 0) {
-            ldpp_dout(this, 1) << "ERROR: failed to commit reservation to queue: " << queue_name << ". error: " << ret << dendl;
-          }
+          // cls_2pc_queue_commit(op, migration_vector, reservation_id);
+          // ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
+          // reservation_id = cls_2pc_reservation::NO_ID;
+          // if (ret < 0) {
+          //   ldpp_dout(this, 1) << "ERROR: failed to commit reservation to queue: " << queue_name << ". error: " << ret << dendl;
+          // }
         }
       }
 
       // updating perfcounters with topic stats
-      uint64_t entries_size;
-      uint32_t entries_number;
-      const auto ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, entries_number, entries_size);
+      std::tuple<uint64_t, uint32_t> stats;
+      const auto ret = rgw::redisqueue::queue_stats(conn, queue_name, stats, yield);
+      uint64_t entries_size = std::get<0>(stats);
+      uint32_t entries_number = std::get<1>(stats);
       if (ret < 0) {
         ldpp_dout(this, 1) << "ERROR: topic stats for topic: " << queue_name << ". error: " << ret << dendl;
       } else {

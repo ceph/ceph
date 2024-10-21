@@ -406,6 +406,48 @@ TEST_F(RGWRedisQueueTest, CleanupStaleReservations) {
   io.run();
 }
 
+TEST_F(RGWRedisQueueTest, QueueStats) {
+  io.restart();
+  boost::asio::spawn(
+      io,
+      [this](boost::asio::yield_context yield) {
+        int res;
+        std::tuple<uint64_t, uint32_t> stats;
+
+        res = rgw::redisqueue::queue_stats(conn, "test_queue", stats, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(stats), 0);
+        ASSERT_EQ(std::get<1>(stats), 0);
+
+        int jitter = rand() % 20;
+        for (int i = 0; i < jitter; i++) {
+          res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+          ASSERT_EQ(res, 0);
+        }
+
+        res = rgw::redisqueue::queue_stats(conn, "test_queue", stats, yield);
+        ASSERT_EQ(res, 0);
+
+        ASSERT_LE(std::get<0>(stats), 320 * jitter);
+        ASSERT_EQ(std::get<1>(stats), jitter);
+
+        for (int i = 0; i < jitter; i++) {
+          res = rgw::redisqueue::abort(conn, "test_queue", yield);
+          ASSERT_EQ(res, 0);
+        }
+
+        res = rgw::redisqueue::queue_stats(conn, "test_queue", stats, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(stats), 0);
+        ASSERT_EQ(std::get<1>(stats), 0);
+      },
+      [this](std::exception_ptr eptr) {
+        conn->cancel();
+        if (eptr) std::rethrow_exception(eptr);
+      });
+  io.run();
+}
+
 TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
   io.restart();
   boost::asio::spawn(
@@ -478,9 +520,6 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         int committed_queue_len = std::get<1>(status);
         while (committed_queue_len > 0) {
           read_res_remaining.clear();
-
-          std::cout << "Remaining queue length: " << committed_queue_len
-                    << std::endl;
 
           int expected_data_size = std::min(batch_size, committed_queue_len);
           std::vector<std::string> data_list_remaining(expected_data_size,

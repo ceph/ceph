@@ -13,6 +13,8 @@ using boost::redis::connection;
 int queue_status(connection* conn, const std::string& name,
                  std::tuple<int, int>& res, optional_yield y);
 
+int queue_stats(connection* conn, const std::string& name, std::tuple<uint64_t, uint32_t>& res, optional_yield y);
+
 int reserve(connection* conn, const std::string name, optional_yield y);
 
 int commit(connection* conn, const std::string& name, const std::string& data,

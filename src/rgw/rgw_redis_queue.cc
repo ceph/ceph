@@ -31,6 +31,38 @@ int queue_status(connection* conn, const std::string& name,
   }
 }
 
+int queue_stats(connection* conn, const std::string& name,
+                std::tuple<uint64_t, uint32_t>& res, optional_yield y) {
+  boost::redis::request req;
+  boost::redis::response<std::optional<uint64_t>, uint32_t> resp;
+  boost::system::error_code ec;
+
+  try {
+    req.push("MEMORY", "USAGE", "reserve:" + name);
+    req.push("LLEN", "reserve:" + name);
+
+    rgw::redis::redis_exec(conn, ec, req, resp, y);
+    if (ec) {
+      std::cerr << "RGW Redis Queue:: " << __func__
+                << "(): ERROR: " << ec.message() << std::endl;
+      return -ec.value();
+    }
+    uint64_t reserveSize;
+    try {
+      reserveSize = std::get<0>(resp).value().value();
+    } catch (const std::bad_optional_access& e) {
+      // Empty queue
+      reserveSize = 0;
+    }
+    res = std::make_tuple(reserveSize, std::get<1>(resp).value());
+    return 0;
+  } catch (const std::exception& e) {
+    std::cerr << "RGW Redis Queue:: " << __func__
+              << "(): Exception: " << e.what() << std::endl;
+    return -EINVAL;
+  }
+}
+
 int reserve(connection* conn, const std::string name, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
