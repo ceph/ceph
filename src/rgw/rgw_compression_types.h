@@ -21,6 +21,9 @@
 #include <vector>
 
 #include "include/encoding.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 
 namespace ceph { class Formatter; }
 

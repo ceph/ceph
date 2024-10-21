@@ -22,6 +22,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "MonCap.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 #include "include/ipaddr.h"
 #include "common/debug.h"

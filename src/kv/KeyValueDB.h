@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 
+#include "include/encoding_string.h"
 #include "common/PriorityCache.h"
 
 class PerfCounters;
