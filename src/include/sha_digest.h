@@ -27,6 +27,8 @@
 
 #include "common/Formatter.h"
 #include "include/encoding.h"
+#include "include/encoding_array.h"
+#include "include/encoding_string.h"
 
 template <uint8_t S>
 struct sha_digest_t {
