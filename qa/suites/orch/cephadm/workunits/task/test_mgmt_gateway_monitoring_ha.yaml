@@ -1,0 +1,122 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.c:
+      - |
+        set -ex
+        # Deploy monitoring stack
+        ceph orch apply node-exporter
+        ceph orch apply grafana 2
+        ceph orch apply alertmanager 2
+        ceph orch apply prometheus 2
+        sleep 240
+        # generate SSL certificate
+        openssl req -x509 -newkey rsa:4096 -keyout /tmp/key.pem -out /tmp/cert.pem -sha256 -days 30 -nodes -subj "/CN=*"
+        # Generate a mgmt.spec template
+        cat << EOT > /tmp/mgmt.spec
+        service_type: mgmt-gateway
+        service_id: foo
+        placement:
+          hosts:
+            - ${HOSTNAME}
+        spec:
+          ssl_protocols:
+            - TLSv1.2
+            - TLSv1.3
+          ssl_ciphers:
+            - AES128-SHA
+            - AES256-SHA
+          enable_health_check_endpoint: True
+        EOT
+        # Add generated certificates to spec file
+        echo "  ssl_certificate: |" >> /tmp/mgmt.spec
+        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/cert.pem >> /tmp/mgmt.spec
+        echo "  ssl_certificate_key: |" >> /tmp/mgmt.spec
+        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/key.pem >> /tmp/mgmt.spec
+        # Apply spec
+        ceph orch apply -i /tmp/mgmt.spec
+- cephadm.wait_for_service:
+    service: mgmt-gateway
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        ##### Auxiliary Functions #####
+        get_daemons() { ceph orch ps --daemon-type "$1" -f json | jq -r '.[] | .daemon_name'; }
+        stop_daemon() { ceph orch daemon stop "$1"; }
+        start_daemon() { ceph orch daemon start "$1"; }
+
+        check_monitoring_daemons() {
+          # Check Prometheus, Grafana, and Alertmanager endpoints are responsive and database health is okay
+          curl -ks "https://${MGMT_GTW_IP}/grafana/api/health" | jq -e '.database == "ok"' || { echo "Grafana health check failed"; exit 1; }
+          curl -ksu admin:admin "https://${MGMT_GTW_IP}/prometheus/api/v1/status/config" | jq -e '.status == "success"' || { echo "Prometheus health check failed"; exit 1; }
+          curl -ksu admin:admin "https://${MGMT_GTW_IP}/alertmanager/api/v2/status" | jq -e '.cluster.status == "ready"' || { echo "Alertmanager health check failed"; exit 1; }
+        }
+
+        manage_daemons() {
+          local action="$1"
+          local suffix="$2"
+          local status="$3"
+
+          local daemons=("PROMETHEUS_DAEMON_${suffix}" "ALERTMGR_DAEMON_${suffix}" "GRAFANA_DAEMON_${suffix}")
+
+          for daemon in "${daemons[@]}"; do
+            "${action}_daemon" "${!daemon}"
+          done
+
+          sleep 30
+
+          for daemon in "${daemons[@]}"; do
+            ceph orch ps | grep -w "${!daemon}" | grep "$status" || { echo "Daemon ${!daemon} did not reach expected status: $status"; exit 1; }
+          done
+        }
+
+        # Wait for background services to be reconfigured following mgmt-gateway installation
+        sleep 180
+
+        PROMETHEUS_DAEMON_1=$(get_daemons prometheus | head -1)
+        PROMETHEUS_DAEMON_2=$(get_daemons prometheus | tail -1)
+        ALERTMGR_DAEMON_1=$(get_daemons alertmanager | head -1)
+        ALERTMGR_DAEMON_2=$(get_daemons alertmanager | tail -1)
+        GRAFANA_DAEMON_1=$(get_daemons grafana | head -1)
+        GRAFANA_DAEMON_2=$(get_daemons grafana | tail -1)
+
+        # Retrieve management hostname and IP
+        MGMT_GTW_HOST=$(ceph orch ps --daemon-type mgmt-gateway -f json | jq -r '.[0].hostname')
+        MGMT_GTW_IP=$(ceph orch host ls -f json | jq -r --arg MGMT_GTW_HOST "$MGMT_GTW_HOST" '.[] | select(.hostname == $MGMT_GTW_HOST) | .addr')
+
+        echo "Ensure daemons are responsive before continuing with testing"
+        check_monitoring_daemons
+
+        # Stop the first set of daemons (Grafana, Prometheus, Alertmanager)
+        manage_daemons "stop" "1" "stopped"
+
+        echo "Ensure second set of daemons is still responsive (HA is working)"
+        check_monitoring_daemons
+
+        # Stop the second set of daemons and start the first set again
+        manage_daemons "stop" "2" "stopped"
+        manage_daemons "start" "1" "running"
+
+        echo "Ensure failover works correctly (mgmt-gateway is routing requests to up & running daemons)"
+        check_monitoring_daemons
