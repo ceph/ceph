@@ -19,6 +19,7 @@
 
 #include "common/ceph_context.h"
 #include "common/debug.h"
+#include "include/encoding_vector.h"
 #include "global/global_context.h"
 #include "osd/osd_types_fmt.h"
 #include "SnapMapReaderI.h"

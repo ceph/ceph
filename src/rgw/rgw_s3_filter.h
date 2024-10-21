@@ -7,6 +7,7 @@
 #include <boost/container/flat_map.hpp>
 
 #include "include/types.h"
+#include "include/encoding_flat_map.h"
 
 class XMLObj;
 
