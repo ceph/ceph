@@ -4504,24 +4504,24 @@ void PrimaryLogPG::do_scan(
 	info.last_update,
 	handle);
       MOSDPGScan *reply = new MOSDPGScan(
-	MOSDPGScan::OP_SCAN_DIGEST,
+	MOSDPGScan::OP_SCAN_DIGEST_REPLY,
 	pg_whoami,
 	get_osdmap_epoch(), m->query_epoch,
-	spg_t(info.pgid.pgid, get_primary().shard), bi.begin, bi.end);
+	spg_t(info.pgid.pgid, get_primary().shard),bi.begin, bi.end,
+	bi.version);
       encode(bi.objects, reply->get_data());
       osd->send_message_osd_cluster(reply, m->get_connection());
     }
     break;
 
-  case MOSDPGScan::OP_SCAN_DIGEST:
+  case MOSDPGScan::OP_SCAN_DIGEST_REPLY:
     {
       pg_shard_t from = m->from;
 
       // Check that from is in backfill_targets vector
       ceph_assert(is_backfill_target(from));
       BackfillInterval bi(m->begin, m->end);
-      //XXX: See following commits to explain the empty version
-      bi.populate(m->get_data(), eversion_t());
+      bi.populate(m->get_data(), m->version);
       ceph_assert(peer_backfill_info.contains(from));
       peer_backfill_info.at(from) = bi;
 
@@ -13970,7 +13970,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	MOSDPGScan *m = new MOSDPGScan(
 	  MOSDPGScan::OP_SCAN_GET_DIGEST, pg_whoami, e, get_last_peering_reset(),
 	  spg_t(info.pgid.pgid, bt.shard),
-	  pbi.end, hobject_t());
+	  pbi.end, hobject_t(), eversion_t());
 
 	if (cct->_conf->osd_op_queue == "mclock_scheduler") {
 	  /* This guard preserves legacy WeightedPriorityQueue behavior for

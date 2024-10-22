@@ -19,18 +19,18 @@
 
 class MOSDPGScan final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 2;
 
 public:
   enum {
     OP_SCAN_GET_DIGEST = 1,      // just objects and versions
-    OP_SCAN_DIGEST = 2,          // result
+    OP_SCAN_DIGEST_REPLY = 2,    // populated BackfillInterval reply
   };
   const char *get_op_name(int o) const {
     switch (o) {
     case OP_SCAN_GET_DIGEST: return "get_digest";
-    case OP_SCAN_DIGEST: return "digest";
+    case OP_SCAN_DIGEST_REPLY: return "digest";
     default: return "???";
     }
   }
@@ -40,6 +40,7 @@ public:
   pg_shard_t from;
   spg_t pgid;
   hobject_t begin, end;
+  eversion_t version;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -60,6 +61,10 @@ public:
     decode(pgid.pgid, p);
     decode(begin, p);
     decode(end, p);
+    if (header.version >= 3) {
+      decode(version, p);
+    }
+
 
     // handle hobject_t format upgrade
     if (!begin.is_max() && begin.pool == -1)
@@ -82,18 +87,20 @@ public:
     encode(end, payload);
     encode(from, payload);
     encode(pgid.shard, payload);
+    encode(version, payload);
   }
 
   MOSDPGScan()
     : MOSDFastDispatchOp{MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION} {}
   MOSDPGScan(__u32 o, pg_shard_t from,
-	     epoch_t e, epoch_t qe, spg_t p, hobject_t be, hobject_t en)
+	     epoch_t e, epoch_t qe, spg_t p, hobject_t be, hobject_t en,
+	     eversion_t _version)
     : MOSDFastDispatchOp{MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION},
       op(o),
       map_epoch(e), query_epoch(qe),
       from(from),
       pgid(p),
-      begin(be), end(en) {
+      begin(be), end(en), version(_version) {
   }
 private:
   ~MOSDPGScan() final {}
@@ -105,6 +112,7 @@ public:
 	<< " " << pgid
 	<< " " << begin << "-" << end
 	<< " e " << map_epoch << "/" << query_epoch
+	<< " v " << version
 	<< ")";
   }
 private:

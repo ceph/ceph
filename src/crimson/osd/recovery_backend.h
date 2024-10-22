@@ -283,7 +283,7 @@ private:
   interruptible_future<> handle_scan_get_digest(
     MOSDPGScan& m,
     crimson::net::ConnectionXcoreRef conn);
-  interruptible_future<> handle_scan_digest(
+  interruptible_future<> handle_scan_digest_reply(
     MOSDPGScan& m);
   interruptible_future<> handle_scan(
     MOSDPGScan& m,

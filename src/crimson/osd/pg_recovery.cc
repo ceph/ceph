@@ -503,7 +503,8 @@ void PGRecovery::request_replica_scan(
     pg->get_last_peering_reset(),
     spg_t(pg->get_pgid().pgid, target.shard),
     begin,
-    end);
+    end,
+    eversion_t());
   std::ignore = pg->get_shard_services().send_to_osd(
     target.osd,
     std::move(msg),

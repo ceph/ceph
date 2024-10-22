@@ -297,20 +297,21 @@ RecoveryBackend::handle_scan_get_digest(
     [this, query_epoch=m.query_epoch, conn
     ](auto backfill_interval) {
       auto reply = crimson::make_message<MOSDPGScan>(
-	MOSDPGScan::OP_SCAN_DIGEST,
+	MOSDPGScan::OP_SCAN_DIGEST_REPLY,
 	pg.get_pg_whoami(),
 	pg.get_osdmap_epoch(),
 	query_epoch,
 	spg_t(pg.get_info().pgid.pgid, pg.get_primary().shard),
 	backfill_interval.begin,
-	backfill_interval.end);
+	backfill_interval.end,
+	backfill_interval.version);
       encode(backfill_interval.objects, reply->get_data());
       return conn->send(std::move(reply));
     });
 }
 
 RecoveryBackend::interruptible_future<>
-RecoveryBackend::handle_scan_digest(
+RecoveryBackend::handle_scan_digest_reply(
   MOSDPGScan& m)
 {
   logger().debug("{}", __func__);
@@ -318,8 +319,7 @@ RecoveryBackend::handle_scan_digest(
   ceph_assert(pg.is_backfill_target(m.from));
 
   BackfillInterval bi(m.begin, m.end);
-  //XXX: See following commits to explain the empty version
-  bi.populate(m.get_data(), eversion_t());
+  bi.populate(m.get_data(), m.version);
 
   shard_services.start_operation<crimson::osd::BackfillRecovery>(
     static_cast<crimson::osd::PG*>(&pg),
@@ -342,8 +342,8 @@ RecoveryBackend::handle_scan(
   switch (m.op) {
     case MOSDPGScan::OP_SCAN_GET_DIGEST:
       return handle_scan_get_digest(m, conn);
-    case MOSDPGScan::OP_SCAN_DIGEST:
-      return handle_scan_digest(m);
+    case MOSDPGScan::OP_SCAN_DIGEST_REPLY:
+      return handle_scan_digest_reply(m);
     default:
       // FIXME: move to errorator
       ceph_assert("unknown op type for pg scan");
