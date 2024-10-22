@@ -101,7 +101,7 @@ public:
 
   void prune_snapshot(uint64_t snap_id) {
     std::unique_lock locker(m_lock);
-    m_prune_snap_ids.insert(snap_id);
+    m_prune_snap_ids_by_gr.insert(snap_id);
   }
 
 private:
@@ -266,6 +266,7 @@ private:
 
   uint32_t m_pending_snapshots = 0;
   std::set<uint64_t> m_prune_snap_ids;
+  std::set<uint64_t> m_prune_snap_ids_by_gr; // added by group replayer
 
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
@@ -318,7 +319,8 @@ private:
   void update_non_primary_snapshot(bool complete);
   void handle_update_non_primary_snapshot(bool complete, int r);
 
-  void notify_group_snap_image_complete();
+  void update_image_snapshot();
+  void handle_update_image_snapshot(int r, uint64_t local_snap_id);
 
   void notify_image_update();
   void handle_notify_image_update(int r);
