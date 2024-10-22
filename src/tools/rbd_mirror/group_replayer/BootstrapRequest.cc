@@ -20,7 +20,7 @@
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::group_replayer::" \
-                           << "BootstrapRequest: " << " " \
+                           << "BootstrapRequest: " << this << " " \
                            << __func__ << ": "
 
 namespace rbd {
@@ -115,18 +115,21 @@ void BootstrapRequest<I>::send() {
   *m_resync_requested = false;
 
   std::string group_id;
-  std::string group_header_oid = librbd::util::group_header_name(
-      *m_local_group_id);
-  int r = librbd::cls_client::mirror_group_resync_get(&m_local_io_ctx,
-                                                      group_header_oid,
-                                                      m_global_group_id,
-                                                      m_local_group_ctx->name,
-                                                      &group_id);
-  if (r < 0) {
-    derr << "getting mirror group resync for global_group_id="
-         << m_global_group_id << " failed: " << cpp_strerror(r) << dendl;
-  } else if (r == 0 && group_id == *m_local_group_id) {
-    *m_resync_requested = true;
+
+  if (m_local_group_id && !m_local_group_id->empty()) {
+    std::string group_header_oid = librbd::util::group_header_name(
+        *m_local_group_id);
+    int r = librbd::cls_client::mirror_group_resync_get(&m_local_io_ctx,
+        group_header_oid,
+        m_global_group_id,
+        m_local_group_ctx->name,
+        &group_id);
+    if (r < 0) {
+      derr << "getting mirror group resync for global_group_id="
+        << m_global_group_id << " failed: " << cpp_strerror(r) << dendl;
+    } else if (r == 0 && group_id == *m_local_group_id) {
+      *m_resync_requested = true;
+    }
   }
 
   if (*m_resync_requested) {
@@ -423,8 +426,8 @@ template <typename I>
 void BootstrapRequest<I>::get_remote_mirror_image() {
   while (!m_images.empty() &&
          m_images.front().state != cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED) {
-    dout(20) << "skip " << m_images.front().spec.pool_id << " "
-             << m_images.front().spec.image_id << dendl;
+    dout(20) << "skipping pool_id= " <<  m_images.front().spec.pool_id
+             << ", image_id=" << m_images.front().spec.image_id << dendl;
     m_images.pop_front();
   }
 
@@ -435,7 +438,8 @@ void BootstrapRequest<I>::get_remote_mirror_image() {
 
   auto &spec = m_images.front().spec;
 
-  dout(10) << spec.pool_id << " " << spec.image_id << dendl;
+  dout(10) << "pool_id=" << spec.pool_id
+           << ", image_id=" << spec.image_id << dendl;
 
   if (!m_pool_meta_cache->remote_pool_meta_exists(spec.pool_id)) {
     derr << "failed to find remote image pool in meta cache" << dendl;
@@ -595,7 +599,7 @@ void BootstrapRequest<I>::handle_get_local_group_name(int r) {
     // should never happen
     derr << "local group name '" << local_group_name << "' does not match "
          << "remote group name '" << m_group_name << "'" << dendl;
-    finish(-EEXIST); // split-brain
+    finish(-EINVAL);
     return;
   }
 
@@ -761,17 +765,21 @@ void BootstrapRequest<I>::handle_list_local_group_snapshots(int r) {
     if (m_remote_mirror_group_primary) {
       if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
           m_local_mirror_group_primary) {
-        derr << "both remote and local groups are primary" << dendl;
+        derr << "both remote and local groups are primary, global group id: "
+             << m_global_group_id << dendl;
       }
     } else if (m_local_mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLED ||
                !m_local_mirror_group_primary) {
-      derr << "both remote and local groups are not primary" << dendl;
+      derr << "both remote and local groups are not primary, global group id: "
+           << m_global_group_id << dendl;
       finish(-EREMOTEIO);
       return;
     }
   } else if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
              !m_local_mirror_group_primary) {
     // trigger group removal
+    derr << "local group is enabled and is not primary, global group id: "
+         << m_global_group_id << dendl;
     m_local_mirror_group.state = cls::rbd::MIRROR_GROUP_STATE_DISABLED;
   }
 
