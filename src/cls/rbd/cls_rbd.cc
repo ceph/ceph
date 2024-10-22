@@ -8766,9 +8766,9 @@ int group_snap_set(cls_method_context_t hctx,
     r = cls_cxx_map_get_val(hctx, key, &snap_bl);
     if (r < 0 && r != -ENOENT) {
       return r;
-    } else if (r >= 0) {
+    } else if (r >= 0 && r != -EEXIST)  {
       CLS_ERR("snap key already exists : %s", key.c_str());
-      return -EEXIST;
+      return r;
     }
 
     std::string order_key = group::snap_order_key(group_snap.id);

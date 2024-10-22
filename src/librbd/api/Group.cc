@@ -468,8 +468,8 @@ int Group<I>::get_id(IoCtx& io_ctx, const char *group_name,
   int r = cls_client::dir_get_id(&io_ctx, RBD_GROUP_DIRECTORY, group_name,
                                  group_id);
   if (r < 0) {
-    lderr(cct) << "error reading group id object: "
-	       << cpp_strerror(r) << dendl;
+    ldout(cct, 20) << "error reading group id object: "
+                   << cpp_strerror(r) << dendl;
     return r;
   }
 

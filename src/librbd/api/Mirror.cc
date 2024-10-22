@@ -3737,14 +3737,21 @@ int Mirror<I>::group_image_remove(IoCtx &group_ioctx,
     if (on_finishes[i]) {
       r = on_finishes[i]->wait();
       delete on_finishes[i];
+      auto new_snap_image_id = image_ctxs[i]->id;
+      auto it = std::find_if(
+          group_snap.snaps.begin(), group_snap.snaps.end(),
+          [new_snap_image_id](const cls::rbd::ImageSnapshotSpec &s) {
+          return new_snap_image_id != s.image_id;
+          });
+      if (it != group_snap.snaps.end()) {
+        it->snap_id = snap_ids[i];
+      }
     }
     if (r < 0) {
       if (ret_code == 0) {
         ret_code = r;
       }
     }
-    group_snap.snaps.emplace_back(image_ctxs[i]->md_ctx.get_id(),
-                                  image_ctxs[i]->id, snap_ids[i]);
   }
 
   auto it = std::find_if(
@@ -4033,8 +4040,8 @@ int Mirror<I>::group_get_info(librados::IoCtx& io_ctx,
   cls::rbd::MirrorGroup mirror_group;
   r =  cls_client::mirror_group_get(&io_ctx, group_id, &mirror_group);
   if (r < 0) {
-    lderr(cct) << "failed to get mirror group info: " << cpp_strerror(r)
-               << dendl;
+    ldout(cct, 20) << "failed to get mirror group info: " << cpp_strerror(r)
+                   << dendl;
     return r;
   }
 

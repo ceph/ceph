@@ -208,15 +208,6 @@ struct ImageReplayer<I>::ReplayerListener
   void handle_notification() override {
     image_replayer->handle_replayer_notification();
   }
-
-  void notify_group_snap_image_complete(
-      int64_t local_pool_id,
-      const std::string &local_image_id,
-      const std::string &remote_group_snap_id,
-      uint64_t local_snap_id) override {
-    local_group_ctx->listener->notify_group_snap_image_complete(local_pool_id,
-        local_image_id, remote_group_snap_id, local_snap_id);
-  }
 };
 
 template <typename I>
