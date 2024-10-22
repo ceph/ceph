@@ -63,6 +63,9 @@ struct BackfillInterval {
     return populated;
   }
 
+  /// update interval based on pg log entries
+  void update(const pg_log_entry_t &e);
+
   /// true if there are no objects in this interval
   bool empty() const {
     return objects.empty();
