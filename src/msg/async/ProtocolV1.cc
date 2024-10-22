@@ -90,9 +90,8 @@ void ProtocolV1::connect() {
 
   // reset connect state variables
   authorizer_buf.clear();
-  // FIPS zeroization audit 20191115: these memsets are not security related.
-  memset(&connect_msg, 0, sizeof(connect_msg));
-  memset(&connect_reply, 0, sizeof(connect_reply));
+  connect_msg = {};
+  connect_reply = {};
 
   global_seq = messenger->get_global_seq();
 }
@@ -820,7 +819,7 @@ CtPtr ProtocolV1::read_message_data_prepare() {
 #if 0
     // rx_buffers is broken by design... see
     //  http://tracker.ceph.com/issues/22480
-    map<ceph_tid_t, pair<ceph::buffer::list, int> >::iterator p =
+    const auto p =
         connection->rx_buffers.find(current_header.tid);
     if (p != connection->rx_buffers.end()) {
       ldout(cct, 10) << __func__ << " seleting rx buffer v " << p->second.second
@@ -1205,7 +1204,7 @@ void ProtocolV1::requeue_sent() {
     return;
   }
 
-  list<out_q_entry_t> &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  auto &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
   out_seq -= sent.size();
   while (!sent.empty()) {
     Message *m = sent.back();
@@ -1220,10 +1219,11 @@ void ProtocolV1::requeue_sent() {
 uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
   ldout(cct, 10) << __func__ << " " << seq << dendl;
   std::lock_guard<std::mutex> l(connection->write_lock);
-  if (out_q.count(CEPH_MSG_PRIO_HIGHEST) == 0) {
+  const auto it = out_q.find(CEPH_MSG_PRIO_HIGHEST);
+  if (it == out_q.end()) {
     return seq;
   }
-  list<out_q_entry_t> &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  auto &rq = it->second;
   uint64_t count = out_seq;
   while (!rq.empty()) {
     Message* const m = rq.front().m;
@@ -1235,7 +1235,7 @@ uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
     rq.pop_front();
     count++;
   }
-  if (rq.empty()) out_q.erase(CEPH_MSG_PRIO_HIGHEST);
+  if (rq.empty()) out_q.erase(it);
   return count;
 }
 
@@ -1246,18 +1246,16 @@ uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
 void ProtocolV1::discard_out_queue() {
   ldout(cct, 10) << __func__ << " started" << dendl;
 
-  for (list<Message *>::iterator p = sent.begin(); p != sent.end(); ++p) {
-    ldout(cct, 20) << __func__ << " discard " << *p << dendl;
-    (*p)->put();
+  for (Message *msg : sent) {
+    ldout(cct, 20) << __func__ << " discard " << msg << dendl;
+    msg->put();
   }
   sent.clear();
-  for (map<int, list<out_q_entry_t>>::iterator p =
-           out_q.begin();
-       p != out_q.end(); ++p) {
-    for (list<out_q_entry_t>::iterator r = p->second.begin();
-         r != p->second.end(); ++r) {
-      ldout(cct, 20) << __func__ << " discard " << r->m << dendl;
-      r->m->put();
+  for (auto& [ prio, entries ] : out_q) {
+    static_cast<void>(prio);
+    for (auto& entry : entries) {
+      ldout(cct, 20) << __func__ << " discard " << entry.m << dendl;
+      entry.m->put();
     }
   }
   out_q.clear();
@@ -1296,7 +1294,7 @@ void ProtocolV1::reset_recv_state()
 
   // clean read and write callbacks
   connection->pendingReadLen.reset();
-  connection->writeCallback.reset();
+  connection->writeCallback = {};
 
   if (state > THROTTLE_MESSAGE && state <= READ_FOOTER_AND_DISPATCH &&
       connection->policy.throttler_messages) {
@@ -1328,14 +1326,12 @@ void ProtocolV1::reset_recv_state()
 
 ProtocolV1::out_q_entry_t ProtocolV1::_get_next_outgoing() {
   out_q_entry_t out_entry;
-  if (!out_q.empty()) {
-    map<int, list<out_q_entry_t>>::reverse_iterator it =
-        out_q.rbegin();
+  if (const auto it = out_q.begin(); it != out_q.end()) {
     ceph_assert(!it->second.empty());
-    list<out_q_entry_t>::iterator p = it->second.begin();
+    const auto p = it->second.begin();
     out_entry = *p;
     it->second.erase(p);
-    if (it->second.empty()) out_q.erase(it->first);
+    if (it->second.empty()) out_q.erase(it);
   }
   return out_entry;
 }
@@ -1572,8 +1568,7 @@ CtPtr ProtocolV1::handle_connect_message_write(int r) {
 CtPtr ProtocolV1::wait_connect_reply() {
   ldout(cct, 20) << __func__ << dendl;
 
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  memset(&connect_reply, 0, sizeof(connect_reply));
+  connect_reply = {};
   return READ(sizeof(connect_reply), handle_connect_reply_1);
 }
 
@@ -1923,8 +1918,7 @@ CtPtr ProtocolV1::handle_client_banner(char *buffer, int r) {
 CtPtr ProtocolV1::wait_connect_message() {
   ldout(cct, 20) << __func__ << dendl;
 
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  memset(&connect_msg, 0, sizeof(connect_msg));
+  connect_msg = {};
   return READ(sizeof(connect_msg), handle_connect_message_1);
 }
 
@@ -1988,8 +1982,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   ceph_msg_connect_reply reply;
   ceph::buffer::list authorizer_reply;
 
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  memset(&reply, 0, sizeof(reply));
+  reply = {};
   reply.protocol_version =
       messenger->get_proto_version(connection->peer_type, false);
 
@@ -2616,8 +2609,7 @@ CtPtr ProtocolV1::server_ready() {
 		 << dendl;
 
   ldout(cct, 20) << __func__ << " accept done" << dendl;
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  memset(&connect_msg, 0, sizeof(connect_msg));
+  connect_msg = {};
 
   if (connection->delay_state) {
     ceph_assert(connection->delay_state->ready());
