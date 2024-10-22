@@ -15,6 +15,9 @@ struct rgw_queue_entry {
   std::string data;
 };
 
+int queue_init(connection* conn, const std::string& name, uint64_t size,
+               optional_yield y);
+
 int redis_queue_parse_result(const std::string& data,
                              std::vector<rgw_queue_entry>& entries,
                              bool* truncated);

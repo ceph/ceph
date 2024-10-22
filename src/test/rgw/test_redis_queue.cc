@@ -37,6 +37,22 @@ class RGWRedisQueueTest : public ::testing::Test {
   }
 };
 
+TEST_F(RGWRedisQueueTest, QueueInit) {
+  io.restart();
+  boost::asio::spawn(
+      io,
+      [this](boost::asio::yield_context yield) {
+        int res;
+        res = rgw::redisqueue::queue_init(conn, "test_queue", 100, yield);
+        ASSERT_EQ(res, 0);
+      },
+      [this](std::exception_ptr eptr) {
+        conn->cancel();
+        if (eptr) std::rethrow_exception(eptr);
+      });
+  io.run();
+}
+
 TEST_F(RGWRedisQueueTest, Reserve) {
   io.restart();
   boost::asio::spawn(

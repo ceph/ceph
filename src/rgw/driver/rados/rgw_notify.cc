@@ -854,25 +854,35 @@ void shutdown() {
 int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx,
                          const std::string& topic_queue, optional_yield y)
 {
-  if (topic_queue == Q_LIST_OBJECT_NAME) {
-    ldpp_dout(dpp, 1) << "ERROR: topic name cannot be: " << Q_LIST_OBJECT_NAME << " (conflict with queue list object name)" << dendl;
-    return -EINVAL;
-  }
-  librados::ObjectWriteOperation op;
-  op.create(true);
-  cls_2pc_queue_init(op, topic_queue, MAX_QUEUE_SIZE);
-  auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, &op, y);
-  if (ret == -EEXIST) {
-    // queue already exists - nothing to do
-    ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_queue << " already exists. nothing to do" << dendl;
-    return 0;
-  }
+
+  // Init is more similar to the below operation of adding the queue name to a hashmap
+  // An empty queue otherwise cannot be created in Redis
+  // In principal this is not required
+  auto io_context = boost::asio::io_context();
+  auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+  int ret = rgw::redisqueue::queue_init(conn, topic_queue, MAX_QUEUE_SIZE, y);
   if (ret < 0) {
-    // failed to create queue
     ldpp_dout(dpp, 1) << "ERROR: failed to create queue for topic: " << topic_queue << ". error: " << ret << dendl;
     return ret;
   }
-
+  // if (topic_queue == Q_LIST_OBJECT_NAME) {
+  //   ldpp_dout(dpp, 1) << "ERROR: topic name cannot be: " << Q_LIST_OBJECT_NAME << " (conflict with queue list object name)" << dendl;
+  //   return -EINVAL;
+  // }
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  // cls_2pc_queue_init(op, topic_queue, MAX_QUEUE_SIZE);
+  // auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, &op, y);
+  // if (ret == -EEXIST) {
+  //   // queue already exists - nothing to do
+  //   ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_queue << " already exists. nothing to do" << dendl;
+  //   return 0;
+  // }
+  // if (ret < 0) {
+  //   // failed to create queue
+  //   ldpp_dout(dpp, 1) << "ERROR: failed to create queue for topic: " << topic_queue << ". error: " << ret << dendl;
+  //   return ret;
+  // }
   bufferlist empty_bl;
   std::map<std::string, bufferlist> new_topic{{topic_queue, empty_bl}};
   op.omap_set(new_topic);

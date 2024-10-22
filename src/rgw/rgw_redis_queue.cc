@@ -3,6 +3,32 @@
 namespace rgw {
 namespace redisqueue {
 
+// Add the queue to the hashmap of 2pc_queues
+int queue_init(connection* conn, const std::string& name, uint64_t size,
+               optional_yield y) {
+  boost::redis::request req;
+  boost::redis::response<int> resp;
+  boost::system::error_code ec;
+
+  std::string HASHMAP_NAME = "2pc_queues";
+
+  try {
+    req.push("HSET", HASHMAP_NAME, name, std::to_string(size));
+    rgw::redis::redis_exec(conn, ec, req, resp, y);
+    if (ec) {
+      std::cerr << "RGW Redis Queue:: " << __func__
+                << "(): ERROR: " << ec.message() << std::endl;
+      return -ec.value();
+    }
+    return 0;
+
+  } catch (const std::exception& e) {
+    std::cerr << "RGW Redis Queue:: " << __func__
+              << "(): Exception: " << e.what() << std::endl;
+    return -EINVAL;
+  }
+}
+
 // FIXME: Perhaps return the queue length in calls to reserve, commit, abort
 // etc and do not use this function explicitly?
 int queue_status(connection* conn, const std::string& name,
