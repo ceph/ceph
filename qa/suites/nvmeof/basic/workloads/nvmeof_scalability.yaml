@@ -31,8 +31,11 @@ tasks:
     no_coverage_and_limits: true
     timeout: 30m
     clients:
-      client.0:
+      client.3:
         - nvmeof/scalability_test.sh nvmeof.a,nvmeof.b
         - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c,nvmeof.d
+        - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c
     env:
       SCALING_DELAYS: '50'
+      RBD_POOL: mypool
+      NVMEOF_GROUP: mygroup0
