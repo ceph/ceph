@@ -19,9 +19,7 @@
 #include "include/common_fwd.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
-#include "common/perf_counters.h"
 #include "common/Cond.h"
-
 
 /// Finisher queue length performance counter ID.
 enum {
@@ -37,23 +35,23 @@ enum {
  * contexts to complete is thread-safe.
  */
 class Finisher {
-  CephContext *cct;
+  CephContext *const cct;
   ceph::mutex finisher_lock; ///< Protects access to queues and finisher_running.
   ceph::condition_variable finisher_cond; ///< Signaled when there is something to process.
   ceph::condition_variable finisher_empty_cond; ///< Signaled when the finisher has nothing more to process.
-  bool         finisher_stop; ///< Set when the finisher should stop.
-  bool         finisher_running; ///< True when the finisher is currently executing contexts.
-  bool	       finisher_empty_wait; ///< True mean someone wait finisher empty.
+  bool         finisher_stop = false; ///< Set when the finisher should stop.
+  bool         finisher_running = false; ///< True when the finisher is currently executing contexts.
+  bool	       finisher_empty_wait = false; ///< True mean someone wait finisher empty.
 
   /// Queue for contexts for which complete(0) will be called.
   std::vector<std::pair<Context*,int>> finisher_queue;
   std::vector<std::pair<Context*,int>> in_progress_queue;
 
-  std::string thread_name;
+  const std::string thread_name;
 
   /// Performance counter for the finisher's queue length.
   /// Only active for named finishers.
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
 
   void *finisher_thread_entry();
 
@@ -66,56 +64,34 @@ class Finisher {
  public:
   /// Add a context to complete, optionally specifying a parameter for the complete function.
   void queue(Context *c, int r = 0) {
-    std::unique_lock ul(finisher_lock);
-    bool was_empty = finisher_queue.empty();
-    finisher_queue.push_back(std::make_pair(c, r));
-    if (was_empty) {
-      finisher_cond.notify_one();
+    {
+      const std::lock_guard l{finisher_lock};
+      const bool should_notify = finisher_queue.empty() && !finisher_running;
+      finisher_queue.push_back(std::make_pair(c, r));
+      if (should_notify) {
+	finisher_cond.notify_one();
+      }
     }
+
     if (logger)
       logger->inc(l_finisher_queue_len);
   }
 
-  void queue(std::list<Context*>& ls) {
+  // TODO use C++20 concept checks instead of SFINAE
+  template<typename T>
+  auto queue(T &ls) -> decltype(std::distance(ls.begin(), ls.end()), void()) {
     {
-      std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_all();
-      }
-      for (auto i : ls) {
+      const std::lock_guard l{finisher_lock};
+      const bool should_notify = finisher_queue.empty() && !finisher_running;
+      for (Context *i : ls) {
 	finisher_queue.push_back(std::make_pair(i, 0));
       }
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
+      if (should_notify) {
+	finisher_cond.notify_one();
+      }
     }
-    ls.clear();
-  }
-  void queue(std::deque<Context*>& ls) {
-    {
-      std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_all();
-      }
-      for (auto i : ls) {
-	finisher_queue.push_back(std::make_pair(i, 0));
-      }
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
-    }
-    ls.clear();
-  }
-  void queue(std::vector<Context*>& ls) {
-    {
-      std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_all();
-      }
-      for (auto i : ls) {
-	finisher_queue.push_back(std::make_pair(i, 0));
-      }
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
-    }
+    if (logger)
+      logger->inc(l_finisher_queue_len, ls.size());
     ls.clear();
   }
 
@@ -137,36 +113,17 @@ class Finisher {
 
   bool is_empty();
 
+  std::string_view get_thread_name() const noexcept {
+    return thread_name;
+  }
+
   /// Construct an anonymous Finisher.
   /// Anonymous finishers do not log their queue length.
-  explicit Finisher(CephContext *cct_) :
-    cct(cct_), finisher_lock(ceph::make_mutex("Finisher::finisher_lock")),
-    finisher_stop(false), finisher_running(false), finisher_empty_wait(false),
-    thread_name("fn_anonymous"), logger(0),
-    finisher_thread(this) {}
+  explicit Finisher(CephContext *cct_);
 
   /// Construct a named Finisher that logs its queue length.
-  Finisher(CephContext *cct_, std::string name, std::string tn) :
-    cct(cct_), finisher_lock(ceph::make_mutex("Finisher::" + name)),
-    finisher_stop(false), finisher_running(false), finisher_empty_wait(false),
-    thread_name(tn), logger(0),
-    finisher_thread(this) {
-    PerfCountersBuilder b(cct, std::string("finisher-") + name,
-			  l_finisher_first, l_finisher_last);
-    b.add_u64(l_finisher_queue_len, "queue_len");
-    b.add_time_avg(l_finisher_complete_lat, "complete_latency");
-    logger = b.create_perf_counters();
-    cct->get_perfcounters_collection()->add(logger);
-    logger->set(l_finisher_queue_len, 0);
-    logger->set(l_finisher_complete_lat, 0);
-  }
-
-  ~Finisher() {
-    if (logger && cct) {
-      cct->get_perfcounters_collection()->remove(logger);
-      delete logger;
-    }
-  }
+  Finisher(CephContext *cct_, std::string_view name, std::string &&tn);
+  ~Finisher();
 };
 
 /// Context that is completed asynchronously on the supplied finisher.
