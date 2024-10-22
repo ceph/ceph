@@ -97,11 +97,11 @@ public:
    */
   bool set_addr_unknowns(const entity_addrvec_t &addr) override;
 
-  int get_dispatch_queue_len() override {
+  int get_dispatch_queue_len() const override {
     return dispatch_queue.get_queue_len();
   }
 
-  double get_dispatch_queue_max_age(utime_t now) override {
+  double get_dispatch_queue_max_age(utime_t now) const override {
     return dispatch_queue.get_max_age(now);
   }
   /** @} Accessors */
@@ -137,7 +137,9 @@ public:
   void wait() override;
   int shutdown() override;
 
-  void dump(Formatter* f) override;
+  void dump(
+      Formatter* f, std::function<bool(const std::string&)> filter =
+      [](const std::string&) { return true; }) const override;
 
   /** @} // Startup/Shutdown */
 
@@ -225,7 +227,7 @@ private:
   std::string ms_type;
 
   /// overall lock used for AsyncMessenger data structures
-  ceph::mutex lock = ceph::make_mutex("AsyncMessenger::lock");
+  mutable ceph::mutex lock = ceph::make_mutex("AsyncMessenger::lock");
   // AsyncMessenger stuff
   /// approximately unique ID set by the Constructor for use in entity_addr_t
   uint64_t nonce;
