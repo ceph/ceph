@@ -1095,17 +1095,6 @@ std::string to_temp_object_name(const rgw::sal::Bucket* bucket, const std::strin
       obj_name);
 }
 
-// calculate hex etag of bufferlist
-std::string calculate_etag(bufferlist& bl) {
-  MD5 hash;
-  hash.Update(reinterpret_cast<const unsigned char*>(bl.c_str()), bl.length());
-  unsigned char etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  hash.Final(etag);
-  char hex_etag[CEPH_CRYPTO_MD5_DIGESTSIZE*2+1];
-  buf_to_hex(etag, CEPH_CRYPTO_MD5_DIGESTSIZE, hex_etag);
-  return std::string(hex_etag);
-}
-
 int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) {
   rgw_pool data_pool;
   const rgw_obj head_obj{get_key(), obj_name};
@@ -1186,9 +1175,9 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   // not the user that wrote the log that triggered the commit
   const ACLOwner owner{bucket_info.owner, ""}; // TODO: missing display name
   head_obj_wop.meta.owner = owner;
-  const std::string etag = calculate_etag(bl_data);
+  const auto etag = TOPNSPC::crypto::digest<TOPNSPC::crypto::MD5>(bl_data).to_str();
   bufferlist bl_etag;
-  bl_etag.append(etag);
+  bl_etag.append(etag.c_str());
   obj_attrs.emplace(RGW_ATTR_ETAG, std::move(bl_etag));
   const req_context rctx{dpp, y, nullptr};
   jspan_context trace{false, false};
