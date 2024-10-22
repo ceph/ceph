@@ -1319,7 +1319,7 @@ void CDir::take_dentry_waiting(std::string_view dname, snapid_t first, snapid_t 
 	     << it->first.snapid
 	     << " on " << *this << dendl;
     std::copy(it->second.begin(), it->second.end(), std::back_inserter(ls));
-    waiting_on_dentry.erase(it++);
+    it = waiting_on_dentry.erase(it);
   }
 
   if (waiting_on_dentry.empty())
@@ -2823,8 +2823,6 @@ void CDir::_committed(int r, version_t v)
 
   auto it = waiting_for_commit.begin();
   while (it != waiting_for_commit.end()) {
-    auto _it = it;
-    ++_it;
     if (it->first > committed_version) {
       dout(10) << " there are waiters for " << it->first << ", committing again" << dendl;
       _commit(it->first, -1);
@@ -2834,8 +2832,7 @@ void CDir::_committed(int r, version_t v)
     for (const auto &waiter : it->second)
       t.push_back(waiter);
     mdcache->mds->queue_waiters(t);
-    waiting_for_commit.erase(it);
-    it = _it;
+    it = waiting_for_commit.erase(it);
 
     if (!(++count % mdcache->mds->heartbeat_reset_grace()))
       mdcache->mds->heartbeat_reset();
