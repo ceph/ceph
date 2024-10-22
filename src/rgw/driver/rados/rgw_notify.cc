@@ -1092,6 +1092,8 @@ int publish_reserve(const DoutPrefixProvider* dpp,
                     reservation_t& res,
                     const RGWObjTags* req_tags) {
   rgw_pubsub_bucket_topics bucket_topics;
+  auto io_context = boost::asio::io_context();
+  auto conn = rgw::redis::RGWRedis(io_context).get_conn();
   if (all_zonegroups_support(site, zone_features::notification_v2) &&
       res.store->stat_topics_v1(res.user_tenant, res.yield, res.dpp) == -ENOENT) {
     auto ret = get_bucket_notifications(dpp, res.bucket, bucket_topics);
@@ -1151,15 +1153,17 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         // TODO: take default reservation size from conf
         constexpr auto DEFAULT_RESERVATION = 4 * 1024U;  // 4K
         res.size = DEFAULT_RESERVATION;
-        librados::ObjectWriteOperation op;
-        bufferlist obl;
-        int rval;
+        // librados::ObjectWriteOperation op;
+        // bufferlist obl;
+        // int rval;
         const auto& queue_name = topic_cfg.dest.persistent_queue;
         // TODO: Replace these with Redis
-        cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
-        auto ret = rgw_rados_operate(
-            res.dpp, res.store->getRados()->get_notif_pool_ctx(), queue_name,
-            &op, res.yield, librados::OPERATION_RETURNVEC);
+        // cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
+
+        auto ret = rgw::redisqueue::reserve(conn, queue_name, res.size, res.yield);
+        // auto ret = rgw_rados_operate(
+        //     res.dpp, res.store->getRados()->get_notif_pool_ctx(), queue_name,
+        //     &op, res.yield, librados::OPERATION_RETURNVEC);
         if (ret < 0) {
           ldpp_dout(res.dpp, 1)
               << "ERROR: failed to reserve notification on queue: "
@@ -1167,13 +1171,17 @@ int publish_reserve(const DoutPrefixProvider* dpp,
           // if no space is left in queue we ask client to slow down
           return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
         }
-        ret = cls_2pc_queue_reserve_result(obl, res_id);
-        if (ret < 0) {
-          ldpp_dout(res.dpp, 1)
-              << "ERROR: failed to parse reservation id. error: " << ret
-              << dendl;
-          return ret;
-        }
+
+        // FIX ME: How is a reservation id used?
+        // Should we emulate this with Redis?
+
+        // ret = cls_2pc_queue_reserve_result(obl, res_id);
+        // if (ret < 0) {
+        //   ldpp_dout(res.dpp, 1)
+        //       << "ERROR: failed to parse reservation id. error: " << ret
+        //       << dendl;
+        //   return ret;
+        // }
       }
 
       res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id, event_type);
@@ -1190,6 +1198,9 @@ int publish_commit(rgw::sal::Object* obj,
 		   reservation_t& res,
 		   const DoutPrefixProvider* dpp)
 {
+  auto io_context = boost::asio::io_context();
+  auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+
   for (auto& topic : res.topics) {
     if (topic.cfg.dest.persistent &&
 	topic.res_id == cls_2pc_reservation::NO_ID) {
@@ -1220,14 +1231,16 @@ int publish_commit(rgw::sal::Object* obj,
 			  <<
           " . trying to make a larger reservation on queue:" << queue_name
 			  << dendl;
+
+        auto ret = rgw::redisqueue::abort(conn, queue_name, res.yield);
         // first cancel the existing reservation
-        librados::ObjectWriteOperation op;
+        // librados::ObjectWriteOperation op;
         // TODO: Redis
-        cls_2pc_queue_abort(op, topic.res_id);
-        auto ret = rgw_rados_operate(
-	  dpp, res.store->getRados()->get_notif_pool_ctx(),
-	  queue_name, &op,
-	  res.yield);
+        // cls_2pc_queue_abort(op, topic.res_id);
+    //     auto ret = rgw_rados_operate(
+	  // dpp, res.store->getRados()->get_notif_pool_ctx(),
+	  // queue_name, &op,
+	  // res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to abort reservation: "
 			    << topic.res_id << 
@@ -1236,33 +1249,43 @@ int publish_commit(rgw::sal::Object* obj,
           return ret;
         }
         // now try to make a bigger one
-	buffer::list obl;
-        int rval;
-        cls_2pc_queue_reserve(op, bl.length(), 1, &obl, &rval);
-        ret = rgw_rados_operate(
-	  dpp, res.store->getRados()->get_notif_pool_ctx(),
-          queue_name, &op, res.yield, librados::OPERATION_RETURNVEC);
+	// buffer::list obl;
+  //       int rval;
+  //       cls_2pc_queue_reserve(op, bl.length(), 1, &obl, &rval);
+  //       ret = rgw_rados_operate(
+	//   dpp, res.store->getRados()->get_notif_pool_ctx(),
+  //         queue_name, &op, res.yield, librados::OPERATION_RETURNVEC);
+        ret = rgw::redisqueue::reserve(conn, queue_name, bl.length(), res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to reserve extra space on queue: "
 			    << queue_name
 			    << ". error: " << ret << dendl;
           return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
         }
-        ret = cls_2pc_queue_reserve_result(obl, topic.res_id);
-        if (ret < 0) {
-          ldpp_dout(dpp, 1) << "ERROR: failed to parse reservation id for "
-	    "extra space. error: " << ret << dendl;
-          return ret;
-        }
+      //   ret = cls_2pc_queue_reserve_result(obl, topic.res_id);
+      //   if (ret < 0) {
+      //     ldpp_dout(dpp, 1) << "ERROR: failed to parse reservation id for "
+	    // "extra space. error: " << ret << dendl;
+      //     return ret;
+      //   }
       }
-      std::vector<buffer::list> bl_data_vec{std::move(bl)};
+      // std::vector<buffer::list> bl_data_vec{std::move(bl)};
       librados::ObjectWriteOperation op;
-      cls_2pc_queue_commit(op, bl_data_vec, topic.res_id);
+
+      // FIXME: Is this commiting multiple messages over a single reservation?
+      // How to convert a bufferlist to a string or a vector of strings incase it is multiple messages?
+      // cls_2pc_queue_commit(op, bl_data_vec, topic.res_id);
+
+      // This needs to be fetched from bufferlist
+      std::string data = "Data to commit";
+
+      auto ret = rgw::redisqueue::commit(conn, queue_name, data, res.yield);
+
       aio_completion_ptr completion {librados::Rados::aio_create_completion()};
       auto pcc_arg = make_unique<PublishCommitCompleteArg>(queue_name, dpp);
       completion->set_complete_callback(pcc_arg.get(), publish_commit_completion);
       auto &io_ctx = res.store->getRados()->get_notif_pool_ctx();
-      int ret = io_ctx.aio_operate(queue_name, completion.get(), &op);
+      ret = io_ctx.aio_operate(queue_name, completion.get(), &op);
       topic.res_id = cls_2pc_reservation::NO_ID;
       if (ret < 0) {
         ldpp_dout(dpp, 1) << "ERROR: failed to commit reservation to queue: "
@@ -1310,11 +1333,14 @@ int publish_abort(reservation_t& res) {
       continue;
     }
     const auto& queue_name = topic.cfg.dest.persistent_queue;
-    librados::ObjectWriteOperation op;
-    cls_2pc_queue_abort(op, topic.res_id);
-    const auto ret = rgw_rados_operate(
-      res.dpp, res.store->getRados()->get_notif_pool_ctx(),
-      queue_name, &op, res.yield);
+    auto io_context = boost::asio::io_context();
+    auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+    auto ret = rgw::redisqueue::abort(conn, queue_name, res.yield);
+    // librados::ObjectWriteOperation op;
+    // cls_2pc_queue_abort(op, topic.res_id);
+    // const auto ret = rgw_rados_operate(
+    //   res.dpp, res.store->getRados()->get_notif_pool_ctx(),
+    //   queue_name, &op, res.yield);
     if (ret < 0) {
       ldpp_dout(res.dpp, 1) << "ERROR: failed to abort reservation: "
 			    << topic.res_id <<
@@ -1331,18 +1357,32 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
 {
   // TODO: use optional_yield instead calling rados_ioctx.operate() synchronously
   cls_2pc_reservations reservations;
-  auto ret = cls_2pc_queue_list_reservations(rados_ioctx, queue_name, reservations);
+
+  auto io_context = boost::asio::io_context();
+  auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+  // auto ret = cls_2pc_queue_list_reservations(rados_ioctx, queue_name, reservations);
+  // if (ret < 0) {
+  //   ldpp_dout(dpp, 1) << "ERROR: failed to read queue list reservation: " << ret << dendl;
+  //   return ret;
+  // }
+
+  std::tuple<int, int> reservation_status;
+  auto ret = rgw::redisqueue::queue_status(conn, queue_name, reservation_status, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to read queue list reservation: " << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to get the queue reservation status: " << ret << dendl;
     return ret;
   }
-  stats.queue_reservations = reservations.size();
+  stats.queue_reservations = std::get<0>(reservation_status);
 
-  ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, stats.queue_entries, stats.queue_size);
+  // ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, stats.queue_entries, stats.queue_size);
+  std::tuple<uint64_t, uint32_t> queue_stats;
+  ret = rgw::redisqueue::queue_stats(conn, queue_name, queue_stats, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get the queue size or the number of entries: " << ret << dendl;
     return ret;
   }
+  stats.queue_size = std::get<0>(queue_stats);
+  stats.queue_entries = std::get<1>(queue_stats);
 
   return 0;
 }

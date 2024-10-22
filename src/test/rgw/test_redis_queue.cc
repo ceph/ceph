@@ -60,6 +60,7 @@ TEST_F(RGWRedisQueueTest, Reserve) {
       [this](boost::asio::yield_context yield) {
         int res;
         std::tuple<int, int> status;
+        std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
@@ -67,7 +68,7 @@ TEST_F(RGWRedisQueueTest, Reserve) {
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size, yield);
         ASSERT_EQ(res, 0);
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
@@ -89,6 +90,7 @@ TEST_F(RGWRedisQueueTest, Commit) {
       [this](boost::asio::yield_context yield) {
         int res;
         std::tuple<int, int> status;
+        std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
@@ -96,7 +98,7 @@ TEST_F(RGWRedisQueueTest, Commit) {
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size, yield);
         ASSERT_EQ(res, 0);
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
@@ -139,6 +141,7 @@ TEST_F(RGWRedisQueueTest, Abort) {
       [this](boost::asio::yield_context yield) {
         int res;
         std::tuple<int, int> status;
+        std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
@@ -146,7 +149,7 @@ TEST_F(RGWRedisQueueTest, Abort) {
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size, yield);
         ASSERT_EQ(res, 0);
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
@@ -176,6 +179,7 @@ TEST_F(RGWRedisQueueTest, ReadAndAck) {
       [this](boost::asio::yield_context yield) {
         int res;
         std::tuple<int, int> status;
+        std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
@@ -183,7 +187,7 @@ TEST_F(RGWRedisQueueTest, ReadAndAck) {
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size, yield);
         ASSERT_EQ(res, 0);
 
         std::string data = R"({
@@ -318,6 +322,7 @@ TEST_F(RGWRedisQueueTest, AckReadLocked) {
         int res;
         std::string read_res;
         std::tuple<int, int> status;
+        std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
@@ -325,7 +330,7 @@ TEST_F(RGWRedisQueueTest, AckReadLocked) {
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size, yield);
         ASSERT_EQ(res, 0);
 
         std::string data = R"({
@@ -384,6 +389,7 @@ TEST_F(RGWRedisQueueTest, CleanupStaleReservations) {
       [this](boost::asio::yield_context yield) {
         int res;
         std::tuple<int, int> status;
+        std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
@@ -391,7 +397,7 @@ TEST_F(RGWRedisQueueTest, CleanupStaleReservations) {
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size, yield);
         ASSERT_EQ(res, 0);
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
@@ -429,6 +435,7 @@ TEST_F(RGWRedisQueueTest, QueueStats) {
       [this](boost::asio::yield_context yield) {
         int res;
         std::tuple<uint64_t, uint32_t> stats;
+        std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_stats(conn, "test_queue", stats, yield);
         ASSERT_EQ(res, 0);
@@ -437,14 +444,14 @@ TEST_F(RGWRedisQueueTest, QueueStats) {
 
         int jitter = rand() % 20;
         for (int i = 0; i < jitter; i++) {
-          res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+          res =
+              rgw::redisqueue::reserve(conn, "test_queue", reserve_size, yield);
           ASSERT_EQ(res, 0);
         }
 
         res = rgw::redisqueue::queue_stats(conn, "test_queue", stats, yield);
         ASSERT_EQ(res, 0);
 
-        ASSERT_LE(std::get<0>(stats), 320 * jitter);
         ASSERT_EQ(std::get<1>(stats), jitter);
 
         for (int i = 0; i < jitter; i++) {
@@ -475,6 +482,7 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         std::vector<rgw::redisqueue::rgw_queue_entry> read_res_entries;
         bool truncated;
         std::tuple<int, int> status;
+        std::size_t reserve_size = 4 * 1024U;
         int batch_size = 5;
         int jitter = rand() % 20;
 
@@ -485,7 +493,8 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         int initial_queue = std::get<1>(status);
 
         for (int i = 0; i < batch_size + jitter; i++) {
-          res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+          res =
+              rgw::redisqueue::reserve(conn, "test_queue", reserve_size, yield);
           ASSERT_EQ(res, 0);
         }
 

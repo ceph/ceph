@@ -89,12 +89,12 @@ int queue_stats(connection* conn, const std::string& name,
   }
 }
 
-int reserve(connection* conn, const std::string name, optional_yield y) {
+int reserve(connection* conn, const std::string name,
+            const std::size_t reserve_size, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
-  int reserveSize = 120;
-  req.push("FCALL", "reserve", 1, name, reserveSize);
+  req.push("FCALL", "reserve", 1, name, reserve_size);
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
