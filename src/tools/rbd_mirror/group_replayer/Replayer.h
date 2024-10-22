@@ -70,12 +70,6 @@ public:
     return (m_state == STATE_REPLAYING || m_state == STATE_IDLE);
   }
 
-  void notify_group_snap_image_complete(
-    int64_t local_pool_id,
-    const std::string &local_image_id,
-    const std::string &remote_group_snap_id,
-    uint64_t local_snap_id);
-
 private:
   enum State {
     STATE_INIT,
@@ -99,15 +93,12 @@ private:
   mutable ceph::mutex m_lock;
 
   State m_state = STATE_INIT;
-  Context* m_on_shutdown = nullptr;
   std::string m_remote_mirror_peer_uuid;
 
   std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
 
-  bool m_remote_demoted = false;
-  bool m_resync_requested = false;
-  bool m_rename_requested = false;
+  bool m_stop_requested = false;
 
   // map of <group_snap_id, pair<GroupSnapshot, on_finish>>
   std::map<std::string, std::pair<cls::rbd::GroupSnapshot, Context *>> m_create_snap_requests;
@@ -129,6 +120,7 @@ private:
   void load_remote_group_snapshots();
   void handle_load_remote_group_snapshots(int r);
 
+  void validate_image_snaps_sync_complete(const std::string &remote_group_snap_id);
   void scan_for_unsynced_group_snapshots(std::unique_lock<ceph::mutex>& locker);
 
   void try_create_group_snapshot(cls::rbd::GroupSnapshot snap);
@@ -158,12 +150,15 @@ private:
   void handle_update_image_snapshot(
     int r, uint64_t local_snap_id, Context *on_finish);
 
-  void mirror_regular_snapshot(
+  void create_regular_snapshot(
     const std::string &remote_group_snap_name,
     const std::string &remote_group_snap_id,
-    std::vector<cls::rbd::GroupImageStatus> *local_images,
     Context *on_finish);
-  void handle_mirror_regular_snapshot(int r, Context *on_finish);
+  void handle_create_regular_snapshot(int r, Context *on_finish);
+  void regular_snapshot_complete(
+    const std::string &remote_group_snap_id,
+    Context *on_finish);
+  void handle_regular_snapshot_complete(int r, Context *on_finish);
 };
 
 } // namespace group_replayer
