@@ -3892,6 +3892,7 @@ Then run the following:
         return self.to_remove_osds.all_osds()
 
     @handle_orch_error
+    @host_exists()
     def drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False, zap_osd_devices: bool = False) -> str:
         """
         Drain all daemons from a host.
