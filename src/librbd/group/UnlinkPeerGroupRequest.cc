@@ -64,11 +64,21 @@ void UnlinkPeerGroupRequest<I>::unlink_peer() {
       }
       ceph_assert(count <= 5);
 
+      // FIXME: This logic of unlinking group snaps will be moved to Group Replayer
+      // and will be done by secondary, just added a half backed fix (do not
+      // want to spend time on this as this code will be removed) to avoid
+      // deleting the previous group snap. This logic will change to makesure
+      // we always have a previous completly synced group snap on primary.
       if (ns->mirror_peer_uuids.empty()) {
         auto next_snap = std::next(it);
-        if (next_snap != snaps.end()) {
-          unlink_snap = it;
-          break;
+        if (next_snap != snaps.end() &&
+            next_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+          next_snap = std::next(next_snap);
+          if (next_snap != snaps.end() &&
+              next_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+            unlink_snap = it;
+            break;
+          }
         }
       }
     }
@@ -91,7 +101,7 @@ template <typename I>
 void UnlinkPeerGroupRequest<I>::remove_group_snapshot(
                               cls::rbd::GroupSnapshot group_snap) {
   CephContext *cct = (CephContext *)m_group_io_ctx.cct();
-  ldout(cct, 10) << dendl;
+  ldout(cct, 10) << "group snap id: " << group_snap.id << dendl;
 
   for (auto &snap : group_snap.snaps) {
     if (snap.snap_id == CEPH_NOSNAP) {
