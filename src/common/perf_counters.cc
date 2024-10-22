@@ -24,6 +24,8 @@ using std::ostringstream;
 using std::make_pair;
 using std::pair;
 
+using namespace std::literals;
+
 namespace TOPNSPC::common {
 PerfCountersCollectionImpl::PerfCountersCollectionImpl()
 {
@@ -37,81 +39,56 @@ PerfCountersCollectionImpl::~PerfCountersCollectionImpl()
 void PerfCountersCollectionImpl::add(PerfCounters *l)
 {
   // make sure the name is unique
-  perf_counters_set_t::iterator i;
-  i = m_loggers.find(l);
-  while (i != m_loggers.end()) {
-    ostringstream ss;
-    ss << l->get_name() << "-" << (void*)l;
-    l->set_name(ss.str());
-    i = m_loggers.find(l);
+  while (m_loggers.contains(l)) {
+    l->set_name(fmt::format("{}-{:p}", l->get_name(), (void *)l));
   }
 
   m_loggers.insert(l);
 
-  for (unsigned int i = 0; i < l->m_data.size(); ++i) {
-    PerfCounters::perf_counter_data_any_d &data = l->m_data[i];
-
-    std::string path = l->get_name();
-    path += ".";
-    path += data.name;
-
-    by_path[path] = {&data, l};
+  const auto rc_name = l->get_name();
+  for (auto& dt: l->m_data) {
+    const auto path = rc_name + "." + dt.name;
+    by_path[path] = {&dt, l};
   }
 }
 
 void PerfCountersCollectionImpl::remove(PerfCounters *l)
 {
-  for (unsigned int i = 0; i < l->m_data.size(); ++i) {
-    PerfCounters::perf_counter_data_any_d &data = l->m_data[i];
-
-    std::string path = l->get_name();
-    path += ".";
-    path += data.name;
-
+  const auto rc_name = l->get_name();
+  for (const auto& dt: l->m_data) {
+    const auto path = rc_name + "." + dt.name;
     by_path.erase(path);
   }
 
-  perf_counters_set_t::iterator i = m_loggers.find(l);
-  ceph_assert(i != m_loggers.end());
-  m_loggers.erase(i);
+  [[maybe_unused]] const auto rm_cnt = m_loggers.erase(l);
+  ceph_assert(rm_cnt == 1);
 }
 
 void PerfCountersCollectionImpl::clear()
 {
-  perf_counters_set_t::iterator i = m_loggers.begin();
-  perf_counters_set_t::iterator i_end = m_loggers.end();
-  for (; i != i_end; ) {
-    delete *i;
-    m_loggers.erase(i++);
+  for (auto& l : m_loggers) {
+    delete l;
   }
-
+  m_loggers.clear();
   by_path.clear();
 }
 
-bool PerfCountersCollectionImpl::reset(const std::string &name)
+bool PerfCountersCollectionImpl::reset(std::string_view name)
 {
-  bool result = false;
-  perf_counters_set_t::iterator i = m_loggers.begin();
-  perf_counters_set_t::iterator i_end = m_loggers.end();
-
-  if (!strcmp(name.c_str(), "all"))  {
-    while (i != i_end) {
-      (*i)->reset();
-      ++i;
+  if (name == "all"sv) {
+    for (auto& dt: m_loggers) {
+      dt->reset();
     }
-    result = true;
-  } else {
-    while (i != i_end) {
-      if (!name.compare((*i)->get_name())) {
-	(*i)->reset();
-	result = true;
-	break;
-      }
-      ++i;
-    }
+    return true;
   }
 
-  return result;
+  auto dt = m_loggers.find(name);
+  if (dt == m_loggers.end()) {
+    return false;
+  }
+
+  (*dt)->reset();
+  return true;
 }
 
 

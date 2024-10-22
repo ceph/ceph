@@ -305,10 +305,16 @@ private:
   friend class PerfCountersCollectionImpl;
 };
 
-class SortPerfCountersByName {
-public:
+struct SortPerfCountersByName {
+  using is_transparent = void;
   bool operator()(const PerfCounters* lhs, const PerfCounters* rhs) const {
-    return (lhs->get_name() < rhs->get_name());
+    return lhs->get_name() < rhs->get_name();
+  }
+  bool operator()(std::string_view lhs, const PerfCounters* rhs) const {
+    return lhs < rhs->get_name();
+  }
+  bool operator()(const PerfCounters* lhs, std::string_view rhs) const {
+    return lhs->get_name() < rhs;
   }
 };
 
@@ -325,7 +331,8 @@ public:
   void add(PerfCounters *l);
   void remove(PerfCounters *l);
   void clear();
-  bool reset(const std::string &name);
+  // a parameter of "all" resets all counters
+  bool reset(std::string_view name);
 
   void dump_formatted(ceph::Formatter *f, bool schema, bool dump_labeled,
                       const std::string &logger = "",
