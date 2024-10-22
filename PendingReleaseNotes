@@ -34,6 +34,8 @@
   (--yes-i-really-mean-it). This has been added as a precaution to tell the
   users that modifying "max_mds" may not help with troubleshooting or recovery
   effort. Instead, it might further destabilize the cluster.
+* RADOS: Added convenience function `librados::AioCompletion::cancel()` with
+  the same behavior as `librados::IoCtx::aio_cancel()`.
 
 * mgr/restful, mgr/zabbix: both modules, already deprecated since 2020, have been
   finally removed. They have not been actively maintenance in the last years,
