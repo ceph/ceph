@@ -318,7 +318,8 @@ RecoveryBackend::handle_scan_digest(
   ceph_assert(pg.is_backfill_target(m.from));
 
   BackfillInterval bi(m.begin, m.end);
-  bi.populate(m.get_data());
+  //XXX: See following commits to explain the empty version
+  bi.populate(m.get_data(), eversion_t());
 
   shard_services.start_operation<crimson::osd::BackfillRecovery>(
     static_cast<crimson::osd::PG*>(&pg),

@@ -32,23 +32,16 @@ struct BackfillInterval {
 
   BackfillInterval() = delete;
 
-  // populate the objects in the interval
-  void populate(const ceph::buffer::list& data) {
+  // populate the objects in the interval and update version
+  void populate(const ceph::buffer::list& data,
+                eversion_t _version) {
     ceph_assert(objects.empty() && !populated);
     auto p = data.cbegin();
     decode_noclear(objects, p);
+    version = _version;
     populated = true;
   }
 
-  // populate the objects in the interval
-  void populate(const std::map<hobject_t,eversion_t>&& _objects) {
-    ceph_assert(objects.empty() && !populated);
-    objects = std::move(_objects);
-    populated = true;
-  }
-
-  // XXX: all populate overrides should update version
-  //      see following commits
   // populate the objects in the interval and update version
   void populate(const std::map<hobject_t,eversion_t>&& _objects,
                 eversion_t _version) {
