@@ -11,8 +11,9 @@ log data can be used to monitor bucket activity, detect unauthorized
 access, get insights into the bucket usage and use the logs as a journal for bucket changes.
 The log records are stored in objects in a separate bucket and can be analyzed later.
 Logging configuration is done at the bucket level and can be enabled or disabled at any time.
-The log bucket can accumulate logs from multiple buckets. The configured "prefix"
-may be used to distinguish between logs from different buckets.
+The log bucket can accumulate logs from multiple buckets. It is recommended to configured 
+a different "prefix" for each bucket, so that the logs of different buckets will be stored
+in different objects in the log bucket.
 
 
 .. toctree::
@@ -22,6 +23,8 @@ Logging Reliability
 -------------------
 For performance reasons, even though the log records are written to persistent storage, the log object will
 appear in the log bucket only after some configurable amount of time (or if the maximum object size of 128MB is reached).
+This time (in seconds) could be set per source bucket via a Ceph extension to the REST API,
+or globally via the `rgw_bucket_logging_obj_roll_time` configuration option. If not set, the default time is 5 minutes.
 Adding a log object to the log bucket is done "lazily", meaning, that if no more records are written to the object, it may
 remain outside of the log bucket even after the configured time has passed.
 
