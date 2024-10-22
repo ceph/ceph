@@ -58,8 +58,10 @@ InstanceReplayer<I>::InstanceReplayer(
 template <typename I>
 InstanceReplayer<I>::~InstanceReplayer() {
   ceph_assert(m_image_state_check_task == nullptr);
+  ceph_assert(m_group_state_check_task == nullptr);
   ceph_assert(m_async_op_tracker.empty());
   ceph_assert(m_image_replayers.empty());
+  ceph_assert(m_group_replayers.empty());
 }
 
 template <typename I>

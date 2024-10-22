@@ -5,6 +5,7 @@
 #define CEPH_RBD_MIRROR_GROUP_REPLAYER_H
 
 #include "cls/rbd/cls_rbd_types.h"
+#include "common/AsyncOpTracker.h"
 #include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 #include "tools/rbd_mirror/Types.h"
@@ -182,15 +183,6 @@ private:
         });
       group_replayer->stop(ctx, false);
     }
-
-    void notify_group_snap_image_complete(
-        int64_t local_pool_id,
-        const std::string &local_image_id,
-        const std::string &remote_group_snap_id,
-        uint64_t local_snap_id) override {
-      group_replayer->m_replayer->notify_group_snap_image_complete(
-          local_pool_id, local_image_id, remote_group_snap_id, local_snap_id);
-    }
   };
 
   librados::IoCtx &m_local_io_ctx;
@@ -211,6 +203,7 @@ private:
   std::string m_remote_group_id;
 
   mutable ceph::mutex m_lock;
+  AsyncOpTracker m_async_op_tracker;
   State m_state = STATE_STOPPED;
   std::string m_state_desc;
   int m_last_r = 0;
@@ -232,8 +225,6 @@ private:
   Listener m_listener = {this};
   std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> m_image_replayer_index;
   std::map<std::string, cls::rbd::GroupSnapshot> m_local_group_snaps;
-  std::map<std::string, cls::rbd::GroupSnapshot> m_remote_group_snaps;
-  std::vector<cls::rbd::GroupSnapshot> remote_group_snaps;
   std::map<std::string, int> m_get_remote_group_snap_ret_vals;
   std::map<std::string, std::map<ImageReplayer<ImageCtxT> *, Context *>> m_create_snap_requests;
   std::set<std::string> m_pending_snap_create;
@@ -276,9 +267,11 @@ private:
   bool finish_start_if_interrupted(ceph::mutex &lock);
   void finish_start(int r, const std::string &desc);
 
-  void stop_group_replayer(Context *on_finish);
-  void handle_stop_group_replayer(int r, Context *on_finish);
+  void stop_group_replayer();
+  void handle_stop_group_replayer(int r);
 
+  void stop_image_replayer(ImageReplayer<ImageCtxT> *image_replayer,
+                           Context *on_finish);
   void stop_image_replayers();
   void handle_stop_image_replayers(int r);
 
@@ -288,6 +281,8 @@ private:
 
   void set_mirror_group_status_update(cls::rbd::MirrorGroupStatusState state,
                                       const std::string &desc);
+  void wait_for_ops();
+  void handle_wait_for_ops(int r);
 };
 
 } // namespace mirror
