@@ -904,17 +904,17 @@ void Client::trim_dentry(Dentry *dn)
 void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
 				    uint64_t truncate_seq, uint64_t truncate_size)
 {
-  uint64_t prior_size = in->size;
+  uint64_t prior_size = in->effective_size();
 
   // In the case of a pending trunc size that is smaller than orig size
   // (i.e. truncating from 8M to 4M) passed truncate_seq will be larger
   // than inode truncate_seq. This shows passed size is latest.
   if (truncate_seq > in->truncate_seq ||
       (truncate_seq == in->truncate_seq && size > in->effective_size())) {
-    ldout(cct, 10) << "size " << in->size << " -> " << size << dendl;
+    ldout(cct, 10) << "size " << in->effective_size() << " -> " << size << dendl;
     if (in->is_fscrypt_enabled()) {
       in->set_effective_size(size);
-      size = fscrypt_block_from_ofs(size);
+      size = fscrypt_next_block_start(size);
     }
     in->size = size;
     in->reported_size = size;
@@ -8268,8 +8268,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     return -CEPHFS_EROFS;
   }
   if ((mask & CEPH_SETATTR_SIZE) &&
-      (uint64_t)stx->stx_size > in->size &&
-      is_quota_bytes_exceeded(in, (uint64_t)stx->stx_size - in->size,
+      (uint64_t)stx->stx_size > in->effective_size() &&
+      is_quota_bytes_exceeded(in, (uint64_t)stx->stx_size - in->effective_size(),
 			      perms)) {
     return -CEPHFS_EDQUOT;
   }
@@ -8421,7 +8421,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
     if (in->fscrypt_ctx &&
         (!(mask & CEPH_SETATTR_FSCRYPT_FILE))) {
-      stx_size = fscrypt_next_block_start(stx_size);
       ldout(cct,10) << "fscrypt: set file size: orig stx_size=" << stx->stx_size <<" new stx_size=" << stx_size << dendl;
 
       alt_aux.resize(sizeof(stx->stx_size));
@@ -8442,7 +8441,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
         !(mask & CEPH_SETATTR_KILL_SGUID) &&
         stx_size >= in->size) {
       if (stx_size > in->size) {
-        in->size = in->reported_size = stx_size;
+        in->reported_size = stx_size;
+        in->set_effective_size(stx_size);
+        in->size = fscrypt_next_block_start(stx_size);
         in->cap_dirtier_uid = perms.uid();
         in->cap_dirtier_gid = perms.gid();
         in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
@@ -10624,7 +10625,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
       req->head.args.open.mask = DEBUG_GETATTR_CAPS;
     else
       req->head.args.open.mask = 0;
-    req->head.args.open.old_size = in->size;   // for O_TRUNC
+    req->head.args.open.old_size = in->effective_size();   // for O_TRUNC
     req->set_inode(in);
     result = make_request(req, perms);
 
@@ -11029,9 +11030,9 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
 
   // short read?
   if (r >= 0 && r < wanted) {
-    if (pos < in->size) {
+    if (pos < in->effective_size()) {
       // zero up to known EOF
-      int64_t some = in->size - pos;
+      int64_t some = in->effective_size() - pos;
       if (some > left)
         some = left;
       auto z = buffer::ptr_node::create(some);
@@ -11052,7 +11053,7 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
     }
 
     // eof?  short read.
-    if ((uint64_t)pos >= in->size)
+    if ((uint64_t)pos >= in->effective_size())
       goto success;
 
     wanted = left;
@@ -11261,7 +11262,7 @@ retry:
       }
 
       // eof?  short read.
-      if ((uint64_t)offset < in->size)
+      if ((uint64_t)offset < in->effective_size())
 	goto retry;
     }
   }
@@ -11427,7 +11428,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   std::vector<ObjectCacher::ObjHole> holes;
   r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
                                  read_start, read_len, bl, 0, &holes, io_finish.get());
- 
   if (onfinish != nullptr) {
     // put the cap ref since we're releasing C_Read_Async_Finisher
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
