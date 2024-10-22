@@ -10,10 +10,20 @@ namespace redisqueue {
 using boost::redis::config;
 using boost::redis::connection;
 
+struct rgw_queue_entry {
+  std::string marker;
+  std::string data;
+};
+
+int redis_queue_parse_result(const std::string& data,
+                             std::vector<rgw_queue_entry>& entries,
+                             bool* truncated);
+
 int queue_status(connection* conn, const std::string& name,
                  std::tuple<int, int>& res, optional_yield y);
 
-int queue_stats(connection* conn, const std::string& name, std::tuple<uint64_t, uint32_t>& res, optional_yield y);
+int queue_stats(connection* conn, const std::string& name,
+                std::tuple<uint64_t, uint32_t>& res, optional_yield y);
 
 int reserve(connection* conn, const std::string name, optional_yield y);
 
@@ -30,7 +40,7 @@ int locked_read(connection* conn, const std::string& name,
                 optional_yield y);
 
 int locked_read(connection* conn, const std::string& name,
-                const std::string& lock_cookie, std::vector<std::string>& res,
+                const std::string& lock_cookie, std::string& res,
                 const int count, optional_yield y);
 
 int ack(connection* conn, const std::string& name, optional_yield y);

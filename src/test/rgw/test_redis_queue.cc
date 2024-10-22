@@ -454,8 +454,10 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
       io,
       [this](boost::asio::yield_context yield) {
         int res;
-        std::vector<std::string> read_res_batch;
-        std::vector<std::string> read_res_remaining;
+        std::string read_res;
+        std::vector<std::string> read_data_batch;
+        std::vector<rgw::redisqueue::rgw_queue_entry> read_res_entries;
+        bool truncated;
         std::tuple<int, int> status;
         int batch_size = 5;
         int jitter = rand() % 20;
@@ -503,9 +505,16 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
 
         std::vector<std::string> data_list_batch(batch_size, data);
         res = rgw::redisqueue::locked_read(conn, "test_queue", lock_cookie,
-                                           read_res_batch, batch_size, yield);
+                                           read_res, batch_size, yield);
+        rgw::redisqueue::redis_queue_parse_result(read_res, read_res_entries,
+                                                  &truncated);
+        ASSERT_EQ(truncated, true);
+        for (auto entry : read_res_entries) {
+          read_data_batch.push_back(entry.data);
+        }
+
         ASSERT_EQ(res, 0);
-        ASSERT_EQ(data_list_batch, read_res_batch);
+        ASSERT_EQ(data_list_batch, read_data_batch);
 
         res = rgw::redisqueue::locked_ack(conn, "test_queue", lock_cookie,
                                           batch_size, yield);
@@ -519,19 +528,23 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         // Read the remaining data
         int committed_queue_len = std::get<1>(status);
         while (committed_queue_len > 0) {
-          read_res_remaining.clear();
+          read_data_batch.clear();
+          data_list_batch.clear();
+          read_res_entries.clear();
 
           int expected_data_size = std::min(batch_size, committed_queue_len);
-          std::vector<std::string> data_list_remaining(expected_data_size,
-                                                       data);
+          data_list_batch = std::vector<std::string>(expected_data_size, data);
 
           res = rgw::redisqueue::locked_read(conn, "test_queue", lock_cookie,
-                                             read_res_remaining, batch_size,
-                                             yield);
+                                             read_res, batch_size, yield);
+          redis_queue_parse_result(read_res, read_res_entries, &truncated);
+          for (auto entry : read_res_entries) {
+            read_data_batch.push_back(entry.data);
+          }
           ASSERT_EQ(res, 0);
-          ASSERT_EQ(data_list_remaining, read_res_remaining);
+          ASSERT_EQ(data_list_batch, read_data_batch);
 
-          int read_size = read_res_remaining.size();
+          int read_size = read_data_batch.size();
           res = rgw::redisqueue::locked_ack(conn, "test_queue", lock_cookie,
                                             read_size, yield);
           ASSERT_EQ(res, 0);
@@ -544,6 +557,8 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
 
           committed_queue_len = std::get<1>(status);
         }
+        // On the last call to read, the entire queue should be returned
+        ASSERT_EQ(truncated, false);
       },
       [this](std::exception_ptr eptr) {
         conn->cancel();

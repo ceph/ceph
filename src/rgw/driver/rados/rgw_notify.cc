@@ -434,7 +434,7 @@ private:
         }
 
         std::string out;
-        ret = rgw::redisqueue::locked_read(conn, queue_name, lock_cookie, redis_entries, max_elements, yield);
+        ret = rgw::redisqueue::locked_read(conn, queue_name, lock_cookie, out, max_elements, yield);
         if (ret == -ENOENT) {
           // queue was deleted
           topics_persistency_tracker.erase(queue_name);

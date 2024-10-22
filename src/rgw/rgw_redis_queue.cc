@@ -129,7 +129,7 @@ int locked_read(connection* conn, const std::string& name,
 }
 
 int locked_read(connection* conn, const std::string& name,
-                const std::string& lock_cookie, std::vector<std::string>& res,
+                const std::string& lock_cookie, std::string& res,
                 const int count, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
@@ -138,26 +138,39 @@ int locked_read(connection* conn, const std::string& name,
   rgw::redis::RedisResponse ret =
       rgw::redis::do_redis_func(conn, req, resp, __func__, y);
   if (ret.errorCode == 0) {
-    // Parse the json string
-    boost::json::value v = boost::json::parse(ret.data);
-    // Check if the json value is an array
-    if (!v.is_array()) {
-      std::cerr << "RGW Redis Queue:: " << __func__
-                << "(): ERROR: JSON value is not an array" << std::endl;
-      return -EINVAL;
-    }
-
-    // Iterate over the json array and add each element to the vector
-    for (auto& element : v.as_array()) {
-      res.push_back(element.as_string().c_str());
-    }
-
+    res = ret.data;
   } else {
     std::cerr << "RGW Redis Queue:: " << __func__
               << "(): ERROR: " << ret.errorMessage << std::endl;
   }
 
   return ret.errorCode;
+}
+
+int redis_queue_parse_result(const std::string& data,
+                             std::vector<rgw_queue_entry>& entries,
+                             bool* truncated) {
+  // Parse the JSON data
+  boost::json::value v = boost::json::parse(data);
+
+  if (!v.is_object()) {
+    std::cerr << "RGW Redis Queue:: " << __func__
+              << "(): ERROR: JSON value is not an object" << std::endl;
+    return -EINVAL;
+  }
+
+  boost::json::object jdata = v.as_object();
+  boost::json::array jentries = jdata.at("values").as_array();
+  *truncated = jdata.at("isTruncated").as_bool();
+
+  for (std::size_t i = 0; i < jentries.size(); i++) {
+    rgw_queue_entry entry;
+    entry.marker = std::to_string(i);
+    entry.data = jentries[i].as_string().c_str();
+    entries.push_back(entry);
+  }
+
+  return 0;
 }
 
 int ack(connection* conn, const std::string& name, optional_yield y) {

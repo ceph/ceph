@@ -213,7 +213,7 @@ end
 local function locked_read_multi(keys, args)
     local name = "queue:" .. keys[1]
     local cookie = args[1]
-    local count = args[2]
+    local count = tonumber(args[2])
 
     local assert_lock_keys = {"lock:" .. keys[1]}
     local assert_lock_args = {cookie}
@@ -221,8 +221,14 @@ local function locked_read_multi(keys, args)
     local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
     if lock_status.map.errorCode == 0 then
         local values = redis.call('LRANGE', name, -count, -1)
-        local data = cjson.encode(values)
-        return format_response(0, "", data)
+        local queueLen = redis.call('LLEN', name)
+        local isTruncated = queueLen > count
+        local data = {
+            values = values,
+            isTruncated = isTruncated
+        }
+        local jsondata = cjson.encode(data)
+        return format_response(0, "", jsondata)
     end
     return lock_status
 end
