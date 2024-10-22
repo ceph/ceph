@@ -41,7 +41,7 @@ void PerfCountersCollectionImpl::add(PerfCounters *l)
   while (i != m_loggers.end()) {
     ostringstream ss;
     ss << l->get_name() << "-" << (void*)l;
-    l->set_name(ss.str());
+    l->set_name(ss.view());
     i = m_loggers.find(l);
   }
 
