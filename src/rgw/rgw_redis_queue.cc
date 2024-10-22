@@ -32,9 +32,9 @@ int queue_init(connection* conn, const std::string& name, uint64_t size,
 // FIXME: Perhaps return the queue length in calls to reserve, commit, abort
 // etc and do not use this function explicitly?
 int queue_status(connection* conn, const std::string& name,
-                 std::tuple<int, int>& res, optional_yield y) {
+                 std::tuple<uint32_t, uint32_t>& res, optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int, int> resp;
+  boost::redis::response<uint32_t, uint32_t> resp;
   boost::system::error_code ec;
 
   try {

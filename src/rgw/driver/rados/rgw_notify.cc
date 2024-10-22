@@ -660,6 +660,7 @@ private:
     const auto min_jitter = 100; // ms
     const auto max_jitter = 500; // ms
     std::uniform_int_distribution<> duration_jitter(min_jitter, max_jitter);
+    auto conn = rgw::redis::RGWRedis(io_context).get_conn();
 
     std::vector<std::string> queue_gc;
     std::mutex queue_gc_lock;
@@ -685,8 +686,6 @@ private:
       for (const auto& queue_name : queues) {
         // try to lock the queue to check if it is owned by this rgw
         // or if ownership needs to be taken
-
-        auto conn = rgw::redis::RGWRedis(io_context).get_conn();
         ret = rgw::redislock::lock(conn, queue_name+"_lock", lock_cookie, failover_time, yield);
         
         if (ret == -EBUSY) {
@@ -1270,7 +1269,7 @@ int publish_commit(rgw::sal::Object* obj,
       //   }
       }
       // std::vector<buffer::list> bl_data_vec{std::move(bl)};
-      librados::ObjectWriteOperation op;
+      // librados::ObjectWriteOperation op;
 
       // FIXME: Is this commiting multiple messages over a single reservation?
       // How to convert a bufferlist to a string or a vector of strings incase it is multiple messages?
@@ -1281,19 +1280,19 @@ int publish_commit(rgw::sal::Object* obj,
 
       auto ret = rgw::redisqueue::commit(conn, queue_name, data, res.yield);
 
-      aio_completion_ptr completion {librados::Rados::aio_create_completion()};
-      auto pcc_arg = make_unique<PublishCommitCompleteArg>(queue_name, dpp);
-      completion->set_complete_callback(pcc_arg.get(), publish_commit_completion);
-      auto &io_ctx = res.store->getRados()->get_notif_pool_ctx();
-      ret = io_ctx.aio_operate(queue_name, completion.get(), &op);
+      // aio_completion_ptr completion {librados::Rados::aio_create_completion()};
+      // auto pcc_arg = make_unique<PublishCommitCompleteArg>(queue_name, dpp);
+      // completion->set_complete_callback(pcc_arg.get(), publish_commit_completion);
+      // auto &io_ctx = res.store->getRados()->get_notif_pool_ctx();
+      // ret = io_ctx.aio_operate(queue_name, completion.get(), &op);
       topic.res_id = cls_2pc_reservation::NO_ID;
       if (ret < 0) {
         ldpp_dout(dpp, 1) << "ERROR: failed to commit reservation to queue: "
                           << queue_name << ". error: " << ret << dendl;
         return ret;
       }
-      pcc_arg.release();
-      completion.release();
+      // pcc_arg.release();
+      // completion.release();
     } else {
       try {
         // TODO add endpoint LRU cache
@@ -1326,6 +1325,8 @@ int publish_commit(rgw::sal::Object* obj,
 }
 
 int publish_abort(reservation_t& res) {
+  auto io_context = boost::asio::io_context();
+  auto conn = rgw::redis::RGWRedis(io_context).get_conn();
   for (auto& topic : res.topics) {
     if (!topic.cfg.dest.persistent ||
 	topic.res_id == cls_2pc_reservation::NO_ID) {
@@ -1333,8 +1334,6 @@ int publish_abort(reservation_t& res) {
       continue;
     }
     const auto& queue_name = topic.cfg.dest.persistent_queue;
-    auto io_context = boost::asio::io_context();
-    auto conn = rgw::redis::RGWRedis(io_context).get_conn();
     auto ret = rgw::redisqueue::abort(conn, queue_name, res.yield);
     // librados::ObjectWriteOperation op;
     // cls_2pc_queue_abort(op, topic.res_id);
@@ -1366,7 +1365,7 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
   //   return ret;
   // }
 
-  std::tuple<int, int> reservation_status;
+  std::tuple<uint32_t, uint32_t> reservation_status;
   auto ret = rgw::redisqueue::queue_status(conn, queue_name, reservation_status, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get the queue reservation status: " << ret << dendl;

@@ -59,7 +59,7 @@ TEST_F(RGWRedisQueueTest, Reserve) {
       io,
       [this](boost::asio::yield_context yield) {
         int res;
-        std::tuple<int, int> status;
+        std::tuple<uint32_t, uint32_t> status;
         std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
@@ -89,7 +89,7 @@ TEST_F(RGWRedisQueueTest, Commit) {
       io,
       [this](boost::asio::yield_context yield) {
         int res;
-        std::tuple<int, int> status;
+        std::tuple<uint32_t, uint32_t> status;
         std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
@@ -140,7 +140,7 @@ TEST_F(RGWRedisQueueTest, Abort) {
       io,
       [this](boost::asio::yield_context yield) {
         int res;
-        std::tuple<int, int> status;
+        std::tuple<uint32_t, uint32_t> status;
         std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
@@ -178,7 +178,7 @@ TEST_F(RGWRedisQueueTest, ReadAndAck) {
       io,
       [this](boost::asio::yield_context yield) {
         int res;
-        std::tuple<int, int> status;
+        std::tuple<uint32_t, uint32_t> status;
         std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
@@ -321,7 +321,7 @@ TEST_F(RGWRedisQueueTest, AckReadLocked) {
       [this](boost::asio::yield_context yield) {
         int res;
         std::string read_res;
-        std::tuple<int, int> status;
+        std::tuple<uint32_t, uint32_t> status;
         std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
@@ -388,7 +388,7 @@ TEST_F(RGWRedisQueueTest, CleanupStaleReservations) {
       io,
       [this](boost::asio::yield_context yield) {
         int res;
-        std::tuple<int, int> status;
+        std::tuple<uint32_t, uint32_t> status;
         std::size_t reserve_size = 4 * 1024U;
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
@@ -481,7 +481,7 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         std::vector<std::string> read_data_batch;
         std::vector<rgw::redisqueue::rgw_queue_entry> read_res_entries;
         bool truncated;
-        std::tuple<int, int> status;
+        std::tuple<uint32_t, uint32_t> status;
         std::size_t reserve_size = 4 * 1024U;
         int batch_size = 5;
         int jitter = rand() % 20;
