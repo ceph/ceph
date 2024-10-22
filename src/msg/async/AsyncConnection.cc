@@ -817,7 +817,7 @@ void AsyncConnection::tick(uint64_t id)
   }
 }
 
-void AsyncConnection::dump(Formatter *f) {
+void AsyncConnection::dump(Formatter *f, bool tcp_info) {
   std::lock_guard<std::mutex> l(lock);
 
   f->open_object_section("async_connection");
@@ -831,7 +831,7 @@ void AsyncConnection::dump(Formatter *f) {
 
   if (cs) {
     f->dump_int("socket_fd", cs.fd());
-    if (!dump_tcp_info(cs.fd(), f)) {
+    if (!tcp_info || !dump_tcp_info(cs.fd(), f)) {
       f->dump_null("tcp_info");
     }
   } else {
