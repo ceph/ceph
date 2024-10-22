@@ -532,7 +532,7 @@ Commands
   disabled on all images (within the pool or namespace) for which mirroring
   was enabled, whether by default or explicitly.
 
-:command:`mirror pool enable` [*pool-name*] *mode*
+:command:`mirror pool enable` *pool-name* *mode* [--remote-namespace *remote-namespace-name*]
   Enable RBD mirroring within a pool or namespace.
   The mirroring mode can either be ``pool`` or ``image``.
   If configured in ``pool`` mode, all images in the pool or namespace
@@ -540,6 +540,8 @@ Commands
   If configured in ``image`` mode, mirroring needs to be
   explicitly enabled (by ``mirror image enable`` command)
   on each image.
+  A namespace can be mirrored to a different namespace on the remote
+  pool using the ``--remote-namespace`` option.
 
 :command:`mirror pool info` [*pool-name*]
   Show information about the pool or namespace mirroring configuration.

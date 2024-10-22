@@ -23,18 +23,21 @@ capability is available in two modes:
   blocks can be quickly determined without the need to scan the full RBD image.
   Since this mode is not as fine-grained as journaling, the complete delta 
   between two snapshots will need to be synced prior to use during a failover
-  scenario. Any partially applied set of deltas will be rolled back at moment
-  of failover.
+  scenario. Any partially applied set of deltas will be rolled back at the 
+  moment of failover.
 
 .. note:: journal-based mirroring requires the Ceph Jewel release or later;
    snapshot-based mirroring requires the Ceph Octopus release or later.
 
+.. note:: All instances of the term "namespace" in this document refer to RBD
+   namespaces.
+
 Mirroring is configured on a per-pool basis within peer clusters and can be
-configured on a specific subset of images within the pool.  You can also mirror
-all images within a given pool when using journal-based
-mirroring. Mirroring is configured using the ``rbd`` command. The
-``rbd-mirror`` daemon is responsible for pulling image updates from the remote
-peer cluster and applying them to the image within the local cluster.
+configured on a namespace or specific subset of images within the pool or
+namespace. You can also mirror all images within a given pool or namespace when
+using journal-based mirroring. Mirroring is configured using the ``rbd``
+command. The ``rbd-mirror`` daemon is responsible for pulling image updates from
+the remote peer cluster and applying them to the image within the local cluster.
 
 Depending on the desired needs for replication, RBD mirroring can be configured
 for either one- or two-way replication:
@@ -230,6 +233,57 @@ pool as follows:
 #. Otherwise, if the source image uses a separate data pool, and a pool with the
    same name exists on the destination cluster, that pool will be used.
 #. If neither of the above is true, no data pool will be set.
+
+Namespace Configuration
+=======================
+
+Mirroring can be configured on a namespace in a pool. The pool must already
+have been configured for mirroring. The namespace can be mirrored to a namespace
+with the same or a different name in the remote pool.
+
+Enable Mirroring
+----------------
+
+To enable mirroring on a namespace with ``rbd``, issue the ``mirror pool enable``
+subcommand with the namespace spec and the mirroring mode, and an optional
+remote namespace name::
+
+        rbd mirror pool enable {pool-name}/{local-namespace-name} {mode} [--remote-namespace {remote-namespace-name}]
+
+The mirroring mode can either be ``image`` or ``pool``:
+
+* **image**: When configured in ``image`` mode, mirroring must
+  `explicitly enabled`_ on each image.
+* **pool** (default):  When configured in ``pool`` mode, all images in the namespace
+  with the journaling feature enabled are mirrored.
+
+For example::
+
+        $ rbd --cluster site-a mirror pool enable image-pool/namespace-a image --remote-namespace namespace-b
+        $ rbd --cluster site-b mirror pool enable image-pool/namespace-b image --remote-namespace namespace-a
+
+This will set up image mode mirroring between image-pool/namespace-a on cluster
+site-a and image-pool/namespace-b on cluster site-b.
+The namespace and remote-namespace pair configured on a cluster must
+match the remote-namespace and namespace respectively on the remote cluster.
+If the ``--remote-namespace`` option is not provided, the namespace will be
+mirrored to a namespace with the same name in the remote pool.
+
+Disable Mirroring
+-----------------
+
+To disable mirroring on a namespace with ``rbd``, specify the ``mirror pool disable``
+command and the namespace spec::
+
+        rbd mirror pool disable {pool-name}/{namespace-name}
+
+When configured in ``image`` mode, any mirror enabled images in the namespace
+must be explicitly disabled before disabling mirroring on the namespace.
+
+For example::
+
+        $ rbd --cluster site-a mirror pool disable image-pool/namespace-a
+        $ rbd --cluster site-b mirror pool disable image-pool/namespace-b
 
 Image Configuration
 ===================
