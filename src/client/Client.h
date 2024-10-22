@@ -1384,14 +1384,6 @@ private:
     void finish(int r) override {
       CRF->finish_io(r);
     }
-
-    // For _read_async, we may not finish in one go, so be prepared for multiple
-    // calls to complete. All the handling though is in C_Read_Finisher.
-    void complete(int r) override {
-      finish(r);
-      if (CRF->iofinished)
-        delete this;
-    }
   };
 
   class C_Read_Sync_NonBlocking : public Context {
