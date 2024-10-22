@@ -360,7 +360,9 @@ int AsyncMessenger::shutdown()
   return 0;
 }
 
-void AsyncMessenger::dump(Formatter* f) {
+void AsyncMessenger::dump(
+    Formatter* f, std::function<bool(const std::string&)> filter) const {
+  const bool tcp_info = filter("tcp_info");
   std::lock_guard l{lock};
   f->dump_unsigned("nonce", nonce);
   f->open_object_section("my_name");
@@ -370,17 +372,19 @@ void AsyncMessenger::dump(Formatter* f) {
   my_addrs->dump(f);
   f->close_section();  // my_addrs
 
-  f->open_array_section("listen_sockets");
-  for (const auto& proc : processors) {
-    for (const auto& sock : proc->listen_sockets) {
-      f->open_object_section("socket");
-      f->dump_int("socket_fd", sock.fd());
+  if (filter("listen_sockets")) {
+    f->open_array_section("listen_sockets");
+    for (const auto& proc : processors) {
+      for (const auto& sock : proc->listen_sockets) {
+        f->open_object_section("socket");
+        f->dump_int("socket_fd", sock.fd());
 
-      f->dump_int("worker_id", proc->worker ? proc->worker->id : -1);
-      f->close_section();  // socket
+        f->dump_int("worker_id", proc->worker ? proc->worker->id : -1);
+        f->close_section();  // socket
+      }
     }
+    f->close_section();  // listen_sockets
   }
-  f->close_section();  // listen_sockets
 
   f->open_object_section("dispatch_queue");
   f->dump_int("length", get_dispatch_queue_len());
@@ -392,36 +396,44 @@ void AsyncMessenger::dump(Formatter* f) {
 
   f->dump_int("connections_count", conns.size());
 
-  f->open_array_section("connections");
-  for (const auto& [e, c] : conns) {
-    f->open_object_section("connection");
-    e.dump(f);
-    c->dump(f);
-    f->close_section();  // connection
+  if (filter("connections")) {
+    f->open_array_section("connections");
+    for (const auto& [e, c] : conns) {
+      f->open_object_section("connection");
+      e.dump(f);
+      c->dump(f, tcp_info);
+      f->close_section();  // connection
+    }
+    f->close_section();  // connections
   }
-  f->close_section();  // connections
 
-  f->open_array_section("anon_conns");
-  for (const auto& c : anon_conns) {
-    c->dump(f);
+  if (filter("anon_conns")) {
+    f->open_array_section("anon_conns");
+    for (const auto& c : anon_conns) {
+      c->dump(f, tcp_info);
+    }
+    f->close_section();  // anon_conns
   }
-  f->close_section();  // anon_conns
 
-  f->open_array_section("accepting_conns");
-  for (const auto& c : accepting_conns) {
-    c->dump(f);
+  if (filter("accepting_conns")) {
+    f->open_array_section("accepting_conns");
+    for (const auto& c : accepting_conns) {
+      c->dump(f, tcp_info);
+    }
+    f->close_section();  // accepting_conns
   }
-  f->close_section();
 
-  f->open_array_section("deleted_conns");
-  for (const auto& c : deleted_conns) {
-    c->dump(f);
+  if (filter("deleted_conns")) {
+    f->open_array_section("deleted_conns");
+    for (const auto& c : deleted_conns) {
+      c->dump(f, tcp_info);
+    }
+    f->close_section();  // deleted_conns
   }
-  f->close_section();  // deleted_conns
 
   if (local_connection) {
     f->open_array_section("local_connection");
-    local_connection->dump(f);
+    local_connection->dump(f, tcp_info);
     f->close_section();  // local_connection
   }
 }
