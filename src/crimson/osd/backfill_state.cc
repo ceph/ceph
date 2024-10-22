@@ -130,27 +130,15 @@ void BackfillState::Enqueuing::maybe_update_range()
 	     pg().get_projected_last_update());
     auto func =
       [&](const pg_log_entry_t& e) {
-        DEBUGDPP("maybe_update_range(lambda): updating from version {}",
-	  pg(), e.version);
-        if (e.soid >= primary_bi.begin && e.soid <  primary_bi.end) {
-	  if (e.is_update()) {
-	    DEBUGDPP("maybe_update_range(lambda): {} updated to ver {}",
-	      pg(), e.soid, e.version);
-            primary_bi.objects.erase(e.soid);
-            primary_bi.objects.insert(std::make_pair(e.soid,
-                                                             e.version));
-	  } else if (e.is_delete()) {
-            DEBUGDPP("maybe_update_range(lambda): {} removed",
-	      pg(), e.soid);
-            primary_bi.objects.erase(e.soid);
-          }
-        }
+        DEBUGDPP("maybe_update_range(lambda): "
+                 "updating {} to version {}",
+                 pg(), e.soid, e.version);
+        primary_bi.update(e);
       };
     DEBUGDPP("{}: scanning pg log first", pg());
     peering_state().scan_log_after(primary_bi.version, func);
     DEBUGDPP("{}: scanning projected log", pg());
     pg().get_projected_log().scan_log_after(primary_bi.version, func);
-    primary_bi.version = pg().get_projected_last_update();
   } else {
     ceph_abort_msg(
       "scan_range should have raised primary_bi.version past log_tail");

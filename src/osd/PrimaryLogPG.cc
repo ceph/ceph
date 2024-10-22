@@ -14335,28 +14335,12 @@ void PrimaryLogPG::update_range(
     auto func = [&](const pg_log_entry_t &e) {
       dout(10) << __func__ << ": updating from version " << e.version
                << dendl;
-      const hobject_t &soid = e.soid;
-      if (soid >= bi->begin &&
-	  soid < bi->end) {
-	if (e.is_update()) {
-	  dout(10) << __func__ << ": " << e.soid << " updated to version "
-		   << e.version << dendl;
-	  bi->objects.erase(e.soid);
-	  bi->objects.insert(
-	    make_pair(
-	      e.soid,
-	      e.version));
-	} else if (e.is_delete()) {
-	  dout(10) << __func__ << ": " << e.soid << " removed" << dendl;
-	  bi->objects.erase(e.soid);
-	}
-      }
+      bi->update(e);
     };
     dout(10) << "scanning pg log first" << dendl;
     recovery_state.get_pg_log().get_log().scan_log_after(bi->version, func);
     dout(10) << "scanning projected log" << dendl;
     projected_log.scan_log_after(bi->version, func);
-    bi->version = projected_last_update;
   } else {
     ceph_abort_msg("scan_range should have raised bi->version past log_tail");
   }
