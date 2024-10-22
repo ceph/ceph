@@ -124,10 +124,10 @@ BackfillState::Cancelled::react(const BackfillState::Triggered& evt)
 void BackfillState::Enqueuing::maybe_update_range()
 {
   if (auto& primary_bi = backfill_state().backfill_info;
-      primary_bi.version >= pg().get_projected_last_update()) {
+      primary_bi.get_interval_version() >= pg().get_projected_last_update()) {
     logger().info("{}: bi is current", __func__);
-    ceph_assert(primary_bi.version == pg().get_projected_last_update());
-  } else if (primary_bi.version >= peering_state().get_log_tail()) {
+    ceph_assert(primary_bi.get_interval_version() == pg().get_projected_last_update());
+  } else if (primary_bi.get_interval_version() >= peering_state().get_log_tail()) {
     if (peering_state().get_pg_log().get_log().empty() &&
         pg().get_projected_log().empty()) {
       /* Because we don't move log_tail on split, the log might be
@@ -136,12 +136,12 @@ void BackfillState::Enqueuing::maybe_update_range()
        * eversion_t(), because otherwise the entry which changed
        * last_update since the last scan would have to be present.
        */
-      ceph_assert(primary_bi.version == eversion_t());
+      ceph_assert(primary_bi.get_interval_version() == eversion_t());
       return;
     }
     logger().debug("{}: bi is old, ({}) can be updated with log to {}",
                    __func__,
-                   primary_bi.version,
+                   primary_bi.get_interval_version(),
                    pg().get_projected_last_update());
     auto func =
       [&](const pg_log_entry_t& e) {
@@ -150,9 +150,11 @@ void BackfillState::Enqueuing::maybe_update_range()
         primary_bi.update(e);
       };
     logger().debug("{}: scanning pg log first", __func__);
-    peering_state().scan_log_after(primary_bi.version, func);
+    peering_state().scan_log_after(primary_bi.get_interval_version(),
+                                   func);
     logger().debug("{}: scanning projected log", __func__);
-    pg().get_projected_log().scan_log_after(primary_bi.version, func);
+    pg().get_projected_log().scan_log_after(primary_bi.get_interval_version(),
+                                            func);
   } else {
     ceph_abort_msg(
       "scan_range should have raised primary_bi.version past log_tail");
@@ -193,9 +195,8 @@ hobject_t BackfillState::Enqueuing::earliest_peer_backfill(
 {
   hobject_t e = hobject_t::get_max();
   for (const pg_shard_t& bt : peering_state().get_backfill_targets()) {
-    const auto iter = peer_backfill_info.find(bt);
-    ceph_assert(iter != peer_backfill_info.end());
-    e = std::min(e, iter->second.begin);
+    ceph_assert(peer_backfill_info.contains(bt));
+    e = std::min(e,peer_backfill_info.at(bt).get_begin());
   }
   return e;
 }
@@ -216,7 +217,7 @@ bool BackfillState::Enqueuing::should_rescan_primary(
   const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info,
   const BackfillInterval& backfill_info) const
 {
-  return backfill_info.begin <= earliest_peer_backfill(peer_backfill_info) &&
+  return backfill_info.get_begin() <= earliest_peer_backfill(peer_backfill_info) &&
 	 !backfill_info.extends_to_end() && backfill_info.empty();
 }
 
@@ -239,11 +240,11 @@ BackfillState::Enqueuing::remove_on_peers(const hobject_t& check)
   result_t result { {}, check };
   for (const auto& bt : peering_state().get_backfill_targets()) {
     const auto& pbi = backfill_state().peer_backfill_info.at(bt);
-    if (pbi.begin == check) {
+    if (pbi.get_begin() == check) {
       result.pbi_targets.insert(bt);
-      const auto& version = pbi.objects.begin()->second;
-      backfill_state().progress_tracker->enqueue_drop(pbi.begin);
-      backfill_listener().enqueue_drop(bt, pbi.begin, version);
+      const auto& version = pbi.get_begin_version();
+      backfill_state().progress_tracker->enqueue_drop(pbi.get_begin());
+      backfill_listener().enqueue_drop(bt, pbi.get_begin(), version);
     }
   }
   logger().debug("{}: BACKFILL removing {} from peers {}",
@@ -257,19 +258,19 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
 {
   logger().debug("{}: check={}", __func__, check);
   const auto& primary_bi = backfill_state().backfill_info;
-  result_t result { {}, primary_bi.begin };
+  result_t result { {}, primary_bi.get_begin() };
   std::map<hobject_t, std::pair<eversion_t, std::vector<pg_shard_t>>> backfills;
 
   for (const auto& bt : peering_state().get_backfill_targets()) {
     const auto& peer_bi = backfill_state().peer_backfill_info.at(bt);
 
     // Find all check peers that have the wrong version
-    if (const eversion_t& obj_v = primary_bi.objects.begin()->second;
-        check == primary_bi.begin && check == peer_bi.begin) {
-      if (peer_bi.objects.begin()->second != obj_v) {
+    if (const eversion_t& obj_v = primary_bi.get_begin_version();
+        check == primary_bi.get_begin() && check == peer_bi.get_begin()) {
+      if (peer_bi.get_begin_version() != obj_v) {
 	std::ignore = backfill_state().progress_tracker->enqueue_push(
-	  primary_bi.begin);
-	auto &[v, peers] = backfills[primary_bi.begin];
+	  primary_bi.get_begin());
+	auto &[v, peers] = backfills[primary_bi.get_begin()];
 	assert(v == obj_v || v == eversion_t());
 	v = obj_v;
 	peers.push_back(bt);
@@ -281,10 +282,10 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
       // Only include peers that we've caught up to their backfill line
       // otherwise, they only appear to be missing this object
       // because their peer_bi.begin > backfill_info.begin.
-      if (primary_bi.begin > peering_state().get_peer_last_backfill(bt)) {
+      if (primary_bi.get_begin() > peering_state().get_peer_last_backfill(bt)) {
 	std::ignore = backfill_state().progress_tracker->enqueue_push(
-	  primary_bi.begin);
-	auto &[v, peers] = backfills[primary_bi.begin];
+	  primary_bi.get_begin());
+	auto &[v, peers] = backfills[primary_bi.get_begin()];
 	assert(v == obj_v || v == eversion_t());
 	v = obj_v;
 	peers.push_back(bt);
@@ -320,7 +321,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 
   // update our local interval to cope with recent changes
   primary_bi.trim_to(backfill_state().last_backfill_started);
-  if (primary_bi.version < peering_state().get_log_tail()) {
+  if (primary_bi.get_interval_version() < peering_state().get_log_tail()) {
     // it might be that the OSD is so flooded with modifying operations
     // that backfill will be spinning here over and over. For the sake
     // of performance and complexity we don't synchronize with entire PG.
@@ -361,7 +362,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
     // for which that object applies.
     if (const hobject_t check = \
           earliest_peer_backfill(backfill_state().peer_backfill_info);
-        check < primary_bi.begin) {
+        check < primary_bi.get_begin()) {
       // Don't increment ops here because deletions
       // are cheap and not replied to unlike real recovery_ops,
       // and we can't increment ops without requeueing ourself
@@ -402,7 +403,7 @@ BackfillState::PrimaryScanning::PrimaryScanning(my_context ctx)
   // Later on, in PrimaryScanning::react, BackfillState will be
   // updated with the returned interval
   backfill_listener().request_primary_scan(
-    backfill_state().backfill_info.begin);
+    backfill_state().backfill_info.get_begin());
 }
 
 boost::statechart::result
@@ -428,7 +429,7 @@ bool BackfillState::ReplicasScanning::replica_needs_scan(
   const BackfillInterval& local_backfill_info)
 {
   return replica_backfill_info.empty() && \
-         replica_backfill_info.begin <= local_backfill_info.begin && \
+         replica_backfill_info.get_begin() <= local_backfill_info.get_begin() && \
          !replica_backfill_info.extends_to_end();
 }
 
@@ -439,8 +440,8 @@ BackfillState::ReplicasScanning::ReplicasScanning(my_context ctx)
     if (const auto& pbi = backfill_state().peer_backfill_info.at(bt);
         replica_needs_scan(pbi, backfill_state().backfill_info)) {
       logger().debug("{}: scanning peer osd.{} from {}",
-                     __func__, bt, pbi.end);
-      backfill_listener().request_replica_scan(bt, pbi.end, hobject_t{});
+                     __func__, bt, pbi.get_end());
+      backfill_listener().request_replica_scan(bt, pbi.get_end(), hobject_t{});
 
       ceph_assert(waiting_on_backfill.find(bt) == \
                   waiting_on_backfill.end());

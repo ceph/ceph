@@ -302,10 +302,10 @@ RecoveryBackend::handle_scan_get_digest(
 	pg.get_osdmap_epoch(),
 	query_epoch,
 	spg_t(pg.get_info().pgid.pgid, pg.get_primary().shard),
-	backfill_interval.begin,
-	backfill_interval.end,
-	backfill_interval.version);
-      encode(backfill_interval.objects, reply->get_data());
+	backfill_interval.get_begin(),
+	backfill_interval.get_end(),
+	backfill_interval.get_interval_version());
+      encode(backfill_interval.get_objects(), reply->get_data());
       return conn->send(std::move(reply));
     });
 }

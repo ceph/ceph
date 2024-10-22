@@ -18,6 +18,7 @@
  */
 
 struct BackfillInterval {
+private:
   // info about a backfill interval on a peer
   eversion_t version; /// version at which the scan occurred
   std::map<hobject_t,eversion_t> objects;
@@ -25,6 +26,7 @@ struct BackfillInterval {
   hobject_t end;   /// object to start populating the interval to
   bool populated = false;
 
+public:
   BackfillInterval(hobject_t begin);
 
   BackfillInterval(hobject_t begin,
@@ -49,6 +51,26 @@ struct BackfillInterval {
     objects = std::move(_objects);
     version = _version;
     populated = true;
+  }
+
+  const std::map<hobject_t,eversion_t>& get_objects() const {
+    return objects;
+  }
+
+  const hobject_t& get_begin() const {
+    return begin;
+  }
+
+  const hobject_t& get_end() const {
+    return begin;
+  }
+
+  const eversion_t& get_begin_version() const {
+    return objects.begin()->second;
+  }
+
+  const eversion_t& get_interval_version() const {
+    return version;
   }
 
   /// true if interval is populated
@@ -109,9 +131,9 @@ struct BackfillInterval {
     }
     f->close_section();
   }
-};
 
-std::ostream &operator<<(std::ostream &out, const BackfillInterval &bi);
+  friend std::ostream &operator<<(std::ostream &out, const BackfillInterval &bi);
+};
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<BackfillInterval> : fmt::ostream_formatter {};

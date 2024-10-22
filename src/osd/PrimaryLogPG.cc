@@ -4507,9 +4507,9 @@ void PrimaryLogPG::do_scan(
 	MOSDPGScan::OP_SCAN_DIGEST_REPLY,
 	pg_whoami,
 	get_osdmap_epoch(), m->query_epoch,
-	spg_t(info.pgid.pgid, get_primary().shard),bi.begin, bi.end,
-	bi.version);
-      encode(bi.objects, reply->get_data());
+	spg_t(info.pgid.pgid, get_primary().shard),bi.get_begin(), bi.get_end(),
+	bi.get_interval_version());
+      encode(bi.get_objects(), reply->get_data());
       osd->send_message_osd_cluster(reply, m->get_connection());
     }
     break;
@@ -13839,9 +13839,8 @@ hobject_t PrimaryLogPG::earliest_peer_backfill() const
 {
   hobject_t e = hobject_t::get_max();
   for (const pg_shard_t& peer : get_backfill_targets()) {
-    const auto iter = peer_backfill_info.find(peer);
-    ceph_assert(iter != peer_backfill_info.end());
-    e = std::min(e, iter->second.begin);
+    ceph_assert(peer_backfill_info.contains(peer));
+    e = std::min(e, peer_backfill_info.at(peer).get_begin());
   }
   return e;
 }
@@ -13947,9 +13946,9 @@ uint64_t PrimaryLogPG::recover_backfill(
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   while (ops < max) {
-    if (backfill_info->begin <= earliest_peer_backfill() &&
+    if (backfill_info->get_begin() <= earliest_peer_backfill() &&
 	!backfill_info->extends_to_end() && backfill_info->empty()) {
-      hobject_t next = backfill_info->end;
+      hobject_t next = backfill_info->get_end();
       backfill_info = BackfillInterval(next, hobject_t::get_max());
       update_range(&backfill_info.value(), handle);
     }
@@ -13963,14 +13962,14 @@ uint64_t PrimaryLogPG::recover_backfill(
       BackfillInterval& pbi = peer_backfill_info.at(bt);
 
       dout(20) << " peer shard " << bt << " backfill " << pbi << dendl;
-      if (pbi.begin <= backfill_info->begin &&
+      if (pbi.get_begin() <= backfill_info->get_begin() &&
 	  !pbi.extends_to_end() && pbi.empty()) {
-	dout(10) << " scanning peer osd." << bt << " from " << pbi.end << dendl;
+	dout(10) << " scanning peer osd." << bt << " from " << pbi.get_end() << dendl;
 	epoch_t e = get_osdmap_epoch();
 	MOSDPGScan *m = new MOSDPGScan(
 	  MOSDPGScan::OP_SCAN_GET_DIGEST, pg_whoami, e, get_last_peering_reset(),
 	  spg_t(info.pgid.pgid, bt.shard),
-	  pbi.end, hobject_t(), eversion_t());
+	  pbi.get_end(), hobject_t(), eversion_t());
 
 	if (cct->_conf->osd_op_queue == "mclock_scheduler") {
 	  /* This guard preserves legacy WeightedPriorityQueue behavior for
@@ -14000,13 +13999,13 @@ uint64_t PrimaryLogPG::recover_backfill(
     // the set of targets for which that object applies.
     hobject_t check = earliest_peer_backfill();
 
-    if (check < backfill_info->begin) {
+    if (check < backfill_info->get_begin()) {
 
       set<pg_shard_t> check_targets;
       for (const auto& bt : get_backfill_targets()) {
         ceph_assert(peer_backfill_info.contains(bt));
         BackfillInterval& pbi = peer_backfill_info.at(bt);
-        if (pbi.begin == check)
+        if (pbi.get_begin() == check)
           check_targets.insert(bt);
       }
       ceph_assert(!check_targets.empty());
@@ -14016,9 +14015,9 @@ uint64_t PrimaryLogPG::recover_backfill(
       for (const auto& bt : check_targets) {
         ceph_assert(peer_backfill_info.contains(bt));
         BackfillInterval& pbi = peer_backfill_info.at(bt);
-        ceph_assert(pbi.begin == check);
+        ceph_assert(pbi.get_begin() == check);
 
-        to_remove.push_back(boost::make_tuple(check, pbi.objects.begin()->second, bt));
+        to_remove.push_back(boost::make_tuple(check, pbi.get_begin_version(), bt));
         pbi.pop_front();
       }
 
@@ -14029,15 +14028,15 @@ uint64_t PrimaryLogPG::recover_backfill(
       // and we can't increment ops without requeueing ourself
       // for recovery.
     } else {
-      eversion_t& obj_v = backfill_info->objects.begin()->second;
+      const eversion_t& obj_v = backfill_info->get_begin_version();
 
       vector<pg_shard_t> need_ver_targs, missing_targs, keep_ver_targs, skip_targs;
       for (const auto& bt : get_backfill_targets()) {
         ceph_assert(peer_backfill_info.contains(bt));
         BackfillInterval& pbi = peer_backfill_info.at(bt);
         // Find all check peers that have the wrong version
-	if (check == backfill_info->begin && check == pbi.begin) {
-	  if (pbi.objects.begin()->second != obj_v) {
+	if (check == backfill_info->get_begin() && check == pbi.get_begin()) {
+	  if (pbi.get_begin_version() != obj_v) {
 	    need_ver_targs.push_back(bt);
 	  } else {
 	    keep_ver_targs.push_back(bt);
@@ -14048,7 +14047,7 @@ uint64_t PrimaryLogPG::recover_backfill(
           // Only include peers that we've caught up to their backfill line
 	  // otherwise, they only appear to be missing this object
 	  // because their pbi.begin > backfill_info->begin.
-          if (backfill_info->begin > pinfo.last_backfill)
+          if (backfill_info->get_begin() > pinfo.last_backfill)
 	    missing_targs.push_back(bt);
 	  else
 	    skip_targs.push_back(bt);
@@ -14063,7 +14062,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	//assert(!waiting_for_degraded_object.count(check));
       }
       if (!need_ver_targs.empty() || !missing_targs.empty()) {
-	ObjectContextRef obc = get_object_context(backfill_info->begin, false);
+	ObjectContextRef obc = get_object_context(backfill_info->get_begin(), false);
 	ceph_assert(obc);
 	if (obc->get_recovery_read()) {
 	  if (!need_ver_targs.empty()) {
@@ -14072,7 +14071,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 		   << " to peers " << need_ver_targs << dendl;
 	  }
 	  if (!missing_targs.empty()) {
-	    dout(20) << " BACKFILL pushing " << backfill_info->begin
+	    dout(20) << " BACKFILL pushing " << backfill_info->get_begin()
 	         << " with ver " << obj_v
 	         << " to peers " << missing_targs << dendl;
 	  }
@@ -14080,16 +14079,16 @@ uint64_t PrimaryLogPG::recover_backfill(
 	  all_push.insert(all_push.end(), missing_targs.begin(), missing_targs.end());
 
 	  handle.reset_tp_timeout();
-	  int r = prep_backfill_object_push(backfill_info->begin, obj_v, obc, all_push, h);
+	  int r = prep_backfill_object_push(backfill_info->get_begin(), obj_v, obc, all_push, h);
 	  if (r < 0) {
 	    *work_started = true;
-	    dout(0) << __func__ << " Error " << r << " trying to backfill " << backfill_info->begin << dendl;
+	    dout(0) << __func__ << " Error " << r << " trying to backfill " << backfill_info->get_begin() << dendl;
 	    break;
 	  }
 	  ops++;
 	} else {
 	  *work_started = true;
-	  dout(20) << "backfill blocking on " << backfill_info->begin
+	  dout(20) << "backfill blocking on " << backfill_info->get_begin()
 		   << "; could not get rw_manager lock" << dendl;
 	  break;
 	}
@@ -14100,8 +14099,8 @@ uint64_t PrimaryLogPG::recover_backfill(
 	       << " missing_targs=" << missing_targs
 	       << " skip_targs=" << skip_targs << dendl;
 
-      last_backfill_started = backfill_info->begin;
-      add_to_stat.insert(backfill_info->begin); // XXX: Only one for all pushes?
+      last_backfill_started = backfill_info->get_begin();
+      add_to_stat.insert(backfill_info->get_begin()); // XXX: Only one for all pushes?
       backfill_info->pop_front();
       vector<pg_shard_t> check_targets = need_ver_targs;
       check_targets.insert(check_targets.end(), keep_ver_targs.begin(), keep_ver_targs.end());
@@ -14157,7 +14156,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 
   hobject_t backfill_pos =
     backfill_info ?
-    std::min(backfill_info->begin, earliest_peer_backfill()) :
+    std::min(backfill_info->get_begin(), earliest_peer_backfill()) :
     earliest_peer_backfill();
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
   for (set<hobject_t>::iterator i = backfills_in_flight.begin();
@@ -14284,16 +14283,16 @@ void PrimaryLogPG::update_range(
   int local_min = cct->_conf->osd_backfill_scan_min;
   int local_max = cct->_conf->osd_backfill_scan_max;
 
-  if (bi->version < info.log_tail) {
+  if (bi->get_interval_version() < info.log_tail) {
     dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
 	     << dendl;
-    *bi = scan_range(local_min, local_max, bi->begin, info.last_update, handle);
+    *bi = scan_range(local_min, local_max, bi->get_begin(), info.last_update, handle);
   }
 
-  if (bi->version >= projected_last_update) {
+  if (bi->get_interval_version() >= projected_last_update) {
     dout(10) << __func__<< ": bi is current " << dendl;
-    ceph_assert(bi->version == projected_last_update);
-  } else if (bi->version >= info.log_tail) {
+    ceph_assert(bi->get_interval_version() == projected_last_update);
+  } else if (bi->get_interval_version() >= info.log_tail) {
     if (recovery_state.get_pg_log().get_log().empty() && projected_log.empty()) {
       /* Because we don't move log_tail on split, the log might be
        * empty even if log_tail != last_update.  However, the only
@@ -14301,11 +14300,11 @@ void PrimaryLogPG::update_range(
        * eversion_t(), because otherwise the entry which changed
        * last_update since the last scan would have to be present.
        */
-      ceph_assert(bi->version == eversion_t());
+      ceph_assert(bi->get_interval_version() == eversion_t());
       return;
     }
 
-    dout(10) << __func__<< ": bi is old, (" << bi->version
+    dout(10) << __func__<< ": bi is old, (" << bi->get_interval_version()
 	     << ") can be updated with log to projected_last_update "
 	     << projected_last_update << dendl;
 
@@ -14315,9 +14314,9 @@ void PrimaryLogPG::update_range(
       bi->update(e);
     };
     dout(10) << "scanning pg log first" << dendl;
-    recovery_state.get_pg_log().get_log().scan_log_after(bi->version, func);
+    recovery_state.get_pg_log().get_log().scan_log_after(bi->get_interval_version(), func);
     dout(10) << "scanning projected log" << dendl;
-    projected_log.scan_log_after(bi->version, func);
+    projected_log.scan_log_after(bi->get_interval_version(), func);
   } else {
     ceph_abort_msg("scan_range should have raised bi->version past log_tail");
   }
