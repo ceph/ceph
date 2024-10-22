@@ -305,7 +305,7 @@ TEST_F(TestMockMirrorDisableRequest, Success) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(
@@ -347,7 +347,7 @@ TEST_F(TestMockMirrorDisableRequest, SuccessNoRemove) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(
@@ -376,7 +376,7 @@ TEST_F(TestMockMirrorDisableRequest, SuccessNonPrimary) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_NON_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(
@@ -409,7 +409,7 @@ TEST_F(TestMockMirrorDisableRequest, NonPrimaryError) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_NON_PRIMARY, 0);
 
   C_SaferCond ctx;
@@ -433,7 +433,7 @@ TEST_F(TestMockMirrorDisableRequest, GetMirrorInfoError) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, -EINVAL);
 
   C_SaferCond ctx;
@@ -457,7 +457,7 @@ TEST_F(TestMockMirrorDisableRequest, MirrorImageSetError) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(
@@ -483,7 +483,7 @@ TEST_F(TestMockMirrorDisableRequest, JournalPromoteError) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_NON_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(
@@ -511,7 +511,7 @@ TEST_F(TestMockMirrorDisableRequest, JournalClientListError) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(
@@ -541,7 +541,7 @@ TEST_F(TestMockMirrorDisableRequest, SnapRemoveError) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(
@@ -580,7 +580,7 @@ TEST_F(TestMockMirrorDisableRequest, JournalClientUnregisterError) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(
@@ -617,7 +617,7 @@ TEST_F(TestMockMirrorDisableRequest, SnapshotPromoteError) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_NON_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(
@@ -644,7 +644,7 @@ TEST_F(TestMockMirrorDisableRequest, RefreshError) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_NON_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(
@@ -674,7 +674,7 @@ TEST_F(TestMockMirrorDisableRequest, MirrorImageRemoveError) {
   MockGetInfoRequest mock_get_info_request;
   expect_get_mirror_info(
     mock_image_ctx, mock_get_info_request,
-    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id", {},
      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   MockImageStateUpdateRequest mock_image_state_update_request;
   expect_mirror_image_state_update(

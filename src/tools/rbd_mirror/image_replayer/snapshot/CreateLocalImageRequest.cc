@@ -47,7 +47,7 @@ void CreateLocalImageRequest<I>::disable_mirror_image() {
   // need to send 'disabling' since the cls methods will fail if we aren't
   // in that state
   cls::rbd::MirrorImage mirror_image{
-    cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, m_global_image_id,
+    cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, m_global_image_id, {},
     cls::rbd::MIRROR_IMAGE_STATE_DISABLING};
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_set(&op, m_state_builder->local_image_id,
@@ -118,7 +118,7 @@ void CreateLocalImageRequest<I>::add_mirror_image() {
   // use 'creating' to track a partially constructed image. it will
   // be switched to 'enabled' once the image is fully created
   cls::rbd::MirrorImage mirror_image{
-    cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, m_global_image_id,
+    cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, m_global_image_id, {},
     cls::rbd::MIRROR_IMAGE_STATE_CREATING};
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_set(&op, m_state_builder->local_image_id,
