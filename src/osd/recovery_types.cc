@@ -20,6 +20,8 @@ void BackfillInterval::update(const pg_log_entry_t &e) {
       objects.emplace(e.soid,e.version);
     } else if (e.is_delete()) {
       objects.erase(e.soid);
+      begin = objects.begin();
+      end = objects.rbegin();
     }
   }
   // When scanning log entries for updates, we call update
