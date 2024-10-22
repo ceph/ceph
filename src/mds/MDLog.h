@@ -297,9 +297,9 @@ private:
   bool debug_subtrees;
   std::atomic_uint64_t event_large_threshold; // accessed by submit thread
   uint64_t events_per_segment;
-  uint64_t major_segment_event_ratio;
   int64_t max_events;
   uint64_t max_segments;
+  uint64_t minor_segments_per_major_segment;
   bool pause;
   bool skip_corrupt_events;
   bool skip_unbounded_events;
@@ -307,7 +307,7 @@ private:
   std::set<uint64_t> major_segments;
   std::set<LogSegment*> expired_segments;
   std::set<LogSegment*> expiring_segments;
-  uint64_t events_since_last_major_segment = 0;
+  uint64_t minor_segments_since_last_major_segment = 0;
   double log_warn_factor;
 
   // log trimming decay counter
