@@ -184,12 +184,6 @@ struct GroupCtx {
     }
 
     virtual void stop() = 0;
-
-    virtual void notify_group_snap_image_complete(
-        int64_t local_pool_id,
-        const std::string &local_image_id,
-        const std::string &remote_group_snap_id,
-        uint64_t local_snap_id) = 0;
   };
 
   std::string name;
