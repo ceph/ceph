@@ -43,11 +43,11 @@ HeartbeatMap::~HeartbeatMap()
   ceph_assert(m_workers.empty());
 }
 
-heartbeat_handle_d *HeartbeatMap::add_worker(const string& name, pthread_t thread_id)
+heartbeat_handle_d *HeartbeatMap::add_worker(string&& name, pthread_t thread_id)
 {
   std::unique_lock locker{m_rwlock};
   ldout(m_cct, 10) << "add_worker '" << name << "'" << dendl;
-  heartbeat_handle_d *h = new heartbeat_handle_d(name);
+  heartbeat_handle_d *h = new heartbeat_handle_d(std::move(name));
   ANNOTATE_BENIGN_RACE_SIZED(&h->timeout, sizeof(h->timeout),
                              "heartbeat_handle_d timeout");
   ANNOTATE_BENIGN_RACE_SIZED(&h->suicide_timeout, sizeof(h->suicide_timeout),
