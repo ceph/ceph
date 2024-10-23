@@ -400,6 +400,7 @@ public:
                 t, T::TYPE, offset, length, *ret);
       ceph_abort("impossible");
     } else if (result == Transaction::get_extent_ret::PRESENT) {
+      assert(ret->get_length() == length);
       if (ret->is_fully_loaded()) {
         SUBTRACET(seastore_cache, "{} {}~{} is present on t -- {}",
                   t, T::TYPE, offset, length, *ret);
@@ -584,6 +585,7 @@ public:
     // user should not see RETIRED_PLACEHOLDER extents
     ceph_assert(!is_retired_placeholder_type(p_extent->get_type()));
     if (!p_extent->is_fully_loaded()) {
+      assert(is_logical_type(p_extent->get_type()));
       assert(!p_extent->is_mutable());
       ++access_stats.load_present;
       ++stats.access.s.load_present;
@@ -689,30 +691,26 @@ private:
       extent_init_func(*ret);
       return read_extent<T>(
 	std::move(ret));
-    } else if (!cached->is_fully_loaded()) {
-      auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
-      on_cache(*ret);
+    }
+
+    auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
+    on_cache(*ret);
+    if (ret->is_fully_loaded()) {
+      SUBTRACE(seastore_cache,
+          "{} {}~{} is present in cache -- {}",
+          T::TYPE, offset, length, *ret);
+      return ret->wait_io().then([ret] {
+        // ret may be invalid, caller must check
+        return seastar::make_ready_future<TCachedExtentRef<T>>(ret);
+      });
+    } else {
       SUBDEBUG(seastore_cache,
-        "{} {}~{} is present without been fully loaded, reading ... -- {}",
-        T::TYPE, offset, length, *ret);
+          "{} {}~{} is present without been fully loaded, reading ... -- {}",
+          T::TYPE, offset, length, *ret);
       auto bp = create_extent_ptr_rand(length);
       ret->set_bptr(std::move(bp));
       return read_extent<T>(
         std::move(ret));
-    } else {
-      SUBTRACE(seastore_cache,
-          "{} {}~{} is present in cache -- {}",
-          T::TYPE, offset, length, *cached);
-      auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
-      on_cache(*ret);
-      return ret->wait_io(
-      ).then([ret=std::move(ret)]() mutable
-	     -> read_extent_ret<T> {
-        // ret may be invalid, caller must check
-        return read_extent_ret<T>(
-          get_extent_ertr::ready_future_marker{},
-          std::move(ret));
-      });
     }
   }
 
@@ -781,6 +779,7 @@ private:
                 t, type, offset, length, laddr, *ret);
       ceph_abort("impossible");
     } else if (status == Transaction::get_extent_ret::PRESENT) {
+      assert(ret->get_length() == length);
       if (ret->is_fully_loaded()) {
         SUBTRACET(seastore_cache, "{} {}~{} {} is present on t -- {}",
                   t, type, offset, length, laddr, *ret);
