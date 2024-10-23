@@ -214,7 +214,7 @@ public:
       pin->maybe_fix_pos();
       fut = base_iertr::make_ready_future<LBAMappingRef>(std::move(pin));
     }
-    return fut.si_then([&t, this](auto npin) mutable {
+    return fut.si_then([&t, this](auto npin) {
       // checking the lba child must be atomic with creating
       // and linking the absent child
       auto ret = get_extent_if_linked<T>(t, std::move(npin));
