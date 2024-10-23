@@ -16,6 +16,7 @@ from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, \
     RgwClient, RgwMultisite, RgwMultisiteAutomation
+from ..services.rgw_iam import RgwAccounts
 from ..services.service import RgwServiceManager, wait_for_daemon_to_start
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
@@ -399,6 +400,15 @@ class RgwBucket(RgwRESTController):
                 if bucket['tenant'] else bucket['bucket']
         return bucket
 
+    def _get_owner(self, owner):
+        accounts = RgwAccounts().get_accounts()
+
+        # if the owner is present in the accounts list,
+        # then the bucket is owned by an account.
+        # hence we will use dashboard user to fetch the
+        # bucket info
+        return owner if owner not in accounts else RgwServiceManager.user
+
     def _get_versioning(self, owner, daemon_name, bucket_name):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.get_bucket_versioning(bucket_name)
@@ -542,19 +552,20 @@ class RgwBucket(RgwRESTController):
         bucket_name = RgwBucket.get_s3_bucket_name(result['bucket'],
                                                    result['tenant'])
 
+        owner = self._get_owner(result['owner'])
         # Append the versioning configuration.
-        versioning = self._get_versioning(result['owner'], daemon_name, bucket_name)
-        encryption = self._get_encryption(bucket_name, daemon_name, result['owner'])
+        versioning = self._get_versioning(owner, daemon_name, bucket_name)
+        encryption = self._get_encryption(bucket_name, daemon_name, owner)
         result['encryption'] = encryption['Status']
         result['versioning'] = versioning['Status']
         result['mfa_delete'] = versioning['MfaDelete']
-        result['bucket_policy'] = self._get_policy(bucket_name, daemon_name, result['owner'])
-        result['acl'] = self._get_acl(bucket_name, daemon_name, result['owner'])
-        result['replication'] = self._get_replication(bucket_name, result['owner'], daemon_name)
-        result['lifecycle'] = self._get_lifecycle(bucket_name, daemon_name, result['owner'])
+        result['bucket_policy'] = self._get_policy(bucket_name, daemon_name, owner)
+        result['acl'] = self._get_acl(bucket_name, daemon_name, owner)
+        result['replication'] = self._get_replication(bucket_name, owner, daemon_name)
+        result['lifecycle'] = self._get_lifecycle(bucket_name, daemon_name, owner)
 
         # Append the locking configuration.
-        locking = self._get_locking(result['owner'], daemon_name, bucket_name)
+        locking = self._get_locking(owner, daemon_name, bucket_name)
         result.update(locking)
 
         return self._append_bid(result)
@@ -599,7 +610,7 @@ class RgwBucket(RgwRESTController):
             raise DashboardException(e, http_status_code=500, component='rgw')
 
     @allow_empty_body
-    def set(self, bucket, bucket_id, uid, versioning_state=None,
+    def set(self, bucket, bucket_id, uid=None, versioning_state=None,
             encryption_state='false', encryption_type=None, key_id=None,
             mfa_delete=None, mfa_token_serial=None, mfa_token_pin=None,
             lock_mode=None, lock_retention_period_days=None,
@@ -609,23 +620,27 @@ class RgwBucket(RgwRESTController):
         encryption_state = str_to_bool(encryption_state)
         if replication is not None:
             replication = str_to_bool(replication)
-        # When linking a non-tenant-user owned bucket to a tenanted user, we
-        # need to prefix bucket name with '/'. e.g. photos -> /photos
-        if '$' in uid and '/' not in bucket:
-            bucket = '/{}'.format(bucket)
 
-        # Link bucket to new user:
-        result = self.proxy(daemon_name,
-                            'PUT',
-                            'bucket', {
-                                'bucket': bucket,
-                                'bucket-id': bucket_id,
-                                'uid': uid
-                            },
-                            json_response=False)
+        result = None
+        if uid:
+            # When linking a non-tenant-user owned bucket to a tenanted user, we
+            # need to prefix bucket name with '/'. e.g. photos -> /photos
+            if '$' in uid and '/' not in bucket:
+                bucket = '/{}'.format(bucket)
+
+            # Link bucket to new user:
+            result = self.proxy(daemon_name,
+                                'PUT',
+                                'bucket', {
+                                    'bucket': bucket,
+                                    'bucket-id': bucket_id,
+                                    'uid': uid
+                                },
+                                json_response=False)
 
         uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
         bucket_name = RgwBucket.get_s3_bucket_name(bucket, uid_tenant)
+        uid = self._get_owner(uid)
 
         locking = self._get_locking(uid, daemon_name, bucket_name)
         if versioning_state:
@@ -659,7 +674,7 @@ class RgwBucket(RgwRESTController):
             self._set_lifecycle(bucket_name, lifecycle, daemon_name, uid)
         else:
             self._delete_lifecycle(bucket_name, daemon_name, uid)
-        return self._append_bid(result)
+        return self._append_bid(result) if result else None
 
     def delete(self, bucket, purge_objects='true', daemon_name=None):
         return self.proxy(daemon_name, 'DELETE', 'bucket', {
