@@ -14,7 +14,6 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators, isEmptyInputValue } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
 import { RgwUserCapability } from '../models/rgw-user-capability';
@@ -25,6 +24,7 @@ import { RgwUserCapabilityModalComponent } from '../rgw-user-capability-modal/rg
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
 import { RgwUserSubuserModalComponent } from '../rgw-user-subuser-modal/rgw-user-subuser-modal.component';
 import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-rgw-user-form',
@@ -55,7 +55,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private rgwUserService: RgwUserService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private notificationService: NotificationService,
     public actionLabels: ActionLabelsI18n
   ) {
@@ -510,15 +510,15 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (_.isNumber(index)) {
       // Edit
       const subuser = this.subusers[index];
-      modalRef.componentInstance.setEditing();
-      modalRef.componentInstance.setValues(uid, subuser.id, subuser.permissions);
+      modalRef.setEditing();
+      modalRef.setValues(uid, subuser.id, subuser.permissions);
     } else {
       // Add
-      modalRef.componentInstance.setEditing(false);
-      modalRef.componentInstance.setValues(uid);
-      modalRef.componentInstance.setSubusers(this.subusers);
+      modalRef.setEditing(false);
+      modalRef.setValues(uid);
+      modalRef.setSubusers(this.subusers);
     }
-    modalRef.componentInstance.submitAction.subscribe((subuser: RgwUserSubuser) => {
+    modalRef.submitAction.subscribe((subuser: RgwUserSubuser) => {
       this.setSubuser(subuser, index);
     });
   }
