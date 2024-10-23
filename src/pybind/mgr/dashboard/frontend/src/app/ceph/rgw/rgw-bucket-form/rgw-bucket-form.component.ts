@@ -23,7 +23,6 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { rgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
 import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
@@ -39,6 +38,7 @@ import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { map, switchMap } from 'rxjs/operators';
 import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml-formatter.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -92,7 +92,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     private formBuilder: CdFormBuilder,
     private rgwBucketService: RgwBucketService,
     private rgwSiteService: RgwSiteService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private rgwUserService: RgwUserService,
     private notificationService: NotificationService,
     private textAreaJsonFormatterService: TextAreaJsonFormatterService,
@@ -475,7 +475,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   showTagModal(index?: number) {
     const modalRef = this.modalService.show(BucketTagModalComponent);
-    const modalComponent = modalRef.componentInstance as BucketTagModalComponent;
+    const modalComponent = modalRef as BucketTagModalComponent;
     modalComponent.currentKeyTags = this.tags.map((item) => item.key);
 
     if (_.isNumber(index)) {
