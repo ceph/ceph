@@ -25,6 +25,9 @@
    - osd_op_num_shards_hdd = 1 (was 5)
    - osd_op_num_threads_per_shard_hdd = 5 (was 1)
   For more details see https://tracker.ceph.com/issues/66289.
+* MGR: MGR's always-on modulues/plugins can now be force-disabled. This can be
+  necessary in cases where MGR(s) needs to be prevented from being flooded by
+  the module commands when coresponding Ceph service is down/degraded.
 
 * CephFS: Modifying the FS setting variable "max_mds" when a cluster is
   unhealthy now requires users to pass the confirmation flag
