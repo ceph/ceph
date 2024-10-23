@@ -4730,6 +4730,23 @@ bool Server::is_valid_layout(file_layout_t *layout)
   return true;
 }
 
+bool Server::can_handle_charmap(const MDRequestRef& mdr, CDentry* dn)
+{
+  CDir *dir = dn->get_dir();
+  CInode *diri = dir->get_inode();
+  if (auto* csp = diri->get_charmap()) {
+    dout(20) << __func__ << ": with " << *csp << dendl;
+    auto& client_metadata = mdr->session->info.client_metadata;
+    bool allowed  = client_metadata.features.test(CEPHFS_FEATURE_CHARMAP);
+    if (!allowed) {
+      dout(5) << " client cannot handle charmap" << dendl;
+      respond_to_request(mdr, -EPERM);
+      return false;
+    }
+  }
+  return true;
+}
+
 void Server::handle_client_openc(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -4758,6 +4775,10 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
   }
 
   ceph_assert(dnl->is_null());
+
+  if (!can_handle_charmap(mdr, dn)) {
+    return;
+  }
 
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
@@ -7382,6 +7403,11 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
     return;
 
   ceph_assert(dn->get_projected_linkage()->is_null());
+
+  if (!can_handle_charmap(mdr, dn)) {
+    return;
+  }
+
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
     respond_to_request(mdr, -ENAMETOOLONG);
@@ -7479,6 +7505,11 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
     return;
 
   ceph_assert(dn->get_projected_linkage()->is_null());
+
+  if (!can_handle_charmap(mdr, dn)) {
+    return;
+  }
+
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
     respond_to_request(mdr, -ENAMETOOLONG);
@@ -7579,6 +7610,11 @@ void Server::handle_client_link(const MDRequestRef& mdr)
   }
 
   ceph_assert(destdn->get_projected_linkage()->is_null());
+
+  if (!can_handle_charmap(mdr, destdn)) {
+    return;
+  }
+
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
     respond_to_request(mdr, -ENAMETOOLONG);
@@ -8995,6 +9031,10 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   CInode *srci = srcdnl->get_inode();
   dout(10) << " srci " << *srci << dendl;
+
+  if (!can_handle_charmap(mdr, destdn)) {
+    return;
+  }
 
   // -- some sanity checks --
   if (destdn == srcdn) {
