@@ -96,6 +96,15 @@
       mirror group resync               Force resync to primary group for RBD
                                         mirroring.
       mirror group snapshot             Create RBD mirroring group snapshot.
+      mirror group snapshot schedule add
+                                        Add mirror group snapshot schedule.
+      mirror group snapshot schedule list (... ls)
+                                        List mirror group snapshot schedule.
+      mirror group snapshot schedule remove (... rm)
+                                        Remove mirror group snapshot schedule.
+      mirror group snapshot schedule status
+                                        Show mirror group snapshot schedule
+                                        status.
       mirror group status               Show RBD mirroring status for an group.
       mirror image demote               Demote an image to non-primary for RBD
                                         mirroring.
@@ -1794,6 +1803,75 @@
     --group arg             group name
     --skip-quiesce          do not run quiesce hooks
     --ignore-quiesce-error  ignore quiesce hook error
+  
+  rbd help mirror group snapshot schedule add
+  usage: rbd mirror group snapshot schedule add
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--group <group>] 
+                                        <interval> [<start-time>] 
+  
+  Add mirror group snapshot schedule.
+  
+  Positional arguments
+    <interval>           schedule interval
+    <start-time>         schedule start time
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+  
+  rbd help mirror group snapshot schedule list
+  usage: rbd mirror group snapshot schedule list
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--group <group>] [--recursive] 
+                                        [--format <format>] [--pretty-format] 
+  
+  List mirror group snapshot schedule.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+    -R [ --recursive ]   list all schedules
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help mirror group snapshot schedule remove
+  usage: rbd mirror group snapshot schedule remove
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--group <group>] 
+                                        [<interval>] [<start-time>] 
+  
+  Remove mirror group snapshot schedule.
+  
+  Positional arguments
+    <interval>           schedule interval
+    <start-time>         schedule start time
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+  
+  rbd help mirror group snapshot schedule status
+  usage: rbd mirror group snapshot schedule status
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--group <group>] [--format <format>] 
+                                        [--pretty-format] 
+  
+  Show mirror group snapshot schedule status.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help mirror group status
   usage: rbd mirror group status [--pool <pool>] [--namespace <namespace>] 

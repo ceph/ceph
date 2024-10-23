@@ -31,24 +31,6 @@ static const std::string IMAGE_POOL_NAME("image-" + at::POOL_NAME);
 static const std::string GROUP_NAMESPACE_NAME("group-" + at::NAMESPACE_NAME);
 static const std::string IMAGE_NAMESPACE_NAME("image-" + at::NAMESPACE_NAME);
 
-void add_group_option(po::options_description *opt,
-		      at::ArgumentModifier modifier) {
-  std::string name = GROUP_NAME;
-  std::string description = at::get_description_prefix(modifier) + "group name";
-  switch (modifier) {
-  case at::ARGUMENT_MODIFIER_NONE:
-  case at::ARGUMENT_MODIFIER_SOURCE:
-    break;
-  case at::ARGUMENT_MODIFIER_DEST:
-    name = DEST_GROUP_NAME;
-    break;
-  }
-
-  // TODO add validator
-  opt->add_options()
-    (name.c_str(), po::value<std::string>(), description.c_str());
-}
-
 void add_prefixed_pool_option(po::options_description *opt,
                               const std::string &prefix) {
   std::string name = prefix + "-" + at::POOL_NAME;
@@ -73,7 +55,7 @@ void add_group_spec_options(po::options_description *pos,
                             bool snap) {
   at::add_pool_option(opt, modifier);
   at::add_namespace_option(opt, modifier);
-  add_group_option(opt, modifier);
+  at::add_group_option(opt, modifier);
   if (!snap) {
     pos->add_options()
       ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
@@ -966,7 +948,7 @@ void get_add_arguments(po::options_description *positional,
 
   add_prefixed_pool_option(options, "group");
   add_prefixed_namespace_option(options, "group");
-  add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
 
   positional->add_options()
     (at::IMAGE_SPEC.c_str(),
@@ -988,7 +970,7 @@ void get_remove_image_arguments(po::options_description *positional,
 
   add_prefixed_pool_option(options, "group");
   add_prefixed_namespace_option(options, "group");
-  add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
 
   positional->add_options()
     (at::IMAGE_SPEC.c_str(),
