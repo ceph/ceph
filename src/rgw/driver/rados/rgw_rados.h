@@ -1234,7 +1234,7 @@ public:
 
   int transition_obj(RGWObjectCtx& obj_ctx,
                      RGWBucketInfo& bucket_info,
-                     const rgw_obj& obj,
+                     rgw_obj obj,
                      const rgw_placement_rule& placement_rule,
                      const real_time& mtime,
                      uint64_t olh_epoch,
