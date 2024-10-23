@@ -7235,11 +7235,16 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
   // it's a directory.
   dn->push_projected_linkage(newi);
 
-  auto _inode = newi->_get_inode();
+  auto* _inode = newi->_get_inode();
   _inode->version = dn->pre_dirty();
   _inode->rstat.rsubdirs = 1;
   _inode->accounted_rstat = _inode->rstat;
   _inode->update_backtrace();
+  if (auto* csp = diri->get_charmap()) {
+    dout(20) << " with " << *csp << dendl;
+    auto& c = _inode->set_charmap();
+    c = *csp;
+  }
 
   snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
