@@ -11193,7 +11193,6 @@ paths:
                   type: string
               required:
               - bucket_id
-              - uid
               type: object
       responses:
         '200':
