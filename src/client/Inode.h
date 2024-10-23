@@ -329,6 +329,7 @@ struct Inode : RefCountedObject {
   void rm_fh(Fh *f) {fhs.erase(f);}
   void set_async_err(int r);
   void dump(Formatter *f) const;
+  void print(std::ostream&) const;
 
   void break_all_delegs() { break_deleg(false); };
 
@@ -359,7 +360,5 @@ private:
   bool delegations_broken(bool skip_read);
 
 };
-
-std::ostream& operator<<(std::ostream &out, const Inode &in);
 
 #endif
