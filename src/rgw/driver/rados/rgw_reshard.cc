@@ -5,6 +5,11 @@
 #include <sstream>
 #include <chrono>
 
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/asio/use_future.hpp>
+
 #include "rgw_zone.h"
 #include "driver/rados/rgw_bucket.h"
 #include "rgw_asio_thread.h"
@@ -1845,86 +1850,49 @@ int RGWReshard::process_all_logshards(const DoutPrefixProvider *dpp, optional_yi
   return 0;
 }
 
-bool RGWReshard::going_down()
+static void reshard_worker(const DoutPrefixProvider* dpp,
+                           rgw::sal::RadosStore* store,
+                           boost::asio::yield_context yield)
 {
-  return down_flag;
-}
+  RGWReshard reshard(store);
+  const auto& conf = store->ctx()->_conf;
 
-void RGWReshard::start_processor()
-{
-  worker = new ReshardWorker(store->ctx(), this);
-  worker->create("rgw_reshard");
-}
+  using Clock = ceph::coarse_mono_clock;
+  auto timer = boost::asio::basic_waitable_timer<Clock>{yield.get_executor()};
 
-void RGWReshard::stop_processor()
-{
-  down_flag = true;
-  if (worker) {
-    worker->stop();
-    worker->join();
+  for (;;) { // until cancellation
+    const auto start = Clock::now();
+    reshard.process_all_logshards(dpp, yield);
+
+    timer.expires_at(start + std::chrono::seconds{
+        conf.get_val<uint64_t>("rgw_reshard_thread_interval")});
+    timer.async_wait(yield);
   }
-  delete worker;
-  worker = nullptr;
 }
 
-void *RGWReshard::ReshardWorker::entry() {
-  const auto debug_interval = cct->_conf.get_val<int64_t>("rgw_reshard_debug_interval");
-  double interval_factor = 1.0;
-  if (debug_interval >= 1) {
-    constexpr double secs_per_day = 60 * 60 * 24;
-    interval_factor = debug_interval / secs_per_day;
+namespace rgwrados::reshard {
 
-    ldpp_dout(this, 0) << "DEBUG: since the rgw_reshard_debug_interval is set at " <<
-      debug_interval << " the rgw_reshard_thread_interval will be "
-      "multiplied by a factor of " << interval_factor << dendl;
-  }
-
-  do {
-    utime_t start = ceph_clock_now();
-    reshard->process_all_logshards(this, null_yield);
-
-    if (reshard->going_down()) {
-      break;
-    }
-
-    utime_t end = ceph_clock_now();
-    utime_t elapsed = end - start;
-
-    int secs = cct->_conf.get_val<uint64_t>("rgw_reshard_thread_interval");
-    secs = std::max(1, int(secs * interval_factor));
-
-    if (secs <= elapsed.sec()) {
-      continue; // next round
-    }
-
-    secs -= elapsed.sec();
-
-    // note: this will likely wait for the intended period of
-    // time, but could wait for less
-    std::unique_lock locker{lock};
-    cond.wait_for(locker, std::chrono::seconds(secs));
-  } while (!reshard->going_down());
-
-  return NULL;
-}
-
-void RGWReshard::ReshardWorker::stop()
+auto start(rgw::sal::RadosStore* store,
+           boost::asio::io_context& ctx,
+           boost::asio::cancellation_signal& signal)
+  -> std::future<void>
 {
-  std::lock_guard l{lock};
-  cond.notify_all();
+  // spawn reshard_worker() as a cancellable coroutine on a strand executor
+  return boost::asio::spawn(
+      boost::asio::make_strand(ctx),
+      [store] (boost::asio::yield_context yield) {
+        const DoutPrefix dpp{store->ctx(), dout_subsys, "reshard worker: "};
+        reshard_worker(&dpp, store, yield);
+      }, boost::asio::bind_cancellation_slot(signal.slot(),
+            boost::asio::bind_executor(ctx,
+                boost::asio::use_future)));
 }
 
-CephContext *RGWReshard::ReshardWorker::get_cct() const
+void stop(boost::asio::cancellation_signal& signal,
+          std::future<void>& future)
 {
-  return cct;
+  signal.emit(boost::asio::cancellation_type::terminal);
+  try { future.get(); } catch (const std::exception&) {} // ignore
 }
 
-unsigned RGWReshard::ReshardWorker::get_subsys() const
-{
-  return dout_subsys;
-}
-
-std::ostream& RGWReshard::ReshardWorker::gen_prefix(std::ostream& out) const
-{
-  return out << "rgw reshard worker thread: ";
-}
+} // namespace rgwrados::reshard
