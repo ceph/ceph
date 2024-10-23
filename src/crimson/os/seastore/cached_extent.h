@@ -816,9 +816,8 @@ protected:
   }
 
   template <typename T>
-  static TCachedExtentRef<T> make_placeholder_cached_extent_ref(
-    extent_len_t length) {
-    return new T(length);
+  static TCachedExtentRef<T> make_cached_extent_ref() {
+    return new T();
   }
 
   void reset_prior_instance() {
