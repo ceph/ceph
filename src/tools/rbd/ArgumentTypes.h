@@ -55,6 +55,8 @@ static const std::string DEST_SNAPSHOT_NAME("dest-snap");
 static const std::string PATH("path");
 static const std::string FROM_SNAPSHOT_NAME("from-snap");
 static const std::string WHOLE_OBJECT("whole-object");
+static const std::string GROUP_NAME("group");
+static const std::string DEST_GROUP_NAME("dest-group");
 
 // encryption arguments
 static const std::string ENCRYPTION_FORMAT("encryption-format");
@@ -149,6 +151,9 @@ void add_pool_option(boost::program_options::options_description *opt,
                      const std::string &desc_suffix = "");
 void add_namespace_option(boost::program_options::options_description *opt,
                           ArgumentModifier modifier);
+
+void add_group_option(boost::program_options::options_description *opt,
+                      ArgumentModifier modifier);
 
 void add_image_option(boost::program_options::options_description *opt,
                       ArgumentModifier modifier,

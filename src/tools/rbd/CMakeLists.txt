@@ -39,6 +39,7 @@ set(rbd_srcs
   action/MirrorImage.cc
   action/MirrorPool.cc
   action/MirrorSnapshotSchedule.cc
+  action/MirrorGroupSnapshotSchedule.cc
   action/Namespace.cc
   action/Nbd.cc
   action/ObjectMap.cc
