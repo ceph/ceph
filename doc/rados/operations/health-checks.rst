@@ -1502,10 +1502,10 @@ This health check is raised if a certain percentage (determined by
 :confval:`mon_warn_pg_not_deep_scrubbed_ratio`) of the interval has elapsed
 after the time the scrub was scheduled and no scrub has been performed.
 
-PGs will receive a deep scrub only if they are flagged as *clean* (which means
-that they are to be cleaned, and not that they have been examined and found to
-be clean). Misplaced or degraded PGs might not be flagged as ``clean`` (see
-*PG_AVAILABILITY* and *PG_DEGRADED* above).
+PGs will receive a deep scrub only if they are flagged as ``clean`` (which
+means that they are to be cleaned, and not that they have been examined and
+found to be clean). Misplaced or degraded PGs might not be flagged as ``clean``
+(see *PG_AVAILABILITY* and *PG_DEGRADED* above).
 
 This document offers two methods of setting the value of
 :confval:`osd_deep_scrub_interval`. The first method listed here changes the
