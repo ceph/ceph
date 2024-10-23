@@ -20,6 +20,8 @@ allowed_consecutive_spdk_ping_failures = {{ spec.allowed_consecutive_spdk_ping_f
 spdk_ping_interval_in_seconds = {{ spec.spdk_ping_interval_in_seconds }}
 ping_spdk_under_lock = {{ spec.ping_spdk_under_lock }}
 enable_monitor_client = {{ spec.enable_monitor_client }}
+max_hosts_per_namespace = {{ spec.max_hosts_per_namespace }}
+max_namespaces_with_netmask = {{ spec.max_namespaces_with_netmask }}
 
 [gateway-logs]
 log_level = {{ spec.log_level }}
@@ -53,7 +55,15 @@ rpc_socket_dir = {{ spec.rpc_socket_dir }}
 rpc_socket_name = {{ spec.rpc_socket_name }}
 timeout = {{ spec.spdk_timeout }}
 bdevs_per_cluster = {{ spec.bdevs_per_cluster }}
+{% if spec.spdk_log_level %}
 log_level = {{ spec.spdk_log_level }}
+{% endif %}
+{% if spec.spdk_protocol_log_level %}
+protocol_log_level = {{ spec.spdk_protocol_log_level }}
+{% endif %}
+{% if spec.spdk_log_file_dir %}
+log_file_dir = {{ spec.spdk_log_file_dir }}
+{% endif %}
 conn_retries = {{ spec.conn_retries }}
 transports = {{ spec.transports }}
 {% if transport_tcp_options %}
@@ -65,4 +75,7 @@ tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 
 [monitor]
 timeout = {{ spec.monitor_timeout }}
+{% if spec.monitor_client_log_file_dir %}
+log_file_dir = {{ spec.monitor_client_log_file_dir }}
+{% endif %}
 
