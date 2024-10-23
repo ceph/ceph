@@ -42,26 +42,26 @@ Inode::~Inode()
   }
 }
 
-ostream& operator<<(ostream &out, const Inode &in)
+void Inode::print(std::ostream& out) const
 {
-  out << in.vino() << "("
-      << "faked_ino=" << in.faked_ino
-      << " nref=" << in.get_nref()
-      << " ll_ref=" << in.ll_ref
-      << " cap_refs=" << in.cap_refs
-      << " open=" << in.open_by_mode
-      << " mode=" << oct << in.mode << dec
-      << " size=" << in.size << "/" << in.max_size
-      << " nlink=" << in.nlink
-      << " btime=" << in.btime
-      << " mtime=" << in.mtime
-      << " ctime=" << in.ctime
-      << " change_attr=" << in.change_attr
-      << " caps=" << ccap_string(in.caps_issued());
-  if (!in.caps.empty()) {
+  out << vino() << "("
+      << "faked_ino=" << faked_ino
+      << " nref=" << get_nref()
+      << " ll_ref=" << ll_ref
+      << " cap_refs=" << cap_refs
+      << " open=" << open_by_mode
+      << " mode=" << oct << mode << dec
+      << " size=" << size << "/" << max_size
+      << " nlink=" << nlink
+      << " btime=" << btime
+      << " mtime=" << mtime
+      << " ctime=" << ctime
+      << " change_attr=" << change_attr
+      << " caps=" << ccap_string(caps_issued());
+  if (!caps.empty()) {
     out << "(";
     bool first = true;
-    for (const auto &pair : in.caps) {
+    for (const auto &pair : caps) {
       if (!first)
         out << ',';
       out << pair.first << '=' << ccap_string(pair.second.issued);
@@ -69,28 +69,28 @@ ostream& operator<<(ostream &out, const Inode &in)
     }
     out << ")";
   }
-  if (in.dirty_caps)
-    out << " dirty_caps=" << ccap_string(in.dirty_caps);
-  if (in.flushing_caps)
-    out << " flushing_caps=" << ccap_string(in.flushing_caps);
+  if (dirty_caps)
+    out << " dirty_caps=" << ccap_string(dirty_caps);
+  if (flushing_caps)
+    out << " flushing_caps=" << ccap_string(flushing_caps);
 
-  if (in.flags & I_COMPLETE)
+  if (flags & I_COMPLETE)
     out << " COMPLETE";
 
-  if (in.is_file())
-    out << " " << in.oset;
+  if (is_file())
+    out << " " << oset;
 
-  if (!in.dentries.empty())
-    out << " parents=" << in.dentries;
+  if (!dentries.empty())
+    out << " parents=" << dentries;
 
-  if (in.is_dir() && in.has_dir_layout())
+  if (is_dir() && has_dir_layout())
     out << " has_dir_layout";
 
-  if (in.quota.is_enabled())
-    out << " " << in.quota;
+  if (quota.is_enabled())
+    out << " " << quota;
 
-  out << ' ' << &in << ")";
-  return out;
+
+  out << ' ' << this << ")";
 }
 
 
