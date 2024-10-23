@@ -6,11 +6,14 @@
 #include <vector>
 #include <initializer_list>
 #include <functional>
+#include <future>
 #include <iterator>
 #include <algorithm>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/io_context.hpp>
 
 #include "include/common_fwd.h"
 #include "include/rados/librados.hpp"
@@ -205,31 +208,7 @@ private:
     std::ostream *out;
     Formatter *formatter;
 
-    void get_logshard_oid(int shard_num, std::string *shard);
-protected:
-  class ReshardWorker : public Thread, public DoutPrefixProvider {
-    CephContext *cct;
-    RGWReshard *reshard;
-    ceph::mutex lock = ceph::make_mutex("ReshardWorker");
-    ceph::condition_variable cond;
-
-  public:
-    ReshardWorker(CephContext * const _cct,
-		  RGWReshard * const _reshard)
-      : cct(_cct),
-        reshard(_reshard) {}
-
-    void *entry() override;
-    void stop();
-
-    CephContext *get_cct() const override;
-    unsigned get_subsys() const override;
-    std::ostream& gen_prefix(std::ostream& out) const override;
-  };
-
-  ReshardWorker *worker = nullptr;
-  std::atomic<bool> down_flag = { false };
-
+  void get_logshard_oid(int shard_num, std::string *shard);
   std::string get_logshard_key(const std::string& tenant, const std::string& bucket_name);
   void get_bucket_logshard_oid(const std::string& tenant, const std::string& bucket_name, std::string *oid);
 
@@ -251,9 +230,6 @@ public:
                     const DoutPrefixProvider *dpp, optional_yield y);
   int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp, optional_yield y);
   int process_all_logshards(const DoutPrefixProvider *dpp, optional_yield y);
-  bool going_down();
-  void start_processor();
-  void stop_processor();
 };
 
 class RGWReshardWait {
@@ -287,3 +263,17 @@ public:
   // unblock any threads waiting on reshard
   void stop();
 };
+
+namespace rgwrados::reshard {
+
+/// Start background processing of the reshard log.
+auto start(rgw::sal::RadosStore* store,
+           boost::asio::io_context& ctx,
+           boost::asio::cancellation_signal& signal)
+  -> std::future<void>;
+
+/// Cancel background processing and wait for it to finish.
+void stop(boost::asio::cancellation_signal& signal,
+          std::future<void>& future);
+
+} // namespace rgwrados::reshard
