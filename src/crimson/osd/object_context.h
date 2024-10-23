@@ -63,6 +63,7 @@ class ObjectContext : public ceph::common::intrusive_lru_base<
 {
 private:
   tri_mutex lock;
+  bool pushing = false;
 
 public:
   ObjectState obs;
@@ -104,6 +105,18 @@ public:
     obs = std::move(_obs);
     ssc = std::move(_ssc);
     fully_loaded = true;
+  }
+
+  void set_pushing() {
+    pushing = true;
+  }
+
+  void pushed() {
+    pushing = false;
+  }
+
+  bool is_pushing() const {
+    return pushing;
   }
 
   void set_clone_state(ObjectState &&_obs) {

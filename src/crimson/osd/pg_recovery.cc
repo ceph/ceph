@@ -527,20 +527,25 @@ void PGRecovery::enqueue_push(
   auto [recovering, added] = pg->get_recovery_backend()->add_recovering(obj);
   if (!added)
     return;
-  std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
-  handle_exception_interruptible([] (auto) {
+  std::ignore = pg->get_recovery_backend()->recover_object(
+    obj,
+    v,
+    // We must trigger ObjectPushed before the obc lock, which is acquired for
+    // the push, is released.
+    [this, obj] {
+      logger().debug("enqueue_push:{}", __func__);
+      using BackfillState = crimson::osd::BackfillState;
+      if (backfill_state->is_triggered()) {
+	backfill_state->post_event(
+	  BackfillState::ObjectPushed(std::move(obj)).intrusive_from_this());
+      } else {
+	backfill_state->process_event(
+	  BackfillState::ObjectPushed(std::move(obj)).intrusive_from_this());
+      }
+    }
+  ).handle_exception_interruptible([] (auto) {
     ceph_abort_msg("got exception on backfill's push");
     return seastar::make_ready_future<>();
-  }).then_interruptible([this, obj] {
-    logger().debug("enqueue_push:{}", __func__);
-    using BackfillState = crimson::osd::BackfillState;
-    if (backfill_state->is_triggered()) {
-      backfill_state->post_event(
-       BackfillState::ObjectPushed(std::move(obj)).intrusive_from_this());
-    } else {
-      backfill_state->process_event(
-       BackfillState::ObjectPushed(std::move(obj)).intrusive_from_this());
-    }
   });
 }
 

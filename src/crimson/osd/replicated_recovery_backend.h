@@ -29,7 +29,8 @@ public:
 
   interruptible_future<> recover_object(
     const hobject_t& soid,
-    eversion_t need) final;
+    eversion_t need,
+    std::optional<on_recovered_func_t> on_recovered = std::nullopt) final;
   interruptible_future<> recover_delete(
     const hobject_t& soid,
     eversion_t need) final;
@@ -140,7 +141,8 @@ private:
   interruptible_future<> maybe_push_shards(
     const crimson::osd::ObjectContextRef &head_obc,
     const hobject_t& soid,
-    eversion_t need);
+    eversion_t need,
+    std::optional<on_recovered_func_t>);
 
   /// read the data attached to given object. the size of them is supposed to
   /// be relatively small.
