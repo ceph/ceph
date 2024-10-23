@@ -672,7 +672,7 @@ void cls_rgw_reshard_list(librados::ObjectReadOperation& op,
                           std::string marker, uint32_t max,
                           bufferlist& bl);
 int cls_rgw_reshard_list_decode(const bufferlist& bl,
-                                std::list<cls_rgw_reshard_entry>& entries,
+                                std::vector<cls_rgw_reshard_entry>& entries,
                                 bool* is_truncated);
 void cls_rgw_reshard_get(librados::ObjectReadOperation& op,
                          std::string tenant, std::string bucket_name,

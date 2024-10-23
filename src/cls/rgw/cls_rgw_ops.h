@@ -1574,7 +1574,7 @@ WRITE_CLASS_ENCODER(cls_rgw_reshard_list_op)
 
 
 struct cls_rgw_reshard_list_ret {
-  std::list<cls_rgw_reshard_entry> entries;
+  std::vector<cls_rgw_reshard_entry> entries;
   bool is_truncated{false};
 
   cls_rgw_reshard_list_ret() {}

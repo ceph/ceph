@@ -1169,7 +1169,7 @@ void cls_rgw_reshard_list(librados::ObjectReadOperation& op,
 }
 
 int cls_rgw_reshard_list_decode(const bufferlist& out,
-                                std::list<cls_rgw_reshard_entry>& entries,
+                                std::vector<cls_rgw_reshard_entry>& entries,
                                 bool* is_truncated)
 {
   cls_rgw_reshard_list_ret op_ret;

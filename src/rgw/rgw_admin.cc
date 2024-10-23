@@ -8428,7 +8428,7 @@ next:
       bool is_truncated = true;
       std::string marker;
       do {
-	std::list<cls_rgw_reshard_entry> entries;
+	std::vector<cls_rgw_reshard_entry> entries;
         ret = reshard.list(dpp(), null_yield, i, marker, max_entries - count,
                            entries, &is_truncated);
         if (ret < 0) {
