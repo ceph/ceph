@@ -14,11 +14,11 @@ abstractions:
 
 * FS volumes, an abstraction for CephFS file systems
 
-* FS subvolumes, an abstraction for independent CephFS directory trees
-
 * FS subvolume groups, an abstraction for a directory level higher than FS
   subvolumes. Used to effect policies (e.g., :doc:`/cephfs/file-layouts`)
   across a set of subvolumes
+
+* FS subvolumes, an abstraction for independent CephFS directory trees
 
 Possible use-cases for the export abstractions:
 
