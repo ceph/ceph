@@ -130,6 +130,24 @@ void add_image_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
+void add_group_option(po::options_description *opt,
+		      ArgumentModifier modifier) {
+  std::string name = GROUP_NAME;
+  std::string description = get_description_prefix(modifier) + "group name";
+  switch (modifier) {
+  case ARGUMENT_MODIFIER_NONE:
+  case ARGUMENT_MODIFIER_SOURCE:
+    break;
+  case ARGUMENT_MODIFIER_DEST:
+    name = DEST_GROUP_NAME;
+    break;
+  }
+
+  // TODO add validator
+  opt->add_options()
+    (name.c_str(), po::value<std::string>(), description.c_str());
+}
+
 void add_image_id_option(po::options_description *opt,
                          const std::string &desc_suffix) {
   std::string name = IMAGE_ID;
