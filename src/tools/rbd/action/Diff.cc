@@ -42,7 +42,7 @@ static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
 }
 
 static int do_diff(librbd::Image& image, const char *fromsnapname,
-                   bool whole_object, Formatter *f)
+                   bool from_parent, bool whole_object, Formatter *f)
 {
   int r;
   librbd::image_info_t info;
@@ -62,7 +62,10 @@ static int do_diff(librbd::Image& image, const char *fromsnapname,
     om.t->define_column("Type", TextTable::LEFT, TextTable::LEFT);
   }
 
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
+  if (from_parent)
+    r = image.diff_iterate_from_parent(0, info.size, diff_cb, &om);
+  else
+    r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
                           diff_cb, &om);
   if (f) {
     f->close_section();
@@ -82,7 +85,8 @@ void get_arguments(po::options_description *positional,
   options->add_options()
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
      "snapshot starting point")
-    (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object");
+    (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object")
+    (at::FROM_PARENT.c_str(), po::bool_switch(), "diff with parent");
   at::add_format_options(options);
 }
 
@@ -107,6 +111,13 @@ int execute(const po::variables_map &vm,
   }
 
   bool diff_whole_object = vm[at::WHOLE_OBJECT].as<bool>();
+  bool diff_from_parent = vm[at::FROM_PARENT].as<bool>();
+
+  if (diff_from_parent && (!from_snap_name.empty() || diff_whole_object)) {
+    std::cerr << "from-parent cannot be set simultaneously with from-snap and whole-object"
+              << std::endl;
+    return -EINVAL;
+  }
 
   at::Format::Formatter formatter;
   r = utils::get_formatter(vm, &formatter);
@@ -124,7 +135,7 @@ int execute(const po::variables_map &vm,
   }
 
   r = do_diff(image, from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
-              diff_whole_object, formatter.get());
+              diff_from_parent, diff_whole_object, formatter.get());
   if (r < 0) {
     std::cerr << "rbd: diff error: " << cpp_strerror(r) << std::endl;
     return -r;
