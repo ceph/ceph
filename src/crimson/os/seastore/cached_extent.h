@@ -549,7 +549,12 @@ public:
   /// Return true if extent is fully loaded or is about to be fully loaded (call 
   /// wait_io() in this case)
   bool is_fully_loaded() const {
-    return ptr.has_value();
+    if (ptr.has_value()) {
+      // length == 0 iff root
+      return true;
+    } else { // ptr is std::nullopt
+      return false;
+    }
   }
 
   /**
@@ -565,6 +570,7 @@ public:
     return length;
   }
 
+  /// Returns length of lazily loaded extent data in cache
   extent_len_t get_loaded_length() const {
     if (ptr.has_value()) {
       return ptr->length();
@@ -709,10 +715,10 @@ private:
    */
   journal_seq_t dirty_from_or_retired_at;
 
-  /// cache data contents, std::nullopt if no data in cache
+  /// cache data contents, std::nullopt iff lazily loaded
   std::optional<ceph::bufferptr> ptr;
 
-  /// disk data length
+  /// disk data length, 0 iff root
   extent_len_t length;
 
   /// number of deltas since initial write
@@ -760,9 +766,25 @@ protected:
   trans_view_set_t retired_transactions;
 
   CachedExtent(CachedExtent &&other) = delete;
-  CachedExtent(ceph::bufferptr &&_ptr) : ptr(std::move(_ptr)) {
-    length = ptr->length();
+
+  /// construct a fully loaded CachedExtent
+  CachedExtent(ceph::bufferptr &&_ptr)
+    : length(_ptr.length()) {
+    ptr = std::move(_ptr);
+
+    assert(ptr->is_page_aligned());
     assert(length > 0);
+    assert(is_fully_loaded());
+    // must call init() to fully initialize
+  }
+
+  /// construct a lazily loaded CachedExtent
+  CachedExtent(extent_len_t _length)
+    : length(_length) {
+    assert(is_aligned(length, CEPH_PAGE_SIZE));
+    assert(length > 0);
+    assert(!is_fully_loaded());
+    // must call init() to fully initialize
   }
 
   /// construct new CachedExtent, will deep copy the buffer
@@ -772,14 +794,17 @@ protected:
       length(other.get_length()),
       version(other.version),
       poffset(other.poffset) {
-      assert((length % CEPH_PAGE_SIZE) == 0);
-      if (other.is_fully_loaded()) {
-        ptr = create_extent_ptr_rand(length);
-        other.ptr->copy_out(0, length, ptr->c_str());
-      } else {
-        // the extent must be fully loaded before CoW
-        assert(length == 0); // in case of root
-      }
+    // the extent must be fully loaded before CoW
+    assert(other.is_fully_loaded());
+    assert(is_aligned(length, CEPH_PAGE_SIZE));
+    if (length > 0) {
+      ptr = create_extent_ptr_rand(length);
+      other.ptr->copy_out(0, length, ptr->c_str());
+    } else { // length == 0, must be root
+      ptr = ceph::bufferptr(0);
+    }
+
+    assert(is_fully_loaded());
   }
 
   struct share_buffer_t {};
@@ -790,22 +815,31 @@ protected:
       ptr(other.ptr),
       length(other.get_length()),
       version(other.version),
-      poffset(other.poffset) {}
+      poffset(other.poffset) {
+    // the extent must be fully loaded before CoW
+    assert(other.is_fully_loaded());
+    assert(is_aligned(length, CEPH_PAGE_SIZE));
+    assert(length > 0);
+    assert(is_fully_loaded());
+  }
 
   // 0 length is only possible for the RootBlock
   struct zero_length_t {};
-  CachedExtent(zero_length_t) : ptr(ceph::bufferptr(0)), length(0) {};
+  CachedExtent(zero_length_t)
+    : ptr(ceph::bufferptr(0)),
+      length(0) {
+    assert(is_fully_loaded());
+    // must call init() to fully initialize
+  }
 
   struct retired_placeholder_t{};
   CachedExtent(retired_placeholder_t, extent_len_t _length)
     : state(extent_state_t::CLEAN),
       length(_length) {
     assert(length > 0);
-  }
-
-  /// no buffer extent, for lazy read
-  CachedExtent(extent_len_t _length) : length(_length) {
-    assert(length > 0);
+    assert(!is_fully_loaded());
+    assert(is_aligned(length, CEPH_PAGE_SIZE));
+    // must call init() to fully initialize
   }
 
   friend class Cache;
