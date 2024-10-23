@@ -89,6 +89,9 @@ void Inode::print(std::ostream& out) const
   if (quota.is_enabled())
     out << " " << quota;
 
+  if (optmetadata.size() > 0) {
+    out << " " << optmetadata;
+  }
 
   out << ' ' << this << ")";
 }

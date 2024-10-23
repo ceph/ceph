@@ -15,6 +15,8 @@
 #include "mds/mdstypes.h" // hrm
 #include "include/cephfs/types.h"
 
+#include "messages/MClientReply.h"
+
 #include "osdc/ObjectCacher.h"
 
 #include "InodeRef.h"
@@ -164,6 +166,10 @@ struct Inode : RefCountedObject {
 
   std::vector<uint8_t> fscrypt_auth;
   std::vector<uint8_t> fscrypt_file;
+
+  decltype(InodeStat::optmetadata) optmetadata;
+  using optkind_t = decltype(InodeStat::optmetadata)::optkind_t;
+
   bool is_fscrypt_enabled() {
     return !!fscrypt_auth.size();
   }
@@ -330,6 +336,14 @@ struct Inode : RefCountedObject {
   void set_async_err(int r);
   void dump(Formatter *f) const;
   void print(std::ostream&) const;
+
+  bool has_charmap() const {
+    return optmetadata.has_opt(optkind_t::CHARMAP);
+  }
+  auto& get_charmap() const {
+    auto& opt = optmetadata.get_opt(optkind_t::CHARMAP);
+    return opt.template get_meta< charmap_md_t >();
+  }
 
   void break_all_delegs() { break_deleg(false); };
 
