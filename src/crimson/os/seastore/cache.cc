@@ -1826,7 +1826,7 @@ void Cache::init()
     remove_extent(root, nullptr);
     root = nullptr;
   }
-  root = new RootBlock();
+  root = CachedExtent::make_cached_extent_ref<RootBlock>();
   root->init(CachedExtent::extent_state_t::CLEAN,
              P_ADDR_ROOT,
              PLACEMENT_HINT_NULL,

@@ -1068,7 +1068,7 @@ public:
       // (relative/temp) paddr, so make extent directly
       ext = CachedExtent::make_cached_extent_ref<T>(std::move(nbp));
     } else {
-      ext = CachedExtent::make_placeholder_cached_extent_ref<T>(remap_length);
+      ext = CachedExtent::make_cached_extent_ref<T>(remap_length);
     }
 
     ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
