@@ -14,7 +14,6 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
 import { RgwUserCapability } from '../models/rgw-user-capability';
@@ -27,6 +26,7 @@ import { RgwUserSubuserModalComponent } from '../rgw-user-subuser-modal/rgw-user
 import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-rgw-user-form',
@@ -58,7 +58,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private rgwUserService: RgwUserService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private notificationService: NotificationService,
     public actionLabels: ActionLabelsI18n
   ) {
@@ -522,15 +522,15 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (_.isNumber(index)) {
       // Edit
       const subuser = this.subusers[index];
-      modalRef.componentInstance.setEditing();
-      modalRef.componentInstance.setValues(uid, subuser.id, subuser.permissions);
+      modalRef.setEditing();
+      modalRef.setValues(uid, subuser.id, subuser.permissions);
     } else {
       // Add
-      modalRef.componentInstance.setEditing(false);
-      modalRef.componentInstance.setValues(uid);
-      modalRef.componentInstance.setSubusers(this.subusers);
+      modalRef.setEditing(false);
+      modalRef.setValues(uid);
+      modalRef.setSubusers(this.subusers);
     }
-    modalRef.componentInstance.submitAction.subscribe((subuser: RgwUserSubuser) => {
+    modalRef.submitAction.subscribe((subuser: RgwUserSubuser) => {
       this.setSubuser(subuser, index);
     });
   }
@@ -544,14 +544,14 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (_.isNumber(index)) {
       // View
       const key = this.s3Keys[index];
-      modalRef.componentInstance.setViewing();
-      modalRef.componentInstance.setValues(key.user, key.access_key, key.secret_key);
+      modalRef.setViewing();
+      modalRef.setValues(key.user, key.access_key, key.secret_key);
     } else {
       // Add
       const candidates = this._getS3KeyUserCandidates();
-      modalRef.componentInstance.setViewing(false);
-      modalRef.componentInstance.setUserCandidates(candidates);
-      modalRef.componentInstance.submitAction.subscribe((key: RgwUserS3Key) => {
+      modalRef.setViewing(false);
+      modalRef.setUserCandidates(candidates);
+      modalRef.submitAction.subscribe((key: RgwUserS3Key) => {
         this.setS3Key(key);
       });
     }
@@ -564,7 +564,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   showSwiftKeyModal(index: number) {
     const modalRef = this.modalService.show(RgwUserSwiftKeyModalComponent);
     const key = this.swiftKeys[index];
-    modalRef.componentInstance.setValues(key.user, key.secret_key);
+    modalRef.setValues(key.user, key.secret_key);
   }
 
   /**
@@ -576,14 +576,14 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (_.isNumber(index)) {
       // Edit
       const cap = this.capabilities[index];
-      modalRef.componentInstance.setEditing();
-      modalRef.componentInstance.setValues(cap.type, cap.perm);
+      modalRef.setEditing();
+      modalRef.setValues(cap.type, cap.perm);
     } else {
       // Add
-      modalRef.componentInstance.setEditing(false);
-      modalRef.componentInstance.setCapabilities(this.capabilities);
+      modalRef.setEditing(false);
+      modalRef.setCapabilities(this.capabilities);
     }
-    modalRef.componentInstance.submitAction.subscribe((cap: RgwUserCapability) => {
+    modalRef.submitAction.subscribe((cap: RgwUserCapability) => {
       this.setCapability(cap, index);
     });
   }

@@ -22,6 +22,7 @@ import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
 import { By } from '@angular/platform-browser';
+import { CheckboxModule, NumberModule, SelectModule } from 'carbon-components-angular';
 
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
@@ -39,7 +40,10 @@ describe('RgwUserFormComponent', () => {
       SharedModule,
       ToastrModule.forRoot(),
       NgbTooltipModule,
-      PipesModule
+      PipesModule,
+      CheckboxModule,
+      NumberModule,
+      SelectModule
     ]
   });
 
@@ -408,12 +412,10 @@ describe('RgwUserFormComponent', () => {
   it('should call showCapabilityModal', () => {
     const modalShowSpy = spyOn(component['modalService'], 'show').and.callFake(() => {
       modalRef = {
-        componentInstance: {
-          setEditing: jest.fn(),
-          setValues: jest.fn(),
-          setCapabilities: jest.fn(),
-          submitAction: { subscribe: jest.fn() }
-        }
+        setEditing: jest.fn(),
+        setValues: jest.fn(),
+        setCapabilities: jest.fn(),
+        submitAction: { subscribe: jest.fn() }
       };
       return modalRef;
     });
@@ -424,9 +426,7 @@ describe('RgwUserFormComponent', () => {
   it('should call showSwiftKeyModal', () => {
     const modalShowSpy = spyOn(component['modalService'], 'show').and.callFake(() => {
       modalRef = {
-        componentInstance: {
-          setValues: jest.fn()
-        }
+        setValues: jest.fn()
       };
       return modalRef;
     });
@@ -440,12 +440,10 @@ describe('RgwUserFormComponent', () => {
   it('should call showS3KeyModal', () => {
     const modalShowSpy = spyOn(component['modalService'], 'show').and.callFake(() => {
       modalRef = {
-        componentInstance: {
-          setValues: jest.fn(),
-          setViewing: jest.fn(),
-          setUserCandidates: jest.fn(),
-          submitAction: { subscribe: jest.fn() }
-        }
+        setValues: jest.fn(),
+        setViewing: jest.fn(),
+        setUserCandidates: jest.fn(),
+        submitAction: { subscribe: jest.fn() }
       };
       return modalRef;
     });
@@ -605,13 +603,11 @@ describe('RgwUserFormComponent', () => {
   it('should call showSubuserModal', () => {
     const modalShowSpy = spyOn(component['modalService'], 'show').and.callFake(() => {
       modalRef = {
-        componentInstance: {
-          setValues: jest.fn(),
-          setViewing: jest.fn(),
-          setEditing: jest.fn(),
-          setUserCandidates: jest.fn(),
-          submitAction: { subscribe: jest.fn() }
-        }
+        setValues: jest.fn(),
+        setViewing: jest.fn(),
+        setEditing: jest.fn(),
+        setUserCandidates: jest.fn(),
+        submitAction: { subscribe: jest.fn() }
       };
       return modalRef;
     });
@@ -630,39 +626,35 @@ describe('RgwUserFormComponent', () => {
       ];
       let spy = spyOn(component['modalService'], 'show').and.callFake(() => {
         return (modalRef = {
-          componentInstance: {
-            setEditing: jest.fn(),
-            setValues: jest.fn(),
-            setCapabilities: jest.fn(),
-            setSubusers: jest.fn(),
-            setUserCandidates: jest.fn(),
-            submitAction: { subscribe: jest.fn() }
-          }
+          setEditing: jest.fn(),
+          setValues: jest.fn(),
+          setCapabilities: jest.fn(),
+          setSubusers: jest.fn(),
+          setUserCandidates: jest.fn(),
+          submitAction: { subscribe: jest.fn() }
         });
       });
       spyOn(component, 'getUID').and.returnValue('dashboard');
       component.showSubuserModal(index);
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(modalRef.componentInstance.setEditing).toHaveBeenCalledTimes(1);
-      expect(modalRef.componentInstance.setValues).toHaveBeenCalledWith(
+      expect(modalRef.setEditing).toHaveBeenCalledTimes(1);
+      expect(modalRef.setValues).toHaveBeenCalledWith(
         'dashboard',
         component.subusers[index].id,
         component.subusers[index].permissions
       );
-      expect(modalRef.componentInstance.submitAction.subscribe).toHaveBeenCalled();
+      expect(modalRef.submitAction.subscribe).toHaveBeenCalled();
     });
 
     it('should handle "Add" scenario when index is not provided', () => {
       let spy = spyOn(component['modalService'], 'show').and.callFake(() => {
         return (modalRef = {
-          componentInstance: {
-            setEditing: jest.fn(),
-            setValues: jest.fn(),
-            setCapabilities: jest.fn(),
-            setSubusers: jest.fn(),
-            setUserCandidates: jest.fn(),
-            submitAction: { subscribe: jest.fn() }
-          }
+          setEditing: jest.fn(),
+          setValues: jest.fn(),
+          setCapabilities: jest.fn(),
+          setSubusers: jest.fn(),
+          setUserCandidates: jest.fn(),
+          submitAction: { subscribe: jest.fn() }
         });
       });
       component.subusers = [
@@ -671,10 +663,10 @@ describe('RgwUserFormComponent', () => {
       spyOn(component, 'getUID').and.returnValue('dashboard');
       component.showSubuserModal();
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(modalRef.componentInstance.setEditing).toHaveBeenCalledWith(false);
-      expect(modalRef.componentInstance.setValues).toHaveBeenCalledWith('dashboard');
-      expect(modalRef.componentInstance.setSubusers).toHaveBeenCalledWith(component.subusers);
-      expect(modalRef.componentInstance.submitAction.subscribe).toHaveBeenCalled();
+      expect(modalRef.setEditing).toHaveBeenCalledWith(false);
+      expect(modalRef.setValues).toHaveBeenCalledWith('dashboard');
+      expect(modalRef.setSubusers).toHaveBeenCalledWith(component.subusers);
+      expect(modalRef.submitAction.subscribe).toHaveBeenCalled();
     });
   });
 });

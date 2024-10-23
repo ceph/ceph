@@ -1,7 +1,6 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { AbstractControl, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -9,13 +8,14 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators, isEmptyInputValue } from '~/app/shared/forms/cd-validators';
 import { RgwUserSubuser } from '../models/rgw-user-subuser';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-user-subuser-modal',
   templateUrl: './rgw-user-subuser-modal.component.html',
   styleUrls: ['./rgw-user-subuser-modal.component.scss']
 })
-export class RgwUserSubuserModalComponent {
+export class RgwUserSubuserModalComponent extends BaseModal {
   /**
    * The event that is triggered when the 'Add' or 'Update' button
    * has been pressed.
@@ -29,11 +29,8 @@ export class RgwUserSubuserModalComponent {
   resource: string;
   action: string;
 
-  constructor(
-    private formBuilder: CdFormBuilder,
-    public bsModalRef: NgbActiveModal,
-    private actionLabels: ActionLabelsI18n
-  ) {
+  constructor(private formBuilder: CdFormBuilder, private actionLabels: ActionLabelsI18n) {
+    super();
     this.resource = $localize`Subuser`;
     this.createForm();
   }
@@ -42,7 +39,7 @@ export class RgwUserSubuserModalComponent {
     this.formGroup = this.formBuilder.group({
       uid: [null],
       subuid: [null, [Validators.required, this.subuserValidator()]],
-      perm: [null, [Validators.required]],
+      perm: ['full-control', [Validators.required]],
       // Swift key
       generate_secret: [true],
       secret_key: [null, [CdValidators.requiredIf({ generate_secret: false })]]
@@ -125,6 +122,6 @@ export class RgwUserSubuserModalComponent {
     subuser.generate_secret = values.generate_secret;
     subuser.secret_key = values.secret_key;
     this.submitAction.emit(subuser);
-    this.bsModalRef.close();
+    this.closeModal();
   }
 }
