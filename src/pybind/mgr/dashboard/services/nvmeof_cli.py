@@ -36,12 +36,12 @@ def add_nvmeof_gateway(_, inbuf, name: str, group: str, daemon_name: str):
 
 
 @CLIWriteCommand('dashboard nvmeof-gateway-rm')
-def remove_nvmeof_gateway(_, name: str):
+def remove_nvmeof_gateway(_, name: str, daemon_name: str = ''):
     '''
     Remove NVMe-oF gateway configuration
     '''
     try:
-        NvmeofGatewaysConfig.remove_gateway(name)
+        NvmeofGatewaysConfig.remove_gateway(name, daemon_name)
         return 0, 'Success', ''
     except ManagedByOrchestratorException as ex:
         return -errno.EINVAL, '', str(ex)
