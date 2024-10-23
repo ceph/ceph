@@ -824,16 +824,16 @@ protected:
   }
 
   // 0 length is only possible for the RootBlock
-  struct zero_length_t {};
-  CachedExtent(zero_length_t)
+  struct root_construct_t {};
+  CachedExtent(root_construct_t)
     : ptr(ceph::bufferptr(0)),
       length(0) {
     assert(is_fully_loaded());
     // must call init() to fully initialize
   }
 
-  struct retired_placeholder_t{};
-  CachedExtent(retired_placeholder_t, extent_len_t _length)
+  struct retired_placeholder_construct_t {};
+  CachedExtent(retired_placeholder_construct_t, extent_len_t _length)
     : state(extent_state_t::CLEAN),
       length(_length) {
     assert(length > 0);
@@ -1254,7 +1254,7 @@ class RetiredExtentPlaceholder : public CachedExtent {
 
 public:
   RetiredExtentPlaceholder(extent_len_t length)
-    : CachedExtent(CachedExtent::retired_placeholder_t{}, length) {}
+    : CachedExtent(CachedExtent::retired_placeholder_construct_t{}, length) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     ceph_assert(0 == "Should never happen for a placeholder");
