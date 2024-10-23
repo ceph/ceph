@@ -1298,7 +1298,7 @@ int RGWBucketReshard::execute(int num_shards,
   auto unlock = make_scope_guard([this] { reshard_lock.unlock(); });
 
   if (reshard_log) {
-    ret = reshard_log->update(dpp, bucket_info, initiator, y);
+    ret = reshard_log->update(dpp, y, bucket_info.bucket, initiator);
     if (ret < 0) {
       return ret;
     }
@@ -1417,21 +1417,19 @@ int RGWReshard::add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry,
   return 0;
 }
 
-int RGWReshard::update(const DoutPrefixProvider *dpp,
-		       const RGWBucketInfo& bucket_info,
-		       const cls_rgw_reshard_initiator initiator,
-		       optional_yield y)
+int RGWReshard::update(const DoutPrefixProvider* dpp,
+		       optional_yield y,
+		       const rgw_bucket& bucket,
+		       cls_rgw_reshard_initiator initiator)
 {
   cls_rgw_reshard_entry entry;
-  entry.bucket_name = bucket_info.bucket.name;
-  entry.bucket_id = bucket_info.bucket.bucket_id;
-  entry.tenant = bucket_info.bucket.tenant;
-  entry.initiator = initiator;
 
-  int ret = get(dpp, entry);
+  int ret = get(dpp, y, bucket, entry);
   if (ret < 0) {
     return ret;
   }
+
+  entry.initiator = initiator;
 
   ret = add(dpp, entry, y);
   if (ret < 0) {
@@ -1443,37 +1441,54 @@ int RGWReshard::update(const DoutPrefixProvider *dpp,
 }
 
 
-int RGWReshard::list(const DoutPrefixProvider *dpp, int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated)
+int RGWReshard::list(const DoutPrefixProvider *dpp, optional_yield y,
+                     int logshard_num, string& marker, uint32_t max,
+                     std::list<cls_rgw_reshard_entry>& entries,
+                     bool *is_truncated)
 {
   string logshard_oid;
 
   get_logshard_oid(logshard_num, &logshard_oid);
 
-  int ret = cls_rgw_reshard_list(store->getRados()->reshard_pool_ctx, logshard_oid, marker, max, entries, is_truncated);
+  bufferlist bl;
+  librados::ObjectReadOperation op;
+  cls_rgw_reshard_list(op, marker, max, bl);
 
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx,
+                              logshard_oid, &op, nullptr, y);
   if (ret == -ENOENT) {
     // these shard objects aren't created until we actually write something to
     // them, so treat ENOENT as a successful empty listing
     *is_truncated = false;
-    ret = 0;
-  } else if (ret == -EACCES) {
+    return 0;
+  }
+  if (ret == -EACCES) {
     ldpp_dout(dpp, -1) << "ERROR: access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
                       << ". Fix the pool access permissions of your client" << dendl;
-  } else if (ret < 0) {
+    return ret;
+  }
+  if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to list reshard log entries, oid="
         << logshard_oid << " marker=" << marker << " " << cpp_strerror(ret) << dendl;
+    return ret;
   }
 
-  return ret;
+  return cls_rgw_reshard_list_decode(bl, entries, is_truncated);
 }
 
-int RGWReshard::get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry)
+int RGWReshard::get(const DoutPrefixProvider *dpp, optional_yield y,
+                    const rgw_bucket& bucket, cls_rgw_reshard_entry& entry)
 {
   string logshard_oid;
 
   get_bucket_logshard_oid(entry.tenant, entry.bucket_name, &logshard_oid);
 
-  int ret = cls_rgw_reshard_get(store->getRados()->reshard_pool_ctx, logshard_oid, entry);
+  bufferlist bl;
+  librados::ObjectReadOperation op;
+  cls_rgw_reshard_get(op, bucket.tenant, bucket.name, bl);
+
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx,
+                              logshard_oid, &op, nullptr, y);
   if (ret < 0) {
     if (ret != -ENOENT) {
       ldpp_dout(dpp, -1) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant <<
@@ -1482,7 +1497,7 @@ int RGWReshard::get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry)
     return ret;
   }
 
-  return 0;
+  return cls_rgw_reshard_get_decode(bl, entry);
 }
 
 int RGWReshard::remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entry& entry, optional_yield y)
@@ -1756,7 +1771,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
   
   do {
     std::list<cls_rgw_reshard_entry> entries;
-    ret = list(dpp, logshard_num, marker, max_op_entries, entries, &is_truncated);
+    ret = list(dpp, y, logshard_num, marker, max_op_entries, entries, &is_truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "cannot list all reshards in logshard oid=" <<
 	logshard_oid << dendl;

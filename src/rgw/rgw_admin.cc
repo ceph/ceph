@@ -8429,7 +8429,8 @@ next:
       std::string marker;
       do {
 	std::list<cls_rgw_reshard_entry> entries;
-        ret = reshard.list(dpp(), i, marker, max_entries - count, entries, &is_truncated);
+        ret = reshard.list(dpp(), null_yield, i, marker, max_entries - count,
+                           entries, &is_truncated);
         if (ret < 0) {
           cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
           return ret;
