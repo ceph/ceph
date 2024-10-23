@@ -19,8 +19,9 @@ namespace po = boost::program_options;
 namespace {
 
 int parse_schedule_name(const std::string &name, bool allow_images,
-                        std::string *pool_name, std::string *namespace_name,
-                        std::string *image_name) {
+                        bool allow_groups, std::string *pool_name,
+                        std::string *namespace_name, std::string *image_name,
+                        std::string *group_name) {
   // parse names like:
   // '', 'rbd/', 'rbd/ns/', 'rbd/image', 'rbd/ns/image'
   std::regex pattern("^(?:([^/]+)/(?:(?:([^/]+)/|)(?:([^/@]+))?)?)?$");
@@ -44,12 +45,18 @@ int parse_schedule_name(const std::string &name, bool allow_images,
   }
 
   if (match[3].matched) {
-    if (!allow_images) {
+    if (!allow_images and !allow_groups) {
         return -EINVAL;
     }
-    *image_name = match[3];
+    if (allow_images) {
+      *image_name = match[3];
+    } else if (allow_groups) {
+      *group_name = match[3];
+    }
+
   } else {
     *image_name = "-";
+    *group_name = "-";
   }
 
   return 0;
@@ -58,26 +65,40 @@ int parse_schedule_name(const std::string &name, bool allow_images,
 } // anonymous namespace
 
 void add_level_spec_options(po::options_description *options,
-                            bool allow_image) {
+                            bool allow_image, bool allow_group) {
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_namespace_option(options, at::ARGUMENT_MODIFIER_NONE);
   if (allow_image) {
     at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
   }
+  if (allow_group) {
+    at::add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
+  }
 }
 
 int get_level_spec_args(const po::variables_map &vm,
                         std::map<std::string, std::string> *args) {
-  if (vm.count(at::IMAGE_NAME)) {
+  if (vm.count(at::IMAGE_NAME) or vm.count(at::GROUP_NAME)) {
     std::string pool_name;
     std::string namespace_name;
-    std::string image_name;
+    std::string image_or_group_name;
 
-    int r = utils::extract_spec(vm[at::IMAGE_NAME].as<std::string>(),
-                                &pool_name, &namespace_name, &image_name,
-                                nullptr, utils::SPEC_VALIDATION_FULL);
-    if (r < 0) {
-      return r;
+    if (vm.count(at::IMAGE_NAME)) {
+      int r = utils::extract_spec(vm[at::IMAGE_NAME].as<std::string>(),
+                                  &pool_name, &namespace_name, &image_or_group_name,
+                                  nullptr, utils::SPEC_VALIDATION_FULL);
+      if (r < 0) {
+	return r;
+      }
+    }
+
+    if (vm.count(at::GROUP_NAME)) {
+      int r = utils::extract_spec(vm[at::GROUP_NAME].as<std::string>(),
+                                  &pool_name, &namespace_name, &image_or_group_name,
+                                  nullptr, utils::SPEC_VALIDATION_FULL);
+      if (r < 0) {
+	return r;
+      }
     }
 
     if (!pool_name.empty()) {
@@ -102,10 +123,10 @@ int get_level_spec_args(const po::variables_map &vm,
     }
 
     if (namespace_name.empty()) {
-      (*args)["level_spec"] = pool_name + "/" + image_name;
+      (*args)["level_spec"] = pool_name + "/" + image_or_group_name;
     } else {
       (*args)["level_spec"] = pool_name + "/" + namespace_name + "/" +
-        image_name;
+        image_or_group_name;
     }
     return 0;
   }
@@ -310,9 +331,10 @@ void ScheduleList::dump(ceph::Formatter *f) {
     std::string pool_name;
     std::string namespace_name;
     std::string image_name;
+    std::string group_name;
 
-    int r = parse_schedule_name(name, allow_images, &pool_name, &namespace_name,
-                                &image_name);
+    int r = parse_schedule_name(name, allow_images, allow_groups, &pool_name,
+                                &namespace_name, &image_name, &group_name);
     if (r < 0) {
       continue;
     }
@@ -322,6 +344,8 @@ void ScheduleList::dump(ceph::Formatter *f) {
     f->dump_string("namespace", namespace_name);
     if (allow_images) {
       f->dump_string("image", image_name);
+    } else if (allow_groups) {
+      f->dump_string("group", group_name);
     }
     s.dump(f);
     f->close_section();
@@ -335,6 +359,8 @@ std::ostream& operator<<(std::ostream& os, ScheduleList &l) {
   tbl.define_column("NAMESPACE", TextTable::LEFT, TextTable::LEFT);
   if (l.allow_images) {
     tbl.define_column("IMAGE", TextTable::LEFT, TextTable::LEFT);
+  } else if (l.allow_groups) {
+    tbl.define_column("GROUP", TextTable::LEFT, TextTable::LEFT);
   }
   tbl.define_column("SCHEDULE", TextTable::LEFT, TextTable::LEFT);
 
@@ -342,9 +368,11 @@ std::ostream& operator<<(std::ostream& os, ScheduleList &l) {
     std::string pool_name;
     std::string namespace_name;
     std::string image_name;
+    std::string group_name;
 
-    int r = parse_schedule_name(name, l.allow_images, &pool_name,
-                                &namespace_name, &image_name);
+    int r = parse_schedule_name(name, l.allow_images, l.allow_groups,
+                                &pool_name, &namespace_name, &image_name,
+                                &group_name);
     if (r < 0) {
       continue;
     }
@@ -355,6 +383,8 @@ std::ostream& operator<<(std::ostream& os, ScheduleList &l) {
     tbl << pool_name << namespace_name;
     if (l.allow_images) {
       tbl << image_name;
+    } else if (l.allow_groups) {
+      tbl << group_name;
     }
     tbl << ss.str() << TextTable::endrow;
   }
