@@ -245,6 +245,8 @@ public:
   // check layout
   bool is_valid_layout(file_layout_t *layout);
 
+  bool can_handle_charmap(const MDRequestRef& mdr, CDentry* dn);
+
   // open
   void handle_client_open(const MDRequestRef& mdr);
   void handle_client_openc(const MDRequestRef& mdr);  // O_CREAT variant.
