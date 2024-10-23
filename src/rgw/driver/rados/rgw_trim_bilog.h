@@ -119,3 +119,13 @@ WRITE_CLASS_ENCODER(rgw::BucketTrimStatus);
 int bilog_trim(const DoutPrefixProvider* p, rgw::sal::RadosStore* store,
 	       RGWBucketInfo& bucket_info, uint64_t gen, int shard_id,
 	       std::string_view start_marker, std::string_view end_marker);
+
+int list_deleted_buckets(const DoutPrefixProvider* dpp,
+                        rgw::sal::RadosStore* store,
+                        std::set<std::string>& buckets,
+                        optional_yield y);
+
+int remove_deleted_bucket(const DoutPrefixProvider *dpp, 
+                          rgw::sal::RadosStore* store,
+                          std::string& bucket_key,
+                          optional_yield y);

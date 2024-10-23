@@ -19,6 +19,10 @@ extern void init_bucket(rgw_bucket *b, const char *t, const char *n, const char 
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const std::string& key,
                                        rgw_bucket* bucket, int *shard_id);
 
+extern std::string rgw_make_bucket_metadata_string(const std::string& tenant_name,
+                                       			  const std::string& bucket_name,
+                                       			  const std::string& bucket_instance);
+
 extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
                                               const std::string& bucket_name);
 
