@@ -1443,7 +1443,7 @@ int RGWReshard::update(const DoutPrefixProvider* dpp,
 
 int RGWReshard::list(const DoutPrefixProvider *dpp, optional_yield y,
                      int logshard_num, string& marker, uint32_t max,
-                     std::list<cls_rgw_reshard_entry>& entries,
+                     std::vector<cls_rgw_reshard_entry>& entries,
                      bool *is_truncated)
 {
   string logshard_oid;
@@ -1770,7 +1770,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
   }
   
   do {
-    std::list<cls_rgw_reshard_entry> entries;
+    std::vector<cls_rgw_reshard_entry> entries;
     ret = list(dpp, y, logshard_num, marker, max_op_entries, entries, &is_truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "cannot list all reshards in logshard oid=" <<
