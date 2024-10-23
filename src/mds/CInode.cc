@@ -3956,7 +3956,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       8 + 8 + 8 + 8 + 8 + sizeof(struct ceph_timespec) + // dirstat.nfiles ~ rstat.rctime
       sizeof(__u32) + sizeof(__u32) * 2 * dirfragtree._splits.size() + // dirfragtree
       sizeof(__u32) + symlink.length() + // symlink
-      sizeof(struct ceph_dir_layout); // dir_layout
+      sizeof(struct ceph_dir_layout) // dir_layout
+      + 4 + file_i->fscrypt_auth.size() // len + data
+      + 4 + file_i->fscrypt_file.size() // len + data
+      ;
 
     if (xattr_version) {
       bytes += sizeof(__u32) + sizeof(__u32); // xattr buffer len + number entries
