@@ -76,12 +76,12 @@ protected:
     bool check = false;                                                 \
                                                                         \
     const auto &layout = get_layout();                                  \
-    if (auto o = layout.omap_root.get(L_ADDR_NULL); !o.is_null()) {     \
+    if (auto o = layout.omap_root.get(LADDR_HINT_NULL); !o.is_null()) { \
       check = true;                                                     \
       ret.emplace(o.addr.get_local_##type##_id());                      \
     }                                                                   \
                                                                         \
-    if (auto x = layout.xattr_root.get(L_ADDR_NULL); !x.is_null()) {    \
+    if (auto x = layout.xattr_root.get(LADDR_HINT_NULL); !x.is_null()) {\
       if (check) {                                                      \
         ceph_assert(x.addr.get_local_##type##_id() == *ret);            \
       } else {                                                          \

@@ -314,7 +314,7 @@ public:
 
   alloc_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     extent_len_t len) final
   {
     std::vector<alloc_mapping_info_t> alloc_infos = {
@@ -346,7 +346,7 @@ public:
 	laddr, len, intermediate_key)};
     return alloc_cloned_mappings(
       t,
-      laddr,
+      laddr_hint_t::create_as_fixed(laddr),
       std::move(alloc_infos)
     ).si_then([&t, this, intermediate_base](auto imappings) {
       assert(imappings.size() == 1);
@@ -371,7 +371,7 @@ public:
 
   alloc_extent_ret alloc_extent(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     LogicalCachedExtent &ext,
     extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) final
   {
@@ -403,7 +403,7 @@ public:
 
   alloc_extents_ret alloc_extents(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<LogicalCachedExtentRef> extents,
     extent_ref_count_t refcount) final
   {
@@ -503,7 +503,8 @@ public:
 	  }
 	  fut = alloc_cloned_mappings(
 	    t,
-	    (remaps.front().offset + orig_laddr).checked_to_laddr(),
+	    laddr_hint_t::create_as_fixed(
+	      (remaps.front().offset + orig_laddr).checked_to_laddr()),
 	    std::move(alloc_infos)
 	  ).si_then([&orig_mapping](auto imappings) mutable {
 	    std::vector<LBAMappingRef> mappings;
@@ -522,7 +523,8 @@ public:
 	} else { // !orig_mapping->is_indirect()
 	  fut = alloc_extents(
 	    t,
-	    (remaps.front().offset + orig_laddr).checked_to_laddr(),
+	    laddr_hint_t::create_as_fixed(
+	      (remaps.front().offset + orig_laddr).checked_to_laddr()),
 	    std::move(extents),
 	    EXTENT_DEFAULT_REF_COUNT);
 	}
@@ -655,7 +657,7 @@ private:
 
   alloc_extents_ret _alloc_extents(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<alloc_mapping_info_t> &alloc_infos);
 
   ref_ret _incref_extent(
@@ -671,7 +673,7 @@ private:
 
   alloc_extent_iertr::future<std::vector<BtreeLBAMappingRef>> alloc_cloned_mappings(
     Transaction &t,
-    laddr_t laddr,
+    laddr_hint_t hint,
     std::vector<alloc_mapping_info_t> alloc_infos)
   {
 #ifndef NDEBUG
@@ -683,10 +685,10 @@ private:
 #endif
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, laddr](auto &alloc_infos) {
+      [this, &t, hint](auto &alloc_infos) {
       return _alloc_extents(
 	t,
-	laddr,
+	hint,
 	alloc_infos
       ).si_then([&alloc_infos](auto mappings) {
 	assert(alloc_infos.size() == mappings.size());

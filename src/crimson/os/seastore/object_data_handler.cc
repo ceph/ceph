@@ -529,7 +529,7 @@ ObjectDataHandler::write_ret do_insertions(
 	       region.len);
 	return ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	  ctx.t,
-	  region.addr,
+	  laddr_hint_t::create_as_fixed(region.addr),
 	  region.len
         ).si_then([&region](auto extents) {
           auto off = region.addr;
@@ -560,7 +560,7 @@ ObjectDataHandler::write_ret do_insertions(
 	       region.len);
 	return ctx.tm.reserve_region(
 	  ctx.t,
-	  region.addr,
+	  laddr_hint_t::create_as_fixed(region.addr),
 	  region.len
 	).si_then([FNAME, ctx, &region](auto pin) {
 	  ceph_assert(pin->get_length() == region.len);
@@ -1052,13 +1052,14 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
            object_data.get_reserved_data_len());
     return write_iertr::now();
   } else {
+    auto hint = ctx.onode.get_data_hint();
     DEBUGT("reserving: {}~{}",
            ctx.t,
-           ctx.onode.get_data_hint(),
+           hint,
            max_object_size);
     return ctx.tm.reserve_region(
       ctx.t,
-      ctx.onode.get_data_hint(),
+      hint,
       max_object_size
     ).si_then([max_object_size=max_object_size, &object_data](auto pin) {
       ceph_assert(pin->get_length() == max_object_size);
@@ -1730,7 +1731,10 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	  laddr_t addr = (object_data.get_reserved_data_base() + offset)
 	      .checked_to_laddr();
 	  if (pin->get_val().is_zero()) {
-	    fut = ctx.tm.reserve_region(ctx.t, addr, pin->get_length());
+	    fut = ctx.tm.reserve_region(
+	      ctx.t,
+	      laddr_hint_t::create_as_fixed(addr),
+	      pin->get_length());
 	  } else {
 	    fut = ctx.tm.clone_pin(ctx.t, addr, *pin);
 	  }
@@ -1744,9 +1748,10 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	  );
 	}).si_then([&last_pos, &object_data, ctx] {
 	  if (last_pos != object_data.get_reserved_data_len()) {
+	    auto laddr = (object_data.get_reserved_data_base() + last_pos).checked_to_laddr();
 	    return ctx.tm.reserve_region(
 	      ctx.t,
-	      (object_data.get_reserved_data_base() + last_pos).checked_to_laddr(),
+	      laddr_hint_t::create_as_fixed(laddr),
 	      object_data.get_reserved_data_len() - last_pos
 	    ).si_then([](auto) {
 	      return seastar::now();
