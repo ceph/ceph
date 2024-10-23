@@ -37,10 +37,9 @@ export class BucketsPageHelper extends PageHelper {
     cy.get('#owner').should('have.class', 'ng-valid');
 
     if (isLocking) {
-      cy.get('#lock_enabled').click({ force: true });
+      cy.get('#lock_enabled_input').click({ force: true });
       // Select lock mode:
       this.selectLockMode('Compliance');
-      cy.get('#lock_mode').should('have.class', 'ng-valid');
       cy.get('#lock_retention_period_days').type('3');
     }
 
@@ -61,7 +60,7 @@ export class BucketsPageHelper extends PageHelper {
 
     // If object locking is enabled versioning shouldn't be visible
     if (isLocking) {
-      cy.get('input[id=versioning]').should('be.disabled');
+      cy.get('input[name=versioning]').should('be.disabled');
       cy.contains('button', 'Edit Bucket').click();
 
       this.getTableCell(this.columnIndex.name, name)
@@ -84,9 +83,9 @@ export class BucketsPageHelper extends PageHelper {
       return cy.get('@versioningValueCell').should('have.text', this.versioningStateEnabled);
     }
     // Enable versioning
-    cy.get('input[id=versioning]').should('not.be.checked');
-    cy.get('label[for=versioning]').click();
-    cy.get('input[id=versioning]').should('be.checked');
+    cy.get('input[name=versioning]').should('not.be.checked');
+    cy.get('label[for=versioning_input]').click();
+    cy.get('input[name=versioning]').should('be.checked');
     cy.contains('button', 'Edit Bucket').click();
 
     // Check if the owner is updated
@@ -110,8 +109,8 @@ export class BucketsPageHelper extends PageHelper {
     // Disable versioning:
     this.navigateEdit(name, false, true, null, true);
 
-    cy.get('label[for=versioning]').click();
-    cy.get('input[id=versioning]').should('not.be.checked');
+    cy.get('label[for=versioning_input]').click();
+    cy.get('input[name=versioning]').should('not.be.checked');
     cy.contains('button', 'Edit Bucket').wait(WAIT_TIMER).click();
 
     // Check versioning suspended:
@@ -136,10 +135,9 @@ export class BucketsPageHelper extends PageHelper {
       .and('have.class', 'ng-invalid');
 
     // Check that error message was printed under name input field
-    cy.get('#bid + .invalid-feedback').should(
-      'have.text',
-      'Bucket names must be 3 to 63 characters long.'
-    );
+    cy.get('cds-text-label[for=bid]')
+      .find('span.invalid-feedback')
+      .should('have.text', 'Bucket names must be 3 to 63 characters long.');
 
     // Test invalid owner input
     // select some valid option. The owner drop down error message will not appear unless a valid user was selected at
@@ -152,10 +150,12 @@ export class BucketsPageHelper extends PageHelper {
     cy.get('@nameInputField').click();
 
     // Check that owner drop down field was marked invalid in the css
-    cy.get('#owner').should('have.class', 'ng-invalid');
+    cy.get('cds-select[id=owner]').should('have.class', 'ng-invalid');
 
     // Check that error message was printed under owner drop down field
-    cy.get('#owner + .invalid-feedback').should('have.text', 'This field is required.');
+    cy.get('cds-select[id=owner]')
+      .find('.invalid-feedback')
+      .should('have.text', 'This field is required.');
 
     // Clicks the Create Bucket button but the page doesn't move.
     // Done by testing for the breadcrumb
@@ -169,7 +169,7 @@ export class BucketsPageHelper extends PageHelper {
   testInvalidEdit(name: string) {
     this.navigateEdit(name, false, true, null, true);
 
-    cy.get('input[id=versioning]').should('exist').and('not.be.checked');
+    cy.get('input[name=versioning]').should('exist').and('not.be.checked');
 
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
     // and checks if it's an invalid input
@@ -180,10 +180,12 @@ export class BucketsPageHelper extends PageHelper {
     cy.contains('button', 'Edit Bucket').click();
 
     // Check that owner drop down field was marked invalid in the css
-    cy.get('#owner').should('have.class', 'ng-invalid');
+    cy.get('cds-select[id=owner]').should('have.class', 'ng-invalid');
 
     // Check that error message was printed under owner drop down field
-    cy.get('#owner + .invalid-feedback').should('have.text', 'This field is required.');
+    cy.get('cds-select[id=owner]')
+      .find('.invalid-feedback')
+      .should('have.text', 'This field is required.');
 
     this.expectBreadcrumbText('Edit');
   }

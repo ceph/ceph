@@ -8,12 +8,9 @@
       <div i18n="form title"
            class="form-header">
         {{ action | titlecase }} {{ resource | upperFirst }}
+
+        <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
       </div>
-      <legend>
-        <cd-help-text i18n>
-          All fields are required, except where marked optional.
-        </cd-help-text>
-      </legend>
       <div class="form-item form-item-append"
            cdsRow>
         <div cdsCol>

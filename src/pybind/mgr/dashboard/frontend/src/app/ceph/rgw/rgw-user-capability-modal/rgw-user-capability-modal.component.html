@@ -1,70 +1,78 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="false"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
 
-  <ng-container class="modal-content">
+    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+  </cds-modal-header>
+
     <form #frm="ngForm"
           [formGroup]="formGroup"
           novalidate>
-      <div class="modal-body">
+      <div cdsModalContent>
         <!-- Type -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 [ngClass]="{'required': !editing}"
-                 for="type"
-                 i18n>Type</label>
-          <div class="cd-col-form-input">
-            <input id="type"
-                   class="form-control"
-                   type="text"
-                   *ngIf="editing"
+        <div class="form-item">
+          <cds-text-label for="type"
+                          [invalid]="formGroup.controls.type.invalid && formGroup.controls.type.dirty"
+                          [invalidText]="typeError"
+                          *ngIf="editing"
+                          i18n>Type
+            <input cdsText
+                   id="type"
+                   name="type"
+                   formControlName="type"
                    [readonly]="true"
-                   formControlName="type">
-            <select id="type"
-                    class="form-select"
-                    formControlName="type"
-                    *ngIf="!editing"
-                    autofocus>
-              <option i18n
-                      *ngIf="types !== null"
-                      [ngValue]="null">-- Select a type --</option>
-              <option *ngFor="let type of types"
-                      [value]="type">{{ type }}</option>
-            </select>
+                   modal-primary-focus>
+          </cds-text-label>
+
+          <cds-select *ngIf="!editing"
+                      label="Type"
+                      i18n-label
+                      for="type"
+                      formControlName="type"
+                      [invalid]="formGroup.controls.type.invalid && formGroup.controls.type.dirty"
+                      [invalidText]="typeError">
+            <option value="">--- Select a type ---</option>
+            <option *ngFor="let type of types"
+                    [value]="type">{{ type }}</option>
+          </cds-select>
+          <ng-template #typeError>
             <span class="invalid-feedback"
                   *ngIf="formGroup.showError('type', frm, 'required')"
                   i18n>This field is required.</span>
-          </div>
+          </ng-template>
         </div>
 
         <!-- Permission -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="perm"
-                 i18n>Permission</label>
-          <div class="cd-col-form-input">
-            <select id="perm"
-                    class="form-select"
-                    formControlName="perm">
-              <option i18n
-                      [ngValue]="null">-- Select a permission --</option>
-              <option *ngFor="let perm of ['read', 'write', '*']"
-                      [value]="perm">
-                {{ perm }}
-              </option>
-            </select>
+        <div class="form-item">
+          <cds-select label="Permission"
+                      i18n-label
+                      for="perm"
+                      formControlName="perm"
+                      [invalid]="formGroup.controls.perm.invalid && formGroup.controls.perm.dirty"
+                      [invalidText]="permError">
+            <option value="">--- Select a permission ---</option>
+            <option *ngFor="let perm of ['read', 'write', '*']"
+                    [value]="perm">
+              {{ perm }}
+            </option>
+          </cds-select>
+
+          <ng-template #permError>
             <span class="invalid-feedback"
                   *ngIf="formGroup.showError('perm', frm, 'required')"
                   i18n>This field is required.</span>
-          </div>
+          </ng-template>
         </div>
       </div>
 
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [form]="formGroup"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-      </div>
-    </form>
-  </ng-container>
-</cd-modal>
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [form]="formGroup"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                          [modalForm]="true"></cd-form-button-panel>
+
+  </form>
+</cds-modal>
