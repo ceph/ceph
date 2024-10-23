@@ -136,6 +136,24 @@ std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) 
 	     << "+0x" << std::hex << laddr_offset.get_offset() << std::dec;
 }
 
+std::ostream &operator<<(std::ostream &out, const laddr_printer_t &p) {
+  out << p.addr;
+  if (!p.addr.is_global_address()) {
+    out << std::hex << '(' << static_cast<int>(p.addr.get_shard())
+	<< ',' << p.addr.get_pool()
+	<< ',' << p.addr.get_reversed_hash();
+    if (p.addr.is_object_address()) {
+      out << ',' << p.addr.get_local_object_id()
+	  << ',' << p.addr.get_local_clone_id()
+	  << ',' << p.addr.is_metadata()
+	  << ',' << p.addr.get_offset_bytes();
+    }
+    out << ')' << std::dec;
+  }
+
+  return out;
+}
+
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
 {
   if (pladdr.is_laddr()) {
