@@ -1,59 +1,75 @@
-<cd-modal [modalRef]="activeModal">
-  <span class="modal-title"
-        i18n>{{ getMode() }} Tag</span>
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="false"
+           (overlaySelected)="closeModal()">
 
-    <ng-container class="modal-content">
-      <form class="form"
-            #formDir="ngForm"
-            [formGroup]="form">
-        <div class="modal-body">
-          <!-- Key -->
-          <div class="form-group row">
-            <label class="cd-col-form-label required"
-                   for="key"
-                   i18n>Key</label>
-            <div class="cd-col-form-input">
-              <input type="text"
-                     class="form-control"
-                     formControlName="key"
-                     id="key">
-              <span class="invalid-feedback"
-                    *ngIf="form.showError('key', formDir, 'required')"
-                    i18n>This field is required.</span>
-              <span class="invalid-feedback"
-                    *ngIf="form.showError('key', formDir, 'unique')"
-                    i18n>This key must be unique.</span>
-              <span class="invalid-feedback"
-                    *ngIf="form.showError('key', formDir, 'maxLength')"
-                    i18n>Length of the key must be maximum of 128 characters</span>
-            </div>
-          </div>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ getMode() }} Tag</h3>
+  </cds-modal-header>
 
-          <!-- Value -->
-          <div class="form-group row">
-            <label class="cd-col-form-label required"
-                   for="value"
-                   i18n>Value</label>
-            <div class="cd-col-form-input">
-              <input id="value"
-                     class="form-control"
-                     type="text"
-                     formControlName="value">
-              <span *ngIf="form.showError('value', formDir, 'required')"
-                    class="invalid-feedback"
-                    i18n>This field is required.</span>
-              <span class="invalid-feedback"
-                    *ngIf="form.showError('value', formDir, 'maxLength')"
-                    i18n>Length of the value must be a maximum of 128 characters</span>
-            </div>
-          </div>
-        </div>
+  <form class="form"
+        #formDir="ngForm"
+        [formGroup]="form">
+    <div cdsModalContent>
+      <!-- Key -->
+      <div class="form-item">
+        <cds-text-label label="Key"
+                        for="key"
+                        cdRequiredField="Key"
+                        [invalid]="form.controls.key.invalid && form.controls.key.dirty"
+                        [invalidText]="keyError">Key
+          <input cdsText
+                 type="text"
+                 id="key"
+                 name="key"
+                 formControlName="key"
+                 [invalid]="form.controls.key.invalid && form.controls.key.dirty"
+                 [autofocus]="true"
+                 modal-primary-focus>
+        </cds-text-label>
+        <ng-template #keyError>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('key', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('key', formDir, 'unique')"
+                i18n>This key must be unique.</span>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('key', formDir, 'maxLength')"
+                i18n>Length of the key must be maximum of 128 characters</span>
+        </ng-template>
+      </div>
 
-        <div class="modal-footer">
-          <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                                [form]="form"
-                                [submitText]="getMode()"></cd-form-button-panel>
-        </div>
-      </form>
-    </ng-container>
-  </cd-modal>
+      <!-- Value -->
+      <div class="form-item">
+        <cds-text-label label="Value"
+                        for="value"
+                        cdRequiredField="Value"
+                        [invalid]="form.controls.value.invalid && form.controls.value.dirty"
+                        [invalidText]="valueError">Value
+          <input cdsText
+                 type="text"
+                 id="value"
+                 name="value"
+                 formControlName="value"
+                 [invalid]="form.controls.value.invalid && form.controls.value.dirty">
+        </cds-text-label>
+        <ng-template #valueError>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('value', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('value', formDir, 'maxLength')"
+                i18n>Length of the value must be a maximum of 128 characters</span>
+        </ng-template>
+      </div>
+
+    </div>
+
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [form]="form"
+                          [submitText]="getMode()"
+                          [modalForm]="true"></cd-form-button-panel>
+  </form>
+</cds-modal>

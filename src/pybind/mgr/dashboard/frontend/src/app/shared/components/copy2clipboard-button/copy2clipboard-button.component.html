@@ -5,11 +5,13 @@
    *ngIf="showIconOnly; else withButtonTpl"></i>
 
 <ng-template #withButtonTpl>
-  <button (click)="onClick()"
-          type="button"
-          class="btn btn-light"
-          i18n-title
-          title="Copy to Clipboard">
-    <i [ngClass]="[icons.clipboard]"></i>
-  </button>
+
+  <cds-icon-button kind="tertiary"
+                   size="md"
+                   title="Copy to Clipboard"
+                   (click)="onClick()">
+    <svg cdsIcon="copy"
+         size="32"
+         class="cds--btn__icon"></svg>
+  </cds-icon-button>
 </ng-template>
