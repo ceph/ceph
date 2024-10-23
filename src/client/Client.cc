@@ -29,6 +29,9 @@
 #endif
 #include <sys/uio.h>
 
+#include <string>
+#include <string_view>
+
 #include <boost/lexical_cast.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 
@@ -159,6 +162,7 @@ using std::oct;
 using std::pair;
 using std::string;
 using std::vector;
+using namespace std::literals;
 
 using namespace TOPNSPC::common;
 
@@ -1054,6 +1058,8 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   if (in->is_symlink())
     in->symlink = st->symlink;
 
+  in->optmetadata = st->optmetadata; // TODO maybe prune unknown_md_t
+
   // only update inode if mds info is strictly newer, or it is the same and projected (odd).
   bool new_version = false;
   if (in->version == 0 ||
@@ -1241,6 +1247,44 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   update_dentry_lease(dn, dlease, from, session);
   return dn;
 }
+
+bool Client::_wrap_name(const Inode& diri, std::string& dname, std::string& alternate_name)
+{
+  // TODO change API to disallow setting alternate_name by the application
+  ldout(cct, 20) << __func__ << ": (" << dname << ", " << alternate_name << ") on " << diri << dendl;
+  if (diri.has_casesensitivity()) {
+    auto& cs = diri.get_casesensitivity();
+    ldout(cct, 25) << __func__ << ":  " << cs << dendl;
+    if (cs.is_insensitive()) {
+      auto&& folder = cs.get_casefolder();
+      std::string folded = dname;
+      if (folder == "locale"sv) {
+        std::transform(folded.begin(), folded.end(), folded.begin(), ::tolower);
+      } else {
+        return false;
+      }
+      alternate_name = dname;
+      dname = folded;
+    }
+  }
+  return true;
+}
+
+std::string Client::_unwrap_name(const Inode& diri, const std::string& dname, const std::string& alternate_name)
+{
+  ldout(cct, 20) << __func__ << ": (" << dname << ", " << alternate_name << ") on " << diri << dendl;
+  std::string newdname = dname;
+  if (diri.has_casesensitivity()) {
+    auto& cs = diri.get_casesensitivity();
+    ldout(cct, 25) << __func__ << ":  " << cs << dendl;
+    if (cs.is_insensitive()) {
+      ldout(cct, 25) << __func__ << ":  = " << alternate_name << dendl;
+      newdname = alternate_name;
+    }
+  }
+  return newdname;
+}
+
 
 void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session)
 {
@@ -7377,8 +7421,9 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, int mask, Inod
   bool did_lookup_request = false;
   // can only request shared caps
   mask &= CEPH_CAP_ANY_SHARED | CEPH_STAT_RSTAT;
+  std::string dname = name;
 
-  if (dname == "..") {
+  if (dname == ".."sv) {
     if (dir->dentries.empty()) {
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
       filepath path(dir->ino);
@@ -7399,7 +7444,7 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, int mask, Inod
     goto done;
   }
 
-  if (dname == ".") {
+  if (dname == "."sv) {
     *target = dir;
     goto done;
   }
@@ -7505,7 +7550,7 @@ relookup:
   return r;
 }
 
-Dentry *Client::get_or_create(Inode *dir, const char* name)
+Dentry *Client::get_or_create(Inode *dir, const std::string& name)
 {
   // lookup
   ldout(cct, 20) << __func__ << " " << *dir << " name " << name << dendl;
@@ -9296,7 +9341,8 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 	   << " last_name " << dirp->last_name
 	   << " offset " << hex << dirp->offset << dec
 	   << dendl;
-  Dir *dir = dirp->inode->dir;
+  auto& diri = dirp->inode;
+  Dir *dir = diri->dir;
 
   if (!dir) {
     ldout(cct, 10) << " dir is empty" << dendl;
@@ -9351,7 +9397,8 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     fill_statx(dn->inode, caps, &stx);
 
     uint64_t next_off = dn->offset + 1;
-    fill_dirent(&de, dn->name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
+    auto dname = _unwrap_name(*diri, dn->name, dn->alternate_name);
+    fill_dirent(&de, dname.c_str(), stx.stx_mode, stx.stx_ino, next_off);
     ++pd;
     if (pd == dir->readdir_cache.end())
       next_off = dir_result_t::END;
@@ -9570,6 +9617,8 @@ int Client::_readdir_r_cb(int op,
 	 ++it) {
       dir_result_t::dentry &entry = *it;
 
+      ldout(cct, 25) << __func__ << ": " << entry << dendl;
+
       uint64_t next_off = entry.offset + 1;
 
       int r;
@@ -9584,7 +9633,8 @@ int Client::_readdir_r_cb(int op,
       }
 
       fill_statx(entry.inode, caps, &stx);
-      fill_dirent(&de, entry.name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
+      auto dname = _unwrap_name(*diri, entry.name, entry.alternate_name);
+      fill_dirent(&de, dname.c_str(), stx.stx_mode, stx.stx_ino, next_off);
 
       Inode *inode = NULL;
       if (getref) {
@@ -15108,6 +15158,15 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     else
       return -CEPHFS_EROFS;
   }
+
+  /* N.B.: when toname/fromname (wrapped) refer to the same file, then we
+   * expect the MDS to succeed since both names "exist" and refer to the same
+   * hard link. (From the MDS side, the wrapped names are equal too!)
+   *
+   * If an application wants to do a case-sensitive rename, they must use an
+   * intermediate file name.
+   *
+   */
 
   walk_dentry_result wdr_from;
   if (int rc = path_walk(fromdir, filepath(fromname), &wdr_from, perm, false, 0, true); rc < 0) {

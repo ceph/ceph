@@ -157,6 +157,15 @@ struct dir_result_t {
     explicit dentry(int64_t o) : offset(o) {}
     dentry(int64_t o, std::string n, std::string an, InodeRef in) :
       offset(o), name(std::move(n)), alternate_name(std::move(an)), inode(std::move(in)) {}
+    void print(std::ostream& os) {
+      os << "dn(name=" << name << " altn=" << alternate_name;
+      if (inode) {
+        os << " ino=" << inode->ino;
+      } else {
+        os << " null";
+      }
+      os << ")";
+    }
   };
   struct dentry_off_lt {
     bool operator()(const dentry& d, int64_t off) const {
@@ -972,6 +981,9 @@ protected:
 
   void check_caps(const InodeRef& in, unsigned flags);
 
+  bool _wrap_name(const Inode& diri, std::string& dname, std::string& alternate_name);
+  std::string _unwrap_name(const Inode& diri, const std::string& dname, const std::string& alternate_name);
+
   void set_cap_epoch_barrier(epoch_t e);
 
   void handle_command_reply(const MConstRef<MCommandReply>& m);
@@ -1763,7 +1775,7 @@ private:
   int _flock(Fh *fh, int cmd, uint64_t owner);
   int _lazyio(Fh *fh, int enable);
 
-  Dentry *get_or_create(Inode *dir, const char* name);
+  Dentry *get_or_create(Inode *dir, const std::string& name);
 
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
