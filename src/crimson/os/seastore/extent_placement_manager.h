@@ -371,9 +371,7 @@ public:
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
-    auto bp = ceph::bufferptr(
-      buffer::create_page_aligned(length));
-    bp.zero();
+    auto bp = create_extent_ptr_zero(length);
 
     return alloc_result_t{addr, std::move(bp), gen};
   }
@@ -405,9 +403,7 @@ public:
 #ifdef UNIT_TESTS_BUILT
     if (unlikely(external_paddr.has_value())) {
       assert(external_paddr->is_fake());
-      auto bp = ceph::bufferptr(
-        buffer::create_page_aligned(length));
-      bp.zero();
+      auto bp = create_extent_ptr_zero(length);
       allocs.emplace_back(alloc_result_t{*external_paddr, std::move(bp), gen});
     } else {
 #else
@@ -419,8 +415,7 @@ public:
         auto left = ext.len;
         while (left > 0) {
           auto len = std::min(max_data_allocation_size, left);
-          auto bp = ceph::bufferptr(buffer::create_page_aligned(len));
-          bp.zero();
+          auto bp = create_extent_ptr_zero(len);
           auto start = ext.start.is_delayed()
                         ? ext.start
                         : ext.start + (ext.len - left);

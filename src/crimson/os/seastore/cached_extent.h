@@ -41,6 +41,18 @@ void intrusive_ptr_release(CachedExtent *);
 
 #endif
 
+inline ceph::bufferptr create_extent_ptr_rand(extent_len_t len) {
+  assert(is_aligned(len, CEPH_PAGE_SIZE));
+  assert(len > 0);
+  return ceph::bufferptr(buffer::create_page_aligned(len));
+}
+
+inline ceph::bufferptr create_extent_ptr_zero(extent_len_t len) {
+  auto bp = create_extent_ptr_rand(len);
+  bp.zero();
+  return bp;
+}
+
 template <typename T>
 using TCachedExtentRef = boost::intrusive_ptr<T>;
 
@@ -762,7 +774,7 @@ protected:
       poffset(other.poffset) {
       assert((length % CEPH_PAGE_SIZE) == 0);
       if (other.is_fully_loaded()) {
-        ptr.emplace(buffer::create_page_aligned(length));
+        ptr = create_extent_ptr_rand(length);
         other.ptr->copy_out(0, length, ptr->c_str());
       } else {
         // the extent must be fully loaded before CoW

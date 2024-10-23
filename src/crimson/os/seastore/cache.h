@@ -411,7 +411,7 @@ public:
 	assert(!ret->is_mutable());
         SUBDEBUGT(seastore_cache, "{} {}~{} is present on t without been \
           fully loaded, reading ... {}", t, T::TYPE, offset, length, *ret);
-        auto bp = alloc_cache_buf(ret->get_length());
+        auto bp = create_extent_ptr_rand(ret->get_length());
         ret->set_bptr(std::move(bp));
         return read_extent<T>(
           ret->cast<T>());
@@ -592,7 +592,7 @@ public:
         "{} {}~{} is present without been fully loaded, reading ... -- {}",
         p_extent->get_type(), p_extent->get_paddr(),p_extent->get_length(),
         *p_extent);
-      auto bp = alloc_cache_buf(p_extent->get_length());
+      auto bp = create_extent_ptr_rand(p_extent->get_length());
       p_extent->set_bptr(std::move(bp));
       return read_extent<CachedExtent>(CachedExtentRef(p_extent));
     }
@@ -647,7 +647,7 @@ private:
     auto cached = query_cache(offset);
     if (!cached) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
-        alloc_cache_buf(length));
+        create_extent_ptr_rand(length));
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
                 PLACEMENT_HINT_NULL,
@@ -667,7 +667,7 @@ private:
     // extent PRESENT in cache
     if (is_retired_placeholder_type(cached->get_type())) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
-        alloc_cache_buf(length));
+        create_extent_ptr_rand(length));
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
                 PLACEMENT_HINT_NULL,
@@ -695,7 +695,7 @@ private:
       SUBDEBUG(seastore_cache,
         "{} {}~{} is present without been fully loaded, reading ... -- {}",
         T::TYPE, offset, length, *ret);
-      auto bp = alloc_cache_buf(length);
+      auto bp = create_extent_ptr_rand(length);
       ret->set_bptr(std::move(bp));
       return read_extent<T>(
         std::move(ret));
@@ -791,7 +791,7 @@ private:
 	assert(!ret->is_mutable());
         SUBDEBUGT(seastore_cache, "{} {}~{} {} is present on t without been \
                   fully loaded, reading ...", t, type, offset, length, laddr);
-        auto bp = alloc_cache_buf(ret->get_length());
+        auto bp = create_extent_ptr_rand(ret->get_length());
         ret->set_bptr(std::move(bp));
         return read_extent<CachedExtent>(
           std::move(ret));
@@ -1762,15 +1762,6 @@ private:
 
   seastar::metrics::metric_group metrics;
   void register_metrics();
-
-  /// alloc buffer for cached extent
-  bufferptr alloc_cache_buf(size_t size) {
-    // TODO: memory pooling etc
-    auto bp = ceph::bufferptr(
-      buffer::create_page_aligned(size));
-    bp.zero();
-    return bp;
-  }
 
   void backref_batch_update(
     std::vector<backref_entry_ref> &&,
