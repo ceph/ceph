@@ -7,30 +7,20 @@ namespace redisqueue {
 int queue_init(connection* conn, const std::string& name, uint64_t size,
                optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int> resp;
-  boost::system::error_code ec;
+  rgw::redis::RedisResponseMap resp;
 
-  std::string HASHMAP_NAME = "2pc_queues";
-
-  try {
-    req.push("HSET", HASHMAP_NAME, name, std::to_string(size));
-    rgw::redis::redis_exec(conn, ec, req, resp, y);
-    if (ec) {
-      std::cerr << "RGW Redis Queue:: " << __func__
-                << "(): ERROR: " << ec.message() << std::endl;
-      return -ec.value();
-    }
-    return 0;
-
-  } catch (const std::exception& e) {
-    std::cerr << "RGW Redis Queue:: " << __func__
-              << "(): Exception: " << e.what() << std::endl;
-    return -EINVAL;
-  }
+  req.push("FCALL", "init_queue", 1, name, size);
+  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
-// FIXME: Perhaps return the queue length in calls to reserve, commit, abort
-// etc and do not use this function explicitly?
+int queue_remove(connection* conn, const std::string& name, optional_yield y) {
+  boost::redis::request req;
+  rgw::redis::RedisResponseMap resp;
+
+  req.push("FCALL", "remove_queue", 1, name);
+  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+}
+
 int queue_status(connection* conn, const std::string& name,
                  std::tuple<uint32_t, uint32_t>& res, optional_yield y) {
   boost::redis::request req;

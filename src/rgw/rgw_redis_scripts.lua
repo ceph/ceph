@@ -98,6 +98,8 @@ redis.register_function('assert_lock', assert_lock)
 -- in https://redis.io/docs/latest/develop/interact/programmability/eval-intro/
 ---
 
+local MAPNAME = "2pc:queues"
+
 -- Function to generate a string longer than n by concatenating the charset
 local function generateString(n)
     local charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
@@ -111,6 +113,49 @@ local function generateString(n)
     return table.concat(result)
 end
 
+--- Initialize a queue with a given size
+--- @param keys table A  single element list - queue set name
+--- @param args table A single-element list - size
+--- @return number 0 if the queue is initialized, -lerrorCodes.EEXIST if the queue already exists
+local function init_queue(keys, args)
+    local queue_name = keys[1]
+    local size = tonumber(args[1])
+
+    local ret = redis.call('HSETNX', MAPNAME, queue_name, size)
+    if ret == 0 then
+        return format_response(-lerrorCodes.EEXIST, "Queue already exists", "")
+    end
+    return format_response(0, "", "")
+end
+
+--- Remove a queue
+--- @param keys table A two element list - queue set name and queue name
+--- @return number 0 if the queue is removed, -lerrorCodes.ENOENT if the queue does not exist
+local function remove_queue(keys)
+    local queue_name = keys[1]
+
+    local ret = redis.call('HDEL', MAPNAME, queue_name)
+    if ret == 0 then
+        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+    end
+
+    --- Remove all the keys associated with the queue
+    redis.call('DEL', "queue:" .. queue_name)
+    redis.call('DEL', "reserve:" .. queue_name)
+    redis.call('DEL', "lock:" .. queue_name)
+
+    return format_response(0, "", "")
+end
+
+--- Check if a queue exists
+--- @param keys table A single element list - queue name
+--- @return number 1 if the queue exists, 0 if the queue does not exist
+local function check_queue_exists(keys)
+    local queue_name = keys[1]
+
+    return redis.call('HEXISTS', MAPNAME, queue_name)
+end
+
 --- Add an item to the reserve queue for n bytes
 --- @param keys table A single element list - queue name
 --- @param args table A single-element list - item size
@@ -118,6 +163,10 @@ end
 local function reserve(keys, args)
     local name = "reserve:" .. keys[1]
     local item_size = tonumber(args[1])
+
+    if check_queue_exists({keys[1]}) == 0 then
+        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+    end
 
     local randomString = generateString(item_size)
     --- generate a json of the format {"timestamp": <current time>, "data": <value>}
@@ -135,8 +184,12 @@ end
 local function unreserve(keys)
     local name = "reserve:" .. keys[1]
 
+    if check_queue_exists({keys[1]}) == 0 then
+        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+    end
+
     local value = redis.call('RPOP', name)
-    if not value then
+    if value == nil then
         return format_response(-lerrorCodes.ENOENT, "Queue is empty", "")
     end
     return format_response(0, "", "")
@@ -150,7 +203,11 @@ local function commit(keys, args)
     local name = "queue:" .. keys[1]
     local message = args[1]
 
-    unreserve(keys)
+    local res = unreserve(keys)
+    if res.map.errorCode ~= 0 then
+        return res
+    end
+
     if not redis.call('LPUSH', name, message) then
         return format_response(-lerrorCodes.ENOSPC, "Not enough memory", "")
     end
@@ -168,18 +225,26 @@ end
 --- This does not remove the message from the queue
 local function read(keys)
     local name = "queue:" .. keys[1]
+
+    if check_queue_exists({keys[1]}) == 0 then
+        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+    end
+
     local value = redis.call('LRANGE', name, -1, -1)[1]
     return format_response(0, "", value)
 end
 
---- Option one
---- Have a separate read if lock is held
+--- Read single message from the queue
 --- @param keys table A single element list - queue name
 --- @param args table A single element list - cookie
 --- @return pair of number (error code) and string (message)
 local function locked_read(keys, args)
     local name = "queue:" .. keys[1]
     local cookie = args[1]
+
+    if check_queue_exists({keys[1]}) == 0 then
+        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+    end
 
     local assert_lock_keys = {"lock:" .. keys[1]}
     local assert_lock_args = {cookie}
@@ -192,8 +257,7 @@ local function locked_read(keys, args)
     return lock_status
 end
 
---- Option one
---- Have a separate read if lock is held
+--- Read multiple messages from the queue
 --- @param keys table A single element list - queue name
 --- @param args table A two element list - cookie, count
 --- @return pair of number (error code) and string (message)
@@ -201,6 +265,10 @@ local function locked_read_multi(keys, args)
     local name = "queue:" .. keys[1]
     local cookie = args[1]
     local count = tonumber(args[2])
+
+    if check_queue_exists({keys[1]}) == 0 then
+        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+    end
 
     local assert_lock_keys = {"lock:" .. keys[1]}
     local assert_lock_args = {cookie}
@@ -222,6 +290,11 @@ end
 
 local function ack(keys)
     local name = "queue:" .. keys[1]
+
+    if check_queue_exists({keys[1]}) == 0 then
+        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+    end
+
     redis.call('RPOP', name)
     return format_response(0, "", "")
 end
@@ -233,6 +306,10 @@ end
 local function locked_ack(keys, args)
     local name = "queue:" .. keys[1]
     local cookie = args[1]
+
+    if check_queue_exists({keys[1]}) == 0 then
+        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+    end
 
     local assert_lock_keys = {"lock:" .. keys[1]}
     local assert_lock_args = {cookie}
@@ -254,6 +331,10 @@ local function locked_ack_multi(keys, args)
     local cookie = args[1]
     local count = args[2]
 
+    if check_queue_exists({keys[1]}) == 0 then
+        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+    end
+
     local assert_lock_keys = {"lock:" .. keys[1]}
     local assert_lock_args = {cookie}
 
@@ -273,6 +354,10 @@ local function cleanup(keys, args)
     local name = "reserve:" .. keys[1]
     local timeout = args[1]
 
+    if check_queue_exists({keys[1]}) == 0 then
+        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+    end
+
     local values = redis.call('LRANGE', name, 0, -1)
     local index = -1
     for i, value in ipairs(values) do
@@ -291,6 +376,8 @@ local function cleanup(keys, args)
 end
 
 --- Register the functions.
+redis.register_function('init_queue', init_queue)
+redis.register_function('remove_queue', remove_queue)
 redis.register_function('reserve', reserve)
 redis.register_function('commit', commit)
 redis.register_function('abort', abort)

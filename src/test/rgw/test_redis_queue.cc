@@ -43,8 +43,13 @@ TEST_F(RGWRedisQueueTest, QueueInit) {
       io,
       [this](boost::asio::yield_context yield) {
         int res;
+        // Remove the queue if it exists
+        res = rgw::redisqueue::queue_remove(conn, "test_queue", yield);
+        ASSERT_TRUE(res == 0 || res == -ENOENT);
         res = rgw::redisqueue::queue_init(conn, "test_queue", 100, yield);
         ASSERT_EQ(res, 0);
+        res = rgw::redisqueue::queue_init(conn, "test_queue", 100, yield);
+        ASSERT_EQ(res, -EEXIST);
       },
       [this](std::exception_ptr eptr) {
         conn->cancel();
@@ -584,6 +589,71 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         }
         // On the last call to read, the entire queue should be returned
         ASSERT_EQ(truncated, false);
+      },
+      [this](std::exception_ptr eptr) {
+        conn->cancel();
+        if (eptr) std::rethrow_exception(eptr);
+      });
+  io.run();
+}
+
+TEST_F(RGWRedisQueueTest, OperationOnDeletedQueue) {
+  io.restart();
+  boost::asio::spawn(
+      io,
+      [this](boost::asio::yield_context yield) {
+        int res;
+        std::tuple<uint32_t, uint32_t> status;
+        std::size_t reserve_size = 4 * 1024U;
+
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+
+        int initial_reserve = std::get<0>(status);
+        int initial_queue = std::get<1>(status);
+
+        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size, yield);
+        ASSERT_EQ(res, 0);
+
+        std::string data = R"({
+          "Records": [
+            {
+              "version": "0",
+              "region": "test-region"
+            },
+            {
+              "version": "1",
+              "region": "test-region"
+            }
+          ]
+        })";
+
+        res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
+        ASSERT_EQ(res, 0);
+
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(status), initial_reserve);
+        ASSERT_EQ(std::get<1>(status), initial_queue + 1);
+
+        res = rgw::redisqueue::queue_remove(conn, "test_queue", yield);
+        ASSERT_EQ(res, 0);
+
+        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size, yield);
+        ASSERT_EQ(res, -ENOENT);
+
+        res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
+        ASSERT_EQ(res, -ENOENT);
+
+        res = rgw::redisqueue::read(conn, "test_queue", data, yield);
+        ASSERT_EQ(res, -ENOENT);
+
+        res = rgw::redisqueue::ack(conn, "test_queue", yield);
+        ASSERT_EQ(res, -ENOENT);
+
+        res = rgw::redisqueue::cleanup_stale_reservations(conn, "test_queue", 1,
+                                                          yield);
+        ASSERT_EQ(res, -ENOENT);
       },
       [this](std::exception_ptr eptr) {
         conn->cancel();

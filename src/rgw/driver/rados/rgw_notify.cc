@@ -1271,14 +1271,12 @@ int publish_commit(rgw::sal::Object* obj,
       // std::vector<buffer::list> bl_data_vec{std::move(bl)};
       // librados::ObjectWriteOperation op;
 
-      // FIXME: Is this commiting multiple messages over a single reservation?
-      // How to convert a bufferlist to a string or a vector of strings incase it is multiple messages?
-      // cls_2pc_queue_commit(op, bl_data_vec, topic.res_id);
-
       // This needs to be fetched from bufferlist
-      std::string data = "Data to commit";
+      std::string data = bl.c_str();
 
+      // TODO: Redis: Do async completion
       auto ret = rgw::redisqueue::commit(conn, queue_name, data, res.yield);
+
 
       // aio_completion_ptr completion {librados::Rados::aio_create_completion()};
       // auto pcc_arg = make_unique<PublishCommitCompleteArg>(queue_name, dpp);
