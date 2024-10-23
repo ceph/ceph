@@ -655,11 +655,34 @@ private:
     update_func_t &&f,
     LogicalCachedExtent*);
 
+  // Allocate a list of pins.
+  // If alloc_mapping_info_t::key in alloc_infos are all L_ADDR_NULL, allocate a
+  // consecutive pins of the total length based on the hint.
+  // If the keys are all not L_ADDR_NULL, allocate a list of ordered pins based
+  // on each key. The hint must equal to the key of first entriy in alloc_infos.
   alloc_extents_ret _alloc_extents(
     Transaction &t,
     laddr_hint_t hint,
     std::vector<alloc_mapping_info_t> &alloc_infos);
 
+  struct insert_pos_t {
+    insert_pos_t(LBABtree::iterator iter, laddr_t laddr)
+      : iter(iter), laddr(laddr) {}
+    // Point to insert position.
+    LBABtree::iterator iter;
+    // Logical address allocated for insertion.
+    laddr_t laddr;
+  };
+
+  // Search for a suitable position and laddr according to hint~length.
+  using search_insert_pos_ret = alloc_extent_iertr::future<insert_pos_t>;
+  search_insert_pos_ret search_insert_pos(
+    Transaction &t,
+    LBABtree &btree,
+    laddr_hint_t hint,
+    extent_len_t length);
+
+  // appropriate
   ref_ret _incref_extent(
     Transaction &t,
     laddr_t addr,
