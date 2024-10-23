@@ -637,6 +637,10 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_error(-ENOENT);
     }
 
+    if (pbucket_info->zonegroup != store->get_zone()->get_zonegroup().get_id()) {
+      return set_cr_done(); // not my bucket
+    }
+
     if (pbucket_info->layout.logs.empty()) {
       return set_cr_done(); // no bilogs to trim
     }
