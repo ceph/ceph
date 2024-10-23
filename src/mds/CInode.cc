@@ -3970,7 +3970,28 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   } else {
     xattr_version = 0;
   }
-  
+
+  bufferlist optmdbl;
+  {
+    decltype(InodeStat::optmetadata) optmetadata;
+    using kind_t = decltype(optmetadata)::optkind_t;
+
+    auto* csp = get_casesensitivity();
+    if (csp) {
+      dout(25) << *csp << dendl;
+      if (csp->is_insensitive()) {
+        auto& opt = optmetadata.get_or_create_opt(kind_t::CASE_INSENSITIVE);
+        auto& cs = opt.template get_meta< casesensitivity_md_t >();
+        cs = *csp;
+        dout(25) << "cs now " << cs << dendl;
+      } else {
+        dout(25) << "skipping" << dendl;
+      }
+    }
+
+    encode(optmetadata, optmdbl);
+  }
+
   // do we have room?
   if (max_bytes) {
     unsigned bytes =
@@ -3984,6 +4005,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       sizeof(struct ceph_dir_layout) // dir_layout
       + 4 + file_i->fscrypt_auth.size() // len + data
       + 4 + file_i->fscrypt_file.size() // len + data
+      + optmdbl.length()
       ;
 
     if (xattr_version) {
@@ -4138,7 +4160,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    * note: encoding matches MClientReply::InodeStat
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode(oi->ino, bl);
     encode(snapid, bl);
     encode(oi->rdev, bl);
@@ -4186,6 +4208,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(!file_i->fscrypt_auth.empty(), bl);
     encode(file_i->fscrypt_auth, bl);
     encode(file_i->fscrypt_file, bl);
+    encode_nohead(optmdbl, bl);
+    // encode inodestat
     ENCODE_FINISH(bl);
   }
   else {
