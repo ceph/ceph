@@ -91,7 +91,14 @@ void ObjectCopyRequest<I>::send_list_snaps() {
   }
 
   io::SnapIds snap_ids;
-  snap_ids.reserve(1 + m_snap_map.size());
+
+  if (m_src_snap_id_start != 0) {
+    snap_ids.reserve(2 + m_snap_map.size());
+    snap_ids.push_back(0);
+  } else {
+    snap_ids.reserve(1 + m_snap_map.size());
+  }
+
   snap_ids.push_back(m_src_snap_id_start);
   for (auto& [src_snap_id, _] : m_snap_map) {
     if (m_src_snap_id_start < src_snap_id) {
@@ -142,9 +149,11 @@ void ObjectCopyRequest<I>::send_read() {
   }
 
   auto index = *m_read_snaps.begin();
+
   auto& read_op = m_read_ops[index];
-  if (read_op.image_interval.empty()) {
-    // nothing written to this object for this snapshot (must be trunc/remove)
+  io::WriteReadSnapIds write_read_snap_ids{index};
+  if (read_op.image_interval.empty() ||
+      write_read_snap_ids.first <= m_src_snap_id_start) {
     handle_read(0);
     return;
   }
@@ -247,11 +256,14 @@ void ObjectCopyRequest<I>::send_update_object_map() {
       handle_update_object_map(r);
       finish_op_ctx->complete(0);
     });
-
+  // The deep-copy code path does not set the object state to PENDING
+  // before deletion, causing the objectmap updation to be skipped.
+  // Set force to true to force the objectmap updation in this case.
+  bool force = (object_state == OBJECT_NONEXISTENT);
   auto dst_image_ctx = m_dst_image_ctx;
   bool sent = dst_image_ctx->object_map->template aio_update<
     Context, &Context::complete>(dst_snap_id, m_dst_object_number, object_state,
-                                 {}, {}, false, ctx);
+                                 {}, {}, false, force, ctx);
 
   // NOTE: state machine might complete before we reach here
   dst_image_ctx->image_lock.unlock_shared();
@@ -320,6 +332,11 @@ void ObjectCopyRequest<I>::send_write_object() {
   SnapIds dst_snap_ids;
   librados::snap_t dst_snap_seq = 0;
   librados::snap_t src_snap_seq = m_snapshot_sparse_bufferlist.begin()->first;
+  if (m_src_snap_id_start != 0 && src_snap_seq <= m_src_snap_id_start) {
+    handle_write_object(0);
+    return;
+  }
+
   if (src_snap_seq != 0) {
     auto snap_map_it = m_snap_map.find(src_snap_seq);
     ceph_assert(snap_map_it != m_snap_map.end());
@@ -625,32 +642,32 @@ void ObjectCopyRequest<I>::merge_write_ops() {
 template <typename I>
 void ObjectCopyRequest<I>::compute_zero_ops() {
   ldout(m_cct, 20) << dendl;
-
   m_src_image_ctx->image_lock.lock_shared();
   bool hide_parent = (m_src_snap_id_start == 0 &&
                       m_src_image_ctx->parent != nullptr);
   m_src_image_ctx->image_lock.unlock_shared();
-
+  bool update_map_nonexistent = false;
   // ensure we have a zeroed interval for each snapshot
   for (auto& [src_snap_seq, _] : m_snap_map) {
     if (m_src_snap_id_start < src_snap_seq) {
       m_dst_zero_interval[src_snap_seq];
     }
   }
-
   // exists if copying from an arbitrary snapshot w/o any deltas in the
   // start snapshot slot (i.e. DNE)
   bool object_exists = (
       m_src_snap_id_start > 0 &&
       m_snapshot_delta.count({m_src_snap_id_start, m_src_snap_id_start}) == 0);
-  bool fast_diff = m_dst_image_ctx->test_features(RBD_FEATURE_FAST_DIFF);
-  uint64_t prev_end_size = 0;
 
+  bool fast_diff = m_dst_image_ctx->test_features(RBD_FEATURE_FAST_DIFF);
+  uint64_t prev_end_size = compute_starting_end_size();
   // compute zero ops from the zeroed intervals
   for (auto &it : m_dst_zero_interval) {
     auto src_snap_seq = it.first;
     auto &zero_interval = it.second;
-
+    if (src_snap_seq <= m_src_snap_id_start) {
+      continue;
+    }
     auto snap_map_it = m_snap_map.find(src_snap_seq);
     ceph_assert(snap_map_it != m_snap_map.end());
     auto dst_snap_seq = snap_map_it->second.front();
@@ -685,7 +702,6 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
         hide_parent = false;
       }
     }
-
     // collect known zeroed extents from the snapshot delta for the current
     // src snapshot. If this is the first snapshot, we might need to handle
     // the whiteout case if it overlaps with the parent
@@ -774,6 +790,9 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
           }
 
           object_exists = (object_extent.offset > 0 || hide_parent);
+	  if (!object_exists) {
+	    update_map_nonexistent = true;
+	  }
           end_size = std::min(end_size, object_extent.offset);
         } else {
           // zero interval inside the object
@@ -789,14 +808,21 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     }
 
     uint8_t dst_object_map_state = OBJECT_NONEXISTENT;
-    if (object_exists) {
-      dst_object_map_state = OBJECT_EXISTS;
-      if (fast_diff && m_snapshot_sparse_bufferlist.count(src_snap_seq) == 0) {
-        dst_object_map_state = OBJECT_EXISTS_CLEAN;
+    if (src_snap_seq > m_src_snap_id_start) {
+      if (object_exists) {
+        dst_object_map_state = OBJECT_EXISTS;
+        if (fast_diff && m_snapshot_sparse_bufferlist.count(src_snap_seq) == 0) {
+          dst_object_map_state = OBJECT_EXISTS_CLEAN;
+        }
+        m_dst_object_state[src_snap_seq] = dst_object_map_state;
+      } else {
+        // Don't update if an object does not exist for the snapshot
+        // due to resizes as the objectmap will invalidate the entry.
+	if (dst_may_exist_it->second && update_map_nonexistent) {
+	  m_dst_object_state[src_snap_seq] = dst_object_map_state;
+        }
       }
-      m_dst_object_state[src_snap_seq] = dst_object_map_state;
     }
-
     ldout(m_cct, 20) << "dst_snap_seq=" << dst_snap_seq << ", "
                      << "end_size=" << end_size << ", "
                      << "dst_object_map_state="
@@ -834,6 +860,34 @@ void ObjectCopyRequest<I>::compute_dst_object_may_exist() {
   ldout(m_cct, 20) << "dst_object_may_exist=" << m_dst_object_may_exist
                    << dendl;
 }
+
+template <typename I>
+uint64_t ObjectCopyRequest<I>::compute_starting_end_size() {
+  uint64_t end_size = 0;
+
+  if (m_src_snap_id_start == 0) {
+    return 0;
+  }
+
+  for (auto& [key, image_intervals] : m_snapshot_delta) {
+    io::WriteReadSnapIds write_read_snap_ids{key};
+
+    // advance the src write snap id to the first valid snap id
+    if (write_read_snap_ids.first <= m_src_snap_id_start) {
+      for (auto& image_interval : image_intervals) {
+        striper::LightweightObjectExtents object_extents;
+        io::util::area_to_object_extents(m_dst_image_ctx, image_interval.get_off(),
+                                     image_interval.get_len(), m_image_area, 0,
+                                     &object_extents);
+	for (auto& object_extent : object_extents) {
+	  end_size = std::max(end_size, object_extent.offset + object_extent.length);
+	}
+      }
+    }
+  }
+  return end_size;
+}
+
 
 } // namespace deep_copy
 } // namespace librbd

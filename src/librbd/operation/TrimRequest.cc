@@ -207,7 +207,7 @@ void TrimRequest<I>::send_pre_trim() {
 
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start_min, m_num_objects, OBJECT_PENDING,
-            OBJECT_EXISTS, {}, false, this)) {
+            OBJECT_EXISTS, {}, false, false, this)) {
         return;
       }
     }
@@ -311,7 +311,7 @@ void TrimRequest<I>::send_post_trim() {
 
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start_min, m_num_objects, OBJECT_NONEXISTENT,
-            OBJECT_PENDING, {}, false, this)) {
+            OBJECT_PENDING, {}, false, false, this)) {
         return;
       }
     }
