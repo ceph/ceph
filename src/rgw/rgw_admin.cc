@@ -8376,10 +8376,19 @@ next:
     } else if (inject_delay_at) {
       fault.inject(*inject_delay_at, InjectDelay{inject_delay, dpp()});
     }
-    ret = br.execute(num_shards, fault, max_entries,
-		     cls_rgw_reshard_initiator::Admin,
-		     dpp(), null_yield,
-                     verbose, &cout, formatter.get());
+
+    // spawn execute() as a coroutine
+    boost::asio::io_context ctx;
+    boost::asio::spawn(ctx,
+        [&] (boost::asio::yield_context yield) {
+          ret = br.execute(num_shards, fault, max_entries,
+                           cls_rgw_reshard_initiator::Admin,
+                           dpp(), yield,
+                           verbose, &cout, formatter.get());
+        }, [] (std::exception_ptr eptr) {
+          if (eptr) { std::rethrow_exception(eptr); }
+        });
+    ctx.run();
     return -ret;
   }
 

@@ -112,6 +112,11 @@ class RGWBucketReshard {
 		 Formatter *formatter,
                  ReshardFaultInjector& fault,
                  const DoutPrefixProvider *dpp, optional_yield y);
+  // execute the bucket reshard while the bucket's reshard lock is held
+  int execute_locked(int num_shards, ReshardFaultInjector& fault,
+                     int max_op_entries, const DoutPrefixProvider *dpp,
+                     boost::asio::yield_context yield, bool verbose,
+                     std::ostream *out, ceph::Formatter *formatter);
 public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
@@ -122,7 +127,7 @@ public:
 		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, ReshardFaultInjector& f,
               int max_op_entries, const cls_rgw_reshard_initiator initiator,
-	      const DoutPrefixProvider *dpp, optional_yield y,
+	      const DoutPrefixProvider *dpp, boost::asio::yield_context yield,
               bool verbose = false, std::ostream *out = nullptr,
               ceph::Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
