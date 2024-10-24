@@ -501,7 +501,7 @@ void Log::dump_recent()
     m_recent.clear();
     for (const auto& e : t) {
       auto& set = recent_pthread_ids[e.m_thread];
-      set.insert(e.m_thread_name);
+      set.insert(e.m_thread_name.data());
     }
     _flush(t, true);
   }
