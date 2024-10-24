@@ -4,6 +4,7 @@ on: [pull_request]
 
 jobs:
   pull_request:
+    name: "Check Incompatible Licenses"
     runs-on: ubuntu-latest
     steps:
     - name: Check Pull Request
