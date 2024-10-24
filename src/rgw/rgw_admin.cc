@@ -8483,12 +8483,28 @@ next:
   }
 
   if (opt_cmd == OPT::RESHARD_PROCESS) {
-    RGWReshard reshard(static_cast<rgw::sal::RadosStore*>(driver), true, &cout);
+    auto rados_driver = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!rados_driver) {
+      cerr << "ERROR: this command can only work when the cluster "
+          "has a RADOS backing store." << std::endl;
+      return EPERM;
+    }
 
-    int ret = reshard.process_all_logshards(dpp(), null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: failed to process reshard logs, error=" << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    RGWReshard reshard(rados_driver, true, &cout);
+
+    // spawn process_all_logshards() as a coroutine
+    boost::asio::io_context ctx;
+    boost::asio::spawn(ctx,
+        [&reshard] (boost::asio::yield_context yield) {
+          reshard.process_all_logshards(dpp(), yield);
+        }, [] (std::exception_ptr eptr) {
+          if (eptr) { std::rethrow_exception(eptr); }
+        });
+    try {
+      ctx.run();
+    } catch (const std::exception& e) {
+      cerr << "ERROR: failed to process reshard logs with " << e.what() << std::endl;
+      return -1;
     }
   }
 
