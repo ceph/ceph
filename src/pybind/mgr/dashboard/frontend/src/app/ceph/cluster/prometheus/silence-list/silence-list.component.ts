@@ -19,7 +19,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { PrometheusRule } from '~/app/shared/models/prometheus-alerts';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -56,7 +56,7 @@ export class SilenceListComponent extends PrometheusListHelper {
   constructor(
     private authStorageService: AuthStorageService,
     private cdDatePipe: CdDatePipe,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private notificationService: NotificationService,
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
