@@ -4,6 +4,8 @@
 #ifndef CEPH_COMMON_SLOPPYCRCMAP_H
 #define CEPH_COMMON_SLOPPYCRCMAP_H
 
+#include <map>
+
 #include "include/encoding.h"
 
 namespace ceph {
