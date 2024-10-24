@@ -587,8 +587,15 @@ class MemStore::OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
   ObjectRef o;
   std::map<std::string,ceph::buffer::list>::iterator it;
 public:
-  OmapIteratorImpl(CollectionRef c, ObjectRef o)
-    : c(c), o(o), it(o->omap.begin()) {}
+  OmapIteratorImpl(CollectionRef c, ObjectRef o, const omap_iter_seek_t& start_from)
+    : c(c), o(o) {
+    std::lock_guard lock{o->omap_mutex};
+    if (start_from.seek_type == omap_iter_seek_t::LOWER_BOUND) {
+      it = o->omap.lower_bound(start_from.seek_position);
+    } else {
+      it = o->omap.upper_bound(start_from.seek_position);
+    }
+  }
 
   int seek_to_first() override {
     std::lock_guard lock{o->omap_mutex};
@@ -629,14 +636,15 @@ public:
 
 ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(
   CollectionHandle& ch,
-  const ghobject_t& oid)
+  const ghobject_t& oid,
+  omap_iter_seek_t start_from)
 {
   dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
   Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return ObjectMap::ObjectMapIterator();
-  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o));
+  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, start_from));
 }
 
 
