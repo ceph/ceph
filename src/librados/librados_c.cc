@@ -1206,6 +1206,13 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_pool_stat)(
     return err;
   }
 
+  ceph_statfs statfs_result;
+  err = io_ctx_impl->client->get_pool_fs_stats(io_ctx_impl->get_id(), statfs_result);
+  if (err) {
+    tracepoint(librados, rados_ioctx_pool_stat_exit, err, stats);
+    return err;
+  }
+
   ::pool_stat_t& r = rawresult[pool_name];
   uint64_t allocated_bytes = r.get_allocated_data_bytes(per_pool) +
     r.get_allocated_omap_bytes(per_pool);
@@ -1217,6 +1224,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_pool_stat)(
 
   stats->num_kb = shift_round_up(allocated_bytes, 10);
   stats->num_bytes = allocated_bytes;
+  stats->num_bytes_available = statfs_result.bytes_avail;
   stats->num_objects = r.stats.sum.num_objects;
   stats->num_object_clones = r.stats.sum.num_object_clones;
   stats->num_object_copies = r.stats.sum.num_object_copies;
