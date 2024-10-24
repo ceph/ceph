@@ -396,7 +396,9 @@ class RGWPSCreateTopicOp : public RGWOp {
 
 void RGWPSCreateTopicOp::execute(optional_yield y) {
   // master request will replicate the topic creation.
-  if (!driver->is_meta_master()) {
+  if (!driver->is_meta_master() &&
+      rgw::all_zonegroups_support(*s->penv.site,
+                                  rgw::zone_features::notification_v2)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
@@ -863,7 +865,9 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
 };
 
 void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (!driver->is_meta_master() &&
+      rgw::all_zonegroups_support(*s->penv.site,
+                                  rgw::zone_features::notification_v2)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
@@ -1008,7 +1012,9 @@ class RGWPSDeleteTopicOp : public RGWOp {
 };
 
 void RGWPSDeleteTopicOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (!driver->is_meta_master() &&
+      rgw::all_zonegroups_support(*s->penv.site,
+                                  rgw::zone_features::notification_v2)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
@@ -1260,7 +1266,9 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
 }
 
 void RGWPSCreateNotifOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (!driver->is_meta_master() &&
+      rgw::all_zonegroups_support(*s->penv.site,
+                                  rgw::zone_features::notification_v2)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &data, nullptr, s->info, y);
     if (op_ret < 0) {
@@ -1462,7 +1470,9 @@ int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
 }
 
 void RGWPSDeleteNotifOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (!driver->is_meta_master() &&
+      rgw::all_zonegroups_support(*s->penv.site,
+                                  rgw::zone_features::notification_v2)) {
     bufferlist indata;
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &indata, nullptr, s->info, y);
