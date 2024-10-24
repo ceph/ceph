@@ -299,6 +299,12 @@ public:
       const std::string &k,
       const ceph::bufferlist &to_set_bl);
   public:
+    size_t get_count() const override {
+      return bat.Count();
+    }
+    size_t get_size_bytes() const override {
+      return bat.GetDataSize();
+    }
     void set(
       const std::string &prefix,
       const std::string &k,
