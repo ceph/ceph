@@ -10,6 +10,7 @@ import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loa
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { HostFormComponent } from './host-form.component';
+import { InputModule, ModalModule } from 'carbon-components-angular';
 
 describe('HostFormComponent', () => {
   let component: HostFormComponent;
@@ -23,7 +24,9 @@ describe('HostFormComponent', () => {
         HttpClientTestingModule,
         RouterTestingModule,
         ReactiveFormsModule,
-        ToastrModule.forRoot()
+        ToastrModule.forRoot(),
+        InputModule,
+        ModalModule
       ],
       declarations: [HostFormComponent],
       providers: [NgbActiveModal]
@@ -45,7 +48,7 @@ describe('HostFormComponent', () => {
 
   it('should open the form in a modal', () => {
     const nativeEl = fixture.debugElement.nativeElement;
-    expect(nativeEl.querySelector('cd-modal')).not.toBe(null);
+    expect(nativeEl.querySelector('cds-modal')).not.toBe(null);
   });
 
   it('should validate the network address is valid', fakeAsync(() => {
