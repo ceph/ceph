@@ -179,57 +179,9 @@ struct cpu_set_t;
 #define MSG_DONTWAIT MSG_NONBLOCK
 #endif
 
-/* compiler warning free success noop */
-#define pthread_setname_noop_helper(thread, name) ({ \
-  int __i = 0;                                       \
-  __i; })
-
-#define pthread_getname_noop_helper(thread, name, len) ({ \
-  if (name != NULL)                                       \
-    *name = '\0';                                         \
-  0; })
-
 #define pthread_kill_unsupported_helper(thread, signal) ({ \
   int __i = -ENOTSUP;                                      \
   __i; })
-
-#if defined(_WIN32) && defined(__clang__) && \
-    !defined(_LIBCPP_HAS_THREAD_API_PTHREAD)
-  // In this case, llvm doesn't use the pthread api for std::thread.
-  // We cannot use native_handle() with the pthread api, nor can we pass
-  // it to Windows API functions.
-  #define ceph_pthread_setname pthread_setname_noop_helper
-#elif defined(HAVE_PTHREAD_SETNAME_NP)
-  #if defined(__APPLE__)
-    #define ceph_pthread_setname(thread, name) ({ \
-      int __result = 0;                         \
-      if (thread == pthread_self())             \
-        __result = pthread_setname_np(name);    \
-      __result; })
-  #else
-    #define ceph_pthread_setname pthread_setname_np
-  #endif
-#elif defined(HAVE_PTHREAD_SET_NAME_NP)
-  /* Fix a small name diff and return 0 */
-  #define ceph_pthread_setname(thread, name) ({ \
-    pthread_set_name_np(thread, name);          \
-    0; })
-#else
-  #define ceph_pthread_setname pthread_setname_noop_helper
-#endif
-
-#if defined(_WIN32) && defined(__clang__) && \
-    !defined(_LIBCPP_HAS_THREAD_API_PTHREAD)
-  #define ceph_pthread_getname pthread_getname_noop_helper
-#elif defined(HAVE_PTHREAD_GETNAME_NP)
-  #define ceph_pthread_getname pthread_getname_np
-#elif defined(HAVE_PTHREAD_GET_NAME_NP)
-  #define ceph_pthread_getname(thread, name, len) ({ \
-    pthread_get_name_np(thread, name, len);          \
-    0; })
-#else
-  #define ceph_pthread_getname pthread_getname_noop_helper
-#endif
 
 #if defined(_WIN32) && defined(__clang__) && \
     !defined(_LIBCPP_HAS_THREAD_API_PTHREAD)
@@ -243,6 +195,9 @@ int ceph_posix_fallocate(int fd, off_t offset, off_t len);
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+int ceph_pthread_getname(char* name, size_t size);
+int ceph_pthread_setname(const char* name);
 
 int pipe_cloexec(int pipefd[2], int flags);
 char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
