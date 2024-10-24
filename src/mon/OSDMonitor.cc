@@ -983,6 +983,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       dout(20) << "Checking degraded stretch mode due to osd changes" << dendl;
       mon.maybe_go_degraded_stretch_mode();
     }
+  } else {
+    mon.try_disable_stretch_mode();
   }
 }
 
@@ -15077,6 +15079,65 @@ void OSDMonitor::convert_pool_priorities(void)
     pool.last_change = pending_inc.epoch;
     pending_inc.new_pools[pool_id] = pool;
   }
+}
+
+void OSDMonitor::try_disable_stretch_mode(stringstream& ss,
+     bool *okay,
+     int *errcode,
+     const string& crush_rule)
+{
+  dout(20) << __func__ << dendl;
+  *okay = false;
+  if (!osdmap.stretch_mode_enabled) {
+    ss << "stretch mode is already disabled";
+    *errcode = -EINVAL;
+    return;
+  }
+  if (osdmap.recovering_stretch_mode) {
+    ss << "stretch mode is currently recovering and cannot be disabled";
+    *errcode = -EBUSY;
+    return;
+  }
+  for (const auto& pi : osdmap.get_pools()) {
+    pg_pool_t *pool = pending_inc.get_new_pool(pi.first, &pi.second);
+    pool->peering_crush_bucket_count = 0;
+    pool->peering_crush_bucket_target = 0;
+    pool->peering_crush_bucket_barrier = 0;
+    pool->peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    pool->size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+    pool->min_size = g_conf().get_osd_pool_default_min_size(pool->size);
+    // if crush rule is supplied, use it if it exists in crush map
+    if (!crush_rule.empty()) {
+      int crush_rule_id = osdmap.crush->get_rule_id(crush_rule);
+      if (crush_rule_id < 0) {
+        ss << "unrecognized crush rule " << crush_rule;
+        *errcode = -EINVAL;
+        return;
+      }
+      if (!osdmap.crush->rule_valid_for_pool_type(crush_rule_id, pool->get_type())) {
+        ss << "crush rule " << crush_rule << " type does not match pool type";
+        *errcode = -EINVAL;
+        return;
+      }
+      if (crush_rule_id == pool->crush_rule) {
+        ss << "You can't disable stretch mode with the same crush rule you are using";
+        *errcode = -EINVAL;
+        return;
+      }
+      pool->crush_rule = crush_rule_id;
+    } else {
+      // otherwise, use the default rule
+      pool->crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct);
+    }
+  }
+  pending_inc.change_stretch_mode = true;
+  pending_inc.stretch_mode_enabled = false;
+  pending_inc.new_stretch_bucket_count = 0;
+  pending_inc.new_degraded_stretch_mode = 0;
+  pending_inc.new_stretch_mode_bucket = 0;
+  pending_inc.new_recovering_stretch_mode = 0;
+  *okay = true;
+  return;
 }
 
 void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
