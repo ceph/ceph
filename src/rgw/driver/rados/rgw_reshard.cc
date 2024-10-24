@@ -518,6 +518,10 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     }
 
     if (ret == -ECANCELED) {
+      if (y.cancelled() != boost::asio::cancellation_type::none) {
+        break;
+      }
+
       // racing write detected, read the latest bucket info and try again
       int ret2 = store->getRados()->get_bucket_instance_info(
           bucket_info.bucket, bucket_info,
@@ -599,6 +603,10 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
     }
 
     if (ret == -ECANCELED) {
+      if (y.cancelled() != boost::asio::cancellation_type::none) {
+        break;
+      }
+
       // racing write detected, read the latest bucket info and try again
       int ret2 = store->getRados()->get_bucket_instance_info(
           bucket_info.bucket, bucket_info,
@@ -723,6 +731,10 @@ static int change_reshard_state(rgw::sal::RadosStore* store,
     }
 
     if (ret == -ECANCELED) {
+      if (y.cancelled() != boost::asio::cancellation_type::none) {
+        break;
+      }
+
       // racing write detected, read the latest bucket info and try again
       int ret2 = store->getRados()->get_bucket_instance_info(
           bucket_info.bucket, bucket_info,
@@ -849,6 +861,10 @@ static int commit_reshard(rgw::sal::RadosStore* store,
   do {
     ret = commit_target_layout(store, bucket_info, bucket_attrs, fault, dpp, y);
     if (ret == -ECANCELED) {
+      if (y.cancelled() != boost::asio::cancellation_type::none) {
+        break;
+      }
+
       // racing write detected, read the latest bucket info and try again
       int ret2 = store->getRados()->get_bucket_instance_info(
           bucket_info.bucket, bucket_info,
@@ -1791,7 +1807,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
       entry.get_key(&marker);
     } // entry for loop
-  } while (is_truncated);
+  } while (is_truncated && y.cancelled() == boost::asio::cancellation_type::none);
 
   logshard_lock.unlock();
   return 0;
@@ -1820,6 +1836,10 @@ int RGWReshard::process_all_logshards(const DoutPrefixProvider *dpp, optional_yi
     ret = process_single_logshard(i, dpp, y);
 
     ldpp_dout(dpp, 20) << "finish processing logshard = " << logshard << " , ret = " << ret << dendl;
+
+    if (y.cancelled() != boost::asio::cancellation_type::none) {
+      break;
+    }
   }
 
   return 0;
