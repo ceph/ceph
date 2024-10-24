@@ -142,9 +142,16 @@ bool PaxosService::dispatch(MonOpRequestRef op)
 
 void PaxosService::refresh(bool *need_bootstrap)
 {
+  dout(10) << __func__ << dendl;
+
   // update cached versions
-  cached_first_committed = mon.store->get(get_service_name(), first_committed_name);
-  cached_last_committed = mon.store->get(get_service_name(), last_committed_name);
+  auto first_committed = mon.store->get(get_service_name(), first_committed_name);
+  auto last_committed = mon.store->get(get_service_name(), last_committed_name);
+  if (last_committed > cached_last_committed) {
+    finish_contexts(g_ceph_context, waiting_for_commit, 0);
+  }
+  cached_first_committed = first_committed;
+  cached_last_committed = last_committed;
 
   version_t new_format = get_value("format_version");
   if (new_format != format_version) {
@@ -153,7 +160,6 @@ void PaxosService::refresh(bool *need_bootstrap)
   }
   format_version = new_format;
 
-  dout(10) << __func__ << dendl;
 
   update_from_paxos(need_bootstrap);
 }
@@ -164,8 +170,9 @@ void PaxosService::post_refresh()
 
   post_paxos_update();
 
-  if (mon.is_peon() && !waiting_for_finished_proposal.empty()) {
+  if (mon.is_peon()) {
     finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
+    finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   }
 }
 
@@ -275,6 +282,7 @@ void PaxosService::restart()
   }
 
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
+  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
 
   if (have_pending) {
     discard_pending();
@@ -290,6 +298,7 @@ void PaxosService::election_finished()
   dout(10) << __func__ << dendl;
 
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
+  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
 
   // make sure we update our state
   _active();
@@ -367,6 +376,7 @@ void PaxosService::shutdown()
     proposal_timer = 0;
   }
 
+  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 
   on_shutdown();
