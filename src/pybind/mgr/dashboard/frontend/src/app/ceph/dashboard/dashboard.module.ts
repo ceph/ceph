@@ -19,6 +19,7 @@ import { MdsSummaryPipe } from './mds-summary.pipe';
 import { MgrSummaryPipe } from './mgr-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
 import { OsdSummaryPipe } from './osd-summary.pipe';
+import { PopoverModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -31,7 +32,8 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     NgbPopoverModule,
     FormsModule,
     ReactiveFormsModule,
-    DashboardV3Module
+    DashboardV3Module,
+    PopoverModule
   ],
 
   declarations: [

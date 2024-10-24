@@ -11,6 +11,11 @@ export class RgwSyncMetadataInfoComponent {
 
   @Input()
   metadataSyncInfo: any = {};
+  isOpen: boolean = false;
 
   constructor() {}
+
+  togglePopover() {
+    this.isOpen = !this.isOpen;
+  }
 }
