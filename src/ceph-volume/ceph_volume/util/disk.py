@@ -7,7 +7,7 @@ import json
 from ceph_volume import process, allow_loop_devices
 from ceph_volume.api import lvm
 from ceph_volume.util.system import get_file_contents
-from typing import Dict, List, Any, Union
+from typing import Dict, List, Any, Union, Optional
 
 
 logger = logging.getLogger(__name__)
@@ -251,7 +251,9 @@ def lsblk(device, columns=None, abspath=False):
 
     return result[0]
 
-def lsblk_all(device='', columns=None, abspath=False):
+def lsblk_all(device: str = '',
+              columns: Optional[List[str]] = None,
+              abspath: bool = False) -> List[Dict[str, str]]:
     """
     Create a dictionary of identifying values for a device using ``lsblk``.
     Each supported column is a key, in its *raw* format (all uppercase
@@ -332,7 +334,6 @@ def lsblk_all(device='', columns=None, abspath=False):
     if device:
         base_command.append('--nodeps')
         base_command.append(device)
-
     out, err, rc = process.call(base_command)
 
     if rc != 0:
