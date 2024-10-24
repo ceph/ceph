@@ -1741,6 +1741,7 @@ public:
     OnodeRef o;
     KeyValueDB::Iterator it;
     std::string head, tail;
+    bool seeked = false;
 
     std::string _stringify() const;
   public:
