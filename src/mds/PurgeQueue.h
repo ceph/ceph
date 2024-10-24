@@ -88,7 +88,7 @@ enum {
   // How many items have been finished by PurgeQueue
   l_pq_executing_ops,
   l_pq_executing_ops_high_water,
-  l_pq_executing,
+  l_pq_executing_items,
   l_pq_executing_high_water,
   l_pq_executed_ops,
   l_pq_executed,

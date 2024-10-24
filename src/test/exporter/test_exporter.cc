@@ -615,7 +615,7 @@ static std::vector<std::pair<std::string, std::string>> promethize_data = {
   {"prometheus_collect_duration_seconds_count", "ceph_prometheus_collect_duration_seconds_count"},
   {"prometheus_collect_duration_seconds_sum", "ceph_prometheus_collect_duration_seconds_sum"},
   {"purge_queue.pq_executed", "ceph_purge_queue_pq_executed"},
-  {"purge_queue.pq_executing", "ceph_purge_queue_pq_executing"},
+  {"purge_queue.pq_executing_items", "ceph_purge_queue_pq_executing"},
   {"purge_queue.pq_executing_high_water", "ceph_purge_queue_pq_executing_high_water"},
   {"purge_queue.pq_executing_ops", "ceph_purge_queue_pq_executing_ops"},
   {"purge_queue.pq_executing_ops_high_water", "ceph_purge_queue_pq_executing_ops_high_water"},

@@ -267,7 +267,7 @@ class TestFragmentation(CephFSTestCase):
 
         def _check_pq_finished():
             num_strays = self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['num_strays']
-            pq_ops = self.fs.mds_asok(['perf', 'dump', 'purge_queue'])['purge_queue']['pq_executing']
+            pq_ops = self.fs.mds_asok(['perf', 'dump', 'purge_queue'])['purge_queue']['pq_executing_items']
             return num_strays == 0 and pq_ops == 0
 
         # Wait for all strays to purge

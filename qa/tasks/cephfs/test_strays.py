@@ -193,7 +193,7 @@ class TestStrays(CephFSTestCase):
                 raise RuntimeError("Timeout waiting for {0} inodes to purge, stats:{1}".format(total_inodes, mdc_stats))
 
             num_strays = mdc_stats['num_strays']
-            num_strays_purging = pq_stats['pq_executing']
+            num_strays_purging = pq_stats['pq_executing_items']
             num_purge_ops = pq_stats['pq_executing_ops']
             files_high_water = pq_stats['pq_executing_high_water']
             ops_high_water = pq_stats['pq_executing_ops_high_water']
@@ -261,7 +261,7 @@ class TestStrays(CephFSTestCase):
         pq_stats = stats['purge_queue']
         self.assertEqual(mdc_stats['num_strays'], 0)
         self.assertEqual(mdc_stats['num_strays_delayed'], 0)
-        self.assertEqual(pq_stats['pq_executing'], 0)
+        self.assertEqual(pq_stats['pq_executing_items'], 0)
         self.assertEqual(pq_stats['pq_executing_ops'], 0)
         self.assertEqual(mdc_stats['strays_created'], total_inodes)
         self.assertEqual(mdc_stats['strays_enqueued'], total_inodes)
@@ -761,7 +761,7 @@ touch pin/placeholder
         pq_stats = self.fs.mds_asok(['perf', 'dump', "purge_queue"])['purge_queue']
         self.assertEqual(mdc_stats["num_strays"], 0)
         self.assertEqual(mdc_stats["num_strays_delayed"], 0)
-        self.assertEqual(pq_stats["pq_executing"], 0)
+        self.assertEqual(pq_stats["pq_executing_items"], 0)
         self.assertEqual(pq_stats["pq_executing_ops"], 0)
 
     def test_mv_cleanup(self):
