@@ -88,8 +88,8 @@ tasks:
 - cephadm.exec:
     host.d:
       - sleep 30
-      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
-      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user2%t3stP4ss2 //{{'host.a'|role_to_remote|attr('ip_address')}}/share2 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -d5 -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -d5 -U user2%t3stP4ss2 //{{'host.a'|role_to_remote|attr('ip_address')}}/share2 -c ls"
 
 # verify CTDB is healthy, cluster well formed
 - cephadm.exec:
@@ -107,8 +107,8 @@ tasks:
 - cephadm.exec:
     host.d:
       - sleep 30
-      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.c'|role_to_remote|attr('ip_address')}}/share1 -c ls"
-      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user2%t3stP4ss2 //{{'host.c'|role_to_remote|attr('ip_address')}}/share2 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -d5 -U user1%t3stP4ss1 //{{'host.c'|role_to_remote|attr('ip_address')}}/share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -d5 -U user2%t3stP4ss2 //{{'host.c'|role_to_remote|attr('ip_address')}}/share2 -c ls"
 
 - cephadm.shell:
     host.a:
