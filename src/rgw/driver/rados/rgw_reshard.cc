@@ -37,7 +37,6 @@ using namespace std;
 
 const string reshard_oid_prefix = "reshard.";
 const string reshard_lock_name = "reshard_process";
-const string bucket_instance_lock_name = "bucket_instance_lock";
 
 // key reduction values; NB maybe expose some in options
 constexpr uint64_t default_min_objs_per_shard = 10000;
@@ -337,8 +336,7 @@ public:
     return 0;
   }
 
-  int finish(bool process_log = false, RGWBucketReshard *br = nullptr,
-             const DoutPrefixProvider *dpp = nullptr) {
+  int finish(bool process_log = false) {
     int ret = 0;
     for (auto& shard : target_shards) {
       int r = shard.flush(process_log);
@@ -353,13 +351,6 @@ public:
         derr << "ERROR: target_shards[" << shard.get_shard_id() << "].wait_all_aio() returned error: " << cpp_strerror(-r) << dendl;
         ret = r;
       }
-      if (br != nullptr) {
-        r = br->renew_lock_if_needed(dpp);
-      }
-      if (r < 0) {
-        derr << "ERROR: br->renew_lock_if_needed() returned error: " << cpp_strerror(-r) << dendl;
-        ret = r;
-      }
     }
     return ret;
   }
@@ -367,11 +358,8 @@ public:
 
 RGWBucketReshard::RGWBucketReshard(rgw::sal::RadosStore* _store,
 				   const RGWBucketInfo& _bucket_info,
-				   const std::map<std::string, bufferlist>& _bucket_attrs,
-				   RGWBucketReshardLock* _outer_reshard_lock) :
-  store(_store), bucket_info(_bucket_info), bucket_attrs(_bucket_attrs),
-  reshard_lock(store, bucket_info, true),
-  outer_reshard_lock(_outer_reshard_lock)
+				   const std::map<std::string, bufferlist>& _bucket_attrs) :
+  store(_store), bucket_info(_bucket_info), bucket_attrs(_bucket_attrs)
 { }
 
 // sets reshard status of bucket index shards for the current index layout
@@ -961,6 +949,9 @@ int RGWBucketReshard::clear_resharding(rgw::sal::RadosStore* store,
 
 int RGWBucketReshard::cancel(const DoutPrefixProvider* dpp, optional_yield y)
 {
+  constexpr bool ephemeral = true;
+  RGWBucketReshardLock reshard_lock(store, bucket_info, ephemeral);
+
   int ret = reshard_lock.lock(dpp);
   if (ret < 0) {
     return ret;
@@ -1018,8 +1009,6 @@ int RGWBucketReshardLock::lock(const DoutPrefixProvider *dpp) {
     return ret;
   }
 
-  reset_time(Clock::now());
-
   return 0;
 }
 
@@ -1031,61 +1020,11 @@ void RGWBucketReshardLock::unlock() {
   }
 }
 
-int RGWBucketReshardLock::renew(const Clock::time_point& now) {
-  internal_lock.set_must_renew(true);
-  int ret;
-  if (ephemeral) {
-    ret = internal_lock.lock_exclusive_ephemeral(&store->getRados()->reshard_pool_ctx,
-						 lock_oid);
-  } else {
-    ret = internal_lock.lock_exclusive(&store->getRados()->reshard_pool_ctx, lock_oid);
-  }
-  if (ret < 0) { /* expired or already locked by another processor */
-    std::stringstream error_s;
-    if (-ENOENT == ret) {
-      error_s << "ENOENT (lock expired or never initially locked)";
-    } else {
-      error_s << ret << " (" << cpp_strerror(-ret) << ")";
-    }
-    ldout(store->ctx(), 5) << __func__ << "(): failed to renew lock on " <<
-      lock_oid << " with error " << error_s.str() << dendl;
-    return ret;
-  }
-  internal_lock.set_must_renew(false);
-
-  reset_time(now);
-  ldout(store->ctx(), 20) << __func__ << "(): successfully renewed lock on " <<
-    lock_oid << dendl;
-
-  return 0;
-}
-
 auto RGWBucketReshardLock::make_client(boost::asio::yield_context yield)
   -> ceph::async::RadosLockClient
 {
   return {yield.get_executor(), store->getRados()->reshard_pool_ctx,
       lock_oid, internal_lock, ephemeral};
-}
-
-int RGWBucketReshard::renew_lock_if_needed(const DoutPrefixProvider *dpp) {
-  int ret = 0;
-  Clock::time_point now = Clock::now();
-  if (reshard_lock.should_renew(now)) {
-    // assume outer locks have timespans at least the size of ours, so
-    // can call inside conditional
-    if (outer_reshard_lock) {
-      ret = outer_reshard_lock->renew(now);
-      if (ret < 0) {
-        return ret;
-      }
-    }
-    ret = reshard_lock.renew(now);
-    if (ret < 0) {
-      ldpp_dout(dpp, -1) << "Error renewing bucket lock: " << ret << dendl;
-      return ret;
-    }
-  }
-  return 0;
 }
 
 int RGWBucketReshard::calc_target_shard(const RGWBucketInfo& bucket_info, const rgw_obj_key& key,
@@ -1206,11 +1145,6 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
           return ret;
         }
 
-        ret = renew_lock_if_needed(dpp);
-        if (ret < 0) {
-          return ret;
-        }
-
         if (verbose_json_out) {
           formatter->close_section();
           formatter->flush(*out);
@@ -1229,7 +1163,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
     (*out) << "end time: " << real_clock::now() << std::endl;
   }
 
-  int ret = target_shards_mgr.finish(process_log, this, dpp);
+  int ret = target_shards_mgr.finish(process_log);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to reshard: " << ret << dendl;
     return -EIO;
@@ -1395,8 +1329,7 @@ bool RGWBucketReshard::should_zone_reshard_now(const RGWBucketInfo& bucket,
 
 RGWReshard::RGWReshard(rgw::sal::RadosStore* _store, bool _verbose, ostream *_out,
                        Formatter *_formatter) :
-  store(_store), instance_lock(bucket_instance_lock_name),
-  verbose(_verbose), out(_out), formatter(_formatter)
+  store(_store), verbose(_verbose), out(_out), formatter(_formatter)
 {
   num_logshards = store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_num_logs");
 }
@@ -1769,7 +1702,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
 
   // all checkes passed; we can reshard...
 
-  RGWBucketReshard br(store, bucket_info, bucket_attrs, nullptr);
+  RGWBucketReshard br(store, bucket_info, bucket_attrs);
 
   ReshardFaultInjector f; // no fault injected
   ret = br.execute(entry.new_num_shards, f, max_op_entries, entry.initiator,
