@@ -27,12 +27,13 @@ cat /tmp/nvmeof-gw-new.yaml
 
 echo "[nvmeof.scale] Starting scale testing by removing ${GATEWAYS}"
 status_checks
-ceph orch rm nvmeof.mypool && sleep 20 # temp workaround
 ceph orch apply -i /tmp/nvmeof-gw-new.yaml # downscale
+ceph orch redeploy nvmeof.mypool.mygroup0 
 sleep $DELAY
 status_checks
-ceph orch rm nvmeof.mypool && sleep 20 # temp workaround
+echo "[nvmeof.scale] Downscale complete - removed gateways (${GATEWAYS}); now scaling back up"
 ceph orch apply -i /tmp/nvmeof-gw.yaml #upscale
+ceph orch redeploy nvmeof.mypool.mygroup0 
 sleep $DELAY
 status_checks
 
