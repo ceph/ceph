@@ -1,5 +1,4 @@
 local g = import 'grafonnet/grafana.libsonnet';
-local u = import 'utils.libsonnet';
 
 (import 'utils.libsonnet') {
   'rbd-details.json':
@@ -58,22 +57,20 @@ local u = import 'utils.libsonnet';
       $.addClusterTemplate()
     )
     .addTemplate(
-      $.addJobTemplate()
-    )
-    .addTemplate(
       $.addTemplateSchema('pool',
                           '$datasource',
-                          'label_values(pool)',
+                          'label_values(ceph_rbd_read_ops{%(matchers)s}, pool)' % $.matchers(),
                           1,
                           false,
                           0,
                           '',
                           '')
     )
+
     .addTemplate(
       $.addTemplateSchema('image',
                           '$datasource',
-                          'label_values(image)',
+                          'label_values(ceph_rbd_read_ops{%(matchers)s, pool="$pool"}, image)' % $.matchers(),
                           1,
                           false,
                           0,
@@ -84,9 +81,9 @@ local u = import 'utils.libsonnet';
       RbdDetailsPanel(
         'IOPS',
         'iops',
-        'rate(ceph_rbd_write_ops{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])' % $.matchers()
+        'rate(ceph_rbd_write_ops{pool="$pool", image="$image", %(matchers)s}[$__rate_interval])' % $.matchers()
         ,
-        'rate(ceph_rbd_read_ops{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])' % $.matchers(),
+        'rate(ceph_rbd_read_ops{pool="$pool", image="$image", %(matchers)s}[$__rate_interval])' % $.matchers(),
         0,
         0,
         8,
@@ -95,8 +92,8 @@ local u = import 'utils.libsonnet';
       RbdDetailsPanel(
         'Throughput',
         'Bps',
-        'rate(ceph_rbd_write_bytes{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])' % $.matchers(),
-        'rate(ceph_rbd_read_bytes{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])' % $.matchers(),
+        'rate(ceph_rbd_write_bytes{pool="$pool", image="$image", %(matchers)s}[$__rate_interval])' % $.matchers(),
+        'rate(ceph_rbd_read_bytes{pool="$pool", image="$image", %(matchers)s}[$__rate_interval])' % $.matchers(),
         8,
         0,
         8,
@@ -106,12 +103,12 @@ local u = import 'utils.libsonnet';
         'Average Latency',
         'ns',
         |||
-          rate(ceph_rbd_write_latency_sum{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval]) /
-            rate(ceph_rbd_write_latency_count{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])
+          rate(ceph_rbd_write_latency_sum{pool="$pool", image="$image", %(matchers)s}[$__rate_interval]) /
+            rate(ceph_rbd_write_latency_count{pool="$pool", image="$image", %(matchers)s}[$__rate_interval])
         ||| % $.matchers(),
         |||
-          rate(ceph_rbd_read_latency_sum{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval]) /
-            rate(ceph_rbd_read_latency_count{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])
+          rate(ceph_rbd_read_latency_sum{pool="$pool", image="$image", %(matchers)s}[$__rate_interval]) /
+            rate(ceph_rbd_read_latency_count{pool="$pool", image="$image", %(matchers)s}[$__rate_interval])
         ||| % $.matchers(),
         16,
         0,
@@ -189,9 +186,6 @@ local u = import 'utils.libsonnet';
     )
     .addTemplate(
       $.addClusterTemplate()
-    )
-    .addTemplate(
-      $.addJobTemplate()
     )
     .addPanels([
       RbdOverviewPanel(

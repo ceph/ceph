@@ -49,17 +49,17 @@ class PromqlTest:
     The workflow of testing would be something like:
 
         # add prometheus query to test
-        self.set_expression('bonding_slaves > 0')
+        self.set_expression('node_bonding_slaves > 0')
 
         # add some prometheus input series
-        self.add_series('bonding_slaves{master="bond0"}', '2')
-        self.add_series('bonding_slaves{master="bond1"}', '3')
+        self.add_series('node_bonding_slaves{master="bond0"}', '2')
+        self.add_series('node_bonding_slaves{master="bond1"}', '3')
         self.add_series('node_network_receive_bytes{instance="127.0.0.1",
             device="eth1"}', "10 100 230 22")
 
         # expected output of the query
-        self.add_exp_samples('bonding_slaves{master="bond0"}', 2)
-        self.add_exp_samples('bonding_slaves{master="bond1"}', 3)
+        self.add_exp_samples('node_bonding_slaves{master="bond0"}', 2)
+        self.add_exp_samples('node_bonding_slaves{master="bond1"}', 3)
 
         # at last, always call promtool with:
         self.assertTrue(self.run_promtool())
@@ -150,10 +150,10 @@ class PromqlTest:
         '$osd_hosts', you should change this to a real value. Example:
 
 
-        > self.set_expression('bonding_slaves{master="$osd_hosts"} > 0')
+        > self.set_expression('node_bonding_slaves{master="$osd_hosts"} > 0')
         > self.set_variable('osd_hosts', '127.0.0.1')
         > print(self.query)
-        > bonding_slaves{master="127.0.0.1"} > 0
+        > node_bonding_slaves{master="127.0.0.1"} > 0
 
         Args:
              variable(str): Variable name
