@@ -982,7 +982,11 @@ extern "C" int ceph_statxat(struct ceph_mount_info *cmount, int dirfd, const cha
 {
   if (!cmount->is_mounted())
     return -CEPHFS_ENOTCONN;
+#ifdef CEPH_REQ_FLAG_MASK_EXT
+  if (flags & ~CEPH_REQ_FLAG_MASK_EXT)
+#else
   if (flags & ~CEPH_REQ_FLAG_MASK)
+#endif
     return -CEPHFS_EINVAL;
   return cmount->get_client()->statxat(dirfd, relpath, stx, cmount->default_perms,
                                        want, flags);
