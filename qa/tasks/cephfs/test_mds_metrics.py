@@ -11,6 +11,8 @@ from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 log = logging.getLogger(__name__)
 
+MDS_RESTART_GRACE = 60
+
 class TestMDSMetrics(CephFSTestCase):
     CLIENTS_REQUIRED = 2
     MDSS_REQUIRED = 3
@@ -105,23 +107,22 @@ class TestMDSMetrics(CephFSTestCase):
                     break
         return done, metrics
 
-    def _setup_fs(self, fs_name):
-        fs_a = self.mds_cluster.newfs(name=fs_name)
+    def _setup_fs(self, fs_name, mount):
+        fs = self.mds_cluster.newfs(name=fs_name)
 
         self.mds_cluster.mds_restart()
 
         # Wait for filesystem to go healthy
-        fs_a.wait_for_daemons()
+        fs.wait_for_daemons()
 
         # Reconfigure client auth caps
-        for mount in self.mounts:
-            self.get_ceph_cmd_result(
-                'auth', 'caps', f"client.{mount.client_id}",
-                'mds', 'allow',
-                'mon', 'allow r',
-                'osd', f'allow rw pool={fs_a.get_data_pool_name()}')
+        self.get_ceph_cmd_result(
+            'auth', 'caps', f"client.{mount.client_id}",
+            'mds', 'allow',
+            'mon', 'allow r',
+            'osd', f'allow rw pool={fs.get_data_pool_name()}')
 
-        return fs_a
+        return fs
 
     # basic check to verify if we get back metrics from each active mds rank
 
@@ -456,7 +457,7 @@ class TestMDSMetrics(CephFSTestCase):
         self.fs.rank_fail(rank=0)
 
         # Wait for rank0 up:active state
-        self.fs.wait_for_state('up:active', rank=0, timeout=30)
+        self.fs.wait_for_state('up:active', rank=0, timeout=MDS_RESTART_GRACE)
 
         fscid = self.fs.id
 
@@ -497,15 +498,15 @@ class TestMDSMetrics(CephFSTestCase):
             self._cleanup_test_dirs()
 
     def test_client_metrics_and_metadata(self):
-        self.mount_a.umount_wait()
-        self.mount_b.umount_wait()
-        self.fs.delete_all_filesystems()
+        self.mount_a.umount_wait(force=True)
+        self.mount_b.umount_wait(force=True)
+        self.mds_cluster.delete_all_filesystems()
 
         self.run_ceph_cmd("fs", "flag", "set", "enable_multiple",
-            "true", "--yes-i-really-mean-it")
+                          "true", "--yes-i-really-mean-it")
 
         # creating filesystem
-        fs_a = self._setup_fs(fs_name="fs1")
+        fs_a = self._setup_fs(fs_name="fs1", mount=self.mount_a)
 
         # Mount a client on fs_a
         self.mount_a.mount_wait(cephfs_name=fs_a.name)
@@ -515,7 +516,7 @@ class TestMDSMetrics(CephFSTestCase):
         self.mount_a.create_files()
 
         # creating another filesystem
-        fs_b = self._setup_fs(fs_name="fs2")
+        fs_b = self._setup_fs(fs_name="fs2", mount=self.mount_b)
 
         # Mount a client on fs_b
         self.mount_b.mount_wait(cephfs_name=fs_b.name)
@@ -566,14 +567,15 @@ class TestMDSMetrics(CephFSTestCase):
             pass
 
     def test_perf_stats_stale_metrics_with_multiple_filesystem(self):
-        self.mount_a.umount_wait()
-        self.mount_b.umount_wait()
+        self.mount_a.umount_wait(force=True)
+        self.mount_b.umount_wait(force=True)
+        self.mds_cluster.delete_all_filesystems()
 
         self.run_ceph_cmd("fs", "flag", "set", "enable_multiple",
-            "true", "--yes-i-really-mean-it")
+                          "true", "--yes-i-really-mean-it")
 
         # creating filesystem
-        fs_b = self._setup_fs(fs_name="fs2")
+        fs_b = self._setup_fs(fs_name="fs2", mount=self.mount_b)
 
         # Mount a client on fs_b
         self.mount_b.mount_wait(cephfs_name=fs_b.name)
@@ -582,7 +584,7 @@ class TestMDSMetrics(CephFSTestCase):
         self.mount_b.create_files()
 
         # creating another filesystem
-        fs_a = self._setup_fs(fs_name="fs1")
+        fs_a = self._setup_fs(fs_name="fs1", mount=self.mount_a)
 
         # Mount a client on fs_a
         self.mount_a.mount_wait(cephfs_name=fs_a.name)
@@ -606,7 +608,7 @@ class TestMDSMetrics(CephFSTestCase):
         # fail active mds of fs_a
         fs_a_mds = fs_a.get_active_names()[0]
         self.mds_cluster.mds_fail(fs_a_mds)
-        fs_a.wait_for_state('up:active', rank=0, timeout=30)
+        fs_a.wait_for_state('up:active', rank=0, timeout=MDS_RESTART_GRACE)
 
         # spread directory per rank
         self._spread_directory_on_all_ranks(fs_a.id)
