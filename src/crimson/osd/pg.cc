@@ -927,7 +927,7 @@ PG::submit_transaction(
 
   auto [submitted, all_completed] = co_await backend->submit_transaction(
       peering_state.get_acting_recovery_backfill(),
-      obc->obs.oi.soid,
+      obc,
       std::move(txn),
       std::move(osd_op_p),
       peering_state.get_last_peering_reset(),
@@ -1609,20 +1609,23 @@ bool PG::is_degraded_or_backfilling_object(const hobject_t& soid) const {
 
 bool PG::should_send_op(
   pg_shard_t peer,
-  const hobject_t &hoid) const
+  const ObjectContextRef &obc) const
 {
   if (peer == get_primary())
     return true;
+  auto &hoid = obc->obs.oi.soid;
   bool should_send =
     (hoid.pool != (int64_t)get_info().pgid.pool() ||
-    (has_backfill_state() && hoid <= get_last_backfill_started()) ||
+    (has_backfill_state() && hoid <= get_last_backfill_started()
+     && obc->is_pushing()) ||
     hoid <= peering_state.get_peer_info(peer).last_backfill);
   if (!should_send) {
     ceph_assert(is_backfill_target(peer));
     logger().debug("{} issue_repop shipping empty opt to osd."
                    "{}, object {} beyond std::max(last_backfill_started, "
                    "peer_info[peer].last_backfill {})",
-                   peer, hoid, peering_state.get_peer_info(peer).last_backfill);
+                   __func__, peer, hoid,
+                   peering_state.get_peer_info(peer).last_backfill);
   }
   return should_send;
   // TODO: should consider async recovery cases in the future which are not supported

@@ -79,9 +79,11 @@ public:
     Ref<MOSDFastDispatchOp> m,
     crimson::net::ConnectionXcoreRef conn);
 
+  using on_recovered_func_t = std::function<void ()>;
   virtual interruptible_future<> recover_object(
     const hobject_t& soid,
-    eversion_t need) = 0;
+    eversion_t need,
+    std::optional<on_recovered_func_t> on_recovered = std::nullopt) = 0;
   virtual interruptible_future<> recover_delete(
     const hobject_t& soid,
     eversion_t need) = 0;

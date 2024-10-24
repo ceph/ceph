@@ -25,20 +25,23 @@ using std::string;
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::recover_object(
   const hobject_t& soid,
-  eversion_t need)
+  eversion_t need,
+  std::optional<on_recovered_func_t> func)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
   // always add_recovering(soid) before recover_object(soid)
   assert(is_recovering(soid));
   // start tracking the recovery of soid
-  return maybe_pull_missing_obj(soid, need).then_interruptible([this, soid, need] {
+  return maybe_pull_missing_obj(soid, need
+  ).then_interruptible([this, soid, need, func=std::move(func)]() mutable {
     logger().debug("recover_object: loading obc: {}", soid);
     return pg.obc_loader.with_obc<RWState::RWREAD>(soid,
-      [this, soid, need](auto head, auto obc) {
+      [this, soid, need, func=std::move(func)](auto head, auto obc) mutable {
       logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
       auto& recovery_waiter = get_recovering(soid);
+      obc->set_pushing();
       recovery_waiter.obc = obc;
-      return maybe_push_shards(head, soid, need);
+      return maybe_push_shards(head, soid, need, std::move(func));
     }, false).handle_error_interruptible(
       crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
       // TODO: may need eio handling?
@@ -53,7 +56,8 @@ RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::maybe_push_shards(
   const crimson::osd::ObjectContextRef &head_obc,
   const hobject_t& soid,
-  eversion_t need)
+  eversion_t need,
+  std::optional<on_recovered_func_t> func)
 {
   return seastar::do_with(
     get_shards_to_push(soid),
@@ -80,8 +84,9 @@ ReplicatedRecoveryBackend::maybe_push_shards(
         });
       });
     });
-  }).then_interruptible([this, soid] {
+  }).then_interruptible([this, soid, func=std::move(func)] {
     auto &recovery = get_recovering(soid);
+    recovery.obc->pushed();
     if (auto push_info = recovery.pushing.begin();
         push_info != recovery.pushing.end()) {
       pg.get_recovery_handler()->on_global_recover(soid,
@@ -94,6 +99,9 @@ ReplicatedRecoveryBackend::maybe_push_shards(
                                                    false);
     } else {
       // no pulls, no pushes
+    }
+    if (func) {
+      std::invoke(*func);
     }
     return seastar::make_ready_future<>();
   }).handle_exception_interruptible([this, soid](auto e) {
