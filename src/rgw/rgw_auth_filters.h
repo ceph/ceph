@@ -69,6 +69,10 @@ public:
     return get_decoratee().get_aclowner();
   }
 
+  std::string get_aclowner_tenant() const override {
+    return get_decoratee().get_aclowner_tenant();
+  }
+
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return get_decoratee().get_perms_from_aclspec(dpp, aclspec);
   }
@@ -233,6 +237,7 @@ class SysReqApplier : public DecoratedApplier<T> {
   const RGWHTTPArgs& args;
   mutable boost::tribool is_system;
   mutable std::optional<ACLOwner> effective_owner;
+  mutable std::string effective_owner_tenant;
 
 public:
   template <typename U>
@@ -256,6 +261,13 @@ public:
       return *effective_owner;
     }
     return DecoratedApplier<T>::get_aclowner();
+  }
+
+  std::string get_aclowner_tenant() const override {
+    if (effective_owner) { // we still check effective_owner as tenant can be empty anyway
+      return effective_owner_tenant;
+    }
+    return DecoratedApplier<T>::get_aclowner_tenant();
   }
 };
 
@@ -291,6 +303,7 @@ void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo
           throw -EACCES;
         }
         effective_owner->display_name = user->get_display_name();
+        effective_owner_tenant = user->get_tenant();
       }
     }
   }
