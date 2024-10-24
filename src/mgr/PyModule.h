@@ -161,10 +161,10 @@ public:
   }
 
   const std::string &get_name() const {
-    std::lock_guard l(lock) ; return module_name;
+    return module_name;
   }
   const std::string &get_error_string() const {
-    std::lock_guard l(lock) ; return error_string;
+    return error_string;
   }
   bool get_can_run() const {
     std::lock_guard l(lock) ; return can_run;
