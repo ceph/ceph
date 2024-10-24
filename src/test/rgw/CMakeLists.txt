@@ -335,7 +335,7 @@ target_link_libraries(radosgw-cr-test ${rgw_libs} librados
   global ${LIB_RESOLV}
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
-  GTest::GTest)
+  GTest::gtest)
 
 if(WITH_RADOSGW_POSIX)
   # unittest_posix_bucket_cache
