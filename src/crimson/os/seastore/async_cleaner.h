@@ -380,6 +380,11 @@ public:
     Transaction &t,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt) = 0;
 
+  virtual void register_reclaim_range(
+    Transaction &t,
+    paddr_t start,
+    paddr_t end) = 0;
+
 private:
   template <typename Func, bool IsWeak>
   auto do_with_transaction_intr(

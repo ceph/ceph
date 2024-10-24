@@ -114,6 +114,8 @@ using backref_entry_ref = std::unique_ptr<backref_entry_t>;
 using backref_entry_mset_t = backref_entry_t::multiset_t;
 using backref_entry_refs_t = std::vector<backref_entry_ref>;
 using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_entry_refs_t>;
+using backref_entryrefs_by_trans_id_t = std::map<
+  transaction_id_t, backref_entry_refs_t>;
 using backref_entry_query_set_t = std::set<
     backref_entry_t, backref_entry_t::cmp_t>;
 
@@ -853,6 +855,11 @@ private:
     );
   }
 
+  // the backref entries indexed by trans_id only store the reampped
+  // entries to ensure the gc transaction could retrieve the latest
+  // changes. These entries are merged into backref_entryrefs_by_seq
+  // in Cache::complete_commit
+  backref_entryrefs_by_trans_id_t backref_entryrefs_by_trans_id;
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_entry_mset_t backref_entry_mset;
 
@@ -1431,7 +1438,76 @@ public:
     return stats.omap_tree_depth;
   }
 
+  void register_reclaim_range(
+    Transaction &t,
+    paddr_t start,
+    paddr_t end) {
+    auto p = &main_gc_trans;
+    if (t.get_src() == Transaction::src_t::CLEANER_COLD) {
+      p = &cold_gc_trans;
+    }
+    ceph_assert(p->t == nullptr);
+    ceph_assert(p->start == P_ADDR_NULL);
+    ceph_assert(p->end == P_ADDR_NULL);
+    p->t = &t;
+    p->start = start;
+    p->end = end;
+  }
+
+  void unregister_reclaim_range(Transaction &t) {
+    auto p = &main_gc_trans;
+    if (t.get_src() == Transaction::src_t::CLEANER_COLD) {
+      p = &cold_gc_trans;
+    }
+    ceph_assert(p->t == &t);
+    p->reset();
+  }
+
 private:
+  struct gc_trans_info_t {
+    Transaction *t = nullptr;
+    paddr_t start = P_ADDR_NULL;
+    paddr_t end = P_ADDR_NULL;
+    void reset() {
+      t = nullptr;
+      start = P_ADDR_NULL;
+      end = P_ADDR_NULL;
+    }
+  };
+
+  gc_trans_info_t main_gc_trans;
+  gc_trans_info_t cold_gc_trans;
+
+  void maybe_update_gc_info() {
+    if (main_gc_trans.t && main_gc_trans.t->conflicted) {
+      main_gc_trans.reset();
+    }
+    if (cold_gc_trans.t && cold_gc_trans.t->conflicted) {
+      cold_gc_trans.reset();
+    }
+  }
+
+  Transaction* get_conflicted_gc_trans(paddr_t start, extent_len_t len) {
+    auto overlap = [&](const gc_trans_info_t &i) {
+      assert(i.start != P_ADDR_NULL);
+      assert(i.end != P_ADDR_NULL);
+      auto end = start.add_offset(len);
+      return (start >= i.start && start < i.end) ||
+	(end > i.start && end <= i.end);
+    };
+    if (main_gc_trans.t &&
+	!main_gc_trans.t->conflicted &&
+	overlap(main_gc_trans)) {
+      return main_gc_trans.t;
+    } else if (cold_gc_trans.t &&
+	       !cold_gc_trans.t->conflicted &&
+	       overlap(cold_gc_trans)) {
+      return cold_gc_trans.t;
+    } else {
+      return nullptr;
+    }
+  }
+
   /// Update lru for access to ref
   void touch_extent(
       CachedExtent &ext,
@@ -1767,7 +1843,12 @@ private:
     return bp;
   }
 
+  void prepare_remapped_backref_entryrefs(
+    transaction_id_t trans_id,
+    backref_entry_refs_t backref_entries);
+
   void backref_batch_update(
+    transaction_id_t,
     std::vector<backref_entry_ref> &&,
     const journal_seq_t &);
 
@@ -1810,7 +1891,10 @@ private:
   void commit_replace_extent(Transaction& t, CachedExtentRef next, CachedExtentRef prev);
 
   /// Invalidate extent and mark affected transactions
-  void invalidate_extent(Transaction& t, CachedExtent& extent);
+  void invalidate_extent(
+    Transaction& t,
+    CachedExtent& extent,
+    Transaction *gc_trans);
 
   /// Mark a valid transaction as conflicted
   void mark_transaction_conflicted(

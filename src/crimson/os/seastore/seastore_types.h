@@ -2138,6 +2138,11 @@ constexpr bool is_trim_transaction(transaction_type_t type) {
       type == transaction_type_t::TRIM_ALLOC);
 }
 
+constexpr bool is_clean_transaction(transaction_type_t type) {
+  return type == transaction_type_t::CLEANER_MAIN ||
+      type == transaction_type_t::CLEANER_COLD;
+}
+
 constexpr bool is_modify_transaction(transaction_type_t type) {
   return (type == transaction_type_t::MUTATE ||
       is_background_transaction(type));
