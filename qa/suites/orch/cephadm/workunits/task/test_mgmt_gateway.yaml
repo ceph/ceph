@@ -48,7 +48,7 @@ tasks:
           enable_health_check_endpoint: True
         EOT
         # Add generated certificates to spec file
-        echo "  ssl_certificate: |" >> /tmp/mgmt.spec 
+        echo "  ssl_certificate: |" >> /tmp/mgmt.spec
         while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/cert.pem >> /tmp/mgmt.spec
         echo "  ssl_certificate_key: |" >> /tmp/mgmt.spec
         while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/key.pem >> /tmp/mgmt.spec
@@ -63,9 +63,22 @@ tasks:
         # retrieve mgmt hostname and ip
         MGMT_GTW_HOST=$(ceph orch ps --daemon-type mgmt-gateway -f json | jq -e '.[]' | jq -r '.hostname')
         MGMT_GTW_IP=$(ceph orch host ls -f json | jq -r --arg MGMT_GTW_HOST "$MGMT_GTW_HOST" '.[] | select(.hostname==$MGMT_GTW_HOST) | .addr')
-        # check mgmt-gateway health
+        # check mgmt-gateway external server health
         curl -k -s https://${MGMT_GTW_IP}/health
-        curl -k -s https://${MGMT_GTW_IP}:29443/health
+        # check mgmt-gateway internal server access is restricted
+        if [ "$(curl -k -s -o /dev/null -w "%{http_code}" https://${MGMT_GTW_IP}:29443/health)" -ne 400 ]; then
+            echo "The internal management gateway is unexpectedly reachable. Access should be restricted."
+            exit 1
+        fi
+
+        # retrieve monitoring hostnames
+        PROMTEHUS_HOST=$(ceph orch ps --daemon-type prometheus -f json | jq -e '.[]' | jq -r '.hostname')
+        ALERTMGR_HOST=$(ceph orch ps --daemon-type alertmanager -f json | jq -e '.[]' | jq -r '.hostname')
+
+        # check that prometheus and alertmanager are enforcing mTLS
+        curl -k -v https://${PROMTEHUS_HOST=$}:9095 2>&1 | grep "alert certificate required"
+        curl -k -v https://${ALERTMGR_HOST}:9093 2>&1 | grep "alert certificate required"
+
         # wait for background services to be reconfigured following mgmt-gateway installation
         sleep 180
         # check grafana endpoints are responsive and database health is okay
@@ -73,5 +86,4 @@ tasks:
         # check prometheus endpoints are responsive
         curl -k -s -u admin:admin https://${MGMT_GTW_IP}/prometheus/api/v1/status/config | jq -e '.status == "success"'
         # check alertmanager endpoints are responsive
-        curl -k -s -u admin:admin https://${MGMT_GTW_IP}/alertmanager/api/v2/status
-
+        curl -k -s -u admin:admin https://${MGMT_GTW_IP}/alertmanager/api/v2/status | jq -e '.cluster.status == "ready"'
