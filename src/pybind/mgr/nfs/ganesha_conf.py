@@ -459,7 +459,7 @@ class Export:
                    ex_dict.get('access_type', 'RO'),
                    ex_dict.get('squash', 'no_root_squash'),
                    ex_dict.get('security_label', True),
-                   ex_dict.get('protocols', [4]),
+                   ex_dict.get('protocols', [3, 4]),
                    ex_dict.get('transports', ['TCP']),
                    FSAL.from_dict(ex_dict.get('fsal', {})),
                    [Client.from_dict(client) for client in ex_dict.get('clients', [])],

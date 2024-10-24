@@ -55,7 +55,7 @@ class TestNFS(MgrTestCase):
          "squash": "none",
          "security_label": True,
          "protocols": [
-           4
+           3, 4
          ],
          "transports": [
            "TCP"
