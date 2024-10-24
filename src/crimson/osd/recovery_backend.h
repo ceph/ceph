@@ -42,7 +42,8 @@ public:
       shard_services{shard_services},
       store{&shard_services.get_store()},
       coll{coll},
-      backend{backend} {}
+      backend{backend},
+      backfill_scan_sync{&backend->backfill_scan_sync} {}
   virtual ~RecoveryBackend() {}
   std::pair<WaitForObjectRecovery&, bool> add_recovering(const hobject_t& soid) {
     auto [it, added] = recovering.emplace(soid, new WaitForObjectRecovery(pg));
@@ -90,7 +91,7 @@ public:
     eversion_t need) = 0;
 
   interruptible_future<BackfillInterval> scan_for_backfill(
-    const hobject_t& from,
+    hobject_t from,
     std::int64_t min,
     std::int64_t max);
 
@@ -125,6 +126,7 @@ protected:
   crimson::os::FuturizedStore::Shard* store;
   crimson::os::CollectionRef coll;
   PGBackend* backend;
+  PGBackend::BackfillScanSynchronizer* backfill_scan_sync;
 
   struct pull_info_t {
     pg_shard_t from;
@@ -289,4 +291,9 @@ private:
     MOSDPGScan& m,
     crimson::net::ConnectionXcoreRef conn);
   interruptible_future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
+  interruptible_future<BackfillInterval> _scan_for_backfill_with_scan_wait(
+    hobject_t from,
+    std::int64_t min,
+    std::int64_t max);
+
 };

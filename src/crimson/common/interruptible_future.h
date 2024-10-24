@@ -592,6 +592,22 @@ public:
   my_type finally(Func&& func) {
     return core_type::finally(std::forward<Func>(func));
   }
+
+  template <typename Func>
+  my_type on_interruption(Func&& func) {
+    return core_type::then_wrapped(
+      [func=std::move(func)](auto&& fut) mutable {
+	if (fut.failed()) {
+	  std::exception_ptr ex = fut.get_exception();
+	  if (InterruptCond::is_interruption(ex)) {
+	    std::invoke(std::move(func));
+	  }
+	  return seastar::make_exception_future<T>(std::move(ex));
+	} else {
+	  return seastar::make_ready_future<T>(fut.get());
+	}
+      });
+  }
 private:
   template <typename Func>
   [[gnu::always_inline]]

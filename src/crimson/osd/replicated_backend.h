@@ -39,6 +39,14 @@ private:
     osd_op_params_t&& osd_op_p,
     epoch_t min_epoch, epoch_t max_epoch,
     std::vector<pg_log_entry_t>&& log_entries) final;
+  rep_op_fut_t _submit_transaction_with_io_wait(
+    const std::set<pg_shard_t> &pg_shards,
+    const hobject_t& hoid,
+    ceph::os::Transaction&& txn,
+    osd_op_params_t&& osd_op_p,
+    epoch_t min_epoch, epoch_t max_epoch,
+    std::vector<pg_log_entry_t>&& log_entries,
+    inflight_ioreq_t::Ref &io);
   const pg_t pgid;
   const pg_shard_t whoami;
   class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
