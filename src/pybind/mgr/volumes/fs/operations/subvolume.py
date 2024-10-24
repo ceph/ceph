@@ -59,6 +59,12 @@ def remove_subvol(mgr, fs, vol_spec, group, subvolname, force=False, retainsnaps
         subvolume.remove(retainsnaps)
 
 
+def get_subvol_stats(mgr, fs, volspec, group, subvolname):
+    op_type = SubvolumeOpType.REMOVE
+    with open_subvol(mgr, fs, volspec, group, subvolname, op_type) as subvolume:
+        return subvolume.get_stats()
+
+
 @contextmanager
 def open_subvol(mgr, fs, vol_spec, group, subvolname, op_type):
     """
