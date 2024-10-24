@@ -1,5 +1,5 @@
 ---
-name: "Check Incompatible Licenses"
+name: "Check For Incompatible Licenses"
 on: [pull_request]
 
 jobs:
