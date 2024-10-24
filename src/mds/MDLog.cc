@@ -258,7 +258,7 @@ void MDLog::create(MDSContext *c)
   logger->set(l_mdl_expos, journaler->get_expire_pos());
   logger->set(l_mdl_wrpos, journaler->get_write_pos());
 
-  submit_thread.create("md_submit");
+  submit_thread.create("mds-log-submit");
 }
 
 void MDLog::open(MDSContext *c)
@@ -267,9 +267,9 @@ void MDLog::open(MDSContext *c)
 
   ceph_assert(!recovery_thread.is_started());
   recovery_thread.set_completion(c);
-  recovery_thread.create("md_recov_open");
+  recovery_thread.create("mds-log-recvr");
 
-  submit_thread.create("md_submit");
+  submit_thread.create("mds-log-submit");
   // either append() or replay() will follow.
 }
 
@@ -311,7 +311,7 @@ void MDLog::reopen(MDSContext *c)
   recovery_thread.join();
 
   recovery_thread.set_completion(new C_ReopenComplete(this, c));
-  recovery_thread.create("md_recov_reopen");
+  recovery_thread.create("mds-log-reopen");
 }
 
 void MDLog::append()
@@ -657,6 +657,8 @@ void MDLog::try_to_commit_open_file_table(uint64_t last_seq)
 }
 
 void MDLog::log_trim_upkeep(void) {
+  ceph_pthread_setname("mds-log-trim");
+
   dout(10) << dendl;
 
   std::unique_lock mds_lock(mds->mds_lock);
@@ -1008,7 +1010,7 @@ void MDLog::replay(MDSContext *c)
   }
   already_replayed = true;
 
-  replay_thread.create("md_log_replay");
+  replay_thread.create("mds-log-replay");
 }
 
 

@@ -496,7 +496,7 @@ MDSRank::MDSRank(
 
   objecter->unset_honor_pool_full();
 
-  finisher = new Finisher(cct, "MDSRank", "MR_Finisher");
+  finisher = new Finisher(cct, "MDSRank", "mds-rank-fin");
 
   mdcache = new MDCache(this, purge_queue);
   mdlog = new MDLog(this);
@@ -581,7 +581,7 @@ void MDSRankDispatcher::init()
   // who is interested in it.
   handle_osd_map();
 
-  progress_thread.create("mds_rank_progr");
+  progress_thread.create("mds-rank-progr");
 
   purge_queue.init();
 
