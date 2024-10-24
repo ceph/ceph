@@ -205,6 +205,9 @@ protected:
 
 public:
   static constexpr bool is_trackable = true;
+  virtual bool requires_pg() const {
+    return true;
+  }
 };
 
 template <class T>
