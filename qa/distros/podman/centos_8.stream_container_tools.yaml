@@ -2,7 +2,7 @@ os_type: centos
 os_version: "8.stream"
 overrides:
   selinux:
-    whitelist:
+    allowlist:
       - scontext=system_u:system_r:logrotate_t:s0
 
 tasks:

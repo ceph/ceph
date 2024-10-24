@@ -2,6 +2,6 @@ os_type: centos
 os_version: "8.2"
 overrides:
   selinux:
-    whitelist:
+    allowlist:
       - scontext=system_u:system_r:logrotate_t:s0
 ktype: distro
