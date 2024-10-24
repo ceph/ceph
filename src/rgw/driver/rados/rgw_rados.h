@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <functional>
+#include <future>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
@@ -58,7 +59,6 @@ class RGWSyncLogTrimThread;
 class RGWSyncTraceManager;
 struct RGWZoneGroup;
 struct RGWZoneParams;
-class RGWReshard;
 class RGWReshardWait;
 namespace rgw { class SiteConfig; }
 
@@ -556,7 +556,8 @@ public:
    */
   std::string host_id;
 
-  RGWReshard* reshard{nullptr};
+  boost::asio::cancellation_signal reshard_cancel;
+  std::future<void> reshard_future;
   std::shared_ptr<RGWReshardWait> reshard_wait;
 
   virtual ~RGWRados() = default;
@@ -599,7 +600,8 @@ public:
   /** Initialize the RADOS instance and prepare to do other ops */
   int init_svc(bool raw, const DoutPrefixProvider *dpp, const rgw::SiteConfig& site);
   virtual int init_rados();
-  int init_complete(const DoutPrefixProvider *dpp, optional_yield y);
+  int init_complete(const DoutPrefixProvider *dpp, optional_yield y,
+                    boost::asio::io_context& io_context);
   void finalize();
 
   int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type, const std::map<std::string, std::string>& meta);

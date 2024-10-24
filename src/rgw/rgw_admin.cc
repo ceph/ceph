@@ -8359,8 +8359,7 @@ next:
     }
 
     RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(driver),
-			bucket->get_info(), bucket->get_attrs(),
-			nullptr /* no callback */);
+			bucket->get_info(), bucket->get_attrs());
 
 #define DEFAULT_RESHARD_MAX_ENTRIES 1000
     if (max_entries < 1) {
@@ -8376,10 +8375,19 @@ next:
     } else if (inject_delay_at) {
       fault.inject(*inject_delay_at, InjectDelay{inject_delay, dpp()});
     }
-    ret = br.execute(num_shards, fault, max_entries,
-		     cls_rgw_reshard_initiator::Admin,
-		     dpp(), null_yield,
-                     verbose, &cout, formatter.get());
+
+    // spawn execute() as a coroutine
+    boost::asio::io_context ctx;
+    boost::asio::spawn(ctx,
+        [&] (boost::asio::yield_context yield) {
+          ret = br.execute(num_shards, fault, max_entries,
+                           cls_rgw_reshard_initiator::Admin,
+                           dpp(), yield,
+                           verbose, &cout, formatter.get());
+        }, [] (std::exception_ptr eptr) {
+          if (eptr) { std::rethrow_exception(eptr); }
+        });
+    ctx.run();
     return -ret;
   }
 
@@ -8428,8 +8436,9 @@ next:
       bool is_truncated = true;
       std::string marker;
       do {
-	std::list<cls_rgw_reshard_entry> entries;
-        ret = reshard.list(dpp(), i, marker, max_entries - count, entries, &is_truncated);
+	std::vector<cls_rgw_reshard_entry> entries;
+        ret = reshard.list(dpp(), null_yield, i, marker, max_entries - count,
+                           entries, &is_truncated);
         if (ret < 0) {
           cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
           return ret;
@@ -8468,8 +8477,7 @@ next:
     }
 
     RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(driver),
-			bucket->get_info(), bucket->get_attrs(),
-			nullptr /* no callback */);
+			bucket->get_info(), bucket->get_attrs());
     list<cls_rgw_bucket_instance_entry> status;
     int r = br.get_status(dpp(), &status);
     if (r < 0) {
@@ -8482,12 +8490,28 @@ next:
   }
 
   if (opt_cmd == OPT::RESHARD_PROCESS) {
-    RGWReshard reshard(static_cast<rgw::sal::RadosStore*>(driver), true, &cout);
+    auto rados_driver = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!rados_driver) {
+      cerr << "ERROR: this command can only work when the cluster "
+          "has a RADOS backing store." << std::endl;
+      return EPERM;
+    }
 
-    int ret = reshard.process_all_logshards(dpp(), null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: failed to process reshard logs, error=" << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    RGWReshard reshard(rados_driver, true, &cout);
+
+    // spawn process_all_logshards() as a coroutine
+    boost::asio::io_context ctx;
+    boost::asio::spawn(ctx,
+        [&reshard] (boost::asio::yield_context yield) {
+          reshard.process_all_logshards(dpp(), yield);
+        }, [] (std::exception_ptr eptr) {
+          if (eptr) { std::rethrow_exception(eptr); }
+        });
+    try {
+      ctx.run();
+    } catch (const std::exception& e) {
+      cerr << "ERROR: failed to process reshard logs with " << e.what() << std::endl;
+      return -1;
     }
   }
 
@@ -8515,8 +8539,7 @@ next:
     if (bucket_initable) {
       // we did not encounter an error, so let's work with the bucket
 	RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(driver),
-			    bucket->get_info(), bucket->get_attrs(),
-			    nullptr /* no callback */);
+			    bucket->get_info(), bucket->get_attrs());
       int ret = br.cancel(dpp(), null_yield);
       if (ret < 0) {
         if (ret == -EBUSY) {

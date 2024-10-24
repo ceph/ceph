@@ -14,12 +14,7 @@
 
 #pragma once
 
-#include <boost/range/begin.hpp>
-#include <boost/range/end.hpp>
-#include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
-
-#include "acconfig.h"
 
 /// optional-like wrapper for a boost::asio::yield_context. operations that take
 /// an optional_yield argument will, when passed a non-empty yield context,
@@ -39,6 +34,15 @@ class optional_yield {
 
   /// return a reference to the yield_context. only valid if non-empty
   boost::asio::yield_context& get_yield_context() const noexcept { return *y; }
+
+  /// return the cancellation type of the yield_context, or none
+  boost::asio::cancellation_type cancelled() const {
+    if (y) {
+      return y->cancelled();
+    } else {
+      return boost::asio::cancellation_type::none;
+    }
+  }
 };
 
 // type tag object to construct an empty optional_yield

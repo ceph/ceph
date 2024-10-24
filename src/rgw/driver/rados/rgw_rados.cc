@@ -1097,9 +1097,8 @@ void RGWRados::finalize()
   }
 
   if (run_reshard_thread) {
-    reshard->stop_processor();
+    rgwrados::reshard::stop(reshard_cancel, reshard_future);
   }
-  delete reshard;
   delete index_completion_manager;
 
   if (run_notification_thread) {
@@ -1184,7 +1183,8 @@ int RGWRados::update_service_map(const DoutPrefixProvider *dpp, std::map<std::st
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
  */
-int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
+int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y,
+                            boost::asio::io_context& io_context)
 {
   int ret;
 
@@ -1347,13 +1347,13 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
 
   reshard_wait = std::make_shared<RGWReshardWait>();
 
-  reshard = new RGWReshard(this->driver);
-
   // disable reshard thread based on zone/zonegroup support
   run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
 
-  if (run_reshard_thread)  {
-    reshard->start_processor();
+  if (run_reshard_thread) {
+    // spawn a coroutine to process the reshard log
+    reshard_future = rgwrados::reshard::start(driver, io_context,
+                                              reshard_cancel);
   }
 
   index_completion_manager = new RGWIndexCompletionManager(this);

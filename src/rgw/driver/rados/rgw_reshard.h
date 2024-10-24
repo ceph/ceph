@@ -6,11 +6,14 @@
 #include <vector>
 #include <initializer_list>
 #include <functional>
+#include <future>
 #include <iterator>
 #include <algorithm>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/io_context.hpp>
 
 #include "include/common_fwd.h"
 #include "include/rados/librados.hpp"
@@ -26,6 +29,7 @@
 class RGWReshard;
 
 
+namespace ceph::async { class RadosLockClient; }
 class BucketReshardManager;
 namespace rgw { namespace sal {
   class RadosStore;
@@ -42,14 +46,6 @@ class RGWBucketReshardLock {
   rados::cls::lock::Lock internal_lock;
   std::chrono::seconds duration;
 
-  Clock::time_point start_time;
-  Clock::time_point renew_thresh;
-
-  void reset_time(const Clock::time_point& now) {
-    start_time = now;
-    renew_thresh = start_time + duration / 2;
-  }
-
 public:
   RGWBucketReshardLock(rgw::sal::RadosStore* _store,
 		       const std::string& reshard_lock_oid,
@@ -62,11 +58,12 @@ public:
 
   int lock(const DoutPrefixProvider *dpp);
   void unlock();
-  int renew(const Clock::time_point&);
 
-  bool should_renew(const Clock::time_point& now) const {
-    return now >= renew_thresh;
-  }
+  ceph::timespan get_duration() const { return duration; }
+
+  // return a LockClient for with_lease()
+  auto make_client(boost::asio::yield_context yield)
+    -> ceph::async::RadosLockClient;
 }; // class RGWBucketReshardLock
 
 class RGWBucketReshard {
@@ -77,9 +74,6 @@ class RGWBucketReshard {
   rgw::sal::RadosStore *store;
   RGWBucketInfo bucket_info;
   std::map<std::string, bufferlist> bucket_attrs;
-
-  RGWBucketReshardLock reshard_lock;
-  RGWBucketReshardLock* outer_reshard_lock;
 
   // using an initializer_list as an array in contiguous memory
   // allocated in at once
@@ -103,23 +97,26 @@ class RGWBucketReshard {
 		 Formatter *formatter,
                  ReshardFaultInjector& fault,
                  const DoutPrefixProvider *dpp, optional_yield y);
+  // execute the bucket reshard while the bucket's reshard lock is held
+  int execute_locked(int num_shards, ReshardFaultInjector& fault,
+                     int max_op_entries, const DoutPrefixProvider *dpp,
+                     boost::asio::yield_context yield, bool verbose,
+                     std::ostream *out, ceph::Formatter *formatter);
 public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
   // manage
   RGWBucketReshard(rgw::sal::RadosStore* _store,
 		   const RGWBucketInfo& _bucket_info,
-		   const std::map<std::string, bufferlist>& _bucket_attrs,
-		   RGWBucketReshardLock* _outer_reshard_lock);
+		   const std::map<std::string, bufferlist>& _bucket_attrs);
   int execute(int num_shards, ReshardFaultInjector& f,
               int max_op_entries, const cls_rgw_reshard_initiator initiator,
-	      const DoutPrefixProvider *dpp, optional_yield y,
+	      const DoutPrefixProvider *dpp, boost::asio::yield_context yield,
               bool verbose = false, std::ostream *out = nullptr,
               ceph::Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
   int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider* dpp, optional_yield y);
-  int renew_lock_if_needed(const DoutPrefixProvider *dpp);
 
   static int clear_resharding(rgw::sal::RadosStore* store,
 			      RGWBucketInfo& bucket_info,
@@ -198,58 +195,37 @@ public:
 private:
     rgw::sal::RadosStore* store;
     std::string lock_name;
-    rados::cls::lock::Lock instance_lock;
     int num_logshards;
 
     bool verbose;
     std::ostream *out;
     Formatter *formatter;
 
-    void get_logshard_oid(int shard_num, std::string *shard);
-protected:
-  class ReshardWorker : public Thread, public DoutPrefixProvider {
-    CephContext *cct;
-    RGWReshard *reshard;
-    ceph::mutex lock = ceph::make_mutex("ReshardWorker");
-    ceph::condition_variable cond;
-
-  public:
-    ReshardWorker(CephContext * const _cct,
-		  RGWReshard * const _reshard)
-      : cct(_cct),
-        reshard(_reshard) {}
-
-    void *entry() override;
-    void stop();
-
-    CephContext *get_cct() const override;
-    unsigned get_subsys() const override;
-    std::ostream& gen_prefix(std::ostream& out) const override;
-  };
-
-  ReshardWorker *worker = nullptr;
-  std::atomic<bool> down_flag = { false };
-
+  void get_logshard_oid(int shard_num, std::string *shard);
   std::string get_logshard_key(const std::string& tenant, const std::string& bucket_name);
   void get_bucket_logshard_oid(const std::string& tenant, const std::string& bucket_name, std::string *oid);
 
 public:
   RGWReshard(rgw::sal::RadosStore* _store, bool _verbose = false, std::ostream *_out = nullptr, Formatter *_formatter = nullptr);
   int add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry, optional_yield y);
-  int update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const cls_rgw_reshard_initiator initiator, optional_yield y);
-  int get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
+  int update(const DoutPrefixProvider *dpp, optional_yield y,
+             const rgw_bucket& bucket, cls_rgw_reshard_initiator initiator);
+  int get(const DoutPrefixProvider *dpp, optional_yield y,
+          const rgw_bucket& bucket, cls_rgw_reshard_entry& entry);
   int remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entry& entry, optional_yield y);
-  int list(const DoutPrefixProvider *dpp, int logshard_num, std::string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
+  int list(const DoutPrefixProvider *dpp, optional_yield y,
+           int logshard_num, std::string& marker, uint32_t max,
+           std::vector<cls_rgw_reshard_entry>& entries, bool *is_truncated);
   int clear_bucket_resharding(const DoutPrefixProvider *dpp, const std::string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 
   /* reshard thread */
   int process_entry(const cls_rgw_reshard_entry& entry, int max_entries,
-                    const DoutPrefixProvider *dpp, optional_yield y);
-  int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp, optional_yield y);
-  int process_all_logshards(const DoutPrefixProvider *dpp, optional_yield y);
-  bool going_down();
-  void start_processor();
-  void stop_processor();
+                    const DoutPrefixProvider *dpp,
+                    boost::asio::yield_context y);
+  int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp,
+                              boost::asio::yield_context y);
+  int process_all_logshards(const DoutPrefixProvider *dpp,
+                            boost::asio::yield_context y);
 };
 
 class RGWReshardWait {
@@ -283,3 +259,17 @@ public:
   // unblock any threads waiting on reshard
   void stop();
 };
+
+namespace rgwrados::reshard {
+
+/// Start background processing of the reshard log.
+auto start(rgw::sal::RadosStore* store,
+           boost::asio::io_context& ctx,
+           boost::asio::cancellation_signal& signal)
+  -> std::future<void>;
+
+/// Cancel background processing and wait for it to finish.
+void stop(boost::asio::cancellation_signal& signal,
+          std::future<void>& future);
+
+} // namespace rgwrados::reshard
