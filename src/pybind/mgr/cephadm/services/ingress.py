@@ -260,7 +260,10 @@ class IngressService(CephService):
             for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
                 if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
                     interface = list(ifaces.keys())[0]
-                    host_ip = ifaces[interface][0]
+                    for ip_addr in ifaces[interface]:
+                        if ip_addr != str(bare_ip):
+                            host_ip = ip_addr
+                            break
                     logger.info(
                         f'{bare_ip} is in {subnet} on {host} interface {interface}'
                     )
@@ -270,7 +273,10 @@ class IngressService(CephService):
                 for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
                     if subnet in spec.virtual_interface_networks:
                         interface = list(ifaces.keys())[0]
-                        host_ip = ifaces[interface][0]
+                        for ip_addr in ifaces[interface]:
+                            if ip_addr != str(bare_ip):
+                                host_ip = ip_addr
+                                break
                         logger.info(
                             f'{spec.virtual_ip} will be configured on {host} interface '
                             f'{interface} (which is in subnet {subnet})'

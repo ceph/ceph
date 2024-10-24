@@ -1849,7 +1849,10 @@ class TestIngressService:
         with with_host(cephadm_module, 'test', addr='1.2.3.7'):
             cephadm_module.cache.update_host_networks('test', {
                 '1.2.3.0/24': {
-                    'if0': ['1.2.3.4']
+                    'if0': [
+                        '1.2.3.4',  # simulate already assigned VIP
+                        '1.2.3.1',  # simulate interface IP
+                    ]
                 }
             })
 
@@ -1897,7 +1900,7 @@ class TestIngressService:
                                 'auth_type PASS\n      '
                                 'auth_pass 12345\n  '
                                 '}\n  '
-                                'unicast_src_ip 1.2.3.4\n  '
+                                'unicast_src_ip 1.2.3.1\n  '
                                 'unicast_peer {\n  '
                                 '}\n  '
                                 'virtual_ipaddress {\n    '
