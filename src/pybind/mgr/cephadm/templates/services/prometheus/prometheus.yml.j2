@@ -137,6 +137,10 @@ scrape_configs:
 
 {% if nvmeof_sd_url %}
   - job_name: 'nvmeof'
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: cluster
+      replacement: {{ cluster_fsid }}
 {% if security_enabled %}
     honor_labels: true
     scheme: https
@@ -157,6 +161,10 @@ scrape_configs:
 
 {% if nfs_sd_url %}
   - job_name: 'nfs'
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: cluster
+      replacement: {{ cluster_fsid }}
 {% if security_enabled %}
     honor_labels: true
     scheme: https
@@ -177,6 +185,10 @@ scrape_configs:
 
 {% if smb_sd_url %}
   - job_name: 'smb'
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: cluster
+      replacement: {{ cluster_fsid }}
 {% if security_enabled %}
     honor_labels: true
     scheme: https
@@ -218,6 +230,9 @@ scrape_configs:
         - '{job="node"}'
         - '{job="haproxy"}'
         - '{job="ceph-exporter"}'
+        - '{job="nvmeof"}'
+        - '{job="nfs"}'
+        - '{job="smb"}'
     static_configs:
     - targets: ['{{ url }}']
 {% endfor %}
