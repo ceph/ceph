@@ -77,11 +77,22 @@ class NvmeofGatewaysConfig(object):
         cls._save_config(config)
 
     @classmethod
-    def remove_gateway(cls, name):
+    def remove_gateway(cls, name, daemon_name=None):
         config = cls.get_gateways_config()
         if name not in config['gateways']:
             raise NvmeofGatewayDoesNotExist(name)
-        del config['gateways'][name]
+
+        if not daemon_name:
+            del config['gateways'][name]
+        else:
+            # remove the daemon from the list of gateways
+            config['gateways'][name] = [daemon for daemon in config['gateways'][name]
+                                        if daemon['daemon_name'] != daemon_name]
+
+            # if there are no more daemons in the list, remove the gateway
+            if not config['gateways'][name]:
+                del config['gateways'][name]
+
         cls._save_config(config)
 
     @classmethod
