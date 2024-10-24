@@ -181,3 +181,27 @@ README*                                         @ceph/doc-writers
 /src/test/cls_version                           @ceph/rgw
 /src/test/rgw                                   @ceph/rgw
 /src/test/test_rgw*                             @ceph/rgw
+
+# security (vulnerability-prone files/components)
+/sudoers.d/*                                    @ceph/security
+/src/ceph-crash.in                              @ceph/security  # CVE-2022-3650
+/src/auth/                                      @ceph/security  # CVE-2021-20288 CVE-2018-1128 CVE-2018-1129 CVE-2018-1128
+/src/init-ceph.in                               @ceph/security  # CVE-2013-1882
+/src/common/MemoryModel.cc                      @ceph/security  # CVE-2013-1882
+/src/msg/                                       @ceph/security  # CVE-2018-1128
+/src/mon/AuthMonitor.cc                         @ceph/security  # CVE-2021-20288
+/src/mon/Monitor.cc                             @ceph/security  # CVE-2016-5009
+/src/mon/OSDMonitor.cc                          @ceph/security  # CVE-2018-10861
+/src/rgw/rgw_acl_s3.cc                          @ceph/security  # CVE-2016-7031
+/src/rgw/rgw_asio_frontend.cc                   @ceph/security  # CVE-2020-1700 CVE-2019-10222
+/src/rgw/rgw_auth_s3.cc                         @ceph/security  # CVE-2018-16889
+/src/rgw/rgw_cors.cc                            @ceph/security  # CVE-2023-46159 CVE-2016-9579
+/src/rgw/rgw_op.cc                              @ceph/security  # CVE-2016-7031
+/src/rgw/rgw_policy_s3.cc                       @ceph/security  # CVE-2016-8626
+/src/rgw/rgw_rest_*.cc                          @ceph/security  # CVE-2023-43040 CVE-2021-3531
+/src/pybind/ceph_volume_client.py               @ceph/security  # CVE-2020-27781
+/src/pybind/mgr/dashboard/controllers/          @ceph/security  # CVE-2021-3509 CVE-2020-1699
+/src/pybind/mgr/dashboard/services/auth.py      @ceph/security  # CVE-2020-27839
+/src/pybind/mgr/dashboard/frontend/src/app/core/auth/login/login.component.ts       @ceph/security  # CVE-2020-27839
+/src/pybind/mgr/dashboard/frontend/src/app/shared/api/auth.service.ts               @ceph/security  # CVE-2020-27839
+/src/pybind/mgr/dashboard/frontend/src/app/shared/services/auth-storage.service.ts  @ceph/security  # CVE-2020-27839
