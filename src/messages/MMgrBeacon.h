@@ -95,6 +95,16 @@ public:
     command_descs = cmds;
   }
 
+  void clear_command_descs()
+  {
+    command_descs.clear();
+  }
+
+  void clear_modules()
+  {
+    modules.clear();
+  }
+
   const std::vector<MonCommand> &get_command_descs()
   {
     return command_descs;
