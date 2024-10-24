@@ -4,6 +4,7 @@
   $use-flexbox-grid: true,
 );
 @use '@carbon/colors';
+
 @use './src/styles/vendor/variables' as vv;
 @use './themes/default';
 @use '@carbon/styles/scss/compat/themes' as compat;
@@ -37,6 +38,10 @@ Custom theme
 ******************************************/
 @forward './themes/content';
 
+//Importing carbon tags token
+
+@use '@carbon/styles/scss/components/tag/tokens' as tag-tokens;
+
 /******************************************
 Datatable
 ******************************************/
@@ -60,6 +65,52 @@ tr.cds--parent-row.cds--expandable-row + tr[data-child-row] td {
 
 th {
   padding-block: 0 !important;
+}
+
+//  Overriding badges to match the class name of tags
+.tags-success {
+  background-color: theme.$support-success;
+  color: colors.$white;
+}
+
+.tags-warning {
+  background: theme.$support-warning;
+  color: colors.$white;
+}
+
+.tags-danger {
+  background: theme.$support-error;
+  color: colors.$white;
+}
+
+.tags-primary {
+  background: vv.$primary;
+  color: colors.$white;
+}
+
+.tags-secondary {
+  background: tag-tokens.$tag-color-warm-gray;
+  color: colors.$white;
+}
+
+.tags-info {
+  background-color: vv.$primary;
+  color: colors.$white;
+}
+
+.tags-light {
+  background: colors.$white;
+  border: tag-tokens.$tag-color-gray;
+}
+
+.tags-dark {
+  background: tag-tokens.$tag-color-cool-gray;
+  color: colors.$white;
+}
+
+.tags-default {
+  background: tag-tokens.$tag-border-gray;
+  color: colors.$white;
 }
 
 /******************************************

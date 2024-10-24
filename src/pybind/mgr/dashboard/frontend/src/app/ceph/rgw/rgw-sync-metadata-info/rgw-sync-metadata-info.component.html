@@ -25,7 +25,11 @@
   </ng-template>
   <ul class="me-2">
     <ng-template #upToDateTpl>
-      <li class="badge badge-success">Up to Date</li>
+      <li>
+        <cds-tag class="tags-success"> 
+          Up to Date
+        </cds-tag>
+      </li>
     </ng-template>
     <ng-template #showMetadataStatus>
       <a *ngIf="metadataSyncInfo.syncstatus !== 'Not Syncing From Zone'"
@@ -53,7 +57,10 @@
     <li class="mt-4 fw-bold">
       Last Synced:
     </li>
-    <li class="badge badge-info"
-        *ngIf="metadataSyncInfo.timestamp; else upToDateTpl">{{ metadataSyncInfo.timestamp | relativeDate }}</li>
+    <li *ngIf="metadataSyncInfo.timestamp; else upToDateTpl">
+      <cds-tag class="tags-info">
+        {{ metadataSyncInfo.timestamp | relativeDate }}
+      </cds-tag>
+    </li>   
   </ul>
 </span>
