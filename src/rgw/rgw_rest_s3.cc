@@ -6494,6 +6494,7 @@ rgw::auth::s3::LocalEngine::authenticate(
 
   /* Ignore signature for HTTP OPTIONS */
   if (s->op_type == RGW_OP_OPTIONS_CORS) {
+    s->user->set_attrs(user->get_attrs());
     auto apl = apl_factory->create_apl_local(
         cct, s, user->get_info(), std::move(account), std::move(policies),
         k.subuser, std::nullopt, access_key_id);
@@ -6515,6 +6516,7 @@ rgw::auth::s3::LocalEngine::authenticate(
     return result_t::reject(-ERR_SIGNATURE_NO_MATCH);
   }
 
+  s->user->set_attrs(user->get_attrs());
   auto apl = apl_factory->create_apl_local(
       cct, s, user->get_info(), std::move(account), std::move(policies),
       k.subuser, std::nullopt, access_key_id);
@@ -6723,6 +6725,7 @@ rgw::auth::s3::STSEngine::authenticate(
       return result_t::deny(-EPERM);
     }
 
+    s->user->set_attrs(user->get_attrs());
     string subuser;
     auto apl = local_apl_factory->create_apl_local(
         cct, s, user->get_info(), std::move(account), std::move(policies),
