@@ -388,6 +388,13 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
 
   auto hiter = headers.begin();
   for (; hiter != headers.end(); ++hiter) {
+    for (const auto& stat : hiter->stats) {
+        RGWObjCategory category = stat.first;
+        result->stats[category] = stat.second;
+      }
+  }
+  hiter = headers.begin();
+  for (; hiter != headers.end(); ++hiter) {
     RGWObjCategory category = RGWObjCategory::Main;
     auto iter = (hiter->stats).find(category);
     if (iter != hiter->stats.end()) {
