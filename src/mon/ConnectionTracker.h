@@ -128,6 +128,10 @@ class ConnectionTracker {
   */
   bool is_clean(int mon_rank, int monmap_size);
   /**
+   * Check if we have a netsplit.
+   */
+  std::set<std::pair<unsigned, unsigned>> get_netsplit();
+  /**
    * Encode this ConnectionTracker. Useful both for storing on disk
    * and for sending off to peers for decoding and import
    * with receive_peer_report() above.

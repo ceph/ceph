@@ -67,6 +67,7 @@ private:
   void check_for_mon_down(health_check_map_t *checks);
   void check_for_clock_skew(health_check_map_t *checks);
   void check_if_msgr2_enabled(health_check_map_t *checks);
+  void check_netsplit(health_check_map_t *checks);
   bool check_leader_health();
   bool check_member_health();
   bool check_mutes();
