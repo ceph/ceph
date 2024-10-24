@@ -57,7 +57,12 @@ InternalClientRequest::with_interruption()
   LOG_PREFIX(InternalClientRequest::with_interruption);
   assert(pg->is_active());
 
-  co_await enter_stage<interruptor>(client_pp().recover_missing);
+  obc_orderer = pg->obc_loader.get_obc_orderer(get_target_oid());
+  auto obc_manager = pg->obc_loader.get_obc_manager(
+    *obc_orderer,
+    get_target_oid());
+
+  co_await enter_stage<interruptor>(obc_orderer->obc_pp().process);
 
   bool unfound = co_await do_recover_missing(
     pg, get_target_oid(), osd_reqid_t());
@@ -67,10 +72,8 @@ InternalClientRequest::with_interruption()
       std::make_error_code(std::errc::operation_canceled),
       fmt::format("{} is unfound, drop it!", get_target_oid()));
   }
-  co_await enter_stage<interruptor>(
-    client_pp().check_already_complete_get_obc);
 
-  DEBUGI("{}: getting obc lock", *this);
+  DEBUGI("{}: generating ops", *this);
 
   auto osd_ops = create_osd_ops();
 
@@ -80,20 +83,11 @@ InternalClientRequest::with_interruption()
     std::as_const(osd_ops), pg->get_pgid().pgid, *pg->get_osdmap());
   assert(ret == 0);
 
-  auto obc_manager = pg->obc_loader.get_obc_manager(get_target_oid());
-
-  // initiate load_and_lock in order, but wait concurrently
-  enter_stage_sync(client_pp().lock_obc);
-
   co_await pg->obc_loader.load_and_lock(
     obc_manager, pg->get_lock_type(op_info)
   ).handle_error_interruptible(
     crimson::ct_error::assert_all("unexpected error")
   );
-
-  DEBUGDPP("{}: got obc {}, entering process stage",
-	   *pg, *this, obc_manager.get_obc()->obs);
-  co_await enter_stage<interruptor>(client_pp().process);
 
   auto params = get_do_osd_ops_params();
   OpsExecuter ox(
@@ -114,6 +108,9 @@ InternalClientRequest::with_interruption()
     std::move(ox), osd_ops);
 
   co_await std::move(submitted);
+
+  co_await enter_stage<interruptor>(obc_orderer->obc_pp().wait_repop);
+
   co_await std::move(completed);
 
   DEBUGDPP("{}: complete", *pg, *this);

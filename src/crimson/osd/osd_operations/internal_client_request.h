@@ -4,6 +4,7 @@
 #pragma once
 
 #include "crimson/common/type_helpers.h"
+#include "crimson/osd/object_context_loader.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/client_request_common.h"
 #include "crimson/osd/pg.h"
@@ -48,6 +49,7 @@ private:
   Ref<PG> pg;
   epoch_t start_epoch;
   OpInfo op_info;
+  std::optional<ObjectContextLoader::Orderer> obc_orderer;
   PipelineHandle handle;
 
 public:
@@ -55,12 +57,8 @@ public:
 
   std::tuple<
     StartEvent,
-    CommonPGPipeline::WaitForActive::BlockingEvent,
-    PGActivationBlocker::BlockingEvent,
-    CommonPGPipeline::RecoverMissing::BlockingEvent,
-    CommonPGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent,
-    CommonPGPipeline::LockOBC::BlockingEvent,
-    CommonPGPipeline::Process::BlockingEvent,
+    CommonOBCPipeline::Process::BlockingEvent,
+    CommonOBCPipeline::WaitRepop::BlockingEvent,
     CompletionEvent
   > tracking_events;
 };
