@@ -17,6 +17,8 @@
 
 #include <fmt/format.h>
 
+#include "include/types.h" // for version_t
+#include "include/unordered_set.h"
 #include "include/utime.h"
 #include "include/utime_fmt.h"
 #include "msg/msg_fmt.h"
@@ -24,6 +26,12 @@
 #include "common/entity_name.h"
 #include "ostream_temp.h"
 #include "LRUSet.h"
+
+#include <cstdint>
+#include <iostream>
+#include <list>
+#include <map>
+#include <string>
 
 namespace ceph {
   class Formatter;
