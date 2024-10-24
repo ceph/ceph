@@ -6472,14 +6472,10 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       command == "truncobj" || command == "injectmdataerr" ||
       command == "injectdataerr"
     ) {
-    pg_t rawpg;
     int64_t pool;
     OSDMapRef curmap = service->get_osdmap();
-    int r = -1;
 
-    string poolstr;
-
-    cmd_getval(cmdmap, "pool", poolstr);
+    string poolstr = cmd_getval_or<string>(cmdmap, "pool", string{"xxx"});
     pool = curmap->lookup_pg_pool_name(poolstr);
     //If we can't find it by name then maybe id specified
     if (pool < 0 && isdigit(poolstr[0]))
@@ -6489,20 +6485,20 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       return;
     }
 
-    string objname, nspace;
-    cmd_getval(cmdmap, "objname", objname);
+    string objname = cmd_getval_or<string>(cmdmap, "objname", string{"xxx"});
+    string nspace;
     std::size_t found = objname.find_first_of('/');
     if (found != string::npos) {
       nspace = objname.substr(0, found);
       objname = objname.substr(found+1);
     }
     object_locator_t oloc(pool, nspace);
-    r = curmap->object_locator_to_pg(object_t(objname), oloc,  rawpg);
-
-    if (r < 0) {
+    auto maybe_pg = curmap->object_locator_to_expected_pg(object_t(objname), oloc);
+    if (!maybe_pg.has_value()) {
       ss << "Invalid namespace/objname";
       return;
     }
+    pg_t rawpg = maybe_pg.value();
 
     int64_t shardid = cmd_getval_or<int64_t>(cmdmap, "shardid", shard_id_t::NO_SHARD);
     hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
@@ -6515,6 +6511,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
         }
     }
 
+    int r = -1;
     ObjectStore::Transaction t;
 
     if (command == "setomapval") {
