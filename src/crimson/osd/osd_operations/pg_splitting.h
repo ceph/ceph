@@ -19,44 +19,40 @@ namespace crimson::osd {
 
 class ShardServices;
 class PG;
+/*
+ has to happen before PGAdvanceMap 
+ we assume the pg->get_osdmap() is last_map and we will get next_map from shard_services.get_map(next_epoch)
+*/
 
-class PGAdvanceMap : public PhasedOperationT<PGAdvanceMap> {
+class PGSplitting : public PhasedOperationT<PGSplitting> {
 public:
-  static constexpr OperationTypeCode type = OperationTypeCode::pg_advance_map;
+  static constexpr OperationTypeCode type = OperationTypeCode::pg_splitting;
 
 protected:
   Ref<PG> pg;
   ShardServices &shard_services;
   PipelineHandle handle;
 
-  std::optional<epoch_t> from;
-  epoch_t to;
-
+  OSDMapRef cur_map;
+  epoch_t next_epoch;
   PeeringCtx rctx;
-  const bool do_init;
-  const bool split_child;
 
 public:
-  PGAdvanceMap(
-    Ref<PG> pg, ShardServices &shard_services, epoch_t to,
-    PeeringCtx &&rctx, bool do_init, bool split_child);
-  ~PGAdvanceMap();
+  PGSplitting(
+    Ref<PG> pg, ShardServices &shard_services, OSDMapRef cur_map, epoch_t next_epoch,
+    PeeringCtx &&rctx);
+  ~PGSplitting();
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter *f) const final;
   seastar::future<> start();
-  PipelineHandle &get_handle() { return handle; }
-
-  std::tuple<
-    PGPeeringPipeline::Process::BlockingEvent
-  > tracking_events;
-
-private:
-  PGPeeringPipeline &peering_pp(PG &pg);
+  void split_stats(std::set<Ref<PG>> child_pgs,
+		   const std::set<spg_t> &child_pgids);
+  //PipelineHandle &get_handle() { return handle; }
 };
 
 }
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::osd::PGAdvanceMap> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::osd::PGSplitting> : fmt::ostream_formatter {};
 #endif
