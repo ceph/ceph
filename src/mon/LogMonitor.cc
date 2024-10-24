@@ -690,6 +690,9 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   auto m = op->get_req<MLog>();
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
   int num_new = 0;
+  const version_t trim_max = g_conf().get_val<version_t>("paxos_service_trim_max");
+  const uint64_t trim_max_multiplier = g_conf().get_val<uint64_t>("paxos_service_trim_max_multiplier");
+  const version_t last_to_remove = get_last_to_remove();
 
   MonSession *session = op->get_session();
   if (!session)
@@ -699,7 +702,13 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
 	    << session->caps << dendl;
     goto done;
   }
-  
+
+  if (trim_max_multiplier && last_to_remove == trim_max * trim_max_multiplier) {
+    dout(10) << "last trim quantities reached max, "
+	     << "ignore this op to avoid db growing too quickly" << dendl;
+    goto done;
+  }
+
   for (auto p = m->entries.begin();
        p != m->entries.end();
        ++p) {
