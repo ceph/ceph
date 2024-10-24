@@ -2280,6 +2280,7 @@ int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Rea
   read_op.params.target_obj = target_obj;
   read_op.params.obj_size = &state.size;
   read_op.params.lastmod = &state.mtime;
+  read_op.params.objv_tracker = &state.objv_tracker;
 
   return read_op.prepare(y, dpp);
 }
@@ -2808,6 +2809,9 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.zones_trace = params.zones_trace;
   parent_op.params.abortmp = params.abortmp;
   parent_op.params.parts_accounted_size = params.parts_accounted_size;
+  if (params.objv_tracker) {
+      parent_op.params.check_objv = params.objv_tracker->version_for_check();
+  }
 
   int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
   if (ret < 0)
@@ -2821,7 +2825,9 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
 
 int RadosObject::delete_object(const DoutPrefixProvider* dpp,
 			       optional_yield y,
-			       uint32_t flags)
+			       uint32_t flags,
+			       std::list<rgw_obj_index_key>* remove_objs,
+			       RGWObjVersionTracker* objv)
 {
   RGWRados::Object del_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
   RGWRados::Object::Delete del_op(&del_target);
@@ -2829,6 +2835,10 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   del_op.params.bucket_owner = bucket->get_info().owner;
   del_op.params.versioning_status = (flags & FLAG_PREVENT_VERSIONING)
                                     ? 0 : bucket->get_info().versioning_status();
+  del_op.params.remove_objs = remove_objs;
+  if (objv) {
+      del_op.params.check_objv = objv->version_for_check();
+  }
 
   return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
 }
@@ -2924,13 +2934,84 @@ int RadosObject::swift_versioning_copy(const ACLOwner& owner, const rgw_user& re
                                         y);
 }
 
+int RadosMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+                                                 CephContext *cct, optional_yield y,
+                                                 const rgw_obj& obj,
+                                                 list<rgw_obj_index_key>& remove_objs,
+                                                 prefix_map_t& processed_prefixes)
+{
+  bool truncated;
+  int ret;
+  int max_parts = 1000;
+  int marker = 0;
+  cls_rgw_obj_chain chain;
+
+  do {
+    ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
+
+    if (ret < 0) {
+      ldpp_dout(dpp, 20) << __func__ << ": RadosMultipartUpload::list_parts returned " << ret << dendl;
+      return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
+    }
+
+    for (auto part_it = parts.begin(); part_it != parts.end(); ++part_it) {
+      RadosMultipartPart* part = dynamic_cast<RadosMultipartPart*>(part_it->second.get());
+
+      auto& part_prefixes = processed_prefixes[part->info.num];
+
+      if (!part->info.manifest.empty()) {
+        auto manifest_prefix = part->info.manifest.get_prefix();
+        if (not manifest_prefix.empty() && part_prefixes.find(manifest_prefix) == part_prefixes.end()) {
+          store->getRados()->update_gc_chain(dpp, obj, part->info.manifest, &chain);
+
+          RGWObjManifest::obj_iterator oiter = part->info.manifest.obj_begin(dpp);
+          if (oiter != part->info.manifest.obj_end(dpp)) {
+            rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store->getRados());
+
+            rgw_obj head_obj;
+            RGWSI_Tier_RADOS::raw_obj_to_obj(bucket->get_key(), raw_head, &head_obj);
+
+            rgw_obj_index_key remove_key;
+            head_obj.key.get_index_key(&remove_key);
+            remove_objs.push_back(remove_key);
+          }
+        }
+      }
+      cleanup_part_history(dpp, y, part, remove_objs, part_prefixes);
+    }
+  } while (truncated);
+
+  if (store->getRados()->get_gc() == nullptr) {
+    //Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
+    store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
+  } else {
+    /* use upload id as tag and do it synchronously */
+    auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), y);
+    if (ret < 0 && leftover_chain) {
+      ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
+      if (ret == -ENOENT) {
+        return -ERR_NO_SUCH_UPLOAD;
+      }
+      //Delete objects inline if send chain to gc fails
+      store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id());
+    }
+  }
+  return 0;
+}
+
 int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
                                                optional_yield y,
                                                RadosMultipartPart *part,
-                                               list<rgw_obj_index_key>& remove_objs)
+                                               list<rgw_obj_index_key>& remove_objs,
+                                               boost::container::flat_set<std::string>& processed_prefixes)
 {
   cls_rgw_obj_chain chain;
   for (auto& ppfx : part->get_past_prefixes()) {
+    auto [it, inserted] = processed_prefixes.emplace(ppfx);
+    if (!inserted) {
+      continue; // duplicate
+    }
+
     rgw_obj past_obj;
     past_obj.init_ns(bucket->get_key(), ppfx + "." + std::to_string(part->info.num), mp_ns);
     rgw_obj_index_key past_key;
@@ -2978,77 +3059,105 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   int ret;
   uint64_t parts_accounted_size = 0;
 
-  do {
-    ret = list_parts(dpp, cct, 1000, marker, &marker, &truncated, y);
+  prefix_map_t processed_prefixes;
+
+  static constexpr auto MAX_DELETE_RETRIES = 15u;
+  for (auto i = 0u; i < MAX_DELETE_RETRIES; i++) {
+    ret = meta_obj->get_obj_attrs(y, dpp);
     if (ret < 0) {
-      ldpp_dout(dpp, 20) << __func__ << ": RadosMultipartUpload::list_parts returned " <<
-	ret << dendl;
+      ldpp_dout(dpp, 0) << __func__ << ": ERROR: failed to get obj attrs, obj=" << meta_obj
+                        << " ret=" << ret << dendl;
       return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
     }
 
-    for (auto part_it = parts.begin();
-	 part_it != parts.end();
-	 ++part_it) {
-      RadosMultipartPart* obj_part = dynamic_cast<RadosMultipartPart*>(part_it->second.get());
-      if (obj_part->info.manifest.empty()) {
-	std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(
-				    rgw_obj_key(obj_part->oid, std::string(), RGW_OBJ_NS_MULTIPART));
-	obj->set_hash_source(mp_obj.get_key());
-	ret = obj->delete_object(dpp, y, 0);
-        if (ret < 0 && ret != -ENOENT)
-          return ret;
-      } else {
-	auto target = meta_obj->get_obj();
-	store->getRados()->update_gc_chain(dpp, target, obj_part->info.manifest, &chain);
-        RGWObjManifest::obj_iterator oiter = obj_part->info.manifest.obj_begin(dpp);
-        if (oiter != obj_part->info.manifest.obj_end(dpp)) {
-	  std::unique_ptr<rgw::sal::Object> head = bucket->get_object(rgw_obj_key());
-          rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store->getRados());
-	  dynamic_cast<rgw::sal::RadosObject*>(head.get())->raw_obj_to_obj(raw_head);
+    RGWObjVersionTracker objv_tracker = meta_obj->get_version_tracker();
 
-          rgw_obj_index_key key;
-          head->get_key().get_index_key(&key);
-          remove_objs.push_back(key);
+    do {
+      ret = list_parts(dpp, cct, 1000, marker, &marker, &truncated, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 20) << __func__ << ": RadosMultipartUpload::list_parts returned " << ret << dendl;
+        return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
+      }
 
-          cleanup_part_history(dpp, null_yield, obj_part, remove_objs);
+      for (auto part_it = parts.begin(); part_it != parts.end(); ++part_it) {
+        RadosMultipartPart* obj_part = dynamic_cast<RadosMultipartPart*>(part_it->second.get());
+
+        if (obj_part->info.manifest.empty()) {
+          std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(
+            rgw_obj_key(obj_part->oid, std::string(), RGW_OBJ_NS_MULTIPART));
+          obj->set_hash_source(mp_obj.get_key());
+          ret = obj->delete_object(dpp, y, 0, nullptr, nullptr);
+          if (ret < 0 && ret != -ENOENT)
+            return ret;
+        } else {
+          auto manifest_prefix = obj_part->info.manifest.get_prefix();
+          auto [it, inserted] = processed_prefixes.emplace(obj_part->info.num, boost::container::flat_set<std::string>{});
+          if (not manifest_prefix.empty()) {
+            if (it->second.find(manifest_prefix) != it->second.end()) {
+              continue;
+            }
+            it->second.emplace(manifest_prefix);
+          }
+
+          auto target = meta_obj->get_obj();
+          store->getRados()->update_gc_chain(dpp, target, obj_part->info.manifest, &chain);
+          RGWObjManifest::obj_iterator oiter = obj_part->info.manifest.obj_begin(dpp);
+          if (oiter != obj_part->info.manifest.obj_end(dpp)) {
+            std::unique_ptr<rgw::sal::Object> head = bucket->get_object(rgw_obj_key());
+            rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store->getRados());
+            dynamic_cast<rgw::sal::RadosObject*>(head.get())->raw_obj_to_obj(raw_head);
+
+            rgw_obj_index_key key;
+            head->get_key().get_index_key(&key);
+            remove_objs.push_back(key);
+
+            cleanup_part_history(dpp, null_yield, obj_part, remove_objs, it->second);
+          }
         }
+        parts_accounted_size += obj_part->info.accounted_size;
       }
-      parts_accounted_size += obj_part->info.accounted_size;
-    }
-  } while (truncated);
+    } while (truncated);
 
-  if (store->getRados()->get_gc() == nullptr) {
-    //Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
-    store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
-  } else {
-    /* use upload id as tag and do it synchronously */
-    auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), y);
-    if (ret < 0 && leftover_chain) {
-      ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
-      if (ret == -ENOENT) {
-        return -ERR_NO_SUCH_UPLOAD;
+    if (store->getRados()->get_gc() == nullptr) {
+      //Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
+      store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
+    } else {
+      /* use upload id as tag and do it synchronously */
+      auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), y);
+      if (ret < 0 && leftover_chain) {
+        ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
+        if (ret == -ENOENT) {
+          return -ERR_NO_SUCH_UPLOAD;
+        }
+        //Delete objects inline if send chain to gc fails
+        store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id());
       }
-      //Delete objects inline if send chain to gc fails
-      store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id());
     }
+
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
+    del_op->params.bucket_owner = bucket->get_info().owner;
+    del_op->params.versioning_status = 0;
+    if (!remove_objs.empty()) {
+      del_op->params.remove_objs = &remove_objs;
+    }
+
+    del_op->params.abortmp = true;
+    del_op->params.parts_accounted_size = parts_accounted_size;
+    del_op->params.objv_tracker = &objv_tracker;
+
+    // and also remove the metadata obj
+    ret = del_op->delete_obj(dpp, y, 0);
+    if (ret != -ECANCELED) {
+      if (ret < 0) {
+        ldpp_dout(dpp, 20) << __func__ << ": del_op.delete_obj returned " << ret << dendl;
+      }
+      break;
+    }
+    ldpp_dout(dpp, 20) << "deleting meta_obj is cancelled due to mismatch cls_version: " << objv_tracker << dendl;
+    chain.objs.clear();
+    marker = 0;
   }
 
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
-  del_op->params.bucket_owner = bucket->get_info().owner;
-  del_op->params.versioning_status = 0;
-  if (!remove_objs.empty()) {
-    del_op->params.remove_objs = &remove_objs;
-  }
-
-  del_op->params.abortmp = true;
-  del_op->params.parts_accounted_size = parts_accounted_size;
-
-  // and also remove the metadata obj
-  ret = del_op->delete_obj(dpp, y, 0);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << __func__ << ": del_op.delete_obj returned " <<
-      ret << dendl;
-  }
   return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
 }
 
@@ -3228,7 +3337,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				   RGWCompressionInfo& cs_info, off_t& ofs,
 				   std::string& tag, ACLOwner& owner,
 				   uint64_t olh_epoch,
-				   rgw::sal::Object* target_obj)
+				   rgw::sal::Object* target_obj,
+				   prefix_map_t& processed_prefixes)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -3300,6 +3410,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
       rgw_obj src_obj;
       src_obj.init_ns(bucket->get_key(), oid, mp_ns);
 
+      auto [it, inserted] = processed_prefixes.emplace(part->info.num, boost::container::flat_set<std::string>{});
+
       if (obj_part.manifest.empty()) {
         ldpp_dout(dpp, 0) << "ERROR: empty manifest for object part: obj="
 			 << src_obj << dendl;
@@ -3311,6 +3423,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
         if (not manifest_prefix.empty()) {
           // It has an explicit prefix. Override the default one.
           src_obj.init_ns(bucket->get_key(), manifest_prefix + "." + std::to_string(part->info.num), mp_ns);
+	  it->second.emplace(manifest_prefix);
         }
       }
 
@@ -3356,7 +3469,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
       remove_objs.push_back(remove_key);
 
-      cleanup_part_history(dpp, y, part, remove_objs);
+      cleanup_part_history(dpp, y, part, remove_objs, it->second);
 
       ofs += obj_part.size;
       accounted_size += obj_part.accounted_size;
