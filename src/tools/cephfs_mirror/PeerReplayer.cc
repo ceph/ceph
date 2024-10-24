@@ -528,8 +528,9 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
     uint64_t snap_id;
     if (is_remote) {
       if (!info.nr_snap_metadata) {
-        derr << ": snap_path=" << snap_path << " has invalid metadata in remote snapshot"
-             << dendl;
+        std::string failed_reason = "snapshot '" + snap  + "' has invalid metadata";
+        derr << ": " << failed_reason << dendl;
+        m_snap_sync_stats.at(dir_root).last_failed_reason = failed_reason;
         rv = -EINVAL;
       } else {
         auto metadata = decode_snap_metadata(info.snap_metadata, info.nr_snap_metadata);
@@ -1686,7 +1687,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
   double duration = 0;
   for (; it != local_snap_map.end(); ++it) {
     if (m_perf_counters) {
-      start = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now().time_since_epoch()).count();
+      start = std::chrono::duration_cast<std::chrono::seconds>(clock::now().time_since_epoch()).count();
       utime_t t;
       t.set_from_double(start);
       m_perf_counters->tset(l_cephfs_mirror_peer_replayer_last_synced_start, t);
@@ -1705,7 +1706,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     }
     if (m_perf_counters) {
       m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snaps_synced);
-      end = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now().time_since_epoch()).count();
+      end = std::chrono::duration_cast<std::chrono::seconds>(clock::now().time_since_epoch()).count();
       utime_t t;
       t.set_from_double(end);
       m_perf_counters->tset(l_cephfs_mirror_peer_replayer_last_synced_end, t);
@@ -1807,6 +1808,9 @@ void PeerReplayer::peer_status(Formatter *f) {
     f->open_object_section(dir_root);
     if (sync_stat.failed) {
       f->dump_string("state", "failed");
+      if (sync_stat.last_failed_reason) {
+	f->dump_string("failure_reason", *sync_stat.last_failed_reason);
+      }
     } else if (!sync_stat.current_syncing_snap) {
       f->dump_string("state", "idle");
     } else {
