@@ -1042,6 +1042,9 @@ class Filesystem(MDSCluster):
         """
         return self.get_daemon_names("up:active", status=status)
 
+    def get_standby_replay_names(self, status=None):
+        return self.get_daemon_names('up:standby-replay', status=status)
+
     def get_all_mds_rank(self, status=None):
         mdsmap = self.get_mds_map(status)
         result = []
