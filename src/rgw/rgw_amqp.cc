@@ -650,6 +650,9 @@ private:
   // (4) TODO reconnect on connection errors
   // (5) TODO cleanup timedout callbacks
   void run() noexcept {
+    // give the runner thread a name for easier debugging
+    ceph_pthread_setname("amqp_manager");
+
     amqp_frame_t frame;
     while (!stopped) {
 
@@ -838,12 +841,6 @@ public:
       // This is to prevent rehashing so that iterators are not invalidated
       // when a new connection is added.
       connections.max_load_factor(10.0);
-      // give the runner thread a name for easier debugging
-      const char* thread_name = "amqp_manager";
-      if (const auto rc = ceph_pthread_setname(runner.native_handle(), thread_name); rc != 0) {
-        ldout(cct, 1) << "ERROR: failed to set amqp manager thread name to: " << thread_name
-          << ". error: " << rc << dendl;
-      }
   }
 
   // non copyable

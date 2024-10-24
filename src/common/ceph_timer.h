@@ -98,6 +98,7 @@ class timer {
   std::thread thread;
 
   void timer_thread() {
+    ceph_pthread_setname("ceph_timer");
     std::unique_lock l(lock);
     while (!suspended) {
       auto now = TC::now();
@@ -155,7 +156,6 @@ class timer {
 public:
   timer() : suspended(false) {
     thread = std::thread(&timer::timer_thread, this);
-    set_thread_name(thread, "ceph_timer");
   }
 
   // Create a suspended timer, jobs will be executed in order when
