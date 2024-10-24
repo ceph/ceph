@@ -194,7 +194,9 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   utime_t ut(mtime);
   encode_json("mtime", ut, f);
   encode_json("etag", etag, f);
-  encode_json("storage_class", storage_class, f);
+  encode_json("storage_class",
+	      rgw_placement_rule::get_canonical_storage_class(storage_class),
+	      f);
   encode_json("owner", owner, f);
   encode_json("owner_display_name", owner_display_name, f);
   encode_json("content_type", content_type, f);
