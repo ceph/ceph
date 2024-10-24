@@ -137,9 +137,8 @@ struct D3nL1CacheRequest {
     async_completion<yield_context, void()> init(yield);
     auto ex = get_associated_executor(init.completion_handler);
 
-    auto& ref = r.obj.get_ref();
-    ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): oid=" << ref.obj.oid << dendl;
-    async_read(dpp, context, cache_location+"/"+url_encode(ref.obj.oid, true), read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
+    ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): oid=" << r.obj.oid << dendl;
+    async_read(dpp, context, cache_location+"/"+url_encode(r.obj.oid, true), read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
   }
 
 };
