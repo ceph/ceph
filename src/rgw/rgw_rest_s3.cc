@@ -2782,7 +2782,7 @@ void RGWPutObj_ObjStore_S3::send_response()
       if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
         s->formatter->dump_string("LastModified", buf);
       }
-      s->formatter->dump_string("ETag", etag);
+      s->formatter->dump_format("ETag", "\"%s\"", etag.c_str());
       s->formatter->close_section();
       rgw_flush_formatter_and_reset(s, s->formatter);
       return;
@@ -3419,7 +3419,7 @@ done:
     }
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object->get_name());
-    s->formatter->dump_string("ETag", etag);
+    s->formatter->dump_format("ETag", "\"%s\"", etag.c_str());
     s->formatter->close_section();
   }
   s->err.message = err_msg;
@@ -4225,7 +4225,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     }
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object->get_name());
-    s->formatter->dump_string("ETag", etag);
+    s->formatter->dump_format("ETag", "\"%s\"", etag.c_str());
     if (armored_cksum) {
       s->formatter->dump_string(cksum->element_name(), *armored_cksum);
     }
