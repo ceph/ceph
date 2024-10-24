@@ -36,8 +36,8 @@ struct onode_layout_t {
 
   object_data_le_t object_data;
 
-  char oi[MAX_OI_LENGTH];
-  char ss[MAX_SS_LENGTH];
+  char oi[MAX_OI_LENGTH] = {0};
+  char ss[MAX_SS_LENGTH] = {0};
 } __attribute__((packed));
 
 class Transaction;
