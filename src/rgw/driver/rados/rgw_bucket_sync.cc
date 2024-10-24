@@ -156,8 +156,6 @@ void rgw_sync_group_pipe_map::init(const DoutPrefixProvider *dpp,
   default_flow = _default_flow;
   pall_zones = _pall_zones;
 
-  rgw_sync_bucket_entity zb(zone, bucket);
-
   status = group.status;
 
   std::vector<rgw_sync_bucket_pipes> zone_pipes;
@@ -743,6 +741,18 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
   *ppolicy = std::move(policy);
 }
 
+RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(CephContext *_cct,
+                                                       const rgw_zone_id& effective_zone,
+                                                       RGWSI_Bucket_Sync *_bucket_sync_svc,
+                                                       const rgw_sync_policy_info& _sync_policy) : bucket_sync_svc(_bucket_sync_svc),
+                                                                                                   zone_id(effective_zone),
+                                                                                                   sync_policy(_sync_policy) {
+  // This constructor is called only for remote zonegroups that read objects.
+  // Therefore, zone_svc is used solely for obtaining the context, and other properties are disregarded.
+  zone_svc = new RGWSI_Zone(_cct);
+  flow_mgr.reset(new RGWBucketSyncFlowManager(_cct, zone_id, nullopt, nullptr));
+}
+
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
                                                        RGWSI_SyncModules *sync_modules_svc,
 						       RGWSI_Bucket_Sync *_bucket_sync_svc,
@@ -984,13 +994,44 @@ void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *_sour
   }
 }
 
-bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags) const {
-  if (bucket_exports_data()) {
-    for (auto& entry : target_pipes.pipe_map) {
-      auto& filter = entry.second.params.source.filter;
+bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags, rgw_sync_bucket_pipe* dest_pipe) const {
+  if (!bucket_exports_data()) {
+    return false;
+  }
+
+  const bool force_priority = zone_svc->ctx()->_conf->rgw_data_sync_priority_rule_enforcement;
+  const auto& pipe_map = target_pipes.pipe_map;
+
+  if (force_priority && dest_pipe) {
+    // Find the highest priority pipe that matches the filters
+    const rgw_sync_bucket_pipe* best_pipe = nullptr;
+
+    for (const auto& entry : pipe_map) {
+      const auto& pipe = entry.second;
+      const auto& filter = pipe.params.source.filter;
+
       if (filter.check_prefix(obj_name) && filter.check_tags(tags.get_tags())) {
-	return true;
+        if (!best_pipe || pipe.params.priority > best_pipe->params.priority) {
+          best_pipe = &pipe;
+        }
       }
+    }
+
+    if (best_pipe) {
+      *dest_pipe = *best_pipe;
+      return true;
+    }
+
+    return false;
+  }
+
+  // Without force_priority or dest_pipe, return true on first matching pipe
+  for (const auto& entry : pipe_map) {
+    const auto& pipe = entry.second;
+    const auto& filter = pipe.params.source.filter;
+
+    if (filter.check_prefix(obj_name) && filter.check_tags(tags.get_tags())) {
+      return true;
     }
   }
 
@@ -1019,4 +1060,3 @@ bool RGWBucketSyncPolicyHandler::bucket_imports_data() const
 {
   return bucket_is_sync_target();
 }
-

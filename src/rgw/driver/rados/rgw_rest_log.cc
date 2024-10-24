@@ -371,7 +371,8 @@ void RGWOp_BILog_List::execute(optional_yield y) {
          max_entries_str = s->info.args.get("max-entries"),
          bucket_instance = s->info.args.get("bucket-instance"),
          gen_str = s->info.args.get("generation", &gen_specified),
-         format_version_str = s->info.args.get("format-ver");
+         format_version_str = s->info.args.get("format-ver"),
+         rgwx_zonegroup = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
   std::unique_ptr<rgw::sal::Bucket> bucket;
   rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name));
 
@@ -443,7 +444,6 @@ void RGWOp_BILog_List::execute(optional_yield y) {
 
   unsigned count = 0;
 
-
   max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
   if (!err.empty())
     max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
@@ -459,9 +459,16 @@ void RGWOp_BILog_List::execute(optional_yield y) {
       return;
     }
 
-    count += entries.size();
+    list<rgw_bi_log_entry> zonegroup_entries;
+    for (auto& entry : entries) {
+      if (entry.log_zonegroup == rgwx_zonegroup || rgwx_zonegroup.empty() || rgwx_zonegroup.empty()) {
+        zonegroup_entries.push_back(entry);
+      }
+    }
 
-    send_response(entries, marker);
+    count += zonegroup_entries.size();
+
+    send_response(zonegroup_entries, marker);
   } while (truncated && count < max_entries);
 
   send_response_end();
@@ -652,10 +659,10 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
 }
 
 void RGWOp_DATALog_List::execute(optional_yield y) {
-  string   shard = s->info.args.get("id");
-
-  string   max_entries_str = s->info.args.get("max-entries"),
+  string   shard = s->info.args.get("id"),
+           max_entries_str = s->info.args.get("max-entries"),
            marker = s->info.args.get("marker"),
+           rgwx_zonegroup = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup"),
            err;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
@@ -690,7 +697,7 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
   // entry listed
   op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
     datalog_rados->list_entries(this, shard_id, max_entries, entries,
-				marker, &last_marker, &truncated, y);
+				marker, &last_marker, &truncated, y, rgwx_zonegroup);
 }
 
 void RGWOp_DATALog_List::send_response() {

@@ -39,6 +39,7 @@
 #include "rgw_sync_policy.h"
 #include "rgw_zone.h"
 #include "rgw_trim_bilog.h"
+#include "services/svc_bucket_sync.h"
 
 namespace bc = boost::container;
 
@@ -52,21 +53,23 @@ struct rgw_data_change {
   std::string key;
   ceph::real_time timestamp;
   uint64_t gen = 0;
+  std::string log_zonegroup;
 
   void encode(ceph::buffer::list& bl) const {
     // require decoders to recognize v2 when gen>0
     const uint8_t compat = (gen == 0) ? 1 : 2;
-    ENCODE_START(2, compat, bl);
+    ENCODE_START(3, compat, bl);
     auto t = std::uint8_t(entity_type);
     encode(t, bl);
     encode(key, bl);
     encode(timestamp, bl);
     encode(gen, bl);
+    encode(log_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(2, bl);
+     DECODE_START(3, bl);
      std::uint8_t t;
      decode(t, bl);
      entity_type = DataLogEntityType(t);
@@ -76,6 +79,9 @@ struct rgw_data_change {
        gen = 0;
      } else {
        decode(gen, bl);
+     }
+     if (struct_v >= 3) {
+       decode(log_zonegroup, bl);
      }
      DECODE_FINISH(bl);
   }
@@ -182,7 +188,7 @@ public:
   int list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 	   std::vector<rgw_data_change_log_entry>& entries,
 	   std::string_view marker, std::string* out_marker, bool* truncated,
-	   optional_yield y);
+	   optional_yield y, const std::string& rgwx_zonegroup);
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id,
 		   std::string_view marker, optional_yield y);
   void trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,
@@ -203,12 +209,13 @@ public:
 struct BucketGen {
   rgw_bucket_shard shard;
   uint64_t gen;
+  std::string log_zonegroup;
 
-  BucketGen(const rgw_bucket_shard& shard, uint64_t gen)
-    : shard(shard), gen(gen) {}
+  BucketGen(const rgw_bucket_shard& shard, uint64_t gen, const std::string& log_zonegroup)
+    : shard(shard), gen(gen), log_zonegroup(log_zonegroup) {}
 
-  BucketGen(rgw_bucket_shard&& shard, uint64_t gen)
-    : shard(std::move(shard)), gen(gen) {}
+  BucketGen(rgw_bucket_shard&& shard, uint64_t gen, const std::string& log_zonegroup)
+    : shard(std::move(shard)), gen(gen), log_zonegroup(log_zonegroup) {}
 
   BucketGen(const BucketGen&) = default;
   BucketGen(BucketGen&&) = default;
@@ -219,7 +226,7 @@ struct BucketGen {
 };
 
 inline bool operator ==(const BucketGen& l, const BucketGen& r) {
-  return (l.shard == r.shard) && (l.gen == r.gen);
+  return (l.shard == r.shard) && (l.gen == r.gen) && (l.log_zonegroup == r.log_zonegroup);
 }
 
 inline bool operator <(const BucketGen& l, const BucketGen& r) {
@@ -227,6 +234,8 @@ inline bool operator <(const BucketGen& l, const BucketGen& r) {
     return true;
   } else if (l.shard == r.shard) {
     return l.gen < r.gen;
+  } else if (l.gen == r.gen) {
+    return l.log_zonegroup < r.log_zonegroup;
   } else {
     return false;
   }
@@ -239,6 +248,7 @@ class RGWDataChangesLog {
   rgw::BucketChangeObserver *observer = nullptr;
   const RGWZone* zone;
   std::unique_ptr<DataLogBackends> bes;
+  RGWSI_Bucket_Sync* bucket_sync;
 
   const int num_shards;
   std::string get_prefix() { return "data_log"; }
@@ -269,11 +279,13 @@ class RGWDataChangesLog {
 
   bc::flat_set<BucketGen> cur_cycle;
 
-  ChangeStatusPtr _get_change(const rgw_bucket_shard& bs, uint64_t gen);
+  ChangeStatusPtr _get_change(const rgw_bucket_shard& bs, uint64_t gen, const std::string& log_zonegroup);
   void register_renew(const rgw_bucket_shard& bs,
-		      const rgw::bucket_log_layout_generation& gen);
+		      const rgw::bucket_log_layout_generation& gen,
+                      const std::string& log_zonegroup);
   void update_renewed(const rgw_bucket_shard& bs,
 		      uint64_t gen,
+                      const std::string& log_zonegroup,
 		      ceph::real_time expiration);
 
   ceph::mutex renew_lock = ceph::make_mutex("ChangesRenewThread::lock");
@@ -282,14 +294,17 @@ class RGWDataChangesLog {
   void renew_stop();
   std::thread renew_thread;
 
-  std::function<bool(const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp)> bucket_filter;
   bool going_down() const;
-  bool filter_bucket(const DoutPrefixProvider *dpp, const rgw_bucket& bucket, optional_yield y) const;
+  int bucket_exports_data(const rgw_bucket& bucket,
+                          optional_yield y,
+                          const DoutPrefixProvider *dpp) const;
+  int may_log_data(optional_yield y,
+                   const DoutPrefixProvider *dpp) const;
   int renew_entries(const DoutPrefixProvider *dpp);
 
 public:
 
-  RGWDataChangesLog(CephContext* cct);
+  RGWDataChangesLog(CephContext* cct, RGWSI_Bucket_Sync* bucket_sync);
   ~RGWDataChangesLog();
 
   int start(const DoutPrefixProvider *dpp, const RGWZone* _zone, const RGWZoneParams& zoneparams,
@@ -297,12 +312,13 @@ public:
   int choose_oid(const rgw_bucket_shard& bs);
   int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
 		const rgw::bucket_log_layout_generation& gen, int shard_id,
-		optional_yield y);
+		optional_yield y, const std::string& log_zonegroup);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   std::string_view marker, std::string* out_marker,
-		   bool* truncated, optional_yield y);
+		   bool* truncated, optional_yield y,
+                   const std::string& rgwx_zonegroup);
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id,
 		   std::string_view marker, optional_yield y);
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,
@@ -315,7 +331,7 @@ public:
   int list_entries(const DoutPrefixProvider *dpp, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   LogMarker& marker, bool* ptruncated,
-		   optional_yield y);
+		   optional_yield y, const std::string& rgwx_zonegroup);
 
   void mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen);
   auto read_clear_modified() {
@@ -330,8 +346,14 @@ public:
     this->observer = observer;
   }
 
-  void set_bucket_filter(decltype(bucket_filter)&& f) {
-    bucket_filter = std::move(f);
+  bool may_log_bucket(const DoutPrefixProvider* dpp,
+                      const RGWBucketInfo& bucket_info,
+                      optional_yield y) const {
+    if (bucket_info.layout.logs.empty()) {
+      return false;
+    }
+
+    return bucket_exports_data(bucket_info.bucket, y, dpp);
   }
   // a marker that compares greater than any other
   std::string max_marker() const;

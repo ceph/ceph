@@ -816,7 +816,6 @@ int RGWPutObjTags_ObjStore_S3::get_params(optional_yield y)
     return -ERR_MALFORMED_XML;
   }
 
-  RGWObjTags obj_tags;
   r = tagging.rebuild(obj_tags);
   if (r < 0)
     return r;
@@ -1390,7 +1389,16 @@ struct ReplicationConfiguration {
     disabled_group.id = disabled_group_id;
     disabled_group.status = rgw_sync_policy_group::Status::ALLOWED; /* not enabled, not forbidden */
 
+    std::set<int> priorities; // used to check for duplicates
     for (auto& rule : rules) {
+      if (s->cct->_conf->rgw_data_sync_priority_rule_enforcement) {
+        if (priorities.find(rule.priority) != priorities.end()) {
+          s->err.message = fmt::format("Found duplicate priority {}.", rule.priority);
+          return -EINVAL;
+        }
+        priorities.insert(rule.priority);
+      }
+
       rgw_sync_bucket_pipes pipe;
       bool enabled;
       int r = rule.to_sync_policy_pipe(s, driver, &pipe, &enabled);
@@ -2142,7 +2150,7 @@ void RGWGetBucketLogging_ObjStore_S3::send_response()
 void RGWGetBucketLocation_ObjStore_S3::send_response()
 {
   dump_errno(s);
-  dump_header(s, "x-rgw-bucket-placement-target", 
+  dump_header(s, "x-rgw-bucket-placement-target",
     s->bucket->get_info().placement_rule.name);
   end_header(s, this, to_mime_type(s->format));
   dump_start(s);
@@ -3121,7 +3129,6 @@ int RGWPostObj_ObjStore_S3::get_tags()
       return -EINVAL;
     }
 
-    RGWObjTags obj_tags;
     int r = tagging.rebuild(obj_tags);
     if (r < 0)
       return r;

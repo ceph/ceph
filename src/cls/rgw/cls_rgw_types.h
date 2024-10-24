@@ -392,12 +392,13 @@ struct rgw_bucket_dir_entry {
   std::string tag;
   uint16_t flags;
   uint64_t versioned_epoch;
+  std::string log_zonegroup; // this currently is only being used by check_disk_state() to pass the log_zonegroup to cls in order to log for the correct zonegroup
 
   rgw_bucket_dir_entry() :
     exists(false), index_ver(0), flags(0), versioned_epoch(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(8, 3, bl);
+    ENCODE_START(9, 3, bl);
     encode(key.name, bl);
     encode(ver.epoch, bl);
     encode(exists, bl);
@@ -410,10 +411,11 @@ struct rgw_bucket_dir_entry {
     encode(key.instance, bl);
     encode(flags, bl);
     encode(versioned_epoch, bl);
+    encode(log_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
     decode(key.name, bl);
     decode(ver.epoch, bl);
     decode(exists, bl);
@@ -439,6 +441,9 @@ struct rgw_bucket_dir_entry {
     }
     if (struct_v >= 8) {
       decode(versioned_epoch, bl);
+    }
+    if (struct_v >= 9) {
+      decode(log_zonegroup, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -624,11 +629,12 @@ struct rgw_bi_log_entry {
   std::string owner; /* only being set if it's a delete marker */
   std::string owner_display_name; /* only being set if it's a delete marker */
   rgw_zone_set zones_trace;
+  std::string log_zonegroup;
 
   rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     encode(id, bl);
     encode(object, bl);
     encode(timestamp, bl);
@@ -644,10 +650,11 @@ struct rgw_bi_log_entry {
     encode(owner, bl);
     encode(owner_display_name, bl);
     encode(zones_trace, bl);
+    encode(log_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(4, bl);
+    DECODE_START(5, bl);
     decode(id, bl);
     decode(object, bl);
     decode(timestamp, bl);
@@ -669,6 +676,9 @@ struct rgw_bi_log_entry {
     }
     if (struct_v >= 4) {
       decode(zones_trace, bl);
+    }
+    if (struct_v >= 5) {
+      decode(log_zonegroup, bl);
     }
     DECODE_FINISH(bl);
   }

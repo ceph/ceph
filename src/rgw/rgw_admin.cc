@@ -8348,7 +8348,8 @@ next:
       return ENOTSUP;
     }
 
-    if (!RGWBucketReshard::should_zone_reshard_now(bucket->get_info(), zone_svc) &&
+    auto datalog_rados = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
+    if (!RGWBucketReshard::should_zone_reshard_now(dpp(), null_yield, bucket->get_info(), datalog_rados) &&
         !yes_i_really_mean_it) {
       std::cerr << "Bucket '" << bucket->get_name() << "' already has too many "
           "log generations (" << bucket->get_info().layout.logs.size() << ") "
@@ -10539,10 +10540,10 @@ next:
         ret = datalog_svc->list_entries(dpp(), shard_id, max_entries - count,
 					entries, marker,
 					&marker, &truncated,
-					null_yield);
+					null_yield, "");
       } else {
         ret = datalog_svc->list_entries(dpp(), max_entries - count, entries,
-					log_marker, &truncated, null_yield);
+					log_marker, &truncated, null_yield, "");
       }
       if (ret < 0) {
         cerr << "ERROR: datalog_svc->list_entries(): " << cpp_strerror(-ret) << std::endl;

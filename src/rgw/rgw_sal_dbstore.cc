@@ -528,7 +528,7 @@ namespace rgw::sal {
     return read_op.prepare(dpp);
   }
 
-  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
+  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, std::string *log_zonegroup, uint32_t flags)
   {
     Attrs empty;
     DB::Object op_target(store->getDB(),
@@ -544,7 +544,7 @@ namespace rgw::sal {
     return read_attrs(dpp, read_op, y, target_obj);
   }
 
-  int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
+  int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, std::string *log_zonegroup, uint32_t flags)
   {
     rgw_obj target = get_obj();
     int r = get_obj_attrs(y, dpp, &target);
@@ -553,17 +553,17 @@ namespace rgw::sal {
     }
     set_atomic();
     state.attrset[attr_name] = attr_val;
-    return set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
+    return set_obj_attrs(dpp, &state.attrset, nullptr, y, log_zonegroup, flags);
   }
 
-  int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
+  int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y, std::string *log_zonegroup, uint32_t flags)
   {
     Attrs rmattr;
     bufferlist bl;
 
     set_atomic();
     rmattr[attr_name] = bl;
-    return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
+    return set_obj_attrs(dpp, nullptr, &rmattr, y, log_zonegroup, flags);
   }
 
   bool DBObject::is_expired() {
@@ -610,6 +610,7 @@ namespace rgw::sal {
       uint64_t olh_epoch,
       const DoutPrefixProvider* dpp,
       optional_yield y,
+      std::string *log_zonegroup,
       uint32_t flags)
   {
     DB::Object op_target(store->getDB(),
@@ -719,6 +720,7 @@ namespace rgw::sal {
 
   int DBObject::delete_object(const DoutPrefixProvider* dpp,
       optional_yield y,
+      std::string *log_zonegroup,
       uint32_t flags,
       std::list<rgw_obj_index_key>* remove_objs,
       RGWObjVersionTracker* objv)
@@ -1234,7 +1236,8 @@ namespace rgw::sal {
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, std::string *log_zonegroup,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
   {
@@ -1245,6 +1248,7 @@ namespace rgw::sal {
     parent_op.meta.if_nomatch = if_nomatch;
     parent_op.meta.user_data = user_data;
     parent_op.meta.zones_trace = zones_trace;
+    parent_op.meta.log_zonegroup = log_zonegroup;
     
     /* XXX: handle accounted size */
     accounted_size = total_data_size;
@@ -1391,7 +1395,8 @@ namespace rgw::sal {
                          ceph::real_time delete_at,
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
-                         rgw_zone_set *zones_trace, bool *canceled,
+                         rgw_zone_set *zones_trace, std::string *log_zonegroup,
+                         bool *canceled,
                          const req_context& rctx,
                          uint32_t flags)
   {
@@ -1401,6 +1406,7 @@ namespace rgw::sal {
     parent_op.meta.if_nomatch = if_nomatch;
     parent_op.meta.user_data = user_data;
     parent_op.meta.zones_trace = zones_trace;
+    parent_op.meta.log_zonegroup = log_zonegroup;
     parent_op.meta.category = RGWObjCategory::Main;
     
     /* XXX: handle accounted size */
