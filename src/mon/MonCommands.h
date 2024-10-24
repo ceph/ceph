@@ -1509,3 +1509,7 @@ COMMAND_WITH_FLAG("dump_historic_slow_ops",
             "show recent slow ops",
             "mon", "r",
             FLAG(TELL))
+COMMAND_WITH_FLAG("subs",
+            "list existing subscription",
+            "mon", "rw",
+            FLAG(TELL))
