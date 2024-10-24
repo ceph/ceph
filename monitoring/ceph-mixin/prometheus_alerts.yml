@@ -837,6 +837,24 @@ groups:
         labels:
           severity: "warning"
           type: "ceph_default"
+      - alert: "NVMeoFListenersUnbalancedCount"
+        annotations:
+          description: "For every subsystem, each gateway should have a listener to balance traffic between gateways."
+          summary: "Not enough listeners added to {{ $labels.nqn }} subsystem"
+        expr: "ceph_nvmeof_subsystem_listener_count < scalar(count(ceph_nvmeof_gateway_info)) and ceph_nvmeof_subsystem_listener_count != 0"
+        for: "10m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NVMeoFZeroListeners"
+        annotations:
+          description: "NVMeoF gateway configuration incomplete; one of the subsystems have zero listeners."
+          summary: "No listeners added to {{ $labels.nqn }} subsystem"
+        expr: "ceph_nvmeof_subsystem_listener_count == 0"
+        for: "10m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
       - alert: "NVMeoFHighHostCPU"
         annotations:
           description: "High CPU on a gateway host can lead to CPU contention and performance degradation"
