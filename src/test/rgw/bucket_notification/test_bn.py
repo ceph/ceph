@@ -477,10 +477,6 @@ def stop_kafka_receiver(receiver, task):
 
 
 def get_ip():
-    return 'localhost'
-
-
-def get_ip_http():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         # address should not be reachable
@@ -3959,7 +3955,7 @@ def persistent_notification(endpoint_type, conn, account=None):
     host = get_ip()
     if endpoint_type == 'http':
         # create random port for the http server
-        host = get_ip_http()
+        host = get_ip()
         port = random.randint(10000, 20000)
         # start an http server in a separate thread
         receiver = HTTPServerWithEvents((host, port))
