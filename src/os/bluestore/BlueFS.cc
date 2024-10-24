@@ -4163,6 +4163,15 @@ bool BlueFS::debug_get_is_dev_dirty(FileWriter *h, uint8_t dev)
   return h->dirty_devs[dev];
 }
 
+void BlueFS::collect_alerts(osd_alert_list_t& alerts) {
+  if (bdev[BDEV_DB]) {
+    bdev[BDEV_DB]->collect_alerts(alerts, "DB");
+  }
+  if (bdev[BDEV_WAL]) {
+    bdev[BDEV_WAL]->collect_alerts(alerts, "WAL");
+  }
+}
+
 int BlueFS::open_for_read(
   std::string_view dirname,
   std::string_view filename,
