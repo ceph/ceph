@@ -14,7 +14,8 @@ import { DashboardPieComponent } from './dashboard-pie/dashboard-pie.component';
 import { DashboardTimeSelectorComponent } from './dashboard-time-selector/dashboard-time-selector.component';
 import { DashboardV3Component } from './dashboard/dashboard-v3.component';
 import { PgSummaryPipe } from './pg-summary.pipe';
-
+import { IconModule } from 'carbon-components-angular';
+ 
 @NgModule({
   imports: [
     CephSharedModule,
@@ -27,7 +28,8 @@ import { PgSummaryPipe } from './pg-summary.pipe';
     NgbTooltipModule,
     FormsModule,
     ReactiveFormsModule,
-    SimplebarAngularModule
+    SimplebarAngularModule,
+    IconModule
   ],
 
   declarations: [
@@ -43,6 +45,6 @@ import { PgSummaryPipe } from './pg-summary.pipe';
     DashboardAreaChartComponent,
     DashboardTimeSelectorComponent,
     DashboardPieComponent
-  ]
+  ],
 })
 export class DashboardV3Module {}

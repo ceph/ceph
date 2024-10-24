@@ -32,9 +32,9 @@ export enum Icons {
   users = 'fa fa-users', // Users, Groups
   share = 'fa fa-share-alt', // share
   key = 'fa fa-key-modern', // S3 Keys, Swift Keys, Authentication
-  warning = 'fa fa-exclamation-triangle', // Notification warning
+  warning = 'warning--alt--filled', // Notification warning
   info = 'fa fa-info', // Notification information
-  infoCircle = 'fa fa-info-circle', // Info on landing page
+  infoCircle = 'information--filled', // Info on landing page
   questionCircle = 'fa fa-question-circle-o',
   danger = 'fa fa-exclamation-circle',
   success = 'fa fa-check-circle',
@@ -55,7 +55,7 @@ export enum Icons {
   lineChart = 'fa fa-line-chart', // Line chart
   signOut = 'fa fa-sign-out', // Sign Out
   health = 'fa fa-heartbeat', // Health
-  circle = 'fa fa-circle', // Circle
+  circle = 'dot-mark', // Circle
   bell = 'fa fa-bell', // Notification
   mute = 'fa fa-bell-slash', // Mute or silence
   tag = 'fa fa-tag', // Tag, Badge
@@ -85,8 +85,12 @@ export enum Icons {
   calendar = 'fa fa-calendar',
   externalUrl = 'fa fa-external-link', // links to external page
   nfsExport = 'fa fa-server', // NFS export
-
+  launch = 'launch',
   /* Icons for special effect */
+  sz16 = '16',
+  sz20 = '20',
+  sz32='32',
+  sz24 = '24',
   large = 'fa fa-lg', // icon becomes 33% larger
   large2x = 'fa fa-2x', // icon becomes 50% larger
   large3x = 'fa fa-3x', // icon becomes 3 times larger
