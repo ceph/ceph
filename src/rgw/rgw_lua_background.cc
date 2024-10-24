@@ -83,11 +83,6 @@ void Background::start() {
   }
   started = true;
   runner = std::thread(&Background::run, this);
-  const char* thread_name = "lua_background";
-  if (const auto rc = ceph_pthread_setname(runner.native_handle(), thread_name); rc != 0) {
-    ldout(cct, 1) << "ERROR: failed to set lua background thread name to: " << thread_name
-      << ". error: " << rc << dendl;
-  }
 }
 
 void Background::pause() {
@@ -134,6 +129,7 @@ void Background::run() {
   set_package_path(L, luarocks_path);
   create_debug_action(L, cct);
   create_background_metatable(L);
+  ceph_pthread_setname("lua_background");
   const DoutPrefixProvider* const dpp = &dp;
 
   while (!stopped) {

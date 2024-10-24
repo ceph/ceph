@@ -14,6 +14,7 @@
 #include "rgw_perf_counters.h"
 #include "common/dout.h"
 #include <chrono>
+#include <fmt/format.h>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -506,8 +507,7 @@ public:
           }
         });
         const std::string thread_name = WORKER_THREAD_NAME+std::to_string(worker_id);
-        if (const auto rc = ceph_pthread_setname(workers.back().native_handle(), 
-          thread_name.c_str()); rc != 0) {
+        if (const auto rc = ceph_pthread_setname(thread_name.c_str()); rc != 0) {
            ldpp_dout(this, 1) << "ERROR: failed to set notification manager thread name to: " << thread_name
              << ". error: " << rc << dendl;
         }
