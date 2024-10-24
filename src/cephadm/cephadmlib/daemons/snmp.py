@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
-from ..constants import DEFAULT_SNMP_GATEWAY_IMAGE
+from ceph.cephadm.images import DEFAULT_SNMP_GATEWAY_IMAGE
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_types import CephContainer
 from ..context import CephadmContext
