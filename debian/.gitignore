@@ -38,4 +38,6 @@
 /python-cephfs
 /libcephfs-java
 /libcephfs-jni
+/libcephfs-proxy0-dbg
+/libcephfs-proxy0
 /tmp
