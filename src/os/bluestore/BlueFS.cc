@@ -168,6 +168,7 @@ private:
 		f->dump_int(("dev-"+to_string(i)).c_str(), sizes[i]);
 	    }
           }
+          f->dump_int("size", r.second->fnode.size);
           f->close_section();
         }
       }
