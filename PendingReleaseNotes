@@ -34,6 +34,8 @@
   (--yes-i-really-mean-it). This has been added as a precaution to tell the
   users that modifying "max_mds" may not help with troubleshooting or recovery
   effort. Instead, it might further destabilize the cluster.
+* RADOS: Added convenience function `librados::AioCompletion::cancel()` with
+  the same behavior as `librados::IoCtx::aio_cancel()`.
 
 
 

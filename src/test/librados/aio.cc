@@ -1722,3 +1722,97 @@ TEST(LibRadosAioEC, MultiWrite) {
   rados_aio_release(my_completion2);
   rados_aio_release(my_completion3);
 }
+
+TEST(LibRadosAio, ReadCancel) {
+  AioTestData test_data;
+  ASSERT_EQ("", test_data.init());
+
+  // cancellation tests are racy, so retry if completion beats the cancellation
+  int ret = 0;
+  int tries = 10;
+  do {
+    rados_completion_t completion;
+    ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &completion));
+    char buf[128];
+    memset(buf, 0xee, sizeof(buf));
+    ASSERT_EQ(0, rados_aio_read(test_data.m_ioctx, "nonexistent",
+                                completion, buf, sizeof(buf), 0));
+
+    ASSERT_EQ(0, rados_aio_cancel(test_data.m_ioctx, completion));
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, rados_aio_wait_for_complete(completion));
+    }
+    ret = rados_aio_get_return_value(completion);
+    rados_aio_release(completion);
+  } while (ret == -ENOENT && --tries);
+
+  ASSERT_EQ(-ECANCELED, ret);
+}
+
+TEST(LibRadosAio, ReadCancelAfterComplete) {
+  AioTestData test_data;
+  rados_completion_t completion;
+  ASSERT_EQ("", test_data.init());
+
+  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &completion));
+  char buf[128];
+  memset(buf, 0xee, sizeof(buf));
+  ASSERT_EQ(0, rados_aio_read(test_data.m_ioctx, "nonexistent",
+                              completion, buf, sizeof(buf), 0));
+
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(completion));
+  }
+  ASSERT_EQ(0, rados_aio_cancel(test_data.m_ioctx, completion));
+  ASSERT_EQ(-ENOENT, rados_aio_get_return_value(completion));
+  rados_aio_release(completion);
+}
+
+TEST(LibRadosAio, WriteCancel) {
+  AioTestData test_data;
+  ASSERT_EQ("", test_data.init());
+
+  // cancellation tests are racy, so retry if completion beats the cancellation
+  int ret = 0;
+  int tries = 10;
+  do {
+    rados_completion_t completion;
+    ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &completion));
+    char buf[128];
+    memset(buf, 0xee, sizeof(buf));
+    ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
+                                 completion, buf, sizeof(buf), 0));
+
+    ASSERT_EQ(0, rados_aio_cancel(test_data.m_ioctx, completion));
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, rados_aio_wait_for_complete(completion));
+    }
+    ret = rados_aio_get_return_value(completion);
+    rados_aio_release(completion);
+  } while (ret == 0 && --tries);
+
+  ASSERT_EQ(-ECANCELED, ret);
+}
+
+TEST(LibRadosAio, WriteCancelAfterComplete) {
+  AioTestData test_data;
+  rados_completion_t completion;
+  ASSERT_EQ("", test_data.init());
+
+  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &completion));
+  char buf[128];
+  memset(buf, 0xee, sizeof(buf));
+  ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
+                               completion, buf, sizeof(buf), 0));
+
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(completion));
+  }
+  ASSERT_EQ(0, rados_aio_cancel(test_data.m_ioctx, completion));
+  ASSERT_EQ(0, rados_aio_get_return_value(completion));
+  rados_aio_release(completion);
+}
