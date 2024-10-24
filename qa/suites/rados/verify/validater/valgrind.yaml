@@ -8,7 +8,8 @@ overrides:
   ceph:
     conf:
       global:
-        osd heartbeat grace: 80
+        # see https://tracker.ceph.com/issues/65768
+        osd heartbeat grace: 160
       mon:
         mon osd crush smoke test: false
       osd:
