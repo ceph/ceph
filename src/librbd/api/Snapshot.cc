@@ -38,12 +38,12 @@ public:
 
   template <typename T>
   inline int operator()(const T&) const {
-    // ignore other than GroupSnapshotNamespace types.
+    // ignore other than GroupImageSnapshotNamespace types.
     return -EINVAL;
   }
 
   inline int operator()(
-      const cls::rbd::GroupSnapshotNamespace& snap_namespace) {
+      const cls::rbd::GroupImageSnapshotNamespace& snap_namespace) {
     IoCtx group_ioctx;
     int r = util::create_ioctx(*image_ioctx, "group", snap_namespace.group_pool,
                                {}, &group_ioctx);
