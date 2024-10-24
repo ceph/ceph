@@ -896,6 +896,10 @@ class CephadmServe:
                     )
                     continue
 
+                # set multisite config before deploying the rgw daemon
+                if service_type == 'rgw':
+                    self.mgr.rgw_service.set_realm_zg_zone(cast(RGWSpec, spec))
+
                 # deploy new daemon
                 daemon_id = slot.name
 
