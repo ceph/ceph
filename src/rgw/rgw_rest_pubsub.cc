@@ -159,6 +159,8 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
                              const boost::optional<Policy>& policy,
                              uint64_t op)
 {
+  const bool restrict_public_buckets = s->bucket_access_conf && s->bucket_access_conf->restrict_public_buckets();
+
   if (s->auth.identity->get_account()) {
     const bool account_root = (s->auth.identity->get_identity_type() == TYPE_ROOT);
     if (!s->auth.identity->is_owner_of(owner)) {
@@ -168,26 +170,30 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
       // from the resource-based policies and require Allow from both
       const auto identity_res = evaluate_iam_policies(
           dpp, s->env, *s->auth.identity, account_root, op, arn,
-          {}, s->iam_identity_policies, s->session_policies);
+          {}, s->iam_identity_policies, s->session_policies,
+          s->bucket_owner.id, restrict_public_buckets);
       if (identity_res == Effect::Deny) {
         return false;
       }
       const auto resource_res = evaluate_iam_policies(
           dpp, s->env, *s->auth.identity, false, op, arn,
-          policy, {}, {});
+          policy, {}, {},
+          s->bucket_owner.id, restrict_public_buckets);
       return identity_res == Effect::Allow && resource_res == Effect::Allow;
     } else {
       // require an Allow from either identity- or resource-based policy
       return Effect::Allow == evaluate_iam_policies(
           dpp, s->env, *s->auth.identity, account_root, op, arn,
-          policy, s->iam_identity_policies, s->session_policies);
+          policy, s->iam_identity_policies, s->session_policies,
+          s->bucket_owner.id, restrict_public_buckets);
     }
   }
 
   constexpr bool account_root = false;
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->auth.identity, account_root, op, arn,
-      policy, s->iam_identity_policies, s->session_policies);
+      policy, s->iam_identity_policies, s->session_policies,
+      s->bucket_owner.id, restrict_public_buckets);
   if (effect == Effect::Deny) {
     return false;
   }
