@@ -721,7 +721,8 @@ CephContext::CephContext(uint32_t module_type_,
 #ifdef CEPH_DEBUG_MUTEX
     _lockdep_obs(NULL),
 #endif
-    crush_location(this)
+    crush_location(this),
+    _msgr_hook(nullptr)
 {
   if (options.create_log) {
     _log = options.create_log(&_conf->subsys);
@@ -796,6 +797,9 @@ CephContext::~CephContext()
 
   delete _plugin_registry;
 
+  if (_msgr_hook) {
+    _admin_socket->unregister_commands(_msgr_hook.get());
+  }
   _admin_socket->unregister_commands(_admin_hook);
   delete _admin_hook;
   delete _admin_socket;
