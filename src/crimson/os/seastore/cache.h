@@ -323,8 +323,9 @@ public:
 	    CachedExtentRef>(ret);
         });
       } else {
-        SUBDEBUGT(seastore_cache, "{} {} is present on t -- {}"
-                  " without being fully loaded", t, type, offset, *ret);
+        SUBDEBUGT(seastore_cache,
+            "{} {} is present on t -- {} without fully loaded",
+            t, type, offset, *ret);
         return get_extent_if_cached_iertr::make_ready_future<
           CachedExtentRef>();
       }
@@ -354,8 +355,8 @@ public:
 
     if (!ret->is_fully_loaded()) {
       // ignore non-full extent
-      SUBDEBUGT(seastore_cache, "{} {} is present without "
-                "being fully loaded", t, type, offset);
+      SUBDEBUGT(seastore_cache,
+          "{} {} is present without fully loaded", t, type, offset);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
 
@@ -396,13 +397,13 @@ public:
     LOG_PREFIX(Cache::get_caching_extent);
     auto result = t.get_extent(offset, &ret);
     if (result == Transaction::get_extent_ret::RETIRED) {
-      SUBERRORT(seastore_cache, "{} {}~{} is retired on t -- {}",
+      SUBERRORT(seastore_cache, "{} {}~0x{:x} is retired on t -- {}",
                 t, T::TYPE, offset, length, *ret);
       ceph_abort("impossible");
     } else if (result == Transaction::get_extent_ret::PRESENT) {
       assert(ret->get_length() == length);
       if (ret->is_fully_loaded()) {
-        SUBTRACET(seastore_cache, "{} {}~{} is present on t -- {}",
+        SUBTRACET(seastore_cache, "{} {}~0x{:x} is present on t -- {}",
                   t, T::TYPE, offset, length, *ret);
         return ret->wait_io().then([ret] {
 	  return seastar::make_ready_future<TCachedExtentRef<T>>(
@@ -410,15 +411,16 @@ public:
         });
       } else {
 	assert(!ret->is_mutable());
-        SUBDEBUGT(seastore_cache, "{} {}~{} is present on t without been \
-          fully loaded, reading ... {}", t, T::TYPE, offset, length, *ret);
+        SUBDEBUGT(seastore_cache,
+            "{} {}~0x{:x} is present on t without fully loaded, reading ... -- {}",
+            t, T::TYPE, offset, length, *ret);
         auto bp = create_extent_ptr_rand(ret->get_length());
         ret->set_bptr(std::move(bp));
         return read_extent<T>(
           ret->cast<T>());
       }
     } else {
-      SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
+      SUBTRACET(seastore_cache, "{} {}~0x{:x} is absent on t, query cache ...",
                 t, T::TYPE, offset, length);
       auto f = [&t, this](CachedExtent &ext) {
         t.add_to_read_set(CachedExtentRef(&ext));
@@ -454,7 +456,7 @@ public:
     }
 #endif
 
-    SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
+    SUBTRACET(seastore_cache, "{} {}~0x{:x} is absent on t, query cache ...",
 	      t, T::TYPE, offset, length);
     auto f = [&t, this](CachedExtent &ext) {
       // FIXME: assert(ext.is_stable_clean());
@@ -591,8 +593,8 @@ public:
       ++stats.access.s.load_present;
       LOG_PREFIX(Cache::get_extent_viewable_by_trans);
       SUBDEBUG(seastore_cache,
-        "{} {}~{} is present without been fully loaded, reading ... -- {}",
-        p_extent->get_type(), p_extent->get_paddr(),p_extent->get_length(),
+        "{} {}~0x{:x} is present without fully loaded, reading ... -- {}",
+        p_extent->get_type(), p_extent->get_paddr(), p_extent->get_length(),
         *p_extent);
       auto bp = create_extent_ptr_rand(p_extent->get_length());
       p_extent->set_bptr(std::move(bp));
@@ -656,7 +658,7 @@ private:
                 NULL_GENERATION,
 		TRANS_ID_NULL);
       SUBDEBUG(seastore_cache,
-          "{} {}~{} is absent, add extent and reading ... -- {}",
+          "{} {}~0x{:x} is absent, add extent and reading ... -- {}",
           T::TYPE, offset, length, *ret);
       add_extent(ret);
       // touch_extent() should be included in on_cache
@@ -676,7 +678,7 @@ private:
                 NULL_GENERATION,
 		TRANS_ID_NULL);
       SUBDEBUG(seastore_cache,
-          "{} {}~{} is absent(placeholder), reading ... -- {}",
+          "{} {}~0x{:x} is absent(placeholder), add extent and reading ... -- {}",
           T::TYPE, offset, length, *ret);
       extents_index.replace(*ret, *cached);
       on_cache(*ret);
@@ -697,7 +699,7 @@ private:
     on_cache(*ret);
     if (ret->is_fully_loaded()) {
       SUBTRACE(seastore_cache,
-          "{} {}~{} is present in cache -- {}",
+          "{} {}~0x{:x} is present in cache -- {}",
           T::TYPE, offset, length, *ret);
       return ret->wait_io().then([ret] {
         // ret may be invalid, caller must check
@@ -705,7 +707,7 @@ private:
       });
     } else {
       SUBDEBUG(seastore_cache,
-          "{} {}~{} is present without been fully loaded, reading ... -- {}",
+          "{} {}~0x{:x} is present without fully loaded, reading ... -- {}",
           T::TYPE, offset, length, *ret);
       auto bp = create_extent_ptr_rand(length);
       ret->set_bptr(std::move(bp));
@@ -775,28 +777,29 @@ private:
     CachedExtentRef ret;
     auto status = t.get_extent(offset, &ret);
     if (status == Transaction::get_extent_ret::RETIRED) {
-      SUBERRORT(seastore_cache, "{} {}~{} {} is retired on t -- {}",
+      SUBERRORT(seastore_cache, "{} {}~0x{:x} {} is retired on t -- {}",
                 t, type, offset, length, laddr, *ret);
       ceph_abort("impossible");
     } else if (status == Transaction::get_extent_ret::PRESENT) {
       assert(ret->get_length() == length);
       if (ret->is_fully_loaded()) {
-        SUBTRACET(seastore_cache, "{} {}~{} {} is present on t -- {}",
+        SUBTRACET(seastore_cache, "{} {}~0x{:x} {} is present on t -- {}",
                   t, type, offset, length, laddr, *ret);
         return ret->wait_io().then([ret] {
 	  return seastar::make_ready_future<CachedExtentRef>(ret);
         });
       } else {
 	assert(!ret->is_mutable());
-        SUBDEBUGT(seastore_cache, "{} {}~{} {} is present on t without been \
-                  fully loaded, reading ...", t, type, offset, length, laddr);
+        SUBDEBUGT(seastore_cache,
+            "{} {}~0x{:x} {} is present on t without fully loaded, reading ... -- {}",
+            t, type, offset, length, laddr, *ret);
         auto bp = create_extent_ptr_rand(ret->get_length());
         ret->set_bptr(std::move(bp));
         return read_extent<CachedExtent>(
           std::move(ret));
       }
     } else {
-      SUBTRACET(seastore_cache, "{} {}~{} {} is absent on t, query cache ...",
+      SUBTRACET(seastore_cache, "{} {}~0x{:x} {} is absent on t, query cache ...",
                 t, type, offset, length, laddr);
       auto f = [&t, this](CachedExtent &ext) {
 	t.add_to_read_set(CachedExtentRef(&ext));
@@ -830,7 +833,7 @@ private:
     }
 #endif
 
-    SUBTRACET(seastore_cache, "{} {}~{} {} is absent on t, query cache ...",
+    SUBTRACET(seastore_cache, "{} {}~0x{:x} {} is absent on t, query cache ...",
 	      t, type, offset, length, laddr);
     auto f = [&t, this](CachedExtent &ext) {
       // FIXME: assert(ext.is_stable_clean());
@@ -969,7 +972,7 @@ public:
 #endif
   ) {
     LOG_PREFIX(Cache::alloc_new_non_data_extent);
-    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
+    SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
               t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
 #ifdef UNIT_TESTS_BUILT
     auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen, epaddr);
@@ -988,7 +991,7 @@ public:
 	      t.get_trans_id());
     t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache,
-              "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
+              "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
               t, T::TYPE, length, result->paddr,
               hint, rewrite_gen_printer_t{result->gen}, *ret);
     return ret;
@@ -1012,7 +1015,7 @@ public:
 #endif
   ) {
     LOG_PREFIX(Cache::alloc_new_data_extents);
-    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
+    SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
               t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
 #ifdef UNIT_TESTS_BUILT
     auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen, epaddr);
@@ -1033,7 +1036,7 @@ public:
                 t.get_trans_id());
       t.add_fresh_extent(ret);
       SUBDEBUGT(seastore_cache,
-                "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
+                "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
                 t, T::TYPE, length, result.paddr,
                 hint, rewrite_gen_printer_t{result.gen}, *ret);
       extents.emplace_back(std::move(ret));
@@ -1079,7 +1082,7 @@ public:
     auto extent = ext->template cast<T>();
     extent->set_laddr(remap_laddr);
     t.add_fresh_extent(ext);
-    SUBTRACET(seastore_cache, "allocated {} {}B, hint={}, has ptr? {} -- {}",
+    SUBTRACET(seastore_cache, "allocated {} 0x{:x}B, hint={}, has ptr? {} -- {}",
       t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *extent);
     return extent;
   }
