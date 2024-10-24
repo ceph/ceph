@@ -94,8 +94,41 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   }
 }
 
+template <typename T>
+concept is_convertible_to_stream = std::is_convertible_v<T, std::ostream &>;
+
+template <typename T>
+concept is_streamable = requires(std::ostream &os, const T &value) {
+  { os << value } -> is_convertible_to_stream;
+};
+
+template <typename T>
+struct laddr_formatter_t;
+
+template <typename T>
+requires fmt::is_formattable<T>::value
+struct laddr_formatter_t<T> {
+  static std::ostream &format(std::ostream &out, const T &v) {
+    // fmt support format __int128
+    fmt::format_to(std::ostreambuf_iterator<char>(out), "L0x{:x}", v);
+    return out;
+  }
+};
+template <typename T>
+requires is_streamable<T>
+struct laddr_formatter_t<T> {
+  static std::ostream &format(std::ostream &out, const T &v) {
+    // boost uint128_t support stream operator but __int128 doesn't
+    return out << "L0x" << std::hex << v << std::dec;
+  }
+};
+
 std::ostream &operator<<(std::ostream &out, const laddr_t &laddr) {
-  return out << "L0x" << std::hex << laddr.value << std::dec;
+  if (laddr == L_ADDR_NULL) {
+    return out << "L_ADDR_NULL";
+  } else {
+    return laddr_formatter_t<laddr_t::Unsigned>::format(out, laddr.value);
+  }
 }
 
 std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) {
@@ -103,13 +136,337 @@ std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) 
 	     << "+0x" << std::hex << laddr_offset.get_offset() << std::dec;
 }
 
+std::ostream &operator<<(std::ostream &out, const laddr_printer_t &p) {
+  out << p.addr;
+  if (p.addr.is_object_address()) {
+    out << std::hex << "(" << static_cast<int>(p.addr.get_shard())
+	<< "," << p.addr.get_pool()
+	<< "," << p.addr.get_reversed_hash()
+	<< "," << p.addr.get_local_object_id()
+	<< "," << p.addr.get_local_clone_id()
+	<< "," << p.addr.is_metadata()
+	<< "," << p.addr.get_offset_bytes()
+	<< ")" << std::dec;
+  }
+
+  return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const laddr_hint_t &hint) {
+  out << "laddr_hint_t(addr=" << laddr_printer_t{hint.addr} << ", conflict_condition=";
+  switch(hint.condition) {
+  case laddr_conflict_condition_t::object_prefix:
+    out << "object_prefix";
+    break;
+  case laddr_conflict_condition_t::object_content:
+    out << "object_content";
+    break;
+  case laddr_conflict_condition_t::clone_prefix:
+    out << "clone_prefix";
+    break;
+  case laddr_conflict_condition_t::all:
+    out << "all";
+    break;
+  default:
+    __builtin_unreachable();
+  }
+  out << ", conflict_policy=";
+  switch(hint.policy) {
+  case laddr_conflict_policy_t::gen_random:
+    out << "gen_random";
+    break;
+  case laddr_conflict_policy_t::linear_search:
+    out << "linear_search";
+    break;
+  case laddr_conflict_policy_t::never:
+    out << "never";
+    break;
+  default:
+    __builtin_unreachable();
+  }
+  return out << ", block_size=" << hint.block_size << ")";
+}
+
+namespace {
+struct random_generator_t {
+  static random_generator_t &get() {
+    static thread_local random_generator_t r{};
+    return r;
+  }
+  random_generator_t()
+      : eng(std::rand()),
+        global(0, std::numeric_limits<uint64_t>::max()) {}
+  std::default_random_engine eng;
+  std::uniform_int_distribution<uint64_t> global;
+  uint64_t operator()() { return global(eng); }
+};
+uint64_t rand_field() { return random_generator_t::get()(); }
+extent_len_t get_block_size_mask(extent_len_t block_size) {
+  assert(block_size != 0 && (block_size & (block_size - 1)) == 0);
+  return (block_size >> laddr_t::UNIT_SHIFT) - 1;
+}
+} // namespace
+
+laddr_hint_t laddr_hint_t::create_global_md_hint() {
+  laddr_t addr = L_ADDR_MIN.with_object_content(rand_field());
+  assert(addr.get_object_info() == 0);
+  return {
+    addr,
+    laddr_conflict_condition_t::object_content,
+    laddr_conflict_policy_t::linear_search,
+    /*block_size=*/ laddr_t::UNIT_SIZE
+  };
+}
+
+laddr_hint_t laddr_hint_t::create_onode_hint(
+  shard_t shard,
+  pool_t pool,
+  crush_hash_t crush)
+{
+  laddr_t addr = L_ADDR_MIN;
+  addr.set_shard(shard);
+  addr.set_pool(pool);
+  addr.set_reversed_hash(crush);
+
+  assert(addr.match_shard_bits(shard));
+  assert(addr.match_pool_bits(pool));
+  assert(addr.get_reversed_hash() == crush);
+  assert(addr.get_local_object_id() == 0);
+  assert(addr.get_object_content() == 0);
+
+  return {
+    addr,
+    laddr_conflict_condition_t::object_content,
+    laddr_conflict_policy_t::linear_search,
+    /*block_size=*/ laddr_t::UNIT_SIZE
+  };
+}
+
+laddr_hint_t laddr_hint_t::create_fresh_object_data_hint(
+  shard_t shard,
+  pool_t pool,
+  crush_hash_t crush)
+{
+  auto addr = L_ADDR_MIN;
+  auto condition = laddr_conflict_condition_t::object_prefix;
+  auto policy = laddr_conflict_policy_t::gen_random;
+
+  addr.set_shard(shard);
+  addr.set_pool(pool);
+  addr.set_reversed_hash(crush);
+
+  do {
+    addr.set_local_object_id(rand_field());
+    addr.set_local_clone_id(rand_field());
+  } while (!addr.is_object_address());
+
+  assert(addr.match_pool_bits(pool));
+  assert(addr.match_shard_bits(shard));
+  assert(addr.get_reversed_hash() == crush);
+  assert(addr.get_local_object_id() != LOCAL_OBJECT_ID_ZERO);
+  assert(!addr.is_metadata());
+  assert(addr.get_offset_bytes() == 0);
+  return {addr, condition, policy, /*block_size=*/ laddr_t::UNIT_SIZE};
+}
+
+laddr_hint_t laddr_hint_t::create_fresh_object_md_hint(
+  shard_t shard,
+  pool_t pool,
+  crush_hash_t crush,
+  extent_len_t block_size)
+{
+  assert(block_size != 0 && (block_size & (block_size - 1)) == 0);
+
+  auto hint = create_fresh_object_data_hint(shard, pool, crush);
+  auto clone_id = hint.addr.get_local_clone_id();
+  hint.addr.set_metadata(true);
+  hint.block_size = block_size;
+
+  assert(hint.addr.match_pool_bits(pool));
+  assert(hint.addr.match_shard_bits(shard));
+  assert(hint.addr.get_reversed_hash() == crush);
+  assert(hint.addr.get_local_object_id() != LOCAL_OBJECT_ID_ZERO);
+  assert(hint.addr.get_local_clone_id() == clone_id);
+  assert(hint.addr.is_metadata());
+  assert(hint.addr.get_offset_bytes() == 0);
+  boost::ignore_unused(clone_id);
+  return hint;
+}
+
+laddr_hint_t laddr_hint_t::create_clone_object_data_hint(
+  shard_t shard,
+  pool_t pool,
+  crush_hash_t crush,
+  local_object_id_t id)
+{
+  auto addr = L_ADDR_MIN;
+  auto condition = laddr_conflict_condition_t::clone_prefix;
+  auto policy = laddr_conflict_policy_t::gen_random;
+
+  addr.set_shard(shard);
+  addr.set_pool(pool);
+  addr.set_reversed_hash(crush);
+  addr.set_local_object_id(id);
+  addr.set_local_clone_id(rand_field());
+
+  assert(addr.match_pool_bits(pool));
+  assert(addr.match_shard_bits(shard));
+  assert(addr.get_reversed_hash() == crush);
+  assert(addr.get_local_object_id() == id);
+  assert(!addr.is_metadata());
+  assert(addr.get_offset_bytes() == 0);
+  return {addr, condition, policy, /*block_size=*/ laddr_t::UNIT_SIZE};
+}
+
+laddr_hint_t laddr_hint_t::create_clone_object_md_hint(
+  shard_t shard,
+  pool_t pool,
+  crush_hash_t crush,
+  local_object_id_t id,
+  extent_len_t block_size)
+{
+  auto block_mask = get_block_size_mask(block_size);
+
+  auto hint = create_clone_object_data_hint(shard, pool, crush, id);
+  auto clone_id = hint.addr.get_local_clone_id();
+  hint.addr.set_metadata(true);
+  hint.addr.set_offset_by_blocks(rand_field() & ~block_mask);
+  hint.block_size = block_size;
+
+  assert(hint.addr.match_pool_bits(pool));
+  assert(hint.addr.match_shard_bits(shard));
+  assert(hint.addr.get_reversed_hash() == crush);
+  assert(hint.addr.get_local_object_id() == id);
+  assert(hint.addr.get_local_clone_id() == clone_id);
+  assert(hint.addr.is_metadata());
+  assert((hint.addr.get_offset_blocks() & block_mask) == 0);
+  boost::ignore_unused(clone_id);
+  return hint;
+}
+
+laddr_hint_t laddr_hint_t::create_object_data_hint(
+  shard_t shard,
+  pool_t pool,
+  crush_hash_t crush,
+  local_object_id_t object_id,
+  local_clone_id_t clone_id)
+{
+  auto addr = L_ADDR_MIN;
+  auto condition = laddr_conflict_condition_t::all;
+  auto policy = laddr_conflict_policy_t::never;
+
+  addr.set_shard(shard);
+  addr.set_pool(pool);
+  addr.set_reversed_hash(crush);
+  addr.set_local_object_id(object_id);
+  addr.set_local_clone_id(clone_id);
+
+  assert(addr.match_pool_bits(pool));
+  assert(addr.match_shard_bits(shard));
+  assert(addr.get_reversed_hash() == crush);
+  assert(addr.get_local_object_id() == object_id);
+  assert(addr.get_local_clone_id() == clone_id);
+  assert(!addr.is_metadata());
+  assert(addr.get_offset_blocks() == 0);
+  return {addr, condition, policy, /*block_size=*/ laddr_t::UNIT_SIZE};
+}
+
+laddr_hint_t laddr_hint_t::create_object_md_hint(
+  shard_t shard,
+  pool_t pool,
+  crush_hash_t crush,
+  local_object_id_t object_id,
+  local_clone_id_t clone_id,
+  extent_len_t block_size)
+{
+  auto block_mask = get_block_size_mask(block_size);
+
+  auto addr = L_ADDR_MIN;
+  auto condition = laddr_conflict_condition_t::all;
+  auto policy = laddr_conflict_policy_t::gen_random;
+
+  addr.set_shard(shard);
+  addr.set_pool(pool);
+  addr.set_reversed_hash(crush);
+  addr.set_local_object_id(object_id);
+  addr.set_local_clone_id(clone_id);
+  addr.set_metadata(true);
+  addr.set_offset_by_blocks(rand_field() && (~block_mask));
+
+  assert(addr.match_pool_bits(pool));
+  assert(addr.match_shard_bits(shard));
+  assert(addr.get_reversed_hash() == crush);
+  assert(addr.get_local_object_id() == object_id);
+  assert(addr.get_local_clone_id() == clone_id);
+  assert(addr.is_metadata());
+  assert((addr.get_offset_blocks() & block_mask) == 0);
+  return {addr, condition, policy, block_size};
+}
+
+void laddr_hint_t::find_next_random() {
+  assert(policy == laddr_conflict_policy_t::gen_random);
+  auto block_mask = get_block_size_mask(block_size);
+
+  auto orig_addr = addr;
+  switch (condition) {
+  case laddr_conflict_condition_t::object_prefix:
+    assert(orig_addr.is_object_address());
+    do {
+      addr.set_local_object_id(rand_field());
+    } while (orig_addr == addr || !addr.is_object_address());
+    assert(orig_addr.get_shard() == addr.get_shard());
+    assert(orig_addr.get_pool() == addr.get_pool());
+    assert(orig_addr.get_reversed_hash() == addr.get_reversed_hash());
+    assert(orig_addr.get_object_content() == addr.get_object_content());
+    assert(addr.is_object_address());
+    break;
+  case laddr_conflict_condition_t::object_content:
+    assert(orig_addr.is_global_address() ||
+	   orig_addr.is_onode_extent_address());
+    do {
+      addr.set_object_content(rand_field());
+    } while (orig_addr == addr);
+    assert(orig_addr.get_object_info() == addr.get_object_info());
+    assert(addr.is_global_address() || addr.is_onode_extent_address());
+    break;
+  case laddr_conflict_condition_t::clone_prefix:
+    assert(orig_addr.is_object_address());
+    do {
+      addr.set_local_clone_id(rand_field());
+    } while (orig_addr.get_local_clone_id() == addr.get_local_clone_id());
+    assert(orig_addr.get_object_info() == addr.get_object_info());
+    assert(orig_addr.is_metadata() == addr.is_metadata());
+    assert(orig_addr.get_offset_bytes() == addr.get_offset_bytes());
+    assert(addr.is_object_address());
+    break;
+  case laddr_conflict_condition_t::all:
+    assert(addr.is_object_address());
+    assert(addr.is_metadata());
+    do {
+      addr.set_offset_by_blocks(rand_field() & (~block_mask));
+    } while (orig_addr.get_offset_bytes() == addr.get_offset_bytes());
+    assert(orig_addr.get_object_info() == addr.get_object_info());
+    assert(orig_addr.is_metadata() == addr.is_metadata());
+    assert(orig_addr.get_local_clone_id() == addr.get_local_clone_id());
+    assert((addr.get_offset_blocks() & block_mask) == 0);
+    break;
+  default:
+    __builtin_unreachable();
+  }
+}
+
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
 {
+  out << "pladdr(";
   if (pladdr.is_laddr()) {
-    return out << pladdr.get_laddr();
+    // pladdr(local_clone_id=0x...)
+    out << "local_clone_id=0x" << std::hex
+	<< pladdr.get_local_clone_id() << std::dec;
   } else {
-    return out << pladdr.get_paddr();
+    // pladdr(paddr<...>)
+    out << pladdr.get_paddr();
   }
+  return out << ")";
 }
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)

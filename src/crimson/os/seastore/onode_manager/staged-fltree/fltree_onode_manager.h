@@ -36,13 +36,8 @@ struct FLTreeOnode final : Onode, Value {
   FLTreeOnode& operator=(const FLTreeOnode&) = delete;
 
   template <typename... T>
-  FLTreeOnode(uint32_t ddr, uint32_t dmr, const hobject_t &hobj, T&&... args)
-    : Onode(ddr, dmr, hobj),
-      Value(std::forward<T>(args)...) {}
-
-  template <typename... T>
   FLTreeOnode(const hobject_t &hobj, T&&... args)
-    : Onode(0, 0, hobj),
+    : Onode(hobj),
       Value(std::forward<T>(args)...) {}
 
   struct Recorder : public ValueDeltaRecorder {
@@ -50,6 +45,8 @@ struct FLTreeOnode final : Onode, Value {
       UPDATE_ONODE_SIZE,
       UPDATE_OMAP_ROOT,
       UPDATE_XATTR_ROOT,
+      UPDATE_LOCAL_OBJECT_ID,
+      UPDATE_LOCAL_CLONE_ID,
       UPDATE_OBJECT_DATA,
       UPDATE_OBJECT_INFO,
       UPDATE_SNAPSET,
@@ -104,6 +101,22 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
+  void update_local_object_id(Transaction &t, local_object_id_t id) final {
+    with_mutable_layout(
+      t,
+      [id, this](NodeExtentMutable &payload_mut, Recorder *recorder) {
+        maybe_update_local_object_id(payload_mut, recorder, id);
+      });
+  }
+
+  void update_local_clone_id(Transaction &t, local_clone_id_t id) final {
+    with_mutable_layout(
+      t,
+      [id, this](NodeExtentMutable &payload_mut, Recorder *recorder) {
+        maybe_update_local_clone_id(payload_mut, recorder, id);
+      });
+  }
+
   void update_onode_size(Transaction &t, uint32_t size) final {
     with_mutable_layout(
       t,
@@ -121,9 +134,15 @@ struct FLTreeOnode final : Onode, Value {
   void update_omap_root(Transaction &t, omap_root_t &oroot) final {
     with_mutable_layout(
       t,
-      [&oroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
+      [&oroot, this](NodeExtentMutable &payload_mut, Recorder *recorder) {
 	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
           payload_mut.get_write());
+        if (oroot.addr != L_ADDR_NULL) {
+          maybe_update_local_object_id(
+            payload_mut, recorder, oroot.addr.get_local_object_id());
+          maybe_update_local_clone_id(
+            payload_mut, recorder, oroot.addr.get_local_clone_id());
+        }
 	mlayout.omap_root.update(oroot);
 	if (recorder) {
 	  recorder->encode_update(
@@ -135,9 +154,15 @@ struct FLTreeOnode final : Onode, Value {
   void update_xattr_root(Transaction &t, omap_root_t &xroot) final {
     with_mutable_layout(
       t,
-      [&xroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
+      [&xroot, this](NodeExtentMutable &payload_mut, Recorder *recorder) {
 	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
 	  payload_mut.get_write());
+        if (xroot.addr != L_ADDR_NULL) {
+          maybe_update_local_object_id(
+            payload_mut, recorder, xroot.addr.get_local_object_id());
+          maybe_update_local_clone_id(
+            payload_mut, recorder, xroot.addr.get_local_clone_id());
+        }
 	mlayout.xattr_root.update(xroot);
 	if (recorder) {
 	  recorder->encode_update(
@@ -149,9 +174,19 @@ struct FLTreeOnode final : Onode, Value {
   void update_object_data(Transaction &t, object_data_t &odata) final {
     with_mutable_layout(
       t,
-      [&odata](NodeExtentMutable &payload_mut, Recorder *recorder) {
+      [&odata, this](NodeExtentMutable &payload_mut, Recorder *recorder) {
 	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
           payload_mut.get_write());
+        if (!odata.is_null()) {
+          maybe_update_local_object_id(
+            payload_mut,
+            recorder,
+            odata.get_reserved_data_base().get_local_object_id());
+          maybe_update_local_clone_id(
+            payload_mut,
+            recorder,
+            odata.get_reserved_data_base().get_local_clone_id());
+        }
 	mlayout.object_data.update(odata);
 	if (recorder) {
 	  recorder->encode_update(
@@ -227,14 +262,73 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
+  void maybe_update_local_object_id(
+    NodeExtentMutable &payload_mut,
+    Recorder *recorder,
+    local_object_id_t id) {
+    auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+      payload_mut.get_write());
+    local_object_id_t layout_id = mlayout.local_object_id;
+    if (layout_id == LOCAL_OBJECT_ID_NULL) {
+      ceph_assert(id != LOCAL_OBJECT_ID_ZERO);
+      mlayout.local_object_id = id;
+      if (recorder) {
+        recorder->encode_update(
+          payload_mut, Recorder::delta_op_t::UPDATE_LOCAL_OBJECT_ID);
+      }
+    } else {
+      ceph_assert(id == layout_id);
+    }
+  }
+
+  void maybe_update_local_clone_id(
+    NodeExtentMutable &payload_mut,
+    Recorder *recorder,
+    local_clone_id_t id) {
+    auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+      payload_mut.get_write());
+    mlayout.local_clone_id = id;
+    if (recorder) {
+      recorder->encode_update(
+        payload_mut, Recorder::delta_op_t::UPDATE_LOCAL_CLONE_ID);
+    }
+  }
+
   void mark_delete() {
     assert(status != status_t::DELETED);
     status = status_t::DELETED;
   }
 
-  laddr_t get_hint() const final {
-    return Value::get_hint();
+  laddr_hint_t generate_data_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id) const final {
+    ceph_assert(object_id.has_value() == clone_id.has_value());
+    if (!object_id) {
+      return Value::create_fresh_object_data_hint();
+    } else {
+      return Value::create_object_data_hint(*object_id, *clone_id);
+    }
   }
+
+  laddr_hint_t generate_data_clone_hint(
+    local_object_id_t object_id) const final {
+    return Value::create_clone_object_data_hint(object_id);
+  }
+
+  laddr_hint_t generate_metadata_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id,
+    extent_len_t block_size) const final {
+    if (!object_id) {
+      ceph_assert(!object_id);
+      return Value::create_fresh_object_md_hint(block_size);
+    } else if (!clone_id) {
+      return Value::create_clone_object_md_hint(*object_id, block_size);
+    } else {
+      return Value::create_object_md_hint(*object_id, *clone_id, block_size);
+    }
+  }
+
   ~FLTreeOnode() final {}
 };
 
@@ -246,16 +340,11 @@ class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
   OnodeTree tree;
 
   uint32_t default_data_reservation = 0;
-  uint32_t default_metadata_offset = 0;
-  uint32_t default_metadata_range = 0;
 public:
   FLTreeOnodeManager(TransactionManager &tm) :
     tree(NodeExtentManager::create_seastore(tm)),
     default_data_reservation(
-      get_conf<uint64_t>("seastore_default_max_object_size")),
-    default_metadata_offset(default_data_reservation),
-    default_metadata_range(
-      get_conf<uint64_t>("seastore_default_object_metadata_reservation"))
+      get_conf<uint64_t>("seastore_default_max_object_size"))
   {}
 
   mkfs_ret mkfs(Transaction &t) {

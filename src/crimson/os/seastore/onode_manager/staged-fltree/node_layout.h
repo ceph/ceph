@@ -67,7 +67,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   static eagain_ifuture<typename parent_t::fresh_impl_t> allocate(
-      context_t c, laddr_t hint, bool is_level_tail, level_t level) {
+      context_t c, laddr_hint_t hint, bool is_level_tail,
+      bool is_level_head, level_t level) {
     LOG_PREFIX(OTree::Layout::allocate);
     extent_len_t extent_size;
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
@@ -84,12 +85,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
             "EIO -- extent_size={}, is_level_tail={}, level={}",
             c.t, extent_size, is_level_tail, level);
       })
-    ).si_then([is_level_tail, level](auto extent) {
+    ).si_then([is_level_tail, is_level_head, level](auto extent) {
       assert(extent);
       assert(extent->is_initial_pending());
       auto mut = extent->get_mutable();
       node_stage_t::bootstrap_extent(
-          mut, FIELD_TYPE, NODE_TYPE, is_level_tail, level);
+          mut, FIELD_TYPE, NODE_TYPE, is_level_tail, is_level_head, level);
       return typename parent_t::fresh_impl_t{
         std::unique_ptr<parent_t>(new NodeLayoutT(extent)), mut};
     });
@@ -107,6 +108,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   nextent_state_t get_extent_state() const override { return extent.get_state(); }
   void prepare_mutate(context_t c) override { return extent.prepare_mutate(c); }
   bool is_level_tail() const override { return extent.read().is_level_tail(); }
+  bool is_level_head() const override { return extent.read().is_level_head(); }
 
   void validate_non_empty() const override {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
@@ -312,7 +314,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     key_view_t first_index;
     stage_t::template get_slot<true, false>(
         extent.read(), position_t::begin(), &first_index, nullptr);
-    auto hint = first_index.get_hint();
+    auto hint = first_index.create_onode_hint();
     return extent.rebuild(c, hint).si_then([this] (auto mut) {
       // addr may change
       build_name();
@@ -448,6 +450,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     if (!p_index_key && pp_value) {
       stage_t::template get_prev_slot<false, true>(
           extent.read(), _pos, nullptr, pp_value);
+    } else if (p_index_key && pp_value) {
+      stage_t::template get_prev_slot<true, true>(
+	  extent.read(), _pos, p_index_key, pp_value);
     } else {
       ceph_abort("not implemented");
     }
@@ -927,7 +932,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         << "@" << extent.get_laddr()
         << "+0x" << std::hex << extent.get_length() << std::dec
         << "Lv" << (unsigned)level()
-        << (is_level_tail() ? "$" : "");
+        << (is_level_tail() ? "$" : "")
+	<< (is_level_head() ? "&" : "");
     name = sos.str();
   }
 

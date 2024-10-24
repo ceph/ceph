@@ -12,8 +12,6 @@ using namespace crimson::os;
 using namespace crimson::os::seastore;
 
 #define MAX_OBJECT_SIZE (16<<20)
-#define DEFAULT_OBJECT_DATA_RESERVATION (16<<20)
-#define DEFAULT_OBJECT_METADATA_RESERVATION (16<<20)
 
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
@@ -26,7 +24,7 @@ class TestOnode final : public Onode {
   bool dirty = false;
 
 public:
-  TestOnode(uint32_t ddr, uint32_t dmr) : Onode(ddr, dmr, hobject_t()) {}
+  TestOnode() : Onode(hobject_t()) {}
   const onode_layout_t &get_layout() const final {
     return layout;
   }
@@ -38,7 +36,33 @@ public:
     return true;
   }
   bool is_dirty() const { return dirty; }
-  laddr_t get_hint() const final {return L_ADDR_MIN; }
+  laddr_hint_t get_hint() const {
+    laddr_hint_t hint;
+    hint.addr = laddr_t::from_byte_offset(0);
+    hint.condition = laddr_conflict_condition_t::object_content;
+    hint.policy = laddr_conflict_policy_t::linear_search;
+    hint.block_size = laddr_t::UNIT_SIZE;
+    return hint;
+  }
+
+  laddr_hint_t generate_data_hint(
+    std::optional<local_object_id_t>,
+    std::optional<local_clone_id_t>) const final {
+    return get_hint();
+  }
+
+  laddr_hint_t generate_data_clone_hint(
+    local_object_id_t) const final {
+    return get_hint();
+  }
+
+  laddr_hint_t generate_metadata_hint(
+    std::optional<local_object_id_t>,
+    std::optional<local_clone_id_t>,
+    extent_len_t) const final {
+    return get_hint();
+  }
+
   ~TestOnode() final = default;
 
   void update_onode_size(Transaction &t, uint32_t size) final {
@@ -62,6 +86,22 @@ public:
   void update_object_data(Transaction &t, object_data_t &odata) final {
     with_mutable_layout(t, [&odata](onode_layout_t &mlayout) {
       mlayout.object_data.update(odata);
+    });
+    auto base = odata.get_reserved_data_base();
+    update_local_object_id(t, base.get_local_object_id());
+    update_local_clone_id(t, base.get_local_clone_id());
+  }
+
+  void update_local_object_id(Transaction &t, local_object_id_t id) final {
+    with_mutable_layout(t, [id](onode_layout_t &mlayout) {
+      ceph_assert(id != LOCAL_OBJECT_ID_ZERO);
+      mlayout.local_object_id = id;
+    });
+  }
+
+  void update_local_clone_id(Transaction &t, local_clone_id_t id) final {
+    with_mutable_layout(t, [id](onode_layout_t &mlayout) {
+      mlayout.local_clone_id = id;
     });
   }
 
@@ -230,7 +270,7 @@ struct object_data_handler_test_t:
     return ret;
   }
 
-  using remap_entry = TransactionManager::remap_entry;
+  using remap_entry_t = TransactionManager::remap_entry_t;
   LBAMappingRef remap_pin(
     Transaction &t,
     LBAMappingRef &&opin,
@@ -239,7 +279,7 @@ struct object_data_handler_test_t:
     auto pin = with_trans_intr(t, [&](auto& trans) {
       return tm->remap_pin<ObjectDataBlock>(
         trans, std::move(opin), std::array{
-          remap_entry(new_offset, new_len)}
+          remap_entry_t(new_offset, new_len)}
       ).si_then([](auto ret) {
         return std::move(ret[0]);
       });
@@ -263,9 +303,7 @@ struct object_data_handler_test_t:
   }
 
   seastar::future<> set_up_fut() final {
-    onode = new TestOnode(
-      DEFAULT_OBJECT_DATA_RESERVATION,
-      DEFAULT_OBJECT_METADATA_RESERVATION);
+    onode = new TestOnode();
     known_contents = buffer::create(4<<20 /* 4MB */);
     memset(known_contents.c_str(), 0, known_contents.length());
     size = 0;

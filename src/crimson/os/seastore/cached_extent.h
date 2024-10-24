@@ -156,6 +156,7 @@ struct trans_spec_view_t {
 };
 
 class ExtentIndex;
+class parent_tracker_t;
 class CachedExtent
   : public boost::intrusive_ref_counter<
       CachedExtent, boost::thread_unsafe_counter>,
@@ -403,6 +404,8 @@ public:
   virtual complete_load_ertr::future<> complete_load() {
     return complete_load_ertr::now();
   }
+
+  virtual void maybe_reset_parent_tracker(parent_tracker_t *) {}
 
   /**
    * cast

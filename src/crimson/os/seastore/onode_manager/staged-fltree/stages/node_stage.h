@@ -43,6 +43,7 @@ class node_extent_t {
   const char* p_start() const { return fields_start(*p_fields); }
 
   bool is_level_tail() const { return p_fields->is_level_tail(); }
+  bool is_level_head() const { return p_fields->is_level_head(); }
   level_t level() const { return p_fields->header.level; }
   node_offset_t free_size() const {
     return p_fields->template free_size_before<NODE_TYPE>(
@@ -127,7 +128,7 @@ class node_extent_t {
   }
 
   static void bootstrap_extent(
-      NodeExtentMutable&, field_type_t, node_type_t, bool, level_t);
+      NodeExtentMutable&, field_type_t, node_type_t, bool, bool, level_t);
 
   static void update_is_level_tail(NodeExtentMutable&, const node_extent_t&, bool);
 

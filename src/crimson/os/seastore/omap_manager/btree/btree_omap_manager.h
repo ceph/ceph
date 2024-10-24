@@ -26,8 +26,9 @@ class BtreeOMapManager : public OMapManager {
   TransactionManager &tm;
 
   omap_context_t get_omap_context(
-    Transaction &t, laddr_t addr_min) {
-    return omap_context_t{tm, t, addr_min};
+    Transaction &t, laddr_hint_t hint) {
+    assert(hint != LADDR_HINT_NULL);
+    return omap_context_t{tm, t, hint};
   }
 
   /* get_omap_root
@@ -65,7 +66,7 @@ class BtreeOMapManager : public OMapManager {
 public:
   explicit BtreeOMapManager(TransactionManager &tm);
 
-  initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint) final;
+  initialize_omap_ret initialize_omap(Transaction &t, laddr_hint_t hint) final;
 
   omap_get_value_ret omap_get_value(
     const omap_root_t &omap_root,

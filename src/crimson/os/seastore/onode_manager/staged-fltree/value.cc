@@ -82,9 +82,50 @@ Value::do_prepare_mutate_payload(Transaction& t)
    return p_cursor->prepare_mutate_value_payload(get_context(t));
 }
 
-laddr_t Value::get_hint() const
+laddr_hint_t Value::create_fresh_object_data_hint() const
 {
-  return p_cursor->get_key_view(vb.get_header_magic()).get_hint();
+    return p_cursor->get_key_view(vb.get_header_magic())
+      .create_fresh_object_data_hint();
+}
+
+laddr_hint_t Value::create_fresh_object_md_hint(
+  extent_len_t block_size) const
+{
+    return p_cursor->get_key_view(vb.get_header_magic())
+      .create_fresh_object_md_hint(block_size);
+
+}
+
+laddr_hint_t Value::create_clone_object_data_hint(
+  local_object_id_t object_id) const
+{
+    return p_cursor->get_key_view(vb.get_header_magic())
+      .create_clone_object_data_hint(object_id);
+}
+
+laddr_hint_t Value::create_clone_object_md_hint(
+  local_object_id_t object_id,
+  extent_len_t block_size) const
+{
+    return p_cursor->get_key_view(vb.get_header_magic())
+      .create_clone_object_md_hint(object_id, block_size);
+}
+
+laddr_hint_t Value::create_object_data_hint(
+  local_object_id_t object_id,
+  local_clone_id_t clone_id) const
+{
+    return p_cursor->get_key_view(vb.get_header_magic())
+      .create_object_data_hint(object_id, clone_id);
+}
+
+laddr_hint_t Value::create_object_md_hint(
+  local_object_id_t object_id,
+  local_clone_id_t clone_id,
+  extent_len_t block_size) const
+{
+    return p_cursor->get_key_view(vb.get_header_magic())
+      .create_object_md_hint(object_id, clone_id, block_size);
 }
 
 std::unique_ptr<ValueDeltaRecorder>

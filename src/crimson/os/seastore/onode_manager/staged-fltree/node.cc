@@ -73,6 +73,13 @@ tree_cursor_t::get_next(context_t c)
   return ref_leaf_node->get_next_cursor(c, position);
 }
 
+eagain_ifuture<Ref<tree_cursor_t>>
+tree_cursor_t::get_prev(context_t c)
+{
+  assert(is_tracked());
+  return ref_leaf_node->get_prev_cursor(c, position);
+}
+
 void tree_cursor_t::assert_next_to(
     const tree_cursor_t& prv, value_magic_t magic) const
 {
@@ -96,6 +103,13 @@ void tree_cursor_t::assert_next_to(
     ceph_abort("impossible");
   }
 #endif
+}
+
+bool tree_cursor_t::is_head() const
+{
+  auto ret = !!ref_leaf_node && position == search_position_t::begin();
+  assert(ret ? ref_leaf_node->is_level_head() : true);
+  return ret;
 }
 
 template <bool FORCE_MERGE>
@@ -478,7 +492,7 @@ Super::URef Node::deref_super()
   return ret;
 }
 
-eagain_ifuture<> Node::upgrade_root(context_t c, laddr_t hint)
+eagain_ifuture<> Node::upgrade_root(context_t c, laddr_hint_t hint)
 {
   LOG_PREFIX(OTree::Node::upgrade_root);
   assert(impl->field_type() == field_type_t::N0);
@@ -539,6 +553,14 @@ Node::get_next_cursor_from_parent(context_t c)
   assert(!impl->is_level_tail());
   assert(!is_root());
   return parent_info().ptr->get_next_cursor(c, parent_info().position);
+}
+
+eagain_ifuture<Ref<tree_cursor_t>>
+Node::get_prev_cursor_from_parent(context_t c)
+{
+  assert(!impl->is_level_head());
+  assert(!is_root());
+  return parent_info().ptr->get_prev_cursor(c, parent_info().position);
 }
 
 template <bool FORCE_MERGE>
@@ -828,6 +850,25 @@ InternalNode::get_next_cursor(context_t c, const search_position_t& pos)
       return child->lookup_smallest(c);
     });
   }
+}
+
+eagain_ifuture<Ref<tree_cursor_t>>
+InternalNode::get_prev_cursor(context_t c, const search_position_t& pos)
+{
+  impl->validate_non_empty();
+  if (pos == search_position_t::begin()) {
+    ceph_assert(!impl->is_level_head());
+    return get_prev_cursor_from_parent(c);
+  }
+
+  search_position_t prev_pos = pos;
+  const laddr_packed_t* p_child_addr = nullptr;
+  impl->get_prev_slot(prev_pos, nullptr, &p_child_addr);
+  assert(p_child_addr);
+  return get_or_track_child(c, prev_pos, p_child_addr->value
+  ).si_then([c](auto child) {
+    return child->lookup_largest(c);
+  });
 }
 
 eagain_ifuture<> InternalNode::apply_child_split(
@@ -1229,12 +1270,12 @@ eagain_ifuture<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
 }
 
 eagain_ifuture<Ref<InternalNode>> InternalNode::allocate_root(
-    context_t c, laddr_t hint, level_t old_root_level,
+    context_t c, laddr_hint_t hint, level_t old_root_level,
     laddr_t old_root_addr, Super::URef&& super)
 {
   // support tree height up to 256
   ceph_assert(old_root_level < MAX_LEVEL);
-  return InternalNode::allocate(c, hint, field_type_t::N0, true, old_root_level + 1
+  return InternalNode::allocate(c, hint, field_type_t::N0, true, true, old_root_level + 1
   ).si_then([c, old_root_addr,
                super = std::move(super)](auto fresh_node) mutable {
     auto root = fresh_node.node;
@@ -1395,7 +1436,9 @@ eagain_ifuture<> InternalNode::test_clone_root(
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
   Ref<const Node> this_ref = this;
-  return InternalNode::allocate(c_other, L_ADDR_MIN, field_type_t::N0, true, impl->level()
+  return InternalNode::allocate(
+    c_other, laddr_hint_t::create_global_md_hint(),
+    field_type_t::N0, true, true, impl->level()
   ).si_then([this, c_other, &tracker_other](auto fresh_other) {
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
@@ -1506,19 +1549,20 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
 
   // proceed to split with insert
   // assume I'm already ref-counted by caller
-  laddr_t left_hint, right_hint;
+  laddr_hint_t left_hint, right_hint;
   {
     key_view_t left_key;
     impl->get_slot(search_position_t::begin(), &left_key, nullptr);
-    left_hint = left_key.get_hint();
+    left_hint = left_key.create_onode_hint();
     key_view_t right_key;
     impl->get_largest_slot(nullptr, &right_key, nullptr);
-    right_hint = right_key.get_hint();
+    right_hint = right_key.create_onode_hint();
   }
   return (is_root() ? upgrade_root(c, left_hint) : eagain_iertr::now()
   ).si_then([this, c, right_hint] {
     return InternalNode::allocate(
-        c, right_hint, impl->field_type(), impl->is_level_tail(), impl->level());
+        c, right_hint, impl->field_type(), impl->is_level_tail(),
+	impl->is_level_head(), impl->level());
   }).si_then([this, insert_key, insert_child, insert_pos,
                 insert_stage=insert_stage, insert_size=insert_size,
                 outdated_child, c, FNAME](auto fresh_right) mutable {
@@ -1762,9 +1806,11 @@ void InternalNode::validate_child_inconsistent(const Node& child) const
 }
 
 eagain_ifuture<InternalNode::fresh_node_t> InternalNode::allocate(
-    context_t c, laddr_t hint, field_type_t field_type, bool is_level_tail, level_t level)
+    context_t c, laddr_hint_t hint, field_type_t field_type,
+    bool is_level_tail, bool is_level_head, level_t level)
 {
-  return InternalNodeImpl::allocate(c, hint, field_type, is_level_tail, level
+  return InternalNodeImpl::allocate(c, hint, field_type, is_level_tail,
+				    is_level_head, level
   ).si_then([](auto&& fresh_impl) {
     auto *derived_ptr = fresh_impl.impl.get();
     auto node = Ref<InternalNode>(new InternalNode(
@@ -1783,6 +1829,11 @@ LeafNode::LeafNode(LeafNodeImpl* impl, NodeImplURef&& impl_ref)
 bool LeafNode::is_level_tail() const
 {
   return impl->is_level_tail();
+}
+
+bool LeafNode::is_level_head() const
+{
+  return impl->is_level_head();
 }
 
 node_version_t LeafNode::get_version() const
@@ -1827,6 +1878,23 @@ LeafNode::get_next_cursor(context_t c, const search_position_t& pos)
   } else {
     return eagain_iertr::make_ready_future<Ref<tree_cursor_t>>(
         get_or_track_cursor(next_pos, index_key, p_value_header));
+  }
+}
+
+eagain_ifuture<Ref<tree_cursor_t>>
+LeafNode::get_prev_cursor(context_t c, const search_position_t& pos)
+{
+  impl->validate_non_empty();
+  if (pos != search_position_t::begin()) {
+    search_position_t prev_pos = pos;
+    key_view_t index_key;
+    const value_header_t* p_value_header = nullptr;
+    impl->get_prev_slot(prev_pos, &index_key, &p_value_header);
+    return eagain_iertr::make_ready_future<Ref<tree_cursor_t>>(
+        get_or_track_cursor(prev_pos, index_key, p_value_header));
+  } else {
+    ceph_assert(!is_level_head());
+    return get_prev_cursor_from_parent(c);
   }
 }
 
@@ -2042,7 +2110,8 @@ eagain_ifuture<> LeafNode::test_clone_root(
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
   Ref<const Node> this_ref = this;
-  return LeafNode::allocate(c_other, L_ADDR_MIN, field_type_t::N0, true
+  return LeafNode::allocate(
+    c_other, laddr_hint_t::create_global_md_hint(), field_type_t::N0, true, true
   ).si_then([this, c_other, &tracker_other](auto fresh_other) {
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
@@ -2090,18 +2159,19 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
   }
   // split and insert
   Ref<Node> this_ref = this;
-  laddr_t left_hint, right_hint;
+  laddr_hint_t left_hint, right_hint;
   {
     key_view_t left_key;
     impl->get_slot(search_position_t::begin(), &left_key, nullptr);
-    left_hint = left_key.get_hint();
+    left_hint = left_key.create_onode_hint();
     key_view_t right_key;
     impl->get_largest_slot(nullptr, &right_key, nullptr);
-    right_hint = right_key.get_hint();
+    right_hint = right_key.create_onode_hint();
   }
   return (is_root() ? upgrade_root(c, left_hint) : eagain_iertr::now()
   ).si_then([this, c, right_hint] {
-    return LeafNode::allocate(c, right_hint, impl->field_type(), impl->is_level_tail());
+    return LeafNode::allocate(
+      c, right_hint, impl->field_type(), impl->is_level_tail(), impl->is_level_head());
   }).si_then([this_ref = std::move(this_ref), this, c, &key, vconf, FNAME,
                 insert_pos, insert_stage=insert_stage, insert_size=insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
@@ -2139,7 +2209,8 @@ eagain_ifuture<Ref<LeafNode>> LeafNode::allocate_root(
     context_t c, RootNodeTracker& root_tracker)
 {
   LOG_PREFIX(OTree::LeafNode::allocate_root);
-  return LeafNode::allocate(c, L_ADDR_MIN, field_type_t::N0, true
+  return LeafNode::allocate(
+    c, laddr_hint_t::create_global_md_hint(), field_type_t::N0, true, true
   ).si_then([c, &root_tracker, FNAME](auto fresh_node) {
     auto root = fresh_node.node;
     return c.nm.get_super(c.t, root_tracker
@@ -2262,9 +2333,10 @@ void LeafNode::track_erase(
 }
 
 eagain_ifuture<LeafNode::fresh_node_t> LeafNode::allocate(
-    context_t c, laddr_t hint, field_type_t field_type, bool is_level_tail)
+    context_t c, laddr_hint_t hint, field_type_t field_type,
+    bool is_level_tail, bool is_level_head)
 {
-  return LeafNodeImpl::allocate(c, hint, field_type, is_level_tail
+  return LeafNodeImpl::allocate(c, hint, field_type, is_level_tail, is_level_head
   ).si_then([](auto&& fresh_impl) {
     auto *derived_ptr = fresh_impl.impl.get();
     auto node = Ref<LeafNode>(new LeafNode(

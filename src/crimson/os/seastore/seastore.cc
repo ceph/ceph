@@ -1753,7 +1753,8 @@ SeaStore::Shard::_do_transaction_step(
 
   using onode_iertr = OnodeManager::get_onode_iertr::extend<
     crimson::ct_error::value_too_large>;
-  auto fut = onode_iertr::make_ready_future<OnodeRef>(OnodeRef());
+  auto fut = onode_iertr::make_ready_future<
+    crimson::os::seastore::OnodeManager::adjacent_onodes_t>();
   bool create = false;
   if (op->op == Transaction::OP_TOUCH ||
       op->op == Transaction::OP_CREATE ||
@@ -1773,7 +1774,8 @@ SeaStore::Shard::_do_transaction_step(
       fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
     }
   }
-  return fut.si_then([&, op, this, FNAME](auto get_onode) {
+  return fut.si_then([&, op, this, FNAME](auto onodevec) {
+    auto get_onode = onodevec.onode;
     OnodeRef &o = onodes[op->oid];
     if (!o) {
       assert(get_onode);
@@ -1789,19 +1791,23 @@ SeaStore::Shard::_do_transaction_step(
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
       return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
-      ).si_then([&onodes, &d_onodes, op](auto dest_onode) {
+      ).si_then([&onodes, &d_onodes, op,
+		 onodevec=std::move(onodevec)](auto d_onodevec) {
+	auto dest_onode = d_onodevec.onode;
 	assert(dest_onode);
 	auto &d_o = onodes[op->dest_oid];
 	assert(!d_o);
 	assert(!d_onodes[op->dest_oid]);
 	d_o = dest_onode;
 	d_onodes[op->dest_oid] = dest_onode;
-	return seastar::now();
+	return OnodeManager::get_or_create_onode_iertr::make_ready_future<
+	  OnodeManager::adjacent_onodes_t>(std::move(onodevec));
       });
     } else {
-      return OnodeManager::get_or_create_onode_iertr::now();
+      return OnodeManager::get_or_create_onode_iertr::make_ready_future<
+	OnodeManager::adjacent_onodes_t>(std::move(onodevec));
     }
-  }).si_then([&ctx, &i, &onodes, &d_onodes, op, this, FNAME]() -> tm_ret {
+  }).si_then([&ctx, &i, &onodes, &d_onodes, op, this, FNAME](auto onodevec) -> tm_ret {
     const ghobject_t& oid = i.get_oid(op->oid);
     try {
       switch (op->op) {
@@ -1818,7 +1824,30 @@ SeaStore::Shard::_do_transaction_step(
       case Transaction::OP_TOUCH:
       {
         DEBUGT("op CREATE/TOUCH, oid={} ...", *ctx.transaction, oid);
-        return _touch(ctx, onodes[op->oid]);
+	OnodeRef &left = onodevec.left;
+	OnodeRef &right = onodevec.right;
+	auto id = LOCAL_OBJECT_ID_NULL;
+	if (left) {
+	  auto left_id = left->get_local_object_id();
+	  ceph_assert(left_id);
+	  id = *left_id;
+	}
+
+	if (right) {
+	  auto right_id = right->get_local_object_id();
+	  ceph_assert(right_id);
+	  if (id == LOCAL_OBJECT_ID_NULL) {
+	    id = *right_id;
+	  } else {
+	    ceph_assert(*right_id == id);
+	  }
+	}
+
+	auto onode = onodes[op->oid];
+	if (id != LOCAL_OBJECT_ID_NULL) {
+	  onode->update_local_object_id(*ctx.transaction, id);
+	}
+	return _touch(ctx, onode);
       }
       case Transaction::OP_WRITE:
       {
@@ -2178,6 +2207,19 @@ SeaStore::Shard::_clone(
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
+  LOG_PREFIX(SeaStore::_clone);
+  DEBUGT("onode={} d_onode={}", *ctx.transaction, *onode, *d_onode);
+  auto src_id = onode->get_local_object_id();
+  ceph_assert(src_id);
+  if (auto dest_id = d_onode->get_local_object_id();
+      !dest_id) {
+    DEBUGT("update d_onode local_object_id to: {}",
+	   *ctx.transaction, *src_id);
+    d_onode->update_local_object_id(*ctx.transaction, *src_id);
+  } else {
+    ceph_assert(*src_id == *dest_id);
+  }
+
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [this, &ctx, &onode, &d_onode](auto &objHandler) {
