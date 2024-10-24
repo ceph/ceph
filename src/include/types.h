@@ -40,18 +40,20 @@ extern "C" {
 #include <set>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
+#include "boost/tuple/tuple.hpp"
 #include <map>
 #include <vector>
 #include <optional>
 #include <ostream>
 #include <iomanip>
+#include <unordered_set>
+
+#include "common/Formatter.h"
 
 #include "object.h"
 #include "intarith.h"
 
 #include "acconfig.h"
-
-#include "assert.h"
 
 // DARWIN compatibility
 #ifdef __APPLE__
