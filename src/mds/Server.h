@@ -174,7 +174,7 @@ public:
   void early_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(const MDRequestRef& mdr, int r = 0);
   void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
-		      const MDRequestRef& mdr);
+		      const MDRequestRef& mdr, bool early_reply=false);
 
   void handle_peer_request(const cref_t<MMDSPeerRequest> &m);
   void handle_peer_request_reply(const cref_t<MMDSPeerRequest> &m);
@@ -256,16 +256,16 @@ public:
   // link
   void handle_client_link(const MDRequestRef& mdr);
   void _link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, SnapRealm *target_realm);
-  void _link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti,
+  void _link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, CInode *referenti,
 			  version_t, version_t, bool);
 
-  void _link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);
-  void _link_remote_finish(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
-			   version_t);
+  void _link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti, CDentry *straydn);
+  void _link_remote_finish(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti, CInode *referenti,
+                           CDentry *sd, version_t);
 
   void handle_peer_link_prep(const MDRequestRef& mdr);
   void _logged_peer_link(const MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
-  void _commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti);
+  void _commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti, inodeno_t referent_ino);
   void _committed_peer(const MDRequestRef& mdr);  // use for rename, too
   void handle_peer_link_prep_ack(const MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
   void do_link_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequestRef& mdr);
@@ -342,6 +342,7 @@ public:
     laggy_clients.clear();
   }
 
+  const bufferlist& get_snap_trace(Session *session, SnapRealm *realm, std::vector<SnapRealm*>& related_realms) const;
   const bufferlist& get_snap_trace(Session *session, SnapRealm *realm) const;
   const bufferlist& get_snap_trace(client_t client, SnapRealm *realm) const;
 
