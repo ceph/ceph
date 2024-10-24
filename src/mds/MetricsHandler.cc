@@ -51,6 +51,7 @@ void MetricsHandler::init() {
   dout(10) << dendl;
 
   updater = std::thread([this]() {
+      ceph_pthread_setname("mds-metrics");
       std::unique_lock locker(lock);
       while (!stopping) {
         double after = g_conf().get_val<std::chrono::seconds>("mds_metrics_update_interval").count();
