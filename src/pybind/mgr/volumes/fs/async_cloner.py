@@ -313,6 +313,8 @@ class Cloner(AsyncJobs):
     the driver. file types supported are directories, symbolic links and regular files.
     """
     def __init__(self, volume_client, tp_size, snapshot_clone_delay, clone_no_wait):
+        super(Cloner, self).__init__(volume_client, "cloner", tp_size)
+
         self.vc = volume_client
         self.snapshot_clone_delay = snapshot_clone_delay
         self.snapshot_clone_no_wait = clone_no_wait
@@ -323,7 +325,6 @@ class Cloner(AsyncJobs):
             SubvolumeStates.STATE_FAILED       : handle_clone_failed,
             SubvolumeStates.STATE_CANCELED     : handle_clone_failed,
         }
-        super(Cloner, self).__init__(volume_client, "cloner", tp_size)
 
     def reconfigure_max_concurrent_clones(self, tp_size):
         return super(Cloner, self).reconfigure_max_async_threads(tp_size)
