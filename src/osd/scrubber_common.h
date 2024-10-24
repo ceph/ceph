@@ -92,10 +92,10 @@ struct OSDRestrictions {
   /// the OSD is performing recovery & osd_repair_during_recovery is 'true'
   bool allow_requested_repair_only:1{false};
 
-  /// the load is high, or the time is not right. For periodic scrubs,
-  /// only the overdue ones are allowed.
-  bool only_deadlined:1{false};
+  /// the CPU load is high. No regular scrubs are allowed.
   bool cpu_overloaded:1{false};
+
+  /// outside of allowed scrubbing hours/days
   bool restricted_time:1{false};
 
   /// the OSD is performing a recovery, osd_scrub_during_recovery is 'false',
