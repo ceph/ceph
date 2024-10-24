@@ -8094,6 +8094,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   size_t auxsize = 0;
   filepath path;
   MetaRequest *req;
+  bool flush_dirty_caps = false;
 
   if (aux)
     auxsize = aux->size();
@@ -8264,6 +8265,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
         !(mask & CEPH_SETATTR_KILL_SGUID) &&
         stx->stx_size >= in->size) {
       if (stx->stx_size > in->size) {
+        flush_dirty_caps = is_root_quota_enabled(in, QUOTA_MAX_BYTES, perms);
+
         in->size = in->reported_size = stx->stx_size;
         in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
         mask &= ~(CEPH_SETATTR_SIZE);
@@ -8340,6 +8343,10 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     } else {
       mask &= ~CEPH_SETATTR_ATIME;
     }
+  }
+
+  if (flush_dirty_caps) {
+    check_caps(in, CHECK_CAPS_NODELAY);
   }
 
   if (!mask) {
@@ -11398,7 +11405,8 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
     in->size = totalwritten + offset;
     in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
-    if (is_quota_bytes_approaching(in, f->actor_perms)) {
+    if (is_root_quota_enabled(in, QUOTA_MAX_BYTES, f->actor_perms) ||
+        is_quota_bytes_approaching(in, f->actor_perms)) {
       check_caps(in, CHECK_CAPS_NODELAY);
     } else if (is_max_size_approaching(in)) {
       check_caps(in, 0);
@@ -12374,15 +12382,13 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   memset(stbuf, 0, sizeof(*stbuf));
 
   /*
-   * we're going to set a block size of 4MB so we can represent larger
+   * we're going to set a block size of 4MiB so we can represent larger
    * FSes without overflowing. Additionally convert the space
-   * measurements from KB to bytes while making them in terms of
-   * blocks.  We use 4MB only because it is big enough, and because it
+   * measurements from KiB to bytes while making them in terms of
+   * blocks.  We use 4MiB only because it is big enough, and because it
    * actually *is* the (ceph) default block size.
    */
-  const int CEPH_BLOCK_SHIFT = 22;
-  stbuf->f_frsize = 1 << CEPH_BLOCK_SHIFT;
-  stbuf->f_bsize = 1 << CEPH_BLOCK_SHIFT;
+  stbuf->f_frsize = CEPH_4M_BLOCK_SIZE;
   stbuf->f_files = total_files_on_fs;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
@@ -12422,11 +12428,19 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     // Special case: if there is a size quota set on the Inode acting
     // as the root for this client mount, then report the quota status
     // as the filesystem statistics.
-    const fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_BLOCK_SHIFT;
-    const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_BLOCK_SHIFT;
+    fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_4M_BLOCK_SHIFT;
+    const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_4M_BLOCK_SHIFT;
     // It is possible for a quota to be exceeded: arithmetic here must
     // handle case where used > total.
-    const fsblkcnt_t free = total > used ? total - used : 0;
+    fsblkcnt_t free = total > used ? total - used : 0;
+
+    // For quota size less than 4KB, report the total=used=4KB,free=0
+    // when quota is full and total=free=4KB, used=0 otherwise.
+    if (!total) {
+      total = 1;
+      free = quota_root->quota.max_bytes > quota_root->rstat.rbytes ? 1 : 0;
+      stbuf->f_frsize = CEPH_4K_BLOCK_SIZE;
+    }
 
     stbuf->f_blocks = total;
     stbuf->f_bfree = free;
@@ -12435,10 +12449,11 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     // General case: report the cluster statistics returned from RADOS. Because
     // multiple pools may be used without one filesystem namespace via
     // layouts, this is the most correct thing we can do.
-    stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
-    stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
-    stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_blocks = stats.kb >> CEPH_4K_BLOCK_SHIFT;
+    stbuf->f_bfree = stats.kb_avail >> CEPH_4K_BLOCK_SHIFT;
+    stbuf->f_bavail = stats.kb_avail >> CEPH_4K_BLOCK_SHIFT;
   }
+  stbuf->f_bsize = stbuf->f_frsize;
 
   return rval;
 }
@@ -16329,7 +16344,8 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
-      if (is_quota_bytes_approaching(in, fh->actor_perms)) {
+      if (is_root_quota_enabled(in, QUOTA_MAX_BYTES, fh->actor_perms) ||
+          is_quota_bytes_approaching(in, fh->actor_perms)) {
         check_caps(in, CHECK_CAPS_NODELAY);
       } else if (is_max_size_approaching(in)) {
 	check_caps(in, 0);
@@ -16917,8 +16933,8 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms, quota_max_t type
  * Traverse quota ancestors of the Inode, return true
  * if any of them passes the passed function
  */
-bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
-				   std::function<bool (const Inode &in)> test)
+bool Client::check_quota_condition(Inode *in, const UserPerm& perms, quota_max_t type,
+                                   std::function<bool (const Inode &in)> test)
 {
   if (!cct->_conf.get_val<bool>("client_quota"))
     return false;
@@ -16934,7 +16950,7 @@ bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
       return false;
     } else {
       // Continue up the tree
-      in = get_quota_root(in, perms);
+      in = get_quota_root(in, perms, type);
     }
   }
 
@@ -16943,7 +16959,7 @@ bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
 
 bool Client::is_quota_files_exceeded(Inode *in, const UserPerm& perms)
 {
-  return check_quota_condition(in, perms,
+  return check_quota_condition(in, perms, QUOTA_MAX_FILES,
       [](const Inode &in) {
         return in.quota.max_files && in.rstat.rsize() >= in.quota.max_files;
       });
@@ -16952,7 +16968,7 @@ bool Client::is_quota_files_exceeded(Inode *in, const UserPerm& perms)
 bool Client::is_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
 				     const UserPerm& perms)
 {
-  return check_quota_condition(in, perms,
+  return check_quota_condition(in, perms, QUOTA_MAX_BYTES,
       [&new_bytes](const Inode &in) {
         return in.quota.max_bytes && (in.rstat.rbytes + new_bytes)
                > in.quota.max_bytes;
@@ -16963,7 +16979,7 @@ bool Client::is_quota_bytes_approaching(Inode *in, const UserPerm& perms)
 {
   ceph_assert(in->size >= in->reported_size);
   const uint64_t size = in->size - in->reported_size;
-  return check_quota_condition(in, perms,
+  return check_quota_condition(in, perms, QUOTA_MAX_BYTES,
       [&size](const Inode &in) {
         if (in.quota.max_bytes) {
           if (in.rstat.rbytes >= in.quota.max_bytes) {
@@ -16975,6 +16991,14 @@ bool Client::is_quota_bytes_approaching(Inode *in, const UserPerm& perms)
         } else {
           return false;
         }
+      });
+}
+
+bool Client::is_root_quota_enabled(Inode *in, quota_max_t type, const UserPerm& perms)
+{
+  return check_quota_condition(in, perms, type,
+      [&type](const Inode &in) {
+        return in.quota.is_enabled(type);
       });
 }
 

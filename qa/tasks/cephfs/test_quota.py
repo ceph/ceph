@@ -113,9 +113,13 @@ class TestQuota(CephFSTestCase):
         self.assertEqual(self.mount_a.getfattr("./subdir",
                                                "ceph.quota.max_bytes"), None)
 
-        readable_values = {"10K": "10240",
+        readable_values = {"4K": "4096",
+                           "8Ki": "8192",
+                           "100K": "102400",
                            "100Ki": "102400",
-                           "10M": "10485760",
+                           "4M": "4194304",
+                           "8Mi": "8388608",
+                           "100M": "104857600",
                            "100Mi": "104857600",
                            "2G": "2147483648",
                            "4Gi": "4294967296",
@@ -154,9 +158,9 @@ class TestQuota(CephFSTestCase):
         self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes", "0")
         self.assertEqual(self.mount_a.getfattr("./subdir",
                                                "ceph.quota.max_bytes"), None)
-        self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes", "1K")
+        self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes", "4K")
         self.assertEqual(self.mount_a.getfattr("./subdir",
-                                               "ceph.quota.max_bytes"), "1024")
+                                               "ceph.quota.max_bytes"), "4096")
         self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes", "0M")
         self.assertEqual(self.mount_a.getfattr("./subdir",
                                                "ceph.quota.max_bytes"), None)
