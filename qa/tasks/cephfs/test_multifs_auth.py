@@ -29,7 +29,7 @@ class TestMultiFS(CephFSTestCase):
         self.run_ceph_cmd(f'auth rm {self.client_name}')
 
         self.fs1 = self.fs
-        self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
+        self.fs2 = self.mds_cluster.newfs()
 
         # we'll reassign caps to client.1 so that it can operate with cephfs2
         self.run_ceph_cmd(f'auth caps client.{self.mount_b.client_id} mon '

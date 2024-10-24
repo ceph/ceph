@@ -112,7 +112,7 @@ class TestClusterAffinity(CephFSTestCase):
         """
         That a vanilla standby is preferred over others with mds_join_fs set to another fs.
         """
-        fs2 = self.mds_cluster.newfs(name="cephfs2")
+        fs2 = self.mds_cluster.newfs()
         status, target = self._verify_init()
         active = self.fs.get_active_names(status=status)[0]
         status2, _ = self._verify_init(fs=fs2)
@@ -145,7 +145,7 @@ class TestClusterAffinity(CephFSTestCase):
         standbys = [info['name'] for info in status.get_standbys()]
         for mds in standbys:
             self.config_set('mds.'+mds, 'mds_join_fs', 'cephfs2')
-        fs2 = self.mds_cluster.newfs(name="cephfs2")
+        fs2 = self.mds_cluster.newfs()
         for mds in standbys:
             self._change_target_state(target, mds, {'join_fscid': fs2.id})
         self.fs.rank_fail()
@@ -170,7 +170,7 @@ class TestClusterAffinity(CephFSTestCase):
         standbys = [info['name'] for info in status.get_standbys()]
         for mds in standbys:
             self.config_set('mds.'+mds, 'mds_join_fs', 'cephfs2')
-        fs2 = self.mds_cluster.newfs(name="cephfs2")
+        fs2 = self.mds_cluster.newfs()
         for mds in standbys:
             self._change_target_state(target, mds, {'join_fscid': fs2.id})
         self.fs.set_refuse_standby_for_another_fs(True)
@@ -792,8 +792,8 @@ class TestMultiFilesystems(CephFSTestCase):
                           "true", "--yes-i-really-mean-it")
 
     def _setup_two(self):
-        fs_a = self.mds_cluster.newfs(name="alpha")
-        fs_b = self.mds_cluster.newfs(name="bravo")
+        fs_a = self.mds_cluster.newfs()
+        fs_b = self.mds_cluster.newfs()
 
         self.mds_cluster.mds_restart()
 
