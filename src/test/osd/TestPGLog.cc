@@ -2460,13 +2460,14 @@ public:
   }
 
   void test_disk_roundtrip() {
+    CephContext *cct = g_ceph_context;
     ObjectStore::Transaction t;
     hobject_t hoid;
     hoid.pool = 1;
     hoid.oid = "log";
     ghobject_t log_oid(hoid);
     map<string, bufferlist> km;
-    write_log_and_missing(t, &km, test_coll, log_oid, false);
+    write_log_and_missing(cct, t, &km, test_coll, log_oid, false);
     if (!km.empty()) {
       t.omap_setkeys(test_coll, log_oid, km);
     }
