@@ -15,13 +15,13 @@
 static void usage() {
   std::cout << "usage: ceph-exporter [options]\n"
             << "options:\n"
-               "  --sock-dir:     The path to ceph daemons socket files dir\n"
-               "  --addrs:        Host ip address where exporter is deployed\n"
-               "  --port:         Port to deploy exporter on. Default is 9926\n"
-               "  --cert-file:    Path to the certificate file to use https\n"
-               "  --key-file:     Path to the certificate key file to use https\n"
+               "  --sock-dir:     The path to Ceph daemon sockets (*.asok)\n"
+               "  --addrs:        Host IP address on which the exporter is to listen\n"
+               "  --port:         TCP Port on which the exporter is to listen. Default is 9926\n"
+               "  --cert-file:    Path to the certificate file when using HTTPS\n"
+               "  --key-file:     Path to the certificate key file when using HTTPS\n"
                "  --prio-limit:   Only perf counters greater than or equal to prio-limit are fetched. Default: 5\n"
-               "  --stats-period: Time to wait before sending requests again to exporter server (seconds). Default: 5s"
+               "  --stats-period: Interval between daemon scrapes (seconds). Default: 5s"
             << std::endl;
   generic_server_usage();
 }
