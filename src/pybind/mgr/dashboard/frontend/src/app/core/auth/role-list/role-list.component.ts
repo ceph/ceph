@@ -99,7 +99,7 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
       {
         name: $localize`System Role`,
         prop: 'system',
-        cellClass: 'text-center',
+        cellClass: 'text-left',
         flexGrow: 1,
         cellTransformation: CellTemplate.checkIcon
       }
