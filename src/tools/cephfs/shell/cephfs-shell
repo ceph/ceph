@@ -15,10 +15,19 @@ import re
 import shlex
 import stat
 import errno
+import distro
 
 from cmd2 import Cmd
 from cmd2 import __version__ as cmd2_version
 from distutils.version import LooseVersion
+
+# DFLAG is used to override the checks done by cephfs-shell
+# for cmd2 versions due to weird behaviour of Ubuntu22.04 with
+# cmd2's version i.e. it always gets the version of cmd2 as
+# "0.0.0" instead of the actual cmd2 version.
+DFLAG = False
+if distro.name() == "Ubuntu" and distro.version() == "22.04":
+    DFLAG = True
 
 if sys.version_info.major < 3:
     raise RuntimeError("cephfs-shell is only compatible with python3")
@@ -1532,7 +1541,7 @@ def read_shell_conf(shell, shell_conf_file):
 
     sec = 'cephfs-shell'
     opts = []
-    if LooseVersion(cmd2_version) >= LooseVersion("0.10.0"):
+    if LooseVersion(cmd2_version) >= LooseVersion("0.10.0") or DFLAG is True:
         for attr in shell.settables.keys():
             opts.append(attr)
     else:
@@ -1600,7 +1609,7 @@ def manage_args():
     args.exe_and_quit = False    # Execute and quit, don't launch the shell.
 
     if args.batch:
-        if LooseVersion(cmd2_version) <= LooseVersion("0.9.13"):
+        if LooseVersion(cmd2_version) <= LooseVersion("0.9.13") and DFLAG is not True:
             args.commands = ['load ' + args.batch, ',quit']
         else:
             args.commands = ['run_script ' + args.batch, ',quit']
@@ -1645,7 +1654,7 @@ def execute_cmds_and_quit(args):
     # value to indicate whether the execution of the commands should stop, but
     # since 0.9.7 it returns the return value of do_* methods only if it's
     # not None. When it is None it returns False instead of None.
-    if LooseVersion(cmd2_version) <= LooseVersion("0.9.6"):
+    if LooseVersion(cmd2_version) <= LooseVersion("0.9.6") and DFLAG is not True:
         stop_exec_val = None
     else:
         stop_exec_val = False
