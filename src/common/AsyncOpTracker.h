@@ -15,7 +15,7 @@ public:
   void start_op();
   void finish_op();
 
-  void wait_for_ops(Context *on_finish);
+  void wait_for_ops(Context *on_finish, Context *on_finish_locked = nullptr);
 
   bool empty();
 
@@ -23,7 +23,7 @@ private:
   ceph::mutex m_lock = ceph::make_mutex("AsyncOpTracker::m_lock");
   uint32_t m_pending_ops = 0;
   Context *m_on_finish = nullptr;
-
+  Context* m_on_finish_locked = nullptr;
 };
 
 class C_TrackedOp : public Context {
