@@ -16,19 +16,20 @@ ObjectContextLoader::load_and_lock_head(Manager &manager, RWState::State lock_ty
   LOG_PREFIX(ObjectContextLoader::load_and_lock_head);
   DEBUGDPP("{} {}", dpp, manager.target, lock_type);
   auto releaser = manager.get_releaser();
-  // no users pre-populate head_state on this path, so we don't bother to
-  // handle it
   ceph_assert(manager.target.is_head());
-  ceph_assert(manager.head_state.is_empty());
-  ceph_assert(manager.target_state.is_empty());
-  auto [obc, existed] = obc_registry.get_cached_obc(manager.target);
-  manager.set_state_obc(manager.target_state, obc);
-  manager.set_state_obc(manager.head_state, obc);
 
-  if (existed) {
+  if (manager.head_state.is_empty()) {
+    auto [obc, _] = obc_registry.get_cached_obc(manager.target);
+    manager.set_state_obc(manager.head_state, obc);
+  }
+  ceph_assert(manager.target_state.is_empty());
+  manager.set_state_obc(manager.target_state, manager.head_state.obc);
+
+  if (manager.target_state.obc->loading_started) {
     co_await manager.target_state.lock_to(lock_type);
   } else {
     manager.target_state.lock_excl_sync();
+    manager.target_state.obc->loading_started = true;
     co_await load_obc(manager.target_state.obc);
     manager.target_state.demote_excl_to(lock_type);
   }
@@ -36,7 +37,8 @@ ObjectContextLoader::load_and_lock_head(Manager &manager, RWState::State lock_ty
 }
 
 ObjectContextLoader::load_and_lock_fut
-ObjectContextLoader::load_and_lock_clone(Manager &manager, RWState::State lock_type)
+ObjectContextLoader::load_and_lock_clone(
+  Manager &manager, RWState::State lock_type, bool lock_head)
 {
   LOG_PREFIX(ObjectContextLoader::load_and_lock_clone);
   DEBUGDPP("{} {}", dpp, manager.target, lock_type);
@@ -46,16 +48,20 @@ ObjectContextLoader::load_and_lock_clone(Manager &manager, RWState::State lock_t
   ceph_assert(manager.target_state.is_empty());
 
   if (manager.head_state.is_empty()) {
-    auto [obc, existed] = obc_registry.get_cached_obc(manager.target.get_head());
+    auto [obc, _] = obc_registry.get_cached_obc(manager.target.get_head());
     manager.set_state_obc(manager.head_state, obc);
+  }
 
-    if (existed) {
-      co_await manager.head_state.lock_to(RWState::RWREAD);
-    } else {
-      manager.head_state.lock_excl_sync();
-      co_await load_obc(manager.head_state.obc);
-      manager.head_state.demote_excl_to(RWState::RWREAD);
-    }
+  if (!manager.head_state.obc->loading_started) {
+    // caller is responsible for pre-populating a loaded obc if lock_head is
+    // false
+    ceph_assert(lock_head);
+    manager.head_state.lock_excl_sync();
+    manager.head_state.obc->loading_started = true;
+    co_await load_obc(manager.head_state.obc);
+    manager.head_state.demote_excl_to(RWState::RWREAD);
+  } else if (lock_head) {
+    co_await manager.head_state.lock_to(RWState::RWREAD);
   }
 
   if (manager.options.resolve_clone) {
@@ -95,13 +101,14 @@ ObjectContextLoader::load_and_lock_clone(Manager &manager, RWState::State lock_t
       manager.head_state.state = RWState::RWNONE;
     }
   } else {
-    auto [obc, existed] = obc_registry.get_cached_obc(manager.target);
+    auto [obc, _] = obc_registry.get_cached_obc(manager.target);
     manager.set_state_obc(manager.target_state, obc);
 
-    if (existed) {
+    if (manager.target_state.obc->loading_started) {
       co_await manager.target_state.lock_to(RWState::RWREAD);
     } else {
       manager.target_state.lock_excl_sync();
+      manager.target_state.obc->loading_started = true;
       co_await load_obc(manager.target_state.obc);
       manager.target_state.obc->set_clone_ssc(manager.head_state.obc->ssc);
       manager.target_state.demote_excl_to(RWState::RWREAD);
