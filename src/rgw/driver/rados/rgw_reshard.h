@@ -46,14 +46,6 @@ class RGWBucketReshardLock {
   rados::cls::lock::Lock internal_lock;
   std::chrono::seconds duration;
 
-  Clock::time_point start_time;
-  Clock::time_point renew_thresh;
-
-  void reset_time(const Clock::time_point& now) {
-    start_time = now;
-    renew_thresh = start_time + duration / 2;
-  }
-
 public:
   RGWBucketReshardLock(rgw::sal::RadosStore* _store,
 		       const std::string& reshard_lock_oid,
@@ -66,11 +58,7 @@ public:
 
   int lock(const DoutPrefixProvider *dpp);
   void unlock();
-  int renew(const Clock::time_point&);
 
-  bool should_renew(const Clock::time_point& now) const {
-    return now >= renew_thresh;
-  }
   ceph::timespan get_duration() const { return duration; }
 
   // return a LockClient for with_lease()
@@ -86,9 +74,6 @@ class RGWBucketReshard {
   rgw::sal::RadosStore *store;
   RGWBucketInfo bucket_info;
   std::map<std::string, bufferlist> bucket_attrs;
-
-  RGWBucketReshardLock reshard_lock;
-  RGWBucketReshardLock* outer_reshard_lock;
 
   // using an initializer_list as an array in contiguous memory
   // allocated in at once
@@ -123,8 +108,7 @@ public:
   // manage
   RGWBucketReshard(rgw::sal::RadosStore* _store,
 		   const RGWBucketInfo& _bucket_info,
-		   const std::map<std::string, bufferlist>& _bucket_attrs,
-		   RGWBucketReshardLock* _outer_reshard_lock);
+		   const std::map<std::string, bufferlist>& _bucket_attrs);
   int execute(int num_shards, ReshardFaultInjector& f,
               int max_op_entries, const cls_rgw_reshard_initiator initiator,
 	      const DoutPrefixProvider *dpp, boost::asio::yield_context yield,
@@ -133,7 +117,6 @@ public:
 	      RGWReshard *reshard_log = nullptr);
   int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider* dpp, optional_yield y);
-  int renew_lock_if_needed(const DoutPrefixProvider *dpp);
 
   static int clear_resharding(rgw::sal::RadosStore* store,
 			      RGWBucketInfo& bucket_info,
@@ -212,7 +195,6 @@ public:
 private:
     rgw::sal::RadosStore* store;
     std::string lock_name;
-    rados::cls::lock::Lock instance_lock;
     int num_logshards;
 
     bool verbose;
