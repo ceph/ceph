@@ -34,8 +34,8 @@ public:
                                          uint64_t *snap_id,
                                          Context *on_finish) {
     return new CreateNonPrimaryRequest(image_ctx, demoted, primary_mirror_uuid,
-                                       primary_snap_id, snap_seqs, image_state,
-                                       snap_id, on_finish);
+                                       primary_snap_id, snap_seqs,
+                                       image_state, snap_id, on_finish);
   }
 
   CreateNonPrimaryRequest(ImageCtxT *image_ctx,
@@ -76,11 +76,11 @@ private:
    */
 
   ImageCtxT *m_image_ctx;
-  bool m_demoted;
-  std::string m_primary_mirror_uuid;
-  uint64_t m_primary_snap_id;
-  SnapSeqs m_snap_seqs;
-  ImageState m_image_state;
+  const bool m_demoted;
+  const std::string m_primary_mirror_uuid;
+  const uint64_t m_primary_snap_id;
+  const SnapSeqs m_snap_seqs;
+  const ImageState m_image_state;
   uint64_t *m_snap_id;
   Context *m_on_finish;
 

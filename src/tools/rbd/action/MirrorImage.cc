@@ -403,7 +403,7 @@ int execute_status(const po::variables_map &vm,
         local_status));
       formatter->dump_string("description", local_status.description);
       if (mirror_service != nullptr) {
-        mirror_service->dump_image(formatter);
+        mirror_service->dump(formatter);
       }
       formatter->dump_string("last_update", utils::timestr(
         local_status.last_update));
@@ -462,7 +462,7 @@ int execute_status(const po::variables_map &vm,
                 << "  description: " << local_status.description << "\n";
       if (mirror_service != nullptr) {
         std::cout << "  service:     " <<
-          mirror_service->get_image_description() << "\n";
+          mirror_service->get_description() << "\n";
       }
       std::cout << "  last_update: " << utils::timestr(
         local_status.last_update) << std::endl;

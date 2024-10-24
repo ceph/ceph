@@ -39,6 +39,11 @@ void ImageStateUpdateRequest<I>::send() {
 template <typename I>
 void ImageStateUpdateRequest<I>::get_mirror_image() {
   if (!m_mirror_image.global_image_id.empty()) {
+    if (m_mirror_image.state == m_mirror_image_state) {
+      finish(0);
+      return;
+    }
+
     set_mirror_image();
     return;
   }
@@ -75,16 +80,16 @@ void ImageStateUpdateRequest<I>::handle_get_mirror_image(int r) {
     return;
   }
 
-  set_mirror_image();
-}
-
-template <typename I>
-void ImageStateUpdateRequest<I>::set_mirror_image() {
   if (m_mirror_image.state == m_mirror_image_state) {
     finish(0);
     return;
   }
 
+  set_mirror_image();
+}
+
+template <typename I>
+void ImageStateUpdateRequest<I>::set_mirror_image() {
   ldout(m_cct, 10) << dendl;
   m_mirror_image.state = m_mirror_image_state;
 
@@ -104,7 +109,7 @@ void ImageStateUpdateRequest<I>::handle_set_mirror_image(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "failed to disable mirroring image: " << cpp_strerror(r)
+    lderr(m_cct) << "failed to set mirror image: " << cpp_strerror(r)
                  << dendl;
     finish(r);
     return;
@@ -115,6 +120,12 @@ void ImageStateUpdateRequest<I>::handle_set_mirror_image(int r) {
 
 template <typename I>
 void ImageStateUpdateRequest<I>::notify_mirroring_watcher() {
+  // skip image notification if mirroring for the image group is disabled
+  if (m_mirror_image.group_spec.is_valid()) {
+    finish(0);
+    return;
+  }
+
   ldout(m_cct, 10) << dendl;
 
   auto ctx = util::create_context_callback<
