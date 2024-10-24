@@ -32,6 +32,9 @@
 
 #define EC_ISA_ADDRESS_ALIGNMENT 32u
 
+#define is_aligned(POINTER, BYTE_COUNT) \
+  (((uintptr_t)(const void *)(POINTER)) % (BYTE_COUNT) == 0)
+
 class ErasureCodeIsa : public ceph::ErasureCode {
 public:
 
@@ -83,6 +86,10 @@ public:
                             std::map<int, ceph::buffer::list> *decoded) override;
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
+
+  void isa_xor(char **data, char **coding, int blocksize);
+
+  void byte_xor(char *data, char *coding, char *data_end);
 
   virtual void isa_encode(char **data,
                           char **coding,
