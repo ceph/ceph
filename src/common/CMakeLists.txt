@@ -31,6 +31,7 @@ set(common_srcs
   HeartbeatMap.cc
   LogClient.cc
   LogEntry.cc
+  MemoryModel.cc
   ostream_temp.cc
   OutputDataSocket.cc
   PluginRegistry.cc
