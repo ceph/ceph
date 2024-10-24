@@ -9,6 +9,10 @@ class ClusterAlreadyExists(Exception):
     pass
 
 
+class SystemdDropInException(Error):
+    pass
+
+
 class TimeoutExpired(Error):
     pass
 
