@@ -1,5 +1,6 @@
 import logging
 from boto.s3.deletemarker import DeleteMarker
+from boto.exception import BotoServerError
 
 from itertools import zip_longest  # type: ignore
 
@@ -127,7 +128,19 @@ class RadosZone(Zone):
             return True
 
         def create_role(self, path, rolename, policy_document, tag_list):
+            if policy_document is None:
+                policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/testuser\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
             return self.iam_conn.create_role(rolename, policy_document, path)
+
+        def delete_role(self, role_name):
+            return self.iam_conn.delete_role(role_name)
+
+        def has_role(self, role_name):
+            try:
+                self.get_role(role_name)
+            except BotoServerError:
+                return False
+            return True
 
     def get_conn(self, credentials):
         return self.Conn(self, credentials)
