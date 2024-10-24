@@ -8128,6 +8128,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   {
     std::string t;
     dn->make_path_string(t, true);
+    dout(20) << " stray_prior_path = " << t << dendl;
     pi.inode->stray_prior_path = std::move(t);
   }
   pi.inode->version = in->pre_dirty();
@@ -9448,6 +9449,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
+        dout(20) << " stray_prior_path = " << t << dendl;
         tpi->stray_prior_path = std::move(t);
       }
       tpi->nlink--;
