@@ -54,20 +54,32 @@ TEST(ECUtil, stripe_info_t)
   ASSERT_EQ(s.aligned_chunk_offset_to_logical_offset(2*s.get_chunk_size()),
 	    2*s.get_stripe_width());
 
+  // Stripe 1 + 1 chunk for 10 stripes needs to read 11 stripes starting
+  // from 1 because there is a partial stripe at the start and end
   ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(
 	      make_pair(swidth+s.get_chunk_size(), 10*swidth)),
-	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
+	    make_pair(s.get_chunk_size(), 11*s.get_chunk_size()));
 
+  // Stripe 1 + 0 chunks for 10 stripes needs to read 10 stripes starting
+  // from 1 because there are no partial stripes
   ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(swidth, 10*swidth)),
 	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
 
-  // round down offset if it's under stripe width
+  // Stripe 0 + 1 chunk for 10 stripes needs to read 11 stripes starting
+  // from 0 because there is a partial stripe at the start and end
   ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(s.get_chunk_size(), 10*swidth)),
-	    make_pair<uint64_t>(0, 10*s.get_chunk_size()));
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
 
-  // round up size if above stripe
+  // Stripe 0 + 1 chunk for (10 stripes + 1 chunk) needs to read 11 stripes
+  // starting from 0 because there is a partial stripe at the start and end
   ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(s.get_chunk_size(),
 							  10*swidth + s.get_chunk_size())),
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  // Stripe 0 + 2 chunks for (10 stripes + 2 chunks) needs to read 11 stripes
+  // starting from 0 because there is a partial stripe at the start
+  ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(2*s.get_chunk_size(),
+							  10*swidth + 2*s.get_chunk_size())),
 	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
 
   ASSERT_EQ(s.offset_len_to_stripe_bounds(make_pair(swidth-10, (uint64_t)20)),
