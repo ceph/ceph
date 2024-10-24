@@ -4687,7 +4687,7 @@ void InodeStoreBare::generate_test_instances(std::list<InodeStoreBare*> &ls)
 }
 
 void CInode::validate_disk_state(CInode::validated_data *results,
-                                 MDSContext *fin)
+                                 MDSContext *fin, bool remote_dirfrag_dirty)
 {
   class ValidationContinuation : public MDSContinuation {
   public:
@@ -4696,6 +4696,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
     CInode::validated_data *results;
     bufferlist bl;
     CInode *shadow_in;
+    bool remote_dirfrag_dirty = false;
 
     enum {
       START = 0,
@@ -4707,12 +4708,13 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
     ValidationContinuation(CInode *i,
                            CInode::validated_data *data_r,
-                           MDSContext *fin_) :
+                           MDSContext *fin_, bool remote_dirfrag_dirty) :
                              MDSContinuation(i->mdcache->mds->server),
                              fin(fin_),
                              in(i),
                              results(data_r),
-                             shadow_in(NULL) {
+                             shadow_in(NULL),
+                             remote_dirfrag_dirty(remote_dirfrag_dirty) {
       set_callback(START, static_cast<Continuation::stagePtr>(&ValidationContinuation::_start));
       set_callback(BACKTRACE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_backtrace));
       set_callback(INODE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_inode_disk));
@@ -4990,6 +4992,7 @@ next:
       results->raw_stats.memory_value.rstat = in->get_inode()->rstat;
       frag_info_t& dir_info = results->raw_stats.ondisk_value.dirstat;
       nest_info_t& nest_info = results->raw_stats.ondisk_value.rstat;
+      bool local_dirty_dirfrag = false;
 
       if (rval != 0) {
         results->raw_stats.error_str << "Failed to read dirfrags off disk";
@@ -5002,6 +5005,8 @@ next:
 	ceph_assert(dir->get_version() > 0);
 	nest_info.add(dir->get_fnode()->accounted_rstat);
 	dir_info.add(dir->get_fnode()->accounted_fragstat);
+	if (dir->is_auth() && dir->is_dirty())
+          local_dirty_dirfrag = true;
       }
       nest_info.rsubdirs++; // it gets one to account for self
       if (const sr_t *srnode = in->get_projected_srnode(); srnode)
@@ -5029,7 +5034,21 @@ next:
                       "please rerun scrub when system is stable; "
                       "assuming passed for now;" << dendl;
           results->raw_stats.passed = true;
-        }
+        } else if (local_dirty_dirfrag) {
+          MDCache *mdcache = in->mdcache; // for dout()
+          auto ino = [this]() { return in->ino(); }; // for dout()
+          dout(20) << "raw stats most likely wont match since it's a directory "
+	              "inode and a local dirfrag is dirty; please rerun scrub when "
+		      "system is stable; assuming passed for now;" << dendl;
+          results->raw_stats.passed = true;
+        } else if (remote_dirfrag_dirty) {
+          MDCache *mdcache = in->mdcache; // for dout()
+          auto ino = [this]() { return in->ino(); }; // for dout()
+          dout(20) << "raw stats most likely wont match since it's a directory "
+	              "inode and a remote dirfrag is dirty; please rerun scrub when "
+ 		      "system is stable; assuming passed for now;" << dendl;
+          results->raw_stats.passed = true;
+ 	}
 	goto next;
       }
 
@@ -5067,7 +5086,7 @@ next:
   dout(10) << "scrub starting validate_disk_state on " << *this << dendl;
   ValidationContinuation *vc = new ValidationContinuation(this,
                                                           results,
-                                                          fin);
+                                                          fin, remote_dirfrag_dirty);
   vc->begin();
 }
 

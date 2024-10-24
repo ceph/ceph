@@ -205,14 +205,14 @@ void ScrubStack::add_to_waiting(MDSCacheObject *obj)
   scrub_waiting.push_back(&obj->item_scrub);
 }
 
-void ScrubStack::remove_from_waiting(MDSCacheObject *obj, bool kick)
+void ScrubStack::remove_from_waiting(MDSCacheObject *obj, bool kick, bool remote_dirfrag_dirty)
 {
   scrubs_in_progress--;
   if (obj->item_scrub.is_on_list()) {
     obj->item_scrub.remove_myself();
     scrub_stack.push_front(&obj->item_scrub);
     if (kick)
-      kick_off_scrubs();
+      kick_off_scrubs(remote_dirfrag_dirty);
   }
 }
 
@@ -230,7 +230,7 @@ private:
   MDSCacheObject *obj;
 };
 
-void ScrubStack::kick_off_scrubs()
+void ScrubStack::kick_off_scrubs(bool remote_dirfrag_dirty)
 {
   ceph_assert(ceph_mutex_is_locked(mdcache->mds->mds_lock));
   dout(20) << __func__ << ": state=" << state << dendl;
@@ -287,7 +287,7 @@ void ScrubStack::kick_off_scrubs()
       } else {
 	bool added_children = false;
 	bool done = false; // it's done, so pop it off the stack
-	scrub_dir_inode(in, &added_children, &done);
+	scrub_dir_inode(in, &added_children, &done, remote_dirfrag_dirty);
 	if (done) {
 	  dout(20) << __func__ << " dir inode, done" << dendl;
 	  dequeue(in);
@@ -361,7 +361,7 @@ bool ScrubStack::validate_inode_auth(CInode *in)
   }
 }
 
-void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
+void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done, bool remote_dirfrag_dirty)
 {
   dout(10) << __func__ << " " << *in << dendl;
   ceph_assert(in->is_auth());
@@ -437,7 +437,7 @@ void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
     return;
   }
 
-  scrub_dir_inode_final(in);
+  scrub_dir_inode_final(in, remote_dirfrag_dirty);
 
   *done = true;
   dout(10) << __func__ << " done" << dendl;
@@ -462,12 +462,12 @@ public:
   }
 };
 
-void ScrubStack::scrub_dir_inode_final(CInode *in)
+void ScrubStack::scrub_dir_inode_final(CInode *in, bool remote_dirfrag_dirty)
 {
   dout(20) << __func__ << " " << *in << dendl;
 
   C_InodeValidated *fin = new C_InodeValidated(mdcache->mds, this, in);
-  in->validate_disk_state(&fin->result, fin);
+  in->validate_disk_state(&fin->result, fin, remote_dirfrag_dirty);
   return;
 }
 
@@ -985,6 +985,7 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
       ceph_assert(diri);
 
       std::vector<CDir*> dfs;
+      bool dirty_dirfrag = false;
       MDSGatherBuilder gather(g_ceph_context);
       frag_vec_t frags;
       diri->dirfragtree.get_leaves(frags);
@@ -1007,6 +1008,10 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
 	    dout(10) << __func__ << " can't auth pin " << *dir <<  dendl;
 	    dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
 	    continue;
+	  }
+	  if (dir->is_dirty()) {
+	    dout(10) << __func__ << " mark dirfrag dirty " << *dir <<  dendl;
+	    dirty_dirfrag = true;
 	  }
 	  dfs.push_back(dir);
 	}
@@ -1040,7 +1045,8 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
       }
 
       auto r = make_message<MMDSScrub>(MMDSScrub::OP_QUEUEDIR_ACK, m->get_ino(),
-				       std::move(queued), m->get_tag());
+				       std::move(queued), m->get_tag(),
+	                               inodeno_t(), false, false, false, false, dirty_dirfrag);
       mdcache->mds->send_message_mds(r, from);
     }
     break;
@@ -1062,7 +1068,7 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
 
 	    const auto& header = diri->get_scrub_header();
 	    header->set_epoch_last_forwarded(scrub_epoch);
-	    remove_from_waiting(diri);
+	    remove_from_waiting(diri, true, m->is_dirfrag_dirty());
 	  }
 	}
       }
