@@ -1,5 +1,5 @@
 from .auth import AuthManager, AuthManagerTool, AuthType, BaseAuth, \
-    JwtManager, SSOAuth, decode_jwt_segment
+    JwtManager, SSOAuthMixin, decode_jwt_segment
 from .oauth2 import OAuth2
 from .saml2 import Saml2
 
@@ -8,7 +8,7 @@ __all__ = [
     'AuthManagerTool',
     'AuthType',
     'BaseAuth',
-    'SSOAuth',
+    'SSOAuthMixin',
     'JwtManager',
     'decode_jwt_segment',
     'Saml2',
