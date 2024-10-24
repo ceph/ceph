@@ -8,6 +8,7 @@ events {
 
 http {
 
+    #access_log /dev/stdout;
     client_header_buffer_size 32K;
     large_client_header_buffers 4 32k;
     proxy_busy_buffers_size 512k;
@@ -15,6 +16,22 @@ http {
     proxy_buffer_size 256K;
     proxy_headers_hash_max_size 1024;
     proxy_headers_hash_bucket_size 128;
+
+{% if oauth2_proxy_endpoints %}
+    upstream oauth2_proxy_servers {
+     {% for ep in oauth2_proxy_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+{% if service_discovery_endpoints %}
+    upstream service_discovery_servers {
+     {% for ep in service_discovery_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
 
 {% if dashboard_endpoints %}
     upstream dashboard_servers {

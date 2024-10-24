@@ -3771,14 +3771,19 @@ class TestSMB:
 class TestMgmtGateway:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_discovery_endpoints")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_external_certificates",
            lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_internal_certificates",
-           lambda instance, dspec: (ceph_generated_cert, ceph_generated_key))
+           lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
-    def test_mgmt_gw_config_no_auth(self, get_service_endpoints_mock: List[str], _run_cephadm, cephadm_module: CephadmOrchestrator):
+    def test_mgmt_gateway_config_no_auth(self,
+                                         get_service_discovery_endpoints_mock: List[str],
+                                         get_service_endpoints_mock: List[str],
+                                         _run_cephadm,
+                                         cephadm_module: CephadmOrchestrator):
 
         def get_services_endpoints(name):
             if name == 'prometheus':
@@ -3791,6 +3796,7 @@ class TestMgmtGateway:
 
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         get_service_endpoints_mock.side_effect = get_services_endpoints
+        get_service_discovery_endpoints_mock.side_effect = lambda: ["ceph-node-0:8765", "ceph-node-2:8765"]
 
         server_port = 5555
         spec = MgmtGatewaySpec(port=server_port,
@@ -3825,6 +3831,7 @@ class TestMgmtGateway:
 
                                          http {
 
+                                             #access_log /dev/stdout;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
@@ -3832,6 +3839,12 @@ class TestMgmtGateway:
                                              proxy_buffer_size 256K;
                                              proxy_headers_hash_max_size 1024;
                                              proxy_headers_hash_bucket_size 128;
+
+
+                                             upstream service_discovery_servers {
+                                              server ceph-node-0:8765;
+                                              server ceph-node-2:8765;
+                                             }
 
                                              upstream dashboard_servers {
                                               server ceph-node-2:8443;
@@ -3940,6 +3953,12 @@ class TestMgmtGateway:
                                                  ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
                                                  ssl_prefer_server_ciphers on;
 
+                                                 location /internal/sd {
+                                                     rewrite ^/internal/(.*) /$1 break;
+                                                     proxy_pass https://service_discovery_servers;
+                                                     proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+                                                 }
+
                                                  location /internal/dashboard {
                                                      rewrite ^/internal/dashboard/(.*) /$1 break;
                                                      proxy_pass https://dashboard_servers;
@@ -3995,15 +4014,19 @@ class TestMgmtGateway:
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_discovery_endpoints")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_external_certificates",
            lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_internal_certificates",
-           lambda instance, dspec: (ceph_generated_cert, ceph_generated_key))
+           lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
-    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_oauth2_service_url", lambda _: "https://192.168.100.102:4180")
-    def test_mgmt_gw_config_with_auth(self, get_service_endpoints_mock: List[str], _run_cephadm, cephadm_module: CephadmOrchestrator):
+    def test_mgmt_gateway_config_with_auth(self,
+                                           get_service_discovery_endpoints_mock: List[str],
+                                           get_service_endpoints_mock: List[str],
+                                           _run_cephadm,
+                                           cephadm_module: CephadmOrchestrator):
 
         def get_services_endpoints(name):
             if name == 'prometheus':
@@ -4012,10 +4035,13 @@ class TestMgmtGateway:
                 return ["ceph-node-2:3000", "ceph-node-2:3000"]
             elif name == 'alertmanager':
                 return ["192.168.100.100:9093", "192.168.100.102:9093"]
+            elif name == 'oauth2-proxy':
+                return ["192.168.100.101:4180", "192.168.100.102:4180"]
             return []
 
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         get_service_endpoints_mock.side_effect = get_services_endpoints
+        get_service_discovery_endpoints_mock.side_effect = lambda: ["ceph-node-0:8765", "ceph-node-2:8765"]
 
         server_port = 5555
         spec = MgmtGatewaySpec(port=server_port,
@@ -4051,6 +4077,7 @@ class TestMgmtGateway:
 
                                          http {
 
+                                             #access_log /dev/stdout;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
@@ -4058,6 +4085,16 @@ class TestMgmtGateway:
                                              proxy_buffer_size 256K;
                                              proxy_headers_hash_max_size 1024;
                                              proxy_headers_hash_bucket_size 128;
+
+                                             upstream oauth2_proxy_servers {
+                                              server 192.168.100.101:4180;
+                                              server 192.168.100.102:4180;
+                                             }
+
+                                             upstream service_discovery_servers {
+                                              server ceph-node-0:8765;
+                                              server ceph-node-2:8765;
+                                             }
 
                                              upstream dashboard_servers {
                                               server ceph-node-2:8443;
@@ -4119,7 +4156,7 @@ class TestMgmtGateway:
                                                  # add_header Content-Security-Policy "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; require-trusted-types-for 'script'; frame-ancestors 'self';";
 
                                                  location /oauth2/ {
-                                                     proxy_pass https://192.168.100.102:4180;
+                                                     proxy_pass https://oauth2_proxy_servers;
                                                      proxy_set_header Host $host;
                                                      proxy_set_header X-Real-IP $remote_addr;
                                                      proxy_set_header X-Scheme $scheme;
@@ -4129,7 +4166,7 @@ class TestMgmtGateway:
 
                                                  location = /oauth2/auth {
                                                      internal;
-                                                     proxy_pass https://192.168.100.102:4180;
+                                                     proxy_pass https://oauth2_proxy_servers;
                                                      proxy_set_header Host $host;
                                                      proxy_set_header X-Real-IP $remote_addr;
                                                      proxy_set_header X-Scheme $scheme;
@@ -4257,6 +4294,12 @@ class TestMgmtGateway:
                                                  ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
                                                  ssl_prefer_server_ciphers on;
 
+                                                 location /internal/sd {
+                                                     rewrite ^/internal/(.*) /$1 break;
+                                                     proxy_pass https://service_discovery_servers;
+                                                     proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+                                                 }
+
                                                  location /internal/dashboard {
                                                      rewrite ^/internal/dashboard/(.*) /$1 break;
                                                      proxy_pass https://dashboard_servers;
@@ -4315,12 +4358,26 @@ class TestMgmtGateway:
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_external_certificates",
            lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_internal_certificates",
-           lambda instance, dspec: (ceph_generated_cert, ceph_generated_key))
+           lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
-    def test_oauth2_proxy_service(self, get_service_endpoints_mock: List[str], _run_cephadm, cephadm_module: CephadmOrchestrator):
+    def test_oauth2_proxy_service(self, get_service_endpoints_mock, _run_cephadm, cephadm_module):
+        self.oauth2_proxy_service_common(get_service_endpoints_mock, _run_cephadm, cephadm_module, virtual_ip=None)
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_external_certificates",
+           lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_internal_certificates",
+           lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
+    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    def test_oauth2_proxy_service_with_ha(self, get_service_endpoints_mock, _run_cephadm, cephadm_module):
+        self.oauth2_proxy_service_common(get_service_endpoints_mock, _run_cephadm, cephadm_module, virtual_ip="192.168.100.200")
+
+    def oauth2_proxy_service_common(self, get_service_endpoints_mock, _run_cephadm, cephadm_module: CephadmOrchestrator, virtual_ip=None):
         def get_services_endpoints(name):
             if name == 'prometheus':
                 return ["192.168.100.100:9095", "192.168.100.101:9095"]
@@ -4337,7 +4394,8 @@ class TestMgmtGateway:
         mgmt_gw_spec = MgmtGatewaySpec(port=server_port,
                                        ssl_certificate=ceph_generated_cert,
                                        ssl_certificate_key=ceph_generated_key,
-                                       enable_auth=True)
+                                       enable_auth=True,
+                                       virtual_ip=virtual_ip)
 
         oauth2_spec = OAuth2ProxySpec(provider_display_name='my_idp_provider',
                                       client_id='my_client_id',
@@ -4346,6 +4404,8 @@ class TestMgmtGateway:
                                       cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
                                       ssl_certificate=ceph_generated_cert,
                                       ssl_certificate_key=ceph_generated_key)
+
+        redirect_url = f"https://{virtual_ip if virtual_ip else 'host_fqdn'}:5555/oauth2/callback"
         expected = {
             "fsid": "fsid",
             "name": "oauth2-proxy.ceph-node",
@@ -4364,7 +4424,7 @@ class TestMgmtGateway:
             },
             "config_blobs": {
                 "files": {
-                    "oauth2-proxy.conf": dedent("""
+                    "oauth2-proxy.conf": dedent(f"""
                                          # Listen on port 4180 for incoming HTTP traffic.
                                          https_address= "0.0.0.0:4180"
 
@@ -4377,7 +4437,7 @@ class TestMgmtGateway:
                                          client_id= "my_client_id"
                                          client_secret= "my_client_secret"
                                          oidc_issuer_url= "http://192.168.10.10:8888/dex"
-                                         redirect_url= "https://host_fqdn:5555/oauth2/callback"
+                                         redirect_url= "{redirect_url}"
 
                                          ssl_insecure_skip_verify=true
 
