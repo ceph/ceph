@@ -55,6 +55,7 @@ target_link_libraries(unittest_osd_types global)
 # unittest_ecbackend
 add_executable(unittest_ecbackend
   TestECBackend.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_ecbackend)
 target_link_libraries(unittest_ecbackend osd global)

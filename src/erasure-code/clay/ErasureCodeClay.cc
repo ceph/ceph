@@ -306,7 +306,14 @@ int ErasureCodeClay::is_repair(const set<int> &want_to_read,
 
   if (includes(available_chunks.begin(), available_chunks.end(),
                want_to_read.begin(), want_to_read.end())) return 0;
+  // Oops, before the attempt to EC partial reads the fellowing
+  // condition was always true as `get_want_to_read_shards()` yields
+  // entire stripe. Unfortunately, we built upon this assumption and
+  // even `ECUtil::decode()` asserts on chunks being multiply of
+  // `chunk_size`.
+  // XXX: for now returning 0 and knocking the optimization out.
   if (want_to_read.size() > 1) return 0;
+  else return 0;
 
   int i = *want_to_read.begin();
   int lost_node_id = (i < k) ? i: i+nu;
