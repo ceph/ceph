@@ -233,11 +233,16 @@ Place a host in and out of maintenance mode (stops all Ceph daemons on host):
 .. prompt:: bash #
 
    ceph orch host maintenance enter <hostname> [--force] [--yes-i-really-mean-it]
-   ceph orch host maintenance exit <hostname>
+   ceph orch host maintenance exit <hostname> [--force] [--offline]
 
-The ``--force`` flag allows the user to bypass warnings (but not alerts). The ``--yes-i-really-mean-it``
-flag bypasses all safety checks and will attempt to force the host into maintenance mode no
-matter what.
+The ``--force`` flag on the ``enter`` command allows the user to bypass warnings (but not alerts).
+The ``--yes-i-really-mean-it`` flag bypasses all safety checks and will attempt to force the
+host into maintenance mode no matter what. The ``--force`` and ``--offline`` flags to the ``exit`` command
+can be used to to have cephadm mark a host that is in maintenance mode and offline as no longer
+in maintenance mode. Note in this case if the host comes online, the Ceph daemons
+on the host will remain in the stopped state. The ``--force`` and ``--offline`` flags to the ``exit``
+command are intended to be run for hosts in maintenance mode that are permanently offline
+before removing the host entirely from cephadm management using the ``ceph orch host rm`` command.
 
 .. warning:: Using the --yes-i-really-mean-it flag to force the host to enter maintenance
    mode can potentially cause loss of data availability, the mon quorum to break down due
