@@ -27,7 +27,7 @@ public:
   ceph_mds_session_head head;
   static constexpr unsigned SESSION_BLOCKLISTED = (1<<0);
 
-  unsigned flags = 0;
+  uint32_t flags = 0;
   std::map<std::string, std::string> metadata;
   feature_bitset_t supported_features;
   metric_spec_t metric_spec;
