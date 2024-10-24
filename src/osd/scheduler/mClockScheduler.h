@@ -30,6 +30,16 @@
 #include "osd/scheduler/OpSchedulerItem.h"
 
 
+enum {
+  l_mclock_first = 15000,
+  l_mclock_immediate_queue_len,
+  l_mclock_client_queue_len,
+  l_mclock_recovery_queue_len,
+  l_mclock_best_effort_queue_len,
+  l_mclock_all_type_queue_len,
+  l_mclock_last,
+};
+
 namespace ceph::osd::scheduler {
 
 constexpr double default_min = 0.0;
@@ -98,6 +108,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   const bool is_rotational;
   const unsigned cutoff_priority;
   MonClient *monc;
+  PerfCounters *logger;
 
   /**
    * osd_bandwidth_cost_per_io
@@ -219,7 +230,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
 public: 
   mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
     int shard_id, bool is_rotational, unsigned cutoff_priority,
-    MonClient *monc);
+    MonClient *monc, bool init_perfcounter=true);
   ~mClockScheduler() override;
 
   /// Calculate scaled cost per item
@@ -268,6 +279,9 @@ public:
 private:
   // Enqueue the op to the high priority queue
   void enqueue_high(unsigned prio, OpSchedulerItem &&item, bool front = false);
+  void _init_logger();
+  void _get_mclock_counter(scheduler_id_t id);
+  void _put_mclock_counter(scheduler_id_t id);
 };
 
 }
