@@ -1142,7 +1142,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 ))
         self.remove_health_warning('CEPHADM_FAILED_DAEMON')
         if failed_daemons:
-            self.set_health_warning('CEPHADM_FAILED_DAEMON', f'{len(failed_daemons)} failed cephadm daemon(s)', len(
+            self.set_health_warning('CEPHADM_FAILED_DAEMON', f'{len(failed_daemons)} failed cephadm daemon(s) {failed_daemons}', len(
                 failed_daemons), failed_daemons)
 
     def get_first_matching_network_ip(self, host: str, sspec: ServiceSpec) -> Optional[str]:
