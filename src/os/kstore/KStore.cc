@@ -2285,7 +2285,13 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       f.close_section();
       f.flush(*_dout);
       *_dout << dendl;
-      ceph_abort_msg("unexpected error");
+      if (!g_conf().get_val<bool>("objectstore_debug_throw_on_failed_txc")) {
+	ceph_abort_msg("unexpected error");
+      } else {
+	txc->osr->undo_queue(txc);
+	delete txc;
+	throw r;
+      }
     }
 
     // object operations
@@ -2534,7 +2540,13 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	f.close_section();
 	f.flush(*_dout);
 	*_dout << dendl;
-	ceph_abort_msg("unexpected error");
+	if (!g_conf().get_val<bool>("objectstore_debug_throw_on_failed_txc")) {
+	  ceph_abort_msg("unexpected error");
+	} else {
+	  txc->osr->undo_queue(txc);
+	  delete txc;
+	  throw r;
+	}
       }
     }
   }
