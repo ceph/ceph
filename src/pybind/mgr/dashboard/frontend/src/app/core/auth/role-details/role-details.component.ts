@@ -31,28 +31,28 @@ export class RoleDetailsComponent implements OnChanges, OnInit {
         prop: 'read',
         name: $localize`Read`,
         flexGrow: 1,
-        cellClass: 'text-center',
+        cellClass: 'text-left',
         cellTransformation: CellTemplate.checkIcon
       },
       {
         prop: 'create',
         name: $localize`Create`,
         flexGrow: 1,
-        cellClass: 'text-center',
+        cellClass: 'text-left',
         cellTransformation: CellTemplate.checkIcon
       },
       {
         prop: 'update',
         name: $localize`Update`,
         flexGrow: 1,
-        cellClass: 'text-center',
+        cellClass: 'text-left',
         cellTransformation: CellTemplate.checkIcon
       },
       {
         prop: 'delete',
         name: $localize`Delete`,
         flexGrow: 1,
-        cellClass: 'text-center',
+        cellClass: 'text-left',
         cellTransformation: CellTemplate.checkIcon
       }
     ];
