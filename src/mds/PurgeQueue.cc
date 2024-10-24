@@ -122,7 +122,7 @@ PurgeQueue::PurgeQueue(
     cct(cct_),
     rank(rank_),
     metadata_pool(metadata_pool_),
-    finisher(cct, "PurgeQueue", "PQ_Finisher"),
+    finisher(cct, "PurgeQueue", "mds-pq-fin"),
     timer(cct, lock),
     filer(objecter_, &finisher),
     objecter(objecter_),
