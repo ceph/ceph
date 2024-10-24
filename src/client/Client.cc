@@ -9193,7 +9193,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     }
 
     int idx = pd - dir->readdir_cache.begin();
-    if (dn->inode->is_dir()) {
+    if (dn->inode->is_dir() && cct->_conf->client_dirsize_rbytes) {
       mask |= CEPH_STAT_RSTAT;
     }
     int r = _getattr(dn->inode, mask, dirp->perms);
@@ -9258,6 +9258,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 			 unsigned want, unsigned flags, bool getref)
 {
   int caps = statx_to_mask(flags, want);
+  int rstat_on_dir = cct->_conf->client_dirsize_rbytes ? CEPH_STAT_RSTAT : 0;
 
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
@@ -9287,7 +9288,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
     uint64_t next_off = 1;
 
     int r;
-    r = _getattr(diri, caps | CEPH_STAT_RSTAT, dirp->perms);
+    r = _getattr(diri, caps | rstat_on_dir, dirp->perms);
     if (r < 0)
       return r;
 
@@ -9320,7 +9321,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
       in = diri->get_first_parent()->dir->parent_inode;
 
     int r;
-    r = _getattr(in, caps | CEPH_STAT_RSTAT, dirp->perms);
+    r = _getattr(in, caps | rstat_on_dir, dirp->perms);
     if (r < 0)
       return r;
 
@@ -9388,7 +9389,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
       if (check_caps) {
 	int mask = caps;
 	if(entry.inode->is_dir()){
-          mask |= CEPH_STAT_RSTAT;
+          mask |= rstat_on_dir;
 	}
 	r = _getattr(entry.inode, mask, dirp->perms);
 	if (r < 0)
