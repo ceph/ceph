@@ -5675,10 +5675,13 @@ void Monitor::handle_scrub(MonOpRequestRef op)
       if (scrub_result.size() == quorum.size()) {
         scrub_check_results();
         scrub_result.clear();
-        if (scrub_state->finished)
+        if (scrub_state->finished) {
+          const utime_t lat = ceph_clock_now() - scrub_state->start;
+          dout(10) << __func__ << " mon scrub latency: " << lat << dendl;
           scrub_finish();
-        else
+        } else {
           scrub();
+        }
       }
     }
     break;
