@@ -994,29 +994,35 @@ void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *_sour
   }
 }
 
-bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags, rgw_sync_bucket_pipe *dest_pipe) const {
-  if (bucket_exports_data()) {
-    // sort desc by priority
-    std::vector<const rgw_sync_bucket_pipe*> pipes;
-    pipes.reserve(target_pipes.pipe_map.size());
-    for (const auto& entry : target_pipes.pipe_map) {
-      pipes.push_back(&entry.second);
-    }
-    if (dest_pipe) { // if dest_pipe is provided, sort by priority and return the highest priority pipe
-      std::sort(pipes.begin(), pipes.end(), [](const rgw_sync_bucket_pipe* a, const rgw_sync_bucket_pipe* b) {
-        return a->params.priority > b->params.priority;
-      });
-    }
+bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags, rgw_sync_bucket_pipe* dest_pipe) const {
+  if (!bucket_exports_data()) {
+    return false;
+  }
 
-    for (auto& pipe : pipes) {
-      const auto& filter = pipe->params.source.filter;
+  const bool force_priority = zone_svc->ctx()->_conf->rgw_data_sync_priority_rule_enforcement;
+  const auto& pipe_map = target_pipes.pipe_map;
+
+  // Find the highest priority pipe that matches the filters
+  const rgw_sync_bucket_pipe* best_pipe = nullptr;
+
+  for (const auto& entry : pipe_map) {
+    const auto& pipe = entry.second;
+    const auto& filter = pipe.params.source.filter;
+
+    if (!best_pipe || pipe.params.priority > best_pipe->params.priority) {
       if (filter.check_prefix(obj_name) && filter.check_tags(tags.get_tags())) {
-        if (dest_pipe) {
-          *dest_pipe = *pipe;
+        if (!force_priority || !dest_pipe) {
+          return true;
         }
-        return true;
+
+        best_pipe = &pipe;
       }
     }
+  }
+
+  if (best_pipe) {
+    *dest_pipe = *best_pipe;
+    return true;
   }
 
   return false;

@@ -4264,3 +4264,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_data_sync_priority_rule_enforcement
+  type: bool
+  level: advanced
+  default: false
+  desc: Controls whether replication applies a single rule per object or multiple rules.
+  long_desc: When disabled, an object can match multiple replication rules, allowing it to be logged
+    and replicated to multiple zonegroups simultaneously. Enabling this option forces a priority-based
+    approach, similar to AWS behavior, where only the highest priority rule is applied to each object.
+  services:
+  - rgw
+  with_legacy: true
