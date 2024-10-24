@@ -120,7 +120,9 @@ system, run a command of the following form:
 
 .. note:: "Mirroring module" commands are prefixed with ``fs snapshot mirror``.
    This distinguishes them from "monitor commands", which are prefixed with ``fs
-   mirror``. Be sure (in this context) to use module commands.
+   mirror``. Enabling mirroring by using monitor commands will result in the mirror daemon
+   entering the "failed" state due to the absence of the `cephfs_mirror` index object.
+   So be sure (in this context) to use module commands.
 
 To disable mirroring for a given file system, run a command of the following form:
 
