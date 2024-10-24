@@ -1229,6 +1229,7 @@ class RGWSpec(ServiceSpec):
                  rgw_bucket_counters_cache: Optional[bool] = False,
                  rgw_bucket_counters_cache_size: Optional[int] = None,
                  generate_cert: bool = False,
+                 disable_multisite_sync_traffic: Optional[bool] = None,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1281,6 +1282,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_bucket_counters_cache_size = rgw_bucket_counters_cache_size
         #: Whether we should generate a cert/key for the user if not provided
         self.generate_cert = generate_cert
+        #: Used to make RGW not do multisite replication so it can dedicate to IO
+        self.disable_multisite_sync_traffic = disable_multisite_sync_traffic
 
     def get_port_start(self) -> List[int]:
         return [self.get_port()]

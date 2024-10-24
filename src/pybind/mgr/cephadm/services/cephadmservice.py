@@ -1144,6 +1144,14 @@ class RgwService(CephService):
                 'value': str(spec.rgw_bucket_counters_cache_size),
             })
 
+        if getattr(spec, 'disable_multisite_sync_traffic', None) is not None:
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': daemon_name,
+                'name': 'rgw_run_sync_thread',
+                'value': 'false' if spec.disable_multisite_sync_traffic else 'true',
+            })
+
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
