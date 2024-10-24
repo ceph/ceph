@@ -790,11 +790,16 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   librados::snap_t start_snap_id = 0;
   librados::snap_t first_snap_id = *m_snap_ids.begin();
   librados::snap_t last_snap_id = *m_snap_ids.rbegin();
+  bool calc_diff = (m_list_snaps_flags & LIST_SNAPS_FLAG_CALC_DIFF_FROM_PARENT) != 0;
 
   if (r == -ENOENT) {
     // the object does not exist -- mark the missing extents
     zero_extent(first_snap_id, true);
-    list_from_parent();
+    if (calc_diff) {
+      this->finish(0);
+    } else {
+      list_from_parent();
+    }
     return;
   } else if (r < 0) {
     lderr(cct) << "failed to retrieve object snapshot list: " << cpp_strerror(r)
@@ -808,6 +813,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   convert_snap_set(m_snap_set, &snap_set);
 
   bool initial_extents_written = false;
+  bool need_compare_parent = calc_diff ? true : false;
 
   interval_set<uint64_t> object_interval;
   for (auto& object_extent : m_object_extents) {
@@ -862,6 +868,9 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
     // clip diff to current object extent
     interval_set<uint64_t> diff_interval;
     diff_interval.intersection_of(object_interval, diff);
+    if (calc_diff && (diff_interval.size() == object_interval.size())) {
+      need_compare_parent = false;
+    }
 
     // clip diff to size of object (in case it was truncated)
     interval_set<uint64_t> zero_interval;
@@ -928,11 +937,15 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
 
   bool snapshot_delta_empty = snapshot_delta.empty();
   if (!initial_extents_written) {
-    zero_extent(first_snap_id, first_snap_id > 0);
+    zero_extent(calc_diff ? last_snap_id : first_snap_id, first_snap_id > 0);
+    if (calc_diff) {
+      need_compare_parent = false;
+      snapshot_delta_empty = false;
+    }
   }
   ldout(cct, 20) << "snapshot_delta=" << snapshot_delta << dendl;
 
-  if (snapshot_delta_empty) {
+  if (snapshot_delta_empty || need_compare_parent) {
     list_from_parent();
     return;
   }
@@ -986,7 +999,8 @@ void ObjectListSnapsRequest<I>::list_from_parent() {
                  << " area=" << m_image_area << dendl;
 
    auto list_snaps_flags = (
-     m_list_snaps_flags | LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS);
+     m_list_snaps_flags | LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) &
+     ~LIST_SNAPS_FLAG_CALC_DIFF_FROM_PARENT;
 
   ImageListSnapsRequest<I> req(
     *image_ctx->parent, aio_comp, std::move(parent_extents), m_image_area,
@@ -999,6 +1013,8 @@ template <typename I>
 void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
   I *image_ctx = this->m_ictx;
   auto cct = image_ctx->cct;
+  bool calc_diff = (m_list_snaps_flags & LIST_SNAPS_FLAG_CALC_DIFF_FROM_PARENT) != 0;
+  librados::snap_t snap_id_end = *m_snap_ids.rbegin();
 
   ldout(cct, 20) << "r=" << r << ", "
                  << "parent_snapshot_delta=" << m_parent_snapshot_delta
@@ -1010,9 +1026,20 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
     return;
   }
 
+  interval_set<uint64_t> diff_interval;
+  if (calc_diff) {
+    for (auto& [key, snapshot_extents] : *m_snapshot_delta) {
+      for (auto& snapshot_extent : snapshot_extents) {
+        ceph_assert(snapshot_extent.get_val().state == SPARSE_EXTENT_STATE_DATA);
+        diff_interval.insert(snapshot_extent.get_off(), snapshot_extent.get_len());
+      }
+    }
+  }
+
   // the write/read snapshot id key is not useful for parent images so
   // map the special-case INITIAL_WRITE_READ_SNAP_IDS key
   *m_snapshot_delta = {};
+  interval_set<uint64_t> parent_interval;
   auto& intervals = (*m_snapshot_delta)[INITIAL_WRITE_READ_SNAP_IDS];
   for (auto& [key, image_extents] : m_parent_snapshot_delta) {
     for (auto image_extent : image_extents) {
@@ -1025,9 +1052,42 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
                                        &object_extents);
       for (auto& object_extent : object_extents) {
         ceph_assert(object_extent.object_no == this->m_object_no);
-        intervals.insert(
-          object_extent.offset, object_extent.length,
-          {state, object_extent.length});
+        if (calc_diff) {
+          ceph_assert(state == SPARSE_EXTENT_STATE_DATA);
+          parent_interval.insert(object_extent.offset, object_extent.length);
+        } else {
+          intervals.insert(
+            object_extent.offset, object_extent.length,
+            {state, object_extent.length});
+        }
+      }
+    }
+  }
+
+  if (calc_diff) {
+    interval_set<uint64_t> object_interval;
+    for (auto& object_extent : m_object_extents) {
+      object_interval.insert(object_extent.first, object_extent.second);
+    }
+    ceph_assert(object_interval.num_intervals() == 1);
+
+    auto& intervals = (*m_snapshot_delta)[{snap_id_end, snap_id_end}];
+    for (auto& interval : object_interval) {
+      interval_set<uint64_t> object_extent, overlap, overlap_parent;
+      object_extent.insert(interval.first, interval.second);
+      overlap.intersection_of(object_extent, diff_interval);
+      overlap_parent.intersection_of(object_extent, parent_interval);
+      ceph_assert(overlap.num_intervals() == 1);
+      ceph_assert(overlap.begin().get_start() == interval.first);
+      intervals.insert(interval.first, overlap.size(),
+        SparseExtent(SPARSE_EXTENT_STATE_DATA, overlap.size()));
+
+      overlap_parent.union_of(overlap);
+      if (overlap_parent.size() > overlap.size()) {
+        auto zero_len = interval.second - overlap.size();
+        ceph_assert(zero_len > 0);
+        intervals.insert(interval.first + overlap.size(), zero_len,
+          SparseExtent(SPARSE_EXTENT_STATE_ZEROED, zero_len));
       }
     }
   }
