@@ -177,20 +177,33 @@ To see the default container images, run a command of the following form:
 
 .. prompt:: bash #
 
-   grep -E "DEFAULT*IMAGE" /var/lib/ceph/{FSID}/cephadm.{DIGEST}
+   cephadm list-images
 
 ::
 
-   DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.51.0'
-   DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.9.5'    
-   DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.9.5'    
-   DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.7.0'    
-   DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.27.0'   
-   DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:10.4.0'
+   [mgr]
+   mgr/cephadm/container_image_prometheus = quay.io/prometheus/prometheus:v2.51.0
+   mgr/cephadm/container_image_loki = docker.io/grafana/loki:3.0.0
+   mgr/cephadm/container_image_promtail = docker.io/grafana/promtail:3.0.0
+   mgr/cephadm/container_image_node_exporter = quay.io/prometheus/node-exporter:v1.7.0
+   mgr/cephadm/container_image_alertmanager = quay.io/prometheus/alertmanager:v0.27.0
+   mgr/cephadm/container_image_grafana = quay.io/ceph/grafana:10.4.8
+   mgr/cephadm/container_image_haproxy = quay.io/ceph/haproxy:2.3
+   mgr/cephadm/container_image_keepalived = quay.io/ceph/keepalived:2.2.4
+   mgr/cephadm/container_image_nvmeof = quay.io/ceph/nvmeof:1.2.17
+   mgr/cephadm/container_image_snmp_notifier = docker.io/maxwo/snmp-notifier:v1.2.1
+   mgr/cephadm/container_image_elasticsearch = quay.io/omrizeneva/elasticsearch:6.8.23
+   mgr/cephadm/container_image_jaeger_collector = quay.io/jaegertracing/jaeger-collector:1.29
+   mgr/cephadm/container_image_jaeger_agent = quay.io/jaegertracing/jaeger-agent:1.29
+   mgr/cephadm/container_image_jaeger_query = quay.io/jaegertracing/jaeger-query:1.29
+   mgr/cephadm/container_image_smb = quay.io/samba.org/samba-server:devbuilds-centos-amd64
+   mgr/cephadm/container_image_samba_metrics = quay.io/samba.org/samba-metrics:latest
+   mgr/cephadm/container_image_nginx = quay.io/ceph/nginx:sclorg-nginx-126
+   mgr/cephadm/container_image_oauth2_proxy = quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+
 
 Default monitoring images are specified in
-``/src/cephadm/cephadmlib/constants.py`` and in
-``/src/pybind/mgr/cephadm/module.py``.
+``/src/python-common/ceph/cephadm/images.py``.
 
 Using custom images
 ~~~~~~~~~~~~~~~~~~~
