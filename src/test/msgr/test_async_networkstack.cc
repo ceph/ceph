@@ -233,10 +233,10 @@ TEST_P(NetworkWorkerTest, SimpleTest) {
     if (is_my_accept) {
       center->create_file_event(srv_socket.fd(), EVENT_READABLE, &cb);
       {
-        r = srv_socket.read(buf, sizeof(buf));
+        r = srv_socket.read(buf);
         while (r == -EAGAIN) {
           ASSERT_TRUE(cb.poll(500));
-          r = srv_socket.read(buf, sizeof(buf));
+          r = srv_socket.read(buf);
           cb.reset();
         }
         ASSERT_EQ(len, r);
@@ -258,11 +258,11 @@ TEST_P(NetworkWorkerTest, SimpleTest) {
     if (is_my_accept) {
       cb.reset();
       ASSERT_TRUE(cb.poll(500));
-      r = srv_socket.read(buf, sizeof(buf));
+      r = srv_socket.read(buf);
       if (r == -EAGAIN) {
         cb.reset();
         ASSERT_TRUE(cb.poll(1000*500));
-        r = srv_socket.read(buf, sizeof(buf));
+        r = srv_socket.read(buf);
       }
       ASSERT_EQ(0, r);
       center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
@@ -384,7 +384,7 @@ TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
         int i = 3;
         while (!i--) {
           ASSERT_TRUE(cb.poll(500));
-          r = cli_socket.read(buf, sizeof(buf));
+          r = cli_socket.read(buf);
           if (r == 0)
             break;
         }
@@ -541,7 +541,7 @@ TEST_P(NetworkWorkerTest, ComplexTest) {
       if (srv_socket) {
         char buf[1000];
         if (len > 0) {
-          r = srv_socket.read(buf, sizeof(buf));
+          r = srv_socket.read(buf);
           ASSERT_TRUE(r > 0 || r == -EAGAIN);
           if (r > 0) {
             read_string.append(buf, r);
@@ -729,8 +729,8 @@ class StressFactory {
         buffer.resize(m->len);
       bool must_no = false;
       while (true) {
-        r = socket.read((char*)buffer.data() + read_offset,
-                        m->len - read_offset);
+        r = socket.read({(char*)buffer.data() + read_offset,
+                         m->len - read_offset});
         ASSERT_TRUE(r == -EAGAIN || r > 0);
         if (r == -EAGAIN)
           break;
@@ -852,7 +852,7 @@ class StressFactory {
       while (true) {
         char buf[4096];
         bufferptr data;
-        r = socket.read(buf, sizeof(buf));
+        r = socket.read(buf);
         ASSERT_TRUE(r == -EAGAIN || (r >= 0 && (size_t)r <= sizeof(buf)));
         if (r == 0) {
           ASSERT_TRUE(buffers.empty());
