@@ -124,21 +124,23 @@ class Alerts(MgrModule):
         d: Dict[str, Any] = {}
         for code, alert in new.get('checks', {}).items():
             self.log.debug('new code %s alert %s' % (code, alert))
-            if code not in last.get('checks', {}):
-                if 'new' not in d:
-                    d['new'] = {}
-                d['new'][code] = alert
-            elif (alert['summary'].get('count', 0)
-                  > last['checks'][code]['summary'].get('count', 0)):
-                if 'updated' not in d:
-                    d['updated'] = {}
-                d['updated'][code] = alert
+            if not ('muted' in alert and alert['muted']):
+                if code not in last.get('checks', {}):
+                    if 'new' not in d:
+                        d['new'] = {}
+                    d['new'][code] = alert
+                elif (alert['summary'].get('count', 0)
+                      > last['checks'][code]['summary'].get('count', 0)):
+                    if 'updated' not in d:
+                        d['updated'] = {}
+                    d['updated'][code] = alert
         for code, alert in last.get('checks', {}).items():
             self.log.debug('old code %s alert %s' % (code, alert))
-            if code not in new.get('checks', {}):
-                if 'cleared' not in d:
-                    d['cleared'] = {}
-                d['cleared'][code] = alert
+            if not ('muted' in alert and alert['muted']):
+                if code not in new.get('checks', {}):
+                    if 'cleared' not in d:
+                        d['cleared'] = {}
+                    d['cleared'][code] = alert
         return d
 
     def _send_alert(self, status: Dict[str, Any], diff: Dict[str, Any]) -> None:
