@@ -46,15 +46,15 @@ server {
     # add_header Content-Security-Policy "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; require-trusted-types-for 'script'; frame-ancestors 'self';";
 {% endif %}
 
-{% if spec.enable_health_check_endpoint %}
+{% if spec.enable_health_check_endpoint or spec.virtual_ip %}
     location /health {
          return 200 'OK';
          add_header Content-Type text/plain;
     }
 {% endif %}
-{% if oauth2_proxy_url %}
+{% if enable_oauth2_proxy %}
     location /oauth2/ {
-        proxy_pass {{ oauth2_proxy_url }};
+        proxy_pass https://oauth2_proxy_servers;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Scheme $scheme;
@@ -64,7 +64,7 @@ server {
 
     location = /oauth2/auth {
         internal;
-        proxy_pass {{ oauth2_proxy_url }};
+        proxy_pass https://oauth2_proxy_servers;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Scheme $scheme;
@@ -78,7 +78,7 @@ server {
     location / {
         proxy_pass {{ dashboard_scheme }}://dashboard_servers;
         proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
-        {% if oauth2_proxy_url %}
+        {% if enable_oauth2_proxy %}
         auth_request /oauth2/auth;
         error_page 401 = /oauth2/sign_in;
 
@@ -120,7 +120,7 @@ server {
         # will send this header if Grafana is running on the same node as one of those services
         proxy_set_header Authorization "";
         proxy_buffering off;
-        {% if oauth2_proxy_url %}
+        {% if enable_oauth2_proxy %}
         auth_request /oauth2/auth;
         error_page 401 = /oauth2/sign_in;
 
@@ -156,7 +156,7 @@ server {
         proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
         proxy_ssl_verify on;
         proxy_ssl_verify_depth 2;
-        {% if oauth2_proxy_url %}
+        {% if enable_oauth2_proxy %}
         auth_request /oauth2/auth;
         error_page 401 = /oauth2/sign_in;
 
@@ -180,7 +180,7 @@ server {
         proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
         proxy_ssl_verify on;
         proxy_ssl_verify_depth 2;
-        {% if oauth2_proxy_url %}
+        {% if enable_oauth2_proxy %}
         auth_request /oauth2/auth;
         error_page 401 = /oauth2/sign_in;
 
