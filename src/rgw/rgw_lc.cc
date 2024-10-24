@@ -1183,7 +1183,7 @@ public:
 		       << " " << oc.wq->thr_name() << dendl;
     } else {
       /* ! o.is_delete_marker() */
-      r = remove_expired_obj(oc.dpp, oc, !oc.bucket->versioned(),
+      r = remove_expired_obj(oc.dpp, oc, !oc.bucket->versioning_enabled(),
                              {rgw::notify::ObjectExpirationCurrent,
                               rgw::notify::LifecycleExpirationDelete});
       if (r < 0) {
