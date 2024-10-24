@@ -94,6 +94,19 @@ private:
                  std::ostream *os,
 		 Formatter *formatter,
                  const DoutPrefixProvider *dpp);
+  bool is_fast_reshard(int current_shards,
+                       int target_shards);
+  int do_reshard_fast(RGWBucketInfo& new_bucket_info,
+                      int current_shards,
+                      int target_shards,
+                      int max_entries, bool verbose, std::ostream *os,
+                      Formatter *formatter, const DoutPrefixProvider *dpp,
+                      optional_yield y);
+  int do_reshard_fast_process(RGWBucketInfo &new_bucket_info,
+                              int current_shards, int target_shards, int job_id,
+                              int growth_factor, int max_entries,
+                              const DoutPrefixProvider *dpp, optional_yield y);
+
 public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
