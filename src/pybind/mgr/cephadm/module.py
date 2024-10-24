@@ -36,7 +36,7 @@ from ceph.deployment.service_spec import \
     ServiceSpec, PlacementSpec, \
     HostPlacementSpec, IngressSpec, \
     TunedProfileSpec, IscsiServiceSpec, \
-    MgmtGatewaySpec
+    MgmtGatewaySpec, RGWSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -3018,6 +3018,11 @@ Then run the following:
             assert ingress_spec.backend_service
             daemons = self.cache.get_daemons_by_service(ingress_spec.backend_service)
             deps = [d.name() for d in daemons]
+            for attr in ['ssl_cert', 'ssl_key']:
+                ssl_cert_key = getattr(ingress_spec, attr, None)
+                if ssl_cert_key:
+                    assert isinstance(ssl_cert_key, str)
+                    deps.append(str(hash(ssl_cert_key)))
         elif daemon_type == 'keepalived':
             # because cephadm creates new daemon instances whenever
             # port or ip changes, identifying daemons by name is
@@ -3101,6 +3106,13 @@ Then run the following:
             # url_prefix for monitoring daemons depends on the presence of mgmt-gateway
             # while dashboard urls depend on the mgr daemons
             deps += get_daemon_names(['mgr', 'grafana', 'prometheus', 'alertmanager', 'oauth2-proxy'])
+        elif daemon_type == 'rgw':
+            rgw_spec = cast(RGWSpec, spec)
+            ssl_cert = getattr(rgw_spec, 'rgw_frontend_ssl_certificate', None)
+            if isinstance(ssl_cert, list):
+                ssl_cert = '\n'.join(ssl_cert)
+            if ssl_cert:
+                deps.append(str(hash(ssl_cert)))
         else:
             # this daemon type doesn't need deps mgmt
             pass
