@@ -188,8 +188,9 @@ export class NfsFormComponent extends CdForm implements OnInit {
   async getSubVol() {
     const fs_name = this.nfsForm.getValue('fsal').fs_name;
     const subvolgrp = this.nfsForm.getValue('subvolume_group');
-    await this.setSubVolGrpPath();
-
+    if (!this.selectedSubvol) {
+      await this.setSubVolGrpPath();
+    }
     (subvolgrp === this.defaultSubVolGroup
       ? this.subvolService.get(fs_name)
       : this.subvolService.get(fs_name, subvolgrp)
