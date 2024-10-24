@@ -473,6 +473,17 @@ CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
 add_subdirectory(auth)
 add_subdirectory(common)
 add_subdirectory(crush)
+
+set(DEFAULT_WITH_URING OFF)
+if(LINUX)
+  set(DEFAULT_WITH_URING ON)
+endif(LINUX)
+
+option(WITH_URING "build with io_uring support" ${DEFAULT_WITH_URING})
+if(WITH_URING)
+  add_subdirectory(io/uring)
+endif(WITH_URING)
+
 add_subdirectory(msg)
 add_subdirectory(arch)
 add_subdirectory(extblkdev)
@@ -565,6 +576,10 @@ target_link_libraries(common
 if(WITH_JAEGER)
 add_dependencies(common jaeger_base)
 endif()
+
+if(WITH_URING)
+  target_link_libraries(common io_uring)
+endif(WITH_URING)
 
 if (WIN32)
   # Statically building ceph-common on Windows fails. We're temporarily
