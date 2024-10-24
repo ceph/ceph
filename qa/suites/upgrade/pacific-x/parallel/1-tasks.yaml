@@ -13,7 +13,7 @@ tasks:
 - print: "**** done install task..."
 - print: "**** done start installing pacific cephadm ..."
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:pacific
+    image: quay.io/ceph/ceph:v16.2
     cephadm_branch: pacific
     cephadm_git_url: https://github.com/ceph/ceph
     conf:
