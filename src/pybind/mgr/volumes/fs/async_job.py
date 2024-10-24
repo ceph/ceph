@@ -118,10 +118,16 @@ class AsyncJobs(threading.Thread):
     def __init__(self, volume_client, name_pfx, nr_concurrent_jobs):
         threading.Thread.__init__(self, name="{0}.tick".format(name_pfx))
         self.vc = volume_client
-        # queue of volumes for starting async jobs
+        # self.q is a deque of names of a volumes for which async jobs needs
+        # to be started.
         self.q = deque()  # type: deque
-        # volume => job tracking
+
+        # self.jobs is a dictionary where volume name is the key and value is
+        # a tuple containing two members: the async job and an instance of
+        # threading.Thread that performs that job.
+        # in short, self.jobs = {volname: (async_job, thread instance)}.
         self.jobs = {}
+
         # lock, cv for kickstarting jobs
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
