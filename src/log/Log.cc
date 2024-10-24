@@ -31,6 +31,7 @@
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 
 #define MAX_LOG_BUF 65536
 
@@ -493,13 +494,14 @@ void Log::dump_recent()
   _flush(m_flush, false);
 
   _log_message("--- begin dump of recent events ---", true);
-  std::set<std::pair<pthread_t, const char *>> recent_pthread_ids;
+  std::map<pthread_t, std::set<std::string> > recent_pthread_ids;
   {
     EntryVector t;
     t.insert(t.end(), std::make_move_iterator(m_recent.begin()), std::make_move_iterator(m_recent.end()));
     m_recent.clear();
     for (const auto& e : t) {
-      recent_pthread_ids.emplace(std::make_pair(e.m_thread, e.m_thread_name));
+      auto& set = recent_pthread_ids[e.m_thread];
+      set.insert(e.m_thread_name);
     }
     _flush(t, true);
   }
@@ -515,11 +517,14 @@ void Log::dump_recent()
 			   m_stderr_log, m_stderr_crash), true);
 
   _log_message("--- pthread ID / name mapping for recent threads ---", true);
-  for (auto& [pthread_id, pthread_name] : recent_pthread_ids)
+  for (const auto& [pthread_id, pthread_names] : recent_pthread_ids)
   {
     // we want the ID to be printed in the same format as we use for a log entry.
     // The reason is easier grepping.
-    _log_message(fmt::format("  {:x} / {}", tid_to_int(pthread_id), pthread_name), true);
+    auto msg = fmt::format("  {:x} / {}",
+      tid_to_int(pthread_id),
+      fmt::join(pthread_names, ", "));
+    _log_message(msg, true);
   }
 
   _log_message(fmt::format("  max_recent {:9}", m_recent.capacity()), true);
