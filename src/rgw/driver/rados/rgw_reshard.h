@@ -29,6 +29,7 @@
 class RGWReshard;
 
 
+namespace ceph::async { class RadosLockClient; }
 class BucketReshardManager;
 namespace rgw { namespace sal {
   class RadosStore;
@@ -70,6 +71,11 @@ public:
   bool should_renew(const Clock::time_point& now) const {
     return now >= renew_thresh;
   }
+  ceph::timespan get_duration() const { return duration; }
+
+  // return a LockClient for with_lease()
+  auto make_client(boost::asio::yield_context yield)
+    -> ceph::async::RadosLockClient;
 }; // class RGWBucketReshardLock
 
 class RGWBucketReshard {
@@ -227,9 +233,12 @@ public:
 
   /* reshard thread */
   int process_entry(const cls_rgw_reshard_entry& entry, int max_entries,
-                    const DoutPrefixProvider *dpp, optional_yield y);
-  int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp, optional_yield y);
-  int process_all_logshards(const DoutPrefixProvider *dpp, optional_yield y);
+                    const DoutPrefixProvider *dpp,
+                    boost::asio::yield_context y);
+  int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp,
+                              boost::asio::yield_context y);
+  int process_all_logshards(const DoutPrefixProvider *dpp,
+                            boost::asio::yield_context y);
 };
 
 class RGWReshardWait {

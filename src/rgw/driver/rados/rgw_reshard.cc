@@ -18,6 +18,7 @@
 #include "rgw_sal_rados.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
+#include "common/async/lease_rados.h"
 #include "common/errno.h"
 #include "common/ceph_json.h"
 
@@ -988,12 +989,8 @@ RGWBucketReshardLock::RGWBucketReshardLock(rgw::sal::RadosStore* _store,
     "rgw_reshard_bucket_lock_duration");
   duration = std::chrono::seconds(lock_dur_secs);
 
-#define COOKIE_LEN 16
-  char cookie_buf[COOKIE_LEN + 1];
-  gen_rand_alphanumeric(store->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
-  cookie_buf[COOKIE_LEN] = '\0';
-
-  internal_lock.set_cookie(cookie_buf);
+  constexpr size_t COOKIE_LEN = 16;
+  internal_lock.set_cookie(gen_rand_alphanumeric(store->ctx(), COOKIE_LEN));
   internal_lock.set_duration(duration);
 }
 
@@ -1060,6 +1057,13 @@ int RGWBucketReshardLock::renew(const Clock::time_point& now) {
     lock_oid << dendl;
 
   return 0;
+}
+
+auto RGWBucketReshardLock::make_client(boost::asio::yield_context yield)
+  -> ceph::async::RadosLockClient
+{
+  return {yield.get_executor(), store->getRados()->reshard_pool_ctx,
+      lock_oid, internal_lock, ephemeral};
 }
 
 int RGWBucketReshard::renew_lock_if_needed(const DoutPrefixProvider *dpp) {
@@ -1599,7 +1603,7 @@ void RGWReshardWait::stop()
 int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
                               int max_op_entries, // max num to process per op
 			      const DoutPrefixProvider* dpp,
-			      optional_yield y)
+			      boost::asio::yield_context y)
 {
   ldpp_dout(dpp, 20) << __func__ << " resharding " <<
       entry.bucket_name  << dendl;
@@ -1767,7 +1771,8 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
 } // RGWReshard::process_entry
 
 
-int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp, optional_yield y)
+int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp,
+                                        boost::asio::yield_context y)
 {
   std::string marker;
   bool is_truncated = true;
@@ -1781,40 +1786,22 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
   string logshard_oid;
   get_logshard_oid(logshard_num, &logshard_oid);
 
-  RGWBucketReshardLock logshard_lock(store, logshard_oid, false);
-
-  int ret = logshard_lock.lock(dpp);
-  if (ret < 0) { 
-    ldpp_dout(dpp, 5) << __func__ << "(): failed to acquire lock on " <<
-      logshard_oid << ", ret = " << ret <<dendl;
-    return ret;
-  }
-  
   do {
     std::vector<cls_rgw_reshard_entry> entries;
-    ret = list(dpp, y, logshard_num, marker, max_op_entries, entries, &is_truncated);
+    int ret = list(dpp, y, logshard_num, marker, max_op_entries, entries, &is_truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "cannot list all reshards in logshard oid=" <<
 	logshard_oid << dendl;
-      continue;
+      return ret;
     }
 
     for(const auto& entry : entries) { // logshard entries
       process_entry(entry, max_op_entries, dpp, y);
 
-      Clock::time_point now = Clock::now();
-      if (logshard_lock.should_renew(now)) {
-        ret = logshard_lock.renew(now);
-        if (ret < 0) {
-          return ret;
-        }
-      }
-
       entry.get_key(&marker);
     } // entry for loop
   } while (is_truncated && y.cancelled() == boost::asio::cancellation_type::none);
 
-  logshard_lock.unlock();
   return 0;
 }
 
@@ -1828,19 +1815,32 @@ void RGWReshard::get_logshard_oid(int shard_num, string *logshard)
   *logshard =  objname + buf;
 }
 
-int RGWReshard::process_all_logshards(const DoutPrefixProvider *dpp, optional_yield y)
+int RGWReshard::process_all_logshards(const DoutPrefixProvider *dpp,
+                                      boost::asio::yield_context y)
 {
-  int ret = 0;
-
   for (int i = 0; i < num_logshards; i++) {
     string logshard;
     get_logshard_oid(i, &logshard);
 
     ldpp_dout(dpp, 20) << "processing logshard = " << logshard << dendl;
 
-    ret = process_single_logshard(i, dpp, y);
+    constexpr bool ephemeral = false;
+    RGWBucketReshardLock lock(store, logshard, ephemeral);
+    auto client = lock.make_client(y);
 
-    ldpp_dout(dpp, 20) << "finish processing logshard = " << logshard << " , ret = " << ret << dendl;
+    try {
+      // call process_single_logshard() under the protection of cls_lock
+      ceph::async::with_lease(client, lock.get_duration(), y,
+          [this, i, dpp] (boost::asio::yield_context yield) {
+            process_single_logshard(i, dpp, yield);
+          });
+    } catch (const ceph::async::lease_aborted& e) {
+      ldpp_dout(dpp, 1) << "reshard log lease aborted with " << e.code() << dendl;
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 1) << "reshard processing failed with " << e.what() << dendl;
+    }
+
+    ldpp_dout(dpp, 20) << "finish processing logshard = " << logshard << dendl;
 
     if (y.cancelled() != boost::asio::cancellation_type::none) {
       break;
