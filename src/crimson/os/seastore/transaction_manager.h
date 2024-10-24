@@ -920,12 +920,13 @@ private:
     static_assert(is_logical_type(T::TYPE));
     using ret = pin_to_extent_ret<T>;
     auto &pref = *pin;
+    auto direct_length = pref.is_indirect() ?
+      pref.get_intermediate_length() :
+      pref.get_length();
     return cache->get_absent_extent<T>(
       t,
       pref.get_val(),
-      pref.is_indirect() ?
-	pref.get_intermediate_length() :
-	pref.get_length(),
+      direct_length,
       [&pref]
       (T &extent) mutable {
 	assert(!extent.has_laddr());
@@ -984,14 +985,21 @@ private:
               t, *pin, type);
     assert(is_logical_type(type));
     auto &pref = *pin;
+    laddr_t direct_key;
+    extent_len_t direct_length;
+    if (pref.is_indirect()) {
+      direct_key = pref.get_intermediate_base();
+      direct_length = pref.get_intermediate_length();
+    } else {
+      direct_key = pref.get_key();
+      direct_length = pref.get_length();
+    }
     return cache->get_absent_extent_by_type(
       t,
       type,
       pref.get_val(),
-      pref.get_key(),
-      pref.is_indirect() ?
-	pref.get_intermediate_length() :
-	pref.get_length(),
+      direct_key,
+      direct_length,
       [&pref](CachedExtent &extent) mutable {
 	auto &lextent = static_cast<LogicalCachedExtent&>(extent);
 	assert(!lextent.has_laddr());
