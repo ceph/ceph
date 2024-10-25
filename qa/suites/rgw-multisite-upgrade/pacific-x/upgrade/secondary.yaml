@@ -1,0 +1,9 @@
+upgrade-task:
+- install.upgrade: # leave c1 on pacific, upgrade c2 to current
+    c2.mon.a:
+    c2.mgr.x:
+    c2.osd.0:
+    c2.osd.1:
+    c2.osd.2:
+    c2.client.0:
+    c2.client.1:

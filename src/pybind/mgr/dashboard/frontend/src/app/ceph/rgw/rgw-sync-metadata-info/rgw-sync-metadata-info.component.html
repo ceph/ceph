@@ -1,0 +1,59 @@
+<span *ngIf="metadataSyncInfo === 'no sync (zone is master)'">
+  <ul class="me-2">
+    <li><b>Status:</b></li>
+    <li>No Sync</li>
+  </ul>
+</span>
+<span *ngIf="metadataSyncInfo !== 'no sync (zone is master)'">
+  <ng-template #metadataSyncPopover>
+    <ul class="text-center">
+      <li><h5><b>Metadata Sync Status:</b></h5></li>
+      <li *ngFor="let status of metadataSyncInfo.fullSyncStatus">
+        <span *ngIf="!status?.includes(metadataSyncInfo.syncstatus) && !status?.includes('failed') && !status?.includes('error')">
+          <span *ngIf="status?.includes(':')">
+            <b>{{ status.split(':')[0] | titlecase }}</b>:{{ status.split(':')[1] | titlecase}}
+          </span>
+          <span *ngIf="!status?.includes(':')">
+            <b>{{ status | titlecase }}</b>
+          </span>
+        </span>
+        <span *ngIf="status?.includes('failed') || status?.includes('error')">
+            {{ status | titlecase }}
+        </span>
+      </li>
+    </ul>
+  </ng-template>
+  <ul class="me-2">
+    <ng-template #upToDateTpl>
+      <li class="badge badge-success">Up to Date</li>
+    </ng-template>
+    <ng-template #showMetadataStatus>
+      <a *ngIf="metadataSyncInfo.syncstatus !== 'Not Syncing From Zone'"
+         class="lead text-primary"
+         [ngbPopover]="metadataSyncPopover"
+         placement="top"
+         popoverClass="rgw-overview-card-popover"
+         i18n>{{ metadataSyncInfo.syncstatus | titlecase }}</a>
+      <a *ngIf="metadataSyncInfo.syncstatus === 'Not Syncing From Zone'"
+         class="lead text-primary"
+         [ngbPopover]="metadataSyncPopover"
+         placement="top"
+         popoverClass="rgw-overview-card-popover"
+         i18n>Not Syncing</a>
+    </ng-template>
+    <li><b>Status:</b></li>
+    <li *ngIf="metadataSyncInfo.syncstatus?.includes('failed') || metadataSyncInfo.syncstatus?.includes('error'); else showMetadataStatus">
+      <i class="text-danger"
+         [ngClass]="[icons.danger]"></i>
+      <a class="lead text-danger"
+         [ngbPopover]="metadataSyncPopover"
+         placement="top"
+         popoverClass="rgw-overview-card-popover"
+         i18n>Error</a></li>
+    <li class="mt-4 fw-bold">
+      Last Synced:
+    </li>
+    <li class="badge badge-info"
+        *ngIf="metadataSyncInfo.timestamp; else upToDateTpl">{{ metadataSyncInfo.timestamp | relativeDate }}</li>
+  </ul>
+</span>
