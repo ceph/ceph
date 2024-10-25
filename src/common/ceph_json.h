@@ -1,11 +1,16 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
+#include <deque>
+#include <map>
+#include <set>
 #include <stdexcept>
+#include <string>
 #include <typeindex>
 #include <include/types.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/optional.hpp>
 #include <include/ceph_fs.h>
 #include "common/ceph_time.h"
 
