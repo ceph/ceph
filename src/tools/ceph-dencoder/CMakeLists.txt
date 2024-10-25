@@ -10,7 +10,6 @@ endif()
 
 set(dencoder_srcs
   ceph_dencoder.cc
-  ../../include/uuid.cc
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_executable(ceph-dencoder ${dencoder_srcs})
 set_target_properties(ceph-dencoder PROPERTIES
