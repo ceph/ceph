@@ -11,6 +11,10 @@ import { Observable, of as observableOf, timer as observableTimer } from 'rxjs';
 import { map, switchMapTo, take } from 'rxjs/operators';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
+import {
+  IPV4VALIDATIONREGEX,
+  IPV6VALIDATIONREGEX
+} from '~/app/shared/constants/regex-patterns.constants';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import validator from 'validator';
@@ -45,17 +49,14 @@ export class CdValidators {
    *   if the validation check fails, otherwise `null`.
    */
   static ip(version: number = 0): ValidatorFn {
-    // prettier-ignore
-    const ipv4Rgx =
-      /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
-    const ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
-
     if (version === 4) {
-      return Validators.pattern(ipv4Rgx);
+      return Validators.pattern(IPV4VALIDATIONREGEX);
     } else if (version === 6) {
-      return Validators.pattern(ipv6Rgx);
+      return Validators.pattern(IPV6VALIDATIONREGEX);
     } else {
-      return Validators.pattern(new RegExp(ipv4Rgx.source + '|' + ipv6Rgx.source));
+      return Validators.pattern(
+        new RegExp(IPV4VALIDATIONREGEX.source + '|' + IPV6VALIDATIONREGEX.source)
+      );
     }
   }
 
@@ -565,11 +566,9 @@ export class CdValidators {
       let errorName: string;
       // - Bucket names cannot be formatted as IP address.
       constraints.push(() => {
-        const ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
-        const ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
         const name = control.value;
         let notIP = true;
-        if (ipv4Rgx.test(name) || ipv6Rgx.test(name)) {
+        if (IPV4VALIDATIONREGEX.test(name) || IPV6VALIDATIONREGEX.test(name)) {
           errorName = 'ipAddress';
           notIP = false;
         }
