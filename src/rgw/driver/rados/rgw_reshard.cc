@@ -1027,8 +1027,10 @@ auto RGWBucketReshardLock::make_client(boost::asio::yield_context yield)
       lock_oid, internal_lock, ephemeral};
 }
 
-int RGWBucketReshard::calc_target_shard(const RGWBucketInfo& bucket_info, const rgw_obj_key& key,
-                                        int& shard, const DoutPrefixProvider *dpp) {
+static int calc_target_shard(const DoutPrefixProvider* dpp, RGWRados* store,
+                             const RGWBucketInfo& bucket_info,
+                             const rgw_obj_key& key, int& shard)
+{
   int target_shard_id, ret;
 
   rgw_obj obj(bucket_info.bucket, key);
@@ -1037,8 +1039,8 @@ int RGWBucketReshard::calc_target_shard(const RGWBucketInfo& bucket_info, const 
     // place the multipart .meta object on the same shard as its head object
     obj.index_hash_source = mp.get_key();
   }
-  ret = store->getRados()->get_target_shard_id(bucket_info.layout.target_index->layout.normal,
-                obj.get_hash_object(), &target_shard_id);
+  ret = store->get_target_shard_id(bucket_info.layout.target_index->layout.normal,
+                                   obj.get_hash_object(), &target_shard_id);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
     return ret;
@@ -1134,7 +1136,8 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
         }
 
         int shard_index;
-        ret = calc_target_shard(bucket_info, key, shard_index, dpp);
+        ret = calc_target_shard(dpp, store->getRados(),
+                                bucket_info, key, shard_index);
         if (ret < 0) {
           return ret;
         }
