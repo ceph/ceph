@@ -142,6 +142,7 @@
 # disable dwz for %50% speedup at the cost of ~33% space
 %global _find_debuginfo_dwz_opts %{nil}
 %endif
+%bcond_with sccache
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
@@ -1529,6 +1530,9 @@ cmake .. \
     -DWITH_JAEGER:BOOL=OFF \
 %endif
     -DWITH_GRAFANA:BOOL=ON \
+%if %{with sccache}
+    -DWITH_SCCACHE=ON \
+%endif
 %if 0%{with cephadm_bundling}
 %if 0%{with cephadm_pip_deps}
     -DCEPHADM_BUNDLED_DEPENDENCIES=pip
