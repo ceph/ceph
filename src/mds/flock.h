@@ -3,10 +3,13 @@
 #ifndef CEPH_MDS_FLOCK_H
 #define CEPH_MDS_FLOCK_H
 
-#include <errno.h>
+#include "include/ceph_fs.h" // for ceph_filelock
+#include "include/types.h" // for client_t
 
-#include "common/debug.h"
-#include "mdstypes.h"
+#include <cstdint>
+#include <list>
+#include <map>
+#include <ostream>
 
 inline std::ostream& operator<<(std::ostream& out, const ceph_filelock& l) {
   out << "start: " << l.start << ", length: " << l.length
