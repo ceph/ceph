@@ -80,7 +80,7 @@ class RGWBucketReshard {
   static const std::initializer_list<uint16_t> reshard_primes;
 
   int reshard_process(const rgw::bucket_index_layout_generation& current,
-                      int& max_entries,
+                      int max_entries,
                       BucketReshardManager& target_shards_mgr,
                       bool verbose_json_out,
                       std::ostream *out,
