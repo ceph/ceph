@@ -217,6 +217,6 @@ mv $outfile.all.tar $outfile.tar
 rm $outfile
 
 echo "compressing..."
-bzip2 -9 $outfile.tar
+xz -T0 -6 -z $outfile.tar
 
 echo "done."
