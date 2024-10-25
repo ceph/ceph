@@ -4,6 +4,7 @@
 #include "inode_backtrace.h"
 
 #include "common/Formatter.h"
+#include "include/container_ios.h"
 
 /* inode_backpointer_t */
 
