@@ -11,6 +11,7 @@
 #include "common/blkdev.h"
 #include "include/stringify.h"
 #include "include/compat.h"
+#include "include/container_ios.h"
 #include "common/debug.h"
 
 //#define dout_subsys ceph_subsys_context

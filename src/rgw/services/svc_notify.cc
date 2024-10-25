@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "include/random.h"
+#include "include/container_ios.h"
 #include "include/Context.h"
 #include "common/async/spawn_throttle.h"
 #include "common/errno.h"
