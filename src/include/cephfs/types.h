@@ -30,7 +30,6 @@
 #include "include/types.h" // for version_t
 #include "include/utime.h"
 
-#include <boost/spirit/include/qi.hpp>
 #include "include/ceph_assert.h"
 #include <boost/serialization/strong_typedef.hpp>
 #include "common/ceph_json.h"
@@ -1384,25 +1383,5 @@ inline void decode(inode_t<Allocator> &c, ::ceph::buffer::list::const_iterator &
 {
   c.decode(p);
 }
-
-// parse a map of keys/values.
-namespace qi = boost::spirit::qi;
-
-template <typename Iterator>
-struct keys_and_values
-  : qi::grammar<Iterator, std::map<std::string, std::string>()>
-{
-    keys_and_values()
-      : keys_and_values::base_type(query)
-    {
-      query =  pair >> *(qi::lit(' ') >> pair);
-      pair  =  key >> '=' >> value;
-      key   =  qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9");
-      value = +qi::char_("a-zA-Z0-9-_.");
-    }
-  qi::rule<Iterator, std::map<std::string, std::string>()> query;
-  qi::rule<Iterator, std::pair<std::string, std::string>()> pair;
-  qi::rule<Iterator, std::string()> key, value;
-};
 
 #endif
