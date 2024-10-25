@@ -4,7 +4,7 @@
 #include "Finisher.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/perf_counters.h"
-#include "include/types.h" // for operator<<(std::vector)
+#include "include/container_ios.h"
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"

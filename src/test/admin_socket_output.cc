@@ -19,6 +19,7 @@
 #include "common/admin_socket_client.h"     // For AdminSocketClient
 #include "common/ceph_json.h"               // For JSONParser, JSONObjIter
 #include "include/buffer.h"                 // For bufferlist
+#include "include/container_ios.h"
 
 #include "admin_socket_output.h"
 
