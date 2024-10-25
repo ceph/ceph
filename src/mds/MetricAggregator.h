@@ -13,16 +13,17 @@
 #include "common/ceph_mutex.h"
 #include "common/perf_counters.h"
 #include "include/common_fwd.h"
-#include "messages/MMDSMetrics.h"
 
 #include "mgr/MetricTypes.h"
 #include "mgr/MDSPerfMetricTypes.h"
 
 #include "mdstypes.h"
-#include "MDSMap.h"
 #include "MDSPinger.h"
 
+class MDSMap;
 class MDSRank;
+class MMDSMetrics;
+struct Metrics;
 class MgrClient;
 
 class MetricAggregator : public Dispatcher {
