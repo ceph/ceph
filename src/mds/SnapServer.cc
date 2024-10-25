@@ -25,6 +25,7 @@
 #include "msg/Messenger.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
