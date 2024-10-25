@@ -22,12 +22,17 @@
 #include <fmt/ostream.h>
 #endif
 
-#include "include/types.h"
-
 #include "json_spirit/json_spirit_value.h"
 #include "include/ceph_assert.h"   // spirit clobbers it!
+#include "include/object.h" // for object_t
+#include "include/types.h" // for version_t, shard_id_t
 
 #include "reverse.h"
+
+#include <cstdint>
+#include <iostream>
+#include <set>
+#include <string>
 
 namespace ceph {
   class Formatter;
