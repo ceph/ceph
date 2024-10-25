@@ -15,7 +15,10 @@
 #ifndef CEPH_MSG_TYPES_H
 #define CEPH_MSG_TYPES_H
 
+#include <algorithm> // for std::min()
+#include <set>
 #include <sstream>
+#include <string>
 
 #include <netinet/in.h>
 #include "common/fmt_common.h"
