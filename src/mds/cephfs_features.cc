@@ -1,11 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <array>
 #include "cephfs_features.h"
 #include "mdstypes.h"
+#include "common/StackStringStream.h"
 
 #include <fmt/format.h>
+
+#include <array>
 
 static const std::array feature_names
 {
