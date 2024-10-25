@@ -207,7 +207,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
     auto [ver, bl] = librados::async_operate(
-      yield, ioctx, oid, op, flags, trace_info, yield[ec]);
+      yield.get_executor(), ioctx, oid, op, flags, trace_info, yield[ec]);
     if (pbl) {
       *pbl = std::move(bl);
     }
@@ -231,8 +231,8 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
   if (y) {
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    version_t ver = librados::async_operate(yield, ioctx, oid, op, flags,
-                                            trace_info, yield[ec]);
+    version_t ver = librados::async_operate(
+        yield.get_executor(), ioctx, oid, op, flags, trace_info, yield[ec]);
     if (pver) {
       *pver = ver;
     }
@@ -253,8 +253,8 @@ int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, cons
   if (y) {
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    auto [ver, reply] = librados::async_notify(yield, ioctx, oid,
-                                               bl, timeout_ms, yield[ec]);
+    auto [ver, reply] = librados::async_notify(
+        yield.get_executor(), ioctx, oid, bl, timeout_ms, yield[ec]);
     if (pbl) {
       *pbl = std::move(reply);
     }
