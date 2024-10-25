@@ -1050,8 +1050,80 @@ static int calc_target_shard(const DoutPrefixProvider* dpp, RGWRados* store,
   return 0;
 }
 
+static int process_source_shard(const DoutPrefixProvider *dpp, optional_yield y,
+                                RGWRados* store, const RGWBucketInfo& bucket_info,
+                                const rgw::bucket_index_layout_generation& current,
+                                int source_shard, int max_op_entries,
+                                BucketReshardManager& target_shards_mgr,
+                                bool verbose_json_out, ostream *out,
+                                Formatter *formatter, uint64_t& stage_entries,
+                                bool process_log)
+{
+  bool is_truncated = true;
+  string marker;
+  const std::string filter; // empty string since we're not filtering by object
+  while (is_truncated) {
+    std::list<rgw_cls_bi_entry> entries;
+
+    int ret = store->bi_list(dpp, bucket_info, source_shard, filter,
+                             marker, max_op_entries, &entries,
+                             &is_truncated, process_log, y);
+    if (ret == -ENOENT) {
+      ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
+          << source_shard << ", skipping" << dendl;
+      // break out of the is_truncated loop and move on to the next shard
+      break;
+    } else if (ret < 0) {
+      derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    for (auto& entry : entries) {
+      marker = entry.idx;
+
+      cls_rgw_obj_key cls_key;
+      RGWObjCategory category;
+      rgw_bucket_category_stats stats;
+      bool account = entry.get_info(&cls_key, &category, &stats);
+      rgw_obj_key key(cls_key);
+      if (entry.type == BIIndexType::OLH && key.empty()) {
+        // bogus entry created by https://tracker.ceph.com/issues/46456
+        // to fix, skip so it doesn't get include in the new bucket instance
+        ldpp_dout(dpp, 10) << "Dropping entry with empty name, idx=" << marker << dendl;
+        continue;
+      }
+
+      int shard_index;
+      ret = calc_target_shard(dpp, store, bucket_info, key, shard_index);
+      if (ret < 0) {
+        return ret;
+      }
+
+      ret = target_shards_mgr.add_entry(shard_index, entry, account,
+                                        category, stats, process_log);
+      if (ret < 0) {
+        return ret;
+      }
+
+      const uint64_t entry_id = stage_entries++;
+      if (verbose_json_out) {
+        formatter->open_object_section("entry");
+        encode_json("shard_id", source_shard, formatter);
+        encode_json("num_entry", entry_id, formatter);
+        encode_json("entry", entry, formatter);
+        formatter->close_section();
+        formatter->flush(*out);
+      } else if (out && !(stage_entries % 1000)) {
+        (*out) << " " << stage_entries;
+      }
+    } // entries loop
+  } // while truncated
+
+  return 0;
+}
+
 int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation& current,
-                                      int& max_op_entries,
+                                      int max_op_entries,
                                       BucketReshardManager& target_shards_mgr,
                                       bool verbose_json_out,
                                       ostream *out,
@@ -1088,73 +1160,13 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
   }
 
   const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
-  string marker;
   for (uint32_t i = 0; i < num_source_shards; ++i) {
-    bool is_truncated = true;
-    marker.clear();
-    const std::string null_object_filter; // empty string since we're not filtering by object
-    while (is_truncated) {
-      entries.clear();
-
-      int ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter,
-                                           marker, max_op_entries, &entries,
-                                           &is_truncated, process_log, y);
-      if (ret == -ENOENT) {
-        ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
-            << i << ", skipping" << dendl;
-        // break out of the is_truncated loop and move on to the next shard
-        break;
-      } else if (ret < 0) {
-        derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
-        return ret;
-      }
-
-      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
-        rgw_cls_bi_entry& entry = *iter;
-        if (verbose_json_out) {
-          formatter->open_object_section("entry");
-
-          encode_json("shard_id", i, formatter);
-          encode_json("num_entry", stage_entries, formatter);
-          encode_json("entry", entry, formatter);
-        }
-        stage_entries++;
-
-        marker = entry.idx;
-
-        cls_rgw_obj_key cls_key;
-        RGWObjCategory category;
-        rgw_bucket_category_stats stats;
-        bool account = entry.get_info(&cls_key, &category, &stats);
-        rgw_obj_key key(cls_key);
-        if (entry.type == BIIndexType::OLH && key.empty()) {
-          // bogus entry created by https://tracker.ceph.com/issues/46456
-          // to fix, skip so it doesn't get include in the new bucket instance
-          stage_entries--;
-          ldpp_dout(dpp, 10) << "Dropping entry with empty name, idx=" << marker << dendl;
-          continue;
-        }
-
-        int shard_index;
-        ret = calc_target_shard(dpp, store->getRados(),
-                                bucket_info, key, shard_index);
-        if (ret < 0) {
-          return ret;
-        }
-
-        ret = target_shards_mgr.add_entry(shard_index, entry, account,
-                  category, stats, process_log);
-        if (ret < 0) {
-          return ret;
-        }
-
-        if (verbose_json_out) {
-          formatter->close_section();
-          formatter->flush(*out);
-        } else if (out && !(stage_entries % 1000)) {
-          (*out) << " " << stage_entries;
-        }
-      } // entries loop
+    int ret = process_source_shard(dpp, y, store->getRados(), bucket_info,
+                                   current, i, max_op_entries,
+                                   target_shards_mgr, verbose_json_out, out,
+                                   formatter, stage_entries, process_log);
+    if (ret < 0) {
+      return ret;
     }
   }
 
