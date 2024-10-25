@@ -317,9 +317,9 @@ options:
     replicas on each OSD as shown by the PGS column of a ``ceph osd df``
     report. In some circumstances it may exceed this target, up to the
     ``mon_max_pg_per_osd`` limit. Conversely, a lower number of PGs per OSD may be
-    set if the cluster is not yet fully utilized or when the sum of power-of-two
-    per-pool ``pg_num`` values does not permit a perfect fit.
-  default: 100
+    created if the cluster is not yet fully populated and the ``bulk`` flag is not
+    enabled for a given pool.
+  default: 200
   min: 1
 # min pgs per osd for reweight-by-pg command
 - name: mon_reweight_min_pgs_per_osd
