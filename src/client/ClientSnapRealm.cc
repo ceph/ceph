@@ -3,6 +3,7 @@
 
 #include "ClientSnapRealm.h"
 #include "common/Formatter.h"
+#include "include/container_ios.h"
 
 using std::set;
 using std::vector;

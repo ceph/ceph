@@ -6,6 +6,7 @@
 
 #include <ostream>
 
+#include "include/container_ios.h"
 #include "include/denc.h"
 #include "include/utime.h"
 #include "mdstypes.h"
