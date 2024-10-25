@@ -18,6 +18,7 @@
 #include "msg/Messenger.h"
 
 #include "events/ETableServer.h"
+#include "common/debug.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
