@@ -1,9 +1,15 @@
 #ifndef __CEPH_SNAP_TYPES_H
 #define __CEPH_SNAP_TYPES_H
 
-#include "include/types.h"
+#include "include/object.h" // for struct snapid_t
+#include "include/types.h" // for the ceph_mds_snap_realm encoder
 #include "include/utime.h"
-#include "include/fs_types.h"
+#include "include/fs_types.h" // for struct inodeno_t
+
+#include <fmt/core.h> // for FMT_VERSION
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 namespace ceph {
 class Formatter;
