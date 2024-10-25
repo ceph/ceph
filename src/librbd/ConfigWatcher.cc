@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/ConfigWatcher.h"
+#include "include/container_ios.h"
 #include "common/config_obs.h"
 #include "common/dout.h"
 #include "common/errno.h"
