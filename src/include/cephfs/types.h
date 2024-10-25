@@ -12,32 +12,25 @@
  */
 #ifndef CEPH_CEPHFS_TYPES_H
 #define CEPH_CEPHFS_TYPES_H
-#include "include/int_types.h"
 
-#include <ostream>
-#include <set>
+#include <algorithm> // for std::find_if()
+#include <cstdint>
+#include <list>
 #include <map>
+#include <ostream>
+#include <string>
 #include <string_view>
+#include <vector>
 
-#include "common/config.h"
-#include "common/Clock.h"
-#include "common/DecayCounter.h"
-#include "common/StackStringStream.h"
-#include "common/entity_name.h"
-
-#include "include/compat.h"
-#include "include/Context.h"
-#include "include/frag.h"
-#include "include/xlist.h"
-#include "include/interval_set.h"
+#include "common/Formatter.h"
 #include "include/compact_set.h"
+#include "include/encoding.h"
 #include "include/fs_types.h"
 #include "include/ceph_fs.h"
-
-#include "mds/inode_backtrace.h"
+#include "include/types.h" // for version_t
+#include "include/utime.h"
 
 #include <boost/spirit/include/qi.hpp>
-#include <boost/pool/pool.hpp>
 #include "include/ceph_assert.h"
 #include <boost/serialization/strong_typedef.hpp>
 #include "common/ceph_json.h"
