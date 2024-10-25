@@ -18,7 +18,7 @@
 #include <iostream>
 
 #include "common/Formatter.h"
-#include "include/types.h"
+#include "include/container_ios.h"
 
 void CompatSet::FeatureSet::encode(ceph::buffer::list& bl) const {
   using ceph::encode;

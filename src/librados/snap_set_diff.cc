@@ -3,9 +3,9 @@
 
 #include "snap_set_diff.h"
 #include "common/ceph_context.h"
+#include "include/container_ios.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
-#include "include/types.h"
 #include "common/debug.h"
 
 #include <vector>
