@@ -14378,6 +14378,7 @@ bool MDCache::is_ready_to_trim_cache(void)
 
 void MDCache::upkeep_main(void)
 {
+  ceph_pthread_setname("mds-cache-trim");
   std::unique_lock lock(upkeep_mutex);
 
   // create a "memory model" for the upkeep thread. The object maintains
