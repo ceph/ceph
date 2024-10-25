@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
+#include "Message.h"
+
 #ifdef ENCODE_DUMP
 # include <typeinfo>
 # include <cxxabi.h>
@@ -11,8 +13,6 @@
 #include "include/types.h"
 
 #include "global/global_context.h"
-
-#include "Message.h"
 
 #include "messages/MPGStats.h"
 
@@ -205,7 +205,9 @@
 #include "messages/MTimeCheck.h"
 #include "messages/MTimeCheck2.h"
 
+#include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/debug.h"
 
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
