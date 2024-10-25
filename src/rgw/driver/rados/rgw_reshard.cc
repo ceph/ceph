@@ -1258,7 +1258,7 @@ int RGWBucketReshard::execute(int num_shards,
     return ceph::async::with_lease(client, lock.get_duration(), y,
         [&] (boost::asio::yield_context yield) {
           if (reshard_log) {
-            // update initiator once the last is acquired
+            // update initiator once the lock is acquired
             int ret = reshard_log->update(dpp, yield, bucket_info.bucket, initiator);
             if (ret < 0) {
               return ret;
