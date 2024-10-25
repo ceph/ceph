@@ -3,6 +3,7 @@
 
 #include "common/Formatter.h"
 #include "mgr/OSDPerfMetricTypes.h"
+#include "include/container_ios.h"
 #include <ostream>
 
 using ceph::bufferlist;
