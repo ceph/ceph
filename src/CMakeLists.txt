@@ -504,6 +504,7 @@ set(libcommon_files
   include/utime.cc
   include/uuid.cc
   common/error_code.cc
+  common/frag.cc
   common/tracer.cc
   log/Log.cc
   mon/MonCap.cc
