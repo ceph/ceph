@@ -16,6 +16,7 @@
 #include "bluestore_types.h"
 #include "common/Formatter.h"
 #include "common/Checksummer.h"
+#include "include/container_ios.h"
 #include "include/stringify.h"
 
 using std::list;

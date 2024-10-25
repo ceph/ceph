@@ -14,6 +14,7 @@
 
 #include "rgw_dedup_utils.h"
 #include "common/ceph_crypto.h"
+#include "include/container_ios.h"
 
 namespace rgw::dedup {
   //---------------------------------------------------------------------------
