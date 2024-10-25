@@ -1,11 +1,17 @@
 #ifndef _MSG_ASYNC_FRAMES_V2_
 #define _MSG_ASYNC_FRAMES_V2_
 
+#include "include/buffer.h"
+#include "include/byteorder.h" // for ceph_le*
+#include "include/ceph_features.h" // for CEPH_FEATUREMASK_*
 #include "include/types.h"
 #include "common/Clock.h"
 #include "crypto_onwire.h"
 #include "compression_onwire.h"
+#include "msg/msg_types.h" // for entity_addr_t, entity_addrvec_t
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <iosfwd>
 #include <utility>
 
