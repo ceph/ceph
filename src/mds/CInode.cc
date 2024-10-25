@@ -41,6 +41,7 @@
 #include "common/errno.h"
 #include "global/global_context.h"
 #include "include/ceph_assert.h"
+#include "include/cephfs/json.h"
 #include "include/int_types.h"
 #include "include/random.h" // for ceph::util::generate_random_number()
 
