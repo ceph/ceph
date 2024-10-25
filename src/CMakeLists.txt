@@ -512,6 +512,7 @@ set(libcommon_files
   mon/MonSub.cc
   mon/error_code.cc
   mgr/MgrClient.cc
+  mon/MgrMap.cc
   mon/PGMap.cc
   mgr/ServiceMap.cc
   osd/ECMsgTypes.cc
