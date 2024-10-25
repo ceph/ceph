@@ -106,6 +106,8 @@ If quotas are not enabled or if no quota is set on the mounted sub-directory,
 then the overall usage of the file system will be reported irrespective of the
 value of this setting.
 
+.. _cephfs-layout-and-quota-restriction:
+
 Layout and Quota restriction (the 'p' flag)
 ===========================================
 
