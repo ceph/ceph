@@ -20,9 +20,6 @@
 #include <string>
 #include <optional>
 #include <fmt/chrono.h>
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
 #include <sys/time.h>
 
 #if defined(__APPLE__)
