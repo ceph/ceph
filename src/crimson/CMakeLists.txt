@@ -98,6 +98,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/include/utime.cc
+  ${PROJECT_SOURCE_DIR}/src/include/uuid.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/io/IoOperations.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/ServiceMap.cc

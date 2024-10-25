@@ -13,7 +13,38 @@
  */
 
 #include "uuid.h"
+#include "random.h"
 #include "common/Formatter.h"
+
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/string_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
+
+#include <random>
+
+void uuid_d::generate_random() {
+  random_device_t rng;
+  boost::uuids::basic_random_generator gen(rng);
+  uuid = gen();
+}
+
+bool uuid_d::parse(const char *s) {
+  try {
+    boost::uuids::string_generator gen;
+    uuid = gen(s);
+    return true;
+  } catch (std::runtime_error& e) {
+    return false;
+  }
+}
+
+void uuid_d::print(char *s) const {
+  memcpy(s, boost::uuids::to_string(uuid).c_str(), 37);
+}
+
+std::string uuid_d::to_string() const {
+  return boost::uuids::to_string(uuid);
+}
 
 void uuid_d::dump(ceph::Formatter *f) const
 {
