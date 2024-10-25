@@ -2495,8 +2495,8 @@ int RadosObject::transition(Bucket* bucket,
 int RadosObject::restore_obj_from_cloud(Bucket* bucket,
                                   rgw::sal::PlacementTier* tier,
                                   rgw_placement_rule& placement_rule,
-                            	  rgw_bucket_dir_entry& o,
-                          	  CephContext* cct,
+                            	    rgw_bucket_dir_entry& o,
+                          	      CephContext* cct,
                                   RGWObjTier& tier_config,
                                   real_time& mtime,
                                   uint64_t olh_epoch,
@@ -2567,7 +2567,7 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   ret = store->getRados()->restore_obj_from_cloud(tier_ctx, *rados_ctx,
                                 bucket->get_info(), get_obj(), placement_rule,
                                 tier_config,
-                                mtime, olh_epoch, days, dpp, y, flags & FLAG_LOG_OP);
+                                olh_epoch, days, dpp, y, flags & FLAG_LOG_OP);
 
   if (ret < 0) { //failed to restore
     ldpp_dout(dpp, 0) << "Restoring object(" << o.key << ") from the cloud endpoint(" << endpoint << ") failed, ret=" << ret << dendl;
@@ -2740,7 +2740,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
           RGWObjManifest *pmanifest;
           pmanifest = &m;
 
-	        Object* head_obj = (Object*)this;
+          Object* head_obj = (Object*)this;
           RGWObjTier tier_config;
           m.get_tier_config(&tier_config);
 	
@@ -2751,12 +2751,21 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
           pmanifest->set_obj_size(0);
           obj_op.meta.manifest = pmanifest;
 
+          auto v_iter = attrs.find(RGW_ATTR_RESTORE_VERSIONED_EPOCH);
+          if (v_iter != attrs.end()) {
+            uint64_t versioned_epoch;
+            using ceph::decode;
+            decode(versioned_epoch, v_iter->second);
+            obj_op.meta.olh_epoch = versioned_epoch;
+          }
+
           // erase restore attrs
           attrs.erase(RGW_ATTR_RESTORE_STATUS);
           attrs.erase(RGW_ATTR_RESTORE_TYPE);
           attrs.erase(RGW_ATTR_RESTORE_TIME);
           attrs.erase(RGW_ATTR_RESTORE_EXPIRY_DATE);
           attrs.erase(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+      	  attrs.erase(RGW_ATTR_RESTORE_VERSIONED_EPOCH);
 
           bufferlist bl;
           bl.append(tier_config.name);
