@@ -3,14 +3,15 @@
 
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <vector>
 
 #include "AuthAuthorizeHandler.h"
 #include "AuthMethodList.h"
 #include "common/ceph_mutex.h"
-#include "common/ceph_context.h"
-#include "common/config_cacher.h"
+#include "common/config_obs.h"
+#include "include/common_fwd.h" // for CephContext
 
 class AuthRegistry : public md_config_obs_t {
   CephContext *cct;
