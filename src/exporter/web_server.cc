@@ -28,6 +28,9 @@ namespace net = boost::asio;      // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl; // from <boost/asio/ssl.hpp>
 using tcp = boost::asio::ip::tcp; // from <boost/asio/ip/tcp.hpp>
 
+//common io context for the web servers
+std::shared_ptr<net::io_context> global_ioc;
+
 // Base class for common functionality
 class web_connection {
 public:
@@ -43,7 +46,7 @@ protected:
   web_connection(net::any_io_executor executor, std::chrono::seconds timeout)
       : deadline_(executor, timeout) {}
 
-    // Common request processing logic
+  // Common request processing logic
   void process_request() {
     response_.version(request_.version());
     response_.keep_alive(request_.keep_alive());
@@ -64,7 +67,7 @@ protected:
     write_response();
   }
 
-    // Construct a response message based on the request target
+  // Construct a response message based on the request target
   void create_response() {
     if (request_.target() == "/") {
         response_.result(http::status::moved_permanently);
@@ -81,7 +84,7 @@ protected:
     }
   }
 
-    // Asynchronously transmit the response message
+  // Asynchronously transmit the response message
   virtual void write_response() = 0;
 
   // Check whether we have spent enough time on this connection
@@ -228,28 +231,33 @@ void https_server(tcp::acceptor &acceptor, ssl::context &ssl_ctx) {
 }
 
 void run_http_server(const std::string& exporter_addr, short unsigned int port) {
-  net::io_context ioc{1};
-  tcp::acceptor acceptor{ioc, {net::ip::make_address(exporter_addr), port}};
-  tcp::socket socket{ioc};
+  tcp::acceptor acceptor{*global_ioc, {net::ip::make_address(exporter_addr), port}};
+  tcp::socket socket{*global_ioc};
 
   http_server(acceptor, socket);
 
   dout(1) << "HTTP server running on " << exporter_addr << ":" << port << dendl;
-  ioc.run();
+  global_ioc->run();
 }
 
 void run_https_server(const std::string& exporter_addr, short unsigned int port, const std::string& cert_file, const std::string& key_file) {
-  net::io_context ioc{1};
   ssl::context ssl_ctx(ssl::context::tlsv13);
 
   ssl_ctx.use_certificate_chain_file(cert_file);
   ssl_ctx.use_private_key_file(key_file, ssl::context::pem);
 
-  tcp::acceptor acceptor{ioc, {net::ip::make_address(exporter_addr), port}};
+  tcp::acceptor acceptor{*global_ioc, {net::ip::make_address(exporter_addr), port}};
   https_server(acceptor, ssl_ctx);
 
   dout(1) << "HTTPS server running on " << exporter_addr << ":" << port << dendl;
-  ioc.run();
+  global_ioc->run();
+}
+
+void stop_web_server() {
+  if (global_ioc) {
+    global_ioc->stop();
+    dout(1) << "Ceph exporter web server stopped" << dendl;
+  }
 }
 
 void web_server_thread_entrypoint() {
@@ -259,18 +267,21 @@ void web_server_thread_entrypoint() {
     std::string cert_file = g_conf().get_val<std::string>("exporter_cert_file");
     std::string key_file = g_conf().get_val<std::string>("exporter_key_file");
 
+    // Initialize global_ioc
+    global_ioc = std::make_shared<net::io_context>(1);
+
     if (cert_file.empty() && key_file.empty()) {
       run_http_server(exporter_addr, port);
     } else {
       try {
           run_https_server(exporter_addr, port, cert_file, key_file);
       } catch (const std::exception &e) {
-          dout(1) << "Failed to start HTTPS server: " << e.what() << dendl;
+          derr << "Failed to start HTTPS server: " << e.what() << dendl;
           exit(EXIT_FAILURE);
       }
     }
   } catch (std::exception const &e) {
-      dout(1) << "Error: " << e.what() << dendl;
+      derr << "Error: " << e.what() << dendl;
       exit(EXIT_FAILURE);
   }
 }

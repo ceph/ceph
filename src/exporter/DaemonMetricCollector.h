@@ -1,16 +1,19 @@
 #pragma once
 
 #include "common/admin_socket_client.h"
+#include <atomic>
 #include <map>
 #include <string>
 #include <vector>
 
 #include <boost/asio/steady_timer.hpp>
+#include <boost/thread.hpp>
 #include <boost/json/object.hpp>
 #include <filesystem>
 #include <map>
 #include <string>
 #include <vector>
+
 
 struct pstat {
   unsigned long utime;
@@ -43,11 +46,16 @@ public:
   std::string metrics;
   std::pair<labels_t, std::string> add_fixed_name_metrics(std::string metric_name);
   void update_sockets();
+  void shutdown();
 
 private:
   std::mutex metrics_mutex;
   std::unique_ptr<MetricsBuilder> builder;
-  void request_loop(boost::asio::steady_timer &timer);
+  boost::asio::io_context io;
+  boost::asio::steady_timer timer{io};
+  std::atomic<bool> shutdown_flag{false};
+
+  void request_loop();
 
   void dump_asok_metric(boost::json::object perf_info,
                         boost::json::value perf_values, std::string name,
@@ -108,3 +116,4 @@ public:
 };
 
 DaemonMetricCollector &collector_instance();
+
