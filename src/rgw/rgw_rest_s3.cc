@@ -1410,7 +1410,7 @@ struct ReplicationConfiguration {
     disabled_group.id = disabled_group_id;
     disabled_group.status = rgw_sync_policy_group::Status::ALLOWED; /* not enabled, not forbidden */
 
-    std::set<int> priorities; // used to check for duplicates
+    std::set<int32_t> priorities; // used to check for duplicates
     for (auto& rule : rules) {
       if (s->cct->_conf->rgw_data_sync_priority_rule_enforcement) {
         if (priorities.find(rule.priority) != priorities.end()) {
@@ -1426,6 +1426,24 @@ struct ReplicationConfiguration {
       if (r < 0) {
         ldpp_dout(s, 5) << "NOTICE: failed to convert replication configuration into sync policy pipe (rule.id=" << rule.id << "): " << cpp_strerror(-r) << dendl;
         return r;
+      }
+
+      if (pipe.dest.bucket) {
+        if (pipe.dest.bucket->match(s->bucket->get_key())) {
+          s->err.message = "Destination bucket cannot be the same as the source bucket.";
+          return -EINVAL;
+        }
+
+        std::unique_ptr<rgw::sal::Bucket> dest_bucket;
+        if (r = driver->load_bucket(s, *pipe.dest.bucket, &dest_bucket, s->yield); r < 0) {
+          if (r == -ENOENT) {
+            s->err.message = "Destination bucket must exist.";
+            return -EINVAL;
+          }
+
+          ldpp_dout(s, 0) << "ERROR: failed to load bucket info for bucket=" << *pipe.dest.bucket << " r=" << r << dendl;
+          return r;
+        }
       }
 
       if (enabled) {
