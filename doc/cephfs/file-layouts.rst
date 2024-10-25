@@ -6,6 +6,9 @@ File layouts
 The layout of a file controls how its contents are mapped to Ceph RADOS objects.  You can
 read and write a file's layout using *virtual extended attributes* or xattrs.
 
+Clients must use the ``p`` flag when writing a file's layout. See :ref:`Layout
+and Quota restriction (the 'p' flag) <cephfs-layout-and-quota-restriction>`.
+
 The name of the layout xattrs depends on whether a file is a regular file or a directory.  Regular
 files' layout xattrs are called ``ceph.file.layout``, whereas directories' layout xattrs are called
 ``ceph.dir.layout``.  Where subsequent examples refer to ``ceph.file.layout``, substitute ``dir`` as appropriate
