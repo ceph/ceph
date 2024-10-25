@@ -17,7 +17,6 @@
 
 #include <algorithm> // for std::min()
 #include <set>
-#include <sstream>
 #include <string>
 
 #include <netinet/in.h>
@@ -27,7 +26,6 @@
 #endif
 
 #include "include/ceph_features.h"
-#include "include/types.h"
 #include "include/blobhash.h"
 #include "include/encoding.h"
 #include "include/msgr.h" // for CEPH_ENTITY_TYPE_*
@@ -445,11 +443,7 @@ struct entity_addr_t {
   std::string ip_only_to_str() const;
   std::string ip_n_port_to_str() const;
 
-  std::string get_legacy_str() const {
-    std::ostringstream ss;
-    ss << get_sockaddr() << "/" << get_nonce();
-    return ss.str();
-  }
+  std::string get_legacy_str() const;
 
   bool parse(const std::string_view s, int default_type=TYPE_DEFAULT);
   bool parse(const char *s, const char **end = 0, int default_type=TYPE_DEFAULT);
@@ -729,15 +723,7 @@ struct entity_addrvec_t {
     return false;
   }
 
-  friend std::ostream& operator<<(std::ostream& out, const entity_addrvec_t& av) {
-    if (av.v.empty()) {
-      return out;
-    } else if (av.v.size() == 1) {
-      return out << av.v[0];
-    } else {
-      return out << av.v;
-    }
-  }
+  friend std::ostream& operator<<(std::ostream& out, const entity_addrvec_t& av);
 
   friend bool operator==(const entity_addrvec_t& l, const entity_addrvec_t& r) {
     return l.v == r.v;
