@@ -24,6 +24,7 @@
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/deferred.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/use_future.hpp>
@@ -110,6 +111,36 @@ TEST_F(AsioRados, AsyncReadCallback)
     EXPECT_EQ(0, bl.length());
   };
   librados::async_read(ex, io, "noexist", 256, 0, failure_cb);
+
+  service.run();
+}
+
+TEST_F(AsioRados, AsyncReadDeferred)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  auto init1 = [&] { // pass local variables that go out of scope
+    librados::IoCtx ioc = io;
+    std::string oid = "exist";
+    return librados::async_read(ex, ioc, oid, 256, 0, boost::asio::deferred);
+  }();
+  std::move(init1)([] (error_code ec, version_t ver, bufferlist bl) {
+    EXPECT_FALSE(ec);
+    EXPECT_LT(0, ver);
+    EXPECT_EQ("hello", bl.to_str());
+  });
+
+  auto init2 = [&] {
+    librados::IoCtx ioc = io;
+    std::string oid = "noexist";
+    return librados::async_read(ex, ioc, oid, 256, 0, boost::asio::deferred);
+  }();
+  std::move(init2)([] (error_code ec, version_t ver, bufferlist bl) {
+    EXPECT_EQ(boost::system::errc::no_such_file_or_directory, ec);
+    EXPECT_EQ(0, ver);
+    EXPECT_EQ(0, bl.length());
+  });
 
   service.run();
 }
@@ -237,6 +268,40 @@ TEST_F(AsioRados, AsyncWriteCallback)
   service.run();
 }
 
+TEST_F(AsioRados, AsyncWriteDeferred)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  auto init1 = [&] { // pass local variables that go out of scope
+    librados::IoCtx ioc = io;
+    std::string oid = "exist";
+    bufferlist bl;
+    bl.append("hello");
+    return librados::async_write(ex, ioc, oid, bl, bl.length(), 0,
+                                 boost::asio::deferred);
+  }();
+  std::move(init1)([] (error_code ec, version_t ver) {
+    EXPECT_FALSE(ec);
+    EXPECT_LT(0, ver);
+  });
+
+  auto init2 = [&] {
+    librados::IoCtx ioc = snapio;
+    std::string oid = "exist";
+    bufferlist bl;
+    bl.append("hello");
+    return librados::async_write(ex, ioc, oid, bl, bl.length(), 0,
+                                 boost::asio::deferred);
+  }();
+  std::move(init2)([] (error_code ec, version_t ver) {
+    EXPECT_EQ(boost::system::errc::read_only_file_system, ec);
+    EXPECT_EQ(0, ver);
+  });
+
+  service.run();
+}
+
 TEST_F(AsioRados, AsyncWriteFuture)
 {
   boost::asio::io_context service;
@@ -357,6 +422,42 @@ TEST_F(AsioRados, AsyncReadOperationCallback)
     librados::async_operate(ex, io, "noexist", std::move(op),
                             0, nullptr, failure_cb);
   }
+  service.run();
+}
+
+TEST_F(AsioRados, AsyncReadOperationDeferred)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  auto init1 = [&] { // pass local variables that go out of scope
+    librados::IoCtx ioc = io;
+    std::string oid = "exist";
+    librados::ObjectReadOperation op;
+    op.read(0, 0, nullptr, nullptr);
+    return librados::async_operate(ex, ioc, oid, std::move(op),
+                                   0, nullptr, boost::asio::deferred);
+  }();
+  std::move(init1)([] (error_code ec, version_t ver, bufferlist bl) {
+    EXPECT_FALSE(ec);
+    EXPECT_LT(0, ver);
+    EXPECT_EQ("hello", bl.to_str());
+  });
+
+  auto init2 = [&] {
+    librados::IoCtx ioc = io;
+    std::string oid = "noexist";
+    librados::ObjectReadOperation op;
+    op.read(0, 0, nullptr, nullptr);
+    return librados::async_operate(ex, ioc, oid, std::move(op),
+                                   0, nullptr, boost::asio::deferred);
+  }();
+  std::move(init2)([] (error_code ec, version_t ver, bufferlist bl) {
+    EXPECT_EQ(boost::system::errc::no_such_file_or_directory, ec);
+    EXPECT_EQ(0, ver);
+    EXPECT_EQ(0, bl.length());
+  });
+
   service.run();
 }
 
@@ -500,6 +601,44 @@ TEST_F(AsioRados, AsyncWriteOperationCallback)
   service.run();
 }
 
+TEST_F(AsioRados, AsyncWriteOperationDeferred)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  auto init1 = [&] { // pass local variables that go out of scope
+    librados::IoCtx ioc = io;
+    std::string oid = "exist";
+    bufferlist bl;
+    bl.append("hello");
+    librados::ObjectWriteOperation op;
+    op.write_full(bl);
+    return librados::async_operate(ex, ioc, oid, std::move(op),
+                                   0, nullptr, boost::asio::deferred);
+  }();
+  std::move(init1)([] (error_code ec, version_t ver) {
+    EXPECT_FALSE(ec);
+    EXPECT_LT(0, ver);
+  });
+
+  auto init2 = [&] {
+    librados::IoCtx ioc = snapio;
+    std::string oid = "exist";
+    bufferlist bl;
+    bl.append("hello");
+    librados::ObjectWriteOperation op;
+    op.write_full(bl);
+    return librados::async_operate(ex, ioc, oid, std::move(op),
+                                   0, nullptr, boost::asio::deferred);
+  }();
+  std::move(init2)([] (error_code ec, version_t ver) {
+    EXPECT_EQ(boost::system::errc::read_only_file_system, ec);
+    EXPECT_EQ(0, ver);
+  });
+
+  service.run();
+}
+
 TEST_F(AsioRados, AsyncWriteOperationFuture)
 {
   boost::asio::io_context service;
@@ -636,6 +775,46 @@ TEST_F(AsioRados, AsyncNotifyCallback)
     EXPECT_EQ(0, reply.length());
   };
   librados::async_notify(ex, io, "noexist", bl, timeout, failure_cb);
+
+  service.run();
+}
+
+TEST_F(AsioRados, AsyncNotifyDeferred)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  constexpr uint64_t timeout = 0;
+
+  auto init1 = [&] { // pass local variables that go out of scope
+    librados::IoCtx ioc = io;
+    std::string oid = "exist";
+    bufferlist bl;
+    bl.append("hello");
+    return librados::async_notify(ex, ioc, oid, bl, timeout,
+                                  boost::asio::deferred);
+  }();
+  std::move(init1)([&] (error_code ec, version_t ver, bufferlist reply) {
+    EXPECT_FALSE(ec);
+    EXPECT_LT(0, ver);
+    std::vector<librados::notify_ack_t> acks;
+    std::vector<librados::notify_timeout_t> timeouts;
+    io.decode_notify_response(reply, &acks, &timeouts);
+  });
+
+  auto init2 = [&] {
+    librados::IoCtx ioc = io;
+    std::string oid = "noexist";
+    bufferlist bl;
+    bl.append("hello");
+    return librados::async_notify(ex, ioc, oid, bl, timeout,
+                                  boost::asio::deferred);
+  }();
+  std::move(init2)([] (error_code ec, version_t ver, bufferlist reply) {
+    EXPECT_EQ(boost::system::errc::no_such_file_or_directory, ec);
+    EXPECT_EQ(0, ver);
+    EXPECT_EQ(0, reply.length());
+  });
 
   service.run();
 }
