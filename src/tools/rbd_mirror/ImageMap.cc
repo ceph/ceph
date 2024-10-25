@@ -4,6 +4,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Timer.h"
+#include "include/container_ios.h"
 
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
