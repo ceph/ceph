@@ -21,6 +21,7 @@
 
 #include "include/ceph_fs.h"
 #include "include/ceph_features.h"
+#include "include/container_ios.h"
 #include "include/addr_parsing.h"
 #include "auth/Crypto.h"
 #include "common/ceph_argparse.h"
