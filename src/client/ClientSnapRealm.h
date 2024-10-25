@@ -8,6 +8,10 @@
 #include "common/snap_types.h"
 #include "include/xlist.h"
 
+#include <iostream>
+#include <set>
+#include <vector>
+
 struct Inode;
 
 struct SnapRealm {
