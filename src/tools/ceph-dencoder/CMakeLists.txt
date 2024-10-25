@@ -10,7 +10,6 @@ endif()
 
 set(dencoder_srcs
   ceph_dencoder.cc
-  ../../include/uuid.cc
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_executable(ceph-dencoder ${dencoder_srcs})
 set_target_properties(ceph-dencoder PROPERTIES
@@ -37,7 +36,6 @@ function(add_denc_mod name)
 endfunction()
 
 add_denc_mod(denc-mod-common
-  ../../include/uuid.cc
   common_types.cc)
 target_link_libraries(denc-mod-common
   ceph-common
