@@ -112,7 +112,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
       std::string oid = rgw::sal::get_key_in_cache(get_prefix(block->cacheObj.bucketName, block->cacheObj.objName, version), std::to_string(block->blockID), std::to_string(block->size));
 
       if (this->policyDriver->get_cache_policy()->exist_key(oid)) { /* Local copy */
-	policyDriver->get_cache_policy()->update(env->dpp, oid, 0, bl.length(), "", false, y);
+	policyDriver->get_cache_policy()->update(env->dpp, oid, 0, bl.length(), "", false, rgw::d4n::RefCount::NOOP, y);
         return 0;
       } else {
 	if (this->policyDriver->get_cache_policy()->eviction(dpp, block->size, y) < 0)
@@ -140,7 +140,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	  if (dir->set(env->dpp, block, y) < 0)
 	    return -1;
 
-	  this->policyDriver->get_cache_policy()->update(dpp, oid, 0, bl.length(), "", false, y);
+	  this->policyDriver->get_cache_policy()->update(dpp, oid, 0, bl.length(), "", false, rgw::d4n::RefCount::NOOP, y);
 	  if (cacheDriver->put(dpp, oid, bl, bl.length(), attrs, y) < 0)
             return -1;
 	  return cacheDriver->set_attr(dpp, oid, "localWeight", std::to_string(age), y);
@@ -177,7 +177,7 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
     std::string version;
     std::string key = rgw::sal::get_key_in_cache(get_prefix(block->cacheObj.bucketName, block->cacheObj.objName, version), std::to_string(block->blockID), std::to_string(block->size));
     ASSERT_EQ(0, cacheDriver->put(env->dpp, key, bl, bl.length(), attrs, optional_yield{yield}));
-    policyDriver->get_cache_policy()->update(env->dpp, key, 0, bl.length(), "", false, optional_yield{yield});
+    policyDriver->get_cache_policy()->update(env->dpp, key, 0, bl.length(), "", false, rgw::d4n::RefCount::NOOP, optional_yield{yield});
 
     ASSERT_EQ(lfuda(env->dpp, block, cacheDriver, yield), 0);
 
@@ -236,12 +236,12 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     ASSERT_EQ(0, dir->set(env->dpp, &victim, optional_yield{yield}));
     std::string victimKeyInCache = rgw::sal::get_key_in_cache(get_prefix(victim.cacheObj.bucketName, victim.cacheObj.objName, victim.version), std::to_string(victim.blockID), std::to_string(victim.size));
     ASSERT_EQ(0, cacheDriver->put(env->dpp, victimKeyInCache, bl, bl.length(), attrs, optional_yield{yield}));
-    policyDriver->get_cache_policy()->update(env->dpp, victimKeyInCache, 0, bl.length(), "", false, optional_yield{yield});
+    policyDriver->get_cache_policy()->update(env->dpp, victimKeyInCache, 0, bl.length(), "", false, rgw::d4n::RefCount::NOOP, optional_yield{yield});
 
     /* Set head blocks */
     std::string victimHeadObj = get_prefix(victim.cacheObj.bucketName, victim.cacheObj.objName, victim.version);
     ASSERT_EQ(0, cacheDriver->put(env->dpp, victimHeadObj, bl, bl.length(), attrs, optional_yield{yield}));
-    policyDriver->get_cache_policy()->update(env->dpp, victimHeadObj, 0, bl.length(), "", false, optional_yield{yield});
+    policyDriver->get_cache_policy()->update(env->dpp, victimHeadObj, 0, bl.length(), "", false, rgw::d4n::RefCount::NOOP, optional_yield{yield});
 
     /* Remote block */
     block->size = cacheDriver->get_free_space(env->dpp) + 1; /* To trigger eviction */
