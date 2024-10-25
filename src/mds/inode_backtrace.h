@@ -3,9 +3,14 @@
 #ifndef CEPH_INODE_BACKTRACE_H
 #define CEPH_INODE_BACKTRACE_H
 
+#include <list>
+#include <ostream>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "mdstypes.h"
+#include "include/types.h" // for version_t
 
 namespace ceph {
   class Formatter;
