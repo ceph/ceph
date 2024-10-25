@@ -12,6 +12,8 @@
  */
 
 #include "librados/librados_asio.h"
+
+#include <optional>
 #include <gtest/gtest.h>
 
 #include "common/ceph_argparse.h"
@@ -21,6 +23,7 @@
 
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/use_future.hpp>
@@ -158,6 +161,57 @@ TEST_F(AsioRados, AsyncReadYield)
   service.run();
 }
 
+template <typename ...Args>
+auto capture(std::optional<std::tuple<std::exception_ptr, Args...>>& out) {
+  return [&out] (std::exception_ptr eptr, std::tuple<Args...> args) {
+    out = std::tuple_cat(std::make_tuple(eptr), std::move(args));
+  };
+}
+
+TEST_F(AsioRados, AsyncReadAwaitable)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  using result_tuple = std::tuple<std::exception_ptr, version_t, bufferlist>;
+
+  std::optional<result_tuple> result1;
+  boost::asio::co_spawn(ex,
+                        librados::async_read(ex, io, "exist", 256, 0,
+                                             boost::asio::use_awaitable),
+                        capture(result1));
+
+  std::optional<result_tuple> result2;
+  boost::asio::co_spawn(ex,
+                        librados::async_read(ex, io, "noexist", 256, 0,
+                                             boost::asio::use_awaitable),
+                        capture(result2));
+
+  service.run();
+
+  {
+    ASSERT_TRUE(result1);
+    auto [eptr, ver, bl] = std::move(*result1);
+    EXPECT_FALSE(eptr);
+    EXPECT_LT(0, ver);
+    EXPECT_EQ("hello", bl.to_str());
+  }
+  {
+    ASSERT_TRUE(result2);
+    auto [eptr, ver, bl] = std::move(*result2);
+    ASSERT_TRUE(eptr);
+    try {
+      std::rethrow_exception(eptr);
+    } catch (const boost::system::system_error& e) {
+      EXPECT_EQ(e.code(), std::errc::no_such_file_or_directory);
+    } catch (const std::exception&) {
+      EXPECT_THROW(throw, boost::system::system_error);
+    }
+    EXPECT_EQ(0, ver);
+    EXPECT_EQ(0, bl.length());
+  }
+}
+
 TEST_F(AsioRados, AsyncWriteCallback)
 {
   boost::asio::io_context service;
@@ -230,6 +284,51 @@ TEST_F(AsioRados, AsyncWriteYield)
   boost::asio::spawn(ex, failure_cr, rethrow);
 
   service.run();
+}
+
+TEST_F(AsioRados, AsyncWriteAwaitable)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  bufferlist bl;
+  bl.append("hello");
+
+  using result_tuple = std::tuple<std::exception_ptr, version_t>;
+
+  std::optional<result_tuple> result1;
+  boost::asio::co_spawn(ex,
+                        librados::async_write(ex, io, "exist", bl, bl.length(),
+                                              0, boost::asio::use_awaitable),
+                        capture(result1));
+
+  std::optional<result_tuple> result2;
+  boost::asio::co_spawn(ex,
+                        librados::async_write(ex, snapio, "exist", bl, bl.length(),
+                                              0, boost::asio::use_awaitable),
+                        capture(result2));
+
+  service.run();
+
+  {
+    ASSERT_TRUE(result1);
+    auto [eptr, ver] = std::move(*result1);
+    EXPECT_FALSE(eptr);
+    EXPECT_LT(0, ver);
+  }
+  {
+    ASSERT_TRUE(result2);
+    auto [eptr, ver] = std::move(*result2);
+    ASSERT_TRUE(eptr);
+    try {
+      std::rethrow_exception(eptr);
+    } catch (const boost::system::system_error& e) {
+      EXPECT_EQ(e.code(), std::errc::read_only_file_system);
+    } catch (const std::exception&) {
+      EXPECT_THROW(throw, boost::system::system_error);
+    }
+    EXPECT_EQ(0, ver);
+  }
 }
 
 TEST_F(AsioRados, AsyncReadOperationCallback)
@@ -318,6 +417,56 @@ TEST_F(AsioRados, AsyncReadOperationYield)
   boost::asio::spawn(ex, failure_cr, rethrow);
 
   service.run();
+}
+
+TEST_F(AsioRados, AsyncReadOperationAwaitable)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  using result_tuple = std::tuple<std::exception_ptr, version_t, bufferlist>;
+
+  std::optional<result_tuple> result1;
+  librados::ObjectReadOperation op1;
+  op1.read(0, 0, nullptr, nullptr);
+  boost::asio::co_spawn(
+      ex,
+      librados::async_operate(ex, io, "exist", std::move(op1),
+                              0, nullptr, boost::asio::use_awaitable),
+      capture(result1));
+
+  std::optional<result_tuple> result2;
+  librados::ObjectReadOperation op2;
+  op2.read(0, 0, nullptr, nullptr);
+  boost::asio::co_spawn(
+      ex,
+      librados::async_operate(ex, io, "noexist", std::move(op2),
+                              0, nullptr, boost::asio::use_awaitable),
+      capture(result2));
+
+  service.run();
+
+  {
+    ASSERT_TRUE(result1);
+    auto [eptr, ver, bl] = std::move(*result1);
+    EXPECT_FALSE(eptr);
+    EXPECT_LT(0, ver);
+    EXPECT_EQ("hello", bl.to_str());
+  }
+  {
+    ASSERT_TRUE(result2);
+    auto [eptr, ver, bl] = std::move(*result2);
+    ASSERT_TRUE(eptr);
+    try {
+      std::rethrow_exception(eptr);
+    } catch (const boost::system::system_error& e) {
+      EXPECT_EQ(e.code(), std::errc::no_such_file_or_directory);
+    } catch (const std::exception&) {
+      EXPECT_THROW(throw, boost::system::system_error);
+    }
+    EXPECT_EQ(0, ver);
+    EXPECT_EQ(0, bl.length());
+  }
 }
 
 TEST_F(AsioRados, AsyncWriteOperationCallback)
@@ -412,6 +561,57 @@ TEST_F(AsioRados, AsyncWriteOperationYield)
   service.run();
 }
 
+TEST_F(AsioRados, AsyncWriteOperationAwaitable)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  bufferlist bl;
+  bl.append("hello");
+
+  using result_tuple = std::tuple<std::exception_ptr, version_t>;
+
+  std::optional<result_tuple> result1;
+  librados::ObjectWriteOperation op1;
+  op1.write_full(bl);
+  boost::asio::co_spawn(
+      ex,
+      librados::async_operate(ex, io, "exist", std::move(op1),
+                              0, nullptr, boost::asio::use_awaitable),
+      capture(result1));
+
+  std::optional<result_tuple> result2;
+  librados::ObjectWriteOperation op2;
+  op2.write_full(bl);
+  boost::asio::co_spawn(
+      ex,
+      librados::async_operate(ex, snapio, "exist", std::move(op2),
+                              0, nullptr, boost::asio::use_awaitable),
+      capture(result2));
+
+  service.run();
+
+  {
+    ASSERT_TRUE(result1);
+    auto [eptr, ver] = std::move(*result1);
+    EXPECT_FALSE(eptr);
+    EXPECT_LT(0, ver);
+  }
+  {
+    ASSERT_TRUE(result2);
+    auto [eptr, ver] = std::move(*result2);
+    ASSERT_TRUE(eptr);
+    try {
+      std::rethrow_exception(eptr);
+    } catch (const boost::system::system_error& e) {
+      EXPECT_EQ(e.code(), std::errc::read_only_file_system);
+    } catch (const std::exception&) {
+      EXPECT_THROW(throw, boost::system::system_error);
+    }
+    EXPECT_EQ(0, ver);
+  }
+}
+
 TEST_F(AsioRados, AsyncNotifyCallback)
 {
   boost::asio::io_context service;
@@ -497,6 +697,56 @@ TEST_F(AsioRados, AsyncNotifyYield)
   boost::asio::spawn(ex, failure_cr, rethrow);
 
   service.run();
+}
+
+TEST_F(AsioRados, AsyncNotifyAwaitable)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  bufferlist bl;
+  bl.append("hello");
+  constexpr uint64_t timeout = 0;
+
+  using result_tuple = std::tuple<std::exception_ptr, version_t, bufferlist>;
+
+  std::optional<result_tuple> result1;
+  boost::asio::co_spawn(ex,
+                        librados::async_notify(ex, io, "exist", bl, timeout,
+                                               boost::asio::use_awaitable),
+                        capture(result1));
+
+  std::optional<result_tuple> result2;
+  boost::asio::co_spawn(ex,
+                        librados::async_notify(ex, io, "noexist", bl, timeout,
+                                               boost::asio::use_awaitable),
+                        capture(result2));
+
+  service.run();
+
+  {
+    ASSERT_TRUE(result1);
+    auto [eptr, ver, reply] = std::move(*result1);
+    EXPECT_FALSE(eptr);
+    EXPECT_LT(0, ver);
+    std::vector<librados::notify_ack_t> acks;
+    std::vector<librados::notify_timeout_t> timeouts;
+    io.decode_notify_response(reply, &acks, &timeouts);
+  }
+  {
+    ASSERT_TRUE(result2);
+    auto [eptr, ver, reply] = std::move(*result2);
+    ASSERT_TRUE(eptr);
+    try {
+      std::rethrow_exception(eptr);
+    } catch (const boost::system::system_error& e) {
+      EXPECT_EQ(e.code(), std::errc::no_such_file_or_directory);
+    } catch (const std::exception&) {
+      EXPECT_THROW(throw, boost::system::system_error);
+    }
+    EXPECT_EQ(0, ver);
+    EXPECT_EQ(0, reply.length());
+  }
 }
 
 // FIXME: this crashes on windows with:
