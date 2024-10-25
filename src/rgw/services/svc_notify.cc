@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "include/random.h"
+#include "include/container_ios.h"
 #include "include/Context.h"
 #include "common/errno.h"
 
