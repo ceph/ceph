@@ -15,6 +15,7 @@
 #include "ElectionLogic.h"
 
 #include "include/ceph_assert.h"
+#include "include/container_ios.h"
 #include "common/dout.h"
 
 #include <iomanip>
