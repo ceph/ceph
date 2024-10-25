@@ -117,11 +117,12 @@ auto async_read(IoExecutor ex, IoCtx& io, const std::string& oid,
   using Op = detail::AsyncOp<bufferlist>;
   using Signature = typename Op::Signature;
   return boost::asio::async_initiate<CompletionToken, Signature>(
-      [] (auto handler, IoExecutor ex, IoCtx& io, const std::string& oid,
-          size_t len, uint64_t off) {
+      [] (auto handler, IoExecutor ex, const IoCtx& i,
+          const std::string& oid, size_t len, uint64_t off) {
         auto p = Op::create(ex, std::move(handler));
         auto& op = p->user_data;
 
+        IoCtx& io = const_cast<IoCtx&>(i);
         int ret = io.aio_read(oid, op.aio_completion.get(), &op.result, len, off);
         if (ret < 0) {
           auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
@@ -142,11 +143,12 @@ auto async_write(IoExecutor ex, IoCtx& io, const std::string& oid,
   using Op = detail::AsyncOp<void>;
   using Signature = typename Op::Signature;
   return boost::asio::async_initiate<CompletionToken, Signature>(
-      [] (auto handler, IoExecutor ex, IoCtx& io, const std::string& oid,
+      [] (auto handler, IoExecutor ex, const IoCtx& i, const std::string& oid,
           const bufferlist &bl, size_t len, uint64_t off) {
         auto p = Op::create(ex, std::move(handler));
         auto& op = p->user_data;
 
+        IoCtx& io = const_cast<IoCtx&>(i);
         int ret = io.aio_write(oid, op.aio_completion.get(), bl, len, off);
         if (ret < 0) {
           auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
@@ -167,11 +169,12 @@ auto async_operate(IoExecutor ex, IoCtx& io, const std::string& oid,
   using Op = detail::AsyncOp<bufferlist>;
   using Signature = typename Op::Signature;
   return boost::asio::async_initiate<CompletionToken, Signature>(
-      [] (auto handler, IoExecutor ex, IoCtx& io, const std::string& oid,
+      [] (auto handler, IoExecutor ex, const IoCtx& i, const std::string& oid,
           ObjectReadOperation *read_op, int flags) {
         auto p = Op::create(ex, std::move(handler));
         auto& op = p->user_data;
 
+        IoCtx& io = const_cast<IoCtx&>(i);
         int ret = io.aio_operate(oid, op.aio_completion.get(), read_op,
                                  flags, &op.result);
         if (ret < 0) {
@@ -193,12 +196,13 @@ auto async_operate(IoExecutor ex, IoCtx& io, const std::string& oid,
   using Op = detail::AsyncOp<void>;
   using Signature = typename Op::Signature;
   return boost::asio::async_initiate<CompletionToken, Signature>(
-      [] (auto handler, IoExecutor ex, IoCtx& io, const std::string& oid,
+      [] (auto handler, IoExecutor ex, const IoCtx& i, const std::string& oid,
           ObjectWriteOperation *write_op, int flags,
           const jspan_context* trace_ctx) {
         auto p = Op::create(ex, std::move(handler));
         auto& op = p->user_data;
 
+        IoCtx& io = const_cast<IoCtx&>(i);
         int ret = io.aio_operate(oid, op.aio_completion.get(), write_op, flags, trace_ctx);
         if (ret < 0) {
           auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
@@ -218,11 +222,13 @@ auto async_notify(IoExecutor ex, IoCtx& io, const std::string& oid,
   using Op = detail::AsyncOp<bufferlist>;
   using Signature = typename Op::Signature;
   return boost::asio::async_initiate<CompletionToken, Signature>(
-      [] (auto handler, IoExecutor ex, IoCtx& io, const std::string& oid,
-          bufferlist& bl, uint64_t timeout_ms) {
+      [] (auto handler, IoExecutor ex, const IoCtx& i, const std::string& oid,
+          const bufferlist& b, uint64_t timeout_ms) {
         auto p = Op::create(ex, std::move(handler));
         auto& op = p->user_data;
 
+        IoCtx& io = const_cast<IoCtx&>(i);
+        bufferlist& bl = const_cast<bufferlist&>(b);
         int ret = io.aio_notify(oid, op.aio_completion.get(),
                                 bl, timeout_ms, &op.result);
         if (ret < 0) {
