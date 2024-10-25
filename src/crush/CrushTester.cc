@@ -13,6 +13,7 @@
 #include "common/SubProcess.h"
 #include "common/fork_function.h"
 
+#include "include/container_ios.h"
 #include "include/stringify.h"
 #include "CrushTester.h"
 #include "CrushTreeDumper.h"
