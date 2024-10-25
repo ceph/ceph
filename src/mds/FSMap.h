@@ -26,6 +26,7 @@
 
 #include <errno.h>
 
+#include "include/container_ios.h"
 #include "include/types.h"
 #include "common/ceph_time.h"
 #include "common/Clock.h"

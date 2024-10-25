@@ -11,6 +11,7 @@
 #include "global/global_init.h"
 #include "common/common_init.h"
 #include "common/ceph_argparse.h"
+#include "include/container_ios.h"
 
 using namespace std;
 
