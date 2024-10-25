@@ -10,4 +10,8 @@ export class CephUserService {
   export(entities: string[]) {
     return this.http.post('api/cluster/user/export', { entities: entities });
   }
+
+  getUser() {
+    return this.http.get('api/cluster/user');
+  }
 }
