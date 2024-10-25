@@ -30,8 +30,8 @@ public:
 
   /* Partition */
   virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
-  virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; }
-  void set_free_space(const DoutPrefixProvider* dpp, uint64_t free_space) { this->free_space = free_space; }
+  virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override;
+  void set_free_space(const DoutPrefixProvider* dpp, uint64_t free_space);
 
   virtual int restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func) override;
 
@@ -39,6 +39,7 @@ private:
   Partition partition_info;
   uint64_t free_space;
   CephContext* cct;
+  std::mutex cache_lock;
 
   struct libaio_read_handler {
     rgw::Aio* throttle = nullptr;
