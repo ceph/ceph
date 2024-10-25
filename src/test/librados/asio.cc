@@ -19,8 +19,6 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 
-#include <boost/range/begin.hpp>
-#include <boost/range/end.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/use_future.hpp>
@@ -81,20 +79,21 @@ void rethrow(std::exception_ptr eptr) {
 TEST_F(AsioRados, AsyncReadCallback)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
 
   auto success_cb = [&] (error_code ec, version_t ver, bufferlist bl) {
     EXPECT_FALSE(ec);
     EXPECT_LT(0, ver);
     EXPECT_EQ("hello", bl.to_str());
   };
-  librados::async_read(service, io, "exist", 256, 0, success_cb);
+  librados::async_read(ex, io, "exist", 256, 0, success_cb);
 
   auto failure_cb = [&] (error_code ec, version_t ver, bufferlist bl) {
     EXPECT_EQ(boost::system::errc::no_such_file_or_directory, ec);
     EXPECT_EQ(0, ver);
     EXPECT_EQ(0, bl.length());
   };
-  librados::async_read(service, io, "noexist", 256, 0, failure_cb);
+  librados::async_read(ex, io, "noexist", 256, 0, failure_cb);
 
   service.run();
 }
@@ -102,10 +101,11 @@ TEST_F(AsioRados, AsyncReadCallback)
 TEST_F(AsioRados, AsyncReadFuture)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
 
-  auto f1 = librados::async_read(service, io, "exist", 256,
+  auto f1 = librados::async_read(ex, io, "exist", 256,
                                  0, boost::asio::use_future);
-  auto f2 = librados::async_read(service, io, "noexist", 256,
+  auto f2 = librados::async_read(ex, io, "noexist", 256,
                                  0, boost::asio::use_future);
 
   service.run();
@@ -120,26 +120,27 @@ TEST_F(AsioRados, AsyncReadFuture)
 TEST_F(AsioRados, AsyncReadYield)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
 
   auto success_cr = [&] (boost::asio::yield_context yield) {
     error_code ec;
-    auto [ver, bl] = librados::async_read(service, io, "exist", 256,
+    auto [ver, bl] = librados::async_read(ex, io, "exist", 256,
                                           0, yield[ec]);
     EXPECT_FALSE(ec);
     EXPECT_LT(0, ver);
     EXPECT_EQ("hello", bl.to_str());
   };
-  boost::asio::spawn(service, success_cr, rethrow);
+  boost::asio::spawn(ex, success_cr, rethrow);
 
   auto failure_cr = [&] (boost::asio::yield_context yield) {
     error_code ec;
-    auto [ver, bl] = librados::async_read(service, io, "noexist", 256,
+    auto [ver, bl] = librados::async_read(ex, io, "noexist", 256,
                                           0, yield[ec]);
     EXPECT_EQ(boost::system::errc::no_such_file_or_directory, ec);
     EXPECT_EQ(0, ver);
     EXPECT_EQ(0, bl.length());
   };
-  boost::asio::spawn(service, failure_cr, rethrow);
+  boost::asio::spawn(ex, failure_cr, rethrow);
 
   service.run();
 }
@@ -147,6 +148,7 @@ TEST_F(AsioRados, AsyncReadYield)
 TEST_F(AsioRados, AsyncWriteCallback)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
 
   bufferlist bl;
   bl.append("hello");
@@ -155,14 +157,14 @@ TEST_F(AsioRados, AsyncWriteCallback)
     EXPECT_FALSE(ec);
     EXPECT_LT(0, ver);
   };
-  librados::async_write(service, io, "exist", bl, bl.length(), 0,
+  librados::async_write(ex, io, "exist", bl, bl.length(), 0,
                         success_cb);
 
   auto failure_cb = [&] (error_code ec, version_t ver) {
     EXPECT_EQ(boost::system::errc::read_only_file_system, ec);
     EXPECT_EQ(0, ver);
   };
-  librados::async_write(service, snapio, "exist", bl, bl.length(), 0,
+  librados::async_write(ex, snapio, "exist", bl, bl.length(), 0,
                         failure_cb);
 
   service.run();
@@ -171,13 +173,14 @@ TEST_F(AsioRados, AsyncWriteCallback)
 TEST_F(AsioRados, AsyncWriteFuture)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
 
   bufferlist bl;
   bl.append("hello");
 
-  auto f1 = librados::async_write(service, io, "exist", bl, bl.length(), 0,
+  auto f1 = librados::async_write(ex, io, "exist", bl, bl.length(), 0,
                                   boost::asio::use_future);
-  auto f2 = librados::async_write(service, snapio, "exist", bl, bl.length(), 0,
+  auto f2 = librados::async_write(ex, snapio, "exist", bl, bl.length(), 0,
                                   boost::asio::use_future);
 
   service.run();
@@ -189,28 +192,29 @@ TEST_F(AsioRados, AsyncWriteFuture)
 TEST_F(AsioRados, AsyncWriteYield)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
 
   bufferlist bl;
   bl.append("hello");
 
   auto success_cr = [&] (boost::asio::yield_context yield) {
     error_code ec;
-    auto ver = librados::async_write(service, io, "exist", bl,
+    auto ver = librados::async_write(ex, io, "exist", bl,
                                      bl.length(), 0, yield[ec]);
     EXPECT_FALSE(ec);
     EXPECT_LT(0, ver);
     EXPECT_EQ("hello", bl.to_str());
   };
-  boost::asio::spawn(service, success_cr, rethrow);
+  boost::asio::spawn(ex, success_cr, rethrow);
 
   auto failure_cr = [&] (boost::asio::yield_context yield) {
     error_code ec;
-    auto ver = librados::async_write(service, snapio, "exist", bl,
+    auto ver = librados::async_write(ex, snapio, "exist", bl,
                                      bl.length(), 0, yield[ec]);
     EXPECT_EQ(boost::system::errc::read_only_file_system, ec);
     EXPECT_EQ(0, ver);
   };
-  boost::asio::spawn(service, failure_cr, rethrow);
+  boost::asio::spawn(ex, failure_cr, rethrow);
 
   service.run();
 }
@@ -218,6 +222,7 @@ TEST_F(AsioRados, AsyncWriteYield)
 TEST_F(AsioRados, AsyncReadOperationCallback)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
   {
     librados::ObjectReadOperation op;
     op.read(0, 0, nullptr, nullptr);
@@ -226,7 +231,7 @@ TEST_F(AsioRados, AsyncReadOperationCallback)
       EXPECT_LT(0, ver);
       EXPECT_EQ("hello", bl.to_str());
     };
-    librados::async_operate(service, io, "exist", &op, 0, nullptr, success_cb);
+    librados::async_operate(ex, io, "exist", &op, 0, nullptr, success_cb);
   }
   {
     librados::ObjectReadOperation op;
@@ -236,7 +241,7 @@ TEST_F(AsioRados, AsyncReadOperationCallback)
       EXPECT_EQ(0, ver);
       EXPECT_EQ(0, bl.length());
     };
-    librados::async_operate(service, io, "noexist", &op, 0, nullptr, failure_cb);
+    librados::async_operate(ex, io, "noexist", &op, 0, nullptr, failure_cb);
   }
   service.run();
 }
@@ -244,18 +249,19 @@ TEST_F(AsioRados, AsyncReadOperationCallback)
 TEST_F(AsioRados, AsyncReadOperationFuture)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
   std::future<read_result> f1;
   {
     librados::ObjectReadOperation op;
     op.read(0, 0, nullptr, nullptr);
-    f1 = librados::async_operate(service, io, "exist", &op, 0, nullptr,
+    f1 = librados::async_operate(ex, io, "exist", &op, 0, nullptr,
                                  boost::asio::use_future);
   }
   std::future<read_result> f2;
   {
     librados::ObjectReadOperation op;
     op.read(0, 0, nullptr, nullptr);
-    f2 = librados::async_operate(service, io, "noexist", &op, 0, nullptr,
+    f2 = librados::async_operate(ex, io, "noexist", &op, 0, nullptr,
                                  boost::asio::use_future);
   }
   service.run();
@@ -270,30 +276,31 @@ TEST_F(AsioRados, AsyncReadOperationFuture)
 TEST_F(AsioRados, AsyncReadOperationYield)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
 
   auto success_cr = [&] (boost::asio::yield_context yield) {
     librados::ObjectReadOperation op;
     op.read(0, 0, nullptr, nullptr);
     error_code ec;
-    auto [ver, bl] = librados::async_operate(service, io, "exist", &op,
+    auto [ver, bl] = librados::async_operate(ex, io, "exist", &op,
                                              0, nullptr, yield[ec]);
     EXPECT_FALSE(ec);
     EXPECT_LT(0, ver);
     EXPECT_EQ("hello", bl.to_str());
   };
-  boost::asio::spawn(service, success_cr, rethrow);
+  boost::asio::spawn(ex, success_cr, rethrow);
 
   auto failure_cr = [&] (boost::asio::yield_context yield) {
     librados::ObjectReadOperation op;
     op.read(0, 0, nullptr, nullptr);
     error_code ec;
-    auto [ver, bl] = librados::async_operate(service, io, "noexist", &op,
+    auto [ver, bl] = librados::async_operate(ex, io, "noexist", &op,
                                              0, nullptr, yield[ec]);
     EXPECT_EQ(boost::system::errc::no_such_file_or_directory, ec);
     EXPECT_EQ(0, ver);
     EXPECT_EQ(0, bl.length());
   };
-  boost::asio::spawn(service, failure_cr, rethrow);
+  boost::asio::spawn(ex, failure_cr, rethrow);
 
   service.run();
 }
@@ -301,6 +308,7 @@ TEST_F(AsioRados, AsyncReadOperationYield)
 TEST_F(AsioRados, AsyncWriteOperationCallback)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
 
   bufferlist bl;
   bl.append("hello");
@@ -312,7 +320,7 @@ TEST_F(AsioRados, AsyncWriteOperationCallback)
       EXPECT_FALSE(ec);
       EXPECT_LT(0, ver);
     };
-    librados::async_operate(service, io, "exist", &op, 0, nullptr, success_cb);
+    librados::async_operate(ex, io, "exist", &op, 0, nullptr, success_cb);
   }
   {
     librados::ObjectWriteOperation op;
@@ -321,7 +329,7 @@ TEST_F(AsioRados, AsyncWriteOperationCallback)
       EXPECT_EQ(boost::system::errc::read_only_file_system, ec);
       EXPECT_EQ(0, ver);
     };
-    librados::async_operate(service, snapio, "exist", &op, 0, nullptr, failure_cb);
+    librados::async_operate(ex, snapio, "exist", &op, 0, nullptr, failure_cb);
   }
   service.run();
 }
@@ -329,6 +337,7 @@ TEST_F(AsioRados, AsyncWriteOperationCallback)
 TEST_F(AsioRados, AsyncWriteOperationFuture)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
 
   bufferlist bl;
   bl.append("hello");
@@ -337,14 +346,14 @@ TEST_F(AsioRados, AsyncWriteOperationFuture)
   {
     librados::ObjectWriteOperation op;
     op.write_full(bl);
-    f1 = librados::async_operate(service, io, "exist", &op, 0, nullptr,
+    f1 = librados::async_operate(ex, io, "exist", &op, 0, nullptr,
                                  boost::asio::use_future);
   }
   std::future<version_t> f2;
   {
     librados::ObjectWriteOperation op;
     op.write_full(bl);
-    f2 = librados::async_operate(service, snapio, "exist", &op, 0, nullptr,
+    f2 = librados::async_operate(ex, snapio, "exist", &op, 0, nullptr,
                                  boost::asio::use_future);
   }
   service.run();
@@ -356,6 +365,7 @@ TEST_F(AsioRados, AsyncWriteOperationFuture)
 TEST_F(AsioRados, AsyncWriteOperationYield)
 {
   boost::asio::io_context service;
+  auto ex = service.get_executor();
 
   bufferlist bl;
   bl.append("hello");
@@ -364,23 +374,23 @@ TEST_F(AsioRados, AsyncWriteOperationYield)
     librados::ObjectWriteOperation op;
     op.write_full(bl);
     error_code ec;
-    auto ver = librados::async_operate(service, io, "exist", &op,
+    auto ver = librados::async_operate(ex, io, "exist", &op,
                                        0, nullptr, yield[ec]);
     EXPECT_FALSE(ec);
     EXPECT_LT(0, ver);
   };
-  boost::asio::spawn(service, success_cr, rethrow);
+  boost::asio::spawn(ex, success_cr, rethrow);
 
   auto failure_cr = [&] (boost::asio::yield_context yield) {
     librados::ObjectWriteOperation op;
     op.write_full(bl);
     error_code ec;
-    auto ver = librados::async_operate(service, snapio, "exist", &op,
+    auto ver = librados::async_operate(ex, snapio, "exist", &op,
                                        0, nullptr, yield[ec]);
     EXPECT_EQ(boost::system::errc::read_only_file_system, ec);
     EXPECT_EQ(0, ver);
   };
-  boost::asio::spawn(service, failure_cr, rethrow);
+  boost::asio::spawn(ex, failure_cr, rethrow);
 
   service.run();
 }

@@ -123,7 +123,7 @@ void RadosIo::applyIoOp(IoOp &op)
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
-      librados::async_operate(asio, io, oid,
+      librados::async_operate(asio.get_executor(), io, oid,
                               &op_info->wop, 0, nullptr, create_cb);
     }
     break;
@@ -138,7 +138,7 @@ void RadosIo::applyIoOp(IoOp &op)
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
-      librados::async_operate(asio, io, oid,
+      librados::async_operate(asio.get_executor(), io, oid,
                               &op_info->wop, 0, nullptr, remove_cb);
     }
     break;
@@ -159,7 +159,7 @@ void RadosIo::applyIoOp(IoOp &op)
                                  op_info->length1));
         finish_io();
       };
-      librados::async_operate(asio, io, oid,
+      librados::async_operate(asio.get_executor(), io, oid,
                               &op_info->rop, 0, nullptr, read_cb);
       num_io++;
     }
@@ -191,7 +191,7 @@ void RadosIo::applyIoOp(IoOp &op)
                                  op_info->length2));
         finish_io();
       };
-      librados::async_operate(asio, io, oid,
+      librados::async_operate(asio.get_executor(), io, oid,
                               &op_info->rop, 0, nullptr, read2_cb);
       num_io++;
     }
@@ -227,7 +227,7 @@ void RadosIo::applyIoOp(IoOp &op)
                                  op_info->length3));
         finish_io();
       };
-      librados::async_operate(asio, io, oid,
+      librados::async_operate(asio.get_executor(), io, oid,
                               &op_info->rop, 0, nullptr, read3_cb);
       num_io++;
     }
@@ -245,7 +245,7 @@ void RadosIo::applyIoOp(IoOp &op)
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
-      librados::async_operate(asio, io, oid,
+      librados::async_operate(asio.get_executor(), io, oid,
                               &op_info->wop, 0, nullptr, write_cb);
       num_io++;
     }
@@ -265,7 +265,7 @@ void RadosIo::applyIoOp(IoOp &op)
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
-      librados::async_operate(asio, io, oid,
+      librados::async_operate(asio.get_executor(), io, oid,
                               &op_info->wop, 0, nullptr, write2_cb);
       num_io++;
     }
@@ -288,7 +288,7 @@ void RadosIo::applyIoOp(IoOp &op)
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
-      librados::async_operate(asio, io, oid,
+      librados::async_operate(asio.get_executor(), io, oid,
                               &op_info->wop, 0, nullptr, write3_cb);
       num_io++;
     }
