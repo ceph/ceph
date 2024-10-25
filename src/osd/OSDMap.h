@@ -29,16 +29,20 @@
 #include <set>
 #include <map>
 #include <memory>
+#include <random>
 
-#include <boost/smart_ptr/local_shared_ptr.hpp>
 #include "include/btree_map.h"
 #include "include/common_fwd.h"
+#include "include/fs_types.h" // for struct file_layout_t
 #include "include/types.h"
 #include "common/ceph_releases.h"
 #include "osd_types.h"
 
-//#include "include/ceph_features.h"
 #include "crush/CrushWrapper.h"
+
+#ifdef WITH_SEASTAR
+#include <boost/smart_ptr/local_shared_ptr.hpp>
+#endif
 
 // forward declaration
 class CrushWrapper;
