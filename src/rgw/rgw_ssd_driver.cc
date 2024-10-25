@@ -14,6 +14,7 @@ namespace efs = std::filesystem;
 namespace rgw { namespace cache {
 
 static std::atomic<uint64_t> index{0};
+static std::atomic<uint64_t> dir_index{0};
 
 static std::vector<std::string> tokenize_key(std::string_view key)
 {
@@ -86,24 +87,32 @@ static void parse_key(const DoutPrefixProvider* dpp, const std::string& location
 static void create_directories(const DoutPrefixProvider* dpp, const std::string& dir_path)
 {
     std::error_code ec;
+    std::string temp_dir_path = dir_path + "_" + std::to_string(dir_index++);
     if (!efs::exists(dir_path, ec)) {
-        if (!efs::create_directories(dir_path, ec)) {
-            ldpp_dout(dpp, 0) << "initialize::: ERROR creating directory: '" << dir_path <<
+        if (!efs::create_directories(temp_dir_path, ec)) {
+            ldpp_dout(dpp, 0) << "create_directories::: ERROR creating directory: '" << temp_dir_path <<
                             "' : " << ec.value() << dendl;
         } else {
-            uid_t uid = dpp->get_cct()->get_set_uid();
-            gid_t gid = dpp->get_cct()->get_set_gid();
+            efs::rename(temp_dir_path, dir_path, ec);
+            if (ec) {
+                ldpp_dout(dpp, 0) << "create_directories::: ERROR renaming directory: '" << temp_dir_path <<
+                            "' : " << ec.value() << dendl;
+                efs::remove(temp_dir_path, ec);
+            } else {
+                uid_t uid = dpp->get_cct()->get_set_uid();
+                gid_t gid = dpp->get_cct()->get_set_gid();
 
-            ldpp_dout(dpp, 5) << "initialize:: uid is " << uid << " and gid is " << gid << dendl;
-            ldpp_dout(dpp, 5) << "initialize:: changing permissions for directory: " << dendl;
+                ldpp_dout(dpp, 5) << "create_directories:: uid is " << uid << " and gid is " << gid << dendl;
+                ldpp_dout(dpp, 5) << "create_directories:: changing permissions for directory: " << dendl;
 
-            if (uid) { 
-                if (chown(dir_path.c_str(), uid, gid) == -1) {
-                    ldpp_dout(dpp, 5) << "initialize: chown return error: " << strerror(errno) << dendl;
-                }
+                if (uid) {
+                    if (chown(dir_path.c_str(), uid, gid) == -1) {
+                        ldpp_dout(dpp, 5) << "create_directories: chown return error: " << strerror(errno) << dendl;
+                    }
 
-                if (chmod(dir_path.c_str(), S_IRWXU|S_IRWXG|S_IRWXO) == -1) {
-                    ldpp_dout(dpp, 5) << "initialize: chmod return error: " << strerror(errno) << dendl;
+                    if (chmod(dir_path.c_str(), S_IRWXU|S_IRWXG|S_IRWXO) == -1) {
+                        ldpp_dout(dpp, 5) << "create_directories: chmod return error: " << strerror(errno) << dendl;
+                    }
                 }
             }
         }
@@ -392,6 +401,18 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
     return 0;
 }
 
+uint64_t SSDDriver::get_free_space(const DoutPrefixProvider* dpp)
+{
+    efs::space_info space = efs::space(partition_info.location);
+    return space.available;
+}
+
+void SSDDriver::set_free_space(const DoutPrefixProvider* dpp, uint64_t free_space)
+{
+    std::lock_guard l(cache_lock);
+    this->free_space = free_space;
+}
+
 int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y)
 {
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
@@ -479,7 +500,7 @@ int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& ke
         ldpp_dout(dpp, 0) << "ERROR: append_data::fclose file has return error, errno=" << errno << dendl;
         return -errno;
     }
-
+    std::lock_guard l(cache_lock);
     efs::space_info space = efs::space(partition_info.location);
     this->free_space = space.available;
 
@@ -626,19 +647,20 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
     parse_key(dpp, partition_info.location, key, dir_path, file_name, is_dirty);
     std::string location = get_file_path(dpp, dir_path, file_name);
     ldpp_dout(dpp, 20) << "INFO: delete_data::file to remove: " << location << dendl;
+    std::error_code ec;
 
     //Remove file
-    if (!efs::remove(location)) {
+    if (!efs::remove(location, ec)) {
         ldpp_dout(dpp, 0) << "ERROR: delete_data::remove has failed to remove the file: " << location << dendl;
-        return -EIO;
+        return -ec.value();
     }
 
     //Remove directory if empty, removes object directory
-    if (efs::is_empty(dir_path)) {
-        ldpp_dout(dpp, 20) << "INFO: delete_data::object directory to remove: " << dir_path << dendl;
-        if (!efs::remove(dir_path)) {
-            ldpp_dout(dpp, 0) << "ERROR: delete_data::remove has failed to remove the directory: " << dir_path << dendl;
-            return -EIO;
+    if (efs::is_empty(dir_path, ec)) {
+        ldpp_dout(dpp, 20) << "INFO: delete_data::object directory to remove: " << dir_path << " :" << ec.value() << dendl;
+        if (!efs::remove(dir_path, ec)) {
+            //another version could have been written between the check and removal, hence not returning error from here
+            ldpp_dout(dpp, 0) << "ERROR: delete_data::remove has failed to remove the directory: " << dir_path  << " :" << ec.value() << dendl;
         }
     }
     auto pos = dir_path.find_last_of('/');
@@ -646,14 +668,15 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
         dir_path.erase(pos, (dir_path.length() - pos));
 
         //Remove bucket directory
-        if (efs::is_empty(dir_path)) {
-            ldpp_dout(dpp, 20) << "INFO: delete_data::bucket directory to remove: " << dir_path << dendl;
-            if (!efs::remove(dir_path)) {
-                ldpp_dout(dpp, 0) << "ERROR: delete_data::remove has failed to remove the directory: " << dir_path << dendl;
-                return -EIO;
+        if (efs::is_empty(dir_path, ec)) {
+            ldpp_dout(dpp, 20) << "INFO: delete_data::bucket directory to remove: " << dir_path << " :" << ec.value() << dendl;
+            if (!efs::remove(dir_path, ec)) {
+                //another object could have been written between the check and removal, hence not returning error from here
+                ldpp_dout(dpp, 0) << "ERROR: delete_data::remove has failed to remove the directory: " << dir_path << " :" << ec.value() << dendl;
             }
         }
     }
+
     efs::space_info space = efs::space(partition_info.location);
     this->free_space = space.available;
 
@@ -683,8 +706,25 @@ int SSDDriver::AsyncWriteRequest::prepare_libaio_write_op(const DoutPrefixProvid
     mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
     r = fd = TEMP_FAILURE_RETRY(::open(file_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, mode));
     if (fd < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: AsyncWriteRequest::prepare_libaio_write_op: open file failed, errno=" << errno << ", location='" << file_path.c_str() << "'" << dendl;
-        return r;
+        //directories might have been deleted by a parallel delete of the last version of an object
+        if (errno == ENOENT) {
+            //retry after creating directories
+            std::string dir_path = file_path;
+            auto pos = dir_path.find_last_of('/');
+            if (pos != std::string::npos) {
+                dir_path.erase(pos, (dir_path.length() - pos));
+            }
+            ldpp_dout(dpp, 20) << "INFO: AsyncWriteRequest::prepare_libaio_write_op: dir_path for creating directories=" << dir_path << dendl;
+            create_directories(dpp, dir_path);
+            r = fd = TEMP_FAILURE_RETRY(::open(file_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, mode));
+            if (fd < 0) {
+                ldpp_dout(dpp, 0) << "ERROR: AsyncWriteRequest::prepare_libaio_write_op: open file failed, errno=" << errno << ", location='" << file_path.c_str() << "'" << dendl;
+                return r;
+            }
+        } else {
+            ldpp_dout(dpp, 0) << "ERROR: AsyncWriteRequest::prepare_libaio_write_op: open file failed, errno=" << errno << ", location='" << file_path.c_str() << "'" << dendl;
+            return r;
+        }
     }
     if (dpp->get_cct()->_conf->rgw_d4n_l1_fadvise != POSIX_FADV_NORMAL)
         posix_fadvise(fd, 0, 0, dpp->get_cct()->_conf->rgw_d4n_l1_fadvise);
@@ -792,18 +832,16 @@ int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& ke
     for (auto& it : attrs) {
         std::string attr_name = it.first;
         std::string attr_val = it.second.to_str();
-        std::string old_attr_val;
-        auto ret = get_attr(dpp, key, attr_name, old_attr_val, y);
-        if (old_attr_val.empty()) {
+        auto ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), XATTR_REPLACE);
+        if (ret < 0 && errno == ENODATA) {
             ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), XATTR_CREATE);
-        } else {
-            ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), XATTR_REPLACE);
         }
         if (ret < 0) {
             ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not modify attr value for attr name: " << attr_name << " key: " << key << " ERROR: " << cpp_strerror(errno) <<dendl;
             return ret;
         }
     }
+
     efs::space_info space = efs::space(partition_info.location);
     this->free_space = space.available;
     return 0;
@@ -912,28 +950,42 @@ int SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, c
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): get_attr: key: " << attr_name << dendl;
 
-    int attr_size = getxattr(location.c_str(), attr_name.c_str(), nullptr, 0);
-    if (attr_size < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << attr_name << ": " << cpp_strerror(errno) << dendl;
-        attr_val = "";
-        return errno;
-    }
-
-    if (attr_size == 0) {
-        ldpp_dout(dpp, 0) << "ERROR: no attribute value found for attr_name: " << attr_name << dendl;
-        attr_val = "";
+    size_t buffer_size = 256;
+    while (true) {
+        attr_val.resize(buffer_size);
+        ssize_t attr_size = getxattr(location.c_str(), attr_name.c_str(), attr_val.data(), attr_val.size());
+        if (attr_size < 0) {
+            if (errno == ERANGE) {
+                // Buffer too small, get actual size needed
+                attr_size = getxattr(location.c_str(), attr_name.c_str(), nullptr, 0);
+                if (attr_size < 0) {
+                    ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << attr_name << ": " << cpp_strerror(errno) << dendl;
+                    attr_val = "";
+                    return errno;
+                }
+                if (attr_size == 0) {
+                    ldpp_dout(dpp, 0) << "ERROR: no attribute value found for attr_name: " << attr_name << dendl;
+                    attr_val = "";
+                    return 0;
+                }
+                // Resize and try again
+                buffer_size = static_cast<size_t>(attr_size);
+                continue;
+            }
+            ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not get attribute " << attr_name << ": " << cpp_strerror(errno) << dendl;
+            attr_val = "";
+            return errno;
+        } //end-if result < 0
+        if (attr_size == 0) {
+            ldpp_dout(dpp, 0) << "ERROR: no attribute value found for attr_name: " << attr_name << dendl;
+            attr_val = "";
+            return 0;
+        } //end-if result == 0
+        // Success - resize buffer to actual data size and return
+        ldpp_dout(dpp, 20) << "INFO: attr_size is: " << attr_size << dendl;
+        attr_val.resize(static_cast<size_t>(attr_size));
         return 0;
     }
-
-    attr_val.resize(attr_size);
-    attr_size = getxattr(location.c_str(), attr_name.c_str(), attr_val.data(), attr_size);
-    if (attr_size < 0) {
-        ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not get attr value for attr name: " << attr_name << " key: " << key << dendl;
-        attr_val = "";
-        return errno;
-    }
-
-    return 0;
 }
 
 int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y)
