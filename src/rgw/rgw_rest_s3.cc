@@ -1427,6 +1427,24 @@ struct ReplicationConfiguration {
         return r;
       }
 
+      if (pipe.dest.bucket) {
+        if (pipe.dest.bucket->match(s->bucket->get_key())) {
+          s->err.message = "Destination bucket cannot be the same as the source bucket.";
+          return -EINVAL;
+        }
+
+        std::unique_ptr<rgw::sal::Bucket> dest_bucket;
+        if (r = driver->load_bucket(s, *pipe.dest.bucket, &dest_bucket, s->yield); r < 0) {
+          if (r == -ENOENT) {
+            s->err.message = "Destination bucket must exist.";
+            return -EINVAL;
+          }
+
+          ldpp_dout(s, 0) << "ERROR: failed to load bucket info for bucket=" << *pipe.dest.bucket << " r=" << r << dendl;
+          return r;
+        }
+      }
+
       if (enabled) {
         enabled_group.pipes.emplace_back(std::move(pipe));
       } else {
