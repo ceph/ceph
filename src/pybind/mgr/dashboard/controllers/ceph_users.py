@@ -6,7 +6,7 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
 from . import APIDoc, APIRouter, CRUDCollectionMethod, CRUDEndpoint, \
-    EndpointDoc, Param, RESTController, SecretStr
+    EndpointDoc, Param, RESTController
 from ._crud import ArrayHorizontalContainer, CRUDMeta, Form, FormField, \
     FormTaskInfo, Icon, MethodType, SelectionType, TableAction, Validator, \
     VerticalContainer
@@ -232,4 +232,4 @@ edit_form = Form(path='/cluster/user/edit',
 class CephUser(NamedTuple):
     entity: str
     caps: List[CephUserCaps]
-    key: SecretStr
+    key: str
