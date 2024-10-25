@@ -79,8 +79,6 @@ class RGWBucketReshard {
   // allocated in at once
   static const std::initializer_list<uint16_t> reshard_primes;
 
-  int calc_target_shard(const RGWBucketInfo& bucket_info, const rgw_obj_key& key,
-                        int& shard, const DoutPrefixProvider *dpp);
   int reshard_process(const rgw::bucket_index_layout_generation& current,
                       int& max_entries,
                       BucketReshardManager& target_shards_mgr,
