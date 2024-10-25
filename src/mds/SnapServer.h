@@ -18,9 +18,8 @@
 #include "MDSTableServer.h"
 #include "snap.h"
 
-#include "messages/MRemoveSnaps.h"
-
 class MDSRank;
+class MRemoveSnaps;
 class MonClient;
 
 class SnapServer : public MDSTableServer {
