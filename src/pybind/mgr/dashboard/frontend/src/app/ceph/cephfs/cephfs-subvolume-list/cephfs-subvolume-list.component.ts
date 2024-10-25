@@ -31,7 +31,6 @@ import { CriticalConfirmationModalComponent } from '~/app/shared/components/crit
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-mount-details.component';
-import { HealthService } from '~/app/shared/api/health.service';
 import _ from 'lodash';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
@@ -92,7 +91,6 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
     private cephfsSubvolumeGroupService: CephfsSubvolumeGroupService,
-    private healthService: HealthService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -214,20 +212,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
   }
 
   showAttachInfo() {
-    const selectedSubVolume = this.selection?.selected?.[0];
-
-    this.healthService.getClusterFsid().subscribe({
-      next: (clusterId: string) => {
-        this.modalRef = this.modalService.show(CephfsMountDetailsComponent, {
-          onSubmit: () => this.modalRef.close(),
-          mountData: {
-            fsId: clusterId,
-            fsName: this.fsName,
-            rootPath: selectedSubVolume.info.path
-          }
-        });
-      }
-    });
+        this.modalRef = this.modalService.show(CephfsMountDetailsComponent);
   }
 
   openModal(edit = false) {

@@ -1,37 +1,47 @@
 <cds-modal size="md"
-           [open]="open"
-           (overlaySelected)="closeModal()">
+          [open]="open" 
+          (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>
-      Attach commands
-    </h3>
+    <h3 cdsModalHeaderHeading i18n>Attach commands</h3>
   </cds-modal-header>
-
   <div class="cds--modal-content">
-    <h5 class="fw-bold"
-        i18n>
-      Using Mount command
-    </h5>
-    <cd-code-block textWrap="true"
-                   [codes]="[mount]"></cd-code-block>
+    <form name="userForm" 
+          #formDir="ngForm" 
+          [formGroup]="userForm" 
+          novalidate>
+      <div class="form-item">
+        <cds-select
+          label="Ceph User"
+          for="user"
+          formControlName="user"
+          name="user"
+          id="user"
+          (change)="userChangeHandler()"
+          i18n
+          >Ceph User
+          <option *ngFor="let user of filteredUsers" 
+                  [value]="user.entity">
+            {{ user.entity }}
+          </option>
+        </cds-select>
+      </div>
+    </form>
+    <h5 class="fw-bold" i18n>Using CephFS Mount command</h5>
+    <cd-code-block textWrap="true" [codes]="[cephfsmount]"></cd-code-block>
 
-    <h5 class="fw-bold"
-        i18n>
-      Using FUSE command
-    </h5>
-    <cd-code-block textWrap="true"
-                   [codes]="[fuse]"></cd-code-block>
+    <h5 class="fw-bold" i18n>Using Mount command</h5>
+    <cd-code-block textWrap="true" [codes]="[mount]"></cd-code-block>
 
-    <h5 class="fw-bold"
-        i18n>
-        Using NFS Command
-    </h5>
-    <cd-code-block textWrap="true"
-                   [codes]="[nfs]"></cd-code-block>
+    <h5 class="fw-bold" i18n>Using FUSE command</h5>
+    <cd-code-block textWrap="true" [codes]="[fuse]"></cd-code-block>
+
+    <h5 class="fw-bold" i18n>Using NFS Command</h5>
+    <cd-code-block textWrap="true" [codes]="[nfs]"></cd-code-block>
   </div>
-  <cd-form-button-panel [modalForm]="true"
-                        [showSubmit]="false"
-                        (backAction)="cancel()"
-                        i18n></cd-form-button-panel>
+  <cd-form-button-panel
+    [modalForm]="true"
+    [showSubmit]="false"
+    (backAction)="cancel()"
+    i18n
+  ></cd-form-button-panel>
 </cds-modal>
