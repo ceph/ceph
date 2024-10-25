@@ -16,6 +16,8 @@
 #include "debug.h"
 #include "errno.h"
 
+#include <dirent.h>
+
 #ifndef _WIN32
 void dump_open_fds(CephContext *cct)
 {
