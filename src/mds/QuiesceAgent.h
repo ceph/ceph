@@ -10,11 +10,14 @@
  *
  */
 #pragma once
+
 #include "mds/QuiesceDb.h"
-#include <functional>
-#include <optional>
-#include <map>
+#include "common/Thread.h"
+
+#include <algorithm> // for std::max()
+#include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <thread>
 
 class QuiesceAgent {
