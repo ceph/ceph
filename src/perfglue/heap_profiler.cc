@@ -26,6 +26,7 @@
 #include "common/LogClient.h"
 #include "global/global_context.h"
 #include "common/debug.h"
+#include "include/container_ios.h"
 
 #include <iomanip>
 
