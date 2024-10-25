@@ -39,6 +39,7 @@
 #include "common/Clock.h"
 #include "common/ceph_json.h"
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "global/global_context.h"
 #include "include/denc.h"
@@ -945,6 +946,29 @@ void CInode::put_stickydirs()
 
 
 // pins
+
+void CInode::bad_put(int by) {
+  generic_dout(0) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref
+#ifdef MDS_REF_SET
+		  << " (" << ref_map << ")"
+#endif
+		  << dendl;
+#ifdef MDS_REF_SET
+  ceph_assert(ref_map[by] > 0);
+#endif
+  ceph_assert(ref > 0);
+}
+
+void CInode::bad_get(int by) {
+  generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
+#ifdef MDS_REF_SET
+		  << " (" << ref_map << ")"
+#endif
+		  << dendl;
+#ifdef MDS_REF_SET
+  ceph_assert(ref_map[by] >= 0);
+#endif
+}
 
 void CInode::first_get()
 {

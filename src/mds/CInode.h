@@ -23,7 +23,6 @@
 #include <vector>
 
 #include "common/config.h"
-#include "common/debug.h"
 #include "common/ref.h" // for cref_t
 #include "include/compat.h"
 #include "include/Context.h" // for C_GatherBuilder
@@ -45,8 +44,6 @@
 #include "Capability.h"
 
 #include <boost/intrusive_ptr.hpp>
-
-#define dout_context g_ceph_context
 
 struct sr_t;
 class BatchOp;
@@ -967,27 +964,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void unfreeze_auth_pin();
 
   // -- reference counting --
-  void bad_put(int by) override {
-    generic_dout(0) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref
-#ifdef MDS_REF_SET
-		    << " (" << ref_map << ")"
-#endif
-		    << dendl;
-#ifdef MDS_REF_SET
-    ceph_assert(ref_map[by] > 0);
-#endif
-    ceph_assert(ref > 0);
-  }
-  void bad_get(int by) override {
-    generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
-#ifdef MDS_REF_SET
-		    << " (" << ref_map << ")"
-#endif
-		    << dendl;
-#ifdef MDS_REF_SET
-    ceph_assert(ref_map[by] >= 0);
-#endif
-  }
+  void bad_put(int by) override;
+  void bad_get(int by) override;
   void first_get() override;
   void last_put() override;
   void _put() override;
@@ -1284,5 +1262,5 @@ std::ostream& operator<<(std::ostream& out, const CInode& in);
 
 extern cinode_lock_info_t cinode_lock_info[];
 extern int num_cinode_locks;
-#undef dout_context
+
 #endif
