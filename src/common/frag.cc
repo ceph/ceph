@@ -13,7 +13,7 @@
  */
 
 #include "include/frag.h"
-#include "include/types.h" // for operator<<(std::set)
+#include "include/container_ios.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 
