@@ -16,7 +16,6 @@
 #include "CephxProtocol.h"
 
 #include <errno.h>
-#include <sstream>
 
 #include "common/config.h"
 #include "include/ceph_features.h"
