@@ -84,6 +84,8 @@ extern "C" {
 #include "driver/rados/rgw_bucket.h"
 #include "driver/rados/rgw_sal_rados.h"
 
+#include <iomanip>
+
 #define dout_context g_ceph_context
 
 static rgw::sal::Driver* driver = NULL;
