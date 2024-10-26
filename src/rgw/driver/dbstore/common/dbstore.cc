@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "dbstore.h"
+#include "log/Log.h"
 
 using namespace std;
 

@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include "rgw_data_sync.h"
+
 #include "common/ceph_json.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
@@ -10,7 +12,6 @@
 #include "rgw_common.h"
 #include "rgw_zone.h"
 #include "rgw_sync.h"
-#include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
@@ -34,8 +35,10 @@
 
 #include "include/common_fwd.h"
 #include "include/random.h"
+#include "include/timegm.h"
 
 #include <boost/asio/yield.hpp>
+#include <shared_mutex> // for std::shared_lock
 #include <string_view>
 
 #define dout_subsys ceph_subsys_rgw
