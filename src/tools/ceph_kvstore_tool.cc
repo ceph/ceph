@@ -20,6 +20,7 @@
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "common/url_escape.h"
+#include "include/types.h" // for struct byte_u_t
 
 #include "global/global_context.h"
 #include "global/global_init.h"
