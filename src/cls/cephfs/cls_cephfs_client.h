@@ -5,6 +5,7 @@
 #include "mds/mdstypes.h"
 #include "cls_cephfs.h"
 
+struct inode_backtrace_t;
 class AccumulateArgs;
 
 class ClsCephFSClient
