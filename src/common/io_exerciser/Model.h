@@ -3,15 +3,6 @@
 #include <cstdint>
 #include <string>
 
-#include <boost/asio/io_context.hpp>
-
-#include "IoOp.h"
-#include "common/Thread.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "include/interval_set.h"
-#include "librados/librados_asio.h"
-
 /* Overview
  *
  * class Model
