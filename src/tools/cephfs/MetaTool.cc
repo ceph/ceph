@@ -8,6 +8,7 @@
 #include "include/types.h"
 #include "common/Formatter.h"
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"

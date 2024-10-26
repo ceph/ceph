@@ -23,6 +23,14 @@
 #include "tools/rbd_mirror/image_replayer/journal/ReplayStatusFormatter.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix

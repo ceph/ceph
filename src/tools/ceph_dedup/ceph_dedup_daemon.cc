@@ -1,4 +1,7 @@
 #include "common.h"
+#include "log/Log.h"
+
+#include <shared_mutex> // for std::shared_lock
 
 #undef dout_prefix
 #define dout_prefix *_dout << "ceph_dedup_daemon: " \

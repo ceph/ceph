@@ -15,6 +15,8 @@
 #include "JournalFilter.h"
 
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
+#include "common/strtol.h" // for strict_strtoll()
 
 #include "mds/events/ESession.h"
 #include "mds/events/EUpdate.h"
