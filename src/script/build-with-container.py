@@ -63,6 +63,7 @@ log = logging.getLogger()
 DISTROS = [
     "ubuntu22.04",
     "centos9",
+    "centos10",
     "centos8",
 ]
 
@@ -201,6 +202,7 @@ class Context:
     def from_image(self):
         return {
             "centos9": "quay.io/centos/centos:stream9",
+            "centos10": "quay.io/centos/centos:stream10-development",
             # "centos8": "quay.io/centos/centos:stream8",
             "centos8": "quay.io/phlogistonjohn/devcentos:stream8",
             "ubuntu22.04": "docker.io/ubuntu:22.04",
