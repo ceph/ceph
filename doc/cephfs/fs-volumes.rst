@@ -1377,5 +1377,28 @@ set with this id was present in the database
 
   $ ceph fs quiesce fs1 sub1 sub2 sub3 --set-id="external-id" --if-version=0
 
+
+.. _disabling-volumes-plugin:
+
+Disabling Volumes Plugin
+------------------------
+By default the volumes plugin is enabled and set to ``always on``. However, in
+certain cases it might be appropriate to disable it. For example, when a CephFS
+is in a degraded state, the volumes plugin commands may accumulate in MGR
+instead of getting served. Which eventually causes policy throttles to kick in
+and the MGR becomes unresponsive.
+
+In this event, volumes plugin can be disabled even though it is an
+``always on`` module in MGR. To do so, run ``ceph mgr module disable volumes
+--yes-i-really-mean-it``. Do note that this command will disable operations
+and remove commands of volumes plugin since it will disable all CephFS
+services on the Ceph cluster accessed through this plugin.
+
+Before resorting to a measure as drastic as this, it is a good idea to try less
+drastic measures and then assess if the file system experience has improved due
+to it. One example of such less drastic measure is to disable asynchronous
+threads launched by volumes plugins for cloning and purging trash.
+
+
 .. _manila: https://github.com/openstack/manila
 .. _CSI: https://github.com/ceph/ceph-csi
