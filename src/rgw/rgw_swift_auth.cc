@@ -16,6 +16,7 @@
 #include "common/Clock.h"
 
 #include "include/random.h"
+#include "include/timegm.h"
 
 #include "rgw_client_io.h"
 #include "rgw_http_client.h"
