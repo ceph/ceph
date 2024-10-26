@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <shared_mutex> // for std::shared_lock
 #include <string>
 #include <map>
 #include <unordered_map>
