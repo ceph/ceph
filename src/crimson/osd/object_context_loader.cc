@@ -123,41 +123,41 @@ ObjectContextLoader::load_and_lock(Manager &manager, RWState::State lock_type)
   }
 }
 
-  ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::load_obc(ObjectContextRef obc)
-  {
-    LOG_PREFIX(ObjectContextLoader::load_obc);
-    return backend.load_metadata(obc->get_oid())
+ObjectContextLoader::load_obc_iertr::future<>
+ObjectContextLoader::load_obc(ObjectContextRef obc)
+{
+  LOG_PREFIX(ObjectContextLoader::load_obc);
+  return backend.load_metadata(obc->get_oid())
     .safe_then_interruptible(
       [FNAME, this, obc=std::move(obc)](auto md)
       -> load_obc_ertr::future<> {
-      const hobject_t& oid = md->os.oi.soid;
-      DEBUGDPP("loaded obs {} for {}", dpp, md->os.oi, oid);
-      if (oid.is_head()) {
-        if (!md->ssc) {
-	  ERRORDPP("oid {} missing snapsetcontext", dpp, oid);
-          return crimson::ct_error::object_corrupted::make();
-        }
-        obc->set_head_state(std::move(md->os),
-                            std::move(md->ssc));
-      } else {
-        // we load and set the ssc only for head obc.
-        // For clones, the head's ssc will be referenced later.
-        // See set_clone_ssc
-        obc->set_clone_state(std::move(md->os));
-      }
-      DEBUGDPP("loaded obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);
-      return seastar::now();
-    });
-  }
+	const hobject_t& oid = md->os.oi.soid;
+	DEBUGDPP("loaded obs {} for {}", dpp, md->os.oi, oid);
+	if (oid.is_head()) {
+	  if (!md->ssc) {
+	    ERRORDPP("oid {} missing snapsetcontext", dpp, oid);
+	    return crimson::ct_error::object_corrupted::make();
+	  }
+	  obc->set_head_state(std::move(md->os),
+			      std::move(md->ssc));
+	} else {
+	  // we load and set the ssc only for head obc.
+	  // For clones, the head's ssc will be referenced later.
+	  // See set_clone_ssc
+	  obc->set_clone_state(std::move(md->os));
+	}
+	DEBUGDPP("loaded obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);
+	return seastar::now();
+      });
+}
 
-  void ObjectContextLoader::notify_on_change(bool is_primary)
-  {
-    LOG_PREFIX(ObjectContextLoader::notify_on_change);
-    DEBUGDPP("is_primary: {}", dpp, is_primary);
-    for (auto& obc : obc_set_accessing) {
-      DEBUGDPP("interrupting obc: {}", dpp, obc.get_oid());
-      obc.interrupt(::crimson::common::actingset_changed(is_primary));
-    }
+void ObjectContextLoader::notify_on_change(bool is_primary)
+{
+  LOG_PREFIX(ObjectContextLoader::notify_on_change);
+  DEBUGDPP("is_primary: {}", dpp, is_primary);
+  for (auto& obc : obc_set_accessing) {
+    DEBUGDPP("interrupting obc: {}", dpp, obc.get_oid());
+    obc.interrupt(::crimson::common::actingset_changed(is_primary));
   }
+}
 }
