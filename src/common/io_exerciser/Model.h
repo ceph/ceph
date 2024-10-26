@@ -1,15 +1,7 @@
 #pragma once
 
-#include "IoOp.h"
-
-#include <boost/asio/io_context.hpp>
-
-#include "librados/librados_asio.h"
-
-#include "include/interval_set.h"
-#include "global/global_init.h"
-#include "global/global_context.h"
-#include "common/Thread.h"
+#include <cstdint>
+#include <string>
 
 /* Overview
  *
@@ -22,6 +14,8 @@
 
 namespace ceph {
   namespace io_exerciser {
+
+    class IoOp;
 
     class Model
     {
