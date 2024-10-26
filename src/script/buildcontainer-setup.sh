@@ -22,7 +22,7 @@ case "${CEPH_BRANCH}~${DISTRO}" in
         install_container_deps
         dnf_clean
     ;;
-    *~*centos*stream9)
+    *~*centos*stream9|*~*centos*stream10*)
         dnf install -y /usr/bin/rpmbuild wget
         install_container_deps
         dnf_clean
