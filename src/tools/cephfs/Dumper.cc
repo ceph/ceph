@@ -12,8 +12,11 @@
  * 
  */
 
+#include "Dumper.h"
+
 #include "include/compat.h"
 #include "include/fs_types.h"
+#include "common/debug.h"
 #include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
@@ -22,8 +25,6 @@
 #include "mds/JournalPointer.h"
 #include "osdc/Journaler.h"
 #include "mon/MonClient.h"
-
-#include "Dumper.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds

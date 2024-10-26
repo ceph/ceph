@@ -13,6 +13,12 @@
 
 #include <vector>
 
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 rbd::mirror::Mirror *mirror = nullptr;
 PerfCounters *g_journal_perf_counters = nullptr;
 PerfCounters *g_snapshot_perf_counters = nullptr;
