@@ -17,9 +17,9 @@
 #include "CephxProtocol.h"
 #include "CephxKeyServer.h"
 #include <errno.h>
-#include <sstream>
 
 #include "include/random.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/config.h"
 #include "common/debug.h"
 
