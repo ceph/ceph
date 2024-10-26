@@ -168,6 +168,11 @@ public:
       return target_state.obc;
     }
 
+    ObjectContextRef &get_head_obc() {
+      ceph_assert(!head_state.is_empty());
+      return head_state.obc;
+    }
+
     void release() {
       release_state(head_state);
       release_state(target_state);
@@ -213,8 +218,13 @@ public:
   // See SnapTrimObjSubEvent::remove_or_update - in_removed_snaps_queue usage.
   template<RWState::State State>
   load_obc_iertr::future<> with_obc(hobject_t oid,
-                                    with_obc_func_t&& func,
-                                    bool resolve_clone = true);
+                                    with_obc_func_t func,
+                                    bool resolve_clone = true) {
+    auto manager = get_obc_manager(oid, resolve_clone);
+    co_await load_and_lock(manager, State);
+    co_await std::invoke(
+      func, manager.get_head_obc(), manager.get_obc());
+  }
 
   // Use this variant in the case where the head object
   // obc is already locked and only the clone obc is needed.
@@ -223,8 +233,20 @@ public:
   template<RWState::State State>
   load_obc_iertr::future<> with_clone_obc_only(ObjectContextRef head,
                                                hobject_t clone_oid,
-                                               with_obc_func_t&& func,
-                                               bool resolve_clone = true);
+                                               with_obc_func_t func,
+                                               bool resolve_clone = true) {
+    LOG_PREFIX(ObjectContextLoader::with_clone_obc_only);
+    SUBDEBUGDPP(osd, "{}", dpp, clone_oid);
+    auto manager = get_obc_manager(clone_oid, resolve_clone);
+    // We populate head_state here with the passed obc assuming that
+    // it has been loaded and locked appropriately.  We do not populate
+    // head_state.state because we won't be taking or releasing any
+    // locks on head as part of this call.
+    manager.head_state.obc = head;
+    manager.head_state.obc->append_to(obc_set_accessing);
+    co_await load_and_lock(manager, State);
+    co_await std::invoke(func, head, manager.get_obc());
+  }
 
   void notify_on_change(bool is_primary);
 
@@ -233,24 +255,6 @@ private:
   PGBackend& backend;
   DoutPrefixProvider& dpp;
   obc_accessing_list_t obc_set_accessing;
-
-  template<RWState::State State>
-  load_obc_iertr::future<> with_clone_obc(const hobject_t& oid,
-                                          with_obc_func_t&& func,
-                                          bool resolve_clone);
-
-  template<RWState::State State>
-  load_obc_iertr::future<> with_head_obc(const hobject_t& oid,
-                                         with_obc_func_t&& func);
-
-  template<RWState::State State, typename Func>
-  load_obc_iertr::future<> with_locked_obc(const hobject_t& oid,
-					   Func&& func);
-
-  template<RWState::State State>
-  load_obc_iertr::future<ObjectContextRef>
-  get_or_load_obc(ObjectContextRef obc,
-                  bool existed);
 
   load_obc_iertr::future<> load_obc(ObjectContextRef obc);
 };
