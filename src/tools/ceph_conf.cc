@@ -17,6 +17,7 @@
 
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "log/Log.h"
 #include "mon/AuthMonitor.h"
 #include "common/Formatter.h"
 
