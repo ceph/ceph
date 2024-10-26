@@ -4,6 +4,7 @@
 #include <errno.h>
 
 #include "common/errno.h"
+#include "common/safe_io.h" // for safe_read()
 
 #include "rgw_tools.h"
 
