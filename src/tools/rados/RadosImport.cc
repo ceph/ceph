@@ -12,11 +12,10 @@
  *
  */
 
-
-#include "common/errno.h"
-
-#include "osd/PGLog.h"
 #include "RadosImport.h"
+#include "osd/PGLog.h"
+#include "common/debug.h"
+#include "common/errno.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
