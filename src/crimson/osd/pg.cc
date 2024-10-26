@@ -1628,7 +1628,8 @@ bool PG::should_send_op(
     logger().debug("{} issue_repop shipping empty opt to osd."
                    "{}, object {} beyond std::max(last_backfill_started, "
                    "peer_info[peer].last_backfill {})",
-                   peer, hoid, peering_state.get_peer_info(peer).last_backfill);
+                   __func__, peer, hoid,
+                   peering_state.get_peer_info(peer).last_backfill);
   }
   return should_send;
   // TODO: should consider async recovery cases in the future which are not supported
