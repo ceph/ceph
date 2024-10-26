@@ -12,6 +12,8 @@
 
 #include "rgw_zone.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -356,7 +358,7 @@ int RGWSI_Notify::watch_cb(const DoutPrefixProvider *dpp,
                            uint64_t notifier_id,
                            bufferlist& bl)
 {
-  std::shared_lock l{watchers_lock};
+  std::shared_lock{watchers_lock};
   if (cb) {
     return cb->watch_cb(dpp, notify_id, cookie, notifier_id, bl);
   }

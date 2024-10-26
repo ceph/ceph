@@ -28,6 +28,7 @@
 #include "common/convenience.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
+#include "include/timegm.h"
 #include "rgw_crypt_sanitize.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_policy.h"
