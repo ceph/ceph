@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_pubsub_push.h"
+#include <shared_mutex> // for std::shared_lock
 #include <string>
 #include <sstream>
 #include <algorithm>

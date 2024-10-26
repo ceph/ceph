@@ -79,6 +79,8 @@ extern "C" {
 #include "driver/rados/rgw_bucket.h"
 #include "driver/rados/rgw_sal_rados.h"
 
+#include <iomanip>
+
 #define dout_context g_ceph_context
 
 #define SECRET_KEY_LEN 40

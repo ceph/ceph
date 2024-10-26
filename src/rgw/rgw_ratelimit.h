@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <shared_mutex> // for std::shared_lock
 #include <thread>
 #include <condition_variable>
 #include "rgw_common.h"

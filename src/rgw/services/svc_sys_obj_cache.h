@@ -9,6 +9,8 @@
 
 #include "svc_sys_obj_core.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 class RGWSI_Notify;
 
 class RGWSI_SysObj_Cache_CB;

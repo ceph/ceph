@@ -27,6 +27,7 @@
 
 #include "common/async/yield_context.h"
 #include "common/random_string.h"
+#include "common/strtol.h" // for ceph::parse()
 
 #include "cls/fifo/cls_fifo_types.h"
 #include "cls/fifo/cls_fifo_ops.h"
