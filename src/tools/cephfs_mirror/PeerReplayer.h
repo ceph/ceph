@@ -10,6 +10,8 @@
 #include "ServiceDaemon.h"
 #include "Types.h"
 
+#include <boost/optional.hpp>
+
 namespace cephfs {
 namespace mirror {
 
