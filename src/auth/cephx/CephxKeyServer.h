@@ -17,6 +17,7 @@
 
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
+#include "common/ceph_json.h"
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
 
