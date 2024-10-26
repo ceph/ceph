@@ -15,6 +15,7 @@
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
 #include "common/config_proxy.h"
+#include "common/strtol.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 
