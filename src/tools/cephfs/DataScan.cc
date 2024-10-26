@@ -12,7 +12,10 @@
  *
  */
 
+#include "DataScan.h"
+
 #include "include/compat.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include <fstream>
@@ -27,7 +30,6 @@
 #include "cls/cephfs/cls_cephfs_client.h"
 
 #include "PgFiles.h"
-#include "DataScan.h"
 #include "include/compat.h"
 
 #define dout_context g_ceph_context

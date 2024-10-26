@@ -11,6 +11,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/escape.h"
+#include "common/Formatter.h"
 #include "common/safe_io.h"
 #include "global/global_context.h"
 #include <fstream>

@@ -16,6 +16,7 @@
 #include "MDSUtility.h"
 #include "include/rados/librados.hpp"
 
+struct inode_backtrace_t;
 class InodeStore;
 class MDSTable;
 
