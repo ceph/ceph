@@ -1,0 +1,119 @@
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="false"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <ng-container i18n="form title"
+                  class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+  </cds-modal-header>
+
+  <form #frm="ngForm"
+        [formGroup]="formGroup"
+        novalidate>
+    <div cdsModalContent>
+
+      <!-- Username -->
+      <div class="form-item">
+        <cds-text-label for="user"
+                        [invalid]="formGroup.controls.user.invalid && formGroup.controls.user.dirty"
+                        [invalidText]="userError"
+                        *ngIf="viewing"
+                        i18n>Username
+          <input cdsText
+                 id="user"
+                 name="user"
+                 formControlName="user"
+                 readonly
+                 [readonly]="true"
+                 modal-primary-focus>
+        </cds-text-label>
+
+        <cds-select *ngIf="!viewing"
+                    label="Username"
+                    i18n-label
+                    for="user"
+                    formControlName="user"
+                    [invalid]="formGroup.controls.user.invalid && formGroup.controls.user.dirty"
+                    [invalidText]="userError">
+          <option value="">--- Select a username ---</option>
+          <option *ngFor="let userCandidate of userCandidates"
+                  [value]="userCandidate">{{ userCandidate }}</option>
+        </cds-select>
+
+        <ng-template #userError>
+          <span class="invalid-feedback"
+                *ngIf="formGroup.showError('user', frm, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <!-- Auto-generate key -->
+      <div class="form-item"
+           *ngIf="!viewing">
+        <cds-checkbox id="generate_key"
+                      formControlName="generate_key"
+                      i18n>Auto-generate key
+        </cds-checkbox>
+      </div>
+
+      <!-- Access key -->
+      <div class="form-item form-item-append"
+           *ngIf="!formGroup.getValue('generate_key')">
+        <cds-password-label for="access_key"
+                            [invalid]="formGroup.controls.access_key.invalid && formGroup.controls.access_key.dirty"
+                            [invalidText]="accessKeyError"
+                            i18n>Access key
+          <input cdsPassword
+                 id="access_key"
+                 name="access_key"
+                 formControlName="access_key"
+                 [readonly]="viewing">
+        </cds-password-label>
+        <cd-copy-2-clipboard-button source="access_key"
+                                    class="mt-4">
+        </cd-copy-2-clipboard-button>
+
+        <ng-template #accessKeyError>
+          <span class="invalid-feedback"
+                *ngIf="formGroup.showError('access_key', frm, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <!-- Secret key -->
+      <div class="form-item form-item-append"
+           *ngIf="!formGroup.getValue('generate_key')">
+        <cds-password-label for="secret_key"
+                            [invalid]="formGroup.controls.secret_key.invalid && formGroup.controls.secret_key.dirty"
+                            [invalidText]="secretKeyError"
+                            i18n>Secret key
+          <input cdsPassword
+                 id="secret_key"
+                 name="secret_key"
+                 formControlName="secret_key"
+                 [invalid]="formGroup.controls.secret_key.invalid && formGroup.controls.secret_key.dirty"
+                 [readonly]="viewing">
+        </cds-password-label>
+
+        <cd-copy-2-clipboard-button source="secret_key"
+                                    class="mt-4">
+        </cd-copy-2-clipboard-button>
+
+        <ng-template #secretKeyError>
+          <span class="invalid-feedback"
+                *ngIf="formGroup.showError('secret_key', frm, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+    </div>
+
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [form]="formGroup"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                          [showSubmit]="!viewing"
+                          [modalForm]="true"></cd-form-button-panel>
+  </form>
+</cds-modal>
