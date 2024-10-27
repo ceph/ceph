@@ -1677,6 +1677,16 @@ public:
   } // static read_log_and_missing
 
 #ifdef WITH_SEASTAR
+  void write_log_and_missing(
+    ObjectStore::Transaction& t,
+    std::map<std::string,ceph::buffer::list> *log_to_setkey,
+    const coll_t& coll,
+    const ghobject_t &log_oid,
+    bool require_rollback,
+    std::set<std::string> *log_to_remove,
+    std::set<std::pair<std::string, std::string>> *log_to_rmkeyrange
+    );
+
   seastar::future<> read_log_and_missing_crimson(
     crimson::os::FuturizedStore::Shard &store,
     crimson::os::CollectionRef ch,

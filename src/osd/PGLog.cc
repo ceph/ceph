@@ -1175,9 +1175,17 @@ namespace {
                ghobject_t &pgmeta_oid,
                std::optional<std::string> &start) {
           return seastar::repeat([this, &ch, &pgmeta_oid, &start]() {
-            return store.omap_get_values(
-              ch, pgmeta_oid, start
-            ).safe_then([this, &start](const auto& ret) {
+	    auto fut = crimson::os::FuturizedStore::Shard::read_errorator::
+	      make_ready_future<std::tuple<bool, 
+	      crimson::os::FuturizedStore::Shard::omap_values_t>>();
+	    if (store.support_log_interfaces()) {
+	      fut = store.log_get_values(
+		ch, pgmeta_oid, start);
+	    } else {
+	      fut = store.omap_get_values(
+		ch, pgmeta_oid, start);
+	    }
+	    return fut.safe_then([this, &start](const auto& ret) {
               const auto& [done, kvs] = ret;
               for (const auto& [key, value] : kvs) {
                 process_entry(key, value);
@@ -1225,6 +1233,50 @@ seastar::future<> PGLog::read_log_and_missing_crimson(
     [ch, pgmeta_oid](FuturizedShardStoreLogReader& reader) {
     return reader.read(ch, pgmeta_oid);
   });
+}
+
+// non-static
+void PGLog::write_log_and_missing(
+  ObjectStore::Transaction& t,
+  map<string,bufferlist> *log_to_setkey,
+  const coll_t& coll,
+  const ghobject_t &log_oid,
+  bool require_rollback,
+  set<string> *log_to_remove,
+  set<std::pair<string, string>> *log_to_rmkeyrange)
+{
+  if (needs_write()) {
+    dout(6) << "write_log_and_missing with: "
+	     << "dirty_to: " << dirty_to
+	     << ", dirty_from: " << dirty_from
+	     << ", writeout_from: " << writeout_from
+	     << ", trimmed: " << trimmed
+	     << ", trimmed_dups: " << trimmed_dups
+	     << ", clear_divergent_priors: " << clear_divergent_priors
+	     << dendl;
+    _write_log_and_missing(
+      t, log_to_setkey, log, coll, log_oid,
+      dirty_to,
+      dirty_from,
+      writeout_from,
+      std::move(trimmed),
+      std::move(trimmed_dups),
+      missing,
+      !touched_log,
+      require_rollback,
+      clear_divergent_priors,
+      dirty_to_dups,
+      dirty_from_dups,
+      write_from_dups,
+      &may_include_deletes_in_missing_dirty,
+      (pg_log_debug ? &log_keys_debug : nullptr),
+      log_to_remove,
+      log_to_rmkeyrange,
+      this);
+    undirty();
+  } else {
+    dout(10) << "log is not dirty" << dendl;
+  }
 }
 
 #endif
