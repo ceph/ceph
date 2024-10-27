@@ -564,6 +564,26 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static void try_deduping_record_dbg(const DoutPrefixProvider* dpp,
+				      const disk_record_t *p_tgt_rec,
+				      disk_block_id_t      block_id,
+				      record_id_t          rec_id,
+				      md5_shard_t          md5_shard)
+  {
+    ldpp_dout(dpp, 20) << __func__ << "::bucket=" << p_tgt_rec->bucket_name
+		       << ", obj=" << p_tgt_rec->obj_name
+		       << ", block_id=" << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
+		       << ", md5_shard=" << (int)md5_shard << dendl;
+
+    ldpp_dout(dpp, 20) << __func__ << "::(3)::md5_shard=" << (int)md5_shard
+		       << "::"<< p_tgt_rec->bucket_name
+		       << "/" << p_tgt_rec->obj_name
+		       << "::num_parts=" << p_tgt_rec->s.num_parts
+		       << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
+		       << p_tgt_rec->s.md5_low << std::dec << dendl;
+  }
+
+  //---------------------------------------------------------------------------
   // We purged all entries not marked for-dedup (i.e. singleton bit is set) from the table
   //   so all entries left are sources of dedup with multiple copies.
   // If the record is marked as Shared-Manifest-Object -> skip it
@@ -580,114 +600,227 @@ namespace rgw::dedup {
 				      md5_shard_t          md5_shard,
 				      md5_stats_t         *p_stats /* IN-OUT */)
   {
-    ldpp_dout(dpp, 20) << __func__ << "::bucket=" << p_tgt_rec->bucket_name
-		       << ", obj=" << p_tgt_rec->obj_name
-		       << ", block_id=" << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
-		       << ", md5_shard=" << (int)md5_shard << dendl;
-
-    ldpp_dout(dpp, 20) << __func__ << "::(3)::md5_shard=" << (int)md5_shard
-		       << "::"<< p_tgt_rec->bucket_name
-		       << "/" << p_tgt_rec->obj_name
-		       << "::num_parts=" << p_tgt_rec->s.num_parts
-		       << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
-		       << p_tgt_rec->s.md5_low << std::dec << dendl;
-
+    bool should_print_debug = cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>();
+    if (unlikely(should_print_debug)) {
+      try_deduping_record_dbg(dpp, p_tgt_rec, block_id, rec_id, md5_shard);
+    }
     p_stats->processed_objects ++;
     if (p_tgt_rec->s.flags.has_shared_manifest()) {
       // record holds a shared_manifest object so can't be a dedup target
-      ldpp_dout(dpp, 20) << __func__ << "::skipped shared_manifest" << dendl;
       p_stats->skipped_shared_manifest++;
+      ldpp_dout(dpp, 20) << __func__ << "::skipped shared_manifest" << dendl;
       return 0;
     }
 
     key_t key(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, p_tgt_rec->s.size_4k_units, p_tgt_rec->s.num_parts);
-    dedup_table_t::value_t val;
-    int ret = d_table.get_val(&key, &val);
+    dedup_table_t::value_t src_val;
+    int ret = d_table.get_val(&key, &src_val);
     if (ret != 0) {
       // record has no valid entry in table because it is a singleton
       p_stats->skipped_singleton++;
-      ldpp_dout(dpp, 20) << __func__ << ":(4)skipped singleton:" << p_tgt_rec->bucket_name
-			 << "/" << p_tgt_rec->obj_name
-			 << "::num_parts=" << p_tgt_rec->s.num_parts
+      ldpp_dout(dpp, 20) << __func__ << "::skipped singleton::" << p_tgt_rec->bucket_name
+			 << "/" << p_tgt_rec->obj_name << "::num_parts=" << p_tgt_rec->s.num_parts
 			 << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
 			 << p_tgt_rec->s.md5_low << std::dec << dendl;
       return 0;
     }
 
-    disk_block_id_t src_block_id = val.block_idx;
-    record_id_t src_rec_id = val.rec_id;
-    bool has_shared_manifest = val.has_shared_manifest();
-    bool src_has_sha256 = val.has_valid_sha256();
+    disk_block_id_t src_block_id = src_val.block_idx;
+    record_id_t src_rec_id = src_val.rec_id;
     if (block_id == src_block_id && rec_id == src_rec_id) {
       // the table entry point to this record which means it is a dedup source so nothing to do
-      ldpp_dout(dpp, 20) << __func__ << "::skipped source-record" << dendl;
       p_stats->skipped_source_record++;
+      ldpp_dout(dpp, 20) << __func__ << "::skipped source-record" << dendl;
       return 0;
     }
 
     // This records is a dedup target with source record on source_block_id
     disk_record_t src_rec;
     ret = load_record(p_dedup_cluster_ioctx, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
-    if (ret == 0) {
-      ldpp_dout(dpp, 20) << __func__ << "::src_bucket=" << src_rec.bucket_name
-			 << ", src_object=" << src_rec.obj_name << dendl;
-      // verify that SRC and TGT records don't refer to the same physical object
-      // This could happen in theory if we read the same objects twice
-      if (src_rec.obj_name == p_tgt_rec->obj_name && src_rec.bucket_name == p_tgt_rec->bucket_name) {
-	p_stats->skipped_duplicate++;
-	ldpp_dout(dpp, 10) << __func__ << "::WARN: Duplicate records for object=" << src_rec.obj_name << dendl;
+    if (unlikely(ret != 0)) {
+      // we can withstand most errors moving to the next object
+      ldpp_dout(dpp, 5) << __func__ << "::Failed load_record("
+			<< src_block_id << ", " << src_rec_id << ")" << dendl;
+      return 0;
+    }
+
+    ldpp_dout(dpp, 20) << __func__ << "::SRC=" << src_rec.bucket_name << "/" << src_rec.obj_name << dendl;
+    // verify that SRC and TGT records don't refer to the same physical object
+    // This could happen in theory if we read the same objects twice
+    if (src_rec.obj_name == p_tgt_rec->obj_name && src_rec.bucket_name == p_tgt_rec->bucket_name) {
+      p_stats->skipped_duplicate++;
+      ldpp_dout(dpp, 10) << __func__ << "::WARN: Duplicate records for object=" << src_rec.obj_name << dendl;
+      return 0;
+    }
+    bool src_has_sha256 = src_val.has_valid_sha256();
+    if (!src_has_sha256) {
+      ldpp_dout(dpp, 10) << __func__ << "::No Valid SHA256 for: "
+			 << src_rec.bucket_name << " / " << src_rec.obj_name << dendl;
+    }
+
+    if (!p_tgt_rec->s.flags.has_valid_sha256() ) {
+      // TBD:  if TGT has no valid SHA256 ->
+      //              read the full object, calc SHA256 adding it to in-memory record
+    }
+
+    // temporary code until SHA256 support is added
+    if (src_has_sha256 && p_tgt_rec->s.flags.has_valid_sha256()) {
+      if (memcmp(src_rec.s.sha256, p_tgt_rec->s.sha256, sizeof(src_rec.s.sha256)) != 0) {
+	p_stats->skipped_bad_sha256++;
+	derr << __func__ << "::SHA256 mismatch" << dendl;
 	return 0;
       }
+    }
+    else {
+      p_stats->skip_sha256_cmp++;
+    }
 
+    ret = dedup_object(&src_rec, p_tgt_rec, src_val.has_shared_manifest(), src_has_sha256);
+    if (ret == 0) {
+      p_stats->deduped_objects++;
       if (!src_has_sha256) {
-	// TBD:  if SRC has no valid SHA256 -> read the full object and calc it
-	// TBD2: after calculation need to store the SHA256 on the disk-record
-	// TBD3  after storing SHA256 on disk-record -> update flags in dedup-table
-	ldpp_dout(dpp, 20) << __func__ << "::No Valid SHA256 for: "
-			   << src_rec.bucket_name << " / " << src_rec.obj_name << dendl;
+	// TBD: calculate SHA256 for SRC and set flag in table!!
       }
 
-      if (!p_tgt_rec->s.flags.has_valid_sha256() ) {
-	// TBD:  if TGT has no valid SHA256 ->
-	//              read the full object, calc SHA256 adding it to in-memory record
+      // mark the SRC object as a providor of a shared manifest
+      if (!src_val.has_shared_manifest()) {
+	p_stats->set_shared_manifest++;
+	// set the shared manifest flag in the dedup table
+	d_table.set_shared_manifest_mode(&key, src_block_id, src_rec_id);
+      }
+      else {
+	ldpp_dout(dpp, 20) << __func__ << "::SRC object already marked as shared_manifest" << dendl;
+      }
+    }
+
+    return 0;
+  }
+
+  using ceph::crypto::SHA256;
+  //---------------------------------------------------------------------------
+  int Background::calc_object_sha256(const disk_record_t *p_rec, unsigned char *p_sha256)
+  {
+    RGWObjManifest manifest;
+    try {
+      auto bl_iter = p_rec->manifest_bl.cbegin();
+      decode(manifest, bl_iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad src manifest" << dendl;
+      return -1;
+    }
+
+    librados::IoCtx ioctx;
+    std::string oid;
+    int ret = get_ioctx1(dpp, driver, rados, p_rec->bucket_name, p_rec->obj_name, &ioctx, &oid);
+    if (unlikely(ret != 0)) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx()" << dendl;
+      return -1;
+    }
+
+    librados::IoCtx head_ioctx;
+    //SHA256 hash;
+    std::string secret("0555b35654ad1656d804");
+    TOPNSPC::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
+    for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p) {
+      rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
+      rgw_rados_ref obj;
+      ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
+      if (ret < 0) {
+	ldpp_dout(dpp, 1) << "manifest::failed to open rados context for " << obj << dendl;
+	return -1;
       }
 
-      // temporary code until SHA256 support is added
-      if (src_has_sha256 && p_tgt_rec->s.flags.has_valid_sha256()) {
-	if (memcmp(src_rec.s.sha256, p_tgt_rec->s.sha256, sizeof(src_rec.s.sha256)) != 0) {
-	  derr << __func__ << "::SHA256 mismatch" << dendl;
-	  p_stats->skipped_bad_sha256++;
-	  return 0;
+      if (oid == raw_obj.oid) {
+	ldpp_dout(dpp, 1) << "manifest::head object=" << oid << dendl;
+	head_ioctx = obj.ioctx;
+      }
+      bufferlist bl;
+      librados::IoCtx ioctx = obj.ioctx;
+      ret = ioctx.read_full(raw_obj.oid, bl);
+      if (ret > 0) {
+	for (const auto& bptr : bl.buffers()) {
+	  //hash.Update((const unsigned char *)bptr.c_str(), bptr.length());
+	  hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
 	}
       }
       else {
-	p_stats->skip_sha256_cmp++;
-      }
-#if 0
-      // REMOVE-ME!!!
-      // temporary solution to allow tests to finish until the ref-tag issue is solved
-      return 0;
-#endif
-      ret = dedup_object(&src_rec, p_tgt_rec, has_shared_manifest, src_has_sha256);
-      if (ret == 0) {
-	p_stats->deduped_objects++;
-	if (!src_has_sha256) {
-	  // TBD: calculate SHA256 for SRC and set flag in table!!
-	}
-	// mark the SRC object as a providor of a shared manifest
-	if (!has_shared_manifest) {
-	  p_stats->set_shared_manifest++;
-	  // set the shared manifest flag in the dedup table
-	  d_table.set_shared_manifest_mode(&key, src_block_id, src_rec_id);
-	}
-	else {
-	  ldpp_dout(dpp, 20) << __func__ << "::SRC object already marked as shared_manifest" << dendl;
-	}
+	ldpp_dout(dpp, 1) << "ERR: failed to read " << oid
+			  << ", error is " << cpp_strerror(ret) << dendl;
+	return ret;
       }
     }
-    // we can withstand most errors moving to the next object
-    // only report an error if we recived a stop scan request!
+    //hash.Final(p_sha256);
+    hmac.Final(p_sha256);
+    uint64_t *arr = (uint64_t*)p_sha256;
+    char buff[64+1];
+    snprintf(buff, sizeof(buff), "%016lx%016lx%016lx%016lx", arr[0], arr[1], arr[2], arr[3]);
+    ldpp_dout(dpp, 1) << "SHA256=|||" << buff << "|||" << dendl;
+    //RGW_ATTR_SHA256
+    //set_attrs(Attrs a);
+    //int setxattr(const std::string& oid, const char *name, bufferlist& bl);
     return 0;
+#if 0
+    RGW_ATTR_SHA256
+      sha256_digest_t CryptoKeyHandler::hmac_sha256(
+	const ceph::bufferlist& in) const
+    {
+      TOPNSPC::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
+
+      for (const auto& bptr : in.buffers()) {
+	hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
+      }
+      sha256_digest_t ret;
+      hmac.Final(ret.v);
+
+      return ret;
+    }
+
+    SHA256 hasher;
+    hasher.Update(reinterpret_cast<const unsigned char*>(msg.data()), msg.size());
+    hasher.Final(hash.v);
+
+    TOPNSPC::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
+    for (const auto& bptr : in.buffers()) {
+      hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
+    }
+    sha256_digest_t ret;
+    hmac.Final(ret.v);
+#endif
+  }
+
+  //---------------------------------------------------------------------------
+  void Background::calc_missing_sha256_for_all_src_objects(md5_shard_t md5_shard)
+  {
+    unsigned count = 0;
+    for(const auto & entry:d_table) {
+      if (entry.val.has_valid_sha256()) {
+	continue;
+      }
+      count++;
+
+      disk_block_id_t block_id = entry.val.block_idx;
+      record_id_t rec_id = entry.val.rec_id;
+      disk_record_t rec;
+      int ret = load_record(p_dedup_cluster_ioctx, &rec, block_id, rec_id, md5_shard, &entry.key, dpp);
+      if (unlikely(ret != 0)) {
+	ldpp_dout(dpp, 1) << __func__ << "::Failed load_record()::"
+			  << rec.bucket_name << "/" << rec.obj_name << dendl;
+	continue;
+      }
+      ldpp_dout(dpp, 1) << __func__ << rec.bucket_name << "/" << rec.obj_name << dendl;
+      ceph_assert(rec.s.flags.has_valid_sha256() == false);
+
+      unsigned char sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+      ret = calc_object_sha256(&rec, sha256);
+      if (ret == 0) {
+	// TBD1: set SHA256 attribute in the Head-Object
+	// TBD2: If SRC set SHA256 in Record
+	// TBD3: If SRC set SHA256 in table
+      }
+    }
+    if (count) {
+      ldpp_dout(dpp, 1) << __func__ << "::We fixed SHA256 for " << count << " objects" << dendl;
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -822,7 +955,7 @@ namespace rgw::dedup {
       return 1;
     }
     uint64_t size = obj->get_size();
-#if 1
+#if 0
     if (size <= 4*1024*1024) {
       p_worker_stats->ingress_skip_too_small++;
       // dedup only useful for objects bigger than 4MB
@@ -1050,6 +1183,7 @@ namespace rgw::dedup {
 		      << "::duplicate_count="  << p_stats->duplicate_count << dendl;
 
     d_table.remove_singletons_and_redistribute_keys();
+    calc_missing_sha256_for_all_src_objects(md5_shard);
     for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
       run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, worker_id, slab_count_arr, p_stats);
       if (unlikely(should_stop())) {

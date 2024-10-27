@@ -182,6 +182,16 @@ namespace rgw::dedup {
     out << "Skipped shared_manifest  = " << s.skipped_shared_manifest << "\n";
     out << "Skipped singleton        = " << s.skipped_singleton << "\n";
     out << "Skipped source record    = " << s.skipped_source_record << "\n";
+    if (s.skipped_duplicate) {
+      out << "\n***ERR:Skipped duplicate = " << s.skipped_duplicate << "***\n";
+    }
+
+    if (s.skipped_bad_sha256) {
+      out << "\n***ERR:Skipped SHA256 = " << s.skipped_bad_sha256 << "***\n";
+    }
+    if (s.skipped_failed_src_load) {
+      out << "\n***ERR:Skipped SRC-Load = " << s.skipped_failed_src_load << "***\n";
+    }
     out << "================================\n";
     out << "Skipped total            = " << s.get_skipped_total() << "\n\n";
 
@@ -193,13 +203,6 @@ namespace rgw::dedup {
     out << "Singleton Obj            = " << s.singleton_count << "\n";
     out << "Unique Obj               = " << s.unique_count << "\n";
     out << "Duplicate Obj            = " << s.duplicate_count << "\n";
-    if (s.skipped_duplicate) {
-      out << "\n\n***ERR:Skipped duplicate = " << s.skipped_duplicate << "***\n\n\n";
-    }
-
-    if (s.skipped_bad_sha256) {
-      out << "\n\n***ERR:Skipped SHA256 = " << s.skipped_bad_sha256 << "***\n\n\n";
-    }
 
     return out;
   }

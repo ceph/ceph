@@ -208,17 +208,10 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void dedup_table_t::print_redistribute_stats()
+  void dedup_table_t::get_stats(uint32_t *p_entries_count, uint32_t *p_occupied_count)
   {
-    std::cout << "sizeof(entry)=" << sizeof(table_entry_t) << std::endl;
-    double avg = (double)redistributed_search_total / entries_count;
-    std::cout << "redistribute::num entries=" << entries_count << ", total=" << redistributed_search_total
-	      << ", avg=" << avg << ", max=" << redistributed_search_max << std::endl;
-    std::cout << "Entries redistributed=" << redistributed_count
-	      << ", redistributed_clear=" << redistributed_clear
-	      << ", loopback=" << redistributed_loopback
-	      << ", not needed=" << redistributed_not_needed
-	      << ", perfect placment=" << redistributed_perfect << std::endl;
+    *p_entries_count = entries_count;
+    *p_occupied_count = occupied_count;
   }
 } // namespace rgw::dedup
 

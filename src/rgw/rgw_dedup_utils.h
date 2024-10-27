@@ -138,7 +138,9 @@ namespace rgw::dedup {
       this->skipped_source_record   = 0;
       this->skipped_duplicate       = 0;
       this->skipped_bad_sha256      = 0;
+      this->skipped_failed_src_load = 0;
 
+      this->skip_sha256_cmp         = 0;
       this->set_shared_manifest     = 0;
       this->loaded_objects          = 0;
       this->processed_objects       = 0;
@@ -151,14 +153,15 @@ namespace rgw::dedup {
     }
     uint64_t get_skipped_total() const {
       return (skipped_source_record + skipped_singleton + skipped_shared_manifest +
-	      skipped_duplicate + skipped_bad_sha256);
+	      skipped_duplicate + skipped_bad_sha256 + skipped_failed_src_load);
     }
     md5_stats_t& operator +=(const md5_stats_t& other) {
-      this->skipped_shared_manifest += other.skipped_shared_manifest ;
-      this->skipped_singleton       += other.skipped_singleton ;
-      this->skipped_source_record   += other.skipped_source_record ;
-      this->skipped_duplicate       += other.skipped_duplicate ;
-      this->skipped_bad_sha256      += other.skipped_bad_sha256 ;
+      this->skipped_shared_manifest += other.skipped_shared_manifest;
+      this->skipped_singleton       += other.skipped_singleton;
+      this->skipped_source_record   += other.skipped_source_record;
+      this->skipped_duplicate       += other.skipped_duplicate;
+      this->skipped_bad_sha256      += other.skipped_bad_sha256;
+      this->skipped_failed_src_load += other.skipped_failed_src_load;
 
       this->set_shared_manifest     += other.set_shared_manifest;
       this->skip_sha256_cmp         += other.skip_sha256_cmp;
@@ -175,10 +178,11 @@ namespace rgw::dedup {
     uint64_t skipped_source_record = 0;
     uint64_t skipped_duplicate = 0;
     uint64_t skipped_bad_sha256 = 0;
+    uint64_t skipped_failed_src_load = 0;
 
-    uint64_t set_shared_manifest = 0;
     uint64_t skip_sha256_cmp = 0;
 
+    uint64_t set_shared_manifest = 0;
     uint64_t loaded_objects = 0;
     uint64_t processed_objects = 0;
     uint64_t singleton_count = 0;
@@ -197,8 +201,10 @@ namespace rgw::dedup {
     encode(m.skipped_source_record, bl);
     encode(m.skipped_duplicate, bl);
     encode(m.skipped_bad_sha256, bl);
-    encode(m.set_shared_manifest, bl);
+    encode(m.skipped_failed_src_load, bl);
+
     encode(m.skip_sha256_cmp, bl);
+    encode(m.set_shared_manifest, bl);
 
     encode(m.loaded_objects, bl);
     encode(m.processed_objects, bl);
@@ -218,8 +224,10 @@ namespace rgw::dedup {
     decode(m.skipped_source_record, bl);
     decode(m.skipped_duplicate, bl);
     decode(m.skipped_bad_sha256, bl);
-    decode(m.set_shared_manifest, bl);
+    decode(m.skipped_failed_src_load, bl);
+
     decode(m.skip_sha256_cmp, bl);
+    decode(m.set_shared_manifest, bl);
 
     decode(m.loaded_objects, bl);
     decode(m.processed_objects, bl);

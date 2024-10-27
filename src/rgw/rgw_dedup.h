@@ -74,6 +74,8 @@ namespace rgw::dedup {
 			uint32_t seq_count_arr[],
 			md5_stats_t *p_stats /* IN-OUT */);
 
+    int calc_object_sha256(const disk_record_t *p_rec, unsigned char *p_sha256);
+    void calc_missing_sha256_for_all_src_objects(md5_shard_t md5_shard);
     int objects_dedup_single_md5_shard(md5_shard_t md5_shard,
 				       md5_stats_t *p_stats);
     int add_disk_record(const rgw::sal::Bucket *p_bucket,
