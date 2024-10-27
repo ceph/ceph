@@ -80,6 +80,8 @@ public:
   int print_stats() const;
   int build_size_histogram(const std::string& prefix) const;
 
+#ifdef WITH_BLUESTORE
 private:
   int load_bluestore(const std::string& path, bool read_only, bool need_open_db);
+#endif // WITH_BLUESTORE
 };
