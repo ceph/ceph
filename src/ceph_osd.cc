@@ -42,9 +42,11 @@
 #include "global/signal_handler.h"
 
 #include "include/color.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/pick_address.h"
 
+#include "log/Log.h"
 #include "perfglue/heap_profiler.h"
 
 #include "include/ceph_assert.h"
