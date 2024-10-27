@@ -5,6 +5,8 @@
 
 #include "pg_scrubber.h"
 
+#include "common/debug.h"
+
 using must_scrub_t = Scrub::must_scrub_t;
 using sched_params_t = Scrub::sched_params_t;
 using OSDRestrictions = Scrub::OSDRestrictions;
