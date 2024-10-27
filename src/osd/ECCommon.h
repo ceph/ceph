@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
 #include <fmt/format.h>
 
