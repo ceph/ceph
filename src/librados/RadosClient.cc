@@ -32,6 +32,7 @@
 #include "include/buffer.h"
 #include "include/stringify.h"
 #include "include/util.h"
+#include "log/Log.h"
 
 #include "msg/Messenger.h"
 
