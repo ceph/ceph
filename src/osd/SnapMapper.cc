@@ -17,6 +17,8 @@
 #include <fmt/printf.h>
 #include <fmt/ranges.h>
 
+#include "common/ceph_context.h"
+#include "common/debug.h"
 #include "global/global_context.h"
 #include "osd/osd_types_fmt.h"
 #include "SnapMapReaderI.h"
