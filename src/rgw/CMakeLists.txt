@@ -477,6 +477,7 @@ target_link_libraries(rgw_a
   PRIVATE
     legacy-option-headers
     common_utf8 global
+    kmip
     ${CRYPTO_LIBS}
     ${ARROW_LIBRARIES}
     ${ARROW_FLIGHT_LIBRARIES}
@@ -484,7 +485,7 @@ target_link_libraries(rgw_a
   PUBLIC
     rgw_common
     Boost::context)
-
+  
 if(WITH_CURL_OPENSSL)
   # used by rgw_http_client_curl.cc
   target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
@@ -504,6 +505,8 @@ if(COMPILER_SUPPORTS_VLA_ERROR)
   target_compile_options(rgw_schedulers PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
 endif()
+
+target_link_libraries(rgw_a PRIVATE rgw_schedulers)
 
 set(radosgw_srcs
   rgw_main.cc)
