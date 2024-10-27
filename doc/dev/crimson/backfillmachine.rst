@@ -3,7 +3,7 @@ BackfillMachine
 ===============
 
 
-In Crimson, Backfill is implemented with `Boost State Chart <https://www.boost.org/doc/libs/1_86_0/libs/statechart/doc/>`_.
+In Crimson, backfill is implemented with `Boost State Chart <https://www.boost.org/doc/libs/1_86_0/libs/statechart/doc/>`_.
 
 .. //TODO: Once the implementation is settled:
 ..         * Explain exceptional states once we finish working on this code
@@ -14,8 +14,10 @@ A sample of the recent state model:
 
 .. note:: ``Cancelled`` and ``Crushed`` states are not included in the
           following graph in order to make it easier to follow:
-            * **Any** state is able to transit into ``Crushed``.
-            * **Any** state (except from ``Initial`` and ``Waiting``) can transit into ``Cancelled``
+
+          * **Any** state is able to transit into ``Crushed``.
+
+          * **Any** state (except from ``Initial`` and ``Waiting``) can transit into ``Cancelled``
 
 .. image:: crimson_backfillmachine.svg
 
