@@ -11,8 +11,12 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "common/errno.h"
 #include "ReplicatedBackend.h"
+
+#include <sstream>
+
+#include "common/debug.h"
+#include "common/errno.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGPCT.h"
 #include "messages/MOSDRepOp.h"
