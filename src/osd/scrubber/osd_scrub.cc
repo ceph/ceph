@@ -220,8 +220,6 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
     env_conditions.restricted_time = !scrub_time_permit(scrub_clock_now);
     env_conditions.cpu_overloaded =
 	!m_load_tracker.scrub_load_below_threshold();
-    env_conditions.only_deadlined =
-	env_conditions.restricted_time || env_conditions.cpu_overloaded;
   }
 
   return env_conditions;
