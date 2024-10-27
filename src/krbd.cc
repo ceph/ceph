@@ -30,12 +30,14 @@
 #include <utility>
 
 #include "auth/KeyRing.h"
+#include "common/ceph_context.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/module.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
 #include "common/secret.h"
+#include "common/strtol.h" // for strict_strtoll()
 #include "common/TextTable.h"
 #include "common/Thread.h"
 #include "include/ceph_assert.h"
