@@ -8,6 +8,7 @@
 #include <seastar/net/packet.hh>
 
 #include "crimson/common/log.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 #include "Errors.h"
 
 using crimson::common::local_conf;

@@ -17,9 +17,12 @@
 #include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/fatal_signal.h"
+#include "crimson/common/perf_counters_collection.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/osd/main_config_bootstrap_helpers.h"
+
+#include <sys/wait.h> // for waitpid()
 
 using namespace std::literals;
 using crimson::common::local_conf;

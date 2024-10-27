@@ -7,6 +7,7 @@
 #include <pthread.h>
 
 #include "include/ceph_assert.h"
+#include "include/intarith.h" // for round_up_to()
 #include "crimson/common/config_proxy.h"
 
 using crimson::common::local_conf;

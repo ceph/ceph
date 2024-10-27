@@ -13,6 +13,7 @@
 
 #include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
+#include "crimson/common/perf_counters_collection.h"
 #include "cyan_collection.h"
 #include "cyan_object.h"
 
@@ -146,6 +147,8 @@ CyanStore::list_collections()
 
 CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 {
+  using ceph::decode;
+
   static const char read_file_errmsg[]{"read_file"};
   ceph::bufferlist bl;
   std::string fn =
@@ -157,7 +160,7 @@ CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 
   std::set<coll_t> collections;
   auto p = bl.cbegin();
-  ceph::decode(collections, p);
+  decode(collections, p);
 
   for (auto& coll : collections) {
     std::string fn = fmt::format("{}/{}{}", path, coll,

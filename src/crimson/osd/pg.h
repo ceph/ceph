@@ -10,6 +10,7 @@
 #include <seastar/core/shared_future.hh>
 
 #include "common/dout.h"
+#include "common/ostream_temp.h"
 #include "include/interval_set.h"
 #include "crimson/net/Fwd.h"
 #include "messages/MOSDRepOpReply.h"

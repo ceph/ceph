@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <deque>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -12,6 +13,8 @@
 
 #include <seastar/core/lowres_clock.hh>
 
+#include "include/encoding_list.h"
+#include "include/encoding_string.h"
 #include "include/byteorder.h"
 #include "include/denc.h"
 #include "include/buffer.h"
