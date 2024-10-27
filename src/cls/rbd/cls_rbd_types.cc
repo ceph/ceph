@@ -5,6 +5,8 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
 
+#include <iomanip>
+
 namespace cls {
 namespace rbd {
 
