@@ -16,12 +16,22 @@
  */
 #pragma once
 
+#include "common/ceph_context.h"
+#include "common/debug.h"
 // re-include our assert to clobber boost's
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
+#include "include/unordered_map.h"
 #include "osd_types.h"
 #include "os/ObjectStore.h"
+
+#include <iosfwd>
+#include <map>
+#include <memory>
 #include <list>
+#include <set>
+#include <string>
+#include <vector>
 
 #ifdef WITH_SEASTAR
 #include <seastar/core/future.hh>
