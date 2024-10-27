@@ -5,13 +5,16 @@
 
 #include <boost/statechart/custom_reaction.hpp>
 #include <boost/statechart/event.hpp>
-#include <boost/statechart/simple_state.hpp>
 #include <boost/statechart/state.hpp>
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
 #include <boost/statechart/event_base.hpp>
 #include <string>
 #include <atomic>
+#include <map>
+#include <optional>
+#include <ostream>
+#include <vector>
 
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
@@ -20,13 +23,16 @@
 #include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
 #include "osd_types.h"
-#include "osd_types_fmt.h"
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
 #include "MissingLoc.h"
-#include "osd/osd_perf_counters.h"
+#include "msg/Message.h"
+#include "msg/MessageRef.h"
+#include "common/ceph_mutex.h"
 #include "common/config_cacher.h"
-#include "common/ostream_temp.h"
+#include "common/snap_types.h" // for class SnapContext
+
+class OstreamTemp;
 
 struct PGPool {
   epoch_t cached_epoch;
