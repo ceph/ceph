@@ -15,13 +15,18 @@
 #ifndef CEPH_MON_SESSION_H
 #define CEPH_MON_SESSION_H
 
+#include <map>
+#include <set>
 #include <string>
 #include <string_view>
 
+#include "common/Clock.h" // for ceph_clock_now()
+#include "common/RefCountedObj.h"
 #include "include/utime.h"
 #include "include/xlist.h"
 
 #include "global/global_context.h"
+#include "msg/Connection.h" // for ConnectionRef
 #include "msg/msg_types.h"
 #include "mon/mon_types.h"
 
