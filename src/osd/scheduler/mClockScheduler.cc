@@ -17,7 +17,13 @@
 #include <functional>
 
 #include "osd/scheduler/mClockScheduler.h"
-#include "common/dout.h"
+#include "common/debug.h"
+
+#ifdef WITH_SEASTAR
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 namespace dmc = crimson::dmclock;
 using namespace std::placeholders;
