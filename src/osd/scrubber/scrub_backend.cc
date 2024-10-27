@@ -4,6 +4,7 @@
 #include "./scrub_backend.h"
 
 #include <algorithm>
+#include <sstream>
 
 #include <fmt/ranges.h>
 
