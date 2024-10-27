@@ -1,6 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "scrub_machine.h"
+#include "ScrubStore.h"
+#include "common/debug.h"
+
 #include <chrono>
 #include <typeinfo>
 
@@ -8,9 +12,6 @@
 
 #include "osd/OSD.h"
 #include "osd/OpRequest.h"
-
-#include "ScrubStore.h"
-#include "scrub_machine.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
