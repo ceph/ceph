@@ -2394,7 +2394,9 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
       info.flags |= BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
     }
 
-    if (zone_placement) {
+    if (info.zonegroup != driver->get_zone()->get_zonegroup().get_id()) {
+      info.layout.current_index.layout.type = rgw::BucketIndexType::Indexless; // indexless for cross-zonegroup bucket
+    } else if (zone_placement) {
       init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
                                  zone_placement->index_type);
     }

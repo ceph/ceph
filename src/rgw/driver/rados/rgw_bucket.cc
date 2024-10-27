@@ -1502,21 +1502,17 @@ static int bucket_stats(rgw::sal::Driver* driver,
     return ret;
   }
 
-  const RGWBucketInfo& bucket_info = bucket->get_info();
-
-  const auto& index = bucket_info.get_current_index();
-  if (is_layout_indexless(index)) {
-    cerr << "error, indexless buckets do not maintain stats; bucket=" <<
-      bucket->get_name() << std::endl;
-    return -EINVAL;
-  }
-
   std::string bucket_ver, master_ver;
   std::string max_marker;
-  ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
-  if (ret < 0) {
-    cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
-    return ret;
+
+  const RGWBucketInfo& bucket_info = bucket->get_info();
+  const auto& index = bucket_info.get_current_index();
+  if (!is_layout_indexless(index)) {
+    ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+    if (ret < 0) {
+      cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
+      return ret;
+    }
   }
 
   utime_t ut(bucket->get_modification_time());
@@ -1537,8 +1533,12 @@ static int bucket_stats(rgw::sal::Driver* driver,
   formatter->dump_string("marker", bucket->get_marker());
   formatter->dump_stream("index_type") << bucket_info.layout.current_index.layout.type;
   formatter->dump_int("index_generation", bucket_info.layout.current_index.gen);
-  formatter->dump_int("num_shards",
-		      bucket_info.layout.current_index.layout.normal.num_shards);
+  if (is_layout_indexless(index)) {
+    formatter->dump_int("num_shards", 0); // default is 1 - so override for indexless to 0
+  } else {
+    formatter->dump_int("num_shards",
+                        bucket_info.layout.current_index.layout.normal.num_shards);
+  }
   formatter->dump_string("reshard_status", to_string(bucket_info.layout.resharding));
   logrecord_ut.gmtime(formatter->dump_stream("judge_reshard_lock_time"));
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
@@ -2813,8 +2813,12 @@ int RGWBucketInstanceMetadataHandler::put(std::string& entry, RGWMetadataObject*
     return ret;
   }
 
-  // update related state on success
-  return put_post(dpp, y, bci, old, objv_tracker);
+  if (bci.info.zonegroup == driver->get_zone()->get_zonegroup().get_id()) {
+    // update related state on success only when I own it
+    return put_post(dpp, y, bci, old, objv_tracker);
+  }
+
+  return 0;
 }
 
 void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
@@ -2847,9 +2851,13 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     bool from_remote_zone)
 {
   if (from_remote_zone) {
-    // bucket layout information is local. don't overwrite existing layout with
-    // information from a remote zone
-    if (old_bci) {
+    if (bci.info.zonegroup != driver->get_zone()->get_zonegroup().get_id()) {
+      // not my bucket, mark it as an indexless bucket
+      bci.info.layout = rgw::BucketLayout{};
+      bci.info.layout.current_index.layout.type = rgw::BucketIndexType::Indexless;
+    } else if (old_bci) {
+      // bucket layout information is local. don't overwrite existing layout with
+      // information from a remote zone
       bci.info.layout = old_bci->info.layout;
     } else {
       // replace peer's layout with default-constructed, then apply our defaults
@@ -2879,14 +2887,17 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
         return ret;
       }
     }
-    bci.info.layout.current_index.layout.type = rule_info.index_type;
+
+    if (bci.info.zonegroup == driver->get_zone()->get_zonegroup().get_id()) {
+      bci.info.layout.current_index.layout.type = rule_info.index_type;
+    }
   } else {
     /* existing bucket, keep its placement */
     bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
     bci.info.placement_rule = old_bci->info.placement_rule;
   }
 
-  //always keep bucket versioning enabled on archive zone
+  // always keep bucket versioning enabled on archive zone
   if (driver->get_zone()->get_tier_type() == "archive") {
     bci.info.flags = (bci.info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
   }
