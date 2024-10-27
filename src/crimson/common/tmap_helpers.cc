@@ -7,6 +7,8 @@
 #include "include/encoding.h"
 #include "include/rados.h"
 
+#include <map>
+
 namespace detail {
 
 #define decode_or_return(v, bp) \
