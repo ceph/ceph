@@ -1018,6 +1018,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   Inode *in;
   bool was_new = false;
   auto [it, b] = inode_map.try_emplace(st->vino);
+  ldout(cct, 25) << __func__ << ": " << *st << dendl;
   if (!b) {
     in = it->second;
     ldout(cct, 12) << __func__ << " had " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
@@ -1580,6 +1581,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
   if (reply->head.is_dentry) {
     dirst.decode(p, features);
+    ldout(cct, 25) << "insert_trace: " << dirst << dendl;
     dst.decode(p, features);
     decode(dname, p);
     dlease.decode(p, features);
