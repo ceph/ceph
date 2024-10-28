@@ -253,6 +253,8 @@ RecoveryBackend::scan_for_backfill(
       co_return;
     }
   }));
+  // BackfillInterval::version will be set to committed_to before the backfill scan
+  // See BackfillState::PrimaryScanning
   BackfillInterval bi(std::move(start), std::move(next),
                       std::move(*version_map), eversion_t{});
   DEBUGDPP("{} BackfillInterval filled, leaving, {}",

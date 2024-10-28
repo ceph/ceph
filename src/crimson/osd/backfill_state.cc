@@ -397,6 +397,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 BackfillState::PrimaryScanning::PrimaryScanning(my_context ctx)
   : my_base(ctx)
 {
+  // set BackfillInterval::version to the committed_to before the backfill scan
   backfill_state().backfill_info.version = peering_state().get_pg_committed_to();
   backfill_listener().request_primary_scan(
     backfill_state().backfill_info.begin);
