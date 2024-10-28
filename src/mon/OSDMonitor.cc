@@ -5298,7 +5298,7 @@ bool OSDMonitor::handle_osd_timeouts(const utime_t &now,
     if (t == last_osd_report.end()) {
       // it wasn't in the map; start the timer.
       last_osd_report[i].first = now;
-      last_osd_report[i].second = 0;
+      last_osd_report[i].second = g_conf()->osd_beacon_report_interval;
     } else if (can_mark_down(i)) {
       utime_t diff = now - t->second.first;
       // we use the max(mon_osd_report_timeout, 2*osd_beacon_report_interval) as timeout
