@@ -267,6 +267,7 @@ RecoveryBackend::scan_for_backfill(
       });
     }).then_interruptible([FNAME, version_map, start=std::move(start),
 			  next=std::move(next), this] {
+      // set BackfillInterval::version to the committed_to before the backfill scan
       BackfillInterval bi(std::move(start), std::move(next),
                           std::move(*version_map), eversion_t{});
       DEBUGDPP("{} BackfillInterval filled, leaving, {}",
