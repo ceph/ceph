@@ -31,6 +31,12 @@
 #include "messages/MMgrCommandReply.h"
 #include "messages/MPGStats.h"
 
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 using std::string;
 using std::vector;
 
