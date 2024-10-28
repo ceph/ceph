@@ -161,3 +161,11 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
     *equivalent = false;
   return comparator;
 }
+
+std::ostream& operator<<(std::ostream& out, const inode_backpointer_t& ib) {
+  return out << "<" << ib.dirino << "/" << ib.dname << " v" << ib.version << ">";
+}
+
+std::ostream& operator<<(std::ostream& out, const inode_backtrace_t& it) {
+  return out << "(" << it.pool << ")" << it.ino << ":" << it.ancestors << "//" << it.old_pools;
+}
