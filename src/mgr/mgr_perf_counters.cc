@@ -5,6 +5,12 @@
 #include "common/perf_counters.h"
 #include "common/ceph_context.h"
 
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 PerfCounters *perfcounter = NULL;
 
 int mgr_perf_start(CephContext *cct)
