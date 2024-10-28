@@ -30,20 +30,11 @@
 #include "include/interval_set.h"
 #include "mdstypes.h"
 #include "mds/MDSAuthCaps.h"
-#include "common/perf_counters.h"
 #include "common/DecayCounter.h"
 
-#include "Capability.h"
-#include "CDentry.h" // for struct ClientLease
 #include "MDSContext.h"
 #include "Mutation.h" // for struct MDRequestImpl
 #include "msg/Message.h"
-
-#ifdef WITH_CRIMSON
-#include "crimson/common/perf_counters_collection.h"
-#else
-#include "common/perf_counters_collection.h"
-#endif
 
 struct MDRequestImpl;
 
@@ -61,6 +52,8 @@ enum {
   l_mdssm_last,
 };
 
+struct ClientLease;
+class Capability;
 class CInode;
 
 /* 
@@ -300,20 +293,10 @@ public:
     cap_acquisition.hit(count);
   }
 
-  void touch_cap(Capability *cap) {
-    session_cache_liveness.hit(1.0);
-    caps.push_front(&cap->item_session_caps);
-  }
+  void touch_cap(Capability *cap);
+  void touch_cap_bottom(Capability *cap);
 
-  void touch_cap_bottom(Capability *cap) {
-    session_cache_liveness.hit(1.0);
-    caps.push_back(&cap->item_session_caps);
-  }
-
-  void touch_lease(ClientLease *r) {
-    session_cache_liveness.hit(1.0);
-    leases.push_back(&r->item_session_lease);
-  }
+  void touch_lease(ClientLease *r);
 
   bool is_any_flush_waiter() {
     return !waitfor_flush.empty();
@@ -571,23 +554,7 @@ public:
     rank = r;
   }
 
-  Session* get_or_add_session(const entity_inst_t& i) {
-    Session *s;
-    auto session_map_entry = session_map.find(i.name);
-    if (session_map_entry != session_map.end()) {
-      s = session_map_entry->second;
-    } else {
-      s = session_map[i.name] = new Session(ConnectionRef());
-      s->info.inst = i;
-      s->last_cap_renew = Session::clock::now();
-      if (logger) {
-        logger->set(l_mdssm_session_count, session_map.size());
-        logger->inc(l_mdssm_session_add);
-      }
-    }
-
-    return s;
-  }
+  Session* get_or_add_session(const entity_inst_t& i);
 
   static void generate_test_instances(std::list<SessionMapStore*>& ls);
   void reset_state()
@@ -612,17 +579,7 @@ public:
   SessionMap() = delete;
   explicit SessionMap(MDSRank *m);
 
-  ~SessionMap() override
-  {
-    for (auto p : by_state)
-      delete p.second;
-
-    if (logger) {
-      g_ceph_context->get_perfcounters_collection()->remove(logger);
-    }
-
-    delete logger;
-  }
+  ~SessionMap() override;
 
   uint64_t set_state(Session *session, int state);
   void update_average_session_age();
