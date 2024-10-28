@@ -39,6 +39,7 @@
 #include "librbd/operation/SnapshotLimitRequest.h"
 #include "librbd/operation/SparsifyRequest.h"
 #include <set>
+#include <shared_mutex> // for std::shared_lock
 #include <boost/bind/bind.hpp>
 #include <boost/scope_exit.hpp>
 

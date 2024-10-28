@@ -13,6 +13,7 @@
 #include <vector>
 #include "librbd/BlockGuard.h"
 #include "librbd/io/Types.h"
+#include "include/utime.h"
 
 namespace ceph {
 class Formatter;
