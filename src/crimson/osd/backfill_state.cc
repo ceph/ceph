@@ -320,7 +320,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
   auto& primary_bi = backfill_state().backfill_info;
 
   // update our local interval to cope with recent changes
-  primary_bi.begin = backfill_state().last_backfill_started;
+  primary_bi.trim_to(backfill_state().last_backfill_started);
   if (primary_bi.version < peering_state().get_log_tail()) {
     // it might be that the OSD is so flooded with modifying operations
     // that backfill will be spinning here over and over. For the sake
