@@ -1,4 +1,5 @@
 #include "dout.h"
+#include "log/Log.h"
 
 #include <iostream>
 #include <sstream>
@@ -25,3 +26,13 @@ fmt::formatter<DoutPrefixProvider>::format(const DoutPrefixProvider &dpp,
   return fmt::formatter<std::string_view>::format(out.view(), ctx);
 }
 #endif
+
+#if !defined(WITH_SEASTAR) || defined(WITH_ALIEN)
+
+void DoutSubmitEntry(ceph::logging::Log &log, ceph::logging::Entry &&e) noexcept
+{
+    log.submit_entry(std::move(e));
+}
+
+#endif
+
