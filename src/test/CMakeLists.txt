@@ -168,7 +168,7 @@ add_executable(ceph_test_mutate
 target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS})
 
-if(NOT WIN32)
+if(WITH_BLUESTORE AND NOT WIN32)
 # test_trans
 add_executable(test_trans
   test_trans.cc
