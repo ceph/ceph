@@ -6,6 +6,14 @@
 #include "include/ceph_features.h"
 #include "common/ceph_json.h"
 
+void inodeno_t::dump(ceph::Formatter *f) const {
+  f->dump_unsigned("val", val);
+}
+
+std::ostream& operator<<(std::ostream& out, const inodeno_t& ino) {
+  return out << std::hex << "0x" << ino.val << std::dec;
+}
+
 void dump(const ceph_file_layout& l, ceph::Formatter *f)
 {
   f->dump_unsigned("stripe_unit", l.fl_stripe_unit);
