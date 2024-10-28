@@ -87,6 +87,13 @@ public:
 		    const std::map<int, ceph::bufferlist> &chunks,
 		    std::map<int, ceph::bufferlist> *decoded) override;
 
+  void encode_delta(const ceph::bufferptr &old_data,
+                    const ceph::bufferptr &new_data,
+                    ceph::bufferptr *delta);
+
+  void apply_delta(const std::map<int, ceph::bufferptr> &in,
+                   std::map <int, ceph::bufferptr> &out);
+
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
   int is_repair(const std::set<int> &want_to_read,
