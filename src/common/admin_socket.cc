@@ -27,6 +27,7 @@ typedef void* timer_t;
 
 #include <iomanip>
 #include <optional>
+#include <sstream>
 
 #include <stdlib.h>
 
@@ -48,6 +49,7 @@ typedef void* timer_t;
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 
+#include "include/buffer.h"
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
 #include "include/compat.h"
@@ -123,6 +125,19 @@ static void add_cleanup_file(std::string file) {
     atexit(remove_all_cleanup_files);
     cleanup_atexit = true;
   }
+}
+
+void AdminSocketHook::call_async(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    ceph::Formatter *f,
+    const ceph::buffer::list& inbl,
+    asok_finisher on_finish) {
+  // by default, call the synchronous handler and then finish
+  ceph::buffer::list out;
+  std::ostringstream errss;
+  int r = call(command, cmdmap, inbl, f, errss, out);
+  on_finish(r, errss.str(), out);
 }
 
 AdminSocket::AdminSocket(CephContext *cct)
