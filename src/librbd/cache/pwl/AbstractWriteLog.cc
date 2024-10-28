@@ -5,8 +5,9 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/ceph_assert.h"
+#include "common/Clock.h" // for ceph_clock_now()
+#include "common/debug.h"
 #include "common/deleter.h"
-#include "common/dout.h"
 #include "common/environment.h"
 #include "common/errno.h"
 #include "common/hostname.h"
@@ -18,7 +19,15 @@
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
 #include "librbd/plugin/Api.h"
+
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 #include <map>
+#include <shared_mutex> // for std::shared_lock
 #include <vector>
 
 #undef dout_subsys

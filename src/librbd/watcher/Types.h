@@ -8,6 +8,10 @@
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
 
+#include <iosfwd>
+#include <map>
+#include <vector>
+
 namespace ceph { class Formatter; }
 
 namespace librbd {
