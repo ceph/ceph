@@ -13,6 +13,7 @@
 #include "librbd/Utils.h"
 #include <list>
 #include <set>
+#include <shared_mutex> // for std::shared_lock
 #include <vector>
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>

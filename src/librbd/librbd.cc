@@ -50,6 +50,7 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
 #include <algorithm>
+#include <shared_mutex> // for std::shared_lock
 #include <string>
 #include <utility>
 #include <vector>

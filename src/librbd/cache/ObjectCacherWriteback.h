@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_CACHE_OBJECT_CACHER_WRITEBACK_H
 
 #include "common/snap_types.h"
+#include "include/unordered_map.h"
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
 #include <queue>

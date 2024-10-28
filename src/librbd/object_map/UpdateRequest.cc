@@ -9,6 +9,8 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "cls/lock/cls_lock_client.h"
+
+#include <shared_mutex> // for std::shared_lock
 #include <string>
 
 #define dout_subsys ceph_subsys_rbd
