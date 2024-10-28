@@ -10751,6 +10751,11 @@ next:
     }
     map<int, string> markers;
     const auto& logs = bucket->get_info().layout.logs;
+    if (logs.empty()) {
+      cerr << "ERROR: no log layout for bucket" << std::endl;
+      return ENOENT;
+    }
+
     auto log_layout = std::reference_wrapper{logs.back()};
     if (gen) {
       auto i = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(*gen));
