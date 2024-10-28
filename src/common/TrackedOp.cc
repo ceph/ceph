@@ -12,6 +12,9 @@
 
 #include "TrackedOp.h"
 
+#include <shared_mutex> // for std::shared_lock
+#include <sstream>
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_optracker
 #undef dout_prefix
