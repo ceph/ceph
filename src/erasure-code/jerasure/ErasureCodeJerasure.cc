@@ -137,6 +137,19 @@ int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
   return jerasure_decode(erasures, data, coding, blocksize);
 }
 
+void ErasureCodeJerasure::encode_delta(const bufferptr &old_data,
+                                       const bufferptr &new_data,
+                                       bufferptr *delta)
+{
+  ceph_assert(false); // Not yet supported by this plugin
+}
+
+void ErasureCodeJerasure::apply_delta(const std::map<int, bufferptr> &in,
+                                      std::map <int, bufferptr> &out)
+{
+  ceph_assert(false); // Not yet supported by this plugin
+}
+
 bool ErasureCodeJerasure::is_prime(int value)
 {
   int prime55[] = {

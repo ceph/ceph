@@ -252,6 +252,19 @@ int ErasureCodeShec::decode_chunks(const set<int> &want_to_read,
   }
 }
 
+void ErasureCodeShec::encode_delta(const bufferptr &old_data,
+                                   const bufferptr &new_data,
+                                   bufferptr *delta)
+{
+  ceph_abort("Not yet supported by this plugin");
+}
+
+void ErasureCodeShec::apply_delta(const std::map<int, bufferptr> &in,
+                                  std::map <int, bufferptr> &out)
+{
+  ceph_abort("Not yet supported by this plugin");
+}
+
 //
 // ErasureCodeShecReedSolomonVandermonde
 //

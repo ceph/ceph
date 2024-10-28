@@ -371,6 +371,60 @@ namespace ceph {
                               std::map<int, bufferlist> *encoded) = 0;
 
     /**
+     * Calculate the delta between the old_data and new_data
+     * buffers using xor, and returns the result in the delta buffer.
+     * 
+     * Assumes old_data, new_data and delta are all buffers
+     * of the same length.
+     * 
+     * TODO The caller may provide a special bufferptr representing 
+     * a buffer of all zeros for either old_data or new_data. 
+     * TODO The caller is permitted to use the same buffer for old_data and delta, 
+     * although the caller may not pass a special buffer of all zeros for delta.
+     * If the plugin can detect that the delta buffer is filled with zeros, 
+     * then it may replace the bufferptr with a special bufferptr representing 
+     * a buffer of all zeros.
+     *
+     * @param [in] old_data first buffer to xor
+     * @param [in] new_data second buffer to xor
+     * @param [out] delta buffer to write the delta of old_data and new_data
+     */
+    virtual void encode_delta(const bufferptr &old_data,
+                              const bufferptr &new_data,
+                              bufferptr *delta) = 0;
+
+    /**
+     * Applies one or more deltas to one or more coding
+     * chunks.
+     * 
+     * Assumes all buffers in the in and out maps are the same length.
+     *
+     * The in map should contain deltas of data chunks to be applied to
+     * the coding chunks. The delta for a specific data chunk must have
+     * the correct integer key in the map. e.g. if k=2 m=2 and a delta for k[1] 
+     * is being applied, then the delta should have key 1 in the in map.
+     * 
+     * The in map should also contain the coding chunks that the delta will
+     * be applied to. The coding chunks must also have the correct integer key in the
+     * map. e.g. if k=2 m=2 and the delta for k[1] is to be applied to m[1], then
+     * the coding chunk should have key 3 in the in map.
+     * 
+     * If a coding buffer is present in the in map, then it must also be present in the 
+     * out map with the same key.
+     * 
+     * TODO  If an input buffer is the special zero buffer then the output buffer must 
+     * be a different buffer. If the plugin is able to detect that it has generated 
+     * a coding parity buffer that is all zeros it may replace entries in the out with 
+     * the special zero buffer.
+     *
+     * @param [in] old_data first buffer to xor
+     * @param [in] new_data second buffer to xor
+     * @param [out] delta buffer containing the delta of old_data and new_data
+     */
+    virtual void apply_delta(const std::map<int, bufferptr> &in,
+                             std::map <int, bufferptr> &out) = 0;
+
+    /**
      * Decode the **chunks** and store at least **want_to_read**
      * chunks in **decoded**.
      *

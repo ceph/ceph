@@ -136,6 +136,17 @@ public:
     return 0;
   }
 
+  void encode_delta(const bufferptr &old_data,
+                              const bufferptr &new_data,
+                              bufferptr *delta) override {
+    ceph_abort();
+  }
+
+  void apply_delta(const std::map<int, bufferptr> &in,
+                             std::map <int, bufferptr> &out) override {
+    ceph_abort();
+  }
+
   int _decode(const std::set<int> &want_to_read,
 	      const std::map<int, bufferlist> &chunks,
 	      std::map<int, bufferlist> *decoded) override {
