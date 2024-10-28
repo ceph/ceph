@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { Observable, ReplaySubject, Subscription, of } from 'rxjs';
+import { Observable, ReplaySubject, Subscription, combineLatest, of } from 'rxjs';
 
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -14,7 +14,6 @@ import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 
 import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
-import { HealthService } from '~/app/shared/api/health.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { catchError, shareReplay, switchMap, tap } from 'rxjs/operators';
@@ -39,13 +38,10 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   totalPoolUsedBytes = 0;
   averageObjectSize = 0;
   realmData: any;
-  daemonSub: Subscription;
   realmSub: Subscription;
   multisiteInfo: object[] = [];
   ZonegroupSub: Subscription;
   ZoneSUb: Subscription;
-  HealthSub: Subscription;
-  BucketSub: Subscription;
   queriesResults: { [key: string]: [] } = {
     RGW_REQUEST_PER_SECOND: [],
     BANDWIDTH: [],
@@ -65,10 +61,10 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   multisiteSyncStatus$: Observable<any>;
   subject = new ReplaySubject<any>();
   syncCardLoading = true;
+  fetchDataSub: Subscription;
 
   constructor(
     private authStorageService: AuthStorageService,
-    private healthService: HealthService,
     private refreshIntervalService: RefreshIntervalService,
     private rgwDaemonService: RgwDaemonService,
     private rgwRealmService: RgwRealmService,
@@ -83,24 +79,23 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
-      this.daemonSub = this.rgwDaemonService.list().subscribe((data: any) => {
-        this.rgwDaemonCount = data.length;
-      });
-      this.HealthSub = this.healthService.getClusterCapacity().subscribe((data: any) => {
-        this.objectCount = data['total_objects'];
-        this.totalPoolUsedBytes = data['total_pool_bytes_used'];
-        this.averageObjectSize = data['average_object_size'];
-      });
-      setTimeout(() => {
+      this.fetchDataSub = combineLatest([
+        this.rgwDaemonService.list(),
+        this.rgwBucketService.fetchAndTransformBuckets(),
+        this.rgwBucketService.totalNumObjects$,
+        this.rgwBucketService.totalUsedCapacity$,
+        this.rgwBucketService.averageObjectSize$,
+        this.rgwBucketService.getTotalBucketsAndUsersLength()
+      ]).subscribe(([daemonData, _, objectCount, usedCapacity, averageSize, bucketData]) => {
+        this.rgwDaemonCount = daemonData.length;
+        this.objectCount = objectCount;
+        this.totalPoolUsedBytes = usedCapacity;
+        this.averageObjectSize = averageSize;
+        this.rgwBucketCount = bucketData.buckets_count;
+        this.UserCount = bucketData.users_count;
         this.getSyncStatus();
       });
     });
-    this.BucketSub = this.rgwBucketService
-      .getTotalBucketsAndUsersLength()
-      .subscribe((data: any) => {
-        this.rgwBucketCount = data['buckets_count'];
-        this.UserCount = data['users_count'];
-      });
     this.realmSub = this.rgwRealmService.list().subscribe((data: any) => {
       this.rgwRealmCount = data['realms'].length;
     });
@@ -139,14 +134,12 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.interval.unsubscribe();
-    this.daemonSub.unsubscribe();
-    this.realmSub.unsubscribe();
-    this.ZonegroupSub.unsubscribe();
-    this.ZoneSUb.unsubscribe();
-    this.BucketSub.unsubscribe();
-    this.HealthSub.unsubscribe();
-    this.prometheusService.unsubscribe();
+    this.interval?.unsubscribe();
+    this.realmSub?.unsubscribe();
+    this.ZonegroupSub?.unsubscribe();
+    this.ZoneSUb?.unsubscribe();
+    this.fetchDataSub?.unsubscribe();
+    this.prometheusService?.unsubscribe();
   }
 
   getPrometheusData(selectedTime: any) {
