@@ -4,7 +4,8 @@
 #ifndef CEPH_LOG_SUBSYSTEMS
 #define CEPH_LOG_SUBSYSTEMS
 
-#include <string>
+#include <array>
+#include <cstdint>
 #include <vector>
 #include <algorithm>
 
