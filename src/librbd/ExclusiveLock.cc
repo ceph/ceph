@@ -14,7 +14,9 @@
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
 #include "common/ceph_mutex.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
+#include "common/perf_counters.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

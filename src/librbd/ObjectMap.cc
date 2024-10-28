@@ -23,6 +23,9 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/stringify.h"
 #include "osdc/Striper.h"
+
+#include <iomanip>
+#include <shared_mutex> // for std::shared_lock
 #include <sstream>
 
 #define dout_subsys ceph_subsys_rbd
