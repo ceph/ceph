@@ -15,10 +15,10 @@
 #ifndef CEPH_COMMON_INIT_H
 #define CEPH_COMMON_INIT_H
 
-#include <deque>
-
 #include "include/common_fwd.h"
 #include "common/code_environment.h"
+
+#include <string>
 
 enum common_init_flags_t {
   // Set up defaults that make sense for an unprivileged daemon
