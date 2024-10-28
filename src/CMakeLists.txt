@@ -530,6 +530,7 @@ set(libcommon_files
   osd/OpRequest.cc
   osd/ClassHandler.cc
   osd/osd_op_util.cc
+  osd/osd_types.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   osdc/error_code.cc
