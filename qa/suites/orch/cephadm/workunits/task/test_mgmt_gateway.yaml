@@ -1,0 +1,77 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.c:
+      - |
+        set -ex
+        # Deploy monitoring stack
+        ceph orch apply node-exporter
+        ceph orch apply grafana
+        ceph orch apply alertmanager
+        ceph orch apply prometheus
+        sleep 240
+        # generate SSL certificate
+        openssl req -x509 -newkey rsa:4096 -keyout /tmp/key.pem -out /tmp/cert.pem -sha256 -days 30 -nodes -subj "/CN=*"
+        # Generate a mgmt.spec template
+        cat << EOT > /tmp/mgmt.spec
+        service_type: mgmt-gateway
+        service_id: foo
+        placement:
+          hosts:
+            - ${HOSTNAME}
+        spec:
+          ssl_protocols:
+            - TLSv1.2
+            - TLSv1.3
+          ssl_ciphers:
+            - AES128-SHA
+            - AES256-SHA
+          enable_health_check_endpoint: True
+        EOT
+        # Add generated certificates to spec file
+        echo "  ssl_certificate: |" >> /tmp/mgmt.spec 
+        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/cert.pem >> /tmp/mgmt.spec
+        echo "  ssl_certificate_key: |" >> /tmp/mgmt.spec
+        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/key.pem >> /tmp/mgmt.spec
+        # Apply spec
+        ceph orch apply -i /tmp/mgmt.spec
+- cephadm.wait_for_service:
+    service: mgmt-gateway
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+        # retrieve mgmt hostname and ip
+        MGMT_GTW_HOST=$(ceph orch ps --daemon-type mgmt-gateway -f json | jq -e '.[]' | jq -r '.hostname')
+        MGMT_GTW_IP=$(ceph orch host ls -f json | jq -r --arg MGMT_GTW_HOST "$MGMT_GTW_HOST" '.[] | select(.hostname==$MGMT_GTW_HOST) | .addr')
+        # check mgmt-gateway health
+        curl -k -s https://${MGMT_GTW_IP}/health
+        curl -k -s https://${MGMT_GTW_IP}:29443/health
+        # wait for background services to be reconfigured following mgmt-gateway installation
+        sleep 180
+        # check grafana endpoints are responsive and database health is okay
+        curl -k -s https://${MGMT_GTW_IP}/grafana/api/health | jq -e '.database == "ok"'
+        # check prometheus endpoints are responsive
+        curl -k -s -u admin:admin https://${MGMT_GTW_IP}/prometheus/api/v1/status/config | jq -e '.status == "success"'
+        # check alertmanager endpoints are responsive
+        curl -k -s -u admin:admin https://${MGMT_GTW_IP}/alertmanager/api/v2/status
+
