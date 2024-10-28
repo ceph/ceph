@@ -30,7 +30,7 @@
 #include "global/global_context.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
-#include "log/Log.h"
+#include "log/Entry.h"
 #endif
 
 extern void dout_emergency(const char * const str);
@@ -154,6 +154,7 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
     }                                           \
   } while (0)
 #else
+void DoutSubmitEntry(ceph::logging::Log &log, ceph::logging::Entry &&e) noexcept;
 #define dout_impl(cct, sub, v)						\
   do {									\
   const bool should_gather = [&](const auto cctX, auto sub_, auto v_) {	\
@@ -187,7 +188,7 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
     std::ostream* _dout = &_dout_e.get_ostream();
 
 #define dendl_impl std::flush;                                          \
-    _dout_cct->_log->submit_entry(std::move(_dout_e));                  \
+    DoutSubmitEntry(*_dout_cct->_log, std::move(_dout_e));              \
   }                                                                     \
   } while (0)
 #endif	// WITH_CRIMSON
