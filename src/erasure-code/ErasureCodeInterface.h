@@ -380,6 +380,56 @@ namespace ceph {
                               std::map<int, bufferlist> *encoded) = 0;
 
     /**
+     * Calculate the delta between the old_data and new_data buffers using xor,
+     * (or plugin-specific implementation) and returns the result in the
+     * delta_maybe_in_place buffer.
+     *
+     * Assumes old_data, new_data and delta_maybe_in_place are all buffers of
+     * the same length.
+     *
+     * Optionally, the delta_maybe_in_place and old_data parameters can be the
+     * same buffer. For some plugins making these the same buffer is slightly
+     * faster, as it avoids a memcpy. Reduced allocations in the caller may
+     * also provide a performance advantage.
+     *
+     * @param [in] old_data first buffer to xor
+     * @param [in] new_data second buffer to xor
+     * @delta_maybe_in_place [out] delta buffer to write the delta of
+     *                       old_data and new_data. This can optionally be a
+     *                       pointer to old_data.
+     */
+    virtual void encode_delta(const bufferptr &old_data,
+                              const bufferptr &new_data,
+                              bufferptr *delta_maybe_in_place) = 0;
+
+    /**
+     * Applies one or more deltas to one or more coding
+     * chunks.
+     *
+     * Assumes all buffers in the in and out maps are the same length.
+     *
+     * The in map should contain deltas of data chunks to be applied to
+     * the coding chunks. The delta for a specific data chunk must have
+     * the correct integer key in the map. e.g. if k=2 m=2 and a delta for k[1] 
+     * is being applied, then the delta should have key 1 in the in map.
+     *
+     * The in map should also contain the coding chunks that the delta will
+     * be applied to. The coding chunks must also have the correct integer key in the
+     * map. e.g. if k=2 m=2 and the delta for k[1] is to be applied to m[1], then
+     * the coding chunk should have key 3 in the in map.
+     *
+     * If a coding buffer is present in the in map, then it must also be present in the 
+     * out map with the same key.
+     *
+     *
+     * @param [in] old_data first buffer to xor
+     * @param [in] new_data second buffer to xor
+     * @param [out] delta buffer containing the delta of old_data and new_data
+     */
+    virtual void apply_delta(const std::map<int, bufferptr> &in,
+                             std::map <int, bufferptr> &out) = 0;
+
+    /**
      * Decode the **chunks** and store at least **want_to_read**
      * chunks in **decoded**.
      *
