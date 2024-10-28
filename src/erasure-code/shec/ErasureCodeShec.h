@@ -98,6 +98,13 @@ public:
 		    const std::map<int, ceph::buffer::list> &chunks,
 		    std::map<int, ceph::buffer::list> *decoded) override;
 
+  void encode_delta(const ceph::bufferptr &old_data,
+                    const ceph::bufferptr &new_data,
+                    ceph::bufferptr *delta);
+
+  void apply_delta(const std::map<int, ceph::bufferptr> &in,
+                   std::map <int, ceph::bufferptr> &out);
+
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
   virtual void shec_encode(char **data,
 			   char **coding,

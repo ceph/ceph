@@ -55,6 +55,15 @@ public:
                     map<int, bufferlist> *decoded) override {
     ceph_abort_msg("ErasureCode::decode_chunks not implemented");
   }
+  void encode_delta(const bufferptr &old_data,
+                    const bufferptr &new_data,
+                    bufferptr *delta) override {
+    ceph_abort_msg("ErasureCode::encode_delta not implemented");
+  }
+    virtual void apply_delta(const std::map<int, bufferptr> &in,
+                             std::map <int, bufferptr> &out) override {
+    ceph_abort_msg("ErasureCode::apply_delta not implemented");
+  }
 
   int create_rule(const string &name,
 		  CrushWrapper &crush,
