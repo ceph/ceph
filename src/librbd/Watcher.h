@@ -11,6 +11,7 @@
 #include "librbd/watcher/Notifier.h"
 #include "librbd/watcher/Types.h"
 #include <string>
+#include <shared_mutex> // for std::shared_lock
 #include <utility>
 
 namespace librbd {

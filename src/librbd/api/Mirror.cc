@@ -36,6 +36,7 @@
 #include "json_spirit/json_spirit.h"
 
 #include <algorithm>
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

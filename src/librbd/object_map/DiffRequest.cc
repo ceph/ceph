@@ -8,6 +8,8 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "osdc/Striper.h"
+
+#include <shared_mutex> // for std::shared_lock
 #include <string>
 
 #define dout_subsys ceph_subsys_rbd

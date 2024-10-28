@@ -12,7 +12,9 @@
 #include "common/Throttle.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
+
 #include <list>
+#include <shared_mutex> // for std::shared_lock
 
 struct Context;
 
