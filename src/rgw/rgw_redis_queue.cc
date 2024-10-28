@@ -80,12 +80,22 @@ int queue_stats(connection* conn, const std::string& name,
 }
 
 int reserve(connection* conn, const std::string name,
-            const std::size_t reserve_size, optional_yield y) {
+            const std::size_t reserve_size, std::string& res,
+            optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "reserve", 1, name, reserve_size);
-  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+  rgw::redis::RedisResponse ret =
+      rgw::redis::do_redis_func(conn, req, resp, __func__, y);
+  if (ret.errorCode == 0) {
+    res = ret.data;
+  } else {
+    std::cerr << "RGW Redis Queue:: " << __func__
+              << "(): ERROR: " << ret.errorMessage << std::endl;
+    res = "";
+  }
+  return ret.errorCode;
 }
 
 int commit(connection* conn, const std::string& name, const std::string& data,
@@ -97,11 +107,12 @@ int commit(connection* conn, const std::string& name, const std::string& data,
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
-int abort(connection* conn, const std::string& name, optional_yield y) {
+int abort(connection* conn, const std::string& name,
+          const std::uint32_t& res_id, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
-  req.push("FCALL", "abort", 1, name);
+  req.push("FCALL", "abort", 1, name, res_id);
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
@@ -163,9 +174,8 @@ int locked_read(connection* conn, const std::string& name,
   return ret.errorCode;
 }
 
-int redis_queue_parse_result(const std::string& data,
-                             std::vector<rgw_queue_entry>& entries,
-                             bool* truncated) {
+int parse_read_result(const std::string& data,
+                      std::vector<rgw_queue_entry>& entries, bool* truncated) {
   // Parse the JSON data
   boost::json::value v = boost::json::parse(data);
 
@@ -185,6 +195,22 @@ int redis_queue_parse_result(const std::string& data,
     entry.data = jentries[i].as_string().c_str();
     entries.push_back(entry);
   }
+
+  return 0;
+}
+
+int parse_reserve_result(connection* conn, const std::string& data,
+                         std::uint32_t& res_id) {
+  boost::json::value v = boost::json::parse(data);
+
+  if (!v.is_object()) {
+    std::cerr << "RGW Redis Queue:: " << __func__
+              << "(): ERROR: JSON value is not an object" << std::endl;
+    return -EINVAL;
+  }
+
+  boost::json::object jdata = v.as_object();
+  res_id = (uint32_t)jdata.at("reservationID").as_int64();
 
   return 0;
 }

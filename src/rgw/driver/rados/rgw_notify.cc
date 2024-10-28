@@ -1156,10 +1156,9 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         // bufferlist obl;
         // int rval;
         const auto& queue_name = topic_cfg.dest.persistent_queue;
-        // TODO: Replace these with Redis
         // cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
-
-        auto ret = rgw::redisqueue::reserve(conn, queue_name, res.size, res.yield);
+        std::string reserve_response;
+        auto ret = rgw::redisqueue::reserve(conn, queue_name, res.size, reserve_response, res.yield);
         // auto ret = rgw_rados_operate(
         //     res.dpp, res.store->getRados()->get_notif_pool_ctx(), queue_name,
         //     &op, res.yield, librados::OPERATION_RETURNVEC);
@@ -1171,16 +1170,13 @@ int publish_reserve(const DoutPrefixProvider* dpp,
           return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
         }
 
-        // FIX ME: How is a reservation id used?
-        // Should we emulate this with Redis?
-
-        // ret = cls_2pc_queue_reserve_result(obl, res_id);
-        // if (ret < 0) {
-        //   ldpp_dout(res.dpp, 1)
-        //       << "ERROR: failed to parse reservation id. error: " << ret
-        //       << dendl;
-        //   return ret;
-        // }
+        ret = rgw::redisqueue::parse_reserve_result(conn, reserve_response, res_id);
+        if (ret < 0) {
+          ldpp_dout(res.dpp, 1)
+              << "ERROR: failed to parse reservation id. error: " << ret
+              << dendl;
+          return ret;
+        }
       }
 
       res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id, event_type);
@@ -1202,19 +1198,17 @@ int publish_commit(rgw::sal::Object* obj,
 
   for (auto& topic : res.topics) {
     if (topic.cfg.dest.persistent &&
-	topic.res_id == cls_2pc_reservation::NO_ID) {
+	    topic.res_id == cls_2pc_reservation::NO_ID) {
       // nothing to commit or already committed/aborted
       continue;
     }
     event_entry_t event_entry;
-    populate_event(res, obj, size, mtime, etag, version, topic.event_type,
-                   event_entry.event);
+    populate_event(res, obj, size, mtime, etag, version, topic.event_type, event_entry.event);
     event_entry.event.configurationId = topic.configurationId;
     event_entry.event.opaque_data = topic.cfg.opaque_data;
     if (topic.cfg.dest.persistent) { 
       event_entry.push_endpoint = std::move(topic.cfg.dest.push_endpoint);
-      event_entry.push_endpoint_args =
-	std::move(topic.cfg.dest.push_endpoint_args);
+      event_entry.push_endpoint_args = std::move(topic.cfg.dest.push_endpoint_args);
       event_entry.arn_topic = topic.cfg.dest.arn_topic;
       event_entry.creation_time = ceph::coarse_real_clock::now();
       event_entry.time_to_live = topic.cfg.dest.time_to_live;
@@ -1231,15 +1225,15 @@ int publish_commit(rgw::sal::Object* obj,
           " . trying to make a larger reservation on queue:" << queue_name
 			  << dendl;
 
-        auto ret = rgw::redisqueue::abort(conn, queue_name, res.yield);
+        auto ret = rgw::redisqueue::abort(conn, queue_name, topic.res_id, res.yield);
         // first cancel the existing reservation
         // librados::ObjectWriteOperation op;
         // TODO: Redis
         // cls_2pc_queue_abort(op, topic.res_id);
-    //     auto ret = rgw_rados_operate(
-	  // dpp, res.store->getRados()->get_notif_pool_ctx(),
-	  // queue_name, &op,
-	  // res.yield);
+        //     auto ret = rgw_rados_operate(
+        // dpp, res.store->getRados()->get_notif_pool_ctx(),
+        // queue_name, &op,
+        // res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to abort reservation: "
 			    << topic.res_id << 
@@ -1248,31 +1242,33 @@ int publish_commit(rgw::sal::Object* obj,
           return ret;
         }
         // now try to make a bigger one
-	// buffer::list obl;
-  //       int rval;
-  //       cls_2pc_queue_reserve(op, bl.length(), 1, &obl, &rval);
-  //       ret = rgw_rados_operate(
-	//   dpp, res.store->getRados()->get_notif_pool_ctx(),
-  //         queue_name, &op, res.yield, librados::OPERATION_RETURNVEC);
-        ret = rgw::redisqueue::reserve(conn, queue_name, bl.length(), res.yield);
+        // buffer::list obl;
+        //       int rval;
+        //       cls_2pc_queue_reserve(op, bl.length(), 1, &obl, &rval);
+        //       ret = rgw_rados_operate(
+        //   dpp, res.store->getRados()->get_notif_pool_ctx(),
+        //         queue_name, &op, res.yield, librados::OPERATION_RETURNVEC);
+        std::string reserve_response;
+        ret = rgw::redisqueue::reserve(conn, queue_name, bl.length(), reserve_response, res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to reserve extra space on queue: "
 			    << queue_name
 			    << ". error: " << ret << dendl;
           return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
         }
-      //   ret = cls_2pc_queue_reserve_result(obl, topic.res_id);
-      //   if (ret < 0) {
-      //     ldpp_dout(dpp, 1) << "ERROR: failed to parse reservation id for "
-	    // "extra space. error: " << ret << dendl;
-      //     return ret;
-      //   }
+        // ret = cls_2pc_queue_reserve_result(obl, topic.res_id);
+        ret = rgw::redisqueue::parse_reserve_result(conn, reserve_response, topic.res_id);
+        if (ret < 0) {
+          ldpp_dout(dpp, 1) << "ERROR: failed to parse reservation id for "
+	                              "extra space. error: " << ret << dendl;
+          return ret;
+        }
       }
       // std::vector<buffer::list> bl_data_vec{std::move(bl)};
       // librados::ObjectWriteOperation op;
 
-      // This needs to be fetched from bufferlist
-      std::string data = bl.c_str();
+
+      std::string data = bl.to_str().c_str();
 
       // TODO: Redis: Do async completion
       auto ret = rgw::redisqueue::commit(conn, queue_name, data, res.yield);
@@ -1332,7 +1328,7 @@ int publish_abort(reservation_t& res) {
       continue;
     }
     const auto& queue_name = topic.cfg.dest.persistent_queue;
-    auto ret = rgw::redisqueue::abort(conn, queue_name, res.yield);
+    auto ret = rgw::redisqueue::abort(conn, queue_name, topic.res_id,res.yield);
     // librados::ObjectWriteOperation op;
     // cls_2pc_queue_abort(op, topic.res_id);
     // const auto ret = rgw_rados_operate(

@@ -171,18 +171,25 @@ local function reserve(keys, args)
     local randomString = generateString(item_size)
     --- generate a json of the format {"timestamp": <current time>, "data": <value>}
     local time = redis.call("TIME")[0]
+    local reservation_id = redis.call('INCR', name .. ":id")
     local value = '{"timestamp":' .. redis.call("TIME")[1] .. ',"data":"' .. randomString .. '"}'
     if not redis.call('LPUSH', name, value) then
         return format_response(-lerrorCodes.ENOSPC, "Not enough memory", "")
     end
-    return format_response(0, "", "")
+    local data = {
+        reservationID = reservation_id
+    }
+    local jsondata = cjson.encode(data)
+    return format_response(0, "", jsondata)
 end
 
 --- Remove an item from the reserve queue
 --- @param keys table A single element list - queue name
+--- @param args table A single-element list - reservation id
 --- @return number 0 if the item is removed from the queue, -lerrorCodes.ENOENT if the queue is empty
-local function unreserve(keys)
+local function unreserve(keys, args)
     local name = "reserve:" .. keys[1]
+    local reservation_id = tonumber(args[1])
 
     if check_queue_exists({keys[1]}) == 0 then
         return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
@@ -197,13 +204,14 @@ end
 
 --- Commit message to the queue
 --- @param keys table A single element list - queue name
---- @param args table A single-element list - message
+--- @param args table A two element list - message and reservation id
 --- @return number 0 if the message is committed to the queue
 local function commit(keys, args)
     local name = "queue:" .. keys[1]
     local message = args[1]
+    local reservation_id = tonumber(args[2])
 
-    local res = unreserve(keys)
+    local res = unreserve(keys, {reservation_id})
     if res.map.errorCode ~= 0 then
         return res
     end
@@ -216,7 +224,7 @@ end
 
 --- Abort the message reservation
 local function abort(keys, args)
-    return unreserve(keys)
+    return unreserve(keys, args)
 end
 
 --- Read a message from the queue

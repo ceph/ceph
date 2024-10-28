@@ -20,9 +20,11 @@ int queue_init(connection* conn, const std::string& name, uint64_t size,
 
 int queue_remove(connection* conn, const std::string& name, optional_yield y);
 
-int redis_queue_parse_result(const std::string& data,
-                             std::vector<rgw_queue_entry>& entries,
-                             bool* truncated);
+int parse_read_result(const std::string& data,
+                      std::vector<rgw_queue_entry>& entries, bool* truncated);
+
+int parse_reserve_result(connection* conn, const std::string& data,
+                         std::uint32_t& res_id);
 
 int queue_status(connection* conn, const std::string& name,
                  std::tuple<uint32_t, uint32_t>& res, optional_yield y);
@@ -30,12 +32,14 @@ int queue_status(connection* conn, const std::string& name,
 int queue_stats(connection* conn, const std::string& name,
                 std::tuple<uint64_t, uint32_t>& res, optional_yield y);
 
-int reserve(connection* conn, const std::string name, const std::size_t reserve_size, optional_yield y);
+int reserve(connection* conn, const std::string name,
+            const std::size_t reserve_size, std::string& res, optional_yield y);
 
 int commit(connection* conn, const std::string& name, const std::string& data,
            optional_yield y);
 
-int abort(connection* conn, const std::string& name, optional_yield y);
+int abort(connection* conn, const std::string& name,
+          const std::uint32_t& res_id, optional_yield y);
 
 int read(connection* conn, const std::string& name, std::string& res,
          optional_yield y);
