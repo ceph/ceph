@@ -199,6 +199,7 @@ protected:
   }
 };
 
+#ifdef WITH_BLUESTORE
 
 class MultiLabelTest : public StoreTestDeferredSetup {
   public:
@@ -273,6 +274,8 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     StoreTest::TearDown();
   }
 };
+
+#endif // WITH_BLUESTORE
 
 class StoreTestSpecificAUSize : public StoreTestDeferredSetup {
 
@@ -7198,13 +7201,14 @@ INSTANTIATE_TEST_SUITE_P(
   StoreTestDeferredSetup,
   ::testing::Values(
     "bluestore"));
-#endif
 
 INSTANTIATE_TEST_SUITE_P(
   ObjectStore,
   MultiLabelTest,
   ::testing::Values(
     "bluestore"));
+
+#endif // WITH_BLUESTORE
 
 struct deferred_test_t {
   uint32_t bdev_block_size;
@@ -7218,6 +7222,8 @@ void PrintTo(const deferred_test_t& t, ::std::ostream* os)
   *os << t.bdev_block_size << "/" << t.min_alloc_size << "/"
       << t.max_blob_size << "/" << t.prefer_deferred_size;
 }
+
+#ifdef WITH_BLUESTORE
 
 class DeferredWriteTest : public StoreTestFixture,
 		          public ::testing::WithParamInterface<deferred_test_t> {
@@ -7309,7 +7315,6 @@ TEST_P(DeferredWriteTest, NewData) {
   }
 }
 
-#if defined(WITH_BLUESTORE)
 INSTANTIATE_TEST_SUITE_P(
   BlueStore,
   DeferredWriteTest,
@@ -10970,6 +10975,8 @@ TEST_P(StoreTest, mergeRegionTest) {
   }
 }
 
+#ifdef WITH_BLUESTORE
+
 TEST_P(MultiLabelTest, MultiSelectableOff) {
   SetVal(g_conf(), "bluestore_bdev_label_multi", "false");
   g_conf().apply_changes(nullptr);
@@ -11291,6 +11298,8 @@ TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithObjects) {
   ASSERT_NE(it, label.meta.end());
   ASSERT_EQ(label.meta["multi"], "yes");
 }
+
+#endif // WITH_BLUESTORE
 
 TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
   if (string(GetParam()) != "bluestore")
