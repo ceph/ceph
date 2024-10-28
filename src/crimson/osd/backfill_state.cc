@@ -398,7 +398,9 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 BackfillState::PrimaryScanning::PrimaryScanning(my_context ctx)
   : my_base(ctx)
 {
-  backfill_state().backfill_info.version = peering_state().get_last_update();
+  // RecoveryBackend::scan_for_backfill() will result in a new backfill_info
+  // Later on, in PrimaryScanning::react, BackfillState will be
+  // updated with the returned interval
   backfill_listener().request_primary_scan(
     backfill_state().backfill_info.begin);
 }
