@@ -7,6 +7,8 @@
 #include "include/stringify.h"
 #include "librbd/WatchNotifyTypes.h"
 
+#include <map>
+
 namespace librbd {
 namespace watch_notify {
 
