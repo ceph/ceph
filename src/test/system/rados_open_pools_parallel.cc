@@ -109,7 +109,7 @@ int main(int argc, const char **argv)
   CrossProcessSem *pool_setup_sem = NULL;
   RETURN1_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
   StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
-					   pool, 50, ".obj");
+					   pool, 50, get_temp_suffix(".obj"));
   StRadosOpenPool r2(argc, argv, pool_setup_sem, NULL, pool);
   vector < SysTestRunnable* > vec;
   vec.push_back(&r1);
@@ -127,7 +127,7 @@ int main(int argc, const char **argv)
   CrossProcessSem *open_pool_sem2 = NULL;
   RETURN1_IF_NONZERO(CrossProcessSem::create(0, &open_pool_sem2));
   StRadosCreatePool r3(argc, argv, NULL, pool_setup_sem2, open_pool_sem2,
-					   pool, 50, ".obj");
+					   pool, 50, get_temp_suffix(".obj"));
   StRadosOpenPool r4(argc, argv, pool_setup_sem2, open_pool_sem2, pool);
   vector < SysTestRunnable* > vec2;
   vec2.push_back(&r3);

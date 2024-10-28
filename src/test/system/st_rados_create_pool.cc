@@ -130,3 +130,18 @@ std::string get_temp_pool_name(const char* prefix)
   ceph_assert((unsigned int)ret < sizeof(poolname));
   return poolname;
 }
+
+std::string get_temp_suffix(const char* _suffix)
+{
+  ceph_assert(_suffix);
+  char hostname[80];
+  int ret = 0;
+  ret = gethostname(hostname, sizeof(hostname));
+  ceph_assert(!ret);
+  char suffix[256];
+  ret = snprintf(suffix, sizeof(suffix),
+                 "%s-%s-%d", _suffix, hostname, getpid());
+  ceph_assert(ret > 0);
+  ceph_assert((unsigned int)ret < sizeof(suffix));
+  return suffix;
+}
