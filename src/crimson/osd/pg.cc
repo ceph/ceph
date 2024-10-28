@@ -1615,8 +1615,14 @@ bool PG::should_send_op(
     return true;
   bool should_send =
     (hoid.pool != (int64_t)get_info().pgid.pool() ||
-    (has_backfill_state() && hoid <= get_last_backfill_started()) ||
-    hoid <= peering_state.get_peer_info(peer).last_backfill);
+    // An object has been fully pushed to the backfill target if and only if
+    // either of the following conditions is met:
+    // 1. peer_info.last_backfill has passed "hoid"
+    // 2. last_backfill_started has passed "hoid" and "hoid" is not in the peer
+    //    missing set
+    hoid <= peering_state.get_peer_info(peer).last_backfill ||
+    (has_backfill_state() && hoid <= get_last_backfill_started() &&
+     !peering_state.get_peer_missing(peer).is_missing(hoid)));
   if (!should_send) {
     ceph_assert(is_backfill_target(peer));
     logger().debug("{} issue_repop shipping empty opt to osd."
