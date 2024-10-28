@@ -78,7 +78,12 @@ admin_token_retry:
     throw -EINVAL;
   }
 
-  validate.append_header("X-Auth-Token", admin_token);
+  if (allow_expired) {
+    validate.append_header("X-Auth-Token", admin_token);
+  } else {
+    validate.append_header("X-Auth-Token", token);
+  }
+
   validate.set_send_length(0);
 
   validate.set_url(url);
