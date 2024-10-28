@@ -4464,7 +4464,6 @@ void Server::_lookup_ino_2(const MDRequestRef& mdr, int r)
 }
 
 
-/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_open(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -4702,7 +4701,6 @@ bool Server::is_valid_layout(file_layout_t *layout)
   return true;
 }
 
-/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_openc(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -7169,7 +7167,6 @@ void Server::handle_client_mknod(const MDRequestRef& mdr)
 
 
 // MKDIR
-/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_mkdir(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -8767,8 +8764,6 @@ public:
  * all other nodes have also replciated destdn and straydn.  note that
  * destdn replicas need not also replicate srci.  this only works when 
  * destdn is leader.
- *
- * This function takes responsibility for the passed mdr.
  */
 void Server::handle_client_rename(const MDRequestRef& mdr)
 {
@@ -10913,7 +10908,6 @@ void Server::_peer_rename_sessions_flushed(const MDRequestRef& mdr)
 }
 
 // snaps
-/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_lssnap(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -11023,7 +11017,6 @@ struct C_MDS_mksnap_finish : public ServerLogContext {
   }
 };
 
-/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_mksnap(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -11220,7 +11213,6 @@ struct C_MDS_rmsnap_finish : public ServerLogContext {
   }
 };
 
-/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_rmsnap(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -11350,7 +11342,6 @@ struct C_MDS_renamesnap_finish : public ServerLogContext {
   }
 };
 
-/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_renamesnap(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
