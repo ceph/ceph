@@ -108,7 +108,7 @@ class MgrTestCase(CephTestCase):
         # Unload all non-default plugins
         loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
                    "mgr", "module", "ls", "--format=json-pretty"))['enabled_modules']
-        unload_modules = set(loaded) - {"cephadm", "restful"}
+        unload_modules = set(loaded) - {"cephadm"}
 
         for m in unload_modules:
             cls.mgr_cluster.mon_manager.raw_cluster_cmd(
@@ -137,7 +137,7 @@ class MgrTestCase(CephTestCase):
             raise SkipTest(
                 "Only have {0} manager daemons, {1} are required".format(
                     len(cls.mgr_cluster.mgr_ids), cls.MGRS_REQUIRED))
-        
+
         # We expect laggy OSDs in this testing environment so turn off this warning.
         # See https://tracker.ceph.com/issues/61907
         cls.mgr_cluster.mon_manager.raw_cluster_cmd('config', 'set', 'mds',

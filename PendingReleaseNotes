@@ -35,6 +35,13 @@
   users that modifying "max_mds" may not help with troubleshooting or recovery
   effort. Instead, it might further destabilize the cluster.
 
+* mgr/restful, mgr/zabbix: both modules, already deprecated since 2020, have been
+  finally removed. They have not been actively maintenance in the last years,
+  and started suffering from vulnerabilities in their dependency chain (e.g.:
+  CVE-2023-46136).  As alternatives, for the `restful` module, the `dashboard` module
+  provides a richer and better maintained RESTful API. Regarding the `zabbix` module,
+  there are alternative monitoring solutions, like `prometheus`, which is the most
+  widely adopted among the Ceph user community.
 
 
 >=19.0.0

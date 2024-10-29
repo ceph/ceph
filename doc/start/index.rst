@@ -40,8 +40,8 @@ The Ceph Metadata Server is necessary to run Ceph File System clients.
   state of the Ceph cluster, including storage utilization, current
   performance metrics, and system load.  The Ceph Manager daemons also
   host python-based modules to manage and expose Ceph cluster
-  information, including a web-based :ref:`mgr-dashboard` and
-  `REST API`_.  At least two managers are normally required for high
+  information, including a web-based :ref:`mgr-dashboard`.
+  At least two managers are normally required for high
   availability.
 
 - **Ceph OSDs**: An Object Storage Daemon (:term:`Ceph OSD`,
@@ -61,8 +61,6 @@ Ceph stores data as objects within logical storage pools. Using the
 contain the object, and which OSD should store the placement group.  The
 CRUSH algorithm enables the Ceph Storage Cluster to scale, rebalance, and
 recover dynamically.
-
-.. _REST API: ../../mgr/restful
 
 .. container:: columns-2
 
