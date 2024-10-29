@@ -17,8 +17,8 @@
 
 #include <cstdint>
 #include <cstdio>
-#include <iomanip>
-#include <iosfwd>
+#include <list>
+#include <ostream>
 #include <string>
 #include <string>
 #include <string_view>
@@ -26,8 +26,6 @@
 #include <fmt/compile.h>
 #include <fmt/format.h>
 
-#include "include/rados.h"
-#include "include/unordered_map.h"
 #include "common/Formatter.h"
 
 #include "hash.h"
