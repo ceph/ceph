@@ -5988,23 +5988,32 @@ int64_t Server::make_quota_max_byte_parseable(string val)
   int64_t dec_len;
   int64_t q;
   string cast_err;
+  string unit;
   
   size_t dec_index = val.find_first_of(".");
   size_t unit_index = val.find_first_not_of("0123456789-+.");
-  unit = str.substr(unit_index, val.length() - unit_index);
+
   if (dec_index != std::string::npos) {
-    if ((unit_index == std::string::npos) || (unit == 'B'))  {
+    if (unit_index == std::string::npos) {
     dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
     << "Invalid Byte value" << dendl;
     return -CEPHFS_EINVAL;
     }
+    unit = val.substr(unit_index, val.length() - unit_index);
+    if (unit == "B") {
+      dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
+    << "Invalid Byte value" << dendl;
+    return -CEPHFS_EINVAL;
+    }
   }
+
   dec_len = unit_index - dec_index - 1;
-  if ((dec_len == 0) || (dec_index == val.length() - 1)) {
+  if ((dec_len == 0) || (dec_index == val.length() - 1) ||
+       (dec_index != val.find_last_of("."))) {
     dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
     << "Invalid Float value" << dendl;
     return -CEPHFS_EINVAL;
-  }  
+  }    
   
   if (dec_index != std::string::npos) {
     before_decimal = val.substr(0, dec_index);
