@@ -25,7 +25,6 @@
 
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
-#include "Mutation.h" // for MutationRef (complete definition is needed)
 
 // -- lock types --
 // see CEPH_LOCK_*
@@ -425,37 +424,9 @@ public:
   }
 
   // xlock
-  void get_xlock(MutationRef who, client_t client) { 
-    ceph_assert(!has_xlock_by());
-    ceph_assert(state == LOCK_XLOCK || is_locallock() ||
-	   state == LOCK_LOCK /* if we are a peer */);
-    parent->get(MDSCacheObject::PIN_LOCK);
-    more()->num_xlock++;
-    more()->xlock_by = who; 
-    more()->xlock_by_client = client;
-  }
-  void set_xlock_done() {
-    ceph_assert(more()->xlock_by);
-    ceph_assert(state == LOCK_XLOCK || is_locallock() ||
-	   state == LOCK_LOCK /* if we are a peer */);
-    if (!is_locallock())
-      state = LOCK_XLOCKDONE;
-    more()->xlock_by.reset();
-  }
-  void put_xlock() {
-    ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
-	   state == LOCK_XLOCKSNAP || state == LOCK_LOCK_XLOCK ||
-	   state == LOCK_LOCK  || /* if we are a leader of a peer */
-	   state == LOCK_PREXLOCK || state == LOCK_SYNC ||
-	   is_locallock());
-    --more()->num_xlock;
-    parent->put(MDSCacheObject::PIN_LOCK);
-    if (more()->num_xlock == 0) {
-      more()->xlock_by.reset();
-      more()->xlock_by_client = -1;
-      try_clear_more();
-    }
-  }
+  void get_xlock(MutationRef who, client_t client);
+  void set_xlock_done();
+  void put_xlock();
   bool is_xlocked() const {
     return have_more() && more()->num_xlock > 0;
   }
@@ -468,9 +439,7 @@ public:
   bool is_xlocked_by_client(client_t c) const {
     return have_more() ? more()->xlock_by_client == c : false;
   }
-  MutationRef get_xlock_by() const {
-    return have_more() ? more()->xlock_by : MutationRef();
-  }
+  MutationRef get_xlock_by() const;
   bool has_xlock_by() const noexcept {
     return have_more() && more()->xlock_by;
   }
@@ -635,6 +604,7 @@ private:
   // XXX not in mempool
   struct unstable_bits_t {
     unstable_bits_t();
+    ~unstable_bits_t() noexcept;
 
     bool empty() {
       return
@@ -659,16 +629,8 @@ private:
   };
 
   bool have_more() const { return _unstable ? true : false; }
-  unstable_bits_t *more() const {
-    if (!_unstable)
-      _unstable.reset(new unstable_bits_t);
-    return _unstable.get();
-  }
-  void try_clear_more() {
-    if (_unstable && _unstable->empty()) {
-      _unstable.reset();
-    }
-  }
+  unstable_bits_t *more() const;
+  void try_clear_more();
 
   int num_rdlock = 0;
 
