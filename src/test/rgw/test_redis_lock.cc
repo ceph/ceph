@@ -14,15 +14,25 @@
 using boost::redis::config;
 using boost::redis::connection;
 
+static constexpr auto dout_subsys = ceph_subsys_rgw;
+
+class TestDPP : public DoutPrefixProvider {
+  CephContext* get_cct() const override { return g_ceph_context; }
+  unsigned get_subsys() const override { return dout_subsys; }
+  std::ostream& gen_prefix(std::ostream& out) const override { return out; }
+};
+
 class RGWRedisLockTest : public ::testing::Test {
  protected:
   boost::asio::io_context io;
   connection* conn;
   config* cfg;
+  DoutPrefixProvider* dpp;
 
   void SetUp() {
     cfg = new config();
     conn = new connection(io);
+    dpp = new TestDPP();
 
     boost::asio::spawn(
         io,
@@ -40,6 +50,7 @@ class RGWRedisLockTest : public ::testing::Test {
   void TearDown() {
     delete conn;
     delete cfg;
+    delete dpp;
   }
 };
 
@@ -53,10 +64,11 @@ TEST_F(RGWRedisLockTest, Lock) {
         const std::string cookie = "mycookie";
 
         int return_code =
-            rgw::redislock::lock(conn, name, cookie, duration, yield);
+            rgw::redislock::lock(dpp, conn, name, cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
-        return_code = rgw::redislock::assert_locked(conn, name, cookie, yield);
+        return_code =
+            rgw::redislock::assert_locked(dpp, conn, name, cookie, yield);
         ASSERT_EQ(return_code, 0);
       },
       [this](std::exception_ptr eptr) {
@@ -76,13 +88,14 @@ TEST_F(RGWRedisLockTest, Unlock) {
         int duration = 1000;
 
         int return_code =
-            rgw::redislock::lock(conn, name, cookie, duration, yield);
+            rgw::redislock::lock(dpp, conn, name, cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
-        return_code = rgw::redislock::unlock(conn, name, cookie, yield);
+        return_code = rgw::redislock::unlock(dpp, conn, name, cookie, yield);
         ASSERT_EQ(return_code, 0);
 
-        return_code = rgw::redislock::assert_locked(conn, name, cookie, yield);
+        return_code =
+            rgw::redislock::assert_locked(dpp, conn, name, cookie, yield);
         ASSERT_EQ(return_code, -ENOENT);
       },
       [this](std::exception_ptr eptr) {
@@ -102,19 +115,21 @@ TEST_F(RGWRedisLockTest, RenewBeforeLeaseExpiry) {
         int duration = 1000;
 
         int return_code =
-            rgw::redislock::lock(conn, name, cookie, duration, yield);
+            rgw::redislock::lock(dpp, conn, name, cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
         // wait for 500ms
         boost::asio::steady_timer timer(io, std::chrono::milliseconds(500));
         timer.async_wait(yield);
 
-        return_code = rgw::redislock::lock(conn, name, cookie, duration, yield);
+        return_code =
+            rgw::redislock::lock(dpp, conn, name, cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
         // wait for 600ms - the initial lock timeout has expired by now but the
         // renewel process has kept it valid
-        return_code = rgw::redislock::assert_locked(conn, name, cookie, yield);
+        return_code =
+            rgw::redislock::assert_locked(dpp, conn, name, cookie, yield);
         ASSERT_EQ(return_code, 0);
       },
       [this](std::exception_ptr eptr) {
@@ -134,20 +149,20 @@ TEST_F(RGWRedisLockTest, AcquireAfterRenew) {
         int duration = 1000;
 
         int return_code =
-            rgw::redislock::lock(conn, name, cookie1, duration, yield);
+            rgw::redislock::lock(dpp, conn, name, cookie1, duration, yield);
         ASSERT_EQ(return_code, 0);
 
         boost::asio::steady_timer timer(io, std::chrono::milliseconds(500));
         timer.async_wait(yield);
 
         return_code =
-            rgw::redislock::lock(conn, name, cookie1, duration, yield);
+            rgw::redislock::lock(dpp, conn, name, cookie1, duration, yield);
         ASSERT_EQ(return_code, 0);
 
         // Try to acquire the lock with another client after the initial client
         // has renewed it
         return_code =
-            rgw::redislock::lock(conn, name, cookie2, duration, yield);
+            rgw::redislock::lock(dpp, conn, name, cookie2, duration, yield);
         ASSERT_EQ(return_code, -EBUSY);
       },
       [this](std::exception_ptr eptr) {
@@ -169,10 +184,11 @@ TEST_F(RGWRedisLockTest, RenewAfterReacquisition) {
         int duration = 500;
 
         int return_code =
-            rgw::redislock::lock(conn, name, cookie, duration, yield);
+            rgw::redislock::lock(dpp, conn, name, cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
-        return_code = rgw::redislock::assert_locked(conn, name, cookie, yield);
+        return_code =
+            rgw::redislock::assert_locked(dpp, conn, name, cookie, yield);
         ASSERT_EQ(return_code, 0);
 
         // wait for the lock to expire
@@ -181,11 +197,12 @@ TEST_F(RGWRedisLockTest, RenewAfterReacquisition) {
 
         const std::string new_cookie = "differentcookie";
         return_code =
-            rgw::redislock::lock(conn, name, new_cookie, duration, yield);
+            rgw::redislock::lock(dpp, conn, name, new_cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
         // attempt to lock with the initial client
-        return_code = rgw::redislock::lock(conn, name, cookie, duration, yield);
+        return_code =
+            rgw::redislock::lock(dpp, conn, name, cookie, duration, yield);
         ASSERT_EQ(return_code, -EBUSY);
       },
       [this](std::exception_ptr eptr) {
@@ -205,12 +222,12 @@ TEST_F(RGWRedisLockTest, MultiLock) {
         const std::string clientCookie1 = "mycookie1";
         const std::string clientCookie2 = "mycookie2";
 
-        int return_code =
-            rgw::redislock::lock(conn, name, clientCookie1, duration, yield);
+        int return_code = rgw::redislock::lock(dpp, conn, name, clientCookie1,
+                                               duration, yield);
         ASSERT_EQ(return_code, 0);
 
-        return_code =
-            rgw::redislock::lock(conn, name, clientCookie2, duration, yield);
+        return_code = rgw::redislock::lock(dpp, conn, name, clientCookie2,
+                                           duration, yield);
         ASSERT_EQ(return_code, -EBUSY);
       },
       [this](std::exception_ptr eptr) {
@@ -230,22 +247,23 @@ TEST_F(RGWRedisLockTest, Timeout) {
         const std::string cookie = "mycookie";
 
         int return_code =
-            rgw::redislock::lock(conn, name, cookie, duration, yield);
+            rgw::redislock::lock(dpp, conn, name, cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
         boost::asio::steady_timer timer(io, std::chrono::milliseconds(1000));
         timer.async_wait(yield);
 
-        return_code = rgw::redislock::assert_locked(conn, name, cookie, yield);
+        return_code =
+            rgw::redislock::assert_locked(dpp, conn, name, cookie, yield);
         ASSERT_EQ(return_code, -ENOENT);
 
         const std::string new_cookie = "newcookie";
         return_code =
-            rgw::redislock::lock(conn, name, new_cookie, duration, yield);
+            rgw::redislock::lock(dpp, conn, name, new_cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
         return_code =
-            rgw::redislock::assert_locked(conn, name, new_cookie, yield);
+            rgw::redislock::assert_locked(dpp, conn, name, new_cookie, yield);
         ASSERT_EQ(return_code, 0);
       },
       [this](std::exception_ptr eptr) {

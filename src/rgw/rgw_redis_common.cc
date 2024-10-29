@@ -22,30 +22,28 @@ int load_lua_rgwlib(boost::asio::io_context& io, connection* conn, config* cfg,
   rgw::redis::redis_exec(conn, ec, req, resp, y);
 
   if (ec) {
-    std::cerr << "EC Message: " << ec.message() << std::endl;
     return ec.value();
   }
   if (std::get<0>(resp).value() != "rgwlib") return -EINVAL;
-
   return 0;
 }
 
-RedisResponse do_redis_func(connection* conn, boost::redis::request& req,
-                            RedisResponseMap& resp, std::string func_name,
-                            optional_yield y) {
+RedisResponse do_redis_func(const DoutPrefixProvider* dpp, connection* conn,
+                            boost::redis::request& req, RedisResponseMap& resp,
+                            std::string func_name, optional_yield y) {
   try {
     boost::system::error_code ec;
     rgw::redis::redis_exec(conn, ec, req, resp, y);
     if (ec) {
-      std::cerr << "RGW RedisLock:: " << func_name
-                << "(): ERROR: " << ec.message() << std::endl;
+      ldpp_dout(dpp, 1) << "RGW RedisLock:: " << func_name
+                        << "(): ERROR: " << ec.message() << dendl;
       return RedisResponse(-ec.value(), ec.message());
     }
     return RedisResponse(resp);
 
   } catch (const std::exception& e) {
-    std::cerr << "RGW RedisLock:: " << func_name
-              << "(): Exception: " << e.what() << std::endl;
+    ldpp_dout(dpp, 1) << "RGW RedisLock:: " << func_name
+                      << "(): Exception: " << e.what() << dendl;
     return RedisResponse(-EINVAL, e.what());
   }
 }
@@ -57,11 +55,7 @@ RGWRedis::RGWRedis(boost::asio::io_context& io)
   boost::asio::spawn(
       io,
       [this, &io](boost::asio::yield_context yield) {
-        int res = load_lua_rgwlib(io, conn.get(), cfg.get(), yield);
-        if (res < 0) {
-          std::cerr << "Failed to load lua scripts to redis. error: " << res
-                    << std::endl;
-        }
+        load_lua_rgwlib(io, conn.get(), cfg.get(), yield);
       },
       [this, &io](std::exception_ptr eptr) {
         if (eptr) std::rethrow_exception(eptr);

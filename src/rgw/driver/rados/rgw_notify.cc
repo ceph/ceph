@@ -319,10 +319,10 @@ private:
 
       auto conn = rgw::redis::RGWRedis(io_context).get_conn();
 
-      auto ret = rgw::redislock::assert_locked(conn, queue_name+"_lock", lock_cookie, yield);
+      auto ret = rgw::redislock::assert_locked(this, conn, queue_name+"_lock", lock_cookie, yield);
       if (ret == 0)
       {
-        ret = rgw::redisqueue::cleanup_stale_reservations(conn, queue_name, stale_reservations_period_s, yield);
+        ret = rgw::redisqueue::cleanup_stale_reservations(this, conn, queue_name, stale_reservations_period_s, yield);
       }
 
       if (ret == -ENOENT) {
@@ -354,7 +354,7 @@ private:
   int unlock_queue(const std::string& queue_name, boost::asio::yield_context yield) {
 
     auto conn = rgw::redis::RGWRedis(io_context).get_conn();
-    auto ret = rgw::redislock::unlock(conn, queue_name+"_lock", lock_cookie, yield);
+    auto ret = rgw::redislock::unlock(this, conn, queue_name+"_lock", lock_cookie, yield);
 
     if (ret == -ENOENT) {
       ldpp_dout(this, 10) << "INFO: queue: " << queue_name
@@ -417,7 +417,7 @@ private:
       std::vector<std::string> redis_entries;
       auto total_entries = 0U;
       {
-        auto ret = rgw::redislock::assert_locked(conn, queue_name+"_lock", lock_cookie, yield);
+        auto ret = rgw::redislock::assert_locked(this, conn, queue_name+"_lock", lock_cookie, yield);
 
         if (ret == -EBUSY) {
           topics_persistency_tracker.erase(queue_name);
@@ -434,7 +434,7 @@ private:
         }
 
         std::string out;
-        ret = rgw::redisqueue::locked_read(conn, queue_name, lock_cookie, out, max_elements, yield);
+        ret = rgw::redisqueue::locked_read(this, conn, queue_name, lock_cookie, out, max_elements, yield);
         if (ret == -ENOENT) {
           // queue was deleted
           topics_persistency_tracker.erase(queue_name);
@@ -534,7 +534,7 @@ private:
         }
 
         uint64_t entries_to_remove = index;
-        auto ret = rgw::redislock::assert_locked(conn, queue_name+"_lock", lock_cookie, yield);
+        auto ret = rgw::redislock::assert_locked(this, conn, queue_name+"_lock", lock_cookie, yield);
         if (ret == -EBUSY) {
           ldpp_dout(this, 10)
               << "WARNING: queue: " << queue_name
@@ -548,7 +548,7 @@ private:
           return;
         }
 
-        ret = rgw::redisqueue::locked_ack(conn, queue_name, lock_cookie, entries_to_remove, yield);
+        ret = rgw::redisqueue::locked_ack(this, conn, queue_name, lock_cookie, entries_to_remove, yield);
         if (ret == -ENOENT) {
           // queue was deleted
           ldpp_dout(this, 10) << "INFO: queue: " << queue_name
@@ -630,7 +630,7 @@ private:
 
       // updating perfcounters with topic stats
       std::tuple<uint64_t, uint32_t> stats;
-      const auto ret = rgw::redisqueue::queue_stats(conn, queue_name, stats, yield);
+      const auto ret = rgw::redisqueue::queue_stats(this, conn, queue_name, stats, yield);
       uint64_t entries_size = std::get<0>(stats);
       uint32_t entries_number = std::get<1>(stats);
       if (ret < 0) {
@@ -686,7 +686,7 @@ private:
       for (const auto& queue_name : queues) {
         // try to lock the queue to check if it is owned by this rgw
         // or if ownership needs to be taken
-        ret = rgw::redislock::lock(conn, queue_name+"_lock", lock_cookie, failover_time, yield);
+        ret = rgw::redislock::lock(this, conn, queue_name+"_lock", lock_cookie, failover_time, yield);
         
         if (ret == -EBUSY) {
           // lock is already taken by another RGW
@@ -859,7 +859,7 @@ int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_i
   // In principal this is not required
   auto io_context = boost::asio::io_context();
   auto conn = rgw::redis::RGWRedis(io_context).get_conn();
-  int ret = rgw::redisqueue::queue_init(conn, topic_queue, MAX_QUEUE_SIZE, y);
+  int ret = rgw::redisqueue::queue_init(dpp, conn, topic_queue, MAX_QUEUE_SIZE, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to create queue for topic: " << topic_queue << ". error: " << ret << dendl;
     return ret;
@@ -1158,7 +1158,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         const auto& queue_name = topic_cfg.dest.persistent_queue;
         // cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
         std::string reserve_response;
-        auto ret = rgw::redisqueue::reserve(conn, queue_name, res.size, reserve_response, res.yield);
+        auto ret = rgw::redisqueue::reserve(res.dpp, conn, queue_name, res.size, reserve_response, res.yield);
         // auto ret = rgw_rados_operate(
         //     res.dpp, res.store->getRados()->get_notif_pool_ctx(), queue_name,
         //     &op, res.yield, librados::OPERATION_RETURNVEC);
@@ -1170,7 +1170,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
           return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
         }
 
-        ret = rgw::redisqueue::parse_reserve_result(conn, reserve_response, res_id);
+        ret = rgw::redisqueue::parse_reserve_result(res.dpp, reserve_response, res_id);
         if (ret < 0) {
           ldpp_dout(res.dpp, 1)
               << "ERROR: failed to parse reservation id. error: " << ret
@@ -1225,7 +1225,7 @@ int publish_commit(rgw::sal::Object* obj,
           " . trying to make a larger reservation on queue:" << queue_name
 			  << dendl;
 
-        auto ret = rgw::redisqueue::abort(conn, queue_name, topic.res_id, res.yield);
+        auto ret = rgw::redisqueue::abort(dpp, conn, queue_name, topic.res_id, res.yield);
         // first cancel the existing reservation
         // librados::ObjectWriteOperation op;
         // TODO: Redis
@@ -1249,7 +1249,7 @@ int publish_commit(rgw::sal::Object* obj,
         //   dpp, res.store->getRados()->get_notif_pool_ctx(),
         //         queue_name, &op, res.yield, librados::OPERATION_RETURNVEC);
         std::string reserve_response;
-        ret = rgw::redisqueue::reserve(conn, queue_name, bl.length(), reserve_response, res.yield);
+        ret = rgw::redisqueue::reserve(dpp, conn, queue_name, bl.length(), reserve_response, res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to reserve extra space on queue: "
 			    << queue_name
@@ -1257,7 +1257,7 @@ int publish_commit(rgw::sal::Object* obj,
           return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
         }
         // ret = cls_2pc_queue_reserve_result(obl, topic.res_id);
-        ret = rgw::redisqueue::parse_reserve_result(conn, reserve_response, topic.res_id);
+        ret = rgw::redisqueue::parse_reserve_result(dpp, reserve_response, topic.res_id);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to parse reservation id for "
 	                              "extra space. error: " << ret << dendl;
@@ -1271,7 +1271,7 @@ int publish_commit(rgw::sal::Object* obj,
       std::string data = bl.to_str().c_str();
 
       // TODO: Redis: Do async completion
-      auto ret = rgw::redisqueue::commit(conn, queue_name, data, res.yield);
+      auto ret = rgw::redisqueue::commit(dpp, conn, queue_name, data, res.yield);
 
 
       // aio_completion_ptr completion {librados::Rados::aio_create_completion()};
@@ -1328,7 +1328,7 @@ int publish_abort(reservation_t& res) {
       continue;
     }
     const auto& queue_name = topic.cfg.dest.persistent_queue;
-    auto ret = rgw::redisqueue::abort(conn, queue_name, topic.res_id,res.yield);
+    auto ret = rgw::redisqueue::abort(res.dpp, conn, queue_name, topic.res_id,res.yield);
     // librados::ObjectWriteOperation op;
     // cls_2pc_queue_abort(op, topic.res_id);
     // const auto ret = rgw_rados_operate(
@@ -1360,7 +1360,7 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
   // }
 
   std::tuple<uint32_t, uint32_t> reservation_status;
-  auto ret = rgw::redisqueue::queue_status(conn, queue_name, reservation_status, y);
+  auto ret = rgw::redisqueue::queue_status(dpp, conn, queue_name, reservation_status, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get the queue reservation status: " << ret << dendl;
     return ret;
@@ -1369,7 +1369,7 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
 
   // ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, stats.queue_entries, stats.queue_size);
   std::tuple<uint64_t, uint32_t> queue_stats;
-  ret = rgw::redisqueue::queue_stats(conn, queue_name, queue_stats, y);
+  ret = rgw::redisqueue::queue_stats(dpp, conn, queue_name, queue_stats, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get the queue size or the number of entries: " << ret << dendl;
     return ret;

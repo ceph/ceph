@@ -70,9 +70,13 @@ void redis_exec(connection* conn, boost::system::error_code& ec,
   }
 }
 
-RedisResponse do_redis_func(connection* conn, boost::redis::request& req,
-                            RedisResponseMap& resp, std::string func_name,
-                            optional_yield y);
+// RedisResponse do_redis_func(connection* conn, boost::redis::request& req,
+//                             RedisResponseMap& resp, std::string func_name,
+//                             optional_yield y);
+
+RedisResponse do_redis_func(const DoutPrefixProvider* dpp, connection* conn,
+                            boost::redis::request& req, RedisResponseMap& resp,
+                            std::string func_name, optional_yield y);
 
 int load_lua_rgwlib(boost::asio::io_context& io, connection* conn, config* cfg,
                     optional_yield y);
@@ -89,7 +93,7 @@ class RGWRedis {
 
  private:
   boost::asio::io_context& io;
-  std::unique_ptr<connection> conn;  
+  std::unique_ptr<connection> conn;
   std::unique_ptr<config> cfg;
 };
 

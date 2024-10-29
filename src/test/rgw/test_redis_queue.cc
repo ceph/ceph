@@ -7,16 +7,25 @@
 
 using boost::redis::config;
 using boost::redis::connection;
+static constexpr auto dout_subsys = ceph_subsys_rgw;
+
+class TestDPP : public DoutPrefixProvider {
+  CephContext* get_cct() const override { return g_ceph_context; }
+  unsigned get_subsys() const override { return dout_subsys; }
+  std::ostream& gen_prefix(std::ostream& out) const override { return out; }
+};
 
 class RGWRedisQueueTest : public ::testing::Test {
  protected:
   boost::asio::io_context io;
   connection* conn;
   config* cfg;
+  DoutPrefixProvider* dpp;
 
   void SetUp() {
     cfg = new config();
     conn = new connection(io);
+    dpp = new TestDPP();
 
     boost::asio::spawn(
         io,
@@ -34,6 +43,7 @@ class RGWRedisQueueTest : public ::testing::Test {
   void TearDown() {
     delete conn;
     delete cfg;
+    delete dpp;
   }
 };
 
@@ -44,11 +54,11 @@ TEST_F(RGWRedisQueueTest, QueueInit) {
       [this](boost::asio::yield_context yield) {
         int res;
         // Remove the queue if it exists
-        res = rgw::redisqueue::queue_remove(conn, "test_queue", yield);
+        res = rgw::redisqueue::queue_remove(dpp, conn, "test_queue", yield);
         ASSERT_TRUE(res == 0 || res == -ENOENT);
-        res = rgw::redisqueue::queue_init(conn, "test_queue", 100, yield);
+        res = rgw::redisqueue::queue_init(dpp, conn, "test_queue", 100, yield);
         ASSERT_EQ(res, 0);
-        res = rgw::redisqueue::queue_init(conn, "test_queue", 100, yield);
+        res = rgw::redisqueue::queue_init(dpp, conn, "test_queue", 100, yield);
         ASSERT_EQ(res, -EEXIST);
       },
       [this](std::exception_ptr eptr) {
@@ -69,20 +79,22 @@ TEST_F(RGWRedisQueueTest, Reserve) {
         std::string reserve_result;
         std::uint32_t reservation_id;
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size,
+        res = rgw::redisqueue::reserve(dpp, conn, "test_queue", reserve_size,
                                        reserve_result, yield);
         ASSERT_EQ(res, 0);
 
-        rgw::redisqueue::parse_reserve_result(conn, reserve_result,
+        rgw::redisqueue::parse_reserve_result(dpp, reserve_result,
                                               reservation_id);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
         ASSERT_EQ(std::get<1>(status), initial_queue);
@@ -104,17 +116,19 @@ TEST_F(RGWRedisQueueTest, Commit) {
         std::size_t reserve_size = 4 * 1024U;
         std::string reserve_result;
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size,
+        res = rgw::redisqueue::reserve(dpp, conn, "test_queue", reserve_size,
                                        reserve_result, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
         ASSERT_EQ(std::get<1>(status), initial_queue);
@@ -132,10 +146,11 @@ TEST_F(RGWRedisQueueTest, Commit) {
           ]
         })";
 
-        res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
+        res = rgw::redisqueue::commit(dpp, conn, "test_queue", data, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + 1);
@@ -158,28 +173,32 @@ TEST_F(RGWRedisQueueTest, Abort) {
         std::string reserve_result;
         std::uint32_t reservation_id;
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size,
+        res = rgw::redisqueue::reserve(dpp, conn, "test_queue", reserve_size,
                                        reserve_result, yield);
         ASSERT_EQ(res, 0);
 
-        rgw::redisqueue::parse_reserve_result(conn, reserve_result,
+        rgw::redisqueue::parse_reserve_result(dpp, reserve_result,
                                               reservation_id);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
         ASSERT_EQ(std::get<1>(status), initial_queue);
 
-        res = rgw::redisqueue::abort(conn, "test_queue", reservation_id, yield);
+        res = rgw::redisqueue::abort(dpp, conn, "test_queue", reservation_id,
+                                     yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue);
@@ -201,13 +220,14 @@ TEST_F(RGWRedisQueueTest, ReadAndAck) {
         std::size_t reserve_size = 4 * 1024U;
         std::string reserve_result;
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size,
+        res = rgw::redisqueue::reserve(dpp, conn, "test_queue", reserve_size,
                                        reserve_result, yield);
         ASSERT_EQ(res, 0);
 
@@ -224,23 +244,25 @@ TEST_F(RGWRedisQueueTest, ReadAndAck) {
           ]
         })";
 
-        res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
+        res = rgw::redisqueue::commit(dpp, conn, "test_queue", data, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + 1);
 
         std::string read_res;
-        res = rgw::redisqueue::read(conn, "test_queue", read_res, yield);
+        res = rgw::redisqueue::read(dpp, conn, "test_queue", read_res, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(read_res, data);
 
-        res = rgw::redisqueue::ack(conn, "test_queue", yield);
+        res = rgw::redisqueue::ack(dpp, conn, "test_queue", yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue);
@@ -278,11 +300,11 @@ TEST_F(RGWRedisQueueTest, LockedReadValidLock) {
         std::string lock_name = "lock:test_queue";
         std::string lock_cookie = "mycookie";
         int duration = 500;
-        int return_code =
-            rgw::redislock::lock(conn, lock_name, lock_cookie, duration, yield);
+        int return_code = rgw::redislock::lock(dpp, conn, lock_name,
+                                               lock_cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
-        res = rgw::redisqueue::locked_read(conn, "test_queue", lock_cookie,
+        res = rgw::redisqueue::locked_read(dpp, conn, "test_queue", lock_cookie,
                                            read_res, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(data, read_res);
@@ -306,14 +328,14 @@ TEST_F(RGWRedisQueueTest, LockedReadInvalidLock) {
         std::string lock_name = "lock:test_queue";
         std::string lock_cookie = "mycookie";
         int duration = 500;
-        int return_code =
-            rgw::redislock::lock(conn, lock_name, lock_cookie, duration, yield);
+        int return_code = rgw::redislock::lock(dpp, conn, lock_name,
+                                               lock_cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
         // Try to read with an invalid lock
         std::string invalid_lock_cookie = "invalid_cookie";
         res = rgw::redisqueue::locked_read(
-            conn, "test_queue", invalid_lock_cookie, read_res, yield);
+            dpp, conn, "test_queue", invalid_lock_cookie, read_res, yield);
         ASSERT_NE(res, 0);
         ASSERT_EQ(res, -EBUSY);
         ASSERT_EQ(read_res, "");
@@ -322,7 +344,7 @@ TEST_F(RGWRedisQueueTest, LockedReadInvalidLock) {
         boost::asio::steady_timer timer(io, std::chrono::milliseconds(1000));
         timer.async_wait(yield);
 
-        res = rgw::redisqueue::locked_read(conn, "test_queue", lock_cookie,
+        res = rgw::redisqueue::locked_read(dpp, conn, "test_queue", lock_cookie,
                                            read_res, yield);
         ASSERT_NE(res, 0);
         ASSERT_EQ(res, -ENOENT);
@@ -346,13 +368,14 @@ TEST_F(RGWRedisQueueTest, AckReadLocked) {
         std::size_t reserve_size = 4 * 1024U;
         std::string reserve_result;
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size,
+        res = rgw::redisqueue::reserve(dpp, conn, "test_queue", reserve_size,
                                        reserve_result, yield);
         ASSERT_EQ(res, 0);
 
@@ -369,10 +392,11 @@ TEST_F(RGWRedisQueueTest, AckReadLocked) {
           ]
         })";
 
-        res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
+        res = rgw::redisqueue::commit(dpp, conn, "test_queue", data, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + 1);
@@ -380,20 +404,21 @@ TEST_F(RGWRedisQueueTest, AckReadLocked) {
         std::string lock_name = "lock:test_queue";
         std::string lock_cookie = "mycookie";
         int duration = 500;
-        int return_code =
-            rgw::redislock::lock(conn, lock_name, lock_cookie, duration, yield);
+        int return_code = rgw::redislock::lock(dpp, conn, lock_name,
+                                               lock_cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
-        res = rgw::redisqueue::locked_read(conn, "test_queue", lock_cookie,
+        res = rgw::redisqueue::locked_read(dpp, conn, "test_queue", lock_cookie,
                                            read_res, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(data, read_res);
 
-        res =
-            rgw::redisqueue::locked_ack(conn, "test_queue", "mycookie", yield);
+        res = rgw::redisqueue::locked_ack(dpp, conn, "test_queue", "mycookie",
+                                          yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue);
@@ -415,17 +440,19 @@ TEST_F(RGWRedisQueueTest, CleanupStaleReservations) {
         std::size_t reserve_size = 4 * 1024U;
         std::string reserve_result;
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size,
+        res = rgw::redisqueue::reserve(dpp, conn, "test_queue", reserve_size,
                                        reserve_result, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
         ASSERT_EQ(std::get<1>(status), initial_queue);
@@ -434,11 +461,12 @@ TEST_F(RGWRedisQueueTest, CleanupStaleReservations) {
         timer.async_wait(yield);
 
         int stale_timeout = 1;  // 1 second
-        res = rgw::redisqueue::cleanup_stale_reservations(conn, "test_queue",
-                                                          stale_timeout, yield);
+        res = rgw::redisqueue::cleanup_stale_reservations(
+            dpp, conn, "test_queue", stale_timeout, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
 
         // The timeout used in all tests is smaller then 2 seconds
@@ -465,33 +493,36 @@ TEST_F(RGWRedisQueueTest, QueueStats) {
         std::uint32_t reservation_id;
         std::vector<std::uint32_t> reservation_ids;
 
-        res = rgw::redisqueue::queue_stats(conn, "test_queue", stats, yield);
+        res =
+            rgw::redisqueue::queue_stats(dpp, conn, "test_queue", stats, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(stats), 0);
         ASSERT_EQ(std::get<1>(stats), 0);
 
         int jitter = rand() % 20;
         for (int i = 0; i < jitter; i++) {
-          res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size,
+          res = rgw::redisqueue::reserve(dpp, conn, "test_queue", reserve_size,
                                          reserve_result, yield);
-          rgw::redisqueue::parse_reserve_result(conn, reserve_result,
+          rgw::redisqueue::parse_reserve_result(dpp, reserve_result,
                                                 reservation_id);
           reservation_ids.push_back(reservation_id);
           ASSERT_EQ(res, 0);
         }
 
-        res = rgw::redisqueue::queue_stats(conn, "test_queue", stats, yield);
+        res =
+            rgw::redisqueue::queue_stats(dpp, conn, "test_queue", stats, yield);
         ASSERT_EQ(res, 0);
 
         ASSERT_EQ(std::get<1>(stats), jitter);
 
         for (int i = 0; i < jitter; i++) {
-          res = rgw::redisqueue::abort(conn, "test_queue", reservation_ids[i],
-                                       yield);
+          res = rgw::redisqueue::abort(dpp, conn, "test_queue",
+                                       reservation_ids[i], yield);
           ASSERT_EQ(res, 0);
         }
 
-        res = rgw::redisqueue::queue_stats(conn, "test_queue", stats, yield);
+        res =
+            rgw::redisqueue::queue_stats(dpp, conn, "test_queue", stats, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(stats), 0);
         ASSERT_EQ(std::get<1>(stats), 0);
@@ -519,14 +550,15 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         int batch_size = 5;
         int jitter = rand() % 20;
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
         for (int i = 0; i < batch_size + jitter; i++) {
-          res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size,
+          res = rgw::redisqueue::reserve(dpp, conn, "test_queue", reserve_size,
                                          reserve_result, yield);
           ASSERT_EQ(res, 0);
         }
@@ -545,11 +577,12 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         })";
 
         for (int i = 0; i < batch_size + jitter; i++) {
-          res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
+          res = rgw::redisqueue::commit(dpp, conn, "test_queue", data, yield);
           ASSERT_EQ(res, 0);
         }
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + batch_size + jitter);
@@ -557,14 +590,14 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         std::string lock_name = "lock:test_queue";
         std::string lock_cookie = "mycookie";
         int duration = 500;
-        int return_code =
-            rgw::redislock::lock(conn, lock_name, lock_cookie, duration, yield);
+        int return_code = rgw::redislock::lock(dpp, conn, lock_name,
+                                               lock_cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
         std::vector<std::string> data_list_batch(batch_size, data);
-        res = rgw::redisqueue::locked_read(conn, "test_queue", lock_cookie,
+        res = rgw::redisqueue::locked_read(dpp, conn, "test_queue", lock_cookie,
                                            read_res, batch_size, yield);
-        rgw::redisqueue::parse_read_result(read_res, read_res_entries,
+        rgw::redisqueue::parse_read_result(dpp, read_res, read_res_entries,
                                            &truncated);
         ASSERT_EQ(truncated, true);
         for (auto entry : read_res_entries) {
@@ -574,11 +607,12 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         ASSERT_EQ(res, 0);
         ASSERT_EQ(data_list_batch, read_data_batch);
 
-        res = rgw::redisqueue::locked_ack(conn, "test_queue", lock_cookie,
+        res = rgw::redisqueue::locked_ack(dpp, conn, "test_queue", lock_cookie,
                                           batch_size, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + jitter);
@@ -593,9 +627,10 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
           int expected_data_size = std::min(batch_size, committed_queue_len);
           data_list_batch = std::vector<std::string>(expected_data_size, data);
 
-          res = rgw::redisqueue::locked_read(conn, "test_queue", lock_cookie,
-                                             read_res, batch_size, yield);
-          rgw::redisqueue::parse_read_result(read_res, read_res_entries,
+          res =
+              rgw::redisqueue::locked_read(dpp, conn, "test_queue", lock_cookie,
+                                           read_res, batch_size, yield);
+          rgw::redisqueue::parse_read_result(dpp, read_res, read_res_entries,
                                              &truncated);
           for (auto entry : read_res_entries) {
             read_data_batch.push_back(entry.data);
@@ -604,12 +639,12 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
           ASSERT_EQ(data_list_batch, read_data_batch);
 
           int read_size = read_data_batch.size();
-          res = rgw::redisqueue::locked_ack(conn, "test_queue", lock_cookie,
-                                            read_size, yield);
+          res = rgw::redisqueue::locked_ack(dpp, conn, "test_queue",
+                                            lock_cookie, read_size, yield);
           ASSERT_EQ(res, 0);
 
-          res =
-              rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+          res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                              yield);
           ASSERT_EQ(res, 0);
           ASSERT_EQ(std::get<0>(status), initial_reserve);
           ASSERT_EQ(std::get<1>(status), committed_queue_len - read_size);
@@ -636,13 +671,14 @@ TEST_F(RGWRedisQueueTest, OperationOnDeletedQueue) {
         std::size_t reserve_size = 4 * 1024U;
         std::string reserve_result;
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
         int initial_queue = std::get<1>(status);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size,
+        res = rgw::redisqueue::reserve(dpp, conn, "test_queue", reserve_size,
                                        reserve_result, yield);
         ASSERT_EQ(res, 0);
 
@@ -659,32 +695,33 @@ TEST_F(RGWRedisQueueTest, OperationOnDeletedQueue) {
           ]
         })";
 
-        res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
+        res = rgw::redisqueue::commit(dpp, conn, "test_queue", data, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(dpp, conn, "test_queue", status,
+                                            yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + 1);
 
-        res = rgw::redisqueue::queue_remove(conn, "test_queue", yield);
+        res = rgw::redisqueue::queue_remove(dpp, conn, "test_queue", yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::reserve(conn, "test_queue", reserve_size,
+        res = rgw::redisqueue::reserve(dpp, conn, "test_queue", reserve_size,
                                        reserve_result, yield);
         ASSERT_EQ(res, -ENOENT);
 
-        res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
+        res = rgw::redisqueue::commit(dpp, conn, "test_queue", data, yield);
         ASSERT_EQ(res, -ENOENT);
 
-        res = rgw::redisqueue::read(conn, "test_queue", data, yield);
+        res = rgw::redisqueue::read(dpp, conn, "test_queue", data, yield);
         ASSERT_EQ(res, -ENOENT);
 
-        res = rgw::redisqueue::ack(conn, "test_queue", yield);
+        res = rgw::redisqueue::ack(dpp, conn, "test_queue", yield);
         ASSERT_EQ(res, -ENOENT);
 
-        res = rgw::redisqueue::cleanup_stale_reservations(conn, "test_queue", 1,
-                                                          yield);
+        res = rgw::redisqueue::cleanup_stale_reservations(
+            dpp, conn, "test_queue", 1, yield);
         ASSERT_EQ(res, -ENOENT);
       },
       [this](std::exception_ptr eptr) {

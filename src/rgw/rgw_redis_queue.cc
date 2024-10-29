@@ -4,25 +4,27 @@ namespace rgw {
 namespace redisqueue {
 
 // Add the queue to the hashmap of 2pc_queues
-int queue_init(connection* conn, const std::string& name, uint64_t size,
-               optional_yield y) {
+int queue_init(const DoutPrefixProvider* dpp, connection* conn,
+               const std::string& name, uint64_t size, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "init_queue", 1, name, size);
-  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+  return rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y).errorCode;
 }
 
-int queue_remove(connection* conn, const std::string& name, optional_yield y) {
+int queue_remove(const DoutPrefixProvider* dpp, connection* conn,
+                 const std::string& name, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "remove_queue", 1, name);
-  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+  return rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y).errorCode;
 }
 
-int queue_status(connection* conn, const std::string& name,
-                 std::tuple<uint32_t, uint32_t>& res, optional_yield y) {
+int queue_status(const DoutPrefixProvider* dpp, connection* conn,
+                 const std::string& name, std::tuple<uint32_t, uint32_t>& res,
+                 optional_yield y) {
   boost::redis::request req;
   boost::redis::response<uint32_t, uint32_t> resp;
   boost::system::error_code ec;
@@ -33,22 +35,23 @@ int queue_status(connection* conn, const std::string& name,
 
     rgw::redis::redis_exec(conn, ec, req, resp, y);
     if (ec) {
-      std::cerr << "RGW Redis Queue:: " << __func__
-                << "(): ERROR: " << ec.message() << std::endl;
+      ldpp_dout(dpp, 1) << "RGW Redis Queue:: " << __func__
+                        << "(): ERROR: " << ec.message() << dendl;
       return -ec.value();
     }
     res = std::make_tuple(std::get<0>(resp).value(), std::get<1>(resp).value());
     return 0;
 
   } catch (const std::exception& e) {
-    std::cerr << "RGW Redis Queue:: " << __func__
-              << "(): Exception: " << e.what() << std::endl;
+    ldpp_dout(dpp, 1) << "RGW Redis Queue:: " << __func__
+                      << "(): Exception: " << e.what() << dendl;
     return -EINVAL;
   }
 }
 
-int queue_stats(connection* conn, const std::string& name,
-                std::tuple<uint64_t, uint32_t>& res, optional_yield y) {
+int queue_stats(const DoutPrefixProvider* dpp, connection* conn,
+                const std::string& name, std::tuple<uint64_t, uint32_t>& res,
+                optional_yield y) {
   boost::redis::request req;
   boost::redis::response<std::optional<uint64_t>, uint32_t> resp;
   boost::system::error_code ec;
@@ -59,8 +62,8 @@ int queue_stats(connection* conn, const std::string& name,
 
     rgw::redis::redis_exec(conn, ec, req, resp, y);
     if (ec) {
-      std::cerr << "RGW Redis Queue:: " << __func__
-                << "(): ERROR: " << ec.message() << std::endl;
+      ldpp_dout(dpp, 1) << "RGW Redis Queue:: " << __func__
+                        << "(): ERROR: " << ec.message() << dendl;
       return -ec.value();
     }
     uint64_t reserveSize;
@@ -73,115 +76,116 @@ int queue_stats(connection* conn, const std::string& name,
     res = std::make_tuple(reserveSize, std::get<1>(resp).value());
     return 0;
   } catch (const std::exception& e) {
-    std::cerr << "RGW Redis Queue:: " << __func__
-              << "(): Exception: " << e.what() << std::endl;
+    ldpp_dout(dpp, 1) << "RGW Redis Queue:: " << __func__
+                      << "(): Exception: " << e.what() << dendl;
     return -EINVAL;
   }
 }
 
-int reserve(connection* conn, const std::string name,
-            const std::size_t reserve_size, std::string& res,
-            optional_yield y) {
+int reserve(const DoutPrefixProvider* dpp, connection* conn,
+            const std::string name, const std::size_t reserve_size,
+            std::string& res, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "reserve", 1, name, reserve_size);
   rgw::redis::RedisResponse ret =
-      rgw::redis::do_redis_func(conn, req, resp, __func__, y);
+      rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y);
   if (ret.errorCode == 0) {
     res = ret.data;
   } else {
-    std::cerr << "RGW Redis Queue:: " << __func__
-              << "(): ERROR: " << ret.errorMessage << std::endl;
+    ldpp_dout(dpp, 1) << "RGW Redis Queue:: " << __func__
+                      << "(): ERROR: " << ret.errorMessage << dendl;
     res = "";
   }
   return ret.errorCode;
 }
 
-int commit(connection* conn, const std::string& name, const std::string& data,
-           optional_yield y) {
+int commit(const DoutPrefixProvider* dpp, connection* conn,
+           const std::string& name, const std::string& data, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "commit", 1, name, data);
-  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+  return rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y).errorCode;
 }
 
-int abort(connection* conn, const std::string& name,
-          const std::uint32_t& res_id, optional_yield y) {
+int abort(const DoutPrefixProvider* dpp, connection* conn,
+          const std::string& name, const std::uint32_t& res_id,
+          optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "abort", 1, name, res_id);
-  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+  return rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y).errorCode;
 }
 
-int read(connection* conn, const std::string& name, std::string& res,
-         optional_yield y) {
+int read(const DoutPrefixProvider* dpp, connection* conn,
+         const std::string& name, std::string& res, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "read", 1, name);
   rgw::redis::RedisResponse ret =
-      rgw::redis::do_redis_func(conn, req, resp, __func__, y);
+      rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y);
   if (ret.errorCode == 0) {
     res = ret.data;
   } else {
-    std::cerr << "RGW Redis Queue:: " << __func__
-              << "(): ERROR: " << ret.errorMessage << std::endl;
+    ldpp_dout(dpp, 1) << "RGW Redis Queue:: " << __func__
+                      << "(): ERROR: " << ret.errorMessage << dendl;
     res = "";
   }
 
   return ret.errorCode;
 }
 
-int locked_read(connection* conn, const std::string& name,
-                const std::string& lock_cookie, std::string& res,
-                optional_yield y) {
+int locked_read(const DoutPrefixProvider* dpp, connection* conn,
+                const std::string& name, const std::string& lock_cookie,
+                std::string& res, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "locked_read", 1, name, lock_cookie);
   rgw::redis::RedisResponse ret =
-      rgw::redis::do_redis_func(conn, req, resp, __func__, y);
+      rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y);
   if (ret.errorCode == 0) {
     res = ret.data;
   } else {
-    std::cerr << "RGW Redis Queue:: " << __func__
-              << "(): ERROR: " << ret.errorMessage << std::endl;
+    ldpp_dout(dpp, 1) << "RGW Redis Queue:: " << __func__
+                      << "(): ERROR: " << ret.errorMessage << dendl;
     res = "";
   }
 
   return ret.errorCode;
 }
 
-int locked_read(connection* conn, const std::string& name,
-                const std::string& lock_cookie, std::string& res,
-                const int count, optional_yield y) {
+int locked_read(const DoutPrefixProvider* dpp, connection* conn,
+                const std::string& name, const std::string& lock_cookie,
+                std::string& res, const int count, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "locked_read_multi", 1, name, lock_cookie, count);
   rgw::redis::RedisResponse ret =
-      rgw::redis::do_redis_func(conn, req, resp, __func__, y);
+      rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y);
   if (ret.errorCode == 0) {
     res = ret.data;
   } else {
-    std::cerr << "RGW Redis Queue:: " << __func__
-              << "(): ERROR: " << ret.errorMessage << std::endl;
+    ldpp_dout(dpp, 1) << "RGW Redis Queue:: " << __func__
+                      << "(): ERROR: " << ret.errorMessage << dendl;
   }
 
   return ret.errorCode;
 }
 
-int parse_read_result(const std::string& data,
+int parse_read_result(const DoutPrefixProvider* dpp, const std::string& data,
                       std::vector<rgw_queue_entry>& entries, bool* truncated) {
   // Parse the JSON data
   boost::json::value v = boost::json::parse(data);
 
   if (!v.is_object()) {
-    std::cerr << "RGW Redis Queue:: " << __func__
-              << "(): ERROR: JSON value is not an object" << std::endl;
+    ldpp_dout(dpp, 1) << "RGW Redis Queue:: " << __func__
+                      << "(): ERROR: JSON value is not an object" << dendl;
     return -EINVAL;
   }
 
@@ -199,13 +203,13 @@ int parse_read_result(const std::string& data,
   return 0;
 }
 
-int parse_reserve_result(connection* conn, const std::string& data,
+int parse_reserve_result(const DoutPrefixProvider* dpp, const std::string& data,
                          std::uint32_t& res_id) {
   boost::json::value v = boost::json::parse(data);
 
   if (!v.is_object()) {
-    std::cerr << "RGW Redis Queue:: " << __func__
-              << "(): ERROR: JSON value is not an object" << std::endl;
+    ldpp_dout(dpp, 1) << "RGW Redis Queue:: " << __func__
+                      << "(): ERROR: JSON value is not an object" << dendl;
     return -EINVAL;
   }
 
@@ -215,40 +219,43 @@ int parse_reserve_result(connection* conn, const std::string& data,
   return 0;
 }
 
-int ack(connection* conn, const std::string& name, optional_yield y) {
+int ack(const DoutPrefixProvider* dpp, connection* conn,
+        const std::string& name, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "ack", 1, name);
-  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+  return rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y).errorCode;
 }
 
-int locked_ack(connection* conn, const std::string& name,
-               const std::string& lock_cookie, optional_yield y) {
-  boost::redis::request req;
-  rgw::redis::RedisResponseMap resp;
-
-  req.push("FCALL", "locked_ack", 1, name, lock_cookie);
-  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
-}
-
-int locked_ack(connection* conn, const std::string& name,
-               const std::string& lock_cookie, const int count,
+int locked_ack(const DoutPrefixProvider* dpp, connection* conn,
+               const std::string& name, const std::string& lock_cookie,
                optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
-  req.push("FCALL", "locked_ack_multi", 1, name, lock_cookie, count);
-  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+  req.push("FCALL", "locked_ack", 1, name, lock_cookie);
+  return rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y).errorCode;
 }
 
-int cleanup_stale_reservations(connection* conn, const std::string& name,
-                               int stale_timeout, optional_yield y) {
+int locked_ack(const DoutPrefixProvider* dpp, connection* conn,
+               const std::string& name, const std::string& lock_cookie,
+               const int count, optional_yield y) {
+  boost::redis::request req;
+  rgw::redis::RedisResponseMap resp;
+
+  req.push("FCALL", "locked_ack_multi", 1, name, lock_cookie, count);
+  return rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y).errorCode;
+}
+
+int cleanup_stale_reservations(const DoutPrefixProvider* dpp, connection* conn,
+                               const std::string& name, int stale_timeout,
+                               optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "cleanup", 1, name, stale_timeout);
-  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+  return rgw::redis::do_redis_func(dpp, conn, req, resp, __func__, y).errorCode;
 }
 
 }  // namespace redisqueue
