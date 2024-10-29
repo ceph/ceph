@@ -16,6 +16,7 @@
 #include "MDSMap.h"
 
 #include "MDSContext.h"
+#include "RetryMessage.h"
 #include "msg/Messenger.h"
 
 #include "messages/MMDSTableRequest.h"

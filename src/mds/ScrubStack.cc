@@ -14,6 +14,7 @@
 
 #include "ScrubStack.h"
 #include "CDir.h"
+#include "RetryMessage.h"
 #include "SnapRealm.h"
 #include "common/debug.h"
 #include "common/Formatter.h"

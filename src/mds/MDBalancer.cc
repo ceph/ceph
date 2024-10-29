@@ -13,6 +13,7 @@
  */
 
 #include "MDBalancer.h"
+#include "RetryMessage.h"
 
 #include "include/compat.h"
 #include "mdstypes.h"

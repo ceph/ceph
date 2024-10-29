@@ -13,6 +13,8 @@
  */
 
 #include "Server.h"
+#include "RetryMessage.h"
+#include "RetryRequest.h"
 #include "BatchOp.h"
 
 #include <boost/lexical_cast.hpp>
