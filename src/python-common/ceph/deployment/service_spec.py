@@ -1313,6 +1313,10 @@ class RGWSpec(ServiceSpec):
             raise SpecValidationError('"ssl" field must be set to true when "generate_cert" '
                                       'is set to true')
 
+        if self.generate_cert and self.rgw_frontend_ssl_certificate:
+            raise SpecValidationError('"generate_cert" field and "rgw_frontend_ssl_certificate" '
+                                      'field are mutually exclusive')
+
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
 
