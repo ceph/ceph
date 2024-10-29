@@ -374,10 +374,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
         security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
-
-        # Now use pip to install some extra python modules
-        pip install pecan
-
     exit
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false

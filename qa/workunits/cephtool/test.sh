@@ -63,7 +63,7 @@ function retry_eagain()
     for count in $(seq 1 $max) ; do
         status=0
         "$@" > $tmpfile 2>&1 || status=$?
-        if test $status = 0 || 
+        if test $status = 0 ||
             ! grep --quiet EAGAIN $tmpfile ; then
             break
         fi
@@ -108,7 +108,7 @@ function check_response()
 		exit 1
 	fi
 
-	if ! grep --quiet -- "$expected_string" $TMPFILE ; then 
+	if ! grep --quiet -- "$expected_string" $TMPFILE ; then
 		echo "Didn't find $expected_string in output" >&2
 		cat $TMPFILE >&2
 		exit 1
@@ -696,7 +696,7 @@ function test_auth_profiles()
 
   ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-ro
   ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-rw
-  
+
   # add a new role-definer with the existing role-definer
   ceph -n client.xx-profile-rd -k client.xx.keyring \
     auth add client.xx-profile-rd2 mon 'allow profile role-definer'
@@ -730,7 +730,7 @@ function test_mon_caps()
   ceph-authtool -n client.bug --cap mon '' $TEMP_DIR/ceph.client.bug.keyring
   ceph auth add client.bug -i  $TEMP_DIR/ceph.client.bug.keyring
   rados lspools --no-mon-config --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
-  check_response "Permission denied"  
+  check_response "Permission denied"
 }
 
 function test_mon_misc()
@@ -780,7 +780,6 @@ function test_mon_misc()
   ceph mgr dump
   ceph mgr dump | jq -e '.active_clients[0].name'
   ceph mgr module ls
-  ceph mgr module enable restful
   expect_false ceph mgr module enable foodne
   ceph mgr module enable foodne --force
   ceph mgr module disable foodne
@@ -1650,7 +1649,7 @@ function test_mon_osd()
   dump_json=$(ceph osd dump --format=json | \
 	  jq -cM '.osds[] | select(.osd == 0)')
   [[ "${info_json}" == "${dump_json}" ]]
-  
+
   info_plain="$(ceph osd info)"
   dump_plain="$(ceph osd dump | grep '^osd')"
   [[ "${info_plain}" == "${dump_plain}" ]]
@@ -2244,7 +2243,7 @@ function test_mon_pg()
   # tell osd version
   #
   ceph tell osd.0 version
-  expect_false ceph tell osd.9999 version 
+  expect_false ceph tell osd.9999 version
   expect_false ceph tell osd.foo version
 
   # back to pg stuff
@@ -2336,7 +2335,7 @@ function test_mon_osd_pool_set()
   ceph osd pool get $TEST_POOL_GETSET deep_scrub_interval | expect_false grep '.'
 
   ceph osd pool get $TEST_POOL_GETSET recovery_priority | expect_false grep '.'
-  ceph osd pool set $TEST_POOL_GETSET recovery_priority 5 
+  ceph osd pool set $TEST_POOL_GETSET recovery_priority 5
   ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep 'recovery_priority: 5'
   ceph osd pool set $TEST_POOL_GETSET recovery_priority -5
   ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep 'recovery_priority: -5'
@@ -2346,13 +2345,13 @@ function test_mon_osd_pool_set()
   expect_false ceph osd pool set $TEST_POOL_GETSET recovery_priority 11
 
   ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | expect_false grep '.'
-  ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 5 
+  ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 5
   ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | grep 'recovery_op_priority: 5'
   ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 0
   ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | expect_false grep '.'
 
   ceph osd pool get $TEST_POOL_GETSET scrub_priority | expect_false grep '.'
-  ceph osd pool set $TEST_POOL_GETSET scrub_priority 5 
+  ceph osd pool set $TEST_POOL_GETSET scrub_priority 5
   ceph osd pool get $TEST_POOL_GETSET scrub_priority | grep 'scrub_priority: 5'
   ceph osd pool set $TEST_POOL_GETSET scrub_priority 0
   ceph osd pool get $TEST_POOL_GETSET scrub_priority | expect_false grep '.'
@@ -2386,10 +2385,10 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET size 2
   wait_for_clean
   ceph osd pool set $TEST_POOL_GETSET min_size 2
-  
+
   expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 0
   ceph osd pool set $TEST_POOL_GETSET hashpspool 0 --yes-i-really-mean-it
-  
+
   expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 1
   ceph osd pool set $TEST_POOL_GETSET hashpspool 1 --yes-i-really-mean-it
 
@@ -2587,7 +2586,7 @@ function test_mon_osd_misc()
   ceph osd map 2>$TMPFILE; check_response 'pool' $? 22
 
   # expect error about unused argument foo
-  ceph osd ls foo 2>$TMPFILE; check_response 'unused' $? 22 
+  ceph osd ls foo 2>$TMPFILE; check_response 'unused' $? 22
 
   # expect "not in range" for invalid overload percentage
   ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response 'higher than 100' $? 22

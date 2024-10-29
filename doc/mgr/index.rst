@@ -33,8 +33,6 @@ sensible.
     Alerts module <alerts>
     DiskPrediction module <diskprediction>
     Local pool module <localpool>
-    RESTful module <restful>
-    Zabbix module <zabbix>
     Prometheus module <prometheus>
     Influx module <influx>
     Hello module <hello>

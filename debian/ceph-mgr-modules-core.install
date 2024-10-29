@@ -16,7 +16,6 @@ usr/share/ceph/mgr/progress
 usr/share/ceph/mgr/prometheus
 usr/share/ceph/mgr/rbd_support
 usr/share/ceph/mgr/rgw
-usr/share/ceph/mgr/restful
 usr/share/ceph/mgr/selftest
 usr/share/ceph/mgr/snap_schedule
 usr/share/ceph/mgr/stats
@@ -25,4 +24,3 @@ usr/share/ceph/mgr/telegraf
 usr/share/ceph/mgr/telemetry
 usr/share/ceph/mgr/test_orchestrator
 usr/share/ceph/mgr/volumes
-usr/share/ceph/mgr/zabbix
