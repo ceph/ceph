@@ -501,6 +501,7 @@ set(libcommon_files
   global/global_context.cc
   xxHash/xxhash.c
   include/invoke_date.cc
+  include/object.cc
   include/utime.cc
   include/uuid.cc
   common/error_code.cc
