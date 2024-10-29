@@ -4,6 +4,7 @@
 #include <algorithm>
 #include "bluefs_types.h"
 #include "common/Formatter.h"
+#include "include/denc.h"
 #include "include/uuid.h"
 #include "include/stringify.h"
 
@@ -218,6 +219,23 @@ std::ostream& operator<<(std::ostream& out, const bluefs_fnode_delta_t& delta)
 
 // bluefs_transaction_t
 
+DENC_HELPERS
+void bluefs_transaction_t::bound_encode(size_t &s) const {
+  uint32_t crc = op_bl.crc32c(-1);
+  DENC_START(1, 1, s);
+  denc(uuid, s);
+  denc_varint(seq, s);
+  // not using bufferlist encode method, as it merely copies the bufferptr and not
+  // contents, meaning we're left with fragmented target bl
+  __u32 len = op_bl.length();
+  denc(len, s);
+  for (auto& it : op_bl.buffers()) {
+    s += it.length();
+  }
+  denc(crc, s);
+  DENC_FINISH(s);
+}
+
 void bluefs_transaction_t::encode(bufferlist& bl) const
 {
   uint32_t crc = op_bl.crc32c(-1);
@@ -282,3 +300,4 @@ ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
 	     << " crc 0x" << t.op_bl.crc32c(-1)
 	     << std::dec << ")";
 }
+
