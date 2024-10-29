@@ -385,16 +385,16 @@ public:
       return -EINVAL;
     }
 
-  bool confirm = false;
-  cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
-  if (var == "max_mds" && !confirm && mon->mdsmon()->has_any_health_warning()) {
-    ss << "One or more file system health warnings are present. Modifying "
-       << "the file system setting variable \"max_mds\" may not help "
-       << "troubleshoot or recover from these warnings and may further "
-       << "destabilize the system. If you really wish to proceed, run "
-       << "again with --yes-i-really-mean-it";
-    return -EPERM;
-  }
+    bool confirm = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+    if (var == "max_mds" && !confirm && mon->mdsmon()->has_any_health_warning()) {
+      ss << "One or more file system health warnings are present. Modifying "
+	 << "the file system setting variable \"max_mds\" may not help "
+	 << "troubleshoot or recover from these warnings and may further "
+	 << "destabilize the system. If you really wish to proceed, run "
+	 << "again with --yes-i-really-mean-it";
+      return -EPERM;
+    }
 
     return set_val(mon, fsmap, op, cmdmap, ss, fsp->get_fscid(), var, val);
   }
