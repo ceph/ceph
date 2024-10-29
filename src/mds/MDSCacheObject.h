@@ -12,7 +12,6 @@
 #include "include/types.h"
 
 #include "mdstypes.h"
-#include "MDSContext.h"
 #include "include/elist.h"
 
 #define MDS_REF_SET      // define me for improved debug output, sanity checking
@@ -278,10 +277,10 @@ class MDSCacheObject {
     }
     waiting.insert(std::pair<waiter_seq_t, waiter>(seq, waiter{mask, c}));
   }
-  virtual void take_waiting(uint64_t mask, MDSContext::vec& ls) {
+  virtual void take_waiting(uint64_t mask, std::vector<MDSContext*>& ls) {
     take_waiting(waitmask_t(mask), ls);
   }
-  void take_waiting(waitmask_t mask, MDSContext::vec& ls);
+  void take_waiting(waitmask_t mask, std::vector<MDSContext*>& ls);
   void finish_waiting(uint64_t mask, int result = 0) {
     finish_waiting(waitmask_t(mask), result);
   }
