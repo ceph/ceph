@@ -26,9 +26,9 @@ else:
             logger.info("Initiating nvmeof gateway connection...")
             try:
                 if not gw_group:
-                    service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info()
+                    service_name, self.gateway_addr, enable_auth = NvmeofGatewaysConfig.get_service_info()
                 else:
-                    service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info(
+                    service_name, self.gateway_addr, enable_auth = NvmeofGatewaysConfig.get_service_info(
                         gw_group
                     )
             except TypeError as e:
@@ -53,7 +53,10 @@ else:
                     self.gateway_addr = matched_gateway.get('service_url')
                     logger.debug("Gateway address set to: %s", self.gateway_addr)
 
-            root_ca_cert = NvmeofGatewaysConfig.get_root_ca_cert(service_name)
+            root_ca_cert = None
+            if enable_auth:
+                root_ca_cert = NvmeofGatewaysConfig.get_root_ca_cert(service_name)
+
             if root_ca_cert:
                 client_key = NvmeofGatewaysConfig.get_client_key(service_name)
                 client_cert = NvmeofGatewaysConfig.get_client_cert(service_name)

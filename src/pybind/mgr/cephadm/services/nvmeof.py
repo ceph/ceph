@@ -148,7 +148,8 @@ class NvmeofService(CephService):
                         'inbuf': service_url,
                         'name': service_name,
                         'group': spec.group,
-                        'daemon_name': dd.name()
+                        'daemon_name': dd.name(),
+                        'enable_auth': spec.enable_auth
                     })
             return cmd_dicts
 

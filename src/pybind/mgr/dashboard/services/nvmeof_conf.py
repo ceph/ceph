@@ -51,14 +51,15 @@ class NvmeofGatewaysConfig(object):
         return cls._load_config_from_store()
 
     @classmethod
-    def add_gateway(cls, name, service_url, group, daemon_name):
+    def add_gateway(cls, name, service_url, group, daemon_name, enable_auth):
         config = cls.get_gateways_config()
 
         if name in config.get('gateways', {}):
             existing_gateways = config['gateways'][name]
             for gateway in existing_gateways:
-                if 'daemon_name' not in gateway:
+                if {'daemon_name', 'enable_auth' } - gateway.keys():
                     gateway['daemon_name'] = daemon_name
+                    gateway['enable_auth'] = enable_auth
                     break
                 if gateway['service_url'] == service_url:
                     return
@@ -66,7 +67,8 @@ class NvmeofGatewaysConfig(object):
         new_gateway = {
             'service_url': service_url,
             'group': group,
-            'daemon_name': daemon_name
+            'daemon_name': daemon_name,
+            'enable_auth': enable_auth
         }
 
         if name in config.get('gateways', {}):
@@ -152,7 +154,7 @@ def _get_name_url_for_group(gateways, group):
                 config = _get_running_daemon_svc_config(svc_config, running_daemons)
 
                 if config:
-                    return service_name, config['service_url']
+                    return service_name, config['service_url'], config['enable_auth']
         return None
 
     except OrchestratorError:
@@ -190,5 +192,6 @@ def _get_default_service(gateways):
                 component="nvmeof"
             )
         service_name = gateway_keys[0]
-        return service_name, gateways[service_name][0]['service_url']
+        first_gw = gateways[service_name][0]
+        return service_name, first_gw['service_url'], first_gw['enable_auth']
     return None
