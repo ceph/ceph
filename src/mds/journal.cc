@@ -370,6 +370,13 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   }
 }
 
+void LogSegment::purge_inodes_finish(interval_set<inodeno_t>& inos){
+  purging_inodes.subtract(inos);
+  if (NULL != purged_cb &&
+      purging_inodes.empty())
+    purged_cb->complete(0);
+}
+
 // -----------------------
 // EMetaBlob
 
