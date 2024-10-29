@@ -28,7 +28,6 @@
 #include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
-#include "MDSContext.h"
 #include "PurgeQueue.h"
 #include "MetricsHandler.h"
 #include "mon/MonClient.h"
@@ -37,6 +36,7 @@
 // benefit of those including this header and using MDSRank::logger
 #include "common/perf_counters.h"
 
+class MDSContext;
 class MDSMetaRequest;
 class MMDSMap;
 
@@ -242,14 +242,14 @@ class MDSRank {
       finished_queue.push_front(c);
       progress_thread.signal();
     }
-    void queue_waiters(MDSContext::vec& ls) {
-      MDSContext::vec v;
+    void queue_waiters(std::vector<MDSContext*>& ls) {
+      std::vector<MDSContext*> v;
       v.swap(ls);
       std::copy(v.begin(), v.end(), std::back_inserter(finished_queue));
       progress_thread.signal();
     }
-    void queue_waiters_front(MDSContext::vec& ls) {
-      MDSContext::vec v;
+    void queue_waiters_front(std::vector<MDSContext*>& ls) {
+      std::vector<MDSContext*> v;
       v.swap(ls);
       std::copy(v.rbegin(), v.rend(), std::front_inserter(finished_queue));
       progress_thread.signal();
@@ -333,9 +333,7 @@ class MDSRank {
     void wait_for_any_client_connection(MDSContext *c) {
       waiting_for_any_client_connection.push_back(c);
     }
-    void kick_waiters_for_any_client_connection(void) {
-      finish_contexts(g_ceph_context, waiting_for_any_client_connection);
-    }
+    void kick_waiters_for_any_client_connection();
     void wait_for_active(MDSContext *c) {
       waiting_for_active.push_back(c);
     }
@@ -604,7 +602,7 @@ class MDSRank {
     std::unique_ptr<MetricAggregator> metric_aggregator;
 
     std::list<cref_t<Message>> waiting_for_nolaggy;
-    MDSContext::que finished_queue;
+    std::deque<MDSContext*> finished_queue;
     // Dispatch, retry, queues
     int dispatch_depth = 0;
 
@@ -616,15 +614,15 @@ class MDSRank {
 
     ceph_tid_t last_tid = 0;    // for mds-initiated requests (e.g. stray rename)
 
-    MDSContext::vec waiting_for_active, waiting_for_replay, waiting_for_rejoin,
+    std::vector<MDSContext*> waiting_for_active, waiting_for_replay, waiting_for_rejoin,
 				waiting_for_reconnect, waiting_for_resolve;
-    MDSContext::vec waiting_for_any_client_connection;
-    MDSContext::que replay_queue;
+    std::vector<MDSContext*> waiting_for_any_client_connection;
+    std::deque<MDSContext*> replay_queue;
     bool replaying_requests_done = false;
 
-    std::map<mds_rank_t, MDSContext::vec> waiting_for_active_peer;
-    std::map<mds_rank_t, MDSContext::vec> waiting_for_bootstrapping_peer;
-    std::map<epoch_t, MDSContext::vec> waiting_for_mdsmap;
+    std::map<mds_rank_t, std::vector<MDSContext*>> waiting_for_active_peer;
+    std::map<mds_rank_t, std::vector<MDSContext*>> waiting_for_bootstrapping_peer;
+    std::map<epoch_t, std::vector<MDSContext*>> waiting_for_mdsmap;
 
     epoch_t osd_epoch_barrier = 0;
 
