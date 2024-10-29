@@ -299,12 +299,11 @@ struct ScrubPgIF {
 
   virtual ~ScrubPgIF() = default;
 
-  friend std::ostream& operator<<(std::ostream& out, const ScrubPgIF& s)
-  {
-    return s.show(out);
+  friend std::ostream& operator<<(std::ostream& out, const ScrubPgIF& s) {
+    return s.show_concise(out);
   }
 
-  virtual std::ostream& show(std::ostream& out) const = 0;
+  virtual std::ostream& show_concise(std::ostream& out) const = 0;
 
   // --------------- triggering state-machine events:
 
