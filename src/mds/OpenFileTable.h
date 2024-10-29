@@ -21,14 +21,14 @@
 
 #include "mdstypes.h"
 
-#include "MDSContext.h"
-
 #include "common/config_proxy.h" // for class ConfigProxy
 #include "global/global_context.h" // for g_conf()
 
 struct inode_backpointer_t;
+class Context;
 class CDir;
 class CInode;
+class MDSContext;
 class MDSRank;
 class Anchor;
 class OpenedAnchor;
@@ -139,7 +139,7 @@ protected:
 
   std::vector<std::map<std::string, bufferlist> > loaded_journals;
   std::map<inodeno_t, RecoveredAnchor> loaded_anchor_map;
-  MDSContext::vec waiting_for_load;
+  std::vector<MDSContext*> waiting_for_load;
   bool load_done = false;
 
   enum {
@@ -150,7 +150,7 @@ protected:
   };
   unsigned prefetch_state = 0;
   unsigned num_opening_inodes = 0;
-  MDSContext::vec waiting_for_prefetch;
+  std::vector<MDSContext*> waiting_for_prefetch;
 
   std::map<uint64_t, std::vector<inodeno_t> > logseg_destroyed_inos;
   std::set<inodeno_t> destroyed_inos_set;

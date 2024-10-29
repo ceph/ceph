@@ -13,6 +13,7 @@
  */
 
 #include "MDSTable.h"
+#include "MDSContext.h"
 #include "MDSRank.h"
 
 #include "osdc/Objecter.h"
