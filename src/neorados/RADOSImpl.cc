@@ -12,14 +12,13 @@
  *
  */
 
+#include "RADOSImpl.h"
 
 #include <boost/system/system_error.hpp>
 
 #include "common/common_init.h"
 
 #include "global/global_init.h"
-
-#include "RADOSImpl.h"
 
 namespace neorados {
 namespace detail {
