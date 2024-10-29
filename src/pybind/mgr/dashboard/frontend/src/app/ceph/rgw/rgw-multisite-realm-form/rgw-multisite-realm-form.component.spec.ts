@@ -14,6 +14,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 
 import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form.component';
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { CheckboxModule, InputModule, ModalModule } from 'carbon-components-angular';
 
 describe('RgwMultisiteRealmFormComponent', () => {
   let component: RgwMultisiteRealmFormComponent;
@@ -26,9 +27,16 @@ describe('RgwMultisiteRealmFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       HttpClientTestingModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      ModalModule,
+      InputModule,
+      CheckboxModule
     ],
-    providers: [NgbActiveModal],
+    providers: [
+      NgbActiveModal,
+      { provide: 'multisiteInfo', useValue: [[]] },
+      { provide: 'info', useValue: { data: { name: 'null' } } }
+    ],
     declarations: [RgwMultisiteRealmFormComponent]
   });
 
@@ -68,7 +76,6 @@ describe('RgwMultisiteRealmFormComponent', () => {
 
     it('tests create success notification', () => {
       spyOn(rgwRealmService, 'create').and.returnValue(observableOf([]));
-      component.action = 'create';
       component.multisiteRealmForm.markAsDirty();
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
