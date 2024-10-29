@@ -10,7 +10,10 @@ using boost::redis::connection;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
 
 class TestDPP : public DoutPrefixProvider {
-  CephContext* get_cct() const override { return g_ceph_context; }
+  CephContext* get_cct() const override {
+    auto cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
+    return cct;
+  }
   unsigned get_subsys() const override { return dout_subsys; }
   std::ostream& gen_prefix(std::ostream& out) const override { return out; }
 };
