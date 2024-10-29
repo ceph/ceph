@@ -19,7 +19,6 @@
 #include "include/types.h"
 
 #include "CInode.h"
-#include "MDSContext.h"
 #include "Mutation.h"
 
 struct LeaseStat;
@@ -31,6 +30,7 @@ class MClientLease;
 class MClientReply;
 class MDCache;
 class MLock;
+class MDSContext;
 class MDSRank;
 class Session;
 class CDentry;
@@ -83,9 +83,9 @@ public:
   void eval_lock_caches(Capability *cap);
   void put_lock_cache(MDLockCache* lock_cache);
 
-  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, MDSContext::vec *pfinishers=0);
+  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, std::vector<MDSContext*> *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue);
-  void eval_any(SimpleLock *lock, bool *need_issue, MDSContext::vec *pfinishers=0, bool first=false) {
+  void eval_any(SimpleLock *lock, bool *need_issue, std::vector<MDSContext*> *pfinishers=0, bool first=false) {
     if (!lock->is_stable())
       eval_gather(lock, first, need_issue, pfinishers);
     else if (lock->get_parent()->is_auth())
