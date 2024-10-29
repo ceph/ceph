@@ -2395,8 +2395,8 @@ static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket,
   dump_header(s, "X-RGW-Object-Count", static_cast<long long>(stats.num_objects));
   dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(stats.size));
 
-  // only bucket's owner is allowed to get the quota settings of the account
-  if (s->auth.identity->is_owner_of(bucket->get_owner())) {
+  // only bucket's owner is allowed to get the quota settings of the account if bucket quota is enabled.
+  if (s->auth.identity->is_owner_of(bucket->get_owner()) && s->bucket->get_info().quota.enabled) {
     const auto& user_info = s->user->get_info();
     const auto& bucket_quota = s->bucket->get_info().quota; // bucket quota
     dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.quota.user_quota.max_size));
