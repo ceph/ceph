@@ -164,7 +164,7 @@ template <>
 struct formatter<scrub_flags_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(scrub_flags_t& sf, FormatContext& ctx) const
+  auto format(const scrub_flags_t& sf, FormatContext& ctx) const
   {
     std::string txt;
     bool sep{false};
@@ -528,7 +528,7 @@ class PgScrubber : public ScrubPgIF,
   /// to complete (in order to perform an 'after-repair' scrub)
   bool m_after_repair_scrub_required{false};
 
-  ostream& show(ostream& out) const override;
+  ostream& show_concise(ostream& out) const override;
 
  public:
   //  ------------------  the I/F used by the ScrubBackend (ScrubBeListener)
@@ -741,6 +741,12 @@ class PgScrubber : public ScrubPgIF,
   bool m_publish_sessions{false};  //< will the counter be part of 'query'
 				   //output?
 
+  /**
+   * the scrub operation flags.
+   * Set at scrub start. Checked in multiple locations - mostly
+   * at finish.
+   * Note: replicas only use the 'priority' field.
+   */
   scrub_flags_t m_flags;
 
   bool m_active{false};
