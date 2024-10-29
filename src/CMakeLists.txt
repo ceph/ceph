@@ -502,6 +502,7 @@ set(libcommon_files
   xxHash/xxhash.c
   include/invoke_date.cc
   include/object.cc
+  include/types.cc
   include/utime.cc
   include/uuid.cc
   common/error_code.cc
