@@ -5896,6 +5896,12 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_error(retcode);
     }
 
+    if (sync_pipe.dest_bucket_info.zonegroup != env->svc->zone->get_zonegroup().get_id()) {
+      // destination bucket is in a different zonegroup, we need to replicate
+      ldpp_dout(dpp, 20) << __func__ << "(): skipping as the destination bucket is in a different zonegroup zonegroup=" << sync_pipe.dest_bucket_info.zonegroup << dendl;
+      return set_cr_done();
+    }
+
     sync_pipe.info = sync_pair;
 
     // read bucket sync status
