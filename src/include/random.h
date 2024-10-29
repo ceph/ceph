@@ -16,9 +16,9 @@
 #define CEPH_RANDOM_H 1
 
 #include <mutex>
+#include <optional>
 #include <random>
 #include <type_traits>
-#include <boost/optional.hpp>
 
 // Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85494
 #ifdef __MINGW32__
@@ -123,7 +123,7 @@ void randomize_rng()
 template <typename EngineT>
 EngineT& engine()
 {
-  thread_local boost::optional<EngineT> rng_engine;
+  thread_local std::optional<EngineT> rng_engine;
 
   if (!rng_engine) {
     rng_engine.emplace(EngineT());
