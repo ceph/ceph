@@ -6,7 +6,6 @@ overrides:
       - objects misplaced
       - Synthetic exception in serve
       - influxdb python module not found
-      - \(MGR_ZABBIX_
       - foo bar
       - Failed to open Telegraf
       - evicting unresponsive client

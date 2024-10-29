@@ -21,7 +21,6 @@ overrides:
         ceph_repository: dev
         ceph_mgr_modules:
           - status
-          - restful
         cephfs_pools:
           - name: "cephfs_data"
             pg_num: "64"

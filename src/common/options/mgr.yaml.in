@@ -152,7 +152,7 @@ options:
     first started after installation, to populate the list of enabled manager modules.  Subsequent
     updates are done using the 'mgr module [enable|disable]' commands.  List may be
     comma or space separated.
-  default: restful iostat nfs
+  default: iostat nfs
   services:
   - mon
   - common
