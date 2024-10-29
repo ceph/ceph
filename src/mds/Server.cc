@@ -6044,23 +6044,32 @@ int64_t Server::make_quota_max_byte_parseable(string val)
   int64_t dec_len;
   int64_t q;
   string cast_err;
+  string unit;
   
   size_t dec_index = val.find_first_of(".");
-  size_t unit_index = val.find_first_not_of("0123456789-+.");
-  unit = str.substr(unit_index, val.length() - unit_index);
+  size_t unit_index = val.find_first_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+
   if (dec_index != std::string::npos) {
-    if ((unit_index == std::string::npos) || (unit == 'B'))  {
+    if (unit_index == std::string::npos) {
     dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
     << "Invalid Byte value" << dendl;
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
+    }
+    unit = val.substr(unit_index, val.length() - unit_index);
+    if (unit == "B") {
+      dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
+    << "Invalid Byte value" << dendl;
+    return -EINVAL;
     }
   }
+
   dec_len = unit_index - dec_index - 1;
-  if ((dec_len == 0) || (dec_index == val.length() - 1)) {
+  if ((dec_len == 0) || (dec_index == val.length() - 1) ||
+       (dec_index != val.find_last_of("."))) {
     dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
     << "Invalid Float value" << dendl;
-    return -CEPHFS_EINVAL;
-  }  
+    return -EINVAL;
+  }    
   
   if (dec_index != std::string::npos) {
     before_decimal = val.substr(0, dec_index);
@@ -6075,7 +6084,7 @@ int64_t Server::make_quota_max_byte_parseable(string val)
   if(!cast_err.empty()) {
     dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
     << cast_err << dendl;
-    q = -CEPHFS_EINVAL;
+    q = -EINVAL;
   }
   return q;
 }
@@ -6107,8 +6116,9 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
       }
     } else if (name == "quota.max_bytes") {
       int64_t res = make_quota_max_byte_parseable(value);
-      if(res == -CEPHFS_EINVAL) {
-        return -CEPHFS_EINVAL;
+      if(res == -EINVAL) {
+        std::ostream *ss << "Invalid input" << value;
+        return -EINVAL;
       }
       quota->max_bytes = res;
     } else if (name == "quota.max_files") {
