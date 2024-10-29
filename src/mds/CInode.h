@@ -33,7 +33,6 @@
 #include "include/compact_set.h"
 
 #include "MDSCacheObject.h"
-#include "MDSContext.h"
 #include "flock.h"
 #include "inode_backtrace.h" // for inode_backtrace_t
 
@@ -52,6 +51,7 @@ class CDentry;
 class CDir;
 class CInode;
 class MDCache;
+class MDSContext;
 class LogSegment;
 struct SnapRealm;
 class Session;
@@ -683,7 +683,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void set_ambiguous_auth() {
     state_set(STATE_AMBIGUOUSAUTH);
   }
-  void clear_ambiguous_auth(MDSContext::vec& finished);
+  void clear_ambiguous_auth(std::vector<MDSContext*>& finished);
   void clear_ambiguous_auth();
 
   const inode_const_ptr& get_inode() const {
@@ -777,12 +777,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void decode_store(ceph::buffer::list::const_iterator& bl);
 
   void add_dir_waiter(frag_t fg, MDSContext *c);
-  void take_dir_waiting(frag_t fg, MDSContext::vec& ls);
+  void take_dir_waiting(frag_t fg, std::vector<MDSContext*>& ls);
   bool is_waiting_for_dir(frag_t fg) {
     return waiting_on_dir.count(fg);
   }
   void add_waiter(uint64_t tag, MDSContext *c) override;
-  void take_waiting(uint64_t tag, MDSContext::vec& ls) override;
+  void take_waiting(uint64_t tag, std::vector<MDSContext*>& ls) override;
 
   // -- encode/decode helpers --
   void _encode_base(ceph::buffer::list& bl, uint64_t features);
@@ -792,7 +792,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void _encode_locks_state_for_replica(ceph::buffer::list& bl, bool need_recover);
   void _encode_locks_state_for_rejoin(ceph::buffer::list& bl, int rep);
   void _decode_locks_state_for_replica(ceph::buffer::list::const_iterator& p, bool is_new);
-  void _decode_locks_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters,
+  void _decode_locks_rejoin(ceph::buffer::list::const_iterator& p, std::vector<MDSContext*>& waiters,
 			    std::list<SimpleLock*>& eval_locks, bool survivor);
 
   // -- import/export --
@@ -957,7 +957,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   /* Freeze the inode. auth_pin_allowance lets the caller account for any
    * auth_pins it is itself holding/responsible for. */
   bool freeze_inode(int auth_pin_allowance=0);
-  void unfreeze_inode(MDSContext::vec& finished);
+  void unfreeze_inode(std::vector<MDSContext*>& finished);
   void unfreeze_inode();
 
   void freeze_auth_pin();
@@ -1207,7 +1207,7 @@ protected:
   ceph_lock_state_t *flock_locks = nullptr;
 
   // -- waiting --
-  mempool::mds_co::compact_map<frag_t, MDSContext::vec > waiting_on_dir;
+  mempool::mds_co::compact_map<frag_t, std::vector<MDSContext*>> waiting_on_dir;
 
 
   // -- freezing inode --

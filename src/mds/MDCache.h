@@ -1049,9 +1049,9 @@ private:
   void encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
 		       uint64_t features);
   
-  void decode_replica_dir(CDir *&dir, bufferlist::const_iterator& p, CInode *diri, mds_rank_t from, MDSContext::vec& finished);
-  void decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p, CDir *dir, MDSContext::vec& finished);
-  void decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, CDentry *dn, MDSContext::vec& finished);
+  void decode_replica_dir(CDir *&dir, bufferlist::const_iterator& p, CInode *diri, mds_rank_t from, std::vector<MDSContext*>& finished);
+  void decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p, CDir *dir, std::vector<MDSContext*>& finished);
+  void decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, CDentry *dn, std::vector<MDSContext*>& finished);
 
   void encode_replica_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl);
   void decode_replica_stray(CDentry *&straydn, CInode **in, const bufferlist &bl, mds_rank_t from);
@@ -1159,7 +1159,7 @@ private:
   ceph_tid_t discover_last_tid = 0;
 
   // waiters
-  std::map<int, std::map<inodeno_t, MDSContext::vec > > waiting_for_base_ino;
+  std::map<int, std::map<inodeno_t, std::vector<MDSContext*> > > waiting_for_base_ino;
 
   std::map<inodeno_t,std::map<client_t, reconnected_cap_info_t> > reconnected_caps;   // inode -> client -> snap_follows,realmino
   std::map<inodeno_t,std::map<client_t, snapid_t> > reconnected_snaprealms;  // realmino -> client -> realmseq
@@ -1206,7 +1206,7 @@ private:
     uleader() {}
     std::set<mds_rank_t> peers;
     LogSegment *ls = nullptr;
-    MDSContext::vec waiters;
+    std::vector<MDSContext*> waiters;
     bool safe = false;
     bool committing = false;
     bool recovering = false;
@@ -1217,7 +1217,7 @@ private:
     mds_rank_t leader;
     LogSegment *ls = nullptr;
     MDPeerUpdate *su = nullptr;
-    MDSContext::vec waiters;
+    std::vector<MDSContext*> waiters;
   };
 
   struct open_ino_info_t {
@@ -1234,14 +1234,14 @@ private:
     version_t tid = 0;
     int64_t pool = -1;
     int last_err = 0;
-    MDSContext::vec waiters;
+    std::vector<MDSContext*> waiters;
   };
 
   ceph_tid_t open_ino_last_tid = 0;
   std::map<inodeno_t,open_ino_info_t> opening_inodes;
 
   bool open_ino_batch = false;
-  std::map<CDir*, std::pair<std::vector<std::string>, MDSContext::vec> > open_ino_batched_fetch;
+  std::map<CDir*, std::pair<std::vector<std::string>, std::vector<MDSContext*>> > open_ino_batched_fetch;
 
   friend struct C_MDC_OpenInoTraverseDir;
   friend struct C_MDC_OpenInoParentOpened;
@@ -1400,7 +1400,7 @@ private:
 
   std::map<inodeno_t,std::map<client_t,std::map<mds_rank_t,cap_reconnect_t> > > cap_imports;  // ino -> client -> frommds -> capex
   std::set<inodeno_t> cap_imports_missing;
-  std::map<inodeno_t, MDSContext::vec > cap_reconnect_waiters;
+  std::map<inodeno_t, std::vector<MDSContext*> > cap_reconnect_waiters;
   int cap_imports_num_opening = 0;
 
   std::set<CInode*> rejoin_undef_inodes;
@@ -1410,7 +1410,7 @@ private:
 
   std::vector<CInode*> rejoin_recover_q, rejoin_check_q;
   std::list<SimpleLock*> rejoin_eval_locks;
-  MDSContext::vec rejoin_waiters;
+  std::vector<MDSContext*> rejoin_waiters;
 
   std::unique_ptr<MDSContext> rejoin_done;
   std::unique_ptr<MDSContext> resolve_done;
@@ -1439,7 +1439,7 @@ private:
     int bits = 0;
     bool committed = false;
     LogSegment *ls = nullptr;
-    MDSContext::vec waiters;
+    std::vector<MDSContext*> waiters;
     frag_vec_t old_frags;
     bufferlist rollback;
   };
@@ -1510,12 +1510,12 @@ private:
   void trim_non_auth();      // trim out trimmable non-auth items
 
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
-			    std::vector<CDir*>* frags, MDSContext::vec& waiters, bool replay);
+			    std::vector<CDir*>* frags, std::vector<MDSContext*>& waiters, bool replay);
   void adjust_dir_fragments(CInode *diri,
 			    const std::vector<CDir*>& srcfrags,
 			    frag_t basefrag, int bits,
 			    std::vector<CDir*>* resultfrags,
-			    MDSContext::vec& waiters,
+			    std::vector<MDSContext*>& waiters,
 			    bool replay);
   CDir *force_dir_fragment(CInode *diri, frag_t fg, bool replay=true);
   void get_force_dirfrag_bound_set(const std::vector<dirfrag_t>& dfs, std::set<CDir*>& bounds);
@@ -1572,7 +1572,7 @@ private:
   std::pair<dirfrag_t, std::string> shutdown_export_next;
 
   bool opening_root = false, open = false;
-  MDSContext::vec waiting_for_open;
+  std::vector<MDSContext*> waiting_for_open;
 
   // -- snaprealms --
   SnapRealm *global_snaprealm = nullptr;

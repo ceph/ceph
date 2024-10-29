@@ -27,8 +27,6 @@
 #include "include/elist.h"
 #include "include/filepath.h"
 
-#include "MDSContext.h"
-
 #include "Capability.h"
 
 #include "common/StackStringStream.h"
@@ -42,6 +40,7 @@ class CInode;
 class CDir;
 class CDentry;
 class MDSCacheObject;
+class MDSContext;
 class Session;
 class ScatterLock;
 class SimpleLock;
@@ -345,7 +344,7 @@ struct MDRequestImpl : public MutationImpl {
     Context *peer_commit = nullptr;
     ceph::buffer::list rollback_bl;
 
-    MDSContext::vec waiting_for_finish;
+    std::vector<MDSContext*> waiting_for_finish;
 
     std::map<inodeno_t, metareqid_t> quiesce_ops;
 
