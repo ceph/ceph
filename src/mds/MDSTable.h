@@ -19,13 +19,13 @@
 #include "include/types.h" // for version_t
 #include "include/cephfs/types.h" // for mds_rank_t
 
-#include "MDSContext.h"
-
 #include <map>
 #include <string>
 #include <string_view>
 #include <vector>
 
+class Context;
+class MDSContext;
 class MDSRank;
 
 class MDSTable {
@@ -91,6 +91,6 @@ protected:
 
   version_t version = 0, committing_version = 0, committed_version = 0, projected_version = 0;
 
-  std::map<version_t, MDSContext::vec > waitfor_save;
+  std::map<version_t, std::vector<MDSContext*> > waitfor_save;
 };
 #endif

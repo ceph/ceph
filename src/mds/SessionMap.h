@@ -32,11 +32,14 @@
 #include "mds/MDSAuthCaps.h"
 #include "common/DecayCounter.h"
 
-#include "MDSContext.h"
 #include "Mutation.h" // for struct MDRequestImpl
 #include "msg/Message.h"
 
 struct MDRequestImpl;
+class MDSContext;
+class C_MDSInternalNoop;
+using MDSGather = C_GatherBase<MDSContext, C_MDSInternalNoop>;
+using MDSGatherBuilder = C_GatherBuilderBase<MDSContext, MDSGather>;
 
 enum {
   l_mdssm_first = 5500,
@@ -278,7 +281,7 @@ public:
     waitfor_flush[get_push_seq()].push_back(c);
     return get_push_seq();
   }
-  void finish_flush(version_t seq, MDSContext::vec& ls) {
+  void finish_flush(version_t seq, std::vector<MDSContext*>& ls) {
     while (!waitfor_flush.empty()) {
       auto it = waitfor_flush.begin();
       if (it->first > seq)
@@ -486,7 +489,7 @@ private:
   // -- caps --
   uint32_t cap_gen = 0;
   version_t cap_push_seq = 0;        // cap push seq #
-  std::map<version_t, MDSContext::vec > waitfor_flush; // flush session messages
+  std::map<version_t, std::vector<MDSContext*> > waitfor_flush; // flush session messages
 
   // Has completed_requests been modified since the last time we
   // wrote this session out?
@@ -786,11 +789,11 @@ public:
 
   MDSRank *mds;
   std::map<int,xlist<Session*>*> by_state;
-  std::map<version_t, MDSContext::vec> commit_waiters;
+  std::map<version_t, std::vector<MDSContext*>> commit_waiters;
 
   // -- loading, saving --
   inodeno_t ino;
-  MDSContext::vec waiting_for_load;
+  std::vector<MDSContext*> waiting_for_load;
 
 protected:
   void _mark_dirty(Session *session, bool may_save);

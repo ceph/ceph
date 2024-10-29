@@ -52,6 +52,10 @@ class LogSegment;
 class MDCache;
 class MDLog;
 class MDSContext;
+class C_MDSInternalNoop;
+using MDSGather = C_GatherBase<MDSContext, C_MDSInternalNoop>;
+using MDSGatherBuilder = C_GatherBuilderBase<MDSContext, MDSGather>;
+class MDSLogContextBase;
 class MDSRank;
 class Session;
 struct SnapInfo;
@@ -133,11 +137,7 @@ public:
   };
 
   explicit Server(MDSRank *m, MetricsHandler *metrics_handler);
-  ~Server() {
-    g_ceph_context->get_perfcounters_collection()->remove(logger);
-    delete logger;
-    delete reconnect_done;
-  }
+  ~Server();
 
   void create_logger();
 

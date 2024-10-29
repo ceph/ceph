@@ -24,7 +24,6 @@
 #include <boost/intrusive_ptr.hpp>
 
 #include "MDSCacheObject.h"
-#include "MDSContext.h"
 
 // -- lock types --
 // see CEPH_LOCK_*
@@ -40,6 +39,7 @@ extern "C" {
 struct MDLockCache;
 struct MDLockCacheItem;
 struct MutationImpl;
+class MDSContext;
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
 struct LockType {
@@ -241,7 +241,7 @@ public:
   void finish_waiters(uint64_t mask, int r=0) {
     parent->finish_waiting(getmask(mask), r);
   }
-  void take_waiting(uint64_t mask, MDSContext::vec& ls) {
+  void take_waiting(uint64_t mask, std::vector<MDSContext*>& ls) {
     parent->take_waiting(getmask(mask), ls);
   }
   void add_waiter(uint64_t mask, MDSContext *c) {
@@ -265,7 +265,7 @@ public:
     //assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
     return s;
   }
-  void set_state_rejoin(int s, MDSContext::vec& waiters, bool survivor) {
+  void set_state_rejoin(int s, std::vector<MDSContext*>& waiters, bool survivor) {
     ceph_assert(!get_parent()->is_auth());
 
     // If lock in the replica object was not in SYNC state when auth mds of the object failed.
@@ -502,7 +502,7 @@ public:
     if (is_new)
       state = s;
   }
-  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
+  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, std::vector<MDSContext*>& waiters, bool survivor) {
     __s16 s;
     using ceph::decode;
     decode(s, p);

@@ -18,7 +18,6 @@
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
-#include "MDSContext.h"
 #include "mdstypes.h"
 #include "CInode.h"
 #include "CDentry.h"
@@ -35,6 +34,10 @@
 class CDir;
 class CInode;
 class CDentry;
+class MDSContext;
+class C_MDSInternalNoop;
+using MDSGather = C_GatherBase<MDSContext, C_MDSInternalNoop>;
+using MDSGatherBuilder = C_GatherBuilderBase<MDSContext, MDSGather>;
 class MDSRank;
 struct MDPeerUpdate;
 
@@ -56,12 +59,7 @@ class LogSegment {
   {}
 
   void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
-  void purge_inodes_finish(interval_set<inodeno_t>& inos){
-    purging_inodes.subtract(inos);
-    if (NULL != purged_cb &&
-	purging_inodes.empty())
-      purged_cb->complete(0);
-  }
+  void purge_inodes_finish(interval_set<inodeno_t>& inos);
   void set_purged_cb(MDSContext* c){
     ceph_assert(purged_cb == NULL);
     purged_cb = c;
@@ -107,7 +105,7 @@ class LogSegment {
   version_t sessionmapv = 0;
   std::map<int,version_t> tablev;
 
-  MDSContext::vec expiry_waiters;
+  std::vector<MDSContext*> expiry_waiters;
 };
 
 static inline std::ostream& operator<<(std::ostream& out, const LogSegment& ls) {

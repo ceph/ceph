@@ -295,6 +295,12 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   supported_metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
 }
 
+Server::~Server() {
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete logger;
+  delete reconnect_done;
+}
+
 void Server::dispatch(const cref_t<Message> &m)
 {
   switch (m->get_type()) {
