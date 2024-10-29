@@ -263,7 +263,7 @@ bool LFUDAPolicy::invalidate_dirty_object(const DoutPrefixProvider* dpp, const s
   if (p->second.second == State::INIT) {
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Setting State::INVALID for key=" << key << dendl;
     p->second.second = State::INVALID;
-    int ret = cacheDriver->set_attr(dpp, DIRTY_BLOCK_PREFIX + key, RGW_CACHE_ATTR_INVALID, "1", y);
+    int ret = cacheDriver->set_attr(dpp, key, RGW_CACHE_ATTR_INVALID, "1", y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Failed to set xattr, ret=" << ret << dendl;
       return false;
@@ -438,11 +438,6 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
   bool updateLocalWeight = true;
   uint64_t refcount = 0;
 
-  std::string oid_in_cache = key;
-  if (dirty == true) {
-    oid_in_cache = DIRTY_BLOCK_PREFIX + key;
-  }
-
   if (!restore_val.empty()) {
     updateLocalWeight = false;
     localWeight = std::stoull(restore_val);
@@ -478,7 +473,7 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
 
   if (updateLocalWeight) {
     int ret = -1;
-    if ((ret = cacheDriver->set_attr(dpp, oid_in_cache, RGW_CACHE_ATTR_LOCAL_WEIGHT, std::to_string(localWeight), y)) < 0) 
+    if ((ret = cacheDriver->set_attr(dpp, key, RGW_CACHE_ATTR_LOCAL_WEIGHT, std::to_string(localWeight), y)) < 0) 
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): CacheDriver set_attr method failed, ret=" << ret << dendl;
   }
 
@@ -555,12 +550,11 @@ int LFUDAPolicy::delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry
     }
     off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
     off_t cur_len = cur_size - fst;
-    std::string prefix = e->key + CACHE_DELIM + std::to_string(fst) + CACHE_DELIM + std::to_string(cur_len);
-    std::string oid_in_cache = DIRTY_BLOCK_PREFIX + prefix;
+    std::string oid_in_cache = rgw::sal::get_key_in_cache(e->key, std::to_string(fst), std::to_string(cur_len));
 
     int ret = -1;
     std::unique_lock<std::mutex> ll(lfuda_lock);
-    auto it = entries_map.find(prefix);
+    auto it = entries_map.find(oid_in_cache);
     if (it != entries_map.end()) {
       if (it->second->refcount > 0) {
         return -EBUSY;//better error code?
@@ -568,7 +562,7 @@ int LFUDAPolicy::delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry
     }
     ll.unlock();
     if ((ret = cacheDriver->delete_data(dpp, oid_in_cache, y)) == 0) {
-      if (!(ret = erase(dpp, prefix, y))) {
+      if (!(ret = erase(dpp, oid_in_cache, y))) {
 	ldpp_dout(dpp, 0) << "Failed to delete policy entry for: " << oid_in_cache << ", ret=" << ret << dendl;
         return -EINVAL;
       }
@@ -643,7 +637,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
           continue;
         }
         ll.unlock();
-        if ((ret = cacheDriver->delete_data(dpp, DIRTY_BLOCK_PREFIX + e->key, y)) == 0) {
+        if ((ret = cacheDriver->delete_data(dpp, e->key, y)) == 0) {
           if (!(ret = erase(dpp, e->key, y))) {
             ldpp_dout(dpp, 0) << "Failed to delete head policy entry for: " << e->key << ", ret=" << ret << dendl; // TODO: what must occur during failure?
           }
@@ -701,11 +695,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 
 	ACLOwner owner{c_user->get_id(), c_user->get_display_name()};
 
-	std::string prefix = url_encode(e->bucket_id) + CACHE_DELIM + url_encode(e->version) + CACHE_DELIM + url_encode(c_obj->get_name());
-	std::string head_oid_in_cache = DIRTY_BLOCK_PREFIX + prefix;
-	std::string new_head_oid_in_cache = prefix;
-	ldpp_dout(dpp, 10) << __func__ << "(): head_oid_in_cache=" << head_oid_in_cache << dendl;
-	ldpp_dout(dpp, 10) << __func__ << "(): new_head_oid_in_cache=" << new_head_oid_in_cache << dendl;
+	ldpp_dout(dpp, 10) << __func__ << "(): e->key=" << e->key << dendl;
 	int op_ret;
 	if (e->delete_marker) {
 	  bool null_delete_marker = (c_obj->get_instance() == "null");
@@ -757,7 +747,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 
 	  rgw::sal::DataProcessor* filter = processor.get();
 	  bufferlist bl;
-	  op_ret = cacheDriver->get_attrs(dpp, head_oid_in_cache, obj_attrs, null_yield); //get obj attrs from head
+	  op_ret = cacheDriver->get_attrs(dpp, e->key, obj_attrs, null_yield); //get obj attrs from head
 	  if (op_ret < 0) {
 	    ldpp_dout(dpp, 20) << __func__ << "cacheDriver->get_attrs returned ret=" << op_ret << dendl;
 	    erase_dirty_object(dpp, e->key, null_yield);
@@ -779,7 +769,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    }
 	    off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
 	    off_t cur_len = cur_size - fst;
-	    std::string oid_in_cache = DIRTY_BLOCK_PREFIX + prefix + CACHE_DELIM + std::to_string(fst) + CACHE_DELIM + std::to_string(cur_len);
+	    std::string oid_in_cache = rgw::sal::get_key_in_cache(e->key, std::to_string(fst), std::to_string(cur_len));
 	    ldpp_dout(dpp, 10) << __func__ << "(): oid_in_cache=" << oid_in_cache << dendl;
 	    rgw::sal::Attrs attrs;
 	    cacheDriver->get(dpp, oid_in_cache, 0, cur_len, data, attrs, null_yield);
@@ -832,32 +822,36 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
 	    off_t cur_len = cur_size - fst;
 
-	    std::string oid_in_cache = DIRTY_BLOCK_PREFIX + prefix + CACHE_DELIM + std::to_string(fst) + CACHE_DELIM + std::to_string(cur_len);
+	    std::string oid_in_cache = rgw::sal::get_key_in_cache(e->key, std::to_string(fst), std::to_string(cur_len));
 	    ldpp_dout(dpp, 20) << __func__ << "(): oid_in_cache =" << oid_in_cache << dendl;
-	    std::string new_oid_in_cache = prefix + CACHE_DELIM + std::to_string(fst) + CACHE_DELIM + std::to_string(cur_len);
-	    //Rename block to remove "D" prefix
-	    cacheDriver->rename(dpp, oid_in_cache, new_oid_in_cache, null_yield);
 	    //Update in-memory data structure for each block
-	    this->update(dpp, new_oid_in_cache, 0, 0, e->version, false, 0, y);
+	    this->update(dpp, oid_in_cache, 0, 0, e->version, false, 0, y);
 
 	    rgw::d4n::CacheBlock block;
 	    block.cacheObj.bucketName = c_obj->get_bucket()->get_bucket_id();
 	    block.cacheObj.objName = c_obj->get_key().get_oid();
 	    block.size = cur_len;
 	    block.blockID = fst;
-      std::string dirty = "false";
-	    op_ret = blockDir->update_field(dpp, &block, "dirty", dirty, null_yield);
-	    if (op_ret < 0) {
-	ldpp_dout(dpp, 0) << __func__ << "updating dirty flag in block directory failed, ret=" << op_ret << dendl;
-	    }
+            if ((op_ret = cacheDriver->set_attr(dpp, oid_in_cache, RGW_CACHE_ATTR_DIRTY, "0", y)) == 0) {
+              std::string dirty = "false";
+		op_ret = blockDir->update_field(dpp, &block, "dirty", dirty, null_yield);
+		if (op_ret < 0) {
+		    ldpp_dout(dpp, 0) << __func__ << "updating dirty flag in block directory failed, ret=" << op_ret << dendl;
+		}
+            } else {
+		ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty xattr in cache, ret=" << op_ret << dendl;
+            }
+
 	    fst += cur_len;
 	  } while(fst < lst);
 	} //end-else if delete_marker
 
-	cacheDriver->rename(dpp, head_oid_in_cache, new_head_oid_in_cache, null_yield);
-
 	//invoke update() with dirty flag set to false, to update in-memory metadata for head
-	this->update(dpp, new_head_oid_in_cache, 0, 0, e->version, false, 0, y);
+	this->update(dpp, e->key, 0, 0, e->version, false, 0, y);
+         
+        if ((ret = cacheDriver->set_attr(dpp, e->key, RGW_CACHE_ATTR_DIRTY, "0", y)) < 0) {
+	  ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty attr in cache, ret=" << op_ret << dendl;
+        }
 
 	if (null_instance) {
 	  //restore instance for directory data processing in later steps
@@ -865,6 +859,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	}
 	rgw::d4n::CacheBlock block;
 	block.cacheObj.bucketName = c_obj->get_bucket()->get_bucket_id();
+        std::cout << "bucket name: " << block.cacheObj.bucketName  << std::endl;
 	block.cacheObj.objName = c_obj->get_name();
 	block.size = 0;
 	block.blockID = 0;
