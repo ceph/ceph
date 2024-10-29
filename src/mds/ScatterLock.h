@@ -19,6 +19,7 @@
 #include "SimpleLock.h"
 
 #include "MDSContext.h"
+#include "include/xlist.h"
 
 class ScatterLock : public SimpleLock {
 public:
