@@ -260,6 +260,13 @@ e.g.::
 
 .. _cephfs_mirroring_mirroring_status:
 
+Snapshot Mirroring
+------------------
+
+To initiate snapshot mirroring, create a snapshot of the configured directory in the primary cluster::
+
+  $ mkdir -p /d0/d1/d2/.snap/snap1
+
 Mirroring Status
 ----------------
 
