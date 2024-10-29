@@ -729,6 +729,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 
   if (sub.size() == 0) {
     avail = gw_availability_t::GW_CREATED;
+    dout(20) << "No-subsystems condition detected for GW " << gw_id <<dendl;
   } else {
     bool listener_found = false;
     for (auto &subs: sub) {
@@ -738,6 +739,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
       }
     }
     if (!listener_found) {
+     dout(10) << "No-listeners condition detected for GW " << gw_id  << dendl;
      avail = gw_availability_t::GW_CREATED;
     }
   }// for HA no-subsystems and no-listeners are same usecases
