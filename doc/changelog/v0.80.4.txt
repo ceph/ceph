@@ -1,0 +1,36 @@
+commit 7c241cfaa6c8c068bc9da8578ca00b9f4fc7567f (tag: refs/tags/v0.80.4)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Tue Jul 15 12:13:55 2014 -0700
+
+    0.80.4
+
+commit 7557a8139425d1705b481d7f010683169fd5e49b (refs/remotes/gh/firefly)
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Jul 14 13:29:37 2014 -0700
+
+    XfsFileStoreBackend: default to disabling extsize on xfs
+    
+    This appears to be responsible for the deep scrub mismatches on some rbd
+    workloads.
+    
+    Fixes: 8830
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 01cd3cdc726a3e838bce05b355a021778b4e5db1)
+
+commit ee7016a046c09be674808efb093b6ff80d0df18c
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jul 14 15:00:30 2014 -0700
+
+    Revert "Revert "rgw: if extra data pool name is empty, use data pool name instead""
+    
+    This reverts commit 0b6bd2545925b5e8a80d41de1fda13ffe9d30e2b.
+    
+    We confused commit 5fd8b0d1639c67e355f0fc0d7e6d7036618d87a1 with commit
+    b1a4a7cb91e164d1f8af8ce9319e3b3c1949858d in our tests.  We tested without
+    the latter, saw a failure, applied it and then reverted the former, and it
+    passed, but didn't actually resolve the problem.
+    
+    This puts them both back in place and all should be well.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
