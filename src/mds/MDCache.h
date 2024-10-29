@@ -35,7 +35,8 @@
 #include "StrayManager.h"
 #include "OpenFileTable.h"
 #include "MDSContext.h"
-#include "Mutation.h"
+
+#include <boost/intrusive_ptr.hpp>
 
 class EMetaBlob;
 class MCacheExpire;
@@ -64,6 +65,11 @@ class Migrator;
 class Session;
 
 class ESubtreeMap;
+
+struct MutationImpl;
+struct MDRequestImpl;
+typedef boost::intrusive_ptr<MutationImpl> MutationRef;
+typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
 enum {
   l_mdc_first = 3000,
