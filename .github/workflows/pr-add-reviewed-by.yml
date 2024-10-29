@@ -1,0 +1,16 @@
+name: Pull Request Review
+on: pull_request_review
+jobs:
+  review:
+    name: Add Reviewed-by Trailer
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Add Reviewed-by Trailer
+        uses: mheap/reviewed-by-trailer-action@8f0f8fd3c37d59a03265665db99347d37d0e9685
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          states: approved
