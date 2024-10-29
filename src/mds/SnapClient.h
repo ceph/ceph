@@ -18,6 +18,7 @@
 #include <map>
 #include <set>
 #include <string_view>
+#include <vector>
 
 #include "MDSTableClient.h"
 #include "snap.h"
@@ -107,7 +108,7 @@ private:
 
   std::set<version_t> committing_tids;
 
-  std::map<version_t, MDSContext::vec > waiting_for_version;
+  std::map<version_t, std::vector<MDSContext*> > waiting_for_version;
 
   uint64_t sync_reqid = 0;
   bool synced = false;
