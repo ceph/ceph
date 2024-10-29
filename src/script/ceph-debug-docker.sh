@@ -117,13 +117,15 @@ FROM ${env}
 
 WORKDIR /root
 RUN apt-get update --yes --quiet && \
-    apt-get install --yes --quiet screen gdb software-properties-common apt-transport-https curl
+    apt-get install --yes --quiet screen gdb software-properties-common apt-transport-https curl debuginfod ubuntu-dbgsym-keyring
 COPY cephdev.asc cephdev.asc
 RUN apt-key add cephdev.asc && \
     curl -L $repo_url | tee /etc/apt/sources.list.d/ceph_dev.list && \
     cat /etc/apt/sources.list.d/ceph_dev.list|sed -e 's/^deb/deb-src/' >>/etc/apt/sources.list.d/ceph_dev.list && \
     apt-get update --yes && \
-    DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt-get --assume-yes -q --no-install-recommends install -o Dpkg::Options::=--force-confnew --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-common-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg python3-cephfs python3-rados
+    DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt-get --assume-yes -q --no-install-recommends install -o Dpkg::Options::=--force-confnew --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-common-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg python3-cephfs python3-rados ; \
+    printf 'set debuginfod enabled on\n' | tee -a ~/.gdbinit
+ENV DEBUGINFOD_URLS="https://debuginfod.ubuntu.com"
 EOF
         time run $SUDO docker build $CACHE --tag "$tag" .
     else
@@ -180,7 +182,7 @@ EOF
 
     printf "built image %s\n" "$tag"
 
-    run $SUDO docker run $PRIVILEGED -ti -v /ceph:/ceph:ro -v /cephfs:/cephfs:ro -v /teuthology:/teuthology:ro "$tag"
+    run $SUDO docker run $PRIVILEGED -ti -v /teuthology:/teuthology:ro "$tag"
     return 0
 }
 
