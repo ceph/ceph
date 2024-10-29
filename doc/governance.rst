@@ -60,20 +60,24 @@ Responsibilities
 ----------------
 
  * Elect executive council
- * Amend governance model (by majority vote)
+ * Amend governance model by supermajority vote
  * Meet regularly to discuss and decide on tactical and strategic projects
    and improvements
+ * Hold an annual election
 
 Membership
 ----------
 
  * Developers, users, community members
- * Voting members can be nominated and added/removed by existing
-   members (2/3 majority)
+ * Members can be nominated and added/removed by existing members via a
+   supermajority vote
  * Anyone may attend steering committee meetings as a non-voting participant
  * Existing Ceph Leadership Team members are grandfathered in
  * Membership reflected by an email list and on the Ceph website and
    docs
+
+.. note:: A "supermajority" is a 2/3 majority of votes on a particular item
+          in an election. Abstaining does not bias a vote.
 
 Current Members
 ^^^^^^^^^^^^^^^
