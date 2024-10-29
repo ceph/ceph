@@ -4030,6 +4030,18 @@ int Mirror<I>::group_info_list(librados::IoCtx& io_ctx,
       info.mirror_image_mode = mode;
       info.state = static_cast<rbd_mirror_group_state_t>(group.state);
 
+      cls::rbd::MirrorSnapshotState promotion_state;
+      r = get_last_mirror_snapshot_state(io_ctx, group_id, &promotion_state);
+      if (r == -ENOENT) {
+	promotion_state = cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
+      } else if (r < 0) {
+	lderr(cct) << "failed to get last mirror snapshot state: "
+		    << cpp_strerror(r) << dendl;
+	return r;
+      }
+      info.primary =
+	(promotion_state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY);
+
       if (entries->size() == max) {
         break;
       }
@@ -4069,11 +4081,24 @@ int Mirror<I>::group_get_info(librados::IoCtx& io_ctx,
     return r;
   }
 
+  cls::rbd::MirrorSnapshotState promotion_state;
+  r = get_last_mirror_snapshot_state(io_ctx, group_id, &promotion_state);
+  if (r == -ENOENT) {
+    promotion_state = cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
+  } else if (r < 0) {
+    lderr(cct) << "failed to get last mirror snapshot state: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+
   mirror_group_info->global_id = mirror_group.global_group_id;
   mirror_group_info->mirror_image_mode =
       static_cast<rbd_mirror_image_mode_t>(mirror_group.mirror_image_mode);
   mirror_group_info->state =
       static_cast<rbd_mirror_group_state_t>(mirror_group.state);
+  mirror_group_info->primary =
+    (promotion_state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY);
 
   return 0;
 }
