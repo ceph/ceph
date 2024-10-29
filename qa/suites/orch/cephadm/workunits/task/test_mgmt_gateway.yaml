@@ -72,12 +72,12 @@ tasks:
         fi
 
         # retrieve monitoring hostnames
-        PROMTEHUS_HOST=$(ceph orch ps --daemon-type prometheus -f json | jq -e '.[]' | jq -r '.hostname')
+        PROMETHEUS_HOST=$(ceph orch ps --daemon-type prometheus -f json | jq -e '.[]' | jq -r '.hostname')
         ALERTMGR_HOST=$(ceph orch ps --daemon-type alertmanager -f json | jq -e '.[]' | jq -r '.hostname')
 
         # check that prometheus and alertmanager are enforcing mTLS
-        curl -k -v https://${PROMTEHUS_HOST=$}:9095 2>&1 | grep "alert certificate required"
-        curl -k -v https://${ALERTMGR_HOST}:9093 2>&1 | grep "alert certificate required"
+        openssl s_client -connect ${PROMETHEUS_HOST}:9095 -servername ${PROMETHEUS_HOST} 2>&1 | grep "alert certificate required"
+        openssl s_client -connect ${ALERTMGR_HOST}:9093 -servername ${ALERTMGR_HOST} 2>&1 | grep "alert certificate required"
 
         # wait for background services to be reconfigured following mgmt-gateway installation
         sleep 180

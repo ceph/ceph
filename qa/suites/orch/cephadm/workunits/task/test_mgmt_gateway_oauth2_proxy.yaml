@@ -1,0 +1,68 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+        # Generate a mgmt.spec template
+        cat << EOT > /tmp/mgmt.spec
+        service_type: mgmt-gateway
+        service_id: foo
+        placement:
+          hosts:
+            - ${HOSTNAME}
+        spec:
+          enable_health_check_endpoint: True
+          enable_auth: True
+        EOT
+        # Apply spec
+        ceph orch apply -i /tmp/mgmt.spec
+- cephadm.wait_for_service:
+    service: mgmt-gateway
+- workunit:
+    clients:
+      client.0:
+        - cephadm/test_start_dex_server.sh
+- cephadm.shell:
+    host.c:
+      - |
+        set -ex
+        DEX_IDP_HOST_IP={{'host.a'|role_to_remote|attr('ip_address')}}
+        # Generate a oauth2-proxy spec template
+        cat << EOT > /tmp/oauth2-proxy.spec
+        service_type: oauth2-proxy
+        placement:
+          hosts:
+            - ${HOSTNAME}
+        spec:
+          https_address: "0.0.0.0:4180"
+          provider_display_name: "My OIDC Provider"
+          client_id: "oauth2-proxy"
+          client_secret: "proxy"
+          oidc_issuer_url: "http://${DEX_IDP_HOST_IP}:5556/dex"
+        EOT
+        # Apply spec and wait a little bit for oauth2-proxy to become available
+        # and for the mgmt-gateway to get reconfigured
+        ceph orch apply -i /tmp/oauth2-proxy.spec
+        sleep 100
+        MGMT_GW_HOST=$(ceph orch ps --daemon-type mgmt-gateway -f json | jq -e '.[]' | jq -r '.hostname')
+        curl -s -k -L https://${MGMT_GW_HOST}/ | grep -q "Log in to dex"
