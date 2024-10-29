@@ -673,30 +673,6 @@ private:
     std::atomic_bool m_is_active = false; /* accessed outside mds_lock */
 };
 
-class C_MDS_RetryMessage : public MDSInternalContext {
-public:
-  C_MDS_RetryMessage(MDSRank *mds, const cref_t<Message> &m)
-    : MDSInternalContext(mds), m(m) {}
-  void finish(int r) override {
-    get_mds()->retry_dispatch(m);
-  }
-protected:
-  cref_t<Message> m;
-};
-
-class CF_MDS_RetryMessageFactory : public MDSContextFactory {
-public:
-  CF_MDS_RetryMessageFactory(MDSRank *mds, const cref_t<Message> &m)
-    : mds(mds), m(m) {}
-
-  MDSContext *build() {
-    return new C_MDS_RetryMessage(mds, m);
-  }
-private:
-  MDSRank *mds;
-  cref_t<Message> m;
-};
-
 /**
  * The aspect of MDSRank exposed to MDSDaemon but not subsystems: i.e.
  * the service/dispatcher stuff like init/shutdown that subsystems should
