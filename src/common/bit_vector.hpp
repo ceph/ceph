@@ -29,8 +29,8 @@ private:
   static const uint8_t MASK = static_cast<uint8_t>((1 << _bit_count) - 1);
 
   // must be power of 2
-  BOOST_STATIC_ASSERT((_bit_count != 0) && !(_bit_count & (_bit_count - 1)));
-  BOOST_STATIC_ASSERT(_bit_count <= BITS_PER_BYTE);
+  static_assert((_bit_count != 0) && !(_bit_count & (_bit_count - 1)));
+  static_assert(_bit_count <= BITS_PER_BYTE);
 
   template <typename DataIterator>
   class ReferenceImpl {
