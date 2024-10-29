@@ -39,13 +39,9 @@ namespace rgw::d4n {
 
 namespace rgw { namespace sal {
 
-inline std::string get_cache_block_prefix(rgw::sal::Object* object, const std::string& version, bool is_dirty)
+inline std::string get_cache_block_prefix(rgw::sal::Object* object, const std::string& version)
 {
-  if (is_dirty) {
-    return fmt::format("{}{}{}{}{}{}", DIRTY_BLOCK_PREFIX, object->get_bucket()->get_bucket_id(), CACHE_DELIM, version, CACHE_DELIM, object->get_name());
-  } else {
-    return fmt::format("{}{}{}{}{}", object->get_bucket()->get_bucket_id(), CACHE_DELIM, version, CACHE_DELIM, object->get_name());
-  }
+  return fmt::format("{}{}{}{}{}", url_encode(object->get_bucket()->get_bucket_id(), true), CACHE_DELIM, url_encode(version, true), CACHE_DELIM, url_encode(object->get_name(), true));
 }
 
 inline std::string get_key_in_cache(const std::string& prefix, const std::string& offset, const std::string& len)
@@ -260,7 +256,7 @@ class D4NFilterObject : public FilterObject {
     void set_prefix(const std::string& prefix) { this->prefix = prefix; }
     const std::string get_prefix() { return this->prefix; }
     int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
-    void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
+    void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool dirty = false);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
     int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::vector<std::string>* exec_responses, optional_yield y, bool is_latest_version = true, bool dirty = false);
     int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
