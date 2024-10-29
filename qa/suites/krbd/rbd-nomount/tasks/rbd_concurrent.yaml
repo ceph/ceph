@@ -1,0 +1,10 @@
+tasks:
+- workunit:
+    clients:
+      all:
+        - rbd/concurrent.sh
+# Options for rbd/concurrent.sh (default values shown)
+#    env:
+#        RBD_CONCURRENT_ITER: 100
+#        RBD_CONCURRENT_COUNT: 5
+#        RBD_CONCURRENT_DELAY: 5
