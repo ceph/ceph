@@ -12,8 +12,9 @@
  */
 
 #include "DaemonServer.h"
-#include <boost/algorithm/string.hpp>
-#include "mgr/Mgr.h"
+#include "DaemonState.h"
+#include "Mgr.h"
+#include "MgrSession.h"
 
 #include "include/stringify.h"
 #include "include/str_list.h"
@@ -25,7 +26,9 @@
 #include "mgr/OSDPerfMetricCollector.h"
 #include "mgr/MDSPerfMetricCollector.h"
 #include "mgr/MgrOpRequest.h"
+#include "mon/MonClient.h"
 #include "mon/MonCommand.h"
+#include "msg/Messenger.h"
 
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrUpdate.h"
@@ -41,6 +44,12 @@
 #include "messages/MOSDForceRecovery.h"
 #include "common/errno.h"
 #include "common/pick_address.h"
+#include "common/TextTable.h"
+#include "crush/CrushWrapper.h"
+
+#include <boost/algorithm/string.hpp>
+
+#include <iomanip>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
