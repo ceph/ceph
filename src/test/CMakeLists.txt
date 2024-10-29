@@ -856,6 +856,20 @@ add_executable(unittest_perf_counters
 add_ceph_unittest(unittest_perf_counters)
 target_link_libraries(unittest_perf_counters global)
 
+# unittest_RocksDBStore_stats
+add_executable(unittest_RocksDBStore_stats
+  RocksDBStore_statsTest.cc
+  )
+add_ceph_unittest(unittest_RocksDBStore_stats)
+target_link_libraries(unittest_RocksDBStore_stats
+  global
+  kv
+  RocksDB::RocksDB
+  gtest
+  gtest_main
+  pthread
+)
+
 # unittest_perf_counters_cache
 add_executable(unittest_perf_counters_cache
   test_perf_counters_cache.cc
