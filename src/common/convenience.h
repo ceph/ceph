@@ -17,13 +17,11 @@
 #include <type_traits>
 #include <utility>
 
-#include <boost/optional.hpp>
-
 #ifndef CEPH_COMMON_CONVENIENCE_H
 #define CEPH_COMMON_CONVENIENCE_H
 
 namespace ceph {
-// boost::optional is wonderful! Unfortunately it lacks a function for
+// std::optional is wonderful! Unfortunately it lacks a function for
 // the thing you would most obviously want to do with it: apply a
 // function to its contents.
 
@@ -35,35 +33,6 @@ namespace ceph {
 // I'd considered making more overloads for mutable lvalue
 // references, but those are going a bit beyond likely use cases.
 //
-template<typename T, typename F>
-auto maybe_do(const boost::optional<T>& t, F&& f) ->
-  boost::optional<std::invoke_result_t<F, const std::decay_t<T>>>
-{
-  if (t)
-    return { std::forward<F>(f)(*t) };
-  else
-    return boost::none;
-}
-
-// The other obvious function takes an optional but returns an
-// ‘unwrapped’ value, either the result of evaluating the function or
-// a provided alternate value.
-//
-template<typename T, typename F, typename U>
-auto maybe_do_or(const boost::optional<T>& t, F&& f, U&& u) ->
-  std::invoke_result_t<F, const std::decay_t<T>>
-{
-  static_assert(std::is_convertible_v<U, std::invoke_result_t<F, T>>,
-		"Alternate value must be convertible to function return type.");
-  if (t)
-    return std::forward<F>(f)(*t);
-  else
-    return std::forward<U>(u);
-}
-
-
-// Same thing but for std::optional
-
 template<typename T, typename F>
 auto maybe_do(const std::optional<T>& t, F&& f) ->
   std::optional<std::invoke_result_t<F, const std::decay_t<T>>>
