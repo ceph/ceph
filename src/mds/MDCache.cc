@@ -13,6 +13,8 @@
  */
 
 #include "MDCache.h"
+#include "RetryMessage.h"
+#include "RetryRequest.h"
 
 #include <errno.h>
 
