@@ -26,6 +26,8 @@
 #include "MDLog.h"
 #include "MDSRank.h"
 #include "MDSMap.h"
+#include "RetryMessage.h"
+#include "RetryRequest.h"
 #include "SimpleLock.h"
 #include "SnapRealm.h"
 #include "messages/MClientCaps.h"
