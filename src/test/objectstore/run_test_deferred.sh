@@ -1,10 +1,10 @@
 #!/bin/bash
 
 
-if [[ ! (-x ./bin/unittest_deferred) || ! (-x ./bin/ceph-kvstore-tool) || ! (-x ./bin/ceph-bluestore-tool)]]
+if [[ ! (-x ./bin/test_corrupt_deferred) || ! (-x ./bin/ceph-kvstore-tool) || ! (-x ./bin/ceph-bluestore-tool)]]
 then
     echo Test must be run from ceph build directory
-    echo with unittest_deferred, ceph-kvstore-tool and ceph-bluestore-tool compiled
+    echo with test_corrupt_deferred, ceph-kvstore-tool and ceph-bluestore-tool compiled
     exit 1
 fi
 
@@ -21,7 +21,7 @@ fi
 # Repeat for Object-0 to Object-8.
 
 # Right after getting notification on_complete for all 9 transactions, immediately exit(1).
-./bin/unittest_deferred --log-to-stderr=false
+./bin/test_corrupt_deferred --log-to-stderr=false
 
 # Now we should have a considerable amount of pending deferred writes.
 # They do refer disk regions that do not belong to any object.
