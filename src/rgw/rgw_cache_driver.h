@@ -15,8 +15,8 @@ constexpr char RGW_CACHE_ATTR_SOURC_ZONE[] = "user.rgw.source_zone";
 constexpr char RGW_CACHE_ATTR_LOCAL_WEIGHT[] = "user.rgw.localWeight";
 constexpr char RGW_CACHE_ATTR_DELETE_MARKER[] = "user.rgw.deleteMarker";
 constexpr char RGW_CACHE_ATTR_INVALID[] = "user.rgw.invalid";
+constexpr char RGW_CACHE_ATTR_DIRTY[] = "user.rgw.dirty";
 
-constexpr char DIRTY_BLOCK_PREFIX[] = "D#";
 constexpr char CACHE_DELIM = '#';
 
 namespace rgw { namespace cache {

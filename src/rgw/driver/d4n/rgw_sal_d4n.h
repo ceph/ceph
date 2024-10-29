@@ -243,7 +243,7 @@ class D4NFilterObject : public FilterObject {
     void set_prefix(const std::string& prefix) { this->prefix = prefix; }
     const std::string get_prefix() { return this->prefix; }
     int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
-    void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
+    void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool dirty = false);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version);
     int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::vector<std::string>* exec_responses, optional_yield y, bool is_latest_version = true, bool dirty = false);
     int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
