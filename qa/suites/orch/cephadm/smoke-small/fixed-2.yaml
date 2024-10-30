@@ -1,0 +1,29 @@
+roles:
+- - mon.a
+  - mgr.y
+  - osd.0
+  - client.0
+  - ceph.rgw.foo.a
+  - node-exporter.a
+  - alertmanager.a
+- - mon.b
+  - mgr.x
+  - osd.1
+  - client.1
+  - prometheus.a
+  - grafana.a
+  - node-exporter.b
+- - mon.c
+  - mgr.z
+  - osd.2
+  - client.2
+  - node-exporter.c
+openstack:
+- volumes: # attached to each instance
+    count: 1
+    size: 10 # GB
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
