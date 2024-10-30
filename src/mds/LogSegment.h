@@ -25,6 +25,12 @@
 
 #include "include/unordered_set.h"
 
+#include <cstdint>
+#include <map>
+#include <ostream>
+#include <set>
+#include <vector>
+
 using ceph::unordered_set;
 
 class CDir;
