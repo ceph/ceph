@@ -3499,6 +3499,33 @@ Then run the following:
         return f'Added setting {setting} with value {value} to tuned profile {profile_name}'
 
     @handle_orch_error
+    def tuned_profile_add_settings(self, profile_name: str, settings: dict) -> str:
+        if profile_name not in self.tuned_profiles:
+            raise OrchestratorError(
+                f"Tuned profile {profile_name} does not exist. Cannot add setting."
+            )
+        self.tuned_profiles.add_settings(profile_name, settings)
+        results = [
+            f"Added setting {key} with value {value} to tuned profile {profile_name}"
+            for key, value in settings.items()
+        ]
+        self._kick_serve_loop()
+        return "\n".join(results)
+
+    @handle_orch_error
+    def tuned_profile_rm_settings(self, profile_name: str, settings: List[str]) -> str:
+        if profile_name not in self.tuned_profiles:
+            raise OrchestratorError(
+                f"Tuned profile {profile_name} does not exist. Cannot remove setting."
+            )
+        self.tuned_profiles.rm_settings(profile_name, settings)
+        results = [
+            f'Removed setting {settings} from tuned profile {profile_name}'
+        ]
+        self._kick_serve_loop()
+        return "\n".join(results)
+
+    @handle_orch_error
     def tuned_profile_rm_setting(self, profile_name: str, setting: str) -> str:
         if profile_name not in self.tuned_profiles:
             raise OrchestratorError(
