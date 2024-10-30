@@ -157,7 +157,7 @@ void PurgeQueue::create_logger()
   pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   pcb.add_u64(l_pq_executing_ops, "pq_executing_ops", "Purge queue ops in flight");
   pcb.add_u64(l_pq_executing_ops_high_water, "pq_executing_ops_high_water", "Maximum number of executing file purge ops");
-  pcb.add_u64(l_pq_executing, "pq_executing", "Purge queue tasks in flight");
+  pcb.add_u64(l_pq_executing, "pq_executing", "Purge queue items in flight");
   pcb.add_u64(l_pq_executing_high_water, "pq_executing_high_water", "Maximum number of executing file purges");
   pcb.add_u64(l_pq_item_in_journal, "pq_item_in_journal", "Purge item left in journal");
 
