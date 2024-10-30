@@ -25,8 +25,6 @@
 #include "include/Context.h" // for C_GatherBase
 #include "include/mempool.h"
 
-#include "CInode.h"
-
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
@@ -43,6 +41,9 @@
 
 using namespace std::literals::string_view_literals;
 
+class CDentry;
+class CDir;
+class CInode;
 class OSDMap;
 class LogEvent;
 class EMetaBlob;
@@ -67,6 +68,13 @@ class MClientReclaimReply;
 class MLock;
 class MMDSPeerRequest;
 class filepath;
+
+template<template<typename> class Allocator> struct inode_t;
+using mempool_inode = inode_t<mempool::mds_co::pool_allocator>;
+using inode_const_ptr = std::shared_ptr<const mempool_inode>;
+using mempool_xattr_map = xattr_map<mempool::mds_co::pool_allocator>; // FIXME bufferptr not in mempool
+using xattr_map_ptr = std::shared_ptr<mempool_xattr_map>;
+using xattr_map_const_ptr = std::shared_ptr<const mempool_xattr_map>;
 
 enum {
   l_mdss_first = 1000,
@@ -430,15 +438,15 @@ private:
     // reject xattr request (set or remove), zero to proceed. handlers
     // may parse xattr value for verification if needed and have an
     // option to store custom data in XattrOp::xinfo.
-    int (Server::*validate)(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+    int (Server::*validate)(CInode *cur, const xattr_map_const_ptr xattrs,
                             XattrOp *xattr_op);
 
     // set xattr for an inode in xattr_map
-    void (Server::*setxattr)(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+    void (Server::*setxattr)(CInode *cur, xattr_map_ptr xattrs,
                              const XattrOp &xattr_op);
 
     // remove xattr for an inode from xattr_map
-    void (Server::*removexattr)(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+    void (Server::*removexattr)(CInode *cur, xattr_map_ptr xattrs,
                                 const XattrOp &xattr_op);
   };
 
@@ -448,28 +456,28 @@ private:
   const XattrHandler* get_xattr_or_default_handler(std::string_view xattr_name);
 
   // generic variant to set/remove xattr in/from xattr_map
-  int xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+  int xattr_validate(CInode *cur, const xattr_map_const_ptr xattrs,
                      const std::string &xattr_name, int op, int flags);
-  void xattr_set(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name,
+  void xattr_set(xattr_map_ptr xattrs, const std::string &xattr_name,
                  const bufferlist &xattr_value);
-  void xattr_rm(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name);
+  void xattr_rm(xattr_map_ptr xattrs, const std::string &xattr_name);
 
   // default xattr handlers
-  int default_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+  int default_xattr_validate(CInode *cur, const xattr_map_const_ptr xattrs,
                              XattrOp *xattr_op);
-  void default_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+  void default_setxattr_handler(CInode *cur, xattr_map_ptr xattrs,
                                 const XattrOp &xattr_op);
-  void default_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+  void default_removexattr_handler(CInode *cur, xattr_map_ptr xattrs,
                                    const XattrOp &xattr_op);
 
   // mirror info xattr handler
   int parse_mirror_info_xattr(const std::string &name, const std::string &value,
                               std::string &cluster_id, std::string &fs_id);
-  int mirror_info_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+  int mirror_info_xattr_validate(CInode *cur, const xattr_map_const_ptr xattrs,
                                  XattrOp *xattr_op);
-  void mirror_info_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+  void mirror_info_setxattr_handler(CInode *cur, xattr_map_ptr xattrs,
                                     const XattrOp &xattr_op);
-  void mirror_info_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+  void mirror_info_removexattr_handler(CInode *cur, xattr_map_ptr xattrs,
                                        const XattrOp &xattr_op);
 
   static bool is_ceph_vxattr(std::string_view xattr_name) {
