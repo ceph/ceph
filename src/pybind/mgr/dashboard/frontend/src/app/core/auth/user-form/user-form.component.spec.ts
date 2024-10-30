@@ -16,13 +16,13 @@ import { ComponentsModule } from '~/app/shared/components/components.module';
 import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { PasswordPolicyService } from '~/app/shared/services/password-policy.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { UserFormComponent } from './user-form.component';
 import { UserFormModel } from './user-form.model';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 describe('UserFormComponent', () => {
   let component: UserFormComponent;
@@ -30,7 +30,7 @@ describe('UserFormComponent', () => {
   let fixture: ComponentFixture<UserFormComponent>;
   let httpTesting: HttpTestingController;
   let userService: UserService;
-  let modalService: ModalService;
+  let modalService: ModalCdsService;
   let router: Router;
   let formHelper: FormHelper;
 
@@ -67,7 +67,7 @@ describe('UserFormComponent', () => {
     form = component.userForm;
     httpTesting = TestBed.inject(HttpTestingController);
     userService = TestBed.inject(UserService);
-    modalService = TestBed.inject(ModalService);
+    modalService = TestBed.inject(ModalCdsService);
     router = TestBed.inject(Router);
     spyOn(router, 'navigate');
     fixture.detectChanges();

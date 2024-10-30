@@ -252,6 +252,8 @@ public:
 
   void import_finish(CDir *dir, bool notify, bool last=true);
 
+  void dump_export_states(Formatter *f);
+
 protected:
   struct export_base_t {
     export_base_t(dirfrag_t df, mds_rank_t d, unsigned c, uint64_t g) :
@@ -267,7 +269,31 @@ protected:
   struct export_state_t {
     export_state_t() {}
 
-    int state = 0;
+    void set_state(int s) {
+      ceph_assert(s != state);
+      if (state != EXPORT_CANCELLED) {
+	auto& t = state_history.at(state);
+	t.second = double(ceph_clock_now()) - double(t.first);
+      }
+      state = s;
+      state_history[state] = std::pair<utime_t, double>(ceph_clock_now(), 0.0);
+    }
+    utime_t get_start_time(int s) const {
+      ceph_assert(state_history.count(s) > 0);
+      return state_history.at(s).first;
+    }
+    double get_time_spent(int s) const {
+      ceph_assert(state_history.count(s) > 0);
+      const auto& t = state_history.at(s);
+      return s == state ? double(ceph_clock_now()) - double(t.first) : t.second;
+    }
+    double get_freeze_tree_time() const {
+      ceph_assert(state >= EXPORT_DISCOVERING);
+      ceph_assert(state_history.count((int)EXPORT_DISCOVERING) > 0);
+      return double(ceph_clock_now()) - double(state_history.at((int)EXPORT_DISCOVERING).first);
+    };
+
+    int state = EXPORT_CANCELLED;
     mds_rank_t peer = MDS_RANK_NONE;
     uint64_t tid = 0;
     std::set<mds_rank_t> warning_ack_waiting;
@@ -275,6 +301,10 @@ protected:
     std::map<inodeno_t,std::map<client_t,Capability::Import> > peer_imported;
     MutationRef mut;
     size_t approx_size = 0;
+    // record the start time and time spent of each export state
+    std::map<int, std::pair<utime_t, double> > state_history;
+    // record the clients whose sessions need to be flushed
+    std::set<client_t> export_client_set;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins = 0;

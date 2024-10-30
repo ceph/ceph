@@ -22,7 +22,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CdPwdExpirationSettings } from '~/app/shared/models/cd-pwd-expiration-settings';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { PasswordPolicyService } from '~/app/shared/services/password-policy.service';
 import { UserFormMode } from './user-form-mode.enum';
@@ -61,7 +61,7 @@ export class UserFormComponent extends CdForm implements OnInit {
     private authStorageService: AuthStorageService,
     private route: ActivatedRoute,
     public router: Router,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private roleService: RoleService,
     private userService: UserService,
     private notificationService: NotificationService,

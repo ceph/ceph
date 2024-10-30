@@ -13,7 +13,7 @@ import { TableActionsComponent } from '~/app/shared/datatable/table-actions/tabl
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
@@ -159,7 +159,7 @@ describe('SilenceListComponent', () => {
       const mockObservable = () => of([]);
       spyOn(component, 'refresh').and.callFake(mockObservable);
       spyOn(prometheusService, 'expireSilence').and.callFake(mockObservable);
-      spyOn(TestBed.inject(ModalService), 'show').and.callFake((deletionClass, config) => {
+      spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake((deletionClass, config) => {
         return {
           componentInstance: Object.assign(new deletionClass(), config)
         };

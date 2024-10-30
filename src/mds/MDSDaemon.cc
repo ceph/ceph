@@ -304,6 +304,10 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "show recent ops, sorted by op duration");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("dump_export_states",
+				     asok_hook,
+				     "dump export states");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("scrub_path name=path,type=CephString "
 				     "name=scrubops,type=CephChoices,"
 				     "strings=force|recursive|repair,n=N,req=false "
