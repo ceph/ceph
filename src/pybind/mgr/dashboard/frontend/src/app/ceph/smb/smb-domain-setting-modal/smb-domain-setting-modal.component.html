@@ -1,0 +1,128 @@
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+  </cds-modal-header>
+  <ng-container *cdFormLoading="loading">
+    <div cdsModalContent>
+      <form name="domainSettingsForm"
+            #formDir="ngForm"
+            [formGroup]="domainSettingsForm"
+            novalidate>
+        <div class="form-item">
+          <cds-text-label
+            label="realm"
+            [invalid]="
+              !domainSettingsForm.controls.realm.valid && domainSettingsForm.controls.realm.dirty
+            "
+            [invalidText]="realmNameError"
+            i18n
+            >Realm Name
+            <input
+              cdsText
+              type="text"
+              formControlName="realm"
+              autofocus
+            />
+          </cds-text-label>
+          <ng-template #realmNameError>
+            <span
+              *ngIf="domainSettingsForm.showError('realm', formDir, 'required')"
+              class="invalid-feedback"
+            >
+              <ng-container i18n> This field is required. </ng-container>
+            </span>
+          </ng-template>
+        </div>
+
+        <div
+          *ngIf="joinAuths$ | async as joinAuths"
+          class="form-item">
+          <ng-container
+            formArrayName="join_sources"
+            *ngFor="let _ of join_sources.controls; index as i"
+          >
+            <ng-container [formGroupName]="i">
+              <div
+                cdsRow
+                class="form-item form-item-append">
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 14 }"
+                >
+                  <cds-select
+                    label="Active Directory access resources"
+                    i18n-label
+                    formControlName="ref"
+                    [invalid]="domainSettingsForm.controls?.join_sources.controls[i].invalid && domainSettingsForm.controls?.join_sources.controls[i].controls.ref.dirty"
+                    [invalidText]="joinSourceError"
+                  >
+                    <option
+                      [value]="null"
+                      i18n
+                    >-- List of AD access resources --
+                    </option>
+                    <option *ngFor="let jA of joinAuths"
+                            [value]="jA.auth_id">{{ jA.auth_id }}</option>
+                  </cds-select>
+                  <ng-template #joinSourceError>
+                    <span
+                      class="invalid-feedback"
+                    >
+                      <ng-container i18n> This field is required. </ng-container>
+                    </span>
+                  </ng-template>
+                </div>
+                <div cdsCol
+                     *ngIf="i > 0"
+                     [columnNumbers]="{ lg: 1 }"
+                     class="item-action-btn spacing">
+                  <cds-icon-button kind="danger"
+                                   size="sm"
+                                   (click)="removeJoinSource(i)">
+                    <svg cdsIcon="trash-can"
+                         size="32"
+                         class="cds--btn__icon"></svg>
+                  </cds-icon-button>
+                </div>
+              </div>
+            </ng-container>
+          </ng-container>
+          <div class="form-item">
+            <button cdsButton="tertiary"
+                    type="button"
+                    (click)="addJoinSource()"
+                    i18n>
+              Add AD access resource
+              <svg cdsIcon="add"
+                   size="32"
+                   class="cds--btn__icon"
+                   icon></svg>
+            </button>
+            <button cdsButton="tertiary"
+                    type="button"
+                    (click)="navigateCreateJoinSource()"
+                    i18n>
+              Create AD access resource
+              <svg
+                cdsIcon="launch"
+                size="16"
+                class="cds--btn__icon"></svg>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <cd-form-button-panel
+      (submitActionEvent)="submit()"
+      [form]="domainSettingsForm"
+      [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+      [modalForm]="true"
+    >
+    </cd-form-button-panel>
+  </ng-container>
+</cds-modal>
