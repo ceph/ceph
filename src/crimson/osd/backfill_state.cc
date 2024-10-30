@@ -162,7 +162,7 @@ void BackfillState::Enqueuing::maybe_update_range()
     peering_state().scan_log_after(primary_bi.version, func);
     logger().debug("{}: scanning projected log", __func__);
     pg().get_projected_log().scan_log_after(primary_bi.version, func);
-    primary_bi.version = pg().get_projected_last_update();
+    primary_bi.version = peering_state().get_pg_committed_to();
   } else {
     ceph_abort_msg(
       "scan_range should have raised primary_bi.version past log_tail");
@@ -407,7 +407,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 BackfillState::PrimaryScanning::PrimaryScanning(my_context ctx)
   : my_base(ctx)
 {
-  backfill_state().backfill_info.version = peering_state().get_last_update();
+  backfill_state().backfill_info.version = peering_state().get_pg_committed_to();
   backfill_listener().request_primary_scan(
     backfill_state().backfill_info.begin);
 }
@@ -416,6 +416,7 @@ boost::statechart::result
 BackfillState::PrimaryScanning::react(PrimaryScanned evt)
 {
   logger().debug("{}", __func__);
+  evt.result.version = backfill_state().backfill_info.version;
   backfill_state().backfill_info = std::move(evt.result);
   return transit<Enqueuing>();
 }
