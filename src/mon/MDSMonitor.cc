@@ -12,6 +12,8 @@
  * 
  */
 
+#include "MDSMonitor.h"
+
 #include <regex>
 #include <sstream>
 #include <queue>
@@ -19,7 +21,6 @@
 #include <boost/range/adaptors.hpp>
 #include <boost/utility.hpp>
 
-#include "MDSMonitor.h"
 #include "FSCommands.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
@@ -39,6 +40,7 @@
 #include "include/ceph_assert.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "mds/cephfs_features.h"
 #include "mds/mdstypes.h"
 #include "Session.h"
 
