@@ -1,11 +1,13 @@
 Tracing Kernel Functions with trace-cmd
 =======================================
 
-This guide shows how to use `trace-cmd` to perform a `function_graph` trace of kernel functions triggered by a specific command.
+This guide shows how to use ``trace-cmd`` to perform a `function_graph` trace
+of kernel functions triggered by a specific command.
 
 Prerequisites
 -------------
-Ensure `trace-cmd` is installed. You can install it using your package manager:
+Ensure that the ``trace-cmd`` is installed. You can install it using your
+package manager:
 
 .. code-block:: bash
 
@@ -21,40 +23,50 @@ Running a Function Graph Trace
 ------------------------------
 To trace kernel functions while executing a specific command, use the following command:
 
-.. code-block:: bash
+.. prompt:: bash $
 
    sudo trace-cmd record -p function_graph -e all -b 131072 <your_command>
 
 **Parameters:**
 
-- ``record``: Tells `trace-cmd` to start recording a trace.
-- ``-p function_graph``: Specifies the `function_graph` tracer, which traces function calls and returns, showing the flow of function execution.
-- ``-e all``: Enables all functions for tracing. You can specify specific functions (e.g., ``-e sched:sched_switch``) if needed.
-- ``<your_command>``: Replace ``<your_command>`` with the command you want to trace. For example, to trace `ls`, run:
+- ``record``: Tells ``trace-cmd`` to start recording a trace.
+- ``-p function_graph``: Specifies the `function_graph` tracer, which traces
+  function calls and returns, showing the flow of function execution.
+- ``-e all``: Enables all functions for tracing. You can specify particular 
+  functions (for example, ``-e sched:sched_switch``) if needed.
 - ``-b 131072``: The output can be quite large so we reserve 128MB for each core.
-  .. code-block:: bash
+- ``<your_command>``: Replace ``<your_command>`` with the command you want to
+  trace. For example, to trace ``ls``, run:
+
+   .. prompt:: bash $
 
      sudo trace-cmd record -p function_graph -e all ls
 
 Viewing the Trace Results
 -------------------------
-Once the command completes, `trace-cmd` saves the trace data in a file named ``trace.dat`` by default. To view the trace output:
+After the command completes, ``trace-cmd`` saves the trace data in a file named
+``trace.dat`` by default. To view the trace output run the following command:
 
-.. code-block:: bash
+.. prompt:: bash $
 
    sudo trace-cmd report
 
-The output will show each function call, the time taken, and nested calls in a graph format, providing insights into the kernel's function execution path triggered by the command.
+The output shows each function call, the time taken, and all nested calls in a
+graph format, providing insights into the kernel's function execution path
+triggered by the command.
 
 Example
 -------
 
-.. code-block:: bash
+.. prompt:: bash $
 
-   sudo trace-cmd record -p function_graph -e all mount -t ceph $USER@$FSID.a=/ /mnt/mycephfs -o mon_addr=$IP:$PORT,ms_mode=crc,secret=$CKEY
+   sudo trace-cmd record -p function_graph -e all mount -t ceph $USER@$FSID.a=/
+   /mnt/mycephfs -o mon_addr=$IP:$PORT,ms_mode=crc,secret=$CKEY
 
-This will generate a `trace.dat` file, which can be viewd with trace-cmd report
-.. code-block:: test
+This generates a ``trace.dat`` file, which can be viewed with the command
+``trace-cmd report``:
+
+.. code-block:: bash 
 
            mount-13161 [014] 172368.963735: funcgraph_entry:                   |          do_new_mount() {
            mount-13161 [014] 172368.963735: funcgraph_entry:                   |            get_fs_type() {
