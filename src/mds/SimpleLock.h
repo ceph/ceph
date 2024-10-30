@@ -468,6 +468,9 @@ public:
   bool has_xlock_by() const noexcept {
     return have_more() && more()->xlock_by;
   }
+  bool is_xlocked_by(const MutationRef &who) const noexcept {
+    return have_more() && more()->xlock_by == who;
+  }
   
   // lease
   bool is_leased() const {
