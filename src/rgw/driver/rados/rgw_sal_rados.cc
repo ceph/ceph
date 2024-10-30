@@ -2679,7 +2679,7 @@ int RadosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, 
   return read_attrs(dpp, read_op, y, target_obj);
 }
 
-int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
+int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
 {
   rgw_obj target = get_obj();
   rgw_obj save = get_obj();
@@ -2692,7 +2692,7 @@ int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, o
   state.obj = target;
   set_atomic();
   state.attrset[attr_name] = attr_val;
-  r = set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  r = set_obj_attrs(dpp, &state.attrset, nullptr, y, flags);
   /* Restore target */
   state.obj = save;
 
@@ -3073,8 +3073,7 @@ int RadosObject::set_cloud_restore_status(const DoutPrefixProvider* dpp,
   bufferlist bl;
   using ceph::encode;
   encode(restore_status, bl);
-
-  ret = modify_obj_attrs(RGW_ATTR_RESTORE_STATUS, bl, y, dpp);
+  ret = modify_obj_attrs(RGW_ATTR_RESTORE_STATUS, bl, y, dpp, false);
 
   return ret;
 }
@@ -3161,7 +3160,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
 	    attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
 	  }
           const req_context rctx{dpp, y, nullptr};
-          return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace());
+          return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace(), false);
         } catch (const buffer::end_of_buffer&) {
           // ignore empty manifest; it's not cloud-tiered
         } catch (const std::exception& e) {
@@ -3250,6 +3249,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   // erase restore attrs
   attrs.erase(RGW_ATTR_RESTORE_STATUS);
   attrs.erase(RGW_ATTR_RESTORE_TYPE);
+  attrs.erase(RGW_ATTR_RESTORE_TIME);
   attrs.erase(RGW_ATTR_RESTORE_EXPIRY_DATE);
   attrs.erase(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
 
