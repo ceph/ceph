@@ -1432,12 +1432,21 @@ struct transaction_manager_test_t :
   void test_clone_and_remap_pin() {
     run_async([this] {
       disable_max_extent_size();
-      laddr_t l_offset = laddr_t::from_byte_offset(32 << 10);
+      auto block_size = laddr_t::UNIT_SHIFT;
+      laddr_hint_t hint = laddr_hint_t::create_fresh_object_data_hint(0, 0, 0, block_size);
+      laddr_t data_base = hint.addr;
+      laddr_t l_offset = data_base.with_offset_by_blocks(32);
       size_t l_len = 32 << 10;
-      laddr_t r_offset = laddr_t::from_byte_offset(64 << 10);
+      laddr_t r_offset = data_base.with_offset_by_blocks(64);
       size_t r_len = 32 << 10;
-      laddr_t l_clone_offset = laddr_t::from_byte_offset(96 << 10);
-      laddr_t r_clone_offset = laddr_t::from_byte_offset(128 << 10);
+      laddr_hint_t clone_hint = laddr_hint_t::create_clone_object_data_hint(
+	0, 0, 0, data_base.get_local_object_id(), block_size);
+      while (clone_hint.addr.get_local_clone_id() == hint.addr.get_local_clone_id()) {
+	clone_hint.find_next_random();
+      }
+      laddr_t clone_base = clone_hint.addr;
+      laddr_t l_clone_offset = clone_base.with_offset_by_blocks(32);
+      laddr_t r_clone_offset = clone_base.with_offset_by_blocks(64);
       {
 	auto t = create_transaction();
 	auto lext = alloc_extent(t, l_offset, l_len);
