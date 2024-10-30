@@ -23,6 +23,7 @@
 
 #include "objclass/objclass.h"
 #include <errno.h>
+#include <iomanip>
 #include <string>
 #include <sstream>
 #include <cstdio>
