@@ -134,7 +134,7 @@ run_teuthology_tests() {
     export CEPH_OUT_CLIENT_DIR=${LOCAL_BUILD_DIR}/out/client
     find . -iname "*${COVERAGE_FILE}*" -type f -delete
 
-    python ../qa/tasks/vstart_runner.py --ignore-missing-binaries --no-verbose $OPTIONS $(echo $TEST_CASES) ||
+    python ../qa/tasks/vstart_runner.py --ignore-missing-binaries --no-verbose --debug $OPTIONS $(echo $TEST_CASES) ||
       on_tests_error
 
     deactivate
