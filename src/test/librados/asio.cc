@@ -412,6 +412,93 @@ TEST_F(AsioRados, AsyncWriteOperationYield)
   service.run();
 }
 
+TEST_F(AsioRados, AsyncNotifyCallback)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  bufferlist bl;
+  bl.append("hello");
+  constexpr uint64_t timeout = 0;
+
+  auto success_cb = [&] (error_code ec, version_t ver, bufferlist reply) {
+    EXPECT_FALSE(ec);
+    EXPECT_LT(0, ver);
+    std::vector<librados::notify_ack_t> acks;
+    std::vector<librados::notify_timeout_t> timeouts;
+    io.decode_notify_response(reply, &acks, &timeouts);
+  };
+  librados::async_notify(ex, io, "exist", bl, timeout, success_cb);
+
+  auto failure_cb = [] (error_code ec, version_t ver, bufferlist reply) {
+    EXPECT_EQ(boost::system::errc::no_such_file_or_directory, ec);
+    EXPECT_EQ(0, ver);
+    EXPECT_EQ(0, reply.length());
+  };
+  librados::async_notify(ex, io, "noexist", bl, timeout, failure_cb);
+
+  service.run();
+}
+
+TEST_F(AsioRados, AsyncNotifyFuture)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  bufferlist bl;
+  bl.append("hello");
+  constexpr uint64_t timeout = 0;
+
+  auto f1 = librados::async_notify(ex, io, "exist", bl, timeout,
+                                   boost::asio::use_future);
+  auto f2 = librados::async_notify(ex, io, "noexist", bl, timeout,
+                                   boost::asio::use_future);
+
+  service.run();
+
+  auto [ver, reply] = f1.get();
+  EXPECT_LT(0, ver);
+  std::vector<librados::notify_ack_t> acks;
+  std::vector<librados::notify_timeout_t> timeouts;
+  io.decode_notify_response(reply, &acks, &timeouts);
+
+  EXPECT_THROW(f2.get(), boost::system::system_error);
+}
+
+TEST_F(AsioRados, AsyncNotifyYield)
+{
+  boost::asio::io_context service;
+  auto ex = service.get_executor();
+
+  bufferlist bl;
+  bl.append("hello");
+  constexpr uint64_t timeout = 0;
+
+  auto success_cr = [&] (boost::asio::yield_context yield) {
+    error_code ec;
+    auto [ver, reply] = librados::async_notify(ex, io, "exist", bl,
+                                               timeout, yield[ec]);
+    EXPECT_FALSE(ec);
+    EXPECT_LT(0, ver);
+    std::vector<librados::notify_ack_t> acks;
+    std::vector<librados::notify_timeout_t> timeouts;
+    io.decode_notify_response(reply, &acks, &timeouts);
+  };
+  boost::asio::spawn(ex, success_cr, rethrow);
+
+  auto failure_cr = [&] (boost::asio::yield_context yield) {
+    error_code ec;
+    auto [ver, reply] = librados::async_notify(ex, io, "noexist", bl,
+                                               timeout, yield[ec]);
+    EXPECT_EQ(boost::system::errc::no_such_file_or_directory, ec);
+    EXPECT_EQ(0, ver);
+    EXPECT_EQ(0, reply.length());
+  };
+  boost::asio::spawn(ex, failure_cr, rethrow);
+
+  service.run();
+}
+
 // FIXME: this crashes on windows with:
 // Thread 1 received signal SIGILL, Illegal instruction.
 #ifndef _WIN32
