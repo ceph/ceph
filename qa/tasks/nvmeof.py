@@ -251,9 +251,9 @@ class NvmeofThrasher(Thrasher, Greenlet):
 
     daemon_max_thrash_times: 
                         For now, NVMeoF daemons have limitation that each daemon can 
-                        be thrashed only 3 times in span of 30 mins. This option 
+                        be thrashed only 5 times in span of 30 mins. This option 
                         allows to set the amount of times it could be thrashed in a period
-                        of time. (default: 3)
+                        of time. (default: 5)
     daemon_max_thrash_period: 
                         This option goes with the above option. It sets the period of time
                         over which each daemons can be thrashed for daemon_max_thrash_times
@@ -306,7 +306,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
         self.max_thrash_daemons = int(self.config.get('max_thrash', len(self.daemons) - 1))
 
         # Limits on thrashing each daemon
-        self.daemon_max_thrash_times = int(self.config.get('daemon_max_thrash_times', 3))
+        self.daemon_max_thrash_times = int(self.config.get('daemon_max_thrash_times', 5))
         self.daemon_max_thrash_period = int(self.config.get('daemon_max_thrash_period', 30 * 60)) # seconds
 
         self.min_thrash_delay = int(self.config.get('min_thrash_delay', 60))
@@ -347,6 +347,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
             run.Raw('&&'), 'ceph', 'orch', 'ps', '--daemon-type', 'nvmeof',
             run.Raw('&&'), 'ceph', 'health', 'detail',
             run.Raw('&&'), 'ceph', '-s',
+            run.Raw('&&'), 'sudo', 'nvme', 'list',
         ]
         for dev in self.devices:
             check_cmd += [
