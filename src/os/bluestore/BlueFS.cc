@@ -812,6 +812,7 @@ void BlueFS::_init_alloc()
         name += devnames[id];
       else
         name += to_string(uintptr_t(this));
+      block_reserved[id] = p2roundup(block_reserved[id], alloc_size[id]);
       dout(1) << __func__ << " new, id " << id << std::hex
               << ", allocator name " << name
               << ", allocator type " << cct->_conf->bluefs_allocator
