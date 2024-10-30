@@ -1658,15 +1658,14 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 #endif
         return seastar::do_with(
 	  std::vector<OnodeRef>(ctx.iter.objects.size()),
-          std::vector<OnodeRef>(ctx.iter.objects.size()),
-          [this, &ctx](auto& onodes, auto& d_onodes) mutable {
+          [this, &ctx](auto& onodes) mutable {
           return trans_intr::repeat(
-            [this, &ctx, &onodes, &d_onodes]() mutable
+            [this, &ctx, &onodes]() mutable
             -> tm_iertr::future<seastar::stop_iteration>
             {
               if (ctx.iter.have_op()) {
                 return _do_transaction_step(
-                  ctx, ctx.ch, onodes, d_onodes, ctx.iter
+                  ctx, ctx.ch, onodes, ctx.iter
                 ).si_then([] {
                   return seastar::make_ready_future<seastar::stop_iteration>(
                     seastar::stop_iteration::no);
@@ -1717,7 +1716,6 @@ SeaStore::Shard::_do_transaction_step(
   internal_context_t &ctx,
   CollectionRef &col,
   std::vector<OnodeRef> &onodes,
-  std::vector<OnodeRef> &d_onodes,
   ceph::os::Transaction::iterator &i)
 {
   LOG_PREFIX(SeaStoreS::_do_transaction_step);
@@ -1774,34 +1772,29 @@ SeaStore::Shard::_do_transaction_step(
     }
   }
   return fut.si_then([&, op, this, FNAME](auto get_onode) {
-    OnodeRef &o = onodes[op->oid];
-    if (!o) {
-      assert(get_onode);
-      o = get_onode;
-      d_onodes[op->oid] = get_onode;
-    }
+    onodes[op->oid] = get_onode;
     if ((op->op == Transaction::OP_CLONE
 	  || op->op == Transaction::OP_COLL_MOVE_RENAME)
-	&& !d_onodes[op->dest_oid]) {
+	&& !onodes[op->dest_oid]) {
       const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
       DEBUGT("op {}, get_or_create dest oid={} ...",
              *ctx.transaction, (uint32_t)op->op, dest_oid);
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
       return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
-      ).si_then([&onodes, &d_onodes, op](auto dest_onode) {
+      ).si_then([&onodes, op](auto dest_onode) {
 	assert(dest_onode);
 	auto &d_o = onodes[op->dest_oid];
 	assert(!d_o);
-	assert(!d_onodes[op->dest_oid]);
+	assert(!onodes[op->dest_oid]);
 	d_o = dest_onode;
-	d_onodes[op->dest_oid] = dest_onode;
+	onodes[op->dest_oid] = dest_onode;
 	return seastar::now();
       });
     } else {
       return OnodeManager::get_or_create_onode_iertr::now();
     }
-  }).si_then([&ctx, &i, &onodes, &d_onodes, op, this, FNAME]() -> tm_ret {
+  }).si_then([&ctx, &i, &onodes, op, this, FNAME]() -> tm_ret {
     const ghobject_t& oid = i.get_oid(op->oid);
     try {
       switch (op->op) {
@@ -1809,15 +1802,17 @@ SeaStore::Shard::_do_transaction_step(
       {
         DEBUGT("op REMOVE, oid={} ...", *ctx.transaction, oid);
         return _remove(ctx, onodes[op->oid]
-	).si_then([&onodes, &d_onodes, op] {
+	).si_then([&onodes, op] {
 	  onodes[op->oid].reset();
-	  d_onodes[op->oid].reset();
 	});
       }
       case Transaction::OP_CREATE:
       case Transaction::OP_TOUCH:
       {
-        DEBUGT("op CREATE/TOUCH, oid={} ...", *ctx.transaction, oid);
+        DEBUGT("op {}, oid={} ...",
+	       *ctx.transaction,
+	       op->op == Transaction::OP_CREATE ? "CREATE" : "TOUCH",
+	       oid);
         return _touch(ctx, onodes[op->oid]);
       }
       case Transaction::OP_WRITE:
@@ -1928,7 +1923,7 @@ SeaStore::Shard::_do_transaction_step(
       {
         DEBUGT("op CLONE, oid={}, dest oid={} ...",
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
-	return _clone(ctx, onodes[op->oid], d_onodes[op->dest_oid]);
+	return _clone(ctx, onodes[op->oid], onodes[op->dest_oid]);
       }
       case Transaction::OP_COLL_MOVE_RENAME:
       {
@@ -1936,10 +1931,9 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
 	ceph_assert(op->cid == op->dest_cid);
 	return _rename(
-	  ctx, onodes[op->oid], d_onodes[op->dest_oid]
-	).si_then([&onodes, &d_onodes, op] {
+	  ctx, onodes[op->oid], onodes[op->dest_oid]
+	).si_then([&onodes, op] {
 	  onodes[op->oid].reset();
-	  d_onodes[op->oid].reset();
 	});
       }
       default:
