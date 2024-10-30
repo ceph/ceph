@@ -1903,7 +1903,7 @@ Then run the following:
         self.inventory.add_host(spec)
         self.offline_hosts_remove(spec.hostname)
         if spec.status == 'maintenance':
-            self._set_maintenance_healthcheck()
+            self.set_maintenance_healthcheck()
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
@@ -2074,6 +2074,7 @@ Then run the following:
         self.ssh.reset_con(host)
         # if host was in offline host list, we should remove it now.
         self.offline_hosts_remove(host)
+        self.set_maintenance_healthcheck()
         self.event.set()  # refresh stray health check
         self.log.info('Removed host %s' % host)
         return "Removed {} host '{}'".format('offline' if offline else '', host)
@@ -2188,7 +2189,7 @@ Then run the following:
         self.log.info(msg)
         return msg
 
-    def _set_maintenance_healthcheck(self) -> None:
+    def set_maintenance_healthcheck(self) -> None:
         """Raise/update or clear the maintenance health check as needed"""
 
         in_maintenance = self.inventory.get_host_with_state("maintenance")
@@ -2272,12 +2273,12 @@ Then run the following:
         self.inventory._inventory[hostname] = tgt_host
         self.inventory.save()
 
-        self._set_maintenance_healthcheck()
+        self.set_maintenance_healthcheck()
         return f'Daemons for Ceph cluster {self._cluster_fsid} stopped on host {hostname}. Host {hostname} moved to maintenance mode'
 
     @handle_orch_error
     @host_exists()
-    def exit_host_maintenance(self, hostname: str) -> str:
+    def exit_host_maintenance(self, hostname: str, force: bool = False, offline: bool = False) -> str:
         """Exit maintenance mode and return a host to an operational state
 
         Returning from maintenance will enable the clusters systemd target and
@@ -2285,6 +2286,8 @@ Then run the following:
         host has osd daemons
 
         :param hostname: (str) host name
+        :param force: (bool) force removal of the host from maintenance mode
+        :param offline: (bool) to remove hosts that are offline from maintenance mode
 
         :raises OrchestratorError: Unable to return from maintenance, or unset the
                                    noout flag
@@ -2293,37 +2296,74 @@ Then run the following:
         if tgt_host['status'] != "maintenance":
             raise OrchestratorError(f"Host {hostname} is not in maintenance mode")
 
-        with self.async_timeout_handler(hostname, 'cephadm host-maintenance exit'):
-            outs, errs, _code = self.wait_async(
-                CephadmServe(self)._run_cephadm(hostname, cephadmNoImage,
-                                                'host-maintenance', ['exit'], error_ok=True))
-        returned_msg = errs[0].split('\n')[-1]
-        if returned_msg.startswith('failed') or returned_msg.startswith('ERROR'):
-            raise OrchestratorError(
-                f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
+        # Given we do not regularly check maintenance mode hosts for being offline,
+        # we have no idea at this point whether the host is online or not.
+        # Keep in mind this goes both ways, as users could have run
+        # "ceph cephadm check-host <hostname>" when the host was in maintenance
+        # mode and offline and the host could have since come online. This following
+        # "cephadm check-host" command is being run purely so we know if the host
+        # is online or offline, as those should be handled differently
+        try:
+            with self.async_timeout_handler(hostname, 'cephadm check-host'):
+                outs, errs, _code = self.wait_async(
+                    CephadmServe(self)._run_cephadm(
+                        hostname, cephadmNoImage,
+                        'check-host', [], error_ok=False
+                    )
+                )
+        except OrchestratorError:
+            pass
 
-        if "osd" in self.cache.get_daemon_types(hostname):
-            crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
-            rc, _out, _err = self.mon_command({
-                'prefix': 'osd unset-group',
-                'flags': 'noout',
-                'who': [crush_node],
-                'format': 'json'
-            })
-            if rc:
+        host_offline = hostname in self.offline_hosts
+
+        if host_offline and not offline:
+            raise OrchestratorValidationError(
+                f'{hostname} is offline, please use --offline and --force to take this host out of maintenance mode')
+
+        if not host_offline and offline:
+            raise OrchestratorValidationError(
+                f'{hostname} is online, please take host out of maintenance mode without --offline.')
+
+        if offline and not force:
+            raise OrchestratorValidationError("Taking an offline host out of maintenance mode requires --force")
+
+        # no point trying these parts if we know the host is offline
+        if not host_offline:
+            with self.async_timeout_handler(hostname, 'cephadm host-maintenance exit'):
+                outs, errs, _code = self.wait_async(
+                    CephadmServe(self)._run_cephadm(hostname, cephadmNoImage,
+                                                    'host-maintenance', ['exit'], error_ok=True))
+            returned_msg = errs[0].split('\n')[-1]
+            if (returned_msg.startswith('failed') or returned_msg.startswith('ERROR')):
                 self.log.warning(
-                    f"exit maintenance request failed to UNSET the noout group for {hostname}, (rc={rc})")
-                raise OrchestratorError(f"Unable to set the osds on {hostname} to noout (rc={rc})")
-            else:
-                self.log.info(
-                    f"exit maintenance request has UNSET for the noout group on host {hostname}")
+                    f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
+                if not force:
+                    raise OrchestratorError(
+                        f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
+
+            if "osd" in self.cache.get_daemon_types(hostname):
+                crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
+                rc, _out, _err = self.mon_command({
+                    'prefix': 'osd unset-group',
+                    'flags': 'noout',
+                    'who': [crush_node],
+                    'format': 'json'
+                })
+                if rc:
+                    self.log.warning(
+                        f"exit maintenance request failed to UNSET the noout group for {hostname}, (rc={rc})")
+                    if not force:
+                        raise OrchestratorError(f"Unable to set the osds on {hostname} to noout (rc={rc})")
+                else:
+                    self.log.info(
+                        f"exit maintenance request has UNSET for the noout group on host {hostname}")
 
         # update the host record status
         tgt_host['status'] = ""
         self.inventory._inventory[hostname] = tgt_host
         self.inventory.save()
 
-        self._set_maintenance_healthcheck()
+        self.set_maintenance_healthcheck()
 
         return f"Ceph cluster {self._cluster_fsid} on {hostname} has exited maintenance mode"
 

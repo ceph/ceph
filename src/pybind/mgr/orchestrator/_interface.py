@@ -503,7 +503,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def exit_host_maintenance(self, hostname: str) -> OrchResult:
+    def exit_host_maintenance(self, hostname: str, force: bool = False, offline: bool = False) -> OrchResult:
         """
         Return a host from maintenance, restarting the clusters systemd target
         """
