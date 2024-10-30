@@ -100,11 +100,11 @@ void BaseWriter::service_shutdown()
 }
 
 
-PutBatch::PutBatch(boost::asio::io_context& ctx,
+PutBatch::PutBatch(const boost::asio::any_io_executor& ex,
                    librados::IoCtx ioctx,
                    std::string object,
                    size_t batch_size)
-  : ctx(ctx),
+  : ex(ex),
     ioctx(std::move(ioctx)),
     object(std::move(object)),
     batch_size(batch_size)
@@ -146,16 +146,16 @@ void PutBatch::flush(Completion completion)
 
   constexpr int flags = 0;
   constexpr jspan_context* trace = nullptr;
-  librados::async_operate(ctx, ioctx, object, &op, flags,
+  librados::async_operate(ex, ioctx, object, &op, flags,
                           trace, std::move(completion));
 }
 
-PutEntriesBatch::PutEntriesBatch(boost::asio::io_context& ctx,
+PutEntriesBatch::PutEntriesBatch(const boost::asio::any_io_executor& ex,
                                  librados::IoCtx ioctx,
                                  std::string object,
                                  size_t batch_size,
                                  bool check_existing)
-  : ctx(ctx),
+  : ex(ex),
     ioctx(std::move(ioctx)),
     object(std::move(object)),
     batch_size(batch_size),
@@ -190,7 +190,7 @@ void PutEntriesBatch::flush(Completion completion)
 
   constexpr int flags = 0;
   constexpr jspan_context* trace = nullptr;
-  librados::async_operate(ctx, ioctx, object, &op, flags,
+  librados::async_operate(ex, ioctx, object, &op, flags,
                           trace, std::move(completion));
 }
 

@@ -20,7 +20,6 @@
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/executor_work_guard.hpp>
-#include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/intrusive/list.hpp>
 #include <boost/system.hpp>
@@ -154,7 +153,7 @@ Writer(const boost::asio::any_io_executor&, uint64_t, Batch&) -> Writer<Batch&>;
 // a target shard batch that must be flushed with several bi_put() calls
 class PutBatch {
  public:
-  PutBatch(boost::asio::io_context& ctx,
+  PutBatch(const boost::asio::any_io_executor& ex,
            librados::IoCtx ioctx,
            std::string object,
            size_t batch_size);
@@ -166,7 +165,7 @@ class PutBatch {
   void flush(Completion completion);
 
  private:
-  boost::asio::io_context& ctx;
+  boost::asio::any_io_executor ex;
   librados::IoCtx ioctx;
   std::string object;
   const size_t batch_size;
@@ -177,7 +176,7 @@ class PutBatch {
 // a target shard batch that can be flushed with one bi_put_entries() call
 class PutEntriesBatch {
  public:
-  PutEntriesBatch(boost::asio::io_context& ctx,
+  PutEntriesBatch(const boost::asio::any_io_executor& ex,
                   librados::IoCtx ioctx,
                   std::string object,
                   size_t batch_size,
@@ -190,7 +189,7 @@ class PutEntriesBatch {
   void flush(Completion completion);
 
  private:
-  boost::asio::io_context& ctx;
+  boost::asio::any_io_executor ex;
   librados::IoCtx ioctx;
   std::string object;
   const size_t batch_size;
