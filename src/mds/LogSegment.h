@@ -26,6 +26,12 @@
 
 #include <unordered_set>
 
+#include <cstdint>
+#include <map>
+#include <ostream>
+#include <set>
+#include <vector>
+
 class CDir;
 class CInode;
 class CDentry;
