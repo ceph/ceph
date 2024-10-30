@@ -420,7 +420,7 @@ public:
 
   // xlock
   void get_xlock(MutationRef who, client_t client) { 
-    ceph_assert(get_xlock_by() == MutationRef());
+    ceph_assert(!has_xlock_by());
     ceph_assert(state == LOCK_XLOCK || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a peer */);
     parent->get(MDSCacheObject::PIN_LOCK);
@@ -464,6 +464,9 @@ public:
   }
   MutationRef get_xlock_by() const {
     return have_more() ? more()->xlock_by : MutationRef();
+  }
+  bool has_xlock_by() const noexcept {
+    return have_more() && more()->xlock_by;
   }
   
   // lease
