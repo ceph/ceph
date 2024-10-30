@@ -1,0 +1,70 @@
+tasks:
+- vip:
+
+# make sure cephadm notices the new IP
+- cephadm.shell:
+    host.a:
+      - ceph orch device ls --refresh
+
+# stop kernel nfs server, if running
+- vip.exec:
+    all-hosts:
+      - systemctl stop nfs-server
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create foofs
+      - ceph nfs cluster create foo --ingress --virtual-ip {{VIP0}}/{{VIPPREFIXLEN}} --port 2999
+      - ceph nfs export create cephfs --fsname foofs --cluster-id foo --pseudo-path /fake
+
+- cephadm.wait_for_service:
+    service: nfs.foo
+- cephadm.wait_for_service:
+    service: ingress.nfs.foo
+
+## export and mount
+
+- vip.exec:
+    host.a:
+      - mkdir /mnt/foo
+      - sleep 5
+      - mount -t nfs {{VIP0}}:/fake /mnt/foo -o port=2999
+      - echo test > /mnt/foo/testfile
+      - sync
+
+# take each gateway down in turn and ensure things still work
+- cephadm.shell:
+    volumes:
+      - /mnt/foo:/mnt/foo
+    host.a:
+      - |
+        echo "Check with each haproxy down in turn..."
+        for haproxy in `ceph orch ps | grep ^haproxy.nfs.foo. | awk '{print $1}'`; do
+          ceph orch daemon stop $haproxy
+          while ! ceph orch ps | grep $haproxy | grep stopped; do sleep 1 ; done
+          cat /mnt/foo/testfile
+          echo $haproxy > /mnt/foo/testfile
+          sync
+          ceph orch daemon start $haproxy
+          while ! ceph orch ps | grep $haproxy | grep running; do sleep 1 ; done
+        done
+
+# take each ganesha down in turn.
+# simulate "failure" by deleting the container
+- vip.exec:
+    all-hosts:
+      - |
+        echo "Check with $(hostname) ganesha(s) down..."
+        for c in `systemctl | grep ceph- | grep @nfs | awk '{print $1}'`; do
+            cid=`echo $c | sed 's/@/-/'`
+            id=`echo $c | cut -d @ -f 2 | sed 's/.service$//'`
+            fsid=`echo $c | cut -d @ -f 1 | cut -d - -f 2-`
+            echo "Removing daemon $id fsid $fsid..."
+            sudo $TESTDIR/cephadm rm-daemon --fsid $fsid --name $id
+
+            echo "Waking up cephadm..."
+            sudo $TESTDIR/cephadm shell -- ceph orch ps --refresh
+
+            while ! timeout 1 cat /mnt/foo/testfile ; do true ; done
+            echo "Mount is back!"
+        done

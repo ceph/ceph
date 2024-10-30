@@ -1,0 +1,6 @@
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_volumes.TestSubvolumeGroupSnapshots
+        - tasks.cephfs.test_volumes.TestSubvolumeSnapshots
