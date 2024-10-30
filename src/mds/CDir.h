@@ -546,6 +546,16 @@ public:
 
   void maybe_finish_freeze();
 
+  size_t count_unfreeze_tree_waiters() {
+    size_t n = count_unfreeze_dir_waiters();
+    _walk_tree([&n](CDir *dir) {
+        n += dir->count_unfreeze_dir_waiters();
+        return true;
+      });
+    return n;
+  }
+  inline size_t count_unfreeze_dir_waiters() const { return count_waiters(WAIT_UNFREEZE); }
+
   std::pair<bool,bool> is_freezing_or_frozen_tree() const {
     if (freeze_tree_state) {
       if (freeze_tree_state->frozen)
