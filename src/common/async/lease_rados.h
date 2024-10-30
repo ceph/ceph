@@ -53,7 +53,7 @@ class RadosLockClient : public LockClient {
     } else {
       lock.lock_exclusive(&op);
     }
-    librados::async_operate(*this, ioctx, oid, &op, 0, nullptr,
+    librados::async_operate(ex, ioctx, oid, &op, 0, nullptr,
                             librados::redirect_version(std::move(h)));
   }
   void renew(ceph::timespan dur, Handler h) override {
@@ -66,14 +66,14 @@ class RadosLockClient : public LockClient {
     } else {
       lock.lock_exclusive(&op);
     }
-    librados::async_operate(*this, ioctx, oid, &op, 0, nullptr,
+    librados::async_operate(ex, ioctx, oid, &op, 0, nullptr,
                             librados::redirect_version(std::move(h)));
   }
   void release(Handler h) override {
     librados::ObjectWriteOperation op;
     op.assert_exists();
     lock.unlock(&op);
-    librados::async_operate(*this, ioctx, oid, &op, 0, nullptr,
+    librados::async_operate(ex, ioctx, oid, &op, 0, nullptr,
                             librados::redirect_version(std::move(h)));
   }
 };
