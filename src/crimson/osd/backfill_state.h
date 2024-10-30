@@ -387,7 +387,7 @@ struct BackfillState::PeeringFacade {
   virtual const std::set<pg_shard_t>& get_backfill_targets() const = 0;
   virtual const hobject_t& get_peer_last_backfill(pg_shard_t peer) const = 0;
   virtual const PGLog& get_pg_log() const = 0;
-  virtual const eversion_t& get_last_update() const = 0;
+  virtual eversion_t get_pg_committed_to() const = 0;
   virtual const eversion_t& get_log_tail() const = 0;
 
   // the performance impact of `std::function` has not been considered yet.
