@@ -505,6 +505,11 @@ if(WITH_DPDK)
   set(HAVE_DPDK TRUE)
 endif()
 
+option(WITH_SMCD "Enable SMCD in async messenger" ON)
+if(WITH_SMCD)
+  set(HAVE_SMCD TRUE)
+endif(WITH_SMCD)
+
 option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
 if(WITH_BLKIN)
   find_package(LTTngUST REQUIRED)

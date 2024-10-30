@@ -26,6 +26,9 @@
 #ifdef HAVE_DPDK
 #include "dpdk/DPDKStack.h"
 #endif
+#ifdef HAVE_SMCD
+#include "smcd/SMCDStack.h"
+#endif
 
 #include "common/dout.h"
 #include "include/ceph_assert.h"
@@ -74,6 +77,10 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c,
 #ifdef HAVE_DPDK
   else if (t == "dpdk")
     stack.reset(new DPDKStack(c));
+#endif
+#ifdef HAVE_SMCD
+  else if (t == "smcd")
+    stack.reset(new SMCDStack(c));
 #endif
 
   if (stack == nullptr) {
