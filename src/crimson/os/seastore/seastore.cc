@@ -2236,7 +2236,7 @@ SeaStore::Shard::_omap_set_kvs(
         !root.is_null() ?
         tm_iertr::now() :
         omap_manager.initialize_omap(
-          t, onode->get_metadata_hint(device->get_block_size())
+          t, root.get_hint()
         ).si_then([&root](auto new_root) {
           root = new_root;
         });
