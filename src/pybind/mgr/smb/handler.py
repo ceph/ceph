@@ -29,6 +29,7 @@ from .enums import (
     JoinSourceType,
     LoginAccess,
     LoginCategory,
+    SMBClustering,
     State,
     UserGroupSourceType,
 )
@@ -788,24 +789,33 @@ def order_resources(
 
 def _check_cluster(cluster: ClusterRef, staging: _Staging) -> None:
     """Check that the cluster resource can be updated."""
-    if cluster.intent == Intent.REMOVED:
-        share_ids = ShareEntry.ids(staging)
-        clusters_used = {cid for cid, _ in share_ids}
-        if cluster.cluster_id in clusters_used:
-            raise ErrorResult(
-                cluster,
-                msg="cluster in use by shares",
-                status={
-                    'shares': [
-                        shid
-                        for cid, shid in share_ids
-                        if cid == cluster.cluster_id
-                    ]
-                },
-            )
-        return
+    if cluster.intent == Intent.PRESENT:
+        return _check_cluster_present(cluster, staging)
+    return _check_cluster_removed(cluster, staging)
+
+
+def _check_cluster_removed(cluster: ClusterRef, staging: _Staging) -> None:
+    share_ids = ShareEntry.ids(staging)
+    clusters_used = {cid for cid, _ in share_ids}
+    if cluster.cluster_id in clusters_used:
+        raise ErrorResult(
+            cluster,
+            msg="cluster in use by shares",
+            status={
+                'shares': [
+                    shid
+                    for cid, shid in share_ids
+                    if cid == cluster.cluster_id
+                ]
+            },
+        )
+
+
+def _check_cluster_present(cluster: ClusterRef, staging: _Staging) -> None:
     assert isinstance(cluster, resources.Cluster)
     cluster.validate()
+    if not staging.is_new(cluster):
+        _check_cluster_modifications(cluster, staging)
     for auth_ref in _auth_refs(cluster):
         auth = staging.get_join_auth(auth_ref)
         if (
@@ -832,6 +842,53 @@ def _check_cluster(cluster: ClusterRef, staging: _Staging) -> None:
                     'other_cluster_id': ug.linked_to_cluster,
                 },
             )
+
+
+def _check_cluster_modifications(
+    cluster: resources.Cluster, staging: _Staging
+) -> None:
+    """cluster has some fields we do not permit changing after the cluster has
+    been created.
+    """
+    prev = ClusterEntry.from_store(
+        staging.destination_store, cluster.cluster_id
+    ).get_cluster()
+    if cluster.auth_mode != prev.auth_mode:
+        raise ErrorResult(
+            cluster,
+            'auth_mode value may not be changed',
+            status={'existing_auth_mode': prev.auth_mode},
+        )
+    if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
+        assert prev.domain_settings
+        if not cluster.domain_settings:
+            # should not occur
+            raise ErrorResult(cluster, "domain settings missing from cluster")
+        if cluster.domain_settings.realm != prev.domain_settings.realm:
+            raise ErrorResult(
+                cluster,
+                'domain/realm value may not be changed',
+                status={'existing_domain_realm': prev.domain_settings.realm},
+            )
+    if cluster.is_clustered() != prev.is_clustered():
+        prev_clustering = prev.is_clustered()
+        cterms = {True: 'enabled', False: 'disabled'}
+        msg = (
+            f'a cluster resource with clustering {cterms[prev_clustering]}'
+            f' may not be changed to clustering {cterms[not prev_clustering]}'
+        )
+        opt_terms = {
+            True: SMBClustering.ALWAYS.value,
+            False: SMBClustering.NEVER.value,
+        }
+        hint = {
+            'note': (
+                'Set "clustering" to an explicit value that matches the'
+                ' current clustering behavior'
+            ),
+            'value': opt_terms[prev_clustering],
+        }
+        raise ErrorResult(cluster, msg, status={'hint': hint})
 
 
 def _parse_earmark(earmark: str) -> dict:
