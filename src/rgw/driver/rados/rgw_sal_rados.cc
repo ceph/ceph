@@ -3073,8 +3073,18 @@ int RadosObject::set_cloud_restore_status(const DoutPrefixProvider* dpp,
   bufferlist bl;
   using ceph::encode;
   encode(restore_status, bl);
-
-  ret = modify_obj_attrs(RGW_ATTR_RESTORE_STATUS, bl, y, dpp);
+  rgw_obj target = get_obj();
+  rgw_obj save = get_obj();
+  int r = get_obj_attrs(y, dpp, &target);
+  if (r < 0) {
+    return r;
+  }
+  /* Temporarily set target */
+  state.obj = target;
+  state.attrset[RGW_ATTR_RESTORE_STATUS] = bl;
+  ret = set_obj_attrs(dpp, &state.attrset, nullptr, y, false);
+  /* Restore target */
+  state.obj = save;
 
   return ret;
 }
@@ -3160,7 +3170,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
 	    attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
 	  }
           const req_context rctx{dpp, y, nullptr};
-          return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace());
+          return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace(), false);
         } catch (const buffer::end_of_buffer&) {
           // ignore empty manifest; it's not cloud-tiered
         } catch (const std::exception& e) {
@@ -3174,7 +3184,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
   if (is_expired()) {
     ldpp_dout(dpp, 10) << "Deleting expired obj:" << get_key() << dendl;
 
-    ret = obj->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
+    ret = obj->delete_object(dpp, null_yield, false, nullptr, nullptr);
   }
 
   return ret;
