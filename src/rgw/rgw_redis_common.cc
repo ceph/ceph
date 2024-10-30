@@ -51,22 +51,12 @@ RedisResponse do_redis_func(const DoutPrefixProvider* dpp, connection* conn,
 RGWRedis::RGWRedis(boost::asio::io_context& io)
     : io(io),
       conn(std::make_unique<connection>(io)),
-      cfg(std::make_unique<config>()) {
-  boost::asio::spawn(
-      io,
-      [this, &io](boost::asio::yield_context yield) {
-        load_lua_rgwlib(io, conn.get(), cfg.get(), yield);
-      },
-      [this, &io](std::exception_ptr eptr) {
-        if (eptr) std::rethrow_exception(eptr);
-        io.stop();
-      });
-  io.run();
-}
+      cfg(std::make_unique<config>()) {}
 
 RGWRedis::~RGWRedis() = default;
 
 connection* RGWRedis::get_conn() { return conn.get(); }
+config* RGWRedis::get_cfg() { return cfg.get(); }
 
 }  // namespace redis
 }  // namespace rgw

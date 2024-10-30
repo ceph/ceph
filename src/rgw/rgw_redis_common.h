@@ -90,6 +90,7 @@ class RGWRedis {
   ~RGWRedis();
 
   connection* get_conn();
+  config* get_cfg();
 
  private:
   boost::asio::io_context& io;

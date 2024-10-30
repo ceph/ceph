@@ -142,6 +142,7 @@ class Manager : public DoutPrefixProvider {
   const uint32_t reservations_cleanup_period_s;
   queues_persistency_tracker topics_persistency_tracker;
   const SiteConfig& site;
+  rgw::redis::RGWRedis redis{io_context};
 public:
   rgw::sal::RadosStore& rados_store;
 
@@ -317,8 +318,7 @@ private:
     while (!shutdown) {
       ldpp_dout(this, 20) << "INFO: trying to perform stale reservation cleanup for queue: " << queue_name << dendl;
 
-      auto conn = rgw::redis::RGWRedis(io_context).get_conn();
-
+      auto conn = redis.get_conn();
       auto ret = rgw::redislock::assert_locked(this, conn, queue_name+"_lock", lock_cookie, yield);
       if (ret == 0)
       {
@@ -353,7 +353,7 @@ private:
   // unlock (lose ownership) queue
   int unlock_queue(const std::string& queue_name, boost::asio::yield_context yield) {
 
-    auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+    auto conn = redis.get_conn();
     auto ret = rgw::redislock::unlock(this, conn, queue_name+"_lock", lock_cookie, yield);
 
     if (ret == -ENOENT) {
@@ -395,7 +395,7 @@ private:
     //   return;
     // }
 
-    auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+    auto conn = redis.get_conn();
 
     while (!shutdown) {
       // if queue was empty the last time, sleep for idle timeout
@@ -660,11 +660,11 @@ private:
     const auto min_jitter = 100; // ms
     const auto max_jitter = 500; // ms
     std::uniform_int_distribution<> duration_jitter(min_jitter, max_jitter);
-    auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+    auto conn = redis.get_conn();
 
     std::vector<std::string> queue_gc;
     std::mutex queue_gc_lock;
-    auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
+    //auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
     while (!shutdown) {
       Timer timer(io_context);
       const auto duration = (has_error ? 
@@ -773,6 +773,17 @@ public:
           if (eptr) std::rethrow_exception(eptr);
         });
 
+    boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
+        [this](boost::asio::yield_context yield) {
+          if (auto res = rgw::redis::load_lua_rgwlib(io_context, redis.get_conn(), redis.get_cfg(), yield); res < 0) {
+            ldpp_dout(this, 1) << "ERROR: failed to load lua scripts to redis. error: " << res << dendl;
+            return;
+          }
+          ldpp_dout(this, 20) << "INFO: successfully loaded lua scripts to redis" << dendl;
+        },
+        [this](std::exception_ptr eptr) {
+          if (eptr) std::rethrow_exception(eptr);
+        });
     // start the worker threads to do the actual queue processing
     const std::string WORKER_THREAD_NAME = "notif-worker";
     for (auto worker_id = 0U; worker_id < worker_count; ++worker_id) {
@@ -789,6 +800,10 @@ public:
       ceph_assert(rc == 0);
     }
     ldpp_dout(this, 10) << "INfO: started notification manager with: " << worker_count << " workers" << dendl;
+  }
+
+  rgw::redis::RGWRedis& get_redis() {
+    return redis;
   }
 
   // ctor: start all threads
@@ -857,9 +872,13 @@ int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_i
   // Init is more similar to the below operation of adding the queue name to a hashmap
   // An empty queue otherwise cannot be created in Redis
   // In principal this is not required
-  auto io_context = boost::asio::io_context();
-  auto conn = rgw::redis::RGWRedis(io_context).get_conn();
-  int ret = rgw::redisqueue::queue_init(dpp, conn, topic_queue, MAX_QUEUE_SIZE, y);
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: cannot add a persistent notification. notification manager is not initialized" << dendl;
+    return -EINVAL;
+  }
+  auto& redis = s_manager->get_redis();
+  auto conn = redis.get_conn();
+  auto ret = rgw::redisqueue::queue_init(dpp, conn, topic_queue, MAX_QUEUE_SIZE, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to create queue for topic: " << topic_queue << ". error: " << ret << dendl;
     return ret;
@@ -1091,8 +1110,6 @@ int publish_reserve(const DoutPrefixProvider* dpp,
                     reservation_t& res,
                     const RGWObjTags* req_tags) {
   rgw_pubsub_bucket_topics bucket_topics;
-  auto io_context = boost::asio::io_context();
-  auto conn = rgw::redis::RGWRedis(io_context).get_conn();
   if (all_zonegroups_support(site, zone_features::notification_v2) &&
       res.store->stat_topics_v1(res.user_tenant, res.yield, res.dpp) == -ENOENT) {
     auto ret = get_bucket_notifications(dpp, res.bucket, bucket_topics);
@@ -1149,6 +1166,12 @@ int publish_reserve(const DoutPrefixProvider* dpp,
 
       cls_2pc_reservation::id_t res_id = cls_2pc_reservation::NO_ID;
       if (topic_cfg.dest.persistent) {
+        if (!s_manager) {
+          ldpp_dout(dpp, 1) << "ERROR: cannot reserve on a queue. notification manager is not initialized" << dendl;
+          return -EINVAL;
+        }
+        auto& redis = s_manager->get_redis();
+        auto conn = redis.get_conn();
         // TODO: take default reservation size from conf
         constexpr auto DEFAULT_RESERVATION = 4 * 1024U;  // 4K
         res.size = DEFAULT_RESERVATION;
@@ -1193,8 +1216,6 @@ int publish_commit(rgw::sal::Object* obj,
 		   reservation_t& res,
 		   const DoutPrefixProvider* dpp)
 {
-  auto io_context = boost::asio::io_context();
-  auto conn = rgw::redis::RGWRedis(io_context).get_conn();
 
   for (auto& topic : res.topics) {
     if (topic.cfg.dest.persistent &&
@@ -1207,6 +1228,12 @@ int publish_commit(rgw::sal::Object* obj,
     event_entry.event.configurationId = topic.configurationId;
     event_entry.event.opaque_data = topic.cfg.opaque_data;
     if (topic.cfg.dest.persistent) { 
+      if (!s_manager) {
+        ldpp_dout(dpp, 1) << "ERROR: cannot commit to a queue. notification manager is not initialized" << dendl;
+        return -EINVAL;
+      }
+      auto& redis = s_manager->get_redis();
+      auto conn = redis.get_conn();
       event_entry.push_endpoint = std::move(topic.cfg.dest.push_endpoint);
       event_entry.push_endpoint_args = std::move(topic.cfg.dest.push_endpoint_args);
       event_entry.arn_topic = topic.cfg.dest.arn_topic;
@@ -1319,14 +1346,18 @@ int publish_commit(rgw::sal::Object* obj,
 }
 
 int publish_abort(reservation_t& res) {
-  auto io_context = boost::asio::io_context();
-  auto conn = rgw::redis::RGWRedis(io_context).get_conn();
   for (auto& topic : res.topics) {
     if (!topic.cfg.dest.persistent ||
 	topic.res_id == cls_2pc_reservation::NO_ID) {
       // nothing to abort or already committed/aborted
       continue;
     }
+    if (!s_manager) {
+      ldpp_dout(res.dpp, 1) << "ERROR: cannot abort a reservation. notification manager is not initialized" << dendl;
+      return -EINVAL;
+    }
+    auto& redis = s_manager->get_redis();
+    auto conn = redis.get_conn();
     const auto& queue_name = topic.cfg.dest.persistent_queue;
     auto ret = rgw::redisqueue::abort(res.dpp, conn, queue_name, topic.res_id,res.yield);
     // librados::ObjectWriteOperation op;
@@ -1351,8 +1382,12 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
   // TODO: use optional_yield instead calling rados_ioctx.operate() synchronously
   cls_2pc_reservations reservations;
 
-  auto io_context = boost::asio::io_context();
-  auto conn = rgw::redis::RGWRedis(io_context).get_conn();
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: cannot get queue stats. notification manager is not initialized" << dendl;
+    return -EINVAL;
+  }
+  auto& redis = s_manager->get_redis();
+  auto conn = redis.get_conn();
   // auto ret = cls_2pc_queue_list_reservations(rados_ioctx, queue_name, reservations);
   // if (ret < 0) {
   //   ldpp_dout(dpp, 1) << "ERROR: failed to read queue list reservation: " << ret << dendl;

@@ -9,7 +9,7 @@ set -e
 pid=`ps -ef | grep "redis-server"  | grep -v grep | awk -F' ' '{print $2}'`
 if [[ -n $pid ]]; then
     echo "Flushing redis-server."
-    redis-cli FLUSHALL
+    #redis-cli FLUSHALL
 fi
 
 quoted_print() {
