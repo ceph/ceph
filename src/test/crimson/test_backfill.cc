@@ -233,7 +233,7 @@ struct BackfillFixture::PeeringFacade
   const hobject_t& get_peer_last_backfill(pg_shard_t peer) const override {
     return backfill_targets.at(peer).last_backfill;
   }
-  const eversion_t& get_last_update() const override {
+  eversion_t get_pg_committed_to() const override {
     return backfill_source.last_update;
   }
   const eversion_t& get_log_tail() const override {
