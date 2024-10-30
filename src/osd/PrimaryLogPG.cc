@@ -6739,6 +6739,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
               truncate_update_size_and_usage(ctx->delta_stats,
                                              oi,
                                              op.extent.truncate_size);
+	      //truncate modify oi.size, need clear old data_digest and DIGEST flag
+	      oi.clear_data_digest();
 	    }
 	  } else {
 	    dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
@@ -6757,10 +6759,16 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	if (op.extent.length == 0) {
 	  if (op.extent.offset > oi.size) {
-	    t->truncate(
-	      soid, op.extent.offset);
-            truncate_update_size_and_usage(ctx->delta_stats, oi,
-                                           op.extent.offset);
+	    if (seq && (seq > op.extent.truncate_seq)) {
+	      //do nothing
+	      //write arrived after truncate, we should not truncate to offset
+	    } else {
+	      t->truncate(
+	        soid, op.extent.offset);
+	      truncate_update_size_and_usage(ctx->delta_stats, oi,
+	                                     op.extent.offset);
+	      oi.clear_data_digest();
+	    }
 	  } else {
 	    t->nop(soid);
 	  }
