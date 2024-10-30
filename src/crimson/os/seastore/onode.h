@@ -56,6 +56,44 @@ class Onode : public boost::intrusive_ref_counter<
 protected:
   virtual laddr_t get_hint() const = 0;
   const hobject_t hobj;
+
+#define DEF_ONODE_GET_ID(type)                                          \
+  std::optional<local_##type##_id_t> get_local_##type##_id() const {    \
+    std::optional<local_##type##_id_t> ret = std::nullopt;              \
+    bool check = false;                                                 \
+                                                                        \
+    const auto &layout = get_layout();                                  \
+    if (auto o = layout.omap_root.get(L_ADDR_NULL); !o.is_null()) {     \
+      check = true;                                                     \
+      ret.emplace(o.addr.get_local_##type##_id());                      \
+    }                                                                   \
+                                                                        \
+    if (auto x = layout.xattr_root.get(L_ADDR_NULL); !x.is_null()) {    \
+      if (check) {                                                      \
+        ceph_assert(x.addr.get_local_##type##_id() == *ret);            \
+      } else {                                                          \
+        check = true;                                                   \
+        ret.emplace(x.addr.get_local_##type##_id());                    \
+      }                                                                 \
+    }                                                                   \
+                                                                        \
+    if (auto o = layout.object_data.get(); !o.is_null()) {              \
+      auto addr = o.get_reserved_data_base();                           \
+      if (check) {                                                      \
+        ceph_assert(addr.get_local_##type##_id() == *ret);              \
+      } else {                                                          \
+        ret.emplace(addr.get_local_##type##_id());                      \
+      }                                                                 \
+    }                                                                   \
+                                                                        \
+    return ret;                                                         \
+  }
+
+  DEF_ONODE_GET_ID(object)
+  DEF_ONODE_GET_ID(clone)
+
+#undef DEF_ONODE_GET_ID
+
 public:
   explicit Onode(const hobject_t &hobj) : hobj(hobj) {}
 
