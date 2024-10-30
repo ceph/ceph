@@ -54,7 +54,20 @@ class Onode : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>
 {
 protected:
-  virtual laddr_t get_hint() const = 0;
+  virtual laddr_hint_t generate_data_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id,
+    extent_len_t block_size) const = 0;
+
+  virtual laddr_hint_t generate_data_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const = 0;
+
+  virtual laddr_hint_t generate_metadata_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id,
+    extent_len_t block_size) const = 0;
+
   const hobject_t hobj;
 
 #define DEF_ONODE_GET_ID(type)                                          \
@@ -110,11 +123,24 @@ public:
   virtual void clear_object_info(Transaction&) = 0;
   virtual void clear_snapset(Transaction&) = 0;
 
-  laddr_t get_metadata_hint(uint64_t block_size) const {
-    return get_hint();
+  laddr_hint_t get_data_hint(
+    extent_len_t block_size = laddr_t::UNIT_SIZE) const {
+    return generate_data_hint(
+      get_local_object_id(),
+      get_local_clone_id(),
+      block_size);
   }
-  laddr_t get_data_hint() const {
-    return get_hint();
+  laddr_hint_t get_data_clone_hint(
+    local_clone_id_t object_id,
+    extent_len_t block_size = laddr_t::UNIT_SIZE) const {
+    ceph_assert(object_id != LOCAL_OBJECT_ID_ZERO);
+    return generate_data_clone_hint(object_id, block_size);
+  }
+  laddr_hint_t get_metadata_hint(extent_len_t block_size) const {
+    return generate_metadata_hint(
+      get_local_object_id(),
+      get_local_clone_id(),
+      block_size);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };

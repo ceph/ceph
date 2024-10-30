@@ -36,7 +36,35 @@ public:
     return true;
   }
   bool is_dirty() const { return dirty; }
-  laddr_t get_hint() const final {return L_ADDR_MIN; }
+  laddr_hint_t get_hint() const {
+    laddr_hint_t hint;
+    hint.addr = laddr_t::from_byte_offset(0);
+    hint.condition = laddr_conflict_condition_t::all_at_object_content;
+    hint.policy = laddr_conflict_policy_t::linear_search;
+    hint.block_size = laddr_t::UNIT_SIZE;
+    return hint;
+  }
+
+  laddr_hint_t generate_data_hint(
+    std::optional<local_object_id_t>,
+    std::optional<local_clone_id_t>,
+    extent_len_t) const final {
+    return get_hint();
+  }
+
+  laddr_hint_t generate_data_clone_hint(
+    local_object_id_t,
+    extent_len_t) const final {
+    return get_hint();
+  }
+
+  laddr_hint_t generate_metadata_hint(
+    std::optional<local_object_id_t>,
+    std::optional<local_clone_id_t>,
+    extent_len_t) const final {
+    return get_hint();
+  }
+
   ~TestOnode() final = default;
 
   void update_onode_size(Transaction &t, uint32_t size) final {
