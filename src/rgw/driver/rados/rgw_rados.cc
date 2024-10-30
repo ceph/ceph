@@ -5313,6 +5313,9 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
       attrs[RGW_ATTR_CLOUD_TIER_CONFIG] = t_tier;
     }
 
+    // TODO : check whether log_op need to passed to this function
+    log_op = false;
+
   } else { // permanent restore
     {
       bufferlist bl;
@@ -5324,6 +5327,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     }
     //set mtime to now()
     set_mtime = real_clock::now();
+    log_op = true;
   }
 
   {
