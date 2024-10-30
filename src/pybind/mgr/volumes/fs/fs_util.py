@@ -99,8 +99,8 @@ def listdir_by_ctime_order(fs, path):
     if not entry_names:
         return []
 
-    # dir entries with ctime obtained by statig them. basically,
-    # following is a list of tuples where each tuple has 2 memebers.
+    # dir entries with ctime obtained by statig them. this variable contains
+    # a list of tuples where each tuple has 2 members: entry name and ctime.
     ens_with_ctime = []
     for en in entry_names:
         d_path = os.path.join(path, en)
