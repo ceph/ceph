@@ -24,8 +24,8 @@ upgrade-tasks:
           - sleep 60
           - ceph orch ps
           - ceph versions
-          - ceph versions | jq -e '.overall | length == 1'
-          - ceph versions | jq -e '.overall | keys' | grep $sha1
+          - time timeout 60 bash -c "until ceph versions | jq -e '.overall | length == 1'; do sleep 2; done"
+          - time timeout 60 bash -c "until ceph versions | jq -e '.overall | keys' | grep $sha1; do sleep 2; done"
 
 workload-tasks:
   sequential:
