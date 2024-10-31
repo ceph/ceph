@@ -117,14 +117,15 @@ void RadosIo::applyIoOp(IoOp &op)
       start_io();
       op_info = std::make_shared<AsyncOpInfo>(0, op.length1);
       op_info->bl1 = db->generate_data(0, op.length1);
-      op_info->wop.write_full(op_info->bl1);
+      librados::ObjectWriteOperation wop;
+      wop.write_full(op_info->bl1);
       auto create_cb = [this] (boost::system::error_code ec,
                                version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, oid,
-                              &op_info->wop, 0, nullptr, create_cb);
+                              std::move(wop), 0, nullptr, create_cb);
     }
     break;
 
@@ -132,14 +133,15 @@ void RadosIo::applyIoOp(IoOp &op)
     {
       start_io();
       op_info = std::make_shared<AsyncOpInfo>();
-      op_info->wop.remove();
+      librados::ObjectWriteOperation wop;
+      wop.remove();
       auto remove_cb = [this] (boost::system::error_code ec,
                                version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, oid,
-                              &op_info->wop, 0, nullptr, remove_cb);
+                              std::move(wop), 0, nullptr, remove_cb);
     }
     break;
 
@@ -147,9 +149,10 @@ void RadosIo::applyIoOp(IoOp &op)
     {
       start_io();
       op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1);
-      op_info->rop.read(op.offset1 * block_size,
-                        op.length1 * block_size,
-                        &op_info->bl1, nullptr);
+      librados::ObjectReadOperation rop;
+      rop.read(op.offset1 * block_size,
+               op.length1 * block_size,
+               &op_info->bl1, nullptr);
       auto read_cb = [this, op_info] (boost::system::error_code ec,
                                       version_t ver,
                                       bufferlist bl) {
@@ -160,7 +163,7 @@ void RadosIo::applyIoOp(IoOp &op)
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, oid,
-                              &op_info->rop, 0, nullptr, read_cb);
+                              std::move(rop), 0, nullptr, read_cb);
       num_io++;
     }
     break;
@@ -173,12 +176,13 @@ void RadosIo::applyIoOp(IoOp &op)
                                               op.offset2,
                                               op.length2);
 
-      op_info->rop.read(op.offset1 * block_size,
-                        op.length1 * block_size,
-                        &op_info->bl1, nullptr);
-      op_info->rop.read(op.offset2 * block_size,
-                    op.length2 * block_size,
-                    &op_info->bl2, nullptr);
+      librados::ObjectReadOperation rop;
+      rop.read(op.offset1 * block_size,
+               op.length1 * block_size,
+               &op_info->bl1, nullptr);
+      rop.read(op.offset2 * block_size,
+               op.length2 * block_size,
+               &op_info->bl2, nullptr);
       auto read2_cb = [this, op_info] (boost::system::error_code ec,
                                        version_t ver,
                                        bufferlist bl) {
@@ -192,7 +196,7 @@ void RadosIo::applyIoOp(IoOp &op)
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, oid,
-                              &op_info->rop, 0, nullptr, read2_cb);
+                              std::move(rop), 0, nullptr, read2_cb);
       num_io++;
     }
     break;
@@ -203,15 +207,16 @@ void RadosIo::applyIoOp(IoOp &op)
       op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1,
                                               op.offset2, op.length2,
                                               op.offset3, op.length3);
-      op_info->rop.read(op.offset1 * block_size,
-                    op.length1 * block_size,
-                    &op_info->bl1, nullptr);
-      op_info->rop.read(op.offset2 * block_size,
-                    op.length2 * block_size,
-                    &op_info->bl2, nullptr);
-      op_info->rop.read(op.offset3 * block_size,
-                    op.length3 * block_size,
-                    &op_info->bl3, nullptr);
+      librados::ObjectReadOperation rop;
+      rop.read(op.offset1 * block_size,
+               op.length1 * block_size,
+               &op_info->bl1, nullptr);
+      rop.read(op.offset2 * block_size,
+               op.length2 * block_size,
+               &op_info->bl2, nullptr);
+      rop.read(op.offset3 * block_size,
+               op.length3 * block_size,
+               &op_info->bl3, nullptr);
       auto read3_cb = [this, op_info] (boost::system::error_code ec,
                                        version_t ver,
                                        bufferlist bl) {
@@ -228,7 +233,7 @@ void RadosIo::applyIoOp(IoOp &op)
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, oid,
-                              &op_info->rop, 0, nullptr, read3_cb);
+                              std::move(rop), 0, nullptr, read3_cb);
       num_io++;
     }
     break;
@@ -239,14 +244,15 @@ void RadosIo::applyIoOp(IoOp &op)
       op_info = std::make_shared<AsyncOpInfo>(op.offset1, op.length1);
       op_info->bl1 = db->generate_data(op.offset1, op.length1);
 
-      op_info->wop.write(op.offset1 * block_size, op_info->bl1);
+      librados::ObjectWriteOperation wop;
+      wop.write(op.offset1 * block_size, op_info->bl1);
       auto write_cb = [this] (boost::system::error_code ec,
                               version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, oid,
-                              &op_info->wop, 0, nullptr, write_cb);
+                              std::move(wop), 0, nullptr, write_cb);
       num_io++;
     }
     break;
@@ -258,15 +264,16 @@ void RadosIo::applyIoOp(IoOp &op)
                                               op.offset2, op.length2);
       op_info->bl1 = db->generate_data(op.offset1, op.length1);
       op_info->bl2 = db->generate_data(op.offset2, op.length2);
-      op_info->wop.write(op.offset1 * block_size, op_info->bl1);
-      op_info->wop.write(op.offset2 * block_size, op_info->bl2);
+      librados::ObjectWriteOperation wop;
+      wop.write(op.offset1 * block_size, op_info->bl1);
+      wop.write(op.offset2 * block_size, op_info->bl2);
       auto write2_cb = [this] (boost::system::error_code ec,
                                version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, oid,
-                              &op_info->wop, 0, nullptr, write2_cb);
+                              std::move(wop), 0, nullptr, write2_cb);
       num_io++;
     }
     break;
@@ -280,16 +287,17 @@ void RadosIo::applyIoOp(IoOp &op)
       op_info->bl1 = db->generate_data(op.offset1, op.length1);
       op_info->bl2 = db->generate_data(op.offset2, op.length2);
       op_info->bl3 = db->generate_data(op.offset3, op.length3);
-      op_info->wop.write(op.offset1 * block_size, op_info->bl1);
-      op_info->wop.write(op.offset2 * block_size, op_info->bl2);
-      op_info->wop.write(op.offset3 * block_size, op_info->bl3);
+      librados::ObjectWriteOperation wop;
+      wop.write(op.offset1 * block_size, op_info->bl1);
+      wop.write(op.offset2 * block_size, op_info->bl2);
+      wop.write(op.offset3 * block_size, op_info->bl3);
       auto write3_cb = [this] (boost::system::error_code ec,
                                version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, oid,
-                              &op_info->wop, 0, nullptr, write3_cb);
+                              std::move(wop), 0, nullptr, write3_cb);
       num_io++;
     }
     break;

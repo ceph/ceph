@@ -231,7 +231,8 @@ TEST_F(AsioRados, AsyncReadOperationCallback)
       EXPECT_LT(0, ver);
       EXPECT_EQ("hello", bl.to_str());
     };
-    librados::async_operate(ex, io, "exist", &op, 0, nullptr, success_cb);
+    librados::async_operate(ex, io, "exist", std::move(op),
+                            0, nullptr, success_cb);
   }
   {
     librados::ObjectReadOperation op;
@@ -241,7 +242,8 @@ TEST_F(AsioRados, AsyncReadOperationCallback)
       EXPECT_EQ(0, ver);
       EXPECT_EQ(0, bl.length());
     };
-    librados::async_operate(ex, io, "noexist", &op, 0, nullptr, failure_cb);
+    librados::async_operate(ex, io, "noexist", std::move(op),
+                            0, nullptr, failure_cb);
   }
   service.run();
 }
@@ -254,15 +256,15 @@ TEST_F(AsioRados, AsyncReadOperationFuture)
   {
     librados::ObjectReadOperation op;
     op.read(0, 0, nullptr, nullptr);
-    f1 = librados::async_operate(ex, io, "exist", &op, 0, nullptr,
-                                 boost::asio::use_future);
+    f1 = librados::async_operate(ex, io, "exist", std::move(op),
+                                 0, nullptr, boost::asio::use_future);
   }
   std::future<read_result> f2;
   {
     librados::ObjectReadOperation op;
     op.read(0, 0, nullptr, nullptr);
-    f2 = librados::async_operate(ex, io, "noexist", &op, 0, nullptr,
-                                 boost::asio::use_future);
+    f2 = librados::async_operate(ex, io, "noexist", std::move(op),
+                                 0, nullptr, boost::asio::use_future);
   }
   service.run();
 
@@ -282,7 +284,7 @@ TEST_F(AsioRados, AsyncReadOperationYield)
     librados::ObjectReadOperation op;
     op.read(0, 0, nullptr, nullptr);
     error_code ec;
-    auto [ver, bl] = librados::async_operate(ex, io, "exist", &op,
+    auto [ver, bl] = librados::async_operate(ex, io, "exist", std::move(op),
                                              0, nullptr, yield[ec]);
     EXPECT_FALSE(ec);
     EXPECT_LT(0, ver);
@@ -294,7 +296,7 @@ TEST_F(AsioRados, AsyncReadOperationYield)
     librados::ObjectReadOperation op;
     op.read(0, 0, nullptr, nullptr);
     error_code ec;
-    auto [ver, bl] = librados::async_operate(ex, io, "noexist", &op,
+    auto [ver, bl] = librados::async_operate(ex, io, "noexist", std::move(op),
                                              0, nullptr, yield[ec]);
     EXPECT_EQ(boost::system::errc::no_such_file_or_directory, ec);
     EXPECT_EQ(0, ver);
@@ -320,7 +322,8 @@ TEST_F(AsioRados, AsyncWriteOperationCallback)
       EXPECT_FALSE(ec);
       EXPECT_LT(0, ver);
     };
-    librados::async_operate(ex, io, "exist", &op, 0, nullptr, success_cb);
+    librados::async_operate(ex, io, "exist", std::move(op),
+                            0, nullptr, success_cb);
   }
   {
     librados::ObjectWriteOperation op;
@@ -329,7 +332,8 @@ TEST_F(AsioRados, AsyncWriteOperationCallback)
       EXPECT_EQ(boost::system::errc::read_only_file_system, ec);
       EXPECT_EQ(0, ver);
     };
-    librados::async_operate(ex, snapio, "exist", &op, 0, nullptr, failure_cb);
+    librados::async_operate(ex, snapio, "exist", std::move(op),
+                            0, nullptr, failure_cb);
   }
   service.run();
 }
@@ -346,15 +350,15 @@ TEST_F(AsioRados, AsyncWriteOperationFuture)
   {
     librados::ObjectWriteOperation op;
     op.write_full(bl);
-    f1 = librados::async_operate(ex, io, "exist", &op, 0, nullptr,
-                                 boost::asio::use_future);
+    f1 = librados::async_operate(ex, io, "exist", std::move(op),
+                                 0, nullptr, boost::asio::use_future);
   }
   std::future<version_t> f2;
   {
     librados::ObjectWriteOperation op;
     op.write_full(bl);
-    f2 = librados::async_operate(ex, snapio, "exist", &op, 0, nullptr,
-                                 boost::asio::use_future);
+    f2 = librados::async_operate(ex, snapio, "exist", std::move(op),
+                                 0, nullptr, boost::asio::use_future);
   }
   service.run();
 
@@ -374,7 +378,7 @@ TEST_F(AsioRados, AsyncWriteOperationYield)
     librados::ObjectWriteOperation op;
     op.write_full(bl);
     error_code ec;
-    auto ver = librados::async_operate(ex, io, "exist", &op,
+    auto ver = librados::async_operate(ex, io, "exist", std::move(op),
                                        0, nullptr, yield[ec]);
     EXPECT_FALSE(ec);
     EXPECT_LT(0, ver);
@@ -385,7 +389,7 @@ TEST_F(AsioRados, AsyncWriteOperationYield)
     librados::ObjectWriteOperation op;
     op.write_full(bl);
     error_code ec;
-    auto ver = librados::async_operate(ex, snapio, "exist", &op,
+    auto ver = librados::async_operate(ex, snapio, "exist", std::move(op),
                                        0, nullptr, yield[ec]);
     EXPECT_EQ(boost::system::errc::read_only_file_system, ec);
     EXPECT_EQ(0, ver);

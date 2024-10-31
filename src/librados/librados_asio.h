@@ -163,19 +163,19 @@ auto async_write(IoExecutor ex, IoCtx& io, const std::string& oid,
 /// given handler with signature (error_code, version_t, bufferlist).
 template <boost::asio::execution::executor IoExecutor, typename CompletionToken>
 auto async_operate(IoExecutor ex, IoCtx& io, const std::string& oid,
-                   ObjectReadOperation *read_op, int flags,
+                   ObjectReadOperation read_op, int flags,
                    const jspan_context* trace_ctx, CompletionToken&& token)
 {
   using Op = detail::AsyncOp<bufferlist>;
   using Signature = typename Op::Signature;
   return boost::asio::async_initiate<CompletionToken, Signature>(
       [] (auto handler, IoExecutor ex, const IoCtx& i, const std::string& oid,
-          ObjectReadOperation *read_op, int flags) {
+          ObjectReadOperation read_op, int flags) {
         auto p = Op::create(ex, std::move(handler));
         auto& op = p->user_data;
 
-        IoCtx& io = const_cast<IoCtx&>(i);
-        int ret = io.aio_operate(oid, op.aio_completion.get(), read_op,
+        auto& io = const_cast<IoCtx&>(i);
+        int ret = io.aio_operate(oid, op.aio_completion.get(), &read_op,
                                  flags, &op.result);
         if (ret < 0) {
           auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
@@ -183,34 +183,34 @@ auto async_operate(IoExecutor ex, IoCtx& io, const std::string& oid,
         } else {
           p.release(); // release ownership until completion
         }
-      }, token, ex, io, oid, read_op, flags);
+      }, token, ex, io, oid, std::move(read_op), flags);
 }
 
 /// Calls IoCtx::aio_operate() and arranges for the AioCompletion to call a
 /// given handler with signature (error_code, version_t).
 template <boost::asio::execution::executor IoExecutor, typename CompletionToken>
 auto async_operate(IoExecutor ex, IoCtx& io, const std::string& oid,
-                   ObjectWriteOperation *write_op, int flags,
+                   ObjectWriteOperation write_op, int flags,
                    const jspan_context* trace_ctx, CompletionToken &&token)
 {
   using Op = detail::AsyncOp<void>;
   using Signature = typename Op::Signature;
   return boost::asio::async_initiate<CompletionToken, Signature>(
       [] (auto handler, IoExecutor ex, const IoCtx& i, const std::string& oid,
-          ObjectWriteOperation *write_op, int flags,
+          ObjectWriteOperation write_op, int flags,
           const jspan_context* trace_ctx) {
         auto p = Op::create(ex, std::move(handler));
         auto& op = p->user_data;
 
-        IoCtx& io = const_cast<IoCtx&>(i);
-        int ret = io.aio_operate(oid, op.aio_completion.get(), write_op, flags, trace_ctx);
+        auto& io = const_cast<IoCtx&>(i);
+        int ret = io.aio_operate(oid, op.aio_completion.get(), &write_op, flags, trace_ctx);
         if (ret < 0) {
           auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
           ceph::async::post(std::move(p), ec, 0);
         } else {
           p.release(); // release ownership until completion
         }
-      }, token, ex, io, oid, write_op, flags, trace_ctx);
+      }, token, ex, io, oid, std::move(write_op), flags, trace_ctx);
 }
 
 /// Calls IoCtx::aio_notify() and arranges for the AioCompletion to call a

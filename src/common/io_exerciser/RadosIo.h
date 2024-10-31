@@ -53,8 +53,6 @@ namespace ceph {
 
       class AsyncOpInfo {
       public:
-        librados::ObjectReadOperation rop;
-        librados::ObjectWriteOperation wop;
         ceph::buffer::list bl1;
         ceph::buffer::list bl2;
         ceph::buffer::list bl3;
