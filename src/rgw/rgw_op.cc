@@ -7356,6 +7356,12 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     return;
   }
 
+  if (multi_delete->objects.empty()) {
+    s->err.message = "Missing required element Object";
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
   constexpr int DEFAULT_MAX_NUM = 1000;
   int max_num = s->cct->_conf->rgw_delete_multi_obj_max_num;
   if (max_num < 0) {
