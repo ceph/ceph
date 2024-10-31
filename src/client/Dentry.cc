@@ -31,3 +31,13 @@ std::ostream &operator<<(std::ostream &oss, const Dentry &dn)
 {
   return oss << dn.dir->parent_inode->vino() << "[\"" << dn.name << "\"]";
 }
+
+void intrusive_ptr_add_ref(Dentry* dn)
+{
+  dn->get();
+}
+
+void intrusive_ptr_release(Dentry* dn)
+{
+  dn->put();
+}
