@@ -72,6 +72,14 @@ tries to remove MDS daemons using the enabled Ceph Manager orchestrator module.
    being used. See https://tracker.ceph.com/issues/49605#note-5 for more
    details.
 
+.. note:: If the snap-schedule Ceph Manager module is being used for a volume
+   and the volume is deleted, then the snap-schedule Ceph Manager module will
+   continue to hold references to the old pools. This will lead to the
+   snap-schedule Ceph Manager module faulting and logging errors. To remedy
+   this scenario, we recommend that the snap-schedule Ceph Manager module
+   be restarted after volume deletion. If the faults still persist, then we
+   recommend restarting `ceph-mgr`.
+
 List volumes by running the following command:
 
 .. prompt:: bash #
