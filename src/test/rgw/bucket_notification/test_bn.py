@@ -537,6 +537,16 @@ def another_user(user=None, tenant=None, account=None):
                       calling_format='boto.s3.connection.OrdinaryCallingFormat')
     return conn, arn
 
+
+def get_stats_persistent_topic(topic_name, assert_entries_number=None):
+    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+    assert_equal(result[1], 0)
+    parsed_result = json.loads(result[0])
+    if assert_entries_number:
+        assert_equal(parsed_result['Topic Stats']['Entries'], assert_entries_number)
+    return parsed_result
+
+
 ##############
 # bucket notifications tests
 ##############
@@ -1628,7 +1638,7 @@ def test_ps_s3_notification_multi_delete_on_master():
 @attr('http_test')
 def test_ps_s3_notification_push_http_on_master():
     """ test pushing http s3 notification on master """
-    hostname = get_ip_http()
+    hostname = get_ip()
     conn = connection()
     zonegroup = get_config_zonegroup()
 
@@ -1712,7 +1722,7 @@ def test_ps_s3_notification_push_http_on_master():
 @attr('http_test')
 def test_ps_s3_notification_push_cloudevents_on_master():
     """ test pushing cloudevents notification on master """
-    hostname = get_ip_http()
+    hostname = get_ip()
     conn = connection()
     zonegroup = get_config_zonegroup()
 
