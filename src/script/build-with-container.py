@@ -62,6 +62,7 @@ log = logging.getLogger()
 
 DISTROS = [
     "ubuntu22.04",
+    "ubuntu24.04",
     "centos9",
     "centos10",
     "centos8",
@@ -206,6 +207,7 @@ class Context:
             # "centos8": "quay.io/centos/centos:stream8",
             "centos8": "quay.io/phlogistonjohn/devcentos:stream8",
             "ubuntu22.04": "docker.io/ubuntu:22.04",
+            "ubuntu24.04": "docker.io/ubuntu:24.04",
         }[self.cli.distro]
 
     @property
