@@ -27,7 +27,7 @@ case "${CEPH_BRANCH}~${DISTRO}" in
         install_container_deps
         dnf_clean
     ;;
-    *~*ubuntu*22.04)
+    *~*ubuntu*2?.04)
         apt-get update
         apt-get install -y wget reprepro
         install_container_deps
