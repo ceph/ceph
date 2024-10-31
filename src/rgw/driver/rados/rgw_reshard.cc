@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <deque>
 #include <limits>
 #include <sstream>
 #include <chrono>
@@ -12,6 +13,7 @@
 
 #include "rgw_zone.h"
 #include "driver/rados/rgw_bucket.h"
+#include "driver/rados/reshard_writer.h"
 #include "rgw_asio_thread.h"
 #include "rgw_reshard.h"
 #include "rgw_sal.h"
@@ -159,200 +161,123 @@ void RGWBucketReshard::calculate_preferred_shards(
   }
 } // RGWBucketReshard::check_bucket_shards
 
+// implements the Batch concept for reshard::Writer
+class ShardBatch {
+ public:
+  ShardBatch(const boost::asio::any_io_executor& ex,
+             librados::IoCtx& ioctx,
+             const std::string& object,
+             size_t batch_size,
+             bool can_put_entries,
+             bool check_existing)
+    : ex(ex),
+      ioctx(ioctx),
+      object(object),
+      batch_size(batch_size),
+      can_put_entries(can_put_entries),
+      check_existing(check_existing)
+  {}
 
-class BucketReshardShard {
-  rgw::sal::RadosStore* store;
-  const RGWBucketInfo& bucket_info;
-  int shard_id;
-  RGWRados::BucketShard bs;
-  vector<rgw_cls_bi_entry> entries;
-  map<RGWObjCategory, rgw_bucket_category_stats> stats;
-  deque<librados::AioCompletion *>& aio_completions;
-  uint64_t max_aio_completions;
-  uint64_t reshard_shard_batch_size;
-
-  int wait_next_completion() {
-    librados::AioCompletion *c = aio_completions.front();
-    aio_completions.pop_front();
-
-    c->wait_for_complete();
-
-    int ret = c->get_return_value();
-    c->release();
-
-    if (ret < 0) {
-      derr << "ERROR: reshard rados operation failed: " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-
-    return 0;
+  [[nodiscard]] bool empty() const {
+    return entries.empty();
   }
 
-  int get_completion(librados::AioCompletion **c) {
-    if (aio_completions.size() >= max_aio_completions) {
-      int ret = wait_next_completion();
-      if (ret < 0) {
-        return ret;
-      }
+  [[nodiscard]] bool add(rgw_cls_bi_entry entry,
+                         std::optional<RGWObjCategory> category,
+                         rgw_bucket_category_stats entry_stats) {
+    entries.push_back(std::move(entry));
+    if (category && !can_put_entries) {
+      stats[*category] += entry_stats;
     }
-
-    *c = librados::Rados::aio_create_completion(nullptr, nullptr);
-    aio_completions.push_back(*c);
-
-    return 0;
+    // flush needed?
+    return entries.size() >= batch_size;
   }
 
-public:
-  BucketReshardShard(const DoutPrefixProvider *dpp,
-		     rgw::sal::RadosStore *_store, const RGWBucketInfo& _bucket_info,
-                     const rgw::bucket_index_layout_generation& index,
-                     int shard_id, deque<librados::AioCompletion *>& _completions) :
-    store(_store), bucket_info(_bucket_info), shard_id(shard_id),
-    bs(store->getRados()), aio_completions(_completions)
-  {
-    bs.init(dpp, bucket_info, index, shard_id, null_yield);
-
-    max_aio_completions =
-      store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_max_aio");
-    reshard_shard_batch_size =
-      store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_batch_size");
-  }
-
-  int get_shard_id() const {
-    return shard_id;
-  }
-
-  int add_entry(rgw_cls_bi_entry& entry, bool account, RGWObjCategory category,
-                const rgw_bucket_category_stats& entry_stats,
-                bool process_log = false) {
-    entries.push_back(entry);
-    if (account) {
-      rgw_bucket_category_stats& target = stats[category];
-      target.num_entries += entry_stats.num_entries;
-      target.total_size += entry_stats.total_size;
-      target.total_size_rounded += entry_stats.total_size_rounded;
-      target.actual_size += entry_stats.actual_size;
-    }
-    if (entries.size() >= reshard_shard_batch_size) {
-      int ret = flush(process_log);
-      if (ret < 0) {
-        return ret;
-      }
-    }
-
-    return 0;
-  }
-
-  int flush(bool process_log = false) {
-    if (entries.size() == 0) {
-      return 0;
-    }
-
+  void flush(rgwrados::reshard::Completion completion) {
     librados::ObjectWriteOperation op;
-    if (process_log) {
-      // write the entries in bulk and update the stats. since we may have
-      // already written some of these entries during the InLogrecord stage,
-      // check for existing entries and decrement their stats first
-      const bool check_existing = true;
+
+    if (can_put_entries) {
+      // bi_put_entries() handles stats on the server side
       cls_rgw_bi_put_entries(op, std::move(entries), check_existing);
     } else {
+      // issue a separate bi_put() call for each entry
       for (auto& entry : entries) {
-        cls_rgw_bi_put(op, entry);
+        cls_rgw_bi_put(op, std::move(entry));
       }
-      cls_rgw_bucket_update_stats(op, false, stats);
-    }
-
-    librados::AioCompletion *c;
-    int ret = get_completion(&c);
-    if (ret < 0) {
-      return ret;
-    }
-    ret = bs.bucket_obj.aio_operate(c, &op);
-    if (ret < 0) {
-      derr << "ERROR: failed to store entries in target bucket shard (bs=" << bs.bucket << "/" << bs.shard_id << ") error=" << cpp_strerror(-ret) << dendl;
-      return ret;
+      constexpr bool absolute = false; // add to existing stats
+      cls_rgw_bucket_update_stats(op, absolute, stats);
     }
     entries.clear();
     stats.clear();
 
-    return 0;
+    constexpr int flags = 0;
+    constexpr jspan_context* trace = nullptr;
+    librados::async_operate(ex, ioctx, object, &op, flags,
+                            trace, std::move(completion));
   }
 
-  int wait_all_aio() {
-    int ret = 0;
-    while (!aio_completions.empty()) {
-      int r = wait_next_completion();
-      if (r < 0) {
-        ret = r;
-      }
-    }
-    return ret;
-  }
-}; // class BucketReshardShard
-
+ private:
+  boost::asio::any_io_executor ex;
+  librados::IoCtx& ioctx;
+  const std::string& object;
+  const size_t batch_size;
+  const bool can_put_entries;
+  const bool check_existing;
+  std::vector<rgw_cls_bi_entry> entries;
+  std::map<RGWObjCategory, rgw_bucket_category_stats> stats;
+};
 
 class BucketReshardManager {
-  rgw::sal::RadosStore *store;
-  deque<librados::AioCompletion *> completions;
-  vector<BucketReshardShard> target_shards;
-
-public:
-  BucketReshardManager(const DoutPrefixProvider *dpp,
-		       rgw::sal::RadosStore *_store,
-		       const RGWBucketInfo& bucket_info,
-                       const rgw::bucket_index_layout_generation& target)
-    : store(_store)
+  using Writer = rgwrados::reshard::Writer<ShardBatch>;
+  std::deque<Writer> writers;
+ public:
+  BucketReshardManager(const boost::asio::any_io_executor& ex,
+                       uint64_t max_aio,
+                       librados::IoCtx& ioctx,
+                       const std::map<int, std::string>& oids,
+                       size_t batch_size,
+                       bool can_put_entries,
+                       bool check_existing)
   {
-    const uint32_t num_shards = rgw::num_shards(target.layout.normal);
-    target_shards.reserve(num_shards);
-    for (uint32_t i = 0; i < num_shards; ++i) {
-      target_shards.emplace_back(dpp, store, bucket_info, target, i, completions);
+    //writers.reserve(oids.size());
+    int expected = 0;
+    for (auto& [shard, oid] : oids) {
+      assert(shard == expected); // shard ids must be sequential from 0
+      expected++;
+      writers.emplace_back(ex, max_aio, ex, ioctx, oid, batch_size,
+                           can_put_entries, check_existing);
     }
   }
 
-  ~BucketReshardManager() {
-    for (auto& shard : target_shards) {
-      int ret = shard.wait_all_aio();
-      if (ret < 0) {
-        ldout(store->ctx(), 20) << __func__ <<
-	  ": shard->wait_all_aio() returned ret=" << ret << dendl;
-      }
+  void add_entry(int shard_index, rgw_cls_bi_entry entry,
+                 bool account, RGWObjCategory category,
+                 const rgw_bucket_category_stats& stats,
+                 boost::asio::yield_context yield)
+  {
+    auto& writer = writers.at(shard_index); // may throw
+    std::optional<RGWObjCategory> cat;
+    if (account) {
+      cat = category;
     }
-    target_shards.clear();
+    writer.write(std::move(entry), cat, stats, yield);
   }
 
-  int add_entry(int shard_index,
-                rgw_cls_bi_entry& entry, bool account, RGWObjCategory category,
-                const rgw_bucket_category_stats& entry_stats,
-                bool process_log = false) {
-    int ret = target_shards[shard_index].add_entry(entry, account, category,
-						   entry_stats, process_log);
-    if (ret < 0) {
-      derr << "ERROR: target_shards.add_entry(" << entry.idx <<
-	") returned error: " << cpp_strerror(-ret) << dendl;
-      return ret;
+  void finish(boost::asio::yield_context yield)
+  {
+    std::exception_ptr eptr;
+    for (auto& writer : writers) {
+      writer.flush();
     }
-
-    return 0;
-  }
-
-  int finish(bool process_log = false) {
-    int ret = 0;
-    for (auto& shard : target_shards) {
-      int r = shard.flush(process_log);
-      if (r < 0) {
-        derr << "ERROR: target_shards[" << shard.get_shard_id() << "].flush() returned error: " << cpp_strerror(-r) << dendl;
-        ret = r;
+    for (auto& writer : writers) {
+      try {
+        writer.drain(yield);
+      } catch (const std::exception&) {
+        eptr = std::current_exception();
       }
     }
-    for (auto& shard : target_shards) {
-      int r = shard.wait_all_aio();
-      if (r < 0) {
-        derr << "ERROR: target_shards[" << shard.get_shard_id() << "].wait_all_aio() returned error: " << cpp_strerror(-r) << dendl;
-        ret = r;
-      }
+    if (eptr) {
+      std::rethrow_exception(eptr);
     }
-    return ret;
   }
 }; // class BucketReshardManager
 
@@ -1050,7 +975,8 @@ static int calc_target_shard(const DoutPrefixProvider* dpp, RGWRados* store,
   return 0;
 }
 
-static int process_source_shard(const DoutPrefixProvider *dpp, optional_yield y,
+static int process_source_shard(const DoutPrefixProvider *dpp,
+                                boost::asio::yield_context y,
                                 RGWRados* store, const RGWBucketInfo& bucket_info,
                                 const rgw::bucket_index_layout_generation& current,
                                 int source_shard, int max_op_entries,
@@ -1099,11 +1025,8 @@ static int process_source_shard(const DoutPrefixProvider *dpp, optional_yield y,
         return ret;
       }
 
-      ret = target_shards_mgr.add_entry(shard_index, entry, account,
-                                        category, stats, process_log);
-      if (ret < 0) {
-        return ret;
-      }
+      target_shards_mgr.add_entry(shard_index, entry, account,
+                                  category, stats, y);
 
       const uint64_t entry_id = stage_entries++;
       if (verbose_json_out) {
@@ -1124,11 +1047,14 @@ static int process_source_shard(const DoutPrefixProvider *dpp, optional_yield y,
 
 int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation& current,
                                       int max_op_entries,
-                                      BucketReshardManager& target_shards_mgr,
+                                      librados::IoCtx& pool,
+                                      const std::map<int, std::string>& oids,
+                                      bool can_put_entries,
                                       bool verbose_json_out,
                                       ostream *out,
                                       Formatter *formatter, rgw::BucketReshardState reshard_stage,
-                                      const DoutPrefixProvider *dpp, optional_yield y)
+                                      const DoutPrefixProvider *dpp,
+                                      boost::asio::yield_context y)
 {
   list<rgw_cls_bi_entry> entries;
 
@@ -1159,6 +1085,14 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
     (*out) << stage;
   }
 
+  auto& conf = store->ctx()->_conf;
+  const uint64_t max_aio = conf.get_val<uint64_t>("rgw_reshard_max_aio");
+  const size_t batch_size = conf.get_val<uint64_t>("rgw_reshard_batch_size");
+  const bool check_existing = process_log;
+  BucketReshardManager target_shards_mgr(y.get_executor(), max_aio, pool,
+                                         oids, batch_size, can_put_entries,
+                                         check_existing);
+
   const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
   for (uint32_t i = 0; i < num_source_shards; ++i) {
     int ret = process_source_shard(dpp, y, store->getRados(), bucket_info,
@@ -1170,18 +1104,14 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
     }
   }
 
+  target_shards_mgr.finish(y);
+
   if (verbose_json_out) {
     formatter->close_section();
     formatter->flush(*out);
   } else if (out) {
     (*out) << " " << stage_entries << std::endl;
     (*out) << "end time: " << real_clock::now() << std::endl;
-  }
-
-  int ret = target_shards_mgr.finish(process_log);
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to reshard: " << ret << dendl;
-    return -EIO;
   }
 
   return 0;
@@ -1195,7 +1125,8 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 				 ostream *out,
 				 Formatter *formatter,
                                  ReshardFaultInjector& fault,
-                                 const DoutPrefixProvider *dpp, optional_yield y)
+                                 const DoutPrefixProvider *dpp,
+                                 boost::asio::yield_context y)
 {
   if (out) {
     (*out) << "tenant: " << bucket_info.bucket.tenant << std::endl;
@@ -1208,14 +1139,21 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
     return -EINVAL;
   }
 
-  BucketReshardManager target_shards_mgr(dpp, store, bucket_info, target);
+  librados::IoCtx pool;
+  std::map<int, std::string> oids;
+  int ret = store->svc()->bi_rados->open_bucket_index(
+      dpp, bucket_info, std::nullopt, target, &pool, &oids, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
 
   bool verbose_json_out = verbose && (formatter != nullptr) && (out != nullptr);
 
   if (support_logrecord) {
     // a log is written to shard going with client op at this state
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord);
-    int ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
+    int ret = reshard_process(current, max_op_entries, pool, oids,
+                              support_logrecord, verbose_json_out, out,
                               formatter, bucket_info.layout.resharding, dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": failed in logrecord state of reshard ret = " << ret << dendl;
@@ -1229,8 +1167,9 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 
     // block the client op and complete the resharding
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InProgress);
-    ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
-                              formatter, bucket_info.layout.resharding, dpp, y);
+    ret = reshard_process(current, max_op_entries, pool, oids,
+                          support_logrecord, verbose_json_out, out,
+                          formatter, bucket_info.layout.resharding, dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": failed in progress state of reshard ret = " << ret << dendl;
       return ret;
@@ -1238,7 +1177,8 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
   } else {
     // setting InProgress state, but doing InLogrecord state
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InProgress);
-    int ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
+    int ret = reshard_process(current, max_op_entries, pool, oids,
+                              support_logrecord, verbose_json_out, out,
                               formatter, rgw::BucketReshardState::InLogrecord, dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": failed in logrecord state of reshard ret = " << ret << dendl;

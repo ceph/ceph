@@ -81,11 +81,14 @@ class RGWBucketReshard {
 
   int reshard_process(const rgw::bucket_index_layout_generation& current,
                       int max_entries,
-                      BucketReshardManager& target_shards_mgr,
+                      librados::IoCtx& pool,
+                      const std::map<int, std::string>& oids,
+                      bool can_put_entries,
                       bool verbose_json_out,
                       std::ostream *out,
                       Formatter *formatter, rgw::BucketReshardState reshard_stage,
-                      const DoutPrefixProvider *dpp, optional_yield y);
+                      const DoutPrefixProvider *dpp,
+                      boost::asio::yield_context yield);
 
   int do_reshard(const rgw::bucket_index_layout_generation& current,
                  const rgw::bucket_index_layout_generation& target,
@@ -94,7 +97,8 @@ class RGWBucketReshard {
                  std::ostream *os,
 		 Formatter *formatter,
                  ReshardFaultInjector& fault,
-                 const DoutPrefixProvider *dpp, optional_yield y);
+                 const DoutPrefixProvider *dpp,
+                 boost::asio::yield_context yield);
   // execute the bucket reshard while the bucket's reshard lock is held
   int execute_locked(int num_shards, ReshardFaultInjector& fault,
                      int max_op_entries, const DoutPrefixProvider *dpp,
