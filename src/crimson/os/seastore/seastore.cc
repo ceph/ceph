@@ -1975,6 +1975,7 @@ SeaStore::Shard::_rename(
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
+  // TODO: move all logical extent mappings from src to dst
   auto olayout = onode->get_layout();
   uint32_t size = olayout.size;
   auto omap_root = olayout.omap_root.get(

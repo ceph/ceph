@@ -2400,6 +2400,8 @@ struct omap_root_t {
 
   laddr_hint_t get_hint() const {
     ceph_assert(hint != LADDR_HINT_NULL);
+    // TODO: uncomment this line after supported onode rename
+    // ceph_assert(hint.addr.get_clone_prefix() == addr.get_clone_prefix());
     return hint;
   }
 };
