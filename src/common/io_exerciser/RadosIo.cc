@@ -109,26 +109,28 @@ void RadosIo::applyIoOp(IoOp& op) {
           std::make_shared<AsyncOpInfo<1>>(std::array<uint64_t, 1>{0},
                                            std::array<uint64_t, 1>{opSize});
       op_info->bufferlist[0] = db->generate_data(0, opSize);
-      op_info->wop.write_full(op_info->bufferlist[0]);
+      librados::ObjectWriteOperation wop;
+      wop.write_full(op_info->bufferlist[0]);
       auto create_cb = [this](boost::system::error_code ec, version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, oid,
-                              &op_info->wop, 0, nullptr, create_cb);
+                              std::move(wop), 0, nullptr, create_cb);
       break;
     }
 
     case OpType::Remove: {
       start_io();
       auto op_info = std::make_shared<AsyncOpInfo<0>>();
-      op_info->wop.remove();
+      librados::ObjectWriteOperation wop;
+      wop.remove();
       auto remove_cb = [this](boost::system::error_code ec, version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, oid,
-                              &op_info->wop, 0, nullptr, remove_cb);
+                              std::move(wop), 0, nullptr, remove_cb);
       break;
     }
     case OpType::Read:
@@ -171,10 +173,11 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
     auto op_info =
         std::make_shared<AsyncOpInfo<N>>(readOp.offset, readOp.length);
 
+    librados::ObjectReadOperation rop;
     for (int i = 0; i < N; i++) {
-      op_info->rop.read(readOp.offset[i] * block_size,
-                        readOp.length[i] * block_size, &op_info->bufferlist[i],
-                        nullptr);
+      rop.read(readOp.offset[i] * block_size,
+               readOp.length[i] * block_size, &op_info->bufferlist[i],
+               nullptr);
     }
     auto read_cb = [this, op_info](boost::system::error_code ec, version_t ver,
                                    bufferlist bl) {
@@ -186,7 +189,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       finish_io();
     };
     librados::async_operate(asio.get_executor(), io, oid,
-                            &op_info->rop, 0, nullptr, read_cb);
+                            std::move(rop), 0, nullptr, read_cb);
     num_io++;
   };
 
@@ -194,18 +197,19 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
                           ReadWriteOp<opType, N> writeOp) {
     auto op_info =
         std::make_shared<AsyncOpInfo<N>>(writeOp.offset, writeOp.length);
+    librados::ObjectWriteOperation wop;
     for (int i = 0; i < N; i++) {
       op_info->bufferlist[i] =
           db->generate_data(writeOp.offset[i], writeOp.length[i]);
-      op_info->wop.write(writeOp.offset[i] * block_size,
-                         op_info->bufferlist[i]);
+      wop.write(writeOp.offset[i] * block_size,
+                op_info->bufferlist[i]);
     }
     auto write_cb = [this](boost::system::error_code ec, version_t ver) {
       ceph_assert(ec == boost::system::errc::success);
       finish_io();
     };
     librados::async_operate(asio.get_executor(), io, oid,
-                            &op_info->wop, 0, nullptr, write_cb);
+                            std::move(wop), 0, nullptr, write_cb);
     num_io++;
   };
 
@@ -213,11 +217,12 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
                                 ReadWriteOp<opType, N> writeOp) {
     auto op_info =
         std::make_shared<AsyncOpInfo<N>>(writeOp.offset, writeOp.length);
+    librados::ObjectWriteOperation wop;
     for (int i = 0; i < N; i++) {
       op_info->bufferlist[i] =
           db->generate_data(writeOp.offset[i], writeOp.length[i]);
-      op_info->wop.write(writeOp.offset[i] * block_size,
-                         op_info->bufferlist[i]);
+      wop.write(writeOp.offset[i] * block_size,
+                op_info->bufferlist[i]);
     }
     auto write_cb = [this, writeOp](boost::system::error_code ec,
                                     version_t ver) {
@@ -225,7 +230,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       finish_io();
     };
     librados::async_operate(asio.get_executor(), io, oid,
-                            &op_info->wop, 0, nullptr, write_cb);
+                            std::move(wop), 0, nullptr, write_cb);
     num_io++;
   };
 

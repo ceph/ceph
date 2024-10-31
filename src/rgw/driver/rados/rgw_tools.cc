@@ -208,7 +208,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     auto& yield = y.get_yield_context();
     auto ex = yield.get_executor();
     boost::system::error_code ec;
-    auto [ver, bl] = librados::async_operate(ex, ioctx, oid, op,
+    auto [ver, bl] = librados::async_operate(ex, ioctx, oid, std::move(*op),
                                              flags, trace_info, yield[ec]);
     if (pbl) {
       *pbl = std::move(bl);
@@ -234,7 +234,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     auto& yield = y.get_yield_context();
     auto ex = yield.get_executor();
     boost::system::error_code ec;
-    version_t ver = librados::async_operate(ex, ioctx, oid, op,
+    version_t ver = librados::async_operate(ex, ioctx, oid, std::move(*op),
                                             flags, trace_info, yield[ec]);
     if (pver) {
       *pver = ver;
