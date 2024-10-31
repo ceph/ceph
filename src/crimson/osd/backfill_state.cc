@@ -378,16 +378,17 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
       trim_backfilled_object_from_intervals(std::move(result),
 					    backfill_state().last_backfill_started,
 					    backfill_state().peer_backfill_info);
-    } else {
+      backfill_listener().maybe_flush();
+    } else if (!primary_bi.empty()) {
       auto result = update_on_peers(check);
       trim_backfilled_object_from_intervals(std::move(result),
 					    backfill_state().last_backfill_started,
 					    backfill_state().peer_backfill_info);
-      if (!primary_bi.empty()) {
-	primary_bi.pop_front();
-      }
+      primary_bi.pop_front();
+      backfill_listener().maybe_flush();
+    } else {
+      break;
     }
-    backfill_listener().maybe_flush();
   } while (!all_emptied(primary_bi, backfill_state().peer_backfill_info));
 
   if (backfill_state().progress_tracker->tracked_objects_completed()
