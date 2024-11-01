@@ -355,7 +355,7 @@ invoking methods of the `Ioctx` and other classes.
 .. --------------
 
 .. The Ceph Storage Cluster allows you to make a snapshot of a pool's state.
-.. Whereas, basic pool operations only require a connection to the cluster,
+.. Although basic pool operations require only a connection to the cluster,
 .. snapshots require an I/O context.
 
 .. Ioctx.create_snap(self, snap_name)

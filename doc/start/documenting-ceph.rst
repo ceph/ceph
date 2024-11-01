@@ -860,7 +860,7 @@ possible, we prefer to maintain this convention with text, lists, literal text
    lines should begin at the same character position as the text of the
    indented text (less numbers, bullets, etc.).
 
-   Indented text may include literal text examples. Whereas, text indentation
+   Indented text may include literal text examples. Although text indentation
    should be done with spaces, literal text examples should be indented with
    tabs. This convention enables you to add an additional indented paragraph
    following a literal example by leaving a blank line and beginning the
