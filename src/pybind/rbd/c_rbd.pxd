@@ -739,6 +739,8 @@ cdef extern from "rbd/librbd.h" nogil:
                         size_t *size);
     int rbd_group_get_id(rados_ioctx_t p, const char *group_name,
                          char *group_id, size_t *size)
+    int rbd_group_get_name(rados_ioctx_t p, const char *group_id,
+                           char *group_name, size_t *size);
     int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest)
     void rbd_group_info_cleanup(rbd_group_info_t *group_info,
                                 size_t group_info_size)
