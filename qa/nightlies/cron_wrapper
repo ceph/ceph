@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+# check for no argument case and stop
+if [ -z $1 ]; then
+  echo "need argument"
+  exit 1
+fi
+
+# Make a temporary unlinked file to hold the stdout/stderr
+T=$(mktemp)
+exec 10>"$T"
+exec 11<"$T"
+rm -f "$T"
+
+# Forward to syslog (journald)
+printf 'Running command: %s' "$*" | logger
+"$@" |& tee >(logger) >&10
+code=$?
+
+if [ "$code" != 0 ] ; then
+    printf 'teuthology cronjob encountered error:\n'
+    head -n 10000 <&11
+fi
