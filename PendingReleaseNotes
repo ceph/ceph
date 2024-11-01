@@ -126,6 +126,8 @@
   users that modifying "max_mds" may not help with troubleshooting or recovery
   effort. Instead, it might further destabilize the cluster.
 
+* RADOS: Add ``messenger dump`` command to retrieve runtime information
+  on connections, sockets, and kernel TCP stats from the messenger.
 
 
 >=19.0.0
