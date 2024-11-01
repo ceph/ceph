@@ -1,0 +1,6 @@
+# Lengthen the timeout for thrashed MDS
+overrides:
+  ceph:
+    conf:
+      client:
+        client_shutdown_timeout: 120
