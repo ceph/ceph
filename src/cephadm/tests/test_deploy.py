@@ -495,6 +495,7 @@ def test_deploy_ceph_exporter_container(cephadm_fs, funkypatch):
 def test_deploy_and_rm_iscsi(cephadm_fs, funkypatch):
     # Test that the deploy and remove paths for iscsi (which has sidecar container)
     # create and remove the correct unit files.
+    funkypatch.patch('shutil.rmtree')  # fakefs + shutil.rmtree breaks on py3.12
     mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
