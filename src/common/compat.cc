@@ -13,7 +13,12 @@
  *
  */
 
+#include "include/compat.h"
+#include "include/sock_compat.h"
+#include "common/safe_io.h"
+
 #include <cstdio>
+#include <sstream>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -38,10 +43,6 @@
 #if defined(__linux__) 
 #include <sys/vfs.h>
 #endif
-
-#include "include/compat.h"
-#include "include/sock_compat.h"
-#include "common/safe_io.h"
 
 // The type-value for a ZFS FS in fstatfs.
 #define FS_ZFS_TYPE 0xde
