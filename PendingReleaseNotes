@@ -126,6 +126,14 @@
   users that modifying "max_mds" may not help with troubleshooting or recovery
   effort. Instead, it might further destabilize the cluster.
 
+* CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
+  `--earmark` with a unique identifier needed for NFS or SMB services. The earmark
+  string for a subvolume is empty by default. To remove an already present earmark,
+  an empty string can be assigned to it. Additionally, commands
+  `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get` and
+  `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
+* RADOS: Add ``messenger dump`` command to retrieve runtime information
+  on connections, sockets, and kernel TCP stats from the messenger.
 
 
 >=19.0.0
