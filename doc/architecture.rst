@@ -1215,7 +1215,7 @@ exemplary implementations.
 Summary
 -------
 
-Ceph Storage Clusters are dynamic--like a living organism. Whereas, many storage
+Ceph Storage Clusters are dynamic--like a living organism. Although many storage
 appliances do not fully utilize the CPU and RAM of a typical commodity server,
 Ceph does. From heartbeats, to  peering, to rebalancing the cluster or
 recovering from faults,  Ceph offloads work from clients (and from a centralized
