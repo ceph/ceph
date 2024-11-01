@@ -18,6 +18,7 @@
 #include "include/timegm.h"
 
 #include <iomanip> // for std::setw()
+#include <sstream>
 
 #include <errno.h>
 
