@@ -17,6 +17,7 @@
 #include <fcntl.h>
 
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "common/config.h"
