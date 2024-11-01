@@ -1,5 +1,6 @@
 # type: ignore
 
+import contextlib
 import copy
 import errno
 import json
@@ -37,6 +38,13 @@ def get_ceph_conf(
         fsid = {fsid}
         mon_host = {mon_host}
 '''
+
+@contextlib.contextmanager
+def bootstrap_test_ctx(*args, **kwargs):
+    with with_cephadm_ctx(*args, **kwargs) as ctx:
+        ctx.no_cleanup_on_failure = True
+        yield ctx
+
 
 class TestCephAdm(object):
 
@@ -1432,13 +1440,13 @@ class TestBootstrap(object):
             '--config', conf_file,
         )
 
-        with with_cephadm_ctx(cmd) as ctx:
+        with bootstrap_test_ctx(cmd) as ctx:
             msg = r'No such file or directory'
             with pytest.raises(_cephadm.Error, match=msg):
                 _cephadm.command_bootstrap(ctx)
 
         cephadm_fs.create_file(conf_file)
-        with with_cephadm_ctx(cmd) as ctx:
+        with bootstrap_test_ctx(cmd) as ctx:
             retval = _cephadm.command_bootstrap(ctx)
             assert retval == 0
 
@@ -1446,7 +1454,7 @@ class TestBootstrap(object):
         funkypatch.patch('cephadmlib.systemd.call')
 
         cmd = self._get_cmd()
-        with with_cephadm_ctx(cmd) as ctx:
+        with bootstrap_test_ctx(cmd) as ctx:
             msg = r'must specify --mon-ip or --mon-addrv'
             with pytest.raises(_cephadm.Error, match=msg):
                 _cephadm.command_bootstrap(ctx)
@@ -1455,13 +1463,13 @@ class TestBootstrap(object):
         funkypatch.patch('cephadmlib.systemd.call')
         cmd = self._get_cmd('--mon-ip', '192.168.1.1')
 
-        with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+        with bootstrap_test_ctx(cmd, list_networks={}) as ctx:
             msg = r'--skip-mon-network'
             with pytest.raises(_cephadm.Error, match=msg):
                 _cephadm.command_bootstrap(ctx)
 
         cmd += ['--skip-mon-network']
-        with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+        with bootstrap_test_ctx(cmd, list_networks={}) as ctx:
             retval = _cephadm.command_bootstrap(ctx)
             assert retval == 0
 
@@ -1540,12 +1548,12 @@ class TestBootstrap(object):
 
         cmd = self._get_cmd('--mon-ip', mon_ip)
         if not result:
-            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+            with bootstrap_test_ctx(cmd, list_networks=list_networks) as ctx:
                 msg = r'--skip-mon-network'
                 with pytest.raises(_cephadm.Error, match=msg):
                     _cephadm.command_bootstrap(ctx)
         else:
-            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+            with bootstrap_test_ctx(cmd, list_networks=list_networks) as ctx:
                 retval = _cephadm.command_bootstrap(ctx)
                 assert retval == 0
 
@@ -1604,11 +1612,11 @@ class TestBootstrap(object):
 
         cmd = self._get_cmd('--mon-addrv', mon_addrv)
         if err:
-            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+            with bootstrap_test_ctx(cmd, list_networks=list_networks) as ctx:
                 with pytest.raises(_cephadm.Error, match=err):
                     _cephadm.command_bootstrap(ctx)
         else:
-            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+            with bootstrap_test_ctx(cmd, list_networks=list_networks) as ctx:
                 retval = _cephadm.command_bootstrap(ctx)
                 assert retval == 0
 
@@ -1621,13 +1629,13 @@ class TestBootstrap(object):
             '--skip-mon-network',
         )
 
-        with with_cephadm_ctx(cmd, hostname=hostname) as ctx:
+        with bootstrap_test_ctx(cmd, hostname=hostname) as ctx:
             msg = r'--allow-fqdn-hostname'
             with pytest.raises(_cephadm.Error, match=msg):
                 _cephadm.command_bootstrap(ctx)
 
         cmd += ['--allow-fqdn-hostname']
-        with with_cephadm_ctx(cmd, hostname=hostname) as ctx:
+        with bootstrap_test_ctx(cmd, hostname=hostname) as ctx:
             retval = _cephadm.command_bootstrap(ctx)
             assert retval == 0
 
@@ -1646,7 +1654,7 @@ class TestBootstrap(object):
             '--fsid', fsid,
         )
 
-        with with_cephadm_ctx(cmd) as ctx:
+        with bootstrap_test_ctx(cmd) as ctx:
             if err:
                 with pytest.raises(_cephadm.Error, match=err):
                     _cephadm.command_bootstrap(ctx)
@@ -1661,7 +1669,7 @@ class TestShell(object):
         fsid = '00000000-0000-0000-0000-0000deadbeef'
 
         cmd = ['shell', '--fsid', fsid]
-        with with_cephadm_ctx(cmd) as ctx:
+        with bootstrap_test_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
             assert retval == 0
             assert ctx.fsid == fsid
