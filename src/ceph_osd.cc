@@ -18,6 +18,7 @@
 #include <boost/scoped_ptr.hpp>
 
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "auth/KeyRing.h"
