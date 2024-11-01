@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional, Dict, Callable
 
 from ..inventory import Device
-from ..drive_group import DriveGroupSpec, DeviceSelection, DriveGroupValidationError
+from ..drive_group import DriveGroupSpec, DeviceSelection, DriveGroupValidationError  # noqa: F401
 
 from .filter import FilterGenerator
 from .matchers import _MatchInvalid
