@@ -499,7 +499,7 @@ class TestCephadm(object):
 
                 CephadmServe(cephadm_module)._check_daemons()
 
-                assert _save_host.called_with('test')
+                _save_host.assert_called_with('test')
                 assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -2849,15 +2849,15 @@ Traceback (most recent call last):
         # pass force=true in these tests to bypass _admin label check
         with with_host(cephadm_module, 'test', refresh_hosts=False, rm_with_force=True):
             cephadm_module.drain_host('test', force=True, zap_osd_devices=False)
-            assert _rm_osds.called_with([], zap=False)
+            _rm_osds.assert_called_with([], zap=False)
 
         with with_host(cephadm_module, 'test', refresh_hosts=False, rm_with_force=True):
             cephadm_module.drain_host('test', force=True, zap_osd_devices=True)
-            assert _rm_osds.called_with([], zap=True)
+            _rm_osds.assert_called_with([], zap=True)
 
         with pytest.raises(OrchestratorError, match=r"Cannot find host 'host1' in the inventory."):
             cephadm_module.drain_host('host1', force=True, zap_osd_devices=True)
-            assert _rm_osds.called_with([], zap=True)
+            _rm_osds.assert_called_with([], zap=True)
 
     def test_process_ls_output(self, cephadm_module):
         sample_ls_output = """[
