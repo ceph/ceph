@@ -7,6 +7,7 @@
 #
 # uses scratch local manifest LOCALMANIFEST, will be destroyed if present
 
+import argparse
 from datetime import datetime
 import functools
 import json
@@ -18,7 +19,7 @@ import sys
 # optional env vars (will default if not set)
 
 OPTIONAL_VARS = (
-    'HOST',
+    'ARCH_SPECIFIC_HOST',
     'AMD64_REPO',
     'ARM64_REPO',
     'MANIFEST_HOST',
@@ -47,10 +48,7 @@ def run_command(args):
         return True, result.stdout, result.stderr
 
     except subprocess.CalledProcessError as e:
-        print(f"Command '{e.cmd}' returned {e.returncode}")
-        print("Error output:")
-        print(e.stderr)
-        return False, result.stdout, result.stderr
+        return False, e.output, e.stderr
 
 
 def get_command_output(args):
@@ -69,9 +67,11 @@ def run_command_show_failure(args):
 
 @functools.lru_cache
 def get_latest_tag(path):
-    latest_tag = json.loads(
-        get_command_output(f'skopeo list-tags docker://{path}')
-    )['Tags'][-1]
+    try:
+        cmdout = get_command_output(f'skopeo list-tags docker://{path}')
+        latest_tag = json.loads(cmdout)['Tags'][-1]
+    except IndexError:
+        return None
     return latest_tag
 
 
@@ -84,17 +84,27 @@ def get_image_inspect(path):
 
 
 def get_sha1(info):
-    return info['Labels']['GIT_COMMIT']
+    labels = info.get('Labels', None)
+    if not labels:
+        return None
+    return labels.get('CEPH_SHA1', None)
 
+
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-n', '--dry-run', action='store_true', help='do all local manipulations but do not push final containers to MANIFEST_HOST')
+    args = ap.parse_args()
+    return args
 
 def main():
-    host = os.environ.get('HOST', 'quay.io')
-    amd64_repo = os.environ.get('AMD64_REPO', 'ceph/ceph-amd64')
-    arm64_repo = os.environ.get('ARM64_REPO', 'ceph/ceph-arm64')
-    manifest_host = os.environ.get('MANIFEST_HOST', host)
-    manifest_repo = os.environ.get('MANIFEST_REPO', 'ceph/ceph')
+    args = parse_args()
+    arch_specific_host = os.environ.get('ARCH_SPECIFIC_HOST', 'quay.ceph.io')
+    amd64_repo = os.environ.get('AMD64_REPO', 'ceph/prerelease-amd64')
+    arm64_repo = os.environ.get('ARM64_REPO', 'ceph/prerelease-arm64')
+    manifest_host = os.environ.get('MANIFEST_HOST', arch_specific_host)
+    manifest_repo = os.environ.get('MANIFEST_REPO', 'ceph/prerelease')
     dump_vars(
-        ('host',
+        ('arch_specific_host',
          'amd64_repo',
          'arm64_repo',
          'manifest_host',
@@ -103,8 +113,8 @@ def main():
         locals())
 
     repopaths = (
-        f'{host}/{amd64_repo}',
-        f'{host}/{arm64_repo}',
+        f'{arch_specific_host}/{amd64_repo}',
+        f'{arch_specific_host}/{arm64_repo}',
     )
     tags = [get_latest_tag(p) for p in repopaths]
     print(f'latest tags: amd64:{tags[0]} arm64:{tags[1]}')
@@ -156,8 +166,11 @@ def main():
             f'v{major}.{minor}.{micro}',
             f'v{major}.{minor}.{micro}-{datetime.today().strftime("%Y%m%d")}',
         ):
-        run_command_show_failure(
-          f'podman manifest push localhost/m {base}:{t}')
+        if args.dry_run:
+            print(f'skipping podman manifest push localhost/m {base}:{t}')
+        else:
+            run_command_show_failure(
+              f'podman manifest push localhost/m {base}:{t}')
 
 
 if (__name__ == '__main__'):
