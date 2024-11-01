@@ -482,6 +482,25 @@ int Group<I>::get_id(IoCtx& io_ctx, const char *group_name,
 }
 
 template <typename I>
+int Group<I>::get_name(IoCtx& io_ctx, const char *group_id,
+                       std::string *group_name)
+{
+  CephContext *cct = (CephContext *)io_ctx.cct();
+  ldout(cct, 20) << "io_ctx=" << &io_ctx
+                 << ", group_id="<< group_id << dendl;
+
+  int r = cls_client::dir_get_name(&io_ctx, RBD_GROUP_DIRECTORY, group_id,
+                                   group_name);
+  if (r < 0) {
+    lderr(cct) << "error reading group id object: "
+	       << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
 int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
                         librados::IoCtx& image_ioctx, const char *image_name,
                         uint32_t flags)
