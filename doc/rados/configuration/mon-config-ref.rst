@@ -113,7 +113,7 @@ Consistency
 When you add monitor settings to your Ceph configuration file, you need to be
 aware of some of the architectural aspects of Ceph Monitors. **Ceph imposes
 strict consistency requirements** for a Ceph monitor when discovering another
-Ceph Monitor within the cluster. Whereas, Ceph Clients and other Ceph daemons
+Ceph Monitor within the cluster. Although Ceph Clients and other Ceph daemons
 use the Ceph configuration file to discover monitors, monitors discover each
 other using the monitor map (monmap), not the Ceph configuration file.
 
