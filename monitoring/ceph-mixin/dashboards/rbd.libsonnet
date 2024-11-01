@@ -54,6 +54,20 @@ local info_rbd_stats = std.join(
         'dashboard'
       )
     )
+    .addLinks([
+      $.addLinkSchema(
+        asDropdown=true,
+        icon='external link',
+        includeVars=true,
+        keepTime=true,
+        tags=[],
+        targetBlank=false,
+        title='Browse Dashboards',
+        tooltip='',
+        type='dashboards',
+        url=''
+      ),
+    ])
     .addRequired(
       type='grafana', id='grafana', name='Grafana', version='5.3.3'
     )
