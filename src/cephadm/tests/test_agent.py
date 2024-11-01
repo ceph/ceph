@@ -668,7 +668,7 @@ def test_mgr_listener_run(_load_cert_chain, _load_verify_locations, _handle_json
         agent.mgr_listener.run()
 
         # verify payload was correctly extracted
-        assert _handle_json_payload.called_with(json.loads(payload))
+        _handle_json_payload.assert_called_with(json.loads(payload))
         FakeConn.send.assert_called_once_with(b'ACK')
 
         # second run, with bad json data received
