@@ -483,6 +483,8 @@ public:
   int group_list(IoCtx& io_ctx, std::vector<std::string> *names);
   int group_get_id(IoCtx& io_ctx, const char *group_name,
                    std::string *group_id);
+  int group_get_name(IoCtx& io_ctx, const char *group_id,
+                     std::string *group_name);
   int group_rename(IoCtx& io_ctx, const char *src_group_name,
                    const char *dest_group_name);
 
