@@ -701,7 +701,7 @@ class ArgumentSpec:
         if isinstance(data, str):
             return cls(data, split=True, origin=cls.OriginalType.STRING)
         if 'argument' not in data:
-            raise SpecValidationError(f'ArgumentSpec must have an "argument" field')
+            raise SpecValidationError('ArgumentSpec must have an "argument" field')
         for k in data.keys():
             if k not in cls._fields:
                 raise SpecValidationError(f'ArgumentSpec got an unknown field {k!r}')
