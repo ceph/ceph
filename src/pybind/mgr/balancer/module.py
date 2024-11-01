@@ -325,6 +325,11 @@ class Module(MgrModule):
                type='str',
                default='',
                desc='pools which the automatic balancing will be limited to',
+               runtime=True),
+        Option(name='update_pg_upmap_activity',
+               type='bool',
+               default=False,
+               desc='Updates pg_upmap activity stats to be used in `balancer status detail`',
                runtime=True)
     ]
 
@@ -369,6 +374,11 @@ class Module(MgrModule):
         """
         Show balancer status (detailed)
         """
+        pg_upmap_activity = cast(bool, self.get_module_option('update_pg_upmap_activity'))
+        if not pg_upmap_activity:
+            msg = 'This command is disabled.\n' \
+                  'To enable, run `ceph config set mgr mgr/balancer/update_pg_upmap_activity True`.\n'
+            return 0, msg, ''
         s = {
             'plans': list(self.plans.keys()),
             'active': self.active,
@@ -663,7 +673,9 @@ class Module(MgrModule):
         if not plan_:
             return (-errno.ENOENT, '', f'plan {plan} not found')
         r, detail = self.execute(plan_)
-        self.update_pg_upmap_activity(plan_)  # update pg activity in `balancer status detail`
+        pg_upmap_activity = cast(bool, self.get_module_option('update_pg_upmap_activity'))
+        if pg_upmap_activity:
+            self.update_pg_upmap_activity(plan_)  # update pg activity in `balancer status detail`
         self.plan_rm(plan)
         return (r, '', detail)
 
@@ -755,7 +767,9 @@ class Module(MgrModule):
                     self.execute(plan)
                 else:
                     self.optimize_result = detail
-                self.update_pg_upmap_activity(plan)  # update pg activity in `balancer status detail`
+                pg_upmap_activity = cast(bool, self.get_module_option('update_pg_upmap_activity'))
+                if pg_upmap_activity:
+                    self.update_pg_upmap_activity(plan)  # update pg activity in `balancer status detail`
                 self.optimizing = False
             self.log.debug('Sleeping for %d', sleep_interval)
             self.event.wait(sleep_interval)
