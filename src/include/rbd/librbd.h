@@ -1517,6 +1517,8 @@ CEPH_RBD_API int rbd_group_list2(rados_ioctx_t p, rbd_group_spec_t *groups,
                                  size_t *size);
 CEPH_RBD_API int rbd_group_get_id(rados_ioctx_t p, const char *group_name,
                                   char *group_id, size_t *size);
+CEPH_RBD_API int rbd_group_get_name(rados_ioctx_t p, const char *group_id,
+                                    char *group_name, size_t *size);
 CEPH_RBD_API int rbd_group_rename(rados_ioctx_t p, const char *src_name,
                                   const char *dest_name);
 CEPH_RBD_API int rbd_group_info_cleanup(rbd_group_info_t *group_info,

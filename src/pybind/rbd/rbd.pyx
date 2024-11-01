@@ -1969,6 +1969,32 @@ class RBD(object):
         finally:
             free(c_names)
 
+    def group_get_name(self, ioctx, group_id):
+        """
+        Get group's name.
+
+        :returns: str - group name
+        """
+        group_id = cstr(group_id, 'group_id')
+        cdef:
+            char *_group_id = group_id
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            size_t size = 64
+            char *group_name = NULL
+        try:
+            while True:
+                group_name = <char *>realloc_chk(group_name, size)
+                with nogil:
+                    ret = rbd_group_get_name(_ioctx, _group_id, group_name, &size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error getting name for group %s' % group_id,
+                                  group_errno_to_exception)
+            return decode_cstr(group_name)
+        finally:
+            free(group_name)
+
     def group_list2(self, ioctx):
         """
         Iterate over the groups in the pool.
