@@ -7440,6 +7440,31 @@ extern "C" int rbd_group_get_id(rados_ioctx_t p,
   return 0;
 }
 
+extern "C" int rbd_group_get_name(rados_ioctx_t p,
+                                  const char *group_id,
+                                  char *group_name,
+                                  size_t *size)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::string cpp_name;
+  int r = librbd::api::Group<>::get_name(io_ctx, group_id, &cpp_name);
+  if (r < 0) {
+    return r;
+  }
+
+  auto total_len = cpp_name.size() + 1;
+  if (*size < total_len) {
+    *size = total_len;
+    return -ERANGE;
+  }
+  *size = total_len;
+
+  strcpy(group_name, cpp_name.c_str());
+  return 0;
+}
+
 extern "C" int rbd_group_image_add(rados_ioctx_t group_p,
                                    const char *group_name,
                                    rados_ioctx_t image_p,
