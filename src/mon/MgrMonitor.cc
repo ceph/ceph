@@ -1012,13 +1012,23 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       f->dump_object("mgrmap", m);
     }
     f->flush(rdata);
-  } else if (prefix == "mgr module ls") {
+} else if (prefix == "mgr module ls") {
     if (f) {
+      // Create a mapping from module names to ModuleInfo pointers
+      std::map<std::string, const MgrMap::ModuleInfo*> module_info_map;
+      for (const auto& mi : map.available_modules) {
+        module_info_map[mi.name] = &mi;
+      }
+
       f->open_object_section("modules");
       {
+        // always_on_modules
         f->open_array_section("always_on_modules");
-        for (auto& p : map.get_always_on_modules()) {
-          f->dump_string("module", p);
+        for (const auto& module_name : map.get_always_on_modules()) {
+          auto it = module_info_map.find(module_name);
+          if (it != module_info_map.end()) {
+            it->second->dump(f.get());
+          } 
         }
         f->close_section();
 
@@ -1028,21 +1038,23 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
         }
         f->close_section();
 
+        // enabled_modules
         f->open_array_section("enabled_modules");
-        for (auto& p : map.modules) {
-          if (map.get_always_on_modules().count(p) > 0)
+        for (const auto& module_name : map.modules) {
+          if (map.get_always_on_modules().count(module_name) > 0)
             continue;
-          // We only show the name for enabled modules.  The any errors
-          // etc will show up as a health checks.
-          f->dump_string("module", p);
+          auto it = module_info_map.find(module_name);
+          if (it != module_info_map.end()) {
+            it->second->dump(f.get());
+          } 
         }
         f->close_section();
+
+        // disabled_modules
         f->open_array_section("disabled_modules");
-        for (auto& p : map.available_modules) {
+        for (const auto& p : map.available_modules) {
           if (map.modules.count(p.name) == 0 &&
-            map.get_always_on_modules().count(p.name) == 0) {
-            // For disabled modules, we show the full info if the detail
-            // parameter is enabled, to give a hint about whether enabling it will work
+              map.get_always_on_modules().count(p.name) == 0) {
             p.dump(f.get());
           }
         }
