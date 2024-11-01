@@ -247,6 +247,18 @@ To see the status in greater detail, run the following command:
 
       ceph balancer status detail
 
+To enable `ceph balancer status detail`, run the following command:
+
+   .. prompt:: bash $
+
+      ceph config set mgr mgr/balancer/update_pg_upmap_activity True
+
+To disable `ceph balancer status detail`, run the following command:
+
+   .. prompt:: bash $
+
+      ceph config set mgr mgr/balancer/update_pg_upmap_activity False
+
 To evaluate the distribution that would result from executing a specific plan,
 run the following command:
 
