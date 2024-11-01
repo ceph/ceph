@@ -527,8 +527,8 @@ pattern_type=PatternType.fnmatch))
         labels = [x for x in strings if 'label:' in x]
         if len(labels) > 1:
             raise SpecValidationError('more than one label provided: {}'.format(labels))
-        for l in labels:
-            strings.remove(l)
+        for lbl in labels:
+            strings.remove(lbl)
         label = labels[0][6:] if labels else None
 
         host_patterns = strings
