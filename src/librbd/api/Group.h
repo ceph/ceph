@@ -24,6 +24,8 @@ struct Group {
   static int list(librados::IoCtx& io_ctx, std::vector<std::string> *names);
   static int get_id(librados::IoCtx& io_ctx, const char *group_name,
                     std::string *group_id);
+  static int get_name(librados::IoCtx& io_ctx, const char *group_id,
+                      std::string *group_name);
   static int list(librados::IoCtx& io_ctx,
                   std::map<std::string, std::string> *name_to_id_map);
   static int rename(librados::IoCtx& io_ctx, const char *src_group_name,

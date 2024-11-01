@@ -1442,6 +1442,12 @@ namespace librbd {
     return r;
   }
 
+  int RBD::group_get_name(IoCtx& io_ctx, const char *group_id,
+                          std::string *group_name)
+  {
+    return librbd::api::Group<>::get_name(io_ctx, group_id, group_name);
+  }
+
   int RBD::group_get_id(IoCtx& io_ctx, const char *group_name, std::string *group_id)
   {
     return librbd::api::Group<>::get_id(io_ctx, group_name, group_id);
@@ -7490,6 +7496,31 @@ extern "C" int rbd_group_get_id(rados_ioctx_t p,
   *size = total_len;
 
   strcpy(group_id, cpp_id.c_str());
+  return 0;
+}
+
+extern "C" int rbd_group_get_name(rados_ioctx_t p,
+                                  const char *group_id,
+                                  char *group_name,
+                                  size_t *size)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::string cpp_name;
+  int r = librbd::api::Group<>::get_name(io_ctx, group_id, &cpp_name);
+  if (r < 0) {
+    return r;
+  }
+
+  auto total_len = cpp_name.size() + 1;
+  if (*size < total_len) {
+    *size = total_len;
+    return -ERANGE;
+  }
+  *size = total_len;
+
+  strcpy(group_name, cpp_name.c_str());
   return 0;
 }
 
