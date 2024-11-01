@@ -21,6 +21,8 @@
 
 #include "json_spirit/json_spirit.h"
 
+#include <sstream>
+
 using namespace std;
 
 int get_json_str_map(
