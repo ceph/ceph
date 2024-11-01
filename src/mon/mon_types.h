@@ -15,14 +15,19 @@
 #ifndef CEPH_MON_TYPES_H
 #define CEPH_MON_TYPES_H
 
+#include <iomanip>
+#include <list>
 #include <map>
+#include <sstream>
+#include <string>
 
-#include "include/Context.h"
+#include "include/ceph_features.h" // for CEPH_FEATURE_*
 #include "include/util.h"
 #include "include/utime.h"
 #include "common/Formatter.h"
 #include "common/bit_str.h"
 #include "common/ceph_releases.h"
+#include "msg/msg_types.h" // for entity_addrvec_t
 
 // use as paxos_service index
 enum {
