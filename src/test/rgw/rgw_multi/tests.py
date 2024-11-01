@@ -1212,6 +1212,9 @@ def test_datalog_autotrim():
     # wait for metadata and data sync to catch up
     zonegroup_meta_checkpoint(zonegroup)
     zonegroup_data_checkpoint(zonegroup_conns)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    time.sleep(config.checkpoint_delay)
+    zonegroup_data_checkpoint(zonegroup_conns)
 
     # trim each datalog
     for zone, _ in zone_bucket:
