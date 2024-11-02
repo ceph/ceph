@@ -924,8 +924,9 @@ PG::submit_transaction(
   }
 
   epoch_t map_epoch = get_osdmap_epoch();
+  auto at_version = osd_op_p.at_version;
 
-  peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, osd_op_p.at_version);
+  peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, at_version);
   peering_state.update_trim_to();
 
   ceph_assert(!log_entries.empty());
@@ -947,8 +948,8 @@ PG::submit_transaction(
   co_return std::make_tuple(
     std::move(submitted),
     all_completed.then_interruptible(
-      [this, last_complete=peering_state.get_info().last_complete,
-      at_version=osd_op_p.at_version](auto acked) {
+      [this, at_version,
+      last_complete=peering_state.get_info().last_complete](auto acked) {
       for (const auto& peer : acked) {
         peering_state.update_peer_last_complete_ondisk(
           peer.shard, peer.last_complete_ondisk);
