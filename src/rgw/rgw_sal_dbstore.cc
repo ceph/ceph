@@ -845,6 +845,7 @@ namespace rgw::sal {
 
     multipart_upload_info upload_info;
     upload_info.dest_placement = dest_placement;
+    upload_info.cksum_type = cksum_type;
 
     bufferlist bl;
     encode(upload_info, bl);
@@ -1107,7 +1108,9 @@ namespace rgw::sal {
       ldpp_dout(dpp, 0) << "ERROR: failed to decode multipart upload info" << dendl;
       return -EIO;
     }
+    cksum_type = upload_info.cksum_type;
     placement = upload_info.dest_placement;
+    upload_information = upload_info;
     *rule = &placement;
 
     return 0;

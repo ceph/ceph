@@ -434,6 +434,7 @@ protected:
     ACLOwner owner;
     ceph::real_time mtime;
     rgw_placement_rule placement;
+    multipart_upload_info upload_information;
 
   public:
     DBMultipartUpload(DBStore* _store, Bucket* _bucket, const std::string& oid, std::optional<std::string> upload_id, ACLOwner _owner, ceph::real_time _mtime) : StoreMultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), owner(_owner), mtime(_mtime) {}
