@@ -149,13 +149,13 @@ local function remove_queue(keys)
 
     local ret = redis.call('HDEL', MAPNAME, queue_name)
     if ret == 0 then
-        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue: " .. keys[1] .. "does not exist", "")
     end
 
     --- Remove all the keys associated with the queue
     redis.call('DEL', "queue:" .. queue_name)
     redis.call('DEL', "reserve:" .. queue_name)
-    redis.call('DEL', "lock:" .. queue_name)
+    redis.call('DEL', queue_name .. "_lock")
 
     return format_response(0, "", "")
 end
@@ -178,7 +178,7 @@ local function reserve(keys, args)
     local item_size = tonumber(args[1])
 
     if check_queue_exists({keys[1]}) == 0 then
-        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue: " .. keys[1] .. "does not exist", "")
     end
 
     local randomString = generateString(item_size)
@@ -205,7 +205,7 @@ local function unreserve(keys, args)
     local reservation_id = tonumber(args[1])
 
     if check_queue_exists({keys[1]}) == 0 then
-        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue: " .. keys[1] .. "does not exist", "")
     end
 
     local value = redis.call('RPOP', name)
@@ -248,7 +248,7 @@ local function read(keys)
     local name = "queue:" .. keys[1]
 
     if check_queue_exists({keys[1]}) == 0 then
-        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue: " .. keys[1] .. "does not exist", "")
     end
 
     local value = redis.call('LRANGE', name, -1, -1)[1]
@@ -264,10 +264,10 @@ local function locked_read(keys, args)
     local cookie = args[1]
 
     if check_queue_exists({keys[1]}) == 0 then
-        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue: " .. keys[1] .. "does not exist", "")
     end
 
-    local assert_lock_keys = {"lock:" .. keys[1]}
+    local assert_lock_keys = {keys[1] .. "_lock"}
     local assert_lock_args = {cookie}
 
     local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
@@ -288,10 +288,10 @@ local function locked_read_multi(keys, args)
     local count = tonumber(args[2])
 
     if check_queue_exists({keys[1]}) == 0 then
-        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue: " .. keys[1] .. "does not exist", "")
     end
 
-    local assert_lock_keys = {"lock:" .. keys[1]}
+    local assert_lock_keys = {keys[1] .. "_lock"}
     local assert_lock_args = {cookie}
 
     local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
@@ -303,7 +303,14 @@ local function locked_read_multi(keys, args)
             values = values,
             isTruncated = isTruncated
         }
-        local jsondata = cjson.encode(data)
+        local jsondata
+        -- Workaround for empty list; Empty lua tables are encoded as objects by cjson
+        -- See: https://github.com/mpx/lua-cjson/issues/11
+        if queueLen == 0 then
+            jsondata = '{\"values\":[],\"isTruncated\":false}'
+        else
+            jsondata = cjson.encode(data)
+        end
         return format_response(0, "", jsondata)
     end
     return lock_status
@@ -313,7 +320,7 @@ local function ack(keys)
     local name = "queue:" .. keys[1]
 
     if check_queue_exists({keys[1]}) == 0 then
-        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue: " .. keys[1] .. "does not exist", "")
     end
 
     redis.call('RPOP', name)
@@ -329,10 +336,10 @@ local function locked_ack(keys, args)
     local cookie = args[1]
 
     if check_queue_exists({keys[1]}) == 0 then
-        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue: " .. keys[1] .. "does not exist", "")
     end
 
-    local assert_lock_keys = {"lock:" .. keys[1]}
+    local assert_lock_keys = {keys[1] .. "_lock"}
     local assert_lock_args = {cookie}
 
     local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
@@ -353,10 +360,10 @@ local function locked_ack_multi(keys, args)
     local count = args[2]
 
     if check_queue_exists({keys[1]}) == 0 then
-        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue: " .. keys[1] .. "does not exist", "")
     end
 
-    local assert_lock_keys = {"lock:" .. keys[1]}
+    local assert_lock_keys = {keys[1] .. "_lock"}
     local assert_lock_args = {cookie}
 
     local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
@@ -376,7 +383,7 @@ local function cleanup(keys, args)
     local timeout = args[1]
 
     if check_queue_exists({keys[1]}) == 0 then
-        return format_response(-lerrorCodes.ENOENT, "Queue does not exist", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue: " .. keys[1] .. "does not exist", "")
     end
 
     local values = redis.call('LRANGE', name, 0, -1)

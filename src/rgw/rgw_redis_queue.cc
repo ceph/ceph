@@ -179,7 +179,8 @@ int locked_read(const DoutPrefixProvider* dpp, connection* conn,
 }
 
 int parse_read_result(const DoutPrefixProvider* dpp, const std::string& data,
-                      std::vector<rgw_queue_entry>& entries, bool* truncated) {
+                      std::vector<rgw_queue_entry>& entries, bool* truncated,
+                      std::string& end_marker) {
   // Parse the JSON data
   boost::json::value v = boost::json::parse(data);
 
@@ -193,12 +194,13 @@ int parse_read_result(const DoutPrefixProvider* dpp, const std::string& data,
   boost::json::array jentries = jdata.at("values").as_array();
   *truncated = jdata.at("isTruncated").as_bool();
 
+  rgw_queue_entry entry;
   for (std::size_t i = 0; i < jentries.size(); i++) {
-    rgw_queue_entry entry;
     entry.marker = std::to_string(i);
-    entry.data = jentries[i].as_string().c_str();
+    entry.data = jentries[i].as_string();
     entries.push_back(entry);
   }
+  end_marker = entry.marker;
 
   return 0;
 }

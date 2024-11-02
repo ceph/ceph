@@ -5,6 +5,7 @@
 // Redis TODO: remove the following cls includes
 #include "cls/2pc_queue/cls_2pc_queue_client.h"
 #include "cls/lock/cls_lock_client.h"
+#include <rgw/rgw_b64.h>
 #include "rgw_redis_lock.h"
 #include "rgw_redis_queue.h"
 #include <memory>
@@ -385,16 +386,6 @@ private:
 
     CountersManager queue_counters_container(queue_name, this->get_cct());
 
-    // FIX ME: Why is this required here?
-    // auto redis_ioctx = std::make_unique<boost::redis::connection>(io_context);
-    // // Redis TODO: add a way to configure redis connection
-    // auto redis_cfg = std::make_unique<boost::redis::config>();
-    // if (auto res = rgw::redis::load_lua_rgwlib(io_context, redis_ioctx.get(), redis_cfg.get(), yield); res < 0) {
-    //   ldpp_dout(this, 1) << "ERROR: failed to load lua scripts to redis. didn't start processing for queue " << 
-    //     queue_name << ". error: " << res << dendl;
-    //   return;
-    // }
-
     auto conn = redis.get_conn();
 
     while (!shutdown) {
@@ -408,17 +399,12 @@ private:
 
       // get list of entries in the queue
       is_idle = true;
-      // FIX ME: What are these variables for?
       bool truncated = false;
-      // Why is marker a string? How is it used?
-      // FIX ME: What about entries, the entire process entry would need to be re-written?
       std::string end_marker;
-      std::vector<cls_queue_entry> entries;
-      std::vector<std::string> redis_entries;
+      std::vector<rgw::redisqueue::rgw_queue_entry> entries;
       auto total_entries = 0U;
       {
         auto ret = rgw::redislock::assert_locked(this, conn, queue_name+"_lock", lock_cookie, yield);
-
         if (ret == -EBUSY) {
           topics_persistency_tracker.erase(queue_name);
           ldpp_dout(this, 10)
@@ -447,19 +433,9 @@ private:
             << queue_name << ". error: " << ret << " (will retry)" << dendl;
           continue;
         }
-        
-        // bufferlist obl;
-        // obl.append(out);
-        // // Redis TODO: add a similar parsing function to redisqueue
-        // FIX ME: Do we need such parsing? 
-        // The response from redisqueue::locked_read is a vector of strings
 
-        // ret = cls_2pc_queue_list_entries_result(obl, entries, &truncated, end_marker);
-        // if (ret < 0) {
-        //   ldpp_dout(this, 5) << "WARNING: failed to parse list of entries in queue: " 
-        //     << queue_name << ". error: " << ret << " (will retry)" << dendl;
-        //   continue;
-        // }
+        ret = rgw::redisqueue::parse_read_result(this, out, entries, &truncated, end_marker);
+        
       }
       total_entries = entries.size();
       if (total_entries == 0) {
@@ -488,7 +464,10 @@ private:
            &remove_entries, &has_error, &waiter, &entry/*, &needs_migration_vector*/](boost::asio::yield_context yield) {
             const auto token = waiter.make_token();
             auto& persistency_tracker = notifs_persistency_tracker[entry.marker];
-            auto result = process_entry(this->get_cct()->_conf, persistency_tracker, entry, yield);
+            cls_queue_entry cls_entry;
+            cls_entry.marker = entry.marker;
+            cls_entry.data.append(from_base64(entry.data));
+            auto result = process_entry(this->get_cct()->_conf, persistency_tracker, cls_entry, yield);
             if (result == EntryProcessingResult::Successful || result == EntryProcessingResult::Expired
                 || result == EntryProcessingResult::Migrating) {
               ldpp_dout(this, 20) << "INFO: processing of entry: " << entry.marker
@@ -518,8 +497,6 @@ private:
 
       // delete all published entries from queue
       if (remove_entries) {
-        // FIX ME: Remove cls_queue_entry type
-        //std::vector<cls_queue_entry> entries_to_migrate;
         uint64_t index = 0;
 
         for (const auto& entry: entries) {
@@ -533,7 +510,7 @@ private:
           index++;
         }
 
-        uint64_t entries_to_remove = index;
+        uint64_t entries_to_remove = index + 1; // Number of entries to remove
         auto ret = rgw::redislock::assert_locked(this, conn, queue_name+"_lock", lock_cookie, yield);
         if (ret == -EBUSY) {
           ldpp_dout(this, 10)
@@ -686,7 +663,7 @@ private:
       for (const auto& queue_name : queues) {
         // try to lock the queue to check if it is owned by this rgw
         // or if ownership needs to be taken
-        ret = rgw::redislock::lock(this, conn, queue_name+"_lock", lock_cookie, failover_time, yield);
+        ret = rgw::redislock::lock(this, conn, queue_name+"_lock", lock_cookie, failover_time * 1000, yield);
         
         if (ret == -EBUSY) {
           // lock is already taken by another RGW
@@ -876,26 +853,26 @@ int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_i
     ldpp_dout(dpp, 1) << "ERROR: cannot add a persistent notification. notification manager is not initialized" << dendl;
     return -EINVAL;
   }
+  if (topic_queue == Q_LIST_OBJECT_NAME) {
+    ldpp_dout(dpp, 1) << "ERROR: topic name cannot be: " << Q_LIST_OBJECT_NAME << " (conflict with queue list object name)" << dendl;
+    return -EINVAL;
+  }
   auto& redis = s_manager->get_redis();
   auto conn = redis.get_conn();
   auto ret = rgw::redisqueue::queue_init(dpp, conn, topic_queue, MAX_QUEUE_SIZE, y);
+  if (ret == -EEXIST) {
+    // queue already exists - nothing to do
+    ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_queue << " already exists. nothing to do" << dendl;
+    return 0;
+  }
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to create queue for topic: " << topic_queue << ". error: " << ret << dendl;
     return ret;
   }
-  // if (topic_queue == Q_LIST_OBJECT_NAME) {
-  //   ldpp_dout(dpp, 1) << "ERROR: topic name cannot be: " << Q_LIST_OBJECT_NAME << " (conflict with queue list object name)" << dendl;
-  //   return -EINVAL;
-  // }
   librados::ObjectWriteOperation op;
-  op.create(true);
+  // op.create(true);
   // cls_2pc_queue_init(op, topic_queue, MAX_QUEUE_SIZE);
   // auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, &op, y);
-  // if (ret == -EEXIST) {
-  //   // queue already exists - nothing to do
-  //   ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_queue << " already exists. nothing to do" << dendl;
-  //   return 0;
-  // }
   // if (ret < 0) {
   //   // failed to create queue
   //   ldpp_dout(dpp, 1) << "ERROR: failed to create queue for topic: " << topic_queue << ". error: " << ret << dendl;
@@ -1294,8 +1271,12 @@ int publish_commit(rgw::sal::Object* obj,
       // std::vector<buffer::list> bl_data_vec{std::move(bl)};
       // librados::ObjectWriteOperation op;
 
+      std::string binary_data;
+      for (auto& p : bl.buffers()) {  
+        binary_data.append(p.c_str(), p.length());
+      }
+      std::string data = rgw::to_base64(binary_data);
 
-      std::string data = bl.to_str().c_str();
 
       // TODO: Redis: Do async completion
       auto ret = rgw::redisqueue::commit(dpp, conn, queue_name, data, res.yield);

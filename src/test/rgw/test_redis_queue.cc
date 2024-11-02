@@ -300,7 +300,7 @@ TEST_F(RGWRedisQueueTest, LockedReadValidLock) {
         })";
 
         // Lock the queue
-        std::string lock_name = "lock:test_queue";
+        std::string lock_name = "test_queue_lock";
         std::string lock_cookie = "mycookie";
         int duration = 500;
         int return_code = rgw::redislock::lock(dpp, conn, lock_name,
@@ -328,7 +328,7 @@ TEST_F(RGWRedisQueueTest, LockedReadInvalidLock) {
         std::string read_res;
 
         // Lock the queue
-        std::string lock_name = "lock:test_queue";
+        std::string lock_name = "test_queue_lock";
         std::string lock_cookie = "mycookie";
         int duration = 500;
         int return_code = rgw::redislock::lock(dpp, conn, lock_name,
@@ -404,7 +404,7 @@ TEST_F(RGWRedisQueueTest, AckReadLocked) {
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + 1);
 
-        std::string lock_name = "lock:test_queue";
+        std::string lock_name = "test_queue_lock";
         std::string lock_cookie = "mycookie";
         int duration = 500;
         int return_code = rgw::redislock::lock(dpp, conn, lock_name,
@@ -550,6 +550,7 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         std::tuple<uint32_t, uint32_t> status;
         std::size_t reserve_size = 4 * 1024U;
         std::string reserve_result;
+        std::string end_marker;
         int batch_size = 5;
         int jitter = rand() % 20;
 
@@ -590,7 +591,7 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + batch_size + jitter);
 
-        std::string lock_name = "lock:test_queue";
+        std::string lock_name = "test_queue_lock";
         std::string lock_cookie = "mycookie";
         int duration = 500;
         int return_code = rgw::redislock::lock(dpp, conn, lock_name,
@@ -601,7 +602,7 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
         res = rgw::redisqueue::locked_read(dpp, conn, "test_queue", lock_cookie,
                                            read_res, batch_size, yield);
         rgw::redisqueue::parse_read_result(dpp, read_res, read_res_entries,
-                                           &truncated);
+                                           &truncated, end_marker);
         ASSERT_EQ(truncated, true);
         for (auto entry : read_res_entries) {
           read_data_batch.push_back(entry.data);
@@ -634,7 +635,7 @@ TEST_F(RGWRedisQueueTest, BatchAckReadLocked) {
               rgw::redisqueue::locked_read(dpp, conn, "test_queue", lock_cookie,
                                            read_res, batch_size, yield);
           rgw::redisqueue::parse_read_result(dpp, read_res, read_res_entries,
-                                             &truncated);
+                                             &truncated, end_marker);
           for (auto entry : read_res_entries) {
             read_data_batch.push_back(entry.data);
           }

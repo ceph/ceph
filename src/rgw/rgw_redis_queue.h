@@ -22,7 +22,8 @@ int queue_remove(const DoutPrefixProvider* dpp, connection* conn,
                  const std::string& name, optional_yield y);
 
 int parse_read_result(const DoutPrefixProvider* dpp, const std::string& data,
-                      std::vector<rgw_queue_entry>& entries, bool* truncated);
+                      std::vector<rgw_queue_entry>& entries, bool* truncated,
+                      std::string& end_marker);
 
 int parse_reserve_result(const DoutPrefixProvider* dpp, const std::string& data,
                          std::uint32_t& res_id);
