@@ -285,8 +285,12 @@ public:
   struct Done : sc::state<Done, BackfillMachine>,
                 StateHelper<Done> {
     using reactions = boost::mpl::list<
+      sc::custom_reaction<CancelBackfill>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Done(my_context);
+    sc::result react(CancelBackfill) {
+      return discard_event();
+    }
   };
 
   BackfillState(BackfillListener& backfill_listener,
