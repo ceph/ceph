@@ -26,6 +26,7 @@
 #include <ratio>
 #include <mutex>
 #include <queue>
+#include <shared_mutex> // for std::shared_lock
 #include <condition_variable>
 
 #include <boost/intrusive/list.hpp>
@@ -34,6 +35,7 @@
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
 #include <boost/circular_buffer.hpp>
+#include <boost/optional.hpp>
 #include <utility>
 
 #include "include/cpp-btree/btree_set.h"
