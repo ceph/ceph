@@ -919,10 +919,7 @@ void set_replication_status_header(const DoutPrefixProvider *dpp,
   bufferlist bl;
   bl.append(status);
 
-  rgw::sal::Attrs setattrs;
-  setattrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = std::move(bl);
-
-  int ret = object->set_obj_attrs(dpp, &setattrs, nullptr, y, nullptr, 0);
+  int ret = object->modify_obj_attrs(RGW_ATTR_OBJ_REPLICATION_STATUS, bl, y, dpp, nullptr, 0);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to set amz-replication-status header to " << status << " for object=" << object << dendl;
   }
