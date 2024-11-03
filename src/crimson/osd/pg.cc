@@ -392,7 +392,13 @@ void PG::on_replica_activate()
 
 void PG::on_activate_complete()
 {
-  wait_for_active_blocker.unblock();
+  /* Confusingly, on_activate_complete is invoked when the primary and replicas
+   * have recorded the current interval.  At that point, the PG may either become
+   * ACTIVE or PEERED, depending on whether the acting set is eligible for client
+   * IO.  Only unblock wait_for_active_blocker if we actually became ACTIVE */
+  if (peering_state.is_active()) {
+    wait_for_active_blocker.unblock();
+  }
 
   if (peering_state.needs_recovery()) {
     logger().info("{}: requesting recovery",
