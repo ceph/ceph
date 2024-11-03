@@ -12,10 +12,17 @@
  *
  */
 #include "lockdep.h"
-#include <bitset>
+#include "common/BackTrace.h"
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/valgrind.h"
+#include "include/unordered_map.h"
+
+#include <algorithm> // for std::for_each()
+#include <bitset>
+#include <map>
+#include <string>
+#include <vector>
 
 /******* Constants **********/
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
