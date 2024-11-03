@@ -946,7 +946,12 @@ void handle_replication_status_header(
   auto attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
   if (attr_iter != attrs.end() && attr_iter->second.to_str() == "PENDING") {
     if (s->object->is_sync_completed(dpp, obj_mtime)) {
-      set_replication_status_header(dpp, s->object.get(), s->yield, "COMPLETED");
+      const std::string status = "COMPLETED";
+      set_replication_status_header(dpp, s->object.get(), s->yield, status);
+
+      bufferlist bl;
+      bl.append(status);
+      attrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = std::move(bl); // update the attrs so that the status is reflected in the response
     }
   }
 }

@@ -221,8 +221,8 @@ int RGWDataAccess::Object::put(bufferlist& data,
     }
 
     bufferlist bl;
-    encode(replication_status, bl);
-    attrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = bl;
+    bl.append(replication_status);
+    attrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = std::move(bl);
   }
 
   const req_context rctx{dpp, y, nullptr};
