@@ -155,7 +155,7 @@ local function remove_queue(keys)
     --- Remove all the keys associated with the queue
     redis.call('DEL', "queue:" .. queue_name)
     redis.call('DEL', "reserve:" .. queue_name)
-    redis.call('DEL', queue_name .. "_lock")
+    redis.call('DEL', "reserve:" .. queue_name .. ":id")
 
     return format_response(0, "", "")
 end

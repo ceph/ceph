@@ -892,8 +892,11 @@ int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_i
 
 int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_queue, optional_yield y) {
   librados::ObjectWriteOperation op;
-  op.remove();
-  auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, &op, y);
+  // op.remove();
+  // auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, &op, y);
+  auto& redis = s_manager->get_redis();
+  auto conn = redis.get_conn();
+  auto ret = rgw::redisqueue::queue_remove(dpp, conn, topic_queue, y);
   if (ret == -ENOENT) {
     // queue already removed - nothing to do
     ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_queue << " already removed. nothing to do" << dendl;
