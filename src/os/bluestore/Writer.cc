@@ -13,6 +13,7 @@
  */
 
 #include "Writer.h"
+#include "common/debug.h"
 #include "include/intarith.h"
 #include "os/bluestore/bluestore_types.h"
 
