@@ -1101,7 +1101,7 @@ int do_journal_bucket_logging(rgw::sal::Driver* driver,
     }
     ldpp_dout(op, 20) << "INFO: found 'Journal' logging configuration of bucket '" << s->bucket->get_name() << 
       "' configuration: " << configuration.to_json_str() << dendl;
-    if (auto ret = log_record(driver, obj, s, op->name(), etag, size, configuration, op, y, async_completion); ret < 0) { 
+    if (auto ret = log_record(driver, obj, s, op->canonical_name(), etag, size, configuration, op, y, async_completion); ret < 0) {
       ldpp_dout(op, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_name() << 
         "'. ret=" << ret << dendl;
       return ret;

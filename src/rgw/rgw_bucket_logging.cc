@@ -390,14 +390,13 @@ int log_record(rgw::sal::Driver* driver,
   }
   switch (conf.logging_type) {
     case LoggingType::Standard:
-      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} REST.{}.{} {} \"{} {}{}{} HTTP/1.1\" {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} {} {} \"{} {}{}{} HTTP/1.1\" {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
         dash_if_empty(to_string(s->bucket->get_owner())),
         dash_if_empty(s->bucket->get_name()),
         t,
         "-", // no requester IP
         dash_if_empty(user_or_account),
         dash_if_empty(s->req_id),
-        s->info.method,
         op_name,
         dash_if_empty_or_null(obj, obj->get_name()),
         s->info.method,
@@ -423,11 +422,10 @@ int log_record(rgw::sal::Driver* driver,
         (s->has_acl_header) ? "Yes" : "-");
       break;
     case LoggingType::Journal:
-      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] REST.{}.{} {} {} {} {}",
+      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} {} {}",
         dash_if_empty(to_string(s->bucket->get_owner())),
         dash_if_empty(s->bucket->get_name()),
         t,
-        s->info.method,
         op_name,
         dash_if_empty_or_null(obj, obj->get_name()),
         dash_if_zero(size),

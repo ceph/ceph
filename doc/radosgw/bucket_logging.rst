@@ -91,7 +91,7 @@ minimum amount of data used for journaling bucket changes (this is a Ceph extens
   - bucket name (or dash if empty)
   - time in the following format: ``[day/month/year:hour:minute:second timezone]``
   - object key (or dash if empty)
-  - operation in the following format: ``REST.<HTTP method>.<RGW OP name>``
+  - operation in the following format: ``WEBSITE/REST.<HTTP method>.<resource>``
   - object size (or dash if empty)
   - version id (dash if empty or question mark if unknown)
   - eTag
@@ -114,7 +114,7 @@ based on `AWS Logging Record Format`_.
   - remote IP (not supported, always a dash)
   - user or account (or dash if empty)
   - request ID
-  - operation in the following format: ``REST.<HTTP method>.<RGW OP name>``
+  - operation in the following format: ``WEBSITE/REST.<HTTP method>.<resource>``
   - object key (or dash if empty)
   - request URI in the following format: ``"<HTTP method> <URI> <HTTP version>"``
   - HTTP status (or dash if zero). Note that in most cases log is written before the status is known

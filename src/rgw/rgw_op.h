@@ -300,6 +300,7 @@ public:
   }
   virtual const char* name() const = 0;
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }
+  virtual std::string canonical_name() const { return fmt::format("REST.{}.{}", s->info.method, name()); }
 
   virtual uint32_t op_mask() { return 0; }
 
