@@ -2300,6 +2300,10 @@ Then run the following:
         tgt_host['status'] = ""
         self.inventory._inventory[hostname] = tgt_host
         self.inventory.save()
+        # make sure we refresh state for this host now that it's out
+        # of maintenance mode. Maintenance mode is a time where users
+        # could have theoretically made a lot of changes to the host.
+        self._invalidate_all_host_metadata_and_kick_serve(hostname)
 
         self.set_maintenance_healthcheck()
 
