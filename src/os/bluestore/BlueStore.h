@@ -176,6 +176,7 @@ enum {
   l_bluestore_onode_shard_misses,
   l_bluestore_extents,
   l_bluestore_blobs,
+  l_bluestore_spanning_blobs,
   //****************************************
 
   // buffer cache stats
@@ -1355,6 +1356,7 @@ public:
     bool cached;              ///< Onode is logically in the cache
                               /// (it can be pinned and hence physically out
                               /// of it at the moment though)
+    uint16_t prev_spanning_cnt = 0; /// spanning blobs count
     ExtentMap extent_map;
     BufferSpace bc;             ///< buffer cache
 
@@ -1417,6 +1419,9 @@ public:
       if (c) {
         std::lock_guard l(c->cache->lock);
         bc._clear(c->cache);
+        if (prev_spanning_cnt > 0) {
+          c->store->logger->dec(l_bluestore_spanning_blobs, prev_spanning_cnt);
+        }
       }
     }
 

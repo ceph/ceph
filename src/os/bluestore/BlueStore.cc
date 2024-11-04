@@ -4822,6 +4822,13 @@ void BlueStore::Onode::decode_raw(
 
   // initialize extent_map
   edecoder.decode_spanning_blobs(p, on->c);
+  ceph_assert(on->prev_spanning_cnt == 0);
+  if (on->c) {
+    on->prev_spanning_cnt = on->extent_map.spanning_blob_map.size();
+    if (on->prev_spanning_cnt != 0) {
+      on->c->store->logger->inc(l_bluestore_spanning_blobs, on->prev_spanning_cnt);
+    }
+  }
   if (on->onode.extent_map_shards.empty()) {
     denc(on->extent_map.inline_bl, p);
     edecoder.decode_some(on->extent_map.inline_bl, on->c);
@@ -6488,6 +6495,8 @@ void BlueStore::_init_logger()
 	    "Number of extents in cache");
   b.add_u64(l_bluestore_blobs, "onode_blobs",
 	    "Number of blobs in cache");
+  b.add_u64(l_bluestore_spanning_blobs, "onode_spanning_blobs",
+            "Number of spanning blobs in loaded onodes");
   //****************************************
 
   // buffer cache stats
@@ -14527,6 +14536,12 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   // finalize onodes
   for (auto o : txc->onodes) {
     _record_onode(o, t);
+    int16_t spanning_change =
+      o->extent_map.spanning_blob_map.size() - o->prev_spanning_cnt;
+    if (spanning_change != 0) {
+      o->prev_spanning_cnt = o->extent_map.spanning_blob_map.size();
+      logger->inc(l_bluestore_spanning_blobs, spanning_change);
+    }
     o->flushing_count++;
   }
 
