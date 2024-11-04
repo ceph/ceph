@@ -45,6 +45,7 @@
 class MQuery;
 class OSDMap;
 class PGBackend;
+class ReplicatedBackend;
 class PGPeeringEvent;
 class osd_op_params_t;
 
@@ -678,6 +679,7 @@ private:
     std::tuple<interruptible_future<>, interruptible_future<>>>
   submit_transaction(
     ObjectContextRef&& obc,
+    ObjectContextRef&& new_clone,
     ceph::os::Transaction&& txn,
     osd_op_params_t&& oop,
     std::vector<pg_log_entry_t>&& log_entries);
@@ -885,6 +887,10 @@ private:
   friend class SnapTrimObjSubEvent;
 private:
 
+  void enqueue_push_for_backfill(
+    const hobject_t &obj,
+    const eversion_t &v,
+    const std::vector<pg_shard_t> &peers);
   void mutate_object(
     ObjectContextRef& obc,
     ceph::os::Transaction& txn,
@@ -913,6 +919,7 @@ private:
 
 private:
   friend class IOInterruptCondition;
+  friend class ::ReplicatedBackend;
   struct log_update_t {
     std::set<pg_shard_t> waiting_on;
     seastar::shared_promise<> all_committed;

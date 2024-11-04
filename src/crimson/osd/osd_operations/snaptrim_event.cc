@@ -435,6 +435,7 @@ SnapTrimObjSubEvent::process_and_submit(ObjectContextRef head_obc,
 
   auto [submitted, all_completed] = co_await pg->submit_transaction(
 	  std::move(clone_obc),
+	  nullptr,
 	  std::move(txn),
 	  std::move(osd_op_p),
 	  std::move(log_entries)
