@@ -1150,6 +1150,11 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
 
     fsmap.erase_filesystem(fsp->get_fscid());
 
+    ss << "If there are active snapshot schedules associated with this "
+       << "file-system, you might see EIO errors in the mgr logs or at the "
+       << "snap-schedule command-line due to the missing file-system. "
+       << "However, these errors are transient and will get auto-resolved.";
+
     return 0;
   }
 };
