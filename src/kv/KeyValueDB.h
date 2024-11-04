@@ -24,6 +24,12 @@ class KeyValueDB {
 public:
   class TransactionImpl {
   public:
+    // amount of ops included
+    virtual size_t get_count() const = 0;
+
+    // total encoded data size
+    virtual size_t get_size_bytes() const = 0;
+
     /// Set Keys
     void set(
       const std::string &prefix,                      ///< [in] Prefix for keys, or CF name
