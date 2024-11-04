@@ -60,6 +60,16 @@ private:
   pending_transactions_t pending_trans;
   crimson::osd::PG& pg;
 
+  MURef<MOSDRepOp> new_repop_msg(
+    const pg_shard_t &pg_shard,
+    const hobject_t &hoid,
+    const bufferlist &encoded_txn,
+    const osd_op_params_t &osd_op_p,
+    epoch_t min_epoch,
+    epoch_t map_epoch,
+    const std::vector<pg_log_entry_t> &log_entries,
+    ceph_tid_t tid);
+
   seastar::future<> request_committed(
     const osd_reqid_t& reqid, const eversion_t& at_version) final;
 };
