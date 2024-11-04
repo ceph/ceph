@@ -26,6 +26,7 @@
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/unordered_map.h"
 #include "msg/async/Stack.h"
 #include "Infiniband.h"
 
