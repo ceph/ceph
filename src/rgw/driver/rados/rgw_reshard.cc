@@ -21,6 +21,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/async/lease_rados.h"
+#include "common/async/spawn_throttle.h"
 #include "common/errno.h"
 #include "common/error_code.h"
 #include "common/ceph_json.h"
@@ -1086,24 +1087,35 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
   }
 
   auto& conf = store->ctx()->_conf;
-  const uint64_t max_aio = conf.get_val<uint64_t>("rgw_reshard_max_aio");
+  const uint64_t shard_max_aio = conf.get_val<uint64_t>("rgw_reshard_max_aio");
   const size_t batch_size = conf.get_val<uint64_t>("rgw_reshard_batch_size");
   const bool check_existing = process_log;
-  BucketReshardManager target_shards_mgr(y.get_executor(), max_aio, pool,
+  BucketReshardManager target_shards_mgr(y.get_executor(), shard_max_aio, pool,
                                          oids, batch_size, can_put_entries,
                                          check_existing);
 
+  const uint64_t max_aio = conf.get_val<uint64_t>("rgw_bucket_index_max_aio");
+  constexpr auto on_error = ceph::async::cancel_on_error::all;
+  auto group = ceph::async::spawn_throttle{y, max_aio, on_error};
+
   const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
   for (uint32_t i = 0; i < num_source_shards; ++i) {
-    int ret = process_source_shard(dpp, y, store->getRados(), bucket_info,
-                                   current, i, max_op_entries,
-                                   target_shards_mgr, verbose_json_out, out,
-                                   formatter, stage_entries, process_log);
-    if (ret < 0) {
-      return ret;
-    }
+    group.spawn([&] (boost::asio::yield_context yield) {
+        int ret = process_source_shard(dpp, yield, store->getRados(),
+                                       bucket_info, current, i, max_op_entries,
+                                       target_shards_mgr, verbose_json_out, out,
+                                       formatter, stage_entries, process_log);
+        if (ret < 0) {
+          throw boost::system::system_error(
+              -ret, boost::system::system_category());
+        }
+      });
   }
 
+  // wait for all source shards to complete
+  group.wait();
+
+  // flush and drain all requests to target shards
   target_shards_mgr.finish(y);
 
   if (verbose_json_out) {
