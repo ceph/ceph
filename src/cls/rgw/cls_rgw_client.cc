@@ -350,7 +350,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             rgw_cls_list_ret* result)
 {
   bufferlist in;
-  rgw_cls_list_op call(false);
+  rgw_cls_list_op call;
   call.start_obj = start_obj;
   call.filter_prefix = filter_prefix;
   call.delimiter = delimiter;
@@ -838,7 +838,7 @@ int cls_rgw_get_dir_header_async(IoCtx& io_ctx, const string& oid,
                                  boost::intrusive_ptr<RGWGetDirHeader_CB> cb)
 {
   bufferlist in, out;
-  rgw_cls_list_op call(false);
+  rgw_cls_list_op call;
   call.num_entries = 0;
   call.want_header = true;
   encode(call, in);

@@ -303,12 +303,12 @@ void rgw_cls_bucket_clear_olh_op::dump(Formatter *f) const
 
 void rgw_cls_list_op::generate_test_instances(list<rgw_cls_list_op*>& o)
 {
-  rgw_cls_list_op *op = new rgw_cls_list_op(false);
+  rgw_cls_list_op *op = new rgw_cls_list_op;
   op->start_obj.name = "start_obj";
   op->num_entries = 100;
   op->filter_prefix = "filter_prefix";
   o.push_back(op);
-  o.push_back(new rgw_cls_list_op(false));
+  o.push_back(new rgw_cls_list_op);
 }
 
 void rgw_cls_list_op::dump(Formatter *f) const

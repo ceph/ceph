@@ -388,7 +388,7 @@ struct rgw_cls_list_op
   bool want_header;
   std::string delimiter;
 
-  rgw_cls_list_op(bool want_header) : num_entries(0), list_versions(false), want_header(want_header) {}
+  rgw_cls_list_op() : num_entries(0), list_versions(false), want_header(false) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(7, 4, bl);

@@ -537,7 +537,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   auto iter = in->cbegin();
 
-  rgw_cls_list_op op(false);
+  rgw_cls_list_op op;
   try {
     decode(op, iter);
   } catch (ceph::buffer::error& err) {
