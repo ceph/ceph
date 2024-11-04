@@ -137,6 +137,12 @@
 %endif
 %bcond_without cephadm_bundling
 %bcond_without cephadm_pip_deps
+%bcond_without dwz
+%if %{with dwz}
+%else
+# disable dwz for 50% speedup at the cost of ~33% space
+%global _find_debuginfo_dwz_opts %{nil}
+%endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
