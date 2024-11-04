@@ -104,6 +104,18 @@ Remove a topic by running the following command:
 
    radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
 
+Fetch persistent topic stats (i.e. reservations, entries and size) by running the following command: 
+
+.. prompt:: bash #
+
+   radosgw-admin topic stats --topic={topic-name} [--tenant={tenant}]
+
+Dump (in JSON format) all pending bucket notifications of a persistent topic by running the following command: 
+
+.. prompt:: bash #
+
+   radosgw-admin topic dump --topic={topic-name} [--tenant={tenant}] [--max-entries={max-entries}]
+
 
 Notification Performance Statistics
 -----------------------------------
