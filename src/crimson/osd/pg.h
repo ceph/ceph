@@ -901,6 +901,11 @@ private:
       !peering_state.get_missing_loc().readable_with_acting(
 	oid, get_actingset(), v);
   }
+  bool is_missing_on_peer(
+    const pg_shard_t &peer,
+    const hobject_t &soid) const {
+    return peering_state.get_peer_missing(peer).is_missing(soid);
+  }
   bool is_degraded_or_backfilling_object(const hobject_t& soid) const;
   const std::set<pg_shard_t> &get_actingset() const {
     return peering_state.get_actingset();

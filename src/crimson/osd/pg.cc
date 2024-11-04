@@ -1605,7 +1605,7 @@ bool PG::should_send_op(
     //    missing set
     hoid <= peering_state.get_peer_info(peer).last_backfill ||
     (has_backfill_state() && hoid <= get_last_backfill_started() &&
-     !peering_state.get_peer_missing(peer).is_missing(hoid)));
+     !is_missing_on_peer(peer, hoid)));
   if (!should_send) {
     ceph_assert(is_backfill_target(peer));
     logger().debug("{} issue_repop shipping empty opt to osd."
