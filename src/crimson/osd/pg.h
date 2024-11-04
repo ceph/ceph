@@ -893,7 +893,7 @@ private:
   bool can_discard_op(const MOSDOp& m) const;
   void context_registry_on_change();
   bool is_missing_object(const hobject_t& soid) const {
-    return peering_state.get_pg_log().get_missing().get_items().count(soid);
+    return get_local_missing().is_missing(soid);
   }
   bool is_unreadable_object(const hobject_t &oid,
 			    eversion_t* v = 0) const final {
