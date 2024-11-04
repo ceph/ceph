@@ -10,6 +10,7 @@
 #include "include/buffer.h"
 
 #include "crimson/common/errorator.h"
+#include "crimson/common/errorator-loop.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/logging.h"
@@ -410,14 +411,10 @@ public:
             ret->cast<T>());
         });
       } else {
-	assert(!ret->is_mutable());
         SUBDEBUGT(seastore_cache,
             "{} {}~0x{:x} is present on t without fully loaded, reading ... -- {}",
             t, T::TYPE, offset, length, *ret);
-        auto bp = create_extent_ptr_rand(ret->get_length());
-        ret->set_bptr(std::move(bp));
-        return read_extent<T>(
-          ret->cast<T>());
+        return do_read_extent_maybe_partial<T>(ret->cast<T>(), 0, length);
       }
     } else {
       SUBTRACET(seastore_cache, "{} {}~0x{:x} is absent on t, query cache ...",
@@ -438,12 +435,15 @@ public:
    * get_absent_extent
    *
    * The extent in query is supposed to be absent in Cache.
+   * partially load buffer from partial_off~partial_len if not present.
    */
   template <typename T, typename Func>
   get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
     Transaction &t,
     paddr_t offset,
     extent_len_t length,
+    extent_len_t partial_off,
+    extent_len_t partial_len,
     Func &&extent_init_func) {
     CachedExtentRef ret;
     LOG_PREFIX(Cache::get_absent_extent);
@@ -474,7 +474,8 @@ public:
     };
     return trans_intr::make_interruptible(
       do_get_caching_extent<T>(
-	offset, length, std::forward<Func>(extent_init_func), std::move(f))
+        offset, length, partial_off, partial_len,
+        std::forward<Func>(extent_init_func), std::move(f))
     );
   }
 
@@ -496,6 +497,16 @@ public:
     paddr_t offset,
     extent_len_t length) {
     return get_absent_extent<T>(t, offset, length, [](T &){});
+  }
+
+  template <typename T, typename Func>
+  get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length,
+    Func &&extent_init_func) {
+    return get_absent_extent<T>(t, offset, length, 0, length,
+      std::forward<Func>(extent_init_func));
   }
 
   bool is_viewable_extent_stable(
@@ -586,20 +597,10 @@ public:
 
     // user should not see RETIRED_PLACEHOLDER extents
     ceph_assert(!is_retired_placeholder_type(p_extent->get_type()));
-    if (!p_extent->is_fully_loaded()) {
-      assert(is_logical_type(p_extent->get_type()));
-      assert(!p_extent->is_mutable());
-      ++access_stats.load_present;
-      ++stats.access.s.load_present;
-      LOG_PREFIX(Cache::get_extent_viewable_by_trans);
-      SUBDEBUG(seastore_cache,
-        "{} {}~0x{:x} is present without fully loaded, reading ... -- {}",
-        p_extent->get_type(), p_extent->get_paddr(), p_extent->get_length(),
-        *p_extent);
-      auto bp = create_extent_ptr_rand(p_extent->get_length());
-      p_extent->set_bptr(std::move(bp));
-      return read_extent<CachedExtent>(CachedExtentRef(p_extent));
-    }
+    // for logical extents, handle partial load in TM::read_pin(),
+    // also see read_extent_maybe_partial() and get_absent_extent()
+    assert(is_logical_type(p_extent->get_type()) ||
+           p_extent->is_fully_loaded());
     return p_extent->wait_io(
     ).then([p_extent] {
       return get_extent_ertr::make_ready_future<CachedExtentRef>(
@@ -621,6 +622,37 @@ public:
     });
   }
 
+  // wait extent io or do partial reads
+  template <typename T>
+  read_extent_ret<T> read_extent_maybe_partial(
+    Transaction &t,
+    TCachedExtentRef<T> extent,
+    extent_len_t partial_off,
+    extent_len_t partial_len) {
+    assert(is_logical_type(extent->get_type()));
+    if (!extent->is_range_loaded(partial_off, partial_len)) {
+      LOG_PREFIX(Cache::read_extent_maybe_partial);
+      SUBDEBUGT(seastore_cache,
+        "{} {}~0x{:x} is present on t without range 0x{:x}~0x{:x}, reading ... -- {}",
+        t, extent->get_type(), extent->get_paddr(), extent->get_length(),
+        partial_off, partial_len, *extent);
+      const auto t_src = t.get_src();
+      extent_access_stats_t& access_stats = get_by_ext(
+        get_by_src(stats.access_by_src_ext, t_src),
+        extent->get_type());
+      ++access_stats.load_present;
+      ++stats.access.s.load_present;
+      return do_read_extent_maybe_partial(
+          std::move(extent), partial_off, partial_len);
+    } else {
+      // TODO(implement fine-grained-wait):
+      // the range might be already loaded, but we don't know
+      return extent->wait_io().then([extent]() -> read_extent_ret<T> {
+        return seastar::make_ready_future<TCachedExtentRef<T>>(extent);
+      });
+    }
+  }
+
   extent_len_t get_block_size() const {
     return epm.get_block_size();
   }
@@ -632,54 +664,112 @@ public:
   }
 
 private:
+  /// Implements exclusive call to read_extent() for the extent
+  template <typename T>
+  read_extent_ret<T> do_read_extent_maybe_partial(
+    TCachedExtentRef<T>&& extent,
+    extent_len_t partial_off,
+    extent_len_t partial_len)
+  {
+    LOG_PREFIX(Cache::do_read_extent_maybe_partial);
+    // They must be atomic:
+    // 1. checking missing range and wait io
+    // 2. checking missing range and read
+    // because the extents in Caches can be accessed concurrently
+    //
+    // TODO(implement fine-grained-wait)
+    assert(!extent->is_range_loaded(partial_off, partial_len));
+    assert(!extent->is_mutable());
+    if (extent->is_pending_io()) {
+      auto* p_extent = extent.get();
+      return p_extent->wait_io(
+      ).then([extent=std::move(extent), partial_off, partial_len, this, FNAME]() mutable
+             -> read_extent_ret<T> {
+        if (extent->is_range_loaded(partial_off, partial_len)) {
+          SUBDEBUG(seastore_cache,
+            "{} {}~0x{:x} got range 0x{:x}~0x{:x} ... -- {}",
+            extent->get_type(), extent->get_paddr(), extent->get_length(),
+            partial_off, partial_len, *extent);
+          // we don't know whether the target range is loading or not
+          if (extent->is_pending_io()) {
+            auto* p_extent = extent.get();
+            return p_extent->wait_io(
+            ).then([extent=std::move(extent)]() mutable {
+              return seastar::make_ready_future<TCachedExtentRef<T>>(std::move(extent));
+            });
+          } else {
+            return seastar::make_ready_future<TCachedExtentRef<T>>(std::move(extent));
+          }
+        } else { // range not loaded
+          SUBDEBUG(seastore_cache,
+            "{} {}~0x{:x} without range 0x{:x}~0x{:x} ... -- {}",
+            extent->get_type(), extent->get_paddr(), extent->get_length(),
+            partial_off, partial_len, *extent);
+          return do_read_extent_maybe_partial(
+              std::move(extent), partial_off, partial_len);
+        }
+      });
+    } else {
+      SUBDEBUG(seastore_cache,
+        "{} {}~0x{:x} is not pending without range 0x{:x}~0x{:x}, reading ... -- {}",
+        extent->get_type(), extent->get_paddr(), extent->get_length(),
+        partial_off, partial_len, *extent);
+      return read_extent<T>(
+        std::move(extent), partial_off, partial_len);
+    }
+  }
+
   /**
    * do_get_caching_extent
    *
    * returns ref to extent at offset~length of type T either from
    * - extent_set if already in cache
    * - disk
+   * only load partial_off~partial_len
    */
   using src_ext_t = std::pair<Transaction::src_t, extent_types_t>;
   template <typename T, typename Func, typename OnCache>
   read_extent_ret<T> do_get_caching_extent(
     paddr_t offset,                ///< [in] starting addr
     extent_len_t length,           ///< [in] length
+    extent_len_t partial_off,      ///< [in] offset of piece in extent
+    extent_len_t partial_len,      ///< [in] length of piece in extent
     Func &&extent_init_func,       ///< [in] init func for extent
     OnCache &&on_cache
   ) {
     LOG_PREFIX(Cache::do_get_caching_extent);
     auto cached = query_cache(offset);
     if (!cached) {
-      auto ret = CachedExtent::make_cached_extent_ref<T>(
-        create_extent_ptr_rand(length));
+      // partial read
+      TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION,
 		TRANS_ID_NULL);
       SUBDEBUG(seastore_cache,
-          "{} {}~0x{:x} is absent, add extent and reading ... -- {}",
-          T::TYPE, offset, length, *ret);
+          "{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
+          T::TYPE, offset, length, partial_off, partial_len, *ret);
       add_extent(ret);
       // touch_extent() should be included in on_cache
       on_cache(*ret);
       extent_init_func(*ret);
       return read_extent<T>(
-	std::move(ret));
+	std::move(ret), partial_off, partial_len);
     }
 
     // extent PRESENT in cache
     if (is_retired_placeholder_type(cached->get_type())) {
-      auto ret = CachedExtent::make_cached_extent_ref<T>(
-        create_extent_ptr_rand(length));
+      // partial read
+      TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION,
 		TRANS_ID_NULL);
       SUBDEBUG(seastore_cache,
-          "{} {}~0x{:x} is absent(placeholder), add extent and reading ... -- {}",
-          T::TYPE, offset, length, *ret);
+          "{} {}~0x{:x} is absent(placeholder), add extent and reading range 0x{:x}~0x{:x} ... -- {}",
+          T::TYPE, offset, length, partial_off, partial_len, *ret);
       extents_index.replace(*ret, *cached);
       on_cache(*ret);
 
@@ -692,30 +782,39 @@ private:
       cached->state = CachedExtent::extent_state_t::INVALID;
       extent_init_func(*ret);
       return read_extent<T>(
-	std::move(ret));
+	std::move(ret), partial_off, partial_len);
     }
 
     auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
     on_cache(*ret);
-    if (ret->is_fully_loaded()) {
+    if (ret->is_range_loaded(partial_off, partial_len)) {
       SUBTRACE(seastore_cache,
-          "{} {}~0x{:x} is present in cache -- {}",
-          T::TYPE, offset, length, *ret);
+          "{} {}~0x{:x} is present with range 0x{:x}~0x{:x} ... -- {}",
+          T::TYPE, offset, length, partial_off, partial_len, *ret);
       return ret->wait_io().then([ret] {
         // ret may be invalid, caller must check
         return seastar::make_ready_future<TCachedExtentRef<T>>(ret);
       });
     } else {
       SUBDEBUG(seastore_cache,
-          "{} {}~0x{:x} is present without fully loaded, reading ... -- {}",
-          T::TYPE, offset, length, *ret);
-      auto bp = create_extent_ptr_rand(length);
-      ret->set_bptr(std::move(bp));
-      return read_extent<T>(
-        std::move(ret));
+          "{} {}~0x{:x} is present without range 0x{:x}~0x{:x}, reading ... -- {}",
+          T::TYPE, offset, length, partial_off, partial_len, *ret);
+      return do_read_extent_maybe_partial(
+          std::move(ret), partial_off, partial_len);
     }
   }
 
+  template <typename T, typename Func, typename OnCache>
+  read_extent_ret<T> do_get_caching_extent(
+    paddr_t offset,                ///< [in] starting addr
+    extent_len_t length,           ///< [in] length
+    Func &&extent_init_func,       ///< [in] init func for extent
+    OnCache &&on_cache
+  ) {
+    return do_get_caching_extent<T>(offset, length, 0, length,
+      std::forward<Func>(extent_init_func),
+      std::forward<OnCache>(on_cache));
+  }
 
   // This is a workaround std::move_only_function not being available,
   // not really worth generalizing at this time.
@@ -789,14 +888,10 @@ private:
 	  return seastar::make_ready_future<CachedExtentRef>(ret);
         });
       } else {
-	assert(!ret->is_mutable());
         SUBDEBUGT(seastore_cache,
             "{} {}~0x{:x} {} is present on t without fully loaded, reading ... -- {}",
             t, type, offset, length, laddr, *ret);
-        auto bp = create_extent_ptr_rand(ret->get_length());
-        ret->set_bptr(std::move(bp));
-        return read_extent<CachedExtent>(
-          std::move(ret));
+        return do_read_extent_maybe_partial<CachedExtent>(std::move(ret), 0, length);
       }
     } else {
       SUBTRACET(seastore_cache, "{} {}~0x{:x} {} is absent on t, query cache ...",
@@ -1817,39 +1912,69 @@ private:
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
 
+  /// Read the extent in range offset~length,
+  /// must be called exclusively for an extent,
+  /// also see do_read_extent_maybe_partial().
+  ///
+  /// May return an invalid extent due to transaction conflict.
   template <typename T>
   read_extent_ret<T> read_extent(
-    TCachedExtentRef<T>&& extent
+    TCachedExtentRef<T>&& extent,
+    extent_len_t offset,
+    extent_len_t length
   ) {
+    LOG_PREFIX(Cache::read_extent);
     assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING ||
-      extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
-      extent->state == CachedExtent::extent_state_t::CLEAN);
+           extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
+           extent->state == CachedExtent::extent_state_t::CLEAN);
+    assert(!extent->is_range_loaded(offset, length));
+    assert(is_aligned(offset, get_block_size()));
+    assert(is_aligned(length, get_block_size()));
     extent->set_io_wait();
-    return epm.read(
-      extent->get_paddr(),
-      extent->get_length(),
-      extent->get_bptr()
-    ).safe_then(
-      [extent=std::move(extent), this]() mutable {
-        LOG_PREFIX(Cache::read_extent);
-	if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
-	  extent->state = CachedExtent::extent_state_t::CLEAN;
-	}
-	ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
-	  || extent->state == CachedExtent::extent_state_t::CLEAN
-	  || !extent->is_valid());
-	if (extent->is_valid()) {
-	  // crc will be checked against LBA leaf entry for logical extents,
-	  // or check against in-extent crc for physical extents.
-	  if (epm.get_checksum_needed(extent->get_paddr())) {
-	    extent->last_committed_crc = extent->calc_crc32c();
-	  } else {
-	    extent->last_committed_crc = CRC_NULL;
-	  }
-	  extent->on_clean_read();
-	}
+    load_ranges_t to_read = extent->load_ranges(offset, length);
+    return seastar::do_with(to_read.ranges, [extent, this, FNAME](auto &read_ranges) {
+      return ExtentPlacementManager::read_ertr::parallel_for_each(
+          read_ranges, [extent, this, FNAME](auto &read_range) {
+        SUBDEBUG(seastore_cache, "reading extent {} 0x{:x}~0x{:x} ...",
+                 extent->get_paddr(), read_range.offset, read_range.get_length());
+        assert(is_aligned(read_range.offset, get_block_size()));
+        assert(is_aligned(read_range.get_length(), get_block_size()));
+        return epm.read(
+          extent->get_paddr() + read_range.offset,
+          read_range.get_length(),
+          read_range.ptr);
+      });
+    }).safe_then(
+      [this, FNAME, extent=std::move(extent), offset, length]() mutable {
+        if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
+          extent->state = CachedExtent::extent_state_t::CLEAN;
+        }
+        ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
+          || extent->state == CachedExtent::extent_state_t::CLEAN
+          || !extent->is_valid());
+        if (extent->is_valid()) {
+          if (extent->is_fully_loaded()) {
+            // crc will be checked against LBA leaf entry for logical extents,
+            // or check against in-extent crc for physical extents.
+            if (epm.get_checksum_needed(extent->get_paddr())) {
+              extent->last_committed_crc = extent->calc_crc32c();
+            } else {
+              extent->last_committed_crc = CRC_NULL;
+            }
+            // on_clean_read() may change the content, call after calc_crc32c()
+            extent->on_clean_read();
+            SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} done -- {}",
+              offset, length, *extent);
+          } else {
+            extent->last_committed_crc = CRC_NULL;
+            SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} done (partial) -- {}",
+              offset, length, *extent);
+          }
+        } else {
+          SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} done (invalidated) -- {}",
+            offset, length, *extent);
+        }
         extent->complete_io();
-        SUBDEBUG(seastore_cache, "read extent done -- {}", *extent);
         return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
           std::move(extent));
       },
