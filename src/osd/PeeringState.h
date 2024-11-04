@@ -1470,8 +1470,24 @@ public:
 
   epoch_t last_peering_reset = 0;   ///< epoch of last peering reset
 
-  /// last_update that has committed; ONLY DEFINED WHEN is_active()
-  eversion_t  last_update_ondisk;
+  /**
+   * pg_committed_to
+   *
+   * Maintained on the primary while pg is active (and not merely peered).
+   *
+   * Forall e <= pg_committed_to, e has been committed on all replicas.
+   *
+   * As a consequence:
+   * - No version e <= pg_committed_to can become divergent
+   * - It is safe for replicas to read any object whose most recent update is
+   *   <= pg_committed_to
+   *
+   * Note that if the PG is only peered, pg_committed_to not be set
+   * and will remain eversion_t{} as we cannot guarantee that last_update
+   * at activation will not later become divergent.
+   */
+  eversion_t  pg_committed_to;
+
   eversion_t  last_complete_ondisk; ///< last_complete that has committed.
   eversion_t  last_update_applied;  ///< last_update readable
   /// last version to which rollback_info trimming has been applied
@@ -1490,6 +1506,18 @@ public:
   std::map<pg_shard_t, pg_missing_t> peer_missing; ///< peer missing sets
   std::set<pg_shard_t> peer_log_requested; ///< logs i've requested (and start stamps)
   std::set<pg_shard_t> peer_missing_requested; ///< missing sets requested
+
+  /// not constexpr because classic/crimson might differ
+  const pg_feature_vec_t local_pg_acting_features;
+  
+  /**
+   * acting_pg_features
+   *
+   * PG specific features common to entire acting set.  Valid only on primary
+   * after activation.
+   */
+  pg_feature_vec_t pg_acting_features;
+
 
   /// features supported by all peers
   uint64_t peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
@@ -1541,8 +1569,7 @@ public:
 
   void update_heartbeat_peers();
   void query_unfound(Formatter *f, std::string state);
-  bool proc_replica_info(
-    pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
+  bool proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify);
   void remove_down_peer_info(const OSDMapRef &osdmap);
   void check_recovery_sources(const OSDMapRef& map);
   void set_last_peering_reset();
@@ -1750,6 +1777,7 @@ public:
     spg_t spgid,
     const PGPool &pool,
     OSDMapRef curmap,
+    pg_feature_vec_t supported_pg_acting_features,
     DoutPrefixProvider *dpp,
     PeeringListener *pl);
 
@@ -1899,18 +1927,7 @@ public:
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,
     std::optional<eversion_t> trim_to,
-    std::optional<eversion_t> roll_forward_to);
-
-  void append_log_with_trim_to_updated(
-    std::vector<pg_log_entry_t>&& log_entries,
-    eversion_t roll_forward_to,
-    ObjectStore::Transaction &t,
-    bool transaction_applied,
-    bool async) {
-    update_trim_to();
-    append_log(std::move(log_entries), pg_trim_to, roll_forward_to,
-	min_last_complete_ondisk, t, transaction_applied, async);
-  }
+    std::optional<eversion_t> pg_committed_to);
 
   /**
    * Updates local log to reflect new write from primary.
@@ -1919,10 +1936,20 @@ public:
     std::vector<pg_log_entry_t>&& logv,
     eversion_t trim_to,
     eversion_t roll_forward_to,
-    eversion_t min_last_complete_ondisk,
+    eversion_t pg_committed_to,
     ObjectStore::Transaction &t,
     bool transaction_applied,
     bool async);
+
+  /**
+   * update_pct
+   *
+   * Updates pg_committed_to.  Generally invoked on replica on
+   * receipt of MODPGPCT from primary.
+   */
+  void update_pct(eversion_t pct) {
+    pg_committed_to = pct;
+  }
 
   /**
    * retrieve the min last_backfill among backfill targets
@@ -1937,7 +1964,7 @@ public:
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,
     std::optional<eversion_t> trim_to,
-    std::optional<eversion_t> roll_forward_to);
+    std::optional<eversion_t> pg_committed_to);
 
   /// Update missing set to reflect e (TODOSAM: not sure why this is needed)
   void add_local_next_event(const pg_log_entry_t& e) {
@@ -2412,10 +2439,6 @@ public:
     return missing_loc.get_missing_by_count();
   }
 
-  eversion_t get_min_last_complete_ondisk() const {
-    return min_last_complete_ondisk;
-  }
-
   eversion_t get_pg_trim_to() const {
     return pg_trim_to;
   }
@@ -2424,8 +2447,8 @@ public:
     return last_update_applied;
   }
 
-  eversion_t get_last_update_ondisk() const {
-    return last_update_ondisk;
+  eversion_t get_pg_committed_to() const {
+    return pg_committed_to;
   }
 
   bool debug_has_dirty_state() const {
@@ -2467,6 +2490,8 @@ public:
   /// Get feature vector common to up/acting set
   uint64_t get_min_upacting_features() const { return upacting_features; }
 
+  /// Get pg features common to acting set
+  pg_feature_vec_t get_pg_acting_features() const { return pg_acting_features; }
 
   // Flush control interface
 private:

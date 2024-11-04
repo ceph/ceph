@@ -43,6 +43,7 @@
 #include "messages/MOSDECSubOpReadReply.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
+#include "messages/MOSDPGPCT.h"
 #include "messages/MOSDBackoff.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepOp.h"
@@ -212,6 +213,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     p,
     _pool,
     curmap,
+    PG_FEATURE_CLASSIC_ALL,
     this,
     this),
   pool(recovery_state.get_pgpool()),
@@ -2091,6 +2093,9 @@ bool PG::can_discard_request(OpRequestRef& op)
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     return can_discard_replica_op<
       MOSDPGUpdateLogMissingReply, MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY>(op);
+  case MSG_OSD_PG_PCT:
+    return can_discard_replica_op<
+      MOSDPGPCT, MSG_OSD_PG_PCT>(op);
 
   case MSG_OSD_PG_SCAN:
     return can_discard_scan(op);

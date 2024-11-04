@@ -166,7 +166,8 @@ void RemotePeeringEvent::on_pg_absent(ShardServices &shard_services)
       ctx.send_notify(q.from.osd, {q.query.from, q.query.to,
 				   q.query.epoch_sent,
 				   map_epoch, empty,
-				   PastIntervals{}});
+				   PastIntervals{},
+				   PG_FEATURE_CRIMSON_ALL});
     }
   }
 }

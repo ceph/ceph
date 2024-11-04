@@ -133,6 +133,22 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_time_avg(l_osd_op_before_dequeue_op_lat, "op_before_dequeue_op_lat",
     "Latency of IO before calling dequeue_op(already dequeued and get PG lock)"); // client io before dequeue_op latency
 
+
+  osd_plb.add_u64_counter(
+    l_osd_replica_read, "replica_read", "Count of replica reads received");
+  osd_plb.add_u64_counter(
+    l_osd_replica_read_redirect_missing,
+    "replica_read_redirect_missing",
+    "Count of replica reads redirected to primary due to missing object");
+  osd_plb.add_u64_counter(
+    l_osd_replica_read_redirect_conflict,
+    "replica_read_redirect_conflict",
+    "Count of replica reads redirected to primary due to unstable write");
+  osd_plb.add_u64_counter(
+    l_osd_replica_read_served,
+    "replica_read_served",
+    "Count of replica reads served");
+
   osd_plb.add_u64_counter(
     l_osd_sop, "subop", "Suboperations");
   osd_plb.add_u64_counter(

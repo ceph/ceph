@@ -341,6 +341,40 @@ private:
 	op(op), v(v) {}
   };
   std::map<ceph_tid_t, ceph::ref_t<InProgressOp>> in_progress_ops;
+
+  /// Invoked by pct_callback to update PCT after a pause in IO
+  void send_pct_update();
+
+  /// Handle MOSDPGPCT message
+  void do_pct(OpRequestRef op);
+
+  /// Kick pct timer if repop_queue is empty
+  void maybe_kick_pct_update();
+
+  /// Kick pct timer if repop_queue is empty
+  void cancel_pct_update();
+
+  struct pct_callback_t final : public common::intrusive_timer::callback_t {
+    ReplicatedBackend *backend;
+
+    pct_callback_t(ReplicatedBackend *backend) : backend(backend) {}
+
+    void lock() override {
+      return backend->parent->pg_lock();
+    }
+    void unlock() override {
+      return backend->parent->pg_unlock();
+    }
+    void add_ref() override {
+      return backend->parent->pg_add_ref();
+    }
+    void dec_ref() override {
+      return backend->parent->pg_dec_ref();
+    }
+    void invoke() override {
+      return backend->send_pct_update();
+    }
+  } pct_callback;
 public:
   friend class C_OSD_OnOpCommit;
 
@@ -356,7 +390,7 @@ public:
     const eversion_t &at_version,
     PGTransactionUPtr &&t,
     const eversion_t &trim_to,
-    const eversion_t &min_last_complete_ondisk,
+    const eversion_t &pg_committed_to,
     std::vector<pg_log_entry_t>&& log_entries,
     std::optional<pg_hit_set_history_t> &hset_history,
     Context *on_all_commit,
@@ -372,7 +406,7 @@ private:
     ceph_tid_t tid,
     osd_reqid_t reqid,
     eversion_t pg_trim_to,
-    eversion_t min_last_complete_ondisk,
+    eversion_t pg_committed_to,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
     const ceph::buffer::list &log_entries,
@@ -386,7 +420,7 @@ private:
     ceph_tid_t tid,
     osd_reqid_t reqid,
     eversion_t pg_trim_to,
-    eversion_t min_last_complete_ondisk,
+    eversion_t pg_committed_to,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
     const std::vector<pg_log_entry_t> &log_entries,

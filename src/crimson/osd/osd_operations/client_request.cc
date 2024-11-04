@@ -14,6 +14,7 @@
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_connection_priv.h"
 #include "osd/object_state_fmt.h"
+#include "osd/osd_perf_counters.h"
 
 SET_SUBSYS(osd);
 
@@ -190,15 +191,25 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       DEBUGDPP("{}.{}: dropping misdirected op",
 	       pg, *this, this_instance_id);
       co_return;
-    } else if (const hobject_t& hoid = m->get_hobj();
-               !pg.get_peering_state().can_serve_replica_read(hoid)) {
+    }
+
+    pg.get_perf_logger().inc(l_osd_replica_read);
+    if (pg.is_unreadable_object(m->get_hobj())) {
+      DEBUGDPP("{}.{}: {} missing on replica, bouncing to primary",
+	       pg, *this, this_instance_id, m->get_hobj());
+      pg.get_perf_logger().inc(l_osd_replica_read_redirect_missing);
+      co_await reply_op_error(pgref, -EAGAIN);
+      co_return;
+    } else if (!pg.get_peering_state().can_serve_replica_read(m->get_hobj())) {
       DEBUGDPP("{}.{}: unstable write on replica, bouncing to primary",
 	       pg, *this, this_instance_id);
+      pg.get_perf_logger().inc(l_osd_replica_read_redirect_conflict);
       co_await reply_op_error(pgref, -EAGAIN);
       co_return;
     } else {
       DEBUGDPP("{}.{}: serving replica read on oid {}",
 	       pg, *this, this_instance_id, m->get_hobj());
+      pg.get_perf_logger().inc(l_osd_replica_read_served);
     }
   }
 
