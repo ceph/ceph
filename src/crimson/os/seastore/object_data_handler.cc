@@ -1499,11 +1499,18 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
             [FNAME, ctx, l_start, l_end,
              &l_current, &ret](auto &pin) -> read_iertr::future<> {
             auto pin_start = pin->get_key();
+            extent_len_t read_start;
+            extent_len_t read_start_aligned;
             if (l_current == l_start) { // first pin may skip head
               ceph_assert(l_current.get_aligned_laddr() >= pin_start);
+              read_start = l_current.template
+                get_byte_distance<extent_len_t>(pin_start);
+              read_start_aligned = p2align(read_start, ctx.tm.get_block_size());
             } else { // non-first pin must match start
               assert(l_current > l_start);
               ceph_assert(l_current == pin_start);
+              read_start = 0;
+              read_start_aligned = 0;
             }
 
             ceph_assert(l_current < l_end);
@@ -1528,24 +1535,37 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
             }
 
             // non-zero pin
+            laddr_t l_current_end_aligned = l_current_end.get_roundup_laddr();
+            extent_len_t read_len_aligned =
+              l_current_end_aligned.get_byte_distance<extent_len_t>(pin_start);
+            read_len_aligned -= read_start_aligned;
+            extent_len_t unalign_start_offset = read_start - read_start_aligned;
             DEBUGT("reading {}~{} from pin {}~{}",
               ctx.t,
               l_current,
               read_len,
               pin_start,
               pin_len);
-            extent_len_t e_current_off =
-              l_current.template get_byte_distance<extent_len_t>(pin_start);
             return ctx.tm.read_pin<ObjectDataBlock>(
               ctx.t,
-              std::move(pin)
+              std::move(pin),
+              read_start_aligned,
+              read_len_aligned
             ).si_then([&ret, &l_current, l_current_end,
-                       e_current_off, read_len](auto maybe_indirect_extent) {
-              ret.append(
-                bufferptr(
-                  maybe_indirect_extent.get_bptr(),
-                  e_current_off,
-                  read_len));
+                       read_start_aligned, read_len_aligned,
+                       unalign_start_offset, read_len](auto maybe_indirect_extent) {
+              auto aligned_bl = maybe_indirect_extent.get_range(
+                  read_start_aligned, read_len_aligned);
+              if (read_len < read_len_aligned) {
+                ceph::bufferlist unaligned_bl;
+                unaligned_bl.substr_of(
+                    aligned_bl, unalign_start_offset, read_len);
+                ret.append(std::move(unaligned_bl));
+              } else {
+                assert(read_len == read_len_aligned);
+                assert(unalign_start_offset == 0);
+                ret.append(std::move(aligned_bl));
+              }
               l_current = l_current_end;
               return seastar::now();
             }).handle_error_interruptible(
