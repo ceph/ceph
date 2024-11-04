@@ -2383,6 +2383,11 @@ Then run the following:
 
         self._kick_serve_loop()
 
+    def _invalidate_all_host_metadata_and_kick_serve(self, hostname: str) -> None:
+        # invalidates all metadata for a given host and kicks serve loop
+        self.cache.refresh_all_host_info(hostname)
+        self._kick_serve_loop()
+
     @handle_orch_error
     def describe_service(self, service_type: Optional[str] = None, service_name: Optional[str] = None,
                          refresh: bool = False) -> List[orchestrator.ServiceDescription]:
