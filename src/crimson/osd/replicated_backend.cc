@@ -84,7 +84,7 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
       pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
       encode(log_entries, m->logbl);
       m->pg_trim_to = osd_op_p.pg_trim_to;
-      m->min_last_complete_ondisk = osd_op_p.min_last_complete_ondisk;
+      m->pg_committed_to = osd_op_p.pg_committed_to;
       m->pg_stats = pg.get_info().stats;
       // TODO: set more stuff. e.g., pg_states
       sends->emplace_back(
@@ -99,7 +99,7 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
     std::move(log_entries),
     osd_op_p.pg_trim_to,
     osd_op_p.at_version,
-    osd_op_p.min_last_complete_ondisk,
+    osd_op_p.pg_committed_to,
     true,
     txn,
     false);

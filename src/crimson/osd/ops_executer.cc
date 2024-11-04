@@ -828,7 +828,7 @@ void OpsExecuter::fill_op_params(OpsExecuter::modified_by m)
   osd_op_params->mtime = msg->get_mtime();
   osd_op_params->at_version = pg->get_next_version();
   osd_op_params->pg_trim_to = pg->get_pg_trim_to();
-  osd_op_params->min_last_complete_ondisk = pg->get_min_last_complete_ondisk();
+  osd_op_params->pg_committed_to = pg->get_pg_committed_to();
   osd_op_params->last_complete = pg->get_info().last_complete;
   osd_op_params->user_modify = (m == modified_by::user);
 }

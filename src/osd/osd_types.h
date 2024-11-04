@@ -51,6 +51,7 @@
 #include "librados/ListObjectImpl.h"
 #include "compressor/Compressor.h"
 #include "osd_perf_counters.h"
+#include "pg_features.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -1106,6 +1107,21 @@ public:
     DEDUP_CDC_CHUNK_SIZE,
     PG_NUM_MAX, // max pg_num
     READ_RATIO, // read ration for the read balancer work [0-100]
+    /**
+     * PCT_UPDATE_DELAY
+     *
+     * Time to wait (seconds) after there are no in progress writes before
+     * updating pg_committed_to on replicas.  If the period between writes on
+     * a PG is usually longer than this value, most writes will trigger an
+     * extra message.
+     *
+     * The primary reason to enable this feature would be to limit the time
+     * between a write and when that write is available to be read on replicas.
+     *
+     * A value <= 0 will cause the update to be sent immediately upon write
+     * completion if there are no other in progress writes.
+     */
+    PCT_UPDATE_DELAY,
   };
 
   enum type_t {
@@ -3790,6 +3806,7 @@ struct pg_notify_t {
   shard_id_t to;
   shard_id_t from;
   PastIntervals past_intervals;
+  pg_feature_vec_t pg_features = PG_FEATURE_NONE;
   pg_notify_t() :
     query_epoch(0), epoch_sent(0), to(shard_id_t::NO_SHARD),
     from(shard_id_t::NO_SHARD) {}
@@ -3799,11 +3816,12 @@ struct pg_notify_t {
     epoch_t query_epoch,
     epoch_t epoch_sent,
     const pg_info_t &info,
-    const PastIntervals& pi)
+    const PastIntervals& pi,
+    pg_feature_vec_t pg_features)
     : query_epoch(query_epoch),
       epoch_sent(epoch_sent),
       info(info), to(to), from(from),
-      past_intervals(pi) {
+      past_intervals(pi), pg_features(pg_features) {
     ceph_assert(from == info.pgid.shard);
   }
   void encode(ceph::buffer::list &bl) const;

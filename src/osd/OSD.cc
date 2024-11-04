@@ -504,6 +504,8 @@ void OSDService::shutdown_reserver()
 
 void OSDService::shutdown()
 {
+  pg_timer.stop();
+
   mono_timer.suspend();
 
   {
@@ -9501,7 +9503,8 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
 			 q.query.epoch_sent,
 			 osdmap->get_epoch(),
 			 empty,
-			 PastIntervals()};
+			 PastIntervals(),
+			 PG_FEATURE_CLASSIC_ALL};
       m = new MOSDPGNotify2(spg_t{pgid.pgid, q.query.from},
 			    std::move(notify));
     }

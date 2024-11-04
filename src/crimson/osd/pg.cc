@@ -132,6 +132,7 @@ PG::PG(
 	pool,
 	name),
       osdmap,
+      PG_FEATURE_CRIMSON_ALL,
       this,
       this),
     scrubber(*this),
@@ -1040,7 +1041,7 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
   ceph::os::Transaction t;
   peering_state.merge_new_log_entries(
     log_entries, t, peering_state.get_pg_trim_to(),
-    peering_state.get_min_last_complete_ondisk());
+    peering_state.get_pg_committed_to());
 
   return seastar::do_with(log_entries, set<pg_shard_t>{},
     [this, t=std::move(t), rep_tid](auto& log_entries, auto& waiting_on) mutable {
@@ -1061,7 +1062,7 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
                    get_last_peering_reset(),
                    rep_tid,
                    peering_state.get_pg_trim_to(),
-                   peering_state.get_min_last_complete_ondisk());
+                   peering_state.get_pg_committed_to());
       waiting_on.insert(peer);
       logger().debug("submit_error_log: sending log"
         "missing_request (rep_tid: {} entries: {})"
@@ -1278,7 +1279,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   log_operation(std::move(log_entries),
                 req->pg_trim_to,
                 req->version,
-                req->min_last_complete_ondisk,
+                req->pg_committed_to,
                 !txn.empty(),
                 txn,
                 false);
@@ -1324,13 +1325,13 @@ void PG::log_operation(
   std::vector<pg_log_entry_t>&& logv,
   const eversion_t &trim_to,
   const eversion_t &roll_forward_to,
-  const eversion_t &min_last_complete_ondisk,
+  const eversion_t &pg_committed_to,
   bool transaction_applied,
   ObjectStore::Transaction &txn,
   bool async) {
   logger().debug("{}", __func__);
   if (is_primary()) {
-    ceph_assert(trim_to <= peering_state.get_last_update_ondisk());
+    ceph_assert(trim_to <= peering_state.get_pg_committed_to());
   }
   /* TODO: when we add snap mapper and projected log support,
    * we'll likely want to update them here.
@@ -1354,7 +1355,7 @@ void PG::log_operation(
   peering_state.append_log(std::move(logv),
                            trim_to,
                            roll_forward_to,
-                           min_last_complete_ondisk,
+                           pg_committed_to,
                            txn,
                            !txn.empty(),
                            false);
@@ -1393,17 +1394,17 @@ PG::interruptible_future<> PG::do_update_log_missing(
 
   ceph_assert(m->get_type() == MSG_OSD_PG_UPDATE_LOG_MISSING);
   ObjectStore::Transaction t;
-  std::optional<eversion_t> op_trim_to, op_roll_forward_to;
+  std::optional<eversion_t> op_trim_to, op_pg_committed_to;
   if (m->pg_trim_to != eversion_t())
     op_trim_to = m->pg_trim_to;
-  if (m->pg_roll_forward_to != eversion_t())
-    op_roll_forward_to = m->pg_roll_forward_to;
-  logger().debug("op_trim_to = {}, op_roll_forward_to = {}",
+  if (m->pg_committed_to != eversion_t())
+    op_pg_committed_to = m->pg_committed_to;
+  logger().debug("op_trim_to = {}, op_pg_committed_to = {}",
     op_trim_to.has_value() ? *op_trim_to : eversion_t(),
-    op_roll_forward_to.has_value() ? *op_roll_forward_to : eversion_t());
+    op_pg_committed_to.has_value() ? *op_pg_committed_to : eversion_t());
 
   peering_state.append_log_entries_update_missing(
-    m->entries, t, op_trim_to, op_roll_forward_to);
+    m->entries, t, op_trim_to, op_pg_committed_to);
 
   return interruptor::make_interruptible(shard_services.get_store().do_transaction(
     coll_ref, std::move(t))).then_interruptible(
