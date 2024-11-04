@@ -148,6 +148,9 @@ struct AsyncOp : Invoker<Result> {
 
 /// Calls IoCtx::aio_read() and arranges for the AioCompletion to call a
 /// given handler with signature (error_code, version_t, bufferlist).
+///
+/// The given IoCtx reference is not required to remain valid, but some IoCtx
+/// instance must preserve its underlying implementation until completion.
 template <typename ExecutionContext, typename CompletionToken>
 auto async_read(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
                 size_t len, uint64_t off, CompletionToken&& token)
@@ -173,6 +176,9 @@ auto async_read(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
 
 /// Calls IoCtx::aio_write() and arranges for the AioCompletion to call a
 /// given handler with signature (error_code, version_t).
+///
+/// The given IoCtx reference is not required to remain valid, but some IoCtx
+/// instance must preserve its underlying implementation until completion.
 template <typename ExecutionContext, typename CompletionToken>
 auto async_write(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
                  const bufferlist &bl, size_t len, uint64_t off,
@@ -199,6 +205,9 @@ auto async_write(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
 
 /// Calls IoCtx::aio_operate() and arranges for the AioCompletion to call a
 /// given handler with signature (error_code, version_t, bufferlist).
+///
+/// The given IoCtx reference is not required to remain valid, but some IoCtx
+/// instance must preserve its underlying implementation until completion.
 template <typename ExecutionContext, typename CompletionToken>
 auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
                    ObjectReadOperation *read_op, int flags,
@@ -226,6 +235,9 @@ auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
 
 /// Calls IoCtx::aio_operate() and arranges for the AioCompletion to call a
 /// given handler with signature (error_code, version_t).
+///
+/// The given IoCtx reference is not required to remain valid, but some IoCtx
+/// instance must preserve its underlying implementation until completion.
 template <typename ExecutionContext, typename CompletionToken>
 auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
                    ObjectWriteOperation *write_op, int flags,
@@ -253,6 +265,9 @@ auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
 
 /// Calls IoCtx::aio_notify() and arranges for the AioCompletion to call a
 /// given handler with signature (error_code, version_t, bufferlist).
+///
+/// The given IoCtx reference is not required to remain valid, but some IoCtx
+/// instance must preserve its underlying implementation until completion.
 template <typename ExecutionContext, typename CompletionToken>
 auto async_notify(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
                   bufferlist& bl, uint64_t timeout_ms, CompletionToken &&token)
