@@ -5324,6 +5324,29 @@ void BlueStore::_init_logger()
     "tr_l", PerfCountersBuilder::PRIO_USEFUL);
   //****************************************
 
+  // slow op count
+  //****************************************
+  b.add_u64_counter(l_bluestore_slow_aio_wait_count,
+    "slow_aio_wait_count",
+    "Slow op count for aio wait",
+    "sawc",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_slow_committed_kv_count,
+    "slow_committed_kv_count",
+    "Slow op count for committed kv",
+    "sckc",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_slow_read_onode_meta_count,
+    "slow_read_onode_meta_count",
+    "Slow op count for read onode meta",
+    "sroc",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_slow_read_wait_aio_count,
+    "slow_read_wait_aio_count",
+    "Slow op count for read wait aio",
+    "srwc",
+    PerfCountersBuilder::PRIO_USEFUL);
+
   // Resulting size axis configuration for op histograms, values are in bytes
   PerfHistogramCommon::axis_config_d alloc_hist_x_axis_config{
     "Given size (bytes)",
@@ -10858,7 +10881,8 @@ int BlueStore::read(
     log_latency("get_onode@read",
       l_bluestore_read_onode_meta_lat,
       mono_clock::now() - start1,
-      cct->_conf->bluestore_log_op_age);
+      cct->_conf->bluestore_log_op_age,
+      "", l_bluestore_slow_read_onode_meta_count);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -11197,7 +11221,8 @@ int BlueStore::_do_read(
   log_latency(__func__,
     l_bluestore_read_onode_meta_lat,
     mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age);
+    cct->_conf->bluestore_log_op_age,
+    "", l_bluestore_slow_read_onode_meta_count);
   _dump_onode<30>(cct, *o);
 
   // for deep-scrub, we only read dirty cache and bypass clean cache in
@@ -11240,7 +11265,8 @@ int BlueStore::_do_read(
     l_bluestore_read_wait_aio_lat,
     mono_clock::now() - start,
     cct->_conf->bluestore_log_op_age,
-    [&](auto lat) { return ", num_ios = " + stringify(num_ios); }
+    [&](auto lat) { return ", num_ios = " + stringify(num_ios); },
+    l_bluestore_slow_read_wait_aio_count
   );
 
   bool csum_error = false;
@@ -11562,7 +11588,8 @@ int BlueStore::_do_readv(
   log_latency(__func__,
     l_bluestore_read_onode_meta_lat,
     mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age);
+    cct->_conf->bluestore_log_op_age,
+    "", l_bluestore_slow_read_onode_meta_count);
   _dump_onode<30>(cct, *o);
 
   IOContext ioc(cct, NULL, !cct->_conf->bluestore_fail_eio);
@@ -11595,7 +11622,8 @@ int BlueStore::_do_readv(
     l_bluestore_read_wait_aio_lat,
     mono_clock::now() - start,
     cct->_conf->bluestore_log_op_age,
-    [&](auto lat) { return ", num_ios = " + stringify(num_ios); }
+    [&](auto lat) { return ", num_ios = " + stringify(num_ios); },
+    l_bluestore_slow_read_wait_aio_count
   );
 
   ceph_assert(raw_results.size() == (size_t)m.num_intervals());
@@ -12631,6 +12659,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	mono_clock::duration lat = throttle.log_state_latency(
 	  *txc, logger, l_bluestore_state_aio_wait_lat);
 	if (ceph::to_seconds<double>(lat) >= cct->_conf->bluestore_log_op_age) {
+	  logger->inc(l_bluestore_slow_aio_wait_count);
 	  dout(0) << __func__ << " slow aio_wait, txc = " << txc
 		  << ", latency = " << lat
 		  << dendl;
@@ -12956,7 +12985,8 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
     cct->_conf->bluestore_log_op_age,
     [&](auto lat) {
       return ", txc = " + stringify(txc);
-    }
+    },
+    l_bluestore_slow_committed_kv_count
   );
 }
 
@@ -17321,7 +17351,8 @@ void BlueStore::log_latency(
   int idx,
   const ceph::timespan& l,
   double lat_threshold,
-  const char* info) const
+  const char* info,
+  int idx2) const
 {
   logger->tinc(idx, l);
   if (lat_threshold > 0.0 &&
@@ -17330,6 +17361,9 @@ void BlueStore::log_latency(
       << ", latency = " << l
       << info
       << dendl;
+    if (idx2 > l_bluestore_first && idx2 < l_bluestore_last) {
+      logger->inc(idx2);
+    }
   }
 }
 
@@ -17338,7 +17372,8 @@ void BlueStore::log_latency_fn(
   int idx,
   const ceph::timespan& l,
   double lat_threshold,
-  std::function<string (const ceph::timespan& lat)> fn) const
+  std::function<string (const ceph::timespan& lat)> fn,
+  int idx2) const
 {
   logger->tinc(idx, l);
   if (lat_threshold > 0.0 &&
@@ -17347,6 +17382,9 @@ void BlueStore::log_latency_fn(
       << ", latency = " << l
       << fn(l)
       << dendl;
+    if (idx2 > l_bluestore_first && idx2 < l_bluestore_last) {
+      logger->inc(idx2);
+    }
   }
 }
 

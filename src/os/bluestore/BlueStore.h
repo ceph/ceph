@@ -215,6 +215,14 @@ enum {
   l_bluestore_allocate_hist,
   l_bluestore_allocator_lat,
   //****************************************
+
+  // slow op counter
+  //****************************************
+  l_bluestore_slow_aio_wait_count,
+  l_bluestore_slow_committed_kv_count,
+  l_bluestore_slow_read_onode_meta_count,
+  l_bluestore_slow_read_wait_aio_count,
+  //****************************************
   l_bluestore_last
 };
 
@@ -3308,13 +3316,15 @@ public:
     int idx,
     const ceph::timespan& lat,
     double lat_threshold,
-    const char* info = "") const;
+    const char* info = "",
+    int idx2 = l_bluestore_first) const;
 
   inline void log_latency_fn(const char* name,
     int idx,
     const ceph::timespan& lat,
     double lat_threshold,
-    std::function<std::string (const ceph::timespan& lat)> fn) const;
+    std::function<std::string (const ceph::timespan& lat)> fn,
+    int idx2 = l_bluestore_first) const;
 
 private:
   bool _debug_data_eio(const ghobject_t& o) {
