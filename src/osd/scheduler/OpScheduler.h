@@ -22,6 +22,8 @@
 #include "mon/MonClient.h"
 #include "osd/scheduler/OpSchedulerItem.h"
 
+#include "include/ceph_assert.h"
+
 namespace ceph::osd::scheduler {
 
 using client = uint64_t;
@@ -57,6 +59,11 @@ public:
 
   // Get the scheduler type set for the queue
   virtual op_queue_type_t get_type() const = 0;
+
+  virtual double get_cost_per_io() const {
+    ceph_assert(0 == "impossible for wpq");
+    return 0.0;
+  }
 
   // Destructor
   virtual ~OpScheduler() {};

@@ -1703,6 +1703,11 @@ void OSDService::enqueue_front(OpSchedulerItem&& qi)
   osd->op_shardedwq.queue_front(std::move(qi));
 }
 
+double OSDService::get_cost_per_io() const
+{
+  return osd->op_shardedwq.get_cost_per_io();
+}
+
 void OSDService::queue_recovery_context(
   PG *pg,
   GenContext<ThreadPool::TPHandle&> *c,
@@ -1771,56 +1776,66 @@ template <class MSG_TYPE>
 void OSDService::queue_scrub_event_msg(PG* pg,
 				       Scrub::scrub_prio_t with_priority,
 				       unsigned int qu_priority,
-				       Scrub::act_token_t act_token)
+				       Scrub::act_token_t act_token,
+				       uint64_t cost)
 {
   const auto epoch = pg->get_osdmap_epoch();
   auto msg = new MSG_TYPE(pg->get_pgid(), epoch, act_token);
   dout(15) << "queue a scrub event (" << *msg << ") for " << *pg
            << ". Epoch: " << epoch << " token: " << act_token << dendl;
   enqueue_back(OpSchedulerItem(
-    unique_ptr<OpSchedulerItem::OpQueueable>(msg), get_scrub_cost(),
+    unique_ptr<OpSchedulerItem::OpQueueable>(msg), cost,
     pg->scrub_requeue_priority(with_priority, qu_priority), ceph_clock_now(), 0, epoch));
 }
 
 template <class MSG_TYPE>
 void OSDService::queue_scrub_event_msg(PG* pg,
-                                       Scrub::scrub_prio_t with_priority)
+                                       Scrub::scrub_prio_t with_priority,
+				        uint64_t cost)
 {
   const auto epoch = pg->get_osdmap_epoch();
   auto msg = new MSG_TYPE(pg->get_pgid(), epoch);
   dout(15) << "queue a scrub event (" << *msg << ") for " << *pg << ". Epoch: " << epoch << dendl;
   enqueue_back(OpSchedulerItem(
-    unique_ptr<OpSchedulerItem::OpQueueable>(msg), get_scrub_cost(),
+    unique_ptr<OpSchedulerItem::OpQueueable>(msg), cost,
     pg->scrub_requeue_priority(with_priority), ceph_clock_now(), 0, epoch));
 }
 
-int64_t OSDService::get_scrub_cost()
+template <class MSG_TYPE>
+void OSDService::queue_scrub_event_msg_default_cost(PG* pg,
+		                                     Scrub::scrub_prio_t with_priority,
+						     unsigned int qu_priority,
+						     Scrub::act_token_t act_token)
 {
+  uint64_t cost = cct->_conf->osd_scrub_event_cost;
+  queue_scrub_event_msg<MSG_TYPE>(pg, with_priority, qu_priority, act_token, cost);
+}
 
-  int64_t cost_for_queue = cct->_conf->osd_scrub_cost;
-  if (op_queue_type_t::mClockScheduler == osd->osd_op_queue_type()) {
-    cost_for_queue = cct->_conf->osd_scrub_event_cost *
-                     cct->_conf->osd_shallow_scrub_chunk_max;
-  }
-  return cost_for_queue;
+template <class MSG_TYPE>
+void OSDService::queue_scrub_event_msg_default_cost(PG* pg,
+		                                     Scrub::scrub_prio_t with_priority)
+{
+  uint64_t cost = cct->_conf->osd_scrub_event_cost;
+  queue_scrub_event_msg<MSG_TYPE>(pg, with_priority, cost);
 }
 
 void OSDService::queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority)
 {
-  queue_scrub_event_msg<PGScrub>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrub>(pg, with_priority);
 }
 
 void OSDService::queue_scrub_after_repair(PG* pg, Scrub::scrub_prio_t with_priority)
 {
-  queue_scrub_event_msg<PGScrubAfterRepair>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubAfterRepair>(pg, with_priority);
 }
 
 void OSDService::queue_for_rep_scrub(PG* pg,
 				     Scrub::scrub_prio_t with_priority,
 				     unsigned int qu_priority,
-				     Scrub::act_token_t act_token)
+				     Scrub::act_token_t act_token,
+				     uint64_t cost)
 {
-  queue_scrub_event_msg<PGRepScrub>(pg, with_priority, qu_priority, act_token);
+  queue_scrub_event_msg<PGRepScrub>(pg, with_priority, qu_priority, act_token, cost);
 }
 
 void OSDService::queue_for_rep_scrub_resched(PG* pg,
@@ -1829,91 +1844,91 @@ void OSDService::queue_for_rep_scrub_resched(PG* pg,
 					     Scrub::act_token_t act_token)
 {
   // Resulting scrub event: 'SchedReplica'
-  queue_scrub_event_msg<PGRepScrubResched>(pg, with_priority, qu_priority,
-					   act_token);
+  queue_scrub_event_msg_default_cost<PGRepScrubResched>(pg, with_priority, qu_priority,
+					                act_token);
 }
 
 void OSDService::queue_for_scrub_granted(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'RemotesReserved'
-  queue_scrub_event_msg<PGScrubResourcesOK>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubResourcesOK>(pg, with_priority);
 }
 
 void OSDService::queue_for_scrub_denied(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'ReservationFailure'
-  queue_scrub_event_msg<PGScrubDenied>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubDenied>(pg, with_priority);
 }
 
 void OSDService::queue_for_scrub_resched(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'InternalSchedScrub'
-  queue_scrub_event_msg<PGScrubResched>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubResched>(pg, with_priority);
 }
 
 void OSDService::queue_scrub_pushes_update(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'ActivePushesUpd'
-  queue_scrub_event_msg<PGScrubPushesUpdate>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubPushesUpdate>(pg, with_priority);
 }
 
-void OSDService::queue_scrub_chunk_free(PG* pg, Scrub::scrub_prio_t with_priority)
+void OSDService::queue_scrub_chunk_free(PG* pg, Scrub::scrub_prio_t with_priority, uint64_t cost)
 {
   // Resulting scrub event: 'SelectedChunkFree'
-  queue_scrub_event_msg<PGScrubChunkIsFree>(pg, with_priority);
+  queue_scrub_event_msg<PGScrubChunkIsFree>(pg, with_priority, cost);
 }
 
 void OSDService::queue_scrub_chunk_busy(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'ChunkIsBusy'
-  queue_scrub_event_msg<PGScrubChunkIsBusy>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubChunkIsBusy>(pg, with_priority);
 }
 
 void OSDService::queue_scrub_applied_update(PG* pg, Scrub::scrub_prio_t with_priority)
 {
-  queue_scrub_event_msg<PGScrubAppliedUpdate>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubAppliedUpdate>(pg, with_priority);
 }
 
 void OSDService::queue_scrub_unblocking(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'Unblocked'
-  queue_scrub_event_msg<PGScrubUnblocked>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubUnblocked>(pg, with_priority);
 }
 
 void OSDService::queue_scrub_digest_update(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'DigestUpdate'
-  queue_scrub_event_msg<PGScrubDigestUpdate>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubDigestUpdate>(pg, with_priority);
 }
 
 void OSDService::queue_scrub_got_local_map(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'IntLocalMapDone'
-  queue_scrub_event_msg<PGScrubGotLocalMap>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubGotLocalMap>(pg, with_priority);
 }
 
 void OSDService::queue_scrub_got_repl_maps(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'GotReplicas'
-  queue_scrub_event_msg<PGScrubGotReplMaps>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubGotReplMaps>(pg, with_priority);
 }
 
 void OSDService::queue_scrub_replica_pushes(PG *pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'ReplicaPushesUpd'
-  queue_scrub_event_msg<PGScrubReplicaPushes>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubReplicaPushes>(pg, with_priority);
 }
 
 void OSDService::queue_scrub_is_finished(PG *pg)
 {
   // Resulting scrub event: 'ScrubFinished'
-  queue_scrub_event_msg<PGScrubScrubFinished>(pg, Scrub::scrub_prio_t::high_priority);
+  queue_scrub_event_msg_default_cost<PGScrubScrubFinished>(pg, Scrub::scrub_prio_t::high_priority);
 }
 
 void OSDService::queue_scrub_next_chunk(PG *pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'NextChunk'
-  queue_scrub_event_msg<PGScrubGetNextChunk>(pg, with_priority);
+  queue_scrub_event_msg_default_cost<PGScrubGetNextChunk>(pg, with_priority);
 }
 
 void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e, int64_t num_objects)
