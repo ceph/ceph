@@ -56,6 +56,7 @@
 #include "bluestore_common.h"
 #include "BlueFS.h"
 #include "common/EventTrace.h"
+#include "common/admin_socket.h"
 
 #ifdef WITH_BLKIN
 #include "common/zipkin_trace.h"
@@ -263,10 +264,13 @@ public:
 
   typedef std::map<uint64_t, ceph::buffer::list> ready_regions_t;
 
-
   struct BufferSpace;
   struct Collection;
   struct Onode;
+  class Scanner;
+  class Estimator;
+  Estimator* create_estimator();
+
   typedef boost::intrusive_ptr<Collection> CollectionRef;
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
@@ -1097,7 +1101,8 @@ public:
     decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
     void reshard(
       KeyValueDB *db,
-      KeyValueDB::Transaction t);
+      KeyValueDB::Transaction t,
+      uint32_t segment_size);
 
     /// initialize Shards from the onode
     void init_shards(bool loaded, bool dirty);
@@ -1155,6 +1160,8 @@ public:
     /// seek to the first lextent including or after offset
     extent_map_t::iterator seek_lextent(uint64_t offset);
     extent_map_t::const_iterator seek_lextent(uint64_t offset) const;
+    /// seek to the exactly the extent, or after offset
+    extent_map_t::iterator seek_nextent(uint64_t offset);
 
     /// split extent
     extent_map_t::iterator split_at(extent_map_t::iterator p, uint32_t offset);
@@ -1681,7 +1688,9 @@ public:
 
     //pool options
     pool_opts_t pool_opts;
+    uint32_t segment_size;
     ContextQueue *commit_queue;
+    std::unique_ptr<Estimator> estimator;
 
     OnodeCacheShard* get_onode_cache() const {
       return onode_space.cache;
@@ -2538,6 +2547,10 @@ private:
 
   bool per_pool_stat_collection = true;
 
+  class SocketHook;
+  friend class SocketHook;
+  AdminSocketHook* asok_hook = nullptr;
+
   struct MempoolThread : public Thread {
   public:
     BlueStore *store;
@@ -3318,6 +3331,13 @@ private:
     uint32_t op_flags = 0,
     uint64_t retry_count = 0);
 
+  void _do_read_and_pad(
+    Collection* c,
+    OnodeRef& o,
+    uint32_t offset,
+    uint32_t length,
+    ceph::buffer::list& bl);
+
   int _do_readv(
     Collection *c,
     OnodeRef& o,
@@ -3682,6 +3702,8 @@ private:
   struct WriteContext {
     bool buffered = false;          ///< buffered write
     bool compress = false;          ///< compressed write
+    CompressorRef compressor;       ///< effective compression engine
+    double crr = 0.0;               ///< compression required ratio
     uint8_t csum_type = 0;          ///< checksum type for new blobs
     unsigned csum_order = 0;        ///< target checksum chunk order
     uint64_t target_blob_size = 0;  ///< target (max) blob size
@@ -3847,7 +3869,14 @@ private:
     uint64_t offset, uint64_t length,
     ceph::buffer::list& bl,
     uint32_t fadvise_flags);
-
+  int _do_write_v2_compressed(
+    TransContext *txc,
+    CollectionRef &c,
+    OnodeRef& o,
+    WriteContext& wctx,
+    uint32_t offset, uint32_t length,
+    ceph::buffer::list& bl,
+    uint32_t scan_left, uint32_t scan_right);
   int _touch(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o);
