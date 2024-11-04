@@ -137,14 +137,46 @@ public:
   }
 
   /**
+   * maybe_indirect_extent_t
+   *
+   * Contains necessary information in case the extent is loaded from an
+   * indirect pin.
+   */
+  struct indirect_info_t {
+    extent_len_t intermediate_offset = 0;
+    extent_len_t length = 0;
+  };
+  template <typename T>
+  struct maybe_indirect_extent_t {
+    TCachedExtentRef<T> extent;
+    std::optional<indirect_info_t> maybe_indirect_info;
+    bool is_clone = false;
+
+    bool is_indirect() const {
+      return maybe_indirect_info.has_value();
+    }
+
+    ceph::bufferptr get_bptr() const {
+      if (is_indirect()) {
+        return ceph::bufferptr(
+            extent->get_bptr(),
+            maybe_indirect_info->intermediate_offset,
+            maybe_indirect_info->length);
+      } else {
+        return extent->get_bptr();
+      }
+    }
+  };
+
+  /**
    * read_extent
    *
    * Read extent of type T at offset~length
    */
   using read_extent_iertr = get_pin_iertr;
   template <typename T>
-  using read_extent_ret = read_extent_iertr::future<
-    TCachedExtentRef<T>>;
+  using read_extent_ret =
+    read_extent_iertr::future<maybe_indirect_extent_t<T>>;
   template <typename T>
   read_extent_ret<T> read_extent(
     Transaction &t,
@@ -192,10 +224,16 @@ public:
   }
 
   template <typename T>
-  base_iertr::future<TCachedExtentRef<T>> read_pin(
+  base_iertr::future<maybe_indirect_extent_t<T>> read_pin(
     Transaction &t,
     LBAMappingRef pin)
   {
+    bool is_clone = pin->is_clone();
+    std::optional<indirect_info_t> maybe_indirect_info;
+    if (pin->is_indirect()) {
+      maybe_indirect_info = indirect_info_t{
+        pin->get_intermediate_offset(), pin->get_length()};
+    }
     LOG_PREFIX(TransactionManager::read_pin);
     SUBDEBUGT(seastore_tm, "{} {} ...", t, T::TYPE, *pin);
     auto fut = base_iertr::make_ready_future<LBAMappingRef>();
@@ -223,9 +261,16 @@ public:
       } else {
 	return this->pin_to_extent<T>(t, std::move(std::get<0>(ret)));
       }
-    }).si_then([FNAME, &t](TCachedExtentRef<T> ext) {
-      SUBDEBUGT(seastore_tm, "got {}", t, *ext);
-      return ext;
+    }).si_then([FNAME, maybe_indirect_info, is_clone, &t](TCachedExtentRef<T> ext) {
+      if (maybe_indirect_info.has_value()) {
+        SUBDEBUGT(seastore_tm, "got indirect +0x{:x}~0x{:x} is_clone={} {}",
+                  t, maybe_indirect_info->intermediate_offset,
+                  maybe_indirect_info->length, is_clone, *ext);
+      } else {
+        SUBDEBUGT(seastore_tm, "got direct is_clone={} {}",
+                  t, is_clone, *ext);
+      }
+      return maybe_indirect_extent_t<T>{ext, maybe_indirect_info, is_clone};
     });
   }
 
@@ -355,7 +400,8 @@ public:
   }
 
   template <typename T>
-  read_extent_ret<T> get_mutable_extent_by_laddr(
+  get_pin_iertr::future<TCachedExtentRef<T>>
+  get_mutable_extent_by_laddr(
       Transaction &t,
       laddr_t laddr,
       extent_len_t len) {
@@ -367,8 +413,11 @@ public:
       ceph_assert(!pin->is_clone());
       ceph_assert(pin->get_length() == len);
       return this->read_pin<T>(t, std::move(pin));
-    }).si_then([this, &t, FNAME](auto extent) {
-      auto ext = get_mutable_extent(t, extent)->template cast<T>();
+    }).si_then([this, &t, FNAME](auto maybe_indirect_extent) {
+      assert(!maybe_indirect_extent.is_indirect());
+      assert(!maybe_indirect_extent.is_clone);
+      auto ext = get_mutable_extent(
+          t, maybe_indirect_extent.extent)->template cast<T>();
       SUBDEBUGT(seastore_tm, "got mutable {}", t, *ext);
       return read_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
@@ -431,6 +480,7 @@ public:
       // The according extent might be stable or pending.
       auto fut = base_iertr::now();
       if (!pin->is_indirect()) {
+        ceph_assert(!pin->is_clone());
 	if (!pin->is_parent_viewable()) {
 	  if (pin->is_parent_valid()) {
 	    pin = pin->refresh_with_pending_parent();
@@ -451,7 +501,12 @@ public:
 
 	fut = fut.si_then([this, &t, &pin] {
 	  if (full_extent_integrity_check) {
-	    return read_pin<T>(t, pin->duplicate());
+	    return read_pin<T>(t, pin->duplicate()
+            ).si_then([](auto maybe_indirect_extent) {
+              assert(!maybe_indirect_extent.is_indirect());
+              assert(!maybe_indirect_extent.is_clone);
+              return maybe_indirect_extent.extent;
+            });
 	  } else {
 	    auto ret = get_extent_if_linked<T>(t, pin->duplicate());
 	    if (ret.index() == 1) {
@@ -685,8 +740,11 @@ public:
       t
     ).si_then([&t, this](auto root) {
       return read_extent<RootMetaBlock>(t, root->root.meta);
-    }).si_then([key, &t](auto mblock) {
+    }).si_then([key, &t](auto maybe_indirect_extent) {
       LOG_PREFIX(TransactionManager::read_root_meta);
+      assert(!maybe_indirect_extent.is_indirect());
+      assert(!maybe_indirect_extent.is_clone);
+      auto& mblock = maybe_indirect_extent.extent;
       auto meta = mblock->get_meta();
       auto iter = meta.find(key);
       if (iter == meta.end()) {
@@ -744,7 +802,10 @@ public:
       t
     ).si_then([this, &t](RootBlockRef root) {
       return read_extent<RootMetaBlock>(t, root->root.meta);
-    }).si_then([this, key, value, &t](auto mblock) {
+    }).si_then([this, key, value, &t](auto maybe_indirect_extent) {
+      assert(!maybe_indirect_extent.is_indirect());
+      assert(!maybe_indirect_extent.is_clone);
+      auto& mblock = maybe_indirect_extent.extent;
       mblock = get_mutable_extent(t, mblock
 	)->template cast<RootMetaBlock>();
 
@@ -878,6 +939,8 @@ private:
     extent_types_t type)
   {
     ceph_assert(!pin->parent_modified());
+    assert(!pin->is_indirect());
+    // Note: pin might be a clone
     auto v = pin->get_logical_extent(t);
     // checking the lba child must be atomic with creating
     // and linking the absent child

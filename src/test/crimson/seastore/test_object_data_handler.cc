@@ -264,10 +264,13 @@ struct object_data_handler_test_t:
     auto &layout = onode->get_layout();
     auto odata = layout.object_data.get();
     auto obase = odata.get_reserved_data_base();
-    auto ext = with_trans_intr(t, [&](auto& trans) {
+    auto maybe_indirect_ext = with_trans_intr(t, [&](auto& trans) {
       return tm->read_extent<ObjectDataBlock>(
 	trans, (obase + addr).checked_to_laddr(), len);
     }).unsafe_get();
+    EXPECT_FALSE(maybe_indirect_ext.is_clone);
+    EXPECT_FALSE(maybe_indirect_ext.is_indirect());
+    auto ext = maybe_indirect_ext.extent;
     EXPECT_EQ((obase + addr).checked_to_laddr(), ext->get_laddr());
     return ext;
   }

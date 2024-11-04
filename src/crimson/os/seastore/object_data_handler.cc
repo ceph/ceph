@@ -859,15 +859,14 @@ operate_ret operate_left(context_t ctx, LBAMappingRef &pin, const overwrite_plan
         std::nullopt,
         std::nullopt);
     } else {
-      extent_len_t off = pin->get_intermediate_offset();
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
-      ).si_then([prepend_len, off](auto left_extent) {
+      ).si_then([prepend_len](auto maybe_indirect_left_extent) {
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::nullopt,
           std::make_optional(bufferptr(
-            left_extent->get_bptr(),
-            off,
+            maybe_indirect_left_extent.get_bptr(),
+            0,
             prepend_len)));
       });
     }
@@ -888,16 +887,15 @@ operate_ret operate_left(context_t ctx, LBAMappingRef &pin, const overwrite_plan
         std::move(left_to_write_extent),
         std::nullopt);
     } else {
-      extent_len_t off = pin->get_intermediate_offset();
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
-      ).si_then([prepend_offset=extent_len + off, prepend_len,
+      ).si_then([prepend_offset=extent_len, prepend_len,
                  left_to_write_extent=std::move(left_to_write_extent)]
-                (auto left_extent) mutable {
+                (auto left_maybe_indirect_extent) mutable {
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::move(left_to_write_extent),
           std::make_optional(bufferptr(
-            left_extent->get_bptr(),
+            left_maybe_indirect_extent.get_bptr(),
             prepend_offset,
             prepend_len)));
       });
@@ -944,15 +942,15 @@ operate_ret operate_right(context_t ctx, LBAMappingRef &pin, const overwrite_pla
     } else {
       auto append_offset =
 	overwrite_plan.data_end.get_byte_distance<
-	  extent_len_t>(right_pin_begin)
-	  + pin->get_intermediate_offset();
+	  extent_len_t>(right_pin_begin);
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
-      ).si_then([append_offset, append_len](auto right_extent) {
+      ).si_then([append_offset, append_len]
+                (auto right_maybe_indirect_extent) {
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::nullopt,
           std::make_optional(bufferptr(
-            right_extent->get_bptr(),
+            right_maybe_indirect_extent.get_bptr(),
             append_offset,
             append_len)));
       });
@@ -976,17 +974,16 @@ operate_ret operate_right(context_t ctx, LBAMappingRef &pin, const overwrite_pla
     } else {
       auto append_offset =
 	overwrite_plan.data_end.get_byte_distance<
-	  extent_len_t>(right_pin_begin)
-	  + pin->get_intermediate_offset();
+	  extent_len_t>(right_pin_begin);
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
       ).si_then([append_offset, append_len,
                  right_to_write_extent=std::move(right_to_write_extent)]
-                (auto right_extent) mutable {
+                (auto maybe_indirect_right_extent) mutable {
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::move(right_to_write_extent),
           std::make_optional(bufferptr(
-            right_extent->get_bptr(),
+            maybe_indirect_right_extent.get_bptr(),
             append_offset,
             append_len)));
       });
@@ -1136,12 +1133,12 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
               ctx.t,
               pin.duplicate()
             ).si_then([ctx, size, pin_offset, append_len, roundup_size,
-                      &pin, &object_data, &to_write](auto extent) {
+                      &pin, &object_data, &to_write](auto maybe_indirect_extent) {
               bufferlist bl;
 	      bl.append(
 	        bufferptr(
-	          extent->get_bptr(),
-		  pin.get_intermediate_offset(),
+	          maybe_indirect_extent.get_bptr(),
+	          0,
 	          size - pin_offset
 	      ));
               bl.append_zero(append_len);
@@ -1501,83 +1498,54 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
             pins,
             [FNAME, ctx, l_start, l_end,
              &l_current, &ret](auto &pin) -> read_iertr::future<> {
-            auto pin_key = pin->get_key();
-            if (l_current == l_start) {
-              ceph_assert(l_current >= pin_key);
-            } else {
+            auto pin_start = pin->get_key();
+            if (l_current == l_start) { // first pin may skip head
+              ceph_assert(l_current.get_aligned_laddr() >= pin_start);
+            } else { // non-first pin must match start
               assert(l_current > l_start);
-              ceph_assert(l_current == pin_key);
+              ceph_assert(l_current == pin_start);
             }
+
             ceph_assert(l_current < l_end);
             auto pin_len = pin->get_length();
             assert(pin_len > 0);
-            laddr_offset_t l_pin_end = pin_key + pin_len;
-            ceph_assert(l_current < l_pin_end);
-            laddr_offset_t l_current_end = std::min(l_pin_end, l_end);
+            laddr_offset_t pin_end = pin_start + pin_len;
+            assert(l_current < pin_end);
+            laddr_offset_t l_current_end = std::min(pin_end, l_end);
+            extent_len_t read_len =
+              l_current_end.get_byte_distance<extent_len_t>(l_current);
+
             if (pin->get_val().is_zero()) {
               DEBUGT("got {}~{} from zero-pin {}~{}",
                 ctx.t,
                 l_current,
-                l_current_end.get_byte_distance<loffset_t>(l_current),
-                pin_key,
+                read_len,
+                pin_start,
                 pin_len);
-              ret.append_zero(
-		l_current_end.get_byte_distance<
-		  extent_len_t>(l_current));
+              ret.append_zero(read_len);
               l_current = l_current_end;
               return seastar::now();
             }
 
             // non-zero pin
-            bool is_indirect = pin->is_indirect();
-            laddr_t e_key;
-            extent_len_t e_len;
-            extent_len_t e_off;
-            if (is_indirect) {
-              e_key = pin->get_intermediate_base();
-              e_len = pin->get_intermediate_length();
-              e_off = pin->get_intermediate_offset();
-              DEBUGT("reading {}~{} from indirect-pin {}~{}, direct-pin {}~{}(off={})",
-                ctx.t,
-                l_current,
-		l_current_end.get_byte_distance<extent_len_t>(l_current),
-                pin_key,
-                pin_len,
-                e_key,
-                e_len,
-                e_off);
-              assert(e_key <= pin->get_intermediate_key());
-              assert(e_off + pin_len <= e_len);
-            } else {
-              DEBUGT("reading {}~{} from pin {}~{}",
-                ctx.t,
-                l_current,
-		l_current_end.get_byte_distance<
-		   extent_len_t>(l_current),
-                pin_key,
-                pin_len);
-              e_key = pin_key;
-              e_len = pin_len;
-              e_off = 0;
-            }
-            extent_len_t e_current_off = (l_current + e_off)
-		.template get_byte_distance<extent_len_t>(pin_key);
+            DEBUGT("reading {}~{} from pin {}~{}",
+              ctx.t,
+              l_current,
+              read_len,
+              pin_start,
+              pin_len);
+            extent_len_t e_current_off =
+              l_current.template get_byte_distance<extent_len_t>(pin_start);
             return ctx.tm.read_pin<ObjectDataBlock>(
               ctx.t,
               std::move(pin)
             ).si_then([&ret, &l_current, l_current_end,
-#ifndef NDEBUG
-                       e_key, e_len, e_current_off](auto extent) {
-#else
-                       e_current_off](auto extent) {
-#endif
-              assert(e_key == extent->get_laddr());
-              assert(e_len == extent->get_length());
+                       e_current_off, read_len](auto maybe_indirect_extent) {
               ret.append(
                 bufferptr(
-                  extent->get_bptr(),
+                  maybe_indirect_extent.get_bptr(),
                   e_current_off,
-                  l_current_end.get_byte_distance<extent_len_t>(l_current)));
+                  read_len));
               l_current = l_current_end;
               return seastar::now();
             }).handle_error_interruptible(
