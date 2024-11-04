@@ -398,19 +398,9 @@ processing.
 
    make
 
-or
+See :ref:`doc-dev-kclient-kernel-build-alternate` for another example of a
+``make`` command that compiles the kernel.
 
-.. code-block:: bash
-
-   make -j16 LLVM=1 LLVM_IAS=1 CC='ccache clang' -s ARCH=x86_64 all compile_commands.json
-
-- ``LLVM=1``: Enables the use of the LLVM toolchain.
-- ``LLVM_IAS=1``: Enables the LLVM Integrated Assembler.
-- ``CC='ccache clang'``: Uses ``ccache`` to speed up compilation with
-  ``clang``.
-- ``ARCH=x86_64``: Specifies the target architecture for the build.
-- ``all compile_commands.json``: Builds the kernel and generates a
-  ``compile_commands.json`` file for tools that use this format.
 
 Install Modules on the Guest
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

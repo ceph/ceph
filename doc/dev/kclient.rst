@@ -81,6 +81,27 @@ Finally, build the kernel:
           distribution to actually build the kernel, like gcc. Please use your search
           engine of choice to learn how to do that.
 
+.. _doc-dev-kclient-kernel-build-alternate:
+
+Kernel Building - Alternate Scenario
+------------------------------------
+Compile the kernel using one of the following commands. Adjust the ``-j`` value
+as needed to match the number of cores available on the host for parallel
+processing.
+
+.. code-block:: bash
+
+   make -j16 LLVM=1 LLVM_IAS=1 CC='ccache clang' -s ARCH=x86_64 all compile_commands.json
+
+- ``LLVM=1``: Enables the use of the LLVM toolchain.
+- ``LLVM_IAS=1``: Enables the LLVM Integrated Assembler.
+- ``CC='ccache clang'``: Uses ``ccache`` to speed up compilation with
+  ``clang``.
+- ``ARCH=x86_64``: Specifies the target architecture for the build.
+- ``all compile_commands.json``: Builds the kernel and generates a
+  ``compile_commands.json`` file for tools that use this format.
+
+
 
 Step Two: create a VM
 =====================
