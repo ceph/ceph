@@ -342,7 +342,7 @@ command is of format `filesystem-name@filesystem-id peer-uuid`::
         "last_synced_snap": {
             "id": 120,
             "name": "snap1",
-            "sync_duration": 0.079997898999999997,
+            "sync_duration": 3,
             "sync_time_stamp": "274900.558797s",
             "sync_bytes": 52428800
         },
@@ -376,7 +376,7 @@ When a directory is currently being synchronized, the mirror daemon marks it as 
         "last_synced_snap": {
             "id": 120,
             "name": "snap1",
-            "sync_duration": 0.079997898999999997,
+            "sync_duration": 3,
             "sync_time_stamp": "274900.558797s",
             "sync_bytes": 52428800
         },
@@ -405,7 +405,7 @@ E.g., adding a regular file for synchronization would result in failed status::
         "last_synced_snap": {
             "id": 121,
             "name": "snap2",
-            "sync_duration": 300,
+            "sync_duration": 5,
             "sync_time_stamp": "500900.600797s",
             "sync_bytes": 78643200
         },
@@ -424,6 +424,44 @@ E.g., adding a regular file for synchronization would result in failed status::
 This allows a user to add a non-existent directory for synchronization. The mirror daemon
 will mark such a directory as failed and retry (less frequently). When the directory is
 created, the mirror daemon will clear the failed state upon successful synchronization.
+
+Adding a new snapshot or a new directory manually in the .snap directory of the
+remote filesystem will result in failed status of the corresponding configured directory.
+In the remote filesystem::
+
+  $ ceph fs subvolume snapshot create cephfs subvol1 snap2 group1
+  or
+  $ mkdir /d0/.snap/snap2
+
+  $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
+  {
+    "/d0": {
+        "state": "failed",
+        "failure_reason": "snapshot 'snap2' has invalid metadata",
+        "last_synced_snap": {
+            "id": 120,
+            "name": "snap1",
+            "sync_duration": 3,
+            "sync_time_stamp": "274900.558797s"
+        },
+        "snaps_synced": 2,
+        "snaps_deleted": 0,
+        "snaps_renamed": 0
+    },
+    "/f0": {
+        "state": "failed",
+        "snaps_synced": 0,
+        "snaps_deleted": 0,
+        "snaps_renamed": 0
+    }
+  }
+
+When the snapshot or the directory is removed from the remote filesystem, the mirror daemon will
+clear the failed state upon successful synchronization of the pending snapshots, if any.
+
+.. note:: Treat the remote filesystem as read-only. Nothing is inherently enforced by CephFS.
+          But with the right mds caps, users would not be able to snapshot directories in the
+          remote file system.
 
 When mirroring is disabled, the respective `fs mirror status` command for the file system
 will not show up in command help.
@@ -477,16 +515,16 @@ CephFS exports mirroring metrics as :ref:`Labeled Perf Counters` which will be c
      - The total number of snapshots renamed
    * - avg_sync_time
      - Gauge
-     - The average time (ms) taken by all snapshot synchronizations
+     - The average time taken by all snapshot synchronizations
    * - last_synced_start
      - Gauge
-     - The sync start time (ms) of the last synced snapshot
+     - The sync start time of the last synced snapshot
    * - last_synced_end
      - Gauge
-     - The sync end time (ms) of the last synced snapshot
+     - The sync end time of the last synced snapshot
    * - last_synced_duration
      - Gauge
-     - The time duration (ms) of the last synchronization
+     - The time duration of the last synchronization
    * - last_synced_bytes
      - counter
      - The total bytes being synchronized for the last synced snapshot
