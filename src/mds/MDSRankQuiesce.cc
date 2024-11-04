@@ -283,9 +283,8 @@ void MDSRank::quiesce_cluster_update() {
         }
         auto addrs = mdsmap->get_info_gid(membership.leader).addrs;
 
-        auto ack_msg = make_message<MMDSQuiesceDbAck>();
+        auto ack_msg = make_message<MMDSQuiesceDbAck>(QuiesceDbPeerAck{me, std::move(ack)});
         dout(10) << "sending ack " << ack << " to the leader " << membership.leader << dendl;
-        ack_msg->encode_payload_from({me, std::move(ack)});
         return send_message_mds(ack_msg, addrs);
       }
     };
@@ -297,9 +296,8 @@ void MDSRank::quiesce_cluster_update() {
         return -ENOENT;
       }
       auto addrs = mdsmap->get_info_gid(to).addrs;
-      auto listing_msg = make_message<MMDSQuiesceDbListing>();
+      auto listing_msg = make_message<MMDSQuiesceDbListing>(QuiesceDbPeerListing{me, std::move(db)});
       dout(10) << "sending listing " << db << " to the peer " << to << dendl;
-      listing_msg->encode_payload_from({me, std::move(db)});
       return send_message_mds(listing_msg, addrs);
     };
   }
