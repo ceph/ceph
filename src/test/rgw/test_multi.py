@@ -72,8 +72,8 @@ class Cluster(multisite.Cluster):
             env['CEPH_NUM_MDS'] = '0'
             env['RGW_ZONEGROUP'] = zonegroup
             cmd += ['-n']
-            # cmd += ['-o']
-            # cmd += ['rgw_cache_enabled=false']
+            cmd += ['-o']
+            cmd += ['rgw_cache_enabled=false']
         bash(cmd, env=env)
         self.needs_reset = False
 

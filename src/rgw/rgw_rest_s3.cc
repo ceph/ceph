@@ -5814,7 +5814,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op, optional_yiel
     int redirect_code = 0;
     rrule.apply_rule(protocol, hostname, key_name, &s->redirect,
 		    &redirect_code);
-    // APply a custom HTTP response code
+    // Apply a custom HTTP response code
     if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
     ldpp_dout(s, 10) << "retarget redirect code=" << redirect_code

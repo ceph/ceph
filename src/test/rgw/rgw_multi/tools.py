@@ -93,5 +93,3 @@ def assert_raises(excClass, callableObj, *args, **kwargs):
         else:
             excName = str(excClass)
             raise AssertionError("%s not raised" % excName)
-
-
