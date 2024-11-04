@@ -2752,6 +2752,28 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
+int Objecter::get_object_osd_position(int64_t pool, const string& name,
+                                          const string& key, const string& ns)
+{
+  shared_lock rl(rwlock);
+
+  pg_t pg;
+  int up_primary, acting_primary;
+  vector<int> up, acting;
+
+  int ret = osdmap->map_to_pg(pool, name, key, ns, &pg);
+  if (ret)
+    return ret;
+
+  if (!lookup_pg_mapping(pg, osdmap->get_epoch(), &up,
+                                      &up_primary, &acting, &acting_primary)) {
+    osdmap->pg_to_up_acting_osds(pg, &up, &up_primary,
+                                 &acting, &acting_primary);
+  }
+
+  return acting_primary;
+}
+
 void Objecter::_prune_snapc(
   const mempool::osdmap::map<int64_t,
   snap_interval_set_t>& new_removed_snaps,

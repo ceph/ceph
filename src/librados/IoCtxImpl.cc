@@ -284,6 +284,16 @@ int librados::IoCtxImpl::get_object_pg_hash_position(
   return 0;
 }
 
+int librados::IoCtxImpl::get_object_osd_position(
+    const std::string& oid, int *acting_primary)
+{
+  int r = objecter->get_object_osd_position(poolid, oid, oloc.key, oloc.nspace);
+  if (r < 0)
+    return r;
+  *acting_primary = r;
+  return 0;
+}
+
 void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
 {
   get();

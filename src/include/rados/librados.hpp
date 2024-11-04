@@ -853,6 +853,7 @@ inline namespace v14_2_0 {
     int writesame(const std::string& oid, bufferlist& bl,
 		  size_t write_len, uint64_t off);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
+    int get_object_osd_position(const std::string& oid, int *acting_primary);
     int checksum(const std::string& o, rados_checksum_type_t type,
 		 const bufferlist &init_value_bl, size_t len, uint64_t off,
 		 size_t chunk_size, bufferlist *pbl);
