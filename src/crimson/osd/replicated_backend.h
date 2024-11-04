@@ -35,6 +35,7 @@ private:
   rep_op_fut_t submit_transaction(
     const std::set<pg_shard_t> &pg_shards,
     const hobject_t& hoid,
+    crimson::osd::ObjectContextRef&& new_clone,
     ceph::os::Transaction&& txn,
     osd_op_params_t&& osd_op_p,
     epoch_t min_epoch, epoch_t max_epoch,
@@ -68,6 +69,7 @@ private:
     epoch_t min_epoch,
     epoch_t map_epoch,
     const std::vector<pg_log_entry_t> &log_entries,
+    bool send_op,
     ceph_tid_t tid);
 
   seastar::future<> request_committed(

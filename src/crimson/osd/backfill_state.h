@@ -304,6 +304,15 @@ public:
     backfill_machine.process_event(*std::move(evt));
   }
 
+  void enqueue_standalone_push(
+    const hobject_t &obj,
+    const eversion_t &v,
+    const std::vector<pg_shard_t> &peers);
+
+  bool is_triggered() const {
+    return backfill_machine.triggering_event() != nullptr;
+  }
+
   hobject_t get_last_backfill_started() const {
     return last_backfill_started;
   }

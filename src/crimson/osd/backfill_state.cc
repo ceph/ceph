@@ -610,4 +610,12 @@ void BackfillState::ProgressTracker::complete_to(
   }
 }
 
+void BackfillState::enqueue_standalone_push(
+  const hobject_t &obj,
+  const eversion_t &v,
+  const std::vector<pg_shard_t> &peers) {
+  progress_tracker->enqueue_push(obj);
+  backfill_machine.backfill_listener.enqueue_push(obj, v, peers);
+}
+
 } // namespace crimson::osd
