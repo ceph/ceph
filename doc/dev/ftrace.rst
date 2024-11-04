@@ -1,3 +1,5 @@
+.. _doc-dev-ftrace-trace-cmd:
+
 Tracing Kernel Functions with trace-cmd
 =======================================
 
