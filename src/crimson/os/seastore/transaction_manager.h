@@ -843,6 +843,7 @@ private:
   JournalRef journal;
   ExtentPlacementManagerRef epm;
   BackrefManagerRef backref_manager;
+  seastar::gate journal_gate;
 
   WritePipeline write_pipeline;
 

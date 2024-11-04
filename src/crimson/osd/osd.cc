@@ -719,6 +719,8 @@ seastar::future<> OSD::stop()
     }).then([this] {
       return pg_shard_manager.stop_registries();
     }).then([this] {
+      return handle_osd_map_lock.lock();
+    }).then([this] {
       return store.umount();
     }).then([this] {
       return store.stop();

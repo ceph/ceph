@@ -183,7 +183,9 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
     return cache->close();
   }).safe_then([this] {
     cache->dump_contents();
-    return journal->close();
+    return journal_gate.close().then( [this] {
+      return journal->close();
+    });
   }).safe_then([this] {
     return epm->close();
   }).safe_then([FNAME] {
@@ -454,7 +456,9 @@ TransactionManager::do_submit_transaction(
     }
 
     SUBTRACET(seastore_t, "submitting record", tref);
-    return journal->submit_record(std::move(record), tref.get_handle()
+    return seastar::with_gate(journal_gate,
+    [this, &record, &tref]()
+    {return journal->submit_record(std::move(record), tref.get_handle());}
     ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
