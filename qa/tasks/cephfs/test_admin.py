@@ -994,6 +994,9 @@ class TestRenameCommand(TestAdminCommands):
         """
         That renaming a file system without '--yes-i-really-mean-it' flag fails.
         """
+        # Failing the file system breaks this mount
+        self.mount_a.umount_wait(require_clean=True)
+
         self.run_ceph_cmd(f'fs fail {self.fs.name}')
         self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
         sleep(5)
@@ -1016,6 +1019,9 @@ class TestRenameCommand(TestAdminCommands):
         """
         That renaming a non-existent file system fails.
         """
+        # Failing the file system breaks this mount
+        self.mount_a.umount_wait(require_clean=True)
+
         self.run_ceph_cmd(f'fs fail {self.fs.name}')
         self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
         sleep(5)
@@ -1035,6 +1041,9 @@ class TestRenameCommand(TestAdminCommands):
         That renaming a file system fails if the new name refers to an existing file system.
         """
         self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
+
+        # let's unmount the client before failing the FS
+        self.mount_a.umount_wait(require_clean=True)
 
         self.run_ceph_cmd(f'fs fail {self.fs.name}')
         self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
@@ -1058,6 +1067,9 @@ class TestRenameCommand(TestAdminCommands):
         """
         orig_fs_name = self.fs.name
         new_fs_name = 'new_cephfs'
+
+        # let's unmount the client before failing the FS
+        self.mount_a.umount_wait(require_clean=True)
 
         self.run_ceph_cmd(f'fs mirror enable {orig_fs_name}')
         self.run_ceph_cmd(f'fs fail {self.fs.name}')
