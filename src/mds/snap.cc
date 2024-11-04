@@ -12,11 +12,11 @@
  * 
  */
 
-#include <string_view>
-
 #include "snap.h"
-
 #include "common/Formatter.h"
+
+#include <ostream>
+#include <sstream>
 
 using namespace std;
 /*

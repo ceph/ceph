@@ -15,13 +15,17 @@
 #ifndef CEPH_MDS_SNAP_H
 #define CEPH_MDS_SNAP_H
 
+#include <iosfwd>
+#include <list>
 #include <map>
+#include <string>
 #include <string_view>
 
 #include "mdstypes.h"
 #include "common/snap_types.h"
+#include "include/buffer.h"
 
-#include "Capability.h"
+namespace ceph { class Formatter; }
 
 /*
  * generic snap descriptor.
