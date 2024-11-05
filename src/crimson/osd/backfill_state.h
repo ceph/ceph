@@ -14,6 +14,7 @@
 #include <boost/statechart/transition.hpp>
 
 #include "osd/recovery_types.h"
+#include "osd/PGLog.h"
 
 namespace crimson::osd {
 
@@ -367,6 +368,7 @@ struct BackfillState::PeeringFacade {
   virtual hobject_t earliest_backfill() const = 0;
   virtual const std::set<pg_shard_t>& get_backfill_targets() const = 0;
   virtual const hobject_t& get_peer_last_backfill(pg_shard_t peer) const = 0;
+  virtual const PGLog& get_pg_log() const = 0;
   virtual const eversion_t& get_last_update() const = 0;
   virtual const eversion_t& get_log_tail() const = 0;
 
@@ -392,6 +394,8 @@ struct BackfillState::PeeringFacade {
 // of behaviour that must be provided by a unit test's mock.
 struct BackfillState::PGFacade {
   virtual const eversion_t& get_projected_last_update() const = 0;
+  virtual const PGLog::IndexedLog& get_projected_log() const = 0;
+
   virtual ~PGFacade() {}
 };
 
