@@ -2393,7 +2393,8 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     };
 
   r = image::snapshot::iterate(hctx, pre_check_lambda);
-  if (r < 0 && r != -EEXIST) {
+  //if (r < 0 && r != -EEXIST) {
+  if (r < 0) {
     return r;
   }
 
@@ -5999,11 +6000,10 @@ int group_remove(cls_method_context_t hctx, const string &group_id) {
 
   /* disable_group/group_remove at the time of force promote while the remote is alive
    * will hit below, hence commenting for now. */
-  /*
+
   if (group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
     return -EBUSY;
   }
-  */
 
   r = cls_cxx_map_remove_key(hctx, group_key(group_id));
   if (r < 0) {
@@ -6718,7 +6718,13 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
     if (r < 0) {
       return r;
     }
+
+    r = remove_key(hctx, mirror::REMOTE_NAMESPACE);
+    if (r < 0) {
+      return r;
+    }
   }
+
   return 0;
 }
 
