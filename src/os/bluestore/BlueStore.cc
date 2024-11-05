@@ -8038,24 +8038,17 @@ void BlueStore::_close_db()
   db = nullptr;
 
   if (do_destage && fm && fm->is_null_manager()) {
-    if (cct->_conf->osd_fast_shutdown == false) {
-      // graceful shutdown -> commit backgrounds discards before storing allocator
-      bdev->discard_drain();
-    }
-
-    auto discard_queued = bdev->get_discard_queued();
-    if (discard_queued && (discard_queued->num_intervals() > 0)) {
-      dout(10) << __func__ << "::discard_drain: size=" << discard_queued->size()
-	       << " num_intervals=" << discard_queued->num_intervals() << dendl;
-      // copy discard_queued to the allocator before storing it
-      for (auto p = discard_queued->begin(); p != discard_queued->end(); ++p) {
-	dout(20) << __func__ << "::discarded-extent=[" << p.get_start() << ", " << p.get_len() << "]" << dendl;
-	alloc->init_add_free(p.get_start(), p.get_len());
+    // force all backgrounds discards to be committed before storing allocator
+    // set timeout to 500msec
+    int ret = bdev->discard_drain(500);
+    if (ret == 0) {
+      ret = store_allocator(alloc);
+      if (unlikely(ret != 0)) {
+	derr << __func__ << "::NCB::store_allocator() failed (we will need to rebuild it on startup)" << dendl;
       }
     }
-    int ret = store_allocator(alloc);
-    if (unlikely(ret != 0)) {
-      derr << __func__ << "::NCB::store_allocator() failed (we will need to rebuild it on startup)" << dendl;
+    else {
+      derr << __func__ << "::NCB::discard_drain() exceeded timeout (abort!)" << dendl;
     }
   }
 

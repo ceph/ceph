@@ -292,8 +292,8 @@ public:
     int write_hint = WRITE_LIFE_NOT_SET) = 0;
   virtual int flush() = 0;
   virtual bool try_discard(interval_set<uint64_t> &to_release, bool async=true) { return false; }
-  virtual void discard_drain() { return; }
-  virtual const interval_set<uint64_t>* get_discard_queued() { return nullptr;}
+  virtual int discard_drain(uint32_t timeout_msec = 0) { return 0; }
+
   // for managing buffered readers/writers
   virtual int invalidate_cache(uint64_t off, uint64_t len) = 0;
   virtual int open(const std::string& path) = 0;
