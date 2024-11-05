@@ -839,6 +839,7 @@ extern void dump_continue(req_state *s);
 extern void list_all_buckets_end(req_state *s);
 extern void dump_time(req_state *s, const char *name, real_time t);
 extern std::string dump_time_to_str(const real_time& t);
+extern std::string dump_time_usec_to_str(const real_time& t);
 extern void dump_bucket_from_state(req_state *s);
 extern void dump_redirect(req_state *s, const std::string& redirect);
 extern bool is_valid_url(const char *url);

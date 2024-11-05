@@ -477,6 +477,33 @@ std::string dump_time_to_str(const real_time& t)
   return timestr;
 }
 
+static size_t dump_time_usec_impl(char (&timestr)[TIME_BUF_SIZE],
+                                    const real_time t)
+{
+  const utime_t ut(t);
+  time_t secs = static_cast<time_t>(ut.sec());
+
+  char buf[TIME_BUF_SIZE];
+  struct tm result;
+  const struct tm * const tmp = gmtime_r(&secs, &result);
+  if (tmp == nullptr) {
+    return 0;
+  }
+
+  if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T", tmp) == 0)
+    return 0;
+
+  return snprintf(timestr, sizeof(timestr), "%s.%06d", buf, (int)(ut.usec()));
+}
+
+std::string dump_time_usec_to_str(const real_time& t)
+{
+  char timestr[TIME_BUF_SIZE];
+  dump_time_usec_impl(timestr, t);
+
+  return timestr;
+}
+
 
 void dump_last_modified(req_state *s, real_time t)
 {

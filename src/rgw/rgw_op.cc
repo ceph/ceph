@@ -2681,6 +2681,7 @@ void RGWListBuckets::execute(optional_yield y)
       global_stats.bytes_used += ent.size;
       global_stats.bytes_used_rounded += ent.size_rounded;
       global_stats.objects_count += ent.count;
+      last_modified += ent.last_modified;
 
       /* operator[] still can create a new entry for storage policy seen
        * for first time. */
