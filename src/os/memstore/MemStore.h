@@ -363,14 +363,6 @@ public:
     const std::set<std::string> &keys,     ///< [in] Keys to get
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
-#ifdef WITH_SEASTAR
-  int omap_get_values(
-    CollectionHandle &c,         ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const std::optional<std::string> &start_after,     ///< [in] Keys to get
-    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
-    ) override;
-#endif
 
   using ObjectStore::omap_check_keys;
   /// Filters keys into out which are defined on oid
