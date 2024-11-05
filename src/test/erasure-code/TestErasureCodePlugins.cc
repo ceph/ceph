@@ -612,7 +612,7 @@ INSTANTIATE_TEST_SUITE_P(
     "plugin=lrc mapping=_D_D_DDD layers=[[\"cDcDcDDD\",\"\"]]",
     "plugin=lrc mapping=_D_D_DDDD layers=[[\"cDcDcDDDD\",\"\"]]",
     "plugin=jerasure technique=reed_sol_van k=6 m=3 w=16",
-    "plugin=jerasure technique=reed_sol_van k=6 m=3 w=32"
+    "plugin=jerasure technique=reed_sol_van k=6 m=3 w=32",
     "plugin=jerasure technique=liberation k=6 m=2 packetsize=32 w=11",
     "plugin=jerasure technique=liberation k=6 m=2 packetsize=36 w=13",
     "plugin=jerasure technique=blaum_roth k=6 m=2 packetsize=44 w=7",
