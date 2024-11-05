@@ -65,7 +65,6 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
     discard_callback(d_cb),
     discard_callback_priv(d_cbpriv),
     aio_stop(false),
-    discard_stop(false),
     aio_thread(this),
     injecting_crash(0)
 {
