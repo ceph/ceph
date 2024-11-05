@@ -2435,6 +2435,10 @@ int SQLPutObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
 
   SQL_BIND_INT(dpp, stmt, index, params->op.obj_data.part_num, sdb);
 
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.stripe_num, sdb);
+
+  SQL_BIND_INT(dpp, stmt, index, params->op.obj_data.stripe_num, sdb);
+
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.offset, sdb);
 
   SQL_BIND_INT(dpp, stmt, index, params->op.obj_data.offset, sdb);

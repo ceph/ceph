@@ -97,6 +97,7 @@ struct DBOpObjectInfo {
 struct DBOpObjectDataInfo {
   RGWObjState state;
   uint64_t part_num;
+  uint64_t stripe_num;
   std::string multipart_part_str;
   uint64_t offset;
   uint64_t size;
@@ -293,6 +294,7 @@ struct DBOpObjectPrepareInfo {
 
 struct DBOpObjectDataPrepareInfo {
   static constexpr const char* part_num = ":part_num";
+  static constexpr const char* stripe_num = ":stripe_num";
   static constexpr const char* offset = ":offset";
   static constexpr const char* data = ":data";
   static constexpr const char* size = ":size";
@@ -595,6 +597,7 @@ class DBOp {
       ObjID      TEXT NOT NULL , \
       MultipartPartStr TEXT, \
       PartNum  INTEGER NOT NULL, \
+      StripeNum INTEGER NOT NULL, \
       Offset   INTEGER, \
       Size 	 INTEGER, \
       Mtime  BLOB,       \
@@ -1240,8 +1243,8 @@ class PutObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
       "INSERT OR REPLACE INTO '{}' \
-      (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Mtime, Data) \
-      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
+      (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, StripeNum, Offset, Size, Mtime, Data) \
+      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
 
   public:
     virtual ~PutObjectDataOp() {}
@@ -1255,6 +1258,7 @@ class PutObjectDataOp: virtual public DBOp {
           params.op.obj.obj_id,
           params.op.obj_data.multipart_part_str,
           params.op.obj_data.part_num,
+          params.op.obj_data.stripe_num,
           params.op.obj_data.offset,
           params.op.obj_data.size,
           params.op.obj.mtime,
@@ -1287,8 +1291,9 @@ class GetObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
       "SELECT  \
-      ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Mtime, Data \
-      from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} and ObjID = {} ORDER BY MultipartPartStr, PartNum";
+      ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, StripeNum, Offset, Size, Mtime, Data \
+      from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} and ObjID = {} \
+      ORDER BY MultipartPartStr, PartNum, StripeNum ";
 
   public:
     virtual ~GetObjectDataOp() {}
@@ -1628,6 +1633,7 @@ class DB {
     // "<bucketname>_<objname>_<objinstance>_<multipart-part-str>_<partnum>"
     static constexpr std::string_view raw_obj_oid = "{0}_{1}_{2}_{3}_{4}";
 
+    // XXX [Matt] I think these are actual part numbers, and that we don't need stripe here
     std::string to_oid(std::string_view bucket, std::string_view obj_name,
                        std::string_view obj_instance, std::string_view obj_id,
                        std::string_view mp_str, uint64_t partnum) {
@@ -1680,6 +1686,7 @@ class DB {
         obj_id = _obj_id;
         multipart_part_str = _mp_part_str;
         part_num = _part_num;
+        stripe_num = _stripe_num;
 
         obj_table = bucket_name+".object.table";
         obj_data_table = bucket_name+".objectdata.table";
@@ -1694,6 +1701,7 @@ class DB {
         if (r < 0) {
           multipart_part_str = "0.0";
           part_num = 0;
+          stripe_num = 0;
         }
 
         obj_table = db->getObjectTable(bucket_name);
