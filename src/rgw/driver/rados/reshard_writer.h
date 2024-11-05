@@ -24,8 +24,6 @@
 #include <boost/intrusive/list.hpp>
 #include <boost/system.hpp>
 
-#include "include/rados/librados.hpp"
-#include "cls/rgw/cls_rgw_types.h"
 #include "common/async/service.h"
 #include "common/async/yield_waiter.h"
 
@@ -149,52 +147,5 @@ template <typename Batch>
 Writer(const boost::asio::any_io_executor&, uint64_t, Batch&&) -> Writer<Batch>;
 template <typename Batch>
 Writer(const boost::asio::any_io_executor&, uint64_t, Batch&) -> Writer<Batch&>;
-
-// a target shard batch that must be flushed with several bi_put() calls
-class PutBatch {
- public:
-  PutBatch(const boost::asio::any_io_executor& ex,
-           librados::IoCtx ioctx,
-           std::string object,
-           size_t batch_size);
-
-  [[nodiscard]] bool empty() const;
-  [[nodiscard]] bool add(rgw_cls_bi_entry entry,
-                         std::optional<RGWObjCategory> category,
-                         rgw_bucket_category_stats stats);
-  void flush(Completion completion);
-
- private:
-  boost::asio::any_io_executor ex;
-  librados::IoCtx ioctx;
-  std::string object;
-  const size_t batch_size;
-  std::vector<rgw_cls_bi_entry> entries;
-  std::map<RGWObjCategory, rgw_bucket_category_stats> stats;
-};
-
-// a target shard batch that can be flushed with one bi_put_entries() call
-class PutEntriesBatch {
- public:
-  PutEntriesBatch(const boost::asio::any_io_executor& ex,
-                  librados::IoCtx ioctx,
-                  std::string object,
-                  size_t batch_size,
-                  bool check_existing);
-
-  [[nodiscard]] bool empty() const;
-  [[nodiscard]] bool add(rgw_cls_bi_entry entry,
-                         std::optional<RGWObjCategory> category,
-                         rgw_bucket_category_stats stats);
-  void flush(Completion completion);
-
- private:
-  boost::asio::any_io_executor ex;
-  librados::IoCtx ioctx;
-  std::string object;
-  const size_t batch_size;
-  const bool check_existing;
-  std::vector<rgw_cls_bi_entry> entries;
-};
 
 } // namespace rgwrados::reshard
