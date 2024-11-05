@@ -28,6 +28,8 @@ using ceph::real_time;
 using ceph::real_clock;
 using ceph::real_time;
 
+using ceph::mono_clock;
+
 using ceph::coarse_real_clock;
 using ceph::coarse_mono_clock;
 
