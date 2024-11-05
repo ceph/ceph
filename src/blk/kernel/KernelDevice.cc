@@ -765,7 +765,7 @@ void KernelDevice::_discard_thread(uint64_t tid)
       // This will allow threads to work in parallel
       //      instead of a single thread taking over the whole discard_queued.
       // It will also allow threads to finish in a timely manner.
-      constexpr unsigned MAX_LOCAL_DISCARD = 32;
+      constexpr unsigned MAX_LOCAL_DISCARD = 10;
       unsigned count = 0;
       for (auto p = discard_queued.begin();
 	   p != discard_queued.end() && count < MAX_LOCAL_DISCARD;
