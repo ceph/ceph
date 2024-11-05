@@ -240,11 +240,11 @@ class BucketReshardManager {
                        bool can_put_entries,
                        bool check_existing)
   {
-    //writers.reserve(oids.size());
     int expected = 0;
     for (auto& [shard, oid] : oids) {
       assert(shard == expected); // shard ids must be sequential from 0
       expected++;
+
       writers.emplace_back(ex, max_aio, ex, ioctx, oid, batch_size,
                            can_put_entries, check_existing);
     }
@@ -263,20 +263,27 @@ class BucketReshardManager {
     writer.write(std::move(entry), cat, stats, yield);
   }
 
-  void finish(boost::asio::yield_context yield)
+  void flush()
   {
-    std::exception_ptr eptr;
     for (auto& writer : writers) {
       writer.flush();
     }
+  }
+
+  void drain(boost::asio::yield_context yield)
+  {
+    std::exception_ptr eptr;
     for (auto& writer : writers) {
       try {
         writer.drain(yield);
       } catch (const std::exception&) {
-        eptr = std::current_exception();
+        if (!eptr) {
+          eptr = std::current_exception();
+        }
       }
     }
     if (eptr) {
+      // drain all writers before rethrowing
       std::rethrow_exception(eptr);
     }
   }
@@ -1116,7 +1123,8 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
   group.wait();
 
   // flush and drain all requests to target shards
-  target_shards_mgr.finish(y);
+  target_shards_mgr.flush();
+  target_shards_mgr.drain(y);
 
   if (verbose_json_out) {
     formatter->close_section();
