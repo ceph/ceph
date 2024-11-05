@@ -64,7 +64,7 @@
     "@types/file-saver": "2.0.1",
     "async-mutex": "0.2.4",
     "bootstrap": "5.2.3",
-    "carbon-components-angular": "5.25.1",
+    "carbon-components-angular": "5.48.0",
     "chart.js": "4.4.0",
     "chartjs-adapter-moment": "1.0.1",
     "detect-browser": "5.2.0",

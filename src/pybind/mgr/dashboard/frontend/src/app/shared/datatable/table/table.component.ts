@@ -897,7 +897,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
     if (this.limit === 0) {
       this.model.currentPage = 1;
-      this.model.pageLength = filteredData.length;
+      this.model.pageLength = filteredData.length || 1;
       this._dataset.next(filteredData);
       return;
     }
