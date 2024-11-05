@@ -123,8 +123,8 @@ public:
   ~KernelDevice();
 
   void aio_submit(IOContext *ioc) override;
-  void discard_drain() override;
-  const interval_set<uint64_t>* get_discard_queued() override { return &discard_queued;}
+  int discard_drain(uint32_t timeout_msec) override;
+
   int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const override;
   int get_devname(std::string *s) const override {
     if (devname.empty()) {
