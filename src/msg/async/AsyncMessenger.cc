@@ -724,6 +724,21 @@ int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
     m->clear_payload();
   }
 
+  // ms_inject_drop_mon_forward_msgs - if negative drop any mon forward messages
+  // if positive drop random percentage of mon forward messages
+  if (cct->_conf->ms_inject_drop_mon_forward_msgs > 0 &&
+      type == CEPH_ENTITY_TYPE_MON &&
+      (rand() % 10000 < cct->_conf->ms_inject_drop_mon_forward_msgs * 100)) {
+    ldout(cct, 1) << __func__ << " dropping mon forward message " << *m << dendl;
+    m->put();
+    return 0;
+  } else if (cct->_conf->ms_inject_drop_mon_forward_msgs < 0 &&
+      type == CEPH_ENTITY_TYPE_MON) {
+    ldout(cct, 1) << __func__ << " dropping mon forward message " << *m << dendl;
+    m->put();
+    return 0;
+  }
+
   connect_to(type, addrs, false)->send_message(m);
   return 0;
 }
