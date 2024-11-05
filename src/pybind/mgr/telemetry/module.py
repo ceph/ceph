@@ -107,7 +107,7 @@ MODULE_COLLECTION : List[Dict] = [
     },
     {
         "name": Collection.perf_rocksdb_metrics,
-        "description": "Extended RocksDB metrics for OSD and MON",
+        "description": "RocksDB metrics for OSD and MON (cache usage, data read/write operations, latency, etc.)",
         "channel": "perf",
         "nag": True
     },
@@ -632,6 +632,10 @@ class Module(MgrModule):
         # Initialize result dict to store metrics for each OSD separately
         result = {"osd" : {},
                   "mon" : {}}
+        
+        """
+        Metrics for OSD
+        """
 
         # Get list of OSD ids from the metadata
         osd_metadata = self.get('osd_metadata')
@@ -661,28 +665,39 @@ class Module(MgrModule):
                 self.log.exception(f"Error caught on osd.{osd_id}: {e}")
                 continue
 
-        daemons = []
-        mon_map = self.get('mon_map')
-        for mon in mon_map['mons']:
-            daemons.append('mon'+'.'+mon['name'])
+        """
+        Metrics for MON
+        """
 
+        daemons = []
+        # make sure to enable perf collection
+        if self.is_enabled_collection(Collection.perf_memory_metrics):
+            mon_map = self.get('mon_map')
+            for mon in mon_map['mons']:
+                daemons.append('mon'+'.'+mon['name'])
+
+        # daemon list should look like ["mon.id1", "mon.id2"]
         for daemon in daemons:
             daemon_type, daemon_id = daemon.split('.', 1)
             cmd_dict = {
                 'prefix': 'dump_rocksdb_stats',
-                'level' : "telemetry",
+                'level' : 'telemetry',
                 'format': 'json'
             }
 
+            # hardcoded type and id for now
             daemon_type = "mon"
             daemon_id = "a"
+            # works with osd
+            daemon_type = "osd"
+            daemon_id = "0"
             r, outb, outs = self.tell_command(daemon_type, daemon_id, cmd_dict)
             if r == 0:
                 dump = json.loads(outb)
-            
                 result["mon"] = dump
             else:
-                result["mon"] = (daemon_type,daemon_id)
+                # If we do not get a proper dump just add the type and id to the report
+                result["mon"] = [daemon_type,daemon_id]
         return result
 
     def get_osd_histograms(self, mode: str = 'separated') -> List[Dict[str, dict]]:
