@@ -1515,7 +1515,6 @@ const char** KernelDevice::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
     "bdev_async_discard_threads",
-    "bdev_enable_discard",
     NULL
   };
   return KEYS;
@@ -1524,16 +1523,11 @@ const char** KernelDevice::get_tracked_conf_keys() const
 void KernelDevice::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed)
 {
-  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_enable_discard")) {
+  if (changed.count("bdev_async_discard_threads")) {
     std::unique_lock l(discard_lock);
 
     uint64_t oldval = target_discard_threads;
     uint64_t newval = cct->_conf.get_val<uint64_t>("bdev_async_discard_threads");
-    if (!cct->_conf.get_val<bool>("bdev_enable_discard")) {
-      // We don't want these threads running if discard has been disabled (this is consistent with
-      // KernelDevice::open())
-      newval = 0;
-    }
 
     target_discard_threads = newval;
 
@@ -1547,8 +1541,8 @@ void KernelDevice::handle_conf_change(const ConfigProxy& conf,
         discard_threads.emplace_back(new DiscardThread(this, i));
         discard_threads.back()->create("bstore_discard");
       }
-    // Decrease? Signal threads after telling them to stop
-    } else if (newval < oldval) {
+    } else {
+      // Decrease? Signal threads after telling them to stop
       dout(10) << __func__ << " stopping " << (oldval - newval) << " existing discard threads" << dendl;
 
       // Decreasing to zero is exactly the same as disabling async discard.
