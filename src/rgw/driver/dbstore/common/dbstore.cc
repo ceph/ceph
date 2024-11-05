@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "dbstore.h"
+#include <cstdint>
 
 using namespace std;
 
@@ -1465,10 +1466,11 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   }
 
   /* tail object */
-  int part_num = (ofs / max_chunk_size);
+  uint64_t stripe_num = (ofs / max_chunk_size);
   /* XXX: Handle multipart_str */
   raw_obj read_obj(store, source->get_bucket_info().bucket.name, astate->obj.key.name, 
-      astate->obj.key.instance, astate->obj.key.ns, source->obj_id, "0.0", part_num);
+      astate->obj.key.instance, astate->obj.key.ns, source->obj_id, "0.0",
+      0UL, stripe_num);
 
   read_len = len;
 
@@ -1573,17 +1575,21 @@ int DB::Object::iterate_obj(const DoutPrefixProvider *dpp,
   else
     len = end - ofs + 1;
 
-  /* XXX: Will it really help to store all parts info in astate like manifest in Rados? */
-  int part_num = 0;
+  /* XXX: Will it really help to store all parts info in astate like manifest in Rados? 
+   * [Matt] agree, we seem to be doing ok without a manifest.  However, what we formerly called
+   * part in this method is actually stripe, so rename that and pass it (with part_num)
+   * explicitly to the representation for use in SELECT. */
+  int stripe_num = 0;
   int head_data_size = astate->data.length();
 
   while (ofs <= end && (uint64_t)ofs < astate->size) {
-    part_num = (ofs / max_chunk_size);
+    stripe_num = (ofs / max_chunk_size);
     uint64_t read_len = std::min(len, max_chunk_size);
 
     /* XXX: Handle multipart_str */
     raw_obj read_obj(store, get_bucket_info().bucket.name, astate->obj.key.name, 
-        astate->obj.key.instance, astate->obj.key.ns, obj_id, "0.0", part_num);
+        astate->obj.key.instance, astate->obj.key.ns, obj_id, "0.0",
+        0UL, stripe_num);
     bool reading_from_head = (ofs < head_data_size);
 
     r = cb(dpp, read_obj, ofs, read_len, reading_from_head, astate, arg);
@@ -1629,9 +1635,9 @@ int DB::Object::Write::write_data(const DoutPrefixProvider* dpp,
                                bufferlist& data, uint64_t ofs) {
   DB *store = target->get_store();
   /* tail objects */
-  /* XXX: Split into parts each of max_chunk_size. But later make tail
+  /* XXX: Split into stripes each of max_chunk_size. But later make tail
    * object chunk size limit to sqlite blob limit */
-  int part_num = 0;
+  uint64_t stripe_num = 0;
 
   uint64_t max_chunk_size = store->get_max_chunk_size();
 
@@ -1648,12 +1654,13 @@ int DB::Object::Write::write_data(const DoutPrefixProvider* dpp,
    * maybe this while loop is not needed
    */
   while (write_ofs < end) {
-    part_num = (ofs / max_chunk_size);
+    stripe_num = (ofs / max_chunk_size);
     uint64_t len = std::min(end, max_chunk_size);
 
     /* XXX: Handle multipart_str */
     raw_obj write_obj(store, target->get_bucket_info().bucket.name, obj_state.obj.key.name, 
-        obj_state.obj.key.instance, obj_state.obj.key.ns, target->obj_id, mp_part_str, part_num);
+        obj_state.obj.key.instance, obj_state.obj.key.ns, target->obj_id, mp_part_str,
+        part_num, stripe_num);
 
 
     ldpp_dout(dpp, 20) << "dbstore->write obj-ofs=" << ofs << " write_len=" << len << dendl;

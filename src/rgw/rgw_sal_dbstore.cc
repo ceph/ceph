@@ -1154,6 +1154,7 @@ namespace rgw::sal {
   int DBMultipartWriter::prepare(optional_yield y)
   {
     parent_op.prepare(NULL);
+    parent_op.set_part_num(part_num);
     parent_op.set_mp_part_str(upload_id + "." + std::to_string(part_num));
     // XXX: do we need to handle part_num_str??
     return 0;
@@ -1225,6 +1226,7 @@ namespace rgw::sal {
       }
 
       /* flush whatever tail data is present */
+      /* XXXX add part_num */
       int ret = parent_op.write_data(dpp, tail_part_data, tail_part_offset);
       if (ret < 0) {
         return ret;

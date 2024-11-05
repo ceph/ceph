@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <errno.h>
 #include <stdlib.h>
 #include <string>
@@ -1659,6 +1660,7 @@ class DB {
       std::string obj_id;
       std::string multipart_part_str;
       uint64_t part_num;
+      uint64_t stripe_num;
 
       std::string obj_table;
       std::string obj_data_table;
@@ -1668,7 +1670,8 @@ class DB {
       }
 
       raw_obj(DB* _db, std::string& _bname, std::string& _obj_name, std::string& _obj_instance,
-          std::string& _obj_ns, std::string& _obj_id, std::string _mp_part_str, int _part_num) {
+          std::string& _obj_ns, std::string& _obj_id, std::string _mp_part_str, uint64_t _part_num,
+          uint64_t _stripe_num) {
         db = _db;
         bucket_name = _bname;
         obj_name = _obj_name;
@@ -1857,7 +1860,8 @@ class DB {
       struct Write {
         DB::Object *target;
         RGWObjState obj_state;
-        std::string mp_part_str = "0.0"; // multipart num
+        uint64_t part_num; // multipart part num as integer
+        std::string mp_part_str = "0.0"; // multipart num (XXX needed?)
 
         struct MetaParams {
           ceph::real_time *mtime;
@@ -1889,7 +1893,8 @@ class DB {
 
         explicit Write(DB::Object *_target) : target(_target) {}
 
-        void set_mp_part_str(std::string _mp_part_str) { mp_part_str = _mp_part_str;}
+        void set_part_num(uint64_t _part_num) { part_num = _part_num; }
+        void set_mp_part_str(std::string _mp_part_str) { mp_part_str = _mp_part_str; }
         int prepare(const DoutPrefixProvider* dpp);
         int write_data(const DoutPrefixProvider* dpp,
                                bufferlist& data, uint64_t ofs);
