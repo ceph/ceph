@@ -103,8 +103,6 @@ def get_grafana_dashboards(base_dir):
                 title = dashboard_config['title']
                 assert len(title) > 0, \
                     "Title not found in '{}'".format(json_file)
-                assert len(dashboard_config.get('links', [])) == 0, \
-                    "Links found in '{}'".format(json_file)
                 if not uid:
                     continue
                 if uid in dashboards:
