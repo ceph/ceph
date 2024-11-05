@@ -48,7 +48,7 @@ class yield_waiter {
   {
     return boost::asio::async_initiate<CompletionToken, Signature>(
         [this] (handler_type h) {
-          auto slot = get_associated_cancellation_slot(h);
+          auto slot = boost::asio::get_associated_cancellation_slot(h);
           if (slot.is_connected()) {
             slot.template emplace<op_cancellation>(this);
           }
@@ -62,6 +62,8 @@ class yield_waiter {
     auto s = std::move(*state);
     state.reset();
     auto h = boost::asio::append(std::move(s.handler), ec, std::move(value));
+    auto slot = boost::asio::get_associated_cancellation_slot(h);
+    slot.clear(); // remove our cancellation handler
     boost::asio::dispatch(std::move(h));
   }
 
@@ -130,7 +132,7 @@ class yield_waiter<void> {
   {
     return boost::asio::async_initiate<CompletionToken, Signature>(
         [this] (handler_type h) {
-          auto slot = get_associated_cancellation_slot(h);
+          auto slot = boost::asio::get_associated_cancellation_slot(h);
           if (slot.is_connected()) {
             slot.template emplace<op_cancellation>(this);
           }
@@ -143,6 +145,8 @@ class yield_waiter<void> {
   {
     auto s = std::move(*state);
     state.reset();
+    auto slot = boost::asio::get_associated_cancellation_slot(s.handler);
+    slot.clear(); // remove our cancellation handler
     boost::asio::dispatch(boost::asio::append(std::move(s.handler), ec));
   }
 

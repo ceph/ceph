@@ -72,6 +72,8 @@ class co_waiter {
     ceph_assert(handler);
     auto h = boost::asio::append(std::move(*handler), eptr, std::move(value));
     handler.reset();
+    auto slot = boost::asio::get_associated_cancellation_slot(h);
+    slot.clear(); // remove our cancellation handler
     boost::asio::dispatch(std::move(h));
   }
 
@@ -142,6 +144,8 @@ class co_waiter<void, Executor> {
     ceph_assert(handler);
     auto h = boost::asio::append(std::move(*handler), eptr);
     handler.reset();
+    auto slot = boost::asio::get_associated_cancellation_slot(h);
+    slot.clear(); // remove our cancellation handler
     boost::asio::dispatch(std::move(h));
   }
 
