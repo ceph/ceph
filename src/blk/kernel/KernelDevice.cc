@@ -134,6 +134,7 @@ int KernelDevice::open(const string& p)
 {
   path = p;
   int r = 0, i = 0;
+  uint64_t num_discard_threads = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
   struct stat statbuf;
@@ -285,7 +286,10 @@ int KernelDevice::open(const string& p)
     goto out_fail;
   }
 
-  _discard_update_threads();
+  num_discard_threads = cct->_conf.get_val<uint64_t>("bdev_async_discard_threads");
+  if (support_discard && cct->_conf->bdev_enable_discard && num_discard_threads > 0) {
+    _discard_start();
+  }
 
   // round size down to an even block
   size &= ~(block_size - 1);
@@ -532,48 +536,42 @@ void KernelDevice::_aio_stop()
   }
 }
 
-void KernelDevice::_discard_update_threads()
+void KernelDevice::_discard_start()
 {
+  uint64_t num = cct->_conf.get_val<uint64_t>("bdev_async_discard_threads");
+  dout(10) << __func__ << " starting " << num << " threads" << dendl;
+
   std::unique_lock l(discard_lock);
 
-  uint64_t oldcount = discard_threads.size();
-  uint64_t newcount = cct->_conf.get_val<uint64_t>("bdev_async_discard_threads");
-  if (!cct->_conf.get_val<bool>("bdev_enable_discard") || !support_discard || discard_stop) {
-    newcount = 0;
+  target_discard_threads = num;
+  discard_threads.reserve(num);
+  for(uint64_t i = 0; i < num; i++)
+  {
+    // All threads created with the same name
+    discard_threads.emplace_back(new DiscardThread(this, i));
+    discard_threads.back()->create("bstore_discard");
   }
 
-  // Increase? Spawn now, it's quick
-  if (newcount > oldcount) {
-    dout(10) << __func__ << " starting " << (newcount - oldcount) << " additional discard threads" << dendl;
-    discard_threads.reserve(newcount);
-    for(uint64_t i = oldcount; i < newcount; i++)
-    {
-      // All threads created with the same name
-      discard_threads.emplace_back(new DiscardThread(this, i));
-      discard_threads.back()->create("bstore_discard");
-    }
-  // Decrease? Signal threads after telling them to stop
-  } else if (newcount < oldcount) {
-    dout(10) << __func__ << " stopping " << (oldcount - newcount) << " existing discard threads" << dendl;
-
-    // Signal the last threads to quit, and stop tracking them
-    for(uint64_t i = oldcount; i > newcount; i--)
-    {
-      discard_threads[i-1]->stop = true;
-      discard_threads[i-1]->detach();
-    }
-    discard_threads.resize(newcount);
-
-    discard_cond.notify_all();
-  }
+  dout(10) << __func__ << " started " << num << " threads" << dendl;
 }
 
 void KernelDevice::_discard_stop()
 {
   dout(10) << __func__ << dendl;
 
-  discard_stop = true;
-  _discard_update_threads();
+  // Signal threads to stop, then wait for them to join
+  {
+    std::unique_lock l(discard_lock);
+
+    for(auto &t : discard_threads) {
+      t->stop = true;
+      t->detach();
+    }
+    discard_threads.clear();
+
+    discard_cond.notify_all();
+  }
+
   discard_drain();
 
   dout(10) << __func__ << " stopped" << dendl;
@@ -1530,6 +1528,42 @@ void KernelDevice::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed)
 {
   if (changed.count("bdev_async_discard_threads") || changed.count("bdev_enable_discard")) {
-    _discard_update_threads();
+    std::unique_lock l(discard_lock);
+
+    uint64_t oldval = target_discard_threads;
+    uint64_t newval = cct->_conf.get_val<uint64_t>("bdev_async_discard_threads");
+    if (!cct->_conf.get_val<bool>("bdev_enable_discard")) {
+      // We don't want these threads running if discard has been disabled (this is consistent with
+      // KernelDevice::open())
+      newval = 0;
+    }
+
+    target_discard_threads = newval;
+
+    // Increase? Spawn now, it's quick
+    if (newval > oldval) {
+      dout(10) << __func__ << " starting " << (newval - oldval) << " additional discard threads" << dendl;
+      discard_threads.reserve(target_discard_threads);
+      for(uint64_t i = oldval; i < newval; i++)
+      {
+        // All threads created with the same name
+        discard_threads.emplace_back(new DiscardThread(this, i));
+        discard_threads.back()->create("bstore_discard");
+      }
+    // Decrease? Signal threads after telling them to stop
+    } else if (newval < oldval) {
+      dout(10) << __func__ << " stopping " << (oldval - newval) << " existing discard threads" << dendl;
+
+      // Signal the last threads to quit, and stop tracking them
+      for(uint64_t i = oldval - 1; i >= newval && i != UINT64_MAX; i--)
+      {
+        // Also detach the thread so we no longer need to join
+        discard_threads[i]->stop = true;
+        discard_threads[i]->detach();
+        discard_threads.erase(discard_threads.begin() + i);
+      }
+
+      discard_cond.notify_all();
+    }
   }
 }

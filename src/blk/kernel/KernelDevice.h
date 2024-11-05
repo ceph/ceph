@@ -52,7 +52,6 @@ private:
   aio_callback_t discard_callback;
   void *discard_callback_priv;
   bool aio_stop;
-  bool discard_stop;
 
   ceph::mutex discard_lock = ceph::make_mutex("KernelDevice::discard_lock");
   ceph::condition_variable discard_cond;
@@ -79,6 +78,7 @@ private:
     }
   };
   std::vector<std::shared_ptr<DiscardThread>> discard_threads;
+  uint64_t target_discard_threads = 0;
 
   std::atomic_int injecting_crash;
 
@@ -93,7 +93,7 @@ private:
   int _aio_start();
   void _aio_stop();
 
-  void _discard_update_threads();
+  void _discard_start();
   void _discard_stop();
   bool _discard_started();
 
