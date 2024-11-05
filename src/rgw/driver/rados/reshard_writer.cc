@@ -33,6 +33,9 @@ BaseWriter::BaseWriter(const executor_type& ex, uint64_t max_aio)
 BaseWriter::~BaseWriter()
 {
   svc.remove(*this);
+  ceph_assert(outstanding == 0); // must drain() before destruction
+  ceph_assert(write_waiters.empty());
+  ceph_assert(drain_waiters.empty());
 }
 
 void BaseWriter::drain(boost::asio::yield_context yield)
@@ -51,7 +54,7 @@ void BaseWriter::on_complete(boost::system::error_code ec)
 {
   --outstanding;
 
-  constexpr auto complete_all = [] (boost::intrusive::list<Waiter>& waiters,
+  constexpr auto complete_all = [] (boost::intrusive::list<Waiter> waiters,
                                     boost::system::error_code ec) {
       while (!waiters.empty()) {
         Waiter& waiter = waiters.front();
@@ -59,7 +62,7 @@ void BaseWriter::on_complete(boost::system::error_code ec)
         waiter.complete(ec);
       }
     };
-  constexpr auto complete_one = [] (boost::intrusive::list<Waiter>& waiters,
+  constexpr auto complete_one = [] (boost::intrusive::list<Waiter> waiters,
                                     boost::system::error_code ec) {
       if (!waiters.empty()) {
         Waiter& waiter = waiters.front();
@@ -73,30 +76,30 @@ void BaseWriter::on_complete(boost::system::error_code ec)
       error = ec;
     }
     // fail all waiting calls to write()
-    complete_all(write_waiters, ec);
+    complete_all(std::move(write_waiters), ec);
   } else {
     // wake one waiting call to write()
-    complete_one(write_waiters, {});
+    complete_one(std::move(write_waiters), {});
   }
 
   if (outstanding == 0) {
     // wake all waiting calls to drain()
-    complete_all(drain_waiters, error);
+    complete_all(std::move(drain_waiters), error);
   }
 }
 
 void BaseWriter::service_shutdown()
 {
   // release any outstanding completion handlers
-  constexpr auto shutdown = [] (boost::intrusive::list<Waiter>& waiters) {
+  constexpr auto shutdown = [] (boost::intrusive::list<Waiter> waiters) {
       while (!waiters.empty()) {
         Waiter& waiter = waiters.front();
         waiters.pop_front();
         waiter.shutdown();
       }
     };
-  shutdown(write_waiters);
-  shutdown(drain_waiters);
+  shutdown(std::move(write_waiters));
+  shutdown(std::move(drain_waiters));
 }
 
 
