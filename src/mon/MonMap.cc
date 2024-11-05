@@ -431,10 +431,10 @@ void MonMap::dump(Formatter *f) const
   f->dump_unsigned("min_mon_release", to_integer<unsigned>(min_mon_release));
   f->dump_string("min_mon_release_name", to_string(min_mon_release));
   f->dump_int ("election_strategy", strategy);
-  f->dump_stream("disallowed_leaders: ") << disallowed_leaders;
+  f->dump_stream("disallowed_leaders") << disallowed_leaders;
   f->dump_bool("stretch_mode", stretch_mode_enabled);
   f->dump_string("tiebreaker_mon", tiebreaker_mon);
-  f->dump_stream("removed_ranks: ") << removed_ranks;
+  f->dump_stream("removed_ranks") << removed_ranks;
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
