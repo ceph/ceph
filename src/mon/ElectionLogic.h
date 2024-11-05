@@ -17,6 +17,7 @@
 #define CEPH_ELECTIONLOGIC_H
 
 #include <map>
+#include <memory>
 #include <set>
 #include "include/types.h"
 #include "ConnectionTracker.h"
