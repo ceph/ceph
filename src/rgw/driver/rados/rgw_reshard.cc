@@ -1440,7 +1440,7 @@ int RGWReshard::get(const DoutPrefixProvider *dpp, optional_yield y,
 {
   string logshard_oid;
 
-  get_bucket_logshard_oid(entry.tenant, entry.bucket_name, &logshard_oid);
+  get_bucket_logshard_oid(bucket.tenant, bucket.name, &logshard_oid);
 
   bufferlist bl;
   librados::ObjectReadOperation op;
