@@ -1,7 +1,6 @@
 import json
 import random
 import string
-import sys
 import time
 import logging
 import errno
@@ -10,6 +9,7 @@ import dateutil.parser
 from itertools import combinations
 from itertools import zip_longest
 from io import StringIO
+import xml.etree.ElementTree as ET
 
 import boto
 import boto.s3.connection
@@ -484,23 +484,29 @@ class ZonegroupConns:
             if z == zonegroup.master_zone:
                 self.master_zone = zone_conn
 
-def check_all_buckets_exist(zone_conn, buckets):
+def check_all_buckets_exist(zone_conn, buckets, expected_zonegroup=None):
     if not zone_conn.zone.has_buckets():
         return True
 
     for b in buckets:
         response = zone_conn.conn.make_request('GET', bucket=b, query_args='location')
-        if response.status != 200 and response.status != 301:
+        if response.status != 200:
             log.critical('zone %s does not contain bucket %s', zone_conn.zone.name, b)
             return False
+        if expected_zonegroup:
+            location_constraint = ET.fromstring(response.read()).text  # it's in the <LocationConstraint> element
+            if location_constraint != expected_zonegroup:
+                log.critical('zone %s contains bucket %s with location %s, expected %s',
+                             zone_conn.zone.name, b, location_constraint, expected_zonegroup)
+                return False
 
     return True
 
-def check_all_buckets_exist_all_zonegroups(realm, buckets):
+def check_all_buckets_exist_all_zonegroups(realm, buckets, expected_zonegroup=None):
     for zonegroup in realm.current_period.zonegroups:
         zg_conn = ZonegroupConns(zonegroup)
         for zone_conn in zg_conn.zones:
-            if not check_all_buckets_exist(zone_conn, buckets):
+            if not check_all_buckets_exist(zone_conn, buckets, expected_zonegroup):
                 return False
     return True
 
@@ -1082,7 +1088,7 @@ def test_bucket_create(zonegroup):
     buckets, _ = create_bucket_per_zone(zonegroup_conns)
 
     realm_meta_checkpoint(realm)
-    assert check_all_buckets_exist_all_zonegroups(realm, buckets)
+    assert check_all_buckets_exist_all_zonegroups(realm, buckets, zonegroup.name)
 
 
 @run_per_zonegroup
@@ -1091,18 +1097,18 @@ def test_bucket_recreate(zonegroup):
     buckets, _ = create_bucket_per_zone(zonegroup_conns)
     realm_meta_checkpoint(realm)
 
-    assert check_all_buckets_exist_all_zonegroups(realm, buckets)
+    assert check_all_buckets_exist_all_zonegroups(realm, buckets, zonegroup.name)
 
     # recreate buckets on all zones, make sure they weren't removed
     for zone in zonegroup_conns.rw_zones:
         for bucket_name in buckets:
             _ = zone.create_bucket(bucket_name)
 
-    assert check_all_buckets_exist_all_zonegroups(realm, buckets)
+    assert check_all_buckets_exist_all_zonegroups(realm, buckets, zonegroup.name)
 
     realm_meta_checkpoint(realm)
 
-    assert check_all_buckets_exist_all_zonegroups(realm, buckets)
+    assert check_all_buckets_exist_all_zonegroups(realm, buckets, zonegroup.name)
 
 
 @run_per_zonegroup
@@ -1111,7 +1117,7 @@ def test_bucket_remove(zonegroup):
     buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
     realm_meta_checkpoint(realm)
 
-    assert check_all_buckets_exist_all_zonegroups(realm, buckets)
+    assert check_all_buckets_exist_all_zonegroups(realm, buckets, zonegroup.name)
 
     for zone, bucket_name in zone_bucket:
         zone.conn.delete_bucket(bucket_name)
@@ -1384,7 +1390,7 @@ def test_bucket_delete_notempty(zonegroup):
         assert False # expected 409 BucketNotEmpty
 
     # assert that each bucket still exists on all zonegroups
-    check_all_buckets_exist_all_zonegroups(realm, buckets)
+    check_all_buckets_exist_all_zonegroups(realm, buckets, zonegroup.name)
 
 
 @allow_zonegroups_replication
