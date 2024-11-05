@@ -8043,20 +8043,16 @@ void BlueStore::_close_db()
       bdev->discard_drain();
     }
 
-    interval_set<uint64_t> discard_queued;
-    bdev->swap_discard_queued(discard_queued);
-    if (discard_queued.num_intervals() > 0) {
-      dout(10) << __func__ << "::discard_drain: size=" << discard_queued.size()
-	       << " num_intervals=" << discard_queued.num_intervals() << dendl;
+    auto discard_queued = bdev->get_discard_queued();
+    if (discard_queued && (discard_queued->num_intervals() > 0)) {
+      dout(10) << __func__ << "::discard_drain: size=" << discard_queued->size()
+	       << " num_intervals=" << discard_queued->num_intervals() << dendl;
       // copy discard_queued to the allocator before storing it
-      for (auto p = discard_queued.begin(); p != discard_queued.end(); ++p) {
+      for (auto p = discard_queued->begin(); p != discard_queued->end(); ++p) {
 	dout(20) << __func__ << "::discarded-extent=[" << p.get_start() << ", " << p.get_len() << "]" << dendl;
 	alloc->init_add_free(p.get_start(), p.get_len());
       }
     }
-    // drain the items in the threads local discard_processing queues
-    // There are only a few items in those queues so it is fine to do so in fast shutdown
-    bdev->discard_drain();
     int ret = store_allocator(alloc);
     if (unlikely(ret != 0)) {
       derr << __func__ << "::NCB::store_allocator() failed (we will need to rebuild it on startup)" << dendl;

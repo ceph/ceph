@@ -55,7 +55,7 @@ private:
 
   ceph::mutex discard_lock = ceph::make_mutex("KernelDevice::discard_lock");
   ceph::condition_variable discard_cond;
-  int discard_running = 0;
+  bool discard_running = false;
   interval_set<uint64_t> discard_queued;
 
   struct AioCompletionThread : public Thread {
@@ -124,7 +124,7 @@ public:
 
   void aio_submit(IOContext *ioc) override;
   void discard_drain() override;
-  void swap_discard_queued(interval_set<uint64_t>& other) override;
+  const interval_set<uint64_t>* get_discard_queued() override { return &discard_queued;}
   int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const override;
   int get_devname(std::string *s) const override {
     if (devname.empty()) {
