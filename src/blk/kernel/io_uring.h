@@ -8,6 +8,10 @@
 #include "include/types.h"
 #include "aio/aio.h"
 
+#include <list>
+#include <memory>
+#include <vector>
+
 struct ioring_data;
 
 struct ioring_queue_t final : public io_queue_t {

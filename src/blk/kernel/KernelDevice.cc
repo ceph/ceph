@@ -25,6 +25,7 @@
 #include <boost/lockfree/queue.hpp>
 
 #include "KernelDevice.h"
+#include "log/Log.h"
 #include "include/buffer_raw.h"
 #include "include/intarith.h"
 #include "include/types.h"
@@ -33,6 +34,7 @@
 #include "include/str_map.h"
 #include "common/blkdev.h"
 #include "common/buffer_instrumentation.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
 #if defined(__FreeBSD__)
 #include "bsm/audit_errno.h"
@@ -42,6 +44,12 @@
 
 #include "global/global_context.h"
 #include "io_uring.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
