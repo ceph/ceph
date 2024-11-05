@@ -26,6 +26,7 @@
 
 #include "common/async/service.h"
 #include "common/async/yield_waiter.h"
+#include "cls/rgw/cls_rgw_types.h"
 
 namespace rgwrados::reshard {
 
