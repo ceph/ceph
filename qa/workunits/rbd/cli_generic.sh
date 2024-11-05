@@ -1488,6 +1488,178 @@ test_mirror_snapshot_schedule_recovery() {
     ceph osd pool rm rbd3 rbd3 --yes-i-really-really-mean-it
 }
 
+test_mirror_group_snapshot_schedule() {
+    echo "testing mirror group snapshot schedule..."
+    remove_images
+    ceph osd pool create rbd2 8
+    rbd pool init rbd2
+    rbd namespace create rbd2/ns1
+
+    rbd mirror pool enable rbd2 image
+    rbd mirror pool enable rbd2/ns1 image
+    rbd mirror pool peer add rbd2 cluster1
+
+    test "$(ceph rbd mirror group snapshot schedule list)" = "{}"
+    ceph rbd mirror group snapshot schedule status | fgrep '"scheduled_groups": []'
+
+    expect_fail rbd mirror group snapshot schedule ls
+    test "$(rbd mirror group snapshot schedule ls -R --format json)" = "[]"
+
+    rbd create $RBD_CREATE_ARGS -s 1 rbd2/ns1/img1
+    rbd create $RBD_CREATE_ARGS -s 1 rbd2/ns1/img2
+    rbd group create rbd2/ns1/gp1
+    rbd group image add rbd2/ns1/gp1 rbd2/ns1/img1
+    rbd group image add rbd2/ns1/gp1 rbd2/ns1/img2
+
+    test "$(rbd group snap ls rbd2/ns1/gp1 | grep -c mirror.primary)" = '0'
+
+    rbd mirror group enable rbd2/ns1/gp1 snapshot
+
+    test "$(rbd group snap ls rbd2/ns1/gp1 | grep -c mirror.primary)" = '1'
+
+    rbd mirror group snapshot schedule add -p rbd2/ns1 --group gp1 1m
+    expect_fail rbd mirror group snapshot schedule ls
+    rbd mirror group snapshot schedule ls -R | grep 'rbd2 *ns1 *gp1 *every 1m'
+    expect_fail rbd mirror group snapshot schedule ls -p rbd2
+    rbd mirror group snapshot schedule ls -p rbd2 -R | grep 'rbd2 *ns1 *gp1 *every 1m'
+    expect_fail rbd mirror group snapshot schedule ls -p rbd2/ns1
+    rbd mirror group snapshot schedule ls -p rbd2/ns1 -R | grep 'rbd2 *ns1 *gp1 *every 1m'
+    test "$(rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1)" = 'every 1m'
+
+    for i in `seq 12`; do
+        test "$(rbd group snap ls rbd2/ns1/gp1 | grep -c mirror.primary)" -gt '1' && break
+        sleep 10
+    done
+
+    test "$(rbd group snap ls rbd2/ns1/gp1 | grep -c mirror.primary)" -gt '1'
+
+    # repeat with kicked in schedule, see https://tracker.ceph.com/issues/53915
+    expect_fail rbd mirror group snapshot schedule ls
+    rbd mirror group snapshot schedule ls -R | grep 'rbd2 *ns1 *gp1 *every 1m'
+    expect_fail rbd mirror group snapshot schedule ls -p rbd2
+    rbd mirror group snapshot schedule ls -p rbd2 -R | grep 'rbd2 *ns1 *gp1 *every 1m'
+    expect_fail rbd mirror group snapshot schedule ls -p rbd2/ns1
+    rbd mirror group snapshot schedule ls -p rbd2/ns1 -R | grep 'rbd2 *ns1 *gp1 *every 1m'
+    test "$(rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1)" = 'every 1m'
+    test "$(rbd mirror snapshot schedule ls -R --format json)" = "[]"
+
+    rbd mirror group snapshot schedule status
+    test "$(rbd mirror group snapshot schedule status --format xml |
+        xmlstarlet sel -t -v '//scheduled_groups/group/group')" = 'rbd2/ns1/gp1'
+    test "$(rbd mirror group snapshot schedule status -p rbd2 --format xml |
+        xmlstarlet sel -t -v '//scheduled_groups/group/group')" = 'rbd2/ns1/gp1'
+    test "$(rbd mirror group snapshot schedule status -p rbd2/ns1 --format xml |
+        xmlstarlet sel -t -v '//scheduled_groups/group/group')" = 'rbd2/ns1/gp1'
+    test "$(rbd mirror group snapshot schedule status -p rbd2/ns1 --group gp1 --format xml |
+        xmlstarlet sel -t -v '//scheduled_groups/group/group')" = 'rbd2/ns1/gp1'
+    test "$(rbd mirror snapshot schedule status --format json)" = "[]"
+
+    rbd mirror group demote rbd2/ns1/gp1
+    for i in `seq 12`; do
+        rbd mirror group snapshot schedule status | grep 'rbd2/ns1/gp1' || break
+        sleep 10
+    done
+    rbd mirror group snapshot schedule status | expect_fail grep 'rbd2/ns1/gp1'
+
+    rbd mirror group promote rbd2/ns1/gp1
+    for i in `seq 12`; do
+        rbd mirror group snapshot schedule status | grep 'rbd2/ns1/gp1' && break
+        sleep 10
+    done
+    rbd mirror group snapshot schedule status | grep 'rbd2/ns1/gp1'
+
+    rbd mirror group snapshot schedule add 1h 00:15
+    test "$(rbd mirror group snapshot schedule ls)" = 'every 1h starting at 00:15:00'
+    rbd mirror group snapshot schedule ls -R | grep 'every 1h starting at 00:15:00'
+    rbd mirror group snapshot schedule ls -R | grep 'rbd2 *ns1 *gp1 *every 1m'
+    expect_fail rbd mirror group snapshot schedule ls -p rbd2
+    rbd mirror group snapshot schedule ls -p rbd2 -R | grep 'every 1h starting at 00:15:00'
+    rbd mirror group snapshot schedule ls -p rbd2 -R | grep 'rbd2 *ns1 *gp1 *every 1m'
+    expect_fail rbd mirror group snapshot schedule ls -p rbd2/ns1
+    rbd mirror group snapshot schedule ls -p rbd2/ns1 -R | grep 'every 1h starting at 00:15:00'
+    rbd mirror group snapshot schedule ls -p rbd2/ns1 -R | grep 'rbd2 *ns1 *gp1 *every 1m'
+    test "$(rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1)" = 'every 1m'
+
+    rbd mirror group snapshot schedule remove -p rbd2/ns1 --group gp1 1m
+    test "$(rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1)" = ""
+    test "$(rbd mirror group snapshot schedule ls)" = 'every 1h starting at 00:15:00'
+
+    rbd mirror group snapshot schedule add -p rbd2/ns1 --group gp1 1m
+
+    # Negative tests
+    expect_fail rbd mirror group snapshot schedule add dummy
+    expect_fail rbd mirror group snapshot schedule add -p rbd2/ns1 --group gp1 dummy
+    expect_fail rbd mirror group snapshot schedule remove dummy
+    expect_fail rbd mirror group snapshot schedule remove -p rbd2/ns1 --group gp1 dummy
+    test "$(rbd mirror group snapshot schedule ls)" = 'every 1h starting at 00:15:00'
+    test "$(rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1)" = 'every 1m'
+
+    rbd group rm rbd2/ns1/gp1
+    for i in `seq 12`; do
+        rbd mirror group snapshot schedule status | grep 'rbd2/ns1/gp1' || break
+        sleep 10
+    done
+    rbd mirror group snapshot schedule status | expect_fail grep 'rbd2/ns1/gp1'
+
+    rbd mirror group snapshot schedule remove
+    test "$(rbd mirror group snapshot schedule ls -R --format json)" = "[]"
+
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
+}
+
+test_mirror_group_snapshot_schedule_recovery() {
+    echo "testing recovery of mirror group snapshot scheduler after module's RADOS client is blocklisted..."
+    remove_images
+    ceph osd pool create rbd2 8
+    rbd pool init rbd2
+    rbd namespace create rbd2/ns1
+
+    rbd mirror pool enable rbd2 image
+    rbd mirror pool enable rbd2/ns1 image
+    rbd mirror pool peer add rbd2 cluster1
+
+    rbd create $RBD_CREATE_ARGS -s 1 rbd2/ns1/img1
+    rbd create $RBD_CREATE_ARGS -s 1 rbd2/ns1/img2
+    rbd group create rbd2/ns1/gp1
+    rbd group image add rbd2/ns1/gp1 rbd2/ns1/img1
+    rbd group image add rbd2/ns1/gp1 rbd2/ns1/img2
+
+    test "$(rbd group snap ls rbd2/ns1/gp1 | grep -c mirror.primary)" = '0'
+    rbd mirror group enable rbd2/ns1/gp1 snapshot
+    test "$(rbd group snap ls rbd2/ns1/gp1 | grep -c mirror.primary)" = '1'
+
+    rbd mirror group snapshot schedule add -p rbd2/ns1 --group gp1 1m
+    test "$(rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1)" = 'every 1m'
+
+    # Fetch and blocklist rbd_support module's RADOS client
+    CLIENT_ADDR=$(ceph mgr dump | jq .active_clients[] |
+	jq 'select(.name == "rbd_support")' |
+	jq -r '[.addrvec[0].addr, "/", .addrvec[0].nonce|tostring] | add')
+    ceph osd blocklist add $CLIENT_ADDR
+
+    # Check that you can add a mirror group snapshot schedule after a few retries
+    expect_fail rbd mirror group snapshot schedule add -p rbd2/ns1 --group gp1 2m
+    sleep 10
+    for i in `seq 24`; do
+        rbd mirror group snapshot schedule add -p rbd2/ns1 --group gp1 2m && break
+	sleep 10
+    done
+
+    rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1 | grep 'every 2m'
+    # Verify that the schedule present before client blocklisting is preserved
+    rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1 | grep 'every 1m'
+
+    rbd mirror group snapshot schedule rm -p rbd2/ns1 --group gp1 2m
+    rbd mirror group snapshot schedule rm -p rbd2/ns1 --group gp1 1m
+    rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1 | expect_fail grep 'every 2m'
+    rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1 | expect_fail grep 'every 1m'
+
+    rbd snap purge rbd2/ns1/img1
+    rbd snap purge rbd2/ns1/img1
+    rbd group rm rbd2/ns1/gp1
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
+}
+
 test_perf_image_iostat() {
     echo "testing perf image iostat..."
     remove_images
@@ -1748,6 +1920,8 @@ test_trash_purge_schedule
 test_trash_purge_schedule_recovery
 test_mirror_snapshot_schedule
 test_mirror_snapshot_schedule_recovery
+test_mirror_group_snapshot_schedule
+test_mirror_group_snapshot_schedule_recovery
 test_perf_image_iostat
 test_perf_image_iostat_recovery
 test_mirror_pool_peer_bootstrap_create
