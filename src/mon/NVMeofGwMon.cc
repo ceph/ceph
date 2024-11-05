@@ -607,11 +607,13 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 
   if (sub.size() == 0) {
     avail = gw_availability_t::GW_CREATED;
+    dout(20) << "No-subsystems condition detected for GW " << gw_id <<dendl;
   } else {
-    bool listener_found = false;
+    bool listener_found = true;
     for (auto &subs: sub) {
-      if (subs.listeners.size()) {
-        listener_found = true;
+      if (subs.listeners.size() == 0) {
+        listener_found = false;
+        dout(10) << "No-listeners condition detected for GW " << gw_id << " for nqn " << subs.nqn << dendl;
         break;
       }
     }
