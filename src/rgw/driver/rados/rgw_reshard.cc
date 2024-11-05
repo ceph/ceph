@@ -1253,9 +1253,9 @@ int RGWBucketReshard::execute(int num_shards,
   } catch (const ceph::async::lease_aborted& e) {
     ldpp_dout(dpp, 1) << "bucket reshard lease aborted with " << e.code() << dendl;
     return ceph::from_error_code(e.code());
-  } catch (const std::exception& e) {
+  } catch (const boost::system::system_error& e) {
     ldpp_dout(dpp, 1) << "bucket reshard failed with " << e.what() << dendl;
-    return -EIO;
+    return ceph::from_error_code(e.code());
   }
 }
 
