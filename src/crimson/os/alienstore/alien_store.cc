@@ -429,8 +429,21 @@ auto AlienStore::omap_get_values(CollectionRef ch,
   return do_with_op_gate(omap_values_t{}, [=, this] (auto &values) {
     return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, this, &values] {
       auto c = static_cast<AlienCollection*>(ch.get());
-      return store->omap_get_values(c->collection, oid, start,
-		                    reinterpret_cast<map<string, bufferlist>*>(&values));
+      return store->omap_iterate(
+        c->collection, oid,
+        ObjectStore::omap_iter_seek_t{
+          .seek_position = start.value_or(std::string{}),
+          // FIXME: classical OSDs begins iteration from LOWER_BOUND
+          // (or UPPER_BOUND if filter_prefix > start). However, these
+          // bits are not implemented yet
+          .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+        },
+        [&values]
+        (std::string_view key, std::string_view value) mutable {
+          values[std::string{key}].append(value);
+          // FIXME: there is limit on number of entries yet
+          return ObjectStore::omap_iter_ret_t::NEXT;
+        });
     }).then([&values] (int r)
       -> read_errorator::future<std::tuple<bool, omap_values_t>> {
       if (r == -ENOENT) {

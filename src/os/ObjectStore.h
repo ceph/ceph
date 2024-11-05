@@ -736,15 +736,6 @@ public:
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) = 0;
 
-#ifdef WITH_SEASTAR
-  virtual int omap_get_values(
-    CollectionHandle &c,         ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const std::optional<std::string> &start_after,     ///< [in] Keys to get
-    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
-    ) = 0;
-#endif
-
   /// Filters keys into out which are defined on oid
   virtual int omap_check_keys(
     CollectionHandle &c,     ///< [in] Collection containing oid
