@@ -1105,22 +1105,30 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
   constexpr auto on_error = ceph::async::cancel_on_error::all;
   auto group = ceph::async::spawn_throttle{y, max_aio, on_error};
 
-  const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
-  for (uint32_t i = 0; i < num_source_shards; ++i) {
-    group.spawn([&] (boost::asio::yield_context yield) {
-        int ret = process_source_shard(dpp, yield, store->getRados(),
-                                       bucket_info, current, i, max_op_entries,
-                                       target_shards_mgr, verbose_json_out, out,
-                                       formatter, stage_entries, process_log);
-        if (ret < 0) {
-          throw boost::system::system_error(
-              -ret, boost::system::system_category());
-        }
-      });
-  }
+  try {
+    const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
+    for (uint32_t i = 0; i < num_source_shards; ++i) {
+      group.spawn([&] (boost::asio::yield_context yield) {
+          int ret = process_source_shard(dpp, yield, store->getRados(),
+                                         bucket_info, current, i, max_op_entries,
+                                         target_shards_mgr, verbose_json_out, out,
+                                         formatter, stage_entries, process_log);
+          if (ret < 0) {
+            throw boost::system::system_error(
+                -ret, boost::system::system_category());
+          }
+        });
+    }
 
-  // wait for all source shards to complete
-  group.wait();
+    // wait for all source shards to complete
+    group.wait();
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__
+        << " process_source_shard failed: " << e.what() << dendl;
+    target_shards_mgr.drain(y);
+    throw;
+  }
 
   // flush and drain all requests to target shards
   target_shards_mgr.flush();
