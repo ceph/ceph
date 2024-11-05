@@ -562,17 +562,21 @@ void KernelDevice::_discard_stop()
   // Signal threads to stop, then wait for them to join
   {
     std::unique_lock l(discard_lock);
+    while (discard_threads.empty()) {
+      discard_cond.wait(l);
+    }
 
     for(auto &t : discard_threads) {
       t->stop = true;
-      t->detach();
     }
-    discard_threads.clear();
 
     discard_cond.notify_all();
   }
 
-  discard_drain();
+  // Threads are shared pointers and are cleaned up for us
+  for(auto &t : discard_threads)
+    t->join();
+  discard_threads.clear();
 
   dout(10) << __func__ << " stopped" << dendl;
 }
@@ -757,13 +761,6 @@ void KernelDevice::_discard_thread(uint64_t tid)
       discard_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
-      // If there are non-stopped discard threads and we have been requested
-      // to stop, do so now. Otherwise, we need to proceed because
-      // discard_queued is non-empty and at least one thread is needed to
-      // drain it.
-      if (thr->stop && !discard_threads.empty())
-        break;
-
       // Limit local processing to MAX_LOCAL_DISCARD items.
       // This will allow threads to work in parallel
       //      instead of a single thread taking over the whole discard_queued.
@@ -1554,13 +1551,19 @@ void KernelDevice::handle_conf_change(const ConfigProxy& conf,
     } else if (newval < oldval) {
       dout(10) << __func__ << " stopping " << (oldval - newval) << " existing discard threads" << dendl;
 
-      // Signal the last threads to quit, and stop tracking them
-      for(uint64_t i = oldval - 1; i >= newval && i != UINT64_MAX; i--)
-      {
-        // Also detach the thread so we no longer need to join
-        discard_threads[i]->stop = true;
-        discard_threads[i]->detach();
-        discard_threads.erase(discard_threads.begin() + i);
+      // Decreasing to zero is exactly the same as disabling async discard.
+      // Signal all threads to stop
+      if(newval == 0) {
+        _discard_stop();
+      } else {
+        // Signal the last threads to quit, and stop tracking them
+        for(uint64_t i = oldval - 1; i >= newval; i--)
+        {
+          // Also detach the thread so we no longer need to join
+          discard_threads[i]->stop = true;
+          discard_threads[i]->detach();
+          discard_threads.erase(discard_threads.begin() + i);
+        }
       }
 
       discard_cond.notify_all();
