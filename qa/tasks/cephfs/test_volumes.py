@@ -2705,7 +2705,7 @@ class TestSubvolumes(TestVolumesHelper):
 
         # check mon caps for authid
         expected_mon_caps = 'allow r'
-        full_caps = self._raw_cmd("auth", "get", "client.alice", "--format=json-pretty")
+        full_caps = json.loads(self._raw_cmd("auth", "get", "client.alice", "--format=json-pretty"))
         self.assertEqual(expected_mon_caps, full_caps[0]['caps']['mon'])
 
         # deauthorize guest1 authID
@@ -2721,7 +2721,7 @@ class TestSubvolumes(TestVolumesHelper):
 
         # check mon caps still hold for authid
         expected_mon_caps = 'allow r'
-        full_caps = self._raw_cmd("auth", "get", "client.alice", "--format=json-pretty")
+        full_caps = json.loads(self._raw_cmd("auth", "get", "client.alice", "--format=json-pretty"))
         self.assertEqual(expected_mon_caps, full_caps[0]['caps']['mon'])
 
         # cleanup
