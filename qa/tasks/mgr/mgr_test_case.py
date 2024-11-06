@@ -108,7 +108,8 @@ class MgrTestCase(CephTestCase):
         # Unload all non-default plugins
         loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
                    "mgr", "module", "ls", "--format=json-pretty"))['enabled_modules']
-        unload_modules = set(loaded) - {"cephadm"}
+        module_names = {module['name'] for module in loaded}
+        unload_modules = module_names - {"cephadm"}
 
         for m in unload_modules:
             cls.mgr_cluster.mon_manager.raw_cluster_cmd(
