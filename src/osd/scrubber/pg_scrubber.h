@@ -75,6 +75,8 @@ Main Scrubber interfaces:
 #include <string_view>
 #include <vector>
 
+#include "common/config_proxy.h"
+#include "common/config_cacher.h"
 #include "osd/PG.h"
 #include "osd/scrubber_common.h"
 
@@ -895,6 +897,24 @@ class PgScrubber : public ScrubPgIF,
   // scrub state.
   ceph::coarse_real_clock::time_point m_last_stat_upd{};
 
+  // ------------------ cached (frequently used) configuration values
+
+  /// initial (& max) number of objects to scrub in one pass - deep scrub
+  md_config_cacher_t<int64_t> osd_scrub_chunk_max;
+  /// initial (& max) number of objects to scrub in one pass - shallow
+  md_config_cacher_t<int64_t> osd_shallow_scrub_chunk_max;
+
+  /// chunk size won't be reduced (when preempted) below this
+  /// value (deep scrub)
+  md_config_cacher_t<int64_t> osd_scrub_chunk_min;
+  /// chunk size won't be reduced below this value (shallow scrub)
+  md_config_cacher_t<int64_t> osd_shallow_scrub_chunk_min;
+
+  /// stats update (publish_stats_to_osd()) interval while scrubbing
+  md_config_cacher_t<int64_t> osd_stats_update_period_scrubbing;
+  /// stats update interval while not scrubbing
+  md_config_cacher_t<int64_t> osd_stats_update_period_not_scrubbing;
+
   // ------------ members used if we are a replica
 
   epoch_t m_replica_min_epoch;	///< the min epoch needed to handle this message
@@ -991,6 +1011,9 @@ class PgScrubber : public ScrubPgIF,
     mutable ceph::mutex m_preemption_lock = ceph::make_mutex("preemption_lock");
     bool m_preemptable{false};
     bool m_preempted{false};
+
+    /// the number of preemptions allowed before we start blocking
+    md_config_cacher_t<uint64_t> osd_scrub_max_preemptions;
     int m_left;
     size_t m_size_divisor{1};
     bool are_preemptions_left() const { return m_left > 0; }
