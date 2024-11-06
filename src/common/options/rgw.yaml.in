@@ -4032,6 +4032,18 @@ options:
   - rgw
   - osd
   with_legacy: true
+- name: rgw_do_osd_side_bucket_list_checks
+  type: bool
+  level: dev
+  default: false
+  desc: Perform at OSD side checks on bucket index entries.
+  long_desc: Perform at OSD side checks on bucket index entries.
+    This allows to drop some unneeded entries earlier but requires
+    OSDs to decode them first.
+  services:
+  - rgw
+  - osd
+  with_legacy: true
 - name: rgw_allow_notification_secrets_in_cleartext
   type: bool
   level: advanced
