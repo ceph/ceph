@@ -520,8 +520,9 @@ This means :
 
 #. Turn any available device (ceph-volume decides what 'available' is) into an
    OSD on all hosts that match the glob pattern '*'. (The glob pattern matches
-   against the registered hosts from `host ls`) A more detailed section on
-   host_pattern is available below.
+   against the registered hosts from `host ls`) See
+   :ref:`cephadm-services-placement-by-pattern-matching` for more on using
+   ``host_pattern``-matching to turn devices into OSDs.
 
 #. Then pass it to `osd create` like this:
 
