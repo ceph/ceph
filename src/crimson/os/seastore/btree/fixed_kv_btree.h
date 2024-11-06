@@ -58,7 +58,6 @@ template <
   size_t node_size,
   bool leaf_has_children>
 class FixedKVBtree {
-  static constexpr size_t MAX_DEPTH = 16;
   using self_type = FixedKVBtree<
     node_key_t,
     node_val_t,
@@ -271,7 +270,8 @@ public:
       }
     };
     boost::container::static_vector<
-      node_position_t<internal_node_t>, MAX_DEPTH> internal;
+      node_position_t<internal_node_t>,
+      MAX_FIXEDKVBTREE_DEPTH> internal;
     node_position_t<leaf_node_t> leaf;
 
     bool at_boundary() const {
