@@ -3,12 +3,12 @@
 
 #include "./pg_scrubber.h"  // '.' notation used to affect clang-format order
 
+#include <fmt/ranges.h>
+
 #include <cmath>
 #include <iostream>
 #include <span>
 #include <vector>
-
-#include <fmt/ranges.h>
 
 #include "debug.h"
 
@@ -824,21 +824,21 @@ namespace {
  * an aux function to be used in select_range() below, to
  * select the correct chunk size based on the type of scrub
  */
-int size_from_conf(
+int64_t size_from_conf(
     bool is_deep,
     const ceph::common::ConfigProxy& conf,
-    std::string_view deep_opt,
-    std::string_view shallow_opt)
+    const md_config_cacher_t<int64_t>& deep_opt,
+    const md_config_cacher_t<int64_t>& shallow_opt)
 {
   if (!is_deep) {
-    auto sz = conf.get_val<int64_t>(shallow_opt);
+    auto sz = *shallow_opt;
     if (sz != 0) {
       // assuming '0' means that no distinction was yet configured between
       // deep and shallow scrubbing
-      return static_cast<int>(sz);
+      return sz;
     }
   }
-  return static_cast<int>(conf.get_val<int64_t>(deep_opt));
+  return *deep_opt;
 }
 }  // anonymous namespace
 
@@ -917,16 +917,16 @@ std::optional<uint64_t> PgScrubber::select_range()
   dout(20) << fmt::format(
 		  "{} {} mins: {}d {}s, max: {}d {}s", __func__,
 		  (m_is_deep ? "D" : "S"),
-		  conf.get_val<int64_t>("osd_scrub_chunk_min"),
-		  conf.get_val<int64_t>("osd_shallow_scrub_chunk_min"),
-		  conf.get_val<int64_t>("osd_scrub_chunk_max"),
-		  conf.get_val<int64_t>("osd_shallow_scrub_chunk_max"))
+		  *osd_scrub_chunk_min,
+		  *osd_shallow_scrub_chunk_min,
+		  *osd_scrub_chunk_max,
+		  *osd_shallow_scrub_chunk_max)
 	   << dendl;
 
-  const int min_from_conf = size_from_conf(
-      m_is_deep, conf, "osd_scrub_chunk_min", "osd_shallow_scrub_chunk_min");
-  const int max_from_conf = size_from_conf(
-      m_is_deep, conf, "osd_scrub_chunk_max", "osd_shallow_scrub_chunk_max");
+  const int min_from_conf = static_cast<int>(size_from_conf(
+      m_is_deep, conf, osd_scrub_chunk_min, osd_shallow_scrub_chunk_min));
+  const int max_from_conf = static_cast<int>(size_from_conf(
+      m_is_deep, conf, osd_scrub_chunk_max, osd_shallow_scrub_chunk_max));
 
   const int divisor = static_cast<int>(preemption_data.chunk_divisor());
   const int min_chunk_sz = std::max(3, min_from_conf / divisor);
@@ -1640,7 +1640,7 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   advance_token();
   const auto& conf = m_pg->get_cct()->_conf;
   const int max_from_conf = size_from_conf(
-    m_is_deep, conf, "osd_scrub_chunk_max", "osd_shallow_scrub_chunk_max");
+    m_is_deep, conf, osd_scrub_chunk_max, osd_shallow_scrub_chunk_max);
   auto cost = get_scrub_cost(max_from_conf);
   m_osds->queue_for_rep_scrub(m_pg,
 			      m_replica_request_priority,
@@ -2546,6 +2546,16 @@ PgScrubber::PgScrubber(PG* pg)
     , m_pg_id{pg->pg_id}
     , m_osds{m_pg->osd}
     , m_pg_whoami{pg->pg_whoami}
+    , osd_scrub_chunk_max{m_osds->cct->_conf, "osd_scrub_chunk_max"}
+    , osd_shallow_scrub_chunk_max{m_osds->cct->_conf,
+				  "osd_shallow_scrub_chunk_max"}
+    , osd_scrub_chunk_min{m_osds->cct->_conf, "osd_scrub_chunk_min"}
+    , osd_shallow_scrub_chunk_min{m_osds->cct->_conf,
+				  "osd_shallow_scrub_chunk_min"}
+    , osd_stats_update_period_scrubbing{
+	m_osds->cct->_conf, "osd_stats_update_period_scrubbing"}
+    , osd_stats_update_period_not_scrubbing{
+	m_osds->cct->_conf, "osd_stats_update_period_not_scrubbing"}
     , preemption_data{pg}
 {
   m_fsm = std::make_unique<ScrubMachine>(m_pg, this);
@@ -2674,7 +2684,8 @@ const OSDMapRef& PgScrubber::get_osdmap() const
 
 LoggerSinkSet& PgScrubber::get_logger() const { return *m_osds->clog.get(); }
 
-ostream &operator<<(ostream &out, const PgScrubber &scrubber) {
+ostream& operator<<(ostream& out, const PgScrubber& scrubber)
+{
   return out << scrubber.m_flags;
 }
 
@@ -2788,16 +2799,14 @@ void PgScrubber::update_scrub_stats(ceph::coarse_real_clock::time_point now_is)
   using clock = ceph::coarse_real_clock;
   using namespace std::chrono;
 
-  const seconds period_active = seconds(m_pg->get_cct()->_conf.get_val<int64_t>(
-    "osd_stats_update_period_scrubbing"));
+  const seconds period_active = seconds(*osd_stats_update_period_scrubbing);
   if (!period_active.count()) {
     // a way for the operator to disable these stats updates
     return;
   }
-  const seconds period_inactive =
-    seconds(m_pg->get_cct()->_conf.get_val<int64_t>(
-	      "osd_stats_update_period_not_scrubbing") +
-	    m_pg_id.pgid.m_seed % 30);
+  const seconds period_inactive = seconds(
+      *osd_stats_update_period_not_scrubbing +
+      m_pg_id.pgid.m_seed % 30);
 
   // determine the required update period, based on our current state
   auto period{period_inactive};
@@ -2831,10 +2840,10 @@ void PgScrubber::update_scrub_stats(ceph::coarse_real_clock::time_point now_is)
 
 // ///////////////////// preemption_data_t //////////////////////////////////
 
-PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg}
+PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg},
+  osd_scrub_max_preemptions{pg->cct->_conf, "osd_scrub_max_preemptions"}
 {
-  m_left = static_cast<int>(
-    m_pg->get_cct()->_conf.get_val<uint64_t>("osd_scrub_max_preemptions"));
+  m_left = *osd_scrub_max_preemptions;
 }
 
 void PgScrubber::preemption_data_t::reset()
@@ -2843,8 +2852,7 @@ void PgScrubber::preemption_data_t::reset()
 
   m_preemptable = false;
   m_preempted = false;
-  m_left = static_cast<int>(
-    m_pg->cct->_conf.get_val<uint64_t>("osd_scrub_max_preemptions"));
+  m_left = *osd_scrub_max_preemptions;
   m_size_divisor = 1;
 }
 
