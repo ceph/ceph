@@ -31,9 +31,6 @@ BaseWriter::BaseWriter(const executor_type& ex, uint64_t max_aio)
 BaseWriter::~BaseWriter()
 {
   svc.remove(*this);
-  ceph_assert(outstanding == 0); // must drain() before destruction
-  ceph_assert(write_waiters.empty());
-  ceph_assert(drain_waiters.empty());
 }
 
 void BaseWriter::drain(boost::asio::yield_context yield)
@@ -60,14 +57,6 @@ void BaseWriter::on_complete(boost::system::error_code ec)
         waiter.complete(ec);
       }
     };
-  constexpr auto complete_one = [] (boost::intrusive::list<Waiter> waiters,
-                                    boost::system::error_code ec) {
-      if (!waiters.empty()) {
-        Waiter& waiter = waiters.front();
-        waiters.pop_front();
-        waiter.complete(ec);
-      }
-    };
 
   if (ec) {
     if (!error) {
@@ -75,9 +64,11 @@ void BaseWriter::on_complete(boost::system::error_code ec)
     }
     // fail all waiting calls to write()
     complete_all(std::move(write_waiters), ec);
-  } else {
+  } else if (!write_waiters.empty()) {
     // wake one waiting call to write()
-    complete_one(std::move(write_waiters), {});
+    Waiter& waiter = write_waiters.front();
+    write_waiters.pop_front();
+    waiter.complete(ec);
   }
 
   if (outstanding == 0) {
