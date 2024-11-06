@@ -103,7 +103,7 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
 class FakeDispatcher : public Dispatcher {
  public:
   struct Session : public RefCountedObject {
-    atomic<uint64_t> count;
+    std::atomic<uint64_t> count;
     ConnectionRef con;
 
     explicit Session(ConnectionRef c): RefCountedObject(g_ceph_context), count(0), con(c) {
@@ -1744,7 +1744,7 @@ class SyntheticDispatcher : public Dispatcher {
   bool got_connect;
   map<ConnectionRef, list<uint64_t> > conn_sent;
   map<uint64_t, bufferlist> sent;
-  atomic<uint64_t> index;
+  std::atomic<uint64_t> index;
   SyntheticWorkload *workload;
 
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):
