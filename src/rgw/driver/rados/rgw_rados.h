@@ -1454,11 +1454,11 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                 const std::string& tag,
                 const uint64_t ver,
                 optional_yield y);
+  template <bool DeleteMarkerV>
   int set_olh(const DoutPrefixProvider *dpp,
 	      RGWObjectCtx& obj_ctx,
 	      RGWBucketInfo& bucket_info,
 	      const rgw_obj& target_obj,
-	      bool delete_marker,
 	      rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch,
 	      ceph::real_time unmod_since,
