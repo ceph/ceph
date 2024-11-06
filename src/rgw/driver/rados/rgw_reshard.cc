@@ -991,7 +991,7 @@ static int process_source_shard(const DoutPrefixProvider *dpp,
                                 BucketReshardManager& target_shards_mgr,
                                 bool verbose_json_out, ostream *out,
                                 Formatter *formatter, uint64_t& stage_entries,
-                                bool process_log)
+                                ReshardFaultInjector& fault, bool process_log)
 {
   bool is_truncated = true;
   string marker;
@@ -1050,7 +1050,9 @@ static int process_source_shard(const DoutPrefixProvider *dpp,
     } // entries loop
   } // while truncated
 
-  return 0;
+  // check for injected errors at the very end. this way we can spawn several,
+  // and the first to finish will trigger cancellation of the others
+  return fault.check("process_source_shard");
 }
 
 int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation& current,
@@ -1061,6 +1063,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
                                       bool verbose_json_out,
                                       ostream *out,
                                       Formatter *formatter, rgw::BucketReshardState reshard_stage,
+                                      ReshardFaultInjector& fault,
                                       const DoutPrefixProvider *dpp,
                                       boost::asio::yield_context y)
 {
@@ -1112,7 +1115,8 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
           int ret = process_source_shard(dpp, yield, store->getRados(),
                                          bucket_info, current, i, max_op_entries,
                                          target_shards_mgr, verbose_json_out, out,
-                                         formatter, stage_entries, process_log);
+                                         formatter, stage_entries, fault,
+                                         process_log);
           if (ret < 0) {
             throw boost::system::system_error(
                 -ret, boost::system::system_category());
@@ -1182,7 +1186,8 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord);
     int ret = reshard_process(current, max_op_entries, pool, oids,
                               support_logrecord, verbose_json_out, out,
-                              formatter, bucket_info.layout.resharding, dpp, y);
+                              formatter, bucket_info.layout.resharding,
+                              fault, dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": failed in logrecord state of reshard ret = " << ret << dendl;
       return ret;
@@ -1197,7 +1202,8 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InProgress);
     ret = reshard_process(current, max_op_entries, pool, oids,
                           support_logrecord, verbose_json_out, out,
-                          formatter, bucket_info.layout.resharding, dpp, y);
+                          formatter, bucket_info.layout.resharding,
+                          fault, dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": failed in progress state of reshard ret = " << ret << dendl;
       return ret;
@@ -1207,7 +1213,8 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InProgress);
     int ret = reshard_process(current, max_op_entries, pool, oids,
                               support_logrecord, verbose_json_out, out,
-                              formatter, rgw::BucketReshardState::InLogrecord, dpp, y);
+                              formatter, rgw::BucketReshardState::InLogrecord,
+                              fault, dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": failed in logrecord state of reshard ret = " << ret << dendl;
       return ret;

@@ -115,9 +115,12 @@ def test_bucket_reshard(conn, name, **fault):
         _, ret = run_bucket_reshard_cmd(name, num_shards_expected, check_retcode=False, **fault)
 
         if fault.get('error_code') == errno.ECANCELED or fault.get('error_code') == errno.EOPNOTSUPP:
-            assert(ret == 0) # expect ECANCELED to retry and succeed
+            assert(ret == 0) # expect ECANCELED/EOPNOTSUPP to retry and succeed
         else:
-            assert(ret != 0 and ret != errno.EBUSY)
+            if 'error_at' in fault:
+                assert ret == fault.get('error_code', errno.EIO)
+            else:
+                assert(ret != 0 and ret != errno.EBUSY)
 
             # check shard count
             cur_shard_count = get_bucket_stats(name).num_shards
@@ -274,6 +277,11 @@ def main():
     test_bucket_reshard(connection, 'error-at-change-reshard-state', error_at='change_reshard_state', error_code=errno.ECANCELED)
     log.debug('TEST: reshard bucket with abort at change_reshard_state\n')
     test_bucket_reshard(connection, 'abort-at-change-reshard-state', abort_at='change_reshard_state')
+
+    log.debug('TEST: reshard bucket with EIO injected at process_source_shard\n')
+    test_bucket_reshard(connection, 'error-at-process-source-shard', error_at='process_source_shard')
+    log.debug('TEST: reshard bucket with abort at process_source_shard\n')
+    test_bucket_reshard(connection, 'abort-at-process-source-shard', abort_at='process_source_shard')
 
     # TESTCASE 'logrecord could be stopped after reshard failed'
     log.debug(' test: logrecord could be stopped after reshard failed')
