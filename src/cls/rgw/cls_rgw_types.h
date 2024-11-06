@@ -894,15 +894,52 @@ struct rgw_bucket_dir_header {
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
 struct rgw_bucket_dir {
+  // helps to minimize the memcpy by avoding re-encoding dir entries.
+  // please note it doen't help with keys, so maybe we'll need to go
+  // deeper with the optimiation.
+  struct entries_adapter {
+    // XXX: hack for lack of perfect forwarding in macro-generated
+    // encode() functions.
+    mutable std::map<std::string, ceph::buffer::list> entries;
+
+    void encode(ceph::buffer::list &bl) const {
+      using ::ceph::encode;					     \
+      __u32 n = (__u32)(entries.size());
+      encode(n, bl);
+      for (auto p = entries.begin(); p != entries.end(); ++p) {
+        // TODO: memcpy which could be avoided
+        encode(p->first, bl);
+        // the values are encoded already, just pass through
+        bl.claim_append(p->second);
+      }
+    }
+    void decode(ceph::buffer::list::const_iterator &p) {
+      using ::ceph::decode;					     \
+      decode(entries, p);
+    }
+  };
   std::optional<rgw_bucket_dir_header> header;
   boost::container::flat_map<std::string, rgw_bucket_dir_entry> m;
 
-  void encode(ceph::buffer::list &bl) const {
+  template <class EntriesT>
+  void encode_base(
+    const EntriesT& entries,
+    ceph::buffer::list &bl
+  ) const {
     ENCODE_START(3, 2, bl);
-    encode(header.value_or(rgw_bucket_dir_header{}), bl);
-    encode(m, bl);
-    encode(header.has_value(), bl);
+    encode(this->header.value_or(rgw_bucket_dir_header{}), bl);
+    encode(entries, bl);
+    encode(this->header.has_value(), bl);
     ENCODE_FINISH(bl);
+  }
+  void encode_reusing_encoded_dir_entries(
+    std::map<std::string, ceph::buffer::list> &&entries,
+    ceph::buffer::list &bl
+  ) const {
+    encode_base(entries_adapter{std::move(entries)}, bl);
+  }
+  void encode(ceph::buffer::list &bl) const {
+    encode_base(m, bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
@@ -922,6 +959,7 @@ struct rgw_bucket_dir {
   static void generate_test_instances(std::list<rgw_bucket_dir*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir)
+WRITE_CLASS_ENCODER(rgw_bucket_dir::entries_adapter)
 
 struct rgw_s3select_usage_data {
   uint64_t bytes_processed;

@@ -455,6 +455,16 @@ struct rgw_cls_list_ret {
     encode(marker, bl);
     ENCODE_FINISH(bl);
   }
+  void encode_reusing_encoded_dir_entries(
+    std::map<std::string, ceph::bufferlist> entries,
+    ceph::buffer::list &bl
+  ) const {
+    ENCODE_START(4, 2, bl);
+    dir.encode_reusing_encoded_dir_entries(std::move(entries), bl);
+    encode(is_truncated, bl);
+    encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
   void decode(ceph::buffer::list::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     decode(dir, bl);

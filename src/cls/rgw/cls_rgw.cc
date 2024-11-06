@@ -547,7 +547,8 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   rgw_cls_list_ret ret;
   rgw_bucket_dir& new_dir = ret.dir;
-  auto& name_entry_map = new_dir.m; // map of keys to entries
+  // map of keys to marshalled entries
+  std::map<std::string, ceph::bufferlist> name_entry_map;
 
   int rc = 0;
   if (op.want_header) {
@@ -678,7 +679,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 	    cls_rgw_obj_key proxy_key(prefix_key);
 	    proxy_entry.key = cls_rgw_obj_key(proxy_key);
 	    proxy_entry.flags = rgw_bucket_dir_entry::FLAG_COMMON_PREFIX;
-	    name_entry_map[prefix_key] = proxy_entry;
+	    encode(proxy_entry, name_entry_map[prefix_key]);
 
 	    CLS_LOG(20, "%s: got common prefix entry %s[%s] num entries=%lu",
 		    __func__, proxy_key.name.c_str(), proxy_key.instance.c_str(),
@@ -705,7 +706,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
       if (name_entry_map.size() < op.num_entries &&
 	  kiter->first != prev_omap_key) {
-        name_entry_map[kiter->first] = entry;
+        name_entry_map[kiter->first] = kiter->second;
 	prev_omap_key = kiter->first;
 	CLS_LOG(20, "%s: got object entry %s[%s] num entries=%d",
 		__func__, key.name.c_str(), key.instance.c_str(),
@@ -720,9 +721,10 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
   CLS_LOG(20, "%s: normal exit returning %ld entries, is_truncated=%d",
 	  __func__, ret.dir.m.size(), ret.is_truncated);
-  encode(ret, *out);
+  const auto num_name_entries = name_entry_map.size();
+  ret.encode_reusing_encoded_dir_entries(std::move(name_entry_map), *out);
 
-  if (ret.is_truncated && name_entry_map.size() == 0) {
+  if (ret.is_truncated && num_name_entries == 0) {
     CLS_LOG(5, "%s: returning value RGWBIAdvanceAndRetryError", __func__);
     return RGWBIAdvanceAndRetryError;
   } else {
