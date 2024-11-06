@@ -893,6 +893,112 @@ struct rgw_bucket_dir_header {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
+#if 1
+// an utility for moving encoded data between bufferlist cheaply.
+// the problem is re-encoding fragments otherwise continous
+// bufferlist as the `len` field is freshly generated each time.
+// this helper allows to avoid that.
+template <class T>
+struct netstring_cacher {
+  void decode(bufferlist::const_iterator& p) {
+    iter_marker = p;
+    decode(len, p);
+    decode_nohead(len, t, p);
+  }
+  void encode(bufferlist& bl) {
+    // this copy will merge contiguous buffers in bl if possible
+    iter_marker.copy(sizeof(len) + len, bl);
+    // please note the absence of encode(t, ...)
+  }
+
+private:
+  T t;
+  bufferlist::const_iterator iter_marker;
+  __u32 len;
+};
+
+// oppurtunistically exploit potential memory contuinty in bufferlist
+// to create std::string_view very cheaply -- so cheaply there won't
+// be even refcount bumpup on the optimistic path. Therefore the life-
+// time is tied to the underlying bufferlist
+struct string_view_holder {
+  void decode(bufferlist::const_iterator& p) {
+    using ::ceph::decode;
+    __u32 len;
+    decode(len, p);
+    const char* data;
+    if (auto got = p.get_ptr_and_advance(len, &data); got == len) {
+      // yay, this was cheap
+    } else {
+      data = consolidate_by_copy(data, got, len, p);
+    }
+    sv = std::string_view{data, len};
+  }
+
+  void encode(bufferlist& bl) && {
+    using ::ceph::encode;
+    if (maybe_holder.length()) {
+      encode(maybe_holder, bl);
+      maybe_holder = {};
+    } else {
+      encode(sv, bl);
+    }
+  }
+
+  operator std::string_view() const {
+    return sv;
+  }
+
+private:
+  const char* consolidate_by_copy(
+    const char* data_part,
+    const uint32_t got,
+    const uint32_t len,
+    bufferlist::const_iterator& p
+  ) {
+    maybe_holder.set_length(0);
+    if (maybe_holder.unused_tail_length() < len) {
+      // enlarge holder as needed
+      maybe_holder = buffer::create(len);
+    }
+    maybe_holder.copy_in(0, got, data_part);
+    p.copy(len - got, maybe_holder.c_str() + got);
+    maybe_holder.set_length(len);
+    return maybe_holder.c_str();
+  }
+
+  ceph::bufferptr maybe_holder; // ptr_node instead?
+  std::string_view sv;
+};
+
+// it works by exploiting the fact that types encoded as netstring
+// are supposed to provide decode_nohead()
+template <class T>
+struct decode_deferrer {
+  void decode(bufferlist::const_iterator& p) {
+    iter_marker = p;
+    decode(len, p);
+    p += len;
+  }
+  void encode(bufferlist& bl) {
+    // this copy will merge contiguous buffers in bl if possible
+    iter_marker.copy(sizeof(len) + len, bl);
+  }
+  operator T() {
+    auto copy_iter_marker = iter_marker;
+    // we already know len
+    copy_iter_marker += sizeof(len);
+    decode_nohead(len, t, copy_iter_marker);
+    return t;
+  }
+
+private:
+  T t;
+  bufferlist::const_iterator iter_marker;
+  __u32 len;
+};
+#endif
+
 struct rgw_bucket_dir {
   rgw_bucket_dir_header header;
   boost::container::flat_map<std::string, rgw_bucket_dir_entry> m;
