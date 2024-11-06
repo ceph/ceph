@@ -84,6 +84,12 @@ class Module(MgrModule):
         """Remove a snapshot mirrored directory"""
         return self.fs_snapshot_mirror.remove_dir(fs_name, path)
 
+    @CLIWriteCommand('fs snapshot mirror ls')
+    def snapshot_mirror_ls(self,
+                           fs_name: str):
+        """List the snapshot mirrored directories"""
+        return self.fs_snapshot_mirror.list_dirs(fs_name)
+
     @CLIReadCommand('fs snapshot mirror dirmap')
     def snapshot_mirror_dirmap(self,
                                fs_name: str,
