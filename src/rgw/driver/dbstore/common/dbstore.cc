@@ -848,6 +848,7 @@ int DB::raw_obj::InitializeParamsfromRawObj(const DoutPrefixProvider *dpp,
 
   params->op.obj_data.multipart_part_str = multipart_part_str;
   params->op.obj_data.part_num = part_num;
+  params->op.obj_data.stripe_num = stripe_num;
 
   return ret;
 }
