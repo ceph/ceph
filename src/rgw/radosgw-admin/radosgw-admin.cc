@@ -8386,8 +8386,8 @@ next:
   } // OPT::OBJECT_REINDEX
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE) {
-    if (!static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_expire_objects(dpp(), null_yield)) {
-      cerr << "ERROR: process_expire_objects() processing returned error." << std::endl;
+    if (!driver->process_expired_objects(dpp(), null_yield)) {
+      cerr << "ERROR: process_expired_objects() processing returned error." << std::endl;
       return 1;
     }
   }

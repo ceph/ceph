@@ -466,6 +466,8 @@ class Driver {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
+    /** Reset the temporarily restored objects which are expired */
+    virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) = 0;
 
      /** Get a @a Notification object.  Used to communicate with non-RGW daemons, such as
       * management/tracking software */

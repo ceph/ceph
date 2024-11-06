@@ -435,6 +435,11 @@ std::unique_ptr<Lifecycle> FilterDriver::get_lifecycle(void)
   return std::make_unique<FilterLifecycle>(std::move(lc));
 }
 
+bool FilterDriver::process_expired_objects(const DoutPrefixProvider *dpp,
+	       			           optional_yield y) {
+  return next->process_expired_objects(dpp, y);
+}
+
 std::unique_ptr<Notification> FilterDriver::get_notification(rgw::sal::Object* obj,
 				rgw::sal::Object* src_obj, req_state* s,
 				rgw::notify::EventType event_type, optional_yield y,
