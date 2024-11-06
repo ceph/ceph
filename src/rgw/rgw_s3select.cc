@@ -745,6 +745,7 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
   }
 
   if (m_parquet_type) {
+    # ifdef _ARROW_EXIST
     //parquet processing
     range_request(0, 4, parquet_magic, y);
     if (memcmp(parquet_magic, parquet_magic1, 4) && memcmp(parquet_magic, parquet_magicE, 4)) {
@@ -772,6 +773,7 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
        
       ldout(s->cct, 10) << "S3select: complete parquet query with success " << dendl;
     }
+    # endif
     } else { 
 	//CSV or JSON processing
 	if (m_scan_range_ind) {
