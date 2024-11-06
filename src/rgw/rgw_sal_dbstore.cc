@@ -1226,7 +1226,6 @@ namespace rgw::sal {
       }
 
       /* flush whatever tail data is present */
-      /* XXXX add part_num */
       int ret = parent_op.write_data(dpp, tail_part_data, tail_part_offset);
       if (ret < 0) {
         return ret;
