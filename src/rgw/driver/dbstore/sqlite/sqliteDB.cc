@@ -2416,6 +2416,7 @@ int SQLPutObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
+  // XXXX obj_instance is always NULL in objectdata_table, even when versioning is enabled?
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance, sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
