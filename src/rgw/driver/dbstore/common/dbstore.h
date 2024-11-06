@@ -1505,22 +1505,21 @@ class DB {
 
   public:
     DB(std::string db_name, CephContext *_cct) : db_name(db_name),
-    user_table(db_name+"_user_table"),
-    bucket_table(db_name+"_bucket_table"),
-    quota_table(db_name+"_quota_table"),
-    lc_head_table(db_name+"_lc_head_table"),
-    lc_entry_table(db_name+"_lc_entry_table"),
+    user_table(/* db_name+ */"user_table"),
+    bucket_table(/* db_name+ */"bucket_table"),
+    quota_table(/* db_name+ */"quota_table"),
+    lc_head_table(/* db_name+ */"lc_head_table"),
+    lc_entry_table(/* db_name+ */"lc_entry_table"),
     cct(_cct),
     dp(_cct, ceph_subsys_rgw, "rgw DBStore backend: ")
   {}
     /*	DB() {}*/
 
     DB(CephContext *_cct) : db_name("default_db"),
-    user_table(db_name+"_user_table"),
-    bucket_table(db_name+"_bucket_table"),
-    quota_table(db_name+"_quota_table"),
-    lc_head_table(db_name+"_lc_head_table"),
-    lc_entry_table(db_name+"_lc_entry_table"),
+    user_table(/* db_name+ */"user_table"),
+    bucket_table(/* db_name+ */"bucket_table"),
+    quota_table(/* db_name+ */"quota_table"),
+    lc_head_table(/* db_name+ */"lc_head_table"),
     cct(_cct),
     dp(_cct, ceph_subsys_rgw, "rgw DBStore backend: ")
   {}
@@ -1534,13 +1533,13 @@ class DB {
     const std::string getLCHeadTable() { return lc_head_table; }
     const std::string getLCEntryTable() { return lc_entry_table; }
     const std::string getObjectTable(std::string bucket) {
-      return db_name+"_"+bucket+"_object_table"; }
+      return /* db_name+ "_"+ */bucket+"_object_table"; }
     const std::string getObjectDataTable(std::string bucket) {
-      return db_name+"_"+bucket+"_objectdata_table"; }
+      return /* db_name+ "_"+ */bucket+"_objectdata_table"; }
     const std::string getObjectView(std::string bucket) {
-      return db_name+"_"+bucket+"_object_view"; }
+      return /* db_name+ "_"+ */bucket+"_object_view"; }
     const std::string getObjectTrigger(std::string bucket) {
-      return db_name+"_"+bucket+"_object_trigger"; }
+      return /* db_name+ "_"+ */bucket+"_object_trigger"; }
 
     std::map<std::string, class ObjectOp*> getObjectMap();
 
