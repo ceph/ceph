@@ -766,8 +766,13 @@ void PgScrubber::on_operator_periodic_cmd(
   asok_response_section(f, true, scrub_level, stamp);
 
   if (scrub_level == scrub_level_t::deep) {
+    const auto saved_shallow_stamp = m_pg->info.history.last_scrub_stamp;
     // this call sets both stamps
     m_pg->set_last_deep_scrub_stamp(stamp);
+    // restore the shallow stamp, as otherwise it will be scheduled before
+    // the deep, failing whatever test code called us (this is a test-only
+    // interface).
+    m_pg->set_last_scrub_stamp(saved_shallow_stamp);
   } else {
     m_pg->set_last_scrub_stamp(stamp);
   }
