@@ -87,6 +87,7 @@ class RGWBucketReshard {
                       bool verbose_json_out,
                       std::ostream *out,
                       Formatter *formatter, rgw::BucketReshardState reshard_stage,
+                      ReshardFaultInjector& fault,
                       const DoutPrefixProvider *dpp,
                       boost::asio::yield_context yield);
 
