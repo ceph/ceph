@@ -773,6 +773,9 @@ class RgwUser(RgwRESTController):
         return users
 
     def get(self, uid, daemon_name=None, stats=True) -> dict:
+        return self._get(uid, daemon_name=daemon_name, stats=stats)
+
+    def _get(self, uid, daemon_name=None, stats=True) -> dict:
         query_params = '?stats' if stats else ''
         result = self.proxy(daemon_name, 'GET', 'user{}'.format(query_params),
                             {'uid': uid, 'stats': stats})
@@ -788,7 +791,7 @@ class RgwUser(RgwRESTController):
         # type: (Optional[str]) -> List[str]
         emails = []
         for uid in json.loads(self.list(daemon_name)):  # type: ignore
-            user = json.loads(self.get(uid, daemon_name))  # type: ignore
+            user = self._get(uid, daemon_name)  # type: ignore
             if user["email"]:
                 emails.append(user["email"])
         return emails
@@ -910,7 +913,7 @@ class RgwUser(RgwRESTController):
                        secret_key=None, daemon_name=None):
         # pylint: disable=R1705
         subusr_array = []
-        user = json.loads(self.get(uid, daemon_name))  # type: ignore
+        user = self._get(uid, daemon_name)  # type: ignore
         subusers = user["subusers"]
         for sub_usr in subusers:
             subusr_array.append(sub_usr["id"])
