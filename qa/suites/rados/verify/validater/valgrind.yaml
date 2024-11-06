@@ -26,6 +26,7 @@ overrides:
       - \(MON_DOWN\)
       - \(SLOW_OPS\)
       - slow request
+      - OSD bench result
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
