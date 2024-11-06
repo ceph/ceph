@@ -209,6 +209,14 @@ def _update_drop_in_files(
         dropin = _build_extra_containers_drop_in(
             dropin, ctx, ident, enable_init_containers, sidecar_ids
         )
+    if ident.daemon_type == 'node-exporter':
+        # node-exporter returns code 143 when sent SIGTERM
+        dropin.add_section('Service')
+        dropin.add_setting(
+            section='Service',
+            setting='SuccessExitStatus',
+            value='143',
+        )
     if dropin:
         pinfo.drop_in_file.parent.mkdir(parents=True, exist_ok=True)
         with write_new(pinfo.drop_in_file, perms=None) as f:

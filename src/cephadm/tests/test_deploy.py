@@ -536,6 +536,40 @@ def test_deploy_and_rm_iscsi(cephadm_fs, funkypatch):
     assert not tcmu_sidecar.exists()
 
 
+def test_deploy_node_exporter_drop_in(cephadm_fs, funkypatch):
+    # Test that the deploy and remove paths for node-exporter
+    # handle a systemd drop-in that sets a SuccessExitStatus
+    mocks = _common_patches(funkypatch)
+    _firewalld = mocks['Firewalld']
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'node-exporter.host1'
+        ctx.image = 'quay.io/real-node-exporter-image'
+        ctx.reconfig = False
+        _cephadm._common_deploy(ctx)
+
+    unit_dir = pathlib.Path('/etc/systemd/system')
+    assert unit_dir.is_dir()
+    assert (unit_dir / f'ceph-{fsid}@.service').exists()
+    drop_in = unit_dir / f'ceph-{fsid}@node-exporter.host1.service.d/99-cephadm.conf'
+    assert drop_in.parent.is_dir()
+    assert drop_in.exists()
+    assert '[Service]' in drop_in.read_text()
+    assert 'SuccessExitStatus=143' in drop_in.read_text()
+
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'node-exporter.host1'
+        ctx.image = 'quay.io/real-node-exporter-image'
+        _cephadm.command_rm_daemon(ctx)
+
+    assert not drop_in.exists()
+    assert not drop_in.parent.exists()
+
+
 def test_deploy_smb_container(cephadm_fs, funkypatch):
     mocks = _common_patches(funkypatch)
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
