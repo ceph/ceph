@@ -360,10 +360,15 @@ public:
   }
 
 
-  FixedKVNodeLayout(char *buf) :
-    buf(buf) {}
+  FixedKVNodeLayout() : buf(nullptr) {}
 
   virtual ~FixedKVNodeLayout() = default;
+
+  void set_layout_buf(char *_buf) {
+    assert(buf == nullptr);
+    assert(_buf != nullptr);
+    buf = _buf;
+  }
 
   const_iterator begin() const {
     return const_iterator(

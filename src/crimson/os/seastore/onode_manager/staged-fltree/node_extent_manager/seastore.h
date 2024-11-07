@@ -41,8 +41,10 @@ class SeastoreSuper final: public Super {
 
 class SeastoreNodeExtent final: public NodeExtent {
  public:
-  SeastoreNodeExtent(ceph::bufferptr &&ptr)
+  explicit SeastoreNodeExtent(ceph::bufferptr &&ptr)
     : NodeExtent(std::move(ptr)) {}
+  explicit SeastoreNodeExtent(extent_len_t length)
+    : NodeExtent(length) {}
   SeastoreNodeExtent(const SeastoreNodeExtent& other)
     : NodeExtent(other) {}
   ~SeastoreNodeExtent() override = default;
