@@ -10,11 +10,14 @@
 #include "rgw_zone.h"
 #include "rgw_datalog.h"
 
+#include "driver/rados/shard_io.h"
 #include "cls/rgw/cls_rgw_client.h"
+#include "common/async/blocked_completion.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+using rgwrados::shard_io::Result;
 
 static string dir_oid_prefix = ".dir.";
 
@@ -353,6 +356,45 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+// init_index() is all-or-nothing so if we fail to initialize all shards,
+// we undo the creation of others. RevertibleWriter provides these semantics
+struct IndexInitWriter : rgwrados::shard_io::RadosRevertibleWriter {
+  bool judge_support_logrecord;
+
+  IndexInitWriter(const DoutPrefixProvider& dpp,
+                  boost::asio::any_io_executor ex,
+                  librados::IoCtx& ioctx,
+                  bool judge_support_logrecord)
+    : RadosRevertibleWriter(dpp, std::move(ex), ioctx),
+      judge_support_logrecord(judge_support_logrecord)
+  {}
+  void prepare_write(int shard, librados::ObjectWriteOperation& op) override {
+    // don't overwrite. fail with EEXIST if a shard already exists
+    op.create(true);
+    if (judge_support_logrecord) {
+      // fail with EOPNOTSUPP if the osd doesn't support the reshard log
+      cls_rgw_bucket_init_index2(op);
+    } else {
+      cls_rgw_bucket_init_index(op);
+    }
+  }
+  void prepare_revert(int shard, librados::ObjectWriteOperation& op) override {
+    // on failure, remove any of the shards we successfully created
+    op.remove();
+  }
+  Result on_complete(int, boost::system::error_code ec) override {
+    // ignore EEXIST
+    if (ec && ec != boost::system::errc::file_exists) {
+      return Result::Error;
+    } else {
+      return Result::Success;
+    }
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "init index shards: ";
+  }
+};
+
 int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
                                         optional_yield y,
                                         const RGWBucketInfo& bucket_info,
@@ -372,16 +414,25 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
   map<int, string> bucket_objs;
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards, idx_layout.gen, &bucket_objs);
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  if (judge_support_logrecord) {
-    return CLSRGWIssueBucketIndexInit2(index_pool,
-                                       bucket_objs,
-                                       cct->_conf->rgw_bucket_index_max_aio)();
+  const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto writer = IndexInitWriter{*dpp, ex, index_pool, judge_support_logrecord};
+
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
   } else {
-    return CLSRGWIssueBucketIndexInit(index_pool,
-                                      bucket_objs,
-                                      cct->_conf->rgw_bucket_index_max_aio)();
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto writer = IndexInitWriter{*dpp, ex, index_pool, judge_support_logrecord};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
+                                     ceph::async::use_blocked[ec]);
   }
+  return ceph::from_error_code(ec);
 }
 
 int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
