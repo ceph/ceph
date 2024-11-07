@@ -994,8 +994,7 @@ struct FixedKVInternalNode
    * resolve_relative_addrs fixes up relative internal references
    * based on base.
    */
-  void resolve_relative_addrs(paddr_t base)
-  {
+  void resolve_relative_addrs(paddr_t base) final {
     LOG_PREFIX(FixedKVInternalNode::resolve_relative_addrs);
     for (auto i: *this) {
       if (i->get_val().is_relative()) {

@@ -259,7 +259,7 @@ struct LBALeafNode
   }
 
   // See LBAInternalNode, same concept
-  void resolve_relative_addrs(paddr_t base);
+  void resolve_relative_addrs(paddr_t base) final;
   void node_resolve_vals(
     internal_iterator_t from,
     internal_iterator_t to) const final
