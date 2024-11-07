@@ -1131,14 +1131,14 @@ namespace rgw::sal {
 
   DBMultipartWriter::DBMultipartWriter(const DoutPrefixProvider *dpp,
 	    	    optional_yield y,
-                MultipartUpload* upload,
+            MultipartUpload* upload,
 		        rgw::sal::Object* obj,
 		        DBStore* _driver,
     		    const ACLOwner& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
-                uint64_t _part_num, const std::string& _part_num_str):
-			StoreWriter(dpp, y),
-			store(_driver),
+            uint64_t _part_num, const std::string& _part_num_str):
+			          StoreWriter(dpp, y),
+			          store(_driver),
                 owner(_owner),
                 ptail_placement_rule(_ptail_placement_rule),
                 head_obj(obj),
@@ -1156,7 +1156,7 @@ namespace rgw::sal {
     parent_op.prepare(NULL);
     parent_op.set_part_num(part_num);
     parent_op.set_mp_part_str(upload_id + "." + std::to_string(part_num));
-    // XXX: do we need to handle part_num_str??
+    parent_op.set_upload_id(upload_id);
     return 0;
   }
 
@@ -1209,7 +1209,7 @@ namespace rgw::sal {
           tail_part_offset += max_chunk_size;
         }
         /* reset tail parts or update if excess data */
-        if (excess_size > 0) { /* wrote max_chunk_size data */
+        if (excess_size > 0) { /* wrote max_chunk_size */
           tail_part_size = excess_size;
           bufferlist tmp;
           tail_part_data.begin(write_ofs).copy(excess_size, tmp);

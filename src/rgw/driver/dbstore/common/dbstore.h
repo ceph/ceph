@@ -99,6 +99,7 @@ struct DBOpObjectDataInfo {
   uint64_t part_num;
   uint64_t stripe_num;
   std::string multipart_part_str;
+  std::string upload_id;
   uint64_t offset;
   uint64_t size;
   bufferlist data{};
@@ -299,6 +300,7 @@ struct DBOpObjectDataPrepareInfo {
   static constexpr const char* data = ":data";
   static constexpr const char* size = ":size";
   static constexpr const char* multipart_part_str = ":multipart_part_str";
+  static constexpr const char* upload_id = ":upload_id";
 };
 
 struct DBOpLCEntryPrepareInfo {
@@ -583,6 +585,8 @@ class DBOp {
       /* Extra field 'MultipartPartStr' added which signifies multipart
        * <uploadid + partnum>. For regular object, it is '0.0'
        *
+       * XXX working to supercede MultiPartPartStr with explicit PartNum and
+       *
        *  - part: a collection of stripes that make a contiguous part of an
        object. A regular object will only have one part (although might have
        many stripes), a multipart object might have many parts. Each part
@@ -596,13 +600,14 @@ class DBOp {
       BucketName TEXT NOT NULL , \
       ObjID      TEXT NOT NULL , \
       MultipartPartStr TEXT, \
+      UploadID TEXT, \
       PartNum  INTEGER NOT NULL, \
       StripeNum INTEGER NOT NULL, \
       Offset   INTEGER, \
       Size 	 INTEGER, \
       Mtime  BLOB,       \
       Data     BLOB,             \
-      PRIMARY KEY (ObjName, BucketName, ObjInstance, ObjID, MultipartPartStr, PartNum), \
+      PRIMARY KEY (ObjName, BucketName, ObjInstance, ObjID, MultipartPartStr, UploadID, PartNum), \
       FOREIGN KEY (BucketName) \
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
@@ -1243,8 +1248,8 @@ class PutObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
       "INSERT OR REPLACE INTO '{}' \
-      (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, StripeNum, Offset, Size, Mtime, Data) \
-      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
+      (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, UploadID, PartNum, StripeNum, Offset, Size, Mtime, Data) \
+      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
 
   public:
     virtual ~PutObjectDataOp() {}
@@ -1257,6 +1262,7 @@ class PutObjectDataOp: virtual public DBOp {
           params.op.bucket.bucket_name,
           params.op.obj.obj_id,
           params.op.obj_data.multipart_part_str,
+          params.op.obj_data.upload_id,
           params.op.obj_data.part_num,
           params.op.obj_data.stripe_num,
           params.op.obj_data.offset,
@@ -1267,6 +1273,7 @@ class PutObjectDataOp: virtual public DBOp {
 };
 
 /* XXX: Recheck if this is really needed */
+/* XXXX A version of this *is* needed--to update ObjInstance with a non-NULL value during complete-multipart! */
 class UpdateObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
@@ -1291,7 +1298,7 @@ class GetObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
       "SELECT  \
-      ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, StripeNum, Offset, Size, Mtime, Data \
+      ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, UploadID, PartNum, StripeNum, Offset, Size, Mtime, Data \
       from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} and ObjID = {} \
       ORDER BY MultipartPartStr, PartNum, StripeNum ";
 
@@ -1664,6 +1671,7 @@ class DB {
       std::string obj_ns;
       std::string obj_id;
       std::string multipart_part_str;
+      std::string upload_id;
       uint64_t part_num;
       uint64_t stripe_num;
 
@@ -1675,8 +1683,8 @@ class DB {
       }
 
       raw_obj(DB* _db, std::string& _bname, std::string& _obj_name, std::string& _obj_instance,
-          std::string& _obj_ns, std::string& _obj_id, std::string _mp_part_str, uint64_t _part_num,
-          uint64_t _stripe_num) {
+          std::string& _obj_ns, std::string& _obj_id, std::string _mp_part_str,
+          std::string _upload_id, uint64_t _part_num, uint64_t _stripe_num) {
         db = _db;
         bucket_name = _bname;
         obj_name = _obj_name;
@@ -1684,6 +1692,7 @@ class DB {
         obj_ns = _obj_ns;
         obj_id = _obj_id;
         multipart_part_str = _mp_part_str;
+        upload_id = _upload_id;
         part_num = _part_num;
         stripe_num = _stripe_num;
 
@@ -1869,10 +1878,11 @@ class DB {
         RGWObjState obj_state;
         uint64_t part_num; // multipart part num as integer
         std::string mp_part_str = "0.0"; // multipart num (XXX needed?)
+        std::string upload_id; // XXXX where will we get this? can we save a pointer to the upload?
 
         struct MetaParams {
           ceph::real_time *mtime;
-	  std::map<std::string, bufferlist>* rmattrs;
+	        std::map<std::string, bufferlist>* rmattrs;
           const bufferlist *data;
           RGWObjManifest *manifest;
           const std::string *ptag;
@@ -1902,6 +1912,7 @@ class DB {
 
         void set_part_num(uint64_t _part_num) { part_num = _part_num; }
         void set_mp_part_str(std::string _mp_part_str) { mp_part_str = _mp_part_str; }
+        void set_upload_id(std::string _upload_id) { upload_id = _upload_id; }
         int prepare(const DoutPrefixProvider* dpp);
         int write_data(const DoutPrefixProvider* dpp,
                                bufferlist& data, uint64_t ofs);

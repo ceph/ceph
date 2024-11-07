@@ -1214,6 +1214,10 @@ int DB::raw_obj::write(const DoutPrefixProvider *dpp, int64_t ofs, int64_t write
   db->InitializeParams(dpp, &params);
   InitializeParamsfromRawObj(dpp, &params);
 
+  /* pseudo fk for this upload, we'll use this to scope updates to part/stripe
+   * rows (e.g., setting obj_instance) during multipart-complete */
+  params.op.obj_data.upload_id = upload_id;
+
   /* XXX: Check for chunk_size ?? */
   params.op.obj_data.offset = ofs;
   unsigned write_len = std::min((uint64_t)bl.length() - write_ofs, len);
@@ -1470,7 +1474,7 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   uint64_t stripe_num = (ofs / max_chunk_size);
   /* XXX: Handle multipart_str */
   raw_obj read_obj(store, source->get_bucket_info().bucket.name, astate->obj.key.name, 
-      astate->obj.key.instance, astate->obj.key.ns, source->obj_id, "0.0",
+      astate->obj.key.instance, astate->obj.key.ns, source->obj_id, "0.0", "" /* upload_id*/,
       0UL, stripe_num);
 
   read_len = len;
@@ -1589,7 +1593,7 @@ int DB::Object::iterate_obj(const DoutPrefixProvider *dpp,
 
     /* XXX: Handle multipart_str */
     raw_obj read_obj(store, get_bucket_info().bucket.name, astate->obj.key.name, 
-        astate->obj.key.instance, astate->obj.key.ns, obj_id, "0.0",
+        astate->obj.key.instance, astate->obj.key.ns, obj_id, "0.0", "" /* upload_id */,
         0UL, stripe_num);
     bool reading_from_head = (ofs < head_data_size);
 
@@ -1658,10 +1662,10 @@ int DB::Object::Write::write_data(const DoutPrefixProvider* dpp,
     stripe_num = (ofs / max_chunk_size);
     uint64_t len = std::min(end, max_chunk_size);
 
-    /* XXX: Handle multipart_str */
+    /* XXX: mp_part_str still needed? */
     raw_obj write_obj(store, target->get_bucket_info().bucket.name, obj_state.obj.key.name, 
-        obj_state.obj.key.instance, obj_state.obj.key.ns, target->obj_id, mp_part_str,
-        part_num, stripe_num);
+        obj_state.obj.key.instance, obj_state.obj.key.ns, target->obj_id,
+        mp_part_str, upload_id, part_num, stripe_num);
 
 
     ldpp_dout(dpp, 20) << "dbstore->write obj-ofs=" << ofs << " write_len=" << len << dendl;

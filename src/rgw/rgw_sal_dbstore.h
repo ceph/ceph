@@ -672,9 +672,10 @@ protected:
   class DBMultipartWriter : public StoreWriter {
   protected:
     rgw::sal::DBStore* store;
+    DBMultipartUpload* upload;
     const ACLOwner& owner;
-	const rgw_placement_rule *ptail_placement_rule;
-	uint64_t olh_epoch;
+    const rgw_placement_rule *ptail_placement_rule;
+    uint64_t olh_epoch;
     rgw::sal::Object* head_obj;
     std::string upload_id;
     int part_num;
