@@ -74,6 +74,8 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
         return lba_manager->mkfs(t);
       }).si_then([this, &t] {
         return backref_manager->mkfs(t);
+      }).si_then([this, &t] {
+        return init_root_meta(t);
       }).si_then([this, FNAME, &t] {
         INFOT("submitting mkfs transaction", t);
         return submit_transaction_direct(t);
