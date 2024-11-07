@@ -179,18 +179,24 @@ enum MirrorImageState {
   MIRROR_IMAGE_STATE_CREATING  = 3,
 };
 
+// Indicates whether the image was mirrored enabled as part of a group
+enum MirrorImageType {
+  MIRROR_IMAGE_TYPE_STANDALONE  = 0,
+  MIRROR_IMAGE_TYPE_GROUP       = 1,
+};
+
 struct MirrorImage {
   MirrorImage() {
   }
   MirrorImage(MirrorImageMode mode, const std::string &global_image_id,
-              const GroupSpec &group_spec, MirrorImageState state)
-    : mode(mode), global_image_id(global_image_id), group_spec(group_spec),
+              MirrorImageType type, MirrorImageState state)
+    : mode(mode), global_image_id(global_image_id), type(type),
       state(state) {
   }
 
   MirrorImageMode mode = MIRROR_IMAGE_MODE_JOURNAL;
   std::string global_image_id;
-  GroupSpec group_spec;
+  MirrorImageType type = MIRROR_IMAGE_TYPE_STANDALONE;
   MirrorImageState state = MIRROR_IMAGE_STATE_DISABLING;
 
   void encode(ceph::buffer::list &bl) const;
@@ -205,6 +211,7 @@ struct MirrorImage {
 
 std::ostream& operator<<(std::ostream& os, const MirrorImageMode& mirror_mode);
 std::ostream& operator<<(std::ostream& os, const MirrorImageState& mirror_state);
+std::ostream& operator<<(std::ostream& os, const MirrorImageType& mirror_type);
 std::ostream& operator<<(std::ostream& os, const MirrorImage& mirror_image);
 
 WRITE_CLASS_ENCODER(MirrorImage);
@@ -650,13 +657,13 @@ struct UserSnapshotNamespace {
   }
 };
 
-struct GroupImageSnapshotNamespace {
+struct ImageSnapshotNamespaceGroup {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
     SNAPSHOT_NAMESPACE_TYPE_GROUP;
 
-  GroupImageSnapshotNamespace() {}
+  ImageSnapshotNamespaceGroup() {}
 
-  GroupImageSnapshotNamespace(int64_t _group_pool,
+  ImageSnapshotNamespaceGroup(int64_t _group_pool,
                               const std::string &_group_id,
                               const std::string &_group_snapshot_id)
     : group_id(_group_id), group_pool(_group_pool),
@@ -671,17 +678,17 @@ struct GroupImageSnapshotNamespace {
 
   void dump(ceph::Formatter *f) const;
 
-  inline bool operator==(const GroupImageSnapshotNamespace& gsn) const {
+  inline bool operator==(const ImageSnapshotNamespaceGroup& gsn) const {
     return group_pool == gsn.group_pool &&
 	   group_id == gsn.group_id &&
 	   group_snapshot_id == gsn.group_snapshot_id;
   }
 
-  inline bool operator!=(const GroupImageSnapshotNamespace& gsn) const {
+  inline bool operator!=(const ImageSnapshotNamespaceGroup& gsn) const {
     return !operator==(gsn);
   }
 
-  inline bool operator<(const GroupImageSnapshotNamespace& gsn) const {
+  inline bool operator<(const ImageSnapshotNamespaceGroup& gsn) const {
     if (group_pool != gsn.group_pool) {
       return group_pool < gsn.group_pool;
     }
@@ -877,13 +884,13 @@ struct UnknownSnapshotNamespace {
 
 std::ostream& operator<<(std::ostream& os, const SnapshotNamespaceType& type);
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
-std::ostream& operator<<(std::ostream& os, const GroupImageSnapshotNamespace& ns);
+std::ostream& operator<<(std::ostream& os, const ImageSnapshotNamespaceGroup& ns);
 std::ostream& operator<<(std::ostream& os, const TrashSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const MirrorSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns);
 
 typedef std::variant<UserSnapshotNamespace,
-		     GroupImageSnapshotNamespace,
+		     ImageSnapshotNamespaceGroup,
 		     TrashSnapshotNamespace,
 		     MirrorSnapshotNamespace,
 		     UnknownSnapshotNamespace> SnapshotNamespaceVariant;
@@ -944,11 +951,11 @@ enum GroupSnapshotNamespaceType {
   GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR = 1,
 };
 
-struct UserGroupSnapshotNamespace {
+struct GroupSnapshotNamespaceUser {
   static const GroupSnapshotNamespaceType GROUP_SNAPSHOT_NAMESPACE_TYPE =
     GROUP_SNAPSHOT_NAMESPACE_TYPE_USER;
 
-  UserGroupSnapshotNamespace() {}
+  GroupSnapshotNamespaceUser() {}
 
   void encode(ceph::buffer::list& bl) const {
   }
@@ -957,16 +964,16 @@ struct UserGroupSnapshotNamespace {
   void dump(ceph::Formatter *f) const {
   }
 
-  inline bool operator==(const UserGroupSnapshotNamespace& usn) const {
+  inline bool operator==(const GroupSnapshotNamespaceUser& usn) const {
     return true;
   }
 
-  inline bool operator<(const UserGroupSnapshotNamespace& usn) const {
+  inline bool operator<(const GroupSnapshotNamespaceUser& usn) const {
     return false;
   }
 };
 
-struct MirrorGroupSnapshotNamespace {
+struct GroupSnapshotNamespaceMirror {
   static const GroupSnapshotNamespaceType GROUP_SNAPSHOT_NAMESPACE_TYPE =
     GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR;
 
@@ -976,9 +983,9 @@ struct MirrorGroupSnapshotNamespace {
   std::string primary_mirror_uuid;
   std::string primary_snap_id;
 
-  MirrorGroupSnapshotNamespace() {
+  GroupSnapshotNamespaceMirror() {
   }
-  MirrorGroupSnapshotNamespace(MirrorSnapshotState state,
+  GroupSnapshotNamespaceMirror(MirrorSnapshotState state,
                                const std::set<std::string> &mirror_peer_uuids,
                                const std::string &primary_mirror_uuid,
                                const std::string &primary_snap_id)
@@ -1013,14 +1020,14 @@ struct MirrorGroupSnapshotNamespace {
 
   void dump(ceph::Formatter *f) const;
 
-  inline bool operator==(const MirrorGroupSnapshotNamespace& rhs) const {
+  inline bool operator==(const GroupSnapshotNamespaceMirror& rhs) const {
     return state == rhs.state &&
            mirror_peer_uuids == rhs.mirror_peer_uuids &&
            primary_mirror_uuid == rhs.primary_mirror_uuid &&
            primary_snap_id == rhs.primary_snap_id;
   }
 
-  inline bool operator<(const MirrorGroupSnapshotNamespace& rhs) const {
+  inline bool operator<(const GroupSnapshotNamespaceMirror& rhs) const {
     if (state != rhs.state) {
       return state < rhs.state;
     } else if (mirror_peer_uuids != rhs.mirror_peer_uuids) {
@@ -1033,11 +1040,11 @@ struct MirrorGroupSnapshotNamespace {
   }
 };
 
-struct UnknownGroupSnapshotNamespace {
+struct GroupSnapshotNamespaceUnknown {
   static const GroupSnapshotNamespaceType GROUP_SNAPSHOT_NAMESPACE_TYPE =
     static_cast<GroupSnapshotNamespaceType>(-1);
 
-  UnknownGroupSnapshotNamespace() {}
+  GroupSnapshotNamespaceUnknown() {}
 
   void encode(ceph::buffer::list& bl) const {
   }
@@ -1046,23 +1053,23 @@ struct UnknownGroupSnapshotNamespace {
   void dump(ceph::Formatter *f) const {
   }
 
-  inline bool operator==(const UnknownGroupSnapshotNamespace& gsn) const {
+  inline bool operator==(const GroupSnapshotNamespaceUnknown& gsn) const {
     return true;
   }
 
-  inline bool operator<(const UnknownGroupSnapshotNamespace& gsn) const {
+  inline bool operator<(const GroupSnapshotNamespaceUnknown& gsn) const {
     return false;
   }
 };
 
 std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceType& type);
-std::ostream& operator<<(std::ostream& os, const UserGroupSnapshotNamespace& ns);
-std::ostream& operator<<(std::ostream& os, const MirrorGroupSnapshotNamespace& ns);
-std::ostream& operator<<(std::ostream& os, const UnknownGroupSnapshotNamespace& ns);
+std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceUser& ns);
+std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceMirror& ns);
+std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceUnknown& ns);
 
-typedef std::variant<UserGroupSnapshotNamespace,
-                       MirrorGroupSnapshotNamespace,
-                       UnknownGroupSnapshotNamespace> GroupSnapshotNamespaceVariant;
+typedef std::variant<GroupSnapshotNamespaceUser,
+                       GroupSnapshotNamespaceMirror,
+                       GroupSnapshotNamespaceUnknown> GroupSnapshotNamespaceVariant;
 
 struct GroupSnapshotNamespace : public GroupSnapshotNamespaceVariant {
   using GroupSnapshotNamespaceVariant::GroupSnapshotNamespaceVariant;
@@ -1143,7 +1150,7 @@ WRITE_CLASS_ENCODER(ImageSnapshotSpec);
 
 struct GroupSnapshot {
   std::string id;
-  GroupSnapshotNamespace snapshot_namespace = {UserGroupSnapshotNamespace{}};
+  GroupSnapshotNamespace snapshot_namespace = {GroupSnapshotNamespaceUser{}};
   std::string name;
 
   GroupSnapshotState state = GROUP_SNAPSHOT_STATE_INCOMPLETE;
