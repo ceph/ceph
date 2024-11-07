@@ -24,6 +24,7 @@
 #include "svc_tier_rados.h"
 
 struct rgw_bucket_dir_header;
+struct rgw_cls_list_ret;
 
 class RGWSI_BILog_RADOS;
 
@@ -144,6 +145,26 @@ public:
                          cls_rgw_reshard_status status);
   int trim_reshard_log(const DoutPrefixProvider* dpp, optional_yield,
                        const RGWBucketInfo& bucket_info);
+
+  int set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y,
+                      const RGWBucketInfo& bucket_info, uint64_t timeout);
+
+  int check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                  const RGWBucketInfo& bucket_info,
+                  std::map<int, bufferlist>& buffers);
+
+  int rebuild_index(const DoutPrefixProvider *dpp, optional_yield y,
+                    const RGWBucketInfo& bucket_info);
+
+  /// Read the requested number of entries from each index shard object.
+  int list_objects(const DoutPrefixProvider* dpp, optional_yield y,
+                   librados::IoCtx& index_pool,
+                   const std::map<int, std::string>& bucket_objs,
+                   const cls_rgw_obj_key& start_obj,
+                   const std::string& prefix,
+                   const std::string& delimiter,
+                   uint32_t num_entries, bool list_versions,
+                   std::map<int, rgw_cls_list_ret>& results);
 
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info,
