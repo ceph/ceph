@@ -2433,7 +2433,7 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
       /* only remove it if it's a different bucket instance */
       if (orig_info.bucket.bucket_id != bucket.bucket_id) {
         if (zone_placement) {
-          r = svc.bi->clean_index(dpp, info, info.layout.current_index);
+          r = svc.bi->clean_index(dpp, y, info, info.layout.current_index);
           if (r < 0) {
             ldpp_dout(dpp, 0) << "WARNING: could not remove bucket index (r=" << r << ")" << dendl;
           }

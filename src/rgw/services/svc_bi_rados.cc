@@ -435,7 +435,9 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
   return ceph::from_error_code(ec);
 }
 
-int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
+                                         optional_yield y,
+                                         const RGWBucketInfo& bucket_info,
                                          const rgw::bucket_index_layout_generation& idx_layout)
 {
   librados::IoCtx index_pool;
