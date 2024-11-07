@@ -336,3 +336,6 @@ std::optional<hobject_t> resolve_oid(const SnapSet &ss,
                                      const hobject_t &oid);
 
 } // namespace crimson::osd
+
+template <>
+struct fmt::formatter<RWState::State> : fmt::ostream_formatter {};
