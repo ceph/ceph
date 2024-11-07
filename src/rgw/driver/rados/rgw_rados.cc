@@ -5993,51 +5993,25 @@ int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y
 				 map<RGWObjCategory, RGWStorageStats> *existing_stats,
 				 map<RGWObjCategory, RGWStorageStats> *calculated_stats)
 {
-  librados::IoCtx index_pool;
-
-  // key - bucket index object id
-  // value - bucket index check OP returned result with the given bucket index object (shard)
-  map<int, string> oids;
-
-  int ret = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &oids, nullptr);
+  std::map<int, bufferlist> buffers;
+  int ret = svc.bi_rados->check_index(dpp, y, bucket_info, buffers);
   if (ret < 0) {
     return ret;
   }
 
-  // declare and pre-populate
-  map<int, struct rgw_cls_check_index_ret> bucket_objs_ret;
-  for (auto& iter : oids) {
-    bucket_objs_ret.emplace(iter.first, rgw_cls_check_index_ret());
-  }
+  try {
+    // decode and accumulate the results
+    for (const auto& kv : buffers) {
+      rgw_cls_check_index_ret result;
+      cls_rgw_bucket_check_index_decode(kv.second, result);
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  ret = CLSRGWIssueBucketCheck(index_pool, oids, bucket_objs_ret, cct->_conf->rgw_bucket_index_max_aio)();
-  if (ret < 0) {
-    return ret;
+      accumulate_raw_stats(result.existing_header, *existing_stats);
+      accumulate_raw_stats(result.calculated_header, *calculated_stats);
+    }
+  } catch (const ceph::buffer::error&) {
+    return -EIO;
   }
-
-  // aggregate results (from different shards if there are any)
-  for (const auto& iter : bucket_objs_ret) {
-    accumulate_raw_stats(iter.second.existing_header, *existing_stats);
-    accumulate_raw_stats(iter.second.calculated_header, *calculated_stats);
-  }
-
   return 0;
-}
-
-int RGWRados::bucket_rebuild_index(const DoutPrefixProvider *dpp, optional_yield y,
-                                   const RGWBucketInfo& bucket_info)
-{
-  librados::IoCtx index_pool;
-  map<int, string> bucket_objs;
-
-  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
-  if (r < 0) {
-    return r;
-  }
-
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  return CLSRGWIssueBucketRebuild(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 static int resync_encrypted_multipart(const DoutPrefixProvider* dpp,
@@ -8341,6 +8315,26 @@ int RGWRados::recover_reshard_logrecord(RGWBucketInfo& bucket_info,
   return 0;
 }
 
+static int get_reshard_status(const DoutPrefixProvider* dpp, optional_yield y,
+                              librados::IoCtx& ioctx, const std::string& oid,
+                              cls_rgw_bucket_instance_entry& entry)
+{
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_get_bucket_resharding(op, bl);
+
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+  try {
+    cls_rgw_get_bucket_resharding_decode(bl, entry);
+    return 0;
+  } catch (const buffer::error&) {
+    return -EIO;
+  }
+}
+
 int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
                                      const rgw_obj& obj_instance,
                                      RGWBucketInfo& bucket_info,
@@ -8389,7 +8383,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   constexpr int num_retries = 10;
   for (int i = 1; i <= num_retries; i++) { // nb: 1-based for loop
     auto& ref = bs->bucket_obj;
-    ret = cls_rgw_get_bucket_resharding(ref.ioctx, ref.obj.oid, &entry);
+    ret = get_reshard_status(dpp, y, ref.ioctx, ref.obj.oid, entry);
     if (ret == -ENOENT) {
       ret = fetch_new_bucket_info("get_bucket_resharding_failed");
       if (ret < 0) {
@@ -10230,11 +10224,9 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 
   std::map<int, rgw_cls_list_ret> shard_list_results;
   cls_rgw_obj_key start_after_key(start_after.name, start_after.instance);
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  r = CLSRGWIssueBucketList(ioctx, start_after_key, prefix, delimiter,
-			    num_entries_per_shard,
-			    list_versions, shard_oids, shard_list_results,
-			    cct->_conf->rgw_bucket_index_max_aio)();
+  r = svc.bi_rados->list_objects(dpp, y, ioctx, shard_oids, start_after_key,
+                                 prefix, delimiter, num_entries_per_shard,
+                                 list_versions, shard_list_results);
   if (r < 0) {
     ldpp_dout(dpp, 0) << __func__ <<
       ": CLSRGWIssueBucketList for " << bucket_info.bucket <<

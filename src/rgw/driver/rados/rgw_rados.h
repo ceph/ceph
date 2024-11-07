@@ -1594,8 +1594,6 @@ public:
                          const RGWBucketInfo& bucket_info,
                          std::map<RGWObjCategory, RGWStorageStats> *existing_stats,
                          std::map<RGWObjCategory, RGWStorageStats> *calculated_stats);
-  int bucket_rebuild_index(const DoutPrefixProvider *dpp, optional_yield y,
-                           const RGWBucketInfo& bucket_info);
 
   // Search the bucket for encrypted multipart uploads, and increase their mtime
   // slightly to generate a bilog entry to trigger a resync to repair any

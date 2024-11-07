@@ -806,12 +806,12 @@ int RadosBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
 
 int RadosBucket::rebuild_index(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return store->getRados()->bucket_rebuild_index(dpp, y, info);
+  return store->svc()->bi_rados->rebuild_index(dpp, y, info);
 }
 
 int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout)
 {
-  return store->getRados()->cls_obj_set_bucket_tag_timeout(dpp, info, timeout);
+  return store->svc()->bi_rados->set_tag_timeout(dpp, y, info, timeout);
 }
 
 int RadosBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)

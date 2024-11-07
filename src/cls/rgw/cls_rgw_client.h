@@ -302,6 +302,8 @@ public:
   int operator()();
 }; // class CLSRGWConcurrentIO
 
+void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
+                                    uint64_t timeout);
 
 class CLSRGWIssueBucketIndexInit : public CLSRGWConcurrentIO {
 protected:
@@ -542,6 +544,12 @@ public:
       CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
 };
 
+void cls_rgw_bucket_check_index(librados::ObjectReadOperation& op,
+                                bufferlist& out);
+// decode the response; may throw buffer::error
+void cls_rgw_bucket_check_index_decode(const bufferlist& out,
+                                       rgw_cls_check_index_ret& result);
+
 /**
  * Check the bucket index.
  *
@@ -562,6 +570,8 @@ public:
     CLSRGWConcurrentIO(ioc, oids, _max_aio), result(bucket_objs_ret) {}
   virtual ~CLSRGWIssueBucketCheck() override {}
 };
+
+void cls_rgw_bucket_rebuild_index(librados::ObjectWriteOperation& op);
 
 class CLSRGWIssueBucketRebuild : public CLSRGWConcurrentIO {
 protected:
@@ -593,6 +603,9 @@ public:
                                  uint32_t _max_aio) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio), entry(_entry) {}
   virtual ~CLSRGWIssueSetBucketResharding() override {}
 };
+
+void cls_rgw_bilog_start(librados::ObjectWriteOperation& op);
+void cls_rgw_bilog_stop(librados::ObjectWriteOperation& op);
 
 class CLSRGWIssueResyncBucketBILog : public CLSRGWConcurrentIO {
 protected:
@@ -684,12 +697,15 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw
 // cls_rgw in the T+4 (X) release.
 void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err);
 
-// these overloads which call io_ctx.operate() should not be called in the rgw.
-// rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
-#ifndef CLS_CLIENT_HIDE_IOCTX
-int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid,
-                                  const cls_rgw_bucket_instance_entry& entry);
-int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid);
-int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid,
-                                  cls_rgw_bucket_instance_entry *entry);
-#endif
+void cls_rgw_set_bucket_resharding(librados::ObjectWriteOperation& op,
+                                   cls_rgw_reshard_status status);
+void cls_rgw_clear_bucket_resharding(librados::ObjectWriteOperation& op);
+void cls_rgw_get_bucket_resharding(librados::ObjectReadOperation& op,
+                                   bufferlist& out);
+// decode the entry; may throw buffer::error
+void cls_rgw_get_bucket_resharding_decode(const bufferlist& out,
+                                          cls_rgw_bucket_instance_entry& entry);
+
+// Try to remove all reshard log entries from the bucket index. Return success
+// if any entries were removed, and -ENODATA once they're all gone.
+void cls_rgw_bucket_reshard_log_trim(librados::ObjectWriteOperation& op);
