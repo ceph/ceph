@@ -5509,11 +5509,8 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
       return r;
     }
 
-   /* remove bucket index objects asynchronously by best effort */
-    maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-    (void) CLSRGWIssueBucketIndexClean(index_pool,
-				       bucket_objs,
-				       cct->_conf->rgw_bucket_index_max_aio)();
+    /* remove bucket index objects asynchronously by best effort */
+    std::ignore = svc.bi->clean_index(dpp, y, bucket_info, bucket_info.layout.current_index);
   }
 
   return 0;
