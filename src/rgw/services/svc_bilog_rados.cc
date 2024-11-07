@@ -20,7 +20,7 @@ void RGWSI_BILog_RADOS::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
   svc.bi = bi_rados_svc;
 }
 
-int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp,
+int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
 				const RGWBucketInfo& bucket_info,
 				const rgw::bucket_log_layout_generation& log_layout,
 				int shard_id,
@@ -54,7 +54,10 @@ int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp,
 			      cct->_conf->rgw_bucket_index_max_aio)();
 }
 
-int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
+int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, optional_yield y,
+                                 const RGWBucketInfo& bucket_info,
+                                 const rgw::bucket_log_layout_generation& log_layout,
+                                 int shard_id)
 {
   librados::IoCtx index_pool;
   map<int, string> bucket_objs;
@@ -67,7 +70,10 @@ int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, const RGWBucketI
   return CLSRGWIssueResyncBucketBILog(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
-int RGWSI_BILog_RADOS::log_stop(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
+int RGWSI_BILog_RADOS::log_stop(const DoutPrefixProvider *dpp, optional_yield y,
+                                const RGWBucketInfo& bucket_info,
+                                const rgw::bucket_log_layout_generation& log_layout,
+                                int shard_id)
 {
   librados::IoCtx index_pool;
   map<int, string> bucket_objs;
@@ -90,7 +96,7 @@ static void build_bucket_index_marker(const string& shard_id_str,
   }
 }
 
-int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp,
+int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp, optional_yield y,
 				const RGWBucketInfo& bucket_info,
 				const rgw::bucket_log_layout_generation& log_layout,
 				int shard_id, string& marker, uint32_t max,

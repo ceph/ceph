@@ -494,7 +494,7 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
     return ret;
 
   const auto& index = info.get_current_index();
-  ret = read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  ret = read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -638,13 +638,13 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   return ret;
 }
 
-int RadosBucket::read_stats(const DoutPrefixProvider *dpp,
+int RadosBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			    const bucket_index_layout_generation& idx_layout,
 			    int shard_id, std::string* bucket_ver, std::string* master_ver,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
 			    std::string* max_marker, bool* syncstopped)
 {
-  return store->getRados()->get_bucket_stats(dpp, info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
+  return store->getRados()->get_bucket_stats(dpp, y, info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
 }
 
 int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
@@ -797,17 +797,19 @@ int RadosBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list
   return store->getRados()->remove_objs_from_index(dpp, info, objs_to_unlink);
 }
 
-int RadosBucket::check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
+int RadosBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                             std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                             std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
 {
-  return store->getRados()->bucket_check_index(dpp, info, &existing_stats, &calculated_stats);
+  return store->getRados()->bucket_check_index(dpp, y, info, &existing_stats, &calculated_stats);
 }
 
-int RadosBucket::rebuild_index(const DoutPrefixProvider *dpp)
+int RadosBucket::rebuild_index(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return store->getRados()->bucket_rebuild_index(dpp, info);
+  return store->getRados()->bucket_rebuild_index(dpp, y, info);
 }
 
-int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout)
+int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout)
 {
   return store->getRados()->cls_obj_set_bucket_tag_timeout(dpp, info, timeout);
 }
@@ -2535,7 +2537,8 @@ RadosObject::~RadosObject()
 }
 
 bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
-   const ceph::real_time& obj_mtime)
+                                    optional_yield y,
+                                    const ceph::real_time& obj_mtime)
 {
   const auto& bucket_info = get_bucket()->get_info();
   if (bucket_info.is_indexless()) {
@@ -2552,7 +2555,7 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
 
   const int shard_id = RGWSI_BucketIndex_RADOS::bucket_shard_index(get_key(), shard_count);
 
-  int ret = store->svc()->bilog_rados->log_list(dpp, bucket_info, log_layout, shard_id,
+  int ret = store->svc()->bilog_rados->log_list(dpp, y, bucket_info, log_layout, shard_id,
     marker, 1, entries, &truncated);
 
   if (ret < 0) {

@@ -563,7 +563,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   }
 
   // use a quicker/shorter tag timeout during this process
-  bucket->set_tag_timeout(dpp, BUCKET_TAG_QUICK_TIMEOUT);
+  bucket->set_tag_timeout(dpp, y, BUCKET_TAG_QUICK_TIMEOUT);
 
   rgw::sal::Bucket::ListResults results;
   results.is_truncated = true;
@@ -591,7 +591,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   formatter->close_section();
 
   // restore normal tag timeout for bucket
-  bucket->set_tag_timeout(dpp, 0);
+  bucket->set_tag_timeout(dpp, y, 0);
 
   return 0;
 }
@@ -988,7 +988,7 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
   return 0;
 }
 
-int RGWBucket::check_index(const DoutPrefixProvider *dpp,
+int RGWBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
         RGWBucketAdminOpState& op_state,
         map<RGWObjCategory, RGWStorageStats>& existing_stats,
         map<RGWObjCategory, RGWStorageStats>& calculated_stats,
@@ -996,14 +996,14 @@ int RGWBucket::check_index(const DoutPrefixProvider *dpp,
 {
   bool fix_index = op_state.will_fix_index();
 
-  int r = bucket->check_index(dpp, existing_stats, calculated_stats);
+  int r = bucket->check_index(dpp, y, existing_stats, calculated_stats);
   if (r < 0) {
     set_err_msg(err_msg, "failed to check index error=" + cpp_strerror(-r));
     return r;
   }
 
   if (fix_index) {
-    r = bucket->rebuild_index(dpp);
+    r = bucket->rebuild_index(dpp, y);
     if (r < 0) {
       set_err_msg(err_msg, "failed to rebuild index err=" + cpp_strerror(-r));
       return r;
@@ -1420,7 +1420,7 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver,
     }
   }
 
-  ret = bucket.check_index(dpp, op_state, existing_stats, calculated_stats);
+  ret = bucket.check_index(dpp, y, op_state, existing_stats, calculated_stats);
   if (ret < 0) {
     return ret;
   }
@@ -1499,7 +1499,7 @@ static int bucket_stats(rgw::sal::Driver* driver,
 
   std::string bucket_ver, master_ver;
   std::string max_marker;
-  ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+  ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
     return ret;
@@ -1613,7 +1613,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 	/* need stats for num_entries */
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
-	ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
+	ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
 
 	if (ret < 0)
 	  continue;
@@ -2915,7 +2915,7 @@ int RGWBucketInstanceMetadataHandler::put_post(
     const std::optional<RGWBucketCompleteInfo>& old_bci,
     RGWObjVersionTracker& objv_tracker)
 {
-  int ret = svc_bi->init_index(dpp, bci.info, bci.info.layout.current_index);
+  int ret = svc_bi->init_index(dpp, y, bci.info, bci.info.layout.current_index);
   if (ret < 0) {
     return ret;
   }

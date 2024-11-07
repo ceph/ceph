@@ -355,6 +355,7 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
 }
 
 int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
+                                        optional_yield y,
                                         const RGWBucketInfo& bucket_info,
                                         const rgw::bucket_index_layout_generation& idx_layout,
                                         bool judge_support_logrecord)
@@ -388,7 +389,9 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
   }
 }
 
-int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
+                                         optional_yield y,
+                                         const RGWBucketInfo& bucket_info,
                                          const rgw::bucket_index_layout_generation& idx_layout)
 {
   if (idx_layout.layout.type != rgw::BucketIndexType::Normal) {
@@ -449,7 +452,10 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, list<cls_rgw_bucket_instance_entry> *status)
+int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp,
+                                                optional_yield y,
+                                                const RGWBucketInfo& bucket_info,
+                                                list<cls_rgw_bucket_instance_entry> *status)
 {
   map<int, string> bucket_objs;
 
@@ -481,6 +487,7 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp, c
 }
 
 int RGWSI_BucketIndex_RADOS::set_reshard_status(const DoutPrefixProvider *dpp,
+                                                optional_yield y,
                                                 const RGWBucketInfo& bucket_info,
                                                 cls_rgw_reshard_status status)
 {
@@ -543,9 +550,9 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
 
   int ret;
   if (!new_sync_enabled) {
-    ret = svc.bilog->log_stop(dpp, info, bilog, -1);
+    ret = svc.bilog->log_stop(dpp, y, info, bilog, -1);
   } else {
-    ret = svc.bilog->log_start(dpp, info, bilog, -1);
+    ret = svc.bilog->log_start(dpp, y, info, bilog, -1);
   }
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed writing bilog (bucket=" << info.bucket << "); ret=" << ret << dendl;
