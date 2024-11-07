@@ -183,7 +183,14 @@ class HealthTest(DashboardTestCase):
                     'num_osds': int,
                     'num_per_pool_osds': int,
                     'num_per_pool_omap_osds': int
-                })
+                }),
+                'aux_pool_sum': JList(JObj({
+                    'name': str,
+                    'id': int,
+                    'bytes_used': int,
+                    'meta': int,
+                    'omap': int
+                }))
             }),
             'fs_map': JObj({
                 'btime': str,
