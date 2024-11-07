@@ -354,6 +354,7 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
 }
 
 int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
+                                        optional_yield y,
                                         const RGWBucketInfo& bucket_info,
                                         const rgw::bucket_index_layout_generation& idx_layout,
                                         bool judge_support_logrecord)

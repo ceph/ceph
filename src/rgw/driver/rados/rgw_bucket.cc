@@ -2890,7 +2890,7 @@ int RGWBucketInstanceMetadataHandler::put_post(
     const std::optional<RGWBucketCompleteInfo>& old_bci,
     RGWObjVersionTracker& objv_tracker)
 {
-  int ret = svc_bi->init_index(dpp, bci.info, bci.info.layout.current_index);
+  int ret = svc_bi->init_index(dpp, y, bci.info, bci.info.layout.current_index);
   if (ret < 0) {
     return ret;
   }

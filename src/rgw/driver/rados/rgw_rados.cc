@@ -2407,7 +2407,7 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
     }
 
     if (zone_placement) {
-      ret = svc.bi->init_index(dpp, info, info.layout.current_index);
+      ret = svc.bi->init_index(dpp, y, info, info.layout.current_index);
       if (ret < 0) {
         return ret;
       }
