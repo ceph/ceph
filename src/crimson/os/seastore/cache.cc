@@ -172,6 +172,7 @@ void Cache::register_metrics()
     {extent_types_t::LADDR_INTERNAL,      sm::label_instance("ext", "LADDR_INTERNAL")},
     {extent_types_t::LADDR_LEAF,          sm::label_instance("ext", "LADDR_LEAF")},
     {extent_types_t::DINK_LADDR_LEAF,     sm::label_instance("ext", "DINK_LADDR_LEAF")},
+    {extent_types_t::ROOT_META,           sm::label_instance("ext", "ROOT_META")},
     {extent_types_t::OMAP_INNER,          sm::label_instance("ext", "OMAP_INNER")},
     {extent_types_t::OMAP_LEAF,           sm::label_instance("ext", "OMAP_LEAF")},
     {extent_types_t::ONODE_BLOCK_STAGED,  sm::label_instance("ext", "ONODE_BLOCK_STAGED")},
@@ -1092,6 +1093,9 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
     return alloc_new_non_data_extent<lba_manager::btree::LBAInternalNode>(t, length, hint, gen);
   case extent_types_t::LADDR_LEAF:
     return alloc_new_non_data_extent<lba_manager::btree::LBALeafNode>(
+      t, length, hint, gen);
+  case extent_types_t::ROOT_META:
+    return alloc_new_non_data_extent<RootMetaBlock>(
       t, length, hint, gen);
   case extent_types_t::ONODE_BLOCK_STAGED:
     return alloc_new_non_data_extent<onode::SeastoreNodeExtent>(
@@ -2192,6 +2196,12 @@ Cache::do_get_caching_extent_by_type(
 	offset, length, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::ROOT_META:
+      return do_get_caching_extent<RootMetaBlock>(
+	offset, length, std::move(extent_init_func), std::move(on_cache)
+      ).safe_then([](auto extent) {
+        return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_INNER:
       return do_get_caching_extent<omap_manager::OMapInnerNode>(

@@ -1378,23 +1378,24 @@ enum class extent_types_t : uint8_t {
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
   DINK_LADDR_LEAF = 3, // should only be used for unitttests
-  OMAP_INNER = 4,
-  OMAP_LEAF = 5,
-  ONODE_BLOCK_STAGED = 6,
-  COLL_BLOCK = 7,
-  OBJECT_DATA_BLOCK = 8,
-  RETIRED_PLACEHOLDER = 9,
+  ROOT_META = 4,
+  OMAP_INNER = 5,
+  OMAP_LEAF = 6,
+  ONODE_BLOCK_STAGED = 7,
+  COLL_BLOCK = 8,
+  OBJECT_DATA_BLOCK = 9,
+  RETIRED_PLACEHOLDER = 10,
   // the following two types are not extent types,
   // they are just used to indicates paddr allocation deltas
-  ALLOC_INFO = 10,
-  JOURNAL_TAIL = 11,
+  ALLOC_INFO = 11,
+  JOURNAL_TAIL = 12,
   // Test Block Types
-  TEST_BLOCK = 12,
-  TEST_BLOCK_PHYSICAL = 13,
-  BACKREF_INTERNAL = 14,
-  BACKREF_LEAF = 15,
+  TEST_BLOCK = 13,
+  TEST_BLOCK_PHYSICAL = 14,
+  BACKREF_INTERNAL = 15,
+  BACKREF_LEAF = 16,
   // None and the number of valid extent_types_t
-  NONE = 16,
+  NONE = 17,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1409,12 +1410,12 @@ constexpr bool is_data_type(extent_types_t type) {
 }
 
 constexpr bool is_logical_metadata_type(extent_types_t type) {
-  return type >= extent_types_t::OMAP_INNER &&
+  return type >= extent_types_t::ROOT_META &&
          type <= extent_types_t::COLL_BLOCK;
 }
 
 constexpr bool is_logical_type(extent_types_t type) {
-  if ((type >= extent_types_t::OMAP_INNER &&
+  if ((type >= extent_types_t::ROOT_META &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK) {
     assert(is_logical_metadata_type(type) ||
@@ -1926,43 +1927,17 @@ using backref_root_t = phy_tree_root_t;
  * TODO: generalize this to permit more than one lba_manager implementation
  */
 struct __attribute__((packed)) root_t {
-  using meta_t = std::map<std::string, std::string>;
-
-  static constexpr int MAX_META_LENGTH = 1024;
-
   backref_root_t backref_root;
   lba_root_t lba_root;
   laddr_le_t onode_root;
   coll_root_le_t collection_root;
+  laddr_le_t meta;
 
-  char meta[MAX_META_LENGTH];
-
-  root_t() {
-    set_meta(meta_t{});
-  }
+  root_t() = default;
 
   void adjust_addrs_from_base(paddr_t base) {
     lba_root.adjust_addrs_from_base(base);
     backref_root.adjust_addrs_from_base(base);
-  }
-
-  meta_t get_meta() {
-    bufferlist bl;
-    bl.append(ceph::buffer::create_static(MAX_META_LENGTH, meta));
-    meta_t ret;
-    auto iter = bl.cbegin();
-    decode(ret, iter);
-    return ret;
-  }
-
-  void set_meta(const meta_t &m) {
-    ceph::bufferlist bl;
-    encode(m, bl);
-    ceph_assert(bl.length() < MAX_META_LENGTH);
-    bl.rebuild();
-    auto &bptr = bl.front();
-    ::memset(meta, 0, MAX_META_LENGTH);
-    ::memcpy(meta, bptr.c_str(), bl.length());
   }
 };
 
