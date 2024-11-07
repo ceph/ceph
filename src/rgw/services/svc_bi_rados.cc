@@ -435,6 +435,28 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
   return ceph::from_error_code(ec);
 }
 
+struct IndexCleanWriter : rgwrados::shard_io::RadosWriter {
+  IndexCleanWriter(const DoutPrefixProvider& dpp,
+                   boost::asio::any_io_executor ex,
+                   librados::IoCtx& ioctx)
+    : RadosWriter(dpp, std::move(ex), ioctx)
+  {}
+  void prepare_write(int shard, librados::ObjectWriteOperation& op) override {
+    op.remove();
+  }
+  Result on_complete(int, boost::system::error_code ec) override {
+    // ignore ENOENT
+    if (ec && ec != boost::system::errc::no_such_file_or_directory) {
+      return Result::Error;
+    } else {
+      return Result::Success;
+    }
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "clean index shards: ";
+  }
+};
+
 int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
                                          optional_yield y,
                                          const RGWBucketInfo& bucket_info,
@@ -454,10 +476,25 @@ int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards,
                            idx_layout.gen, &bucket_objs);
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  return CLSRGWIssueBucketIndexClean(index_pool,
-				     bucket_objs,
-				     cct->_conf->rgw_bucket_index_max_aio)();
+  const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto writer = IndexCleanWriter{*dpp, ex, index_pool};
+
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
+  } else {
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto writer = IndexCleanWriter{*dpp, ex, index_pool};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
+                                     ceph::async::use_blocked[ec]);
+  }
+  return ceph::from_error_code(ec);
 }
 
 int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
