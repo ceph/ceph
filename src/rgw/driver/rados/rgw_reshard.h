@@ -117,7 +117,8 @@ public:
               bool verbose = false, std::ostream *out = nullptr,
               ceph::Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
-  int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
+  int get_status(const DoutPrefixProvider *dpp, optional_yield y,
+                 std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider* dpp, optional_yield y);
   int renew_lock_if_needed(const DoutPrefixProvider *dpp);
 

@@ -1455,7 +1455,8 @@ public:
     rctx->set_compressed(obj);
   }
   int decode_policy(const DoutPrefixProvider *dpp, bufferlist& bl, ACLOwner *owner);
-  int get_bucket_stats(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, std::string *bucket_ver, std::string *master_ver,
+  int get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                       RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, std::string *bucket_ver, std::string *master_ver,
       std::map<RGWObjCategory, RGWStorageStats>& stats, std::string *max_marker, bool* syncstopped = NULL);
   int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb);
 
@@ -1589,10 +1590,12 @@ public:
 
   int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket);
 
-  int bucket_check_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
+  int bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                         const RGWBucketInfo& bucket_info,
                          std::map<RGWObjCategory, RGWStorageStats> *existing_stats,
                          std::map<RGWObjCategory, RGWStorageStats> *calculated_stats);
-  int bucket_rebuild_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info);
+  int bucket_rebuild_index(const DoutPrefixProvider *dpp, optional_yield y,
+                           const RGWBucketInfo& bucket_info);
 
   // Search the bucket for encrypted multipart uploads, and increase their mtime
   // slightly to generate a bilog entry to trigger a resync to repair any
