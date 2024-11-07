@@ -31,10 +31,18 @@ struct OMapInnerNode
     StringKVInnerNodeLayout {
   using OMapInnerNodeRef = TCachedExtentRef<OMapInnerNode>;
   using internal_iterator_t = const_iterator;
-  template <typename... T>
-  OMapInnerNode(T&&... t) :
-    OMapNode(std::forward<T>(t)...),
-    StringKVInnerNodeLayout(get_bptr().c_str()) {}
+
+  explicit OMapInnerNode(ceph::bufferptr &&ptr)
+    : OMapNode(std::move(ptr)) {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
+  // Must be identical with OMapInnerNode(ptr) after on_fully_loaded()
+  explicit OMapInnerNode(extent_len_t length)
+    : OMapNode(length) {}
+  OMapInnerNode(const OMapInnerNode &rhs)
+    : OMapNode(rhs) {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
 
   omap_node_meta_t get_node_meta() const final { return get_meta(); }
   bool extent_will_overflow(size_t ksize, std::optional<size_t> vsize) const {
@@ -45,6 +53,10 @@ struct OMapInnerNode
   }
   bool extent_is_below_min() const { return below_min(); }
   uint32_t get_node_size() { return get_size(); }
+
+  void on_fully_loaded() final {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     assert(delta_buffer.empty());
@@ -148,10 +160,18 @@ struct OMapLeafNode
 
   using OMapLeafNodeRef = TCachedExtentRef<OMapLeafNode>;
   using internal_iterator_t = const_iterator;
-  template <typename... T>
-  OMapLeafNode(T&&... t) :
-    OMapNode(std::forward<T>(t)...),
-    StringKVLeafNodeLayout(get_bptr().c_str()) {}
+
+  explicit OMapLeafNode(ceph::bufferptr &&ptr)
+    : OMapNode(std::move(ptr)) {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
+  // Must be identical with OMapLeafNode(ptr) after on_fully_loaded()
+  explicit OMapLeafNode(extent_len_t length)
+    : OMapNode(length) {}
+  OMapLeafNode(const OMapLeafNode &rhs)
+    : OMapNode(rhs) {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
 
   omap_node_meta_t get_node_meta() const final { return get_meta(); }
   bool extent_will_overflow(
@@ -163,6 +183,10 @@ struct OMapLeafNode
   }
   bool extent_is_below_min() const { return below_min(); }
   uint32_t get_node_size() { return get_size(); }
+
+  void on_fully_loaded() final {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     assert(delta_buffer.empty());
