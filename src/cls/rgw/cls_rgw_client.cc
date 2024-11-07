@@ -192,32 +192,10 @@ void cls_rgw_bucket_init_index(ObjectWriteOperation& o)
   o.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX, in);
 }
 
-static bool issue_bucket_index_init_op(librados::IoCtx& io_ctx,
-				       const int shard_id,
-				       const string& oid,
-				       BucketIndexAioManager *manager) {
-  bufferlist in;
-  librados::ObjectWriteOperation op;
-  op.create(true);
-  cls_rgw_bucket_init_index(op);
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
 void cls_rgw_bucket_init_index2(ObjectWriteOperation& o)
 {
   bufferlist in;
   o.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX2, in);
-}
-
-static bool issue_bucket_index_init_op2(librados::IoCtx& io_ctx,
-				       const int shard_id,
-				       const string& oid,
-				       BucketIndexAioManager *manager) {
-  bufferlist in;
-  librados::ObjectWriteOperation op;
-  op.create(true);
-  cls_rgw_bucket_init_index2(op);
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 
 static bool issue_bucket_index_clean_op(librados::IoCtx& io_ctx,
@@ -242,32 +220,6 @@ static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
   ObjectWriteOperation op;
   op.exec(RGW_CLASS, RGW_BUCKET_SET_TAG_TIMEOUT, in);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-int CLSRGWIssueBucketIndexInit::issue_op(const int shard_id, const string& oid)
-{
-  return issue_bucket_index_init_op(io_ctx, shard_id, oid, &manager);
-}
-
-int CLSRGWIssueBucketIndexInit2::issue_op(const int shard_id, const string& oid)
-{
-  return issue_bucket_index_init_op2(io_ctx, shard_id, oid, &manager);
-}
-
-void CLSRGWIssueBucketIndexInit::cleanup()
-{
-  // Do best effort removal
-  for (auto citer = objs_container.begin(); citer != iter; ++citer) {
-    io_ctx.remove(citer->second);
-  }
-}
-
-void CLSRGWIssueBucketIndexInit2::cleanup()
-{
-  // Do best effort removal
-  for (auto citer = objs_container.begin(); citer != iter; ++citer) {
-    io_ctx.remove(citer->second);
-  }
 }
 
 int CLSRGWIssueBucketIndexClean::issue_op(const int shard_id, const string& oid)
