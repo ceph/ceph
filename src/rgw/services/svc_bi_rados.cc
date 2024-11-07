@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <algorithm>
+#include <iterator>
+
 #include "svc_bi_rados.h"
 #include "svc_bilog_rados.h"
 #include "svc_zone.h"
@@ -324,6 +327,32 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const DoutPrefixProvider *d
   return 0;
 }
 
+struct IndexHeadReader : rgwrados::shard_io::RadosReader {
+  std::map<int, bufferlist>& buffers;
+
+  IndexHeadReader(const DoutPrefixProvider& dpp,
+                  boost::asio::any_io_executor ex,
+                  librados::IoCtx& ioctx,
+                  std::map<int, bufferlist>& buffers)
+    : RadosReader(dpp, std::move(ex), ioctx), buffers(buffers)
+  {}
+  void prepare_read(int shard, librados::ObjectReadOperation& op) override {
+    auto& bl = buffers[shard];
+    op.omap_get_header(&bl, nullptr);
+  }
+  Result on_complete(int, boost::system::error_code ec) override {
+    // ignore ENOENT
+    if (ec && ec != boost::system::errc::no_such_file_or_directory) {
+      return Result::Error;
+    } else {
+      return Result::Success;
+    }
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "read dir headers: ";
+  }
+};
+
 int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
                                              const RGWBucketInfo& bucket_info,
                                              const rgw::bucket_index_layout_generation& idx_layout,
@@ -338,20 +367,42 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
   if (r < 0)
     return r;
 
-  map<int, struct rgw_cls_list_ret> list_results;
-  for (auto& iter : oids) {
-    list_results.emplace(iter.first, rgw_cls_list_ret());
+  // read omap headers into bufferlists
+  std::map<int, bufferlist> buffers;
+
+  const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto reader = IndexHeadReader{*dpp, ex, index_pool, buffers};
+
+    rgwrados::shard_io::async_reads(reader, oids, max_aio, yield[ec]);
+  } else {
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto reader = IndexHeadReader{*dpp, ex, index_pool, buffers};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_reads(reader, oids, max_aio,
+                                    ceph::async::use_blocked[ec]);
+  }
+  if (ec) {
+    return ceph::from_error_code(ec);
   }
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  r = CLSRGWIssueGetDirHeader(index_pool, oids, list_results,
-			      cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0)
-    return r;
-
-  map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
-  for(; iter != list_results.end(); ++iter) {
-    headers->push_back(std::move(iter->second.dir.header));
+  try {
+    std::transform(buffers.begin(), buffers.end(),
+                   std::back_inserter(*headers),
+                   [] (const auto& kv) {
+                     rgw_bucket_dir_header header;
+                     auto p = kv.second.cbegin();
+                     decode(header, p);
+                     return header;
+                   });
+  } catch (const ceph::buffer::error&) {
+    return -EIO;
   }
   return 0;
 }
