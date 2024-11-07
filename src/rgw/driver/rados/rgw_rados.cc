@@ -5783,11 +5783,8 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
       return r;
     }
 
-   /* remove bucket index objects asynchronously by best effort */
-    maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-    (void) CLSRGWIssueBucketIndexClean(index_pool,
-				       bucket_objs,
-				       cct->_conf->rgw_bucket_index_max_aio)();
+    /* remove bucket index objects asynchronously by best effort */
+    std::ignore = svc.bi->clean_index(dpp, y, bucket_info, bucket_info.layout.current_index);
   } else {
     // set 'deleted' flag for multisite replication to handle bucket instance removal
     r = store_delete_bucket_info_flag(bucket_info, attrs, y, dpp);
@@ -10076,18 +10073,6 @@ int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj
 			     -1 /* pool id */, 0, ent,
 			     RGWObjCategory::None, remove_objs, bilog_flags,
 			     zones_trace, log_op);
-}
-
-int RGWRados::cls_obj_set_bucket_tag_timeout(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, uint64_t timeout)
-{
-  librados::IoCtx index_pool;
-  map<int, string> bucket_objs;
-  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
-  if (r < 0)
-    return r;
-
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  return CLSRGWIssueSetTagTimeout(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio, timeout)();
 }
 
 
