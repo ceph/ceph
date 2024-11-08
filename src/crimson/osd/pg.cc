@@ -1226,31 +1226,6 @@ void PG::check_blocklisted_obc_watchers(
   }
 }
 
-PG::load_obc_iertr::future<>
-PG::with_locked_obc(const hobject_t &hobj,
-                    const OpInfo &op_info,
-                    with_obc_func_t &&f)
-{
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
-  const hobject_t oid = get_oid(hobj);
-  auto wrapper = [f=std::move(f), this](auto head, auto obc) {
-    check_blocklisted_obc_watchers(obc);
-    return f(head, obc);
-  };
-  switch (get_lock_type(op_info)) {
-  case RWState::RWREAD:
-      return obc_loader.with_obc<RWState::RWREAD>(oid, std::move(wrapper));
-  case RWState::RWWRITE:
-      return obc_loader.with_obc<RWState::RWWRITE>(oid, std::move(wrapper));
-  case RWState::RWEXCL:
-      return obc_loader.with_obc<RWState::RWEXCL>(oid, std::move(wrapper));
-  default:
-    ceph_abort();
-  };
-}
-
 void PG::update_stats(const pg_stat_t &stat) {
   peering_state.update_stats(
     [&stat] (auto& history, auto& stats) {

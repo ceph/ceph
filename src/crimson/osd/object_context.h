@@ -132,22 +132,6 @@ public:
   }
 
 private:
-  template <typename Lock, typename Func>
-  auto _with_lock(Lock& lock, Func&& func) {
-    return lock.lock(
-    ).then([&lock, func=std::forward<Func>(func), obc=Ref(this)]() mutable {
-      return seastar::futurize_invoke(
-	func
-      ).finally([&lock, obc=std::move(obc)] {
-	/* We chain the finally block here because it's possible for lock.lock()
-	 * above to fail due to a call to ObjectContext::interrupt, which calls
-	 * tri_mutex::abort.  In the event of such an error, the lock isn't
-	 * actually taken and calling unlock() would be incorrect. */
-	lock.unlock();
-      });
-    });
-  }
-
   boost::intrusive::list_member_hook<> obc_accessing_hook;
   uint64_t list_link_cnt = 0;
   bool fully_loaded = false;
@@ -176,117 +160,6 @@ public:
     ObjectContext,
     boost::intrusive::list_member_hook<>,
     &ObjectContext::obc_accessing_hook>;
-
-  template<RWState::State Type, typename InterruptCond = void, typename Func>
-  auto with_lock(Func&& func) {
-    if constexpr (!std::is_void_v<InterruptCond>) {
-      auto wrapper = ::crimson::interruptible::interruptor<InterruptCond>::wrap_function(std::forward<Func>(func));
-      switch (Type) {
-      case RWState::RWWRITE:
-	return _with_lock(lock.for_write(), std::move(wrapper));
-      case RWState::RWREAD:
-	return _with_lock(lock.for_read(), std::move(wrapper));
-      case RWState::RWEXCL:
-	return _with_lock(lock.for_excl(), std::move(wrapper));
-      case RWState::RWNONE:
-	return seastar::futurize_invoke(std::move(wrapper));
-      default:
-	assert(0 == "noop");
-      }
-    } else {
-      switch (Type) {
-      case RWState::RWWRITE:
-	return _with_lock(lock.for_write(), std::forward<Func>(func));
-      case RWState::RWREAD:
-	return _with_lock(lock.for_read(), std::forward<Func>(func));
-      case RWState::RWEXCL:
-	return _with_lock(lock.for_excl(), std::forward<Func>(func));
-      case RWState::RWNONE:
-	return seastar::futurize_invoke(std::forward<Func>(func));
-      default:
-	assert(0 == "noop");
-      }
-    }
-  }
-
-  /**
-   * load_then_with_lock
-   *
-   * Takes two functions as arguments -- load_func to be invoked
-   * with an exclusive lock, and func to be invoked under the
-   * lock type specified by the Type template argument.
-   *
-   * Caller must ensure that *this is not already locked, presumably
-   * by invoking load_then_with_lock immediately after construction.
-   *
-   * @param [in] load_func Function to be invoked under excl lock
-   * @param [in] func Function to be invoked after load_func under
-   *             lock of type Type.
-   */
-  template<RWState::State Type, typename Func, typename Func2>
-  auto load_then_with_lock(Func &&load_func, Func2 &&func) {
-    class lock_state_t {
-      tri_mutex *lock = nullptr;
-      bool excl = false;
-
-    public:
-      lock_state_t(tri_mutex &lock) : lock(&lock), excl(true) {
-	ceph_assert(lock.try_lock_for_excl());
-      }
-      lock_state_t(lock_state_t &&o) : lock(o.lock), excl(o.excl) {
-	o.lock = nullptr;
-	o.excl = false;
-      }
-      lock_state_t() = delete;
-      lock_state_t &operator=(lock_state_t &&o) = delete;
-      lock_state_t(const lock_state_t &o) = delete;
-      lock_state_t &operator=(const lock_state_t &o) = delete;
-
-      void demote() {
-	ceph_assert(excl);
-	ceph_assert(lock);
-	if constexpr (Type == RWState::RWWRITE) {
-	  lock->demote_to_write();
-	} else if constexpr (Type == RWState::RWREAD) {
-	  lock->demote_to_read();
-	} else if constexpr (Type == RWState::RWNONE) {
-	  lock->unlock_for_excl();
-	}
-	excl = false;
-      }
-
-      ~lock_state_t() {
-	if (!lock)
-	  return;
-
-	if constexpr (Type == RWState::RWEXCL) {
-	  lock->unlock_for_excl();
-	} else {
-	  if (excl) {
-	    lock->unlock_for_excl();
-	    return;
-	  }
-
-	  if constexpr (Type == RWState::RWWRITE) {
-	    lock->unlock_for_write();
-	  } else if constexpr (Type == RWState::RWREAD) {
-	    lock->unlock_for_read();
-	  }
-	}
-      }
-    };
-
-    return seastar::do_with(
-      lock_state_t{lock},
-      [load_func=std::move(load_func), func=std::move(func)](auto &ls) mutable {
-	return std::invoke(
-	  std::move(load_func)
-	).si_then([func=std::move(func), &ls]() mutable {
-	  ls.demote();
-	  return std::invoke(std::move(func));
-	});
-      });
-  }
 
   bool empty() const {
     return !lock.is_acquired();
@@ -336,3 +209,6 @@ std::optional<hobject_t> resolve_oid(const SnapSet &ss,
                                      const hobject_t &oid);
 
 } // namespace crimson::osd
+
+template <>
+struct fmt::formatter<RWState::State> : fmt::ostream_formatter {};

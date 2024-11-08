@@ -399,13 +399,20 @@ SnapTrimObjSubEvent::start()
     client_pp().check_already_complete_get_obc);
 
   logger().debug("{}: getting obc for {}", *this, coid);
-  // end of commonality
-  // lock both clone's and head's obcs
-  co_await pg->obc_loader.with_obc<RWState::RWWRITE>(
-    coid,
-    std::bind(&SnapTrimObjSubEvent::process_and_submit,
-              this, std::placeholders::_1, std::placeholders::_2),
-    false
+
+
+  auto obc_manager = pg->obc_loader.get_obc_manager(
+    coid, false /* resolve_oid */);
+
+  co_await pg->obc_loader.load_and_lock(
+    obc_manager, RWState::RWWRITE
+  ).handle_error_interruptible(
+    remove_or_update_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error in SnapTrimObjSubEvent"}
+  );
+
+  co_await process_and_submit(
+    obc_manager.get_head_obc(), obc_manager.get_obc()
   ).handle_error_interruptible(
     remove_or_update_iertr::pass_further{},
     crimson::ct_error::assert_all{"unexpected error in SnapTrimObjSubEvent"}

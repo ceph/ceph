@@ -210,7 +210,7 @@ public:
     void requeue(Ref<PG> pg);
     void clear_and_cancel(PG &pg);
   };
-  void complete_request();
+  void complete_request(PG &pg);
 
   static constexpr OperationTypeCode type = OperationTypeCode::client_request;
 
