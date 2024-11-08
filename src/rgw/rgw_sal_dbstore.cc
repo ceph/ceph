@@ -992,7 +992,7 @@ namespace rgw::sal {
 
         ofs += obj_part.size;
         accounted_size += obj_part.accounted_size;
-      }
+      } /* for-each part: parts [obj_iter]*/
     } while (truncated);
     hash.Final((unsigned char *)final_etag);
 
@@ -1026,6 +1026,12 @@ namespace rgw::sal {
     obj_op.meta.completeMultipart = true;
 
     ret = obj_op.write_meta(dpp, ofs, accounted_size, attrs);
+    if (ret < 0)
+      return ret;
+
+    /* XXX write-back now-known ObjInstance into ObjectData rows inserted by
+     * this upload */
+    ret = obj_op.update_obj_data(dpp, get_upload_id(), target_obj->get_instance());
     if (ret < 0)
       return ret;
 

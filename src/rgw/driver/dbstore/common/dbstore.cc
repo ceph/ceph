@@ -1827,6 +1827,38 @@ int DB::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t size, 
   return r;
 }
 
+int DB::Object::Write::update_obj_data(const DoutPrefixProvider *dpp, const std::string& upload_id,
+    const std::string& instance_id)
+{
+  /* Now that tail objects are associated with objectID, they are not deleted
+   * as part of this DeleteObj operation. Such tail objects (with no head object
+   * in *.object.table are cleaned up later by GC thread.
+   *
+   * To avoid races between writes/reads & GC delete, mtime is maintained for each
+   * tail object. This mtime is updated when tail object is written and also when
+   * its corresponding head object is deleted (like here in this case).
+   */
+  // XXXX couch
+
+  int ret = 0;
+  DBOpParams update_params = {};
+
+  DB* store = target->get_store();
+  store->InitializeParams(dpp, &update_params); // XXX check
+  target->InitializeParamsfromObject(dpp, &update_params); // XXX check
+
+  // XXX we have instance_id in params->op.obj.state.obj.key.instance
+  update_params.op.obj.state.mtime = real_clock::now();
+  update_params.op.obj_data.upload_id = upload_id; // XXX but is this just update_params.op.obj.obj_id?
+
+  ret = store->ProcessOp(dpp, "UpdateObjectData", &update_params);
+  if (ret) {
+    ldpp_dout(dpp, 0) << "Updating tail objects obj_instance and mtime failed err:(" <<ret<<")" << dendl;
+  }
+
+  return ret;
+}
+
 int DB::Object::Delete::delete_obj(const DoutPrefixProvider *dpp) {
   int ret = 0;
   DBOpParams del_params = {};
@@ -1920,21 +1952,6 @@ int DB::Object::Delete::delete_obj_impl(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  /* Now that tail objects are associated with objectID, they are not deleted
-   * as part of this DeleteObj operation. Such tail objects (with no head object
-   * in *.object.table are cleaned up later by GC thread.
-   *
-   * To avoid races between writes/reads & GC delete, mtime is maintained for each
-   * tail object. This mtime is updated when tail object is written and also when
-   * its corresponding head object is deleted (like here in this case).
-   */
-  DBOpParams update_params = del_params;
-  update_params.op.obj.state.mtime = real_clock::now();
-  ret = store->ProcessOp(dpp, "UpdateObjectData", &update_params);
-
-  if (ret) {
-    ldpp_dout(dpp, 0) << "Updating tail objects mtime failed err:(" <<ret<<")" << dendl;
-  }
   return ret;
 }
 

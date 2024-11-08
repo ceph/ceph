@@ -100,6 +100,7 @@ struct DBOpObjectDataInfo {
   uint64_t stripe_num;
   std::string multipart_part_str;
   std::string upload_id;
+  std::string obj_instance; // XXX ordering?
   uint64_t offset;
   uint64_t size;
   bufferlist data{};
@@ -301,6 +302,7 @@ struct DBOpObjectDataPrepareInfo {
   static constexpr const char* size = ":size";
   static constexpr const char* multipart_part_str = ":multipart_part_str";
   static constexpr const char* upload_id = ":upload_id";
+  static constexpr const char* obj_instance = ":obj_instance";
 };
 
 struct DBOpLCEntryPrepareInfo {
@@ -1272,13 +1274,13 @@ class PutObjectDataOp: virtual public DBOp {
     }
 };
 
-/* XXX: Recheck if this is really needed */
-/* XXXX A version of this *is* needed--to update ObjInstance with a non-NULL value during complete-multipart! */
+/* This query is now used to update ObjInstance with a non-NULL value
+ * on successful complete-multipart */
 class UpdateObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
       "UPDATE '{}' \
-      SET Mtime = {} WHERE ObjName = {} and ObjInstance = {} and \
+      SET Mtime = {}, ObjInstance = {} WHERE ObjName = {} and \
       BucketName = {} and ObjID = {}";
 
   public:
@@ -1288,7 +1290,8 @@ class UpdateObjectDataOp: virtual public DBOp {
       return fmt::format(Query,
           params.objectdata_table,
           params.op.obj.mtime,
-          params.op.obj.obj_name, params.op.obj.obj_instance,
+          params.op.obj.obj_instance,
+          params.op.obj.obj_name,
           params.op.bucket.bucket_name,
           params.op.obj.obj_id);
     }
@@ -1918,10 +1921,12 @@ class DB {
                                bufferlist& data, uint64_t ofs);
         int _do_write_meta(const DoutPrefixProvider *dpp,
             uint64_t size, uint64_t accounted_size,
-	    std::map<std::string, bufferlist>& attrs,
+	          std::map<std::string, bufferlist>& attrs,
             bool assume_noent, bool modify_tail);
         int write_meta(const DoutPrefixProvider *dpp, uint64_t size,
-	    uint64_t accounted_size, std::map<std::string, bufferlist>& attrs);
+	          uint64_t accounted_size, std::map<std::string, bufferlist>& attrs);
+        int update_obj_data(const DoutPrefixProvider *dpp, const std::string& upload_id,
+            const std::string& instance_id);
       };
 
       struct Delete {
