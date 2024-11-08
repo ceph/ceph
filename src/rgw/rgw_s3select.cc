@@ -762,7 +762,9 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
       op_ret = -ERR_INVALID_REQUEST;
     } else {
       //status per amount of processed data
+#ifdef _ARROW_EXIST
       m_aws_response_handler.update_total_bytes_returned(m_s3_parquet_object.get_return_result_size());
+#endif
       m_aws_response_handler.init_stats_response();
       m_aws_response_handler.send_stats_response();
       m_aws_response_handler.init_end_response();
