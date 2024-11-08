@@ -496,6 +496,8 @@ Advanced Debugging
 
 See :ref:`doc-dev-ftrace-trace-cmd`.
 
+See :ref:`doc-dev-9p-share`.
+
 
 .. _VPN: https://wiki.sepia.ceph.com/doku.php?id=vpnaccess
 .. _systemd resolved update script: systemd-resolved: https://wiki.archlinux.org/title/Systemd-resolved

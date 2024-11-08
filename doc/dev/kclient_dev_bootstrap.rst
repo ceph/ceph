@@ -132,98 +132,8 @@ you to maintain a series of snapshots, with each differential image capturing
 incremental changes, useful for testing, development iterations, or backup
 purposes.
 
-Setting Up a 9P Shared Folder Between Host and Guest
------------------------------------------------------
+See :ref:`doc-dev-9p-share`.
 
-The 9P (Plan 9 Filesystem Protocol) allows you to share directories between the
-host and guest in QEMU, making file transfers between the two environments
-easy. Follow these steps to set up a 9P shared folder.
-
-1. **Create or Identify a Shared Directory on the Host**
-
-   First, decide on a directory on the host that you want to share with the VM.
-   You can use an existing directory or create a new one. For example:
-
-   .. prompt:: bash #
-
-      mkdir ~/shared
-
-2. **Launch the VM with 9P Sharing Enabled**
-
-   To enable 9P sharing, launch the VM with the ``-virtfs`` option to specify
-   the shared folder. In this example, the host’s ``~/shared`` folder will be
-   accessible as ``/mnt/shared`` in the guest:
-
-   .. code-block:: bash
-
-           qemu-system-x86_64      -m 2048                                                                  \
-                                   -enable-kvm                                                              \
-                                   -drive file=my_vm_disk.qcow2,format=qcow2                                \
-                                   -fsdev local,id=shared_folder,path=/home/user/shared,security_model=none \
-                                   -device virtio-9p-pci,fsdev=shared_folder,mount_tag=hostshare            \
-                                   -vnc: 1
-
-   - ``path=/home/user/shared``: Path to the shared folder on the host.
-   - ``mount_tag=hostshare``: Assigns a name (or tag) for the share, which will
-     be used in the guest.
-   - ``id=shared_folder``: An identifier for the shared folder, used internally
-     by QEMU.
-
-3. **Mount the Shared Folder in the Guest**
-
-   After starting the VM, mount the shared folder inside the guest OS. In a
-   Linux guest, you can use the following command:
-
-   .. prompt:: bash #
-
-      sudo mount -t 9p -o trans=virtio hostshare /mnt/shared
-
-
-   - ``-t 9p``: Specifies the 9P protocol for the mount.
-   - ``trans=virtio``: Optimizes the transport for QEMU’s virtualized
-     environment.
-   - ``hostshare``: Matches the `mount_tag` defined in the QEMU command.
-   - ``/mnt/shared``: Mount point within the guest where the shared folder will
-     be accessible.
-
-4. **Make the 9P Mount Persistent**
-
-   To ensure the shared folder is automatically mounted each time the guest
-   boots, add an entry to the guest's `/etc/fstab` file. Open `/etc/fstab` in
-   the guest and add the following line:
-
-   .. prompt:: bash #
-
-      hostshare /mnt/shared 9p trans=virtio,version=9p2000.L,rw 0 0
-
-   - ``hostshare``: The `mount_tag` used in the QEMU launch command.
-   - ``/mnt/shared``: The mount point inside the guest.
-   - ``9p``: The filesystem type.
-   - ``trans=virtio,version=9p2000.L,rw``: Options to optimize the 9P
-     connection, specify protocol version, and allow read-write access.
-
-   With this entry in ``/etc/fstab``, the shared folder will be mounted automatically on boot.
-
-5. **Ensure 9P Drivers Are Loaded in the Guest**
-
-   Before mounting the shared folder, make sure the 9P drivers are loaded in
-   the guest OS. In most Linux distributions, the necessary modules are ``9p``,
-   ``9pnet``, and ``9pnet_virtio``. You can load them manually with:
-
-   .. code-block:: bash
-
-      sudo modprobe 9p
-      sudo modprobe 9pnet
-      sudo modprobe 9pnet_virtio
-
-   If the modules are not loaded automatically,add them to the guest’s
-   ``/etc/modules`` file:
-
-   .. code-block:: text
-
-      9p
-      9pnet
-      9pnet_virtio
 
 Launch the VM with TAP Networking
 ---------------------------------
@@ -404,6 +314,8 @@ See :ref:`doc-dev-kclient-kernel-build-alternate` for another example of a
 
 Install Modules on the Guest
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note:: If you are not using kernel modules, then these steps are optional.
 
 After the build completes, return to the guest and install the compiled modules
 and kernel:
