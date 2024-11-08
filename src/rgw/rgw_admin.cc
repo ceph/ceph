@@ -8638,6 +8638,8 @@ next:
       bufferlist& bl = iter->second;
       if (iter->first == RGW_ATTR_OBJ_REPLICATION_TIMESTAMP) {
         decode_dump<ceph::real_time>("user.rgw.replicated-at", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_INTERNAL_MTIME) {
+	decode_dump<ceph::real_time>("user.rgw.rgw-internal-mtime", bl, formatter.get());
       } else {
         dump_string(iter->first.c_str(), iter->second, formatter.get());
       }
