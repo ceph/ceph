@@ -8,11 +8,11 @@
   methods treat "naive" `datetime` objects as local times.
 * RBD: `rbd group info` and `rbd group snap info` commands are introduced to
   show information about a group and a group snapshot respectively.
-* RBD: `rbd group snap ls` output now includes the group snap IDs. The header
+* RBD: `rbd group snap ls` output now includes the group snapshot IDs. The header
   of the column showing the state of a group snapshot in the unformatted CLI
   output is changed from 'STATUS' to 'STATE'. The state of a group snapshot
   that was shown as 'ok' is now shown as 'complete', which is more descriptive.
-* Based on tests performed at scale on a HDD based Ceph cluster, it was found
+* Based on tests performed at scale on an HDD based Ceph cluster, it was found
   that scheduling with mClock was not optimal with multiple OSD shards. For
   example, in the test cluster with multiple OSD node failures, the client
   throughput was found to be inconsistent across test runs coupled with multiple
@@ -21,15 +21,15 @@
   consistency of client and recovery throughput across multiple test runs.
   Therefore, as an interim measure until the issue with multiple OSD shards
   (or multiple mClock queues per OSD) is investigated and fixed, the following
-  change to the default HDD OSD shard configuration is made:
+  changes to the default option values have been made:
    - osd_op_num_shards_hdd = 1 (was 5)
    - osd_op_num_threads_per_shard_hdd = 5 (was 1)
   For more details see https://tracker.ceph.com/issues/66289.
-* MGR: MGR's always-on modulues/plugins can now be force-disabled. This can be
-  necessary in cases where MGR(s) needs to be prevented from being flooded by
-  the module commands when coresponding Ceph service is down/degraded.
+* MGR: The Ceph Manager's always-on modulues/plugins can now be force-disabled.
+  This can be necessary in cases where we wish to prevent the manager from being
+  flooded by module commands when Ceph services are down or degraded.
 
-* CephFS: Modifying the FS setting variable "max_mds" when a cluster is
+* CephFS: Modifying the setting "max_mds" when a cluster is
   unhealthy now requires users to pass the confirmation flag
   (--yes-i-really-mean-it). This has been added as a precaution to tell the
   users that modifying "max_mds" may not help with troubleshooting or recovery
@@ -52,24 +52,24 @@
 
 * cephx: key rotation is now possible using `ceph auth rotate`. Previously,
   this was only possible by deleting and then recreating the key.
-* ceph: a new --daemon-output-file switch is available for `ceph tell` commands
+* Ceph: a new --daemon-output-file switch is available for `ceph tell` commands
   to dump output to a file local to the daemon. For commands which produce
   large amounts of output, this avoids a potential spike in memory usage on the
   daemon, allows for faster streaming writes to a file local to the daemon, and
   reduces time holding any locks required to execute the command. For analysis,
   it is necessary to retrieve the file from the host running the daemon
   manually. Currently, only --format=json|json-pretty are supported.
-* RGW: GetObject and HeadObject requests now return a x-rgw-replicated-at
+* RGW: GetObject and HeadObject requests now return an x-rgw-replicated-at
   header for replicated objects. This timestamp can be compared against the
   Last-Modified header to determine how long the object took to replicate.
-* The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
-  python dependencies are now available in EPEL9.
+* The cephfs-shell utility is now packaged for RHEL / CentOS / Rocky 9 as required
+  Python dependencies are now available in EPEL9.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
-  multi-site. Previously, the replicas of such objects were corrupted on decryption.
+  multi-site deployments Previously, replicas of such objects were corrupted on decryption.
   A new tool, ``radosgw-admin bucket resync encrypted multipart``, can be used to
   identify these original multipart uploads. The ``LastModified`` timestamp of any
-  identified object is incremented by 1ns to cause peer zones to replicate it again.
-  For multi-site deployments that make any use of Server-Side Encryption, we
+  identified object is incremented by one ns to cause peer zones to replicate it again.
+  For multi-site deployments that make use of Server-Side Encryption, we
   recommended running this command against every bucket in every zone after all
   zones have upgraded.
 * Tracing: The blkin tracing feature (see https://docs.ceph.com/en/reef/dev/blkin/)
@@ -85,60 +85,57 @@
   be enabled to migrate to the new format. See
   https://docs.ceph.com/en/squid/radosgw/zone-features for details. The "v1"
   format is now considered deprecated and may be removed after 2 major releases.
-* CEPHFS: MDS evicts clients which are not advancing their request tids which causes
-  a large buildup of session metadata resulting in the MDS going read-only due to
-  the RADOS operation exceeding the size threshold. `mds_session_metadata_threshold`
-  config controls the maximum size that a (encoded) session metadata can grow.
+* CephFS: The MDS evicts clients which are not advancing their request tids, which causes
+  a large buildup of session metadata, which in turn results in the MDS going read-only
+  due to RADOS operations exceeding the size threshold. `mds_session_metadata_threshold`
+  config controls the maximum size to which (encoded) session metadata can grow.
 * CephFS: A new "mds last-seen" command is available for querying the last time
   an MDS was in the FSMap, subject to a pruning threshold.
-* CephFS: For clusters with multiple CephFS file systems, all the snap-schedule
+* CephFS: For clusters with multiple CephFS file systems, all snap-schedule
   commands now expect the '--fs' argument.
 * CephFS: The period specifier ``m`` now implies minutes and the period specifier
-  ``M`` now implies months. This has been made consistent with the rest
-  of the system.
+  ``M`` now implies months. This is consistent with the rest of the system.
 * RGW: New tools have been added to radosgw-admin for identifying and
   correcting issues with versioned bucket indexes. Historical bugs with the
   versioned bucket index transaction workflow made it possible for the index
   to accumulate extraneous "book-keeping" olh entries and plain placeholder
   entries. In some specific scenarios where clients made concurrent requests
-  referencing the same object key, it was likely that a lot of extra index
+  referencing the same object key, it was likely that extra index
   entries would accumulate. When a significant number of these entries are
   present in a single bucket index shard, they can cause high bucket listing
-  latencies and lifecycle processing failures. To check whether a versioned
+  latency and lifecycle processing failures. To check whether a versioned
   bucket has unnecessary olh entries, users can now run ``radosgw-admin
   bucket check olh``. If the ``--fix`` flag is used, the extra entries will
-  be safely removed. A distinct issue from the one described thus far, it is
-  also possible that some versioned buckets are maintaining extra unlinked
-  objects that are not listable from the S3/ Swift APIs. These extra objects
-  are typically a result of PUT requests that exited abnormally, in the middle
-  of a bucket index transaction - so the client would not have received a
-  successful response. Bugs in prior releases made these unlinked objects easy
-  to reproduce with any PUT request that was made on a bucket that was actively
-  resharding. Besides the extra space that these hidden, unlinked objects
-  consume, there can be another side effect in certain scenarios, caused by
-  the nature of the failure mode that produced them, where a client of a bucket
-  that was a victim of this bug may find the object associated with the key to
-  be in an inconsistent state. To check whether a versioned bucket has unlinked
-  entries, users can now run ``radosgw-admin bucket check unlinked``. If the
-  ``--fix`` flag is used, the unlinked objects will be safely removed. Finally,
-  a third issue made it possible for versioned bucket index stats to be
-  accounted inaccurately. The tooling for recalculating versioned bucket stats
-  also had a bug, and was not previously capable of fixing these inaccuracies.
-  This release resolves those issues and users can now expect that the existing
-  ``radosgw-admin bucket check`` command will produce correct results. We
-  recommend that users with versioned buckets, especially those that existed
-  on prior releases, use these new tools to check whether their buckets are
-  affected and to clean them up accordingly.
-* rgw: The User Accounts feature unlocks several new AWS-compatible IAM APIs
-  for the self-service management of users, keys, groups, roles, policy and
+  be safely removed. An additional issue is that some versioned buckets
+  may maintain extra unlinked objects that are not listable via the S3/Swift
+  APIs. These extra objects are typically a result of PUT requests that 
+  exited abnormally in the middle of a bucket index transaction, and thus 
+  the client would not have received a successful response. Bugs in prior 
+  releases made these unlinked objects easy to reproduce with any PUT 
+  request made on a bucket that was actively resharding. In certain 
+  scenarios, a client of a bucket that was a victim of this bug may find 
+  the object associated with the key to be in an inconsistent state. To check 
+  whether a versioned bucket has unlinked entries, users can now run 
+  ``radosgw-admin bucket check unlinked``. If the ``--fix`` flag is used, 
+  the unlinked objects will be safely removed. Finally, a third issue made 
+  it possible for versioned bucket index stats to be accounted inaccurately. 
+  The tooling for recalculating versioned bucket stats also had a bug, and 
+  was not previously capable of fixing these inaccuracies.  This release 
+  resolves those issues and users can now expect that the existing 
+  ``radosgw-admin bucket check`` command will produce correct results. 
+  We recommend that users with versioned buckets, especially those that 
+  existed on prior releases, use these new tools to check whether their 
+  buckets are affected and to clean them up accordingly.
+* RGW: The "user accounts" feature unlocks several new AWS-compatible IAM APIs
+  for self-service management of users, keys, groups, roles, policy and
   more. Existing users can be adopted into new accounts. This process is optional
   but irreversible. See https://docs.ceph.com/en/squid/radosgw/account and
   https://docs.ceph.com/en/squid/radosgw/iam for details.
-* rgw: On startup, radosgw and radosgw-admin now validate the ``rgw_realm``
+* RGW: On startup, radosgw and radosgw-admin now validate the ``rgw_realm``
   config option. Previously, they would ignore invalid or missing realms and
   go on to load a zone/zonegroup in a different realm. If startup fails with
   a  "failed to load realm" error, fix or remove the ``rgw_realm`` option.
-* rgw: The radosgw-admin commands ``realm create`` and ``realm pull`` no
+* RGW: The radosgw-admin commands ``realm create`` and ``realm pull`` no
   longer set the default realm without ``--default``.
 * CephFS: Running the command "ceph fs authorize" for an existing entity now
   upgrades the entity's capabilities instead of printing an error. It can now
@@ -183,8 +180,9 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 * RADOS: `get_pool_is_selfmanaged_snaps_mode` C++ API has been deprecated
   due to being prone to false negative results.  It's safer replacement is
   `pool_is_in_selfmanaged_snaps_mode`.
-* RADOS: For bug 62338 (https://tracker.ceph.com/issues/62338), we did not choose
-  to condition the fix on a server flag in order to simplify backporting.  As
+* RADOS: For bug 62338 (https://tracker.ceph.com/issues/62338), in order to simplify
+  backporting, we choose to not
+  condition the fix on a server flag.  As
   a result, in rare cases it may be possible for a PG to flip between two acting
   sets while an upgrade to a version with the fix is in progress.  If you observe
   this behavior, you should be able to work around it by completing the upgrade or
