@@ -205,7 +205,6 @@ private:
   };
   std::unique_ptr<CloningContext> cloning_ctx;
 
-
   /**
    * execute_clone
    *
@@ -227,7 +226,7 @@ private:
    * @param backend [in,out] interface for generating mutations
    * @param txn [out] transaction for the operation
    */
-  std::unique_ptr<CloningContext> execute_clone(
+  void execute_clone(
     const SnapContext& snapc,
     const ObjectState& initial_obs,
     const SnapSet& initial_snapset,

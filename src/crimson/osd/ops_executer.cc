@@ -871,7 +871,7 @@ version_t OpsExecuter::get_last_user_version() const
   return pg->get_last_user_version();
 }
 
-std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
+void OpsExecuter::execute_clone(
   const SnapContext& snapc,
   const ObjectState& initial_obs,
   const SnapSet& initial_snapset,
@@ -883,7 +883,7 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
                  __func__, soid,
                  initial_snapset, snapc);
 
-  auto cloning_ctx = std::make_unique<CloningContext>();
+  cloning_ctx = std::make_unique<CloningContext>();
   cloning_ctx->new_snapset = initial_snapset;
 
   // clone object, the snap field is set to the seq of the SnapContext
@@ -941,8 +941,6 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
   cloning_ctx->log_entry.clean_regions.mark_data_region_dirty(0, initial_obs.oi.size);
   cloning_ctx->clone_obc = clone_obc;
-
-  return cloning_ctx;
 }
 
 void OpsExecuter::update_clone_overlap() {
@@ -1036,11 +1034,11 @@ OpsExecuter::OpsExecuter(Ref<PG> pg,
 {
   if (op_info.may_write() && should_clone(*obc, snapc)) {
     do_write_op([this](auto& backend, auto& os, auto& txn) {
-      cloning_ctx = execute_clone(std::as_const(snapc),
-                                  std::as_const(obc->obs),
-                                  std::as_const(obc->ssc->snapset),
-                                  backend,
-                                  txn);
+      execute_clone(std::as_const(snapc),
+		    std::as_const(obc->obs),
+		    std::as_const(obc->ssc->snapset),
+		    backend,
+		    txn);
     });
   }
 }
