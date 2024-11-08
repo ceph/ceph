@@ -3119,7 +3119,7 @@ static int load_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y,
   std::string bver, mver; // ignored
   std::map<RGWObjCategory, RGWStorageStats> categories;
 
-  int r = bucket.read_stats(dpp, index, -1, &bver, &mver, categories);
+  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories);
   if (r < 0) {
     return r;
   }

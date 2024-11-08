@@ -152,7 +152,7 @@ protected:
                  const CreateParams& params,
                  optional_yield y) override;
       virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y) override;
-      virtual int read_stats(const DoutPrefixProvider *dpp,
+      virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			     const bucket_index_layout_generation& idx_layout,
 			     int shard_id,
           std::string *bucket_ver, std::string *master_ver,

@@ -2468,7 +2468,7 @@ int POSIXBucket::set_acl(const DoutPrefixProvider* dpp,
   return write_attrs(dpp, y);
 }
 
-int POSIXBucket::read_stats(const DoutPrefixProvider *dpp,
+int POSIXBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			    const bucket_index_layout_generation& idx_layout,
 			    int shard_id, std::string* bucket_ver, std::string* master_ver,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
@@ -2477,14 +2477,14 @@ int POSIXBucket::read_stats(const DoutPrefixProvider *dpp,
   auto& main = stats[RGWObjCategory::Main];
 
   // TODO: bucket stats shouldn't have to list all objects
-  return dir->for_each(dpp, [this, dpp, &main] (const char* name) {
+  return dir->for_each(dpp, [this, dpp, y, &main] (const char* name) {
     if (name[0] == '.') {
       /* Skip dotfiles */
       return 0;
     }
 
     std::unique_ptr<FSEnt> dent;
-    int ret = dir->get_ent(dpp, null_yield, name, std::string(), dent);
+    int ret = dir->get_ent(dpp, y, name, std::string(), dent);
     if (ret < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not get ent for object " << name << ": "

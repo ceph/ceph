@@ -9137,7 +9137,7 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp,
+int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			       RGWBucketInfo& bucket_info,
 			       const rgw::bucket_index_layout_generation& idx_layout,
 			       int shard_id, string *bucket_ver, string *master_ver,

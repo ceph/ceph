@@ -899,7 +899,7 @@ class Bucket {
     /** Load this bucket from the backing store.  Requires the key to be set, fills other fields. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Read the bucket stats from the backing Store, synchronous */
-    virtual int read_stats(const DoutPrefixProvider *dpp,
+    virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			   const bucket_index_layout_generation& idx_layout,
 			   int shard_id, std::string* bucket_ver, std::string* master_ver,
 			   std::map<RGWObjCategory, RGWStorageStats>& stats,
