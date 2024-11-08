@@ -3820,6 +3820,62 @@ void RGWCreateBucket::execute(optional_yield y)
     createparams.creation_time = master_info.creation_time;
   }
 
+  // update sync pipes pointing to me before creation
+  std::set<rgw_bucket> source_hints;
+  op_ret = driver->get_bucket_sync_hints(s, s->bucket->get_key(), &source_hints, nullptr, y);
+  if (op_ret < 0 && op_ret != -ENOENT) {
+    return;
+  }
+  if (!source_hints.empty() && op_ret != -ENOENT) {
+    std::set<rgw_zone_id> zones;
+    op_ret = list_zonegroup_zones(driver, createparams.zonegroup_id, s, y, zones);
+    if (op_ret < 0) {
+      return;
+    }
+
+    for (auto source_hint : source_hints) {
+      // load source bucket
+      std::unique_ptr<rgw::sal::Bucket> source_bucket;
+      op_ret = driver->load_bucket(s, source_hint, &source_bucket, y);
+      if (op_ret < 0) {
+        return;
+      }
+
+      // update source bucket's sync policy
+      op_ret = retry_raced_bucket_write(this, source_bucket.get(), [this, y, &zones, &source_bucket] {
+        auto sync_policy = source_bucket->get_info().sync_policy;
+        if (!sync_policy) {
+          return 0;
+        }
+
+        for (auto& group : sync_policy->groups) {
+          for (auto& pipe : group.second.pipes) {
+            if (pipe.dest.all_zones && pipe.dest.bucket && pipe.dest.bucket->match(s->bucket->get_key()) &&
+                    (!pipe.dest.zones || *pipe.dest.zones != zones)) {
+              if (pipe.dest.zones) {
+                pipe.dest.zones->clear();
+              }
+              pipe.dest.add_zones(std::vector<rgw_zone_id>(zones.begin(), zones.end()));
+            }
+          }
+        }
+
+        source_bucket->get_info().set_sync_policy(std::move(*sync_policy));
+
+        int ret = source_bucket->put_info(this, false, real_time(), y);
+        if (ret < 0) {
+          ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << source_bucket << ") returned ret=" << ret << dendl;
+          return ret;
+        }
+
+        return 0;
+      }, y);
+      if (op_ret < 0) {
+        return;
+      }
+    }
+  }
+
   ldpp_dout(this, 10) << "user=" << s->user << " bucket=" << s->bucket << dendl;
   op_ret = s->bucket->create(this, createparams, y);
 

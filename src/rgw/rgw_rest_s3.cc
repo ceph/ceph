@@ -1320,14 +1320,41 @@ struct ReplicationConfiguration {
       if (source && !source->zone_names.empty()) {
         pipe->source.zones = get_zone_ids_from_names(driver, source->zone_names);
       } else {
-        pipe->source.set_all_zones(true);
+        std::set<rgw_zone_id> zones;
+        if (int ret = list_zonegroup_zones(driver, s->bucket->get_info().zonegroup, s, s->yield, zones); ret < 0) {
+          return ret;
+        }
+        pipe->source.add_zones(std::vector<rgw_zone_id>(zones.begin(), zones.end()));
+        pipe->source.all_zones = true;
       }
+
+      pipe->dest.bucket.emplace(dest_bk);
+      if (pipe->dest.bucket->match(s->bucket->get_key())) {
+        s->err.message = "Destination bucket cannot be the same as the source bucket.";
+        return -EINVAL;
+      }
+
+      std::unique_ptr<rgw::sal::Bucket> dest_bucket;
+      if (int ret = driver->load_bucket(s, *pipe->dest.bucket, &dest_bucket, s->yield); ret < 0) {
+        if (ret == -ENOENT) {
+          s->err.message = "Destination bucket must exist.";
+          return -EINVAL;
+        }
+
+        ldpp_dout(s, 0) << "ERROR: failed to load bucket info for bucket=" << *pipe->dest.bucket << " ret=" << ret << dendl;
+        return ret;
+      }
+
       if (!destination.zone_names.empty()) {
         pipe->dest.zones = get_zone_ids_from_names(driver, destination.zone_names);
       } else {
-        pipe->dest.set_all_zones(true);
+        std::set<rgw_zone_id> zones;
+        if (int ret = list_zonegroup_zones(driver, dest_bucket->get_info().zonegroup, s, s->yield, zones); ret < 0) {
+          return ret;
+        }
+        pipe->dest.add_zones(std::vector<rgw_zone_id>(zones.begin(), zones.end()));
+        pipe->dest.all_zones = true;
       }
-      pipe->dest.bucket.emplace(dest_bk);
 
       if (filter) {
         int r = filter->to_sync_pipe_filter(s->cct, &pipe->params.source.filter);
@@ -1360,15 +1387,14 @@ struct ReplicationConfiguration {
       status = (enabled ? "Enabled" : "Disabled");
       priority = pipe.params.priority;
 
-      if (pipe.source.all_zones) {
+      if (!pipe.source.zones) {
         source.reset();
       } else if (pipe.source.zones) {
         source.emplace();
         source->zone_names = get_zone_names_from_ids(driver, *pipe.source.zones);
       }
 
-      if (!pipe.dest.all_zones &&
-          pipe.dest.zones) {
+      if (pipe.dest.zones) {
         destination.zone_names = get_zone_names_from_ids(driver, *pipe.dest.zones);
       }
 
@@ -1425,24 +1451,6 @@ struct ReplicationConfiguration {
       if (r < 0) {
         ldpp_dout(s, 5) << "NOTICE: failed to convert replication configuration into sync policy pipe (rule.id=" << rule.id << "): " << cpp_strerror(-r) << dendl;
         return r;
-      }
-
-      if (pipe.dest.bucket) {
-        if (pipe.dest.bucket->match(s->bucket->get_key())) {
-          s->err.message = "Destination bucket cannot be the same as the source bucket.";
-          return -EINVAL;
-        }
-
-        std::unique_ptr<rgw::sal::Bucket> dest_bucket;
-        if (r = driver->load_bucket(s, *pipe.dest.bucket, &dest_bucket, s->yield); r < 0) {
-          if (r == -ENOENT) {
-            s->err.message = "Destination bucket must exist.";
-            return -EINVAL;
-          }
-
-          ldpp_dout(s, 0) << "ERROR: failed to load bucket info for bucket=" << *pipe.dest.bucket << " r=" << r << dendl;
-          return r;
-        }
       }
 
       if (enabled) {

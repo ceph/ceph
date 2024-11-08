@@ -3346,3 +3346,38 @@ int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
 
   return should_log_op(policy_handler, object->get_name(), obj_tags, log_op_info);
 }
+
+int list_zonegroup_zones(rgw::sal::Driver* driver, const std::string& zonegroup,
+                         const DoutPrefixProvider *dpp, optional_yield y,
+                         std::set<rgw_zone_id>& zones)
+{
+  std::unique_ptr<rgw::sal::ZoneGroup> zg;
+  int r = driver->get_zonegroup(zonegroup, &zg);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to get zonegroup info for zonegroup=" << zonegroup << " ret=" << r << dendl;
+    return r;
+  }
+
+  std::list<std::string> zone_ids;
+  if (r = zg->list_zones(zone_ids); r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to list zones for zonegroup=" << zonegroup << " ret=" << r << dendl;
+    return r;
+  }
+
+  zones = std::set<rgw_zone_id>(zone_ids.begin(), zone_ids.end());
+  return 0;
+}
+
+int list_bucket_zones(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                      const DoutPrefixProvider *dpp, optional_yield y,
+                      std::set<rgw_zone_id>& zones)
+{
+  std::unique_ptr<rgw::sal::Bucket> b;
+  int r = driver->load_bucket(dpp, bucket, &b, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to load bucket info for bucket=" << bucket << " ret=" << r << dendl;
+    return r;
+  }
+
+  return list_zonegroup_zones(driver, b->get_info().zonegroup, dpp, y, zones);
+}

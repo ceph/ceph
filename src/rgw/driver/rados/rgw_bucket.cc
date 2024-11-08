@@ -3504,6 +3504,20 @@ int RGWBucketCtl::bucket_imports_data(const rgw_bucket& bucket,
   return handler->bucket_imports_data();
 }
 
+int RGWBucketCtl::get_bucket_sync_hints(const DoutPrefixProvider *dpp,
+                                        const rgw_bucket& bucket,
+                                        std::set<rgw_bucket> *sources,
+                                        std::set<rgw_bucket> *dests,
+                                        optional_yield y)
+{
+  int r = svc.bucket_sync->get_bucket_sync_hints(dpp, bucket, sources, dests, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 20) << __func__ << "(): failed to get bucket sync hints for bucket=" << bucket << " (r=" << r << ")" << dendl;
+    return r;
+  }
+  return 0;
+}
+
 auto create_bucket_metadata_handler(librados::Rados& rados,
                                     RGWSI_Bucket* svc_bucket,
                                     RGWBucketCtl* ctl_bucket)

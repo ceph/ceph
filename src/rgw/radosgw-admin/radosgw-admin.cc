@@ -10576,12 +10576,37 @@ next:
     pipe->source.set_bucket(opt_source_tenant,
                             opt_source_bucket_name,
                             opt_source_bucket_id);
+
+    if (pipe->source.bucket && !pipe->source.zones) {
+      // load the bucket and set the available zones from its zonegroup
+      std::set<rgw_zone_id> zones;
+      if (ret = list_bucket_zones(driver, *pipe->source.bucket, dpp(), null_yield, zones); ret < 0) {
+        return -ret;
+      }
+      pipe->source.add_zones(std::vector<rgw_zone_id>(zones.begin(), zones.end()));
+      pipe->source.all_zones = true; // preserve the all_zones flag as a hint for CreateBucket to update the zones
+    } else {
+      pipe->source.all_zones = false;
+    }
+
     if (opt_dest_zone_ids) {
       pipe->dest.add_zones(*opt_dest_zone_ids);
     }
     pipe->dest.set_bucket(opt_dest_tenant,
                             opt_dest_bucket_name,
                             opt_dest_bucket_id);
+
+    if (pipe->dest.bucket && !pipe->dest.zones) {
+        // load the bucket and set the available zones from its zonegroup
+        std::set<rgw_zone_id> zones;
+        if (ret = list_bucket_zones(driver, *pipe->dest.bucket, dpp(), null_yield, zones); ret < 0) {
+          return -ret;
+        }
+        pipe->dest.add_zones(std::vector<rgw_zone_id>(zones.begin(), zones.end()));
+        pipe->dest.all_zones = true; // preserve the all_zones flag as a hint for CreateBucket to update the zones
+    } else {
+      pipe->dest.all_zones = false;
+    }
 
     pipe->params.source.filter.set_prefix(opt_prefix, !!opt_prefix_rm);
     pipe->params.source.filter.set_tags(tags_add, tags_rm);

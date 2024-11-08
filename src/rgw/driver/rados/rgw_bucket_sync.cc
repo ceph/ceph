@@ -14,7 +14,7 @@
 using namespace std;
 
 ostream& operator<<(ostream& os, const rgw_sync_bucket_entity& e) {
-  os << "{b=" << rgw_sync_bucket_entities::bucket_key(e.bucket) << ",z=" << e.zone.value_or(rgw_zone_id()) << ",az=" << (int)e.all_zones << "}";
+  os << "{b=" << rgw_sync_bucket_entities::bucket_key(e.bucket) << ",z=" << e.zone.value_or(rgw_zone_id()) << "}";
   return os;
 }
 
@@ -730,8 +730,6 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
 
   rgw_sync_bucket_pipes pipes;
   pipes.id = "all";
-  pipes.source.all_zones = true;
-  pipes.dest.all_zones = true;
 
   group.pipes.emplace_back(std::move(pipes));
 

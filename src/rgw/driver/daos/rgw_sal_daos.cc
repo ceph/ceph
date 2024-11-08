@@ -2394,6 +2394,14 @@ int DaosStore::get_sync_policy_handler(const DoutPrefixProvider* dpp,
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
+int DaosStore::get_bucket_sync_hints(const DoutPrefixProvider* dpp,
+                                     const rgw_bucket& bucket,
+                                     std::set<rgw_bucket> *sources,
+                                     std::set<rgw_bucket> *dests,
+                                     optional_yield y) {
+  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
+}
+
 RGWDataSyncStatusManager* DaosStore::get_data_sync_manager(
     const rgw_zone_id& source_zone) {
   DAOS_NOT_IMPLEMENTED_LOG(nullptr);

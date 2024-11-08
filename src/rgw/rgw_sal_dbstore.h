@@ -934,6 +934,11 @@ public:
           std::optional<rgw_bucket> bucket,
           RGWBucketSyncPolicyHandlerRef *phandler,
           optional_yield y) override;
+      virtual int get_bucket_sync_hints(const DoutPrefixProvider* dpp,
+                                        const rgw_bucket& bucket,
+                                        std::set<rgw_bucket> *sources,
+                                        std::set<rgw_bucket> *dests,
+                                        optional_yield y) override;
       virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
       virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) override { return; }
       virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp,

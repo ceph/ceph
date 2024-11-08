@@ -541,6 +541,15 @@ int FilterDriver::get_sync_policy_handler(const DoutPrefixProvider* dpp,
   return next->get_sync_policy_handler(dpp, zone, bucket, phandler, y);
 }
 
+int FilterDriver::get_bucket_sync_hints(const DoutPrefixProvider* dpp,
+                                        const rgw_bucket& bucket,
+                                        std::set<rgw_bucket> *sources,
+                                        std::set<rgw_bucket> *dests,
+                                        optional_yield y)
+{
+  return next->get_bucket_sync_hints(dpp, bucket, sources, dests, y);
+}
+
 RGWDataSyncStatusManager* FilterDriver::get_data_sync_manager(const rgw_zone_id& source_zone)
 {
   return next->get_data_sync_manager(source_zone);

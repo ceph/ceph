@@ -2215,6 +2215,15 @@ int RadosStore::get_sync_policy_handler(const DoutPrefixProvider* dpp,
   return ctl()->bucket->get_sync_policy_handler(zone, bucket, phandler, y, dpp);
 }
 
+int RadosStore::get_bucket_sync_hints(const DoutPrefixProvider* dpp,
+                                      const rgw_bucket& bucket,
+                                      std::set<rgw_bucket> *sources,
+                                      std::set<rgw_bucket> *dests,
+                                      optional_yield y)
+{
+  return ctl()->bucket->get_bucket_sync_hints(dpp, bucket, sources, dests, y);
+}
+
 RGWDataSyncStatusManager* RadosStore::get_data_sync_manager(const rgw_zone_id& source_zone)
 {
   return rados->get_data_sync_manager(source_zone);

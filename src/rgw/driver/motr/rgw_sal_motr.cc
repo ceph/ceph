@@ -3401,6 +3401,15 @@ int MotrStore::get_sync_policy_handler(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+int MotrStore::get_bucket_sync_hints(const DoutPrefixProvider* dpp,
+                                     const rgw_bucket& bucket,
+                                     std::set<rgw_bucket> *sources,
+                                     std::set<rgw_bucket> *dests,
+                                     optional_yield y)
+{
+  return 0;
+}
+
 RGWDataSyncStatusManager* MotrStore::get_data_sync_manager(const rgw_zone_id& source_zone)
 {
   return 0;

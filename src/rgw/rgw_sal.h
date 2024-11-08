@@ -585,6 +585,12 @@ class Driver {
 					std::optional<rgw_bucket> bucket,
 					RGWBucketSyncPolicyHandlerRef* phandler,
 					optional_yield y) = 0;
+    /** Get sync hints for the bucket */
+    virtual int get_bucket_sync_hints(const DoutPrefixProvider* dpp,
+                                      const rgw_bucket& bucket,
+                                      std::set<rgw_bucket> *sources,
+                                      std::set<rgw_bucket> *dests,
+                                      optional_yield y) = 0;
     /** Get a status manager for bucket sync */
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) = 0;
     /** Wake up sync threads for bucket metadata sync */
