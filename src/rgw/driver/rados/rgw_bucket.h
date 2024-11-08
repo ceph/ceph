@@ -697,6 +697,11 @@ public:
   int bucket_imports_data(const rgw_bucket& bucket,
                           optional_yield y,
                           const DoutPrefixProvider *dpp);
+  int get_bucket_sync_hints(const DoutPrefixProvider *dpp,
+                            const rgw_bucket& bucket,
+                            std::set<rgw_bucket> *sources,
+                            std::set<rgw_bucket> *dests,
+                            optional_yield y);
 
 private:
   int convert_old_bucket_info(const rgw_bucket& bucket,
