@@ -52,22 +52,27 @@ string str_int(string s, int i)
   return s;
 }
 
+static int read_header(librados::IoCtx& ioctx, const string& oid,
+                       rgw_bucket_dir_header& header)
+{
+  bufferlist bl;
+  librados::ObjectReadOperation op;
+  op.omap_get_header(&bl, nullptr);
+  int r = ioctx.operate(oid, &op, nullptr);
+  if (r < 0) {
+    return r;
+  }
+  auto p = bl.cbegin();
+  decode(header, p);
+  return r;
+}
+
 void test_stats(librados::IoCtx& ioctx, const string& oid, RGWObjCategory category, uint64_t num_entries, uint64_t total_size)
 {
-  map<int, struct rgw_cls_list_ret> results;
-  map<int, string> oids;
-  oids[0] = oid;
-  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, results, 8)());
-
-  uint64_t entries = 0;
-  uint64_t size = 0;
-  map<int, struct rgw_cls_list_ret>::iterator iter = results.begin();
-  for (; iter != results.end(); ++iter) {
-    entries += (iter->second).dir.header.stats[category].num_entries;
-    size += (iter->second).dir.header.stats[category].total_size;
-  }
-  ASSERT_EQ(total_size, size);
-  ASSERT_EQ(num_entries, entries);
+  rgw_bucket_dir_header header;
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_EQ(total_size, header.stats[category].total_size);
+  ASSERT_EQ(num_entries, header.stats[category].num_entries);
 }
 
 void index_prepare(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
@@ -1432,17 +1437,9 @@ TEST_F(cls_rgw, reshardlog_list)
 
 void reshardlog_entries(librados::IoCtx& ioctx, const std::string& oid, uint32_t num_entries)
 {
-  map<int, struct rgw_cls_list_ret> results;
-  map<int, string> oids;
-  oids[0] = oid;
-  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, results, 8)());
-
-  uint32_t entries = 0;
-  map<int, struct rgw_cls_list_ret>::iterator iter = results.begin();
-  for (; iter != results.end(); ++iter) {
-    entries += (iter->second).dir.header.reshardlog_entries;
-  }
-  ASSERT_EQ(entries, num_entries);
+  rgw_bucket_dir_header header;
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_EQ(num_entries, header.reshardlog_entries);
 }
 
 TEST_F(cls_rgw, reshardlog_num)

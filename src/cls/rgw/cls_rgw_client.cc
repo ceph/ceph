@@ -717,16 +717,6 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
   o.exec(RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates);
 }
 
-int CLSRGWIssueGetDirHeader::issue_op(const int shard_id, const string& oid)
-{
-  cls_rgw_obj_key empty_key;
-  string empty_prefix;
-  string empty_delimiter;
-  return issue_bucket_list_op(io_ctx, shard_id, oid,
-			      empty_key, empty_prefix, empty_delimiter,
-			      0, false, &manager, &result[shard_id]);
-}
-
 static bool issue_resync_bi_log(librados::IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager)
 {
   bufferlist in;

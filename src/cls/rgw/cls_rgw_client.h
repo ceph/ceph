@@ -528,17 +528,6 @@ public:
   virtual ~CLSRGWIssueBucketRebuild() override {}
 };
 
-class CLSRGWIssueGetDirHeader : public CLSRGWConcurrentIO {
-  std::map<int, rgw_cls_list_ret>& result;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueGetDirHeader(librados::IoCtx& io_ctx, std::map<int, std::string>& oids, std::map<int, rgw_cls_list_ret>& dir_headers,
-                          uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(dir_headers) {}
-  virtual ~CLSRGWIssueGetDirHeader() override {}
-};
-
 class CLSRGWIssueSetBucketResharding : public CLSRGWConcurrentIO {
   cls_rgw_bucket_instance_entry entry;
 protected:
