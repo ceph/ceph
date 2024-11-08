@@ -193,7 +193,6 @@ void rgw_sync_bucket_entity::apply_bucket(std::optional<rgw_bucket> b)
 void rgw_sync_bucket_entities::add_zones(const std::vector<rgw_zone_id>& new_zones) {
   for (auto& z : new_zones) {
     if (z == "*") {
-      all_zones = true;
       zones.reset();
       return;
     }
@@ -203,8 +202,6 @@ void rgw_sync_bucket_entities::add_zones(const std::vector<rgw_zone_id>& new_zon
     }
 
     zones->insert(z);
-
-    all_zones = false;
   }
 }
 
@@ -212,21 +209,15 @@ std::vector<rgw_sync_bucket_entity> rgw_sync_bucket_entities::expand() const
 {
   std::vector<rgw_sync_bucket_entity> result;
   rgw_bucket b = get_bucket();
-  if (all_zones) {
+  if (!zones) {
     rgw_sync_bucket_entity e;
-    e.all_zones = true;
     e.bucket = b;
     result.push_back(e);
     return result;
   }
 
-  if (!zones) {
-    return result;
-  }
-
   for (auto& z : *zones) {
     rgw_sync_bucket_entity e;
-    e.all_zones = false;
     e.bucket = b;
     e.zone = z;
     result.push_back(e);
@@ -236,8 +227,6 @@ std::vector<rgw_sync_bucket_entity> rgw_sync_bucket_entities::expand() const
 }
 
 void rgw_sync_bucket_entities::remove_zones(const std::vector<rgw_zone_id>& rm_zones) {
-  all_zones = false;
-
   if (!zones) {
     return;
   }
@@ -653,7 +642,7 @@ void rgw_sync_bucket_entities::dump(Formatter *f) const
   encode_json("bucket", rgw_sync_bucket_entities::bucket_key(bucket), f);
   if (zones) {
     encode_json("zones", zones, f);
-  } else if (all_zones) {
+  } else {
     set<string> z = { "*" };
     encode_json("zones", z, f);
   }
@@ -688,7 +677,6 @@ void rgw_sync_bucket_entities::decode_json(JSONObj *obj)
     auto iter = zones->begin();
     if (*iter == "*") {
       zones.reset();
-      all_zones = true;
     }
   }
 }
