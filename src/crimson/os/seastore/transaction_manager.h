@@ -304,10 +304,6 @@ public:
       len,
       placement_hint,
       INIT_GENERATION);
-    if (!ext) {
-      SUBERRORT(seastore_tm, "insufficient space!", t);
-      return crimson::ct_error::enospc::make();
-    }
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
@@ -343,10 +339,6 @@ public:
       len,
       placement_hint,
       INIT_GENERATION);
-    if (exts.empty()) {
-      SUBERRORT(seastore_tm, "insufficient space!", t);
-      return crimson::ct_error::enospc::make();
-    }
     return lba_manager->alloc_extents(
       t,
       laddr_hint,
