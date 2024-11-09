@@ -1197,6 +1197,7 @@ TEST(BufferListIterator, copy_in) {
   //
   {
     bufferlist::iterator i(&bl);
+    bufferlist::iterator ci(i);
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
@@ -1204,6 +1205,13 @@ TEST(BufferListIterator, copy_in) {
     bufferlist expected;
     expected.append("ABC", 3);
     i.copy_in(3, expected);
+    i.seek(0);
+    EXPECT_EQ('A', *i);
+    EXPECT_EQ('B', *(++i));
+    EXPECT_EQ('C', *(++i));
+    EXPECT_EQ('A', *ci);
+    EXPECT_EQ('B', *(++ci));
+    EXPECT_EQ('C', *(++ci));
     EXPECT_EQ(0, ::memcmp(bl.c_str(), expected.c_str(), 3));
     EXPECT_EQ('A', bl[0]);
     EXPECT_EQ('B', bl[1]);
