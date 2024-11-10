@@ -3204,3 +3204,14 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
 }
 
+boost::optional<rgw::IAM::Policy>
+get_iam_policy_from_attr(CephContext* cct,
+                         const std::map<std::string, bufferlist>& attrs,
+                         const std::string& tenant)
+{
+  if (auto i = attrs.find(RGW_ATTR_IAM_POLICY); i != attrs.end()) {
+    return Policy(cct, &tenant, i->second.to_str(), false);
+  } else {
+    return boost::none;
+  }
+}

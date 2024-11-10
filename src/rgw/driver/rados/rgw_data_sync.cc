@@ -2617,6 +2617,7 @@ class RGWUserPermHandler {
     rgw::IAM::Environment env;
     std::unique_ptr<rgw::auth::Identity> identity;
     RGWAccessControlPolicy user_acl;
+    std::vector<rgw::IAM::Policy> user_policies;
   };
 
   std::shared_ptr<_info> info;
@@ -2644,7 +2645,7 @@ class RGWUserPermHandler {
       }
 
       auto result = rgw::auth::transform_old_authinfo(
-          sync_env->dpp, null_yield, sync_env->driver, user.get());
+          sync_env->dpp, null_yield, sync_env->driver, user.get(), &info->user_policies);
       if (!result) {
         return result.error();
       }
@@ -2679,6 +2680,7 @@ public:
     std::shared_ptr<_info> info;
     RGWAccessControlPolicy bucket_acl;
     std::optional<perm_state> ps;
+    boost::optional<rgw::IAM::Policy> bucket_policy;
   public:
     Bucket() {}
 
@@ -2686,9 +2688,7 @@ public:
              const RGWBucketInfo& bucket_info,
              const map<string, bufferlist>& bucket_attrs);
 
-    bool verify_bucket_permission(int perm);
-    bool verify_object_permission(const map<string, bufferlist>& obj_attrs,
-                                  int perm);
+    bool verify_bucket_permission(const rgw_obj_key& obj_key, const uint64_t op);
   };
 
   static int policy_from_attrs(CephContext *cct,
@@ -2728,6 +2728,14 @@ int RGWUserPermHandler::Bucket::init(RGWUserPermHandler *handler,
     return r;
   }
 
+  // load bucket policy
+  try {
+    bucket_policy = get_iam_policy_from_attr(sync_env->cct, bucket_attrs, bucket_info.bucket.tenant);
+  } catch (const std::exception& e) {
+    ldpp_dout(sync_env->dpp, 0) << "ERROR: reading IAM Policy: " << e.what() << dendl;
+    return -EACCES;
+  }
+
   ps.emplace(sync_env->cct,
              info->env,
              info->identity.get(),
@@ -2740,30 +2748,35 @@ int RGWUserPermHandler::Bucket::init(RGWUserPermHandler *handler,
   return 0;
 }
 
-bool RGWUserPermHandler::Bucket::verify_bucket_permission(int perm)
+bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj_key, const uint64_t op)
 {
-  return verify_bucket_permission_no_policy(sync_env->dpp,
-                                            &(*ps),
-                                            info->user_acl,
-                                            bucket_acl,
-                                            perm);
-}
+  const rgw_obj obj(ps->bucket_info.bucket, obj_key);
+  const auto arn = rgw::ARN(obj);
 
-bool RGWUserPermHandler::Bucket::verify_object_permission(const map<string, bufferlist>& obj_attrs,
-                                                          int perm)
-{
-  RGWAccessControlPolicy obj_acl;
-
-  int r = policy_from_attrs(sync_env->cct, obj_attrs, &obj_acl);
-  if (r < 0) {
-    return r;
+  if (ps->identity->get_account()) {
+    const bool account_root = (ps->identity->get_identity_type() == TYPE_ROOT);
+    if (!ps->identity->is_owner_of(bucket_acl.get_owner().id)) {
+      ldpp_dout(sync_env->dpp, 4) << "cross-account request for bucket owner "
+          << bucket_acl.get_owner().id << " != " << ps->identity->get_aclowner().id << dendl;
+      // cross-account requests evaluate the identity-based policies separately
+      // from the resource-based policies and require Allow from both
+      return ::verify_bucket_permission(sync_env->dpp, &(*ps), arn, account_root, {}, {}, {},
+                                      info->user_policies, {}, op)
+          && ::verify_bucket_permission(sync_env->dpp, &(*ps), arn, false, info->user_acl,
+                                      bucket_acl, bucket_policy, {}, {}, op);
+    } else {
+      // don't consult acls for same-account access. require an Allow from
+      // either identity- or resource-based policy
+      return ::verify_bucket_permission(sync_env->dpp, &(*ps), arn, account_root, {}, {},
+                                      bucket_policy, info->user_policies,
+                                      {}, op);
+    }
   }
-
-  return verify_bucket_permission_no_policy(sync_env->dpp,
-                                            &(*ps),
-                                            bucket_acl,
-                                            obj_acl,
-                                            perm);
+  constexpr bool account_root = false;
+  return ::verify_bucket_permission(sync_env->dpp, &(*ps), arn, account_root,
+                                  info->user_acl, bucket_acl,
+                                  bucket_policy, info->user_policies,
+                                  {}, op);
 }
 
 class RGWFetchObjFilter_Sync : public RGWFetchObjFilter_Default {
@@ -3006,7 +3019,7 @@ public:
             return set_cr_error(retcode);
           }
 
-          if (!dest_bucket_perms.verify_bucket_permission(RGW_PERM_WRITE)) {
+          if (!dest_bucket_perms.verify_bucket_permission(dest_key.value_or(key), rgw::IAM::s3PutObject)) {
             ldout(cct, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to write into bucket (bucket=" << sync_pipe.info.dest_bucket.get_key() << ")" << dendl;
             return -EPERM;
           }
