@@ -1071,6 +1071,7 @@ private:
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
 
   void cache_status(Formatter *f);
+  void stray_status(Formatter *f);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;
@@ -1270,7 +1271,7 @@ private:
   void handle_open_ino(const cref_t<MMDSOpenIno> &m, int err=0);
   void handle_open_ino_reply(const cref_t<MMDSOpenInoReply> &m);
 
-  void scan_stray_dir(dirfrag_t next=dirfrag_t());
+  int scan_stray_dir(dirfrag_t next=dirfrag_t(), Formatter* f = nullptr);
   // -- replicas --
   void handle_discover(const cref_t<MDiscover> &dis);
   void handle_discover_reply(const cref_t<MDiscoverReply> &m);
