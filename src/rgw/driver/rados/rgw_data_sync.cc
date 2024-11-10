@@ -2769,7 +2769,6 @@ bool RGWUserPermHandler::Bucket::verify_object_permission(const map<string, buff
 class RGWFetchObjFilter_Sync : public RGWFetchObjFilter_Default {
   rgw_bucket_sync_pipe sync_pipe;
 
-  std::shared_ptr<RGWUserPermHandler::Bucket> bucket_perms;
   std::optional<rgw_sync_pipe_dest_params> verify_dest_params;
 
   std::optional<ceph::real_time> mtime;
@@ -2782,10 +2781,8 @@ class RGWFetchObjFilter_Sync : public RGWFetchObjFilter_Default {
 
 public:
   RGWFetchObjFilter_Sync(rgw_bucket_sync_pipe& _sync_pipe,
-                         std::shared_ptr<RGWUserPermHandler::Bucket>& _bucket_perms,
                          std::optional<rgw_sync_pipe_dest_params>&& _verify_dest_params,
                          std::shared_ptr<bool>& _need_retry) : sync_pipe(_sync_pipe),
-                                         bucket_perms(_bucket_perms),
                                          verify_dest_params(std::move(_verify_dest_params)),
                                          need_retry(_need_retry) {
     *need_retry = false;
@@ -2852,12 +2849,6 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
       *poverride_owner = acl_translation_owner;
     }
   }
-  if (params.mode == rgw_sync_pipe_params::MODE_USER) {
-    if (!bucket_perms->verify_object_permission(obj_attrs, RGW_PERM_READ)) {
-      ldout(cct, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to fetch object" << dendl;
-      return -EPERM;
-    }
-  }
 
   if (!dest_placement_rule &&
       params.dest.storage_class) {
@@ -2900,7 +2891,6 @@ class RGWObjFetchCR : public RGWCoroutine {
   rgw_sync_pipe_params::Mode param_mode;
 
   std::optional<RGWUserPermHandler> user_perms;
-  std::shared_ptr<RGWUserPermHandler::Bucket> source_bucket_perms;
   RGWUserPermHandler::Bucket dest_bucket_perms;
 
   std::optional<rgw_sync_pipe_dest_params> dest_params;
@@ -3020,16 +3010,6 @@ public:
             ldout(cct, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to write into bucket (bucket=" << sync_pipe.info.dest_bucket.get_key() << ")" << dendl;
             return -EPERM;
           }
-
-          /* init source bucket permission structure */
-          source_bucket_perms = make_shared<RGWUserPermHandler::Bucket>();
-          r = user_perms->init_bucket(sync_pipe.source_bucket_info,
-                                      sync_pipe.source_bucket_attrs,
-                                      source_bucket_perms.get());
-          if (r < 0) {
-            ldout(cct, 20) << "ERROR: " << __func__ << ": failed to init bucket perms manager for uid=" << *param_user << " bucket=" << sync_pipe.source_bucket_info.bucket.get_key() << dendl;
-            return set_cr_error(retcode);
-          }
         }
 
         yield {
@@ -3037,12 +3017,11 @@ public:
             need_retry = make_shared<bool>();
           }
           auto filter = make_shared<RGWFetchObjFilter_Sync>(sync_pipe,
-                                                            source_bucket_perms,
                                                             std::move(dest_params),
                                                             need_retry);
 
           call(new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->driver, sc->source_zone,
-                                       nullopt,
+                                       param_user,
                                        sync_pipe.source_bucket_info.bucket,
                                        std::nullopt, sync_pipe.dest_bucket_info,
                                        key, dest_key, versioned_epoch,
@@ -4528,7 +4507,7 @@ public:
           }
           tn->set_resource_name(SSTR(bucket_str_noinstance(bs.bucket) << "/" << key));
         }
-        if (retcode == -ERR_PRECONDITION_FAILED) {
+        if (retcode == -ERR_PRECONDITION_FAILED || retcode == -EPERM) {
 	  pretty_print(sc->env, "Skipping object s3://{}/{} in sync from zone {}\n",
 		       bs.bucket.name, key, zone_name);
           set_status("Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
