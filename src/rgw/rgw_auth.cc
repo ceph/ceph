@@ -313,7 +313,8 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
 auto transform_old_authinfo(const DoutPrefixProvider* dpp,
                             optional_yield y,
                             sal::Driver* driver,
-                            sal::User* user)
+                            sal::User* user,
+                            std::vector<IAM::Policy>* policies_)
   -> tl::expected<std::unique_ptr<Identity>, int>
 {
   const RGWUserInfo& info = user->get_info();
@@ -328,6 +329,9 @@ auto transform_old_authinfo(const DoutPrefixProvider* dpp,
     return tl::unexpected(r);
   }
 
+  if (policies_) { // return policies to caller if requested
+    *policies_ = policies;
+  }
   return transform_old_authinfo(info, std::move(account), std::move(policies));
 }
 

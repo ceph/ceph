@@ -331,19 +331,6 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-
-static boost::optional<Policy>
-get_iam_policy_from_attr(CephContext* cct,
-                         const map<string, bufferlist>& attrs,
-                         const string& tenant)
-{
-  if (auto i = attrs.find(RGW_ATTR_IAM_POLICY); i != attrs.end()) {
-    return Policy(cct, &tenant, i->second.to_str(), false);
-  } else {
-    return none;
-  }
-}
-
 static boost::optional<PublicAccessBlockConfiguration>
 get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
 {
