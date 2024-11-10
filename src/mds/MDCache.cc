@@ -10204,7 +10204,10 @@ struct C_MDC_RetryScanStray : public MDCacheContext {
   }
 };
 
-void MDCache::scan_stray_dir(dirfrag_t next)
+// if the formatter is not null, the request comes from asok and formatter will
+// accumulate stray dirs info
+// the function returns EAGAIN to support waiting when called from asok
+int MDCache::scan_stray_dir(dirfrag_t next, Formatter* f)
 {
   dout(10) << "scan_stray_dir " << next << dendl;
 
@@ -10224,20 +10227,29 @@ void MDCache::scan_stray_dir(dirfrag_t next)
 
       if (!dir->can_auth_pin()) {
 	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RetryScanStray(this, dir->dirfrag()));
-	return;
+	return -EAGAIN;
       }
 
       if (!dir->is_complete()) {
 	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
-	return;
+	return -EAGAIN;
       }
 
+  std::stringstream ss;
       for (auto &p : dir->items) {
 	CDentry *dn = p.second;
 	dn->state_set(CDentry::STATE_STRAY);
 	CDentry::linkage_t *dnl = dn->get_projected_linkage();
 	if (dnl->is_primary()) {
 	  CInode *in = dnl->get_inode();
+    if (f) {
+      f->open_object_section("stray_inode");
+      ss << "ino: " << in->ino();
+      ss << ", stray_prior_path: " << in->get_inode()->stray_prior_path;
+      f->dump_string("meta: ", ss.str());
+      in->dump(f, CInode::DUMP_CAPS);
+      f->close_section();
+    }
 	  if (in->get_inode()->nlink == 0)
 	    in->state_set(CInode::STATE_ORPHAN);
 	  maybe_eval_stray(in);
@@ -10246,6 +10258,7 @@ void MDCache::scan_stray_dir(dirfrag_t next)
     }
     next.frag = frag_t();
   }
+  return 0;
 }
 
 void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin)
@@ -10256,9 +10269,12 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
     mds->logger->inc(l_mds_openino_backtrace_fetch);
 }
 
-
-
-
+void MDCache::stray_status(Formatter *f)
+{
+  f->open_object_section("strays");
+  scan_stray_dir(dirfrag_t(), f);
+  f->close_section();
+}
 
 // ========================================================================================
 // DISCOVER

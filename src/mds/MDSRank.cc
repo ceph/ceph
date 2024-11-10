@@ -3070,6 +3070,9 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "quiesce db") {
     command_quiesce_db(cmdmap, on_finish);
     return;
+  } else if (command == "dump stray") {
+    mdcache->stray_status(f);
+    goto out;
   } else {
     r = -CEPHFS_ENOSYS;
   }
