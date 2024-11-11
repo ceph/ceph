@@ -894,3 +894,27 @@ HTTP Response
 | ``404``       | NoSuchBucket          | The bucket does not exist                                |
 +---------------+-----------------------+----------------------------------------------------------+
 
+Flush Bucket Logging
+--------------------
+
+Flushes all logging objects for a given source bucket (logging bucket are written lazily).
+
+Syntax
+~~~~~~
+
+::
+
+    POST /{bucket}?logging HTTP/1.1
+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``201``       | Created               | Flushed all logging objects successfully                 |
++---------------+-----------------------+----------------------------------------------------------+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+

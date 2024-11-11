@@ -4912,6 +4912,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
     return new RGWDeleteMultiObj_ObjStore_S3;
   }
 
+  if (s->info.args.exists("logging")) {
+    return RGWHandler_REST_BucketLogging_S3::create_post_op();
+  }
+
   if (s->info.args.exists("mdsearch")) {
     if (!s->cct->_conf->rgw_enable_mdsearch) {
       return NULL;
@@ -6069,7 +6073,8 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
 	case RGW_OP_GET_OBJ://s3select its post-method(payload contain the query) , the request is get-object
-        case RGW_OP_PUT_BUCKET_LOGGING: 
+        case RGW_OP_PUT_BUCKET_LOGGING:
+        case RGW_OP_POST_BUCKET_LOGGING:
         case RGW_OP_GET_BUCKET_LOGGING: 
           break;
         default:
