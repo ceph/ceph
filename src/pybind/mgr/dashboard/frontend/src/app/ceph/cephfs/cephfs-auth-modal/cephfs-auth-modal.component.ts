@@ -1,4 +1,11 @@
-import { Component, Inject, OnInit, Optional } from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectorRef,
+  Component,
+  Inject,
+  OnInit,
+  Optional
+} from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { OperatorFunction, Observable, of } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap, catchError } from 'rxjs/operators';
@@ -19,7 +26,7 @@ const DEBOUNCE_TIMER = 300;
   templateUrl: './cephfs-auth-modal.component.html',
   styleUrls: ['./cephfs-auth-modal.component.scss']
 })
-export class CephfsAuthModalComponent extends CdForm implements OnInit {
+export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterViewInit {
   subvolumeGroup: string;
   subvolume: string;
   isDefaultSubvolumeGroup = false;
@@ -58,6 +65,7 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit {
     private cephfsService: CephfsService,
     private taskWrapper: TaskWrapperService,
     private modalService: ModalCdsService,
+    private changeDetectorRef: ChangeDetectorRef,
 
     @Optional() @Inject('fsName') public fsName: string,
     @Optional() @Inject('id') public id: number
@@ -65,6 +73,10 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit {
     super();
     this.action = this.actionLabels.UPDATE;
     this.resource = $localize`access`;
+  }
+
+  ngAfterViewInit(): void {
+    this.changeDetectorRef.detectChanges();
   }
 
   ngOnInit() {

@@ -1,4 +1,12 @@
-import { Component, Inject, OnDestroy, OnInit, Optional } from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectorRef,
+  Component,
+  Inject,
+  OnDestroy,
+  OnInit,
+  Optional
+} from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, ValidatorFn, Validators } from '@angular/forms';
 
 import { BaseModal } from 'carbon-components-angular';
@@ -17,7 +25,9 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
   templateUrl: './bootstrap-create-modal.component.html',
   styleUrls: ['./bootstrap-create-modal.component.scss']
 })
-export class BootstrapCreateModalComponent extends BaseModal implements OnDestroy, OnInit {
+export class BootstrapCreateModalComponent
+  extends BaseModal
+  implements OnDestroy, OnInit, AfterViewInit {
   pools: any[] = [];
   token: string;
 
@@ -28,11 +38,16 @@ export class BootstrapCreateModalComponent extends BaseModal implements OnDestro
   constructor(
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService,
+    private changeDetectorRef: ChangeDetectorRef,
 
     @Inject('siteName') @Optional() public siteName?: string
   ) {
     super();
     this.createForm();
+  }
+
+  ngAfterViewInit(): void {
+    this.changeDetectorRef.detectChanges();
   }
 
   createForm() {
