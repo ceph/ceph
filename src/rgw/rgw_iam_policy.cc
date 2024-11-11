@@ -113,6 +113,7 @@ static const actpair actpairs[] =
  { "s3:PutBucketCORS", s3PutBucketCORS },
  { "s3:PutBucketEncryption", s3PutBucketEncryption },
  { "s3:PutBucketLogging", s3PutBucketLogging },
+ { "s3:PostBucketLogging", s3PostBucketLogging },
  { "s3:PutBucketNotification", s3PutBucketNotification },
  { "s3:PutBucketOwnershipControls", s3PutBucketOwnershipControls },
  { "s3:PutBucketPolicy", s3PutBucketPolicy },
@@ -1405,6 +1406,9 @@ const char* action_bit_string(uint64_t action) {
 
   case s3PutBucketLogging:
     return "s3:PutBucketLogging";
+
+    case s3PostBucketLogging:
+      return "s3:PostBucketLogging";
 
   case s3GetBucketTagging:
     return "s3:GetBucketTagging";
