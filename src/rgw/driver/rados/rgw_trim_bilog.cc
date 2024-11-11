@@ -466,6 +466,7 @@ class BucketTrimInstanceCR : public RGWCoroutine {
   const DoutPrefixProvider *dpp;
 public:
   struct StatusShards {
+    BucketSyncState state = BucketSyncState::Incremental;
     uint64_t generation = 0;
     std::vector<rgw_bucket_shard_sync_info> shards;
   };
@@ -594,6 +595,7 @@ inline int parse_decode_json<BucketTrimInstanceCR::StatusShards>(
   try {
     bilog_status_v2 v;
     decode_json_obj(v, &p);
+    s.state = v.sync_status.state;
     s.generation = v.sync_status.incremental_gen;
     s.shards = std::move(v.inc_status);
   } catch (JSONDecoder::err& e) {
@@ -700,6 +702,14 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
         return set_cr_error(child_ret);
       }
     }
+
+    // exclude peers reporting not applicable state
+    peer_status.erase(
+      std::remove_if(peer_status.begin(), peer_status.end(),
+                     [](const StatusShards& s) {
+                       return s.state == BucketSyncState::NotApplicable;
+                     }),
+      peer_status.end());
 
     // Determine the minimum generation
     retcode = take_min_generation();
