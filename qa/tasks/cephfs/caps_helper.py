@@ -18,28 +18,18 @@ def gen_mon_cap_str(caps):
 
     caps = ((perm1, fsname1), (perm2, fsname2))
     """
-    def _unpack_tuple(c):
-        if len(c) == 1:
-            perm, fsname = c[0], None
-        elif len(c) == 2:
-            perm, fsname = c
-        else:
-            raise RuntimeError('caps tuple received isn\'t right')
-        return perm, fsname
-
-    def _gen_mon_cap_str(c):
-        perm, fsname = _unpack_tuple(c)
+    def _gen_mon_cap_str(perm, fsname=None):
         mon_cap = f'allow {perm}'
         if fsname:
             mon_cap += f' fsname={fsname}'
         return mon_cap
 
     if len(caps) == 1:
-        return _gen_mon_cap_str(caps[0])
+        return _gen_mon_cap_str(*caps[0])
 
     mon_cap = ''
     for i, c in enumerate(caps):
-        mon_cap += _gen_mon_cap_str(c)
+        mon_cap += _gen_mon_cap_str(*c)
         if i != len(caps) - 1:
             mon_cap += ', '
 
@@ -52,19 +42,18 @@ def gen_osd_cap_str(caps):
 
     caps = ((perm1, fsname1), (perm2, fsname2))
     """
-    def _gen_osd_cap_str(c):
-        perm, fsname = c
+    def _gen_osd_cap_str(perm, fsname):
         osd_cap = f'allow {perm} tag cephfs'
         if fsname:
             osd_cap += f' data={fsname}'
         return osd_cap
 
     if len(caps) == 1:
-        return _gen_osd_cap_str(caps[0])
+        return _gen_osd_cap_str(*caps[0])
 
     osd_cap = ''
     for i, c in enumerate(caps):
-        osd_cap += _gen_osd_cap_str(c)
+        osd_cap += _gen_osd_cap_str(*c)
         if i != len(caps) - 1:
             osd_cap += ', '
 
@@ -77,20 +66,7 @@ def gen_mds_cap_str(caps):
 
     caps = ((perm1, fsname1, cephfs_mntpt1), (perm2, fsname2, cephfs_mntpt2))
     """
-    def _unpack_tuple(c):
-        if len(c) == 2:
-            perm, fsname, cephfs_mntpt = c[0], c[1], '/'
-        elif len(c) == 3:
-            perm, fsname, cephfs_mntpt = c
-        elif len(c) < 2:
-            raise RuntimeError('received items are too less in caps')
-        else: # len(c) > 3
-            raise RuntimeError('received items are too many in caps')
-
-        return perm, fsname, cephfs_mntpt
-
-    def _gen_mds_cap_str(c):
-        perm, fsname, cephfs_mntpt = _unpack_tuple(c)
+    def _gen_mds_cap_str(perm, fsname=None, cephfs_mntpt='/'):
         mds_cap = f'allow {perm}'
         if fsname:
             mds_cap += f' fsname={fsname}'
@@ -101,11 +77,11 @@ def gen_mds_cap_str(caps):
         return mds_cap
 
     if len(caps) == 1:
-        return _gen_mds_cap_str(caps[0])
+        return _gen_mds_cap_str(*caps[0])
 
     mds_cap = ''
     for i, c in enumerate(caps):
-        mds_cap +=  _gen_mds_cap_str(c)
+        mds_cap +=  _gen_mds_cap_str(*c)
         if i != len(caps) - 1:
             mds_cap += ', '
 
@@ -192,10 +168,10 @@ class MonCapTester:
         fsnames = get_fsnames_from_moncap(moncap)
         if fsnames == []:
             log.info('no FS name is mentioned in moncap, client has '
-                     'permission to list all files. moncap -\n{moncap}')
+                     f'permission to list all files. moncap -\n{moncap}')
             return
 
-        log.info('FS names are mentioned in moncap. moncap -\n{moncap}')
+        log.info(f'FS names are mentioned in moncap. moncap -\n{moncap}')
         log.info('testing for presence of these FS names in output of '
                  '"fs ls" command run by client.')
         for fsname in fsnames:
@@ -272,7 +248,7 @@ class MdsCapTester:
         Run test for read perm and, for write perm, run positive test if it
         is present and run negative test if not.
         """
-        if mntpt:
+        if mntpt and mntpt != '/':
             # beacaue we want to value of mntpt from test_set.path along with
             # slash that precedes it.
             mntpt = '/' + mntpt if mntpt[0] != '/' else mntpt
@@ -348,18 +324,19 @@ class CapTester(MonCapTester, MdsCapTester):
         possible_errmsgs = ('permission denied', 'operation not permitted')
         cmdargs = ['sudo'] if sudo_write else ['']
         cmdargs += _cmdargs
+        log.info(f'test absence of {_cmdargs[0]} perm: expect failure {self.path}.')
 
-        for mount, path, data in self.test_set:
-            log.info(f'test absence of {_cmdargs[0]} perm: expect failure {path}.')
+        # open the file and hold it. The MDS will issue CEPH_CAP_EXCL_*
+        # to mount
+        proc = self.mount.open_background(self.path)
 
-            # open the file and hold it. The MDS will issue CEPH_CAP_EXCL_*
-            # to mount
-            proc = mount.open_background(path)
-            cmdargs.append(path)
-            mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
-            cmdargs.pop(-1)
-            mount._kill_background(proc)
-            log.info(f'absence of {_cmdargs[0]} perm was tested successfully')
+        cmdargs.append(self.path)
+        self.mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
+        cmdargs.pop(-1)
+
+        self.mount._kill_background(proc)
+
+        log.info(f'absence of {_cmdargs[0]} perm was tested successfully')
 
     def conduct_neg_test_for_chown_caps(self, sudo_write=True):
         # flip ownership to nobody. assumption: nobody's id is 65534
