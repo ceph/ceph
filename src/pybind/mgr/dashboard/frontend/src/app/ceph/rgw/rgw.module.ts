@@ -73,7 +73,12 @@ import {
   ProgressIndicatorModule,
   CodeSnippetModule,
   InputModule,
-  CheckboxModule
+  CheckboxModule,
+  SelectModule,
+  NumberModule,
+  RadioModule,
+  TooltipModule,
+  ComboBoxModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 
@@ -103,7 +108,12 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     IconModule,
     NgbProgressbar,
     InputModule,
-    CheckboxModule
+    CheckboxModule,
+    SelectModule,
+    NumberModule,
+    RadioModule,
+    TooltipModule,
+    ComboBoxModule
   ],
   exports: [
     RgwDaemonListComponent,
