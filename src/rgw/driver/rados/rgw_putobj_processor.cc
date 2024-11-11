@@ -105,7 +105,7 @@ static int process_completed(const AioResultList& completed, RawObjSet *written)
   std::optional<int> error;
   for (auto& r : completed) {
     if (r.result >= 0) {
-      written->insert(r.obj.get_ref().obj);
+      written->insert(r.obj);
     } else if (!error) { // record first error code
       error = r.result;
     }
@@ -150,7 +150,8 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
     op.write(offset, data);
   }
   constexpr uint64_t id = 0; // unused
-  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
+  auto& ref = stripe_obj.get_ref();
+  auto c = aio->get(ref.obj, Aio::librados_op(ref.pool.ioctx(), std::move(op), y), cost, id);
   return process_completed(c, &written);
 }
 
@@ -164,7 +165,8 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   op.write_full(data);
 
   constexpr uint64_t id = 0; // unused
-  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
+  auto& ref = stripe_obj.get_ref();
+  auto c = aio->get(ref.obj, Aio::librados_op(ref.pool.ioctx(), std::move(op), y), cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);

@@ -178,14 +178,15 @@ int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
     return r;
   }
-  r = rados_obj.operate(dpp, &op, nullptr, y);
+
+  auto& ref = rados_obj.get_ref();
+  version_t op_ver = 0;
+  r = rgw_rados_operate(dpp, ref.pool.ioctx(), obj.oid, &op, nullptr, y, 0, &op_ver);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "rados_obj.operate() r=" << r << " bl.length=" << bl->length() << dendl;
     return r;
   }
   ldpp_dout(dpp, 20) << "rados_obj.operate() r=" << r << " bl.length=" << bl->length() << dendl;
-
-  uint64_t op_ver = rados_obj.get_last_version();
 
   if (read_state.last_ver > 0 &&
       read_state.last_ver != op_ver) {
