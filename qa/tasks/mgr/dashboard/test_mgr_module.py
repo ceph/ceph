@@ -4,6 +4,7 @@ from __future__ import absolute_import
 import logging
 
 import requests
+from urllib3.exceptions import MaxRetryError
 
 from .helper import (DashboardTestCase, JLeaf, JList, JObj,
                      module_options_object_schema, module_options_schema,
@@ -24,10 +25,11 @@ class MgrModuleTestCase(DashboardTestCase):
         def _check_connection():
             try:
                 # Try reaching an API endpoint successfully.
+                logger.info('Trying to reach the REST API endpoint')
                 self._get('/api/mgr/module')
                 if self._resp.status_code == 200:
                     return True
-            except requests.ConnectionError:
+            except (MaxRetryError, requests.ConnectionError):
                 pass
             return False
 
