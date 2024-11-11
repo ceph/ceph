@@ -1086,11 +1086,24 @@ void RGWOp_BILog_Status::execute(optional_yield y)
       std::unique_ptr<rgw::sal::Bucket> dest_bucket;
       op_ret = driver->load_bucket(s, *pipe.dest.bucket, &dest_bucket, y);
       if (op_ret < 0) {
+        if (op_ret == -ENOENT) { // if the destination bucket got deleted, let it trim
+          status.sync_status.state = BucketSyncState::NotApplicable;
+          op_ret = 0;
+          continue;
+        }
         ldpp_dout(this, 4) << "failed to read target bucket info (bucket=: " << cpp_strerror(op_ret) << dendl;
         return;
       }
 
       *opt_dest_info = dest_bucket->get_info();
+      if (opt_dest_info->zonegroup != driver->get_zone()->get_zonegroup().get_id()) {
+        // this usually happen when the user has wrong zones for the bucket in the sync policy
+        // we can cover the mistake by returning the bucket as not applicable so it can be trimmed
+        status.sync_status.state = BucketSyncState::NotApplicable;
+        ldpp_dout(this, 20) << "skipping as I do not own the bucket: " << *pipe.dest.bucket << dendl;
+        continue;
+      }
+
       pinfo = &(*opt_dest_info);
       pipe.dest.bucket = pinfo->bucket;
     }

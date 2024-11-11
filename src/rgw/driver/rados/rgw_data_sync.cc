@@ -6884,6 +6884,9 @@ void encode_json(const char *name, BucketSyncState state, Formatter *f)
   case BucketSyncState::Stopped:
     encode_json(name, "stopped", f);
     break;
+  case BucketSyncState::NotApplicable:
+    encode_json(name, "not-applicable", f);
+    break;
   default:
     encode_json(name, "unknown", f);
     break;
@@ -6900,6 +6903,8 @@ void decode_json_obj(BucketSyncState& state, JSONObj *obj)
     state = BucketSyncState::Incremental;
   } else if (s == "stopped") {
     state = BucketSyncState::Stopped;
+  } else if (s == "not-applicable") {
+    state = BucketSyncState::NotApplicable;
   } else {
     state = BucketSyncState::Init;
   }

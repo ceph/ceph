@@ -1644,6 +1644,7 @@ def test_bucket_index_log_trim_zonegroups(source_zone, dest_zone, source_bucket,
     assert(len(cold_bilog) == 0)
 
 
+@attr('bucket_reshard')
 @allow_zonegroups_replication
 @run_per_zonegroup
 @bucket_replication_per_zonegroup
@@ -1778,6 +1779,35 @@ def test_bucket_reshard_full_zonegroups(source_zone, dest_zone, source_bucket, d
         dest_zone.zone.start()
 
     zone_bucket_checkpoint(dest_zone.zone, source_zone.zone, dest_bucket.name)
+
+
+@allow_zonegroups_replication
+@run_per_zonegroup
+@bucket_replication_per_zonegroup
+def test_index_log_trim_dest_bucket_deletion_zonegroups(source_zone, dest_zone, source_bucket, dest_bucket):
+    for objname in ('a', 'b', 'c', 'd'):
+        k = new_key(source_zone, source_bucket.name, objname)
+        k.set_contents_from_string('foo')
+
+    # delete the dest bucket
+    dest_bucket.delete_keys(['a', 'b', 'c', 'd'])
+    dest_bucket.delete()
+    realm_meta_checkpoint(realm)
+
+    # checking bucket layout before trimming to make sure the bilogs are there even after dest bucket deletion
+    json_obj_1 = bucket_layout(source_zone.zone, source_bucket.name)
+    assert(len(json_obj_1['layout']['logs']) == 1)
+
+    first_gen = json_obj_1['layout']['current_index']['gen']
+    before_reshard_bilog = bilog_list(source_zone.zone, source_bucket.name, ['--gen', str(first_gen)])
+    assert(len(before_reshard_bilog) == 4)
+
+    # trim bilogs
+    bilog_autotrim(source_zone.zone)
+
+    # verify the bucket has empty bilog
+    test_bilog = bilog_list(source_zone.zone, source_bucket.name)
+    assert(len(test_bilog) == 0)
 
 
 @attr('fails_on_rgw')  # RGWGetBucketPeersCR doesn't respect the resolved_sources when only target_bucket is passed.
