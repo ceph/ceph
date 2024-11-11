@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
+        rgw bucket logging obj roll time: 5
+  rgw:
+    storage classes: LUKEWARM, FROZEN
