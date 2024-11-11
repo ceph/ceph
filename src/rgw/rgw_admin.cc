@@ -2672,6 +2672,10 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
       source_sync_info.status = fmt::format("full sync: {} objects completed", full_status.full.count);
       return 0;
     }
+    if (full_status.state == BucketSyncState::NotApplicable) {
+      source_sync_info.status = "not applicable: bucket can't be replicated here";
+      return 0;
+    }
     gen = full_status.incremental_gen;
     shard_status.resize(full_status.shards_done_with_gen.size());
   } else if (r == -ENOENT) {
