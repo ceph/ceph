@@ -1472,6 +1472,14 @@ Usage:
 
         return HandleCommandResult(stdout=out)
 
+    @_cli_write_command('orch osd set-spec-affinity')
+    def _osd_set_spec(self, service_name: str, osd_id: List[str]) -> HandleCommandResult:
+        """Set service spec affinity for osd"""
+        completion = self.set_osd_spec(service_name, osd_id)
+        res = raise_if_exception(completion)
+
+        return HandleCommandResult(stdout=res)
+
     @_cli_write_command('orch daemon add')
     def daemon_add_misc(self,
                         daemon_type: Optional[ServiceType] = None,
