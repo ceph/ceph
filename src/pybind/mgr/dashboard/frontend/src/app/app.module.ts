@@ -1,5 +1,5 @@
 import { APP_BASE_HREF } from '@angular/common';
-import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
+import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -14,38 +14,32 @@ import { ApiInterceptorService } from './shared/services/api-interceptor.service
 import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
 
-@NgModule({
-  declarations: [AppComponent],
-  imports: [
-    HttpClientModule,
-    BrowserModule,
-    BrowserAnimationsModule,
-    ToastrModule.forRoot({
-      positionClass: 'toast-top-right',
-      preventDuplicates: true,
-      enableHtml: true
-    }),
-    AppRoutingModule,
-    CoreModule,
-    SharedModule,
-    CephModule
-  ],
-  exports: [SharedModule],
-  providers: [
-    {
-      provide: ErrorHandler,
-      useClass: JsErrorHandler
-    },
-    {
-      provide: HTTP_INTERCEPTORS,
-      useClass: ApiInterceptorService,
-      multi: true
-    },
-    {
-      provide: APP_BASE_HREF,
-      useValue: '/' + (window.location.pathname.split('/', 1)[1] || '')
-    }
-  ],
-  bootstrap: [AppComponent]
-})
+@NgModule({ declarations: [AppComponent],
+    exports: [SharedModule],
+    bootstrap: [AppComponent], imports: [BrowserModule,
+        BrowserAnimationsModule,
+        ToastrModule.forRoot({
+            positionClass: 'toast-top-right',
+            preventDuplicates: true,
+            enableHtml: true
+        }),
+        AppRoutingModule,
+        CoreModule,
+        SharedModule,
+        CephModule], providers: [
+        {
+            provide: ErrorHandler,
+            useClass: JsErrorHandler
+        },
+        {
+            provide: HTTP_INTERCEPTORS,
+            useClass: ApiInterceptorService,
+            multi: true
+        },
+        {
+            provide: APP_BASE_HREF,
+            useValue: '/' + (window.location.pathname.split('/', 1)[1] || '')
+        },
+        provideHttpClient(withInterceptorsFromDi())
+    ] })
 export class AppModule {}
