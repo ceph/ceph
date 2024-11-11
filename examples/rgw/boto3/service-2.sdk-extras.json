@@ -13,6 +13,17 @@
             "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/bucketops/#delete-notification",
             "documentation":"<p>Deletes the notification configuration from the bucket.</p>"
         },
+        "PostBucketLogging":{
+            "name":"PostBucketLogging",
+            "http":{
+                "method":"POST",
+                "requestUri":"/{Bucket}?logging",
+                "responseCode":201
+            },
+            "input":{"shape":"PostBucketLoggingRequest"},
+            "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/bucketops/#post-bucket-logging",
+            "documentation":"<p>Flushes the logging objects of the buckets.</p>"
+        },
         "GetUsageStats":{
             "name":"GetUsageStats",
             "http":{
@@ -143,6 +154,18 @@
                     "documentation":"<p>Id of the specific notification on the bucket to be deleted.</p>",
                     "location":"querystring",
                     "locationName":"notification-id"
+                }
+            }
+        },
+        "PostBucketLoggingRequest":{
+            "type":"structure",
+            "required":["Bucket"],
+            "members":{
+                "Bucket":{
+                    "shape":"BucketName",
+                    "documentation":"<p>Name of the bucket to flush its logging objects.</p>",
+                    "location":"uri",
+                    "locationName":"Bucket"
                 }
             }
         },

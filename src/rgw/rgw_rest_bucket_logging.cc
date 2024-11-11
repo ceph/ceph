@@ -209,6 +209,84 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
   }
 };
 
+// Post /<bucket name>/?logging
+// actual configuration is XML encoded in the body of the message
+class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
+  int verify_permission(optional_yield y) override {
+    auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
+    if (has_s3_resource_tag)
+      rgw_iam_add_buckettags(this, s);
+
+    if (!verify_bucket_permission(this, s, rgw::IAM::s3PostBucketLogging)) {
+      return -EACCES;
+    }
+
+    return 0;
+  }
+
+  const char* name() const override { return "post_bucket_logging"; }
+  RGWOpType get_type() override { return RGW_OP_POST_BUCKET_LOGGING; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+
+  void execute(optional_yield y) override {
+    op_ret = verify_bucket_logging_params(this, s);
+    if (op_ret < 0) {
+      return;
+    }
+
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
+                                 &bucket, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to get bucket '" << s->bucket_name << "', ret = " << op_ret << dendl;
+      return;
+    }
+    const auto& bucket_attrs = bucket->get_attrs();
+    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
+    if (iter == bucket_attrs.end()) {
+      ldpp_dout(this, 1) << "WARNING: no logging configured on bucket" << dendl;
+      return;
+    }
+    rgw::bucketlogging::configuration configuration;
+    try {
+      configuration.enabled = true;
+      decode(configuration, iter->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+                         << "'. error: " << err.what() << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    std::unique_ptr<rgw::sal::Bucket> target_bucket;
+    op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, configuration.target_bucket),
+                                 &target_bucket, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << configuration.target_bucket << "', ret = " << op_ret << dendl;
+      return;
+    }
+    std::string obj_name;
+    RGWObjVersionTracker objv_tracker;
+    op_ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, this, &objv_tracker);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket << "'" << dendl;
+      return;
+    }
+    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, null_yield, true, &objv_tracker);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to flush pending logging object '" << obj_name
+               << "' to target bucket '" << configuration.target_bucket << "'" << dendl;
+      return;
+    }
+    ldpp_dout(this, 20) << "flushed pending logging object '" << obj_name
+                << "' to target bucket '" << configuration.target_bucket << "'" << dendl;
+  }
+};
+
+RGWOp* RGWHandler_REST_BucketLogging_S3::create_post_op() {
+  return new RGWPostBucketLoggingOp();
+}
+
 RGWOp* RGWHandler_REST_BucketLogging_S3::create_put_op() {
   return new RGWPutBucketLoggingOp();
 }

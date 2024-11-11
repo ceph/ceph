@@ -14,5 +14,6 @@ public:
   virtual ~RGWHandler_REST_BucketLogging_S3() = default;
   static RGWOp* create_get_op();
   static RGWOp* create_put_op();
+  static RGWOp* create_post_op();
 };
 
