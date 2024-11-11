@@ -340,7 +340,16 @@ int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Op
     int ret = string2bool(val, disableWAL);
     if (ret != 0)
       return ret;
-  } else {
+  } else if (key == "rocksdb.statistics.enable" || key == "stats_enabled" || key == "enable_stats") {
+        bool enable;
+        if (string2bool(val, enable) == 0 && enable) {
+            cct->_conf->rocksdb_perf = true;
+            dout(10) << "RocksDB statistics enabled via key: " << key << dendl;
+        } else {
+            dout(10) << "RocksDB statistics disabled via key: " << key << dendl;
+        }
+  }
+  else {
     //unrecognize config options.
     return -EINVAL;
   }
@@ -486,10 +495,22 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
     }
   }
 
-  if (cct->_conf->rocksdb_perf)  {
-    dbstats = rocksdb::CreateDBStatistics();
-    opt.statistics = dbstats;
-  }
+    // Parse each key-value pair in kv_options
+    for (const auto& [key, val] : kv_options) {
+        if (tryInterpret(key, val, opt) != 0) {
+            dout(1) << "Failed to interpret RocksDB option: " << key << dendl;
+            return -EINVAL;
+        }
+    }
+
+    // Initialize dbstats if rocksdb_perf is enabled
+    if (cct->_conf->rocksdb_perf)  {
+        dbstats = rocksdb::CreateDBStatistics();
+        opt.statistics = dbstats;
+        dout(10) << "RocksDB statistics initialized." << dendl;
+    } else {
+        dout(10) << "RocksDB statistics not enabled." << dendl;
+    }
 
   opt.create_if_missing = create_if_missing;
   if (kv_options.count("separate_wal_dir")) {

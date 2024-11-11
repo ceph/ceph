@@ -50,44 +50,18 @@ std::string generate_unique_db_path()
     return "/tmp/test_rocksdb_store_" + to_string(getpid()) + "_" + to_string(rand());
 }
 
-// Helper function to wait for AdminSocket readiness
-bool wait_for_admin_socket(const std::string &path, int timeout_ms = 1000)
-{
-    int fd;
-    int elapsed = 0;
-    int interval = 100; 
-    while (elapsed < timeout_ms)
-    {
-        fd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if (fd >= 0)
-        {
-            struct sockaddr_un addr;
-            memset(&addr, 0, sizeof(addr));
-            addr.sun_family = AF_UNIX;
-            strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
-            if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0)
-            {
-                close(fd);
-                return true;
-            }
-            close(fd);
-        }
-        usleep(interval * 1000); 
-        elapsed += interval;
-    }
-    return false;
-}
-
 class RocksDBMetricsTest : public ::testing::Test
 {
 protected:
-    boost::intrusive_ptr<CephContext> cct_ptr;
-    CephContext *cct;
+    static boost::intrusive_ptr<CephContext> cct_ptr;
+    static CephContext *cct;
+    static std::string admin_socket_path;
+    static std::unique_ptr<rocksdb::Statistics> stats;
     RocksDBStore *store;
     std::string db_path;
-    std::string admin_socket_path;
 
-    void SetUp() override
+    // Set up the global context once for all tests
+    static void SetUpTestSuite()
     {
         // CephContext with a unique admin socket path
         admin_socket_path = generate_rand_socket_path();
@@ -100,7 +74,22 @@ protected:
                                   CINIT_FLAG_NO_CCT_PERF_COUNTERS);
         cct = cct_ptr.get();
         common_init_finish(g_ceph_context);
+    }
 
+    // Tear down the global context after all tests
+    static void TearDownTestSuite()
+    {
+        if (cct_ptr)
+        {
+            cct_ptr = nullptr;
+            cct = nullptr;
+        }
+        // Remove the admin socket file
+        fs::remove(admin_socket_path);
+    }
+
+    void SetUp() override
+    {
         // Define RocksDB store path
         db_path = generate_unique_db_path();
 
@@ -108,18 +97,19 @@ protected:
         fs::remove_all(db_path);
 
         // RocksDBStore with empty options and default environment
-        std::map<std::string, std::string> kv_options; 
-        void *env = nullptr;                           
+        std::map<std::string, std::string> kv_options = {
+            {"rocksdb.statistics.enable", "true"},
+            {"stats_enabled", "true"},
+            {"enable_stats", "true"}};
+
+        void *env = nullptr;
 
         // Create RocksDBStore instance
         store = new RocksDBStore(cct, db_path, kv_options, env);
 
         std::ostringstream out;
-        int r = store->create_and_open(out); 
+        int r = store->create_and_open(out);
         ASSERT_EQ(r, 0) << "Failed to create and open RocksDBStore: " << out.str();
-
-        // Ensure AdminSocket is ready before registering the stats hook
-        ASSERT_TRUE(wait_for_admin_socket(admin_socket_path)) << "AdminSocket not ready in time";
     }
 
     void TearDown() override
@@ -133,9 +123,6 @@ protected:
 
         // Remove the RocksDB store directory
         fs::remove_all(db_path);
-
-        // Remove the admin socket file
-        fs::remove(admin_socket_path);
     }
 
     // Helper function to Write/Read
@@ -145,7 +132,7 @@ protected:
         {
             std::string key = "key" + std::to_string(i);
             std::string value = "value" + std::to_string(i);
-            auto txn = store->get_transaction(); 
+            auto txn = store->get_transaction();
             bufferlist bl;
             bl.append(value);
             txn->set("default", key, bl);
@@ -166,54 +153,116 @@ protected:
     }
 };
 
-TEST_F(RocksDBMetricsTest, SimpleTest){
+// Initialize static members, created only once
+boost::intrusive_ptr<CephContext> RocksDBMetricsTest::cct_ptr = nullptr;
+CephContext *RocksDBMetricsTest::cct = nullptr;
+std::string RocksDBMetricsTest::admin_socket_path = "";
+
+TEST_F(RocksDBMetricsTest, SimpleTest)
+{
     AdminSocketClient client(admin_socket_path.c_str());
     std::string message;
-    
-    //have to construct a JSON to pass into the do_request or else won't work
+
+    // have to construct a JSON to pass into the do_request or else won't work
     json request_json;
     request_json["prefix"] = "dump_rocksdb_stats";
     request_json["level"] = "telemetry";
-    std::string request = request_json.dump();
+    std::string request = request_json.dump(); // convert to string format
 
-    //Debug
+    // Debug
     std::cout << "Sending JSON request: " << request << std::endl;
-    
+
     // JSON command to AdminSocket
     std::string response = client.do_request(request, &message);
-    
+
     cout << "Received JSON response: " << message << std::endl;
 
     json response_json;
-    try {
+    try
+    {
         response_json = json::parse(message);
-    } catch (json::parse_error& e) {
+    }
+    catch (json::parse_error &e)
+    {
         FAIL() << "Failed to parse JSON response: " << e.what();
     }
 
-    ASSERT_TRUE(response_json.contains("main")) << "Response JSON does not contain 'main'";
-    ASSERT_TRUE(response_json.contains("histogram")) << "Response JSON does not contain 'histogram'";
-    ASSERT_TRUE(response_json.contains("columns")) << "Response JSON does not contain 'columns'";
+    ASSERT_TRUE(response_json.contains("main")) << "Response JSON in SIMPLETEST does not contain 'main'";
+    ASSERT_TRUE(response_json.contains("histogram")) << "Response JSON in SIMPLETEST does not contain 'histogram'";
+    ASSERT_TRUE(response_json.contains("columns")) << "Response JSON in SIMPLETEST does not contain 'columns'";
 
-    // ASSERT_TRUE(response_json["main"].contains("rocksdb.bytes.read")) << "'rocksdb.bytes.read' not found in 'main'";
-    // ASSERT_EQ(response_json["main"]["rocksdb.bytes.read"], -1) << "'rocksdb.bytes.read' is negative";
-
-    // ASSERT_EQ(response_json["main"]["rocksdb.bytes.written"], -1) << "'rocksdb.bytes.written' should be zero";
+    ASSERT_EQ(response_json["main"]["rocksdb.bytes.read"], 0);
+    ASSERT_EQ(response_json["main"]["rocksdb.bytes.written"], 0);
+    // ASSERT_EQ(response_json["histogram"]["rocksdb.bytes.read"], -1);
+    // ASSERT_EQ(response_json["histogram"]["rocksdb.bytes.written"], -1);
+    // ASSERT_EQ(response_json["main"]["rocksdb.bytes.read"], -1);
+    // ASSERT_EQ(response_json["main"]["rocksdb.bytes.written"], -1);
 }
 
 // Telemetry Stats
-// TEST_F(RocksDBMetricsTest, DumpTelemetryStats) {
-//     AdminSocketClient client(admin_socket_path.c_str());
-//     std::string message;
-    
-//     //write a operations on the key/value pair for ROCKSDB
-//     perform_write_operations(store, 100);
-    
-//     json request_json;
-//     request_json["prefix"] = "dump_rocksdb_stats";
-//     request_json["level"] = "telemetry";
-    
-// }
+TEST_F(RocksDBMetricsTest, DumpTelemetryStats)
+{
+    AdminSocketClient client(admin_socket_path.c_str());
+    string message;
+
+    // Perform write and read operations
+    perform_write_operations(store, 100);
+    perform_read_operations(store, 50);
+
+    json request_json;
+    request_json["prefix"] = "dump_rocksdb_stats";
+    request_json["level"] = "telemetry";
+    string request = request_json.dump();
+
+    std::cout << "Sending JSON request: " << request << std::endl;
+
+    string response = client.do_request(request, &message);
+
+    cout << "Received JSON response: " << message << std::endl;
+
+    json response_json;
+    try
+    {
+        response_json = json::parse(message);
+    }
+    catch (json::parse_error &e)
+    {
+        FAIL() << "Failed to parse JSON response on TEST DumpTelemetryStats: " << e.what();
+    }
+
+    // Simple Test
+    ASSERT_TRUE(response_json.contains("main")) << "Response JSON in DumpTelemetryStats does not contain 'main'";
+    ASSERT_TRUE(response_json.contains("histogram")) << "Response JSON in DumpTelemetryStats does not contain 'histogram'";
+    ASSERT_TRUE(response_json.contains("columns")) << "Response JSON in DumpTelemetryStats does not contain 'columns'";
+
+    // Main Metrics
+    EXPECT_GT(response_json["main"]["rocksdb.bytes.read"], 0) << "Bytes read should be greater than 0.";
+    EXPECT_GT(response_json["main"]["rocksdb.bytes.written"], 0) << "Bytes written should be greater than 0.";
+    EXPECT_GE(response_json["main"]["rocksdb.memtable.hit"], 0) << "Memtable hits should be >= 0.";
+    EXPECT_GE(response_json["main"]["rocksdb.memtable.miss"], 0) << "Memtable misses should be >= 0.";
+
+    // Histogram Metrics
+    ASSERT_TRUE(response_json["histogram"].contains("rocksdb.db.get.micros")) << "Histogram does not contain db.get.micros";
+    EXPECT_GT(response_json["histogram"]["rocksdb.db.get.micros"]["count"], 0) << "db.get.micros count should be greater than 0.";
+    EXPECT_GT(response_json["histogram"]["rocksdb.db.get.micros"]["avg"], 0) << "Avg db.get.micros should be greater than 0.";
+
+    ASSERT_TRUE(response_json["histogram"].contains("rocksdb.db.write.micros")) << "Histogram does not contain db.write.micros";
+    EXPECT_GT(response_json["histogram"]["rocksdb.db.write.micros"]["count"], 0) << "db.write.micros count should be greater than 0.";
+    EXPECT_GT(response_json["histogram"]["rocksdb.db.write.micros"]["avg"], 0) << "Avg db.write.micros should be greater than 0.";
+
+    // SST Read Metrics
+    ASSERT_TRUE(response_json["histogram"].contains("rocksdb.sst.read.micros")) << "Histogram does not contain sst.read.micros";
+    EXPECT_GT(response_json["histogram"]["rocksdb.sst.read.micros"]["count"], 0) << "sst.read.micros count should be greater than 0.";
+
+    // Columns Metrics
+    ASSERT_TRUE(response_json["columns"].contains("all_columns")) << "Columns section does not contain 'all_columns'";
+    EXPECT_EQ(response_json["columns"]["all_columns"]["sum"]["NumFiles"], 1) << "Number of SST files should be 1.";
+
+    // verify block cache metrics
+    EXPECT_GT(response_json["main"]["rocksdb.block.cache.hit"], 0) << "Block cache hits should be greater than 0.";
+    EXPECT_GE(response_json["main"]["rocksdb.block.cache.miss"], 0) << "Block cache misses should be >= 0.";
+}
+
 
 // // Test to dump objectstore stats after performing write and read operations
 // TEST_F(RocksDBMetricsTest, DumpObjectstoreStats) {
