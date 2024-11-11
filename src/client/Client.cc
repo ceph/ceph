@@ -15375,7 +15375,7 @@ int Client::ll_sync_inode(Inode *in, bool syncdataonly)
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
 
-  ldout(cct, 3) << "ll_sync_inode " << *in << " " << dendl;
+  ldout(cct, 3) << "ll_sync_inode " << _get_vino(in) << " " << dendl;
   tout(cct) << "ll_sync_inode" << std::endl;
   tout(cct) << (uintptr_t)in << std::endl;
 
