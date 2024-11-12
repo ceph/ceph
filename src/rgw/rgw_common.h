@@ -1207,6 +1207,7 @@ namespace rgw {
     namespace s3 {
       class AWSBrowserUploadAbstractor;
       class STSEngine;
+      class LocalEngine;
     }
     class Completer;
   }
@@ -1332,6 +1333,7 @@ struct req_state : DoutPrefixProvider {
       /* Reader. */
       friend class rgw::auth::s3::AWSBrowserUploadAbstractor;
       friend class rgw::auth::s3::STSEngine;
+      friend class rgw::auth::s3::LocalEngine;
 
       std::string access_key;
       std::string signature;

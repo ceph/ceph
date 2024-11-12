@@ -6447,6 +6447,43 @@ void rgw::auth::s3::LDAPEngine::shutdown() {
 }
 
 /* LocalEngine */
+bool rgw::auth::s3::LocalEngine::is_applicable(const req_state* s, const std::string_view& access_key_id) const noexcept
+{
+  //1.LDAP
+  rgw::RGWToken base64_token;
+  try {
+    base64_token = rgw::from_base64(access_key_id);
+  } catch (...) {
+    base64_token = std::string("");
+  }
+
+  if (base64_token.valid()) {
+    return false;
+  }
+  //2. STS
+  if (s->info.args.exists("x-amz-security-token") ||
+      s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN") ||
+      !s->auth.s3_postobj_creds.x_amz_security_token.empty()) {
+    return false;
+  }
+  //3.WebTokenEngine
+  if (s->info.args.exists("WebIdentityToken")) {
+    return false;
+  }
+
+  //Other token based engines
+  if (s->info.env->exists("HTTP_X_AUTH_TOKEN")) {
+    return false;
+  }
+
+  if (s->info.env->exists("HTTP_X_SERVICE_TOKEN")) {
+    return false;
+  }
+
+  //EC2?
+  return true;
+}
+
 rgw::auth::Engine::result_t
 rgw::auth::s3::LocalEngine::authenticate(
   const DoutPrefixProvider* dpp,
@@ -6459,6 +6496,10 @@ rgw::auth::s3::LocalEngine::authenticate(
   const req_state* const s,
   optional_yield y) const
 {
+  if (!is_applicable(s, _access_key_id)) {
+    return result_t::deny();
+  }
+
   /* get the user info */
   std::unique_ptr<rgw::sal::User> user;
   const std::string access_key_id(_access_key_id);
@@ -6466,6 +6507,10 @@ rgw::auth::s3::LocalEngine::authenticate(
   if (driver->get_user_by_access_key(dpp, access_key_id, y, &user) < 0) {
       ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
+      //EC2 - so that ec2 is tried in case local engine returns failure
+      if (driver->ctx()->_conf->rgw_s3_auth_use_keystone) {
+        return result_t::deny(-ERR_INVALID_ACCESS_KEY);
+      }
       return result_t::reject(-ERR_INVALID_ACCESS_KEY);
   }
   //TODO: Uncomment, when we have a migration plan in place.

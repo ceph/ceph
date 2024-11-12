@@ -1155,6 +1155,7 @@ class LocalEngine : public AWSEngine {
                         const completer_factory_t& completer_factory,
                         const req_state* s,
 			optional_yield y) const override;
+  bool is_applicable(const req_state* s, const std::string_view& access_key_id) const noexcept;
 public:
   LocalEngine(CephContext* const cct,
               rgw::sal::Driver* driver,
