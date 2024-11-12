@@ -15,23 +15,21 @@ Add below cmake option (enabled by default)
 
 
 ## Running Test cluster
-Edit ceph.conf to add below option
+Edit ceph.conf to add below options
 
     [client]
         rgw backend store = dbstore
         rgw config store = dbstore
 
-Start vstart cluster
+To start the `vstart` cluster, run the following cmd:
 
-    MON=1 RGW=1 ../src/vstart.sh -o rgw_backend_store=dbstore -o rgw_config_store=dbstore -n -d
+    MON=0 OSD=0 MDS=0 MGR=0 RGW=1 ../src/vstart.sh -n -d --rgw_store dbstore
 
-The above vstart command brings up RGW server on dbstore. It creates default zonegroup, zone and few default users (eg., testid) to be used for s3 operations.
+The above `vstart` command brings up the RGW server on DBStore without the need for MONs or OSDs. It creates a default zonegroup, zone, and few default users (e.g., `testid`) to be used for S3 operations, and generates database files in the `dev` subdirectory, by default, to store them.
 
-`radosgw-admin` can be used to create and remove other users, zonegroups and zones.
+`radosgw-admin` command can be used to create and remove other users, zonegroups and zones.
 
-
-By default, dbstore creates .db file *'/var/lib/ceph/radosgw/dbstore-default_ns.db'* to store the data and *'/var/lib/ceph/radosgw/dbstore-config.db'* file to store the configuration. This can be configured using below options in ceph.conf
-
+The location and prefix for the database files can be configured using the following options:
     [client]
         dbstore db dir = <path for the directory for storing the db backend store data>
         dbstore db name prefix = <prefix to the file names created by db backend store>
