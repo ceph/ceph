@@ -599,6 +599,14 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='-1m')
         with self.assertRaises(CommandFailedError):
             self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='')
+        with self.assertRaises(CommandFailedError):
+            self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='5Y')
+        with self.assertRaises(CommandFailedError):
+            self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='4W')
+        with self.assertRaises(CommandFailedError):
+            self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='3D')
+        with self.assertRaises(CommandFailedError):
+            self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='2H')
 
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/minutes"
         self.remove_snapshots(test_dir, self.get_snap_dir_name())
