@@ -264,41 +264,70 @@ TEST_F(RocksDBMetricsTest, DumpTelemetryStats)
 }
 
 
-// // Test to dump objectstore stats after performing write and read operations
-// TEST_F(RocksDBMetricsTest, DumpObjectstoreStats) {
-//     AdminSocketClient client(admin_socket_path.c_str());
-//     std::string message;
+// Test to dump objectstore stats after performing write and read operations
+TEST_F(RocksDBMetricsTest, DumpObjectstoreStats) {
+    AdminSocketClient client(admin_socket_path.c_str());
+    string message;
 
-//     // Perform write and read operations to generate metrics
-//     perform_write_operations(store, 50);
-//     perform_read_operations(store, 50);
+    // Perform write and read operations
+    perform_write_operations(store, 50);
+    perform_read_operations(store, 50);
 
-//     // Request objectstore stats in JSON format
-//     ASSERT_EQ("", client.do_request("{ \"prefix\": \"dump_rocksdb_stats\", \"level\": \"objectstore\", \"format\": \"json\" }", &message));
+    json request_json;
+    request_json["prefix"] = "dump_rocksdb_stats";
+    request_json["level"] = "objectstore";
+    string request = request_json.dump();
 
-//     // Ensure the message is not empty
-//     ASSERT_FALSE(message.empty());
+    std::cout << "Sending JSON request: " << request << std::endl;
 
-//     // Parse the JSON response
-//     json j;
-//     try {
-//         j = json::parse(message);
-//     } catch (json::parse_error& e) {
-//         FAIL() << "JSON parsing failed: " << e.what();
-//     }
+    string response = client.do_request(request, &message);
 
-//     // Verify that the main, histogram, and columns sections exist
-//     ASSERT_TRUE(j.contains("stats"));
-//     ASSERT_TRUE(j["stats"].contains("main"));
-//     ASSERT_TRUE(j["stats"].contains("histogram"));
-//     ASSERT_TRUE(j["stats"].contains("columns"));
+    cout << "Received JSON response: " << message << std::endl;
 
-//     // Optionally, verify specific metric values
-//     // For example, check that bytes written is greater than zero
-//     if (j["stats"]["main"].contains("rocksdb.bytes.written")) {
-//         EXPECT_GT(j["stats"]["main"]["rocksdb.bytes.written"], 0);
-//     }
-// }
+    json response_json;
+    try
+    {
+        response_json = json::parse(message);
+    }
+    catch (json::parse_error &e)
+    {
+        FAIL() << "Failed to parse JSON response on TEST DumpObjectstoreStats: " << e.what();
+    }
+
+    // Simple Test
+    ASSERT_TRUE(response_json.contains("main")) << "Response JSON in DumpObjectstoreStats does not contain 'main'";
+    ASSERT_TRUE(response_json.contains("histogram")) << "Response JSON in DumpObjectStoreStats does not contain 'histogram'";
+    ASSERT_TRUE(response_json.contains("columns")) << "Response JSON in DumpObjectStoreStats does not contain 'columns'";
+
+    // // Main Metrics
+    // EXPECT_GT(response_json["main"]["rocksdb.bytes.read"], 0) << "Bytes read should be greater than 0.";
+    // EXPECT_GT(response_json["main"]["rocksdb.bytes.written"], 0) << "Bytes written should be greater than 0.";
+    // EXPECT_GE(response_json["main"]["rocksdb.memtable.hit"], 0) << "Memtable hits should be >= 0.";
+    // EXPECT_GE(response_json["main"]["rocksdb.memtable.miss"], 0) << "Memtable misses should be >= 0.";
+
+    // // Histogram Metrics
+    // ASSERT_TRUE(response_json["histogram"].contains("rocksdb.db.get.micros")) << "Histogram does not contain db.get.micros";
+    // EXPECT_GT(response_json["histogram"]["rocksdb.db.get.micros"]["count"], 0) << "db.get.micros count should be greater than 0.";
+    // EXPECT_GT(response_json["histogram"]["rocksdb.db.get.micros"]["avg"], 0) << "Avg db.get.micros should be greater than 0.";
+
+    // ASSERT_TRUE(response_json["histogram"].contains("rocksdb.db.write.micros")) << "Histogram does not contain db.write.micros";
+    // EXPECT_GT(response_json["histogram"]["rocksdb.db.write.micros"]["count"], 0) << "db.write.micros count should be greater than 0.";
+    // EXPECT_GT(response_json["histogram"]["rocksdb.db.write.micros"]["avg"], 0) << "Avg db.write.micros should be greater than 0.";
+
+    // // SST Read Metrics
+    // ASSERT_TRUE(response_json["histogram"].contains("rocksdb.sst.read.micros")) << "Histogram does not contain sst.read.micros";
+    // EXPECT_GT(response_json["histogram"]["rocksdb.sst.read.micros"]["count"], 0) << "sst.read.micros count should be greater than 0.";
+
+    // // Columns Metrics
+    // ASSERT_TRUE(response_json["columns"].contains("all_columns")) << "Columns section does not contain 'all_columns'";
+    // EXPECT_EQ(response_json["columns"]["all_columns"]["sum"]["NumFiles"], 1) << "Number of SST files should be 1.";
+    // EXPECT_EQ(response_json["columns"]["all_columns"]["l0"]["NumFiles"], 0) << "Number of SST files should be 0.";
+    // EXPECT_EQ(response_json["columns"]["all_columns"]["l1"]["NumFiles"], 1) << "Number of SST files should be 1.";
+
+    // // verify block cache metrics
+    // EXPECT_GT(response_json["main"]["rocksdb.block.cache.hit"], 0) << "Block cache hits should be greater than 0.";
+    // EXPECT_GE(response_json["main"]["rocksdb.block.cache.miss"], 0) << "Block cache misses should be >= 0.";
+}
 
 // // Test to dump debug stats after performing write operations
 // TEST_F(RocksDBMetricsTest, DumpDebugStats) {
