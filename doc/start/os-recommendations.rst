@@ -72,8 +72,38 @@ non-Linux systems but these are not supported by the core Ceph effort.
 - **A**: Ceph provides packages and has done comprehensive tests on the software in them.
 - **B**: Ceph provides packages and has done basic tests on the software in them.
 - **C**: Ceph provides packages only. No tests have been done on these releases.
-- **H**: Ceph tests this distribution as a container host.
 - **1**: Testing has been done on Centos 9 starting on version 17.2.8 for Quincy.
+
+Container Hosts
+---------------
+
+This table shows the operating systems that support Ceph's official container images.
+
++---------------+---------------+------------------+------------------+------------------+
+|               | Reef (18.2.z) | Quincy (17.2.z)  | Pacific (16.2.z) | Octopus (15.2.z) |
++===============+===============+==================+==================+==================+
+| Centos 7      |               |                  |                  |                  |
++---------------+---------------+------------------+------------------+------------------+
+| Centos 8      |               |                  |                  |                  |
++---------------+---------------+------------------+------------------+------------------+
+| Centos 9      |      H        |        H         |                  |                  |
++---------------+---------------+------------------+------------------+------------------+
+| Debian 10     |               |                  |                  |                  |
++---------------+---------------+------------------+------------------+------------------+
+| Debian 11     |               |                  |                  |                  |
++---------------+---------------+------------------+------------------+------------------+
+| OpenSUSE 15.2 |               |                  |                  |                  |
++---------------+---------------+------------------+------------------+------------------+
+| OpenSUSE 15.3 |               |                  |                  |                  |
++---------------+---------------+------------------+------------------+------------------+
+| Ubuntu 18.04  |               |                  |                  |                  |
++---------------+---------------+------------------+------------------+------------------+
+| Ubuntu 20.04  |               |                  |                  |                  |
++---------------+---------------+------------------+------------------+------------------+
+| Ubuntu 22.04  |      H        |                  |                  |                  |
++---------------+---------------+------------------+------------------+------------------+
+
+- **H**: Ceph tests this distribution as a container host.
 
 .. note::
    **For Centos 7 Users** 
