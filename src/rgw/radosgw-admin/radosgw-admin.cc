@@ -10196,6 +10196,12 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+
+    if (bucket->get_info().is_indexless()) {
+      cerr << "ERROR: indexless bucket has no bilogs" << std::endl;
+      return EINVAL;
+    }
+
     formatter->open_array_section("entries");
     bool truncated;
     int count = 0;
