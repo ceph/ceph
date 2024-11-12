@@ -431,11 +431,11 @@ class Migrations:
             grafana_cert = self.mgr.get_store(grafana_cert_path)
             if grafana_cert:
                 logger.info(f'Migrating {grafana_daemon.name()} cert to cert store')
-                self.mgr.cert_key_store.save_cert('grafana_cert', grafana_cert, host=hostname)
+                self.mgr.cert_mgr.save_cert('grafana_cert', grafana_cert, host=hostname)
             grafana_key = self.mgr.get_store(grafana_key_path)
             if grafana_key:
                 logger.info(f'Migrating {grafana_daemon.name()} key to cert store')
-                self.mgr.cert_key_store.save_key('grafana_key', grafana_key, host=hostname)
+                self.mgr.cert_mgr.save_key('grafana_key', grafana_key, host=hostname)
 
         # NOTE: prometheus, alertmanager, and node-exporter certs were not stored
         # and appeared to just be generated at daemon deploy time if secure_monitoring_stack
