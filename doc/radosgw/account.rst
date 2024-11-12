@@ -77,14 +77,14 @@ allow it. The account root user can add identity policies to its users in
 several ways.
 
 * Add policy directly to the user with the ``iam:PutUserPolicy`` and
-  ``iam:AttachUserPoliicy`` actions.
+  ``iam:AttachUserPolicy`` actions.
 
 * Create an IAM group and add group policy with the ``iam:PutGroupPolicy`` and
-  ``iam:AttachGroupPoliicy`` actions. Users added to that group with the
+  ``iam:AttachGroupPolicy`` actions. Users added to that group with the
   ``iam:AddUserToGroup`` action will inherit all of the group's policy.
 
 * Create an IAM role and add role policy with the ``iam:PutRolePolicy`` and
-  ``iam:AttachRolePoliicy`` actions. Users that assume this role with the
+  ``iam:AttachRolePolicy`` actions. Users that assume this role with the
   ``sts:AssumeRole`` and ``sts:AssumeRoleWithWebIdentity`` actions will inherit
   all of the role's policy.
 
