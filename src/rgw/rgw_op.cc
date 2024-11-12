@@ -151,7 +151,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
 
   // use the master zone's endpoints
   auto conn = RGWRESTConn{dpp->get_cct(), z->second.id, z->second.endpoints,
-                          creds, site.get_zonegroup().id, zg->second.api_name};
+                          creds, site.get_zone().id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
   int ret = conn.forward(dpp, effective_owner, req, nullptr,
@@ -3633,8 +3633,7 @@ void RGWCreateBucket::execute(optional_yield y)
   const rgw::SiteConfig& site = *s->penv.site;
   const std::optional<RGWPeriod>& period = site.get_period();
   const RGWZoneGroup& my_zonegroup = site.get_zonegroup();
-  const std::string rgwx_zonegroup = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
-  const RGWZoneGroup* bucket_zonegroup = &my_zonegroup;
+  std::unique_ptr<RGWZoneGroup> bucket_zonegroup = std::make_unique<RGWZoneGroup>(my_zonegroup);
 
   // Validate LocationConstraint if it's provided and enforcement is strict
   if (!location_constraint.empty() && !relaxed_region_enforcement) {
@@ -3648,7 +3647,7 @@ void RGWCreateBucket::execute(optional_yield y)
                                      location_constraint);
         return;
       }
-      bucket_zonegroup = &location_iter->second;
+      bucket_zonegroup = std::make_unique<RGWZoneGroup>(location_iter->second);
     } else if (location_constraint != my_zonegroup.api_name) { // if we don't have a period, we can only use the current zonegroup - so check if the location matches by api name here
       ldpp_dout(this, 0) << "location constraint (" << location_constraint
           << ") doesn't match zonegroup (" << my_zonegroup.api_name << ")" << dendl;
@@ -3660,16 +3659,32 @@ void RGWCreateBucket::execute(optional_yield y)
     }
   }
   // If it's a system request, use the provided zonegroup if available
-  else if (s->system_request && !rgwx_zonegroup.empty()) {
-    if (period) {
-      auto zonegroup_iter = period->period_map.zonegroups.find(rgwx_zonegroup);
-      if (zonegroup_iter == period->period_map.zonegroups.end()) {
-        ldpp_dout(this, 0) << "could not find zonegroup " << rgwx_zonegroup
-            << " in current period" << dendl;
-        op_ret = -ENOENT;
+  else if (s->system_request && period) {
+    auto rgwx_zone_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zone");
+    if (unlikely(rgwx_zone_id.empty())) { // backward compatibility
+      const std::string rgwx_zonegroup = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
+      if (!rgwx_zonegroup.empty()) {
+        ldpp_dout(this, 0) << "WARNING: rgwx-zonegroup is deprecated, use rgwx-zone instead" << dendl;
+
+        auto zonegroup_iter = period->period_map.zonegroups.find(rgwx_zonegroup);
+        if (zonegroup_iter == period->period_map.zonegroups.end()) {
+          ldpp_dout(this, 0) << "could not find zonegroup " << rgwx_zonegroup
+              << " in current period" << dendl;
+          op_ret = -ENOENT;
+          return;
+        }
+
+        bucket_zonegroup = std::make_unique<RGWZoneGroup>(zonegroup_iter->second);
+      }
+    } else {
+      auto rgwx_zonegroup = std::make_unique<RGWZoneGroup>();
+      if (!period->find_zone(this, rgwx_zone_id, rgwx_zonegroup.get(), y)) {
+        ldpp_dout(this, 0) << "could not find zonegroup for zone=" << rgwx_zone_id << dendl;
+        op_ret = -EINVAL;
         return;
       }
-      bucket_zonegroup = &zonegroup_iter->second;
+
+      bucket_zonegroup = std::move(rgwx_zonegroup);
     }
   }
 

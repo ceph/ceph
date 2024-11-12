@@ -655,7 +655,7 @@ struct AWSSyncConfig {
                                            id,
                                            { root_conf->endpoint },
                                            root_conf->key,
-					   sync_env->svc->zone->get_zonegroup().get_id(),
+                                           sync_env->svc->zone->zone_id().id,
                                            root_conf->region,
                                            root_conf->host_style));
 
@@ -666,7 +666,7 @@ struct AWSSyncConfig {
                                    id,
                                    { c->conn_conf->endpoint },
                                    c->conn_conf->key,
-				   sync_env->svc->zone->get_zonegroup().get_id(),
+                                   sync_env->svc->zone->zone_id().id,
                                    c->conn_conf->region,
                                    c->conn_conf->host_style));
     }
