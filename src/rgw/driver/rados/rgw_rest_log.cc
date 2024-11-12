@@ -449,6 +449,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
     max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
   send_response();
+  list<rgw_bi_log_entry> zone_entries;
   do {
     list<rgw_bi_log_entry> entries;
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_list(s, bucket->get_info(), log_layout, shard_id,
@@ -459,7 +460,12 @@ void RGWOp_BILog_List::execute(optional_yield y) {
       return;
     }
 
-    list<rgw_bi_log_entry> zone_entries;
+    // update last processed marker for trimming purposes
+    if (!entries.empty()) {
+      last_processed_entry = entries.back();
+    }
+
+    zone_entries.clear();
     for (auto& entry : entries) {
       if (entry.log_zones.contains(rgwx_zone) || rgwx_zone.empty() || entry.log_zones.empty()) {
         zone_entries.push_back(std::move(entry));
@@ -516,6 +522,13 @@ void RGWOp_BILog_List::send_response_end() {
       encode_json("generation", next_log_layout->gen, s->formatter);
       encode_json("num_shards", rgw::num_shards(next_log_layout->layout.in_index.layout), s->formatter);
       s->formatter->close_section(); // next_log
+    }
+
+    if (last_processed_entry) {
+      s->formatter->open_object_section("last_processed_marker");
+      encode_json("id", last_processed_entry->id, s->formatter);
+      encode_json("timestamp", utime_t(last_processed_entry->timestamp), s->formatter);
+      s->formatter->close_section(); // last_processed_marker
     }
 
     s->formatter->close_section(); // result

@@ -1810,6 +1810,54 @@ def test_index_log_trim_dest_bucket_deletion_zonegroups(source_zone, dest_zone, 
     assert(len(test_bilog) == 0)
 
 
+@allow_zonegroups_replication
+@run_per_zonegroup
+def test_sync_single_bucket_to_multiple_log_trim_zonegroups(zonegroup):
+    content = 'asdasd'
+    dest_buckets = []
+
+    # create source bucket
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    source_zone = zonegroup_conns.rw_zones[0]
+    source_bucket = create_zone_bucket(source_zone)
+    realm_meta_checkpoint(realm)
+
+    # create dest bucket on other zonegroups
+    for zg in realm.current_period.zonegroups:
+        if zg.name == zonegroup.name:
+            continue
+
+        zonegroup_conns = ZonegroupConns(zg)
+        z = zonegroup_conns.rw_zones[0]
+        bucket = create_zone_bucket(z)
+        dest_buckets.append((z, bucket))
+        enable_bucket_replication(source_bucket.name, bucket.name, prefix=z.zone.name)  # can't test tags due to using boto2
+
+    # create objects
+    for z, _ in dest_buckets:
+        for i in range(2):
+            objname = f'{z.zone.name}-obj{i}'
+            k = new_key(source_zone, source_bucket.name, objname)
+            k.set_contents_from_string(content)
+    
+    # upload more objects for the first dest bucket
+    # so we can test whether trimming deletes all entries even not all zones are processing all bilog entries
+    for i in range(10):
+        objname = f'{dest_buckets[0][0].zone.name}-obj{i}'
+        k = new_key(source_zone, source_bucket.name, objname)
+        k.set_contents_from_string(content)
+
+    for z, _ in dest_buckets:
+        zone_data_checkpoint(z.zone, source_zone.zone)
+
+    # trim bilogs
+    bilog_autotrim(source_zone.zone)
+
+    # verify the bucket has empty bilog
+    test_bilog = bilog_list(source_zone.zone, source_bucket.name)
+    assert(len(test_bilog) == 0)
+
+
 @attr('fails_on_rgw')  # RGWGetBucketPeersCR doesn't respect the resolved_sources when only target_bucket is passed.
 @attr('bucket_reshard')
 @allow_zonegroups_replication

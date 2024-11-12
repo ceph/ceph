@@ -4182,15 +4182,29 @@ struct next_bilog_result {
   }
 };
 
+struct last_processed_marker_result {
+  std::string id;
+  ceph::real_time timestamp;
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("id", id, obj);
+    utime_t ut;
+    JSONDecoder::decode_json("timestamp", ut, obj);
+    timestamp = ut.to_real_time();
+  }
+};
+
 struct bilog_list_result {
   list<rgw_bi_log_entry> entries;
   bool truncated{false};
   std::optional<next_bilog_result> next_log;
+  std::optional<last_processed_marker_result> last_processed_marker;
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("entries", entries, obj);
     JSONDecoder::decode_json("truncated", truncated, obj);
     JSONDecoder::decode_json("next_log", next_log, obj);
+    JSONDecoder::decode_json("last_processed_marker", last_processed_marker, obj);
   }
 };
 
@@ -5206,6 +5220,20 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
       // disabled
       sync_info.state = rgw_bucket_shard_sync_info::StateStopped;
       return set_cr_done();
+    }
+
+    // insert the last processed marker into the marker tracker as well
+    if (extended_result.last_processed_marker) {
+      auto& last_processed_marker_id = extended_result.last_processed_marker->id;
+      ssize_t p = last_processed_marker_id.find('#'); /* entries might have explicit shard info in them, e.g., 6#00000000004.94.3 */
+      if (p > 0) {
+        last_processed_marker_id = last_processed_marker_id.substr(p + 1);
+      }
+
+      if (!marker_tracker.is_pending(last_processed_marker_id)) {
+        marker_tracker.try_update_high_marker(last_processed_marker_id, 0, extended_result.last_processed_marker->timestamp);
+        tn->log(20, SSTR("Inserted last processed marker: " << last_processed_marker_id));
+      }
     }
 
     yield call(marker_tracker.flush());

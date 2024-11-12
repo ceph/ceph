@@ -27,6 +27,7 @@ class RGWOp_BILog_List : public RGWRESTOp {
   uint32_t format_ver{0};
   bool truncated{false};
   std::optional<rgw::bucket_log_layout_generation> next_log_layout;
+  std::optional<rgw_bi_log_entry> last_processed_entry;
 
 public:
   RGWOp_BILog_List() : sent_header(false) {}

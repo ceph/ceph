@@ -372,7 +372,7 @@ public:
   }
 
   bool start(const T& pos, int index_pos, const real_time& timestamp) {
-    if (pending.find(pos) != pending.end()) {
+    if (is_pending(pos)) {
       return false;
     }
     pending[pos] = marker_entry(index_pos, timestamp);
@@ -381,6 +381,10 @@ public:
 
   void try_update_high_marker(const T& pos, int index_pos, const real_time& timestamp) {
     finish_markers[pos] = marker_entry(index_pos, timestamp);
+  }
+
+  bool is_pending(const T& pos) {
+    return (pending.find(pos) != pending.end());
   }
 
   RGWCoroutine *finish(const T& pos) {
