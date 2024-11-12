@@ -2544,7 +2544,7 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
     boost::algorithm::to_lower(bucket_name);
   }
   /* Create RGW REST connection */
-  S3RESTConn conn(cct, id, { endpoint }, key, zonegroup.get_id(), region, host_style);
+  S3RESTConn conn(cct, id, { endpoint }, key, store->get_zone()->get_id(), region, host_style);
 
   // save source cloudtier storage class
   RGWLCCloudTierCtx tier_ctx(cct, dpp, o, store, bucket->get_info(),
@@ -2630,7 +2630,7 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
   }
 
   /* Create RGW REST connection */
-  S3RESTConn conn(cct, id, { endpoint }, key, zonegroup.get_id(), region, host_style);
+  S3RESTConn conn(cct, id, { endpoint }, key, store->get_zone()->get_id(), region, host_style);
 
   RGWLCCloudTierCtx tier_ctx(cct, dpp, o, store, bucket->get_info(),
 			     this, conn, bucket_name,

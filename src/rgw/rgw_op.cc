@@ -148,7 +148,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
 
   // use the master zone's endpoints
   auto conn = RGWRESTConn{dpp->get_cct(), z->second.id, z->second.endpoints,
-                          creds, site.get_zonegroup().id, zg->second.api_name};
+                          creds, site.get_zone().id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
   int ret = conn.forward(dpp, effective_owner, req, nullptr,
@@ -3652,7 +3652,21 @@ void RGWCreateBucket::execute(optional_yield y)
   if (s->system_request) {
     // allow system requests to override the target zonegroup. for forwarded
     // requests, we'll create the bucket for the originating zonegroup
-    createparams.zonegroup_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
+    auto rgwx_zone_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zone");
+    if (unlikely(rgwx_zone_id.empty())) {
+      createparams.zonegroup_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
+      if (!createparams.zonegroup_id.empty()) {
+        ldpp_dout(this, 0) << "WARNING: rgwx-zonegroup is deprecated, use rgwx-zone instead" << dendl;
+      }
+    } else {
+      RGWZoneGroup rgwx_zonegroup;
+      if (!period->find_zone(this, rgwx_zone_id, &rgwx_zonegroup, y)) {
+        ldpp_dout(this, 0) << "could not find zonegroup for zone=" << rgwx_zone_id << dendl;
+        op_ret = -EINVAL;
+        return;
+      }
+      createparams.zonegroup_id = rgwx_zonegroup.id;
+    }
   }
 
   const RGWZoneGroup* bucket_zonegroup = &my_zonegroup;
