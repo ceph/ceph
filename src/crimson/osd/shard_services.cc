@@ -101,15 +101,63 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
 	epoch,
 	PeeringCtx{}, false, false).second.then(
      [this, old_map, epoch, &shard_services, &pg] {
-      return shard_services.start_operation<PGSplitting>(
-        pg.second,
-        shard_services,
-        old_map,
-        epoch,
-        PeeringCtx{}).second;
-     });
+      return identify_splits(
+	shard_services,
+	pg.second,
+	old_map,
+	epoch).then(
+	  [this, old_map, epoch, &shard_services, &pg] (auto&& children) {
+	  if (!children.empty()) {
+	    return shard_services.get_map(epoch).then(
+	      [this, &shard_services, &pg, children] (cached_map_t&& new_map) {
+		return shard_services.start_operation<PGSplitting>(
+		  pg.second,
+		  shard_services,
+		  new_map,
+		  std::move(children),
+		  PeeringCtx{}).second;
+	    });
+	  } else {
+	    return seastar::now();
+	  }
+        });
+      return seastar::now();
+    });
+    return seastar::now();
   });
 }
+
+seastar::future<std::set<spg_t>> PerShardState::identify_splits(
+  ShardServices &shard_services,
+  Ref<PG> pg,
+  cached_map_t cur_map,
+  epoch_t epoch)
+{
+  LOG_PREFIX(PerShardState::identify_splits);
+  unsigned old_pg_num;
+  if (cur_map->have_pg_pool(pg->get_pgid().pool())) {
+    old_pg_num = cur_map->get_pg_num(pg->get_pgid().pool());
+  } else {
+    DEBUG("{} pool doesn't exist in epoch {}", pg->get_pgid(), cur_map->get_epoch());
+    return seastar::make_ready_future<std::set<spg_t>>(
+	std::move(std::set<spg_t>()));
+  }
+
+  return shard_services.get_map(epoch).then(
+    [this, old_pg_num, pg] (cached_map_t&& new_map) {
+    unsigned new_pg_num = new_map->get_pg_num(pg->get_pgid().pool());
+    if (new_pg_num && new_pg_num > old_pg_num) {
+      std::set<spg_t> children;
+      if (pg->get_pgid().is_split(old_pg_num, new_pg_num, &children)) {
+        return seastar::make_ready_future<std::set<spg_t>>(
+	  std::move(children));
+      }
+    }
+    return seastar::make_ready_future<std::set<spg_t>>(
+	std::move(std::set<spg_t>()));
+  });
+}
+
 
 Ref<PG> PerShardState::get_pg(spg_t pgid)
 {

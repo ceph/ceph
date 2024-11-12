@@ -124,6 +124,11 @@ class PerShardState {
   seastar::future<> broadcast_map_to_pgs(
     ShardServices &shard_services,
     epoch_t epoch);
+  seastar::future<std::set<spg_t>> identify_splits(
+    ShardServices &shard_services,
+    Ref<PG> pg,
+    cached_map_t cur_map,
+    epoch_t epoch);
 
   Ref<PG> get_pg(spg_t pgid);
   template <typename F>
