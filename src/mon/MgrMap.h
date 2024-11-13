@@ -138,12 +138,10 @@ public:
   // running modules on the active mgr daemon.
   std::map<std::string, std::string> services;
 
-  static MgrMap create_null_mgrmap() {
-    MgrMap null_map;
-    /* Use the largest epoch so it's always bigger than whatever the mgr has. */
-    null_map.epoch = std::numeric_limits<decltype(epoch)>::max();
-    return null_map;
-  }
+  MgrMap() noexcept;
+  ~MgrMap() noexcept;
+
+  static MgrMap create_null_mgrmap();
 
   epoch_t get_epoch() const { return epoch; }
   epoch_t get_last_failure_osd_epoch() const { return last_failure_osd_epoch; }
@@ -154,37 +152,10 @@ public:
   const utime_t& get_active_change() const { return active_change; }
   int get_num_standby() const { return standbys.size(); }
 
-  bool all_support_module(const std::string& module) {
-    if (!have_module(module)) {
-      return false;
-    }
-    for (auto& p : standbys) {
-      if (!p.second.have_module(module)) {
-	return false;
-      }
-    }
-    return true;
-  }
+  bool all_support_module(const std::string& module);
 
-  bool have_module(const std::string &module_name) const
-  {
-    for (const auto &i : available_modules) {
-      if (i.name == module_name) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  const ModuleInfo *get_module_info(const std::string &module_name) const {
-    for (const auto &i : available_modules) {
-      if (i.name == module_name) {
-        return &i;
-      }
-    }
-    return nullptr;
-  }
+  bool have_module(const std::string &module_name) const;
+  const ModuleInfo *get_module_info(const std::string &module_name) const;
 
   bool can_run_module(const std::string &module_name, std::string *error) const;
 
@@ -217,33 +188,8 @@ public:
     return false;
   }
 
-  std::set<std::string> get_all_names() const {
-    std::set<std::string> ls;
-    if (active_name.size()) {
-      ls.insert(active_name);
-    }
-    for (auto& p : standbys) {
-      ls.insert(p.second.name);
-    }
-    return ls;
-  }
-
-  std::set<std::string> get_always_on_modules() const {
-    unsigned rnum = to_integer<uint32_t>(ceph_release());
-    auto it = always_on_modules.find(rnum);
-    if (it == always_on_modules.end()) {
-      // ok, try the most recent release
-      if (always_on_modules.empty()) {
-	return {}; // ugh
-      }
-      --it;
-      if (it->first < rnum) {
-	return it->second;
-      }
-      return {};      // wth
-    }
-    return it->second;
-  }
+  std::set<std::string> get_all_names() const;
+  std::set<std::string> get_always_on_modules() const;
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
