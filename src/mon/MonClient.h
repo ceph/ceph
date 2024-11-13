@@ -572,21 +572,8 @@ private:
     std::unique_ptr<CommandCompletion> onfinish;
     std::optional<boost::asio::steady_timer> cancel_timer;
 
-    MonCommand(MonClient& monc, uint64_t t, std::unique_ptr<CommandCompletion> onfinish)
-      : tid(t), onfinish(std::move(onfinish)) {
-      auto timeout =
-          monc.cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
-      if (timeout.count() > 0) {
-	cancel_timer.emplace(monc.service, timeout);
-	cancel_timer->async_wait(
-          [this, &monc](boost::system::error_code ec) {
-	    if (ec)
-	      return;
-	    std::scoped_lock l(monc.monc_lock);
-	    monc._cancel_mon_command(tid);
-	  });
-      }
-    }
+    MonCommand(MonClient& monc, uint64_t t, std::unique_ptr<CommandCompletion> onfinish);
+    ~MonCommand() noexcept;
 
     bool is_tell() const {
       return target_name.size() || target_rank >= 0;
