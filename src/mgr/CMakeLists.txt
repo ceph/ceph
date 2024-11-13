@@ -21,9 +21,7 @@ if(WITH_MGR)
     mgr_perf_counters.cc
     MgrStandby.cc
     MetricCollector.cc
-    OSDPerfMetricTypes.cc
     OSDPerfMetricCollector.cc
-    MDSPerfMetricTypes.cc
     MDSPerfMetricCollector.cc
     PyFormatter.cc
     PyUtil.cc
