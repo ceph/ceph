@@ -91,6 +91,14 @@
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('owner', frm, 'required')"
                   i18n>This field is required.</span>
+            <cd-alert-panel
+              type="info"
+              *ngIf="bucketForm.get('owner').disabled"
+              spacingClass="me-1 mt-1"
+              i18n>
+                The bucket is owned by an account. UI does not support changing
+                the ownership of bucket owned by an account.
+            </cd-alert-panel>
           </div>
         </div>
 
