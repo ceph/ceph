@@ -83,11 +83,11 @@ public:
     std::lock_guard l{lock};
     return values;
   }
-  void set_config_values(const ConfigValues& val) {
+  void set_config_values(ConfigValues&& val) {
 #ifndef WITH_CRIMSON
     std::lock_guard l{lock};
 #endif
-    values = val;
+    values = std::move(val);
   }
   int get_val(const std::string_view key, char** buf, int len) const {
     std::lock_guard l{lock};
