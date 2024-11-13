@@ -196,7 +196,12 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   if (!HAVE_FEATURE(con_features, MONENC) ||
       !HAVE_FEATURE(con_features, SERVER_NAUTILUS)) {
     for (auto& [name, info] : mon_info) {
-      legacy_mon_addr[name] = info.public_addrs.legacy_addr();
+      // see note in mon_info_t::encode()
+      auto addr = info.public_addrs.legacy_addr();
+      if (addr == entity_addr_t()) {
+        addr = info.public_addrs.as_legacy_addr();
+      }
+      legacy_mon_addr[name] = addr;
     }
   }
 
