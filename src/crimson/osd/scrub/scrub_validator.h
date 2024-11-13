@@ -9,6 +9,7 @@
 
 #include "common/config_proxy.h"
 #include "common/scrub_types.h"
+#include "common/scrub_fmt.h"
 #include "crimson/common/log.h"
 #include "osd/osd_types.h"
 
