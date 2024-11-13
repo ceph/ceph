@@ -2,6 +2,7 @@
 
 #include <seastar/core/future.hh>
 #include <seastar/util/defer.hh>
+#include "common/hobject_fmt.h"
 #include "crimson/common/coroutine.h"
 #include "crimson/common/errorator.h"
 #include "crimson/common/log.h"

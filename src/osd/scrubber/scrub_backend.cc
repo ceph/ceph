@@ -9,6 +9,7 @@
 #include <fmt/ranges.h>
 
 #include "common/debug.h"
+#include "common/hobject_fmt.h"
 
 #include "include/utime_fmt.h"
 #include "messages/MOSDRepScrubMap.h"

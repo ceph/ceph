@@ -3,6 +3,8 @@
 
 #include "crimson/osd/object_metadata_helper.h"
 
+#include "common/hobject_fmt.h"
+
 namespace {
   seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_osd);

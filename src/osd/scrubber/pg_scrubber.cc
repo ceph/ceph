@@ -16,6 +16,7 @@
 #include "common/ceph_time.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/hobject_fmt.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
