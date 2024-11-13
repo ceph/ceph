@@ -20,6 +20,7 @@
 #include "rgw_auth.h"
 #include "rgw_iam_policy.h"
 
+#include "common/ceph_time_fmt.h"
 
 inline constexpr int dout_subsys = ceph_subsys_rgw;
 
