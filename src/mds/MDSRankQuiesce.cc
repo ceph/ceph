@@ -12,6 +12,7 @@
 
 #include "MDSRank.h"
 #include "MDCache.h"
+#include "mon/MonClient.h"
 
 #include "QuiesceDbManager.h"
 #include "QuiesceAgent.h"
