@@ -41,6 +41,7 @@
 #include "mon/health_check.h"
 
 #include "crush/CrushTreeDumper.h"
+#include "crush/CrushWrapper.h"
 #include "common/Clock.h"
 #include "mon/PGMap.h"
 #include "common/pick_address.h"
@@ -301,6 +302,81 @@ int OSDMap::Incremental::propagate_base_properties_to_tiers(CephContext *cct,
 
 // ----------------------------------
 // OSDMap
+
+OSDMap::OSDMap() : epoch(0), 
+	     pool_max(0),
+	     flags(0),
+	     num_osd(0), num_up_osd(0), num_in_osd(0),
+	     max_osd(0),
+	     osd_addrs(std::make_shared<addrs_s>()),
+	     pg_temp(std::make_shared<PGTempMap>()),
+	     primary_temp(std::make_shared<mempool::osdmap::map<pg_t,int32_t>>()),
+	     osd_uuid(std::make_shared<mempool::osdmap::vector<uuid_d>>()),
+	     cluster_snapshot_epoch(0),
+	     new_blocklist_entries(false),
+	     cached_up_osd_features(0),
+	     crc_defined(false), crc(0),
+	     crush(std::make_shared<CrushWrapper>()),
+	     stretch_mode_enabled(false), stretch_bucket_count(0),
+	     degraded_stretch_mode(0), recovering_stretch_mode(0), stretch_mode_bucket(0) {
+}
+
+OSDMap::~OSDMap() noexcept = default;
+
+OSDMap::OSDMap(const OSDMap& other) = default;
+OSDMap& OSDMap::operator=(const OSDMap& other) = default;
+
+bool OSDMap::is_noup(int osd) const {
+  if (test_flag(CEPH_OSDMAP_NOUP)) // global?
+    return true;
+  if (is_noup_by_osd(osd)) // by osd?
+    return true;
+  if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOUP) // by crush-node?
+    return true;
+  if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+      get_device_class_flags(class_id) & CEPH_OSD_NOUP) // by device-class?
+    return true;
+  return false;
+}
+
+bool OSDMap::is_nodown(int osd) const {
+  if (test_flag(CEPH_OSDMAP_NODOWN))
+    return true;
+  if (is_nodown_by_osd(osd))
+    return true;
+  if (get_osd_crush_node_flags(osd) & CEPH_OSD_NODOWN)
+    return true;
+  if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+      get_device_class_flags(class_id) & CEPH_OSD_NODOWN)
+    return true;
+  return false;
+}
+
+bool OSDMap::is_noin(int osd) const {
+  if (test_flag(CEPH_OSDMAP_NOIN))
+    return true;
+  if (is_noin_by_osd(osd))
+    return true;
+  if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOIN)
+    return true;
+  if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+      get_device_class_flags(class_id) & CEPH_OSD_NOIN)
+    return true;
+  return false;
+}
+
+bool OSDMap::is_noout(int osd) const {
+  if (test_flag(CEPH_OSDMAP_NOOUT))
+    return true;
+  if (is_noout_by_osd(osd))
+    return true;
+  if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOOUT)
+    return true;
+  if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+      get_device_class_flags(class_id) & CEPH_OSD_NOOUT)
+    return true;
+  return false;
+}
 
 bool OSDMap::subtree_is_down(int id, set<int> *down_cache) const
 {
