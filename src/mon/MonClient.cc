@@ -1174,6 +1174,24 @@ int MonClient::wait_auth_rotating(double timeout)
 
 // ---------
 
+MonClient::MonCommand::MonCommand(MonClient& monc, uint64_t t, CommandCompletion&& onfinish)
+  : tid(t), onfinish(std::move(onfinish)) {
+  auto timeout =
+      monc.cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
+  if (timeout.count() > 0) {
+    cancel_timer.emplace(monc.service, timeout);
+    cancel_timer->async_wait(
+      [this, &monc](boost::system::error_code ec) {
+        if (ec)
+          return;
+        std::scoped_lock l(monc.monc_lock);
+        monc._cancel_mon_command(tid);
+      });
+  }
+}
+
+MonClient::MonCommand::~MonCommand() noexcept = default;
+
 void MonClient::_send_command(MonCommand *r)
 {
   if (r->is_tell()) {
