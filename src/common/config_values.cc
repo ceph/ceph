@@ -6,6 +6,13 @@
 #include "crimson/common/log.h"
 #endif
 
+ConfigValues::ConfigValues() noexcept = default;
+ConfigValues::ConfigValues(const ConfigValues &) noexcept = default;
+ConfigValues::ConfigValues(ConfigValues &&) noexcept = default;
+ConfigValues::~ConfigValues() noexcept = default;
+ConfigValues &ConfigValues::operator=(const ConfigValues &) noexcept = default;
+ConfigValues &ConfigValues::operator=(ConfigValues &&) noexcept = default;
+
 ConfigValues::set_value_result_t
 ConfigValues::set_value(const std::string_view key,
                         Option::value_t&& new_value,
