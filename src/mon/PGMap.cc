@@ -20,6 +20,8 @@
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
 
+#include "crush/CrushWrapper.h"
+
 #include <boost/algorithm/string.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 

@@ -685,27 +685,12 @@ private:
   friend class OSDMonitor;
 
  public:
-  OSDMap() : epoch(0), 
-	     pool_max(0),
-	     flags(0),
-	     num_osd(0), num_up_osd(0), num_in_osd(0),
-	     max_osd(0),
-	     osd_addrs(std::make_shared<addrs_s>()),
-	     pg_temp(std::make_shared<PGTempMap>()),
-	     primary_temp(std::make_shared<mempool::osdmap::map<pg_t,int32_t>>()),
-	     osd_uuid(std::make_shared<mempool::osdmap::vector<uuid_d>>()),
-	     cluster_snapshot_epoch(0),
-	     new_blocklist_entries(false),
-	     cached_up_osd_features(0),
-	     crc_defined(false), crc(0),
-	     crush(std::make_shared<CrushWrapper>()),
-	     stretch_mode_enabled(false), stretch_bucket_count(0),
-	     degraded_stretch_mode(0), recovering_stretch_mode(0), stretch_mode_bucket(0) {
-  }
+  OSDMap();
+  ~OSDMap() noexcept;
 
 private:
-  OSDMap(const OSDMap& other) = default;
-  OSDMap& operator=(const OSDMap& other) = default;
+  OSDMap(const OSDMap& other);
+  OSDMap& operator=(const OSDMap& other);
 public:
 
   /// return feature mask subset that is relevant to OSDMap encoding
@@ -956,57 +941,10 @@ public:
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOOUT);
   }
 
-  bool is_noup(int osd) const {
-    if (test_flag(CEPH_OSDMAP_NOUP)) // global?
-      return true;
-    if (is_noup_by_osd(osd)) // by osd?
-      return true;
-    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOUP) // by crush-node?
-      return true;
-    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
-        get_device_class_flags(class_id) & CEPH_OSD_NOUP) // by device-class?
-      return true;
-    return false;
-  }
-
-  bool is_nodown(int osd) const {
-    if (test_flag(CEPH_OSDMAP_NODOWN))
-      return true;
-    if (is_nodown_by_osd(osd))
-      return true;
-    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NODOWN)
-      return true;
-    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
-        get_device_class_flags(class_id) & CEPH_OSD_NODOWN)
-      return true;
-    return false;
-  }
-
-  bool is_noin(int osd) const {
-    if (test_flag(CEPH_OSDMAP_NOIN))
-      return true;
-    if (is_noin_by_osd(osd))
-      return true;
-    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOIN)
-      return true;
-    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
-        get_device_class_flags(class_id) & CEPH_OSD_NOIN)
-      return true;
-    return false;
-  }
-
-  bool is_noout(int osd) const {
-    if (test_flag(CEPH_OSDMAP_NOOUT))
-      return true;
-    if (is_noout_by_osd(osd))
-      return true;
-    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOOUT)
-      return true;
-    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
-        get_device_class_flags(class_id) & CEPH_OSD_NOOUT)
-      return true;
-    return false;
-  }
+  bool is_noup(int osd) const;
+  bool is_nodown(int osd) const;
+  bool is_noin(int osd) const;
+  bool is_noout(int osd) const;
 
   /**
    * check if an entire crush subtree is down
