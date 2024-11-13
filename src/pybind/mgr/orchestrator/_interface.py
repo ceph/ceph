@@ -576,7 +576,8 @@ class Orchestrator(object):
         self,
         entity: str,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
@@ -584,7 +585,8 @@ class Orchestrator(object):
         self,
         entity: str,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
