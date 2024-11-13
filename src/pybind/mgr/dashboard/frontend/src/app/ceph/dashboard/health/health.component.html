@@ -2,36 +2,36 @@
      class="container-fluid">
   <cd-info-group groupTitle="Status"
                  i18n-groupTitle
-                 *ngIf="healthData.health?.status
-                 || healthData.mon_status
-                 || healthData.osd_map
-                 || healthData.mgr_map
-                 || healthData.hosts != null
-                 || healthData.rgw != null
-                 || healthData.fs_map
-                 || healthData.iscsi_daemons != null">
+                 *ngIf="healthData?.health?.status
+                 || healthData?.mon_status
+                 || healthData?.osd_map
+                 || healthData?.mgr_map
+                 || healthData?.hosts != null
+                 || healthData?.rgw != null
+                 || healthData?.fs_map
+                 || healthData?.iscsi_daemons != null">
 
     <cd-info-card cardTitle="Cluster Status"
                   i18n-cardTitle
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="healthData.health?.status">
-      <ng-container *ngIf="healthData.health?.checks?.length > 0">
+                  *ngIf="healthData?.health?.status">
+      <ng-container *ngIf="healthData?.health?.checks?.length > 0">
         <ng-template #healthChecks>
           <cd-health-checks [healthData]="healthData"></cd-health-checks>
         </ng-template>
         <div class="info-card-content-clickable"
-             [ngStyle]="healthData.health.status | healthColor"
+             [ngStyle]="healthData?.health?.status | healthColor"
              [ngbPopover]="healthChecks"
              popoverClass="info-card-popover-cluster-status">
-          {{ healthData.health.status | healthLabel | uppercase }}
-          <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
+          {{ healthData?.health?.status | healthLabel | uppercase }}
+          <i *ngIf="healthData?.health?.status !== 'HEALTH_OK'"
              class="fa fa-exclamation-triangle"></i>
         </div>
       </ng-container>
-      <ng-container *ngIf="!healthData.health?.checks?.length">
-        <div [ngStyle]="healthData.health.status | healthColor">
-          {{ healthData.health.status | healthLabel | uppercase }}
+      <ng-container *ngIf="!healthData?.health?.checks?.length">
+        <div [ngStyle]="healthData?.health.status | healthColor">
+          {{ healthData?.health.status | healthLabel | uppercase }}
         </div>
       </ng-container>
     </cd-info-card>
@@ -41,8 +41,8 @@
                   link="/hosts"
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="healthData.hosts != null">
-      {{ healthData.hosts }} total
+                  *ngIf="healthData?.hosts != null">
+      {{ healthData?.hosts }} total
     </cd-info-card>
 
     <cd-info-card cardTitle="Monitors"
@@ -50,15 +50,15 @@
                   link="/monitor"
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="healthData.mon_status">
-      {{ healthData.mon_status | monSummary }}
+                  *ngIf="healthData?.mon_status">
+      {{ healthData?.mon_status | monSummary }}
     </cd-info-card>
 
     <cd-info-card cardTitle="OSDs"
                   i18n-cardTitle
                   link="/osd"
                   class="cd-status-card"
-                  *ngIf="(healthData.osd_map | osdSummary) as transformedResult"
+                  *ngIf="(healthData?.osd_map | osdDashboardSummary) as transformedResult"
                   contentClass="content-highlight">
       <span *ngFor="let result of transformedResult"
             [ngClass]="result.class">
@@ -70,8 +70,8 @@
                   i18n-cardTitle
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="healthData.mgr_map">
-      <span *ngFor="let result of (healthData.mgr_map | mgrSummary)"
+                  *ngIf="healthData?.mgr_map">
+      <span *ngFor="let result of (healthData?.mgr_map | mgrDashboardSummary)"
             [ngClass]="result.class"
             [title]="result.titleText != null ? result.titleText : ''">
         {{ result.content }}
@@ -83,14 +83,14 @@
                   link="/rgw/daemon"
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="enabledFeature.rgw && healthData?.rgw != null">
-      {{ healthData.rgw }} total
+                  *ngIf="enabledFeature?.rgw && healthData?.rgw != null">
+      {{ healthData?.rgw }} total
     </cd-info-card>
 
     <cd-info-card cardTitle="Metadata Servers"
                   i18n-cardTitle
                   class="cd-status-card"
-                  *ngIf="(enabledFeature.cephfs && healthData.fs_map | mdsSummary) as transformedResult"
+                  *ngIf="(enabledFeature?.cephfs && healthData?.fs_map | mdsDashboardSummary) as transformedResult"
                   [contentClass]="(transformedResult.length > 1 ? 'text-area-size-2' : '') + ' content-highlight'">
       <!-- TODO: check text-area-size-2 -->
       <span *ngFor="let result of transformedResult"
@@ -105,25 +105,25 @@
                   link="/block/iscsi"
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="enabledFeature.iscsi && healthData?.iscsi_daemons != null">
-      {{ healthData.iscsi_daemons.up + healthData.iscsi_daemons.down }} total
+                  *ngIf="enabledFeature?.iscsi && healthData?.iscsi_daemons != null">
+      {{ healthData?.iscsi_daemons.up + healthData?.iscsi_daemons.down }} total
       <span class="card-text-line-break"></span>
-      {{ healthData.iscsi_daemons.up }} up,
-      <span [ngClass]="{'card-text-error': healthData.iscsi_daemons.down > 0}">{{ healthData.iscsi_daemons.down }}
+      {{ healthData?.iscsi_daemons.up }} up,
+      <span [ngClass]="{'card-text-error': healthData?.iscsi_daemons.down > 0}">{{ healthData?.iscsi_daemons.down }}
         down</span>
     </cd-info-card>
   </cd-info-group>
 
   <cd-info-group groupTitle="Capacity"
                  i18n-groupTitle
-                 *ngIf="healthData.pools
-                 || healthData.df
-                 || healthData.pg_info">
+                 *ngIf="healthData?.pools
+                 || healthData?.df
+                 || healthData?.pg_info">
     <cd-info-card cardTitle="Raw Capacity"
                   i18n-cardTitle
                   class="cd-capacity-card cd-chart-card"
                   contentClass="content-chart"
-                  *ngIf="healthData.df">
+                  *ngIf="healthData?.df">
       <cd-health-pie [data]="healthData"
                      [config]="rawCapacityChartConfig"
                      [isBytesData]="true"
@@ -135,7 +135,7 @@
                   i18n-cardTitle
                   class="cd-capacity-card cd-chart-card"
                   contentClass="content-chart"
-                  *ngIf="healthData.pg_info?.object_stats?.num_objects != null">
+                  *ngIf="healthData?.pg_info?.object_stats?.num_objects != null">
       <cd-health-pie [data]="healthData"
                      (prepareFn)="prepareObjects($event[0], $event[1])">
       </cd-health-pie>
@@ -145,11 +145,11 @@
                   i18n-cardTitle
                   class="cd-capacity-card cd-chart-card"
                   contentClass="content-chart"
-                  *ngIf="healthData.pg_info">
+                  *ngIf="healthData?.pg_info">
       <ng-template #pgStatus>
         <ng-container *ngTemplateOutlet="logsLink"></ng-container>
         <ul>
-          <li *ngFor="let pgStatesText of healthData.pg_info.statuses | keyvalue">
+          <li *ngFor="let pgStatesText of healthData?.pg_info.statuses | keyvalue">
             {{ pgStatesText.key }}: {{ pgStatesText.value }}
           </li>
         </ul>
@@ -169,27 +169,27 @@
                   link="/pool"
                   class="cd-capacity-card"
                   contentClass="content-highlight"
-                  *ngIf="healthData.pools">
-      {{ healthData.pools.length }}
+                  *ngIf="healthData?.pools">
+      {{ healthData?.pools.length }}
     </cd-info-card>
 
     <cd-info-card cardTitle="PGs per OSD"
                   i18n-cardTitle
                   class="cd-capacity-card"
                   contentClass="content-highlight"
-                  *ngIf="healthData.pg_info">
-      {{ healthData.pg_info.pgs_per_osd | dimless }}
+                  *ngIf="healthData?.pg_info">
+      {{ healthData?.pg_info.pgs_per_osd | dimless }}
     </cd-info-card>
   </cd-info-group>
 
   <cd-info-group groupTitle="Performance"
                  i18n-groupTitle
-                 *ngIf="healthData.client_perf || healthData.scrub_status">
+                 *ngIf="healthData?.client_perf || healthData?.scrub_status">
     <cd-info-card cardTitle="Client Read/Write"
                   i18n-cardTitle
                   class="cd-performance-card cd-chart-card"
                   contentClass="content-chart"
-                  *ngIf="healthData.client_perf">
+                  *ngIf="healthData?.client_perf">
       <cd-health-pie [data]="healthData"
                      [config]="clientStatsConfig"
                      (prepareFn)="prepareReadWriteRatio($event[0], $event[1])">
@@ -200,7 +200,7 @@
                   i18n-cardTitle
                   class="cd-performance-card cd-chart-card"
                   contentClass="content-chart"
-                  *ngIf="healthData.client_perf">
+                  *ngIf="healthData?.client_perf">
       <cd-health-pie [data]="healthData"
                      [config]="clientStatsConfig"
                      (prepareFn)="prepareClientThroughput($event[0], $event[1])">
@@ -211,21 +211,21 @@
                   i18n-cardTitle
                   class="cd-performance-card"
                   contentClass="content-highlight"
-                  *ngIf="healthData.client_perf">
-      {{ (healthData.client_perf.recovering_bytes_per_sec | dimlessBinary) + '/s' }}
+                  *ngIf="healthData?.client_perf">
+      {{ (healthData?.client_perf.recovering_bytes_per_sec | dimlessBinary) + '/s' }}
     </cd-info-card>
 
     <cd-info-card cardTitle="Scrubbing"
                   i18n-cardTitle
                   class="cd-performance-card"
                   contentClass="content-highlight"
-                  *ngIf="healthData.scrub_status">
-      {{ healthData.scrub_status }}
+                  *ngIf="healthData?.scrub_status">
+      {{ healthData?.scrub_status }}
     </cd-info-card>
   </cd-info-group>
 
   <ng-template #logsLink>
-    <ng-container *ngIf="permissions.log.read">
+    <ng-container *ngIf="permissions?.log?.read">
       <p class="logs-link"
          i18n><i [ngClass]="[icons.infoCircle]"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
     </ng-container>

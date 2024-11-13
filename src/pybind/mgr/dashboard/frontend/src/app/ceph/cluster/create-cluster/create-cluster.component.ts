@@ -1,4 +1,6 @@
 import {
+  AfterViewInit,
+  ChangeDetectorRef,
   Component,
   EventEmitter,
   OnDestroy,
@@ -39,7 +41,7 @@ import { Step } from 'carbon-components-angular';
   templateUrl: './create-cluster.component.html',
   styleUrls: ['./create-cluster.component.scss']
 })
-export class CreateClusterComponent implements OnInit, OnDestroy {
+export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('skipConfirmTpl', { static: true })
   skipConfirmTpl: TemplateRef<any>;
   currentStep: WizardStepModel;
@@ -88,7 +90,8 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
     private taskWrapper: TaskWrapperService,
     private osdService: OsdService,
     private route: ActivatedRoute,
-    private location: Location
+    private location: Location,
+    private changeDetectorRef: ChangeDetectorRef
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.currentStepSub = this.wizardStepsService
@@ -97,6 +100,9 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
         this.currentStep = step;
       });
     this.currentStep.stepIndex = 0;
+  }
+  ngAfterViewInit(): void {
+    this.changeDetectorRef.detectChanges();
   }
 
   ngOnInit(): void {

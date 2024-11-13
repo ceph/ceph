@@ -8,6 +8,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { InputModule, ModalModule, SelectModule } from 'carbon-components-angular';
+import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
 
 describe('SmbDomainSettingModalComponent', () => {
   let component: SmbDomainSettingModalComponent;
@@ -27,6 +28,7 @@ describe('SmbDomainSettingModalComponent', () => {
         InputModule,
         SelectModule
       ],
+      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
       providers: [NgbActiveModal, { provide: 'domainSettingsObject', useValue: [[]] }]
     }).compileComponents();
 

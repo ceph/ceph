@@ -6,6 +6,10 @@
     "plugins/index.js"
   ],
   "compilerOptions": {
+    "typeRoots": [
+      "../node_modules",
+      "../node_modules/@types"
+    ],
     "sourceMap": false,
     "types": [
       "cypress",
