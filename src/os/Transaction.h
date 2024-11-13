@@ -153,6 +153,10 @@ public:
     OP_COLL_SET_BITS = 42, // cid, bits
 
     OP_MERGE_COLLECTION = 43, // cid, destination
+			      //
+    OP_LOG_SETKEYS = 44, // cid, attrset
+    OP_LOG_RMKEYS = 45,  // cid, keyset
+    OP_LOG_RMKEYRANGE = 46,  // cid, oid, firstkey, lastkey
   };
 
   // Transaction hint type
@@ -1209,6 +1213,53 @@ public:
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
     encode(bl, data_bl);
+    data.ops = data.ops + 1;
+  }
+
+  /// Remove keys from oid log
+  void log_rmkeys(
+    const coll_t &cid,             ///< [in] Collection containing oid
+    const ghobject_t &oid,  ///< [in] Object from which to remove the omap
+    const std::set<std::string> &keys ///< [in] Keys to clear
+    ) {
+    using ceph::encode;
+    Op* _op = _get_next_op();
+    _op->op = OP_LOG_RMKEYS;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    encode(keys, data_bl);
+    data.ops = data.ops + 1;
+  }
+
+  /// Remove key range from oid log
+  void log_rmkeyrange(
+    const coll_t &cid,             ///< [in] Collection containing oid
+    const ghobject_t &oid,  ///< [in] Object from which to remove the omap keys
+    const std::string& first,    ///< [in] first key in range
+    const std::string& last      ///< [in] first key past range, range is [first,last)
+    ) {
+    using ceph::encode;
+    Op* _op = _get_next_op();
+    _op->op = OP_LOG_RMKEYRANGE;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    encode(first, data_bl);
+    encode(last, data_bl);
+    data.ops = data.ops + 1;
+  }
+
+  /// Set keys on oid log.  Replaces duplicate keys.
+  void log_setkeys(
+    const coll_t& cid,                           ///< [in] Collection containing oid
+    const ghobject_t &oid,                ///< [in] Object to update
+    const std::map<std::string, ceph::buffer::list> &attrset ///< [in] Replacement keys and values
+    ) {
+    using ceph::encode;
+    Op* _op = _get_next_op();
+    _op->op = OP_LOG_SETKEYS;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    encode(attrset, data_bl);
     data.ops = data.ops + 1;
   }
 
