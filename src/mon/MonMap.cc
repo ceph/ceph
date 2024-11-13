@@ -25,6 +25,7 @@
 #include "auth/Crypto.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
+#include "common/ceph_time_fmt.h"
 #include "common/dns_resolve.h"
 #include "common/errno.h"
 #include "common/dout.h"
