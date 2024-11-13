@@ -159,6 +159,23 @@ struct rgw_data_notify_entry {
   }
 };
 
+struct read_remote_data_log_last_marker {
+  uint32_t version = 2;
+  std::string log_id;
+  ceph::real_time log_timestamp;
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("log_id", log_id, obj);
+    utime_t ut;
+    JSONDecoder::decode_json("log_timestamp", ut, obj);
+    log_timestamp = ut.to_real_time();
+    JSONDecoder::decode_json("version", version, obj);
+  }
+};
+
+void encode_json(const char* name, const read_remote_data_log_last_marker& info,
+                 ceph::Formatter* f);
+
 class RGWDataChangesBE;
 
 class DataLogBackends final
@@ -187,7 +204,7 @@ public:
   }
   int list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 	   std::vector<rgw_data_change_log_entry>& entries,
-	   std::string_view marker, std::string* out_marker, bool* truncated,
+	   std::string_view marker, read_remote_data_log_last_marker *last_marker, bool* truncated,
 	   optional_yield y, const std::string& rgwx_zone);
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id,
 		   std::string_view marker, optional_yield y);
@@ -317,7 +334,7 @@ public:
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
-		   std::string_view marker, std::string* out_marker,
+		   std::string_view marker, read_remote_data_log_last_marker *last_marker,
 		   bool* truncated, optional_yield y,
                    const std::string& rgwx_zone);
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id,
