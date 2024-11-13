@@ -62,7 +62,7 @@ describe('InputModalComponent', () => {
       ComboBoxModule,
       NumberModule,
       ModalModule
-    ]
+    ],
   });
 
   beforeEach(() => {

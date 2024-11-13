@@ -674,7 +674,6 @@ describe('CephfsDirectoriesComponent', () => {
       mockLib.selectNode('/a/c');
       mockLib.selectNode('/a/c/a');
       component.selectOrigin('/a');
-      console.debug('component.selectedDir', component.selectedDir);
       expect(component.selectedDir.path).toBe('/a');
     });
 

@@ -1,4 +1,4 @@
-import { Component, NgModule, NO_ERRORS_SCHEMA, TemplateRef, ViewChild } from '@angular/core';
+import { Component, NgModule, TemplateRef, ViewChild } from '@angular/core';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { NgForm, ReactiveFormsModule } from '@angular/forms';
 
@@ -9,7 +9,7 @@ import { configureTestBed, modalServiceShow } from '~/testing/unit-test-helper';
 import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';
-import { ModalService, PlaceholderService } from 'carbon-components-angular';
+import { CheckboxModule, ModalService, PlaceholderService } from 'carbon-components-angular';
 import { ModalCdsService } from '../../services/modal-cds.service';
 
 @NgModule({})
@@ -96,8 +96,7 @@ describe('CriticalConfirmationModalComponent', () => {
         LoadingPanelComponent,
         AlertPanelComponent
       ],
-      schemas: [NO_ERRORS_SCHEMA],
-      imports: [ReactiveFormsModule, MockModule, DirectivesModule],
+      imports: [ReactiveFormsModule, MockModule, DirectivesModule, CheckboxModule],
       providers: [
         ModalService,
         PlaceholderService,
