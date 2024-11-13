@@ -141,14 +141,12 @@ The targetted size of a log segment in terms of number of events is controlled b
 
 .. confval:: mds_log_events_per_segment
 
-The frequency of major segments (noted by the journaling of the latest ``ESubtreeMap``) is controlled by:
+The number of minor mds log segments since last major segment is controlled by:
 
-.. confval:: mds_log_major_segment_event_ratio
+.. confval:: mds_log_minor_segments_per_major_segment
 
-When ``mds_log_events_per_segment * mds_log_major_segment_event_ratio``
-non-``ESubtreeMap`` events are logged, the MDS will journal a new
-``ESubtreeMap``. This is necessary to allow the journal to shrink in size
-during the trimming of expired segments.
+This controls how often the MDS trims expired log segments (higher the value, less
+often the MDS updates the journal expiry position for trimming).
 
 The target maximum number of segments is controlled by:
 
