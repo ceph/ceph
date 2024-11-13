@@ -5891,7 +5891,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
   auto reap = make_message<MClientCaps>(CEPH_CAP_OP_IMPORT,
 					in->ino(), realm->inode->ino(), cap->get_cap_id(),
 					cap->get_last_seq(), cap->pending(), cap->wanted(),
-					0, cap->get_mseq(), mds->get_osd_epoch_barrier());
+					0, cap->get_mseq(), cap->get_last_issue(), mds->get_osd_epoch_barrier());
   in->encode_cap_message(reap, cap);
   reap->snapbl = mds->server->get_snap_trace(session, realm);
   reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
