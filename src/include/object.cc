@@ -58,6 +58,17 @@ std::ostream& operator<<(std::ostream& out, const snapid_t& s) {
     return out << std::hex << s.val << std::dec;
 }
 
+auto fmt::formatter<snapid_t>::format(const snapid_t& snp, format_context& ctx) const -> format_context::iterator
+{
+  if (snp == CEPH_NOSNAP) {
+    return fmt::format_to(ctx.out(), "head");
+  }
+  if (snp == CEPH_SNAPDIR) {
+    return fmt::format_to(ctx.out(), "snapdir");
+  }
+  return fmt::format_to(ctx.out(), FMT_COMPILE("{:x}"), snp.val);
+}
+
 void sobject_t::dump(ceph::Formatter *f) const {
   f->dump_stream("oid") << oid;
   f->dump_stream("snap") << snap;
