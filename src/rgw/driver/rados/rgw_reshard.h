@@ -19,6 +19,7 @@
 #include "include/rados/librados.hpp"
 #include "common/ceph_time.h"
 #include "common/async/yield_context.h"
+#include "common/tracer.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/lock/cls_lock_client.h"
 
@@ -93,7 +94,7 @@ class RGWBucketReshard {
 
   int do_reshard(const rgw::bucket_index_layout_generation& current,
                  const rgw::bucket_index_layout_generation& target,
-                 int max_entries, bool support_logrecord,
+                 int max_entries, bool support_logrecord, const jspan& trace,
                  bool verbose,
                  std::ostream *os,
 		 Formatter *formatter,
@@ -103,8 +104,9 @@ class RGWBucketReshard {
   // execute the bucket reshard while the bucket's reshard lock is held
   int execute_locked(int num_shards, ReshardFaultInjector& fault,
                      int max_op_entries, const DoutPrefixProvider *dpp,
-                     boost::asio::yield_context yield, bool verbose,
-                     std::ostream *out, ceph::Formatter *formatter);
+                     boost::asio::yield_context yield, const jspan& trace,
+                     bool verbose, std::ostream *out,
+                     ceph::Formatter *formatter);
 public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
@@ -115,8 +117,8 @@ public:
   int execute(int num_shards, ReshardFaultInjector& f,
               int max_op_entries, const cls_rgw_reshard_initiator initiator,
 	      const DoutPrefixProvider *dpp, boost::asio::yield_context yield,
-              bool verbose = false, std::ostream *out = nullptr,
-              ceph::Formatter *formatter = nullptr,
+              const jspan& trace, bool verbose = false,
+              std::ostream *out = nullptr, ceph::Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
   int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider* dpp, optional_yield y);
@@ -224,11 +226,11 @@ public:
   /* reshard thread */
   int process_entry(const cls_rgw_reshard_entry& entry, int max_entries,
                     const DoutPrefixProvider *dpp,
-                    boost::asio::yield_context y);
+                    boost::asio::yield_context y, const jspan& trace);
   int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp,
-                              boost::asio::yield_context y);
+                              boost::asio::yield_context y, const jspan& trace);
   int process_all_logshards(const DoutPrefixProvider *dpp,
-                            boost::asio::yield_context y);
+                            boost::asio::yield_context y, const jspan& trace);
 };
 
 class RGWReshardWait {

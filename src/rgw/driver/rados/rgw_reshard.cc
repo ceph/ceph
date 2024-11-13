@@ -18,6 +18,7 @@
 #include "rgw_reshard.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#include "rgw_tracer.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/async/lease_rados.h"
@@ -1152,7 +1153,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
 int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& current,
                                  const rgw::bucket_index_layout_generation& target,
                                  int max_op_entries, // max num to process per op
-                                 bool support_logrecord,
+                                 bool support_logrecord, const jspan& trace,
 				 bool verbose,
 				 ostream *out,
 				 Formatter *formatter,
@@ -1200,6 +1201,7 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 
     // block the client op and complete the resharding
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InProgress);
+    [[maybe_unused]] auto span = tracing::rgw::tracer.add_span("blocked", trace.GetContext());
     ret = reshard_process(current, max_op_entries, pool, oids,
                           support_logrecord, verbose_json_out, out,
                           formatter, bucket_info.layout.resharding,
@@ -1211,6 +1213,7 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
   } else {
     // setting InProgress state, but doing InLogrecord state
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InProgress);
+    [[maybe_unused]] auto span = tracing::rgw::tracer.add_span("blocked", trace.GetContext());
     int ret = reshard_process(current, max_op_entries, pool, oids,
                               support_logrecord, verbose_json_out, out,
                               formatter, rgw::BucketReshardState::InLogrecord,
@@ -1234,7 +1237,7 @@ int RGWBucketReshard::execute(int num_shards,
 			      const cls_rgw_reshard_initiator initiator,
                               const DoutPrefixProvider *dpp,
 			      boost::asio::yield_context y,
-                              bool verbose,
+                              const jspan& trace, bool verbose,
 			      ostream *out,
                               Formatter *formatter,
                               RGWReshard* reshard_log)
@@ -1255,7 +1258,7 @@ int RGWBucketReshard::execute(int num_shards,
             }
           }
           return execute_locked(num_shards, fault, max_op_entries,
-                                dpp, yield, verbose, out, formatter);
+                                dpp, yield, trace, verbose, out, formatter);
         });
   } catch (const ceph::async::lease_aborted& e) {
     ldpp_dout(dpp, 1) << "bucket reshard lease aborted with " << e.code() << dendl;
@@ -1268,9 +1271,19 @@ int RGWBucketReshard::execute(int num_shards,
 
 int RGWBucketReshard::execute_locked(int num_shards, ReshardFaultInjector& fault,
                                      int max_op_entries, const DoutPrefixProvider *dpp,
-                                     boost::asio::yield_context y, bool verbose,
-                                     std::ostream *out, ceph::Formatter *formatter)
+                                     boost::asio::yield_context y, const jspan& trace,
+                                     bool verbose, std::ostream *out,
+                                     ceph::Formatter *formatter)
 {
+  auto current_num_shards = rgw::num_shards(bucket_info.layout.current_index);
+
+  auto span = tracing::rgw::tracer.add_span("reshard", trace.GetContext());
+  span->SetAttribute("bucket", bucket_info.bucket.name);
+  span->SetAttribute("tenant", bucket_info.bucket.tenant);
+  span->SetAttribute("instance", bucket_info.bucket.bucket_id);
+  span->SetAttribute("source_shards", current_num_shards);
+  span->SetAttribute("target_shards", num_shards);
+
   bool support_logrecord = true;
   // prepare the target index and add its layout the bucket info
   int ret = init_reshard(store, bucket_info, bucket_attrs, fault, num_shards,
@@ -1283,7 +1296,7 @@ int RGWBucketReshard::execute_locked(int num_shards, ReshardFaultInjector& fault
       ret == 0) { // no fault injected, do the reshard
     ret = do_reshard(bucket_info.layout.current_index,
                      *bucket_info.layout.target_index,
-                     max_op_entries, support_logrecord,
+                     max_op_entries, support_logrecord, *span,
                      verbose, out, formatter, fault, dpp, y);
   }
 
@@ -1295,7 +1308,6 @@ int RGWBucketReshard::execute_locked(int num_shards, ReshardFaultInjector& fault
     return ret;
   }
 
-  auto current_num_shards = rgw::num_shards(bucket_info.layout.current_index);
   ret = commit_reshard(store, bucket_info, bucket_attrs, fault, dpp, y);
   if (ret < 0) {
     return ret;
@@ -1544,7 +1556,8 @@ void RGWReshardWait::stop()
 int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
                               int max_op_entries, // max num to process per op
 			      const DoutPrefixProvider* dpp,
-			      boost::asio::yield_context y)
+			      boost::asio::yield_context y,
+			      const jspan& trace)
 {
   ldpp_dout(dpp, 20) << __func__ << " resharding " <<
       entry.bucket_name  << dendl;
@@ -1696,7 +1709,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
 
   ReshardFaultInjector f; // no fault injected
   ret = br.execute(entry.new_num_shards, f, max_op_entries, entry.initiator,
-                   dpp, y, false, nullptr, nullptr, this);
+                   dpp, y, trace, false, nullptr, nullptr, this);
   if (ret < 0) {
     ldpp_dout(dpp, 0) <<  __func__ <<
         ": Error during resharding bucket " << entry.bucket_name << ":" <<
@@ -1713,7 +1726,8 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
 
 
 int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp,
-                                        boost::asio::yield_context y)
+                                        boost::asio::yield_context y,
+                                        const jspan& trace)
 {
   std::string marker;
   bool is_truncated = true;
@@ -1737,7 +1751,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
     }
 
     for(const auto& entry : entries) { // logshard entries
-      process_entry(entry, max_op_entries, dpp, y);
+      process_entry(entry, max_op_entries, dpp, y, trace);
 
       entry.get_key(&marker);
     } // entry for loop
@@ -1757,7 +1771,8 @@ void RGWReshard::get_logshard_oid(int shard_num, string *logshard)
 }
 
 int RGWReshard::process_all_logshards(const DoutPrefixProvider *dpp,
-                                      boost::asio::yield_context y)
+                                      boost::asio::yield_context y,
+                                      const jspan& trace)
 {
   for (int i = 0; i < num_logshards; i++) {
     string logshard;
@@ -1772,8 +1787,8 @@ int RGWReshard::process_all_logshards(const DoutPrefixProvider *dpp,
     try {
       // call process_single_logshard() under the protection of cls_lock
       ceph::async::with_lease(client, lock.get_duration(), y,
-          [this, i, dpp] (boost::asio::yield_context yield) {
-            process_single_logshard(i, dpp, yield);
+          [this, i, &trace, dpp] (boost::asio::yield_context yield) {
+            process_single_logshard(i, dpp, yield, trace);
           });
     } catch (const ceph::async::lease_aborted& e) {
       ldpp_dout(dpp, 1) << "reshard log lease aborted with " << e.code() << dendl;
@@ -1797,13 +1812,14 @@ static void reshard_worker(const DoutPrefixProvider* dpp,
 {
   RGWReshard reshard(store);
   const auto& conf = store->ctx()->_conf;
+  auto trace = tracing::rgw::tracer.start_trace("reshard_worker");
 
   using Clock = ceph::coarse_mono_clock;
   auto timer = boost::asio::basic_waitable_timer<Clock>{yield.get_executor()};
 
   for (;;) { // until cancellation
     const auto start = Clock::now();
-    reshard.process_all_logshards(dpp, yield);
+    reshard.process_all_logshards(dpp, yield, *trace);
 
     timer.expires_at(start + std::chrono::seconds{
         conf.get_val<uint64_t>("rgw_reshard_thread_interval")});
