@@ -103,31 +103,7 @@ struct denc_traits<MDSPerfMetricKeyDescriptor> {
     }
   }
   static void decode(MDSPerfMetricKeyDescriptor& v,
-                     ceph::buffer::ptr::const_iterator& p) {
-    unsigned num;
-    denc_varint(num, p);
-    v.clear();
-    v.reserve(num);
-    for (unsigned i=0; i < num; ++i) {
-      MDSPerfMetricSubKeyDescriptor d;
-      denc(d, p);
-      if (!d.is_supported()) {
-        v.clear();
-        return;
-      }
-      try {
-        d.regex = d.regex_str.c_str();
-      } catch (const std::regex_error& e) {
-        v.clear();
-        return;
-      }
-      if (d.regex.mark_count() == 0) {
-        v.clear();
-        return;
-      }
-      v.push_back(std::move(d));
-    }
-  }
+                     ceph::buffer::ptr::const_iterator& p);
 };
 
 enum class MDSPerformanceCounterType : uint8_t {
