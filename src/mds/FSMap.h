@@ -28,7 +28,6 @@
 
 #include <errno.h>
 
-#include "include/container_ios.h"
 #include "include/types.h"
 #include "common/ceph_time.h"
 #include "common/Clock.h"
@@ -39,22 +38,6 @@
 #include "include/common_fwd.h"
 #include "common/Formatter.h"
 #include "mds/mdstypes.h"
-
-#if __cplusplus <= 201703L
-template<class Key, class T, class Compare, class Alloc, class Pred>
-typename std::map<Key, T, Compare, Alloc>::size_type
-erase_if(std::map<Key, T, Compare, Alloc>& c, Pred pred) {
-  auto old_size = c.size();
-  for (auto i = c.begin(), last = c.end(); i != last; ) {
-    if (pred(*i)) {
-      i = c.erase(i);
-    } else {
-      ++i;
-    }
-  }
-  return old_size - c.size();
-}
-#endif
 
 class health_check_map_t;
 
@@ -84,11 +67,7 @@ struct ClusterInfo {
   void decode(ceph::buffer::list::const_iterator &iter);
 };
 
-inline std::ostream& operator<<(std::ostream& out, const ClusterInfo &cluster_info) {
-  out << "{client_name=" << cluster_info.client_name << ", cluster_name="
-      << cluster_info.cluster_name << ", fs_name=" << cluster_info.fs_name << "}";
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const ClusterInfo &cluster_info);
 
 struct Peer {
   Peer() = default;
@@ -120,10 +99,7 @@ struct Peer {
 };
 
 typedef std::set<Peer> Peers;
-inline std::ostream& operator<<(std::ostream& out, const Peer &peer) {
-  out << "{uuid=" << peer.uuid << ", remote_cluster=" << peer.remote << "}";
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const Peer &peer);
 
 struct MirrorInfo {
   MirrorInfo() = default;
@@ -180,10 +156,7 @@ struct MirrorInfo {
   void decode(ceph::buffer::list::const_iterator &iter);
 };
 
-inline std::ostream& operator<<(std::ostream& out, const MirrorInfo &mirror_info) {
-  out << "{peers=" << mirror_info.peers << "}";
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const MirrorInfo &mirror_info);
 
 WRITE_CLASS_ENCODER(ClusterInfo)
 WRITE_CLASS_ENCODER(Peer)
@@ -315,20 +288,7 @@ public:
   const CompatSet& get_default_compat() const {return default_compat;}
   CompatSet& get_default_compat() {return default_compat;}
 
-  void filter(const std::vector<std::string>& allowed)
-  {
-    if (allowed.empty()) {
-      return;
-    }
-
-    erase_if(filesystems, [&](const auto& f) {
-      return std::find(allowed.begin(), allowed.end(), f.second.mds_map.get_fs_name()) == allowed.end();
-    });
-
-    erase_if(mds_roles, [&](const auto& r) {
-      return std::find(allowed.begin(), allowed.end(), fs_name_from_gid(r.first)) == allowed.end();
-    });
-  }
+  void filter(const std::vector<std::string>& allowed);
 
   void set_enable_multiple(const bool v)
   {
@@ -383,33 +343,17 @@ public:
    * Does a daemon exist with this GID?
    */
   bool gid_exists(mds_gid_t gid,
-		  const std::vector<std::string>& in = {}) const
-  {
-    try {
-      std::string_view m = fs_name_from_gid(gid);
-      return in.empty() || std::find(in.begin(), in.end(), m) != in.end();
-    } catch (const std::out_of_range&) {
-      return false;
-    }
-  }
+		  const std::vector<std::string>& in = {}) const;
 
   /**
    * Does a daemon with this GID exist, *and* have an MDS rank assigned?
    */
-  bool gid_has_rank(mds_gid_t gid) const
-  {
-    return gid_exists(gid) && mds_roles.at(gid) != FS_CLUSTER_ID_NONE;
-  }
+  bool gid_has_rank(mds_gid_t gid) const;
 
   /**
    * Which filesystem owns this GID?
    */
-  fs_cluster_id_t fscid_from_gid(mds_gid_t gid) const {
-    if (!gid_exists(gid)) {
-      return FS_CLUSTER_ID_NONE;
-    }
-    return mds_roles.at(gid);
-  }
+  fs_cluster_id_t fscid_from_gid(mds_gid_t gid) const;
 
   /**
    * Insert a new MDS daemon, as a standby
@@ -541,55 +485,18 @@ public:
    * Given that gid exists in a filesystem or as a standby, return
    * a reference to its info.
    */
-  const mds_info_t& get_info_gid(mds_gid_t gid) const
-  {
-    auto fscid = mds_roles.at(gid);
-    if (fscid == FS_CLUSTER_ID_NONE) {
-      return standby_daemons.at(gid);
-    } else {
-      return filesystems.at(fscid).mds_map.mds_info.at(gid);
-    }
-  }
+  const mds_info_t& get_info_gid(mds_gid_t gid) const;
+  std::string_view fs_name_from_gid(mds_gid_t gid) const;
 
-  std::string_view fs_name_from_gid(mds_gid_t gid) const
-  {
-    auto fscid = mds_roles.at(gid);
-    if (fscid == FS_CLUSTER_ID_NONE or !filesystem_exists(fscid)) {
-      return std::string_view();
-    } else {
-      return filesystems.at(fscid).mds_map.get_fs_name();
-    }
-  }
+  bool is_standby_replay(mds_gid_t who) const;
+  mds_gid_t get_standby_replay(mds_gid_t who) const;
 
-  bool is_standby_replay(mds_gid_t who) const
-  {
-    return filesystems.at(mds_roles.at(who)).is_standby_replay(who);
-  }
-
-  mds_gid_t get_standby_replay(mds_gid_t who) const
-  {
-    return filesystems.at(mds_roles.at(who)).get_standby_replay(who);
-  }
-
-  const Filesystem* get_legacy_filesystem() const
-  {
-    if (legacy_client_fscid == FS_CLUSTER_ID_NONE) {
-      return nullptr;
-    } else {
-      return &filesystems.at(legacy_client_fscid);
-    }
-  }
+  const Filesystem* get_legacy_filesystem() const;
 
   /**
    * A daemon has informed us of its offload targets
    */
-  void update_export_targets(mds_gid_t who, const std::set<mds_rank_t> &targets)
-  {
-    auto fscid = mds_roles.at(who);
-    modify_filesystem(fscid, [who, &targets](auto&& fs) {
-      fs.mds_map.mds_info.at(who).export_targets = targets;
-    });
-  }
+  void update_export_targets(mds_gid_t who, const std::set<mds_rank_t> &targets);
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
@@ -731,9 +638,6 @@ private:
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMap)
 
-inline std::ostream& operator<<(std::ostream& out, const FSMap& m) {
-  m.print_summary(NULL, &out);
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const FSMap& m);
 
 #endif

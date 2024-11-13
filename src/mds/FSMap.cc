@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "common/StackStringStream.h"
 #include "common/strtol.h" // for strict_strtoll()
+#include "include/container_ios.h"
 #include "include/encoding_chrono.h"
 #include "include/encoding_set.h"
 
@@ -74,6 +75,12 @@ void ClusterInfo::print(std::ostream& out) const {
       << ", fs_name=" << fs_name << "]" << std::endl;
 }
 
+std::ostream& operator<<(std::ostream& out, const ClusterInfo &cluster_info) {
+  out << "{client_name=" << cluster_info.client_name << ", cluster_name="
+      << cluster_info.cluster_name << ", fs_name=" << cluster_info.fs_name << "}";
+  return out;
+}
+
 void Peer::encode(ceph::buffer::list &bl) const {
   ENCODE_START(1, 1, bl);
   encode(uuid, bl);
@@ -96,6 +103,11 @@ void Peer::dump(ceph::Formatter *f) const {
 
 void Peer::print(std::ostream& out) const {
   out << "[uuid=" << uuid << ", remote=" << remote << "]" << std::endl;
+}
+
+std::ostream& operator<<(std::ostream& out, const Peer &peer) {
+  out << "{uuid=" << peer.uuid << ", remote_cluster=" << peer.remote << "}";
+  return out;
 }
 
 void MirrorInfo::encode(ceph::buffer::list &bl) const {
@@ -132,6 +144,11 @@ std::list<MirrorInfo> MirrorInfo::generate_test_instances() {
 
 void MirrorInfo::print(std::ostream& out) const {
   out << "[peers=" << peers << "]" << std::endl;
+}
+
+std::ostream& operator<<(std::ostream& out, const MirrorInfo &mirror_info) {
+  out << "{peers=" << mirror_info.peers << "}";
+  return out;
 }
 
 void Filesystem::dump(Formatter *f) const
@@ -769,6 +786,37 @@ void Filesystem::print(std::ostream &out) const
   }
 }
 
+#if __cplusplus <= 201703L
+template<class Key, class T, class Compare, class Alloc, class Pred>
+typename std::map<Key, T, Compare, Alloc>::size_type
+erase_if(std::map<Key, T, Compare, Alloc>& c, Pred pred) {
+  auto old_size = c.size();
+  for (auto i = c.begin(), last = c.end(); i != last; ) {
+    if (pred(*i)) {
+      i = c.erase(i);
+    } else {
+      ++i;
+    }
+  }
+  return old_size - c.size();
+}
+#endif
+
+void FSMap::filter(const std::vector<std::string>& allowed)
+{
+  if (allowed.empty()) {
+    return;
+  }
+
+  erase_if(filesystems, [&](const auto& f) {
+    return std::find(allowed.begin(), allowed.end(), f.second.mds_map.get_fs_name()) == allowed.end();
+  });
+
+  erase_if(mds_roles, [&](const auto& r) {
+    return std::find(allowed.begin(), allowed.end(), fs_name_from_gid(r.first)) == allowed.end();
+  });
+}
+
 bool FSMap::is_any_degraded() const
 {
   for ([[maybe_unused]] const auto& [fscid, fs] : filesystems) {
@@ -904,6 +952,29 @@ const MDSMap::mds_info_t* FSMap::find_by_name(std::string_view name) const
   }
 
   return nullptr;
+}
+
+bool FSMap::gid_exists(mds_gid_t gid,
+                       const std::vector<std::string>& in) const
+{
+  try {
+    std::string_view m = fs_name_from_gid(gid);
+    return in.empty() || std::find(in.begin(), in.end(), m) != in.end();
+  } catch (const std::out_of_range&) {
+    return false;
+  }
+}
+
+bool FSMap::gid_has_rank(mds_gid_t gid) const
+{
+  return gid_exists(gid) && mds_roles.at(gid) != FS_CLUSTER_ID_NONE;
+}
+
+fs_cluster_id_t FSMap::fscid_from_gid(mds_gid_t gid) const {
+  if (!gid_exists(gid)) {
+    return FS_CLUSTER_ID_NONE;
+  }
+  return mds_roles.at(gid);
 }
 
 const MDSMap::mds_info_t* FSMap::find_replacement_for(mds_role_t role) const
@@ -1337,4 +1408,56 @@ void FSMap::swap_fscids(fs_cluster_id_t fscid1, fs_cluster_id_t fscid2)
     fs.set_fscid(fscid2);
   };
   modify_filesystem(fscid2, std::move(set_fs2_fscid));
+}
+
+const FSMap::mds_info_t& FSMap::get_info_gid(mds_gid_t gid) const
+{
+  auto fscid = mds_roles.at(gid);
+  if (fscid == FS_CLUSTER_ID_NONE) {
+    return standby_daemons.at(gid);
+  } else {
+    return filesystems.at(fscid).mds_map.mds_info.at(gid);
+  }
+}
+
+std::string_view FSMap::fs_name_from_gid(mds_gid_t gid) const
+{
+  auto fscid = mds_roles.at(gid);
+  if (fscid == FS_CLUSTER_ID_NONE or !filesystem_exists(fscid)) {
+    return std::string_view();
+  } else {
+    return filesystems.at(fscid).mds_map.get_fs_name();
+  }
+}
+
+bool FSMap::is_standby_replay(mds_gid_t who) const
+{
+  return filesystems.at(mds_roles.at(who)).is_standby_replay(who);
+}
+
+mds_gid_t FSMap::get_standby_replay(mds_gid_t who) const
+{
+  return filesystems.at(mds_roles.at(who)).get_standby_replay(who);
+}
+
+const Filesystem* FSMap::get_legacy_filesystem() const
+{
+  if (legacy_client_fscid == FS_CLUSTER_ID_NONE) {
+    return nullptr;
+  } else {
+    return &filesystems.at(legacy_client_fscid);
+  }
+}
+
+void FSMap::update_export_targets(mds_gid_t who, const std::set<mds_rank_t> &targets)
+{
+  auto fscid = mds_roles.at(who);
+  modify_filesystem(fscid, [who, &targets](auto&& fs) {
+    fs.mds_map.mds_info.at(who).export_targets = targets;
+  });
+}
+
+std::ostream& operator<<(std::ostream& out, const FSMap& m) {
+  m.print_summary(NULL, &out);
+  return out;
 }
