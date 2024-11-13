@@ -3,6 +3,7 @@
 #include <fmt/ranges.h>
 
 #include "common/hobject.h"
+#include "common/hobject_fmt.h"
 #include "gtest/gtest.h"
 
 using namespace std::string_literals;
