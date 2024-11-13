@@ -6,6 +6,7 @@
 
 #include "crimson/os/seastore/logging.h"
 
+#include "common/ceph_time_fmt.h"
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/transaction_manager.h"
