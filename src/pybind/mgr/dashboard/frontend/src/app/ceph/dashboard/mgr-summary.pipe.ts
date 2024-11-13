@@ -3,7 +3,7 @@ import { Pipe, PipeTransform } from '@angular/core';
 import _ from 'lodash';
 
 @Pipe({
-  name: 'mgrSummary'
+  name: 'mgrDashboardSummary'
 })
 export class MgrSummaryPipe implements PipeTransform {
   transform(value: any): any {

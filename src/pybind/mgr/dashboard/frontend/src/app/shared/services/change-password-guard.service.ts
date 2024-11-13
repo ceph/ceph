@@ -10,7 +10,7 @@ import { AuthStorageService } from './auth-storage.service';
 @Injectable({
   providedIn: 'root'
 })
-export class ChangePasswordGuardService  {
+export class ChangePasswordGuardService {
   constructor(private router: Router, private authStorageService: AuthStorageService) {}
 
   canActivate(_route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
