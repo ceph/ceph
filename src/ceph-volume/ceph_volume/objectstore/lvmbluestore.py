@@ -367,7 +367,7 @@ class LvmBlueStore(BlueStore):
         if is_encrypted:
             osd_lv_path = '/dev/mapper/%s' % osd_block_lv.__dict__['lv_uuid']
             lockbox_secret = osd_block_lv.tags['ceph.cephx_lockbox_secret']
-            self.with_tpm = bool(osd_block_lv.tags.get('ceph.with_tpm', 0))
+            self.with_tpm = osd_block_lv.tags.get('ceph.with_tpm') == '1'
             if not self.with_tpm:
                 encryption_utils.write_lockbox_keyring(osd_id,
                                                        osd_fsid,
