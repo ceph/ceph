@@ -757,7 +757,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
 
 int DataLogBackends::list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 			  std::vector<rgw_data_change_log_entry>& entries,
-			  std::string_view marker, std::string* out_marker,
+			  std::string_view marker, read_remote_data_log_last_marker* last_marker,
 			  bool* truncated, optional_yield y, const std::string& rgwx_zone)
 {
   const auto [start_id, start_cursor] = cursorgen(marker);
@@ -777,8 +777,20 @@ int DataLogBackends::list(const DoutPrefixProvider *dpp, int shard, int max_entr
     if (r < 0)
       return r;
 
-    if (out_marker && !out_cursor.empty()) {
-      *out_marker = gencursor(gen_id, out_cursor);
+    if (last_marker && !out_cursor.empty()) {
+      if (likely(!gentries.empty())) {
+        auto& last_entry = gentries.back();
+        if (likely(last_entry.log_id == out_cursor)) {
+          last_marker->log_id = gencursor(gen_id, out_cursor);
+          last_marker->log_timestamp = last_entry.log_timestamp;
+        } else {
+          last_marker->log_id = gencursor(gen_id, last_entry.log_id);
+          last_marker->version = 1;
+        }
+      } else {
+        last_marker->log_id = gencursor(gen_id, out_cursor);
+        last_marker->version = 1;
+      }
     }
 
     int count = 0;
@@ -799,11 +811,11 @@ int DataLogBackends::list(const DoutPrefixProvider *dpp, int shard, int max_entr
 int RGWDataChangesLog::list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 				    std::vector<rgw_data_change_log_entry>& entries,
 				    std::string_view marker,
-				    std::string* out_marker, bool* truncated,
+				    read_remote_data_log_last_marker* last_marker, bool* truncated,
 				    optional_yield y, const std::string& rgwx_zone)
 {
   assert(shard < num_shards);
-  return bes->list(dpp, shard, max_entries, entries, marker, out_marker,
+  return bes->list(dpp, shard, max_entries, entries, marker, last_marker,
 		   truncated, y, rgwx_zone);
 }
 
@@ -1154,4 +1166,13 @@ int RGWDataChangesLog::bucket_sync_targets(const rgw_bucket& bucket,
   }
 
   return 0;
+}
+
+void encode_json(const char* name, const read_remote_data_log_last_marker& info, ceph::Formatter* f)
+{
+  f->open_object_section(name);
+  encode_json("log_id", info.log_id, f);
+  encode_json("log_timestamp", utime_t(info.log_timestamp), f);
+  encode_json("version", info.version, f);
+  f->close_section();
 }

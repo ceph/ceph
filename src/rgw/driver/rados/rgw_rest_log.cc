@@ -676,6 +676,7 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
            max_entries_str = s->info.args.get("max-entries"),
            marker = s->info.args.get("marker"),
            rgwx_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "zone"),
+           format_version_str = s->info.args.get("format-ver"),
            err;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
@@ -692,6 +693,15 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
     ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
     op_ret = -EINVAL;
     return;
+  }
+
+  if (!format_version_str.empty()) {
+    format_ver = strict_strtoll(format_version_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 5) << "Failed to parse format-ver param: " << format_ver << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
   }
 
   if (!max_entries_str.empty()) {
@@ -728,9 +738,13 @@ void RGWOp_DATALog_List::send_response() {
     return;
 
   s->formatter->open_object_section("log_entries");
-  s->formatter->dump_string("marker", last_marker);
   utime_t lu(last_update);
   encode_json("last_update", lu, s->formatter);
+  if (format_ver >= 2) {
+    encode_json("last_marker", last_marker, s->formatter);
+  } else {
+    s->formatter->dump_string("marker", last_marker.log_id);
+  }
   s->formatter->dump_bool("truncated", truncated);
   {
     s->formatter->open_array_section("entries");
@@ -744,7 +758,7 @@ void RGWOp_DATALog_List::send_response() {
     }
     s->formatter->close_section();
   }
-  s->formatter->close_section();
+  s->formatter->close_section(); // log_entries
   flusher.flush();
 }
 

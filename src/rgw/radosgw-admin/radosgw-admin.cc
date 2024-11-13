@@ -10851,7 +10851,7 @@ next:
       if (specified_shard_id) {
         ret = datalog_svc->list_entries(dpp(), shard_id, max_entries - count,
 					entries, marker,
-					&marker, &truncated,
+					nullptr, &truncated,
 					null_yield, "");
       } else {
         ret = datalog_svc->list_entries(dpp(), max_entries - count, entries,

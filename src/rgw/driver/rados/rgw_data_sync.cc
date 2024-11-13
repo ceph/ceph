@@ -301,18 +301,22 @@ public:
 };
 
 struct read_remote_data_log_response {
-  string marker;
   bool truncated;
   vector<rgw_data_change_log_entry> entries;
   real_time last_update;
+  read_remote_data_log_last_marker last_marker;
 
   read_remote_data_log_response() : truncated(false) {}
 
   void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("marker", marker, obj);
     JSONDecoder::decode_json("truncated", truncated, obj);
     JSONDecoder::decode_json("last_update", last_update, obj);
     JSONDecoder::decode_json("entries", entries, obj);
+    JSONDecoder::decode_json("last_marker", last_marker, obj);
+    if (last_marker.log_id.empty()) { // v1 marker
+      JSONDecoder::decode_json("marker", last_marker.log_id, obj);
+      last_marker.version = 1;
+    }
   };
 };
 
@@ -324,7 +328,7 @@ class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
 
   int shard_id;
   const std::string& marker;
-  string *pnext_marker;
+  read_remote_data_log_last_marker *last_marker;
   vector<rgw_data_change_log_entry> *entries;
   bool *truncated;
   real_time *last_update;
@@ -337,11 +341,11 @@ class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
 
 public:
   RGWReadRemoteDataLogShardCR(RGWDataSyncCtx *_sc, int _shard_id,
-                              const std::string& marker, string *pnext_marker,
+                              const std::string& marker, read_remote_data_log_last_marker *last_marker,
                               vector<rgw_data_change_log_entry> *_entries,
                               bool *_truncated, real_time *_last_update)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      shard_id(_shard_id), marker(marker), pnext_marker(pnext_marker),
+      shard_id(_shard_id), marker(marker), last_marker(last_marker),
       entries(_entries), truncated(_truncated), last_update(_last_update) {
   }
 
@@ -358,6 +362,7 @@ public:
                                           { "id", buf },
                                           { "marker", marker.c_str() },
                                           { "extra-info", "true" },
+                                          { "format-ver", "2" },
                                           { NULL, NULL } };
 
           string p = "/admin/log/";
@@ -402,9 +407,9 @@ public:
 
         entries->clear();
         entries->swap(response.entries);
-        *pnext_marker = response.marker;
         *truncated = response.truncated;
         *last_update = response.last_update;
+        *last_marker = response.last_marker;
         return set_cr_done();
       }
     }
@@ -484,6 +489,7 @@ public:
       { "id", buf },
       { "max-entries", max_entries_buf },
       { marker_key, marker.c_str() },
+      { "format-ver", "2" },
       { NULL, NULL } };
 
     string p = "/admin/log/";
@@ -1965,7 +1971,7 @@ class RGWDataIncSyncShardCR : public RGWDataBaseSyncShardCR {
   ceph::real_time entry_timestamp;
   std::optional<uint64_t> gen;
 
-  string next_marker;
+  read_remote_data_log_last_marker last_marker;
   vector<rgw_data_change_log_entry> log_entries;
   real_time last_update;
   decltype(log_entries)::iterator log_iter;
@@ -1973,6 +1979,7 @@ class RGWDataIncSyncShardCR : public RGWDataBaseSyncShardCR {
   int cbret = 0;
   bool lost_lock = false;
   bool lost_bid = false;
+  std::string last_id;
 
   utime_t get_idle_interval() const {
     ceph::timespan interval = std::chrono::seconds(cct->_conf->rgw_data_sync_poll_interval);
@@ -2113,7 +2120,7 @@ public:
 			 << sync_marker.marker));
         yield call(new RGWReadRemoteDataLogShardCR(sc, shard_id,
 						   sync_marker.marker,
-                                                   &next_marker, &log_entries,
+                                                   &last_marker, &log_entries,
 						   &truncated, &last_update));
         if (retcode < 0 && retcode != -ENOENT) {
           tn->log(0, SSTR("ERROR: failed to read remote data log info: ret="
@@ -2171,10 +2178,20 @@ public:
 
         tn->log(20, SSTR("shard_id=" << shard_id <<
 			 " sync_marker="<< sync_marker.marker
-			 << " next_marker=" << next_marker
+			 << " last_marker=" << last_marker.log_id
 			 << " truncated=" << truncated));
-        if (!next_marker.empty()) {
-          sync_marker.marker = next_marker;
+        if (!last_marker.log_id.empty()) {
+          last_id = log_entries.empty() ? sync_marker.marker : log_entries.back().log_id;
+          sync_marker.marker = last_marker.log_id;
+          if (last_marker.version >= 2 && last_id != last_marker.log_id &&
+              marker_tracker->start(last_marker.log_id, 0, last_marker.log_timestamp)) {
+            tn->log(20, SSTR("updating high marker to " << last_marker.log_id));
+            yield call(marker_tracker->finish(last_marker.log_id));
+            if (retcode < 0) {
+              tn->log(0, SSTR("ERROR: failed to update marker tracker: retcode=" << retcode));
+              retcode = 0; // last marker update is not fatal
+            }
+          }
         } else if (!log_entries.empty()) {
           sync_marker.marker = log_entries.back().log_id;
         }
@@ -3960,7 +3977,7 @@ class RGWReadPendingBucketShardsCoroutine : public RGWCoroutine {
   rgw_data_sync_marker* sync_marker;
   int count;
 
-  std::string next_marker;
+  read_remote_data_log_last_marker last_marker;
   vector<rgw_data_change_log_entry> log_entries;
   bool truncated;
   real_time last_update;
@@ -3998,7 +4015,7 @@ int RGWReadPendingBucketShardsCoroutine::operate(const DoutPrefixProvider *dpp)
     count = 0;
     do{
       yield call(new RGWReadRemoteDataLogShardCR(sc, shard_id, marker,
-                                                 &next_marker, &log_entries, &truncated, &last_update));
+                                                 &last_marker, &log_entries, &truncated, &last_update));
 
       if (retcode == -ENOENT) {
         break;

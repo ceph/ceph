@@ -207,10 +207,11 @@ public:
 
 class RGWOp_DATALog_List : public RGWRESTOp {
   std::vector<rgw_data_change_log_entry> entries;
-  std::string last_marker;
+  read_remote_data_log_last_marker last_marker;
   bool truncated;
   bool extra_info;
   ceph::real_time last_update;
+  uint32_t format_ver{1};
 public:
   RGWOp_DATALog_List() : truncated(false), extra_info(false) {}
   ~RGWOp_DATALog_List() override {}

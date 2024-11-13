@@ -379,6 +379,13 @@ def zonegroup_data_checkpoint(zonegroup_conns):
             log.debug('data checkpoint: source=%s target=%s', source_conn.zone.name, target_conn.zone.name)
             zone_data_checkpoint(target_conn.zone, source_conn.zone)
 
+def realm_data_checkpoint(realm, source_zone):
+    for zonegroup in realm.current_period.zonegroups:
+        if zonegroup.name == source_zone.zonegroup.name:
+            continue
+        for zone in zonegroup.zones:
+            zone_data_checkpoint(zone, source_zone)
+
 def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
     if not target_zone.syncs_from(source_zone.name):
         return
@@ -1053,6 +1060,7 @@ def allow_zonegroup_replication(zonegroup):
     create_sync_group_pipe(c, "allow-sync", "sync-pipe", zones, zones)
 
     zonegroup.period.update(z, commit=True)
+    realm_meta_checkpoint(realm)
 
 def remove_zonegroup_replication(zonegroup):
     z = zonegroup.zones[0]
@@ -1414,7 +1422,7 @@ def test_datalog_autotrim_zonegroups(source_zone, dest_zone, source_bucket, dest
 
     # wait for metadata and data sync to catch up
     realm_meta_checkpoint(realm)
-    zone_data_checkpoint(dest_zone.zone, source_zone.zone)
+    realm_data_checkpoint(realm, source_zone.zone)
 
     # trim each datalog
     # read max markers for each shard
@@ -1431,7 +1439,7 @@ def test_datalog_autotrim_zonegroups(source_zone, dest_zone, source_bucket, dest
         if not len(entries):
             continue
         after_trim = dateutil.parser.isoparse(entries[0]['timestamp'])
-        assert before_trim < after_trim, "any datalog entries must be newer than trim"
+        assert before_trim < after_trim, "any datalog entries must be newer than trim shard_id=%d" % shard_id
 
 
 @attr('bucket_sync_disable')
@@ -1609,6 +1617,7 @@ def test_bucket_index_log_trim_zonegroups(source_zone, dest_zone, source_bucket,
 
     realm_meta_checkpoint(realm)
     zone_bucket_checkpoint(dest_zone.zone, source_zone.zone, cold_bucket_dest.name)
+    realm_data_checkpoint(realm, source_zone.zone)
 
     # trim with max-buckets=0 to clear counters for cold bucket. this should
     # prevent it from being considered 'active' by the next autotrim
@@ -1701,6 +1710,7 @@ def test_bucket_reshard_index_log_trim_zonegroups(source_zone, dest_zone, source
 
     realm_meta_checkpoint(realm)
     zone_bucket_checkpoint(dest_zone.zone, source_zone.zone, dest_bucket.name)
+    realm_data_checkpoint(realm, source_zone.zone)
 
     bilog_autotrim(source_zone.zone)
 
@@ -1858,7 +1868,7 @@ def test_sync_single_bucket_to_multiple_log_trim_zonegroups(zonegroup):
     assert(len(test_bilog) == 0)
 
 
-@attr('fails_on_rgw')  # RGWGetBucketPeersCR doesn't respect the resolved_sources when only target_bucket is passed.
+@attr('fails_with_rgw')  # RGWGetBucketPeersCR doesn't respect the resolved_sources when only target_bucket is passed.
 @attr('bucket_reshard')
 @allow_zonegroups_replication
 @run_per_zonegroup
@@ -1898,7 +1908,7 @@ def test_bucket_sync_run_basic_incremental_zonegroups(source_zone, dest_zone, so
     zone_bucket_checkpoint(dest_zone.zone, source_zone.zone, dest_bucket.name)
 
 
-@attr('fails_on_rgw')  # RGWGetBucketPeersCR doesn't respect the resolved_sources when only target_bucket is passed.
+@attr('fails_with_rgw')  # RGWGetBucketPeersCR doesn't respect the resolved_sources when only target_bucket is passed.
 @attr('bucket_reshard')
 @allow_zonegroups_replication
 @run_per_zonegroup
@@ -1960,9 +1970,9 @@ def test_replication_status_zonegroups(source_zone, dest_zone, source_bucket, de
     # checking if object has PENDING ReplicationStatus
     assert(head_res["ReplicationStatus"] == "PENDING")
 
-    bilog_autotrim(source_zone.zone)
-    zone_data_checkpoint(dest_zone.zone, source_zone.zone)
     zone_bucket_checkpoint(dest_zone.zone, source_zone.zone, dest_bucket.name)
+    realm_data_checkpoint(realm, source_zone.zone)
+    bilog_autotrim(source_zone.zone)
 
     head_res = source_zone.head_object(source_bucket.name, obj_name)
     # checking if object has COMPLETED ReplicationStatus
@@ -2185,7 +2195,7 @@ def test_sync_multiple_buckets_to_single_zonegroups(source_zone, dest_zone, sour
 
     # create source bucket on other zonegroups
     for zg in zonegroups:
-        if zg.name == source_zone.zonegroup.name or zg.name == dest_zone.zonegroup.name:
+        if zg.name == source_zone.zone.zonegroup.name or zg.name == dest_zone.zone.zonegroup.name:
             continue
 
         zonegroup_conns = ZonegroupConns(zg)
@@ -2226,7 +2236,7 @@ def test_sync_single_bucket_to_multiple_zonegroups(source_zone, dest_zone, sourc
 
     # create dest bucket on other zonegroups
     for zg in zonegroups:
-        if zg.name == source_zone.zonegroup.name or zg.name == dest_zone.zonegroup.name:
+        if zg.name == source_zone.zone.zonegroup.name or zg.name == dest_zone.zone.zonegroup.name:
             continue
 
         zonegroup_conns = ZonegroupConns(zg)
