@@ -53,6 +53,10 @@ public:
   operator ValueT() const {
     return value_cache.load();
   }
+
+  ValueT operator*() const {
+    return value_cache.load();
+  }
 };
 
 #endif // CEPH_CONFIG_CACHER_H
