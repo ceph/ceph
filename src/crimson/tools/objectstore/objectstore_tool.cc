@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "common/hobject.h"
+#include "common/hobject_fmt.h"
 #include "common/JSONFormatter.h"
 #include "crimson/os/alienstore/alien_store.h"
 #include "crimson/os/futurized_collection.h"
