@@ -54,6 +54,8 @@ MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_, MonMap *monmap_)
   ceph_assert(cct != nullptr);
 }
 
+MgrClient::~MgrClient() noexcept = default;
+
 void MgrClient::init()
 {
   std::lock_guard l(lock);
