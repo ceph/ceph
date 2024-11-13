@@ -74,6 +74,7 @@ extern "C" {
 #include "rgw_data_access.h"
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
+#include "rgw_tracer.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -8621,9 +8622,10 @@ next:
     boost::asio::io_context ctx;
     boost::asio::spawn(ctx,
         [&] (boost::asio::yield_context yield) {
+          auto trace = tracing::rgw::tracer.start_trace("radosgw-admin");
           ret = br.execute(num_shards, fault, max_entries,
                            cls_rgw_reshard_initiator::Admin,
-                           dpp(), yield,
+                           dpp(), yield, *trace,
                            verbose, &cout, formatter.get());
         }, [] (std::exception_ptr eptr) {
           if (eptr) { std::rethrow_exception(eptr); }
@@ -8744,7 +8746,8 @@ next:
     boost::asio::io_context ctx;
     boost::asio::spawn(ctx,
         [&reshard] (boost::asio::yield_context yield) {
-          reshard.process_all_logshards(dpp(), yield);
+          auto trace = tracing::rgw::tracer.start_trace("radosgw-admin");
+          reshard.process_all_logshards(dpp(), yield, *trace);
         }, [] (std::exception_ptr eptr) {
           if (eptr) { std::rethrow_exception(eptr); }
         });
