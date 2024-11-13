@@ -141,6 +141,18 @@ public:
       const std::optional<std::string> &start ///< [in] start, empty for begin
       ) final; ///< @return <done, values> values.empty() iff done
 
+    read_errorator::future<omap_values_paged_t> log_get_values(
+      CollectionRef c,           ///< [in] collection
+      const ghobject_t &oid,     ///< [in] oid
+      const std::optional<std::string> &start ///< [in] start, empty for begin
+      ) final {
+      return omap_get_values(c, oid, start);
+    }
+
+    bool support_log_interfaces() {
+      return true;
+    }
+
     get_attr_errorator::future<bufferlist> omap_get_header(
       CollectionRef c,
       const ghobject_t& oid) final;

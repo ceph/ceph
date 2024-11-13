@@ -1877,6 +1877,12 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid, aset.size());
         return _omap_set_values(ctx, onodes[op->oid], std::move(aset));
       }
+      case Transaction::OP_LOG_SETKEYS:
+      {
+        std::map<std::string, ceph::bufferlist> aset;
+        i.decode_attrset(aset);
+        return _omap_set_values(ctx, onodes[op->oid], std::move(aset));
+      }
       case Transaction::OP_OMAP_SETHEADER:
       {
         ceph::bufferlist bl;
@@ -1893,6 +1899,12 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid, keys.size());
         return _omap_rmkeys(ctx, onodes[op->oid], std::move(keys));
       }
+      case Transaction::OP_LOG_RMKEYS:
+      {
+        omap_keys_t keys;
+        i.decode_keyset(keys);
+        return _omap_rmkeys(ctx, onodes[op->oid], std::move(keys));
+      }
       case Transaction::OP_OMAP_RMKEYRANGE:
       {
         std::string first, last;
@@ -1900,6 +1912,15 @@ SeaStore::Shard::_do_transaction_step(
         last = i.decode_string();
         DEBUGT("op OMAP_RMKEYRANGE, oid={}, first={}, last={} ...",
                *ctx.transaction, oid, first, last);
+        return _omap_rmkeyrange(
+	  ctx, onodes[op->oid],
+	  std::move(first), std::move(last));
+      }
+      case Transaction::OP_LOG_RMKEYRANGE:
+      {
+        std::string first, last;
+        first = i.decode_string();
+        last = i.decode_string();
         return _omap_rmkeyrange(
 	  ctx, onodes[op->oid],
 	  std::move(first), std::move(last));

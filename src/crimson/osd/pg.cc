@@ -466,12 +466,38 @@ void PG::prepare_write(pg_info_t &info,
       this);
     ceph_assert(ret == 0);
   }
-  pglog.write_log_and_missing(
+  set<string> to_remove;
+  set<std::pair<string, string>> to_rmkeyrange;
+  pglog.extract_log_and_missing_writes(
     t, &km, coll_ref->get_cid(), pgmeta_oid,
-    peering_state.get_pgpool().info.require_rollback());
-  if (!km.empty()) {
-    t.omap_setkeys(coll_ref->get_cid(), pgmeta_oid, km);
+    peering_state.get_pgpool().info.require_rollback(),
+    &to_remove, &to_rmkeyrange);
+  if (!to_remove.empty()) {
+    if (shard_services.get_store().support_log_interfaces()) {
+      t.log_rmkeys(coll_ref->get_cid(), pgmeta_oid, to_remove);
+    } else {
+      t.omap_rmkeys(coll_ref->get_cid(), pgmeta_oid, to_remove);
+    }
   }
+  if (!to_rmkeyrange.empty()) {
+    for (auto &p : to_rmkeyrange) {
+      if (shard_services.get_store().support_log_interfaces()) {
+	t.log_rmkeyrange(coll_ref->get_cid(), pgmeta_oid,
+	  p.first, p.second);
+      } else {
+	t.omap_rmkeyrange(coll_ref->get_cid(), pgmeta_oid,
+	  p.first, p.second);
+      }
+    }
+  }
+  if (!km.empty()) {
+    if (shard_services.get_store().support_log_interfaces()) {
+      t.log_setkeys(coll_ref->get_cid(), pgmeta_oid, km);
+    } else {
+      t.omap_setkeys(coll_ref->get_cid(), pgmeta_oid, km);
+    }
+  }
+
   if (!key_to_remove.empty()) {
     t.omap_rmkey(coll_ref->get_cid(), pgmeta_oid, key_to_remove);
   }
