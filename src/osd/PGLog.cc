@@ -632,7 +632,7 @@ void PGLog::check() {
 // non-static
 void PGLog::write_log_and_missing(
   ObjectStore::Transaction& t,
-  map<string,bufferlist> *km,
+  map<string,bufferlist> *log_to_setkey,
   const coll_t& coll,
   const ghobject_t &log_oid,
   bool require_rollback)
@@ -647,7 +647,7 @@ void PGLog::write_log_and_missing(
 	     << ", clear_divergent_priors: " << clear_divergent_priors
 	     << dendl;
     _write_log_and_missing(
-      t, km, log, coll, log_oid,
+      t, log_to_setkey, log, coll, log_oid,
       dirty_to,
       dirty_from,
       writeout_from,
@@ -690,7 +690,7 @@ void PGLog::write_log_and_missing_wo_missing(
 // static
 void PGLog::write_log_and_missing(
     ObjectStore::Transaction& t,
-    map<string,bufferlist> *km,
+    map<string,bufferlist> *log_to_setkey,
     pg_log_t &log,
     const coll_t& coll,
     const ghobject_t &log_oid,
@@ -700,7 +700,7 @@ void PGLog::write_log_and_missing(
     const DoutPrefixProvider *dpp)
 {
   _write_log_and_missing(
-    t, km, log, coll, log_oid,
+    t, log_to_setkey, log, coll, log_oid,
     eversion_t::max(),
     eversion_t(),
     eversion_t(),
@@ -848,7 +848,7 @@ void PGLog::_write_log_and_missing_wo_missing(
 // static
 void PGLog::_write_log_and_missing(
   ObjectStore::Transaction& t,
-  map<string,bufferlist>* km,
+  map<string,bufferlist>* log_to_setkey,
   pg_log_t &log,
   const coll_t& coll, const ghobject_t &log_oid,
   eversion_t dirty_to,
@@ -907,7 +907,7 @@ void PGLog::_write_log_and_missing(
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    (*km)[p->get_key_name()] = std::move(bl);
+    (*log_to_setkey)[p->get_key_name()] = std::move(bl);
   }
 
   for (auto p = log.log.rbegin();
@@ -917,12 +917,12 @@ void PGLog::_write_log_and_missing(
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    (*km)[p->get_key_name()] = std::move(bl);
+    (*log_to_setkey)[p->get_key_name()] = std::move(bl);
   }
 
   if (log_keys_debug) {
-    for (auto i = (*km).begin();
-	 i != (*km).end();
+    for (auto i = (*log_to_setkey).begin();
+	 i != (*log_to_setkey).end();
 	 ++i) {
       if (i->first[0] == '_')
 	continue;
@@ -961,7 +961,7 @@ void PGLog::_write_log_and_missing(
       break;
     bufferlist bl;
     encode(entry, bl);
-    (*km)[entry.get_key_name()] = std::move(bl);
+    (*log_to_setkey)[entry.get_key_name()] = std::move(bl);
   }
   ldpp_dout(dpp, 10) << __func__ << " 1st round encoded log.dups.size()="
 		     << log.dups.size() << dendl;
@@ -973,7 +973,7 @@ void PGLog::_write_log_and_missing(
        ++p) {
     bufferlist bl;
     encode(*p, bl);
-    (*km)[p->get_key_name()] = std::move(bl);
+    (*log_to_setkey)[p->get_key_name()] = std::move(bl);
   }
   ldpp_dout(dpp, 10) << __func__ << " 2st round encoded log.dups.size()="
 		     << log.dups.size() << dendl;
@@ -986,7 +986,7 @@ void PGLog::_write_log_and_missing(
   // since we encode individual missing items instead of a whole
   // missing set, we need another key to store this bit of state
   if (*may_include_deletes_in_missing_dirty) {
-    (*km)["may_include_deletes_in_missing"] = bufferlist();
+    (*log_to_setkey)["may_include_deletes_in_missing"] = bufferlist();
     *may_include_deletes_in_missing_dirty = false;
   }
   missing.get_changed(
@@ -996,16 +996,17 @@ void PGLog::_write_log_and_missing(
       if (!missing.is_missing(obj, &item)) {
 	to_remove.insert(key);
       } else {
-	encode(make_pair(obj, item), (*km)[key], CEPH_FEATUREMASK_SERVER_OCTOPUS);
+	encode(make_pair(obj, item), (*log_to_setkey)[key],
+	  CEPH_FEATUREMASK_SERVER_OCTOPUS);
       }
     });
   if (require_rollback) {
     encode(
       log.get_can_rollback_to(),
-      (*km)["can_rollback_to"]);
+      (*log_to_setkey)["can_rollback_to"]);
     encode(
       log.get_rollback_info_trimmed_to(),
-      (*km)["rollback_info_trimmed_to"]);
+      (*log_to_setkey)["rollback_info_trimmed_to"]);
   }
 
   if (!to_remove.empty())
