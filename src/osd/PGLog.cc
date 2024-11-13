@@ -1219,9 +1219,17 @@ namespace {
                ghobject_t &pgmeta_oid,
                std::optional<std::string> &start) {
           return seastar::repeat([this, &ch, &pgmeta_oid, &start]() {
-            return store.omap_get_values(
-              ch, pgmeta_oid, start
-            ).safe_then([this, &start](const auto& ret) {
+	    auto fut = crimson::os::FuturizedStore::Shard::read_errorator::
+	      make_ready_future<std::tuple<bool,
+	      crimson::os::FuturizedStore::Shard::omap_values_t>>();
+	    if (store.support_log_interfaces()) {
+	      fut = store.log_get_values(
+		ch, pgmeta_oid, start);
+	    } else {
+	      fut = store.omap_get_values(
+		ch, pgmeta_oid, start);
+	    }
+	    return fut.safe_then([this, &start](const auto& ret) {
               const auto& [done, kvs] = ret;
               for (const auto& [key, value] : kvs) {
                 process_entry(key, value);
