@@ -523,6 +523,8 @@ set(libcommon_files
   mon/MgrMap.cc
   mon/PGMap.cc
   mgr/ServiceMap.cc
+  mgr/OSDPerfMetricTypes.cc
+  mgr/MDSPerfMetricTypes.cc
   osd/ECMsgTypes.cc
   osd/HitSet.cc
   osd/OSDMap.cc
