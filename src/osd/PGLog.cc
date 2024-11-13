@@ -646,7 +646,9 @@ void PGLog::write_log_and_missing(
 	     << ", trimmed_dups: " << trimmed_dups
 	     << ", clear_divergent_priors: " << clear_divergent_priors
 	     << dendl;
-    _write_log_and_missing(
+    set<string> log_to_remove;
+    set<std::pair<string, string>> log_to_rmkeyrange;
+    _extract_log_and_missing_writes(
       t, log_to_setkey, log, coll, log_oid,
       dirty_to,
       dirty_from,
@@ -662,7 +664,18 @@ void PGLog::write_log_and_missing(
       write_from_dups,
       &may_include_deletes_in_missing_dirty,
       (pg_log_debug ? &log_keys_debug : nullptr),
+      &log_to_remove,
+      &log_to_rmkeyrange,
       this);
+    if (!log_to_rmkeyrange.empty()) {
+      for (auto &p : log_to_rmkeyrange) {
+	t.omap_rmkeyrange(coll, log_oid,
+	    p.first, p.second);
+      }
+    }
+    if (!log_to_remove.empty()) {
+      t.omap_rmkeys(coll, log_oid, log_to_remove);
+    }
     undirty();
   } else {
     dout(10) << "log is not dirty" << dendl;
@@ -699,7 +712,9 @@ void PGLog::write_log_and_missing(
     bool *may_include_deletes_in_missing_dirty,
     const DoutPrefixProvider *dpp)
 {
-  _write_log_and_missing(
+  set<string> log_to_remove;
+  set<std::pair<string, string>> log_to_rmkeyrange;
+  _extract_log_and_missing_writes(
     t, log_to_setkey, log, coll, log_oid,
     eversion_t::max(),
     eversion_t(),
@@ -711,7 +726,17 @@ void PGLog::write_log_and_missing(
     eversion_t::max(),
     eversion_t(),
     eversion_t(),
-    may_include_deletes_in_missing_dirty, nullptr, dpp);
+    may_include_deletes_in_missing_dirty, nullptr,
+    &log_to_remove, &log_to_rmkeyrange, dpp);
+  if (!log_to_rmkeyrange.empty()) {
+    for (auto &p : log_to_rmkeyrange) {
+      t.omap_rmkeyrange(coll, log_oid,
+	  p.first, p.second);
+    }
+  }
+  if (!log_to_remove.empty()) {
+    t.omap_rmkeys(coll, log_oid, log_to_remove);
+  }
 }
 
 // static
@@ -846,7 +871,7 @@ void PGLog::_write_log_and_missing_wo_missing(
 }
 
 // static
-void PGLog::_write_log_and_missing(
+void PGLog::_extract_log_and_missing_writes(
   ObjectStore::Transaction& t,
   map<string,bufferlist>* log_to_setkey,
   pg_log_t &log,
@@ -865,6 +890,8 @@ void PGLog::_write_log_and_missing(
   eversion_t write_from_dups,
   bool *may_include_deletes_in_missing_dirty, // in/out param
   set<string> *log_keys_debug,
+  set<string> *log_to_remove,
+  set<std::pair<string, string>> *log_to_rmkeyrange,
   const DoutPrefixProvider *dpp
   ) {
   ldpp_dout(dpp, 10) << __func__ << " clearing up to " << dirty_to
@@ -872,8 +899,7 @@ void PGLog::_write_log_and_missing(
 		     << " dirty_from_dups=" << dirty_from_dups
 		     << " write_from_dups=" << write_from_dups
 		     << " trimmed_dups.size()=" << trimmed_dups.size() << dendl;
-  set<string> to_remove;
-  to_remove.swap(trimmed_dups);
+  (*log_to_remove).swap(trimmed_dups);
   for (auto& t : trimmed) {
     string key = t.get_key_name();
     if (log_keys_debug) {
@@ -881,24 +907,22 @@ void PGLog::_write_log_and_missing(
       ceph_assert(it != log_keys_debug->end());
       log_keys_debug->erase(it);
     }
-    to_remove.emplace(std::move(key));
+    (*log_to_remove).emplace(std::move(key));
   }
   trimmed.clear();
 
   if (touch_log)
     t.touch(coll, log_oid);
   if (dirty_to != eversion_t()) {
-    t.omap_rmkeyrange(
-      coll, log_oid,
-      eversion_t().get_key_name(), dirty_to.get_key_name());
+    (*log_to_rmkeyrange).insert(make_pair(eversion_t().get_key_name(),
+      dirty_to.get_key_name()));
     clear_up_to(log_keys_debug, dirty_to.get_key_name());
   }
   if (dirty_to != eversion_t::max() && dirty_from != eversion_t::max()) {
-    ldpp_dout(dpp, 10) << "write_log_and_missing, clearing from "
+    ldpp_dout(dpp, 10) << __func__  << ", clearing from "
 		       << dirty_from << dendl;
-    t.omap_rmkeyrange(
-      coll, log_oid,
-      dirty_from.get_key_name(), eversion_t::max().get_key_name());
+    (*log_to_rmkeyrange).insert(make_pair(dirty_from.get_key_name(),
+      eversion_t::max().get_key_name()));
     clear_after(log_keys_debug, dirty_from.get_key_name());
   }
 
@@ -938,9 +962,8 @@ void PGLog::_write_log_and_missing(
     dirty_to_dup.version = dirty_to_dups;
     ldpp_dout(dpp, 10) << __func__ << " remove dups min=" << min.get_key_name()
 		       << " to dirty_to_dup=" << dirty_to_dup.get_key_name() << dendl;
-    t.omap_rmkeyrange(
-      coll, log_oid,
-      min.get_key_name(), dirty_to_dup.get_key_name());
+    (*log_to_rmkeyrange).insert(make_pair(min.get_key_name(),
+      dirty_to_dup.get_key_name()));
   }
   if (dirty_to_dups != eversion_t::max() && dirty_from_dups != eversion_t::max()) {
     pg_log_dup_t max, dirty_from_dup;
@@ -949,9 +972,8 @@ void PGLog::_write_log_and_missing(
     ldpp_dout(dpp, 10) << __func__ << " remove dups dirty_from_dup="
 		       << dirty_from_dup.get_key_name()
 		       << " to max=" << max.get_key_name() << dendl;
-    t.omap_rmkeyrange(
-      coll, log_oid,
-      dirty_from_dup.get_key_name(), max.get_key_name());
+    (*log_to_rmkeyrange).insert(make_pair(dirty_from_dup.get_key_name(),
+      max.get_key_name()));
   }
 
   ldpp_dout(dpp, 10) << __func__ << " going to encode log.dups.size()="
@@ -981,7 +1003,7 @@ void PGLog::_write_log_and_missing(
   if (clear_divergent_priors) {
     ldpp_dout(dpp, 10) << "write_log_and_missing: writing divergent_priors"
 		       << dendl;
-    to_remove.insert("divergent_priors");
+    (*log_to_remove).insert("divergent_priors");
   }
   // since we encode individual missing items instead of a whole
   // missing set, we need another key to store this bit of state
@@ -994,7 +1016,7 @@ void PGLog::_write_log_and_missing(
       string key = string("missing/") + obj.to_str();
       pg_missing_item item;
       if (!missing.is_missing(obj, &item)) {
-	to_remove.insert(key);
+	(*log_to_remove).insert(key);
       } else {
 	encode(make_pair(obj, item), (*log_to_setkey)[key],
 	  CEPH_FEATUREMASK_SERVER_OCTOPUS);
@@ -1009,8 +1031,6 @@ void PGLog::_write_log_and_missing(
       (*log_to_setkey)["rollback_info_trimmed_to"]);
   }
 
-  if (!to_remove.empty())
-    t.omap_rmkeys(coll, log_oid, to_remove);
   ldpp_dout(dpp, 10) << "end of " << __func__ << dendl;
 }
 
