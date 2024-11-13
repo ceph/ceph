@@ -364,3 +364,17 @@ list<LogSummary> LogSummary::generate_test_instances()
   // more!
   return o;
 }
+
+std::ostream& operator<<(std::ostream& out, const LogEntry& e)
+{
+  return out << e.stamp << " " << e.name << " (" << e.rank << ") "
+	     << e.seq << " : "
+             << e.channel << " " << e.prio << " " << e.msg;
+}
+
+auto fmt::formatter<LogEntry>::format(const LogEntry& e, format_context& ctx) const -> format_context::iterator
+{
+  return fmt::format_to(ctx.out(), "{} {} ({}) {} : {} [{}] {}",
+			e.stamp, e.name, e.rank, e.seq, e.channel,
+			LogEntry::level_to_str(e.prio), e.msg);
+}
