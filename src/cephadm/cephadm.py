@@ -586,6 +586,8 @@ def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional
             if digest and not digest.endswith('@'):
                 logger.info(f"Using ceph image with id '{image_id}' and tag '{tag}' created on {created_date}\n{digest}")
                 return digest
+    if container_info is not None:
+        logger.warning(f"Not using image '{container_info.image_id}' as it's not in list of non-dangling images with ceph=True label")
     return None
 
 
