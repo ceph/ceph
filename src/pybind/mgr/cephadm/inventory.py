@@ -187,11 +187,12 @@ class Inventory:
 
     def add_label(self, host: str, label: str) -> None:
         host = self._get_stored_name(host)
-
+        labels = label.split(',') if ',' in label else [label]
         if 'labels' not in self._inventory[host]:
             self._inventory[host]['labels'] = list()
-        if label not in self._inventory[host]['labels']:
-            self._inventory[host]['labels'].append(label)
+        for label in labels:
+            if label not in self._inventory[host]['labels']:
+                self._inventory[host]['labels'].append(label)
         self.save()
 
     def rm_label(self, host: str, label: str) -> None:
