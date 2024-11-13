@@ -33,6 +33,7 @@
 #include "common/ceph_crypto.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/hobject_fmt.h"
 #include "common/perf_counters.h"
 #include "common/scrub_types.h"
 #include "include/compat.h"
