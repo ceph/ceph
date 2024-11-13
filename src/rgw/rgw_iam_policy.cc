@@ -21,6 +21,7 @@
 #include "rgw_iam_policy.h"
 #include "rgw_oidc_provider.h"
 
+#include "common/ceph_time_fmt.h"
 
 inline constexpr int dout_subsys = ceph_subsys_rgw;
 
