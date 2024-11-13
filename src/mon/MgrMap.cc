@@ -149,6 +149,34 @@ std::list<MgrMap::ModuleInfo> MgrMap::ModuleInfo::generate_test_instances()
   return ls;
 }
 
+std::set<std::string> MgrMap::get_all_names() const {
+  std::set<std::string> ls;
+  if (active_name.size()) {
+    ls.insert(active_name);
+  }
+  for (auto& p : standbys) {
+    ls.insert(p.second.name);
+  }
+  return ls;
+}
+
+std::set<std::string> MgrMap::get_always_on_modules() const {
+  unsigned rnum = to_integer<uint32_t>(ceph_release());
+  auto it = always_on_modules.find(rnum);
+  if (it == always_on_modules.end()) {
+    // ok, try the most recent release
+    if (always_on_modules.empty()) {
+      return {}; // ugh
+    }
+    --it;
+    if (it->first < rnum) {
+      return it->second;
+    }
+    return {};      // wth
+  }
+  return it->second;
+}
+
 void MgrMap::StandbyInfo::encode(ceph::buffer::list& bl) const
 {
   ENCODE_START(4, 1, bl);
@@ -215,6 +243,48 @@ bool MgrMap::StandbyInfo::have_module(const std::string &module_name) const
       });
 
   return it != available_modules.end();
+}
+
+MgrMap::MgrMap() noexcept = default;
+MgrMap::~MgrMap() noexcept = default;
+
+MgrMap MgrMap::create_null_mgrmap() {
+  MgrMap null_map;
+  /* Use the largest epoch so it's always bigger than whatever the mgr has. */
+  null_map.epoch = std::numeric_limits<decltype(epoch)>::max();
+  return null_map;
+}
+
+bool MgrMap::all_support_module(const std::string& module) {
+  if (!have_module(module)) {
+    return false;
+  }
+  for (auto& p : standbys) {
+    if (!p.second.have_module(module)) {
+	return false;
+    }
+  }
+  return true;
+}
+
+bool MgrMap::have_module(const std::string &module_name) const
+{
+  for (const auto &i : available_modules) {
+    if (i.name == module_name) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+const MgrMap::ModuleInfo *MgrMap::get_module_info(const std::string &module_name) const {
+  for (const auto &i : available_modules) {
+    if (i.name == module_name) {
+      return &i;
+    }
+  }
+  return nullptr;
 }
 
 bool MgrMap::can_run_module(const std::string &module_name, std::string *error) const
