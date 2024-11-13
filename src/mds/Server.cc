@@ -365,7 +365,7 @@ void Server::dispatch(const cref_t<Message> &m)
     handle_client_session(ref_cast<MClientSession>(m));
     return;
   case CEPH_MSG_CLIENT_REQUEST:
-    handle_client_request(ref_cast<MClientRequest>(m));
+    mds->mds_dmclock_scheduler->handle_mds_request(ref_cast<MClientRequest>(m));
     return;
   case CEPH_MSG_CLIENT_REPLY:
     handle_client_reply(ref_cast<MClientReply>(m));
@@ -915,6 +915,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
 	     << ", noop" << dendl;
     // close must have been canceled (by an import?), or any number of other things..
   } else if (open) {
+    mds->mds_dmclock_scheduler->add_session(session);
     ceph_assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.touch_session(session);
@@ -975,6 +976,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
         session->get_connection()->mark_disposable();
       }
 
+      mds->mds_dmclock_scheduler->remove_session(session);
       // reset session
       mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_CLOSE), session);
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
@@ -988,6 +990,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
         mds->sessionmap.set_state(session, Session::STATE_CLOSED);
         session->set_connection(nullptr);
       }
+      mds->mds_dmclock_scheduler->remove_session(session);
       metrics_handler->remove_session(session);
       mds->sessionmap.remove_session(session);
     } else {
@@ -1076,6 +1079,7 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->sessionmap.touch_session(session);
         metrics_handler->add_session(session);
+        mds->mds_dmclock_scheduler->add_session(session);
 
 	auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
 	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC)) {
@@ -1608,6 +1612,7 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 
   if (!m->has_more()) {
     metrics_handler->add_session(session);
+    mds->mds_dmclock_scheduler->add_session(session);
     // notify client of success with an OPEN
     auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
     if (session->info.has_feature(CEPHFS_FEATURE_MIMIC)) {
