@@ -666,7 +666,11 @@ class CephadmServe:
         for s in self.mgr.cache.get_daemons_by_service(rgw_spec.service_name()):
             if s.ports:
                 for p in s.ports:
-                    ep.append(f'{protocol}://{s.hostname}:{p}')
+                    if s.hostname is not None:
+                        host_addr = self.mgr.inventory.get_addr(s.hostname)
+                        ep.append(f'{protocol}://{host_addr}:{p}')
+                    else:
+                        logger.error("Hostname is None for service: %s", s)
         zone_update_cmd = {
             'prefix': 'rgw zone modify',
             'realm_name': rgw_spec.rgw_realm,
