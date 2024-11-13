@@ -95,7 +95,7 @@ seastar::future<> AlienStore::start()
     }
   );
   g_ceph_context = cct.get();
-  cct->_conf.set_config_values(values);
+  cct->_conf.set_config_values(ConfigValues{values});
   cct->_log->start();
 
   store = ObjectStore::create(cct.get(), type, path);
