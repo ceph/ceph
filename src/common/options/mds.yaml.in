@@ -1679,3 +1679,12 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_log_minor_segments_per_major_segment
+  type: uint
+  level: advanced
+  desc: number of minor segments per major segment.
+  long_desc: The number of minor mds log segments since last major segment after which a major segment is started/logged.
+  default: 16
+  services:
+  - mds
+  min: 4
