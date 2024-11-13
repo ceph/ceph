@@ -6,7 +6,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -137,25 +136,22 @@ describe('IscsiTargetFormComponent', () => {
     }
   ];
 
-  configureTestBed(
-    {
-      declarations: [IscsiTargetFormComponent],
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        ToastrModule.forRoot()
-      ],
-      providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: new ActivatedRouteStub({ target_iqn: undefined })
-        }
-      ]
-    },
-    [LoadingPanelComponent]
-  );
+  configureTestBed({
+    declarations: [IscsiTargetFormComponent],
+    imports: [
+      SharedModule,
+      ReactiveFormsModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      ToastrModule.forRoot()
+    ],
+    providers: [
+      {
+        provide: ActivatedRoute,
+        useValue: new ActivatedRouteStub({ target_iqn: undefined })
+      }
+    ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiTargetFormComponent);

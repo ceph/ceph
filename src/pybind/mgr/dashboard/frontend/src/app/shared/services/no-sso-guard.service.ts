@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
 
-
 import { DashboardUserDeniedError } from '~/app/core/error/error';
 import { AuthStorageService } from './auth-storage.service';
 
@@ -11,7 +10,7 @@ import { AuthStorageService } from './auth-storage.service';
 @Injectable({
   providedIn: 'root'
 })
-export class NoSsoGuardService  {
+export class NoSsoGuardService {
   constructor(private authStorageService: AuthStorageService) {}
 
   canActivate() {

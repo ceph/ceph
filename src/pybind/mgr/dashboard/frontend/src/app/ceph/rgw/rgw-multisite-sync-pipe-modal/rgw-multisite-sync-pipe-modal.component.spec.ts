@@ -9,6 +9,7 @@ import { CommonModule } from '@angular/common';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
+import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
 
 class MultisiteServiceMock {
   createEditSyncPipe = jest.fn().mockReturnValue(of(null));
@@ -29,6 +30,7 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
         ReactiveFormsModule,
         CommonModule
       ],
+      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
       providers: [NgbActiveModal, { provide: RgwMultisiteService, useClass: MultisiteServiceMock }]
     }).compileComponents();
 

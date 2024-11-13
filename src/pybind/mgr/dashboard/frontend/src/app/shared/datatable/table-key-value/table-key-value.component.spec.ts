@@ -26,7 +26,7 @@ describe('TableKeyValueComponent', () => {
       RouterTestingModule,
       NgbDropdownModule,
       PipesModule,
-      NgbTooltipModule,
+      NgbTooltipModule
     ]
   });
 

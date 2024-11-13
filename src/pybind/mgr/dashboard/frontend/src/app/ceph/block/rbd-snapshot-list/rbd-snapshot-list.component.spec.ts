@@ -10,7 +10,6 @@ import { Subject, throwError as observableThrowError } from 'rxjs';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
@@ -55,38 +54,35 @@ describe('RbdSnapshotListComponent', () => {
     }
   };
 
-  configureTestBed(
-    {
-      declarations: [
-        RbdSnapshotListComponent,
-        RbdTabsComponent,
-        MockComponent(RbdSnapshotFormModalComponent),
-        BaseModal
-      ],
-      imports: [
-        BrowserAnimationsModule,
-        ComponentsModule,
-        DataTableModule,
-        HttpClientTestingModule,
-        PipesModule,
-        RouterTestingModule,
-        NgbNavModule,
-        ToastrModule.forRoot(),
-        ModalModule,
-        PlaceholderModule,
-        CoreModule
-      ],
-      providers: [
-        { provide: AuthStorageService, useValue: fakeAuthStorageService },
-        TaskListService,
-        ModalService,
-        PlaceholderService,
-        BaseModalService
-      ],
-      schemas: [NO_ERRORS_SCHEMA]
-    },
-    [CriticalConfirmationModalComponent]
-  );
+  configureTestBed({
+    declarations: [
+      RbdSnapshotListComponent,
+      RbdTabsComponent,
+      MockComponent(RbdSnapshotFormModalComponent),
+      BaseModal
+    ],
+    imports: [
+      BrowserAnimationsModule,
+      ComponentsModule,
+      DataTableModule,
+      HttpClientTestingModule,
+      PipesModule,
+      RouterTestingModule,
+      NgbNavModule,
+      ToastrModule.forRoot(),
+      ModalModule,
+      PlaceholderModule,
+      CoreModule
+    ],
+    providers: [
+      { provide: AuthStorageService, useValue: fakeAuthStorageService },
+      TaskListService,
+      ModalService,
+      PlaceholderService,
+      BaseModalService
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdSnapshotListComponent);

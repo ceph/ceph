@@ -1,17 +1,17 @@
 import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { MgrSummaryPipe } from './mgr-summary.pipe';
+import { MgrDashboardSummaryPipe } from './mgr-dashboard-summary.pipe';
 
-describe('MgrSummaryPipe', () => {
-  let pipe: MgrSummaryPipe;
+describe('MgrDashboardSummaryPipe', () => {
+  let pipe: MgrDashboardSummaryPipe;
 
   configureTestBed({
-    providers: [MgrSummaryPipe]
+    providers: [MgrDashboardSummaryPipe]
   });
 
   beforeEach(() => {
-    pipe = TestBed.inject(MgrSummaryPipe);
+    pipe = TestBed.inject(MgrDashboardSummaryPipe);
   });
 
   it('create an instance', () => {

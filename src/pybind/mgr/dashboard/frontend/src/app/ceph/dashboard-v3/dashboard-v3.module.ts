@@ -4,7 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
 import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgChartsModule } from 'ng2-charts';
+import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { SharedModule } from '~/app/shared/shared.module';
@@ -21,15 +21,14 @@ import { PgSummaryPipe } from './pg-summary.pipe';
     CommonModule,
     NgbNavModule,
     SharedModule,
-    NgChartsModule,
     RouterModule,
     NgbPopoverModule,
     NgbTooltipModule,
     FormsModule,
     ReactiveFormsModule,
-    SimplebarAngularModule
+    SimplebarAngularModule,
+    BaseChartDirective
   ],
-
   declarations: [
     DashboardV3Component,
     DashboardPieComponent,
@@ -37,12 +36,12 @@ import { PgSummaryPipe } from './pg-summary.pipe';
     DashboardAreaChartComponent,
     DashboardTimeSelectorComponent
   ],
-
   exports: [
     DashboardV3Component,
     DashboardAreaChartComponent,
     DashboardTimeSelectorComponent,
     DashboardPieComponent
-  ]
+  ],
+  providers: [provideCharts(withDefaultRegisterables())]
 })
 export class DashboardV3Module {}

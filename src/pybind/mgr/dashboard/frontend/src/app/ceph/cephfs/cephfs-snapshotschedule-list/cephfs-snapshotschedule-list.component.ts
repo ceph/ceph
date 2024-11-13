@@ -68,26 +68,7 @@ export class CephfsSnapshotscheduleListComponent
   errorMessage: string = '';
   selectedName: string = '';
   icons = Icons;
-  tableActions: CdTableAction[] = [
-    {
-      name: this.actionLabels.CREATE,
-      permission: 'create',
-      icon: Icons.add,
-      click: () => this.openModal(false)
-    },
-    {
-      name: this.actionLabels.EDIT,
-      permission: 'update',
-      icon: Icons.edit,
-      click: () => this.openModal(true)
-    },
-    {
-      name: this.actionLabels.DELETE,
-      permission: 'delete',
-      icon: Icons.trash,
-      click: () => this.deleteSnapshotSchedule()
-    }
-  ];
+  tableActions!: CdTableAction[];
 
   MODULE_NAME = 'snap_schedule';
   ENABLE_MODULE_TIMER = 2 * 1000;
@@ -112,6 +93,27 @@ export class CephfsSnapshotscheduleListComponent
   }
 
   ngOnInit(): void {
+    this.tableActions = [
+      {
+        name: this.actionLabels.CREATE,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.openModal(false)
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => this.openModal(true)
+      },
+      {
+        name: this.actionLabels.DELETE,
+        permission: 'delete',
+        icon: Icons.trash,
+        click: () => this.deleteSnapshotSchedule()
+      }
+    ];
+
     this.moduleServiceListSub = this.mgrModuleService
       .list()
       .pipe(

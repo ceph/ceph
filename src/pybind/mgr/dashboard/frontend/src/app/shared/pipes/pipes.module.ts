@@ -125,7 +125,8 @@ import { PipeFunctionPipe } from './pipe-function.pipe';
     PathPipe,
     PluralizePipe,
     XmlPipe,
-    MbpersecondPipe
+    MbpersecondPipe,
+    PipeFunctionPipe
   ],
   providers: [
     ArrayPipe,

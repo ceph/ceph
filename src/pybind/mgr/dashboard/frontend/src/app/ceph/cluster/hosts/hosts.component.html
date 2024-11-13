@@ -18,8 +18,7 @@
                 [maxLimit]="25"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)"
-                [toolHeader]="!hideToolHeader"
-                [showMenu]="showMenu">
+                [toolHeader]="!hideToolHeader">
         <div class="table-actions">
           <cd-table-actions [permission]="permissions.hosts"
                             [selection]="selection"

@@ -135,28 +135,25 @@ describe('PoolFormComponent', () => {
 
   const routes: Routes = [{ path: '404', component: ErrorComponent }];
 
-  configureTestBed(
-    {
-      declarations: [ErrorComponent],
-      imports: [
-        BrowserAnimationsModule,
-        HttpClientTestingModule,
-        RouterTestingModule.withRoutes(routes),
-        ToastrModule.forRoot(),
-        NgbNavModule,
-        PoolModule,
-        SharedModule,
-        NgbModalModule
-      ],
-      providers: [
-        ErasureCodeProfileService,
-        NgbActiveModal,
-        SelectBadgesComponent,
-        { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } }
-      ]
-    },
-    [CriticalConfirmationModalComponent]
-  );
+  configureTestBed({
+    declarations: [ErrorComponent],
+    imports: [
+      BrowserAnimationsModule,
+      HttpClientTestingModule,
+      RouterTestingModule.withRoutes(routes),
+      ToastrModule.forRoot(),
+      NgbNavModule,
+      PoolModule,
+      SharedModule,
+      NgbModalModule
+    ],
+    providers: [
+      ErasureCodeProfileService,
+      NgbActiveModal,
+      SelectBadgesComponent,
+      { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } }
+    ]
+  });
 
   let navigationSpy: jasmine.Spy;
 

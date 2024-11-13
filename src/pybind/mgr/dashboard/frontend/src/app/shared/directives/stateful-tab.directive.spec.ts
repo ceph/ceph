@@ -1,15 +1,29 @@
-import { NgbConfig, NgbNav, NgbNavChangeEvent, NgbNavConfig } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNav, NgbNavChangeEvent } from '@ng-bootstrap/ng-bootstrap';
+import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
 
 import { StatefulTabDirective } from './stateful-tab.directive';
+import { TestBed } from '@angular/core/testing';
+
+class NgbNavMock {
+  select() {}
+}
 
 describe('StatefulTabDirective', () => {
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      declarations: [StatefulTabDirective],
+      providers: [{ provide: NgbNav, useClass: NgbNavMock }],
+      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA]
+    }).compileComponents();
+  });
+
   it('should create an instance', () => {
     const directive = new StatefulTabDirective(null);
     expect(directive).toBeTruthy();
   });
 
   it('should get and select active tab', () => {
-    const nav = new NgbNav('tablist', new NgbNavConfig(new NgbConfig()), <any>null, null);
+    const nav = TestBed.inject(NgbNav);
     spyOn(nav, 'select');
     const directive = new StatefulTabDirective(nav);
     directive.cdStatefulTab = 'bar';
@@ -27,7 +41,7 @@ describe('StatefulTabDirective', () => {
   });
 
   it('should select the default tab if provided', () => {
-    const nav = new NgbNav('tablist', new NgbNavConfig(new NgbConfig()), <any>null, null);
+    const nav = TestBed.inject(NgbNav);
     spyOn(nav, 'select');
     const directive = new StatefulTabDirective(nav);
     directive.cdStatefulTab = 'bar';
