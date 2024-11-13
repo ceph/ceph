@@ -9,7 +9,7 @@ import { FeatureTogglesMap, FeatureTogglesService } from './feature-toggles.serv
 @Injectable({
   providedIn: 'root'
 })
-export class FeatureTogglesGuardService  {
+export class FeatureTogglesGuardService {
   constructor(private featureToggles: FeatureTogglesService) {}
 
   canActivate(route: ActivatedRouteSnapshot) {

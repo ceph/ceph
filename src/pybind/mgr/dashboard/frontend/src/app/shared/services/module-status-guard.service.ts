@@ -36,7 +36,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Injectable({
   providedIn: 'root'
 })
-export class ModuleStatusGuardService  {
+export class ModuleStatusGuardService {
   // TODO: Hotfix - remove ALLOWLIST'ing when a generic ErrorComponent is implemented
   static readonly ALLOWLIST: string[] = ['501'];
 

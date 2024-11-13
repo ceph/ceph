@@ -1,4 +1,4 @@
-import { DebugElement, Type } from '@angular/core';
+import { DebugElement, NO_ERRORS_SCHEMA, Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
@@ -41,7 +41,7 @@ export function configureTestBed(configuration: any, entryComponents?: any) {
         }
       );
     } else {
-      await TestBed.configureTestingModule(configuration);
+      await TestBed.configureTestingModule({ ...configuration, schemas: [NO_ERRORS_SCHEMA] });
     }
   });
 }

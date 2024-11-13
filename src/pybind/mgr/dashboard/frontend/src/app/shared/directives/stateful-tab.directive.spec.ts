@@ -1,6 +1,10 @@
-import { NgbConfig, NgbNav, NgbNavChangeEvent, NgbNavConfig } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNavChangeEvent } from '@ng-bootstrap/ng-bootstrap';
 
 import { StatefulTabDirective } from './stateful-tab.directive';
+
+class NgbNavMock {
+  select() {}
+}
 
 describe('StatefulTabDirective', () => {
   it('should create an instance', () => {
@@ -9,7 +13,7 @@ describe('StatefulTabDirective', () => {
   });
 
   it('should get and select active tab', () => {
-    const nav = new NgbNav('tablist', new NgbNavConfig(new NgbConfig()), <any>null, null);
+    const nav = new NgbNavMock();
     spyOn(nav, 'select');
     const directive = new StatefulTabDirective(nav);
     directive.cdStatefulTab = 'bar';
@@ -27,7 +31,7 @@ describe('StatefulTabDirective', () => {
   });
 
   it('should select the default tab if provided', () => {
-    const nav = new NgbNav('tablist', new NgbNavConfig(new NgbConfig()), <any>null, null);
+    const nav = new NgbNavMock();
     spyOn(nav, 'select');
     const directive = new StatefulTabDirective(nav);
     directive.cdStatefulTab = 'bar';

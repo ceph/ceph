@@ -26,7 +26,7 @@ import { ActivatedRouteSnapshot, UrlSegment } from '@angular/router';
 
 import { Observable, of } from 'rxjs';
 
-export class BreadcrumbsResolver  {
+export class BreadcrumbsResolver {
   public resolve(
     route: ActivatedRouteSnapshot
   ): Observable<IBreadcrumb[]> | Promise<IBreadcrumb[]> | IBreadcrumb[] {

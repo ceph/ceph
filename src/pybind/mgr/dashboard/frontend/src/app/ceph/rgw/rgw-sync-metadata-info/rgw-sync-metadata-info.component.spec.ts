@@ -65,8 +65,8 @@ describe('RgwSyncMetadataInfoComponent', () => {
     const syncStatus = fixture.debugElement.query(By.css('.text-primary'));
     expect(syncStatus).toBeTruthy();
     expect(syncStatus.nativeElement.textContent).toEqual('Syncing');
-    const syncPopover = fixture.debugElement.query(By.css('a'));
-    syncPopover.triggerEventHandler('click', null);
+    const syncPopover = fixture.nativeElement.querySelector('a');
+    syncPopover.dispatchEvent(new Event('click'));
     fixture.detectChanges();
     expect(syncPopover).toBeTruthy();
     const syncPopoverText = fixture.debugElement.query(By.css('.text-center'));
