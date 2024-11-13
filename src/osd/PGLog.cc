@@ -682,6 +682,50 @@ void PGLog::write_log_and_missing(
   }
 }
 
+// non-static
+void PGLog::extract_log_and_missing_writes(
+  ObjectStore::Transaction& t,
+  map<string,bufferlist> *log_to_setkey,
+  const coll_t& coll,
+  const ghobject_t &log_oid,
+  bool require_rollback,
+  set<string> *log_to_remove,
+  set<std::pair<string, string>> *log_to_rmkeyrange)
+{
+  if (needs_write()) {
+    dout(6) << __func__ << " with: "
+	     << "dirty_to: " << dirty_to
+	     << ", dirty_from: " << dirty_from
+	     << ", writeout_from: " << writeout_from
+	     << ", trimmed: " << trimmed
+	     << ", trimmed_dups: " << trimmed_dups
+	     << ", clear_divergent_priors: " << clear_divergent_priors
+	     << dendl;
+    _extract_log_and_missing_writes(
+      t, log_to_setkey, log, coll, log_oid,
+      dirty_to,
+      dirty_from,
+      writeout_from,
+      std::move(trimmed),
+      std::move(trimmed_dups),
+      missing,
+      !touched_log,
+      require_rollback,
+      clear_divergent_priors,
+      dirty_to_dups,
+      dirty_from_dups,
+      write_from_dups,
+      &may_include_deletes_in_missing_dirty,
+      (pg_log_debug ? &log_keys_debug : nullptr),
+      log_to_remove,
+      log_to_rmkeyrange,
+      this);
+    undirty();
+  } else {
+    dout(10) << __func__  << "log is not dirty" << dendl;
+  }
+}
+
 // static
 void PGLog::write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
