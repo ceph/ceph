@@ -16,6 +16,7 @@
 #include "osdc/Journaler.h"
 
 #include <typeinfo>
+#include "common/DecayCounter.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/fair_mutex.h"
@@ -35,6 +36,7 @@
 
 #include "mgr/MgrClient.h"
 
+#include "Beacon.h"
 #include "MDCache.h"
 #include "MDLog.h"
 #include "MDSDaemon.h"
@@ -899,6 +901,15 @@ MDSTableServer *MDSRank::get_table_server(int t)
   }
 }
 
+MDSMap::DaemonState MDSRank::get_want_state() const
+{
+  return beacon.get_want_state();
+}
+
+uint64_t MDSRank::get_global_id() const {
+  return monc->get_global_id();
+}
+
 void MDSRank::suicide()
 {
   if (suicide_hook) {
@@ -942,6 +953,11 @@ void MDSRank::damaged_unlocked()
 {
   std::lock_guard l(mds_lock);
   damaged();
+}
+
+double MDSRank::last_cleared_laggy() const
+{
+  return beacon.last_cleared_laggy();
 }
 
 void MDSRank::handle_write_error(int err)
