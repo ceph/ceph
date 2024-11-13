@@ -75,7 +75,7 @@ void Beacon::init(const MDSMap &mdsmap)
   _notify_mdsmap(mdsmap);
 
   sender = std::thread([this]() {
-    ceph_pthread_setname(pthread_self(), "beacon");
+    ceph_pthread_setname("mds-beacon");
     std::unique_lock<std::mutex> lock(mutex);
     bool sent;
     while (!finished) {
