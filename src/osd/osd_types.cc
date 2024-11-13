@@ -41,6 +41,7 @@
 #include "include/encoding_vector.h"
 #include "include/stringify.h"
 #include "include/variant_print.h"
+#include "common/hobject_fmt.h"
 #include "common/strtol.h" // for ritoa()
 
 #include "crush/CrushWrapper.h"
