@@ -1367,7 +1367,8 @@ public:
     const DoutPrefixProvider *dpp = nullptr
     );
 
-  static void _write_log_and_missing(
+  // Previously named _write_log_and_missing
+  static void _extract_log_and_missing_writes(
     ObjectStore::Transaction& t,
     std::map<std::string,ceph::buffer::list>* log_to_setkey,
     pg_log_t &log,
@@ -1386,6 +1387,8 @@ public:
     eversion_t write_from_dups,
     bool *may_include_deletes_in_missing_dirty,
     std::set<std::string> *log_keys_debug,
+    std::set<std::string> *log_to_remove,
+    std::set<std::pair<std::string, std::string>> *log_to_rmkeyrange,
     const DoutPrefixProvider *dpp = nullptr
     );
 
