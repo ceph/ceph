@@ -89,6 +89,12 @@ struct FixedKVNode : ChildableCachedExtent {
   parent_tracker_t* my_tracker = nullptr;
   RootBlockRef root_block;
 
+  void maybe_reset_parent_tracker(parent_tracker_t *tracker) final {
+    if (my_tracker == tracker) {
+      my_tracker = nullptr;
+    }
+  }
+
   // copy dests points from a stable node back to its pending nodes
   // having copy sources at the same tree level, it serves as a two-level index:
   // transaction-id then node-key to the pending node.

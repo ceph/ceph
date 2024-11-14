@@ -84,7 +84,7 @@ public:
   using alloc_extent_ret = alloc_extent_iertr::future<LBAMappingRef>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     LogicalCachedExtent &nextent,
     extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) = 0;
 
@@ -92,7 +92,7 @@ public:
     std::vector<LBAMappingRef>>;
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<LogicalCachedExtentRef> extents,
     extent_ref_count_t refcount) = 0;
 
@@ -105,7 +105,7 @@ public:
 
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     extent_len_t len) = 0;
 
   struct ref_update_result_t {
@@ -135,10 +135,10 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
-  struct remap_entry {
+  struct remap_entry_t {
     extent_len_t offset;
     extent_len_t len;
-    remap_entry(extent_len_t _offset, extent_len_t _len) {
+    remap_entry_t(extent_len_t _offset, extent_len_t _len) {
       offset = _offset;
       len = _len;
     }
@@ -159,7 +159,7 @@ public:
   virtual remap_ret remap_mappings(
     Transaction &t,
     LBAMappingRef orig_mapping,
-    std::vector<remap_entry> remaps,
+    std::vector<remap_entry_t> remaps,
     std::vector<LogicalCachedExtentRef> extents  // Required if and only
 						 // if pin isn't indirect
     ) = 0;

@@ -54,16 +54,61 @@ class Onode : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>
 {
 protected:
-  virtual laddr_t get_hint() const = 0;
-  const uint32_t default_metadata_offset = 0;
-  const uint32_t default_metadata_range = 0;
+  virtual laddr_hint_t generate_data_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id,
+    extent_len_t block_size) const = 0;
+
+  virtual laddr_hint_t generate_data_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const = 0;
+
+  virtual laddr_hint_t generate_metadata_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id,
+    extent_len_t block_size) const = 0;
+
   const hobject_t hobj;
+
+#define DEF_ONODE_GET_ID(type)                                          \
+  std::optional<local_##type##_id_t> get_local_##type##_id() const {    \
+    std::optional<local_##type##_id_t> ret = std::nullopt;              \
+    bool check = false;                                                 \
+                                                                        \
+    const auto &layout = get_layout();                                  \
+    if (auto o = layout.omap_root.get(LADDR_HINT_NULL); !o.is_null()) { \
+      check = true;                                                     \
+      ret.emplace(o.addr.get_local_##type##_id());                      \
+    }                                                                   \
+                                                                        \
+    if (auto x = layout.xattr_root.get(LADDR_HINT_NULL); !x.is_null()) {\
+      if (check) {                                                      \
+        ceph_assert(x.addr.get_local_##type##_id() == *ret);            \
+      } else {                                                          \
+        check = true;                                                   \
+        ret.emplace(x.addr.get_local_##type##_id());                    \
+      }                                                                 \
+    }                                                                   \
+                                                                        \
+    if (auto o = layout.object_data.get(); !o.is_null()) {              \
+      auto addr = o.get_reserved_data_base();                           \
+      if (check) {                                                      \
+        ceph_assert(addr.get_local_##type##_id() == *ret);              \
+      } else {                                                          \
+        ret.emplace(addr.get_local_##type##_id());                      \
+      }                                                                 \
+    }                                                                   \
+                                                                        \
+    return ret;                                                         \
+  }
+
+  DEF_ONODE_GET_ID(object)
+  DEF_ONODE_GET_ID(clone)
+
+#undef DEF_ONODE_GET_ID
+
 public:
-  Onode(uint32_t ddr, uint32_t dmr, const hobject_t &hobj)
-    : default_metadata_offset(ddr),
-      default_metadata_range(dmr),
-      hobj(hobj)
-  {}
+  explicit Onode(const hobject_t &hobj) : hobj(hobj) {}
 
   virtual bool is_alive() const = 0;
   virtual const onode_layout_t &get_layout() const = 0;
@@ -78,16 +123,24 @@ public:
   virtual void clear_object_info(Transaction&) = 0;
   virtual void clear_snapset(Transaction&) = 0;
 
-  laddr_t get_metadata_hint(uint64_t block_size) const {
-    assert(default_metadata_offset);
-    assert(default_metadata_range);
-    uint64_t range_blocks = default_metadata_range / block_size;
-    auto random_offset = default_metadata_offset +
-        (((uint32_t)std::rand() % range_blocks) * block_size);
-    return (get_hint() + random_offset).checked_to_laddr();
+  laddr_hint_t get_data_hint(
+    extent_len_t block_size = laddr_t::UNIT_SIZE) const {
+    return generate_data_hint(
+      get_local_object_id(),
+      get_local_clone_id(),
+      block_size);
   }
-  laddr_t get_data_hint() const {
-    return get_hint();
+  laddr_hint_t get_data_clone_hint(
+    local_clone_id_t object_id,
+    extent_len_t block_size = laddr_t::UNIT_SIZE) const {
+    ceph_assert(object_id != LOCAL_OBJECT_ID_ZERO);
+    return generate_data_clone_hint(object_id, block_size);
+  }
+  laddr_hint_t get_metadata_hint(extent_len_t block_size) const {
+    return generate_metadata_hint(
+      get_local_object_id(),
+      get_local_clone_id(),
+      block_size);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };

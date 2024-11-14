@@ -129,24 +129,24 @@ struct extent_to_remap_t {
     return type == type_t::OVERWRITE;
   }
 
-  using remap_entry = TransactionManager::remap_entry;
-  remap_entry create_remap_entry() {
+  using remap_entry_t = TransactionManager::remap_entry_t;
+  remap_entry_t create_remap_entry() {
     assert(is_remap1());
-    return remap_entry(
+    return remap_entry_t(
       new_offset,
       new_len);
   }
 
-  remap_entry create_left_remap_entry() {
+  remap_entry_t create_left_remap_entry() {
     assert(is_remap2());
-    return remap_entry(
+    return remap_entry_t(
       0,
       new_offset);
   }
 
-  remap_entry create_right_remap_entry() {
+  remap_entry_t create_right_remap_entry() {
     assert(is_remap2());
-    return remap_entry(
+    return remap_entry_t(
       new_offset + new_len,
       pin->get_length() - new_offset - new_len);
   }
@@ -529,7 +529,7 @@ ObjectDataHandler::write_ret do_insertions(
 	       region.len);
 	return ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	  ctx.t,
-	  region.addr,
+	  laddr_hint_t::create_as_fixed(region.addr),
 	  region.len
         ).si_then([&region](auto extents) {
           auto off = region.addr;
@@ -560,7 +560,7 @@ ObjectDataHandler::write_ret do_insertions(
 	       region.len);
 	return ctx.tm.reserve_region(
 	  ctx.t,
-	  region.addr,
+	  laddr_hint_t::create_as_fixed(region.addr),
 	  region.len
 	).si_then([FNAME, ctx, &region](auto pin) {
 	  ceph_assert(pin->get_length() == region.len);
@@ -1040,6 +1040,7 @@ auto with_objects_data(
 ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   context_t ctx,
   object_data_t &object_data,
+  laddr_hint_t hint,
   extent_len_t size)
 {
   LOG_PREFIX(ObjectDataHandler::prepare_data_reservation);
@@ -1054,11 +1055,11 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   } else {
     DEBUGT("reserving: {}~{}",
            ctx.t,
-           ctx.onode.get_data_hint(),
+           hint,
            max_object_size);
     return ctx.tm.reserve_region(
       ctx.t,
-      ctx.onode.get_data_hint(),
+      hint,
       max_object_size
     ).si_then([max_object_size=max_object_size, &object_data](auto pin) {
       ceph_assert(pin->get_length() == max_object_size);
@@ -1393,6 +1394,7 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
       return prepare_data_reservation(
 	ctx,
 	object_data,
+	ctx.onode.get_data_hint(),
 	p2roundup(offset + len, ctx.tm.get_block_size())
       ).si_then([this, ctx, offset, len, &object_data] {
 	auto data_base = object_data.get_reserved_data_base();
@@ -1434,6 +1436,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
       return prepare_data_reservation(
 	ctx,
 	object_data,
+	ctx.onode.get_data_hint(),
 	p2roundup(offset + bl.length(), ctx.tm.get_block_size())
       ).si_then([this, ctx, offset, &object_data, &bl] {
 	auto data_base = object_data.get_reserved_data_base();
@@ -1674,6 +1677,7 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
 	return prepare_data_reservation(
 	  ctx,
 	  object_data,
+	  ctx.onode.get_data_hint(),
 	  p2roundup(offset, ctx.tm.get_block_size()));
       } else {
 	return truncate_iertr::now();
@@ -1708,7 +1712,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
   LOG_PREFIX(ObjectDataHandler::clone_extents);
   TRACET(" object_data: {}~{}, data_base: {}",
     ctx.t,
-    object_data.get_reserved_data_base(),
+    laddr_printer_t{object_data.get_reserved_data_base()},
     object_data.get_reserved_data_len(),
     data_base);
   return ctx.tm.remove(
@@ -1730,7 +1734,10 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	  laddr_t addr = (object_data.get_reserved_data_base() + offset)
 	      .checked_to_laddr();
 	  if (pin->get_val().is_zero()) {
-	    fut = ctx.tm.reserve_region(ctx.t, addr, pin->get_length());
+	    fut = ctx.tm.reserve_region(
+	      ctx.t,
+	      laddr_hint_t::create_as_fixed(addr),
+	      pin->get_length());
 	  } else {
 	    fut = ctx.tm.clone_pin(ctx.t, addr, *pin);
 	  }
@@ -1744,9 +1751,10 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	  );
 	}).si_then([&last_pos, &object_data, ctx] {
 	  if (last_pos != object_data.get_reserved_data_len()) {
+	    auto laddr = (object_data.get_reserved_data_base() + last_pos).checked_to_laddr();
 	    return ctx.tm.reserve_region(
 	      ctx.t,
-	      (object_data.get_reserved_data_base() + last_pos).checked_to_laddr(),
+	      laddr_hint_t::create_as_fixed(laddr),
 	      object_data.get_reserved_data_len() - last_pos
 	    ).si_then([](auto) {
 	      return seastar::now();
@@ -1776,16 +1784,19 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
   // 	   length.
   return with_objects_data(
     ctx,
-    [ctx, this](auto &object_data, auto &d_object_data) {
+    [ctx, this](object_data_t &object_data, auto &d_object_data) {
     ceph_assert(d_object_data.is_null());
     if (object_data.is_null()) {
       return clone_iertr::now();
     }
+    auto object_id = object_data.get_reserved_data_base().get_local_object_id();
+    assert(object_id != LOCAL_OBJECT_ID_ZERO);
     return prepare_data_reservation(
       ctx,
       d_object_data,
+      ctx.d_onode->get_data_clone_hint(object_id),
       object_data.get_reserved_data_len()
-    ).si_then([&object_data, &d_object_data, ctx, this] {
+    ).si_then([&object_data, &d_object_data, ctx, object_id, this] {
       assert(!object_data.is_null());
       auto base = object_data.get_reserved_data_base();
       auto len = object_data.get_reserved_data_len();
@@ -1793,17 +1804,18 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
       LOG_PREFIX(ObjectDataHandler::clone);
       DEBUGT("cloned obj reserve_data_base: {}, len {}",
 	ctx.t,
-	d_object_data.get_reserved_data_base(),
+	laddr_printer_t{d_object_data.get_reserved_data_base()},
 	d_object_data.get_reserved_data_len());
       return prepare_data_reservation(
 	ctx,
 	object_data,
+	ctx.onode.get_data_clone_hint(object_id),
 	d_object_data.get_reserved_data_len()
       ).si_then([&d_object_data, ctx, &object_data, base, len, this] {
 	LOG_PREFIX("ObjectDataHandler::clone");
 	DEBUGT("head obj reserve_data_base: {}, len {}",
 	  ctx.t,
-	  object_data.get_reserved_data_base(),
+	  laddr_printer_t{object_data.get_reserved_data_base()},
 	  object_data.get_reserved_data_len());
 	return ctx.tm.get_pins(ctx.t, base, len
 	).si_then([ctx, &object_data, &d_object_data, base, this](auto pins) {

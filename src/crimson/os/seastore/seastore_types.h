@@ -12,12 +12,21 @@
 
 #include <seastar/core/lowres_clock.hh>
 
+#include "common/hobject.h"
 #include "include/byteorder.h"
 #include "include/denc.h"
 #include "include/buffer.h"
 #include "include/intarith.h"
 #include "include/interval_set.h"
 #include "include/uuid.h"
+
+#ifndef SEASTORE_LADDR_USE_BOOST_U128
+#define SEASTORE_LADDR_USE_BOOST_U128 0
+#endif
+
+#if !defined (__SIZEOF_INT128__) || SEASTORE_LADDR_USE_BOOST_U128
+#include <boost/multiprecision/cpp_int.hpp>
+#endif
 
 namespace crimson::os::seastore {
 
@@ -1019,11 +1028,184 @@ inline extent_len_le_t init_extent_len_le(extent_len_t len) {
   return ceph_le32(len);
 }
 
-// logical addr, see LBAManager, TransactionManager
+using local_object_id_t = uint32_t;
+// LOCAL_OBJECT_ID_ZERO is reserved for SeastoreNodeExtent
+constexpr local_object_id_t LOCAL_OBJECT_ID_ZERO = 0;
+constexpr local_object_id_t LOCAL_OBJECT_ID_NULL =
+    std::numeric_limits<uint32_t>::max();
+using local_object_id_le_t = ceph_le32;
+
+using local_clone_id_t = uint32_t;
+constexpr local_clone_id_t LOCAL_CLONE_ID_NULL =
+    std::numeric_limits<uint32_t>::max();
+using local_clone_id_le_t = ceph_le32;
+
+using shard_t = int8_t;
+using pool_t = int64_t;
+// Note: this is the reversed version of the object hash
+using crush_hash_t = uint32_t;
+using snap_t = uint64_t;
+using gen_t = uint64_t;
+static_assert(sizeof(shard_t) == sizeof(ghobject_t().shard_id.id));
+static_assert(sizeof(pool_t) == sizeof(ghobject_t().hobj.pool));
+static_assert(sizeof(crush_hash_t) == sizeof(ghobject_t().hobj.get_bitwise_key_u32()));
+static_assert(sizeof(snap_t) == sizeof(ghobject_t().hobj.snap.val));
+static_assert(sizeof(gen_t) == sizeof(ghobject_t().generation));
+
+/**
+ * laddr_t
+ *
+ * The laddr_t represents the logical address of a LogicalCachedExtent.
+ *
+ * # Static Layout
+ * laddr_t uses a 128-bit integer to represent the address value internally.
+ * Besides the basic properties inherited from the integers, such as strong
+ * ordering and arithmetic operations, certain types of laddr_t also include
+ * properties derived from user data(rados object). The static layout design
+ * ensures these properties are deterministic and predictable, allowing further
+ * optimizations based on laddr_t.
+ *
+ * # Overview
+ * The layout of laddr_t consists of three parts:
+ *
+ * [upgrade:1][object_info:76][object_content:51]
+ *
+ * Each pair of square brackets represents a property stored within the laddr_t
+ * interger. Each property contains a name and the number of bits it used.
+ *
+ * When the object info for different objects does not conflict within an OSD,
+ * we could obtain a useful property:
+ * Each rados object and its head/clone could have a unique laddr prefix within
+ * an OSD.
+ *
+ * Base on this property, we could:
+ * 1. Group different snapshots of a rados object under the same laddr prefix,
+ *    which could speed up the cloning process.
+ * 2. If the rados object data/meta of a head/clone share the same prefix,
+ *    removing a head/clone will also be possible via range deletion.
+ * 3. Track frequently accessed objects using laddr_t without keeping the full
+ *    object name.
+ *
+ * # Object Info
+ * The defination of this property is:
+ * [shard:6][pool:12][reverse_hash:32][local_object_id:26]
+ *
+ * The shard, pool and reverse_hash come from the information of the rados
+ * object.
+ * The local_object_id is a random number to identify a unique object within
+ * the seastore. Two different rados objects will never share the same
+ * reverse_hash+local_object_id within a pool.
+ *
+ * All bits set to 1 in the object info represent the invalid prefix, and block_offset
+ * logical extents must not use it.
+ *
+ * There are two special rules for global metadata logical extents:
+ * 1. RootBlock and CollectionNode
+ *    When a laddr is used to represent these two types of extents, block_offset object
+ *    info bits should be zero, and the rados object data should never use this
+ *    prefix.
+ * 2. SeastoreNodeExtent
+ *    Since this type of extents are used to store the ghobject_t, its hint is
+ *    derived from the first slot of ghobject_t it stores, then the local object
+ *    id and local clone id(see below) should be zero. The rados object data
+ *    should not use this prefix, too.
+ *    XXX: It's possible that shard, pool and hash are zero, we allow them mix
+ *    with RootBlock and CollectionNode
+ *
+ * This layout allows:
+ * - 2^12=4096 pools per cluster
+ * - 2^6-1=63 shards per pool
+ * - 2^16=65536 pgs per pool and OSD(the most significant 16 bits in reversed
+ *   hash are represented as pg_id internally)
+ * - 2^42=4T objects per pg (the rest 16 bits of hash + 26 bits object id)
+ *
+ * # Object Content
+ * Global meta logical extents use these bits as block address directly, while
+ * the rados objects futher divide these bits into:
+ * [local_clone_id:23][is_metadata:1][blocks:27]
+ *
+ * Like local_object_id, each clone/snapshot of a rados object has an unique
+ * local_clone_id under the same object laddr prefix. When creating a new
+ * snapshot, taking a random local clone id as the new base address for snap
+ * object.
+ *
+ * NOTE: Taking snapshots is a symmetric process for both the newly cloned onode
+ * and the head onode. The two new base laddrs of them will reference the old
+ * head address space, see ObjectDataHandler::clone().
+ * The indirect mapping of clone objects could only store the local_clone_id
+ * of its intermediate key, see pladdr_t::build_laddr().
+ *
+ * The rest 28 bits are used to represent the address of concrete data extents.
+ * Each address represents one 4KiB block on disk.
+ *
+ * is_metadata is true indicates the remaining bits represent the address of
+ * an Omap*Node. Take a random value as address when allocating a new omap extent.
+ *
+ * TODO: Currently, taking snapshots for omap extents is directly copying the
+ * extents to another address space(clone prefix). The similar symmetric cloning
+ * process used by ObjectDataBlock could also be applied to omap extents.
+ * This approach could eliminate the data copy.
+ * Another optimization is that the OMapInnerNode could store only the block
+ * offset field in each clone rather than the full 128-bit laddr_t, which would
+ * increase the fan-out of the OMap inner node.
+ * In summary, the OMapInnerNode only needs the object contents to locate its
+ * children.
+ *
+ * When is_metadata is false, the remaining bits represent the address of
+ * ObjectDataBlock.
+ *
+ * This layout allows:
+ * 1. 2^23/2=4M clones per object(taking a snapshot will consume 2 clone ids)
+ * 2. 2^27=128M blocks per clone of an object(128M * 4KiB = 512GiB)
+ *
+ * # Conflict ratio
+ * The allocation of local_object_id, local_clone_id and metadata blocks needs
+ * random selection for now. We expect the success ratio should be ~90% so that
+ * the address allocation won't cause performance issue, 90% success ratio means:
+ *
+ * - objects per pg < 400G
+ * - clones per object < 400K
+ * - metadata of object < 50GiB
+ *
+ * # Upgrade
+ * This bit is reserved for layout updates.
+ *
+ * If the layout of laddr_t changes in the future, this bit will be used to
+ * transition addresses from the old layout to the new layout.
+ *
+ * TODO: Implement fsck process to support layout upgrades.
+ *
+ * # summary
+ * [upgrade:1][shard:6][pool:12][reverse_hash:32][local_object_id:26][local_clone_id:23][is_metadata:1][blocks:27]
+ */
 class laddr_t {
 public:
-  // the type of underlying integer
-  using Unsigned = uint64_t;
+  // Consider using unsigned __int128 as the underlying integer type when it is
+  // available. It offers some advantages compared to using
+  // boost::multiprecision::uint128_t:
+  //
+  // 1. __int128 satisfies std::is_integral_v, while boost version doesn't;
+  // 2. __int128 is always 16 bytes long, allowing encode/decode using memcpy,
+  //    the boost version's uint128_t may use 24 bytes on some platforms;
+  // 3. std::variant has restrictions with boost::multiprecision::uint128_t:
+  //      using u128 = boost::multiprecision::uint128_t;
+  //      1. static_assert(std::is_nothrow_move_constructible_v<const u128>, "");
+  //      2. static_assert(std::is_nothrow_move_constructible_v<const std::variant<int, u128>>, "");
+  //      3. static_assert(std::is_nothrow_move_constructible_v<const boost::variant<int, u128>>, "");
+  //      4. static_assert(std::is_nothrow_move_constructible_v<const boost::variant2::variant<int, u128>>, "");
+  //    The result shows that assertion 2 and 3 fail. These failures can be
+  //    addressed by marking the copy constructor of the associated wrapper
+  //    struct, which contains a member of type std::variant<laddr_t, xxx>,
+  //    as noexcept when using boost u128.
+  //
+  // Due to these reasone, it's better to use __int128 instead of boost version.
+  // The other components must be compatible with boost version laddr_t.
+#if defined (__SIZEOF_INT128__) && !SEASTORE_LADDR_USE_BOOST_U128
+  using Unsigned = unsigned __int128;
+#else
+  using Unsigned = boost::multiprecision::uint128_t;
+#endif
+
   static constexpr Unsigned RAW_VALUE_MAX =
       std::numeric_limits<Unsigned>::max();
 
@@ -1034,25 +1216,218 @@ public:
   static constexpr unsigned UNIT_SIZE = 1 << UNIT_SHIFT; // 4096
   static constexpr unsigned UNIT_MASK = UNIT_SIZE - 1;
 
-  static laddr_t from_byte_offset(Unsigned value) {
+  // This factory is only used in nbd driver and test cases.
+  // Cast the byte offset to valid rados object extents format.
+  static laddr_t from_byte_offset(loffset_t value) {
     assert((value & UNIT_MASK) == 0);
-    return laddr_t(value >> UNIT_SHIFT);
+    // make value block aligned.
+    value >>= UNIT_SHIFT;
+    laddr_t addr;
+    // set block offset directly.
+    addr.value = value & layout::BlockOffsetSpec::MASK;
+    // move the remaining bits to reversed hash field.
+    // 12(UNIT_SHIFT) + 27(block offset) + 32(reversed hash) = 71 > 64
+    addr.value |= Unsigned(value >> layout::BlockOffsetSpec::length)
+      << (layout::ObjectContentSpec::length + layout::LocalObjectIdSpec::length);
+    // don't use LOCAL_OBJECT_ID_ZERO, as it is for onode extents.
+    addr.set_local_object_id(1);
+    assert(addr.is_object_address());
+    return addr;
   }
 
   static constexpr laddr_t from_raw_uint(Unsigned v) {
     return laddr_t(v);
   }
 
+  // Return wheter this address belongs to global metadata(RootBlock
+  // or CollectionNode).
+  // Always ignore the upgrade bit.
+  bool is_global_address() const {
+    return (value & layout::ObjectInfoSpec::MASK) == 0;
+  }
+
+  // Return wheter this address belongs to SeastoreNodeExtent
+  // Always ignore the upgrade bit.
+  bool is_onode_extent_address() const {
+    return get_local_object_id() == LOCAL_OBJECT_ID_ZERO;
+  }
+
+  // Return wheter this address belongs to a rados object.
+  // Always ignore the upgrade bit.
+  bool is_object_address() const {
+    return !is_global_address()
+	&& !is_onode_extent_address()
+	&& get_object_info() != layout::ObjectInfoSpec::MAX;
+  }
+
+  // Upgrade bit with object info bits
+  laddr_t get_object_prefix() const {
+    auto ret = *this;
+    ret.value &= layout::OBJECT_PREFIX_MASK;
+    return ret;
+  }
+
+  // Object prefix with local_clone_id
+  laddr_t get_clone_prefix() const {
+    auto ret = *this;
+    ret.value &= layout::CLONE_PREFIX_MASK;
+    return ret;
+  }
+
+  Unsigned get_object_info() const {
+    return layout::ObjectInfoSpec::get<Unsigned>(value);
+  }
+
+  shard_t get_shard() const {
+    return layout::ShardSpec::get<shard_t>(value);
+  }
+  void set_shard(shard_t shard) {
+    layout::ShardSpec::set(value, static_cast<Unsigned>(shard));
+  }
+  // Shard has similar problems as pool.
+  bool match_shard_bits(shard_t shard) const {
+    // The most significant bit of shard_t will be discarded if it is casted
+    // from boost::multiprecision::uint128_t directly, so that we cast it to
+    // uint8_t.
+    auto unsigned_shard = static_cast<uint8_t>(shard);
+    return (unsigned_shard & layout::ShardSpec::MAX)
+	== layout::ShardSpec::get<uint8_t>(value);
+  }
+
+  pool_t get_pool() const {
+    return layout::PoolSpec::get<pool_t>(value);
+  }
+  void set_pool(pool_t pool) {
+    layout::PoolSpec::set(value, static_cast<Unsigned>(pool));
+  }
+  // The pool field uses 12 bits, so we cann't figure out the real
+  // pool id is -1 or 4095. If their bits match, the pool ids match.
+  bool match_pool_bits(pool_t pool) const {
+    auto unsigned_pool = static_cast<uint64_t>(pool);
+    return (unsigned_pool & layout::PoolSpec::MAX)
+	== layout::PoolSpec::get<uint64_t>(value);
+  }
+
+  crush_hash_t get_reversed_hash() const {
+    return layout::ReversedHashSpec::get<crush_hash_t>(value);
+  }
+  void set_reversed_hash(crush_hash_t hash) {
+    return layout::ReversedHashSpec::set(value, hash);
+  }
+
+  Unsigned get_object_content() const {
+    return layout::ObjectContentSpec::get<Unsigned>(value);
+  }
+  void set_object_content(Unsigned v) {
+    layout::ObjectContentSpec::set(value, v);
+  }
+  laddr_t with_object_content(Unsigned v) const {
+    auto ret = *this;
+    ret.set_object_content(v);
+    return ret;
+  }
+
+  local_object_id_t get_local_object_id() const {
+    return layout::LocalObjectIdSpec::get<local_object_id_t>(value);
+  }
+  void set_local_object_id(local_object_id_t id) {
+    layout::LocalObjectIdSpec::set(value, id);
+  }
+  laddr_t with_local_object_id(local_object_id_t id) const {
+    auto ret = *this;
+    ret.set_local_object_id(id);
+    return ret;
+  }
+
+  bool is_metadata() const {
+    return layout::MetadataFlagSpec::get<bool>(value);
+  }
+  void set_metadata(bool md) {
+    layout::MetadataFlagSpec::set(value, md);
+  }
+  laddr_t with_metadata() const {
+    auto ret = *this;
+    ret.set_metadata(true);
+    return ret;
+  }
+  laddr_t without_metadata() const {
+    auto ret = *this;
+    ret.set_metadata(false);
+    return ret;
+  }
+
+  local_clone_id_t get_local_clone_id() const {
+    return layout::LocalCloneIdSpec::get<local_clone_id_t>(value);
+  }
+  void set_local_clone_id(local_clone_id_t id) {
+    layout::LocalCloneIdSpec::set(value, id);
+  }
+  laddr_t with_local_clone_id(local_clone_id_t id) const {
+    auto ret = *this;
+    ret.set_local_clone_id(id);
+    return ret;
+  }
+
+  // The result is related to clone prefix
+  loffset_t get_offset_bytes() const {
+    return layout::BlockOffsetSpec::get<loffset_t>(value) << UNIT_SHIFT;
+  }
+  loffset_t get_offset_blocks() const {
+    return layout::BlockOffsetSpec::get<loffset_t>(value);
+  }
+  void set_offset_by_bytes(loffset_t offset) {
+    assert(p2align(uint64_t(offset), uint64_t(UNIT_SIZE)) == offset);
+    offset >>= UNIT_SHIFT;
+    layout::BlockOffsetSpec::set(value, offset);
+  }
+  void set_offset_by_blocks(loffset_t offset) {
+    layout::BlockOffsetSpec::set(value, offset);
+  }
+  laddr_t with_offset_by_bytes(loffset_t offset) const {
+    auto ret = *this;
+    ret.set_offset_by_bytes(offset);
+    return ret;
+  }
+  laddr_t with_offset_by_blocks(loffset_t offset) const {
+    auto ret = *this;
+    ret.set_offset_by_blocks(offset);
+    return ret;
+  }
+
   /// laddr_t works like primitive integer type, encode/decode it manually
   void encode(::ceph::buffer::list::contiguous_appender& p) const {
+#if defined (__SIZEOF_INT128__) && !SEASTORE_LADDR_USE_BOOST_U128
+    static_assert(sizeof(Unsigned) == sizeof(uint64_t) * 2,
+		  "the size of laddr_t Unsigned is not 16 bytes");
     p.append(reinterpret_cast<const char *>(&value), sizeof(Unsigned));
+#else
+    auto high = ceph_le64(get_high64());
+    auto low = ceph_le64(get_low64());
+    p.append(reinterpret_cast<const char*>(&low), sizeof(uint64_t));
+    p.append(reinterpret_cast<const char*>(&high), sizeof(uint64_t));
+#endif
   }
   void bound_encode(size_t& p) const {
+#if defined (__SIZEOF_INT128__) && !SEASTORE_LADDR_USE_BOOST_U128
     p += sizeof(Unsigned);
+#else
+    p += sizeof(uint64_t) * 2;
+#endif
   }
   void decode(::ceph::buffer::ptr::const_iterator& p) {
+#if defined (__SIZEOF_INT128__) && !SEASTORE_LADDR_USE_BOOST_U128
     assert(static_cast<std::size_t>(p.get_end() - p.get_pos()) >= sizeof(Unsigned));
     memcpy((char *)&value, p.get_pos_add(sizeof(Unsigned)), sizeof(Unsigned));
+#else
+    assert(static_cast<std::size_t>(p.get_end() - p.get_pos()) >= sizeof(uint64_t) * 2);
+    auto high = ceph_le64(0);
+    auto low = ceph_le64(0);
+    memcpy((char*)&low, p.get_pos_add(sizeof(uint64_t)), sizeof(uint64_t));
+    memcpy((char*)&high, p.get_pos_add(sizeof(uint64_t)), sizeof(uint64_t));
+    value = (uint64_t)high;
+    value <<= 64;
+    value |= (uint64_t)low;
+#endif
   }
 
   // laddr_offset_t contains one base laddr and one block not aligned
@@ -1113,7 +1488,20 @@ public:
     }
 
     friend bool operator==(const laddr_offset_t&, const laddr_offset_t&) = default;
-    friend auto operator<=>(const laddr_offset_t&, const laddr_offset_t&) = default;
+    friend std::strong_ordering operator<=>(
+      const laddr_offset_t& l, const laddr_offset_t& r) {
+      assert(l.offset < laddr_t::UNIT_SIZE);
+      assert(r.offset < laddr_t::UNIT_SIZE);
+      // boost uint128 doesn't support three way compare operator,
+      // we need to implement it manually.
+      if (l.base == r.base) {
+	return l.offset <=> r.offset;
+      } else {
+	// use laddr_t <=> laddr_t
+	return laddr_t(l.base) <=> laddr_t(r.base);
+      }
+    }
+
     friend std::ostream &operator<<(std::ostream&, const laddr_offset_t&);
     friend laddr_offset_t operator+(const laddr_offset_t &laddr_offset,
 				    const loffset_t &offset) {
@@ -1180,7 +1568,18 @@ public:
     return laddr_offset.get_aligned_laddr() == laddr
 	&& laddr_offset.get_offset() == 0;
   }
-  friend auto operator<=>(const laddr_t&, const laddr_t&) = default;
+  friend constexpr std::strong_ordering operator<=>(
+    const laddr_t& l, const laddr_t& r) {
+    // boost::multiprecision::uint128_t doesn't support three ways operator,
+    // so we need to implement it manually.
+    if (l.value < r.value) {
+      return std::strong_ordering::less;
+    } else if (l.value == r.value) {
+      return std::strong_ordering::equivalent;
+    } else {
+      return std::strong_ordering::greater;
+    }
+  }
   friend auto operator<=>(const laddr_t &laddr,
 			  const laddr_offset_t &laddr_offset) {
     return laddr_offset_t(laddr, 0) <=> laddr_offset;
@@ -1218,6 +1617,60 @@ private:
   // Prevent direct construction of laddr_t with an integer,
   // always use laddr_t::from_raw_uint instead.
   constexpr explicit laddr_t(Unsigned value) : value(value) {}
+  constexpr laddr_t(uint64_t low, uint64_t high)
+      : value((Unsigned(high) << 64) | Unsigned(low)) {}
+
+  uint64_t get_high64() const { return static_cast<uint64_t>(value >> 64); }
+  uint64_t get_low64() const { return static_cast<uint64_t>(value); }
+
+  template <int LENGTH, int OFFSET>
+  struct FieldSpec {
+    static constexpr int length = LENGTH;
+    static constexpr int offset = OFFSET;
+    static constexpr Unsigned MAX = (Unsigned(1) << LENGTH) - 1;
+    static constexpr Unsigned MASK = MAX << OFFSET;
+
+    template <typename ReturnType>
+    static ReturnType get(const Unsigned &laddr_value) {
+      return static_cast<ReturnType>((laddr_value & MASK) >> OFFSET);
+    }
+    static void set(Unsigned &laddr_value, Unsigned field_value) {
+      laddr_value &= ~MASK;
+      laddr_value |= (field_value << OFFSET) & MASK;
+    }
+  };
+
+  // The upgrade bit position never changes
+  using UpgradeFlagSpec = FieldSpec<1,  127>;
+
+  struct layout_v1 {
+    // object info:
+    // [shard:6][pool:12][reverse_hash:32][local_object_id:26]
+    // object content:
+    // [local_clone_id:23][is_metadata:1][block_address:27]
+
+    using ObjectInfoSpec    = FieldSpec<76, 51>;
+    using ObjectContentSpec = FieldSpec<51, 0>;
+
+    using ShardSpec         = FieldSpec<6,  121>;
+    using PoolSpec          = FieldSpec<12, 109>;
+    using ReversedHashSpec  = FieldSpec<32, 77>;
+    using LocalObjectIdSpec = FieldSpec<26, 51>;
+
+    using LocalCloneIdSpec  = FieldSpec<23, 28>;
+    using MetadataFlagSpec  = FieldSpec<1,  27>;
+    using BlockOffsetSpec   = FieldSpec<27, 0>;
+
+    static constexpr Unsigned OBJECT_PREFIX_MASK =
+	UpgradeFlagSpec::MASK | ObjectInfoSpec::MASK;
+    static constexpr Unsigned CLONE_PREFIX_MASK =
+	OBJECT_PREFIX_MASK | LocalCloneIdSpec::MASK;
+  };
+
+  // Always alias to the latest layout implementation.
+  // All accesses, except for fsck, to the laddr fields should use this alias.
+  using layout = layout_v1;
+
   Unsigned value;
 };
 using laddr_offset_t = laddr_t::laddr_offset_t;
@@ -1228,39 +1681,202 @@ constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
 constexpr laddr_t L_ADDR_ROOT = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX - 1);
 constexpr laddr_t L_ADDR_LBAT = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX - 2);
 
+struct laddr_printer_t {
+  const laddr_t &addr;
+};
+std::ostream &operator<<(std::ostream &, const laddr_printer_t &);
+
+// This enum specifies the conflict condition for laddr allocation.
+enum class laddr_conflict_condition_t {
+  // Fixed shard, pool, and reversed_hash, allocate a unique local object id.
+  object_prefix_at_object_id,
+  // Fixed object prefix, allocate a unique local clone id.
+  clone_prefix_at_clone_id,
+  // Fixed object prefix, allocate a unique object content value.
+  all_at_object_content,
+  // Fixed clone prefix, allocate a unique block offset.
+  all_at_block_offset,
+  // Fixed laddr, conflicts never occur
+  all_at_never,
+};
+
+// The behavior of handling laddr allocation conflict
+// see BtreeLBAManager::search_insert_pos()
+enum class laddr_conflict_policy_t {
+  // Find appropriate address by following the lba iterator, only
+  // laddr_conflict_policy_t::{all_at_object_content, all_at_block_offset}
+  // could use this policy.
+  linear_search,
+  // Generate a new random hint.
+  gen_random,
+};
+
+struct laddr_hint_t {
+  laddr_t addr;
+  laddr_conflict_condition_t condition;
+  laddr_conflict_policy_t policy;
+  extent_len_t block_size;
+
+  static laddr_hint_t create_as_fixed(
+    laddr_t laddr,
+    extent_len_t block_size = laddr_t::UNIT_SIZE)
+  {
+    return {
+      laddr,
+      laddr_conflict_condition_t::all_at_never,
+      laddr_conflict_policy_t::linear_search,
+      block_size
+    };
+  }
+  static laddr_hint_t create_global_md_hint(
+    extent_len_t block_size = laddr_t::UNIT_SIZE);
+  static laddr_hint_t create_onode_hint(
+    shard_t shard,
+    pool_t pool,
+    crush_hash_t crush,
+    extent_len_t block_size);
+
+  // According to the state of Onode, there are 6 valid cases when constructing
+  // laddr hint:
+  // |No.|object id|clone id|is metadata|description|
+  // | 1 | N | N | N | write fresh object                                 |
+  // | 2 | N | N | Y | write fresh object that might only contains omap   |
+  // | 3 | N | Y | N | invalid case                                       |
+  // | 4 | N | Y | Y | invalid case                                       |
+  // | 5 | Y | N | N | clone existing onode                               |
+  // | 6 | Y | N | Y | clone existing onode that might only contains omap |
+  // | 7 | Y | Y | N | it might occur if first write omap then write data |
+  // | 8 | Y | Y | Y | allocate omap extents in existing onode            |
+
+  // 1
+  static laddr_hint_t create_fresh_object_data_hint(
+    shard_t shard,
+    pool_t pool,
+    crush_hash_t crush,
+    extent_len_t block_size);
+  // 2
+  static laddr_hint_t create_fresh_object_md_hint(
+    shard_t shard,
+    pool_t pool,
+    crush_hash_t crush,
+    extent_len_t block_size);
+  // 5
+  static laddr_hint_t create_clone_object_data_hint(
+    shard_t shard,
+    pool_t pool,
+    crush_hash_t crush,
+    local_object_id_t object_id,
+    extent_len_t block_size);
+  // 6
+  static laddr_hint_t create_clone_object_md_hint(
+    shard_t shard,
+    pool_t pool,
+    crush_hash_t crush,
+    local_object_id_t object_id,
+    extent_len_t block_size);
+  // 7
+  static laddr_hint_t create_object_data_hint(
+    shard_t shard,
+    pool_t pool,
+    crush_hash_t crush,
+    local_object_id_t object_id,
+    local_clone_id_t clone_id,
+    extent_len_t block_size);
+  // 8
+  static laddr_hint_t create_object_md_hint(
+    shard_t shard,
+    pool_t pool,
+    crush_hash_t crush,
+    local_object_id_t object_id,
+    local_clone_id_t clone_id,
+    extent_len_t block_size);
+
+  void find_next_random();
+
+  bool conflict_with(laddr_t other) const {
+    switch (condition) {
+    case laddr_conflict_condition_t::object_prefix_at_object_id:
+      assert(addr.is_object_address());
+      return addr.get_object_prefix() == other.get_object_prefix();
+    case laddr_conflict_condition_t::clone_prefix_at_clone_id:
+      assert(addr.is_object_address());
+      return addr.get_clone_prefix() == other.get_clone_prefix();
+    case laddr_conflict_condition_t::all_at_object_content:
+    case laddr_conflict_condition_t::all_at_block_offset:
+    case laddr_conflict_condition_t::all_at_never:
+      return addr == other;
+    default:
+      __builtin_unreachable();
+    }
+  }
+
+  laddr_t lower_boundary() const {
+    switch (condition) {
+    case laddr_conflict_condition_t::object_prefix_at_object_id:
+      assert(addr.is_object_address());
+      return addr.with_object_content(0);
+    case laddr_conflict_condition_t::clone_prefix_at_clone_id:
+      assert(addr.is_object_address());
+      return addr.with_offset_by_blocks(0).without_metadata();
+    case laddr_conflict_condition_t::all_at_object_content:
+    case laddr_conflict_condition_t::all_at_block_offset:
+      return addr;
+    case laddr_conflict_condition_t::all_at_never:
+      ceph_abort("imposible conflict case");
+    default:
+      __builtin_unreachable();
+    }
+  }
+
+  bool operator==(const laddr_hint_t&) const = default;
+};
+std::ostream &operator<<(std::ostream &out, const laddr_hint_t &hint);
+
+constexpr laddr_hint_t LADDR_HINT_NULL = {
+  L_ADDR_NULL,
+  laddr_conflict_condition_t::all_at_never,
+  laddr_conflict_policy_t::gen_random,
+  /*block_size=*/ 0
+};
+
 struct __attribute__((packed)) laddr_le_t {
-  ceph_le64 laddr;
+  ceph_le64 low64;
+  ceph_le64 high64;
 
   using orig_type = laddr_t;
 
   laddr_le_t() : laddr_le_t(L_ADDR_NULL) {}
   laddr_le_t(const laddr_le_t &) = default;
   explicit laddr_le_t(const laddr_t &addr)
-    : laddr(addr.value) {}
+    : low64(addr.get_low64()), high64(addr.get_high64()) {}
 
   operator laddr_t() const {
-    return laddr_t(laddr);
+    return laddr_t(low64, high64);
   }
   laddr_le_t& operator=(laddr_t addr) {
-    ceph_le64 val;
-    val = addr.value;
-    laddr = val;
+    low64 = addr.get_low64();
+    high64 = addr.get_high64();
     return *this;
   }
 
   bool operator==(const laddr_le_t&) const = default;
 };
 
-constexpr uint64_t PL_ADDR_NULL = std::numeric_limits<uint64_t>::max();
-
+/**
+ * pladdr_t
+ *
+ * The value of LBA tree leaf node entries, stores either the physical address
+ * of the logical extent, or the value of local_clone_id field of the intermediate
+ * key which points to the physical lba mapping.
+ */
 struct pladdr_t {
-  std::variant<laddr_t, paddr_t> pladdr;
+  std::variant<local_clone_id_t, paddr_t> pladdr;
 
   pladdr_t() = default;
   pladdr_t(const pladdr_t &) = default;
-  pladdr_t(laddr_t laddr)
-    : pladdr(laddr) {}
-  pladdr_t(paddr_t paddr)
+  explicit pladdr_t(local_clone_id_t id)
+    : pladdr(id) {}
+  constexpr explicit pladdr_t(paddr_t paddr)
     : pladdr(paddr) {}
 
   bool is_laddr() const {
@@ -1276,8 +1892,8 @@ struct pladdr_t {
     return *this;
   }
 
-  pladdr_t& operator=(laddr_t laddr) {
-    pladdr = laddr;
+  pladdr_t& operator=(local_clone_id_t id) {
+    pladdr = id;
     return *this;
   }
 
@@ -1288,12 +1904,19 @@ struct pladdr_t {
     return paddr_t(std::get<1>(pladdr));
   }
 
-  laddr_t get_laddr() const {
+  local_clone_id_t get_local_clone_id() const {
     assert(pladdr.index() == 0);
-    return laddr_t(std::get<0>(pladdr));
+    return std::get<0>(pladdr);
   }
 
+  // The corresponding lba key with stored local clone id is the real
+  // intermediate key.
+  laddr_t build_laddr(laddr_t key) {
+    return key.with_local_clone_id(get_local_clone_id());
+  }
 };
+
+constexpr pladdr_t PL_ADDR_NULL = pladdr_t(P_ADDR_NULL);
 
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr);
 
@@ -1304,29 +1927,26 @@ enum class addr_type_t : uint8_t {
 };
 
 struct __attribute__((packed)) pladdr_le_t {
-  ceph_le64 pladdr = ceph_le64(PL_ADDR_NULL);
-  addr_type_t addr_type = addr_type_t::MAX;
+  ceph_le64 addr;
+  addr_type_t addr_type;
 
-  pladdr_le_t() = default;
+  pladdr_le_t() : pladdr_le_t(PL_ADDR_NULL) {}
   pladdr_le_t(const pladdr_le_t &) = default;
   explicit pladdr_le_t(const pladdr_t &addr)
-    : pladdr(
-	ceph_le64(
-	  addr.is_laddr() ?
-	    std::get<0>(addr.pladdr).value :
-	    std::get<1>(addr.pladdr).internal_paddr)),
-      addr_type(
-	addr.is_laddr() ?
-	  addr_type_t::LADDR :
-	  addr_type_t::PADDR)
+    : addr(ceph_le64(addr.is_laddr()
+		     ? addr.get_local_clone_id()
+		     : addr.get_paddr().internal_paddr)),
+      addr_type(addr.is_laddr()
+		? addr_type_t::LADDR
+		: addr_type_t::PADDR)
   {}
 
   operator pladdr_t() const {
     if (addr_type == addr_type_t::LADDR) {
-      return pladdr_t(laddr_t(pladdr));
+      return pladdr_t(static_cast<local_clone_id_t>(addr));
     } else {
       assert(addr_type == addr_type_t::PADDR);
-      return pladdr_t(paddr_t(pladdr));
+      return pladdr_t(paddr_t(addr));
     }
   }
 };
@@ -1740,14 +2360,15 @@ struct __attribute__((packed)) object_data_le_t {
 struct omap_root_t {
   laddr_t addr = L_ADDR_NULL;
   depth_t depth = 0;
-  laddr_t hint = L_ADDR_MIN;
+  laddr_hint_t hint = LADDR_HINT_NULL;
   bool mutated = false;
 
   omap_root_t() = default;
-  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min)
+  omap_root_t(laddr_t addr, depth_t depth, laddr_hint_t hint)
     : addr(addr),
       depth(depth),
-      hint(addr_min) {}
+      hint(hint)
+  {}
 
   omap_root_t(const omap_root_t &o) = default;
   omap_root_t(omap_root_t &&o) = default;
@@ -1762,7 +2383,7 @@ struct omap_root_t {
     return mutated;
   }
   
-  void update(laddr_t _addr, depth_t _depth, laddr_t _hint) {
+  void update(laddr_t _addr, depth_t _depth, laddr_hint_t _hint) {
     mutated = true;
     addr = _addr;
     depth = _depth;
@@ -1777,7 +2398,10 @@ struct omap_root_t {
     return depth;
   }
 
-  laddr_t get_hint() const {
+  laddr_hint_t get_hint() const {
+    ceph_assert(hint != LADDR_HINT_NULL);
+    // TODO: uncomment this line after supported onode rename
+    // ceph_assert(hint.addr.get_clone_prefix() == addr.get_clone_prefix());
     return hint;
   }
 };
@@ -1803,7 +2427,7 @@ public:
     depth = init_depth_le(nroot.get_depth());
   }
   
-  omap_root_t get(laddr_t hint) const {
+  omap_root_t get(laddr_hint_t hint) const {
     return omap_root_t(addr, depth, hint);
   }
 };
@@ -3043,6 +3667,8 @@ template <> struct fmt::formatter<crimson::os::seastore::journal_seq_t> : fmt::o
 template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_offset_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::laddr_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::laddr_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
