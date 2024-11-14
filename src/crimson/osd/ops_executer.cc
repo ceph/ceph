@@ -467,9 +467,7 @@ auto OpsExecuter::do_const_op(Func&& f) {
 template <class Func>
 auto OpsExecuter::do_write_op(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
-  if (!osd_op_params) {
-    fill_op_params(m);
-  }
+  check_init_op_params(m);
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
 }
 OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
@@ -844,6 +842,11 @@ OpsExecuter::flush_changes_and_submit(
 
   apply_stats();
   if (want_mutate) {
+    osd_op_params->at_version = pg->get_next_version();
+    osd_op_params->pg_trim_to = pg->get_pg_trim_to();
+    osd_op_params->pg_committed_to = pg->get_pg_committed_to();
+    osd_op_params->last_complete = pg->get_info().last_complete;
+
     std::vector<pg_log_entry_t> log_entries;
 
     if (cloning_ctx) {
@@ -895,18 +898,6 @@ OpsExecuter::flush_changes_and_submit(
   co_return std::make_tuple(
     std::move(submitted),
     std::move(all_completed));
-}
-
-void OpsExecuter::fill_op_params(OpsExecuter::modified_by m)
-{
-  osd_op_params.emplace();
-  osd_op_params->req_id = msg->get_reqid();
-  osd_op_params->mtime = msg->get_mtime();
-  osd_op_params->at_version = pg->get_next_version();
-  osd_op_params->pg_trim_to = pg->get_pg_trim_to();
-  osd_op_params->pg_committed_to = pg->get_pg_committed_to();
-  osd_op_params->last_complete = pg->get_info().last_complete;
-  osd_op_params->user_modify = (m == modified_by::user);
 }
 
 pg_log_entry_t OpsExecuter::prepare_head_update(
