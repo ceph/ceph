@@ -23,8 +23,7 @@
 #include "PGBackend.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
-#include "ECTransaction.h"
-#include "ExtentCache.h"
+#include "ECExtentCache.h"
 
 //forward declaration
 struct ECSubWrite;
@@ -35,6 +34,7 @@ struct ECSubReadReply;
 struct RecoveryMessages;
 
 class ECBackend : public PGBackend, public ECCommon {
+
 public:
   RecoveryHandle *open_recovery_op() override;
 
@@ -143,10 +143,23 @@ public:
   void objects_read_and_reconstruct(
     const std::map<hobject_t, std::list<ECCommon::ec_align_t>> &reads,
     bool fast_read,
+    uint64_t object_size,
+    GenContextURef<ECCommon::ec_extents_t &&> &&func) override;
+
+  /**
+   * Async read mechanism for read-modify-write (RMW) code paths. Here wthe
+   * client already knows the set of shard reads that are required, so these
+   * can be passed in directly.  The "fast_read" mechanism is not needed.
+   *
+   * Otherwise this is the same as objects_read_and_reconstruct.
+   */
+  void objects_read_and_reconstruct_for_rmw(
+    std::map<hobject_t, read_request_t> &&reads,
     GenContextURef<ECCommon::ec_extents_t &&> &&func) override;
 
   void objects_read_async(
     const hobject_t &hoid,
+    uint64_t object_size,
     const std::list<std::pair<ECCommon::ec_align_t,
                               std::pair<ceph::buffer::list*, Context*>>> &to_read,
     Context *on_complete,
@@ -242,14 +255,11 @@ public:
     }
 
     // must be filled if state == WRITING
-    std::map<int, ceph::buffer::list> returned_data;
+    std::optional<ECUtil::shard_extent_map_t> returned_data;
     std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
     ECUtil::HashInfoRef hinfo;
     ObjectContextRef obc;
     std::set<pg_shard_t> waiting_on_pushes;
-
-    // valid in state READING
-    std::pair<uint64_t, uint64_t> extent_requested;
 
     void dump(ceph::Formatter *f) const;
 
@@ -284,7 +294,7 @@ public:
     RecoveryMessages *m);
   void handle_recovery_read_complete(
     const hobject_t &hoid,
-    std::map<int, extent_map> &buffers_read,
+    ECUtil::shard_extent_map_t &&buffers_read,
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs,
     RecoveryMessages *m);
   void handle_recovery_push(
@@ -376,6 +386,9 @@ public:
   int get_ec_stripe_chunk_size() const override {
     return sinfo.get_chunk_size();
   }
+  uint64_t object_size_to_shard_size(const uint64_t size, int shard) const override {
+    return sinfo.object_size_to_shard_size(size, shard);
+  }
 
   /**
    * ECReadPred
@@ -409,6 +422,10 @@ public:
     size_t
   > get_attrs_n_size_from_disk(const hobject_t& hoid);
 
+  ECUtil::HashInfoRef get_hinfo_from_disk(hobject_t oid);
+
+  std::optional<object_info_t> get_object_info_from_obc(ObjectContextRef &obc_map);
+
 public:
   int object_stat(const hobject_t &hoid, struct stat* st);
   ECBackend(
@@ -418,7 +435,8 @@ public:
     ObjectStore *store,
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
-    uint64_t stripe_width);
+    uint64_t stripe_width,
+    ECExtentCache::LRU &ec_extent_cache_lru);
 
   int objects_get_attrs(
     const hobject_t &hoid,
@@ -441,6 +459,5 @@ public:
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };
-ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
 
 #endif

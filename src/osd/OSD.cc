@@ -5199,7 +5199,7 @@ PG* OSD::_make_pg(
   PG *pg;
   if (pi.type == pg_pool_t::TYPE_REPLICATED ||
       pi.type == pg_pool_t::TYPE_ERASURE)
-    pg = new PrimaryLogPG(&service, createmap, pool, ec_profile, pgid);
+    pg = new PrimaryLogPG(&service, createmap, pool, ec_profile, pgid, lookup_ec_extent_cache_lru(pgid));
   else
     ceph_abort();
   return pg;
@@ -5284,6 +5284,13 @@ bool OSD::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
     service.logger->dec(l_osd_pg_stray);
 
   return true;
+}
+
+ECExtentCache::LRU &OSD::lookup_ec_extent_cache_lru(spg_t pgid) const
+{
+  uint32_t shard_index = pgid.hash_to_shard(num_shards);
+  auto sdata = shards[shard_index];
+  return sdata->ec_extent_cache_lru;
 }
 
 PGRef OSD::_lookup_pg(spg_t pgid)
@@ -11017,7 +11024,8 @@ OSDShard::OSDShard(
     scheduler(ceph::osd::scheduler::make_scheduler(
       cct, osd->whoami, osd->num_shards, id, osd->store->is_rotational(),
       osd->store->get_type(), osd_op_queue, osd_op_queue_cut_off, osd->monc)),
-    context_queue(sdata_wait_lock, sdata_cond)
+    context_queue(sdata_wait_lock, sdata_cond),
+    ec_extent_cache_lru(10*1024*1024)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;
 }

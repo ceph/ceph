@@ -297,6 +297,7 @@ int ReplicatedBackend::objects_readv_sync(
 
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
+  uint64_t object_size,
   const list<pair<ECCommon::ec_align_t,
 		  pair<bufferlist*, Context*> > > &to_read,
   Context *on_complete,
