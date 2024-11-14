@@ -1551,10 +1551,14 @@ class CephadmServe:
         """
         Remove a daemon
         """
-        (daemon_type, daemon_id) = name.split('.', 1)
+        dd = self.mgr.cache.get_daemon(name)
+        daemon_type = dd.daemon_type
+        daemon_id = dd.daemon_id
+        assert (daemon_type is not None and daemon_id is not None)
         daemon = orchestrator.DaemonDescription(
             daemon_type=daemon_type,
             daemon_id=daemon_id,
+            service_name=dd.service_name(),
             hostname=host)
 
         with set_exception_subject('service', daemon.service_id(), overwrite=True):
@@ -1562,7 +1566,6 @@ class CephadmServe:
             self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].pre_remove(daemon)
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
-            dd = self.mgr.cache.get_daemon(daemon.daemon_name)
             if dd.ports:
                 args = ['--name', name, '--force', '--tcp-ports', ' '.join(map(str, dd.ports))]
             else:
