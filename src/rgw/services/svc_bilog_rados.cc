@@ -5,11 +5,14 @@
 #include "svc_bi_rados.h"
 
 #include "rgw_asio_thread.h"
+#include "driver/rados/shard_io.h"
 #include "cls/rgw/cls_rgw_client.h"
+#include "common/async/blocked_completion.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+using rgwrados::shard_io::Result;
 
 RGWSI_BILog_RADOS::RGWSI_BILog_RADOS(CephContext *cct) : RGWServiceInstance(cct)
 {
@@ -19,6 +22,35 @@ void RGWSI_BILog_RADOS::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
 {
   svc.bi = bi_rados_svc;
 }
+
+struct TrimWriter : rgwrados::shard_io::RadosWriter {
+  const BucketIndexShardsManager& start;
+  const BucketIndexShardsManager& end;
+
+  TrimWriter(const DoutPrefixProvider& dpp,
+             boost::asio::any_io_executor ex,
+             librados::IoCtx& ioctx,
+             const BucketIndexShardsManager& start,
+             const BucketIndexShardsManager& end)
+    : RadosWriter(dpp, std::move(ex), ioctx), start(start), end(end)
+  {}
+  void prepare_write(int shard, librados::ObjectWriteOperation& op) override {
+    cls_rgw_bilog_trim(op, start.get(shard, ""), end.get(shard, ""));
+  }
+  Result on_complete(int, boost::system::error_code ec) override {
+    // continue trimming until -ENODATA or other error
+    if (ec == boost::system::errc::no_message_available) {
+      return Result::Success;
+    } else if (ec) {
+      return Result::Error;
+    } else {
+      return Result::Retry;
+    }
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "trim bilog shards: ";
+  }
+};
 
 int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
 				const RGWBucketInfo& bucket_info,
@@ -49,9 +81,25 @@ int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
     return r;
   }
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  return CLSRGWIssueBILogTrim(index_pool, start_marker_mgr, end_marker_mgr, bucket_objs,
-			      cct->_conf->rgw_bucket_index_max_aio)();
+  const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto writer = TrimWriter{*dpp, ex, index_pool, start_marker_mgr, end_marker_mgr};
+
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
+  } else {
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto writer = TrimWriter{*dpp, ex, index_pool, start_marker_mgr, end_marker_mgr};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
+                                     ceph::async::use_blocked[ec]);
+  }
+  return ceph::from_error_code(ec);
 }
 
 int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
