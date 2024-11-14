@@ -1,13 +1,12 @@
 overrides:
   ceph:
-    log-ignorelist:
-    - \(PG_AVAILABILITY\)
-    wait-for-scrub: false
     conf:
       client:
         setuser: ceph
         setgroup: ceph
         debug rgw: 20
+        debug rgw sync: 20
+        debug ms: 1
         rgw crypt s3 kms backend: testing
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
         rgw crypt require ssl: false
