@@ -17418,21 +17418,33 @@ void Client::set_cap_epoch_barrier(epoch_t e)
 
 const char** Client::get_tracked_conf_keys() const
 {
-  static const char* keys[] = {
-    "client_cache_size",
-    "client_cache_mid",
-    "client_acl_type",
-    "client_deleg_timeout",
-    "client_deleg_break_on_open",
-    "client_oc_size",
-    "client_oc_max_objects",
-    "client_oc_max_dirty",
-    "client_oc_target_dirty",
-    "client_oc_max_dirty_age",
-    "client_caps_release_delay",
-    "client_mount_timeout",
-    NULL
-  };
+#define KEYS \
+    "client_acl_type", \
+    "client_cache_mid", \
+    "client_cache_size", \
+    "client_caps_release_delay", \
+    "client_deleg_break_on_open", \
+    "client_deleg_timeout", \
+    "client_mount_timeout", \
+    "client_oc_max_dirty", \
+    "client_oc_max_dirty_age", \
+    "client_oc_max_objects", \
+    "client_oc_size", \
+    "client_oc_target_dirty" \
+
+  constexpr bool is_sorted = [] () constexpr {
+    constexpr auto arr = std::to_array<std::string_view>({KEYS});
+    for (unsigned long i = 0; i < arr.size()-1; ++i) {
+      if (arr[i] > arr[i+1]) {
+        return false;
+      }
+    }
+    return true;
+  }();
+  static_assert(is_sorted, "keys are not sorted!");
+
+  static char const* keys[] = {KEYS, nullptr};
+
   return keys;
 }
 
