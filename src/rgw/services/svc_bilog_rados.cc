@@ -102,7 +102,10 @@ int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
   return ceph::from_error_code(ec);
 }
 
-int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
+int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, optional_yield y,
+                                 const RGWBucketInfo& bucket_info,
+                                 const rgw::bucket_log_layout_generation& log_layout,
+                                 int shard_id)
 {
   librados::IoCtx index_pool;
   map<int, string> bucket_objs;
