@@ -933,7 +933,7 @@ void ECCommon::RMWPipeline::try_finish_rmw()
         auto nop = std::make_shared<ECDummyOp>();
         nop->hoid = op.hoid;
         nop->trim_to = op.trim_to;
-        nop->roll_forward_to = op.version;
+        nop->pg_committed_to = op.version;
         nop->tid = tid;
         nop->reqid = op.reqid;
         nop->pending_cache_ops = 1;
