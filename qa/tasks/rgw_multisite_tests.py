@@ -71,10 +71,15 @@ class RGWMultisiteTests(Task):
 
         # create test account/user
         log.info('creating test user..')
-        user = multisite.User('rgw-multisite-test-user', account='RGW11111111111111111')
-        arg = ['--account-id', user.account]
-        arg += master_zone.zone_args()
-        master_zone.cluster.admin(['account', 'create'] + arg)
+        if self.config.get('with-accounts', True):
+            user = multisite.User('rgw-multisite-test-user', account='RGW11111111111111111')
+            arg = ['--account-id', user.account]
+            arg += master_zone.zone_args()
+            master_zone.cluster.admin(['account', 'create'] + arg)
+        else:
+            # upgrade tests from reef won't support account users
+            user = multisite.User('rgw-multisite-test-user')
+
         user.create(master_zone, ['--display-name', 'TestUser',
                                   '--gen-access-key', '--gen-secret'])
 
