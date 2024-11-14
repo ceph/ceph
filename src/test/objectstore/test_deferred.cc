@@ -215,7 +215,7 @@ void mount_check_alloc()
 
   bool called_allocate = false;
   vector<pair<uint64_t, uint64_t> > captured_allocations;
-  bs->set_tracepoint_debug_deferred_replay_start(
+  bs->dtr_deferred_replay_start =
     [&](){
       std::cout << "action before deferred replay" << std::endl;
       Allocator* alloc = bs->debug_get_alloc();
@@ -226,8 +226,8 @@ void mount_check_alloc()
       std::cout << "sleeping to give compaction a chance" << std::endl;
       sleep(10);
       std::cout << "sleep end" << std::endl;
-    });
-  bs->set_tracepoint_debug_deferred_replay_end(
+    };
+  bs->dtr_deferred_replay_end =
     [&](){
       std::cout << "action after deferred replay" << std::endl;
       Allocator* alloc = bs->debug_get_alloc();
@@ -244,30 +244,30 @@ void mount_check_alloc()
           ca_it++;
         });
       std::cout << "called_allocate=" << called_allocate << std::endl;
-      bs->set_tracepoint_debug_deferred_replay_track(nullptr);
-      bs->set_tracepoint_debug_deferred_replay_start(nullptr);
-      bs->set_tracepoint_debug_deferred_replay_end(nullptr);
-    });
+      bs->dtr_deferred_replay_track = nullptr;
+      bs->dtr_deferred_replay_start = nullptr;
+      bs->dtr_deferred_replay_end = nullptr;
+    };
 
   interval_set<uint64_t> not_onode_allocations;
-  bs->set_tracepoint_debug_init_alloc_done(
+  bs->dtr_init_alloc_done =
     [&](){
       Allocator* alloc = bs->debug_get_alloc();
       alloc->foreach(
         [&](uint64_t start, uint64_t len) {
           not_onode_allocations.insert(start, len);
         });
-      bs->set_tracepoint_debug_init_alloc_done(nullptr);
-    });
+      bs->dtr_init_alloc_done = nullptr;
+    };
   interval_set<uint64_t> extents_sum;
-  bs->set_tracepoint_debug_deferred_replay_track(
+  bs->dtr_deferred_replay_track =
     [&](const bluestore_deferred_transaction_t& dtxn) {
       for (auto& op : dtxn.ops) {
         for (auto& e : op.extents) {
           extents_sum.insert(e.offset, e.length);
         }
       }
-    });
+    };
   std::cout << "mounting..." << std::endl;
   ceph_assert(store->mount() == 0);
   std::cout << "mount done" << std::endl;
@@ -279,7 +279,7 @@ void mount_check_alloc()
   std::cout << std::hex << "disk not used by onodes written by deferred="
             << wrote_to_not_onodes << std::dec << std::endl;
   bool only_wrote_to_onodes = wrote_to_not_onodes.empty();
-  bs->set_tracepoint_debug_deferred_replay_start(nullptr);
+  bs->dtr_deferred_replay_start = nullptr;
   ceph_assert(store->umount() == 0);
 
   ceph_assert(!called_allocate || only_wrote_to_onodes);

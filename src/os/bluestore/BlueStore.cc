@@ -15139,7 +15139,7 @@ void BlueStore::_kv_sync_thread()
       auto sync_start = mono_clock::now();
 #endif
       // submit synct synchronously (block and wait for it to commit)
-      int r = db_was_opened_read_only || cct->_conf->bluestore_debug_omit_kv_commit ?
+      int r = cct->_conf->bluestore_debug_omit_kv_commit ?
 	0 : db->submit_transaction_sync(synct);
       ceph_assert(r == 0);
 
@@ -15538,19 +15538,14 @@ int BlueStore::_deferred_replay()
       }
     );
   }
-  CollectionRef ch = _get_collection(coll_t::meta());
-  bool fake_ch = false;
-  if (!ch) {
-    // hmm, replaying initial mkfs?
-    ch = static_cast<Collection*>(create_new_collection(coll_t::meta()).get());
-    fake_ch = true;
-  }
-  OpSequencer *osr = static_cast<OpSequencer*>(ch->osr.get());
   dtr_deferred_replay_start();
+  IOContext ioctx(cct, nullptr);
+  KeyValueDB::Transaction t = db->get_transaction();
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_DEFERRED);
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
     dout(20) << __func__ << " replay " << pretty_binary_string(it->key())
 	     << dendl;
+    t->rmkey(PREFIX_DEFERRED, it->key());
     bluestore_deferred_transaction_t *deferred_txn =
       new bluestore_deferred_transaction_t;
     bufferlist bl = it->value();
@@ -15567,22 +15562,29 @@ int BlueStore::_deferred_replay()
     bool has_some = _eliminate_outdated_deferred(deferred_txn, bluefs_extents);
     if (has_some) {
       dtr_deferred_replay_track(*deferred_txn);
-      TransContext *txc = _txc_create(ch.get(), osr,  nullptr);
-      txc->deferred_txn = deferred_txn;
-      txc->set_state(TransContext::STATE_KV_DONE);
-      _txc_state_proc(txc);
+      for (auto& op: deferred_txn->ops) {
+        for (auto& e : op.extents) {
+          bufferlist t;
+          op.data.splice(0, e.length, &t);
+          bdev->aio_write(e.offset, t, &ioctx, false);
+        }
+      }
     } else {
       delete deferred_txn;
     }
   }
  out:
-  dout(20) << __func__ << " draining osr" << dendl;
-  _osr_register_zombie(osr);
-  _osr_drain_all();
-  dtr_deferred_replay_end();
-  if (fake_ch) {
-    new_coll_map.clear();
+  bdev->aio_submit(&ioctx);
+  dout(20) << __func__ << " waiting to complete IO" << dendl;
+  ioctx.aio_wait();
+  dout(20) << __func__ << " wait done" << dendl;
+  if (!db_was_opened_read_only) {
+    db->submit_transaction_sync(t);
+    dout(20) << __func__ << " removed L keys" << dendl;
+  } else {
+    dout(10) << __func__ << " DB read-only, skipped L keys removal" << dendl;
   }
+  dtr_deferred_replay_end();
   dout(10) << __func__ << " completed " << count << " events" << dendl;
   return r;
 }
@@ -15610,7 +15612,7 @@ bool BlueStore::_eliminate_outdated_deferred(bluestore_deferred_transaction_t* d
     PExtentVector new_extents;
     ceph::buffer::list new_data;
     uint32_t data_offset = 0; // this tracks location of extent 'e' inside it->data
-    dout(30) << __func__ << " input extents: " << it->extents << dendl;
+    dout(10) << __func__ << " input extents: " << it->extents << dendl;
     for (auto& e: it->extents) {
       interval_set<uint64_t> region;
       region.insert(e.offset, e.length);
@@ -15641,7 +15643,7 @@ bool BlueStore::_eliminate_outdated_deferred(bluestore_deferred_transaction_t* d
       }
       data_offset += e.length;
     }
-    dout(30) << __func__ << " output extents: " << new_extents << dendl;
+    dout(10) << __func__ << " output extents: " << new_extents << dendl;
     if (it->data.length() != new_data.length()) {
       dout(10) << __func__ << " trimmed deferred extents: " << it->extents << "->" << new_extents << dendl;
     }
