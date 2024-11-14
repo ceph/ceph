@@ -72,8 +72,8 @@ class OSDMapReply : public JSONStructure {
   std::vector<int> acting;
   int acting_primary;
 
-  void decode_json(JSONObj* obj);
-  void dump() const;
+  void decode_json(JSONObj* obj) override;
+  void dump() const override;
 };
 
 class OSDPoolGetRequest : public JSONStructure {
@@ -100,8 +100,8 @@ class OSDPoolGetReply : public JSONStructure {
 
   std::string erasure_code_profile;
 
-  void decode_json(JSONObj* obj);
-  void dump() const;
+  void decode_json(JSONObj* obj) override;
+  void dump() const override;
 };
 
 class OSDECProfileGetRequest : public JSONStructure {
@@ -137,8 +137,8 @@ class OSDECProfileGetReply : public JSONStructure {
   std::string technique;
   std::string w;
 
-  void decode_json(JSONObj* obj);
-  void dump() const;
+  void decode_json(JSONObj* obj) override;
+  void dump() const override;
 };
 
 class OSDECProfileSetRequest : public JSONStructure {
