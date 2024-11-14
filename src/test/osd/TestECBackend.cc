@@ -29,7 +29,7 @@ TEST(ECUtil, stripe_info_t)
   const uint64_t swidth = 4096;
   const uint64_t ssize = 4;
 
-  ECUtil::stripe_info_t s(ssize, swidth, 0, vector<int>(0));
+  ECUtil::stripe_info_t s(ssize, swidth, 0);
   ASSERT_EQ(s.get_stripe_width(), swidth);
 
   ASSERT_EQ(s.logical_to_next_chunk_offset(0), 0u);
@@ -93,7 +93,7 @@ TEST(ECUtil, offset_length_is_same_stripe)
   const uint64_t schunk = 1024;
   const uint64_t ssize = 4;
 
-  ECUtil::stripe_info_t s(ssize, swidth, 0, vector<int>(0));
+  ECUtil::stripe_info_t s(ssize, swidth, 0);
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), schunk);
 
@@ -164,6 +164,14 @@ TEST(ECUtil, offset_length_is_same_stripe)
 
 class ErasureCodeDummyImpl : public ErasureCodeInterface {
 public:
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+          FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+          FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+          FLAG_EC_PLUGIN_ZERO_PADDING_OPTIMIZATION |
+          FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+  }
+
   ErasureCodeProfile _profile;
   const std::vector<int> chunk_mapping = {}; // no remapping
   std::vector<std::pair<int, int>> default_sub_chunk = {std::pair(0,1)};
@@ -488,7 +496,7 @@ TEST(ECCommon, get_min_want_to_read_shards)
   const uint64_t ssize = 4;
   const uint64_t csize = 1024;
 
-  ECUtil::stripe_info_t s(ssize, swidth, 0, vector<int>(0));
+  ECUtil::stripe_info_t s(ssize, swidth, 0);
   ECListenerStub listenerStub;
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), csize);
@@ -734,6 +742,8 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
   const uint64_t ssize = 4;
   const int nshards = 6;
 
+  std::vector<ECCommon::shard_read_t> empty_shard_vector(ssize);
+
   bool old_osd_ec_partial_reads_experimental =
     g_ceph_context->_conf->osd_ec_partial_reads_experimental;
   g_ceph_context->_conf->osd_ec_partial_reads_experimental = true;
@@ -755,10 +765,10 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
   // read nothing
   {
     std::map<int, extent_set> want_to_read;
-    std::list<ECCommon::ec_align_t> to_read_list;
+    std::map<int, extent_set> to_read_list;
     hobject_t hoid;
     ECCommon::read_request_t read_request(to_read_list, false);
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
 
@@ -767,20 +777,19 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
   /* Read to every data shard. */
   {
-    std::map<int, extent_set> want_to_read;
-    std::list<ECCommon::ec_align_t> to_read_list;
+    std::map<int, extent_set> to_read_list;
     hobject_t hoid;
-    ECCommon::read_request_t read_request(to_read_list, false);
 
     for (unsigned int i=0; i<ssize; i++) {
-      want_to_read[i].insert(i*2*page_size, page_size);
+      to_read_list[i].insert(i*2*page_size, page_size);
     }
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
+    ECCommon::read_request_t read_request(to_read_list, false);
+    pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
     for (unsigned int i=0; i<ssize; i++) {
-      ref.shard_reads[pg_shard_t(i, shard_id_t(i))].extents = want_to_read[i];
+      ref.shard_reads[pg_shard_t(i, shard_id_t(i))].extents = to_read_list[i];
       ref.shard_reads[pg_shard_t(i, shard_id_t(i))].subchunk = ecode->default_sub_chunk;
     }
     ASSERT_EQ(read_request,  ref);
@@ -788,20 +797,20 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
   /* Read to every data shard. */
   {
-    std::map<int, extent_set> want_to_read;
-    std::list<ECCommon::ec_align_t> to_read_list;
+    std::map<int, extent_set> to_read_list;
     hobject_t hoid;
-    ECCommon::read_request_t read_request(to_read_list, false);
-
     for (unsigned int i=0; i<ssize; i++) {
-      want_to_read[i].insert(i*2*page_size, page_size);
+      to_read_list[i].insert(i*2*page_size, page_size);
     }
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
+    ECCommon::read_request_t read_request(to_read_list, false);
+
+
+    pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
     for (unsigned int i=0; i<ssize; i++) {
-      ref.shard_reads[pg_shard_t(i, shard_id_t(i))].extents = want_to_read[i];
+      ref.shard_reads[pg_shard_t(i, shard_id_t(i))].extents = to_read_list[i];
       ref.shard_reads[pg_shard_t(i, shard_id_t(i))].subchunk = ecode->default_sub_chunk;
     }
 
@@ -811,51 +820,51 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
   /* Read to every data shard - small read */
   {
-    std::map<int, extent_set> want_to_read;
-    std::list<ECCommon::ec_align_t> to_read_list;
+    std::map<int, extent_set> to_read_list;
     hobject_t hoid;
-    ECCommon::read_request_t read_request(to_read_list, false);
 
+    for (int i=0; i < (int)ssize; i++) {
+      to_read_list[i].insert(i*2*page_size + i + 1, i+1);
+    }
     ECCommon::read_request_t ref(to_read_list, false);
-    for (unsigned int i=0; i<ssize; i++) {
-      want_to_read[i].insert(i*2*page_size + i + 1, i+1);
+    ECCommon::read_request_t read_request(to_read_list, false);
+    for (int i=0; i < (int)ssize; i++) {
       ECCommon::shard_read_t &ref_shard_read = ref.shard_reads[pg_shard_t(i, shard_id_t(i))];
       ref_shard_read.subchunk = ecode->default_sub_chunk;
       ref_shard_read.extents.insert(i*2*page_size, page_size);
     }
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
-
+    pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
     ASSERT_EQ(read_request,  ref);
   }
 
   /* Read to every data shard, missing shard. */
   {
-    std::map<int, extent_set> want_to_read;
-    std::list<ECCommon::ec_align_t> to_read_list;
+    std::map<int, extent_set> to_read_list;
     hobject_t hoid;
-    ECCommon::read_request_t read_request(to_read_list, false);
 
     for (unsigned int i=0; i<ssize; i++) {
-      want_to_read[i].insert(i*2*page_size, page_size);
+      to_read_list[i].insert(i*2*page_size, page_size);
     }
+
+    ECCommon::read_request_t read_request(to_read_list, false);
 
     unsigned int missing_shard = 1;
     int parity_shard = ssize;
     listenerStub.acting_shards.erase(pg_shard_t(missing_shard, shard_id_t(missing_shard)));
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
     for (unsigned int i=0; i<ssize; i++) {
       if (i != missing_shard) {
-	want_to_read[i].union_of(want_to_read[missing_shard]);
+	to_read_list[i].union_of(to_read_list[missing_shard]);
         ref.shard_reads[pg_shard_t(i, shard_id_t(i))].subchunk = ecode->default_sub_chunk;
-	ref.shard_reads[pg_shard_t(i, shard_id_t(i))].extents = want_to_read[i];
+	ref.shard_reads[pg_shard_t(i, shard_id_t(i))].extents = to_read_list[i];
       } else {
 	ECCommon::shard_read_t parity_shard_read;
 	parity_shard_read.subchunk = ecode->default_sub_chunk;
-	parity_shard_read.extents.union_of(want_to_read[i]);
+	parity_shard_read.extents.union_of(to_read_list[i]);
 	ref.shard_reads[pg_shard_t(parity_shard, shard_id_t(parity_shard))] = parity_shard_read;
       }
     }
@@ -868,17 +877,16 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
   /* Read to every data shard, missing shard, missing shard is adjacent. */
   {
-    std::map<int, extent_set> want_to_read;
-    std::list<ECCommon::ec_align_t> to_read_list;
+    std::map<int, extent_set> to_read_list;
     hobject_t hoid;
-    ECCommon::read_request_t read_request(to_read_list, false);
     unsigned int missing_shard = 1;
 
+    to_read_list[0].insert(0, page_size);
+    to_read_list[1].insert(page_size, page_size);
+    to_read_list[2].insert(2*page_size, page_size);
+    to_read_list[3].insert(3*page_size, page_size);
+    ECCommon::read_request_t read_request(to_read_list, false);
     ECCommon::read_request_t ref(to_read_list, false);
-    want_to_read[0].insert(0, page_size);
-    want_to_read[1].insert(page_size, page_size);
-    want_to_read[2].insert(2*page_size, page_size);
-    want_to_read[3].insert(3*page_size, page_size);
 
     // Populating reference manually to check that adjacent shards get correctly combined.
     ref.shard_reads[pg_shard_t(0, shard_id_t(0))].extents.insert(0, page_size*2);
@@ -896,7 +904,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
     listenerStub.acting_shards.erase(pg_shard_t(missing_shard, shard_id_t(missing_shard)));
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
     ASSERT_EQ(read_request,  ref);
 
@@ -905,18 +913,17 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
   /* Read to every data shard, but with "fast" (redundant) reads */
   {
-    std::map<int, extent_set> want_to_read;
-    std::list<ECCommon::ec_align_t> to_read_list;
+    std::map<int, extent_set> to_read_list;
     hobject_t hoid;
-    ECCommon::read_request_t read_request(to_read_list, false);
 
     extent_set extents_to_read;
     for (unsigned int i=0; i<ssize; i++) {
-      want_to_read[i].insert(i*2*page_size, page_size);
+      to_read_list[i].insert(i*2*page_size, page_size);
       extents_to_read.insert(i*2*page_size, page_size);
     }
+    ECCommon::read_request_t read_request(to_read_list, false);
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, true, read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, false, true, read_request);
 
     ECCommon::read_request_t ref(to_read_list, false);
     for (unsigned int i=0; i<ssize+2; i++) {
@@ -931,14 +938,13 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
   /* Read to every data shard, missing shard. */
   {
-    std::vector<ECCommon::shard_read_t> want_to_read(empty_shard_vector);
-    std::list<ECCommon::ec_align_t> to_read_list;
+    std::map<int, extent_set> to_read_list;
     hobject_t hoid;
-    ECCommon::read_request_t read_request(to_read_list, false);
 
     for (unsigned int i=0; i<ssize; i++) {
-      want_to_read[i].extents.insert(i*2*page_size, page_size);
+      to_read_list[i].insert(i*2*page_size, page_size);
     }
+    ECCommon::read_request_t read_request(to_read_list, false);
 
     unsigned int missing_shard = 1;
     int parity_shard = ssize;
@@ -946,18 +952,20 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     error_shards.emplace(missing_shard, shard_id_t(missing_shard));
     // Similar to previous tests with missing shards, but this time, emulate
     // the shard being missing as a result of a bad read.
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request, error_shards);
+    pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request, error_shards);
 
     ECCommon::read_request_t ref(to_read_list, false);
+    std::vector<ECCommon::shard_read_t> want_to_read(empty_shard_vector);
     for (unsigned int i=0; i<ssize; i++) {
       if (i != missing_shard) {
         want_to_read[i].subchunk = ecode->default_sub_chunk;
-        want_to_read[i].extents.union_of(want_to_read[missing_shard].extents);
+        want_to_read[i].extents.union_of(to_read_list[missing_shard]);
+        want_to_read[i].extents.union_of(to_read_list[i]);
         ref.shard_reads[pg_shard_t(i, shard_id_t(i))] = want_to_read[i];
       } else {
         ECCommon::shard_read_t parity_shard_read;
         parity_shard_read.subchunk = ecode->default_sub_chunk;
-        parity_shard_read.extents.union_of(want_to_read[i].extents);
+        parity_shard_read.extents.union_of(to_read_list[missing_shard]);
         ref.shard_reads[pg_shard_t(parity_shard, shard_id_t(parity_shard))] = parity_shard_read;
       }
     }
@@ -1000,16 +1008,14 @@ TEST(ECCommon, shard_read_combo_tests)
 
   {
     std::map<int, extent_set> want_to_read;
-    std::list<ECCommon::ec_align_t> to_read_list;
-    ECCommon::read_request_t read_request(to_read_list, false);
 
     ECCommon::ec_align_t to_read(36*1024,10*1024, 1);
-    pipeline.get_min_want_to_read_shards(
-      to_read, want_to_read);
+    pipeline.get_min_want_to_read_shards(to_read, want_to_read);
+    ECCommon::read_request_t read_request(want_to_read, false);
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
+    pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
-    ECCommon::read_request_t ref(to_read_list, false);
+    ECCommon::read_request_t ref(want_to_read, false);
     {
       ECCommon::shard_read_t shard_read;
       shard_read.subchunk = ecode->default_sub_chunk;
@@ -1028,16 +1034,13 @@ TEST(ECCommon, shard_read_combo_tests)
 
   {
     std::map<int, extent_set> want_to_read;
-    std::list<ECCommon::ec_align_t> to_read_list;
-    hobject_t hoid;
-    ECCommon::read_request_t read_request(to_read_list, false);
 
     ECCommon::ec_align_t to_read(12*1024,12*1024, 1);
     pipeline.get_min_want_to_read_shards(to_read, want_to_read);
+    ECCommon::read_request_t read_request(want_to_read, false);
+    pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
-    pipeline.get_min_avail_to_read_shards(hoid, want_to_read, false, false, read_request);
-
-    ECCommon::read_request_t ref(to_read_list, false);
+    ECCommon::read_request_t ref(want_to_read, false);
     {
       ECCommon::shard_read_t shard_read;
       shard_read.subchunk = ecode->default_sub_chunk;
@@ -1064,7 +1067,7 @@ TEST(ECCommon, get_min_want_to_read_shards_bug67087)
   const uint64_t ssize = 4;
   const uint64_t csize = 1024;
 
-  ECUtil::stripe_info_t s(ssize, swidth, 0, vector<int>(0));
+  ECUtil::stripe_info_t s(ssize, swidth, 0);
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), 1024);
 
@@ -1108,7 +1111,7 @@ TEST(ECCommon, get_remaining_shards)
 
   g_ceph_context->_conf->osd_ec_partial_reads_experimental = true;
 
-  ECUtil::stripe_info_t s(ssize, swidth);
+  ECUtil::stripe_info_t s(ssize, swidth, 0, vector<int>(0));
   ECListenerStub listenerStub;
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), swidth/ssize);
@@ -1132,13 +1135,13 @@ TEST(ECCommon, get_remaining_shards)
     hobject_t hoid;
 
     // Mock up a read request
-    std::list<ECCommon::ec_align_t> to_read;
-    to_read.emplace_back(0, 4096, 0);
+    std::map<int, extent_set> to_read;
+    to_read[0].insert(0, 4096);
     ECCommon::read_request_t read_request(to_read, false);
     int missing_shard = 0;
 
     // Mock up a read result.
-    ECCommon::read_result_t read_result;
+    ECCommon::read_result_t read_result(&s);
     read_result.errors.emplace(pg_shards[missing_shard], -EIO);
 
     pipeline.get_remaining_shards(hoid, read_result, read_request, false, false);
@@ -1156,54 +1159,21 @@ TEST(ECCommon, get_remaining_shards)
     ASSERT_EQ(read_request,  ref);
   }
 
-  {
-    hobject_t hoid;
-
-    // Mock up a read request
-    std::list<ECCommon::ec_align_t> to_read;
-    to_read.emplace_back(chunk_size-page_size, 2*page_size, 0);
-    ECCommon::read_request_t read_request(to_read, false);
-    int missing_shard = 1;
-
-    // Mock up a read result.
-    ECCommon::read_result_t read_result;
-    read_result.errors.emplace(pg_shards[missing_shard], -EIO);
-    buffer::list bl;
-    bl.append_zero(page_size);
-    read_result.buffers_read[0].insert(chunk_size-page_size, page_size, bl);
-
-    pipeline.get_remaining_shards(hoid, read_result, read_request, false, false);
-
-    // The result should be a read request for the first 4k of shard 0, as that
-    // is currently missing.
-    ECCommon::read_request_t ref(to_read, false);
-    int parity_shard = 4;
-    for (int i=0; i<ssize; i++) {
-      ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
-      shard_read.extents.insert(0,4096);
-      int shard_id = i==missing_shard?parity_shard:i;
-      ref.shard_reads[pg_shard_t(shard_id, shard_id_t(shard_id))] = shard_read;
-    }
-
-    ASSERT_EQ(read_request,  ref);
-  }
-
   // Request re-read. There is a page of overlap in what is already read.
   {
     hobject_t hoid;
 
-    std::list<ECCommon::ec_align_t> to_read;
-    to_read.emplace_back(chunk_size/2, chunk_size+page_size, 0);
+    std::map<int, extent_set> to_read;
+    s.ro_range_to_shard_extent_set(chunk_size/2, chunk_size+page_size, to_read);
     ECCommon::read_request_t read_request(to_read, false);
     int missing_shard = 1;
 
     // Mock up a read result.
-    ECCommon::read_result_t read_result;
+    ECCommon::read_result_t read_result(&s);
     read_result.errors.emplace(pg_shards[missing_shard], -EIO);
     buffer::list bl;
     bl.append_zero(chunk_size/2);
-    read_result.buffers_read[0].insert(chunk_size/2, chunk_size/2, bl);
+    read_result.buffers_read.insert_in_shard(0, chunk_size/2, bl);
 
     pipeline.get_remaining_shards(hoid, read_result, read_request, false, false);
 

@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 #include "osd/PGTransaction.h"
 #include "osd/ECTransaction.h"
+#include "osd/ECBackend.h"
 
 #include "test/unit.cc"
 
@@ -26,99 +27,168 @@ struct mydpp : public DoutPrefixProvider {
 
 #define dout_context g_ceph_context
 
-TEST(ectransaction, two_writes_separated)
+struct ECTestOp : ECCommon::RMWPipeline::Op {
+  PGTransactionUPtr t;
+};
+
+TEST(ectransaction, two_writes_separated_append)
 {
   hobject_t h;
-  PGTransactionUPtr t(new PGTransaction);
+  PGTransaction::ObjectOperation op;
   bufferlist a, b;
-  t->create(h);
   a.append_zero(565760);
-  t->write(h, 0, a.length(), a, 0);
+  op.buffer_updates.insert(0, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
   b.append_zero(2437120);
-  t->write(h, 669856, b.length(), b, 0);
+  op.buffer_updates.insert(669856, b.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{b, 0});
+
+  ECUtil::stripe_info_t sinfo(2, 8192, 0);
+  ECTransaction::WritePlanObj plan(
+    op,    sinfo,
+    0,
+    std::nullopt,
+    std::nullopt,
+    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
+    nullptr);
+
+  generic_derr << "plan " << plan << dendl;
+
+  ASSERT_FALSE(plan.to_read);
+  ASSERT_EQ(2u, plan.will_write.size());
+}
+
+TEST(ectransaction, two_writes_separated_misaligned_overwrite)
+{
+  hobject_t h;
+  PGTransaction::ObjectOperation op;
+  bufferlist a, b;
+  a.append_zero(565760);
+  op.buffer_updates.insert(0, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
+  b.append_zero(2437120);
+  op.buffer_updates.insert(669856, b.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{b, 0});
 
   ECUtil::stripe_info_t sinfo(2, 8192, 0, std::vector<int>(0));
-  auto plan = ECTransaction::get_write_plan(
-    sinfo,
-    *t,
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
-      return ref;
-    },
-    &dpp);
-  generic_derr << "to_read " << plan.to_read << dendl;
-  generic_derr << "will_write " << plan.will_write << dendl;
+  object_info_t oi;
+  oi.size = 3112960;
 
-  ASSERT_EQ(0u, plan.to_read.size());
-  ASSERT_EQ(1u, plan.will_write.size());
+  ECTransaction::WritePlanObj plan(
+  op,
+  sinfo,
+  oi.size,
+  oi,
+  std::nullopt,
+  ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
+  nullptr);
+
+  generic_derr << "plan " << plan << dendl;
+
+  ASSERT_EQ(2u, (*plan.to_read).size());
+  ASSERT_EQ(2u, plan.will_write.size());
 }
 
-TEST(ectransaction, two_writes_nearby)
+// Test writing to an object at an offset which is beyond the end of the
+// current object.
+TEST(ectransaction, partial_write)
 {
   hobject_t h;
-  PGTransactionUPtr t(new PGTransaction);
-  bufferlist a, b;
-  t->create(h);
+  PGTransaction::ObjectOperation op;
+  bufferlist a;
 
-  // two nearby writes, both partly touching the same 8192-byte stripe
-  ECUtil::stripe_info_t sinfo(2, 8192, 0, std::vector<int>());
-  a.append_zero(565760);
-  t->write(h, 0, a.length(), a, 0);
-  b.append_zero(2437120);
-  t->write(h, 569856, b.length(), b, 0);
+  // Start by writing 8 bytes to the start of an object.
+  a.append_zero(8);
+  op.buffer_updates.insert(0, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
 
-  auto plan = ECTransaction::get_write_plan(
-    sinfo,
-    *t,
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
-      return ref;
-    },
-    &dpp);
-  generic_derr << "to_read " << plan.to_read << dendl;
-  generic_derr << "will_write " << plan.will_write << dendl;
+  ECUtil::stripe_info_t sinfo(2, 8192, 1, std::vector<int>(0));
+  object_info_t oi;
+  oi.size = 8;
+  ECTransaction::WritePlanObj plan(
+  op,
+  sinfo,
+  0,
+  oi,
+  std::nullopt,
+  ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
+  nullptr);
 
-  ASSERT_EQ(0u, plan.to_read.size());
-  ASSERT_EQ(1u, plan.will_write.size());
+  generic_derr << "plan " << plan << dendl;
+
+  // The object is empty, so we should have no reads and an 4k write.
+  ASSERT_FALSE(plan.to_read);
+  extent_set ref_write;
+  ref_write.insert(0, 4096);
+  ASSERT_EQ(2u, plan.will_write.size());
+  ASSERT_EQ(ref_write, plan.will_write.at(0));
+  ASSERT_EQ(ref_write, plan.will_write.at(2));
 }
 
-TEST(ectransaction, many_writes)
+TEST(ectransaction, overlapping_write_non_aligned)
 {
   hobject_t h;
-  PGTransactionUPtr t(new PGTransaction);
-  bufferlist a, b;
-  a.append_zero(512);
-  b.append_zero(4096);
-  t->create(h);
+  PGTransaction::ObjectOperation op;
+  bufferlist a;
 
-  ECUtil::stripe_info_t sinfo(2, 8192, 0, std::vector<int>(0));
-  // write 2801664~512
-  // write 2802176~512
-  // write 2802688~512
-  // write 2803200~512
-  t->write(h, 2801664, a.length(), a, 0);
-  t->write(h, 2802176, a.length(), a, 0);
-  t->write(h, 2802688, a.length(), a, 0);
-  t->write(h, 2803200, a.length(), a, 0);
+  // Start by writing 8 bytes to the start of an object.
+  a.append_zero(8);
+  op.buffer_updates.insert(0, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
 
-  // write 2805760~4096
-  // write 2809856~4096
-  // write 2813952~4096
-  t->write(h, 2805760, b.length(), b, 0);
-  t->write(h, 2809856, b.length(), b, 0);
-  t->write(h, 2813952, b.length(), b, 0);
-
-  auto plan = ECTransaction::get_write_plan(
+  ECUtil::stripe_info_t sinfo(2, 8192, 1, std::vector<int>(0));
+  object_info_t oi;
+  oi.size = 8;
+  ECTransaction::WritePlanObj plan(
+    op,
     sinfo,
-    *t,
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
-      return ref;
-    },
-    &dpp);
-  generic_derr << "to_read " << plan.to_read << dendl;
-  generic_derr << "will_write " << plan.will_write << dendl;
+    8,
+    oi,
+    std::nullopt,
+    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
+    nullptr);
 
-  ASSERT_EQ(0u, plan.to_read.size());
-  ASSERT_EQ(1u, plan.will_write.size());
+  generic_derr << "plan " << plan << dendl;
+
+  // There should be no overlap of this read.
+  ASSERT_EQ(1u, (*plan.to_read).size());
+  extent_set ref;
+  ref.insert(0, 4096);
+  ASSERT_EQ(2u, plan.will_write.size());
+  ASSERT_EQ(1u, (*plan.to_read).size());
+  ASSERT_EQ(ref, plan.will_write.at(0));
+  ASSERT_EQ(ref, plan.will_write.at(2));
 }
+
+TEST(ectransaction, test_appending_write_non_aligned)
+{
+  hobject_t h;
+  PGTransaction::ObjectOperation op;
+  bufferlist a;
+
+  // Start by writing 8 bytes to the start of an object.
+  a.append_zero(4096);
+  op.buffer_updates.insert(3*4096, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
+
+  ECUtil::stripe_info_t sinfo(2, 8192, 1, std::vector<int>(0));
+  object_info_t oi;
+  oi.size = 4*4096;
+  ECTransaction::WritePlanObj plan(
+    op,
+    sinfo,
+    8,
+    oi,
+    std::nullopt,
+    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
+    nullptr);
+
+  generic_derr << "plan " << plan << dendl;
+
+  // There should be an overlapping read, as we need to write zeros to the
+  // empty part.
+  std::map<int, extent_set> ref_read;
+  ref_read[0].insert(0, 4096);
+  ASSERT_EQ(ref_read, *plan.to_read);
+
+  // The writes will cover the new zero parts.
+  std::map<int, extent_set> ref_write;
+  ref_write[0].insert(4096, 4096);
+  ref_write[1].insert(0, 8192);
+  ref_write[2].insert(0, 8192);
+  ASSERT_EQ(ref_write, plan.will_write);
+}
+

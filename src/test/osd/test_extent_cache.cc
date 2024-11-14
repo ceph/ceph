@@ -14,269 +14,275 @@
 
 
 #include <gtest/gtest.h>
-#include "osd/ExtentCache.h"
-#include <iostream>
+#include "osd/ECExtentCache.h"
 
 using namespace std;
+using namespace ECExtentCache;
+using namespace ECUtil;
 
-extent_map imap_from_vector(vector<pair<uint64_t, uint64_t> > &&in)
+shard_extent_map_t imap_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&in, stripe_info_t const *sinfo)
 {
-  extent_map out;
-  for (auto &&tup: in) {
-    bufferlist bl;
-    bl.append_zero(tup.second);
-    out.insert(tup.first, bl.length(), bl);
+  shard_extent_map_t out(sinfo);
+  for (int shard = 0; shard < (int)in.size(); shard++) {
+    for (auto &&tup: in[shard]) {
+      bufferlist bl;
+      bl.append_zero(tup.second);
+      out.insert_in_shard(shard, tup.first, bl);
+    }
   }
   return out;
 }
 
-extent_map imap_from_iset(const extent_set &set)
+shard_extent_map_t imap_from_iset(const map<int, extent_set> &sset, stripe_info_t *sinfo)
 {
-  extent_map out;
-  for (auto &&iter: set) {
-    bufferlist bl;
-    bl.append_zero(iter.second);
-    out.insert(iter.first, iter.second, bl);
+  shard_extent_map_t out(sinfo);
+
+  for (auto &&[shard, set]: sset) {
+    for (auto &&iter: set) {
+      bufferlist bl;
+      bl.append_zero(iter.second);
+      out.insert_in_shard(shard, iter.first, bl);
+    }
   }
   return out;
 }
 
-extent_set iset_from_vector(vector<pair<uint64_t, uint64_t> > &&in)
+map<int, extent_set> iset_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&in)
 {
-  extent_set out;
-  for (auto &&tup: in) {
-    out.insert(tup.first, tup.second);
+  map<int, extent_set> out;
+  for (int shard = 0; shard < (int)in.size(); shard++) {
+    for (auto &&tup: in[shard]) {
+      out[shard].insert(tup.first, tup.second);
+    }
   }
   return out;
 }
 
-TEST(extentcache, simple_write)
+struct Client : public BackendRead, public CacheReady
 {
   hobject_t oid;
+  stripe_info_t sinfo;
+  LRU lru;
+  optional<map<int, extent_set>> active_reads;
+  optional<shard_extent_map_t> result;
 
-  ExtentCache c;
-  ExtentCache::write_pin pin;
-  c.open_write_pin(pin);
+  Client(uint64_t chunk_size, int k, int m, uint64_t cache_size) :
+    sinfo(k, chunk_size * k, m, vector<int>(0)),
+    lru(*this, cache_size) {};
 
-  auto to_read = iset_from_vector(
-    {{0, 2}, {8, 2}, {20, 2}});
-  auto to_write = iset_from_vector(
-    {{0, 10}, {20, 4}});
-  auto must_read = c.reserve_extents_for_rmw(
-    oid, pin, to_write, to_read);
-  ASSERT_EQ(
-    must_read,
-    to_read);
+  void backend_read(hobject_t _oid, const map<int, extent_set>& request) override
+  {
+    ceph_assert(oid == _oid);
+    active_reads = request;
+  }
+  void cache_ready(hobject_t& _oid, shard_extent_map_t& _result) override
+  {
+    ceph_assert(oid == _oid);
 
-  c.print(std::cerr);
+    if (!_result.empty())
+      result = _result;
+  }
 
-  auto got = imap_from_iset(must_read);
-  auto pending_read = to_read;
-  pending_read.subtract(must_read);
+  void complete_read()
+  {
+    auto reads_done = imap_from_iset(*active_reads, &sinfo);
+    active_reads.reset(); // set before done, as may be called back.
+    lru.read_done(oid, std::move(reads_done));
+  }
 
-  auto pending = c.get_remaining_extents_for_rmw(
-    oid,
-    pin,
-    pending_read);
-  ASSERT_TRUE(pending.empty());
+  void complete_write(OpRef &op)
+  {
+    shard_extent_map_t emap = imap_from_iset(op->get_writes(), &sinfo);
+    //Fill in the parity. Parity correctness does not matter to the cache.
+    emap.insert_parity_buffers();
+    result.reset();
+    lru.write_done(op, std::move(emap));
+  }
 
-  auto write_map = imap_from_iset(to_write);
-  c.present_rmw_update(
-    oid,
-    pin,
-    write_map);
+  void commit_write(OpRef &op)
+  {
+    lru.complete(op);
+  }
+};
 
-  c.release_write_pin(pin);
+TEST(ECExtentCache, simple_write)
+{
+  Client cl(32, 2, 1, 64);
+  {
+    OpRef op(new Op(cl));
+
+    auto to_read = iset_from_vector( {{{0, 2}}, {{0, 2}}});
+    auto to_write = iset_from_vector({{{0, 10}}, {{0, 10}}});
+
+    cl.lru.request(op, cl.oid, to_read, to_write, &cl.sinfo);
+    ASSERT_EQ(to_read, cl.active_reads);
+    ASSERT_FALSE(cl.result);
+    cl.complete_read();
+
+    ASSERT_FALSE(cl.active_reads);
+    ASSERT_EQ(to_read, cl.result->get_extent_set_map());
+    cl.complete_write(op);
+
+    ASSERT_FALSE(cl.active_reads);
+    ASSERT_FALSE(cl.result);
+    cl.commit_write(op);
+  }
+
+  // Repeating the same read should complete without a backend read..
+  {
+    OpRef op(new Op(cl));
+    auto to_read = iset_from_vector( {{{0, 2}}, {{0, 2}}});
+    auto to_write = iset_from_vector({{{0, 10}}, {{0, 10}}});
+    cl.lru.request(op, cl.oid, to_read, to_write, &cl.sinfo);
+    ASSERT_FALSE(cl.active_reads);
+    ASSERT_TRUE(cl.result);
+    ASSERT_EQ(to_read, cl.result->get_extent_set_map());
+    cl.complete_write(op);
+    cl.commit_write(op);
+  }
+
+  // Perform a read overlapping with the previous write, but not hte previous read.
+  // This should not result in any backend reads, since the cache can be honoured
+  // from the previous write.
+  {
+    OpRef op(new Op(cl));
+    auto to_read = iset_from_vector( {{{2, 2}}, {{2, 2}}});
+    auto to_write = iset_from_vector({{{0, 10}}, {{0, 10}}});
+    cl.lru.request(op, cl.oid, to_read, to_write, &cl.sinfo);
+    ASSERT_FALSE(cl.active_reads);
+    ASSERT_EQ(to_read, cl.result->get_extent_set_map());
+    cl.complete_write(op);
+    cl.commit_write(op);
+  }
 }
 
-TEST(extentcache, write_write_overlap)
+TEST(ECExtentCache, multiple_writes)
 {
-  hobject_t oid;
+  Client cl(32, 2, 1, 32);
+  OpRef op1(new Op(cl));
 
-  ExtentCache c;
-  ExtentCache::write_pin pin;
-  c.open_write_pin(pin);
+  auto to_read1 = iset_from_vector( {{{0, 2}}});
+  auto to_write1 = iset_from_vector({{{0, 10}}});
 
-  // start write 1
-  auto to_read = iset_from_vector(
-    {{0, 2}, {8, 2}, {20, 2}});
-  auto to_write = iset_from_vector(
-    {{0, 10}, {20, 4}});
-  auto must_read = c.reserve_extents_for_rmw(
-    oid, pin, to_write, to_read);
-  ASSERT_EQ(
-    must_read,
-    to_read);
+  // This should drive a request for this IO, which we do not yet honour.
+  cl.lru.request(op1, cl.oid, to_read1, to_write1, &cl.sinfo);
+  ASSERT_EQ(to_read1, cl.active_reads);
+  ASSERT_FALSE(cl.result);
 
-  c.print(std::cerr);
+  // Perform another request. We should not see any change in the read requests.
+  OpRef op2(new Op(cl));
+  auto to_read2 = iset_from_vector( {{{8, 4}}});
+  auto to_write2 = iset_from_vector({{{10, 10}}});
+  cl.lru.request(op2, cl.oid, to_read2, to_write2, &cl.sinfo);
+  ASSERT_EQ(to_read1, cl.active_reads);
+  ASSERT_FALSE(cl.result);
 
-  // start write 2
-  ExtentCache::write_pin pin2;
-  c.open_write_pin(pin2);
-  auto to_read2 = iset_from_vector(
-    {{2, 4}, {10, 4}, {18, 4}});
-  auto to_write2 = iset_from_vector(
-    {{2, 12}, {18, 12}});
-  auto must_read2 = c.reserve_extents_for_rmw(
-    oid, pin2, to_write2, to_read2);
-  ASSERT_EQ(
-    must_read2,
-    iset_from_vector({{10, 4}, {18, 2}}));
+  // Perform another request, this to check that reads are coalesced.
+  OpRef op3(new Op(cl));
+  auto to_read3 = iset_from_vector( {{{32, 6}}});
+  auto to_write3 = iset_from_vector({{}, {{40, 0}}});
+  cl.lru.request(op3, cl.oid, to_read3, to_write3, &cl.sinfo);
+  ASSERT_EQ(to_read1, cl.active_reads);
+  ASSERT_FALSE(cl.result);
 
-  c.print(std::cerr);
+  // Finally op4, with no reads.
+  OpRef op4(new Op(cl));
+  auto to_write4 = iset_from_vector({{{20, 10}}});
+  cl.lru.request(op4, cl.oid, nullopt, to_write4, &cl.sinfo);
+  ASSERT_EQ(to_read1, cl.active_reads);
+  ASSERT_FALSE(cl.result);
 
-  // complete read for write 1 and start commit
-  auto got = imap_from_iset(must_read);
-  auto pending_read = to_read;
-  pending_read.subtract(must_read);
-  auto pending = c.get_remaining_extents_for_rmw(
-    oid,
-    pin,
-    pending_read);
-  ASSERT_TRUE(pending.empty());
+  // Completing the first read will allow the first write and start a batched read.
+  // Note that the cache must not read what was written in op 1.
+  cl.complete_read();
+  auto expected_read = iset_from_vector({{{10,2}, {32,6}}});
+  ASSERT_EQ(expected_read, cl.active_reads);
+  ASSERT_EQ(to_read1, cl.result->get_extent_set_map());
+  cl.complete_write(op1);
 
-  auto write_map = imap_from_iset(to_write);
-  c.present_rmw_update(
-    oid,
-    pin,
-    write_map);
+  // The next write requires some more reads, so should not occur.
+  ASSERT_FALSE(cl.result);
 
-  c.print(std::cerr);
+  // All reads complete, this should allow for op2 to be ready.
+  cl.complete_read();
+  ASSERT_FALSE(cl.active_reads);
+  ASSERT_EQ(to_read2, cl.result->get_extent_set_map());
+  cl.complete_write(op2);
 
-  // complete read for write 2 and start commit
-  auto pending_read2 = to_read2;
-  pending_read2.subtract(must_read2);
-  auto pending2 = c.get_remaining_extents_for_rmw(
-    oid,
-    pin2,
-    pending_read2);
-  ASSERT_EQ(
-    pending2,
-    imap_from_iset(pending_read2));
+  // Since no further reads are required op3 and op4 should occur immediately.
+  ASSERT_TRUE(cl.result);
+  ASSERT_EQ(to_read3, cl.result->get_extent_set_map());
+  cl.complete_write(op3);
 
-  auto write_map2 = imap_from_iset(to_write2);
-  c.present_rmw_update(
-    oid,
-    pin2,
-    write_map2);
+  // No write data for op 4.
+  ASSERT_FALSE(cl.result);
+  cl.complete_write(op4);
 
-  c.print(std::cerr);
-
-  c.release_write_pin(pin);
-
-  c.print(std::cerr);
-
-  c.release_write_pin(pin2);
+  cl.commit_write(op1);
+  cl.commit_write(op2);
+  cl.commit_write(op3);
+  cl.commit_write(op4);
 }
 
-TEST(extentcache, write_write_overlap2)
+TEST(ECExtentCache, multiple_lru_frees)
 {
-  hobject_t oid;
+  Client cl(32, 2, 1, 64);
 
-  ExtentCache c;
-  ExtentCache::write_pin pin;
-  c.open_write_pin(pin);
-
-  // start write 1
-  auto to_read = extent_set();
-  auto to_write = iset_from_vector(
-    {{659456, 4096}});
-  auto must_read = c.reserve_extents_for_rmw(
-    oid, pin, to_write, to_read);
-  ASSERT_EQ(
-    must_read,
-    to_read);
-
-  c.print(std::cerr);
-
-  // start write 2
-  ExtentCache::write_pin pin2;
-  c.open_write_pin(pin2);
-  auto to_read2 = extent_set();
-  auto to_write2 = iset_from_vector(
-    {{663552, 4096}});
-  auto must_read2 = c.reserve_extents_for_rmw(
-    oid, pin2, to_write2, to_read2);
-  ASSERT_EQ(
-    must_read2,
-    to_read2);
+  /* Perform two writes which fill up the cache (over-fill) */
+  auto to_read = iset_from_vector({{{0, 32}}});
+  auto to_write = iset_from_vector({{{0, 32}}});
+  OpRef op1(new Op(cl));
+  cl.lru.request(op1, cl.oid, to_read, to_write, &cl.sinfo);
+  cl.complete_read();
+  ASSERT_FALSE(cl.active_reads);
+  ASSERT_EQ(to_read, cl.result->get_extent_set_map());
+  cl.complete_write(op1);
 
 
-  // start write 3
-  ExtentCache::write_pin pin3;
-  c.open_write_pin(pin3);
-  auto to_read3 = iset_from_vector({{659456, 8192}});
-  auto to_write3 = iset_from_vector({{659456, 8192}});
-  auto must_read3 = c.reserve_extents_for_rmw(
-    oid, pin3, to_write3, to_read3);
-  ASSERT_EQ(
-    must_read3,
-    extent_set());
+  auto to_read2 = iset_from_vector({{{32, 32}}});
+  auto to_write2 = iset_from_vector({{{32, 32}}});
+  OpRef op2(new Op(cl));
+  cl.lru.request(op2, cl.oid, to_read2, to_write2, &cl.sinfo);
+  cl.complete_read();
+  ASSERT_FALSE(cl.active_reads);
+  ASSERT_EQ(to_read2, cl.result->get_extent_set_map());
+  cl.complete_write(op2);
 
-  c.print(std::cerr);
+  // Since we have not commited the op, both cache lines are cached.
+  auto to_read3 = iset_from_vector({{{10, 2}, {40,2}}});
+  auto to_write3 = iset_from_vector({{{0, 64}}});
+  OpRef op3(new Op(cl));
+  cl.lru.request(op3, cl.oid, to_read3, to_write3, &cl.sinfo);
+  ASSERT_FALSE(cl.active_reads);
+  ASSERT_EQ(to_read3, cl.result->get_extent_set_map());
+  cl.complete_write(op3);
 
-  // complete read for write 1 and start commit
-  auto got = imap_from_iset(must_read);
-  auto pending_read = to_read;
-  pending_read.subtract(must_read);
-  auto pending = c.get_remaining_extents_for_rmw(
-    oid,
-    pin,
-    pending_read);
-  ASSERT_TRUE(pending.empty());
+  // commit the first two writes... The third IO should still be
+  // locking the cache lines.
+  cl.commit_write(op1);
+  cl.commit_write(op2);
 
-  auto write_map = imap_from_iset(to_write);
-  c.present_rmw_update(
-    oid,
-    pin,
-    write_map);
+  // Since we have not commited the op, both cache lines are cached.
+  auto to_read4 = iset_from_vector({{{12, 2}, {42,2}}});
+  auto to_write4 = iset_from_vector({{{0, 64}}});
+  OpRef op4(new Op(cl));
+  cl.lru.request(op4, cl.oid, to_read4, to_write4, &cl.sinfo);
+  ASSERT_FALSE(cl.active_reads);
+  ASSERT_EQ(to_read4, cl.result->get_extent_set_map());
+  cl.complete_write(op4);
 
-  c.print(std::cerr);
+  // commit everything, this should release the first cache line.
+  cl.commit_write(op3);
+  cl.commit_write(op4);
 
-  // complete read for write 2 and start commit
-  auto pending_read2 = to_read2;
-  pending_read2.subtract(must_read2);
-  auto pending2 = c.get_remaining_extents_for_rmw(
-    oid,
-    pin2,
-    pending_read2);
-  ASSERT_EQ(
-    pending2,
-    imap_from_iset(pending_read2));
-
-  auto write_map2 = imap_from_iset(to_write2);
-  c.present_rmw_update(
-    oid,
-    pin2,
-    write_map2);
-
-  // complete read for write 2 and start commit
-  auto pending_read3 = to_read3;
-  pending_read3.subtract(must_read3);
-  auto pending3 = c.get_remaining_extents_for_rmw(
-    oid,
-    pin3,
-    pending_read3);
-  ASSERT_EQ(
-    pending3,
-    imap_from_iset(pending_read3));
-
-  auto write_map3 = imap_from_iset(to_write3);
-  c.present_rmw_update(
-    oid,
-    pin3,
-    write_map3);
-
-
-  c.print(std::cerr);
-
-  c.release_write_pin(pin);
-
-  c.print(std::cerr);
-
-  c.release_write_pin(pin2);
-
-  c.print(std::cerr);
-
-  c.release_write_pin(pin3);
+  // Now the same read as before will have to request the first cache line.
+  cl.lru.request(op4, cl.oid, to_read4, to_write4, &cl.sinfo);
+  auto ref = iset_from_vector({{{12, 2}}});
+  ASSERT_EQ(ref, cl.active_reads);
+  ASSERT_FALSE(cl.result);
+  cl.complete_read();
+  ASSERT_FALSE(cl.active_reads);
+  ASSERT_EQ(to_read4, cl.result->get_extent_set_map());
+  cl.complete_write(op4);
+  cl.commit_write(op4);
 }
