@@ -3586,6 +3586,19 @@ public:
   void debug_set_prefer_deferred_size(uint64_t s) {
     prefer_deferred_size = s;
   }
+  void set_tracepoint_debug_deferred_replay_start(std::function<void()> action) {
+    tracepoint_debug_deferred_replay_start = action;
+  }
+  void set_tracepoint_debug_deferred_replay_end(std::function<void()> action) {
+    tracepoint_debug_deferred_replay_end = action;
+  }
+  void set_tracepoint_debug_deferred_replay_track(
+    std::function<void(const bluestore_deferred_transaction_t&)> action) {
+    tracepoint_debug_deferred_replay_track = action;
+  }
+  void set_tracepoint_debug_init_alloc_done(std::function<void()> action) {
+    tracepoint_debug_init_alloc_done = action;
+  }
   inline void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,
@@ -3601,6 +3614,11 @@ public:
     int idx2 = l_bluestore_first);
 
 private:
+  std::function<void()> tracepoint_debug_deferred_replay_start = nullptr;
+  std::function<void()> tracepoint_debug_deferred_replay_end = nullptr;
+  std::function<void(const bluestore_deferred_transaction_t&)>
+    tracepoint_debug_deferred_replay_track = nullptr;
+  std::function<void()> tracepoint_debug_init_alloc_done = nullptr;
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;
