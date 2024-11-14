@@ -662,6 +662,8 @@ public:
 			 bool* truncated, list_parts_each_t each_func,
 			 optional_yield y) override;
 
+  bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
+                         const ceph::real_time& obj_mtime) override;
   virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			    Attrs* delattrs, optional_yield y, uint32_t flags) override;

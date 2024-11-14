@@ -782,8 +782,10 @@ public:
   virtual bool is_prefetch_data() override { return next->is_prefetch_data(); }
   virtual void set_compressed() override { return next->set_compressed(); }
   virtual bool is_compressed() override { return next->is_compressed(); }
-  virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
-    const ceph::real_time& obj_mtime) override { return next->is_sync_completed(dpp, obj_mtime); }
+  bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
+                         const ceph::real_time& obj_mtime) override {
+    return next->is_sync_completed(dpp, y, obj_mtime);
+  }
   virtual void invalidate() override { return next->invalidate(); }
   virtual bool empty() const override { return next->empty(); }
   virtual const std::string &get_name() const override { return next->get_name(); }

@@ -2907,6 +2907,12 @@ int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
   return -EOPNOTSUPP;
 }
 
+bool POSIXObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
+                                    const ceph::real_time& obj_mtime)
+{
+  return false;
+}
+
 int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
   int ret = stat(dpp);

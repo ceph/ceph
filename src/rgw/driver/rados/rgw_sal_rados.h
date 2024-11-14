@@ -593,8 +593,8 @@ class RadosObject : public StoreObject {
       StoreObject::set_compressed();
     }
 
-    virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
-      const ceph::real_time& obj_mtime) override;
+    bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
+                           const ceph::real_time& obj_mtime) override;
     /* For rgw_admin.cc */
     RGWObjState& get_state() { return state; }
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
