@@ -440,21 +440,6 @@ void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
                         const std::string& marker, uint32_t max,
                         cls_rgw_bi_log_list_ret *pdata, int *ret = nullptr);
 
-class CLSRGWIssueBILogList : public CLSRGWConcurrentIO {
-  std::map<int, cls_rgw_bi_log_list_ret>& result;
-  BucketIndexShardsManager& marker_mgr;
-  uint32_t max;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueBILogList(librados::IoCtx& io_ctx, BucketIndexShardsManager& _marker_mgr, uint32_t _max,
-                       std::map<int, std::string>& oids,
-                       std::map<int, cls_rgw_bi_log_list_ret>& bi_log_lists, uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(bi_log_lists),
-    marker_mgr(_marker_mgr), max(_max) {}
-  virtual ~CLSRGWIssueBILogList() override {}
-};
-
 void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
                         const std::string& start_marker,
                         const std::string& end_marker);

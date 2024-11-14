@@ -623,21 +623,6 @@ void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
   op.exec(RGW_CLASS, RGW_BI_LOG_LIST, in, new ClsBucketIndexOpCtx<cls_rgw_bi_log_list_ret>(pdata, ret));
 }
 
-static bool issue_bi_log_list_op(librados::IoCtx& io_ctx, const string& oid, const int shard_id,
-                                 BucketIndexShardsManager& marker_mgr, uint32_t max,
-                                 BucketIndexAioManager *manager,
-                                 cls_rgw_bi_log_list_ret *pdata)
-{
-  librados::ObjectReadOperation op;
-  cls_rgw_bilog_list(op, marker_mgr.get(shard_id, ""), max, pdata, nullptr);
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-int CLSRGWIssueBILogList::issue_op(const int shard_id, const string& oid)
-{
-  return issue_bi_log_list_op(io_ctx, oid, shard_id, marker_mgr, max, &manager, &result[shard_id]);
-}
-
 void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
                         const std::string& start_marker,
                         const std::string& end_marker)
