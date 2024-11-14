@@ -20,7 +20,7 @@ void RGWSI_BILog_RADOS::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
   svc.bi = bi_rados_svc;
 }
 
-int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp,
+int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
 				const RGWBucketInfo& bucket_info,
 				const rgw::bucket_log_layout_generation& log_layout,
 				int shard_id,

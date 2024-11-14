@@ -10704,7 +10704,7 @@ next:
     if (!gen) {
       gen = 0;
     }
-    ret = bilog_trim(dpp(), static_cast<rgw::sal::RadosStore*>(driver),
+    ret = bilog_trim(dpp(), null_yield, static_cast<rgw::sal::RadosStore*>(driver),
 		     bucket->get_info(), *gen,
 		     shard_id, start_marker, end_marker);
     if (ret < 0) {

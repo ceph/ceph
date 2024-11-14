@@ -641,7 +641,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = bilog_trim(this, static_cast<rgw::sal::RadosStore*>(driver),
+  op_ret = bilog_trim(this, y, static_cast<rgw::sal::RadosStore*>(driver),
 		      bucket->get_info(), gen, shard_id,
 		      start_marker, end_marker);
   if (op_ret < 0) {
