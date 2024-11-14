@@ -1,0 +1,22 @@
+@use './src/styles/chart-tooltip';
+
+$canvas-width: 100%;
+$canvas-height: 100%;
+
+.chart-container {
+  height: $canvas-height;
+  margin-left: auto;
+  margin-right: auto;
+  position: unset;
+  width: $canvas-width;
+}
+
+.chart-canvas {
+  height: $canvas-height;
+  margin-left: auto;
+  margin-right: auto;
+  max-height: $canvas-height;
+  max-width: $canvas-width;
+  position: unset;
+  width: $canvas-width;
+}
