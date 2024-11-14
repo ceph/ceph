@@ -41,12 +41,17 @@ CEPH_SHA1=${CEPH_SHA1:-$(git rev-parse HEAD)}
 # default: build host arch
 ARCH=${ARCH:-$(arch)}
 if [[ "${ARCH}" == "aarch64" ]] ; then ARCH=arm64; fi
+REPO_ARCH=amd64
+if [[ "${ARCH}" = arm64 ]] ; then
+    REPO_ARCH=arm64
+fi
+
 if [[ ${CI_CONTAINER} == "true" ]] ; then
     CONTAINER_REPO_HOSTNAME=${CONTAINER_REPO_HOSTNAME:-quay.ceph.io}
-    CONTAINER_REPO_ORGANIZATION=${CONTAINER_REPO_ORGANIZATION:-ceph/ceph-${ARCH}}
+    CONTAINER_REPO_ORGANIZATION=${CONTAINER_REPO_ORGANIZATION:-ceph-ci/ceph}
 else
-    CONTAINER_REPO_HOSTNAME=${CONTAINER_REPO_HOSTNAME:-quay.io}
-    CONTAINER_REPO_ORGANIZATION=${CONTAINER_REPO_ORGANIZATION:-ceph/ceph}
+    CONTAINER_REPO_HOSTNAME=${CONTAINER_REPO_HOSTNAME:-quay.ceph.io}
+    CONTAINER_REPO_ORGANIZATION=${CONTAINER_REPO_ORGANIZATION:-ceph/prerelease-${REPO_ARCH}}
     # default: most-recent annotated tag
     VERSION=${VERSION:-$(git describe --abbrev=0)}
 fi
@@ -61,7 +66,7 @@ fi
 : "${CONTAINER_REPO_ORGANIZATION:?}"
 : "${CONTAINER_REPO_USERNAME:?}"
 : "${CONTAINER_REPO_PASSWORD:?}"
-if [[ ${CI_CONTAINER} != "true" ]] ; then ${VERSION:?}; fi
+if [[ ${CI_CONTAINER} != "true" ]] ; then : "${VERSION:?}"; fi
 
 # check for valid repo auth (if pushing)
 ORGURL=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}
@@ -162,13 +167,13 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
 else
     #
     # non-CI build.  Tags are like v19.1.0-20240701
-    # push to quay.ceph.io/ceph/prerelease
+    # push to quay.ceph.io/ceph/prerelease-$REPO_ARCH
     #
-    version_tag=${repopath}/prerelease/ceph-${ARCH}:${VERSION}-${builddate}
+    version_tag=${repopath}/prerelease-${REPO_ARCH}:v${VERSION}-${builddate}
 
     podman tag ${image_id} ${version_tag}
     if [[ -z "${NO_PUSH}" ]] ; then
-        podman push ${image_id} ${version_tag}
+        podman push ${version_tag}
     fi
 fi
 
