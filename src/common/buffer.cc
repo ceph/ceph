@@ -944,69 +944,41 @@ static ceph::spinlock debug_lock;
   template class buffer::list::iterator_impl<true>;
   template class buffer::list::iterator_impl<false>;
 
-  buffer::list::iterator::iterator(bl_t *l, unsigned o)
-    : iterator_impl(l, o)
-  {}
-
-  buffer::list::iterator::iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
-    : iterator_impl(l, o, ip, po)
-  {}
-
-  void buffer::list::iterator::copy_in(unsigned len, const ptr& bp)
+  // copy data in
+  void buffer::list_rw::iterator::copy_in(unsigned len, const char *src, bool crc_reset)
   {
-    const auto orig_len = len;
-    if (len == 0) {
-      return;
-    }
-    list_iter_t prev_p; // = ls->before_begin();
-    if (p == ls->end()) {
+    // copy
+    if (p == ls->end())
       seek(off);
-    }
-    // punch hole
     while (len > 0) {
-      if (p == ls->end()) {
-	throw end_of_buffer();
-      }
-      const unsigned available_in_p = p->length() - p_off;
-      const unsigned take_from_p = std::min(available_in_p, len);
-      const unsigned residue_in_p = available_in_p - take_from_p;
+      if (p == ls->end())
+        throw end_of_buffer();
 
-      if (residue_in_p > 0) {
-        // link the residual part of last existing buffer we punched
-        // the hole thorugh. this can happen at the last iteration
-        // only
-        ls->insert_after(p,
-          *ptr_node::create(*p, p_off + take_from_p, residue_in_p).release());
-        ++bl->_num;
-      }
+      unsigned howmuch = p->length() - p_off;
+      if (len < howmuch)
+        howmuch = len;
+      p->copy_in(p_off, howmuch, src, crc_reset);
 
-      // this will create a potentially non-zero ptr at the beginning
-      // of the hole -- this is the only case when a non-zero can appear
-      p->set_length(p->length() - take_from_p);
-
-      len -= take_from_p;
-      prev_p = p++;
-      p_off = 0;
-    }
-    // link the node
-    ls->insert_after(prev_p, *ptr_node::create(bp, 0, orig_len).release());
-    off += orig_len;
-    ++bl->_num;
-  }
-
-  void buffer::list::iterator::copy_in(unsigned len, const list& otherl)
-  {
-    for (const auto& node: otherl._buffers) {
-      const unsigned round_len = std::min(len, node.length());
-      copy_in(round_len, node);
-      len -= round_len;
+      src += howmuch;
+      len -= howmuch;
+      *this += howmuch;
     }
   }
 
-  void buffer::list::iterator::copy_in(unsigned len, const char *src, bool crc_reset)
+  void buffer::list_rw::iterator::copy_in(unsigned len, const list& otherl)
   {
-    ptr_rw newbuf(src, len);
-    copy_in(len, newbuf);
+    if (p == ls->end())
+      seek(off);
+    unsigned left = len;
+    for (const auto& node : otherl.buffers()) {
+      unsigned l = node.length();
+      if (left < l)
+        l = left;
+      copy_in(l, node.c_str());
+      left -= l;
+      if (left == 0)
+        break;
+    }
   }
 
   // -- buffer::list --
@@ -1559,8 +1531,12 @@ static ceph::spinlock debug_lock;
       _num += 1;
       len -= round_size;
     }
+  }
 
-#if 0
+  void buffer::list_rw::append_zero(unsigned len)
+  {
+    _len += len;
+
     const unsigned free_in_last = get_append_buffer_unused_tail_length();
     const unsigned first_round = std::min(len, free_in_last);
     if (first_round) {
@@ -1579,7 +1555,6 @@ static ceph::spinlock debug_lock;
       new_back.set_length(second_round);
       new_back.zero(false);
     }
-#endif
   }
 
   

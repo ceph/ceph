@@ -67,18 +67,18 @@ public:
     }
   };
 
-  class Reference : public ReferenceImpl<bufferlist::iterator> {
+  class Reference : public ReferenceImpl<buffer::list_rw::iterator> {
   public:
     Reference& operator=(uint8_t v);
 
   private:
     friend class BitVector;
 
-    Reference(const bufferlist::iterator& data_iterator, uint64_t shift)
-      : ReferenceImpl<bufferlist::iterator>(data_iterator, shift) {
+    Reference(const buffer::list_rw::iterator& data_iterator, uint64_t shift)
+      : ReferenceImpl<buffer::list_rw::iterator>(data_iterator, shift) {
     }
-    Reference(bufferlist::iterator&& data_iterator, uint64_t shift)
-      : ReferenceImpl<bufferlist::iterator>(std::move(data_iterator), shift) {
+    Reference(buffer::list_rw::iterator&& data_iterator, uint64_t shift)
+      : ReferenceImpl<buffer::list_rw::iterator>(std::move(data_iterator), shift) {
     }
   };
 
@@ -151,9 +151,9 @@ public:
   };
 
   typedef IteratorImpl<const BitVector,
-                       bufferlist::const_iterator,
+                       buffer::list_rw::const_iterator,
                        ConstReference> ConstIterator;
-  typedef IteratorImpl<BitVector, bufferlist::iterator, Reference> Iterator;
+  typedef IteratorImpl<BitVector, buffer::list_rw::iterator, Reference> Iterator;
 
   static const uint32_t BLOCK_SIZE;
   static const uint8_t BIT_COUNT = _bit_count;
@@ -181,7 +181,7 @@ public:
   void resize(uint64_t elements);
   uint64_t size() const;
 
-  const bufferlist& get_data() const;
+  const buffer::list_rw& get_data() const;
 
   Reference operator[](uint64_t offset);
   ConstReference operator[](uint64_t offset) const;
@@ -221,7 +221,7 @@ public:
 
   static void generate_test_instances(std::list<BitVector *> &o);
 private:
-  bufferlist m_data;
+  buffer::list_rw m_data;
   uint64_t m_size;
   bool m_crc_enabled;
 
@@ -268,10 +268,10 @@ void BitVector<_b>::resize(uint64_t size, bool zero) {
     if (zero) {
       m_data.append_zero(buffer_size - m_data.length());
     } else {
-      m_data.append(buffer::ptr(buffer_size - m_data.length()));
+      m_data.append(buffer::ptr_rw(buffer_size - m_data.length()));
     }
   } else if (buffer_size < m_data.length()) {
-    bufferlist bl;
+    buffer::list_rw bl;
     bl.substr_of(m_data, 0, buffer_size);
     bl.swap(m_data);
   }
@@ -287,7 +287,7 @@ uint64_t BitVector<_b>::size() const {
 }
 
 template <uint8_t _b>
-const bufferlist& BitVector<_b>::get_data() const {
+const buffer::list_rw& BitVector<_b>::get_data() const {
   return m_data;
 }
 
@@ -343,7 +343,7 @@ void BitVector<_b>::encode_data(bufferlist& bl, uint64_t data_byte_offset,
                                       end_offset - data_byte_offset);
 
     bufferlist bit;
-    bit.substr_of(m_data, data_byte_offset, len);
+    bit.substr_of(buffer::list_rw::to_bl(m_data), data_byte_offset, len);
     m_data_crcs[data_byte_offset / BLOCK_SIZE].val = bit.crc32c(0);
 
     bl.claim_append(bit);
@@ -364,7 +364,7 @@ void BitVector<_b>::decode_data(bufferlist::const_iterator& it,
     throw buffer::end_of_buffer();
   }
 
-  bufferlist data;
+  buffer::list_rw data;
   if (data_byte_offset > 0) {
     data.substr_of(m_data, 0, data_byte_offset);
   }
@@ -372,7 +372,7 @@ void BitVector<_b>::decode_data(bufferlist::const_iterator& it,
   while (data_byte_offset < end_offset) {
     uint64_t len = std::min<uint64_t>(BLOCK_SIZE, end_offset - data_byte_offset);
 
-    bufferlist bit;
+    buffer::list_rw bit;
     bit.append(it.copy_deep(len));
     if (m_crc_enabled &&
 	m_data_crcs[data_byte_offset / BLOCK_SIZE].val != bit.crc32c(0)) {
@@ -383,7 +383,7 @@ void BitVector<_b>::decode_data(bufferlist::const_iterator& it,
   }
 
   if (m_data.length() > end_offset) {
-    bufferlist tail;
+    buffer::list_rw tail;
     tail.substr_of(m_data, end_offset, m_data.length() - end_offset);
     data.append(tail);
   }
@@ -586,7 +586,7 @@ typename BitVector<_b>::Reference BitVector<_b>::operator[](uint64_t offset) {
   uint64_t shift;
   compute_index(offset, &index, &shift);
 
-  bufferlist::iterator data_iterator(m_data.begin());
+  buffer::list_rw::iterator data_iterator(m_data.begin());
   data_iterator.seek(index);
   return Reference(std::move(data_iterator), shift);
 }
@@ -607,7 +607,7 @@ typename BitVector<_b>::Reference& BitVector<_b>::Reference::operator=(uint8_t v
   uint8_t mask = MASK << this->m_shift;
   char packed_value = (*this->m_data_iterator & ~mask) |
                       ((v << this->m_shift) & mask);
-  bufferlist::iterator it(this->m_data_iterator);
+  buffer::list_rw::iterator it(this->m_data_iterator);
   it.copy_in(1, &packed_value, true);
   return *this;
 }

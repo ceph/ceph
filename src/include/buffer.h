@@ -682,8 +682,7 @@ struct error_code;
       }
     };
 
-  private:
-    // my private bits
+  protected:
     buffers_t _buffers;
 
     // track bufferptr we can modify (especially ::append() to). Not all bptrs
@@ -776,18 +775,7 @@ struct error_code;
 
   public:
     typedef iterator_impl<true> const_iterator;
-
-    class CEPH_BUFFER_API iterator : public iterator_impl<false> {
-      void copy_in(unsigned len, const ptr& otherp);
-
-    public:
-      iterator() = default;
-      iterator(bl_t *l, unsigned o=0);
-      iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
-      // copy data in
-      void copy_in(unsigned len, const char *src, bool crc_reset = true);
-      void copy_in(unsigned len, const list& otherl);
-    };
+    typedef const_iterator iterator;
 
     struct reserve_t {
       char* bp_data;
@@ -972,6 +960,10 @@ struct error_code;
     // This is useful for e.g. get_append_buffer_unused_tail_length() as
     // it allows to avoid conditionals on hot paths.
     static ptr_node always_empty_bptr;
+
+    static ptr always_zeroed_bptr;
+
+  protected:
     ptr_node& refill_append_space(const unsigned len);
 
     // for page_aligned_appender; never ever expose this publicly!
@@ -979,8 +971,6 @@ struct error_code;
     ptr& get_append_buffer() {
       return *_carriage;
     }
-
-    static ptr always_zeroed_bptr;
 
   public:
     // cons/des
@@ -1163,13 +1153,6 @@ struct error_code;
     operator seastar::net::packet() &&;
 #endif
 
-    iterator begin(size_t offset=0) {
-      return iterator(this, offset);
-    }
-    iterator end() {
-      return iterator(this, _len, _buffers.end(), 0);
-    }
-
     const_iterator begin(size_t offset=0) const {
       return const_iterator(this, offset);
     }
@@ -1277,6 +1260,101 @@ struct error_code;
     static list static_from_string(std::string& s);
   };
 
+  class CEPH_BUFFER_API list_rw : private list {
+  public:
+    struct CEPH_BUFFER_API iterator : public iterator_impl<false> {
+      iterator() = default;
+      iterator(list_rw *l, unsigned o=0)
+        : iterator_impl(static_cast<list*>(l), o) {
+      }
+      iterator(list_rw *l, unsigned o, list_iter_t ip, unsigned po)
+        : iterator_impl(static_cast<list*>(l), o, ip, po) {
+      }
+      // copy data in
+      void copy_in(unsigned len, const char *src, bool crc_reset = true);
+      void copy_in(unsigned len, const list& otherl);
+    };
+
+    using list::const_iterator;
+    using list::reserve_t;
+    using list::contiguous_appender;
+    using list::contiguous_filler;
+    using list::page_aligned_appender;
+
+    using list::get_contiguous_appender;
+    using list::get_page_aligned_appender;
+
+  public:
+    using list::list;
+    list_rw(const list&) = delete;
+    list_rw(list&&) = delete;
+
+
+    using list::get_wasted_space;
+    using list::get_num_buffers;
+    const ptr_rw& front() const { return _buffers.front(); }
+    const ptr_rw& back() const { return _buffers.back(); }
+    void swap(list_rw& other) noexcept {
+      list::swap(static_cast<list&>(other));
+    }
+    using list::length;
+    using list::clear;
+
+    iterator begin(size_t offset=0) {
+      return iterator(this, offset);
+    }
+    iterator end() {
+      return iterator(this, _len, _buffers.end(), 0);
+    }
+
+    const_iterator begin(size_t offset=0) const {
+      return const_iterator(this, offset);
+    }
+    const_iterator cbegin(size_t offset=0) const {
+      return begin(offset);
+    }
+    const_iterator end() const {
+      return const_iterator(this, _len, _buffers.end(), 0);
+    }
+
+    void append(const ptr_rw& bp) {
+      list::append(static_cast<const ptr&>(bp));
+    }
+    void append(ptr_rw&& bp) {
+      list::append(static_cast<ptr&&>(bp));
+    }
+    void append_zero(unsigned len);
+      // cannot use the 0dedup as the aggregated ptrs CAN be modified
+    void append(const list_rw& bl) {
+      list::append(static_cast<const list&>(bl));
+    }
+
+    /*
+     * get a char
+     */
+    const char& operator[](unsigned n) const {
+      return list::operator[](n);
+    }
+    char* data(); // may return null if bl contains non-writeable buffers
+    const char *c_str();
+
+    void substr_of(const list_rw& other, unsigned off, unsigned len) {
+      list::substr_of(static_cast<const list&>(other), off, len);
+    }
+
+    uint32_t crc32c(uint32_t crc) const {
+      return list::crc32c(crc);
+    }
+    void invalidate_crc() {
+      list::invalidate_crc();
+    }
+
+    static list to_bl(const list_rw& bl) {
+      return static_cast<const list&>(bl);
+    }
+    std::ostream& operator<<(std::ostream& out) const;
+  };
+
 } // inline namespace v15_2_0
 
   /*
@@ -1301,6 +1379,11 @@ struct error_code;
   };
 
 inline bool operator==(const bufferlist &lhs, const bufferlist &rhs) {
+  if (lhs.length() != rhs.length())
+    return false;
+  return std::equal(lhs.begin(), lhs.end(), rhs.begin());
+}
+inline bool operator==(const buffer::list_rw &lhs, const buffer::list_rw &rhs) {
   if (lhs.length() != rhs.length())
     return false;
   return std::equal(lhs.begin(), lhs.end(), rhs.begin());
@@ -1339,6 +1422,14 @@ std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp);
 std::ostream& operator<<(std::ostream& out, const buffer::raw &r);
 
 std::ostream& operator<<(std::ostream& out, const buffer::list& bl);
+
+inline std::ostream& operator<<(std::ostream& out, const buffer::list_rw& bl) {
+  return bl.operator<<(out);
+}
+
+inline std::ostream& buffer::list_rw::operator<<(std::ostream& out) const {
+  return out << static_cast<const list&>(*this);
+}
 
 inline bufferhash& operator<<(bufferhash& l, const bufferlist &r) {
   l.update(r);
