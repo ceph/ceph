@@ -451,7 +451,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_list(s, bucket->get_info(), log_layout, shard_id,
+    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_list(s, y, bucket->get_info(), log_layout, shard_id,
                                                marker, max_entries - count,
                                                entries, &truncated);
     if (ret < 0) {

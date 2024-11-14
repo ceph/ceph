@@ -138,7 +138,7 @@ static void build_bucket_index_marker(const string& shard_id_str,
   }
 }
 
-int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp,
+int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp, optional_yield y,
 				const RGWBucketInfo& bucket_info,
 				const rgw::bucket_log_layout_generation& log_layout,
 				int shard_id, string& marker, uint32_t max,

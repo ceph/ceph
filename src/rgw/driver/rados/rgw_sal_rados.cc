@@ -2507,7 +2507,7 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
 
   const int shard_id = RGWSI_BucketIndex_RADOS::bucket_shard_index(get_key(), shard_count);
 
-  int ret = store->svc()->bilog_rados->log_list(dpp, bucket_info, log_layout, shard_id,
+  int ret = store->svc()->bilog_rados->log_list(dpp, y, bucket_info, log_layout, shard_id,
     marker, 1, entries, &truncated);
 
   if (ret < 0) {
