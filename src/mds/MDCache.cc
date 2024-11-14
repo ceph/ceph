@@ -7911,7 +7911,9 @@ void MDCache::shutdown_start()
 bool MDCache::shutdown_pass()
 {
   dout(5) << "shutdown_pass" << dendl;
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_START);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_START);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_START)
+    _exit(120);
 
   if (mds->is_stopped()) {
     dout(5) << " already shut down" << dendl;
@@ -7926,7 +7928,9 @@ bool MDCache::shutdown_pass()
   // trim cache
   trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTTRIM);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTTRIM);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_POSTTRIM)
+    _exit(120);
 
   // Export all subtrees to another active (usually rank 0) if not rank 0
   int num_auth_subtree = 0;
@@ -7957,11 +7961,15 @@ bool MDCache::shutdown_pass()
 	dest = 0;
       dout(5) << "sending " << *dir << " back to mds." << dest << dendl;
       migrator->export_dir_nicely(dir, dest);
-      ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTONEEXPORT);
+      //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTONEEXPORT);
+      if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_POSTONEEXPORT)
+        _exit(120);
     }
   }
 
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTALLEXPORTS);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTALLEXPORTS);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_POSTALLEXPORTS)
+    _exit(120);
 
   if (!strays_all_exported) {
     dout(5) << "waiting for strays to migrate" << dendl;
@@ -7981,7 +7989,9 @@ bool MDCache::shutdown_pass()
       mds->server->terminate_sessions();
     return false;
   }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_SESSIONTERMINATE);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_SESSIONTERMINATE);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_SESSIONTERMINATE)
+    _exit(120);
 
   // Fully trim the log so that all objects in cache are clean and may be
   // trimmed by a future MDCache::trim. Note that MDSRank::tick does not
@@ -7994,7 +8004,9 @@ bool MDCache::shutdown_pass()
       auto sle = create_subtree_map();
       mds->mdlog->submit_entry(sle);
       mds->mdlog->flush();
-      ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_SUBTREEMAP);
+      //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_SUBTREEMAP);
+      if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_SUBTREEMAP)
+        _exit(120);
     }
   }
   mds->mdlog->trim_all();
@@ -8002,7 +8014,9 @@ bool MDCache::shutdown_pass()
     dout(5) << "still >1 segments, waiting for log to trim" << dendl;
     return false;
   }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_TRIMALL);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_TRIMALL);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_TRIMALL)
+    _exit(120);
 
   // drop our reference to our stray dir inode
   for (int i = 0; i < NUM_STRAY; ++i) {
@@ -8013,7 +8027,9 @@ bool MDCache::shutdown_pass()
       strays[i]->put_stickydirs();
     }
   }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_STRAYPUT);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_STRAYPUT);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_STRAYPUT)
+    _exit(120);
 
   CDir *mydir = myin ? myin->get_dirfrag(frag_t()) : NULL;
   if (mydir && !mydir->is_subtree_root())
@@ -8050,7 +8066,9 @@ bool MDCache::shutdown_pass()
     mds->mdlog->submit_entry(new ELid());
     mds->mdlog->flush();
     mds->mdlog->cap();
-    ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_LOGCAP);
+    //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_LOGCAP);
+    if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_LOGCAP)
+      _exit(120);
     return false;
   }
 
@@ -8081,19 +8099,25 @@ bool MDCache::shutdown_pass()
     myin->close_dirfrag(mydir->get_frag());
   }
   ceph_assert(subtrees.empty());
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_EMPTYSUBTREES);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_EMPTYSUBTREES);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_EMPTYSUBTREES)
+    _exit(120);
 
   if (myin) {
     remove_inode(myin);
     ceph_assert(!myin);
   }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_MYINREMOVAL);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_MYINREMOVAL);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_MYINREMOVAL)
+    _exit(120);
 
   if (global_snaprealm) {
     remove_inode(global_snaprealm->inode);
     global_snaprealm = nullptr;
   }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_GLOBALSNAPREALMREMOVAL);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_GLOBALSNAPREALMREMOVAL);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_GLOBALSNAPREALMREMOVAL)
+    _exit(120);
   
   // done!
   dout(5) << "shutdown done." << dendl;
@@ -11789,7 +11813,9 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
 
 void MDCache::fragment_freeze_dirs(const std::vector<CDir*>& dirs)
 {
-  ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_FREEZE);
+  //ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_FREEZE);
+  if (kill_dirfrag_at == dirfrag_killpoint::FRAGMENT_FREEZE)
+    _exit(120);
   bool any_subtree = false, any_non_subtree = false;
   for (const auto& dir : dirs) {
     dir->auth_pin(dir);  // until we mark and complete them
@@ -12206,7 +12232,9 @@ void MDCache::_fragment_logged(const MDRequestRef& mdr)
 
   dout(10) << "fragment_logged " << basedirfrag << " bits " << info.bits
 	   << " on " << *diri << dendl;
-  ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_LOGGED);
+  //ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_LOGGED);
+  if (kill_dirfrag_at == dirfrag_killpoint::FRAGMENT_LOGGED)
+    _exit(120);
 
   mdr->mark_event("prepare logged");
 
@@ -12282,7 +12310,9 @@ void MDCache::_fragment_stored(const MDRequestRef& mdr)
     }
 
     mds->send_message_mds(notify, p.first);
-    ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_STORED_POST_NOTIFY);
+    //ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_STORED_POST_NOTIFY);
+    if (kill_dirfrag_at == dirfrag_killpoint::FRAGMENT_STORED_POST_NOTIFY)
+    _exit(120);
   }
 
   // journal commit
@@ -12305,7 +12335,9 @@ void MDCache::_fragment_stored(const MDRequestRef& mdr)
     dir->unfreeze_dir();
   }
 
-  ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_STORED_POST_JOURNAL);
+  //ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_STORED_POST_JOURNAL);
+  if (kill_dirfrag_at == dirfrag_killpoint::FRAGMENT_STORED_POST_JOURNAL)
+    _exit(120);
 
   if (info.notify_ack_waiting.empty()) {
     fragment_drop_locks(info);
@@ -12317,7 +12349,9 @@ void MDCache::_fragment_stored(const MDRequestRef& mdr)
 void MDCache::_fragment_committed(dirfrag_t basedirfrag, const MDRequestRef& mdr)
 {
   dout(10) << "fragment_committed " << basedirfrag << dendl;
-  ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_COMMITTED);
+  //ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_COMMITTED);
+  if (kill_dirfrag_at == dirfrag_killpoint::FRAGMENT_COMMITTED)
+    _exit(120);
 
   if (mdr)
     mdr->mark_event("commit logged");
@@ -12357,7 +12391,9 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, const MDRequestRef& mdr
 void MDCache::_fragment_old_purged(dirfrag_t basedirfrag, int bits, const MDRequestRef& mdr)
 {
   dout(10) << "fragment_old_purged " << basedirfrag << dendl;
-  ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_OLD_PURGED);
+  //ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_OLD_PURGED);
+  if (kill_dirfrag_at == dirfrag_killpoint::FRAGMENT_OLD_PURGED)
+    _exit(120);
 
   if (mdr)
     mdr->mark_event("old frags purged");
@@ -12395,7 +12431,9 @@ void MDCache::fragment_drop_locks(fragment_info_t& info)
 
 MDCache::fragment_info_iterator MDCache::fragment_maybe_finish(const fragment_info_iterator it)
 {
-  ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_MAYBE_FINISH);
+  //ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_MAYBE_FINISH);
+  if (kill_dirfrag_at == dirfrag_killpoint::FRAGMENT_MAYBE_FINISH)
+    _exit(120);
 
   if (!it->second.finishing)
     return it;
@@ -12419,7 +12457,9 @@ MDCache::fragment_info_iterator MDCache::fragment_maybe_finish(const fragment_in
 void MDCache::handle_fragment_notify_ack(const cref_t<MMDSFragmentNotifyAck> &ack)
 {
   dout(10) << "handle_fragment_notify_ack " << *ack << " from " << ack->get_source() << dendl;
-  ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_HANDLE_NOTIFY_ACK);
+  //ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_HANDLE_NOTIFY_ACK);
+  if (kill_dirfrag_at == dirfrag_killpoint::FRAGMENT_HANDLE_NOTIFY_ACK)
+    _exit(120);
   mds_rank_t from = mds_rank_t(ack->get_source().num());
 
   if (mds->get_state() < MDSMap::STATE_ACTIVE) {
@@ -12443,7 +12483,9 @@ void MDCache::handle_fragment_notify_ack(const cref_t<MMDSFragmentNotifyAck> &ac
 void MDCache::handle_fragment_notify(const cref_t<MMDSFragmentNotify> &notify)
 {
   dout(10) << "handle_fragment_notify " << *notify << " from " << notify->get_source() << dendl;
-  ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_HANDLE_NOTIFY);
+  //ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_HANDLE_NOTIFY);
+  if (kill_dirfrag_at == dirfrag_killpoint::FRAGMENT_HANDLE_NOTIFY)
+    _exit(120);
   mds_rank_t from = mds_rank_t(notify->get_source().num());
 
   if (mds->get_state() < MDSMap::STATE_REJOIN) {
@@ -12491,7 +12533,9 @@ void MDCache::handle_fragment_notify(const cref_t<MMDSFragmentNotify> &notify)
     auto ack = make_message<MMDSFragmentNotifyAck>(notify->get_base_dirfrag(),
 					     notify->get_bits(), notify->get_tid());
     mds->send_message_mds(ack, from);
-    ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_HANDLE_NOTIFY_POSTACK);
+    //ceph_assert(kill_dirfrag_at != dirfrag_killpoint::FRAGMENT_HANDLE_NOTIFY_POSTACK);
+    if (kill_dirfrag_at == dirfrag_killpoint::FRAGMENT_HANDLE_NOTIFY_POSTACK)
+    _exit(120);
   }
 }
 
