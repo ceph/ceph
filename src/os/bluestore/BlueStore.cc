@@ -7334,7 +7334,7 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
           << ", free 0x" << alloc->get_free()
           << ", fragmentation " << alloc->get_fragmentation()
           << std::dec << dendl;
-
+  dtr_init_alloc_done();
   return 0;
 }
 
@@ -15447,6 +15447,7 @@ int BlueStore::_deferred_replay()
     fake_ch = true;
   }
   OpSequencer *osr = static_cast<OpSequencer*>(ch->osr.get());
+  dtr_deferred_replay_start();
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_DEFERRED);
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
     dout(20) << __func__ << " replay " << pretty_binary_string(it->key())
@@ -15466,6 +15467,7 @@ int BlueStore::_deferred_replay()
     }
     bool has_some = _eliminate_outdated_deferred(deferred_txn, bluefs_extents);
     if (has_some) {
+      dtr_deferred_replay_track(*deferred_txn);
       TransContext *txc = _txc_create(ch.get(), osr,  nullptr);
       txc->deferred_txn = deferred_txn;
       txc->set_state(TransContext::STATE_KV_DONE);
@@ -15478,6 +15480,7 @@ int BlueStore::_deferred_replay()
   dout(20) << __func__ << " draining osr" << dendl;
   _osr_register_zombie(osr);
   _osr_drain_all();
+  dtr_deferred_replay_end();
   if (fake_ch) {
     new_coll_map.clear();
   }
