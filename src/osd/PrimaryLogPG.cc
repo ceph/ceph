@@ -60,6 +60,7 @@
 #include "osd/scrubber/pg_scrubber.h"
 #include "ECInject.h"
 
+#include "BloomHitSet.h"
 #include "OSD.h"
 #include "OpRequest.h"
 #include "PG.h"

@@ -91,6 +91,9 @@
 
 #include "auth/cephx/CephxKeyServer.h"
 #include "osd/OSDCap.h"
+#include "osd/BloomHitSet.h"
+#include "osd/ExplicitHashHitSet.h"
+#include "osd/ExplicitObjectHitSet.h"
 
 #include "json_spirit/json_spirit_reader.h"
 
