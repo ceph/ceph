@@ -42,7 +42,8 @@ namespace ceph {
       SEQUENCE_SEQ7,
       SEQUENCE_SEQ8,
       SEQUENCE_SEQ9,
-      //
+      SEQUENCE_SEQ10,
+
       SEQUENCE_END,
       SEQUENCE_BEGIN = SEQUENCE_SEQ0
     };
@@ -60,14 +61,20 @@ namespace ceph {
     public:
       virtual ~IoSequence() = default;
 
+      virtual Sequence get_id() const = 0;
+      virtual std::string get_name_with_seqseed() const;
       virtual std::string get_name() const = 0;
       int get_step() const;
       int get_seed() const;
 
-      std::unique_ptr<IoOp> next();
+      virtual Sequence getNextSupportedSequenceId() const;
+      virtual std::unique_ptr<IoOp> next();
 
+      virtual bool is_supported(Sequence sequence) const;
       static std::unique_ptr<IoSequence>
-        generate_sequence(Sequence s, std::pair<int,int> obj_size_range, int seed );
+        generate_sequence(Sequence s,
+                          std::pair<int,int> obj_size_range,
+                          int seed );
 
     protected:
       uint64_t min_obj_size;
@@ -90,13 +97,13 @@ namespace ceph {
       void set_max_object_size(uint64_t size);
       void select_random_object_size();
       std::unique_ptr<IoOp> increment_object_size();
-
     };
 
     class Seq0: public IoSequence {
     public:
       Seq0(std::pair<int,int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
       std::string get_name() const override;
       std::unique_ptr<IoOp> _next() override;
 
@@ -105,24 +112,26 @@ namespace ceph {
       uint64_t length;
     };
 
-    class Seq1: public IoSequence {  
+    class Seq1: public IoSequence {
     public:
       Seq1(std::pair<int,int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
       std::string get_name() const override;
-      std::unique_ptr<IoOp> _next();
+      std::unique_ptr<IoOp> _next() override;
 
     private:
       int count;
     };
-      
+
     class Seq2: public IoSequence {
     public:
       Seq2(std::pair<int,int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
       std::string get_name() const override;
       std::unique_ptr<IoOp> _next() override;
-    
+
     private:
       uint64_t offset;
       uint64_t length;
@@ -132,6 +141,7 @@ namespace ceph {
     public:
       Seq3(std::pair<int,int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
       std::string get_name() const override;
       std::unique_ptr<IoOp> _next() override;
     private:
@@ -143,6 +153,7 @@ namespace ceph {
     public:
       Seq4(std::pair<int,int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
       std::string get_name() const override;
       std::unique_ptr<IoOp> _next() override;
 
@@ -155,6 +166,7 @@ namespace ceph {
     public:
       Seq5(std::pair<int,int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
       std::string get_name() const override;
       std::unique_ptr<IoOp> _next() override;
 
@@ -169,6 +181,7 @@ namespace ceph {
     public:
       Seq6(std::pair<int,int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
       std::string get_name() const override;
       std::unique_ptr<IoOp> _next() override;
 
@@ -183,6 +196,7 @@ namespace ceph {
     public:
       Seq7(std::pair<int,int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
       std::string get_name() const override;
       std::unique_ptr<IoOp> _next() override;
 
@@ -196,6 +210,7 @@ namespace ceph {
     public:
       Seq8(std::pair<int,int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
       std::string get_name() const override;
       std::unique_ptr<IoOp> _next() override;
     private:
@@ -215,8 +230,8 @@ namespace ceph {
     public:
       Seq9(std::pair<int,int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
       std::string get_name() const override;
-
       std::unique_ptr<IoOp> _next() override;
     };
   }

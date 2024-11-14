@@ -9,9 +9,13 @@
 #include "common/io_exerciser/IoSequence.h"
 #include "common/io_exerciser/Model.h"
 
+#include "common/split.h"
+
 #include "librados/librados_asio.h"
 
 #include <boost/program_options.hpp>
+
+#include <optional>
 
 /* Overview
  *
@@ -222,7 +226,8 @@ namespace ceph
                                      io_sequence::tester::chunkSizeChoices>
     {
     public:
-      SelectErasureChunkSize(ceph::util::random_number_generator<int>& rng, po::variables_map vm);
+      SelectErasureChunkSize(ceph::util::random_number_generator<int>& rng,
+                             po::variables_map vm);
     };
 
     class SelectECPool
@@ -234,8 +239,19 @@ namespace ceph
       SelectECPool(ceph::util::random_number_generator<int>& rng,
                    po::variables_map vm,
                    librados::Rados& rados,
-                   bool dry_run);
+                   bool dry_run,
+                   bool allow_pool_autoscaling,
+                   bool allow_pool_balancer,
+                   bool allow_pool_deep_scrubbing,
+                   bool allow_pool_scrubbing);
       const std::string choose() override;
+
+      bool get_allow_pool_autoscaling() { return allow_pool_autoscaling; }
+      bool get_allow_pool_balancer() { return allow_pool_balancer; }
+      bool get_allow_pool_deep_scrubbing() { return allow_pool_deep_scrubbing; }
+      bool get_allow_pool_scrubbing() { return allow_pool_scrubbing; }
+      int getChosenK() const { return k; }
+      int getChosenM() const { return m; }
 
     private:
       void create_pool(librados::Rados& rados,
@@ -247,7 +263,13 @@ namespace ceph
     protected:
       librados::Rados& rados;
       bool dry_run;
-      
+      bool allow_pool_autoscaling;
+      bool allow_pool_balancer;
+      bool allow_pool_deep_scrubbing;
+      bool allow_pool_scrubbing;
+      int k;
+      int m;
+
       SelectErasureKM skm;
       SelectErasurePlugin spl;
       SelectErasureChunkSize scs;
@@ -269,7 +291,8 @@ namespace ceph
                   ceph::condition_variable& cond,
                   bool dryrun,
                   bool verbose,
-                  std::optional<int>  seqseed);
+                  std::optional<int>  seqseed,
+                  bool testRecovery);
       
       int get_num_io();
       bool readyForIo();
@@ -288,6 +311,9 @@ namespace ceph
       ceph::util::random_number_generator<int>& rng;
       bool verbose;
       std::optional<int> seqseed;
+      int poolK;
+      int poolM;
+      bool testrecovery;
     };
 
     class TestRunner
@@ -323,21 +349,35 @@ namespace ceph
       std::optional<int> seqseed;
       bool interactive;
 
+      bool testrecovery;
+
+      bool allow_pool_autoscaling;
+      bool allow_pool_balancer;
+      bool allow_pool_deep_scrubbing;
+      bool allow_pool_scrubbing;
+
       bool show_sequence;
       bool show_help;
 
       int num_objects;
       std::string object_name;
 
+      std::string line;
+      ceph::split split = ceph::split("");
+      ceph::spliterator tokens;
+
+      void clear_tokens();
       std::string get_token();
+      std::optional<std::string> get_optional_token();
       uint64_t get_numeric_token();
+      std::optional<uint64_t> get_optional_numeric_token();
 
       bool run_automated_test();
 
       bool run_interactive_test();
 
       void help();
-      void list_sequence();
+      void list_sequence(bool testrecovery);
     };
   }
 }
