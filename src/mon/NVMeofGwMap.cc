@@ -16,7 +16,9 @@
 #include "NVMeofGwMon.h"
 #include "NVMeofGwMap.h"
 #include "OSDMonitor.h"
+#include "mon/health_check.h"
 
+using std::list;
 using std::map;
 using std::make_pair;
 using std::ostream;
@@ -892,6 +894,47 @@ struct CMonRequestProposal : public Context {
     }
   }
 };
+
+void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const 
+{
+  list<string> singleGatewayDetail;
+  list<string> gatewayDownDetail;
+  for (const auto& created_map_pair: created_gws) {
+    const auto& group_key = created_map_pair.first;
+    auto& group = group_key.second;
+    const NvmeGwMonStates& gw_created_map = created_map_pair.second;
+    if ( gw_created_map.size() == 1) {
+      ostringstream ss;
+      ss << "NVMeoF Gateway Group '" << group << "' has 1 gateway." ;
+      singleGatewayDetail.push_back(ss.str());
+    }
+    for (const auto& gw_created_pair: gw_created_map) {
+      const auto& gw_id = gw_created_pair.first;
+      const auto& gw_created  = gw_created_pair.second;
+      if (gw_created.availability == gw_availability_t::GW_UNAVAILABLE) {
+        ostringstream ss;
+        ss << "NVMeoF Gateway '" << gw_id << "' is unavailable." ;
+        gatewayDownDetail.push_back(ss.str());
+      }
+    }
+  }
+  if (!singleGatewayDetail.empty()) {
+    ostringstream ss;
+    ss << singleGatewayDetail.size() << " group(s) have only 1 nvmeof gateway"
+      << "; HA is not possible with single gateway.";
+    auto& d = checks->add("NVMEOF_SINGLE_GATEWAY", HEALTH_WARN,
+        ss.str(), singleGatewayDetail.size());
+    d.detail.swap(singleGatewayDetail);
+  }
+  if (!gatewayDownDetail.empty()) {
+    ostringstream ss;
+    ss << gatewayDownDetail.size() << " gateway(s) are in unavailable state"
+      << "; gateway might be down, try to redeploy.";
+    auto& d = checks->add("NVMEOF_GATEWAY_DOWN", HEALTH_WARN,
+        ss.str(), gatewayDownDetail.size());
+    d.detail.swap(gatewayDownDetail);
+  }
+}
 
 int NVMeofGwMap::blocklist_gw(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
