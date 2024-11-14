@@ -1953,6 +1953,7 @@ private:
 
   feature_bitset_t myfeatures;
 
+  bool client_permissions;
   bool fuse_default_permissions;
 };
 
