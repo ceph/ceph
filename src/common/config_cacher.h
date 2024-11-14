@@ -50,10 +50,6 @@ public:
     conf.remove_observer(this);
   }
 
-  operator ValueT() const {
-    return value_cache.load();
-  }
-
   ValueT operator*() const {
     return value_cache.load();
   }
