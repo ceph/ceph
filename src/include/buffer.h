@@ -1272,7 +1272,8 @@ struct error_code;
       }
       // copy data in
       void copy_in(unsigned len, const char *src, bool crc_reset = true);
-      void copy_in(unsigned len, const list& otherl);
+      void copy_in(unsigned len, const list& otherl); // must copy!
+      void copy_in(unsigned len, const list_rw& otherl);
     };
 
     using list::const_iterator;
@@ -1340,6 +1341,9 @@ struct error_code;
 
     void substr_of(const list_rw& other, unsigned off, unsigned len) {
       list::substr_of(static_cast<const list&>(other), off, len);
+    }
+    void share_substr_with(unsigned off, unsigned len, list& other) {
+      other.substr_of(static_cast<list&>(*this), off, len);
     }
 
     uint32_t crc32c(uint32_t crc) const {

@@ -965,6 +965,9 @@ static ceph::spinlock debug_lock;
     }
   }
 
+  // I assume the copy_in for regular `buffer::list` does deep copy.
+  // This is essential as the read-only ptrs bl could have taken
+  // shall never ever be exposed-for-modify through bl_rw.
   void buffer::list_rw::iterator::copy_in(unsigned len, const list& otherl)
   {
     if (p == ls->end())
@@ -979,6 +982,10 @@ static ceph::spinlock debug_lock;
       if (left == 0)
         break;
     }
+  }
+  void buffer::list_rw::iterator::copy_in(unsigned len, const list_rw& otherl)
+  {
+    return copy_in(len, static_cast<const list&>(otherl));
   }
 
   // -- buffer::list --

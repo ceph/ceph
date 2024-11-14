@@ -631,7 +631,7 @@ int CryptoObjectDispatch<I>::prepare_copyup(
     return 0;
   }
 
-  ceph::bufferlist current_bl;
+  ceph::buffer::list_rw current_bl;
   current_bl.append_zero(m_image_ctx->get_object_size());
 
   for (auto& [key, extent_map]: *snapshot_sparse_bufferlist) {
@@ -641,7 +641,7 @@ int CryptoObjectDispatch<I>::prepare_copyup(
       if (sbe.state == io::SPARSE_EXTENT_STATE_DATA) {
         current_bl.begin(extent.get_off()).copy_in(extent.get_len(), sbe.bl);
       } else if (sbe.state == io::SPARSE_EXTENT_STATE_ZEROED) {
-        ceph::bufferlist zeros;
+        ceph::buffer::list_rw zeros;
         zeros.append_zero(extent.get_len());
         current_bl.begin(extent.get_off()).copy_in(extent.get_len(), zeros);
       }
@@ -660,7 +660,7 @@ int CryptoObjectDispatch<I>::prepare_copyup(
       uint64_t position = 0;
       for (auto [image_offset, image_length]: image_extents) {
         ceph::bufferlist aligned_bl;
-        aligned_bl.substr_of(current_bl, aligned_off + position, image_length);
+        current_bl.share_substr_with(aligned_off + position, image_length, aligned_bl);
         aligned_bl.rebuild(); // to deep copy aligned_bl from current_bl
         position += image_length;
 
