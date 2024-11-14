@@ -459,28 +459,6 @@ void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
                         const std::string& start_marker,
                         const std::string& end_marker);
 
-class CLSRGWIssueBILogTrim : public CLSRGWConcurrentIO {
-  BucketIndexShardsManager& start_marker_mgr;
-  BucketIndexShardsManager& end_marker_mgr;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-  // Trim until -ENODATA is returned.
-  int valid_ret_code() override { return -ENODATA; }
-  bool need_multiple_rounds() override { return true; }
-  void add_object(int shard, const std::string& oid) override { objs_container[shard] = oid; }
-  void reset_container(std::map<int, std::string>& objs) override {
-    objs_container.swap(objs);
-    iter = objs_container.begin();
-    objs.clear();
-  }
-public:
-  CLSRGWIssueBILogTrim(librados::IoCtx& io_ctx, BucketIndexShardsManager& _start_marker_mgr,
-      BucketIndexShardsManager& _end_marker_mgr, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio),
-    start_marker_mgr(_start_marker_mgr), end_marker_mgr(_end_marker_mgr) {}
-  virtual ~CLSRGWIssueBILogTrim() override {}
-};
-
 class CLSRGWIssueReshardLogTrim : public CLSRGWConcurrentIO {
 protected:
   int issue_op(int shard_id, const std::string& oid) override;

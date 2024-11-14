@@ -651,21 +651,6 @@ void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
   op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
 }
 
-static bool issue_bi_log_trim(librados::IoCtx& io_ctx, const string& oid, const int shard_id,
-                              BucketIndexShardsManager& start_marker_mgr,
-                              BucketIndexShardsManager& end_marker_mgr, BucketIndexAioManager *manager) {
-  cls_rgw_bi_log_trim_op call;
-  librados::ObjectWriteOperation op;
-  cls_rgw_bilog_trim(op, start_marker_mgr.get(shard_id, ""),
-                     end_marker_mgr.get(shard_id, ""));
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-int CLSRGWIssueBILogTrim::issue_op(const int shard_id, const string& oid)
-{
-  return issue_bi_log_trim(io_ctx, oid, shard_id, start_marker_mgr, end_marker_mgr, &manager);
-}
-
 static bool issue_reshard_log_trim(librados::IoCtx& io_ctx, const string& oid, int shard_id,
                                    BucketIndexAioManager *manager) {
   bufferlist in;
