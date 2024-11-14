@@ -17,6 +17,7 @@
 
 #include "osd_types.h"
 #include "osd_perf_counters.h"
+#include "BloomHitSet.h"
 
 #include <algorithm>
 #include <list>
