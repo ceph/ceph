@@ -942,7 +942,6 @@ public:
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<MDSMap> mdsmap;
 
-  bool fuse_default_permissions;
   bool _collect_and_send_global_metrics;
 
 protected:
@@ -1953,6 +1952,8 @@ private:
   std::vector<MDSCapAuth> cap_auths;
 
   feature_bitset_t myfeatures;
+
+  bool fuse_default_permissions;
 };
 
 /**
