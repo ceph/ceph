@@ -268,9 +268,10 @@ seastar::future<> ClientRequest::with_pg_process(
 	       *pgref, *this, this_instance_id, eptr);
     }, pgref, pgref->get_osdmap_epoch()).finally(
       [this, FNAME, opref=std::move(opref), pgref,
-       this_instance_id, instance_handle=std::move(instance_handle), &ihref] {
+       this_instance_id, instance_handle=std::move(instance_handle), &ihref]() mutable {
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
-	ihref.handle.exit();
+	return ihref.handle.complete(
+	).finally([instance_handle=std::move(instance_handle)] {});
     });
 }
 
