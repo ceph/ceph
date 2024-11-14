@@ -393,11 +393,18 @@ public:
     const std::vector<OSDOp>& ops,
     SnapMapper& snap_mapper,
     OSDriver& osdriver);
-  void fill_op_params(modified_by m);
   pg_log_entry_t prepare_head_update(
     const std::vector<OSDOp>& ops,
     ceph::os::Transaction &txn);
 
+  void check_init_op_params(OpsExecuter::modified_by m) {
+    if (!osd_op_params) {
+      osd_op_params.emplace();
+      osd_op_params->req_id = msg->get_reqid();
+      osd_op_params->mtime = msg->get_mtime();
+      osd_op_params->user_modify = (m == modified_by::user);
+    }
+  }
 
   ObjectContextRef get_obc() const {
     return obc;
