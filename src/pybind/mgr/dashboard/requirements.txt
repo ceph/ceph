@@ -1,12 +1,12 @@
 bcrypt
-CherryPy
+CherryPy==18.10.0
 more-itertools
 pyopenssl
 requests
 Routes
 -e ../../../python-common
 prettytable
-pytest==7.0.1
+pytest==8.3.3
 pyyaml
 natsort
 setuptools
