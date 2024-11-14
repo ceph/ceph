@@ -3,10 +3,12 @@
 
 #pragma once
 
-#include <optional>
-
 #include "ConfigMap.h"
 #include "mon/PaxosService.h"
+
+#include <map>
+#include <optional>
+#include <string>
 
 class MonSession;
 
