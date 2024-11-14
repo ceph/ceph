@@ -23,6 +23,7 @@
 #include <sstream>
 #include "common/config.h"
 #include "common/cmdparse.h"
+#include "crush/CrushWrapper.h"
 
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
