@@ -933,6 +933,13 @@ public:
     return std::make_pair(opened_inodes, inode_map.size());
   }
 
+  void set_is_fuse() {
+    is_fuse = true;
+  }
+  bool get_fuse_default_permissions() const {
+    return fuse_default_permissions;
+  }
+
   /* timer_lock for 'timer' */
   ceph::mutex timer_lock = ceph::make_mutex("Client::timer_lock");
   SafeTimer timer;
@@ -945,7 +952,6 @@ public:
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<MDSMap> mdsmap;
 
-  bool fuse_default_permissions;
   bool _collect_and_send_global_metrics;
 
 protected:
@@ -1830,6 +1836,10 @@ private:
   void update_io_stat_read(utime_t latency);
   void update_io_stat_write(utime_t latency);
 
+  bool should_check_perms() const {
+    return (is_fuse && !fuse_default_permissions) || (!is_fuse && client_permissions);
+  }
+
   uint32_t deleg_timeout = 0;
 
   client_switch_interrupt_callback_t switch_interrupt_cb = nullptr;
@@ -1957,7 +1967,9 @@ private:
 
   feature_bitset_t myfeatures;
 
+  bool is_fuse = false;
   bool client_permissions;
+  bool fuse_default_permissions;
 };
 
 /**
