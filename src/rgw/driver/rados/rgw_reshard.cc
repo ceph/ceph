@@ -431,7 +431,7 @@ static int init_target_index(rgw::sal::RadosStore* store,
   if (!bucket_info.datasync_flag_enabled()) {
     // if bucket sync is disabled, disable it on each of the new shards too
     auto log = rgw::log_layout_from_index(0, index);
-    ret = store->svc()->bilog_rados->log_stop(dpp, bucket_info, log, -1);
+    ret = store->svc()->bilog_rados->log_stop(dpp, y, bucket_info, log, -1);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to disable "
           "bucket sync on the target index shard objects: "

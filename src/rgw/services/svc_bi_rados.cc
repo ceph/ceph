@@ -635,7 +635,7 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
 
   int ret;
   if (!new_sync_enabled) {
-    ret = svc.bilog->log_stop(dpp, info, bilog, -1);
+    ret = svc.bilog->log_stop(dpp, y, info, bilog, -1);
   } else {
     ret = svc.bilog->log_start(dpp, y, info, bilog, -1);
   }
