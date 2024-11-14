@@ -17425,7 +17425,8 @@ const char** Client::get_tracked_conf_keys() const
     "client_oc_max_dirty_age", \
     "client_oc_max_objects", \
     "client_oc_size", \
-    "client_oc_target_dirty" \
+    "client_oc_target_dirty", \
+    "fuse_default_permissions" \
 
   constexpr bool is_sorted = [] () constexpr {
     constexpr auto arr = std::to_array<std::string_view>({KEYS});
@@ -17448,6 +17449,9 @@ void Client::handle_conf_change(const ConfigProxy& conf,
 {
   std::scoped_lock lock(client_lock);
 
+  if (changed.count("fuse_default_permissions")) {
+    fuse_default_permissions = cct->_conf.get_val<bool>("fuse_default_permissions");
+  }
   if (changed.count("client_cache_mid")) {
     lru.lru_set_midpoint(cct->_conf->client_cache_mid);
   }
