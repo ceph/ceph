@@ -138,6 +138,62 @@ static void build_bucket_index_marker(const string& shard_id_str,
   }
 }
 
+struct LogReader : rgwrados::shard_io::RadosReader {
+  const BucketIndexShardsManager& start;
+  uint32_t max;
+  std::map<int, cls_rgw_bi_log_list_ret>& logs;
+
+  LogReader(const DoutPrefixProvider& dpp, boost::asio::any_io_executor ex,
+            librados::IoCtx& ioctx, const BucketIndexShardsManager& start,
+            uint32_t max, std::map<int, cls_rgw_bi_log_list_ret>& logs)
+    : RadosReader(dpp, std::move(ex), ioctx),
+      start(start), max(max), logs(logs)
+  {}
+  void prepare_read(int shard, librados::ObjectReadOperation& op) override {
+    auto& result = logs[shard];
+    cls_rgw_bilog_list(op, start.get(shard, ""), max, &result, nullptr);
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "list bilog shards: ";
+  }
+};
+
+static int bilog_list(const DoutPrefixProvider* dpp, optional_yield y,
+                      RGWSI_BucketIndex_RADOS* svc_bi,
+                      const RGWBucketInfo& bucket_info,
+                      const rgw::bucket_log_layout_generation& log_layout,
+                      const BucketIndexShardsManager& start,
+                      int shard_id, uint32_t max,
+                      std::map<int, cls_rgw_bi_log_list_ret>& logs)
+{
+  librados::IoCtx index_pool;
+  map<int, string> oids;
+  const auto& current_index = rgw::log_to_index_layout(log_layout);
+  int r = svc_bi->open_bucket_index(dpp, bucket_info, shard_id, current_index, &index_pool, &oids, nullptr);
+  if (r < 0)
+    return r;
+
+  const size_t max_aio = dpp->get_cct()->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto reader = LogReader{*dpp, ex, index_pool, start, max, logs};
+
+    rgwrados::shard_io::async_reads(reader, oids, max_aio, yield[ec]);
+  } else {
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto reader = LogReader{*dpp, ex, index_pool, start, max, logs};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_reads(reader, oids, max_aio,
+                                    ceph::async::use_blocked[ec]);
+  }
+  return ceph::from_error_code(ec);
+}
+
 int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp, optional_yield y,
 				const RGWBucketInfo& bucket_info,
 				const rgw::bucket_log_layout_generation& log_layout,
@@ -147,26 +203,19 @@ int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __func__ << ": " << bucket_info.bucket << " marker " << marker << " shard_id=" << shard_id << " max " << max << dendl;
   result.clear();
 
-  librados::IoCtx index_pool;
-  map<int, string> oids;
-  map<int, cls_rgw_bi_log_list_ret> bi_log_lists;
-  const auto& current_index = rgw::log_to_index_layout(log_layout);
-  int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, current_index, &index_pool, &oids, nullptr);
-  if (r < 0)
-    return r;
-
   BucketIndexShardsManager marker_mgr;
-  bool has_shards = (oids.size() > 1 || shard_id >= 0);
+  const bool has_shards = (shard_id >= 0);
   // If there are multiple shards for the bucket index object, the marker
   // should have the pattern '{shard_id_1}#{shard_marker_1},{shard_id_2}#
   // {shard_marker_2}...', if there is no sharding, the bi_log_list should
   // only contain one record, and the key is the bucket instance id.
-  r = marker_mgr.from_string(marker, shard_id);
+  int r = marker_mgr.from_string(marker, shard_id);
   if (r < 0)
     return r;
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  r = CLSRGWIssueBILogList(index_pool, marker_mgr, max, oids, bi_log_lists, cct->_conf->rgw_bucket_index_max_aio)();
+  std::map<int, cls_rgw_bi_log_list_ret> bi_log_lists;
+  r = bilog_list(dpp, y, svc.bi, bucket_info, log_layout, marker_mgr,
+                 shard_id, max, bi_log_lists);
   if (r < 0)
     return r;
 
