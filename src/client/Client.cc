@@ -381,6 +381,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 
   user_id = cct->_conf->client_mount_uid;
   group_id = cct->_conf->client_mount_gid;
+  client_permissions = cct->_conf.get_val<bool>("client_permissions");
   fuse_default_permissions = cct->_conf.get_val<bool>(
     "fuse_default_permissions");
 
@@ -6219,7 +6220,7 @@ int Client::may_delete(const char *relpath, const UserPerm& perms) {
   int r = path_walk(path, &dir, perms);
   if (r < 0)
     return r;
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     int r = may_delete(dir.get(), name.c_str(), perms);
     if (r < 0)
       return r;
@@ -7541,7 +7542,7 @@ int Client::path_walk(const filepath& origpath, walk_dentry_result* result, cons
     ldout(cct, 10) << " " << i << " " << *cur << " " << dname << dendl;
     ldout(cct, 20) << "  (path is " << path << ")" << dendl;
     InodeRef next;
-    if (cct->_conf->client_permissions) {
+    if (client_permissions) {
       int r = may_lookup(cur.get(), perms);
       if (r < 0)
 	return r;
@@ -7635,7 +7636,7 @@ int Client::link(const char *relexisting, const char *relpath, const UserPerm& p
   r = path_walk(path, &dir, perm, true);
   if (r < 0)
     return r;
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     if (S_ISDIR(in->mode)) {
       r = -CEPHFS_EPERM;
       return r;
@@ -7689,7 +7690,7 @@ int Client::unlinkat(int dirfd, const char *relpath, int flags, const UserPerm& 
   if (r < 0) {
     return r;
   }
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     r = may_delete(dir.get(), name.c_str(), perm);
     if (r < 0) {
       return r;
@@ -7733,7 +7734,7 @@ int Client::rename(const char *relfrom, const char *relto, const UserPerm& perm,
   if (r < 0)
     goto out;
 
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     int r = may_delete(fromdir.get(), fromname.c_str(), perm);
     if (r < 0)
       return r;
@@ -7787,7 +7788,7 @@ int Client::mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm&
   if (r < 0) {
     return r;
   }
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     r = may_create(dir.get(), perm);
     if (r < 0) {
       return r;
@@ -7816,7 +7817,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
   std::scoped_lock lock(client_lock);
   cur = cwd;
   for (i=0; i<path.depth(); ++i) {
-    if (cct->_conf->client_permissions) {
+    if (client_permissions) {
       r = may_lookup(cur.get(), perms);
       if (r < 0)
 	break;
@@ -7831,7 +7832,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
   ldout(cct, 20) << __func__ << " got through " << i << " directories on path " << relpath << dendl;
   //make new directory at each level
   for (; i<path.depth(); ++i) {
-    if (cct->_conf->client_permissions) {
+    if (client_permissions) {
       r = may_create(cur.get(), perms);
       if (r < 0)
 	return r;
@@ -7881,7 +7882,7 @@ int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t
   int r = path_walk(path, &dir, perms);
   if (r < 0)
     return r;
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     int r = may_create(dir.get(), perms);
     if (r < 0)
       return r;
@@ -7929,7 +7930,7 @@ int Client::symlinkat(const char *target, int dirfd, const char *relpath, const 
   if (r < 0) {
     return r;
   }
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     int r = may_create(dir.get(), perms);
     if (r < 0) {
       return r;
@@ -8420,7 +8421,7 @@ int Client::_setattrx(InodeRef &in, struct ceph_statx *stx, int mask,
 	   CEPH_SETATTR_GID | CEPH_SETATTR_MTIME |
 	   CEPH_SETATTR_ATIME | CEPH_SETATTR_SIZE |
 	   CEPH_SETATTR_CTIME | CEPH_SETATTR_BTIME);
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     int r = may_setattr(in.get(), stx, mask, perms);
     if (r < 0)
       return r;
@@ -9151,7 +9152,7 @@ int Client::opendir(const char *relpath, dir_result_t **dirpp, const UserPerm& p
   int r = path_walk(path, &in, perms, true);
   if (r < 0)
     return r;
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     int r = may_open(in.get(), O_RDONLY, perms);
     if (r < 0)
       return r;
@@ -9179,7 +9180,7 @@ int Client::fdopendir(int dirfd, dir_result_t **dirpp, const UserPerm &perms) {
     return r;
   }
 
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     r = may_open(dirinode.get(), O_RDONLY, perms);
     if (r < 0) {
       return r;
@@ -10078,11 +10079,11 @@ int Client::create_and_open(int dirfd, const char *relpath, int flags,
     dirpath.pop_dentry();
     InodeRef dir;
     r = path_walk(dirpath, &dir, perms, true,
-                  cct->_conf->client_permissions ? CEPH_CAP_AUTH_SHARED : 0, dirinode);
+                  client_permissions ? CEPH_CAP_AUTH_SHARED : 0, dirinode);
     if (r < 0) {
       goto out;
     }
-    if (cct->_conf->client_permissions) {
+    if (client_permissions) {
       r = may_create(dir.get(), perms);
       if (r < 0)
         goto out;
@@ -10096,7 +10097,7 @@ int Client::create_and_open(int dirfd, const char *relpath, int flags,
 
   if (!created) {
     // posix says we can only check permissions of existing files
-    if (cct->_conf->client_permissions) {
+    if (client_permissions) {
       r = may_open(in.get(), flags, perms);
       if (r < 0)
         goto out;
@@ -13055,7 +13056,7 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm,
   int r = path_walk(path, &in, perm);
   if (r < 0)
     return r;
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     r = may_create(in.get(), perm);
     if (r < 0)
       return r;
@@ -13078,7 +13079,7 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms,
   if (r < 0)
     return r;
   Inode *snapdir = open_snapdir(in.get());
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     r = may_delete(snapdir, check_perms ? name : NULL, perms);
     if (r < 0)
       return r;
@@ -13891,7 +13892,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size,
 		      const UserPerm& perms)
 {
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     int r = xattr_permission(in.get(), name, CLIENT_MAY_READ, perms);
     if (r < 0)
       return r;
@@ -14100,7 +14101,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
 int Client::_setxattr(InodeRef &in, const char *name, const void *value,
 		      size_t size, int flags, const UserPerm& perms)
 {
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     int r = xattr_permission(in.get(), name, CLIENT_MAY_WRITE, perms);
     if (r < 0)
       return r;
@@ -14236,7 +14237,7 @@ int Client::_removexattr(Inode *in, const char *name, const UserPerm& perms)
 
 int Client::_removexattr(InodeRef &in, const char *name, const UserPerm& perms)
 {
-  if (cct->_conf->client_permissions) {
+  if (client_permissions) {
     int r = xattr_permission(in.get(), name, CLIENT_MAY_WRITE, perms);
     if (r < 0)
       return r;
@@ -17426,6 +17427,7 @@ const char** Client::get_tracked_conf_keys() const
     "client_oc_max_objects", \
     "client_oc_size", \
     "client_oc_target_dirty", \
+    "client_permissions", \
     "fuse_default_permissions" \
 
   constexpr bool is_sorted = [] () constexpr {
@@ -17451,6 +17453,9 @@ void Client::handle_conf_change(const ConfigProxy& conf,
 
   if (changed.count("fuse_default_permissions")) {
     fuse_default_permissions = cct->_conf.get_val<bool>("fuse_default_permissions");
+  }
+  if (changed.count("client_permissions")) {
+    client_permissions = cct->_conf.get_val<bool>("client_permissions");
   }
   if (changed.count("client_cache_mid")) {
     lru.lru_set_midpoint(cct->_conf->client_cache_mid);
