@@ -682,8 +682,6 @@ struct error_code;
       }
     };
 
-    class iterator;
-
   private:
     // my private bits
     buffers_t _buffers;
@@ -726,7 +724,7 @@ struct error_code;
       iterator_impl(bl_t *l, unsigned o=0);
       iterator_impl(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
 	: bl(l), ls(&bl->_buffers), p(ip), off(o), p_off(po) {}
-      iterator_impl(const list::iterator& i);
+      iterator_impl(const iterator_impl<is_const>& i);
 
       /// get current iterator offset in buffer::list
       unsigned get_off() const { return off; }

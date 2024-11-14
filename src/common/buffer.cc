@@ -724,7 +724,7 @@ static ceph::spinlock debug_lock;
   }
 
   template<bool is_const>
-  buffer::list::iterator_impl<is_const>::iterator_impl(const buffer::list::iterator& i)
+  buffer::list::iterator_impl<is_const>::iterator_impl(const iterator_impl<is_const>& i)
     : iterator_impl<is_const>(i.bl, i.off, i.p, i.p_off) {}
 
   template<bool is_const>
