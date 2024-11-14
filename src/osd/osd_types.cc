@@ -4585,9 +4585,19 @@ void ObjectModDesc::visit(Visitor *visitor) const
       case ROLLBACK_EXTENTS: {
 	vector<pair<uint64_t, uint64_t> > extents;
 	version_t gen;
+	uint64_t object_size;
 	decode(gen, bp);
 	decode(extents, bp);
-	visitor->rollback_extents(gen,extents);
+	if (struct_v < 3) {
+	  // Object size is used by newer code which does not pad objects to a
+	  // multiple of the strip size to truncate the rollback clone
+	  // operations. Older code pads the object so use a large object size
+	  // to avoid doing any truncation.
+	  object_size = 0xffffffffffffffffUL;
+	} else {
+	  decode(object_size, bp);
+	}
+	visitor->rollback_extents(gen, extents, object_size);
 	break;
       }
       default:
@@ -4644,10 +4654,12 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
   }
   void rollback_extents(
     version_t gen,
-    const vector<pair<uint64_t, uint64_t> > &extents) override {
+    const vector<pair<uint64_t, uint64_t> > &extents,
+    uint64_t object_size) override {
     f->open_object_section("op");
     f->dump_string("code", "ROLLBACK_EXTENTS");
     f->dump_unsigned("gen", gen);
+    f->dump_unsigned("object_size", object_size);
     f->dump_stream("snaps") << extents;
     f->close_section();
   }
@@ -4869,7 +4881,7 @@ void pg_log_entry_t::decode_with_checksum(ceph::buffer::list::const_iterator& p)
 
 void pg_log_entry_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(14, 4, bl);
+  ENCODE_START(15, 4, bl);
   encode(op, bl);
   encode(soid, bl);
   encode(version, bl);
@@ -4902,12 +4914,13 @@ void pg_log_entry_t::encode(ceph::buffer::list &bl) const
   if (op != ERROR)
     encode(return_code, bl);
   encode(op_returns, bl);
+  encode(written_shards, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(14, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(15, 4, 4, bl);
   decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -4972,6 +4985,9 @@ void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(return_code, bl);
     }
     decode(op_returns, bl);
+  }
+  if (struct_v >= 15) {
+    decode(written_shards, bl);
   }
   DECODE_FINISH(bl);
 }

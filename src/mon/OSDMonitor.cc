@@ -5406,7 +5406,8 @@ namespace {
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
-    DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO };
+    DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
+    EC_OPTIMIZATIONS };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6213,7 +6214,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"dedup_chunk_algorithm", DEDUP_CHUNK_ALGORITHM},
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
       {"bulk", BULK},
-      {"read_ratio", READ_RATIO}
+      {"read_ratio", READ_RATIO},
+      {"allow_ec_optimizations", EC_OPTIMIZATIONS}
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6228,7 +6230,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N
     };
     const choices_set_t ONLY_ERASURE_CHOICES = {
-      EC_OVERWRITES, ERASURE_CODE_PROFILE
+      EC_OVERWRITES, ERASURE_CODE_PROFILE,
+      EC_OPTIMIZATIONS
     };
     const choices_set_t ONLY_REPLICA_CHOICES = {
       READ_RATIO
@@ -6460,17 +6463,23 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
-            pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
-            if (p->opts.is_set(key)) {
-              if(*it == CSUM_TYPE) {
-                int64_t val;
-                p->opts.get(pool_opts_t::CSUM_TYPE, &val);
-                f->dump_string(i->first.c_str(), Checksummer::get_csum_type_string(val));
-              } else {
-                p->opts.dump(i->first, f.get());
-              }
+	    {
+	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
+	      if (p->opts.is_set(key)) {
+		if(*it == CSUM_TYPE) {
+		  int64_t val;
+		  p->opts.get(pool_opts_t::CSUM_TYPE, &val);
+		  f->dump_string(i->first.c_str(), Checksummer::get_csum_type_string(val));
+		} else {
+		  p->opts.dump(i->first, f.get());
+		}
+	      }
 	    }
             break;
+	  case EC_OPTIMIZATIONS:
+	    f->dump_bool("allow_ec_optimizations",
+			 p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS));
+	    break;
 	}
       }
       f->close_section();
@@ -6641,6 +6650,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
                 }
 	      }
 	    }
+	    break;
+	  case EC_OPTIMIZATIONS:
+	    ss << "allow_ec_optimizations: " <<
+	      (p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS) ? "true" : "false") <<
+	      "\n";
 	    break;
 	}
 	rdata.append(ss.str());
@@ -8794,8 +8808,32 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (val == "true" || (interr.empty() && n == 1)) {
 	p.flags |= pg_pool_t::FLAG_EC_OVERWRITES;
     } else if (val == "false" || (interr.empty() && n == 0)) {
-      ss << "ec overwrites cannot be disabled once enabled";
+      if ((p.flags & pg_pool_t::FLAG_EC_OVERWRITES) != 0) {
+	ss << "ec overwrites cannot be disabled once enabled";
+	return -EINVAL;
+      }
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
+    }
+  } else if (var == "allow_ec_optimizations") {
+    if (!p.is_erasure()) {
+      ss << "ec optimizations can only be enabled for an erasure coded pool";
+      return -EINVAL;
+    }
+    //FIXME: Should be checking for tentacle
+    if (osdmap.require_osd_release < ceph_release_t::squid) {
+      ss << "must set require_osd_release to tentacle or "
+           << "later before setting allow_ec_optimizations";
+        return -EINVAL;
+      }
+    if (val == "true" || (interr.empty() && n == 1)) {
+	p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
+	ss << "ec optimizations cannot be disabled once enabled";
+	return -EINVAL;
+      }
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
