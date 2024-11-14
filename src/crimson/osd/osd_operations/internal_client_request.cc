@@ -148,7 +148,7 @@ seastar::future<> InternalClientRequest::start()
     return seastar::now();
   }).finally([this] {
     logger().debug("{}: exit", *this);
-    handle.exit();
+    return handle.complete();
   });
 }
 
