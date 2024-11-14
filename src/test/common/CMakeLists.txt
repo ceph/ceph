@@ -356,6 +356,7 @@ target_link_libraries(unittest_cdc global ceph-common)
 add_ceph_unittest(unittest_cdc)
 
 add_executable(unittest_ceph_timer test_ceph_timer.cc)
+target_link_libraries(unittest_ceph_timer ceph-common)
 add_ceph_unittest(unittest_ceph_timer)
 
 add_executable(unittest_option test_option.cc)
