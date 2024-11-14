@@ -3698,6 +3698,12 @@ public:
     std::function<std::string (const ceph::timespan& lat)> fn,
     int idx2 = l_bluestore_first);
 
+  debug_point_t<std::function<void()>> dtr_deferred_replay_start;
+  debug_point_t<std::function<void()>> dtr_deferred_replay_end;
+  debug_point_t<std::function<void()>> dtr_init_alloc_done;
+  debug_point_t<std::function<void(const bluestore_deferred_transaction_t&)>>
+    dtr_deferred_replay_track;
+
 private:
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
