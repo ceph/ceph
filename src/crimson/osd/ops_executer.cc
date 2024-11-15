@@ -904,7 +904,12 @@ void OpsExecuter::execute_clone(
   osd_op_params->at_version.version++;
 
   // make clone
-  backend.clone(clone_obc->obs.oi, initial_obs, clone_obc->obs, txn);
+  backend.clone_for_write(soid, coid, txn);
+  backend.set_metadata(
+    coid,
+    clone_obc->obs.oi,
+    nullptr /* snapset */,
+    txn);
 
   delta_stats.num_objects++;
   if (clone_obc->obs.oi.is_omap()) {

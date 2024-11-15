@@ -1283,22 +1283,6 @@ PGBackend::rm_xattr(
   return rm_xattr_iertr::now();
 }
 
-void PGBackend::clone(
-  /* const */object_info_t& snap_oi,
-  const ObjectState& os,
-  const ObjectState& d_os,
-  ceph::os::Transaction& txn)
-{
-  // See OpsExecuter::execute_clone documentation
-  txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
-  {
-    ceph::bufferlist bv;
-    snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
-    txn.setattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, OI_ATTR, bv);
-  }
-  txn.rmattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, SS_ATTR);
-}
-
 using get_omap_ertr =
   crimson::os::FuturizedStore::Shard::read_errorator::extend<
     crimson::ct_error::enodata>;
@@ -1833,5 +1817,34 @@ PGBackend::read_ierrorator::future<> PGBackend::tmapget(
       return read_errorator::future<>{crimson::ct_error::object_corrupted::make()};
     }),
     read_errorator::pass_further{});
+}
+
+void PGBackend::set_metadata(
+  const hobject_t &obj,
+  object_info_t &oi,
+  const SnapSet *ss /* non-null iff head */,
+  ceph::os::Transaction& txn)
+{
+  ceph_assert((obj.is_head() && ss) || (!obj.is_head() && !ss));
+  {
+    ceph::bufferlist bv;
+    oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
+    txn.setattr(coll->get_cid(), ghobject_t{obj}, OI_ATTR, bv);
+  }
+  if (ss) {
+    ceph::bufferlist bss;
+    encode(*ss, bss);
+    txn.setattr(coll->get_cid(), ghobject_t{obj}, SS_ATTR, bss);
+  }
+}
+
+void PGBackend::clone_for_write(
+  const hobject_t &from,
+  const hobject_t &to,
+  ceph::os::Transaction &txn)
+{
+  // See OpsExecuter::execute_clone documentation
+  txn.clone(coll->get_cid(), ghobject_t{from}, ghobject_t{to});
+  txn.rmattr(coll->get_cid(), ghobject_t{to}, SS_ATTR);
 }
 
