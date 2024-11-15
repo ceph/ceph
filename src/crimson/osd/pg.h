@@ -897,12 +897,6 @@ private:
     const hobject_t &obj,
     const eversion_t &v,
     const std::vector<pg_shard_t> &peers);
-public:
-  void mutate_object(
-    ObjectContextRef& obc,
-    ceph::os::Transaction& txn,
-    osd_op_params_t& osd_op_p);
-private:
   bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;
   void context_registry_on_change();
