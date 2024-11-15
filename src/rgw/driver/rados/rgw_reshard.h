@@ -240,7 +240,6 @@ public:
   int get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
   int remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entry& entry, optional_yield y);
   int list(const DoutPrefixProvider *dpp, int logshard_num, std::string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
-  int clear_bucket_resharding(const DoutPrefixProvider *dpp, const std::string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 
   /* reshard thread */
   int process_entry(const cls_rgw_reshard_entry& entry, int max_entries,
