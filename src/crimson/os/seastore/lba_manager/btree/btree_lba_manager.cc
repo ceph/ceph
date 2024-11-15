@@ -703,7 +703,7 @@ BtreeLBAManager::_decref_intermediate(
 
 	if (!val.refcount) {
 	  return btree.remove(c, iter
-	  ).si_then([val] {
+	  ).si_then([val](auto) {
 	    auto res = ref_update_result_t{
 	      val.refcount,
 	      val.pladdr.get_paddr(),
@@ -806,7 +806,7 @@ BtreeLBAManager::_update_mapping(
 	  return btree.remove(
 	    c,
 	    iter
-	  ).si_then([ret] {
+	  ).si_then([ret](auto) {
 	    return update_mapping_ret_bare_t{
 	      std::move(ret),
 	      BtreeLBAMappingRef(nullptr)
