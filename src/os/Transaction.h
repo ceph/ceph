@@ -847,6 +847,39 @@ public:
    */
   void write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
 	       const ceph::buffer::list& write_data, uint32_t flags = 0) {
+    uint64_t off_diff = 0;
+    uint64_t sub_len = 0;
+
+    auto it = write_data.buffers().begin();
+    const auto end = write_data.buffers().end();
+    do {
+      off_diff += sub_len;
+      sub_len = 0;
+      bool first_in_range_is_write;
+      if (it == end) {
+	// the only possiblity we are here is empty write_data.
+	// for such a case we'll generate OP_WRITE.
+        first_in_range_is_write = true;
+      } else {
+	first_in_range_is_write = !it->is_zero();
+	do {
+	  // compress same-type buffers
+	  sub_len += it->length();
+	} while (++it != end && first_in_range_is_write == !it->is_zero());
+      }
+      if (first_in_range_is_write) {
+	bufferlist sub_write_data;
+	sub_write_data.substr_of(write_data, off_diff, sub_len);
+	_write(cid, oid, off + off_diff, sub_len, sub_write_data, flags);
+      } else {
+	zero(cid, oid, off + off_diff, sub_len);
+      }
+    } while (it != end);
+    ceph_assert(len == off_diff + sub_len); // everything shall be processed
+  }
+
+  void _write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
+	       const ceph::buffer::list& write_data, uint32_t flags = 0) {
     using ceph::encode;
     uint32_t orig_len = data_bl.length();
     Op* _op = _get_next_op();
