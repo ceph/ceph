@@ -188,10 +188,10 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
 void BlockRBManager::prefill_fragmented_device()
 {
   LOG_PREFIX(BlockRBManager::prefill_fragmented_device);
-  // the first 2 blocks must be allocated to lba root
+  // the first 3 blocks must be allocated to lba root
   // and backref root during mkfs
-  for (size_t block = get_block_size() * 2;
-      block <= get_size() - get_block_size() * 2;
+  for (size_t block = get_block_size() * 3;
+      block <= get_size() - get_block_size() * 3;
       block += get_block_size() * 2) {
     DEBUG("marking {}~{} used",
       get_start_rbm_addr() + block,
