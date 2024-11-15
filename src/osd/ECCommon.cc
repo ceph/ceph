@@ -211,65 +211,58 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
   bool for_recovery,
   const std::optional<set<pg_shard_t>>& error_shards)
 {
-  for (set<pg_shard_t>::const_iterator i =
-	 get_parent()->get_acting_shards().begin();
-       i != get_parent()->get_acting_shards().end();
-       ++i) {
-    dout(10) << __func__ << ": checking acting " << *i << dendl;
-    const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
-    if (error_shards && error_shards->contains(*i)) {
+  for (auto &&pg_shard : get_parent()->get_acting_shards()) {
+    dout(10) << __func__ << ": checking acting " << pg_shard << dendl;
+    const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
+    if (error_shards && error_shards->contains(pg_shard)) {
       continue;
     }
+    const shard_id_t &shard = pg_shard.shard;
     if (cct->_conf->bluestore_debug_inject_read_err &&
-        ec_inject_test_read_error1(ghobject_t(hoid, ghobject_t::NO_GEN, i->shard))) {
-      dout(0) << __func__ << " Error inject - Missing shard " << i->shard << dendl;
+        ec_inject_test_read_error1(ghobject_t(hoid, ghobject_t::NO_GEN, shard))) {
+      dout(0) << __func__ << " Error inject - Missing shard " << shard << dendl;
       continue;
     }
     if (!missing.is_missing(hoid)) {
-      ceph_assert(!have.count(i->shard));
-      have.insert(i->shard);
-      ceph_assert(!shards.count(i->shard));
-      shards.insert(make_pair(i->shard, *i));
+      ceph_assert(!have.count(shard));
+      have.insert(shard);
+      ceph_assert(!shards.count(shard));
+      shards.insert(make_pair(shard, pg_shard));
     }
   }
 
   if (for_recovery) {
-    for (set<pg_shard_t>::const_iterator i =
-	   get_parent()->get_backfill_shards().begin();
-	 i != get_parent()->get_backfill_shards().end();
-	 ++i) {
-      if (error_shards && error_shards->find(*i) != error_shards->end())
+    for (auto &&pg_shard : get_parent()->get_backfill_shards()) {
+      if (error_shards && error_shards->contains(pg_shard))
 	continue;
-      if (have.count(i->shard)) {
-	ceph_assert(shards.count(i->shard));
+      const shard_id_t &shard = pg_shard.shard;
+      if (have.count(shard)) {
+	ceph_assert(shards.count(shard));
 	continue;
       }
-      dout(10) << __func__ << ": checking backfill " << *i << dendl;
-      ceph_assert(!shards.count(i->shard));
-      const pg_info_t &info = get_parent()->get_shard_info(*i);
-      const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
-      if (hoid < info.last_backfill &&
-	  !missing.is_missing(hoid)) {
-	have.insert(i->shard);
-	shards.insert(make_pair(i->shard, *i));
+      dout(10) << __func__ << ": checking backfill " << pg_shard << dendl;
+      ceph_assert(!shards.count(shard));
+      const pg_info_t &info = get_parent()->get_shard_info(pg_shard);
+      const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
+      if (hoid < info.last_backfill && !missing.is_missing(hoid)) {
+	have.insert(shard);
+	shards.insert(make_pair(shard, pg_shard));
       }
     }
 
     map<hobject_t, set<pg_shard_t>>::const_iterator miter =
       get_parent()->get_missing_loc_shards().find(hoid);
     if (miter != get_parent()->get_missing_loc_shards().end()) {
-      for (set<pg_shard_t>::iterator i = miter->second.begin();
-	   i != miter->second.end();
-	   ++i) {
-	dout(10) << __func__ << ": checking missing_loc " << *i << dendl;
-	auto m = get_parent()->maybe_get_shard_missing(*i);
+      for (auto &&pg_shard : miter->second) {
+	dout(10) << __func__ << ": checking missing_loc " << pg_shard << dendl;
+	auto m = get_parent()->maybe_get_shard_missing(pg_shard);
 	if (m) {
 	  ceph_assert(!(*m).is_missing(hoid));
 	}
-	if (error_shards && error_shards->find(*i) != error_shards->end())
+	if (error_shards && error_shards->contains(pg_shard))
 	  continue;
-	have.insert(i->shard);
-	shards.insert(make_pair(i->shard, *i));
+	have.insert(pg_shard.shard);
+	shards.insert(make_pair(pg_shard.shard, pg_shard));
       }
     }
   }
@@ -770,11 +763,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op)
     op.delta_stats);
 
   map<shard_id_t, ObjectStore::Transaction> trans;
-  for (set<pg_shard_t>::const_iterator i =
-	 get_parent()->get_acting_recovery_backfill_shards().begin();
-       i != get_parent()->get_acting_recovery_backfill_shards().end();
-       ++i) {
-    trans[i->shard];
+  for (auto &&shard : get_parent()->get_acting_recovery_backfill_shards()) {
+    trans[shard.shard];
   }
 
   op.trace.event("start ec write");
@@ -816,19 +806,15 @@ void ECCommon::RMWPipeline::cache_ready(Op &op)
     }
     oid_to_version[op.hoid] = op.version;
   }
-  for (set<pg_shard_t>::const_iterator i =
-	 get_parent()->get_acting_recovery_backfill_shards().begin();
-       i != get_parent()->get_acting_recovery_backfill_shards().end();
-       ++i) {
-    op.pending_commit.insert(*i);
-    map<shard_id_t, ObjectStore::Transaction>::iterator iter =
-      trans.find(i->shard);
+  for (auto &&pg_shard : get_parent()->get_acting_recovery_backfill_shards()) {
+    op.pending_commit.insert(pg_shard);
+    auto iter = trans.find(pg_shard.shard);
     ceph_assert(iter != trans.end());
-    bool should_send = get_parent()->should_send_op(*i, op.hoid);
+    bool should_send = get_parent()->should_send_op(pg_shard, op.hoid);
     const pg_stat_t &stats =
-      (should_send || !backfill_shards.count(*i)) ?
+      (should_send || !backfill_shards.count(pg_shard)) ?
       get_info().stats :
-      get_parent()->get_shard_info().find(*i)->second.stats;
+      get_parent()->get_shard_info().find(pg_shard)->second.stats;
 
     ECSubWrite sop(
       get_parent()->whoami_shard(),
@@ -850,24 +836,24 @@ void ECCommon::RMWPipeline::cache_ready(Op &op)
     if (op.trace) {
       // initialize a child span for this shard
       trace.init("ec sub write", nullptr, &op.trace);
-      trace.keyval("shard", i->shard.id);
+      trace.keyval("shard", pg_shard.shard.id);
     }
 
-    if (*i == get_parent()->whoami_shard()) {
+    if (pg_shard == get_parent()->whoami_shard()) {
       should_write_local = true;
       local_write_op.claim(sop);
     } else if (cct->_conf->bluestore_debug_inject_read_err &&
 	       ec_inject_test_write_error1(ghobject_t(op.hoid,
-		 ghobject_t::NO_GEN, i->shard))) {
+		 ghobject_t::NO_GEN, pg_shard.shard))) {
       dout(0) << " Error inject - Dropping write message to shard " <<
-	i->shard << dendl;
+	pg_shard.shard << dendl;
     } else {
       MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
-      r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
+      r->pgid = spg_t(get_parent()->primary_spg_t().pgid, pg_shard.shard);
       r->map_epoch = get_osdmap_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
       r->trace = trace;
-      messages.push_back(std::make_pair(i->osd, r));
+      messages.push_back(std::make_pair(pg_shard.osd, r));
     }
   }
 

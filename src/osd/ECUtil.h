@@ -82,6 +82,15 @@ namespace ECUtil {
       lhs << rhs.map;
       return lhs;
     }
+    void get_extent_superset(extent_set &eset) {
+      for (auto &&[_, e]: *this) eset.insert(e);
+    }
+    extent_set get_extent_superset() {
+      extent_set eset;
+      get_extent_superset(eset);
+      return eset;
+    }
+
   };
 
   class stripe_info_t {
@@ -547,6 +556,12 @@ public:
    */
   const extent_map &get_extent_map(int shard) const {
     return extent_maps.at(shard);
+  }
+
+  /* Return a particlar extent set.
+   */
+  const extent_set get_extent_set(int shard) const {
+    return extent_maps.at(shard).get_interval_set();
   }
 
   bool contains_shard(int shard) const {
