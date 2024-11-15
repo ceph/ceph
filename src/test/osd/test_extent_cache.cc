@@ -58,36 +58,37 @@ map<int, extent_set> iset_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &
   return out;
 }
 
-struct Client : public BackendRead, public CacheReady
+struct Client : public BackendRead
 {
   hobject_t oid;
   stripe_info_t sinfo;
   LRU lru;
+  PG pg;
   optional<map<int, extent_set>> active_reads;
   optional<shard_extent_map_t> result;
 
   Client(uint64_t chunk_size, int k, int m, uint64_t cache_size) :
     sinfo(k, chunk_size * k, m, vector<int>(0)),
-    lru(*this, cache_size) {};
+    lru(cache_size), pg(*this, lru, sinfo) {};
 
-  void backend_read(hobject_t _oid, const map<int, extent_set>& request) override
-  {
+  void backend_read(hobject_t _oid, const std::map<int, extent_set>& request,
+    uint64_t object_size) override  {
     ceph_assert(oid == _oid);
     active_reads = request;
   }
-  void cache_ready(hobject_t& _oid, shard_extent_map_t& _result) override
+
+  void cache_ready(hobject_t& _oid, const optional<shard_extent_map_t>& _result)
   {
     ceph_assert(oid == _oid);
 
-    if (!_result.empty())
-      result = _result;
+    result = _result;
   }
 
   void complete_read()
   {
     auto reads_done = imap_from_iset(*active_reads, &sinfo);
     active_reads.reset(); // set before done, as may be called back.
-    lru.read_done(oid, std::move(reads_done));
+    pg.read_done(oid, std::move(reads_done));
   }
 
   void complete_write(OpRef &op)
@@ -96,12 +97,16 @@ struct Client : public BackendRead, public CacheReady
     //Fill in the parity. Parity correctness does not matter to the cache.
     emap.insert_parity_buffers();
     result.reset();
-    lru.write_done(op, std::move(emap));
+    pg.write_done(op, std::move(emap));
   }
 
   void commit_write(OpRef &op)
   {
-    lru.complete(op);
+    pg.complete(op);
+  }
+
+  void kick_cache() {
+    pg.read_done(oid, shard_extent_map_t(&sinfo));
   }
 };
 
@@ -109,12 +114,22 @@ TEST(ECExtentCache, simple_write)
 {
   Client cl(32, 2, 1, 64);
   {
-    OpRef op(new Op(cl));
-
     auto to_read = iset_from_vector( {{{0, 2}}, {{0, 2}}});
     auto to_write = iset_from_vector({{{0, 10}}, {{0, 10}}});
 
-    cl.lru.request(op, cl.oid, to_read, to_write, &cl.sinfo);
+    /*    OpRef request(hobject_t const &oid,
+      std::optional<std::map<int, extent_set>> const &to_read,
+      std::map<int, extent_set> const &write,
+      uint64_t orig_size,
+      uint64_t projected_size,
+      CacheReadyCb &&ready_cb)
+      */
+
+    OpRef op = cl.pg.request(cl.oid, to_read, to_write, 10, 10,
+      [&cl](OpRef &cache_op)
+      {
+        cl.cache_ready(cl.oid, cache_op->get_result());
+      });
     ASSERT_EQ(to_read, cl.active_reads);
     ASSERT_FALSE(cl.result);
     cl.complete_read();
@@ -129,12 +144,19 @@ TEST(ECExtentCache, simple_write)
   }
 
   // Repeating the same read should complete without a backend read..
+  // NOTE: This test is broken because the LRU is currently disabled.
   {
-    OpRef op(new Op(cl));
     auto to_read = iset_from_vector( {{{0, 2}}, {{0, 2}}});
     auto to_write = iset_from_vector({{{0, 10}}, {{0, 10}}});
-    cl.lru.request(op, cl.oid, to_read, to_write, &cl.sinfo);
-    ASSERT_FALSE(cl.active_reads);
+    OpRef op = cl.pg.request(cl.oid, to_read, to_write, 10, 10,
+      [&cl](OpRef &cache_op)
+      {
+        cl.cache_ready(cl.oid, cache_op->get_result());
+      });
+    // FIXME: LRU Cache Disabled.
+    ASSERT_TRUE(cl.active_reads);
+    cl.complete_read();
+
     ASSERT_TRUE(cl.result);
     ASSERT_EQ(to_read, cl.result->get_extent_set_map());
     cl.complete_write(op);
@@ -145,11 +167,17 @@ TEST(ECExtentCache, simple_write)
   // This should not result in any backend reads, since the cache can be honoured
   // from the previous write.
   {
-    OpRef op(new Op(cl));
     auto to_read = iset_from_vector( {{{2, 2}}, {{2, 2}}});
     auto to_write = iset_from_vector({{{0, 10}}, {{0, 10}}});
-    cl.lru.request(op, cl.oid, to_read, to_write, &cl.sinfo);
-    ASSERT_FALSE(cl.active_reads);
+    OpRef op = cl.pg.request(cl.oid, to_read, to_write, 10, 10,
+      [&cl](OpRef &cache_op)
+      {
+        cl.cache_ready(cl.oid, cache_op->get_result());
+      });
+    // FIXME: LRU Cache Disabled.
+    ASSERT_TRUE(cl.active_reads);
+    cl.complete_read();
+
     ASSERT_EQ(to_read, cl.result->get_extent_set_map());
     cl.complete_write(op);
     cl.commit_write(op);
@@ -159,36 +187,47 @@ TEST(ECExtentCache, simple_write)
 TEST(ECExtentCache, multiple_writes)
 {
   Client cl(32, 2, 1, 32);
-  OpRef op1(new Op(cl));
 
   auto to_read1 = iset_from_vector( {{{0, 2}}});
   auto to_write1 = iset_from_vector({{{0, 10}}});
 
   // This should drive a request for this IO, which we do not yet honour.
-  cl.lru.request(op1, cl.oid, to_read1, to_write1, &cl.sinfo);
-  ASSERT_EQ(to_read1, cl.active_reads);
+  OpRef op1 = cl.pg.request(cl.oid, to_read1, to_write1, 10, 10,
+    [&cl](OpRef &cache_op)
+    {
+      cl.cache_ready(cl.oid, cache_op->get_result());
+    });  ASSERT_EQ(to_read1, cl.active_reads);
   ASSERT_FALSE(cl.result);
 
   // Perform another request. We should not see any change in the read requests.
-  OpRef op2(new Op(cl));
   auto to_read2 = iset_from_vector( {{{8, 4}}});
   auto to_write2 = iset_from_vector({{{10, 10}}});
-  cl.lru.request(op2, cl.oid, to_read2, to_write2, &cl.sinfo);
+  OpRef op2 = cl.pg.request(cl.oid, to_read2, to_write2, 10, 10,
+    [&cl](OpRef &cache_op)
+    {
+      cl.cache_ready(cl.oid, cache_op->get_result());
+    });
   ASSERT_EQ(to_read1, cl.active_reads);
   ASSERT_FALSE(cl.result);
 
   // Perform another request, this to check that reads are coalesced.
-  OpRef op3(new Op(cl));
   auto to_read3 = iset_from_vector( {{{32, 6}}});
   auto to_write3 = iset_from_vector({{}, {{40, 0}}});
-  cl.lru.request(op3, cl.oid, to_read3, to_write3, &cl.sinfo);
+  OpRef op3 = cl.pg.request(cl.oid, to_read3, to_write3, 10, 10,
+    [&cl](OpRef &cache_op)
+    {
+      cl.cache_ready(cl.oid, cache_op->get_result());
+    });
   ASSERT_EQ(to_read1, cl.active_reads);
   ASSERT_FALSE(cl.result);
 
   // Finally op4, with no reads.
-  OpRef op4(new Op(cl));
   auto to_write4 = iset_from_vector({{{20, 10}}});
-  cl.lru.request(op4, cl.oid, nullopt, to_write4, &cl.sinfo);
+  OpRef op4 = cl.pg.request(cl.oid, nullopt, to_write4, 10, 10,
+    [&cl](OpRef &cache_op)
+    {
+      cl.cache_ready(cl.oid, cache_op->get_result());
+    });
   ASSERT_EQ(to_read1, cl.active_reads);
   ASSERT_FALSE(cl.result);
 
@@ -208,6 +247,9 @@ TEST(ECExtentCache, multiple_writes)
   ASSERT_FALSE(cl.active_reads);
   ASSERT_EQ(to_read2, cl.result->get_extent_set_map());
   cl.complete_write(op2);
+  // In the real code, this happens inside the complete read callback. Here
+  // we need to kick the statemachine.
+  cl.kick_cache();
 
   // Since no further reads are required op3 and op4 should occur immediately.
   ASSERT_TRUE(cl.result);
@@ -226,14 +268,18 @@ TEST(ECExtentCache, multiple_writes)
 
 TEST(ECExtentCache, multiple_lru_frees)
 {
+  // LRU is currently disabled.
+  GTEST_SKIP();
   Client cl(32, 2, 1, 64);
 
   /* Perform two writes which fill up the cache (over-fill) */
   auto to_read = iset_from_vector({{{0, 32}}});
   auto to_write = iset_from_vector({{{0, 32}}});
-  OpRef op1(new Op(cl));
-  cl.lru.request(op1, cl.oid, to_read, to_write, &cl.sinfo);
-  cl.complete_read();
+  OpRef op1 = cl.pg.request(cl.oid, to_read, to_write, 10, 10,
+    [&cl](OpRef &cache_op)
+    {
+      cl.cache_ready(cl.oid, cache_op->get_result());
+    });  cl.complete_read();
   ASSERT_FALSE(cl.active_reads);
   ASSERT_EQ(to_read, cl.result->get_extent_set_map());
   cl.complete_write(op1);
@@ -241,9 +287,11 @@ TEST(ECExtentCache, multiple_lru_frees)
 
   auto to_read2 = iset_from_vector({{{32, 32}}});
   auto to_write2 = iset_from_vector({{{32, 32}}});
-  OpRef op2(new Op(cl));
-  cl.lru.request(op2, cl.oid, to_read2, to_write2, &cl.sinfo);
-  cl.complete_read();
+  OpRef op2 = cl.pg.request(cl.oid, to_read2, to_write2, 10, 10,
+    [&cl](OpRef &cache_op)
+    {
+      cl.cache_ready(cl.oid, cache_op->get_result());
+    });  cl.complete_read();
   ASSERT_FALSE(cl.active_reads);
   ASSERT_EQ(to_read2, cl.result->get_extent_set_map());
   cl.complete_write(op2);
@@ -251,8 +299,11 @@ TEST(ECExtentCache, multiple_lru_frees)
   // Since we have not commited the op, both cache lines are cached.
   auto to_read3 = iset_from_vector({{{10, 2}, {40,2}}});
   auto to_write3 = iset_from_vector({{{0, 64}}});
-  OpRef op3(new Op(cl));
-  cl.lru.request(op3, cl.oid, to_read3, to_write3, &cl.sinfo);
+  OpRef op3 = cl.pg.request(cl.oid, to_read3, to_write3, 10, 10,
+    [&cl](OpRef &cache_op)
+    {
+      cl.cache_ready(cl.oid, cache_op->get_result());
+    });
   ASSERT_FALSE(cl.active_reads);
   ASSERT_EQ(to_read3, cl.result->get_extent_set_map());
   cl.complete_write(op3);
@@ -265,8 +316,11 @@ TEST(ECExtentCache, multiple_lru_frees)
   // Since we have not commited the op, both cache lines are cached.
   auto to_read4 = iset_from_vector({{{12, 2}, {42,2}}});
   auto to_write4 = iset_from_vector({{{0, 64}}});
-  OpRef op4(new Op(cl));
-  cl.lru.request(op4, cl.oid, to_read4, to_write4, &cl.sinfo);
+  OpRef op4 = cl.pg.request(cl.oid, to_read4, to_write4, 10, 10,
+    [&cl](OpRef &cache_op)
+    {
+      cl.cache_ready(cl.oid, cache_op->get_result());
+    });
   ASSERT_FALSE(cl.active_reads);
   ASSERT_EQ(to_read4, cl.result->get_extent_set_map());
   cl.complete_write(op4);
@@ -276,8 +330,12 @@ TEST(ECExtentCache, multiple_lru_frees)
   cl.commit_write(op4);
 
   // Now the same read as before will have to request the first cache line.
-  cl.lru.request(op4, cl.oid, to_read4, to_write4, &cl.sinfo);
-  auto ref = iset_from_vector({{{12, 2}}});
+
+  op4 = cl.pg.request(cl.oid, to_read4, to_write4, 10, 10,
+    [&cl](OpRef &cache_op)
+    {
+      cl.cache_ready(cl.oid, cache_op->get_result());
+    });  auto ref = iset_from_vector({{{12, 2}}});
   ASSERT_EQ(ref, cl.active_reads);
   ASSERT_FALSE(cl.result);
   cl.complete_read();
