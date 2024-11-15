@@ -413,6 +413,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
         ),
         Option(
+            'certificate_automated_rotation_enabled',
+            type='bool',
+            default=True, # TODO(redo): only for testing .. should be disabled by default
+            desc='This flag controls whether cephadm automatically rotates certificates upon expiration.',
+        ),
+        Option(
+            'certificate_duration_days',
+            type='int',
+            default=(3 * 365),
+            desc='Specifies the duration of self certificates generated and signed by cephadm root CA',
+            min=90,
+            max=(10 * 365)
+        ),
+        Option(
+            'renewal_threshold_days',
+            type='int',
+            default=30,
+            desc='Specifies the lead time in days to initiate certificate renewal before expiration.',
+            min=10,
+            max=90
+        ),
+        Option(
             'secure_monitoring_stack',
             type='bool',
             default=False,
@@ -545,6 +567,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.oob_default_addr = ''
             self.ssh_keepalive_interval = 0
             self.ssh_keepalive_count_max = 0
+            self.certificate_duration_days = 0
+            self.renewal_threshold_days = 0
+            self.certificate_automated_rotation_enabled = False
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -595,7 +620,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.tuned_profile_utils = TunedProfileUtils(self)
 
-        self.cert_mgr = CertMgr(self, self.get_mgr_ip())
+        self.cert_mgr = CertMgr(self,
+                                self.certificate_automated_rotation_enabled,
+                                self.certificate_duration_days,
+                                self.renewal_threshold_days,
+                                self.get_mgr_ip())
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
@@ -3266,6 +3295,11 @@ Then run the following:
     @handle_orch_error
     def cert_store_cert_ls(self) -> Dict[str, Any]:
         return self.cert_mgr.cert_ls()
+
+    @handle_orch_error
+    def cert_store_cert_check(self) -> Dict[str, Any]:
+        self.cert_mgr.check_certificates()
+        return {}
 
     @handle_orch_error
     def cert_store_key_ls(self) -> Dict[str, Any]:
