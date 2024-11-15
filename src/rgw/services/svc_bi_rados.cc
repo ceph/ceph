@@ -615,6 +615,7 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp, c
 }
 
 int RGWSI_BucketIndex_RADOS::set_reshard_status(const DoutPrefixProvider *dpp,
+                                                optional_yield y,
                                                 const RGWBucketInfo& bucket_info,
                                                 cls_rgw_reshard_status status)
 {

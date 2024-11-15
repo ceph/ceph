@@ -664,11 +664,11 @@ static int init_reshard(rgw::sal::RadosStore* store,
     if (ret = fault.check("logrecord_writes");
         ret == 0) { // no fault injected, record log with writing to the current index shards
       ret = store->svc()->bi_rados->set_reshard_status(
-          dpp, bucket_info, cls_rgw_reshard_status::IN_LOGRECORD);
+          dpp, y, bucket_info, cls_rgw_reshard_status::IN_LOGRECORD);
     }
   } else {
     ret = store->svc()->bi_rados->set_reshard_status(
-        dpp, bucket_info, cls_rgw_reshard_status::IN_PROGRESS);
+        dpp, y, bucket_info, cls_rgw_reshard_status::IN_PROGRESS);
   }
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to pause "
@@ -736,7 +736,7 @@ static int change_reshard_state(rgw::sal::RadosStore* store,
 
     // unblock writes to the current index shard objects
     int ret2 = store->svc()->bi_rados->set_reshard_status(
-        dpp, bucket_info, cls_rgw_reshard_status::NOT_RESHARDING);
+        dpp, y, bucket_info, cls_rgw_reshard_status::NOT_RESHARDING);
     if (ret2 < 0) {
       ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to unblock "
           "writes to current index objects: " << cpp_strerror(ret2) << dendl;
@@ -748,7 +748,7 @@ static int change_reshard_state(rgw::sal::RadosStore* store,
   if (ret = fault.check("block_writes");
       ret == 0) { // no fault injected, block writes to the current index shards
     ret = store->svc()->bi_rados->set_reshard_status(
-        dpp, bucket_info, cls_rgw_reshard_status::IN_PROGRESS);
+        dpp, y, bucket_info, cls_rgw_reshard_status::IN_PROGRESS);
   }
 
   if (ret < 0) {
@@ -770,7 +770,7 @@ static int cancel_reshard(rgw::sal::RadosStore* store,
 {
   // unblock writes to the current index shard objects
   int ret = store->svc()->bi_rados->set_reshard_status(
-      dpp, bucket_info, cls_rgw_reshard_status::NOT_RESHARDING);
+      dpp, y, bucket_info, cls_rgw_reshard_status::NOT_RESHARDING);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to unblock "
         "writes to current index objects: " << cpp_strerror(ret) << dendl;
@@ -869,7 +869,7 @@ static int commit_reshard(rgw::sal::RadosStore* store,
 
     // unblock writes to the current index shard objects
     int ret2 = store->svc()->bi_rados->set_reshard_status(
-        dpp, bucket_info, cls_rgw_reshard_status::NOT_RESHARDING);
+        dpp, y, bucket_info, cls_rgw_reshard_status::NOT_RESHARDING);
     if (ret2 < 0) {
       ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to unblock "
           "writes to current index objects: " << cpp_strerror(ret2) << dendl;
