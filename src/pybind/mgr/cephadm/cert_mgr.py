@@ -1,14 +1,18 @@
-
 import json
 from typing import TYPE_CHECKING, Tuple, Union, List, Any, Dict, Optional
+import logging
+
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from orchestrator import OrchestratorError
+from mgr_util import verify_tls, get_cert_issuer_info, ServerConfigException
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
 CERT_STORE_CERT_PREFIX = 'cert_store.cert.'
 CERT_STORE_KEY_PREFIX = 'cert_store.key.'
+
+logger = logging.getLogger(__name__)
 
 class Cert():
     def __init__(self, cert: str = '', user_made: bool = False) -> None:
@@ -155,6 +159,10 @@ class CertKeyStore():
             'nvmeof_client_key': {},  # service-name -> key
         }
 
+    def get_key_name_from_cert(self, cert_ref: str) -> str:
+        """Translate a certificate reference name to its corresponding key reference name."""
+        return cert_ref.replace("_cert", "_key")
+
     def get_cert(self, entity: str, service_name: str = '', host: str = '') -> str:
         self._validate_cert_entity(entity, service_name, host)
 
@@ -291,9 +299,16 @@ class CertMgr:
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
 
     def __init__(self, mgr: "CephadmOrchestrator", ip: str) -> None:
+        self.mgr = mgr
         self.cert_key_store = CertKeyStore(mgr)
         self.cert_key_store.load()
         self._initialize_root_ca(ip)
+
+    # Delegate the method calls to `cert_key_store` if `name` matches one of its methods
+    def __getattr__(self, name: str) -> Any:
+        if hasattr(self.cert_key_store, name):
+            return getattr(self.cert_key_store, name)
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
     def _initialize_root_ca(self, ip: str) -> None:
         self.ssl_certs: SSLCerts = SSLCerts()
@@ -320,8 +335,59 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
-    def __getattr__(self, name: str) -> Any:
-        # Delegate the method calls to `cert_key_store` if `name` matches one of its methods
-        if hasattr(self.cert_key_store, name):
-            return getattr(self.cert_key_store, name)
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+    def validate_cert_key_pair(self, cert_ref: str, cert: str, key: str, instance: str = '') -> None:
+        """Helper method to validate a cert/key pair and handle errors."""
+        if not cert.strip() and not key.strip():
+            # Both cert and key are empty, nothing to check
+            return
+        try:
+            get_cert_issuer_info(cert)
+            verify_tls(cert, key)
+            logger.info(f"Checking certificate for {cert_ref}...")
+            # self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
+        except ServerConfigException as e:
+            instance_info = f" ({instance})" if instance else ""
+            err_msg = f"""
+            Detected invalid certificate for {cert_ref}{instance_info}. Please, use the appropriate commands to set a valid
+            key and certificate or reset their value to an empty string if you want cephadm to generate self-signed certificates.
+            Once done, reconfigure the affected daemons as needed.
+            """
+            logger.error(f'Detected invalid certificate for {cert_ref}{instance_info}: {e}')
+            self.mgr.set_health_warning(
+                'CEPHADM_CERT_ERROR',
+                f'Invalid certificate for {cert_ref}{instance_info}: {e}',
+                1,
+                [err_msg]
+            )
+
+    def check_certificates(self) -> None:
+
+        def get_service_or_host(cert_ref: str, instance: str) -> Tuple[str, str]:
+            """Determine the service name or host based on the cert_ref."""
+            service_name = instance if cert_ref in self.cert_key_store.service_name_cert else None
+            host = instance if cert_ref in self.cert_key_store.host_cert else None
+            return service_name, host
+
+        def get_cert_and_key(cert_ref: str, instance: str = '') -> Tuple[str, str, str]:
+            """Retrieve certificate and key, translating names as necessary."""
+            service_name, host = get_service_or_host(cert_ref, instance) if instance else (None, None)
+            cert = self.cert_key_store.get_cert(cert_ref, service_name=service_name, host=host)
+            key_ref = self.cert_key_store.get_key_name_from_cert(cert_ref)
+            key = self.cert_key_store.get_key(key_ref, service_name=service_name, host=host)
+            return cert, key, instance
+
+        for cert_ref, cert_entries in self.cert_key_store.cert_ls().items():
+            if not cert_entries:
+                # No certificates to check for this reference
+                continue
+
+            if isinstance(cert_entries, dict):
+                # Process only valid instances
+                instances = [instance for instance, exists in cert_entries.items() if exists]
+                for instance in instances:
+                    cert, key, instance_info = get_cert_and_key(cert_ref, instance)
+                    self.validate_cert_key_pair(cert_ref, cert, key, instance_info)
+            else:
+                # Global cert case
+                cert, key, _ = get_cert_and_key(cert_ref)
+                self.validate_cert_key_pair(cert_ref, cert, key)

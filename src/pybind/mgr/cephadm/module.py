@@ -3268,6 +3268,11 @@ Then run the following:
         return self.cert_mgr.cert_ls()
 
     @handle_orch_error
+    def cert_store_cert_check(self) -> Dict[str, Any]:
+        self.cert_mgr.check_certificates()
+        return {}
+
+    @handle_orch_error
     def cert_store_key_ls(self) -> Dict[str, Any]:
         return self.cert_mgr.key_ls()
 
