@@ -1265,6 +1265,13 @@ struct ReplicationConfiguration {
         return -EINVAL;
       }
 
+      if (std::holds_alternative<rgw_account_id>(s->owner.id)) {
+        // replication configuration is not supported for accounts
+        // only uid is supported
+        ldpp_dout(s, 1) << "NOTICE: replication configuration is not supported for accounts" << dendl;
+        return -ERR_NOT_IMPLEMENTED;
+      }
+
       pipe->id = id;
       pipe->params.priority = priority;
 
