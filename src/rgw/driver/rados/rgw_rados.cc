@@ -6172,31 +6172,6 @@ int RGWRados::bucket_resync_encrypted_multipart(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int RGWRados::bucket_set_reshard(const DoutPrefixProvider *dpp,
-                                 const RGWBucketInfo& bucket_info,
-                                 const cls_rgw_bucket_instance_entry& entry)
-{
-  librados::IoCtx index_pool;
-  map<int, string> bucket_objs;
-
-  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
-      ": unable to open bucket index, r=" << r << " (" <<
-      cpp_strerror(-r) << ")" << dendl;
-    return r;
-  }
-
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  r = CLSRGWIssueSetBucketResharding(index_pool, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
-      ": unable to issue set bucket resharding, r=" << r << " (" <<
-      cpp_strerror(-r) << ")" << dendl;
-  }
-  return r;
-}
-
 int RGWRados::defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y)
 {
   std::string oid, key;
