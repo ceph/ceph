@@ -504,15 +504,6 @@ public:
 
 void cls_rgw_bilog_start(librados::ObjectWriteOperation& op);
 
-class CLSRGWIssueResyncBucketBILog : public CLSRGWConcurrentIO {
-protected:
-  int issue_op(int shard_id, const std::string& oid);
-public:
-  CLSRGWIssueResyncBucketBILog(librados::IoCtx& io_ctx, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
-  virtual ~CLSRGWIssueResyncBucketBILog() override {}
-};
-
 class CLSRGWIssueBucketBILogStop : public CLSRGWConcurrentIO {
 protected:
   int issue_op(int shard_id, const std::string& oid);
