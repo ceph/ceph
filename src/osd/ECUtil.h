@@ -400,27 +400,6 @@ inline uint64_t align_page_prev(uint64_t val) {
   return val & ~page_mask();
 }
 
-int decode(
-  const stripe_info_t &sinfo,
-  ceph::ErasureCodeInterfaceRef &ec_impl,
-  const std::set<int> want_to_read,
-  std::map<int, ceph::buffer::list> &to_decode,
-  ceph::buffer::list *out);
-
-int decode(
-  const stripe_info_t &sinfo,
-  ceph::ErasureCodeInterfaceRef &ec_impl,
-  std::map<int, ceph::buffer::list> &to_decode,
-  std::map<int, ceph::buffer::list*> &out);
-
-int encode(
-  const stripe_info_t &sinfo,
-  ceph::ErasureCodeInterfaceRef &ec_impl,
-  ceph::buffer::list &in,
-  uint64_t offset,
-  const std::set<int> &want,
-  std::map<int, ceph::buffer::list> *out);
-
 class HashInfo {
   uint64_t total_chunk_size = 0;
   std::vector<uint32_t> cumulative_shard_hashes;
@@ -599,6 +578,9 @@ public:
   void zero_pad(int shard, uint64_t offset, uint64_t length);
   void zero_pad(uint64_t offset, uint64_t length);
   bufferlist get_ro_buffer(uint64_t ro_offset, uint64_t ro_length);
+  /* Returns a buffer assuming that there is a single contigious buffer
+   * represented by the map. */
+  bufferlist get_ro_buffer();
   shard_extent_set_t get_extent_set();
   void insert_parity_buffers();
   void erase_shard(int shard);

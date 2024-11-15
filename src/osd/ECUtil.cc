@@ -181,126 +181,6 @@ void ECUtil::stripe_info_t::ro_size_to_zero_mask(
   trim_shard_extent_set_for_ro_offset(ro_size, shard_extent_set);
 }
 
-/** This variant of decode requires that the set of shards contained in
- * want_to_read is the same for every stripe. Unlike the previous decode, this
- * variant is able to take the entire buffer list of each shard in a single
- * buffer list.  If performance is not critical, this is a simpler interface
- * * and as such is suitable for test tools.
- */
-int ECUtil::decode(
-  const stripe_info_t &sinfo,
-  ErasureCodeInterfaceRef &ec_impl,
-  const set<int> want_to_read,
-  map<int, bufferlist> &to_decode,
-  bufferlist *out)
-{
-  ceph_assert(to_decode.size());
-
-  uint64_t total_data_size = to_decode.begin()->second.length();
-  ceph_assert(total_data_size % sinfo.get_chunk_size() == 0);
-
-  ceph_assert(out);
-  ceph_assert(out->length() == 0);
-
-  for (map<int, bufferlist>::iterator i = to_decode.begin();
-       i != to_decode.end();
-       ++i) {
-    ceph_assert(i->second.length() == total_data_size);
-  }
-
-  if (total_data_size == 0)
-    return 0;
-
-  for (uint64_t i = 0; i < total_data_size; i += sinfo.get_chunk_size()) {
-    map<int, bufferlist> chunks;
-    for (map<int, bufferlist>::iterator j = to_decode.begin();
-	 j != to_decode.end();
-	 ++j) {
-      chunks[j->first].substr_of(j->second, i, sinfo.get_chunk_size());
-    }
-    bufferlist bl;
-    int r = ec_impl->decode_concat(want_to_read, chunks, &bl);
-    ceph_assert(r == 0);
-    ceph_assert(bl.length() % sinfo.get_chunk_size() == 0);
-    out->claim_append(bl);
-  }
-  return 0;
-}
-
-/* This variant of decode is used from recovery of an EC */
-int ECUtil::decode(
-  const stripe_info_t &sinfo,
-  ErasureCodeInterfaceRef &ec_impl,
-  map<int, bufferlist> &to_decode,
-  map<int, bufferlist*> &out) {
-
-  ceph_assert(to_decode.size());
-
-  for (auto &&i : to_decode) {
-    if(i.second.length() == 0)
-      return 0;
-  }
-
-  set<int> need;
-  for (map<int, bufferlist*>::iterator i = out.begin();
-       i != out.end();
-       ++i) {
-    ceph_assert(i->second);
-    ceph_assert(i->second->length() == 0);
-    need.insert(i->first);
-  }
-
-  set<int> avail;
-  for (auto &&i : to_decode) {
-    ceph_assert(i.second.length() != 0);
-    avail.insert(i.first);
-  }
-
-  map<int, vector<pair<int, int>>> min;
-  int r = ec_impl->minimum_to_decode(need, avail, &min);
-  ceph_assert(r == 0);
-
-  int chunks_count = 0;
-  int repair_data_per_chunk = 0;
-  int subchunk_size = sinfo.get_chunk_size()/ec_impl->get_sub_chunk_count();
-
-  for (auto &&i : to_decode) {
-    auto found = min.find(i.first);
-    if (found != min.end()) {
-      int repair_subchunk_count = 0;
-      for (auto& subchunks : min[i.first]) {
-        repair_subchunk_count += subchunks.second;
-      }
-      repair_data_per_chunk = repair_subchunk_count * subchunk_size;
-      chunks_count = (int)i.second.length() / repair_data_per_chunk;
-      break;
-    }
-  }
-
-  for (int i = 0; i < chunks_count; i++) {
-    map<int, bufferlist> chunks;
-    for (auto j = to_decode.begin();
-	 j != to_decode.end();
-	 ++j) {
-      chunks[j->first].substr_of(j->second,
-                                 i*repair_data_per_chunk,
-                                 repair_data_per_chunk);
-    }
-    map<int, bufferlist> out_bls;
-    r = ec_impl->decode(need, chunks, &out_bls, sinfo.get_chunk_size());
-    ceph_assert(r == 0);
-    for (auto j = out.begin(); j != out.end(); ++j) {
-      ceph_assert(out_bls.count(j->first));
-      ceph_assert(out_bls[j->first].length() == sinfo.get_chunk_size());
-      j->second->claim_append(out_bls[j->first]);
-    }
-  }
-  for (auto &&i : out) {
-    ceph_assert(i.second->length() == chunks_count * sinfo.get_chunk_size());
-  }
-  return 0;
-}
-
 namespace ECUtil {
   void shard_extent_map_t::erase_after_ro_offset(uint64_t ro_offset)
   {
@@ -759,6 +639,10 @@ namespace ECUtil {
     return bl;
   }
 
+  bufferlist shard_extent_map_t::get_ro_buffer() {
+    return get_ro_buffer(ro_start, ro_end - ro_start);
+  }
+
   std::string shard_extent_map_t::debug_string(uint64_t interval, uint64_t offset) const
   {
     std::stringstream str;
@@ -843,53 +727,6 @@ namespace ECUtil {
       map[shard].insert(other.at(shard));
   }
 
-}
-
-
-int ECUtil::encode(
-  const stripe_info_t &sinfo,
-  ErasureCodeInterfaceRef &ec_impl,
-  bufferlist &in,
-  uint64_t offset,
-  const set<int> &want,
-  map<int, bufferlist> *out) {
-
-  uint64_t logical_size = in.length();
-  uint64_t stripe_width = sinfo.get_stripe_width();
-
-  ceph_assert(logical_size % sinfo.get_stripe_width() == 0);
-  ceph_assert(out);
-  ceph_assert(out->empty());
-
-  if (logical_size == 0)
-    return 0;
-
-  for (uint64_t i = 0, start = offset; i < logical_size;) {
-    uint64_t to_end_of_stripe = (start/stripe_width + 1) * stripe_width - start;
-    uint64_t to_end_of_buffer = logical_size - i;
-    uint64_t buffer_size = min(to_end_of_buffer, to_end_of_stripe);
-
-    map<int, bufferlist> encoded;
-    bufferlist buf;
-    buf.substr_of(in, i, buffer_size);
-    int r = ec_impl->encode(want, buf, &encoded);
-    ceph_assert(r == 0);
-    for (map<int, bufferlist>::iterator i = encoded.begin();
-	 i != encoded.end();
-	 ++i) {
-      (*out)[i->first].claim_append(i->second);
-    }
-  }
-
-  for (map<int, bufferlist>::iterator i = out->begin();
-       i != out->end();
-       ++i) {
-    ceph_assert(i->second.length() % sinfo.get_chunk_size() == 0);
-    ceph_assert(
-      sinfo.aligned_chunk_offset_to_logical_offset(i->second.length()) ==
-      logical_size);
-  }
-  return 0;
 }
 
 void ECUtil::HashInfo::append(uint64_t old_size,

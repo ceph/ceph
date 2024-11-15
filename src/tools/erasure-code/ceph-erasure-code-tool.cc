@@ -6,7 +6,6 @@
 #include "common/ceph_argparse.h"
 #include "common/config_proxy.h"
 #include "common/errno.h"
-#include "erasure-code/ErasureCode.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -195,37 +194,36 @@ int do_encode(const std::vector<const char*> &args) {
     return r;
   }
 
-  std::set<int> want;
+  ECUtil::shard_extent_map_t encoded_data(sinfo.get());
   std::vector<std::string> shards;
   boost::split(shards, args[2], boost::is_any_of(","));
-  for (auto &shard : shards) {
-    want.insert(atoi(shard.c_str()));
-  }
-  ceph::bufferlist decoded_data;
+  ceph::bufferlist input_data;
   std::string fname = args[3];
 
   std::string error;
-  r = decoded_data.read_file(fname.c_str(), &error);
+  r = input_data.read_file(fname.c_str(), &error);
   if (r < 0) {
     std::cerr << "failed to read " << fname << ": " << error << std::endl;
     return 1;
   }
 
   uint64_t stripe_width = sinfo->get_stripe_width();
-  if (decoded_data.length() % stripe_width != 0) {
-    uint64_t pad = stripe_width - decoded_data.length() % stripe_width;
-    decoded_data.append_zero(pad);
+  if (input_data.length() % stripe_width != 0) {
+    uint64_t pad = stripe_width - input_data.length() % stripe_width;
+    input_data.append_zero(pad);
   }
 
-  std::map<int, ceph::bufferlist> encoded_data;
-  r = ECUtil::encode(*sinfo, ec_impl, decoded_data, 0, want, &encoded_data);
+  sinfo->ro_range_to_shard_extent_map(0, input_data.length(), input_data, encoded_data);
+  r = encoded_data.encode(ec_impl, nullptr, encoded_data.get_ro_end());
   if (r < 0) {
     std::cerr << "failed to encode: " << cpp_strerror(r) << std::endl;
     return 1;
   }
 
-  for (auto &[shard, bl] : encoded_data) {
+  for (auto &[shard, _] : encoded_data.get_extent_maps()) {
     std::string name = fname + "." + stringify(shard);
+    bufferlist bl;
+    encoded_data.get_shard_first_buffer(shard, bl);
     r = bl.write_file(name.c_str());
     if (r < 0) {
       std::cerr << "failed to write " << name << ": " << cpp_strerror(r)
@@ -246,40 +244,41 @@ int do_decode(const std::vector<const char*> &args) {
   ceph::ErasureCodeInterfaceRef ec_impl;
   std::unique_ptr<ECUtil::stripe_info_t> sinfo;
   int r = ec_init(args[0], args[1], &ec_impl, &sinfo);
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
-  std::map<int, ceph::bufferlist> encoded_data;
+  ECUtil::shard_extent_map_t encoded_data(sinfo.get());
   std::vector<std::string> shards;
   boost::split(shards, args[2], boost::is_any_of(","));
-  for (auto &shard : shards) {
-    encoded_data[atoi(shard.c_str())] = {};
-  }
-  ceph::bufferlist decoded_data;
   std::string fname = args[3];
 
   std::set<int> want_to_read;
   const auto chunk_mapping = ec_impl->get_chunk_mapping();
-  for (auto &[shard, bl] : encoded_data) {
-    std::string name = fname + "." + stringify(shard);
+  for (auto &shard_str : shards) {
+    std::string name = fname + "." + shard_str;
     std::string error;
+    bufferlist bl;
     r = bl.read_file(name.c_str(), &error);
     if (r < 0) {
       std::cerr << "failed to read " << name << ": " << error << std::endl;
       return 1;
     }
-    auto chunk = static_cast<ssize_t>(chunk_mapping.size()) > shard ?
-      chunk_mapping[shard] : shard;
-    want_to_read.insert(chunk);
+    int shard = sinfo->get_shard(atoi(shard_str.c_str()));
+    encoded_data.insert_in_shard(shard, 0, bl);
   }
 
-  r = ECUtil::decode(*sinfo, ec_impl, want_to_read, encoded_data, &decoded_data);
+  ECUtil::shard_extent_set_t wanted;
+  sinfo->ro_range_to_shard_extent_set(encoded_data.get_ro_start(),
+    encoded_data.get_ro_end() - encoded_data.get_ro_start(), wanted);
+
+  r = encoded_data.decode(ec_impl, wanted);
   if (r < 0) {
     std::cerr << "failed to decode: " << cpp_strerror(r) << std::endl;
     return 1;
   }
 
+  bufferlist decoded_data = encoded_data.get_ro_buffer();
   r = decoded_data.write_file(fname.c_str());
   if (r < 0) {
     std::cerr << "failed to write " << fname << ": " << cpp_strerror(r)
