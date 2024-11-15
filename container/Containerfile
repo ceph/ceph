@@ -22,6 +22,10 @@ ARG OSD_FLAVOR="default"
 # (optional) Should be 'true' for CI builds (pull from shaman, etc.)
 ARG CI_CONTAINER="true"
 
+# creds for accessing prerelease packages on download.ceph.com for release builds
+ARG PRERELEASE_USERNAME ""
+ARG PRERELEASE_PASSWORD ""
+
 RUN /bin/echo -e "\
 FROM_IMAGE: ${FROM_IMAGE}\n\
 CEPH_REF: ${CEPH_REF}\n\
@@ -82,9 +86,14 @@ RUN set -x && \
         REPO_URL=$(curl -s "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/9/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
     else \
         IS_RELEASE=1 ;\
-        REPO_URL="http://download.ceph.com/rpm-${CEPH_REF}/el9/" ;\
+        REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/el9/" ;\
     fi && \
-    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el9.noarch.rpm"
+    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el9.noarch.rpm" ; \
+    if [[ IS_RELEASE ]] ; then \
+	sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
+	dnf clean expire-cache ; \
+    fi
+
 
 # Copr repos
 # scikit for mgr-diskprediction-local

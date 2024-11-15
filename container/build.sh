@@ -22,6 +22,8 @@ CONTAINER_REPO_HOSTNAME (quay.ceph.io, for CI, for instance)
 CONTAINER_REPO_ORGANIZATION (ceph-ci, for CI, for instance)
 CONTAINER_REPO_USERNAME
 CONTAINER_REPO_PASSWORD
+PRERELEASE_USERNAME for download.ceph.com:/prerelease/ceph
+PRERELEASE_PASSWORD
 
 For a release build: (from ceph.git, built and pushed to download.ceph.com)
 CI_CONTAINER: must be 'false'
@@ -99,6 +101,8 @@ podman build --pull=newer --squash -f $CFILE -t build.sh.output \
     --build-arg CEPH_REF=${BRANCH:-main} \
     --build-arg OSD_FLAVOR=${FLAVOR:-default} \
     --build-arg CI_CONTAINER=${CI_CONTAINER:-default} \
+    --build-arg PRERELEASE_USERNAME=${PRERELEASE_USERNAME} \
+    --build-arg PRERELEASE_PASSWORD=${PRERELEASE_PASSWORD} \
     2>&1 
 
 image_id=$(podman image ls localhost/build.sh.output --format '{{.ID}}')
