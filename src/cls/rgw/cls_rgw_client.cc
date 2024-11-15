@@ -699,18 +699,6 @@ void cls_rgw_bilog_stop(ObjectWriteOperation& op)
   op.exec(RGW_CLASS, RGW_BI_LOG_STOP, in);
 }
 
-static bool issue_bi_log_stop(librados::IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager)
-{
-  librados::ObjectWriteOperation op;
-  cls_rgw_bilog_stop(op);
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-int CLSRGWIssueBucketBILogStop::issue_op(const int shard_id, const string& oid)
-{
-  return issue_bi_log_stop(io_ctx, shard_id, oid, &manager);
-}
-
 class GetDirHeaderCompletion : public ObjectOperationCompletion {
   boost::intrusive_ptr<RGWGetDirHeader_CB> cb;
 public:

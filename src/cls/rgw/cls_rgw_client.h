@@ -505,15 +505,6 @@ public:
 void cls_rgw_bilog_start(librados::ObjectWriteOperation& op);
 void cls_rgw_bilog_stop(librados::ObjectWriteOperation& op);
 
-class CLSRGWIssueBucketBILogStop : public CLSRGWConcurrentIO {
-protected:
-  int issue_op(int shard_id, const std::string& oid);
-public:
-  CLSRGWIssueBucketBILogStop(librados::IoCtx& io_ctx, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
-  virtual ~CLSRGWIssueBucketBILogStop() override {}
-};
-
 int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, const std::string& oid,
                                  boost::intrusive_ptr<RGWGetDirHeader_CB> cb);
 
