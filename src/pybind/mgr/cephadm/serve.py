@@ -111,6 +111,7 @@ class CephadmServe:
                     self._check_daemons()
 
                     self._check_certificates()
+                    #self.mgr.cert_mgr.check_certificates()
 
                     self._purge_deleted_services()
 
