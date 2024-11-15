@@ -148,7 +148,7 @@ def wrap(s, sl):
     """return a '+' suffixed wrapped string"""
     if len(s) < sl:
         return s
-    return f'{s[0:sl-1]}+'
+    return f'{s[0:sl - 1]}+'
 
 
 class FSTopBase(object):
