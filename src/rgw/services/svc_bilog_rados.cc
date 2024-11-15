@@ -102,6 +102,16 @@ int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
   return ceph::from_error_code(ec);
 }
 
+struct StartWriter : rgwrados::shard_io::RadosWriter {
+  using RadosWriter::RadosWriter;
+  void prepare_write(int, librados::ObjectWriteOperation& op) override {
+    cls_rgw_bilog_start(op);
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "restart bilog shards: ";
+  }
+};
+
 int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, optional_yield y,
                                  const RGWBucketInfo& bucket_info,
                                  const rgw::bucket_log_layout_generation& log_layout,
@@ -114,8 +124,25 @@ int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, optional_yield y
   if (r < 0)
     return r;
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  return CLSRGWIssueResyncBucketBILog(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+  const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto writer = StartWriter{*dpp, ex, index_pool};
+
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
+  } else {
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto writer = StartWriter{*dpp, ex, index_pool};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
+                                     ceph::async::use_blocked[ec]);
+  }
+  return ceph::from_error_code(ec);
 }
 
 int RGWSI_BILog_RADOS::log_stop(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
