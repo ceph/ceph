@@ -9938,18 +9938,6 @@ int RGWRados::bi_remove(const DoutPrefixProvider *dpp, BucketShard& bs)
   return 0;
 }
 
-int RGWRados::trim_reshard_log_entries(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y)
-{
-  librados::IoCtx index_pool;
-  map<int, string> bucket_objs;
-
-  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
-  if (r < 0) {
-    return r;
-  }
-  return CLSRGWIssueReshardLogTrim(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
-}
-
 int RGWRados::gc_operate(const DoutPrefixProvider *dpp, string& oid, librados::ObjectWriteOperation&& op, optional_yield y)
 {
   return rgw_rados_operate(dpp, gc_pool_ctx, oid, std::move(op), y);

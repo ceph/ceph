@@ -552,7 +552,7 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
     ret = 0; // non-fatal error
   }
   // trim the reshard log entries written in logrecord state
-  ret = store->getRados()->trim_reshard_log_entries(dpp, bucket_info, y);
+  ret = store->svc()->bi_rados->trim_reshard_log(dpp, y, bucket_info);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to trim "
         "reshard log entries: " << cpp_strerror(ret) << dendl;
@@ -640,11 +640,11 @@ static int init_reshard(rgw::sal::RadosStore* store,
   if (support_logrecord) {
     if (ret = fault.check("trim_reshard_log_entries");
         ret == 0) { // no fault injected, trim reshard log entries
-      ret = store->getRados()->trim_reshard_log_entries(dpp, bucket_info, y);
+      ret = store->svc()->bi_rados->trim_reshard_log(dpp, y, bucket_info);
     }
     if (ret == -EOPNOTSUPP) {
       // not an error, logrecord is not supported, change to block reshard
-      ldpp_dout(dpp, 0) << "WARNING: " << "trim_reshard_log_entries() does not supported"
+      ldpp_dout(dpp, 0) << "WARNING: " << "trim_reshard_log() does not supported"
                         << " logrecord, falling back to block reshard mode." << dendl;
       bucket_info.layout.resharding = rgw::BucketReshardState::InProgress;
       support_logrecord = false;
