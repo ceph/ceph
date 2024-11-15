@@ -693,11 +693,16 @@ void cls_rgw_bilog_start(ObjectWriteOperation& op)
   op.exec(RGW_CLASS, RGW_BI_LOG_RESYNC, in);
 }
 
-static bool issue_bi_log_stop(librados::IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager)
+void cls_rgw_bilog_stop(ObjectWriteOperation& op)
 {
   bufferlist in;
-  librados::ObjectWriteOperation op;
   op.exec(RGW_CLASS, RGW_BI_LOG_STOP, in);
+}
+
+static bool issue_bi_log_stop(librados::IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager)
+{
+  librados::ObjectWriteOperation op;
+  cls_rgw_bilog_stop(op);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 

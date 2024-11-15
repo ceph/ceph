@@ -503,6 +503,7 @@ public:
 };
 
 void cls_rgw_bilog_start(librados::ObjectWriteOperation& op);
+void cls_rgw_bilog_stop(librados::ObjectWriteOperation& op);
 
 class CLSRGWIssueBucketBILogStop : public CLSRGWConcurrentIO {
 protected:
