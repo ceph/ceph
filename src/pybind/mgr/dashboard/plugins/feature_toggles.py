@@ -9,6 +9,8 @@ from mgr_module import CLICommand, Option
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
+from ..controllers.nvmeof import NVMeoFGateway, NVMeoFHost, NVMeoFListener, \
+    NVMeoFNamespace, NVMeoFSubsystem
 from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash
 from ..controllers.rbd_mirroring import RbdMirroringPoolMode, \
     RbdMirroringPoolPeer, RbdMirroringSummary
@@ -26,6 +28,7 @@ class Features(Enum):
     RGW = 'rgw'
     NFS = 'nfs'
     DASHBOARD = 'dashboard'
+    NVME_OF = 'nvmeof'
 
 
 PREDISABLED_FEATURES = set()  # type: Set[str]
@@ -38,6 +41,10 @@ Feature2Controller = {
     Features.CEPHFS: [CephFS],
     Features.RGW: [Rgw, RgwDaemon, RgwBucket, RgwUser],
     Features.NFS: [NFSGaneshaUi, NFSGaneshaExports],
+    Features.NVME_OF: [
+        NVMeoFGateway, NVMeoFSubsystem, NVMeoFHost, NVMeoFNamespace,
+        NVMeoFListener
+    ],
 }
 
 
