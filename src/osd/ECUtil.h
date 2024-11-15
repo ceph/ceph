@@ -16,7 +16,6 @@
 #define ECUTIL_H
 
 #include <ostream>
-#include <opentelemetry/ext/http/client/http_client.h>
 #include <span>
 
 #include "erasure-code/ErasureCodeInterface.h"
