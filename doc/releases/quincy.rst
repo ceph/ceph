@@ -150,7 +150,7 @@ Changelog
 * doc/cephadm: Improve multiple files (`pr#56134 <https://github.com/ceph/ceph/pull/56134>`_, Anthony D'Atri)
 * doc/cephadm: Quincy default images procedure (`pr#57239 <https://github.com/ceph/ceph/pull/57239>`_, Zac Dover)
 * doc/cephadm: remove downgrade reference from upgrade docs (`pr#57087 <https://github.com/ceph/ceph/pull/57087>`_, Adam King)
-* doc/cephfs/client-auth.rst: correct ``fs authorize cephfs1 /dir1 clie… (`pr#55247 <https://github.com/ceph/ceph/pull/55247>`_, 叶海丰)
+* doc/cephfs/client-auth.rst: correct `fs authorize cephfs1 /dir1 clie…` (`pr#55247 <https://github.com/ceph/ceph/pull/55247>`_, 叶海丰)
 * doc/cephfs: add cache pressure information (`pr#59150 <https://github.com/ceph/ceph/pull/59150>`_, Zac Dover)
 * doc/cephfs: add doc for disabling mgr/volumes plugin (`pr#60498 <https://github.com/ceph/ceph/pull/60498>`_, Rishabh Dave)
 * doc/cephfs: disambiguate "Reporting Free Space" (`pr#56873 <https://github.com/ceph/ceph/pull/56873>`_, Zac Dover)
@@ -768,6 +768,21 @@ Changelog
 * Tools/rados: Improve Error Messaging for Object Name Resolution (`pr#55598 <https://github.com/ceph/ceph/pull/55598>`_, Nitzan Mordechai)
 * tools/rbd: make 'children' command support --image-id (`pr#55618 <https://github.com/ceph/ceph/pull/55618>`_, Mykola Golub)
 * win32_deps_build.sh: change Boost URL (`pr#55085 <https://github.com/ceph/ceph/pull/55085>`_, Lucian Petrut)
+
+
+el8 builds                                                                       
+----------
+
+RPM packages for EL8 (RHEL, CentOS, Rocky, AlmaLinux, etc.) are provided by CERN as a
+community member. These packages come with no warranty and have not been tested.
+The software in them has been tested by Ceph according to
+[platforms](https://docs.ceph.com/en/latest/start/os-recommendations/#platforms).
+
+The repository for EL8 builds is hosted by CERN at [Linux @ CERN](https://linuxsoft.cern.ch/repos/ceph-ext-quincy8el-stable/).
+The public part of the GPG key used to sign the packages is available at 
+[RPM-GPG-KEY-Ceph-Community](https://linuxsoft.cern.ch/repos/RPM-GPG-KEY-Ceph-Community).
+
+
 
 v17.2.7 Quincy
 ==============
