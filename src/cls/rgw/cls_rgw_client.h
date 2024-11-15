@@ -580,9 +580,10 @@ void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err)
 // these overloads which call io_ctx.operate() should not be called in the rgw.
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
 #ifndef CLS_CLIENT_HIDE_IOCTX
-int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid,
-                                  const cls_rgw_bucket_instance_entry& entry);
 int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid);
 int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid,
                                   cls_rgw_bucket_instance_entry *entry);
 #endif
+
+void cls_rgw_set_bucket_resharding(librados::ObjectWriteOperation& op,
+                                   cls_rgw_reshard_status status);

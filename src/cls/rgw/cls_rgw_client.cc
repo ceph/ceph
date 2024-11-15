@@ -1101,18 +1101,6 @@ void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_re
   op.exec(RGW_CLASS, RGW_RESHARD_REMOVE, in);
 }
 
-int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
-				  const cls_rgw_bucket_instance_entry& entry)
-{
-  bufferlist in, out;
-  cls_rgw_set_bucket_resharding_op call;
-  call.entry = entry;
-  encode(call, in);
-  librados::ObjectWriteOperation op;
-  op.exec(RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in);
-  return io_ctx.operate(oid, &op);
-}
-
 int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid)
 {
   bufferlist in, out;
@@ -1155,17 +1143,24 @@ void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err)
   op.exec(RGW_CLASS, RGW_GUARD_BUCKET_RESHARDING, in);
 }
 
+void cls_rgw_set_bucket_resharding(librados::ObjectWriteOperation& op,
+                                   cls_rgw_reshard_status status)
+{
+  bufferlist in;
+  cls_rgw_set_bucket_resharding_op call;
+  call.entry.reshard_status = status;
+  encode(call, in);
+
+  op.assert_exists(); // the shard must exist; if not fail rather than recreate
+  op.exec(RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in);
+}
+
 static bool issue_set_bucket_resharding(librados::IoCtx& io_ctx,
 					const int shard_id, const string& oid,
                                         const cls_rgw_bucket_instance_entry& entry,
                                         BucketIndexAioManager *manager) {
-  bufferlist in;
-  cls_rgw_set_bucket_resharding_op call;
-  call.entry = entry;
-  encode(call, in);
   librados::ObjectWriteOperation op;
-  op.assert_exists(); // the shard must exist; if not fail rather than recreate
-  op.exec(RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in);
+  cls_rgw_set_bucket_resharding(op, entry.reshard_status);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 

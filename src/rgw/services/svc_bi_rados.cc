@@ -614,13 +614,27 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp, c
   return 0;
 }
 
+struct ReshardStatusWriter : rgwrados::shard_io::RadosWriter {
+  cls_rgw_reshard_status status;
+  ReshardStatusWriter(const DoutPrefixProvider& dpp,
+                      boost::asio::any_io_executor ex,
+                      librados::IoCtx& ioctx,
+                      cls_rgw_reshard_status status)
+    : RadosWriter(dpp, std::move(ex), ioctx), status(status)
+  {}
+  void prepare_write(int, librados::ObjectWriteOperation& op) override {
+    cls_rgw_set_bucket_resharding(op, status);
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "set resharding status: ";
+  }
+};
+
 int RGWSI_BucketIndex_RADOS::set_reshard_status(const DoutPrefixProvider *dpp,
                                                 optional_yield y,
                                                 const RGWBucketInfo& bucket_info,
                                                 cls_rgw_reshard_status status)
 {
-  const auto entry = cls_rgw_bucket_instance_entry{.reshard_status = status};
-
   librados::IoCtx index_pool;
   map<int, string> bucket_objs;
 
@@ -632,14 +646,25 @@ int RGWSI_BucketIndex_RADOS::set_reshard_status(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  r = CLSRGWIssueSetBucketResharding(index_pool, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
-      ": unable to issue set bucket resharding, r=" << r << " (" <<
-      cpp_strerror(-r) << ")" << dendl;
+  const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto writer = ReshardStatusWriter{*dpp, ex, index_pool, status};
+
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
+  } else {
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto writer = ReshardStatusWriter{*dpp, ex, index_pool, status};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
+                                     ceph::async::use_blocked[ec]);
   }
-  return r;
+  return ceph::from_error_code(ec);
 }
 
 int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
