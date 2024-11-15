@@ -8715,7 +8715,7 @@ next:
 			bucket->get_info(), bucket->get_attrs(),
 			nullptr /* no callback */);
     list<cls_rgw_bucket_instance_entry> status;
-    int r = br.get_status(dpp(), &status);
+    int r = br.get_status(dpp(), null_yield, &status);
     if (r < 0) {
       cerr << "ERROR: could not get resharding status for bucket " <<
 	bucket_name << std::endl;

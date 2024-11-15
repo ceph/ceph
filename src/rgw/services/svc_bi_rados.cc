@@ -583,7 +583,10 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, list<cls_rgw_bucket_instance_entry> *status)
+int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp,
+                                                optional_yield y,
+                                                const RGWBucketInfo& bucket_info,
+                                                list<cls_rgw_bucket_instance_entry> *status)
 {
   map<int, string> bucket_objs;
 
