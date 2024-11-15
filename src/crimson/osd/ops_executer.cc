@@ -821,6 +821,76 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   }
 }
 
+OpsExecuter::rep_op_fut_t
+OpsExecuter::flush_changes_and_submit(
+  const std::vector<OSDOp>& ops,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver)
+{
+  const bool want_mutate = !txn.empty();
+  // osd_op_params are instantiated by every wr-like operation.
+  assert(osd_op_params || !want_mutate);
+  assert(obc);
+
+  auto submitted = interruptor::now();
+  auto all_completed = interruptor::now();
+
+  if (cloning_ctx) {
+    ceph_assert(want_mutate);
+  }
+
+  apply_stats();
+  if (want_mutate) {
+    auto log_entries = flush_clone_metadata(
+      prepare_transaction(ops),
+      snap_mapper,
+      osdriver,
+      txn);
+
+    if (auto log_rit = log_entries.rbegin(); log_rit != log_entries.rend()) {
+      ceph_assert(log_rit->version == osd_op_params->at_version);
+    }
+
+    pg->mutate_object(obc, txn, *osd_op_params);
+    /*
+     * This works around the gcc bug causing the generated code to incorrectly
+     * execute unconditionally before the predicate.
+     *
+     * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101244
+     */
+    auto clone_obc = cloning_ctx
+      ? std::move(cloning_ctx->clone_obc)
+      : nullptr;
+    auto [_submitted, _all_completed] = co_await pg->submit_transaction(
+      std::move(obc),
+      std::move(clone_obc),
+      std::move(txn),
+      std::move(*osd_op_params),
+      std::move(log_entries)
+    );
+
+    submitted = std::move(_submitted);
+    all_completed = std::move(_all_completed);
+  }
+
+  if (op_effects.size()) [[unlikely]] {
+    // need extra ref pg due to apply_stats() which can be executed after
+    // informing snap mapper
+    all_completed =
+      std::move(all_completed).then_interruptible([this, pg=this->pg] {
+      // let's do the cleaning of `op_effects` in destructor
+      return interruptor::do_for_each(op_effects,
+        [pg=std::move(pg)](auto& op_effect) {
+        return op_effect->execute(pg);
+      });
+    });
+  }
+
+  co_return std::make_tuple(
+    std::move(submitted),
+    std::move(all_completed));
+}
+
 void OpsExecuter::fill_op_params(OpsExecuter::modified_by m)
 {
   osd_op_params.emplace();

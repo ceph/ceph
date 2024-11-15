@@ -1175,22 +1175,8 @@ PG::submit_executer_fut PG::submit_executer(
   ).flush_changes_and_submit(
     ops,
     snap_mapper,
-    osdriver,
-    [FNAME, this](auto&& txn,
-		  auto&& obc,
-		  auto&& osd_op_p,
-		  auto&& log_entries,
-                  auto&& new_clone) {
-      DEBUGDPP("object {} submitting txn", *this, obc->get_oid());
-      mutate_object(obc, txn, osd_op_p);
-      return submit_transaction(
-	std::move(obc),
-        std::move(new_clone),
-	std::move(txn),
-	std::move(osd_op_p),
-	std::move(log_entries));
-    });
-
+    osdriver
+  );
   co_return std::make_tuple(
     std::move(submitted).then_interruptible([unlocker=std::move(unlocker)] {}),
     std::move(completed));
