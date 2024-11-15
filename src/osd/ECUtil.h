@@ -60,6 +60,7 @@ namespace ECUtil {
 
   struct shard_extent_set_t
   {
+    // The following boilerplate is just to make this look like a map.
     std::map<int, extent_set> map;
     bool contains(int shard) const { return map.contains(shard); }
     bool empty() const { return map.empty(); }
@@ -72,7 +73,8 @@ namespace ECUtil {
     auto end() const { return map.end(); }
     void emplace(int shard, extent_set &&set) { map.emplace(shard, std::move(set)); }
     int shard_count() { return map.size(); }
-    extent_set at(int shard) const { return map.at(shard); }
+    extent_set &at(int shard) { return map.at(shard); }
+    const extent_set &at(int shard) const { return map.at(shard); }
     extent_set &operator[] (int shard) { return map[shard]; }
     bool operator== (shard_extent_set_t const &other) const {
       return map == other.map;
@@ -82,14 +84,17 @@ namespace ECUtil {
       lhs << rhs.map;
       return lhs;
     }
-    void get_extent_superset(extent_set &eset) {
+    void get_extent_superset(extent_set &eset) const {
       for (auto &&[_, e]: *this) eset.insert(e);
     }
-    extent_set get_extent_superset() {
+    extent_set get_extent_superset() const {
       extent_set eset;
       get_extent_superset(eset);
       return eset;
     }
+
+    void subtract(const shard_extent_set_t &set);
+    void insert(const shard_extent_set_t &set);
 
   };
 
@@ -558,10 +563,18 @@ public:
     return extent_maps.at(shard);
   }
 
-  /* Return a particlar extent set.
+  /* Return a particular extent set.
    */
   const extent_set get_extent_set(int shard) const {
     return extent_maps.at(shard).get_interval_set();
+  }
+
+  shard_extent_set_t get_shard_extent_set() const {
+    shard_extent_set_t ret;
+    for (auto &&[shard, emap] : extent_maps) {
+      ret.emplace(shard, emap.get_interval_set());
+    }
+    return ret;
   }
 
   bool contains_shard(int shard) const {

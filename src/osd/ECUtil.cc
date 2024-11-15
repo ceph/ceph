@@ -827,7 +827,24 @@ namespace ECUtil {
 
     return true;
   }
+
+  void shard_extent_set_t::subtract(const shard_extent_set_t &other) {
+    for (auto && [shard, eset] : other) {
+      if (!contains(shard))
+        continue;
+
+      at(shard).subtract(other.at(shard));
+      if(at(shard).empty()) erase(shard);
+    }
+  }
+
+  void shard_extent_set_t::insert(const shard_extent_set_t &other) {
+    for (auto && [shard, eset] : other)
+      map[shard].insert(other.at(shard));
+  }
+
 }
+
 
 int ECUtil::encode(
   const stripe_info_t &sinfo,

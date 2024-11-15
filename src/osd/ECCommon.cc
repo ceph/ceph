@@ -314,6 +314,8 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   sinfo.ro_size_to_read_mask(read_request.object_size, read_mask);
   sinfo.ro_size_to_zero_mask(read_request.object_size, zero_mask);
 
+  read_superset = read_request.shard_want_to_read.get_extent_superset();
+
   /* First deal with missing shards */
   for (auto &&[shard, extent_set] : read_request.shard_want_to_read) {
     /* Work out what extra extents we need to read on each shard. If do
@@ -324,7 +326,6 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     if (!have.contains(shard) || do_redundant_reads) {
       extra_extents.union_of(extent_set);
     }
-    read_superset.union_of(extent_set);
   }
 
   for (auto &&[shard, subchunk] : need) {
