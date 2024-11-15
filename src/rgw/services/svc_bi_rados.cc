@@ -583,6 +583,32 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+struct ReshardStatusReader : rgwrados::shard_io::RadosReader {
+  std::map<int, bufferlist>& buffers;
+
+  ReshardStatusReader(const DoutPrefixProvider& dpp,
+                      boost::asio::any_io_executor ex,
+                      librados::IoCtx& ioctx,
+                      std::map<int, bufferlist>& buffers)
+    : RadosReader(dpp, std::move(ex), ioctx), buffers(buffers)
+  {}
+  void prepare_read(int shard, librados::ObjectReadOperation& op) override {
+    auto& bl = buffers[shard];
+    cls_rgw_get_bucket_resharding(op, bl);
+  }
+  Result on_complete(int, boost::system::error_code ec) override {
+    // ignore ENOENT
+    if (ec && ec != boost::system::errc::no_such_file_or_directory) {
+      return Result::Error;
+    } else {
+      return Result::Success;
+    }
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "get resharding status: ";
+  }
+};
+
 int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp,
                                                 optional_yield y,
                                                 const RGWBucketInfo& bucket_info,
@@ -602,16 +628,39 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  for (auto i : bucket_objs) {
-    cls_rgw_bucket_instance_entry entry;
+  std::map<int, bufferlist> buffers;
+  const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto reader = ReshardStatusReader{*dpp, ex, index_pool, buffers};
 
-    int ret = cls_rgw_get_bucket_resharding(index_pool, i.second, &entry);
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, -1) << "ERROR: " << __func__ << ": cls_rgw_get_bucket_resharding() returned ret=" << ret << dendl;
-      return ret;
-    }
+    rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio, yield[ec]);
+  } else {
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto reader = ReshardStatusReader{*dpp, ex, index_pool, buffers};
 
-    status->push_back(entry);
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio,
+                                    ceph::async::use_blocked[ec]);
+  }
+  if (ec) {
+    return ceph::from_error_code(ec);
+  }
+
+  try {
+    std::transform(buffers.begin(), buffers.end(),
+                   std::back_inserter(*status),
+                   [] (const auto& kv) {
+                     cls_rgw_bucket_instance_entry entry;
+                     cls_rgw_get_bucket_resharding_decode(kv.second, entry);
+                     return entry;
+                   });
+  } catch (const ceph::buffer::error&) {
+    return -EIO;
   }
 
   return 0;

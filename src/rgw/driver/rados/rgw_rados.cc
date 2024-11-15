@@ -8050,6 +8050,25 @@ int RGWRados::recover_reshard_logrecord(RGWBucketInfo& bucket_info,
   return 0;
 }
 
+static int get_reshard_status(const DoutPrefixProvider* dpp, optional_yield y,
+                              librados::IoCtx& ioctx, const std::string& oid,
+                              cls_rgw_bucket_instance_entry& entry)
+{
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_get_bucket_resharding(op, bl);
+
+  if (int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y); ret < 0) {
+    return ret;
+  }
+  try {
+    cls_rgw_get_bucket_resharding_decode(bl, entry);
+    return 0;
+  } catch (const buffer::error&) {
+    return -EIO;
+  }
+}
+
 int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
                                      const rgw_obj& obj_instance,
                                      RGWBucketInfo& bucket_info,
@@ -8098,7 +8117,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   constexpr int num_retries = 10;
   for (int i = 1; i <= num_retries; i++) { // nb: 1-based for loop
     auto& ref = bs->bucket_obj;
-    ret = cls_rgw_get_bucket_resharding(ref.ioctx, ref.obj.oid, &entry);
+    ret = get_reshard_status(dpp, y, ref.ioctx, ref.obj.oid, entry);
     if (ret == -ENOENT) {
       ret = fetch_new_bucket_info("get_bucket_resharding_failed");
       if (ret < 0) {
