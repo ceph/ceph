@@ -198,10 +198,6 @@ private:
     SnapSet new_snapset;
     pg_log_entry_t log_entry;
     ObjectContextRef clone_obc;
-
-    void apply_to(
-      std::vector<pg_log_entry_t>& log_entries,
-      ObjectContext& processed_obc);
   };
   std::unique_ptr<CloningContext> cloning_ctx;
 
@@ -262,12 +258,6 @@ private:
   * part of the head object for each write operation.
   */
   void update_clone_overlap();
-
-  std::vector<pg_log_entry_t> flush_clone_metadata(
-    std::vector<pg_log_entry_t>&& log_entries,
-    SnapMapper& snap_mapper,
-    OSDriver& osdriver,
-    ceph::os::Transaction& txn);
 
 private:
   // this gizmo could be wrapped in std::optional for the sake of lazy
@@ -403,9 +393,11 @@ public:
     const std::vector<OSDOp>& ops,
     SnapMapper& snap_mapper,
     OSDriver& osdriver);
-  std::vector<pg_log_entry_t> prepare_transaction(
-    const std::vector<OSDOp>& ops);
   void fill_op_params(modified_by m);
+  pg_log_entry_t prepare_head_update(
+    const std::vector<OSDOp>& ops,
+    ceph::os::Transaction &txn);
+
 
   ObjectContextRef get_obc() const {
     return obc;

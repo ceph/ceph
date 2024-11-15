@@ -868,45 +868,6 @@ std::ostream& operator<<(std::ostream& os, const PG& pg)
   return os;
 }
 
-void PG::mutate_object(
-  ObjectContextRef& obc,
-  ceph::os::Transaction& txn,
-  osd_op_params_t& osd_op_p)
-{
-  if (obc->obs.exists) {
-    obc->obs.oi.prior_version = obc->obs.oi.version;
-    obc->obs.oi.version = osd_op_p.at_version;
-    if (osd_op_p.user_modify)
-      obc->obs.oi.user_version = osd_op_p.at_version.version;
-    obc->obs.oi.last_reqid = osd_op_p.req_id;
-    obc->obs.oi.mtime = osd_op_p.mtime;
-    obc->obs.oi.local_mtime = ceph_clock_now();
-
-    // object_info_t
-    {
-      ceph::bufferlist osv;
-      obc->obs.oi.encode_no_oid(osv, CEPH_FEATURES_ALL);
-      // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      txn.setattr(coll_ref->get_cid(), ghobject_t{obc->obs.oi.soid}, OI_ATTR, osv);
-    }
-
-    // snapset
-    if (obc->obs.oi.soid.snap == CEPH_NOSNAP) {
-      logger().debug("final snapset {} in {}",
-        obc->ssc->snapset, obc->obs.oi.soid);
-      ceph::bufferlist bss;
-      encode(obc->ssc->snapset, bss);
-      txn.setattr(coll_ref->get_cid(), ghobject_t{obc->obs.oi.soid}, SS_ATTR, bss);
-      obc->ssc->exists = true;
-    } else {
-      logger().debug("no snapset (this is a clone)");
-    }
-  } else {
-    // reset cached ObjectState without enforcing eviction
-    obc->obs.oi = object_info_t(obc->obs.oi.soid);
-  }
-}
-
 void PG::enqueue_push_for_backfill(
   const hobject_t &obj,
   const eversion_t &v,
