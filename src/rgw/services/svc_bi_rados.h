@@ -138,6 +138,9 @@ public:
 
   int get_reshard_status(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
                          std::list<cls_rgw_bucket_instance_entry> *status);
+  int set_reshard_status(const DoutPrefixProvider *dpp,
+                         const RGWBucketInfo& bucket_info,
+                         cls_rgw_reshard_status status);
 
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info,
