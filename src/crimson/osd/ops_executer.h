@@ -400,7 +400,7 @@ public:
   using rep_op_fut_t =
     interruptible_future<rep_op_fut_tuple>;
   template <typename MutFunc>
-  rep_op_fut_t flush_changes_n_do_ops_effects(
+  rep_op_fut_t flush_changes_and_submit(
     const std::vector<OSDOp>& ops,
     SnapMapper& snap_mapper,
     OSDriver& osdriver,
@@ -486,7 +486,7 @@ auto OpsExecuter::with_effect_on_obc(
 
 template <typename MutFunc>
 OpsExecuter::rep_op_fut_t
-OpsExecuter::flush_changes_n_do_ops_effects(
+OpsExecuter::flush_changes_and_submit(
   const std::vector<OSDOp>& ops,
   SnapMapper& snap_mapper,
   OSDriver& osdriver,
