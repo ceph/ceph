@@ -719,6 +719,20 @@ int RGWSI_BucketIndex_RADOS::set_reshard_status(const DoutPrefixProvider *dpp,
   return ceph::from_error_code(ec);
 }
 
+int RGWSI_BucketIndex_RADOS::trim_reshard_log(const DoutPrefixProvider* dpp,
+                                              optional_yield y,
+                                              const RGWBucketInfo& bucket_info)
+{
+  librados::IoCtx index_pool;
+  map<int, string> bucket_objs;
+
+  int r = open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
+  if (r < 0) {
+    return r;
+  }
+  return CLSRGWIssueReshardLogTrim(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+}
+
 int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
                                               const RGWBucketInfo& info,
                                               const RGWBucketInfo& orig_info,

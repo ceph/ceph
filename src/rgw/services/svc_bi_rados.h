@@ -142,6 +142,8 @@ public:
   int set_reshard_status(const DoutPrefixProvider *dpp, optional_yield y,
                          const RGWBucketInfo& bucket_info,
                          cls_rgw_reshard_status status);
+  int trim_reshard_log(const DoutPrefixProvider* dpp, optional_yield,
+                       const RGWBucketInfo& bucket_info);
 
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info,
