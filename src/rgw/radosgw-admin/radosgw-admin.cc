@@ -10548,7 +10548,11 @@ next:
   if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE ||
       opt_cmd == OPT::SYNC_GROUP_PIPE_MODIFY) {
     CHECK_TRUE(require_non_empty_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
-    CHECK_TRUE(require_non_empty_opt(opt_pipe_id), "ERROR: --pipe-id not specified", EINVAL);
+    if (!opt_pipe_id) {
+      // ReplicationConfiguration can have ID as empty string
+      // cf. https://docs.aws.amazon.com/AmazonS3/latest/API/API_ReplicationRule.html#AmazonS3-Type-ReplicationRule-ID
+      opt_pipe_id = "";
+    }
     if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE) {
       CHECK_TRUE(require_non_empty_opt(opt_source_zone_ids), "ERROR: --source-zones not provided or is empty; should be list of zones or '*'", EINVAL);
       CHECK_TRUE(require_non_empty_opt(opt_dest_zone_ids), "ERROR: --dest-zones not provided or is empty; should be list of zones or '*'", EINVAL);
