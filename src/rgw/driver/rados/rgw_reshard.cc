@@ -1499,17 +1499,6 @@ int RGWReshard::remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entr
   return ret;
 }
 
-int RGWReshard::clear_bucket_resharding(const DoutPrefixProvider *dpp, const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
-{
-  int ret = cls_rgw_clear_bucket_resharding(store->getRados()->reshard_pool_ctx, bucket_instance_oid);
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to clear bucket resharding, bucket_instance_oid=" << bucket_instance_oid << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
 int RGWReshardWait::wait(const DoutPrefixProvider* dpp, optional_yield y)
 {
   std::unique_lock lock(mutex);
