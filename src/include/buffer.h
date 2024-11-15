@@ -1352,9 +1352,8 @@ struct error_code;
     void invalidate_crc() {
       list::invalidate_crc();
     }
-
-    static list to_bl(const list_rw& bl) {
-      return static_cast<const list&>(bl);
+    static list_rw& from_bl_unsafe_yes_i_really_really_mean_that(list& bl) {
+      return static_cast<list_rw&>(bl);
     }
     std::ostream& operator<<(std::ostream& out) const;
   };

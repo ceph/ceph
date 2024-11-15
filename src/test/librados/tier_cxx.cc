@@ -5154,7 +5154,8 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
     bufferlist bl;
     bl.append("hi");
     ASSERT_EQ(0, cache_ioctx.write("foo-chunk", bl, bl.length(), 0));
-    gbl.begin(0).copy_in(bl.length(), bl);
+    buffer::list_rw::from_bl_unsafe_yes_i_really_really_mean_that(
+      gbl).begin(0).copy_in(bl.length(), bl);
   }
   // flush
   {
@@ -5646,7 +5647,8 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
 
   bufferlist tmp;
   tmp.append("Thcce hi");
-  gbl.begin(0).copy_in(tmp.length(), tmp);
+  buffer::list_rw::from_bl_unsafe_yes_i_really_really_mean_that(
+    gbl).begin(0).copy_in(tmp.length(), tmp);
   bufferlist chunk3;
   cdc->calc_chunks(gbl, &chunks);
   chunk3.substr_of(gbl, chunks[0].first, chunks[0].second);
