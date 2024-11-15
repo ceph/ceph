@@ -577,7 +577,7 @@ struct optmetadata_multiton {
   static constexpr int STRUCT_V = 1;
   static constexpr int COMPAT_V = 1;
 
-  using optkind_t = Singleton::kind_t;
+  using optkind_t = typename Singleton::kind_t;
   using optvec_t = std::vector<Singleton,Allocator<Singleton>>;
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
