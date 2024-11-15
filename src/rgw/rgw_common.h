@@ -46,6 +46,7 @@
 #include "rgw_tag.h"
 #include "rgw_op_type.h"
 #include "rgw_sync_policy.h"
+#include "rgw_bucket_snap.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
@@ -1102,6 +1103,7 @@ struct RGWBucketInfo {
   RGWObjectLock obj_lock;
 
   std::optional<rgw_sync_policy_info> sync_policy;
+  RGWBucketSnapMgr snap_mgr;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);

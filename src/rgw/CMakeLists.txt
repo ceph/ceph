@@ -73,6 +73,7 @@ set(librgw_common_srcs
   rgw_basic_types.cc
   rgw_bucket.cc
   rgw_bucket_layout.cc
+  rgw_bucket_snap.cc
   rgw_cache.cc
   rgw_cksum.cc
   rgw_cksum_pipe.cc
