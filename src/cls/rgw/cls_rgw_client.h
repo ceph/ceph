@@ -491,17 +491,6 @@ public:
   virtual ~CLSRGWIssueBucketRebuild() override {}
 };
 
-class CLSRGWIssueSetBucketResharding : public CLSRGWConcurrentIO {
-  cls_rgw_bucket_instance_entry entry;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueSetBucketResharding(librados::IoCtx& ioc, std::map<int, std::string>& _bucket_objs,
-                                 const cls_rgw_bucket_instance_entry& _entry,
-                                 uint32_t _max_aio) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio), entry(_entry) {}
-  virtual ~CLSRGWIssueSetBucketResharding() override {}
-};
-
 void cls_rgw_bilog_start(librados::ObjectWriteOperation& op);
 void cls_rgw_bilog_stop(librados::ObjectWriteOperation& op);
 

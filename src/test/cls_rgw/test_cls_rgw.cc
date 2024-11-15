@@ -1361,11 +1361,9 @@ TEST_F(cls_rgw, index_racing_removes)
 void set_reshard_status(librados::IoCtx& ioctx, const std::string& oid,
                         cls_rgw_reshard_status status)
 {
-  map<int, string> bucket_objs;
-  bucket_objs[0] = oid;
-  const auto entry = cls_rgw_bucket_instance_entry{.reshard_status = status};
-  int r = CLSRGWIssueSetBucketResharding(ioctx, bucket_objs, entry, 1)();
-  ASSERT_EQ(0, r);
+  librados::ObjectWriteOperation op;
+  cls_rgw_set_bucket_resharding(op, status);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
 
 static int reshardlog_list(librados::IoCtx& ioctx, const std::string& oid,
