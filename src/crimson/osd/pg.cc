@@ -1172,7 +1172,7 @@ PG::submit_executer_fut PG::submit_executer(
 
   auto [submitted, completed] = co_await std::move(
     ox
-  ).flush_changes_n_do_ops_effects(
+  ).flush_changes_and_submit(
     ops,
     snap_mapper,
     osdriver,
