@@ -256,20 +256,20 @@ struct ECCommon {
   struct read_request_t {
     const std::list<ec_align_t> to_read;
     const uint32_t flags = 0;
-    const std::map<int, extent_set> shard_want_to_read;
+    const ECUtil::shard_extent_set_t shard_want_to_read;
     std::map<pg_shard_t, shard_read_t> shard_reads;
     bool want_attrs = false;
     uint64_t object_size;
     read_request_t(
       const std::list<ec_align_t> &to_read,
-      const std::map<int, extent_set> shard_want_to_read,
+      const ECUtil::shard_extent_set_t shard_want_to_read,
       bool want_attrs, uint64_t object_size) :
         to_read(to_read),
         flags(to_read.front().flags),
         shard_want_to_read(shard_want_to_read),
         want_attrs(want_attrs),
         object_size(object_size) {}
-    read_request_t(const std::map<int, extent_set> shard_want_to_read,
+    read_request_t(const ECUtil::shard_extent_set_t shard_want_to_read,
       bool want_attrs, uint64_t object_size) :
         shard_want_to_read(shard_want_to_read),
         want_attrs(want_attrs),
@@ -309,7 +309,7 @@ struct ECCommon {
     std::map<pg_shard_t, int> errors;
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs;
     ECUtil::shard_extent_map_t buffers_read;
-    std::map<int, extent_set> processed_read_requests;
+    ECUtil::shard_extent_set_t processed_read_requests;
     read_result_t(const ECUtil::stripe_info_t *sinfo) : r(0), buffers_read(sinfo) {}
   };
 
@@ -478,7 +478,7 @@ struct ECCommon {
      */
     void get_min_want_to_read_shards(
       const ec_align_t &to_read,                  ///< [in]
-      std::map<int, extent_set> &want_shard_reads ///< [out]
+      ECUtil::shard_extent_set_t &want_shard_reads ///< [out]
       );
 
     int get_remaining_shards(
@@ -500,7 +500,7 @@ struct ECCommon {
 
     void get_want_to_read_shards(
       const std::list<ec_align_t> &to_read,
-      std::map<int, extent_set> &want_shard_reads);
+      ECUtil::shard_extent_set_t &want_shard_reads);
 
     /// Returns to_read replicas sufficient to reconstruct want
     int get_min_avail_to_read_shards(
@@ -622,7 +622,7 @@ struct ECCommon {
       }
     };
 
-    void backend_read(hobject_t oid, std::map<int, extent_set> const &request, uint64_t object_size) override  {
+    void backend_read(hobject_t oid, ECUtil::shard_extent_set_t const &request, uint64_t object_size) override  {
       std::map<hobject_t, read_request_t> to_read;
       to_read.emplace(oid, read_request_t(request, false, object_size));
 

@@ -58,6 +58,32 @@ using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
 namespace ECUtil {
   class shard_extent_map_t;
 
+  struct shard_extent_set_t
+  {
+    std::map<int, extent_set> map;
+    bool contains(int shard) const { return map.contains(shard); }
+    bool empty() const { return map.empty(); }
+    void swap(shard_extent_set_t &other) { map.swap(other.map); }
+    void clear() { map.clear(); }
+    auto erase(int shard) { return map.erase(shard); }
+    auto erase(std::map<int, extent_set>::iterator &iter) { return map.erase(iter);}
+    auto begin() const { return map.begin(); }
+    auto begin() { return map.begin(); }
+    auto end() const { return map.end(); }
+    void emplace(int shard, extent_set &&set) { map.emplace(shard, std::move(set)); }
+    int shard_count() { return map.size(); }
+    extent_set at(int shard) const { return map.at(shard); }
+    extent_set &operator[] (int shard) { return map[shard]; }
+    bool operator== (shard_extent_set_t const &other) const {
+      return map == other.map;
+    }
+
+    friend std::ostream& operator<<(std::ostream& lhs, const shard_extent_set_t& rhs) {
+      lhs << rhs.map;
+      return lhs;
+    }
+  };
+
   class stripe_info_t {
   friend class shard_extent_map_t;
 
@@ -73,7 +99,7 @@ private:
   void ro_range_to_shards(
     uint64_t ro_offset,
     uint64_t ro_size,
-    std::map<int, extent_set> *shard_extent_set,
+    ECUtil::shard_extent_set_t *shard_extent_set,
     extent_set *extent_superset,
     buffer::list *bl,
     shard_extent_map_t *shard_extent_map) const;
@@ -299,14 +325,14 @@ public:
   void ro_range_to_shard_extent_set(
     uint64_t ro_offset,
     uint64_t ro_size,
-    std::map<int, extent_set> &shard_extent_set) const {
+    ECUtil::shard_extent_set_t &shard_extent_set) const {
     ro_range_to_shards(ro_offset, ro_size, &shard_extent_set, NULL, NULL, NULL);
   }
 
   void ro_range_to_shard_extent_set(
     uint64_t ro_offset,
     uint64_t ro_size,
-    std::map<int, extent_set> &shard_extent_set,
+    ECUtil::shard_extent_set_t &shard_extent_set,
     extent_set &extent_superset) const {
     ro_range_to_shards(ro_offset, ro_size, &shard_extent_set, &extent_superset, NULL,
                         NULL);
@@ -315,7 +341,7 @@ public:
   void ro_range_to_shard_extent_set_with_parity(
     uint64_t ro_offset,
     uint64_t ro_size,
-    std::map<int, extent_set> &shard_extent_set) const {
+    ECUtil::shard_extent_set_t &shard_extent_set) const {
     extent_set parity;
     ro_range_to_shards(ro_offset, ro_size, &shard_extent_set, &parity, NULL,
                         NULL);
@@ -335,19 +361,19 @@ public:
   }
 
   void trim_shard_extent_set_for_ro_offset (uint64_t ro_offset,
-    std::map<int, extent_set> &shard_extent_set) const;
+    ECUtil::shard_extent_set_t &shard_extent_set) const;
 
   void ro_size_to_read_and_zero_mask(
   uint64_t ro_size,
-  std::map<int, extent_set> &shard_extent_set) const;
+  ECUtil::shard_extent_set_t &shard_extent_set) const;
 
   void ro_size_to_read_mask(
     uint64_t ro_size,
-    std::map<int, extent_set> &shard_extent_set) const;
+    ECUtil::shard_extent_set_t &shard_extent_set) const;
 
   void ro_size_to_zero_mask(
     uint64_t ro_size,
-    std::map<int, extent_set> &shard_extent_set) const;
+    ECUtil::shard_extent_set_t &shard_extent_set) const;
 };
 
 inline uint64_t page_mask() {
@@ -529,8 +555,8 @@ public:
 
   void erase_after_ro_offset(uint64_t ro_offset);
   shard_extent_map_t intersect_ro_range(uint64_t ro_offset, uint64_t ro_length) const;
-  shard_extent_map_t intersect(std::optional<std::map<int, extent_set>> const &other) const;
-  shard_extent_map_t intersect(std::map<int, extent_set> const &other) const;
+  shard_extent_map_t intersect(std::optional<shard_extent_set_t> const &other) const;
+  shard_extent_map_t intersect(shard_extent_set_t const &other) const;
   void insert_in_shard(int shard, uint64_t off, const buffer::list &bl);
   void insert_in_shard(int shard, uint64_t off, const buffer::list &bl, uint64_t new_start, uint64_t new_end);
   void insert_ro_zero_buffer( uint64_t ro_offset, uint64_t ro_length );
@@ -539,14 +565,14 @@ public:
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
   int encode(ErasureCodeInterfaceRef& ecimpl, const HashInfoRef &hinfo, uint64_t before_ro_size);
-  int decode(ErasureCodeInterfaceRef& ecimpl, std::map<int, extent_set> want);
+  int decode(ErasureCodeInterfaceRef& ecimpl, ECUtil::shard_extent_set_t want);
   void get_buffer(int shard, uint64_t offset, uint64_t length, buffer::list &append_to) const;
   void get_shard_first_buffer(int shard, buffer::list &append_to) const;
   uint64_t get_shard_first_offset(int shard) const;
   void zero_pad(int shard, uint64_t offset, uint64_t length);
   void zero_pad(uint64_t offset, uint64_t length);
   bufferlist get_ro_buffer(uint64_t ro_offset, uint64_t ro_length);
-  std::map <int, extent_set> get_extent_set_map();
+  shard_extent_set_t get_extent_set();
   void insert_parity_buffers();
   void erase_shard(int shard);
   std::map<int, bufferlist> slice(int offset, int length) const;
@@ -554,8 +580,8 @@ public:
   void erase_stripe(uint64_t offset, uint64_t length);
   bool contains(int shard) const;
   bool contains(int shard, extent_set other_eset) const;
-  bool contains(std::optional<std::map<int, extent_set>> const &other) const;
-  bool contains(std::map<int, extent_set> const &other) const;
+  bool contains(std::optional<shard_extent_set_t> const &other) const;
+  bool contains(shard_extent_set_t const &other) const;
   uint64_t size();
   void clear();
 

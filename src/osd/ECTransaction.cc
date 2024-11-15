@@ -135,7 +135,7 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
 
   extent_set outter_extent_superset;
 
-  std::optional<std::map<int, extent_set>> inner;
+  std::optional<ECUtil::shard_extent_set_t> inner;
   for (const auto& [ro_off, ro_len] : ro_writes) {
     /* Here, we calculate the "inner" and "outer" extent sets. The inner
      * represents the complete pages read. The outer represents the rounded
@@ -153,7 +153,7 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
     uint64_t inner_len = std::max(inner_off, ECUtil::align_page_prev(raw_end)) - inner_off;
 
     if (inner || outter_off != inner_off || outter_len != inner_len) {
-      if (!inner) inner = std::map(will_write);
+      if (!inner) inner = ECUtil::shard_extent_set_t(will_write);
       sinfo.ro_range_to_shard_extent_set(inner_off,inner_len, *inner);
     }
 
@@ -164,10 +164,10 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
 
   /* Construct the to read on the stack, to avoid having to insert and
    * erase into maps */
-  std::map<int, extent_set> reads;
+  ECUtil::shard_extent_set_t reads;
   if (!sinfo.supports_partial_writes())
   {
-    map<int, extent_set> read_mask;
+    ECUtil::shard_extent_set_t read_mask;
     sinfo.ro_range_to_shard_extent_set(0, projected_size, read_mask);
 
     /* We are not yet attempting to optimise this path and we are instead opting to maintain the old behaviour, where
@@ -185,10 +185,10 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
       }
     }
   } else {
-    std::map<int, extent_set> &small_set = inner?*inner:will_write;
-    std::map<int, extent_set> partial_stripe;
-    std::map<int, extent_set> zero;
-    std::map<int, extent_set> orig;
+    ECUtil::shard_extent_set_t &small_set = inner?*inner:will_write;
+    ECUtil::shard_extent_set_t partial_stripe;
+    ECUtil::shard_extent_set_t zero;
+    ECUtil::shard_extent_set_t orig;
 
     sinfo.ro_range_to_shard_extent_set(projected_size,
       sinfo.logical_to_next_stripe_offset(projected_size), partial_stripe);
@@ -651,7 +651,7 @@ void ECTransaction::generate_transactions(
         auto clone_region = to_write.get_extent_superset();
         clone_region.align(sinfo.get_chunk_size());
 
-        map<int, extent_set> cloneable_range;
+        ECUtil::shard_extent_set_t cloneable_range;
         sinfo.ro_range_to_shard_extent_set_with_parity(0, clone_max, cloneable_range);
 
         for (auto &&[shard, eset] : cloneable_range) {

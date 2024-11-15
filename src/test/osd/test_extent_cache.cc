@@ -33,7 +33,7 @@ shard_extent_map_t imap_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&i
   return out;
 }
 
-shard_extent_map_t imap_from_iset(const map<int, extent_set> &sset, stripe_info_t *sinfo)
+shard_extent_map_t imap_from_iset(const shard_extent_set_t &sset, stripe_info_t *sinfo)
 {
   shard_extent_map_t out(sinfo);
 
@@ -47,9 +47,9 @@ shard_extent_map_t imap_from_iset(const map<int, extent_set> &sset, stripe_info_
   return out;
 }
 
-map<int, extent_set> iset_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&in)
+shard_extent_set_t iset_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&in)
 {
-  map<int, extent_set> out;
+  shard_extent_set_t out;
   for (int shard = 0; shard < (int)in.size(); shard++) {
     for (auto &&tup: in[shard]) {
       out[shard].insert(tup.first, tup.second);
@@ -64,14 +64,14 @@ struct Client : public BackendRead
   stripe_info_t sinfo;
   LRU lru;
   PG pg;
-  optional<map<int, extent_set>> active_reads;
+  optional<shard_extent_set_t> active_reads;
   optional<shard_extent_map_t> result;
 
   Client(uint64_t chunk_size, int k, int m, uint64_t cache_size) :
     sinfo(k, chunk_size * k, m, vector<int>(0)),
     lru(cache_size), pg(*this, lru, sinfo) {};
 
-  void backend_read(hobject_t _oid, const std::map<int, extent_set>& request,
+  void backend_read(hobject_t _oid, const shard_extent_set_t& request,
     uint64_t object_size) override  {
     ceph_assert(oid == _oid);
     active_reads = request;
@@ -118,8 +118,8 @@ TEST(ECExtentCache, simple_write)
     auto to_write = iset_from_vector({{{0, 10}}, {{0, 10}}});
 
     /*    OpRef request(hobject_t const &oid,
-      std::optional<std::map<int, extent_set>> const &to_read,
-      std::map<int, extent_set> const &write,
+      std::optional<std::shard_extent_set_t> const &to_read,
+      std::shard_extent_set_t const &write,
       uint64_t orig_size,
       uint64_t projected_size,
       CacheReadyCb &&ready_cb)
@@ -135,7 +135,7 @@ TEST(ECExtentCache, simple_write)
     cl.complete_read();
 
     ASSERT_FALSE(cl.active_reads);
-    ASSERT_EQ(to_read, cl.result->get_extent_set_map());
+    ASSERT_EQ(to_read, cl.result->get_extent_set());
     cl.complete_write(op);
 
     ASSERT_FALSE(cl.active_reads);
@@ -158,7 +158,7 @@ TEST(ECExtentCache, simple_write)
     cl.complete_read();
 
     ASSERT_TRUE(cl.result);
-    ASSERT_EQ(to_read, cl.result->get_extent_set_map());
+    ASSERT_EQ(to_read, cl.result->get_extent_set());
     cl.complete_write(op);
     cl.commit_write(op);
   }
@@ -178,7 +178,7 @@ TEST(ECExtentCache, simple_write)
     ASSERT_TRUE(cl.active_reads);
     cl.complete_read();
 
-    ASSERT_EQ(to_read, cl.result->get_extent_set_map());
+    ASSERT_EQ(to_read, cl.result->get_extent_set());
     cl.complete_write(op);
     cl.commit_write(op);
   }
@@ -236,7 +236,7 @@ TEST(ECExtentCache, multiple_writes)
   cl.complete_read();
   auto expected_read = iset_from_vector({{{10,2}, {32,6}}});
   ASSERT_EQ(expected_read, cl.active_reads);
-  ASSERT_EQ(to_read1, cl.result->get_extent_set_map());
+  ASSERT_EQ(to_read1, cl.result->get_extent_set());
   cl.complete_write(op1);
 
   // The next write requires some more reads, so should not occur.
@@ -245,7 +245,7 @@ TEST(ECExtentCache, multiple_writes)
   // All reads complete, this should allow for op2 to be ready.
   cl.complete_read();
   ASSERT_FALSE(cl.active_reads);
-  ASSERT_EQ(to_read2, cl.result->get_extent_set_map());
+  ASSERT_EQ(to_read2, cl.result->get_extent_set());
   cl.complete_write(op2);
   // In the real code, this happens inside the complete read callback. Here
   // we need to kick the statemachine.
@@ -253,7 +253,7 @@ TEST(ECExtentCache, multiple_writes)
 
   // Since no further reads are required op3 and op4 should occur immediately.
   ASSERT_TRUE(cl.result);
-  ASSERT_EQ(to_read3, cl.result->get_extent_set_map());
+  ASSERT_EQ(to_read3, cl.result->get_extent_set());
   cl.complete_write(op3);
 
   // No write data for op 4.
@@ -281,7 +281,7 @@ TEST(ECExtentCache, multiple_lru_frees)
       cl.cache_ready(cl.oid, cache_op->get_result());
     });  cl.complete_read();
   ASSERT_FALSE(cl.active_reads);
-  ASSERT_EQ(to_read, cl.result->get_extent_set_map());
+  ASSERT_EQ(to_read, cl.result->get_extent_set());
   cl.complete_write(op1);
 
 
@@ -293,7 +293,7 @@ TEST(ECExtentCache, multiple_lru_frees)
       cl.cache_ready(cl.oid, cache_op->get_result());
     });  cl.complete_read();
   ASSERT_FALSE(cl.active_reads);
-  ASSERT_EQ(to_read2, cl.result->get_extent_set_map());
+  ASSERT_EQ(to_read2, cl.result->get_extent_set());
   cl.complete_write(op2);
 
   // Since we have not commited the op, both cache lines are cached.
@@ -305,7 +305,7 @@ TEST(ECExtentCache, multiple_lru_frees)
       cl.cache_ready(cl.oid, cache_op->get_result());
     });
   ASSERT_FALSE(cl.active_reads);
-  ASSERT_EQ(to_read3, cl.result->get_extent_set_map());
+  ASSERT_EQ(to_read3, cl.result->get_extent_set());
   cl.complete_write(op3);
 
   // commit the first two writes... The third IO should still be
@@ -322,7 +322,7 @@ TEST(ECExtentCache, multiple_lru_frees)
       cl.cache_ready(cl.oid, cache_op->get_result());
     });
   ASSERT_FALSE(cl.active_reads);
-  ASSERT_EQ(to_read4, cl.result->get_extent_set_map());
+  ASSERT_EQ(to_read4, cl.result->get_extent_set());
   cl.complete_write(op4);
 
   // commit everything, this should release the first cache line.
@@ -340,7 +340,7 @@ TEST(ECExtentCache, multiple_lru_frees)
   ASSERT_FALSE(cl.result);
   cl.complete_read();
   ASSERT_FALSE(cl.active_reads);
-  ASSERT_EQ(to_read4, cl.result->get_extent_set_map());
+  ASSERT_EQ(to_read4, cl.result->get_extent_set());
   cl.complete_write(op4);
   cl.commit_write(op4);
 }

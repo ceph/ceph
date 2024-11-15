@@ -171,9 +171,9 @@ void ECBackend::RecoveryBackend::_failed_push(const hobject_t &hoid, ECCommon::r
 
 struct RecoveryMessages {
   map<hobject_t, ECCommon::read_request_t> recovery_reads;
-  map<hobject_t, map<int, extent_set>> want_to_read;
+  map<hobject_t, ECUtil::shard_extent_set_t> want_to_read;
 
-  void recovery_read(const hobject_t &hoid, map<int, extent_set> &&_want_to_read, const ECCommon::read_request_t &read_request)
+  void recovery_read(const hobject_t &hoid, ECUtil::shard_extent_set_t &&_want_to_read, const ECCommon::read_request_t &read_request)
   {
     ceph_assert(!recovery_reads.count(hoid));
     want_to_read.emplace(hoid, std::move(_want_to_read));
@@ -377,12 +377,12 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   op.returned_data.emplace(std::move(buffers_read));
   extent_set buffer_superset = op.returned_data->get_extent_superset();
 
-  map<int, extent_set> missing;
+  ECUtil::shard_extent_set_t missing;
   for (auto && shard : op.missing_on_shards) {
     missing[shard.id].insert(buffer_superset);
   }
 
-  map<int, extent_set> zero_pad;
+  ECUtil::shard_extent_set_t zero_pad;
 
   uint64_t aligned_size = ECUtil::align_page_next(op.obc->obs.oi.size);
 
@@ -557,7 +557,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
     switch (op.state) {
     case RecoveryOp::IDLE: {
       ceph_assert(!op.recovery_progress.data_complete);
-      std::map<int, extent_set> want;
+      ECUtil::shard_extent_set_t want;
 
       op.state = RecoveryOp::READING;
 

@@ -313,8 +313,8 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
 
   extent_set extra_extents;
   extent_set read_superset;
-  map<int, extent_set> read_mask;
-  map<int, extent_set> zero_mask;
+  ECUtil::shard_extent_set_t read_mask;
+  ECUtil::shard_extent_set_t zero_mask;
 
   ceph_assert(read_request.object_size != 0);
 
@@ -370,7 +370,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
 
 void ECCommon::ReadPipeline::get_min_want_to_read_shards(
   const ec_align_t &to_read,
-  map<int, extent_set> &want_shard_reads)
+  ECUtil::shard_extent_set_t &want_shard_reads)
 {
   sinfo.ro_range_to_shard_extent_set(to_read.offset, to_read.size, want_shard_reads);;
   dout(20) << __func__ << ": to_read " << to_read
@@ -528,7 +528,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
 
 void ECCommon::ReadPipeline::get_want_to_read_shards(
   const list<ec_align_t> &to_read,
-  std::map<int, extent_set> &want_shard_reads)
+  ECUtil::shard_extent_set_t &want_shard_reads)
 {
   if (sinfo.supports_partial_reads() && cct->_conf->osd_ec_partial_reads) {
       //optimised.
@@ -617,7 +617,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
 
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&[hoid, to_read]: reads) {
-    map<int, extent_set> want_shard_reads;
+    ECUtil::shard_extent_set_t want_shard_reads;
     get_want_to_read_shards(to_read, want_shard_reads);
 
     read_request_t read_request(to_read, want_shard_reads, false, object_size);
@@ -941,7 +941,7 @@ void ECCommon::RMWPipeline::try_finish_rmw()
 
         ECExtentCache::OpRef cache_op = extent_cache.request(op.hoid,
           std::nullopt,
-          map<int, extent_set>(),
+          ECUtil::shard_extent_set_t(),
           op.plan.plans.at(op.hoid).orig_size,
           op.plan.plans.at(op.hoid).projected_size,
           [nop](ECExtentCache::OpRef cache_op)

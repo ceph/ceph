@@ -53,7 +53,7 @@ TEST(ectransaction, two_writes_separated_append)
   generic_derr << "plan " << plan << dendl;
 
   ASSERT_FALSE(plan.to_read);
-  ASSERT_EQ(2u, plan.will_write.size());
+  ASSERT_EQ(2u, plan.will_write.shard_count());
 }
 
 TEST(ectransaction, two_writes_separated_misaligned_overwrite)
@@ -81,8 +81,8 @@ TEST(ectransaction, two_writes_separated_misaligned_overwrite)
 
   generic_derr << "plan " << plan << dendl;
 
-  ASSERT_EQ(2u, (*plan.to_read).size());
-  ASSERT_EQ(2u, plan.will_write.size());
+  ASSERT_EQ(2u, (*plan.to_read).shard_count());
+  ASSERT_EQ(2u, plan.will_write.shard_count());
 }
 
 // Test writing to an object at an offset which is beyond the end of the
@@ -115,7 +115,7 @@ TEST(ectransaction, partial_write)
   ASSERT_FALSE(plan.to_read);
   extent_set ref_write;
   ref_write.insert(0, 4096);
-  ASSERT_EQ(2u, plan.will_write.size());
+  ASSERT_EQ(2u, plan.will_write.shard_count());
   ASSERT_EQ(ref_write, plan.will_write.at(0));
   ASSERT_EQ(ref_write, plan.will_write.at(2));
 }
@@ -145,11 +145,11 @@ TEST(ectransaction, overlapping_write_non_aligned)
   generic_derr << "plan " << plan << dendl;
 
   // There should be no overlap of this read.
-  ASSERT_EQ(1u, (*plan.to_read).size());
+  ASSERT_EQ(1u, (*plan.to_read).shard_count());
   extent_set ref;
   ref.insert(0, 4096);
-  ASSERT_EQ(2u, plan.will_write.size());
-  ASSERT_EQ(1u, (*plan.to_read).size());
+  ASSERT_EQ(2u, plan.will_write.shard_count());
+  ASSERT_EQ(1u, (*plan.to_read).shard_count());
   ASSERT_EQ(ref, plan.will_write.at(0));
   ASSERT_EQ(ref, plan.will_write.at(2));
 }
@@ -180,12 +180,12 @@ TEST(ectransaction, test_appending_write_non_aligned)
 
   // There should be an overlapping read, as we need to write zeros to the
   // empty part.
-  std::map<int, extent_set> ref_read;
+  ECUtil::shard_extent_set_t ref_read;
   ref_read[0].insert(0, 4096);
   ASSERT_EQ(ref_read, *plan.to_read);
 
   // The writes will cover the new zero parts.
-  std::map<int, extent_set> ref_write;
+  ECUtil::shard_extent_set_t ref_write;
   ref_write[0].insert(4096, 4096);
   ref_write[1].insert(0, 8192);
   ref_write[2].insert(0, 8192);

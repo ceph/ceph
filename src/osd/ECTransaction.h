@@ -27,8 +27,8 @@ namespace ECTransaction {
   {
   public:
 
-    std::optional<std::map<int, extent_set>> to_read;
-    std::map<int, extent_set> will_write;
+    std::optional<ECUtil::shard_extent_set_t> to_read;
+    ECUtil::shard_extent_set_t will_write;
     const ECUtil::HashInfoRef hinfo;
     const ECUtil::HashInfoRef shinfo;
     const uint64_t orig_size;

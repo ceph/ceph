@@ -52,7 +52,7 @@ a superset of all extents required.
 void ECUtil::stripe_info_t::ro_range_to_shards(
     uint64_t ro_offset,
     uint64_t ro_size,
-    map<int, extent_set> *shard_extent_set,
+    shard_extent_set_t *shard_extent_set,
     extent_set *extent_superset,
     buffer::list *bl,
     shard_extent_map_t *shard_extent_map) const {
@@ -143,40 +143,37 @@ void ECUtil::stripe_info_t::ro_range_to_shards(
 }
 
 void ECUtil::stripe_info_t::trim_shard_extent_set_for_ro_offset (uint64_t ro_offset,
-  std::map<int, extent_set> &shard_extent_set) const {
+  shard_extent_set_t &shard_extent_set) const {
 
   /* If the offset is within the first shard, then the remaining shards are
    * not written and we don't need to generated zeros for either */
   int ro_offset_shard = (ro_offset / chunk_size) % k;
   if (ro_offset_shard == 0) {
     uint64_t shard_offset = ro_offset_to_shard_offset(ro_offset, 0);
-    for (auto &&[shard, eset] : shard_extent_set) {
-      eset.erase(align_page_next(shard_offset), ((uint64_t)-1) >> 1);
+    for (auto &&iter = shard_extent_set.begin(); iter != shard_extent_set.end();) {
+      iter->second.erase(align_page_next(shard_offset), ((uint64_t)-1) >> 1);
+      if (iter->second.empty()) iter = shard_extent_set.erase(iter);
+      else ++iter;
     }
-    std::erase_if(shard_extent_set, [](const auto& item)
-    {
-        auto const& [_, eset] = item;
-        return eset.empty();
-    });
   }
 }
 
 void ECUtil::stripe_info_t::ro_size_to_read_and_zero_mask(
   uint64_t ro_size,
-  std::map<int, extent_set> &shard_extent_set) const {
+  shard_extent_set_t &shard_extent_set) const {
   ro_range_to_shard_extent_set_with_parity(0, logical_to_next_stripe_offset(ro_size), shard_extent_set);
   trim_shard_extent_set_for_ro_offset(ro_size, shard_extent_set);
 }
 
 void ECUtil::stripe_info_t::ro_size_to_read_mask(
   uint64_t ro_size,
-  std::map<int, extent_set> &shard_extent_set) const {
+  shard_extent_set_t &shard_extent_set) const {
   ro_range_to_shard_extent_set_with_parity(0, align_page_next(ro_size), shard_extent_set);
 }
 
 void ECUtil::stripe_info_t::ro_size_to_zero_mask(
   uint64_t ro_size,
-  std::map<int, extent_set> &shard_extent_set) const {
+  shard_extent_set_t &shard_extent_set) const {
   // There should never be any zero padding on the parity.
   ro_range_to_shard_extent_set(align_page_next(ro_size),
     logical_to_next_stripe_offset(ro_size) - align_page_next(ro_size),
@@ -311,7 +308,7 @@ namespace ECUtil {
     if (ro_offset >= ro_end)
       return;
 
-    std::map<int, extent_set> ro_to_erase;
+    shard_extent_set_t ro_to_erase;
     sinfo->ro_range_to_shard_extent_set(ro_offset, ro_end - ro_start,
                               ro_to_erase);
     for (auto && [shard, eset] : ro_to_erase) {
@@ -342,13 +339,13 @@ namespace ECUtil {
       return shard_extent_map_t(sinfo);
     }
 
-    std::map<int, extent_set> ro_to_intersect;
+    shard_extent_set_t ro_to_intersect;
     sinfo->ro_range_to_shard_extent_set(ro_offset, ro_length, ro_to_intersect);
 
     return intersect(ro_to_intersect);
   }
 
-  shard_extent_map_t shard_extent_map_t::intersect(optional<map<int, extent_set>> const &other) const
+  shard_extent_map_t shard_extent_map_t::intersect(optional<shard_extent_set_t> const &other) const
   {
     if (!other)
       return shard_extent_map_t(sinfo);
@@ -356,7 +353,7 @@ namespace ECUtil {
     return intersect(*other);
   }
 
-  shard_extent_map_t shard_extent_map_t::intersect(map<int, extent_set> const &other) const
+  shard_extent_map_t shard_extent_map_t::intersect(shard_extent_set_t const &other) const
   {
     shard_extent_map_t out(sinfo);
 
@@ -579,7 +576,7 @@ namespace ECUtil {
   }
 
   int shard_extent_map_t::decode(ErasureCodeInterfaceRef& ecimpl,
-    map<int, extent_set> want)
+    shard_extent_set_t want)
   {
     bool decoded = false;
     int r = 0;
@@ -716,14 +713,14 @@ namespace ECUtil {
     }
   }
 
-  map <int, extent_set> shard_extent_map_t::get_extent_set_map()
+  ECUtil::shard_extent_set_t shard_extent_map_t::get_extent_set()
   {
-    map<int, extent_set> eset_map;
+    shard_extent_set_t shard_eset;
     for (auto &&[shard, emap] : extent_maps) {
-      eset_map.emplace(shard, emap.get_interval_set());
+      shard_eset.emplace(shard, emap.get_interval_set());
     }
 
-    return eset_map;
+    return shard_eset;
   }
 
   void shard_extent_map_t::erase_shard(int shard)
@@ -809,7 +806,7 @@ namespace ECUtil {
     return extent_maps.contains(shard);
   }
 
-  bool shard_extent_map_t::contains(optional<map<int, extent_set>> const &other) const
+  bool shard_extent_map_t::contains(optional<shard_extent_set_t> const &other) const
   {
     if (!other)
       return true;
@@ -817,7 +814,7 @@ namespace ECUtil {
     return contains(*other);
   }
 
-  bool shard_extent_map_t::contains(map<int, extent_set> const &other) const
+  bool shard_extent_map_t::contains(shard_extent_set_t const &other) const
   {
     for ( auto &&[shard, other_eset]: other)
     {
