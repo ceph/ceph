@@ -15,7 +15,8 @@ class SSLConfigException(Exception):
 
 
 class SSLCerts:
-    def __init__(self) -> None:
+    def __init__(self, _certificate_duration_days=(365 * 10 + 3)) -> None:
+        self.certificate_duration_days=_certificate_duration_days
         self.root_cert: Any
         self.root_key: Any
         self.key_file: IO[bytes]
@@ -37,7 +38,7 @@ class SSLCerts:
             x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
         ]))
         root_builder = root_builder.not_valid_before(datetime.now())
-        root_builder = root_builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))
+        root_builder = root_builder.not_valid_after(datetime.now() + timedelta(days=self.certificate_duration_days))
         root_builder = root_builder.serial_number(x509.random_serial_number())
         root_builder = root_builder.public_key(root_public_key)
 
@@ -95,7 +96,7 @@ class SSLCerts:
         builder = builder.issuer_name(
             x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'), ]))
         builder = builder.not_valid_before(datetime.now())
-        builder = builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))
+        builder = builder.not_valid_after(datetime.now() + timedelta(days=self.certificate_duration_days))
         builder = builder.serial_number(x509.random_serial_number())
         builder = builder.public_key(public_key)
 

@@ -298,8 +298,14 @@ class CertMgr:
     CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
 
-    def __init__(self, mgr: "CephadmOrchestrator", ip: str) -> None:
+    def __init__(self,
+                 mgr: "CephadmOrchestrator",
+                 certificate_duration_days: int,
+                 renewal_threshold_days: int,
+                 ip: str) -> None:
         self.mgr = mgr
+        self.certificate_duration_days = certificate_duration_days
+        self.renewal_threshold_days = renewal_threshold_days
         self.cert_key_store = CertKeyStore(mgr)
         self.cert_key_store.load()
         self._initialize_root_ca(ip)
@@ -311,7 +317,7 @@ class CertMgr:
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
     def _initialize_root_ca(self, ip: str) -> None:
-        self.ssl_certs: SSLCerts = SSLCerts()
+        self.ssl_certs: SSLCerts = SSLCerts(self.certificate_duration_days)
         old_cert = self.cert_key_store.get_cert(self.CEPHADM_ROOT_CA_CERT)
         old_key = self.cert_key_store.get_key(self.CEPHADM_ROOT_CA_KEY)
         if old_key and old_cert:
@@ -335,15 +341,20 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
-    def validate_cert_key_pair(self, cert_ref: str, cert: str, key: str, instance: str = '') -> None:
+    def check_cert_key_pair(self, cert_ref: str, cert: str, key: str, instance: str = '') -> None:
         """Helper method to validate a cert/key pair and handle errors."""
         if not cert.strip() and not key.strip():
             # Both cert and key are empty, nothing to check
             return
         try:
             get_cert_issuer_info(cert)
-            verify_tls(cert, key)
-            logger.info(f"Checking certificate for {cert_ref}...")
+            days_to_expiration = verify_tls(cert, key)
+            if days_to_expiration < self.renewal_threshold_days:
+                # trigger renewal
+                logger.info(f'Certificate for "{cert_ref}" must be renewed as only {days_to_expiration} are left for expiration.')
+                pass
+            else:
+                logger.info(f'Certificate for "{cert_ref}" is still valid for {days_to_expiration} days.')
             # self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
         except ServerConfigException as e:
             instance_info = f" ({instance})" if instance else ""
@@ -386,8 +397,8 @@ class CertMgr:
                 instances = [instance for instance, exists in cert_entries.items() if exists]
                 for instance in instances:
                     cert, key, instance_info = get_cert_and_key(cert_ref, instance)
-                    self.validate_cert_key_pair(cert_ref, cert, key, instance_info)
+                    self.check_cert_key_pair(cert_ref, cert, key, instance_info)
             else:
                 # Global cert case
                 cert, key, _ = get_cert_and_key(cert_ref)
-                self.validate_cert_key_pair(cert_ref, cert, key)
+                self.check_cert_key_pair(cert_ref, cert, key)

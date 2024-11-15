@@ -413,6 +413,22 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
         ),
         Option(
+            'certificate_duration_days',
+            type='int',
+            default=365,
+            desc='Specifies the duration of self certificates generated and signed by cephadm CA',
+            min=90,
+            max=(3 * 365)
+        ),
+        Option(
+            'renewal_threshold_days',
+            type='int',
+            default=30,
+            desc='Specifies the lead time in days to initiate certificate renewal before expiration.',
+            min=10,
+            max=90
+        ),
+        Option(
             'secure_monitoring_stack',
             type='bool',
             default=False,
@@ -595,7 +611,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.tuned_profile_utils = TunedProfileUtils(self)
 
-        self.cert_mgr = CertMgr(self, self.get_mgr_ip())
+        self.cert_mgr = CertMgr(self,
+                                self.certificate_duration_days,
+                                self.renewal_threshold_days,
+                                self.get_mgr_ip())
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
