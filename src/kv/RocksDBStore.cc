@@ -340,12 +340,12 @@ int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Op
     int ret = string2bool(val, disableWAL);
     if (ret != 0)
       return ret;
-  } else if (key == "rocksdb.statistics.enable" || key == "stats_enabled" || key == "enable_stats") {
-        bool enable;
-        if (string2bool(val, enable) == 0 && enable) {
+  } else if (key == "rocksdb.statistics.enable") {
+        if (val == "true") {
             cct->_conf->rocksdb_perf = true;
             dout(10) << "RocksDB statistics enabled via key: " << key << dendl;
         } else {
+            cct->_conf->rocksdb_perf = false;
             dout(10) << "RocksDB statistics disabled via key: " << key << dendl;
         }
   }

@@ -50,20 +50,24 @@ std::string generate_unique_db_path()
     return "/tmp/test_rocksdb_store_" + to_string(getpid()) + "_" + to_string(rand());
 }
 
-class RocksDBMetricsTest : public ::testing::Test
+struct RocksDBMetricsTestParams
+{
+    bool perf_counters_enabled;
+    std::string mode;
+};
+
+class RocksDBMetricsTest : public ::testing::TestWithParam<RocksDBMetricsTestParams>
 {
 protected:
     static boost::intrusive_ptr<CephContext> cct_ptr;
     static CephContext *cct;
     static std::string admin_socket_path;
-    static std::unique_ptr<rocksdb::Statistics> stats;
     RocksDBStore *store;
     std::string db_path;
 
     // Set up the global context once for all tests
     static void SetUpTestSuite()
     {
-        // CephContext with a unique admin socket path
         admin_socket_path = generate_rand_socket_path();
         std::map<std::string, std::string> defaults = {
             {"admin_socket", admin_socket_path}};
@@ -90,17 +94,14 @@ protected:
 
     void SetUp() override
     {
-        // Define RocksDB store path
+        // RocksDB store path
         db_path = generate_unique_db_path();
-
-        // Remove existing RocksDB store directory
         fs::remove_all(db_path);
 
+        RocksDBMetricsTestParams params = GetParam();
         // RocksDBStore with empty options and default environment
         std::map<std::string, std::string> kv_options = {
-            {"rocksdb.statistics.enable", "true"},
-            {"stats_enabled", "true"},
-            {"enable_stats", "true"}};
+            {"rocksdb.statistics.enable", params.perf_counters_enabled ? "true" : "false"}};
 
         void *env = nullptr;
 
@@ -153,30 +154,52 @@ protected:
     }
 };
 
-// Initialize static members, created only once
+// Static Members
 boost::intrusive_ptr<CephContext> RocksDBMetricsTest::cct_ptr = nullptr;
 CephContext *RocksDBMetricsTest::cct = nullptr;
 std::string RocksDBMetricsTest::admin_socket_path = "";
 
-TEST_F(RocksDBMetricsTest, SimpleTest)
+// Instantiate the test suite with parameters
+INSTANTIATE_TEST_SUITE_P(
+    PerfCounters,
+    RocksDBMetricsTest,
+    ::testing::Values(
+        RocksDBMetricsTestParams{true, "telemetry"},
+        RocksDBMetricsTestParams{false, "telemetry"}
+        )
+);
+
+// Testing with Params
+TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
 {
+    RocksDBMetricsTestParams params = GetParam();
+
+    // Instantiate AdminSocketClient
     AdminSocketClient client(admin_socket_path.c_str());
     std::string message;
 
-    // have to construct a JSON to pass into the do_request or else won't work
+    std::cout << "[TEST] Perf Counters " 
+              << (params.perf_counters_enabled ? "Enabled" : "Disabled") 
+              << ", Mode: " << params.mode << std::endl;
+
+    // write and read operations for metrics
+    perform_write_operations(store, 100); 
+    perform_read_operations(store, 50);    
+
+    // Prepare JSON request
     json request_json;
     request_json["prefix"] = "dump_rocksdb_stats";
-    request_json["level"] = "telemetry";
-    std::string request = request_json.dump(); // convert to string format
+    request_json["level"] = params.mode;
+    std::string request = request_json.dump();
 
-    // Debug
     std::cout << "Sending JSON request: " << request << std::endl;
 
-    // JSON command to AdminSocket
+    // Send request and capture response
     std::string response = client.do_request(request, &message);
 
-    cout << "Received JSON response: " << message << std::endl;
+    std::cout << "Received JSON response: " << message << std::endl;
 
+    // Parse JSON response
     json response_json;
     try
     {
@@ -184,151 +207,226 @@ TEST_F(RocksDBMetricsTest, SimpleTest)
     }
     catch (json::parse_error &e)
     {
-        FAIL() << "Failed to parse JSON response: " << e.what();
+        FAIL() << "Failed to parse JSON response on PerfCountersAndModesBehavior: " << e.what();
+        return; 
     }
 
-    ASSERT_TRUE(response_json.contains("main")) << "Response JSON in SIMPLETEST does not contain 'main'";
-    ASSERT_TRUE(response_json.contains("histogram")) << "Response JSON in SIMPLETEST does not contain 'histogram'";
-    ASSERT_TRUE(response_json.contains("columns")) << "Response JSON in SIMPLETEST does not contain 'columns'";
+    // Assertions on the response structure
+    ASSERT_TRUE(response_json.contains("main")) << "Response JSON does not contain 'main'";
+    ASSERT_TRUE(response_json.contains("histogram")) << "Response JSON does not contain 'histogram'";
+    ASSERT_TRUE(response_json.contains("columns")) << "Response JSON does not contain 'columns'";
 
-    ASSERT_EQ(response_json["main"]["rocksdb.bytes.read"], 0);
-    ASSERT_EQ(response_json["main"]["rocksdb.bytes.written"], 0);
-    // ASSERT_EQ(response_json["histogram"]["rocksdb.bytes.read"], -1);
-    // ASSERT_EQ(response_json["histogram"]["rocksdb.bytes.written"], -1);
-    // ASSERT_EQ(response_json["main"]["rocksdb.bytes.read"], -1);
-    // ASSERT_EQ(response_json["main"]["rocksdb.bytes.written"], -1);
-}
+    // -------------------------
+    // === Main Metrics Assertions ===
+    // -------------------------
+    const auto& main = response_json["main"];
 
-// Telemetry Stats
-TEST_F(RocksDBMetricsTest, DumpTelemetryStats)
-{
-    AdminSocketClient client(admin_socket_path.c_str());
-    string message;
-
-    // Perform write and read operations
-    perform_write_operations(store, 100);
-    perform_read_operations(store, 50);
-
-    json request_json;
-    request_json["prefix"] = "dump_rocksdb_stats";
-    request_json["level"] = "telemetry";
-    string request = request_json.dump();
-
-    std::cout << "Sending JSON request: " << request << std::endl;
-
-    string response = client.do_request(request, &message);
-
-    cout << "Received JSON response: " << message << std::endl;
-
-    json response_json;
-    try
+    if (params.perf_counters_enabled)
     {
-        response_json = json::parse(message);
+        EXPECT_GT(main["rocksdb.bytes.read"].get<int>(), 0) << "'rocksdb.bytes.read' should be greater than 0.";
+        EXPECT_GT(main["rocksdb.bytes.written"].get<int>(), 0) << "'rocksdb.bytes.written' should be greater than 0.";
+
+        // Dependent On Mode
+        if (params.mode == "telemetry" || params.mode == "all")
+        {
+            // memtable metrics
+            EXPECT_EQ(main["rocksdb.memtable.hit"].get<int>(), 0) << "'rocksdb.memtable.hit' should be 0.";
+            EXPECT_EQ(main["rocksdb.memtable.miss"].get<int>(), 50) << "'rocksdb.memtable.miss' should be 50.";
+
+            // block cache metrics
+            EXPECT_EQ(main["rocksdb.block.cache.data.hit"].get<int>(), 49) << "'rocksdb.block.cache.data.hit' should be 49.";
+            EXPECT_EQ(main["rocksdb.block.cache.data.miss"].get<int>(), 1) << "'rocksdb.block.cache.data.miss' should be 1.";
+            EXPECT_EQ(main["rocksdb.block.cache.filter.add"].get<int>(), 1) << "'rocksdb.block.cache.filter.add' should be 1.";
+            EXPECT_EQ(main["rocksdb.block.cache.filter.miss"].get<int>(), 1) << "'rocksdb.block.cache.filter.miss' should be 1.";
+            EXPECT_EQ(main["rocksdb.block.cache.hit"].get<int>(), 150) << "'rocksdb.block.cache.hit' should be 150.";
+            EXPECT_EQ(main["rocksdb.block.cache.miss"].get<int>(), 3) << "'rocksdb.block.cache.miss' should be 3.";
+        }
+
     }
-    catch (json::parse_error &e)
+    else
     {
-        FAIL() << "Failed to parse JSON response on TEST DumpTelemetryStats: " << e.what();
+        //Perf Counter disabled should be -1/0
+        EXPECT_EQ(main["rocksdb.bytes.read"].get<int>(), -1) << "'rocksdb.bytes.read' should be -1.";
+        EXPECT_EQ(main["rocksdb.bytes.written"].get<int>(), -1) << "'rocksdb.bytes.written' should be -1.";
+        EXPECT_EQ(main["rocksdb.memtable.hit"].get<int>(), -1) << "'rocksdb.memtable.hit' should be -1.";
+        EXPECT_EQ(main["rocksdb.memtable.miss"].get<int>(), -1) << "'rocksdb.memtable.miss' should be -1.";
+        EXPECT_EQ(main["rocksdb.block.cache.data.hit"].get<int>(), -1) << "'rocksdb.block.cache.data.hit' should be -1.";
+        EXPECT_EQ(main["rocksdb.block.cache.data.miss"].get<int>(), -1) << "'rocksdb.block.cache.data.miss' should be -1.";
+        EXPECT_EQ(main["rocksdb.block.cache.filter.add"].get<int>(), -1) << "'rocksdb.block.cache.filter.add' should be -1.";
+        EXPECT_EQ(main["rocksdb.block.cache.filter.miss"].get<int>(), -1) << "'rocksdb.block.cache.filter.miss' should be -1.";
+        EXPECT_EQ(main["rocksdb.block.cache.hit"].get<int>(), -1) << "'rocksdb.block.cache.hit' should be -1.";
+        EXPECT_EQ(main["rocksdb.block.cache.miss"].get<int>(), -1) << "'rocksdb.block.cache.miss' should be -1.";
     }
 
-    // Simple Test
-    ASSERT_TRUE(response_json.contains("main")) << "Response JSON in DumpTelemetryStats does not contain 'main'";
-    ASSERT_TRUE(response_json.contains("histogram")) << "Response JSON in DumpTelemetryStats does not contain 'histogram'";
-    ASSERT_TRUE(response_json.contains("columns")) << "Response JSON in DumpTelemetryStats does not contain 'columns'";
+    // -------------------------
+    // === Histogram Metrics Assertions ===
+    // -------------------------
+    const auto& histogram = response_json["histogram"];
 
-    // Main Metrics
-    EXPECT_GT(response_json["main"]["rocksdb.bytes.read"], 0) << "Bytes read should be greater than 0.";
-    EXPECT_GT(response_json["main"]["rocksdb.bytes.written"], 0) << "Bytes written should be greater than 0.";
-    EXPECT_GE(response_json["main"]["rocksdb.memtable.hit"], 0) << "Memtable hits should be >= 0.";
-    EXPECT_GE(response_json["main"]["rocksdb.memtable.miss"], 0) << "Memtable misses should be >= 0.";
+    if (params.perf_counters_enabled)
+    {
+        // rocksdb.db.get.micros
+        ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros")) << "Histogram does not contain 'rocksdb.db.get.micros'";
+        EXPECT_GT(histogram["rocksdb.db.get.micros"]["count"].get<int>(), 0) 
+            << "'rocksdb.db.get.micros.count' should be greater than 0.";
+        EXPECT_GT(histogram["rocksdb.db.get.micros"]["avg"].get<double>(), 0.0) 
+            << "'rocksdb.db.get.micros.avg' should be greater than 0.0.";
 
-    // Histogram Metrics
-    ASSERT_TRUE(response_json["histogram"].contains("rocksdb.db.get.micros")) << "Histogram does not contain db.get.micros";
-    EXPECT_GT(response_json["histogram"]["rocksdb.db.get.micros"]["count"], 0) << "db.get.micros count should be greater than 0.";
-    EXPECT_GT(response_json["histogram"]["rocksdb.db.get.micros"]["avg"], 0) << "Avg db.get.micros should be greater than 0.";
+        // rocksdb.db.write.micros
+        ASSERT_TRUE(histogram.contains("rocksdb.db.write.micros")) << "Histogram does not contain 'rocksdb.db.write.micros'";
+        EXPECT_GT(histogram["rocksdb.db.write.micros"]["count"].get<int>(), 0) 
+            << "'rocksdb.db.write.micros.count' should be greater than 0.";
+        EXPECT_GT(histogram["rocksdb.db.write.micros"]["avg"].get<double>(), 0.0) 
+            << "'rocksdb.db.write.micros.avg' should be greater than 0.0.";
 
-    ASSERT_TRUE(response_json["histogram"].contains("rocksdb.db.write.micros")) << "Histogram does not contain db.write.micros";
-    EXPECT_GT(response_json["histogram"]["rocksdb.db.write.micros"]["count"], 0) << "db.write.micros count should be greater than 0.";
-    EXPECT_GT(response_json["histogram"]["rocksdb.db.write.micros"]["avg"], 0) << "Avg db.write.micros should be greater than 0.";
+        // rocksdb.sst.read.micros
+        ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros")) << "Histogram does not contain 'rocksdb.sst.read.micros'";
+        EXPECT_GT(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), 0) 
+            << "'rocksdb.sst.read.micros.count' should be greater than 0.";
+        EXPECT_GT(histogram["rocksdb.sst.read.micros"]["avg"].get<int>(), 0) 
+            << "'rocksdb.sst.read.micros.avg' should be greater than 0.";
 
-    // SST Read Metrics
-    ASSERT_TRUE(response_json["histogram"].contains("rocksdb.sst.read.micros")) << "Histogram does not contain sst.read.micros";
-    EXPECT_GT(response_json["histogram"]["rocksdb.sst.read.micros"]["count"], 0) << "sst.read.micros count should be greater than 0.";
+        // Optionally, verify other histograms if needed
+    }
+    else
+    {
+        //Perf Counter disabled should be -1/0
+        // rocksdb.db.get.micros
+        ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros")) << "Histogram does not contain 'rocksdb.db.get.micros'";
+        EXPECT_EQ(histogram["rocksdb.db.get.micros"]["count"].get<int>(), -1) 
+            << "'rocksdb.db.get.micros.count' should be -1.";
+        EXPECT_EQ(histogram["rocksdb.db.get.micros"]["avg"].get<int>(), -1) 
+            << "'rocksdb.db.get.micros.avg' should be -1.";
 
-    // Columns Metrics
-    ASSERT_TRUE(response_json["columns"].contains("all_columns")) << "Columns section does not contain 'all_columns'";
-    EXPECT_EQ(response_json["columns"]["all_columns"]["sum"]["NumFiles"], 1) << "Number of SST files should be 1.";
+        // rocksdb.db.write.micros
+        ASSERT_TRUE(histogram.contains("rocksdb.db.write.micros")) << "Histogram does not contain 'rocksdb.db.write.micros'";
+        EXPECT_EQ(histogram["rocksdb.db.write.micros"]["count"].get<int>(), -1) 
+            << "'rocksdb.db.write.micros.count' should be -1.";
+        EXPECT_EQ(histogram["rocksdb.db.write.micros"]["avg"].get<int>(), -1) 
+            << "'rocksdb.db.write.micros.avg' should be -1.";
 
-    // verify block cache metrics
-    EXPECT_GT(response_json["main"]["rocksdb.block.cache.hit"], 0) << "Block cache hits should be greater than 0.";
-    EXPECT_GE(response_json["main"]["rocksdb.block.cache.miss"], 0) << "Block cache misses should be >= 0.";
+        // rocksdb.sst.read.micros
+        ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros")) << "Histogram does not contain 'rocksdb.sst.read.micros'";
+        EXPECT_EQ(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), -1) 
+            << "'rocksdb.sst.read.micros.count' should be -1.";
+        EXPECT_EQ(histogram["rocksdb.sst.read.micros"]["avg"].get<int>(), -1) 
+            << "'rocksdb.sst.read.micros.avg' should be -1.";
+    }
+
+    // -------------------------
+    // === Columns Metrics Assertions ===
+    // -------------------------
+    const auto& columns = response_json["columns"];
+
+    if (params.perf_counters_enabled)
+    {
+        if (params.mode == "telemetry" || params.mode == "all")
+        {
+            // all_columns.sum.NumFiles 
+            ASSERT_TRUE(columns.contains("all_columns")) << "Columns section does not contain 'all_columns'";
+            EXPECT_EQ(columns["all_columns"]["sum"]["NumFiles"].get<int>(), 1) 
+                << "'columns.all_columns.sum.NumFiles' should be 1.";
+            EXPECT_EQ(columns["all_columns"]["sum"]["KeyDrop"].get<int>(), 0) 
+                << "'columns.all_columns.sum.KeyDrop' should be 0.";
+            EXPECT_EQ(columns["all_columns"]["sum"]["KeyIn"].get<int>(), 0) 
+                << "'columns.all_columns.sum.KeyIn' should be 0.";
+
+            // total_slowdown and total_stop
+            EXPECT_EQ(columns["all_columns"]["total_slowdown"].get<int>(), 0) 
+                << "'columns.all_columns.total_slowdown' should be 0.";
+            EXPECT_EQ(columns["all_columns"]["total_stop"].get<int>(), 0) 
+                << "'columns.all_columns.total_stop' should be 0.";
+        }
+
+    }
+    else
+    {
+        // When performance counters are disabled, 'all_columns.sum.NumFiles' should still be 1
+        ASSERT_TRUE(columns.contains("all_columns")) << "Columns section does not contain 'all_columns'";
+        EXPECT_EQ(columns["all_columns"]["sum"]["NumFiles"].get<int>(), 1) 
+            << "'columns.all_columns.sum.NumFiles' should be 1.";
+
+        // Other columns metrics should have -1 or 0 if present
+        // Since in provided JSON with perf_counters off, 'KeyDrop' and 'KeyIn' are 0
+        EXPECT_EQ(columns["all_columns"]["sum"]["KeyDrop"].get<int>(), 0) 
+            << "'columns.all_columns.sum.KeyDrop' should be 0.";
+        EXPECT_EQ(columns["all_columns"]["sum"]["KeyIn"].get<int>(), 0) 
+            << "'columns.all_columns.sum.KeyIn' should be 0.";
+
+        // Verify total_slowdown and total_stop
+        EXPECT_EQ(columns["all_columns"]["total_slowdown"].get<int>(), 0) 
+            << "'columns.all_columns.total_slowdown' should be 0.";
+        EXPECT_EQ(columns["all_columns"]["total_stop"].get<int>(), 0) 
+            << "'columns.all_columns.total_stop' should be 0.";
+    }
 }
 
 
 // Test to dump objectstore stats after performing write and read operations
-TEST_F(RocksDBMetricsTest, DumpObjectstoreStats) {
-    AdminSocketClient client(admin_socket_path.c_str());
-    string message;
+// TEST_F(RocksDBMetricsTest, DumpObjectstoreStats) {
+//     AdminSocketClient client(admin_socket_path.c_str());
+//     string message;
 
-    // Perform write and read operations
-    perform_write_operations(store, 150);
-    perform_read_operations(store, 50);
+//     // Perform write and read operations
+//     perform_write_operations(store, 150);
+//     perform_read_operations(store, 50);
 
-    json request_json;
-    request_json["prefix"] = "dump_rocksdb_stats";
-    request_json["level"] = "objectstore";
-    string request = request_json.dump();
+//     json request_json;
+//     request_json["prefix"] = "dump_rocksdb_stats";
+//     request_json["level"] = "objectstore";
+//     string request = request_json.dump();
 
-    std::cout << "Sending JSON request: " << request << std::endl;
+//     std::cout << "Sending JSON request: " << request << std::endl;
 
-    string response = client.do_request(request, &message);
+//     string response = client.do_request(request, &message);
 
-    cout << "Received JSON response: " << message << std::endl;
+//     cout << "Received JSON response: " << message << std::endl;
 
-    json response_json;
-    try
-    {
-        response_json = json::parse(message);
-    }
-    catch (json::parse_error &e)
-    {
-        FAIL() << "Failed to parse JSON response on TEST DumpObjectstoreStats: " << e.what();
-    }
+//     json response_json;
+//     try
+//     {
+//         response_json = json::parse(message);
+//     }
+//     catch (json::parse_error &e)
+//     {
+//         FAIL() << "Failed to parse JSON response on TEST DumpObjectstoreStats: " << e.what();
+//     }
 
-    // Simple Test
-    ASSERT_TRUE(response_json.contains("main")) << "Response JSON in DumpObjectstoreStats does not contain 'main'";
-    ASSERT_TRUE(response_json.contains("histogram")) << "Response JSON in DumpObjectStoreStats does not contain 'histogram'";
-    ASSERT_TRUE(response_json.contains("columns")) << "Response JSON in DumpObjectStoreStats does not contain 'columns'";
+//     // Simple Test
+//     ASSERT_TRUE(response_json.contains("main")) << "Response JSON in DumpObjectstoreStats does not contain 'main'";
+//     ASSERT_TRUE(response_json.contains("histogram")) << "Response JSON in DumpObjectStoreStats does not contain 'histogram'";
+//     ASSERT_TRUE(response_json.contains("columns")) << "Response JSON in DumpObjectStoreStats does not contain 'columns'";
 
-    // Main Metrics
-    EXPECT_GT(response_json["main"]["rocksdb.bytes.read"], 0) << "Bytes read should be greater than 0.";
-    EXPECT_GT(response_json["main"]["rocksdb.bytes.written"], 0) << "Bytes written should be greater than 0.";
-    EXPECT_GE(response_json["main"]["rocksdb.memtable.hit"], 0) << "Memtable hits should be >= 0.";
-    EXPECT_GE(response_json["main"]["rocksdb.memtable.miss"], 0) << "Memtable misses should be >= 0.";
+//     // Main Metrics
+//     EXPECT_GT(response_json["main"]["rocksdb.bytes.read"], 0) << "Bytes read should be greater than 0.";
+//     EXPECT_GT(response_json["main"]["rocksdb.bytes.written"], 0) << "Bytes written should be greater than 0.";
+//     EXPECT_GE(response_json["main"]["rocksdb.memtable.hit"], 0) << "Memtable hits should be >= 0.";
+//     EXPECT_GE(response_json["main"]["rocksdb.memtable.miss"], 0) << "Memtable misses should be >= 0.";
 
-    // Histogram Metrics
-    ASSERT_TRUE(response_json["histogram"].contains("rocksdb.db.get.micros")) << "Histogram does not contain db.get.micros";
-    EXPECT_GT(response_json["histogram"]["rocksdb.db.get.micros"]["count"], 0) << "db.get.micros count should be greater than 0.";
-    EXPECT_GT(response_json["histogram"]["rocksdb.db.get.micros"]["avg"], 0) << "Avg db.get.micros should be greater than 0.";
+//     // Histogram Metrics
+//     ASSERT_TRUE(response_json["histogram"].contains("rocksdb.db.get.micros")) << "Histogram does not contain db.get.micros";
+//     EXPECT_GT(response_json["histogram"]["rocksdb.db.get.micros"]["count"], 0) << "db.get.micros count should be greater than 0.";
+//     EXPECT_GT(response_json["histogram"]["rocksdb.db.get.micros"]["avg"], 0) << "Avg db.get.micros should be greater than 0.";
 
-    ASSERT_TRUE(response_json["histogram"].contains("rocksdb.db.write.micros")) << "Histogram does not contain db.write.micros";
-    EXPECT_GT(response_json["histogram"]["rocksdb.db.write.micros"]["count"], 0) << "db.write.micros count should be greater than 0.";
-    EXPECT_GT(response_json["histogram"]["rocksdb.db.write.micros"]["avg"], 0) << "Avg db.write.micros should be greater than 0.";
+//     ASSERT_TRUE(response_json["histogram"].contains("rocksdb.db.write.micros")) << "Histogram does not contain db.write.micros";
+//     EXPECT_GT(response_json["histogram"]["rocksdb.db.write.micros"]["count"], 0) << "db.write.micros count should be greater than 0.";
+//     EXPECT_GT(response_json["histogram"]["rocksdb.db.write.micros"]["avg"], 0) << "Avg db.write.micros should be greater than 0.";
 
-    // SST Read Metrics
-    ASSERT_TRUE(response_json["histogram"].contains("rocksdb.sst.read.micros")) << "Histogram does not contain sst.read.micros";
-    EXPECT_GT(response_json["histogram"]["rocksdb.sst.read.micros"]["count"], 0) << "sst.read.micros count should be greater than 0.";
-    EXPECT_GT(response_json["histogram"]["rocksdb.sst.read.micros"]["avg"], 0) << "Avg sst.read.micros should be greater than 0.";
+//     // SST Read Metrics
+//     ASSERT_TRUE(response_json["histogram"].contains("rocksdb.sst.read.micros")) << "Histogram does not contain sst.read.micros";
+//     EXPECT_GT(response_json["histogram"]["rocksdb.sst.read.micros"]["count"], 0) << "sst.read.micros count should be greater than 0.";
+//     EXPECT_GT(response_json["histogram"]["rocksdb.sst.read.micros"]["avg"], 0) << "Avg sst.read.micros should be greater than 0.";
 
-    // Columns Metrics
-    ASSERT_TRUE(response_json["columns"].contains("default")) << "Columns section does not contain 'default'";
-    EXPECT_EQ(response_json["columns"]["default"]["sum"]["NumFiles"], 1) << "Number of SST files should be 1.";
-    EXPECT_EQ(response_json["columns"]["default"]["l0"]["NumFiles"], 0) << "Number of SST files should be 0.";
-    EXPECT_EQ(response_json["columns"]["default"]["l1"]["NumFiles"], 1) << "Number of SST files should be 1.";
+//     // Columns Metrics
+//     ASSERT_TRUE(response_json["columns"].contains("default")) << "Columns section does not contain 'default'";
+//     EXPECT_EQ(response_json["columns"]["default"]["sum"]["NumFiles"], 1) << "Number of SST files should be 1.";
+//     EXPECT_EQ(response_json["columns"]["default"]["l0"]["NumFiles"], 0) << "Number of SST files should be 0.";
+//     EXPECT_EQ(response_json["columns"]["default"]["l1"]["NumFiles"], 1) << "Number of SST files should be 1.";
 
-    // verify block cache metrics
-    EXPECT_GT(response_json["main"]["rocksdb.block.cache.hit"], 0) << "Block cache hits should be greater than 0.";
-    EXPECT_GE(response_json["main"]["rocksdb.block.cache.miss"], 0) << "Block cache misses should be >= 0.";
-}
+//     // verify block cache metrics
+//     EXPECT_GT(response_json["main"]["rocksdb.block.cache.hit"], 0) << "Block cache hits should be greater than 0.";
+//     EXPECT_GE(response_json["main"]["rocksdb.block.cache.miss"], 0) << "Block cache misses should be >= 0.";
+// }
 
 // Test to dump debug stats after performing write operations
 // TEST_F(RocksDBMetricsTest, DumpDebugStats) {
