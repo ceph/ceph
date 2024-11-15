@@ -84,12 +84,16 @@ namespace ECUtil {
       return lhs;
     }
     void get_extent_superset(extent_set &eset) const {
-      for (auto &&[_, e]: *this) eset.insert(e);
+      for (auto &&[_, e]: map) eset.insert(e);
     }
     extent_set get_extent_superset() const {
       extent_set eset;
       get_extent_superset(eset);
       return eset;
+    }
+
+    void align(uint64_t a) {
+      for (auto &&[_, e]: map) e.align(a);
     }
 
     void subtract(const shard_extent_set_t &set);
@@ -213,10 +217,12 @@ public:
     return !supports_ec_overwrites() || !supports_ec_optimizations();
   }
   bool supports_partial_reads() const {
-    return (plugin_flags & ErasureCodeInterface::FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION) != 0;
+    return supports_ec_optimizations() &&
+      (plugin_flags & ErasureCodeInterface::FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION) != 0;
   }
   bool supports_partial_writes() const {
-    return (plugin_flags & ErasureCodeInterface::FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION) != 0;
+    return supports_ec_optimizations() &&
+      (plugin_flags & ErasureCodeInterface::FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION) != 0;
   }
   bool logical_offset_is_stripe_aligned(uint64_t logical) const {
     return (logical % stripe_width) == 0;
@@ -376,7 +382,7 @@ public:
   void trim_shard_extent_set_for_ro_offset (uint64_t ro_offset,
     ECUtil::shard_extent_set_t &shard_extent_set) const;
 
-  void ro_size_to_read_and_zero_mask(
+  void ro_size_to_stripe_aligned_read_mask(
   uint64_t ro_size,
   ECUtil::shard_extent_set_t &shard_extent_set) const;
 

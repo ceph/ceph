@@ -168,7 +168,7 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
   if (!sinfo.supports_partial_writes())
   {
     ECUtil::shard_extent_set_t read_mask;
-    sinfo.ro_range_to_shard_extent_set(0, projected_size, read_mask);
+    sinfo.ro_size_to_stripe_aligned_read_mask(orig_size, read_mask);
 
     /* We are not yet attempting to optimise this path and we are instead opting to maintain the old behaviour, where
      * a full read and write is performed for every stripe.

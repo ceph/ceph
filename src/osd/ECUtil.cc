@@ -158,7 +158,7 @@ void ECUtil::stripe_info_t::trim_shard_extent_set_for_ro_offset (uint64_t ro_off
   }
 }
 
-void ECUtil::stripe_info_t::ro_size_to_read_and_zero_mask(
+void ECUtil::stripe_info_t::ro_size_to_stripe_aligned_read_mask(
   uint64_t ro_size,
   shard_extent_set_t &shard_extent_set) const {
   ro_range_to_shard_extent_set_with_parity(0, logical_to_next_stripe_offset(ro_size), shard_extent_set);
