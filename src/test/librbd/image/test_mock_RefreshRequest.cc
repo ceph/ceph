@@ -156,9 +156,14 @@ public:
     ASSERT_TRUE(hdr.length() >= sizeof(rbd_obj_header_ondisk));
     ASSERT_EQ(0, memcmp(RBD_HEADER_TEXT, hdr.c_str(), sizeof(RBD_HEADER_TEXT)));
 
-    bufferlist::iterator it = hdr.begin();
-    it.copy_in(sizeof(RBD_MIGRATE_HEADER_TEXT), RBD_MIGRATE_HEADER_TEXT);
-    ASSERT_EQ(0, ictx->md_ctx.write(ictx->header_oid, hdr, hdr.length(), 0));
+    bufferlist new_hdr;
+    new_hdr.append(RBD_MIGRATE_HEADER_TEXT, sizeof(RBD_MIGRATE_HEADER_TEXT));
+    new_hdr.substr_of(
+      hdr,
+      sizeof(RBD_MIGRATE_HEADER_TEXT),
+      hdr.length() - sizeof(RBD_MIGRATE_HEADER_TEXT));
+    ASSERT_EQ(hdr.length(), new_hdr.length());
+    ASSERT_EQ(0, ictx->md_ctx.write(ictx->header_oid, new_hdr, new_hdr.length(), 0));
   }
 
   void expect_set_require_lock(MockExclusiveLock &mock_exclusive_lock,
