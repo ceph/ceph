@@ -504,6 +504,8 @@ seastar::future<> OSD::start()
   }).then_unpack([this] {
     return _add_me_to_crush();
   }).then([this] {
+    return _add_device_class();
+   }).then([this] {
     monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
     monc->sub_want("mgrmap", 0, 0);
     monc->sub_want("osdmap", 0, 0);
@@ -606,6 +608,38 @@ seastar::future<> OSD::_send_boot()
   // OSDMap flag
   m->metadata["osd_type"] = "crimson";
   return monc->send_message(std::move(m));
+}
+
+seastar::future<> OSD::_add_device_class()
+{
+  LOG_PREFIX(OSD::_add_device_class);
+  if (!local_conf().get_val<bool>("osd_class_update_on_start")) {
+    co_return;
+  }
+
+  std::string device_class = co_await store.get_default_device_class();
+  if (device_class.empty()) {
+    WARN("Device class is empty; skipping crush update.");
+    co_return;
+  }
+
+  INFO("device_class is {} ", device_class);
+
+  std::string cmd = fmt::format(
+    R"({{"prefix": "osd crush set-device-class", "class": "{}", "ids": ["{}"]}})",
+    device_class, stringify(whoami)
+  );
+
+  auto [code, message, out] = co_await monc->run_command(std::move(cmd), {});
+  if (code) {
+    // to be caught by crimson/osd/main.cc
+    WARN("fail to set device_class : {} ({})", message, code);
+    throw std::runtime_error("fail to set device_class");
+  } else {
+    INFO("device_class was set: {}", message);
+  }
+
+  co_return;
 }
 
 seastar::future<> OSD::_add_me_to_crush()

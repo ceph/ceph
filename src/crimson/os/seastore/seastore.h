@@ -191,6 +191,8 @@ public:
     seastar::future<> write_meta(const std::string& key,
                                  const std::string& value);
 
+    seastar::future<std::string> get_default_device_class();
+
     store_statfs_t stat() const;
 
     uuid_d get_fsid() const;
@@ -566,6 +568,8 @@ public:
   seastar::future<std::tuple<int, std::string>> read_meta(const std::string& key) final;
 
   seastar::future<std::vector<coll_core_t>> list_collections() final;
+
+  seastar::future<std::string> get_default_device_class() final;
 
   FuturizedStore::Shard& get_sharded_store() final {
     return shard_stores.local();

@@ -590,6 +590,19 @@ seastar::future<struct stat> AlienStore::stat(
   });
 }
 
+seastar::future<std::string> AlienStore::get_default_device_class()
+{
+  logger().debug("{}", __func__);
+  assert(tp);
+  return op_gates.simple_dispatch("get_default_device_class", [=, this] {
+    return tp->submit([=, this] {
+      return store->get_default_device_class();
+    }).then([] (std::string device_class) {
+      return seastar::make_ready_future<std::string>(device_class);
+    });
+  });
+}
+
 auto AlienStore::omap_get_header(CollectionRef ch,
                                  const ghobject_t& oid)
   -> get_attr_errorator::future<ceph::bufferlist>
