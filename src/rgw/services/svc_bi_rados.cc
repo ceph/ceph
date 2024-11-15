@@ -16,6 +16,7 @@
 #include "driver/rados/shard_io.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "common/async/blocked_completion.h"
+#include "common/errno.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -611,6 +612,33 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp, c
   }
 
   return 0;
+}
+
+int RGWSI_BucketIndex_RADOS::set_reshard_status(const DoutPrefixProvider *dpp,
+                                                const RGWBucketInfo& bucket_info,
+                                                cls_rgw_reshard_status status)
+{
+  const auto entry = cls_rgw_bucket_instance_entry{.reshard_status = status};
+
+  librados::IoCtx index_pool;
+  map<int, string> bucket_objs;
+
+  int r = open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+      ": unable to open bucket index, r=" << r << " (" <<
+      cpp_strerror(-r) << ")" << dendl;
+    return r;
+  }
+
+  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
+  r = CLSRGWIssueSetBucketResharding(index_pool, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+      ": unable to issue set bucket resharding, r=" << r << " (" <<
+      cpp_strerror(-r) << ")" << dendl;
+  }
+  return r;
 }
 
 int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
