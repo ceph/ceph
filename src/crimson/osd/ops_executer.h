@@ -399,12 +399,10 @@ public:
     std::tuple<interruptible_future<>, interruptible_future<>>;
   using rep_op_fut_t =
     interruptible_future<rep_op_fut_tuple>;
-  template <typename MutFunc>
   rep_op_fut_t flush_changes_and_submit(
     const std::vector<OSDOp>& ops,
     SnapMapper& snap_mapper,
-    OSDriver& osdriver,
-    MutFunc mut_func) &&;
+    OSDriver& osdriver);
   std::vector<pg_log_entry_t> prepare_transaction(
     const std::vector<OSDOp>& ops);
   void fill_op_params(modified_by m);
@@ -482,76 +480,6 @@ auto OpsExecuter::with_effect_on_obc(
   auto& ctx_ref = task->ctx;
   op_effects.emplace_back(std::move(task));
   return std::forward<MainFunc>(main_func)(ctx_ref);
-}
-
-template <typename MutFunc>
-OpsExecuter::rep_op_fut_t
-OpsExecuter::flush_changes_and_submit(
-  const std::vector<OSDOp>& ops,
-  SnapMapper& snap_mapper,
-  OSDriver& osdriver,
-  MutFunc mut_func) &&
-{
-  const bool want_mutate = !txn.empty();
-  // osd_op_params are instantiated by every wr-like operation.
-  assert(osd_op_params || !want_mutate);
-  assert(obc);
-
-  auto submitted = interruptor::now();
-  auto all_completed = interruptor::now();
-
-  if (cloning_ctx) {
-    ceph_assert(want_mutate);
-  }
-
-  apply_stats();
-  if (want_mutate) {
-    auto log_entries = flush_clone_metadata(
-      prepare_transaction(ops),
-      snap_mapper,
-      osdriver,
-      txn);
-
-    if (auto log_rit = log_entries.rbegin(); log_rit != log_entries.rend()) {
-      ceph_assert(log_rit->version == osd_op_params->at_version);
-    }
-
-    /*
-     * This works around the gcc bug causing the generated code to incorrectly
-     * execute unconditionally before the predicate.
-     *
-     * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101244
-     */
-    auto clone_obc = cloning_ctx
-	? std::move(cloning_ctx->clone_obc)
-	: nullptr;
-    auto [_submitted, _all_completed] = co_await mut_func(
-      std::move(txn),
-      std::move(obc),
-      std::move(*osd_op_params),
-      std::move(log_entries),
-      std::move(clone_obc));
-
-    submitted = std::move(_submitted);
-    all_completed = std::move(_all_completed);
-  }
-
-  if (op_effects.size()) [[unlikely]] {
-    // need extra ref pg due to apply_stats() which can be executed after
-    // informing snap mapper
-    all_completed =
-      std::move(all_completed).then_interruptible([this, pg=this->pg] {
-      // let's do the cleaning of `op_effects` in destructor
-      return interruptor::do_for_each(op_effects,
-        [pg=std::move(pg)](auto& op_effect) {
-        return op_effect->execute(pg);
-      });
-    });
-  }
-
-  co_return std::make_tuple(
-    std::move(submitted),
-    std::move(all_completed));
 }
 
 template <class Func>
