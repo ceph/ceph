@@ -3012,7 +3012,7 @@ struct bucket_sync_status_info {
 
 };
 
-static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& info,
+static int bucket_sync_status(const rgw::SiteConfig& site, rgw::sal::Driver* driver, const RGWBucketInfo& info,
                               const rgw_zone_id& source_zone_id,
 			      std::optional<rgw_bucket>& opt_source_bucket,
                               bucket_sync_status_info& bucket_sync_info)
@@ -3039,57 +3039,48 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
   auto sources = handler->get_all_sources();
 
   auto& zone_conn_map = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_conn_map();
-  set<rgw_zone_id> zone_ids;
 
-  if (!source_zone_id.empty()) {
-    std::unique_ptr<rgw::sal::Zone> zone;
-    int ret = driver->get_zone()->get_zonegroup().get_zone_by_id(source_zone_id.id, &zone);
-    if (ret < 0) {
-      bucket_sync_info.error = fmt::format("Source zone not found in zonegroup {}", zonegroup.get_name());
-      return -EINVAL;
+  for (auto& entry : sources) {
+    auto& pipe = entry.second;
+    if (opt_source_bucket &&
+        pipe.source.bucket != opt_source_bucket) {
+      continue;
     }
-    auto c = zone_conn_map.find(source_zone_id);
+    const auto& zone = pipe.source.zone.value_or(rgw_zone_id());
+    if (zone.empty()) {
+      continue;
+    }
+
+    if (!source_zone_id.empty() && source_zone_id != zone.id) {
+      continue;
+    }
+
+    RGWZone source_zone;
+    RGWZoneGroup source_zg;
+    if(!site.get_period()->period_map.find_zone_by_id(zone, &source_zg, &source_zone)) {
+      bucket_sync_info.error = fmt::format("failed to find source zone {}", zone.id);
+      return EINVAL;
+    }
+
+    bucket_source_sync_info source_sync_info(source_zone);
+
+    auto c = zone_conn_map.find(zone.id);
     if (c == zone_conn_map.end()) {
-      bucket_sync_info.error = fmt::format("No connection to zone {}", zone->get_name());
-      return -EINVAL;
-    }
-    zone_ids.insert(source_zone_id);
-  } else {
-    std::list<std::string> ids;
-    int ret = driver->get_zone()->get_zonegroup().list_zones(ids);
-    if (ret == 0) {
-      for (const auto& entry : ids) {
-	zone_ids.insert(entry);
-      }
-    }
-  }
-
-  for (auto& zone_id : zone_ids) {
-    auto z = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup().zones.find(zone_id.id);
-    if (z == static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup().zones.end()) { /* shouldn't happen */
-      continue;
-    }
-    auto c = zone_conn_map.find(zone_id.id);
-    if (c == zone_conn_map.end()) { /* shouldn't happen */
+      source_sync_info.error = fmt::format("No connection to zone {}", zone.id);
       continue;
     }
 
-    for (auto& entry : sources) {
-      auto& pipe = entry.second;
-      if (opt_source_bucket &&
-	  pipe.source.bucket != opt_source_bucket) {
-	continue;
-      }
-      if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
-        bucket_source_sync_info source_sync_info(z->second);
-        bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(), z->second,
-				  c->second,
-				  info, pipe,
-				  source_sync_info);
-
-        bucket_sync_info.source_status_info.emplace_back(std::move(source_sync_info));
-      }
+    int ret = bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver),
+                                        static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(),
+                                        source_zone,
+                                        c->second,
+                                        info, pipe,
+                                        source_sync_info);
+    if (ret < 0) {
+      source_sync_info.error = fmt::format("failed to get bucket sync status: {}", cpp_strerror(-ret));
     }
+
+    bucket_sync_info.source_status_info.emplace_back(std::move(source_sync_info));
   }
 
   return 0;
@@ -10113,8 +10104,8 @@ next:
 
     auto bucket_info = bucket->get_info();
     bucket_sync_status_info bucket_sync_info(bucket_info);
- 
-    ret = bucket_sync_status(driver, bucket_info, source_zone,
+
+    ret = bucket_sync_status(*site, driver, bucket_info, source_zone,
         opt_source_bucket, bucket_sync_info);
 
     if (ret == 0) {
