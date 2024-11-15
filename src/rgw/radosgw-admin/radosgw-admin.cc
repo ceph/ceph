@@ -11538,9 +11538,9 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->trim_reshard_log_entries(dpp(), bucket->get_info(), null_yield);
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bi_rados->trim_reshard_log(dpp(), null_yield, bucket->get_info());
     if (ret < 0) {
-      cerr << "ERROR: trim_reshard_log_entries(): " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: trim_reshard_log(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
   }
