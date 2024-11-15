@@ -3,6 +3,9 @@ overrides:
     log-ignorelist:  
       # nvmeof daemon thrashing
       - CEPHADM_FAILED_DAEMON
+      - NVMEOF_SINGLE_GATEWAY
+      - NVMEOF_GATEWAY_DOWN
+      - are in unavailable state
       - is in error state
       - failed cephadm daemon
 

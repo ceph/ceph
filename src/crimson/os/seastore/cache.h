@@ -978,7 +978,8 @@ public:
     auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen);
 #endif
     if (!result) {
-      return nullptr;
+      SUBERRORT(seastore_cache, "insufficient space", t);
+      std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
     }
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result->bp));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
@@ -1019,6 +1020,10 @@ public:
 #else
     auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen);
 #endif
+    if (results.empty()) {
+      SUBERRORT(seastore_cache, "insufficient space", t);
+      std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+    }
     std::vector<TCachedExtentRef<T>> extents;
     for (auto &result : results) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
