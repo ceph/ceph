@@ -1342,8 +1342,8 @@ struct error_code;
     void substr_of(const list_rw& other, unsigned off, unsigned len) {
       list::substr_of(static_cast<const list&>(other), off, len);
     }
-    void share_substr_with(unsigned off, unsigned len, list& other) {
-      other.substr_of(static_cast<list&>(*this), off, len);
+    void share_substr_with(unsigned off, unsigned len, list& other) const {
+      other.substr_of(static_cast<const list&>(*this), off, len);
     }
 
     uint32_t crc32c(uint32_t crc) const {

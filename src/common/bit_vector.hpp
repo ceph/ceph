@@ -343,7 +343,7 @@ void BitVector<_b>::encode_data(bufferlist& bl, uint64_t data_byte_offset,
                                       end_offset - data_byte_offset);
 
     bufferlist bit;
-    bit.substr_of(buffer::list_rw::to_bl(m_data), data_byte_offset, len);
+    m_data.share_substr_with(data_byte_offset, len, bit);
     m_data_crcs[data_byte_offset / BLOCK_SIZE].val = bit.crc32c(0);
 
     bl.claim_append(bit);
