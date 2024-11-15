@@ -15,11 +15,14 @@
 
 #include <seastar/core/thread.hh>
 
+#include "crimson/common/log.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/watch.h"
 #include "osd/ClassHandler.h"
 #include "osd/SnapMapper.h"
+
+SET_SUBSYS(osd);
 
 namespace {
   seastar::logger& logger() {
@@ -841,17 +844,20 @@ OpsExecuter::flush_changes_and_submit(
 
   apply_stats();
   if (want_mutate) {
-    auto log_entries = flush_clone_metadata(
-      prepare_transaction(ops),
-      snap_mapper,
-      osdriver,
-      txn);
+    std::vector<pg_log_entry_t> log_entries;
+
+    if (cloning_ctx) {
+      cloning_ctx->log_entry.mtime =
+	cloning_ctx->clone_obc->obs.oi.mtime;
+      log_entries.emplace_back(std::move(cloning_ctx->log_entry));
+    }
+
+    log_entries.emplace_back(prepare_head_update(ops, txn));
 
     if (auto log_rit = log_entries.rbegin(); log_rit != log_entries.rend()) {
       ceph_assert(log_rit->version == osd_op_params->at_version);
     }
 
-    pg->mutate_object(obc, txn, *osd_op_params);
     /*
      * This works around the gcc bug causing the generated code to incorrectly
      * execute unconditionally before the predicate.
@@ -903,14 +909,24 @@ void OpsExecuter::fill_op_params(OpsExecuter::modified_by m)
   osd_op_params->user_modify = (m == modified_by::user);
 }
 
-std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
-  const std::vector<OSDOp>& ops)
+pg_log_entry_t OpsExecuter::prepare_head_update(
+  const std::vector<OSDOp>& ops,
+  ceph::os::Transaction &txn)
 {
-  // let's ensure we don't need to inform SnapMapper about this particular
-  // entry.
+  LOG_PREFIX(OpsExecuter::prepare_head_update);
   assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
-  std::vector<pg_log_entry_t> log_entries;
-  log_entries.emplace_back(
+
+  update_clone_overlap();
+  if (cloning_ctx) {
+    obc->ssc->snapset = std::move(cloning_ctx->new_snapset);
+  }
+  if (snapc.seq > obc->ssc->snapset.seq) {
+     // update snapset with latest snap context
+     obc->ssc->snapset.seq = snapc.seq;
+     obc->ssc->snapset.snaps.clear();
+  }
+
+  pg_log_entry_t ret{
     obc->obs.exists ?
       pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
     obc->obs.oi.soid,
@@ -919,15 +935,38 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
     osd_op_params->user_modify ? osd_op_params->at_version.version : 0,
     osd_op_params->req_id,
     osd_op_params->mtime,
-    op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
+    op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0};
+
   if (op_info.allows_returnvec()) {
     // also the per-op values are recorded in the pg log
-    log_entries.back().set_op_returns(ops);
-    logger().debug("{} op_returns: {}",
-                   __func__, log_entries.back().op_returns);
+    ret.set_op_returns(ops);
+    DEBUGDPP("op returns: {}", *pg, ret.op_returns);
   }
-  log_entries.back().clean_regions = std::move(osd_op_params->clean_regions);
-  return log_entries;
+  ret.clean_regions = std::move(osd_op_params->clean_regions);
+
+
+  if (obc->obs.exists) {
+    obc->obs.oi.prior_version = obc->obs.oi.version;
+    obc->obs.oi.version = osd_op_params->at_version;
+    if (osd_op_params->user_modify)
+      obc->obs.oi.user_version = osd_op_params->at_version.version;
+    obc->obs.oi.last_reqid = osd_op_params->req_id;
+    obc->obs.oi.mtime = osd_op_params->mtime;
+    obc->obs.oi.local_mtime = ceph_clock_now();
+    
+    obc->ssc->exists = true;
+    pg->get_backend().set_metadata(
+      obc->obs.oi.soid,
+      obc->obs.oi,
+      obc->obs.oi.soid.is_head() ? &(obc->ssc->snapset) : nullptr,
+      txn);
+  } else {
+    // reset cached ObjectState without enforcing eviction
+    obc->obs.oi = object_info_t(obc->obs.oi.soid);
+  }
+  
+  DEBUGDPP("entry: {}", *pg, ret);
+  return ret;
 }
 
 // Defined here because there is a circular dependency between OpsExecuter and PG
@@ -1036,37 +1075,6 @@ void OpsExecuter::update_clone_overlap() {
   osd_op_params->modified_ranges.intersection_of(*newest_overlap);
   newest_overlap->subtract(osd_op_params->modified_ranges);
   delta_stats.num_bytes += osd_op_params->modified_ranges.size();
-}
-
-void OpsExecuter::CloningContext::apply_to(
-  std::vector<pg_log_entry_t>& log_entries,
-  ObjectContext& processed_obc)
-{
-  log_entry.mtime = processed_obc.obs.oi.mtime;
-  log_entries.insert(log_entries.begin(), std::move(log_entry));
-  processed_obc.ssc->snapset = std::move(new_snapset);
-}
-
-std::vector<pg_log_entry_t>
-OpsExecuter::flush_clone_metadata(
-  std::vector<pg_log_entry_t>&& log_entries,
-  SnapMapper& snap_mapper,
-  OSDriver& osdriver,
-  ceph::os::Transaction& txn)
-{
-  assert(!txn.empty());
-  update_clone_overlap();
-  if (cloning_ctx) {
-    cloning_ctx->apply_to(log_entries, *obc);
-  }
-  if (snapc.seq > obc->ssc->snapset.seq) {
-     // update snapset with latest snap context
-     obc->ssc->snapset.seq = snapc.seq;
-     obc->ssc->snapset.snaps.clear();
-  }
-  logger().debug("{} done, initial snapset={}, new snapset={}",
-    __func__, obc->obs.oi.soid, obc->ssc->snapset);
-  return std::move(log_entries);
 }
 
 ObjectContextRef OpsExecuter::prepare_clone(
