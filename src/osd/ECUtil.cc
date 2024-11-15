@@ -534,9 +534,9 @@ namespace ECUtil {
                                       buffer::list &append_to) const
   {
     const extent_map &emap = extent_maps.at(shard);
-    auto &&[range, _] = emap.get_containing_range(offset, length);
+    auto &&range = emap.get_lower_range(offset, length);
 
-    if(range == emap.end() || !range.contains(offset, length))
+    if(range == emap.end() || !emap.contains(offset, length))
       return;
 
     if (range.get_len() == length) {
@@ -578,9 +578,7 @@ namespace ECUtil {
   void shard_extent_map_t::zero_pad(int shard, uint64_t offset, uint64_t length)
   {
     const extent_map &emap = extent_maps[shard];
-    auto &&[range, _] = emap.get_containing_range(offset, length);
-
-    if (range != emap.end() && range.contains(offset, length)) return;
+    if (emap.contains(offset, length)) return;
 
     extent_set required;
     required.insert(offset, length);

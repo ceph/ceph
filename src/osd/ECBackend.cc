@@ -1684,19 +1684,17 @@ void ECBackend::objects_read_async(
 	  ceph_assert(read.second.first);
 	  uint64_t offset = read.first.offset;
 	  uint64_t length = read.first.size;
-	  auto range = got.emap.get_containing_range(offset, length);
-	  ceph_assert(range.first != range.second);
-	  ceph_assert(range.first.get_off() <= offset);
+	  auto range = got.emap.get_lower_range(offset, length);
           ldpp_dout(dpp, 20) << "offset: " << offset << dendl;
-          ldpp_dout(dpp, 20) << "range offset: " << range.first.get_off() << dendl;
+          ldpp_dout(dpp, 20) << "range offset: " << range.get_off() << dendl;
           ldpp_dout(dpp, 20) << "length: " << length << dendl;
-          ldpp_dout(dpp, 20) << "range length: " << range.first.get_len()  << dendl;
+          ldpp_dout(dpp, 20) << "range length: " << range.get_len()  << dendl;
 	  ceph_assert(
 	    (offset + length) <=
-	    (range.first.get_off() + range.first.get_len()));
+	    (range.get_off() + range.get_len()));
 	  read.second.first->substr_of(
-	    range.first.get_val(),
-	    offset - range.first.get_off(),
+	    range.get_val(),
+	    offset - range.get_off(),
 	    length);
 	  if (read.second.second) {
 	    read.second.second->complete(length);

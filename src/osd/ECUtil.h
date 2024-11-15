@@ -52,7 +52,7 @@ using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
 
 // Setting to 1 turns on very large amounts of level 0 debug containing the
 // contents of buffers. Even on level 20 this is not really wanted.
-#define DEBUG_EC_BUFFERS 1
+#define DEBUG_EC_BUFFERS 0
 
 namespace ECUtil {
   class shard_extent_map_t;

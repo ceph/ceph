@@ -37,7 +37,7 @@ using ceph::ErasureCodeInterfaceRef;
 void debug(hobject_t oid, const std::string &str, ECUtil::shard_extent_map_t &map, DoutPrefixProvider *dpp)
 {
 #if DEBUG_EC_BUFFERS
-  ldpp_dout(dpp, 0)
+  ldpp_dout(dpp, 20)
     << "EC_DEBUG_BUFFERS: generate_transactions: "
     << "oid: " << oid
     << " " << str << " " << map.debug_string(2048, 8) << dendl;
@@ -49,7 +49,7 @@ void debug(hobject_t oid, const std::string &str, ECUtil::shard_extent_map_t &ma
 #endif
 }
 
-static void encode_and_write(
+static void   encode_and_write(
   pg_t pgid,
   const hobject_t &oid,
   ErasureCodeInterfaceRef &ecimpl,
@@ -278,8 +278,6 @@ void ECTransaction::generate_transactions(
     obj_to_log.insert(make_pair(i.soid, &i));
   }
 
-  map<hobject_t, extent_set> write_plan_validation;
-
   t.safe_create_traverse(
     [&](pair<const hobject_t, PGTransaction::ObjectOperation> &opair)
     {
@@ -300,8 +298,6 @@ void ECTransaction::generate_transactions(
       } else {
         ceph_assert(oid.is_temp());
       }
-
-      write_plan_validation[oid];
 
       WritePlanObj &plan = plans.plans.at(oid);
 
@@ -615,11 +611,7 @@ void ECTransaction::generate_transactions(
         debug(oid, "overlay_buffer", to_write, dpp);
       }
 
-      extent_set clone_ranges;
-      for (auto &&[shard, eset] : plan.will_write) {
-        clone_ranges.insert(eset);
-      }
-
+      extent_set clone_ranges = plan.will_write.get_extent_superset();
       uint64_t clone_max = ECUtil::align_page_next(plan.orig_size);
 
       if (op.delete_first) {
@@ -658,23 +650,22 @@ void ECTransaction::generate_transactions(
           eset.intersection_of(clone_ranges);
           shard_id_t shard_id(shard);
 
-          auto &&st = (*transactions)[shard_id];
+          auto &&t = (*transactions)[shard_id];
 
           if (!eset.empty()) {
             entry->written_shards.insert(shard);
-            st.touch(
+            t.touch(
               coll_t(spg_t(pgid, shard_id)),
               ghobject_t(oid, entry->version.version, shard_id));
-          }
-          // First write to this shard
-          for (auto &[start, len] : eset) {
-            st.clone_range(
-              coll_t(spg_t(pgid, shard_id)),
-              ghobject_t(oid, ghobject_t::NO_GEN, shard_id),
-              ghobject_t(oid, entry->version.version, shard_id),
-              start,
-              len,
-              start);
+            for (auto &[start, len] : eset) {
+              t.clone_range(
+                coll_t(spg_t(pgid, shard_id)),
+                ghobject_t(oid, ghobject_t::NO_GEN, shard_id),
+                ghobject_t(oid, entry->version.version, shard_id),
+                start,
+                len,
+                start);
+            }
           }
         }
 

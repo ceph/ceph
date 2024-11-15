@@ -57,11 +57,12 @@ namespace ECExtentCache {
 
     reading.insert(requesting);
     pg.backend_read.backend_read(oid, requesting, current_size);
+    requesting.clear();
   }
 
   uint64_t Object::read_done(shard_extent_map_t const &buffers)
   {
-    reading.clear();
+    reading.subtract(buffers.get_shard_extent_set());
     uint64_t size_change = insert(buffers);
     send_reads();
     return size_change;
@@ -80,12 +81,11 @@ namespace ECExtentCache {
   }
 
   void Object::check_cache_pinned() {
-    check_buffers_pinned(cache);
+    //check_buffers_pinned(cache);
   }
 
   uint64_t Object::insert(shard_extent_map_t const &buffers)
   {
-    check_buffers_pinned(buffers);
     check_cache_pinned();
 
     uint64_t old_size = cache.size();
