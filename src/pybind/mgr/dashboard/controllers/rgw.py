@@ -773,14 +773,7 @@ class RgwUser(RgwRESTController):
         return users
 
     def get(self, uid, daemon_name=None, stats=True) -> dict:
-        query_params = '?stats' if stats else ''
-        result = self.proxy(daemon_name, 'GET', 'user{}'.format(query_params),
-                            {'uid': uid, 'stats': stats})
-        if not self._keys_allowed():
-            del result['keys']
-            del result['swift_keys']
-        result['uid'] = result['full_user_id']
-        return result
+        return self.get_user(uid, daemon_name, stats)
 
     @Endpoint()
     @ReadPermission
@@ -788,7 +781,7 @@ class RgwUser(RgwRESTController):
         # type: (Optional[str]) -> List[str]
         emails = []
         for uid in json.loads(self.list(daemon_name)):  # type: ignore
-            user = json.loads(self.get(uid, daemon_name))  # type: ignore
+            user = self.get_user(uid, daemon_name)  # type: ignore
             if user["email"]:
                 emails.append(user["email"])
         return emails
@@ -910,7 +903,7 @@ class RgwUser(RgwRESTController):
                        secret_key=None, daemon_name=None):
         # pylint: disable=R1705
         subusr_array = []
-        user = json.loads(self.get(uid, daemon_name))  # type: ignore
+        user = self.get_user(uid, daemon_name)  # type: ignore
         subusers = user["subusers"]
         for sub_usr in subusers:
             subusr_array.append(sub_usr["id"])
@@ -946,6 +939,16 @@ class RgwUser(RgwRESTController):
             'subuser': subuser,
             'purge-keys': purge_keys
         }, json_response=False)
+
+    def get_user(self, uid, daemon_name=None, stats=True) -> dict:
+        query_params = '?stats' if stats else ''
+        result = self.proxy(daemon_name, 'GET', 'user{}'.format(query_params),
+                            {'uid': uid, 'stats': stats})
+        if not self._keys_allowed():
+            del result['keys']
+            del result['swift_keys']
+        result['uid'] = result['full_user_id']
+        return result
 
 
 class RGWRoleEndpoints:
