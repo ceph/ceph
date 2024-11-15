@@ -52,11 +52,11 @@ namespace ECExtentCache {
 
   void Object::send_reads()
   {
-    if (!reading.empty() || requesting.empty())
+    if (requesting.empty())
       return; // Read busy
 
-    reading.swap(requesting);
-    pg.backend_read.backend_read(oid, reading, current_size);
+    reading.insert(requesting);
+    pg.backend_read.backend_read(oid, requesting, current_size);
   }
 
   uint64_t Object::read_done(shard_extent_map_t const &buffers)
