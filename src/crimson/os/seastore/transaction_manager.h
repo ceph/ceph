@@ -23,6 +23,7 @@
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/root_meta.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/journal.h"
@@ -303,10 +304,6 @@ public:
       len,
       placement_hint,
       INIT_GENERATION);
-    if (!ext) {
-      SUBERRORT(seastore_tm, "insufficient space!", t);
-      return crimson::ct_error::enospc::make();
-    }
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
@@ -342,10 +339,6 @@ public:
       len,
       placement_hint,
       INIT_GENERATION);
-    if (exts.empty()) {
-      SUBERRORT(seastore_tm, "insufficient space!", t);
-      return crimson::ct_error::enospc::make();
-    }
     return lba_manager->alloc_extents(
       t,
       laddr_hint,
@@ -690,9 +683,11 @@ public:
     const std::string &key) {
     return cache->get_root(
       t
-    ).si_then([&key, &t](auto root) {
+    ).si_then([&t, this](auto root) {
+      return read_extent<RootMetaBlock>(t, root->root.meta);
+    }).si_then([key, &t](auto mblock) {
       LOG_PREFIX(TransactionManager::read_root_meta);
-      auto meta = root->root.get_meta();
+      auto meta = mblock->get_meta();
       auto iter = meta.find(key);
       if (iter == meta.end()) {
         SUBDEBUGT(seastore_tm, "{} -> nullopt", t, key);
@@ -701,7 +696,35 @@ public:
         SUBDEBUGT(seastore_tm, "{} -> {}", t, key, iter->second);
 	return seastar::make_ready_future<read_root_meta_bare>(iter->second);
       }
-    });
+    }).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error!"}
+    );
+  }
+
+  /**
+   * init_root_meta
+   *
+   * create the root meta block
+   */
+  using init_root_meta_iertr = base_iertr;
+  using init_root_meta_ret = init_root_meta_iertr::future<>;
+  init_root_meta_ret init_root_meta(Transaction &t) {
+    return alloc_non_data_extent<RootMetaBlock>(
+      t, L_ADDR_MIN, RootMetaBlock::SIZE
+    ).si_then([this, &t](auto meta) {
+      meta->set_meta(RootMetaBlock::meta_t{});
+      return cache->get_root(t
+      ).si_then([this, &t, meta](auto root) {
+	auto mroot = cache->duplicate_for_write(
+	  t, root)->template cast<RootBlock>();
+	mroot->root.meta = meta->get_laddr();
+	return seastar::now();
+      });
+    }).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error!"}
+    );
   }
 
   /**
@@ -719,15 +742,21 @@ public:
     SUBDEBUGT(seastore_tm, "seastore_tm, {} -> {} ...", t, key, value);
     return cache->get_root(
       t
-    ).si_then([this, &t, &key, &value](RootBlockRef root) {
-      root = cache->duplicate_for_write(t, root)->cast<RootBlock>();
+    ).si_then([this, &t](RootBlockRef root) {
+      return read_extent<RootMetaBlock>(t, root->root.meta);
+    }).si_then([this, key, value, &t](auto mblock) {
+      mblock = get_mutable_extent(t, mblock
+	)->template cast<RootMetaBlock>();
 
-      auto meta = root->root.get_meta();
+      auto meta = mblock->get_meta();
       meta[key] = value;
 
-      root->root.set_meta(meta);
+      mblock->set_meta(meta);
       return seastar::now();
-    });
+    }).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error!"}
+    );
   }
 
   /**
