@@ -2936,14 +2936,14 @@ static int bucket_sync_info(rgw::sal::Driver* driver, const RGWBucketInfo& info,
     return r;
   }
 
-  auto& sources = handler->get_sources();
+  const auto& sources = handler->get_all_sources();
 
-  for (auto& m : sources) {
-    auto& zone = m.first;
+  for (const auto& m : sources) {
+    const auto& zone = m.first;
     out << indented{width, "source zone"} << zone << std::endl;
-    for (auto& pipe_handler : m.second) {
-      out << indented{width, "bucket"} << *pipe_handler.source.bucket << std::endl;
-    }
+
+    const auto& pipe = m.second;
+    out << indented{width, "bucket"} << *pipe.source.bucket << std::endl;
   }
 
   return 0;
