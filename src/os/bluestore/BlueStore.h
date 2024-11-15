@@ -2853,7 +2853,10 @@ private:
   * opens both DB and dependant super_meta, FreelistManager and allocator
   * in the proper order
   */
-  int _open_db_and_around(bool read_only, bool to_repair = false);
+  int _open_db_and_around(
+    bool read_only,
+    bool to_repair = false,
+    bool replay_deferred = false);
   void _close_db_and_around();
   void _close_around_db();
 
@@ -2977,7 +2980,7 @@ public:
 private:
   void _deferred_submit_unlock(OpSequencer *osr);
   void _deferred_aio_finish(OpSequencer *osr);
-  int _deferred_replay();
+  int _deferred_replay(std::vector<std::string>* keys_to_remove);
   bool _eliminate_outdated_deferred(bluestore_deferred_transaction_t* deferred_txn,
 				    interval_set<uint64_t>& bluefs_extents);
 
