@@ -1868,7 +1868,6 @@ def test_sync_single_bucket_to_multiple_log_trim_zonegroups(zonegroup):
     assert(len(test_bilog) == 0)
 
 
-@attr('fails_with_rgw')  # RGWGetBucketPeersCR doesn't respect the resolved_sources when only target_bucket is passed.
 @attr('bucket_reshard')
 @allow_zonegroups_replication
 @run_per_zonegroup
@@ -1908,7 +1907,6 @@ def test_bucket_sync_run_basic_incremental_zonegroups(source_zone, dest_zone, so
     zone_bucket_checkpoint(dest_zone.zone, source_zone.zone, dest_bucket.name)
 
 
-@attr('fails_with_rgw')  # RGWGetBucketPeersCR doesn't respect the resolved_sources when only target_bucket is passed.
 @attr('bucket_reshard')
 @allow_zonegroups_replication
 @run_per_zonegroup

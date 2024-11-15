@@ -5307,6 +5307,8 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
   std::optional<all_bucket_info> source_bucket_info;
 
   rgw_sync_pipe_info_set::iterator siter;
+  rgw_sync_bucket_entity sh_entity;
+  std::set<rgw_sync_bucket_pipe>::const_iterator sh_iter;
 
   std::shared_ptr<rgw_bucket_get_sync_policy_result> source_policy;
   std::shared_ptr<rgw_bucket_get_sync_policy_result> target_policy;
@@ -5708,6 +5710,45 @@ int RGWGetBucketPeersCR::operate(const DoutPrefixProvider *dpp)
       }
 
       update_from_target_bucket_policy();
+
+      if (!source_bucket && target_policy && target_policy->policy_handler) {
+        /* hints might have incomplete bucket ids,
+         * in which case we need to figure out the current
+         * bucket_id
+         */
+        for (sh_iter = target_policy->policy_handler->get_resolved_source_hints().begin();
+             sh_iter != target_policy->policy_handler->get_resolved_source_hints().end();
+             ++sh_iter) {
+          sh_entity = sh_iter->source;
+          if (!sh_entity.bucket) {
+            continue;
+          }
+          ldpp_dout(dpp, 20) << "Got sync hint for pipe=" << sh_entity << dendl;
+
+          source_policy = make_shared<rgw_bucket_get_sync_policy_result>();
+          yield call(new RGWSyncGetBucketSyncPolicyHandlerCR(sync_env,
+                                                             sh_entity.zone,
+                                                             sh_entity.bucket.value(),
+                                                             source_policy,
+                                                             tn));
+          if (retcode < 0 &&
+              retcode != -ENOENT) {
+            return set_cr_error(retcode);
+          }
+
+          if (source_policy->policy_handler) {
+            auto& opt_bucket_info = source_policy->policy_handler->get_bucket_info();
+            auto& opt_attrs = source_policy->policy_handler->get_bucket_attrs();
+            if (opt_bucket_info && opt_attrs) {
+              source_bucket_info.emplace();
+              source_bucket_info->bucket_info = *opt_bucket_info;
+              source_bucket_info->attrs = *opt_attrs;
+            }
+          }
+
+          update_from_source_bucket_policy();
+        }
+      }
     }
 
     if (source_bucket && source_zone) {
