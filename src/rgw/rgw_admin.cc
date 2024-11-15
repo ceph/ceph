@@ -2881,7 +2881,7 @@ static int bucket_sync_info(rgw::sal::Driver* driver, const RGWBucketInfo& info,
   return 0;
 }
 
-static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& info,
+static int bucket_sync_status(const rgw::SiteConfig& site, rgw::sal::Driver* driver, const RGWBucketInfo& info,
                               const rgw_zone_id& source_zone_id,
 			      std::optional<rgw_bucket>& opt_source_bucket,
                               std::ostream& out)
@@ -2914,55 +2914,41 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
   auto sources = handler->get_all_sources();
 
   auto& zone_conn_map = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_conn_map();
-  set<rgw_zone_id> zone_ids;
 
-  if (!source_zone_id.empty()) {
-    std::unique_ptr<rgw::sal::Zone> zone;
-    int ret = driver->get_zone()->get_zonegroup().get_zone_by_id(source_zone_id.id, &zone);
-    if (ret < 0) {
-      ldpp_dout(dpp(), -1) << "Source zone not found in zonegroup "
-          << zonegroup.get_name() << dendl;
-      return -EINVAL;
+  for (auto& entry : sources) {
+    auto& pipe = entry.second;
+    if (opt_source_bucket &&
+        pipe.source.bucket != opt_source_bucket) {
+      continue;
     }
-    auto c = zone_conn_map.find(source_zone_id);
+    const auto& zone = pipe.source.zone.value_or(rgw_zone_id());
+    if (zone.empty()) {
+      continue;
+    }
+
+    if (!source_zone_id.empty() && source_zone_id != zone.id) {
+      continue;
+    }
+
+    auto c = zone_conn_map.find(zone.id);
     if (c == zone_conn_map.end()) {
-      ldpp_dout(dpp(), -1) << "No connection to zone " << zone->get_name() << dendl;
-      return -EINVAL;
-    }
-    zone_ids.insert(source_zone_id);
-  } else {
-    std::list<std::string> ids;
-    int ret = driver->get_zone()->get_zonegroup().list_zones(ids);
-    if (ret == 0) {
-      for (const auto& entry : ids) {
-	zone_ids.insert(entry);
-      }
-    }
-  }
-
-  for (auto& zone_id : zone_ids) {
-    auto z = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup().zones.find(zone_id.id);
-    if (z == static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup().zones.end()) { /* shouldn't happen */
-      continue;
-    }
-    auto c = zone_conn_map.find(zone_id.id);
-    if (c == zone_conn_map.end()) { /* shouldn't happen */
+      ldpp_dout(dpp(), -1) << "No connection to zone " << zone << dendl;
       continue;
     }
 
-    for (auto& entry : sources) {
-      auto& pipe = entry.second;
-      if (opt_source_bucket &&
-	  pipe.source.bucket != opt_source_bucket) {
-	continue;
-      }
-      if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
-	bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(), z->second,
-				  c->second,
-				  info, pipe,
-				  width, out);
-      }
+    RGWZone source_zone;
+    RGWZoneGroup source_zg;
+    if(!site.get_period()->period_map.find_zone_by_id(zone, &source_zg, &source_zone)) {
+      ldpp_dout(dpp(), -1) << "No zone found for zone id " << zone.id << dendl;
+      continue;
     }
+
+    bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver),
+                              static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(),
+                              source_zone,
+                              c->second,
+                              info, pipe,
+                              width, out);
   }
 
   return 0;
@@ -9854,7 +9840,7 @@ next:
     if (ret < 0) {
       return -ret;
     }
-    bucket_sync_status(driver, bucket->get_info(), source_zone, opt_source_bucket, std::cout);
+    bucket_sync_status(*site, driver, bucket->get_info(), source_zone, opt_source_bucket, std::cout);
   }
 
   if (opt_cmd == OPT::BUCKET_SYNC_MARKERS) {
