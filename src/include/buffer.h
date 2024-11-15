@@ -1318,6 +1318,24 @@ struct error_code;
       return const_iterator(this, _len, _buffers.end(), 0);
     }
 
+    void append(const char *data, unsigned len) {
+      list::append(data, len);
+    }
+#if __cplusplus >= 201703L
+    // To forcibly disambiguate between string and string_view in the
+    // case of arrays
+    template<std::size_t N>
+    void append(const char (&s)[N]) {
+      list::append(s, N);
+    }
+    void append(const char* s) {
+      list::append(s, strlen(s));
+    }
+    void append(std::string_view s) {
+      list::append(s.data(), s.length());
+    }
+#endif // __cplusplus >= 201703L
+
     void append(const ptr_rw& bp) {
       list::append(static_cast<const ptr&>(bp));
     }
@@ -1337,7 +1355,9 @@ struct error_code;
       return list::operator[](n);
     }
     char* data(); // may return null if bl contains non-writeable buffers
-    const char *c_str();
+    const char *c_str() {
+      return list::c_str();
+    }
 
     void substr_of(const list_rw& other, unsigned off, unsigned len) {
       list::substr_of(static_cast<const list&>(other), off, len);

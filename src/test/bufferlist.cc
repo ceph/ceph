@@ -1162,14 +1162,14 @@ TEST(BufferListIterator, copy) {
 }
 
 TEST(BufferListIterator, copy_in) {
-  bufferlist bl;
+  buffer::list_rw bl;
   const char *existing = "XXX";
   bl.append(existing, 3);
   //
   // void buffer::list::iterator::copy_in(unsigned len, const char *src)
   //
   {
-    bufferlist::iterator i(&bl);
+    buffer::list_rw::iterator i(&bl);
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
@@ -1186,7 +1186,7 @@ TEST(BufferListIterator, copy_in) {
   // void copy_in(unsigned len, const char *src) via begin(size_t offset)
   //
   {
-    bufferlist bl;
+    buffer::list_rw bl;
     bl.append("XXX");
     EXPECT_THROW(bl.begin((unsigned)100).copy_in((unsigned)100, (char*)0), buffer::end_of_buffer);
     bl.begin(1).copy_in(2, "AB");
@@ -1196,13 +1196,13 @@ TEST(BufferListIterator, copy_in) {
   // void buffer::list::iterator::copy_in(unsigned len, const list& otherl)
   //
   {
-    bufferlist::iterator i(&bl);
-    bufferlist::iterator ci(i);
+    buffer::list_rw::iterator i(&bl);
+    buffer::list_rw::iterator ci(i);
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
     EXPECT_THROW(i += 200u, buffer::end_of_buffer);
-    bufferlist expected;
+    buffer::list_rw expected;
     expected.append("ABC", 3);
     i.copy_in(3, expected);
     i.seek(0);
@@ -1222,9 +1222,9 @@ TEST(BufferListIterator, copy_in) {
   // void copy_in(unsigned len, const list& src) via begin(size_t offset)
   //
   {
-    bufferlist bl;
+    buffer::list_rw bl;
     bl.append("XXX");
-    bufferlist src;
+    buffer::list_rw src;
     src.append("ABC");
     EXPECT_THROW(bl.begin((unsigned)100).copy_in((unsigned)100, src), buffer::end_of_buffer);
     bl.begin(1).copy_in(2, src);
