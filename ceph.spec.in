@@ -745,6 +745,7 @@ Requires:       python%{python3_pkgversion}-pyOpenSSL
 Requires:       python%{python3_pkgversion}-requests
 Requires:       python%{python3_pkgversion}-dateutil
 Requires:       python%{python3_pkgversion}-setuptools
+Requires:       python%{python3_pkgversion}-colorama
 %if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-pyyaml

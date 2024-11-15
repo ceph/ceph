@@ -1,4 +1,5 @@
 import os
+from colorama import Fore, Style
 
 from ceph.fs.earmarking import (
     CephFSVolumeEarmarking,
@@ -65,6 +66,13 @@ logger = logging.getLogger(__name__)
 
 class PortAlreadyInUse(Exception):
     pass
+
+
+# helper function for showing a warning text in
+# the terminal with a warning color
+class CLIWarning(str):
+    def __new__(cls, content):
+        return super().__new__(cls, f"{Fore.YELLOW}WARNING: {content}{Style.RESET_ALL}")
 
 
 class CephfsConnectionException(Exception):
