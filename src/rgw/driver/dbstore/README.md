@@ -5,7 +5,7 @@ Standalone Rados Gateway (RGW) on DBStore (Experimental)
 ## CMake Option
 Add below cmake option (enabled by default)
 
-    -DWITH_RADOSGW_DBSTORE=ON 
+    -DWITH_RADOSGW_DBSTORE=ON
 
 
 ## Build
@@ -50,4 +50,3 @@ To execute Sample test file
     ninja src/rgw/driver/dbstore/install
     ./bin/dbstore-bin [logfile] [loglevel]
     (default logfile: rgw_dbstore_bin.log, loglevel: 20)
-
