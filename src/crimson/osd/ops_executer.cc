@@ -850,9 +850,7 @@ OpsExecuter::flush_changes_and_submit(
     std::vector<pg_log_entry_t> log_entries;
 
     if (cloning_ctx) {
-      cloning_ctx->log_entry.mtime =
-	cloning_ctx->clone_obc->obs.oi.mtime;
-      log_entries.emplace_back(std::move(cloning_ctx->log_entry));
+      log_entries.emplace_back(complete_cloning_ctx());
     }
 
     log_entries.emplace_back(prepare_head_update(ops, txn));
@@ -971,13 +969,14 @@ version_t OpsExecuter::get_last_user_version() const
   return pg->get_last_user_version();
 }
 
-void OpsExecuter::execute_clone(
+void OpsExecuter::prepare_cloning_ctx(
   const SnapContext& snapc,
   const ObjectState& initial_obs,
   const SnapSet& initial_snapset,
   PGBackend& backend,
   ceph::os::Transaction& txn)
 {
+  LOG_PREFIX(OpsExecuter::prepare_cloning_ctx);
   const hobject_t& soid = initial_obs.oi.soid;
   logger().debug("{} {} snapset={} snapc={}",
                  __func__, soid,
@@ -988,8 +987,8 @@ void OpsExecuter::execute_clone(
 
   // clone object, the snap field is set to the seq of the SnapContext
   // at its creation.
-  hobject_t coid = soid;
-  coid.snap = snapc.seq;
+  cloning_ctx->coid = soid;
+  cloning_ctx->coid.snap = snapc.seq;
 
   // existing snaps are stored in descending order in snapc,
   // cloned_snaps vector will hold all the snaps stored until snapset.seq
@@ -1000,52 +999,63 @@ void OpsExecuter::execute_clone(
     return std::vector<snapid_t>{std::begin(snapc.snaps), last};
   }();
 
-  auto clone_obc = prepare_clone(coid, osd_op_params->at_version);
-  osd_op_params->at_version.version++;
+  // make clone here, but populate in metadata in complete_cloning_ctx
+  backend.clone_for_write(soid, cloning_ctx->coid, txn);
 
-  // make clone
-  backend.clone_for_write(soid, coid, txn);
-  backend.set_metadata(
-    coid,
-    clone_obc->obs.oi,
-    nullptr /* snapset */,
-    txn);
+  cloning_ctx->clone_obc = prepare_clone(cloning_ctx->coid, initial_obs);
 
   delta_stats.num_objects++;
-  if (clone_obc->obs.oi.is_omap()) {
+  if (cloning_ctx->clone_obc->obs.oi.is_omap()) {
     delta_stats.num_objects_omap++;
   }
   delta_stats.num_object_clones++;
   // newsnapset is obc's ssc
-  cloning_ctx->new_snapset.clones.push_back(coid.snap);
-  cloning_ctx->new_snapset.clone_size[coid.snap] = initial_obs.oi.size;
-  cloning_ctx->new_snapset.clone_snaps[coid.snap] = cloned_snaps;
+  cloning_ctx->new_snapset.clones.push_back(cloning_ctx->coid.snap);
+  cloning_ctx->new_snapset.clone_size[cloning_ctx->coid.snap] = initial_obs.oi.size;
+  cloning_ctx->new_snapset.clone_snaps[cloning_ctx->coid.snap] = cloned_snaps;
 
   // clone_overlap should contain an entry for each clone
   // (an empty interval_set if there is no overlap)
-  auto &overlap = cloning_ctx->new_snapset.clone_overlap[coid.snap];
+  auto &overlap = cloning_ctx->new_snapset.clone_overlap[cloning_ctx->coid.snap];
   if (initial_obs.oi.size) {
     overlap.insert(0, initial_obs.oi.size);
   }
 
   // log clone
-  logger().debug("cloning v {} to {} v {} snaps={} snapset={}",
-                 initial_obs.oi.version, coid,
-                 osd_op_params->at_version, cloned_snaps, cloning_ctx->new_snapset);
+  DEBUGDPP("cloning v {} to {} v {} snaps={} snapset={}", *pg,
+	   initial_obs.oi.version, cloning_ctx->coid,
+	   osd_op_params->at_version, cloned_snaps, cloning_ctx->new_snapset);
+}
 
-  cloning_ctx->log_entry = {
+pg_log_entry_t OpsExecuter::complete_cloning_ctx()
+{
+  ceph_assert(cloning_ctx);
+  const auto &coid = cloning_ctx->coid;
+  cloning_ctx->clone_obc->obs.oi.version = osd_op_params->at_version;
+
+  osd_op_params->at_version.version++;
+
+  pg->get_backend().set_metadata(
+    cloning_ctx->coid,
+    cloning_ctx->clone_obc->obs.oi,
+    nullptr /* snapset */,
+    txn);
+
+  pg_log_entry_t ret{
     pg_log_entry_t::CLONE,
     coid,
-    clone_obc->obs.oi.version,
-    clone_obc->obs.oi.prior_version,
-    clone_obc->obs.oi.user_version,
+    cloning_ctx->clone_obc->obs.oi.version,
+    cloning_ctx->clone_obc->obs.oi.prior_version,
+    cloning_ctx->clone_obc->obs.oi.user_version,
     osd_reqid_t(),
-    clone_obc->obs.oi.mtime, // will be replaced in `apply_to()`
+    cloning_ctx->clone_obc->obs.oi.mtime, // will be replaced in `apply_to()`
     0
   };
-  encode(cloned_snaps, cloning_ctx->log_entry.snaps);
-  cloning_ctx->log_entry.clean_regions.mark_data_region_dirty(0, initial_obs.oi.size);
-  cloning_ctx->clone_obc = clone_obc;
+  ceph_assert(cloning_ctx->new_snapset.clone_snaps.count(coid.snap));
+  encode(cloning_ctx->new_snapset.clone_snaps[coid.snap], ret.snaps);
+  ret.clean_regions.mark_data_region_dirty(0, cloning_ctx->clone_obc->obs.oi.size);
+  ret.mtime = cloning_ctx->clone_obc->obs.oi.mtime;
+  return ret;
 }
 
 void OpsExecuter::update_clone_overlap() {
@@ -1070,14 +1080,14 @@ void OpsExecuter::update_clone_overlap() {
 
 ObjectContextRef OpsExecuter::prepare_clone(
   const hobject_t& coid,
-  eversion_t version)
+  const ObjectState& initial_obs)
 {
   ceph_assert(pg->is_primary());
   ObjectState clone_obs{coid};
   clone_obs.exists = true;
-  clone_obs.oi.version = version;
-  clone_obs.oi.prior_version = obc->obs.oi.version;
-  clone_obs.oi.copy_user_bits(obc->obs.oi);
+  // clone_obs.oi.version will be populated in complete_cloning_ctx
+  clone_obs.oi.prior_version = initial_obs.oi.version;
+  clone_obs.oi.copy_user_bits(initial_obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
 
   auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(std::move(coid));
@@ -1108,11 +1118,12 @@ OpsExecuter::OpsExecuter(Ref<PG> pg,
 {
   if (op_info.may_write() && should_clone(*obc, snapc)) {
     do_write_op([this](auto& backend, auto& os, auto& txn) {
-      execute_clone(std::as_const(snapc),
-		    std::as_const(obc->obs),
-		    std::as_const(obc->ssc->snapset),
-		    backend,
-		    txn);
+      prepare_cloning_ctx(
+	std::as_const(snapc),
+	std::as_const(obc->obs),
+	std::as_const(obc->ssc->snapset),
+	backend,
+	txn);
     });
   }
 }
