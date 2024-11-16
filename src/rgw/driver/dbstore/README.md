@@ -40,8 +40,8 @@ The location and prefix for the database files can be configured using the follo
 To execute DBStore unit test cases (using Gtest framework), from build directory
 
     ninja unittest_dbstore_tests
-    ./bin/unittest_dbstore_tests [logfile] [loglevel]
-    (default logfile: rgw_dbstore_tests.log, loglevel: 20)
+    ./bin/unittest_dbstore_tests [logfile] [loglevel] [tenantname]
+    (default logfile: rgw_dbstore_tests.log, loglevel: 20, default_ns_<timestamp_at_time_of_run>)
     ninja unittest_dbstore_mgr_tests
     ./bin/unittest_dbstore_mgr_tests
 

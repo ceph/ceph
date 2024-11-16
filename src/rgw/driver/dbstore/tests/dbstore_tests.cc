@@ -1385,12 +1385,14 @@ int main(int argc, char **argv)
   int ret = -1;
   string c_logfile = "rgw_dbstore_tests.log";
   int c_loglevel = 20;
+  string c_tenant = "default_ns_" + std::to_string(time(NULL));
 
-  // format: ./dbstore-tests logfile loglevel
-  if (argc == 3) {
+  // format: ./dbstore-tests logfile loglevel tenantname
+  if (argc == 4) {
     c_logfile = argv[1];
     c_loglevel = (atoi)(argv[2]);
-    cout << "logfile:" << c_logfile << ", loglevel set to " << c_loglevel << "\n";
+    c_tenant = argv[3];
+    cout << "logfile:" << c_logfile << ", loglevel set to " << c_loglevel << ", db is " << c_tenant << "\n";
   }
 
   ::testing::InitGoogleTest(&argc, argv);
@@ -1398,6 +1400,7 @@ int main(int argc, char **argv)
   gtest::env = new gtest::Environment();
   gtest::env->logfile = c_logfile;
   gtest::env->loglevel = c_loglevel;
+  gtest::env->tenant = c_tenant;
   ::testing::AddGlobalTestEnvironment(gtest::env);
 
   ret = RUN_ALL_TESTS();
