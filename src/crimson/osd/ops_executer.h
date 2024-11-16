@@ -195,21 +195,26 @@ private:
 
   SnapContext snapc; // writer snap context
   struct CloningContext {
+    /// id of new clone, populated in prepare_cloning_ctx
+    hobject_t coid;
+    /// new snapset, populated in prepare_cloning_ctx
     SnapSet new_snapset;
-    pg_log_entry_t log_entry;
+    /// populated in complete_cloning_ctx
     ObjectContextRef clone_obc;
   };
   std::unique_ptr<CloningContext> cloning_ctx;
 
   /**
-   * execute_clone
+   * prepare_cloning_ctx
    *
    * If snapc contains a snap which occurred logically after the last write
    * seen by this object (see OpsExecuter::should_clone()), we first need
-   * make a clone of the object at its current state.  execute_clone primes
-   * txn with that clone operation and returns an
-   * OpsExecuter::CloningContext which will allow us to fill in the corresponding
-   * metadata and log_entries once the operations have been processed.
+   * make a clone of the object at its current state.  prepare_cloning_ctx
+   * primes txn with that clone operation and populates cloning_ctx with
+   * an obc for the clone and a new snapset reflecting the clone.
+   *
+   * complete_cloning_ctx later uses the information from cloning_ctx to
+   * generate a log entry and object_info versions for the clone.
    *
    * Note that this strategy differs from classic, which instead performs this
    * work at the end and reorders the transaction.  See
@@ -222,13 +227,15 @@ private:
    * @param backend [in,out] interface for generating mutations
    * @param txn [out] transaction for the operation
    */
-  void execute_clone(
+  void prepare_cloning_ctx(
     const SnapContext& snapc,
     const ObjectState& initial_obs,
     const SnapSet& initial_snapset,
     PGBackend& backend,
     ceph::os::Transaction& txn);
 
+  /// complete clone, populate clone_obc, return log entry
+  pg_log_entry_t complete_cloning_ctx();
 
   /**
    * should_clone
@@ -439,7 +446,7 @@ public:
 
   ObjectContextRef prepare_clone(
     const hobject_t& coid,
-    eversion_t version);
+    const ObjectState& initial_obs);
 
   void apply_stats();
 };
