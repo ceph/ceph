@@ -54,6 +54,8 @@ from ._interface import (
     _cli_write_command,
     json_to_generic_spec,
     raise_if_exception,
+    MONSpec,
+    IngressSpec
 )
 
 
@@ -958,6 +960,175 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         completion = self.zap_device(hostname, path)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command('orch sd dump cert')
+    def _service_discovery_dump_cert(self) -> HandleCommandResult:
+        """
+        Returns service discovery server root certificate
+        """
+        completion = self.service_discovery_dump_cert()
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_read_command('orch explain service nfs')
+    def _explain_nfs_service(self) -> HandleCommandResult:
+        """
+        List the params available in NFS
+        Service Spec
+        """
+        table = PrettyTable(
+                ['PARAMETER', 'DESCRIPTION',],
+                border=False)
+        table.align['PARAMETER'] = 'l'
+        table.align['DESCRIPTION'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        for k, v in NFSServiceSpec.explain().items():
+            table.add_row((
+                    k,
+                    v,
+                ))
+        return HandleCommandResult(stdout=table.get_string())
+
+    @_cli_read_command('orch explain service rgw')
+    def _explain_rgw_service(self) -> HandleCommandResult:
+        """
+        List the params available in RGW
+        Service Spec
+        """
+        table = PrettyTable(
+                ['PARAMETER', 'DESCRIPTION',],
+                border=False)
+        table.align['PARAMETER'] = 'l'
+        table.align['DESCRIPTION'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        for k, v in RGWSpec.explain().items():
+            table.add_row((
+                    k,
+                    v,
+                ))
+        return HandleCommandResult(stdout=table.get_string())
+    
+    @_cli_read_command('orch explain service nvmeof')
+    def _explain_nvmeof_service(self) -> HandleCommandResult:
+        """
+        List the params available in NVMEoF
+        Service Spec
+        """
+        table = PrettyTable(
+                ['PARAMETER', 'DESCRIPTION',],
+                border=False)
+        table.align['PARAMETER'] = 'l'
+        table.align['DESCRIPTION'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        for k, v in NvmeofServiceSpec.explain().items():
+            table.add_row((
+                    k,
+                    v,
+                ))
+        return HandleCommandResult(stdout=table.get_string())
+    
+    @_cli_read_command('orch explain service iscsi')
+    def _explain_iscsi_service(self) -> HandleCommandResult:
+        """
+        List the params available in ISCSI
+        Service Spec
+        """
+        table = PrettyTable(
+                ['PARAMETER', 'DESCRIPTION',],
+                border=False)
+        table.align['PARAMETER'] = 'l'
+        table.align['DESCRIPTION'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        for k, v in IscsiServiceSpec.explain().items():
+            table.add_row((
+                    k,
+                    v,
+                ))
+        return HandleCommandResult(stdout=table.get_string())
+    
+    @_cli_read_command('orch explain service ingress')
+    def _explain_ingress_service(self) -> HandleCommandResult:
+        """
+        List the params available in Ingress
+        Service Spec
+        """
+        table = PrettyTable(
+                ['PARAMETER', 'DESCRIPTION',],
+                border=False)
+        table.align['PARAMETER'] = 'l'
+        table.align['DESCRIPTION'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        for k, v in IngressSpec.explain().items():
+            table.add_row((
+                    k,
+                    v,
+                ))
+        return HandleCommandResult(stdout=table.get_string())
+
+    @_cli_read_command('orch explain service mon')
+    def _explain_mon_service(self) -> HandleCommandResult:
+        """
+        List the params available in MON
+        Service Spec
+        """
+        table = PrettyTable(
+                ['PARAMETER', 'DESCRIPTION',],
+                border=False)
+        table.align['PARAMETER'] = 'l'
+        table.align['DESCRIPTION'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        for k, v in MONSpec.explain().items():
+            table.add_row((
+                    k,
+                    v,
+                ))
+        return HandleCommandResult(stdout=table.get_string())
+
+    @_cli_read_command('orch explain service snmpgateway')
+    def _explain_snmp_service(self) -> HandleCommandResult:
+        """
+        List the params available in SNMPGateway
+        Service Spec
+        """
+        table = PrettyTable(
+                ['PARAMETER', 'DESCRIPTION',],
+                border=False)
+        table.align['PARAMETER'] = 'l'
+        table.align['DESCRIPTION'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        for k, v in SNMPGatewaySpec.explain().items():
+            table.add_row((
+                    k,
+                    v,
+                ))
+        return HandleCommandResult(stdout=table.get_string())
+
+    @_cli_read_command('orch explain service smb')
+    def _explain_smb_service(self) -> HandleCommandResult:
+        """
+        List the params available in SMB
+        Service Spec
+        """
+        table = PrettyTable(
+                ['PARAMETER', 'DESCRIPTION',],
+                border=False)
+        table.align['PARAMETER'] = 'l'
+        table.align['DESCRIPTION'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        for k, v in SMBSpec.explain().items():
+            table.add_row((
+                    k,
+                    v,
+                ))
+        return HandleCommandResult(stdout=table.get_string())
 
     @_cli_read_command('orch ls')
     def _list_services(self,
