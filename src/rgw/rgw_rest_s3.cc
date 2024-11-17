@@ -2399,11 +2399,17 @@ static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket,
   if (s->auth.identity->is_owner_of(bucket->get_owner())) {
     const auto& user_info = s->user->get_info();
     const auto& bucket_quota = s->bucket->get_info().quota; // bucket quota
-    dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.quota.user_quota.max_size));
-    dump_header(s, "X-RGW-Quota-User-Objects", static_cast<long long>(user_info.quota.user_quota.max_objects));
     dump_header(s, "X-RGW-Quota-Max-Buckets", static_cast<long long>(user_info.max_buckets));
-    dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(bucket_quota.max_size));
-    dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(bucket_quota.max_objects));
+
+    if (user_info.quota.user_quota.enabled){
+      dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.quota.user_quota.max_size));
+      dump_header(s, "X-RGW-Quota-User-Objects", static_cast<long long>(user_info.quota.user_quota.max_objects));
+    }
+
+    if (bucket_quota.enabled){
+      dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(bucket_quota.max_size));
+      dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(bucket_quota.max_objects));
+    }
   }
 }
 
