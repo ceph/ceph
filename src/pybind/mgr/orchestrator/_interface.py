@@ -1105,6 +1105,7 @@ class DaemonDescription(object):
                  ports: Optional[List[int]] = None,
                  ip: Optional[str] = None,
                  deployed_by: Optional[List[str]] = None,
+                 systemd_unit: Optional[str] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
@@ -1170,6 +1171,8 @@ class DaemonDescription(object):
         self.ip: Optional[str] = ip
 
         self.deployed_by = deployed_by
+
+        self.systemd_unit = systemd_unit
 
         self.is_active = is_active
 
@@ -1334,6 +1337,7 @@ class DaemonDescription(object):
         out['ip'] = self.ip
         out['rank'] = self.rank
         out['rank_generation'] = self.rank_generation
+        out['systemd_unit'] = self.systemd_unit
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
@@ -1370,6 +1374,7 @@ class DaemonDescription(object):
         out['is_active'] = self.is_active
         out['ports'] = self.ports
         out['ip'] = self.ip
+        out['systemd_unit'] = self.systemd_unit
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
