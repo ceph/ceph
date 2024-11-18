@@ -772,6 +772,56 @@ int RGWSI_BucketIndex_RADOS::trim_reshard_log(const DoutPrefixProvider* dpp,
   return ceph::from_error_code(ec);
 }
 
+struct TagTimeoutWriter : rgwrados::shard_io::RadosWriter {
+  uint64_t timeout;
+  TagTimeoutWriter(const DoutPrefixProvider& dpp,
+                   boost::asio::any_io_executor ex,
+                   librados::IoCtx& ioctx,
+                   uint64_t timeout)
+    : RadosWriter(dpp, std::move(ex), ioctx), timeout(timeout)
+  {}
+  void prepare_write(int, librados::ObjectWriteOperation& op) override {
+    cls_rgw_bucket_set_tag_timeout(op, timeout);
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "set tag timeouts: ";
+  }
+};
+
+int RGWSI_BucketIndex_RADOS::set_tag_timeout(const DoutPrefixProvider* dpp,
+                                             optional_yield y,
+                                             const RGWBucketInfo& bucket_info,
+                                             uint64_t timeout)
+{
+  librados::IoCtx index_pool;
+  map<int, string> bucket_objs;
+
+  int r = open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
+  if (r < 0) {
+    return r;
+  }
+
+  const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto writer = TagTimeoutWriter{*dpp, ex, index_pool, timeout};
+
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
+  } else {
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto writer = TagTimeoutWriter{*dpp, ex, index_pool, timeout};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
+                                     ceph::async::use_blocked[ec]);
+  }
+  return ceph::from_error_code(ec);
+}
+
 int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
                                               const RGWBucketInfo& info,
                                               const RGWBucketInfo& orig_info,

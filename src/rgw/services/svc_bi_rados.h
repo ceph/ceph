@@ -145,6 +145,9 @@ public:
   int trim_reshard_log(const DoutPrefixProvider* dpp, optional_yield,
                        const RGWBucketInfo& bucket_info);
 
+  int set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y,
+                      const RGWBucketInfo& bucket_info, uint64_t timeout);
+
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info,
 		       optional_yield y) override;

@@ -198,17 +198,22 @@ void cls_rgw_bucket_init_index2(ObjectWriteOperation& o)
   o.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX2, in);
 }
 
+void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
+                                    uint64_t timeout)
+{
+  const auto call = rgw_cls_tag_timeout_op{.tag_timeout = timeout};
+  bufferlist in;
+  encode(call, in);
+  op.exec(RGW_CLASS, RGW_BUCKET_SET_TAG_TIMEOUT, in);
+}
+
 static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
 					    const int shard_id,
 					    const string& oid,
 					    uint64_t timeout,
 					    BucketIndexAioManager *manager) {
-  bufferlist in;
-  rgw_cls_tag_timeout_op call;
-  call.tag_timeout = timeout;
-  encode(call, in);
   ObjectWriteOperation op;
-  op.exec(RGW_CLASS, RGW_BUCKET_SET_TAG_TIMEOUT, in);
+  cls_rgw_bucket_set_tag_timeout(op, timeout);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 

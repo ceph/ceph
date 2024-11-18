@@ -302,6 +302,8 @@ public:
   int operator()();
 }; // class CLSRGWConcurrentIO
 
+void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
+                                    uint64_t timeout);
 
 class CLSRGWIssueSetTagTimeout : public CLSRGWConcurrentIO {
   uint64_t tag_timeout;
