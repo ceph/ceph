@@ -916,6 +916,85 @@ int RGWSI_BucketIndex_RADOS::rebuild_index(const DoutPrefixProvider *dpp,
   return ceph::from_error_code(ec);
 }
 
+struct ListReader : rgwrados::shard_io::RadosReader {
+  const cls_rgw_obj_key& start_obj;
+  const std::string& prefix;
+  const std::string& delimiter;
+  uint32_t num_entries;
+  bool list_versions;
+  std::map<int, rgw_cls_list_ret>& results;
+
+  ListReader(const DoutPrefixProvider& dpp,
+             boost::asio::any_io_executor ex,
+             librados::IoCtx& ioctx,
+             const cls_rgw_obj_key& start_obj,
+             const std::string& prefix,
+             const std::string& delimiter,
+             uint32_t num_entries, bool list_versions,
+             std::map<int, rgw_cls_list_ret>& results)
+    : RadosReader(dpp, std::move(ex), ioctx),
+      start_obj(start_obj), prefix(prefix), delimiter(delimiter),
+      num_entries(num_entries), list_versions(list_versions),
+      results(results)
+  {}
+  void prepare_read(int shard, librados::ObjectReadOperation& op) override {
+    // set the marker depending on whether we've already queried this
+    // shard and gotten a RGWBIAdvanceAndRetryError (defined
+    // constant) return value; if we have use the marker in the return
+    // to advance the search, otherwise use the marker passed in by the
+    // caller
+    auto& result = results[shard];
+    const cls_rgw_obj_key& marker =
+        result.marker.empty() ? start_obj : result.marker;
+    cls_rgw_bucket_list_op(op, marker, prefix, delimiter,
+                           num_entries, list_versions, &result);
+  }
+  Result on_complete(int, boost::system::error_code ec) override {
+    if (ec.value() == -RGWBIAdvanceAndRetryError) {
+      return Result::Retry;
+    } else if (ec) {
+      return Result::Error;
+    } else {
+      return Result::Success;
+    }
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "sharded list objects: ";
+  }
+};
+
+int RGWSI_BucketIndex_RADOS::list_objects(const DoutPrefixProvider* dpp, optional_yield y,
+                                          librados::IoCtx& index_pool,
+                                          const std::map<int, string>& bucket_objs,
+                                          const cls_rgw_obj_key& start_obj,
+                                          const std::string& prefix,
+                                          const std::string& delimiter,
+                                          uint32_t num_entries, bool list_versions,
+                                          std::map<int, rgw_cls_list_ret>& results)
+{
+  const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto reader = ListReader{*dpp, ex, index_pool, start_obj, prefix, delimiter,
+                             num_entries, list_versions, results};
+
+    rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio, yield[ec]);
+  } else {
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto reader = ListReader{*dpp, ex, index_pool, start_obj, prefix, delimiter,
+                             num_entries, list_versions, results};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio,
+                                    ceph::async::use_blocked[ec]);
+  }
+  return ceph::from_error_code(ec);
+}
+
 int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
                                               const RGWBucketInfo& info,
                                               const RGWBucketInfo& orig_info,
