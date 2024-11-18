@@ -753,6 +753,7 @@ public:
    *
    * @return iterator, null on error
    */
+  [[deprecated("in favor of omap_iterate()")]]
   virtual ObjectMap::ObjectMapIterator get_omap_iterator(
     CollectionHandle &c,   ///< [in] collection
     const ghobject_t &oid  ///< [in] object
