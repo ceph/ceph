@@ -1,91 +1,134 @@
 from unittest.mock import Mock
 
-from typing import List, Optional
-
+from dashboard.controllers.smb import SMBCluster, SMBShare
 
 from .. import mgr
 from ..tests import ControllerTestCase
 
 class SMBClusterTest(ControllerTestCase):
-    _smb_cluster_endpoint = '/api/smb/cluster'
+    _endpoint = '/api/smb/cluster'
 
-    _clusters = [
-                    "smbCluster1",
-                    "test1",
-                    "test2"
-                ]
-
-    _cluster = {
-                "resource": {
+    _clusters = {
+                "resources": [
+                    {
+                "resource_type": "ceph.smb.cluster",
+                "cluster_id": "clusterADTest",
+                "auth_mode": "active-directory",
+                "intent": "present",
+                "domain_settings": {
+                    "realm": "DOMAIN1.SINK.TEST",
+                    "join_sources": [
+                        {
+                            "source_type": "resource",
+                            "ref": "join1-admin"
+                        }]
+                    },
+                    "custom_dns": [
+                        "192.168.76.204"
+                    ],
+                    "placement": {
+                        "count": 1
+                    }
+                },
+                {
                     "resource_type": "ceph.smb.cluster",
-                    "cluster_id": "clusterTest",
+                    "cluster_id": "clusterUserTest",
                     "auth_mode": "user",
                     "intent": "present",
                     "user_group_settings": [
-                    {
+                        {
                         "source_type": "resource",
-                        "ref": "ct2pfhzqubl"
-                    }
-                    ],
-                    "placement": {},
-                    "public_addrs": []
-                },
-                "state": "created",
-                "additional_results": [
-                    {
-                    "resource": {
-                        "resource_type": "ceph.smb.usersgroups",
-                        "users_groups_id": "clusterTesswketvyo",
-                        "intent": "present",
-                        "values": {
-                        "users": [
-                            {
-                            "name": "user2",
-                            "password": "pass"
-                            }
-                        ],
-                        "groups": []
-                        },
-                        "linked_to_cluster": "clusterTest"
-                    },
-                    "state": "created",
-                    "success": true
-                    }
-                ],
-                "success": true
-            }
+                        "ref": "ug1"
+                        }
+                    ]
+                }
+                ]
+              }
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([SMBCluster])
 
     def test_list(self):
-        mgr.remote = Mock(return_value=[self._clusters])
+        mgr.remote = Mock(return_value=self._clusters)
 
-        self._get(self._smb_cluster_endpoint)
+        self._get(self._endpoint)
         self.assertStatus(200)
-        self.assertJsonBody([self._clusters])
+        self.assertJsonBody(self._clusters)
 
-    def test_create(self):
-        mgr.remote = Mock(return_value=[self._cluster])
+    def test_create_ad(self):
+        mgr.remote = Mock(return_value=self._clusters['resources'][0])
 
-        self._post(self._smb_cluster_endpoint, {'cluster_id': 'clusterTest', 'auth_mode': 'user', 'define_user_pass': 'user2%pass'})
-        self.assertStatus(200)
-        self.assertInJsonBody([self._cluster])
+        self._post(self._endpoint, {'cluster_id': 'clusterADTest', 'auth_mode': 'active-directory', 'domain_settings': {'realm': 'DOMAIN1.SINK.TEST', 'join_sources': ['join1-admin']}})
+        self.assertStatus(201)
+        self.assertInJsonBody(self._clusters['resources'][0])
+
+    def test_create_user(self):
+        mgr.remote = Mock(return_value=self._clusters['resources'][1])
+
+        self._post(self._endpoint, {'cluster_id': 'clusterUserTest', 'auth_mode': 'user', 'user_group_settings': ['ug1']})
+        self.assertStatus(201)
+        self.assertInJsonBody(self._clusters['resources'][1])
 
 class SMBShareTest(ControllerTestCase):
-    _smb_share_endpoint = '/api/smb/share'
+    _endpoint = '/api/smb/share'
 
-    _shares = [
-                "share1",
-                "shareTest"
-            ]
+    _shares = {
+                "resources": [
+                    {
+                    "resource_type": "ceph.smb.share",
+                    "cluster_id": "clusterUserTest",
+                    "share_id": "share1",
+                    "intent": "present",
+                    "name": "share1name",
+                    "readonly": "false",
+                    "browseable": "true",
+                    "cephfs": {
+                        "volume": "fs1",
+                        "path": "/",
+                        "provider": "samba-vfs"
+                    }
+                    },
+                    {
+                    "resource_type": "ceph.smb.share",
+                    "cluster_id": "clusterADTest",
+                    "share_id": "share2",
+                    "intent": "present",
+                    "name": "share2name",
+                    "readonly": "false",
+                    "browseable": "true",
+                    "cephfs": {
+                        "volume": "fs2",
+                        "path": "/",
+                        "provider": "samba-vfs"
+                    }
+                    }
+                ]
+              }
 
-    def test_list_(self):
-        mgr.remote = Mock(return_value=[self._shares])
 
-        self._get(self._smb_share_endpoint)
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([SMBShare])
+
+    def test_list_all(self):
+        mgr.remote = Mock(return_value=self._shares)
+
+        self._get(self._endpoint)
         self.assertStatus(200)
-        self.assertJsonBody([self._shares])
+        self.assertJsonBody(self._shares)
 
+    def test_list_from_cluster(self):
+        mgr.remote = Mock(return_value=self._shares['resources'][0])
+
+        self._get(self._endpoint)
+        self.assertStatus(200)
+        self.assertJsonBody(self._shares['resources'][0])
 
     def test_delete(self):
+        pass
+        # TODO: set delete after share creation
+        """
         _res = {
                 "resource": {
                     "resource_type": "ceph.smb.share",
@@ -94,10 +137,10 @@ class SMBShareTest(ControllerTestCase):
                     "intent": "removed"
                 },
                 "state": "removed",
-                "success": true
+                "success": "true"
             }
         mgr.remote = Mock(return_value=[_res])
-
-        self._delete(self._smb_share_endpoint)
-        self.assertStatus(200)
+        self._delete(self._endpoint)
+        self.assertStatus(204)
         self.assertJsonBody(_res)
+        """

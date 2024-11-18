@@ -12,6 +12,9 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { SmbDomainSettingModalComponent } from '../smb-domain-setting-modal/smb-domain-setting-modal.component';
+import { Icons } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-smb-cluster-form',
@@ -32,10 +35,11 @@ selectedLabels: string[] = [];
 selectedHosts: string[] = [];
   action: any;
   resource: string;
-
+  icons = Icons;
+  
   constructor( private hostService: HostService, private formBuilder: CdFormBuilder,
     public smbService: SmbService,  public actionLabels: ActionLabelsI18n, 
-      private orchService: OrchestratorService,) {
+      private orchService: OrchestratorService,    private modalService: ModalCdsService,) {
 super();
 this.resource = $localize`Cluster`;
   }
@@ -158,4 +162,10 @@ this.resource = $localize`Cluster`;
         );
       }
     }
+
+    showDomainSettingModal() {
+ this.modalService.show(SmbDomainSettingModalComponent);
+
+   console.log("test");
+  }
 }

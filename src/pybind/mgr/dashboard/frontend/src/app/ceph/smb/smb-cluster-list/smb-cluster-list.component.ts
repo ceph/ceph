@@ -15,6 +15,11 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 
 const BASE_URL = 'cephfs/smb';
@@ -36,12 +41,15 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   viewCacheStatus: any;
   smbClusters: any[];
   tableActions: CdTableAction[];
+  modalRef: NgbModalRef;
 
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
     private smbService: SmbService,
     private urlBuilder: URLBuilderService,
+    private modalService: ModalCdsService,
+    private taskWrapper: TaskWrapperService,
   ) {
     super();
 
@@ -64,9 +72,10 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
       },
       {
         name: this.actionLabels.EDIT,
-        permission: 'update',
+        permission: 'create',
         icon: Icons.edit,
-        click: () => this.openModal()
+        routerLink: () => this.urlBuilder.getCreate(),
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
         name: this.actionLabels.REMOVE,
@@ -110,5 +119,21 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
         context.error();
       }
     );
+  }
+
+  deleteNfsModal() {
+    const cluster_id = this.selection.first().cluster_id;
+
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: $localize`Cluster`,
+      itemNames: [`${cluster_id}`],
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('cluster/delete', {
+            cluster_id: cluster_id,
+          }),
+          call: this.smbService.delete(cluster_id)
+        })
+    });
   }
 }

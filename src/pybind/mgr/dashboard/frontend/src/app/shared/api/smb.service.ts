@@ -16,4 +16,10 @@ export class SmbService {
   create(request: any) {
     return this.http.post(`${this.baseURL}`, {request });
   }
+
+  delete(name: string) {
+    return this.http.delete(`${this.baseURL}/remove/${name}`, {
+      observe: 'response'
+    });
+  }
 }

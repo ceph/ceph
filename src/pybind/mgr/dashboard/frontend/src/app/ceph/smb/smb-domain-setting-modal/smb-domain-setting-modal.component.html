@@ -1,0 +1,139 @@
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="false"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>Domain Setting</h3>
+  </cds-modal-header>
+
+  <div cdsModalContent>
+    <form name="domainSettingForm"
+          #formDir="ngForm"
+          [formGroup]="domainSettingForm"
+          novalidate>
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="realmName"
+          [invalid]="
+          domainSettingForm.controls.realmName.invalid &&
+            (domainSettingForm.controls.realmName.touched ||
+            domainSettingForm.controls.realmName.dirty)
+          "
+          [invalidText]="realmNameError"
+          cdRequiredField="Realm Name"
+          i18n
+          >Realm Name
+          <input
+            cdsText
+            type="text"
+            placeholder="Realm name..."
+            id="realmName"
+            name="realmName"
+            formControlName="realmName"
+            [invalid]="
+            domainSettingForm.controls.realmName.invalid &&
+              (domainSettingForm.controls.realmName.touched ||
+              domainSettingForm.controls.realmName.dirty)
+            "
+            [autofocus]="true"
+            modal-primary-focus
+          />
+        </cds-text-label>
+        <ng-template #realmNameError>
+          <span
+            class="invalid-feedback"
+            *ngIf="domainSettingForm.showError('realmName', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="domainSettingForm.showError('realmName', formDir, 'uniqueName')"
+            i18n
+            >The chosen realm name is already in use.</span
+          >
+        </ng-template>
+      </div>
+
+
+       <!-- Joint Source -->
+       <ng-container formArrayName="jointSources"
+       *ngFor="let jointSource of jointSources.controls; index as i">
+<ng-container [formGroupName]="i">
+<div cdsRow
+  class="form-item form-item-append">
+<div cdsCol
+    [columnNumbers]="{lg: 8}">
+    <input
+    cdsText
+    type="text"
+    id="source_type"
+    name="source_type"
+    formControlName="source_type"
+    placeholder="Source Type"
+    modal-primary-focus
+  />
+</div>
+<div cdsCol
+    [columnNumbers]="{lg: 7}">
+    <input
+    cdsText
+    type="text"
+    placeholder="Ref.."
+    id="ref"
+    name="ref"
+    formControlName="ref"
+    modal-primary-focus
+  />
+  <ng-template #refError>
+    <span
+      class="invalid-feedback"
+      *ngIf="domainSettingForm.showError('ref', formDir, 'required')"
+      i18n
+      >This field is required.</span
+    >
+  </ng-template>
+</div>
+<div cdsCol
+    [columnNumbers]="{lg: 1}"
+    class="item-action-btn">
+ <cds-icon-button kind="tertiary"
+                  size="sm"
+                  >
+   <svg cdsIcon="trash-can"
+        size="32"
+        class="cds--btn__icon"></svg>
+ </cds-icon-button>
+</div>
+</div>
+<ng-template #retentionPolicyError>
+<span class="invalid-feedback"
+     *ngIf="domainSettingForm.controls['jointSources'].controls[i].invalid"
+     i18n>This retention policy already exists for the selected directory.</span>
+</ng-template>
+</ng-container>
+</ng-container>
+
+<div class="form-item">
+<button cdsButton="tertiary"
+   type="button"
+   (click)="addRetentionPolicy()"
+   i18n>
+Add Joint Source
+<svg cdsIcon="add"
+  size="32"
+  class="cds--btn__icon"
+  icon></svg>
+</button>
+</div>
+    </form>
+  </div>
+  <cd-form-button-panel
+    (submitActionEvent)="submit()"
+    [form]="domainSettingForm"
+    [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+    [modalForm]="true"
+  >
+  </cd-form-button-panel>
+</cds-modal>

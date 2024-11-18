@@ -31,6 +31,7 @@ import { AppRoutingModule } from '~/app/app-routing.module';
 import { NgChartsModule } from 'ng2-charts';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { TreeModule } from '@circlon/angular-tree-component';
+import { SmbDomainSettingModalComponent } from './smb-domain-setting-modal/smb-domain-setting-modal.component';
 
 @NgModule({
   imports: [
@@ -64,7 +65,7 @@ import { TreeModule } from '@circlon/angular-tree-component';
     IconModule
   ],
   exports: [SmbClusterListComponent,SmbClusterFormComponent],
-  declarations: [SmbClusterListComponent,SmbClusterFormComponent]
+  declarations: [SmbClusterListComponent,SmbClusterFormComponent, SmbDomainSettingModalComponent]
 })
 export class SmbModule {
   constructor(private iconService: IconService) {

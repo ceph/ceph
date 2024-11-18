@@ -56,28 +56,62 @@
 
         <!-- Domain Setting -->
         <div class="form-item" *ngIf="this.smbForm.get('auth_mode').value === 'active-directory'">
-            <cds-text-label for="domain_setting"
-                          i18n
-                        
-                          cdRequiredField="Domain Setting"
-                          [invalid]="smbForm.controls.domain_setting.invalid && (smbForm.controls.domain_setting.dirty)"
-                          [invalidText]="domainError">Domain Setting
-            <input cdsText
-                   type="text"
-                   placeholder="Domain Setting..."
-                   i18n-placeholder
-                   id="domain_setting"
-                   name="domain_setting"
-                   formControlName="domain_setting"
-                   [invalid]="smbForm.controls.domain_setting.invalid && (smbForm.controls.domain_setting.dirty)">
+          <div cdsCol
+               [columnNumbers]="{md: 12}"
+               class="d-flex">
+               <cds-text-label for="domain_setting"
+               i18n
+             
+               cdRequiredField="Domain Setting"
+               [invalid]="smbForm.controls.domain_setting.invalid && (smbForm.controls.domain_setting.dirty)"
+               [invalidText]="domainError">Domain Setting
+              <div class="cds-input-group">
+                <input cdsText
+             type="text"
+             placeholder="Domain Setting..."
+             i18n-placeholder
+             id="domain_setting"
+             name="domain_setting"
+             formControlName="domain_setting"
+             [invalid]="smbForm.controls.domain_setting.invalid && (smbForm.controls.domain_setting.dirty)">
+           
+            <cds-icon-button kind="ghost"
+            size="md"
+          >
+                   <svg cdsIcon="edit"
+                   size="32"
+                   class="cds--btn__icon"
+                   icon></svg>
+               
+               
+                 </cds-icon-button>
+                
+                
+             <cds-icon-button kind="ghost"
+             size="md"
+           >
+                    <svg cdsIcon="trash-can"
+                    size="32"
+                    class="cds--btn__icon"
+                    icon></svg>
+                
+                
+                  </cds-icon-button>
+                  <button cdsButton="tertiary"
+                  type="button"
+                  (click)="showDomainSettingModal()"
+                  >
+                  Domain Setting
+            <svg cdsIcon="add"
+                 size="32"
+                 class="cds--btn__icon"
+                 icon></svg>
+          </button>
+              </div>
             </cds-text-label>
-            <ng-template #domainError>
-            <span class="invalid-feedback"
-                  *ngIf="smbForm.showError('domain_setting', formDir, 'required')"
-                  i18n>This field is required.</span>
-            </ng-template>
-            </div> 
-    
+          </div>
+          </div>
+
             <!-- User Group Setting -->
           <div class="form-item" *ngIf="this.smbForm.get('auth_mode').value === 'user'">
             <cds-text-label for="user_group_setting" 
