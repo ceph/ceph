@@ -1175,7 +1175,10 @@ class NFSServiceSpec(ServiceSpec):
         se = NFSServiceSpec.spec_explain
         se['port'] = 'Service to run on port'
         se['virtual_ip'] = 'Specific Virtual IP from Haproxy/Ingress spec virtual IP range'
-        se['enable_haproxy_protocol'] = 'Enable to deploy NFS with additional HAProxy protocol support. Enable this param for Ingress as well '
+        se['enable_haproxy_protocol'] = (
+            'If deploy NFS with additional HAProxy protocol support. '
+            'Required to enable on Ingress too'
+        )
         se['idmap_conf'] = ' '
         se['enable_nlm'] = ' '
         return se
@@ -1212,7 +1215,7 @@ class RGWSpec(ServiceSpec):
     ]
 
     spec_explain = dict()
-    
+
     def __init__(self,
                  service_type: str = 'rgw',
                  service_id: Optional[str] = None,
@@ -1328,23 +1331,48 @@ class RGWSpec(ServiceSpec):
 
     def explain() -> Dict:
         se = RGWSpec.spec_explain
-        se['rgw_realm'] = 'The RGW realm associated with this service. Needs to be manually created'
-        se['rgw_zonegroup'] = 'The RGW zonegroup associated with this service. Needs to be manually created'
-        se['rgw_zone'] = 'The RGW zone associated with this service. Needs to be manually created'
-        se['rgw_frontend_ssl_certificate'] = 'List of SSL certificates for RGW frontend'
-        se['rgw_frontend_type'] = 'RGW frontend type: civetweb or beast (default: beast)'
+        se['rgw_realm'] = (
+            'The RGW realm associated with this service. Needs to be manually created'
+        )
+        se['rgw_zonegroup'] = (
+            'The RGW zonegroup associated with this service. Needs to be manually created'
+        )
+        se['rgw_zone'] = (
+            'The RGW zone associated with this service. Needs to be manually created'
+        )
+        se['rgw_frontend_ssl_certificate'] = (
+            'List of SSL certificates for RGW frontend'
+            )
+        se['rgw_frontend_type'] = (
+            'RGW frontend type: civetweb or beast (default: beast)'
+        )
         se['rgw_frontend_port'] = 'Port of the RGW daemons'
-        se['rgw_frontend_extra_args'] = 'List of extra arguments for rgw_frontend in the form opt=value.'
+        se['rgw_frontend_extra_args'] = (
+            'List of extra arguments for rgw_frontend in the form opt=value.'
+        )
         se['ssl'] = "Enable SSL on RGW frontend."
         se['rgw_realm_token'] = 'RGW Realm token for multisite deployment.'
         se['zone_endpoints'] = 'RGW zone endpoints configuration.'
-        se['zonegroup_hostnames'] = 'RGW zonegroup hostname configuration for DNS wildcard bucket resolution.'
-        se['rgw_user_counters_cache'] = 'Enable RGW User counters cache configuration'
-        se['rgw_user_counters_cache_size'] = 'Enable RGW User counters cache size configuration'
-        se['rgw_bucket_counters_cache'] = 'Enable RGW Bucket counters cache configuration'
-        se['rgw_bucket_counters_cache_size'] = 'Enable RGW Bucket counters cache size configuration'
-        se['generate_cert'] = 'Whether we should generate a cert/key for the user if not provided'
+        se['zonegroup_hostnames'] = (
+            'RGW zonegroup hostname configuration for DNS wildcard bucket resolution.'
+        )
+        se['rgw_user_counters_cache'] = (
+            'Enable RGW User counters cache configuration'
+        )
+        se['rgw_user_counters_cache_size'] = (
+            'Enable RGW User counters cache size configuration'
+        )
+        se['rgw_bucket_counters_cache'] = (
+            'Enable RGW Bucket counters cache configuration'
+        )
+        se['rgw_bucket_counters_cache_size'] = (
+            'Enable RGW Bucket counters cache size configuration'
+        )
+        se['generate_cert'] = (
+            'Whether we should generate a cert/key for the user if not provided'
+        )
         return se
+
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
 
@@ -1671,13 +1699,27 @@ class NvmeofServiceSpec(ServiceSpec):
         se['enable_spdk_discovery_controller'] = 'Enable SPDK or ceph-nvmeof discovery service'
         se['enable_prometheus_exporter'] = 'Enables Prometheus exporter'
         se['verify_nqns'] = 'Enables verification of subsystem and host NQNs for validity'
-        se['omap_file_lock_duration'] = 'Number of seconds before automatically unlock OMAP file lock'
-        se['omap_file_lock_retries'] = 'Number of retries to lock OMAP file before giving up'
-        se['omap_file_lock_retry_sleep_interval'] = 'Seconds to wait before retrying to lock OMAP'
-        se['omap_file_update_reloads'] = 'Number of attempt to reload OMAP when it differs from local'
-        se['allowed_consecutive_spdk_ping_failures'] = 'Number (#) of ping failures before aborting gateway'
-        se['spdk_ping_interval_in_seconds'] = 'Sleep interval in seconds between SPDK pings'
-        se['ping_spdk_under_lock'] = 'Whether or not we should perform SPDK ping under the RPC lock'
+        se['omap_file_lock_duration'] = (
+            'Number of seconds before automatically unlock OMAP file lock'
+        )
+        se['omap_file_lock_retries'] = (
+            'Number of retries to lock OMAP file before giving up'
+        )
+        se['omap_file_lock_retry_sleep_interval'] = (
+            'Seconds to wait before retrying to lock OMAP'
+        )
+        se['omap_file_update_reloads'] = (
+            'Number of attempt to reload OMAP when it differs from local'
+        )
+        se['allowed_consecutive_spdk_ping_failures'] = (
+            'Number (#) of ping failures before aborting gateway'
+        )
+        se['spdk_ping_interval_in_seconds'] = (
+            'Sleep interval in seconds between SPDK pings'
+        )
+        se['ping_spdk_under_lock'] = (
+            'Whether or not we should perform SPDK ping under the RPC lock'
+        )
         se['bdevs_per_cluster'] = 'Number of bdevs per cluster'
         se['server_key'] = 'Gateway server key'
         se['server_cert'] = 'Gateway server certificate'
@@ -1685,24 +1727,42 @@ class NvmeofServiceSpec(ServiceSpec):
         se['client_cert'] = 'client certificate'
         se['root_ca_cert'] = 'CA cert for server/client certs'
         se['spdk_path'] = 'Path to SPDK. Defaults to /usr/local/bin/nvmf_tgt'
-        se['tgt_path'] = 'nvmeof target path. Defaults to /usr/local/bin/nvmf_tgt'
+        se['tgt_path'] = (
+            'nvmeof target path. Defaults to /usr/local/bin/nvmf_tgt'
+        )
         se['spdk_timeout'] = 'SPDK connectivity timeout'
         se['spdk_log_level'] = 'The SPDK log level. Defaults to WARNING'
         se['rpc_socket_dir'] = 'The SPDK socket file directory. Defaults to /var/tmp/'
         se['rpc_socket_name'] = 'The SPDK socket file name. Defaults to spdk.sock'
         se['conn_retries'] = 'ceph connection retries number'
         se['transports'] = 'Trasports type, defaults to tcp'
-        se['transport_tcp_options'] = 'List of extra arguments for transports in the form opt=value'
+        se['transport_tcp_options'] = (
+            'List of extra arguments for transports in the form opt=value'
+        )
         se['tgt_cmd_extra_args'] = 'extra arguments for the nvmf_tgt process'
         se['discovery_port'] = 'port of the discovery service. Defaults to 8009'
         se['log_level'] = 'the nvmeof gateway log level. Default to INFO'
-        se['log_files_enabled'] = 'enables the usage of files to keep the nameof gateway log'
-        se['log_files_rotation_enabled'] = 'enables rotation of log files when pass the size limit'
-        se['verbose_log_messages'] = 'add more details to the nvmeof gateway log message'
-        se['max_log_file_size_in_mb'] = 'max size in MB before starting a new log file'
-        se['max_log_files_count'] = 'max log files to keep before overriding them'
-        se['max_log_directory_backups'] = 'max directories for old gateways with same name to keep'
-        se['log_directory'] = 'directory for keeping nameof gateway log files. Defaults to /var/log/ceph/'
+        se['log_files_enabled'] = (
+            'enables the usage of files to keep the nameof gateway log'
+        )
+        se['log_files_rotation_enabled'] = (
+            'enables rotation of log files when pass the size limit'
+        )
+        se['verbose_log_messages'] = (
+            'add more details to the nvmeof gateway log message'
+        )
+        se['max_log_file_size_in_mb'] = (
+            'max size in MB before starting a new log file'
+        )
+        se['max_log_files_count'] = (
+            'max log files to keep before overriding them'
+        )
+        se['max_log_directory_backups'] = (
+            'max directories for old gateways with same name to keep'
+        )
+        se['log_directory'] = (
+            'directory for keeping nameof gateway log files. Defaults to /var/log/ceph/'
+        )
         se['monitor_timeout'] = 'monitor connectivity timeout'
         se['enable_monitor_client'] = 'whether to connect to the ceph monitor or not'
         return se
@@ -1786,7 +1846,10 @@ class IscsiServiceSpec(ServiceSpec):
         se['api_port'] = '`api_port` as defined in the iscsi-gateway.cfg'
         se['api_user'] = '`api_user` as defined in the iscsi-gateway.cfg'
         se['api_password'] = '`api_password` as defined in the iscsi-gateway.cfg'
-        se['api_secure'] = '`api_secure` as defined in the iscsi-gateway.cfg, [Optional] when cert & key are defined'
+        se['api_secure'] = (
+            '`api_secure` as defined in the iscsi-gateway.cfg. '
+            '\n[Optional] when cert & key are defined'
+        )
         se['ssl_cert'] = 'SSL certificate'
         se['ssl_key'] = 'SSL private key'
         return se
@@ -1901,12 +1964,17 @@ class IngressSpec(ServiceSpec):
                 raise SpecValidationError(
                     f'Cannot add ingress: Invalid health_check_interval specified. '
                     f'Valid units are: {valid_units}')
-            
+
     def explain() -> Dict:
         se = IngressSpec.spec_explain
-        se['backend_service'] = 'Backend service which we want to map for traffic distribution.'
+        se['backend_service'] = (
+            'Backend service which we want to map for traffic distribution.'
+        )
         se['frontend_port'] = 'Frontend listening port'
-        se['ssl_cert'] = 'SSL certificate, if SSL is to be enabled. This must contain the both the certificate and private key blocks in .pem format.'
+        se['ssl_cert'] = (
+            'SSL certificate, if SSL is to be enabled. '
+            'This must contain the both the certificate and private key blocks in .pem format.'
+        )
         se['ssl_key'] = 'HAProxy SSL Key'
         se['ssl_dh_param'] = ' '
         se['ssl_ciphers'] = ' '
@@ -1915,16 +1983,45 @@ class IngressSpec(ServiceSpec):
         se['monitor_user'] = 'Monitor user'
         se['monitor_password'] = 'Monitor password'
         se['keepalived_password'] = 'Assign a password to keepalived service'
-        se['virtual_ip'] = 'The virtual IP (and network) in CIDR format where the ingress service will be available.'
-        se['virtual_ips_list'] = 'The virtual IP address in CIDR format where the ingress service will be available. Each virtual IP address will be primary on one node running the ingress service.'
-        se['virtual_interface_networks'] = 'A list of networks to identify which ethernet interface to use for the virtual IP.'
-        se['use_keepalived_multicast'] = 'By default, cephadm will deploy keepalived config to use unicast IPs, using the IPs of the hosts. Default is False. '
-        se['vrrp_interface_network'] = 'By default, cephadm will configure keepalived to use the same interface where the VIPs are for VRRP communication.'
-        se['first_virtual_router_id'] = 'Default is 50. When deploying more than 1 ingress, this parameter can be used to ensure each keepalived will have different virtual_router_id. In the case of using virtual_ips_list, each IP will create its own virtual router. So the first one will have first_virtual_router_id, second one will have first_virtual_router_id + 1, etc. Valid values go from 1 to 255.'
+        se['virtual_ip'] = (
+            'The virtual IP (and network) in CIDR format '
+            'where the ingress service will be available.'
+        )
+        se['virtual_ips_list'] = (
+            'The virtual IP address in CIDR format where the ingress service will be available. '
+            'Each virtual IP address will be primary on one node running the ingress service.'
+        )
+        se['virtual_interface_networks'] = (
+            'A list of networks to identify which '
+            'ethernet interface to use for the virtual IP.'
+        )
+        se['use_keepalived_multicast'] = (
+            'By default, cephadm will deploy keepalived config to use unicast IPs, '
+            'using the IPs of the hosts. Default is False. '
+        )
+        se['vrrp_interface_network'] = (
+            'By default, cephadm will configure keepalived to use the same interface '
+            'where the VIPs are for VRRP communication.'
+        )
+        se['first_virtual_router_id'] = (
+            'Default is 50. When deploying more than 1 ingress, this parameter can be '
+            'used to ensure each keepalived will have different virtual_router_id. '
+            'In the case of using virtual_ips_list, each IP will create its own virtual router. '
+            'So the first one will have first_virtual_router_id, second one will '
+            'have first_virtual_router_id + 1, etc. Valid values go from 1 to 255.'
+        )
         se['ssl'] = 'Enable SSL for Ingress service'
-        se['keepalive_only'] = 'Cephadm supports deploying NFS with keepalived but not haproxy. The ingress service should include this attribute `keepalived` set to true'
-        se['enable_haproxy_protocol'] = 'Used for NFS with HA to use HAProxy protocol'
-        se['health_check_interval'] = 'Default is 2 seconds. This parameter can be used to set the interval between health checks for the haproxy with the backend servers.'
+        se['keepalive_only'] = (
+            'Cephadm supports deploying NFS with keepalived but not haproxy. '
+            'The ingress service should include this attribute `keepalived` set to true'
+        )
+        se['enable_haproxy_protocol'] = (
+            'Used for NFS with HA to use HAProxy protocol'
+        )
+        se['health_check_interval'] = (
+            'Default is 2 seconds. This parameter can be used to set the interval '
+            'between health checks for the haproxy with the backend servers.'
+        )
         return se
 
 
@@ -2768,10 +2865,26 @@ class SNMPGatewaySpec(ServiceSpec):
         se['snmp_version'] = 'Support two versions V2c, V3'
         se['snmp_destination'] = 'SNMP destination must be provided'
         se['port'] = 'Port to which service runs. It defaults to 9464'
-        se['credentials'] = 'You must provide a -i <filename> or sub-parmeters to pass the secrets/passwords to the orchestrator. The creds file contains: `snmp_community` for V2c and `snmp_v3_auth_username`& `snmp_v3_auth_password` for V3.\n credentials:\n\tsnmp_v3_auth_password: mypassword\n\tsnmp_v3_auth_username: myuser'
-        se['engine_id'] = 'engine-id is a unique identifier for the device (in hex) and required for SNMP v3 only. '
-        se['auth_protocol'] = 'Support two protocols: MD5 & SHA. For SNMP V3, the --auth-protocol setting defaults to SHA'
-        se['privacy_protocol'] = 'Support two protocols: DES & AES. For SNMP V3, with encryption you must define the --privacy-protocol'
+        se['credentials'] = (
+            'You must provide a -i <filename> or sub-parmeters to pass '
+            'the secrets/passwords to the orchestrator. '
+            'The creds file contains: `snmp_community` for V2c, '
+            'and `snmp_v3_auth_username`& `snmp_v3_auth_password` for V3.'
+            '\ncredentials:\n\tsnmp_v3_auth_password: mypassword\n\t'
+            'snmp_v3_auth_username: myuser'
+        )
+        se['engine_id'] = (
+            'engine-id is a unique identifier for the device (in hex) '
+            'and required for SNMP v3 only.'
+        )
+        se['auth_protocol'] = (
+            'Support two protocols: MD5 & SHA. '
+            'For SNMP V3, the --auth-protocol setting defaults to SHA'
+        )
+        se['privacy_protocol'] = (
+            'Support two protocols: DES & AES. For SNMP V3, '
+            'with encryption you must define the --privacy-protocol'
+        )
         return se
 
 
@@ -3292,16 +3405,44 @@ class SMBSpec(ServiceSpec):
                 a.to_json() for a in spec['cluster_public_addrs']
             ]
         return obj
-         
+
     def explain() -> Dict:
         se = SMBSpec.spec_explain
-        se['cluster_id'] = 'A name identifying the smb "cluster" this daemon is part of. A cluster may be made up of one or more services sharing a common configuration.'
-        se['features'] = 'a list of terms enabling specific deployment features. Terms include: `domain` to enable Active Dir. Domain membership.'
-        se['config_uri'] = 'a pseudo-uri that resolves to a configuration source that the samba-container can load. A ceph based samba container will be typically storing configuration in rados (rados:// prefix)'
-        se['join_sources'] = 'a list of pseudo-uris that resolve to a (JSON) blob containing data the samba-container can use to join a domain. A ceph based samba container may typically use a rados uri or a mon config-key store uri (example: `rados:mon-config-key:smb/config/mycluster/join1.json`).'
-        se['user_sources'] = 'a list of pseudo-uris that resolve to a (JSON) blob containing data the samba-container can use to create users (and/or groups). A ceph based samba container may typically use a rados uri or a mon config-key store uri (example: `rados:mon-config-key:smb/config/mycluster/join1.json`).'
-        se['custom_dns'] = 'a list of IP addresses that will be set up as custom dns servers for the samba container.'
-        se['include_ceph_users'] = 'A list of ceph auth entity names that will be automatically added to the ceph keyring provided to the samba container.'
+        se['cluster_id'] = (
+            'A name identifying the smb "cluster" this daemon is part of. '
+            'A cluster may be made up of one or more services sharing a common configuration.'
+        )
+        se['features'] = (
+            'a list of terms enabling specific deployment features. '
+            'Terms include: `domain` to enable Active Dir. Domain membership.'
+        )
+        se['config_uri'] = (
+            'a pseudo-uri that resolves to a configuration source that the '
+            'samba-container can load. A ceph based samba container will be '
+            'typically storing configuration in rados (rados:// prefix)'
+        )
+        se['join_sources'] = (
+            'a list of pseudo-uris that resolve to a (JSON) blob containing '
+            'data the samba-container can use to join a domain. '
+            'A ceph based samba container may typically use a rados uri '
+            'or a mon config-key store uri (example: '
+            '`rados:mon-config-key:smb/config/mycluster/join1.json`).'
+        )
+        se['user_sources'] = (
+            'a list of pseudo-uris that resolve to a (JSON) blob containing '
+            'data the samba-container can use to create users (and/or groups). '
+            'A ceph based samba container may typically use a rados uri '
+            'or a mon config-key store uri (example: '
+            '`rados:mon-config-key:smb/config/mycluster/join1.json`).'
+        )
+        se['custom_dns'] = (
+            'a list of IP addresses that will be set up as '
+            'custom dns servers for the samba container.'
+        )
+        se['include_ceph_users'] = (
+            'A list of ceph auth entity names that will be automatically '
+            'added to the ceph keyring provided to the samba container.'
+        )
         return se
 
 

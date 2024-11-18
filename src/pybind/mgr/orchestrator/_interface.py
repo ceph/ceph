@@ -45,9 +45,7 @@ from ceph.deployment.service_spec import (
     MgmtGatewaySpec,
     OAuth2ProxySpec,
     ServiceSpec,
-    TunedProfileSpec,
-    MONSpec,
-    IngressSpec
+    TunedProfileSpec
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
