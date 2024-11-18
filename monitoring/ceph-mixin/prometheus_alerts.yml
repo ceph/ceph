@@ -814,7 +814,16 @@ groups:
         annotations:
           description: "Although you may continue to create subsystems in {{ $labels.gateway_host }}, the configuration may not be supported"
           summary: "The number of subsystems defined to the gateway exceeds supported values on cluster {{ $labels.cluster }}"
-        expr: "count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,\"gateway_host\",\"$1\",\"instance\",\"(.*):.*\")) > 16.00"
+        expr: "count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,\"gateway_host\",\"$1\",\"instance\",\"(.*?)(?::.*)?\")) > 128.00"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NVMeoFTooManyNamespaces"
+        annotations:
+          description: "Although you may continue to create namespaces in {{ $labels.gateway_host }}, the configuration may not be supported"
+          summary: "The number of namespaces defined to the gateway exceeds supported values on cluster {{ $labels.cluster }}"
+        expr: "sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,\"gateway_host\",\"$1\",\"instance\",\"(.*?)(?::.*)?\")) > 1024.00"
         for: "1m"
         labels:
           severity: "warning"
