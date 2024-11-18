@@ -350,10 +350,11 @@ TEST_F(cls_rgw, index_suggest)
     cls_rgw_encode_suggestion(suggest_op, dirent, updates);
   }
 
-  map<int, string> bucket_objs;
-  bucket_objs[0] = bucket_oid;
-  int r = CLSRGWIssueSetTagTimeout(ioctx, bucket_objs, 8 /* max aio */, 1)();
-  ASSERT_EQ(0, r);
+  {
+    librados::ObjectWriteOperation op;
+    cls_rgw_bucket_set_tag_timeout(op, 1);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+  }
 
   sleep(1);
 
