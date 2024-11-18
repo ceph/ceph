@@ -85,6 +85,7 @@ void rgw_s3_key_filter::dump(Formatter *f) const {
     ::encode_json("Value", regex_rule, f);
     f->close_section();
   }
+  f->close_section();
 }
 
 bool rgw_s3_key_filter::decode_xml(XMLObj* obj) {
@@ -151,6 +152,7 @@ void rgw_s3_key_value_filter::dump(Formatter *f) const {
     ::encode_json("Value", key_value.second, f);
     f->close_section();
   }
+  f->close_section();
 }
 
 bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
