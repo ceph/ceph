@@ -94,15 +94,15 @@ CachedExtent* CachedExtent::get_transactional_view(transaction_id_t tid) {
 }
 
 std::ostream &operator<<(std::ostream &out, const parent_tracker_t &tracker) {
-  return out << "parent_tracker=" << (void*)&tracker
-	     << ", parent=" << (void*)tracker.get_parent().get();
+  return out << "tracker_ptr=" << (void*)&tracker
+	     << ", parent_ptr=" << (void*)tracker.get_parent().get();
 }
 
 std::ostream &ChildableCachedExtent::print_detail(std::ostream &out) const {
   if (parent_tracker) {
-    out << *parent_tracker;
+    out << ", parent_tracker(" << *parent_tracker << ")";
   } else {
-    out << ", parent_tracker=" << (void*)nullptr;
+    out << ", parent_tracker(nullptr)";
   }
   _print_detail(out);
   return out;
