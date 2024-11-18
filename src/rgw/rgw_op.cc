@@ -4623,10 +4623,14 @@ void RGWPutObj::execute(optional_yield y)
 
   if (cksum_filter) {
     const auto& hdr = cksum_filter->header();
-    auto expected_ck = cksum_filter->expected(*s->info.env);
+    /* returns the (stable in-env) value of a supplied checksum header,
+     * if present */
+    const char* expected_ck = cksum_filter->expected(*s->info.env);
     auto cksum_verify =
       cksum_filter->verify(*s->info.env); // valid or no supplied cksum
     cksum = get<1>(cksum_verify);
+    /* save computed cksum, failing iff the client asserted a checksum
+     * and it does not match computed */
     if ((!expected_ck) ||
 	std::get<0>(cksum_verify)) {
       buffer::list cksum_bl;

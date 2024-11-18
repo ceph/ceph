@@ -52,7 +52,6 @@ namespace rgw::putobj {
     }
     /* no checksum header */
     if (override_type != rgw::cksum::Type::none) {
-      /* XXXX safe? do we need to fixup env as well? */
       auto algo_header = cksum_algorithm_hdr(override_type);
       return
 	std::make_unique<RGWPutObj_Cksum>(
