@@ -773,7 +773,7 @@ int RadosBucket::rebuild_index(const DoutPrefixProvider *dpp)
   return store->getRados()->bucket_rebuild_index(dpp, info);
 }
 
-int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout)
+int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout)
 {
   return store->getRados()->cls_obj_set_bucket_tag_timeout(dpp, info, timeout);
 }
