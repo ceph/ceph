@@ -646,20 +646,6 @@ void cls_rgw_bucket_check_index_decode(const bufferlist& out,
   decode(result, p);
 }
 
-static bool issue_bucket_check_index_op(IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager,
-    rgw_cls_check_index_ret *pdata) {
-  bufferlist in;
-  librados::ObjectReadOperation op;
-  op.exec(RGW_CLASS, RGW_BUCKET_CHECK_INDEX, in, new ClsBucketIndexOpCtx<rgw_cls_check_index_ret>(
-        pdata, NULL));
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-int CLSRGWIssueBucketCheck::issue_op(int shard_id, const string& oid)
-{
-  return issue_bucket_check_index_op(io_ctx, shard_id, oid, &manager, &result[shard_id]);
-}
-
 static bool issue_bucket_rebuild_index_op(IoCtx& io_ctx, const int shard_id, const string& oid,
     BucketIndexAioManager *manager) {
   bufferlist in;

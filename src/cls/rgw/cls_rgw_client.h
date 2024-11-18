@@ -441,27 +441,6 @@ void cls_rgw_bucket_check_index(librados::ObjectReadOperation& op,
 void cls_rgw_bucket_check_index_decode(const bufferlist& out,
                                        rgw_cls_check_index_ret& result);
 
-/**
- * Check the bucket index.
- *
- * io_ctx          - IO context for rados.
- * bucket_objs_ret - check result for all shards.
- * max_aio         - the maximum number of AIO (for throttling).
- *
- * Return 0 on success, a failure code otherwise.
- */
-class CLSRGWIssueBucketCheck : public CLSRGWConcurrentIO /*<std::map<std::string, rgw_cls_check_index_ret> >*/ {
-  std::map<int, rgw_cls_check_index_ret>& result;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueBucketCheck(librados::IoCtx& ioc, std::map<int, std::string>& oids,
-			 std::map<int, rgw_cls_check_index_ret>& bucket_objs_ret,
-			 uint32_t _max_aio) :
-    CLSRGWConcurrentIO(ioc, oids, _max_aio), result(bucket_objs_ret) {}
-  virtual ~CLSRGWIssueBucketCheck() override {}
-};
-
 class CLSRGWIssueBucketRebuild : public CLSRGWConcurrentIO {
 protected:
   int issue_op(int shard_id, const std::string& oid) override;
