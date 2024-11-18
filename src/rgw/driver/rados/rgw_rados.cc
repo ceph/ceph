@@ -5727,21 +5727,6 @@ int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y
   return 0;
 }
 
-int RGWRados::bucket_rebuild_index(const DoutPrefixProvider *dpp, optional_yield y,
-                                   const RGWBucketInfo& bucket_info)
-{
-  librados::IoCtx index_pool;
-  map<int, string> bucket_objs;
-
-  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
-  if (r < 0) {
-    return r;
-  }
-
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  return CLSRGWIssueBucketRebuild(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
-}
-
 static int resync_encrypted_multipart(const DoutPrefixProvider* dpp,
                                       optional_yield y, RGWRados* store,
                                       RGWBucketInfo& bucket_info,

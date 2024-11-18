@@ -152,6 +152,9 @@ public:
                   const RGWBucketInfo& bucket_info,
                   std::map<int, bufferlist>& buffers);
 
+  int rebuild_index(const DoutPrefixProvider *dpp, optional_yield y,
+                    const RGWBucketInfo& bucket_info);
+
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info,
 		       optional_yield y) override;

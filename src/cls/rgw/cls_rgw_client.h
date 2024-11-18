@@ -441,6 +441,8 @@ void cls_rgw_bucket_check_index(librados::ObjectReadOperation& op,
 void cls_rgw_bucket_check_index_decode(const bufferlist& out,
                                        rgw_cls_check_index_ret& result);
 
+void cls_rgw_bucket_rebuild_index(librados::ObjectWriteOperation& op);
+
 class CLSRGWIssueBucketRebuild : public CLSRGWConcurrentIO {
 protected:
   int issue_op(int shard_id, const std::string& oid) override;

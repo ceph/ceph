@@ -646,11 +646,16 @@ void cls_rgw_bucket_check_index_decode(const bufferlist& out,
   decode(result, p);
 }
 
+void cls_rgw_bucket_rebuild_index(librados::ObjectWriteOperation& op)
+{
+  bufferlist in;
+  op.exec(RGW_CLASS, RGW_BUCKET_REBUILD_INDEX, in);
+}
+
 static bool issue_bucket_rebuild_index_op(IoCtx& io_ctx, const int shard_id, const string& oid,
     BucketIndexAioManager *manager) {
-  bufferlist in;
   librados::ObjectWriteOperation op;
-  op.exec(RGW_CLASS, RGW_BUCKET_REBUILD_INDEX, in);
+  cls_rgw_bucket_rebuild_index(op);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 
