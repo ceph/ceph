@@ -1,14 +1,16 @@
-<cd-table #table
-          [data]="smbClusters"
-          columnMode="flex"
-          [columns]="columns"
-          identifier="id"
-          forceIdentifier="true"
-          selectionType="single"
-          [hasDetails]="false"
-          (setExpandedRow)="setExpandedRow($event)"
-          (fetchData)="loadSMBCluster($event)"
-          >
+<ng-container *ngIf="smbClusters$ | async as smbClusters">
+  <cd-table
+    #table
+    [data]="smbClusters"
+    columnMode="flex"
+    [columns]="columns"
+    identifier="id"
+    forceIdentifier="true"
+    selectionType="single"
+    [hasDetails]="false"
+    (setExpandedRow)="setExpandedRow($event)"
+    (fetchData)="loadSMBCluster($event)"
+  >
   <div class="table-actions">
     <cd-table-actions class="btn-group"
                       [permission]="permission"
@@ -17,3 +19,4 @@
     </cd-table-actions>
   </div>
 </cd-table>
+</ng-container>

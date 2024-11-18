@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, UntypedFormControl, Validators } from '@angular/forms';
+import { FormArray, FormControl, FormGroup, UntypedFormControl, Validators } from '@angular/forms';
 import _ from 'cypress/types/lodash';
 
 import { forkJoin, Observable } from 'rxjs';
@@ -12,86 +12,115 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { SmbDomainSettingModalComponent } from '../smb-domain-setting-modal/smb-domain-setting-modal.component';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { ChangeDetectorRef } from '@angular/core';
 
 @Component({
   selector: 'cd-smb-cluster-form',
   templateUrl: './smb-cluster-form.component.html',
   styleUrls: ['./smb-cluster-form.component.scss']
 })
-export class SmbClusterFormComponent extends CdForm implements OnInit{
-  
+export class SmbClusterFormComponent extends CdForm implements OnInit {
   smbForm: CdFormGroup;
   allClusters: { cluster_id: string }[] = null;
-  data:any;
+  data: any;
   hostsAndLabels$: Observable<{ hosts: any[]; labels: any[] }>;
   hasOrchestrator: boolean;
-orchStatus$: Observable<any>;
+  orchStatus$: Observable<any>;
   publicAddrPattern = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}(\%[a-zA-Z0-9-]+)?$/;
-allClustering: any = [];
-selectedLabels: string[] = [];
-selectedHosts: string[] = [];
+  allClustering: any = [];
+  selectedLabels: string[] = [];
+  selectedHosts: string[] = [];
   action: any;
   resource: string;
-
-  constructor( private hostService: HostService, private formBuilder: CdFormBuilder,
-    public smbService: SmbService,  public actionLabels: ActionLabelsI18n, 
-      private orchService: OrchestratorService,) {
-super();
-this.resource = $localize`Cluster`;
+  icons = Icons;
+  domainSettingObject: object[] = [];
+  constructor(
+    private hostService: HostService,
+    private formBuilder: CdFormBuilder,
+    private cd: ChangeDetectorRef,
+    public smbService: SmbService,
+    public actionLabels: ActionLabelsI18n,
+    private orchService: OrchestratorService,
+    private modalService: ModalCdsService
+  ) {
+    super();
+    this.resource = $localize`Cluster`;
   }
   ngOnInit() {
-   this.createForm();
- 
-
-   this.action = this.actionLabels.CREATE;
-   this.hostsAndLabels$ = forkJoin({
-    hosts: this.hostService.getAllHosts(),
-    labels: this.hostService.getLabels()
-  }).pipe(
-    map(({ hosts, labels }) => ({
-      hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
-      labels: labels.map((label: string) => ({ content: label }))
-    }))
-  );
-  this.orchStatus$ = this.orchService.status();
-  this.allClustering = ['Default', 'Always', 'Never'];
+    this.createForm();
+    this.action = this.actionLabels.CREATE;
+    this.domainSettingObject = this.domainSettingObject;
+    console.log(this.domainSettingObject, 'domainSettingObject');
+    this.action = this.actionLabels.CREATE;
+    this.hostsAndLabels$ = forkJoin({
+      hosts: this.hostService.getAllHosts(),
+      labels: this.hostService.getLabels()
+    }).pipe(
+      map(({ hosts, labels }) => ({
+        hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
+        labels: labels.map((label: string) => ({ content: label }))
+      }))
+    );
+    this.orchStatus$ = this.orchService.status();
+    this.allClustering = ['Default', 'Always', 'Never'];
     console.log(this.hostsAndLabels$);
 
-
-    console.log(this.smbForm.controls.placement.value );
-}
-
+    console.log(this.smbForm.controls.placement.value);
+  }
 
   createForm() {
     this.smbForm = this.formBuilder.group({
-      resource_type: new FormControl('', {
+      resource_type: new FormControl('ceph.smb.cluster', {
         validators: [Validators.required]
       }),
       cluster_id: new FormControl('', {
         validators: [Validators.required]
       }),
-      auth_mode: ['', {
-        validators: [Validators.required]
-      }],
-      intent: ['', {
-        validators: [Validators.required]
-      }],
-      domain_setting: [''],
-      user_group_setting: [''],
-      placement: [''],
+      auth_mode: [
+        '',
+        {
+          validators: [Validators.required]
+        }
+      ],
+      intent: [
+        '',
+        {
+          validators: [Validators.required]
+        }
+      ],
+      domain_setting: [{
+        "realm": "AD.EXAMPLE.COM",
+        "join_sources": [
+          {
+            "source_type": "resource",
+            "ref": "ad-smb-cluwvhzsngq"
+          }
+        ]
+      },],
+      user_group_setting: [[]],
+      placement: [{
+        "hosts": [
+          "node3",
+          "node4"
+        ]
+      },],
       hosts: [[]],
       label: [
         null,
         [
           CdValidators.requiredIf({
-            placement: 'label',
+            placement: 'label'
           })
         ]
       ],
-      custom_dns: [[]],
+      customDns: new FormArray([]),
+      jointSources: new FormArray([]),
       public_addrs: ['', Validators.pattern(this.publicAddrPattern)],
       clustering: new UntypedFormControl('Always')
-    })
+    });
 
     this.orchService.status().subscribe((status) => {
       this.hasOrchestrator = status.available;
@@ -107,13 +136,12 @@ this.resource = $localize`Cluster`;
   onAuthModeChange(): void {
     const authMode = this.smbForm.get('auth_mode').value;
     const domainSettingControl = this.smbForm.get('domain_setting');
-    const defineUserPassControl = this.smbForm.get('user_group_setting')
+    const defineUserPassControl = this.smbForm.get('user_group_setting');
 
     if (authMode === 'active-directory') {
       domainSettingControl.setValidators(Validators.required);
       defineUserPassControl.clearValidators();
-    }
-    else if(authMode === 'user'){
+    } else if (authMode === 'user') {
       defineUserPassControl.setValidators(Validators.required);
       domainSettingControl.clearValidators();
     }
@@ -122,40 +150,81 @@ this.resource = $localize`Cluster`;
   }
 
   submitAction() {
-  
-    console.log(this.smbForm, "lihkug");
+    console.log(this.smbForm, 'lihkug');
     const values = this.smbForm.getRawValue();
-      const serviceSpec: object = {
-        placement: {},
+    const serviceSpec: object = {
+      placement: {}
       //  unmanaged: values['unmanaged']
-      };
-      switch (values['placement']) {
-        case 'hosts':
-          if (values['hosts'].length > 0) {
-            serviceSpec['placement']['hosts'] = this.selectedHosts;
-          }
-          break;
-        case 'label':
-          serviceSpec['placement']['label'] = this.selectedLabels;
-          break;
-      }
-
-    
-   
-      if (this.action === this.actionLabels.CREATE) {
-      
-        this.smbService.create(values).subscribe(
-          () => {
-            // this.notificationService.show(
-            //   NotificationType.success,
-            //   $localize`SMB Cluster: '${values['cluster_id']}' created successfully`
-            // );
-           
-          },
-          () => {
-          //  this.multisiteRealmForm.setErrors({ cdSubmitButton: true });
-          }
-        );
-      }
+    };
+    switch (values['placement']) {
+      case 'hosts':
+        if (values['hosts'].length > 0) {
+          serviceSpec['placement']['hosts'] = this.selectedHosts;
+        }
+        break;
+      case 'label':
+        serviceSpec['placement']['label'] = this.selectedLabels;
+        break;
     }
+
+    if (this.action === this.actionLabels.CREATE) {
+      this.smbService.create(values).subscribe(
+        () => {
+          // this.notificationService.show(
+          //   NotificationType.success,
+          //   $localize`SMB Cluster: '${values['cluster_id']}' created successfully`
+          // );
+        },
+        () => {
+          //  this.multisiteRealmForm.setErrors({ cdSubmitButton: true });
+        }
+      );
+    }
+  }
+
+  showDomainSettingModal() {
+    const intialState = {
+      domainSettingObject: this.domainSettingObject
+    };
+
+    this.modalService.show(SmbDomainSettingModalComponent, intialState);
+
+    console.log(intialState, 'test');
+  }
+  createCustomDnsField() {
+    return this.formBuilder.control('', Validators.required); // You can customize validation as needed
+  }
+
+  get jointSources() {
+    return this.smbForm.get('jointSources') as FormArray;
+  }
+
+  get customDns() {
+    return this.smbForm.get('customDns') as FormArray;
+  }
+
+  addRetentionPolicy() {
+    this.jointSources.push(
+      new FormGroup({
+        source_type: new FormControl(''),
+        ref: new FormControl('', Validators.required)
+      })
+    );
+    this.cd.detectChanges();
+  }
+
+  addCustomDns() {
+    const control = new FormControl('', Validators.required);
+    this.customDns.push(control);
+  }
+
+  removeRetentionPolicy(index: number) {
+    this.jointSources.removeAt(index);
+    this.jointSources.controls.forEach((x) => x.get('ref').updateValueAndValidity());
+    this.cd.detectChanges();
+  }
+
+  removeCustomDNS(index: number) {
+    this.customDns.removeAt(index);
+  }
 }

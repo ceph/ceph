@@ -1,24 +1,26 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
+import { catchError, switchMap } from 'rxjs/operators';
+import { BehaviorSubject, Observable, of } from 'rxjs';
 
 import _ from 'lodash';
-import { Subscription } from 'rxjs';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
-import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { Permission } from '~/app/shared/models/permissions';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { Permission } from '~/app/shared/models/permissions';
+
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SmbService } from '~/app/shared/api/smb.service';
-import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { SMBCluster } from '../smb.model';
 
-
-const BASE_URL = 'cephfs/smb';
-
+const BASE_URL = 'cephfs/smb'; 
 @Component({
   selector: 'cd-smb-cluster-list',
   templateUrl: './smb-cluster-list.component.html',
@@ -28,14 +30,13 @@ const BASE_URL = 'cephfs/smb';
 export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })
   table: TableComponent;
-
   columns: CdTableColumn[];
   permission: Permission;
-  selection = new CdTableSelection();
-  summaryDataSubscription: Subscription;
-  viewCacheStatus: any;
-  smbClusters: any[];
   tableActions: CdTableAction[];
+  context: CdTableFetchDataContext;
+  selection = new CdTableSelection();
+  smbClusters$: Observable<SMBCluster[]>;
+  subject$ = new BehaviorSubject<SMBCluster[]>([]);
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -44,8 +45,22 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
     private urlBuilder: URLBuilderService,
   ) {
     super();
-
     this.permission = this.authStorageService.getPermissions().smb;
+  }
+
+  ngOnInit() {
+    this.columns = [
+      {
+        name: $localize`Name`,
+        prop: 'cluster_id',
+        flexGrow: 2
+      },
+      {
+        name: $localize`Authentication Mode`,
+        prop: 'auth_mode',
+        flexGrow: 2
+      }
+    ];
     this.tableActions = [
       {
         name: this.actionLabels.CREATE + ' Cluster ',
@@ -55,60 +70,23 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
         
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
       },
-      {
-        name: this.actionLabels.CREATE + ' Share ',
-        permission: 'create',
-        icon: Icons.add,
-        click: () => this.openModal(),
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
-      },
-      {
-        name: this.actionLabels.EDIT,
-        permission: 'update',
-        icon: Icons.edit,
-        click: () => this.openModal()
-      },
-      {
-        name: this.actionLabels.REMOVE,
-        permission: 'read',
-        icon: Icons.bars,
-        click: () => this.openModal()
-      }
     ];
-  }
 
-  ngOnInit() {
-    this.columns = [
-      {
-        name: $localize`Cluster`,
-        prop: 'cluster_id',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Auth Mode`,
-        prop: 'auth_mode',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Intent`,
-        prop: 'intent',
-        flexGrow: 2
-      }
-    ];
-  }
-
-  openModal() {
-    throw new Error('Method not implemented.');
-  }
-
-  loadSMBCluster(context: CdTableFetchDataContext) {
-    this.smbService.list().subscribe(
-      (resp: any[]) => {
-        this.smbClusters = resp;
-      },
-      () => {
-        context.error();
-      }
+    this.smbClusters$ = this.subject$.pipe(
+      switchMap(() =>
+        this.smbService.listClusters().pipe(
+          catchError(() => {
+            this.context.error();
+            return of(null);
+          })
+        )
+      )
     );
+  }
+
+
+
+  loadSMBCluster() {
+    this.subject$.next([]);
   }
 }

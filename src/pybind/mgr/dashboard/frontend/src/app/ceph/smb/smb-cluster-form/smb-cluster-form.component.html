@@ -1,7 +1,7 @@
 <div cdsCol [columnNumbers]="{ md: 4 }" *ngIf="orchStatus$ | async as orchStatus">
     <!-- <ng-container *cdFormLoading="loading"> -->
     <form name="smbForm" #formDir="ngForm" [formGroup]="smbForm" novalidate>
-      <div i18n="form title" class="form-header">Create Cluster</div>
+      <div i18n="form title" class="form-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
 
  <!-- Cluster Id -->
  <div class="form-item">
@@ -56,36 +56,69 @@
 
         <!-- Domain Setting -->
         <div class="form-item" *ngIf="this.smbForm.get('auth_mode').value === 'active-directory'">
-            <cds-text-label for="domain_setting"
-                          i18n
-                        
-                          cdRequiredField="Domain Setting"
-                          [invalid]="smbForm.controls.domain_setting.invalid && (smbForm.controls.domain_setting.dirty)"
-                          [invalidText]="domainError">Domain Setting
-            <input cdsText
-                   type="text"
-                   placeholder="Domain Setting..."
-                   i18n-placeholder
-                   id="domain_setting"
-                   name="domain_setting"
-                   formControlName="domain_setting"
-                   [invalid]="smbForm.controls.domain_setting.invalid && (smbForm.controls.domain_setting.dirty)">
+          <div cdsCol
+               [columnNumbers]="{md: 12}"
+               class="d-flex">
+               <cds-text-label for="domain_setting"
+               i18n
+             
+               cdRequiredField="Domain Setting"
+               [invalid]="smbForm.controls.domain_setting.invalid && (smbForm.controls.domain_setting.dirty)"
+               [invalidText]="domainError">Domain Setting
+              <div class="cds-input-group">
+                <input cdsText
+             type="text"
+             placeholder="Domain Setting..."
+             i18n-placeholder
+             id="domain_setting"
+             name="domain_setting"
+             formControlName="domain_setting"
+             [invalid]="smbForm.controls.domain_setting.invalid && (smbForm.controls.domain_setting.dirty)">
+           
+            <cds-icon-button kind="ghost"
+            size="md"
+          >
+                   <svg cdsIcon="edit"
+                   size="32"
+                   class="cds--btn__icon"
+                   icon></svg>
+               
+               
+                 </cds-icon-button>
+                
+                
+             <cds-icon-button kind="ghost"
+             size="md"
+           >
+                    <svg cdsIcon="trash-can"
+                    size="32"
+                    class="cds--btn__icon"
+                    icon></svg>
+                
+                
+                  </cds-icon-button>
+                  <button cdsButton="tertiary"
+                  type="button"
+                  (click)="showDomainSettingModal()"
+                  >
+                  Domain Setting
+            <svg cdsIcon="add"
+                 size="32"
+                 class="cds--btn__icon"
+                 icon></svg>
+          </button>
+              </div>
             </cds-text-label>
-            <ng-template #domainError>
-            <span class="invalid-feedback"
-                  *ngIf="smbForm.showError('domain_setting', formDir, 'required')"
-                  i18n>This field is required.</span>
-            </ng-template>
-            </div> 
-    
+          </div>
+          </div>
+
             <!-- User Group Setting -->
           <div class="form-item" *ngIf="this.smbForm.get('auth_mode').value === 'user'">
             <cds-text-label for="user_group_setting" 
                           i18n
                         
                           cdRequiredField="User group Setting"
-                          [invalid]="smbForm.controls.user_group_setting.invalid && (smbForm.controls.user_group_setting.dirty)"
-                          [invalidText]="userGroupError">User Group Setting
+                          >User Group Setting
             <input cdsText
                    type="text"
                    placeholder="User Group Setting..."
@@ -93,15 +126,71 @@
                    id="user_group_setting"
                    name="user_group_setting"
                    formControlName="user_group_setting"
-                   [invalid]="smbForm.controls.user_group_setting.invalid && (smbForm.controls.user_group_setting.dirty)">
+                  >
             </cds-text-label>
-            <ng-template #userGroupError>
-            <span class="invalid-feedback"
-                  *ngIf="smbForm.showError('user_group_setting', formDir, 'required')"
-                  i18n>This field is required.</span>
-            </ng-template>
             </div> 
 
+             <!-- Joint Source -->
+      <ng-container
+      formArrayName="jointSources"
+      *ngFor="let jointSource of jointSources.controls; index as i"
+    >
+      <ng-container [formGroupName]="i">
+        <div cdsRow class="form-item form-item-append">
+          <div cdsCol [columnNumbers]="{ lg: 8 }">
+            <input
+              cdsText
+              type="text"
+              [id]="'source_type' + i"
+              [name]="'source_type' + i"
+              formControlName="source_type"
+              placeholder="Source Type"
+              modal-primary-focus
+            />
+          </div>
+          <div cdsCol [columnNumbers]="{ lg: 7 }">
+            <input
+              cdsText
+              type="text"
+              placeholder="Ref.."
+              [id]="'ref' + i"
+              [name]="'ref' + i"
+              formControlName="ref"
+              modal-primary-focus
+              [invalid]="smbForm.controls['jointSources'].controls[i].invalid && smbForm.controls['jointSources'].dirty"
+                            [invalidText]="refError"
+            />
+            <ng-template #refError>
+              <span
+                class="invalid-feedback"
+                *ngIf="smbForm.showError('jointSources', formDir, 'required')"
+                i18n
+                >This field is required.</span
+              >
+            </ng-template>
+          </div>
+          <div cdsCol [columnNumbers]="{ lg: 1 }" class="item-action-btn">
+            <cds-icon-button kind="tertiary" size="sm" (click)="removeRetentionPolicy(i)">
+              <svg cdsIcon="trash-can" size="32" class="cds--btn__icon"></svg>
+            </cds-icon-button>
+          </div>
+        </div>
+        <ng-template #retentionPolicyError>
+          <span
+            class="invalid-feedback"
+            *ngIf="smbForm.controls['jointSources'].controls[i].invalid"
+            i18n
+            >This retention policy already exists for the selected directory.</span
+          >
+        </ng-template>
+      </ng-container>
+    </ng-container>
+    <div class="form-item" *ngIf="this.smbForm.get('auth_mode').value === 'user'">
+      <button cdsButton="tertiary" type="button" (click)="addRetentionPolicy()" i18n>
+        Add Joint Source
+        <svg cdsIcon="add" size="32" class="cds--btn__icon" icon></svg>
+      </button>
+    </div>
        <!-- Intent -->
        <div class="form-item">
         <cds-select formControlName="intent"
@@ -201,10 +290,49 @@
                     <option *ngFor="let data of allClustering"> {{data}}</option>
         
         </cds-select>
-    
       </div>
 
- <cd-form-button-panel (submitActionEvent)="submitAction()"
+        
+  <!-- Custom DNS -->
+  <ng-container
+  formArrayName="customDns"
+  *ngFor="let dns of customDns.controls; index as i"
+>
+ 
+    <div cdsRow class="form-item form-item-append">
+      <div cdsCol [columnNumbers]="{ lg: 8 }">
+        <input
+          cdsText
+         
+          [formControlName]="i"
+          placeholder="Custom DNS"
+          modal-primary-focus
+        />
+      </div>
+      <div cdsCol [columnNumbers]="{ lg: 1 }" class="item-action-btn">
+        <cds-icon-button kind="tertiary" size="sm" (click)="removeCustomDNS(i)">
+          <svg cdsIcon="trash-can" size="32" class="cds--btn__icon"></svg>
+        </cds-icon-button>
+      </div>
+    </div>
+    <ng-template #retentionPolicyError>
+      <span
+        class="invalid-feedback"
+        *ngIf="smbForm.controls['customDns'].controls[i].invalid"
+        i18n
+        >This retention policy already exists for the selected directory.</span
+      >
+    </ng-template>
+
+</ng-container>
+
+<div class="form-item">
+  <button cdsButton="tertiary" type="button" (click)="addCustomDns()" i18n>
+    Add Custom DNS
+    <svg cdsIcon="add" size="32" class="cds--btn__icon" icon></svg>
+  </button>
+</div>
+ <cd-form-button-panel (click)="submitAction()"
                               [form]="smbForm"
                         
                               [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"

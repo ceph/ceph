@@ -1395,7 +1395,7 @@
 
       <div class="modal-footer">
         <div class="text-right">
-          <cd-form-button-panel (submitActionEvent)="onSubmit()"
+          <cd-form-button-panel (click)="onSubmit()"
                                 [form]="serviceForm"
                                 [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
         </div>

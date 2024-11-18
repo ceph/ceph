@@ -1,19 +1,28 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
+
+import { SMBCluster } from '~/app/ceph/smb/smb.model';
 
 @Injectable({
   providedIn: 'root'
 })
 export class SmbService {
-  baseURL = 'api/smb/cluster';
+  baseURL = 'api/smb';
 
   constructor(private http: HttpClient) {}
 
-  list() {
-    return this.http.get(`${this.baseURL}`);
+  listClusters(): Observable<SMBCluster[]> {
+    return this.http.get<SMBCluster[]>(`${this.baseURL}/cluster`);
   }
 
   create(request: any) {
-    return this.http.post(`${this.baseURL}`, {request });
+    return this.http.post(`${this.baseURL}/cluster`, {request });
+  }
+
+  delete(name: string) {
+    return this.http.delete(`${this.baseURL}/remove/${name}`, {
+      observe: 'response'
+    });
   }
 }

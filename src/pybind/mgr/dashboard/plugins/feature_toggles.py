@@ -6,7 +6,6 @@ from typing import List, Optional, Set, no_type_check
 import cherrypy
 from mgr_module import CLICommand, Option
 
-from ..controllers.smb import SMBCluster
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
@@ -27,7 +26,6 @@ class Features(Enum):
     RGW = 'rgw'
     NFS = 'nfs'
     DASHBOARD = 'dashboard'
-    SMB = 'smb'
 
 
 PREDISABLED_FEATURES = set()  # type: Set[str]
@@ -40,7 +38,6 @@ Feature2Controller = {
     Features.CEPHFS: [CephFS],
     Features.RGW: [Rgw, RgwDaemon, RgwBucket, RgwUser],
     Features.NFS: [NFSGaneshaUi, NFSGaneshaExports],
-    Features.SMB: [SMBCluster]
 }
 
 
@@ -146,7 +143,6 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             "rgw": (bool, ''),
             "nfs": (bool, ''),
             "dashboard": (bool, ''),
-            "smb": (bool, ''),
         }
 
         @APIRouter('/feature_toggles')

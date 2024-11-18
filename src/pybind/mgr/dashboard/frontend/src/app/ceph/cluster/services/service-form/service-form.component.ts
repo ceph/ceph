@@ -1146,6 +1146,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   onSubmit() {
     const self = this;
     const values: object = this.serviceForm.getRawValue();
+    console.log(values, "test");
     const serviceType: string = values['service_type'];
     let taskUrl = `service/${URLVerbs.CREATE}`;
     if (this.editing) {
