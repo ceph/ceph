@@ -42,6 +42,8 @@ namespace rgw::dedup {
     uint64_t md5_high;      // High Bytes of the Object Data MD5
     uint64_t md5_low;       // Low  Bytes of the Object Data MD5
     uint32_t size_4k_units; // Object size in 4KB units max out at 16TB (AWS MAX-SIZE is 5TB)
+    // TBD: can overload num_part to hold the 12 lower bits of obj_size when we
+    // got a single part
     uint16_t num_parts;     // How many parts were used in multipart upload (AWS MAX-PART is 10,000)
   } __attribute__((__packed__));
 
@@ -103,6 +105,7 @@ namespace rgw::dedup {
     int set_shared_manifest_mode(const key_t *p_key,
 				 disk_block_id_t block_id,
 				 record_id_t rec_id);
+    int  remove_objects_not_protected_by_md5(uint64_t max_allowed);
     void count_duplicates(uint64_t *p_singleton_count,
 			  uint64_t *p_unique_count,
 			  uint64_t *p_duplicate_count);

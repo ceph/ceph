@@ -120,35 +120,6 @@ namespace rgw::dedup {
     delete p_dedup_cluster_ioctx;
   }
 
-  //---------------------------------------------------------------------------
-  int Background::read_bucket_stats(rgw::sal::Bucket *bucket, const string &bucket_name)
-  {
-    const auto& index = bucket->get_info().get_current_index();
-    if (is_layout_indexless(index)) {
-      derr << "error, indexless buckets do not maintain stats; bucket="
-	   << bucket_name << dendl;
-      return -EINVAL;
-    }
-
-    std::map<RGWObjCategory, RGWStorageStats> stats;
-    std::string bucket_ver, master_ver;
-    std::string max_marker;
-    int ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
-    if (ret < 0) {
-      derr << "error getting bucket stats bucket=" << bucket_name << " ret=" << ret << dendl;
-      return ret;
-    }
-#if 0
-    for (auto itr = stats.begin(); itr != stats.end(); ++itr) {
-      RGWStorageStats& s = itr->second;
-      ldpp_dout(dpp, 1) << __func__ << "::" << to_string(itr->first)<< "::num_obj" << s.num_objects << "::size=" << s.size << dendl;
-    }
-
-    utime_t ut(bucket->get_modification_time());
-    ldpp_dout(dpp, 1) << __func__ << "::modification_time=" << ut << dendl;
-#endif
-    return 0;
-  }
 #if 0
   //---------------------------------------------------------------------------
   void Background::calc_object_key(uint64_t object_size, bufferlist &etag_bl, struct Key *p_key)
@@ -563,6 +534,71 @@ namespace rgw::dedup {
     return ret;
   }
 
+  using ceph::crypto::SHA256;
+  //---------------------------------------------------------------------------
+  int Background::calc_object_sha256(const disk_record_t *p_rec, unsigned char *p_sha256)
+  {
+    // Open questions -
+    // 1) do we need the secret if so what is the correct one to use?
+    // 2) are we passing the head/tail objects in the correct order?
+    RGWObjManifest manifest;
+    try {
+      auto bl_iter = p_rec->manifest_bl.cbegin();
+      decode(manifest, bl_iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad src manifest" << dendl;
+      return -1;
+    }
+
+    librados::IoCtx ioctx;
+    std::string oid;
+    int ret = get_ioctx1(dpp, driver, rados, p_rec->bucket_name, p_rec->obj_name, &ioctx, &oid);
+    if (unlikely(ret != 0)) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx()" << dendl;
+      return -1;
+    }
+
+    librados::IoCtx head_ioctx;
+    std::string secret("0555b35654ad1656d804");
+    TOPNSPC::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
+    for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p) {
+      rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
+      rgw_rados_ref obj;
+      ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
+      if (ret < 0) {
+	ldpp_dout(dpp, 1) << "manifest::failed to open rados context for " << obj << dendl;
+	return -1;
+      }
+
+      if (oid == raw_obj.oid) {
+	ldpp_dout(dpp, 1) << "manifest::head object=" << oid << dendl;
+	head_ioctx = obj.ioctx;
+      }
+      bufferlist bl;
+      librados::IoCtx ioctx = obj.ioctx;
+      ret = ioctx.read_full(raw_obj.oid, bl);
+      if (ret > 0) {
+	for (const auto& bptr : bl.buffers()) {
+	  hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
+	}
+      }
+      else {
+	ldpp_dout(dpp, 1) << "ERR: failed to read " << oid
+			  << ", error is " << cpp_strerror(ret) << dendl;
+	return ret;
+      }
+    }
+    hmac.Final(p_sha256);
+    uint64_t *arr = (uint64_t*)p_sha256;
+    char buff[64+1];
+    snprintf(buff, sizeof(buff), "%016lx%016lx%016lx%016lx", arr[0], arr[1], arr[2], arr[3]);
+    ldpp_dout(dpp, 1) << "SHA256=|||" << buff << "|||" << dendl;
+    //RGW_ATTR_SHA256
+    //set_attrs(Attrs a);
+    //int setxattr(const std::string& oid, const char *name, bufferlist& bl);
+    return 0;
+  }
+
   //---------------------------------------------------------------------------
   static void try_deduping_record_dbg(const DoutPrefixProvider* dpp,
 				      const disk_record_t *p_tgt_rec,
@@ -695,99 +731,7 @@ namespace rgw::dedup {
 
     return 0;
   }
-
-  using ceph::crypto::SHA256;
-  //---------------------------------------------------------------------------
-  int Background::calc_object_sha256(const disk_record_t *p_rec, unsigned char *p_sha256)
-  {
-    RGWObjManifest manifest;
-    try {
-      auto bl_iter = p_rec->manifest_bl.cbegin();
-      decode(manifest, bl_iter);
-    } catch (buffer::error& err) {
-      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad src manifest" << dendl;
-      return -1;
-    }
-
-    librados::IoCtx ioctx;
-    std::string oid;
-    int ret = get_ioctx1(dpp, driver, rados, p_rec->bucket_name, p_rec->obj_name, &ioctx, &oid);
-    if (unlikely(ret != 0)) {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx()" << dendl;
-      return -1;
-    }
-
-    librados::IoCtx head_ioctx;
-    //SHA256 hash;
-    std::string secret("0555b35654ad1656d804");
-    TOPNSPC::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
-    for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p) {
-      rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
-      rgw_rados_ref obj;
-      ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
-      if (ret < 0) {
-	ldpp_dout(dpp, 1) << "manifest::failed to open rados context for " << obj << dendl;
-	return -1;
-      }
-
-      if (oid == raw_obj.oid) {
-	ldpp_dout(dpp, 1) << "manifest::head object=" << oid << dendl;
-	head_ioctx = obj.ioctx;
-      }
-      bufferlist bl;
-      librados::IoCtx ioctx = obj.ioctx;
-      ret = ioctx.read_full(raw_obj.oid, bl);
-      if (ret > 0) {
-	for (const auto& bptr : bl.buffers()) {
-	  //hash.Update((const unsigned char *)bptr.c_str(), bptr.length());
-	  hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
-	}
-      }
-      else {
-	ldpp_dout(dpp, 1) << "ERR: failed to read " << oid
-			  << ", error is " << cpp_strerror(ret) << dendl;
-	return ret;
-      }
-    }
-    //hash.Final(p_sha256);
-    hmac.Final(p_sha256);
-    uint64_t *arr = (uint64_t*)p_sha256;
-    char buff[64+1];
-    snprintf(buff, sizeof(buff), "%016lx%016lx%016lx%016lx", arr[0], arr[1], arr[2], arr[3]);
-    ldpp_dout(dpp, 1) << "SHA256=|||" << buff << "|||" << dendl;
-    //RGW_ATTR_SHA256
-    //set_attrs(Attrs a);
-    //int setxattr(const std::string& oid, const char *name, bufferlist& bl);
-    return 0;
 #if 0
-    RGW_ATTR_SHA256
-      sha256_digest_t CryptoKeyHandler::hmac_sha256(
-	const ceph::bufferlist& in) const
-    {
-      TOPNSPC::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
-
-      for (const auto& bptr : in.buffers()) {
-	hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
-      }
-      sha256_digest_t ret;
-      hmac.Final(ret.v);
-
-      return ret;
-    }
-
-    SHA256 hasher;
-    hasher.Update(reinterpret_cast<const unsigned char*>(msg.data()), msg.size());
-    hasher.Final(hash.v);
-
-    TOPNSPC::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
-    for (const auto& bptr : in.buffers()) {
-      hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
-    }
-    sha256_digest_t ret;
-    hmac.Final(ret.v);
-#endif
-  }
-
   //---------------------------------------------------------------------------
   void Background::calc_missing_sha256_for_all_src_objects(md5_shard_t md5_shard)
   {
@@ -822,7 +766,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) << __func__ << "::We fixed SHA256 for " << count << " objects" << dendl;
     }
   }
-
+#endif
   //---------------------------------------------------------------------------
   int Background::run_dedup_step(dedup_step_t step,
 				 md5_shard_t md5_shard,
@@ -955,8 +899,8 @@ namespace rgw::dedup {
       return 1;
     }
     uint64_t size = obj->get_size();
-#if 0
-    if (size <= 4*1024*1024) {
+#if 1
+    if (size <= d_min_obj_size_for_dedup) {
       p_worker_stats->ingress_skip_too_small++;
       // dedup only useful for objects bigger than 4MB
       return 0;
@@ -1177,13 +1121,40 @@ namespace rgw::dedup {
 
     d_table.count_duplicates(&(p_stats->singleton_count), &(p_stats->unique_count),
 			     &(p_stats->duplicate_count));
+    uint64_t obj_count_in_shard = (p_stats->singleton_count +
+				   p_stats->unique_count +
+				   p_stats->duplicate_count);
     ldpp_dout(dpp, 1) << "\n>>>>>" << __func__ << "::FINISHED STEP_BUILD_TABLE"
+		      << "::total_count="      << obj_count_in_shard
 		      << "::singleton_count="  << p_stats->singleton_count
 		      << "::unique_count="     << p_stats->unique_count
 		      << "::duplicate_count="  << p_stats->duplicate_count << dendl;
 
     d_table.remove_singletons_and_redistribute_keys();
-    calc_missing_sha256_for_all_src_objects(md5_shard);
+    uint64_t max_protected_objects_per_shard = d_max_protected_objects / MAX_MD5_SHARD;
+#if 1
+    if (obj_count_in_shard > max_protected_objects_per_shard) {
+      d_table.remove_objects_not_protected_by_md5(max_protected_objects_per_shard);
+    }
+#else
+    // The chance for collison with a 128bit MD5 is 1/(2^64) for object sizes
+    // with less than 6 billion instances (round down to 2^32 for extra safety)
+    ldpp_dout(dpp, 0) <<__func__
+		      << "::all_buckets_obj_count=" << d_all_buckets_obj_count
+		      << "::all_buckets_obj_size=" << d_all_buckets_obj_size
+		      << dendl;
+
+    // when we fail bucket stat collection d_all_buckets_obj_count is set to zero
+    if (!d_all_buckets_obj_count || d_all_buckets_obj_count > d_max_protected_objects) {
+      uint64_t obj_count_ceiling = d_all_buckets_obj_size / d_min_obj_size_for_dedup;
+      ldpp_dout(dpp, 1) << __func__ << "::obj_count_ceiling=" << obj_count_ceiling << dendl;
+      if (obj_count_ceiling > d_max_protected_objects) {
+	if (obj_count_in_shard > max_protected_objects_per_shard) {
+	  d_table.remove_objects_not_protected_by_md5(max_protected_objects_per_shard);
+	}
+      }
+    }
+#endif
     for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
       run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, worker_id, slab_count_arr, p_stats);
       if (unlikely(should_stop())) {
@@ -1194,6 +1165,95 @@ namespace rgw::dedup {
 
     remove_slabs(md5_shard, slab_count_arr);
     return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::read_bucket_stats(const string &bucket_name,
+				    uint64_t     *p_num_obj,
+				    uint64_t     *p_size)
+  {
+    unique_ptr<rgw::sal::Bucket> bucket;
+    const string tenant_name, empty_bucket_id;
+    rgw_bucket b{tenant_name, bucket_name, empty_bucket_id};
+    int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
+    if (unlikely(ret != 0)) {
+      derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
+      return -ret;
+    }
+
+    const auto& index = bucket->get_info().get_current_index();
+    if (is_layout_indexless(index)) {
+      derr << "error, indexless buckets do not maintain stats; bucket="
+	   << bucket_name << dendl;
+      return -EINVAL;
+    }
+
+    std::map<RGWObjCategory, RGWStorageStats> stats;
+    std::string bucket_ver, master_ver;
+    std::string max_marker;
+    ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+    if (ret < 0) {
+      derr << "error getting bucket stats bucket=" << bucket_name << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    for (auto itr = stats.begin(); itr != stats.end(); ++itr) {
+      RGWStorageStats& s = itr->second;
+      ldpp_dout(dpp, 1) << __func__ << "::" << bucket_name << "::"
+			<< to_string(itr->first)
+			<< "::num_obj" << s.num_objects
+			<< "::size=" << s.size << dendl;
+      *p_num_obj += s.num_objects;
+      *p_size    += s.size;
+    }
+
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::collect_all_buckets_stats()
+  {
+    int ret = 0;
+    std::string section("bucket");
+    std::string marker;
+    void *handle = nullptr;
+    ret = driver->meta_list_keys_init(dpp, section, marker, &handle);
+    d_all_buckets_obj_count = 0;
+    d_all_buckets_obj_size  = 0;
+
+    bool has_more = true;
+    while (has_more) {
+      std::list<std::string> buckets;
+      constexpr int max_keys = 1000;
+      ret = driver->meta_list_keys_next(dpp, handle, max_keys, buckets, &has_more);
+      if (ret == 0) {
+	for (auto& bucket_name : buckets) {
+	  //ldpp_dout(dpp, 20) <<__func__ << "::" << bucket_name << dendl;
+	  ret = read_bucket_stats(bucket_name, &d_all_buckets_obj_count,
+				  &d_all_buckets_obj_size);
+	  if (unlikely(ret != 0)) {
+	    goto err;
+	  }
+	}
+	driver->meta_list_keys_complete(handle);
+      }
+      else {
+	derr << __func__ << "::failed driver->meta_list_keys_next()" << dendl;
+	ret = -1;
+	goto err;
+      }
+    }
+    ldpp_dout(dpp, 0) <<__func__
+		      << "::all_buckets_obj_count=" << d_all_buckets_obj_count
+		      << "::all_buckets_obj_size=" << d_all_buckets_obj_size
+		      << dendl;
+    return 0;
+
+  err:
+    // reset counters to mark that we don't have the info
+    d_all_buckets_obj_count = 0;
+    d_all_buckets_obj_size  = 0;
+    return ret;
   }
 
   //---------------------------------------------------------------------------
@@ -1363,7 +1423,7 @@ namespace rgw::dedup {
       return -1;
     }
     d_table.reset();
-
+    collect_all_buckets_stats();
     return 0;
   }
 

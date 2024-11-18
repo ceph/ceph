@@ -67,7 +67,10 @@ namespace rgw::dedup {
     int  f_ingress_work_shard(unsigned shard_id);
     int  f_dedup_md5_shard(unsigned shard_id);
     int  process_all_shards(bool ingress_work_shards, int (Background::* func)(unsigned));
-    int  read_bucket_stats(rgw::sal::Bucket *bucket, const std::string &bucket_name);
+    int  read_bucket_stats(const std::string &bucket_name,
+			   uint64_t     *p_num_obj,
+			   uint64_t     *p_size);
+    int  collect_all_buckets_stats();
     int  run_dedup_step(dedup_step_t step,
 			md5_shard_t md5_shard,
 			work_shard_t work_shard,
@@ -75,7 +78,9 @@ namespace rgw::dedup {
 			md5_stats_t *p_stats /* IN-OUT */);
 
     int calc_object_sha256(const disk_record_t *p_rec, unsigned char *p_sha256);
+#if 0
     void calc_missing_sha256_for_all_src_objects(md5_shard_t md5_shard);
+#endif
     int objects_dedup_single_md5_shard(md5_shard_t md5_shard,
 				       md5_stats_t *p_stats);
     int add_disk_record(const rgw::sal::Bucket *p_bucket,
@@ -122,6 +127,12 @@ namespace rgw::dedup {
     utime_t  d_heart_beat_last_update;
     unsigned d_heart_beat_max_elapsed_sec;
 
+    // A pool with 6 billion objects has a  1/(2^64) chance for collison with a 128bit MD5
+    uint64_t d_max_protected_objects = (6ULL * 1024 * 1024 * 1024);
+    uint64_t d_all_buckets_obj_count = 0;
+    uint64_t d_all_buckets_obj_size  = 0;
+    // we don't benefit from deduping RGW objects smaller than head-object size
+    uint32_t d_min_obj_size_for_dedup = (4ULL * 1024 * 1024);
     // allow to start/pasue/resume/stop execution
     bool d_shutdown_req     = false;
     bool d_remote_abort_req = false;

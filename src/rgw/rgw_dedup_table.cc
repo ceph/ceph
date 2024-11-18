@@ -188,6 +188,18 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  int dedup_table_t::remove_objects_not_protected_by_md5(uint64_t max_allowed)
+  {
+    std::unique_ptr<std::vector<uint32_t>> buckets;
+#if 0
+    if (!buckets) {
+      return -1;
+    }
+#endif
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
   void dedup_table_t::count_duplicates(uint64_t *p_singleton_count,
 				       uint64_t *p_unique_count,
 				       uint64_t *p_duplicate_count)
