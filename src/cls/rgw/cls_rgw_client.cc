@@ -21,67 +21,6 @@ using namespace librados;
 const string BucketIndexShardsManager::KEY_VALUE_SEPARATOR = "#";
 const string BucketIndexShardsManager::SHARDS_SEPARATOR = ",";
 
-
-int CLSRGWConcurrentIO::operator()() {
-  int ret = 0;
-  iter = objs_container.begin();
-  for (; iter != objs_container.end() && max_aio-- > 0; ++iter) {
-    ret = issue_op(iter->first, iter->second);
-    if (ret < 0)
-      break;
-  }
-
-  int num_completions = 0, r = 0;
-  std::map<int, std::string> completed_objs;
-  std::map<int, std::string> retry_objs;
-  while (manager.wait_for_completions(valid_ret_code(), &num_completions, &r,
-				      need_multiple_rounds() ? &completed_objs : nullptr,
-				      !need_multiple_rounds() ? &retry_objs : nullptr)) {
-    if (r >= 0 && ret >= 0) {
-      for (; num_completions && iter != objs_container.end(); --num_completions, ++iter) {
-	int issue_ret = issue_op(iter->first, iter->second);
-	if (issue_ret < 0) {
-	  ret = issue_ret;
-	  break;
-	}
-      }
-    } else if (ret >= 0) {
-      ret = r;
-    }
-
-    // if we're at the end with this round, see if another round is needed
-    if (iter == objs_container.end()) {
-      if (need_multiple_rounds() && !completed_objs.empty()) {
-	// For those objects which need another round, use them to reset
-	// the container
-	reset_container(completed_objs);
-	iter = objs_container.begin();
-      } else if (! need_multiple_rounds() && !retry_objs.empty()) {
-	reset_container(retry_objs);
-	iter = objs_container.begin();
-      }
-
-      // re-issue ops if container was reset above (i.e., iter !=
-      // objs_container.end()); if it was not reset above (i.e., iter
-      // == objs_container.end()) the loop will exit immediately
-      // without iterating
-      for (; num_completions && iter != objs_container.end(); --num_completions, ++iter) {
-	int issue_ret = issue_op(iter->first, iter->second);
-	if (issue_ret < 0) {
-	  ret = issue_ret;
-	  break;
-	}
-      }
-    }
-  }
-
-  if (ret < 0) {
-    cleanup();
-  }
-  return ret;
-} // CLSRGWConcurrentIO::operator()()
-
-
 /**
  * This class represents the bucket index object operation callback context.
  */

@@ -266,42 +266,6 @@ public:
 void cls_rgw_bucket_init_index(librados::ObjectWriteOperation& o);
 void cls_rgw_bucket_init_index2(librados::ObjectWriteOperation& o);
 
-class CLSRGWConcurrentIO {
-protected:
-  librados::IoCtx& io_ctx;
-
-  // map of shard # to oid; the shards that are remaining to be processed
-  std::map<int, std::string>& objs_container;
-  // iterator to work through objs_container
-  std::map<int, std::string>::iterator iter;
-
-  uint32_t max_aio;
-  BucketIndexAioManager manager;
-
-  virtual int issue_op(int shard_id, const std::string& oid) = 0;
-
-  virtual void cleanup() {}
-  virtual int valid_ret_code() { return 0; }
-  // Return true if multiple rounds of OPs might be needed, this happens when
-  // OP needs to be re-send until a certain code is returned.
-  virtual bool need_multiple_rounds() { return false; }
-  // Add a new object to the end of the container.
-  virtual void add_object(int shard, const std::string& oid) {}
-  virtual void reset_container(std::map<int, std::string>& objs) {}
-
-public:
-
-  CLSRGWConcurrentIO(librados::IoCtx& ioc,
-		     std::map<int, std::string>& _objs_container,
-		     uint32_t _max_aio) :
-  io_ctx(ioc), objs_container(_objs_container), max_aio(_max_aio)
-  {}
-
-  virtual ~CLSRGWConcurrentIO() {}
-
-  int operator()();
-}; // class CLSRGWConcurrentIO
-
 void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
                                     uint64_t timeout);
 
