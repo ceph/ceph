@@ -2,7 +2,6 @@
 # pylint: disable=too-many-lines
 import errno
 import json
-import logging
 import os
 from collections import defaultdict
 from typing import Any, Dict, List
@@ -29,8 +28,6 @@ GET_STATFS_SCHEMA = {
     'files': (int, ''),
     'subdirs': (int, '')
 }
-
-logger = logging.getLogger("controllers.rgw")
 
 
 # pylint: disable=R0904
