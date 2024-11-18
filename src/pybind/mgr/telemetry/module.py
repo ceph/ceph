@@ -633,50 +633,19 @@ class Module(MgrModule):
         result = {"osd" : {},
                   "mon" : {}}
         
-        """
-        Metrics for OSD
-        """
+        anonymized_daemons = {}
+        osd_map = self.get('osd_map')
 
-        # Get list of OSD ids from the metadata
-        osd_metadata = self.get('osd_metadata')
-
-        # Loop through each OSD
-        for osd_id in osd_metadata:
-            cmd_dict = {
-                'prefix': 'dump_rocksdb_stats',
-                'level': 'telemetry',
-                'id': str(osd_id),
-                'format': 'json'
-            }
-
-            r, outb, outs = self.osd_command(cmd_dict)
-
-
-            if r != 0:
-                self.log.error(f"Invalid command for osd.{osd_id}: {cmd_dict}")
-                continue
-
-            try:
-
-                dump = json.loads(outb)
-                result["osd"][f"osd.{osd_id}"] = dump
-
-            except (json.decoder.JSONDecodeError, KeyError) as e:
-                self.log.exception(f"Error caught on osd.{osd_id}: {e}")
-                continue
-
-        """
-        Metrics for MON
-        """
-
+        # Combine available daemons
         daemons = []
-        # make sure to enable perf collection
+        for osd in osd_map['osds']:
+            daemons.append('osd'+'.'+str(osd['osd']))
+
         if self.is_enabled_collection(Collection.perf_memory_metrics):
             mon_map = self.get('mon_map')
             for mon in mon_map['mons']:
                 daemons.append('mon'+'.'+mon['name'])
 
-        # daemon list should look like ["mon.id1", "mon.id2"]
         for daemon in daemons:
             daemon_type, daemon_id = daemon.split('.', 1)
             cmd_dict = {
@@ -684,20 +653,23 @@ class Module(MgrModule):
                 'level' : 'telemetry',
                 'format': 'json'
             }
-
-            # hardcoded type and id for now
-            daemon_type = "mon"
-            daemon_id = "a"
-            # works with osd
-            daemon_type = "osd"
-            daemon_id = "0"
             r, outb, outs = self.tell_command(daemon_type, daemon_id, cmd_dict)
-            if r == 0:
-                dump = json.loads(outb)
-                result["mon"] = dump
+            if r != 0:
+                self.log.error("Invalid command dictionary: {}".format(cmd_dict))
+                continue
             else:
-                # If we do not get a proper dump just add the type and id to the report
-                result["mon"] = [daemon_type,daemon_id]
+                try:
+                    dump = json.loads(outb)
+
+                    # Anonymize mon
+                    if daemon_type != 'osd':
+                        anonymized_daemons[daemon] = self.anonymize_entity_name(daemon)
+                        daemon = anonymized_daemons[daemon]
+                    result[daemon_type][daemon] = dump
+
+                except (json.decoder.JSONDecodeError, KeyError) as e:
+                    self.log.exception("Error caught on {}.{}: {}".format(daemon_type, daemon_id, e))
+                    continue
         return result
 
     def get_osd_histograms(self, mode: str = 'separated') -> List[Dict[str, dict]]:
