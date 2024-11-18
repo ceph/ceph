@@ -304,27 +304,28 @@ void BackfillFixture::request_replica_scan(
   const hobject_t& begin,
   const hobject_t& end)
 {
-  BackfillInterval bi;
-  bi.end = backfill_targets.at(target).store.list(begin, [&bi](auto kv) {
-    bi.objects.insert(std::move(kv));
+  std::map<hobject_t,eversion_t> objects;
+  hobject_t scan_beign, scan_end;
+  scan_end = backfill_targets.at(target).store.list(begin, [&objects](auto kv) {
+    objects.insert(std::move(kv));
   });
-  bi.begin = begin;
-  bi.version = backfill_source.last_update;
 
-  schedule_event(crimson::osd::BackfillState::ReplicaScanned{ target, std::move(bi) });
+  BackfillInterval scanned_bi(begin, scan_end, std::move(objects), backfill_source.last_update);
+  schedule_event(crimson::osd::BackfillState::ReplicaScanned{ target, std::move(scanned_bi) });
 }
 
 void BackfillFixture::request_primary_scan(
   const hobject_t& begin)
 {
-  BackfillInterval bi;
-  bi.end = backfill_source.store.list(begin, [&bi](auto kv) {
-    bi.objects.insert(std::move(kv));
-  });
-  bi.begin = begin;
-  bi.version = backfill_source.last_update;
+  std::map<hobject_t,eversion_t> objects;
+  hobject_t scan_beign, scan_end;
 
-  schedule_event(crimson::osd::BackfillState::PrimaryScanned{ std::move(bi) });
+  scan_end = backfill_source.store.list(begin, [&objects](auto kv) {
+    objects.insert(std::move(kv));
+  });
+
+  BackfillInterval scanned_bi(begin, scan_end, std::move(objects), backfill_source.last_update);
+  schedule_event(crimson::osd::BackfillState::PrimaryScanned{ std::move(scanned_bi) });
 }
 
 void BackfillFixture::enqueue_push(
