@@ -2617,7 +2617,9 @@ int POSIXBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list
   return 0;
 }
 
-int POSIXBucket::check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
+int POSIXBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                             std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                             std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
 {
   return 0;
 }

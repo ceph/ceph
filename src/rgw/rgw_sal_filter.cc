@@ -935,11 +935,11 @@ int FilterBucket::remove_objs_from_index(const DoutPrefixProvider *dpp,
   return next->remove_objs_from_index(dpp, objs_to_unlink);
 }
 
-int FilterBucket::check_index(const DoutPrefixProvider *dpp,
+int FilterBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
 			      std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
 			      std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
 {
-  return next->check_index(dpp, existing_stats, calculated_stats);
+  return next->check_index(dpp, y, existing_stats, calculated_stats);
 }
 
 int FilterBucket::rebuild_index(const DoutPrefixProvider *dpp)

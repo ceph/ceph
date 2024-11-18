@@ -763,9 +763,11 @@ int RadosBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list
   return store->getRados()->remove_objs_from_index(dpp, info, objs_to_unlink);
 }
 
-int RadosBucket::check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
+int RadosBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                             std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                             std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
 {
-  return store->getRados()->bucket_check_index(dpp, info, &existing_stats, &calculated_stats);
+  return store->getRados()->bucket_check_index(dpp, y, info, &existing_stats, &calculated_stats);
 }
 
 int RadosBucket::rebuild_index(const DoutPrefixProvider *dpp)

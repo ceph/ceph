@@ -5701,7 +5701,8 @@ static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
   }
 }
 
-int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
+int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                                 const RGWBucketInfo& bucket_info,
 				 map<RGWObjCategory, RGWStorageStats> *existing_stats,
 				 map<RGWObjCategory, RGWStorageStats> *calculated_stats)
 {

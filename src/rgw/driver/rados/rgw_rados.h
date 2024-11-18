@@ -1586,7 +1586,8 @@ public:
 
   int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket);
 
-  int bucket_check_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
+  int bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                         const RGWBucketInfo& bucket_info,
                          std::map<RGWObjCategory, RGWStorageStats> *existing_stats,
                          std::map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info);

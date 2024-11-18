@@ -988,7 +988,7 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
   return 0;
 }
 
-int RGWBucket::check_index(const DoutPrefixProvider *dpp,
+int RGWBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
         RGWBucketAdminOpState& op_state,
         map<RGWObjCategory, RGWStorageStats>& existing_stats,
         map<RGWObjCategory, RGWStorageStats>& calculated_stats,
@@ -996,7 +996,7 @@ int RGWBucket::check_index(const DoutPrefixProvider *dpp,
 {
   bool fix_index = op_state.will_fix_index();
 
-  int r = bucket->check_index(dpp, existing_stats, calculated_stats);
+  int r = bucket->check_index(dpp, y, existing_stats, calculated_stats);
   if (r < 0) {
     set_err_msg(err_msg, "failed to check index error=" + cpp_strerror(-r));
     return r;
@@ -1420,7 +1420,7 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver,
     }
   }
 
-  ret = bucket.check_index(dpp, op_state, existing_stats, calculated_stats);
+  ret = bucket.check_index(dpp, y, op_state, existing_stats, calculated_stats);
   if (ret < 0) {
     return ret;
   }

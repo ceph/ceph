@@ -175,7 +175,9 @@ protected:
           std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
       virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
       virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) override;
-      virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
+      virtual int check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                              std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                              std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
       virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
       virtual int set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout) override;
       virtual int purge_instance(const DoutPrefixProvider *dpp, optional_yield y) override;

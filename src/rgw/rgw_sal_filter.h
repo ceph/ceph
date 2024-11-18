@@ -615,7 +615,7 @@ public:
   virtual int remove_objs_from_index(const DoutPrefixProvider *dpp,
 				     std::list<rgw_obj_index_key>&
 				     objs_to_unlink) override;
-  virtual int check_index(const DoutPrefixProvider *dpp,
+  virtual int check_index(const DoutPrefixProvider *dpp, optional_yield y,
 			  std::map<RGWObjCategory, RGWStorageStats>&
 			  existing_stats,
 			  std::map<RGWObjCategory, RGWStorageStats>&
