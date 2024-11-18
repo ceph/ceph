@@ -178,7 +178,7 @@ protected:
       virtual int check_index(const DoutPrefixProvider *dpp, optional_yield y,
                               std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
                               std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
-      virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
+      virtual int rebuild_index(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout) override;
       virtual int purge_instance(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual std::unique_ptr<Bucket> clone() override {

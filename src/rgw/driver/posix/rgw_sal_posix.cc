@@ -2624,7 +2624,7 @@ int POSIXBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
-int POSIXBucket::rebuild_index(const DoutPrefixProvider *dpp)
+int POSIXBucket::rebuild_index(const DoutPrefixProvider *dpp, optional_yield y)
 {
   return 0;
 }

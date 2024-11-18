@@ -5727,7 +5727,8 @@ int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y
   return 0;
 }
 
-int RGWRados::bucket_rebuild_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info)
+int RGWRados::bucket_rebuild_index(const DoutPrefixProvider *dpp, optional_yield y,
+                                   const RGWBucketInfo& bucket_info)
 {
   librados::IoCtx index_pool;
   map<int, string> bucket_objs;

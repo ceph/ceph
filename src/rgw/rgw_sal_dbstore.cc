@@ -317,7 +317,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::rebuild_index(const DoutPrefixProvider *dpp)
+  int DBBucket::rebuild_index(const DoutPrefixProvider *dpp, optional_yield y)
   {
     /* there is no index table in dbstore. Not applicable */
     return 0;

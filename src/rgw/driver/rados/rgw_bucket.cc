@@ -1003,7 +1003,7 @@ int RGWBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   if (fix_index) {
-    r = bucket->rebuild_index(dpp);
+    r = bucket->rebuild_index(dpp, y);
     if (r < 0) {
       set_err_msg(err_msg, "failed to rebuild index err=" + cpp_strerror(-r));
       return r;

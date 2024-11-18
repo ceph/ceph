@@ -942,9 +942,9 @@ int FilterBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
   return next->check_index(dpp, y, existing_stats, calculated_stats);
 }
 
-int FilterBucket::rebuild_index(const DoutPrefixProvider *dpp)
+int FilterBucket::rebuild_index(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return next->rebuild_index(dpp);
+  return next->rebuild_index(dpp, y);
 }
 
 int FilterBucket::set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout)
