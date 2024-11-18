@@ -156,29 +156,35 @@ public:
       return maybe_indirect_info.has_value();
     }
 
-    ceph::bufferptr get_bptr() const {
+    ceph::bufferlist get_bl() const {
       if (is_indirect()) {
-        return ceph::bufferptr(
-            extent->get_bptr(),
-            maybe_indirect_info->intermediate_offset,
-            maybe_indirect_info->length);
+        return do_get_indirect_range(0, maybe_indirect_info->length);
       } else {
-        return extent->get_bptr();
+        assert(extent->is_fully_loaded());
+        bufferlist bl;
+        bl.append(extent->get_bptr());
+        return bl;
       }
     }
 
     ceph::bufferlist get_range(
         extent_len_t offset, extent_len_t length) const {
       if (is_indirect()) {
-        assert(maybe_indirect_info->intermediate_offset + offset + length <=
-               extent->get_length());
-        assert(offset + length <= maybe_indirect_info->length);
-        return extent->get_range(
-            maybe_indirect_info->intermediate_offset + offset,
-            length);
+        return do_get_indirect_range(offset, length);
       } else {
         return extent->get_range(offset, length);
       }
+    }
+  private:
+    ceph::bufferlist do_get_indirect_range(
+        extent_len_t offset, extent_len_t length) const {
+      assert(is_indirect());
+      assert(maybe_indirect_info->intermediate_offset + offset + length <=
+             extent->get_length());
+      assert(offset + length <= maybe_indirect_info->length);
+      return extent->get_range(
+          maybe_indirect_info->intermediate_offset + offset,
+          length);
     }
   };
 
