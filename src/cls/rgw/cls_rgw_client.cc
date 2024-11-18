@@ -636,11 +636,16 @@ void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
   op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
 }
 
+void cls_rgw_bucket_reshard_log_trim(librados::ObjectWriteOperation& op)
+{
+  bufferlist in;
+  op.exec(RGW_CLASS, RGW_RESHARD_LOG_TRIM, in);
+}
+
 static bool issue_reshard_log_trim(librados::IoCtx& io_ctx, const string& oid, int shard_id,
                                    BucketIndexAioManager *manager) {
-  bufferlist in;
   ObjectWriteOperation op;
-  op.exec(RGW_CLASS, RGW_RESHARD_LOG_TRIM, in);
+  cls_rgw_bucket_reshard_log_trim(op);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 

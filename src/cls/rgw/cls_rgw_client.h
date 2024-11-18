@@ -574,3 +574,7 @@ void cls_rgw_get_bucket_resharding(librados::ObjectReadOperation& op,
 // decode the entry; may throw buffer::error
 void cls_rgw_get_bucket_resharding_decode(const bufferlist& out,
                                           cls_rgw_bucket_instance_entry& entry);
+
+// Try to remove all reshard log entries from the bucket index. Return success
+// if any entries were removed, and -ENODATA once they're all gone.
+void cls_rgw_bucket_reshard_log_trim(librados::ObjectWriteOperation& op);
