@@ -443,15 +443,6 @@ void cls_rgw_bucket_check_index_decode(const bufferlist& out,
 
 void cls_rgw_bucket_rebuild_index(librados::ObjectWriteOperation& op);
 
-class CLSRGWIssueBucketRebuild : public CLSRGWConcurrentIO {
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueBucketRebuild(librados::IoCtx& io_ctx, std::map<int, std::string>& bucket_objs,
-                           uint32_t max_aio) : CLSRGWConcurrentIO(io_ctx, bucket_objs, max_aio) {}
-  virtual ~CLSRGWIssueBucketRebuild() override {}
-};
-
 void cls_rgw_bilog_start(librados::ObjectWriteOperation& op);
 void cls_rgw_bilog_stop(librados::ObjectWriteOperation& op);
 

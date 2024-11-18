@@ -652,18 +652,6 @@ void cls_rgw_bucket_rebuild_index(librados::ObjectWriteOperation& op)
   op.exec(RGW_CLASS, RGW_BUCKET_REBUILD_INDEX, in);
 }
 
-static bool issue_bucket_rebuild_index_op(IoCtx& io_ctx, const int shard_id, const string& oid,
-    BucketIndexAioManager *manager) {
-  librados::ObjectWriteOperation op;
-  cls_rgw_bucket_rebuild_index(op);
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-int CLSRGWIssueBucketRebuild::issue_op(const int shard_id, const string& oid)
-{
-  return issue_bucket_rebuild_index_op(io_ctx, shard_id, oid, &manager);
-}
-
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates)
 {
   updates.append(op);
