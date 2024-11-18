@@ -5706,35 +5706,24 @@ int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y
 				 map<RGWObjCategory, RGWStorageStats> *existing_stats,
 				 map<RGWObjCategory, RGWStorageStats> *calculated_stats)
 {
-  librados::IoCtx index_pool;
-
-  // key - bucket index object id
-  // value - bucket index check OP returned result with the given bucket index object (shard)
-  map<int, string> oids;
-
-  int ret = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &oids, nullptr);
+  std::map<int, bufferlist> buffers;
+  int ret = svc.bi_rados->check_index(dpp, y, bucket_info, buffers);
   if (ret < 0) {
     return ret;
   }
 
-  // declare and pre-populate
-  map<int, struct rgw_cls_check_index_ret> bucket_objs_ret;
-  for (auto& iter : oids) {
-    bucket_objs_ret.emplace(iter.first, rgw_cls_check_index_ret());
-  }
+  try {
+    // decode and accumulate the results
+    for (const auto& kv : buffers) {
+      rgw_cls_check_index_ret result;
+      cls_rgw_bucket_check_index_decode(kv.second, result);
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  ret = CLSRGWIssueBucketCheck(index_pool, oids, bucket_objs_ret, cct->_conf->rgw_bucket_index_max_aio)();
-  if (ret < 0) {
-    return ret;
+      accumulate_raw_stats(result.existing_header, *existing_stats);
+      accumulate_raw_stats(result.calculated_header, *calculated_stats);
+    }
+  } catch (const ceph::buffer::error&) {
+    return -EIO;
   }
-
-  // aggregate results (from different shards if there are any)
-  for (const auto& iter : bucket_objs_ret) {
-    accumulate_raw_stats(iter.second.existing_header, *existing_stats);
-    accumulate_raw_stats(iter.second.calculated_header, *calculated_stats);
-  }
-
   return 0;
 }
 

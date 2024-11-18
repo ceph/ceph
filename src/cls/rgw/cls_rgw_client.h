@@ -435,6 +435,12 @@ void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
                         const std::string& start_marker,
                         const std::string& end_marker);
 
+void cls_rgw_bucket_check_index(librados::ObjectReadOperation& op,
+                                bufferlist& out);
+// decode the response; may throw buffer::error
+void cls_rgw_bucket_check_index_decode(const bufferlist& out,
+                                       rgw_cls_check_index_ret& result);
+
 /**
  * Check the bucket index.
  *

@@ -632,6 +632,20 @@ void cls_rgw_bucket_reshard_log_trim(librados::ObjectWriteOperation& op)
   op.exec(RGW_CLASS, RGW_RESHARD_LOG_TRIM, in);
 }
 
+void cls_rgw_bucket_check_index(librados::ObjectReadOperation& op,
+                                bufferlist& out)
+{
+  bufferlist in;
+  op.exec(RGW_CLASS, RGW_BUCKET_CHECK_INDEX, in, &out, nullptr);
+}
+
+void cls_rgw_bucket_check_index_decode(const bufferlist& out,
+                                       rgw_cls_check_index_ret& result)
+{
+  auto p = out.cbegin();
+  decode(result, p);
+}
+
 static bool issue_bucket_check_index_op(IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager,
     rgw_cls_check_index_ret *pdata) {
   bufferlist in;

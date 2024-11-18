@@ -148,6 +148,10 @@ public:
   int set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y,
                       const RGWBucketInfo& bucket_info, uint64_t timeout);
 
+  int check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                  const RGWBucketInfo& bucket_info,
+                  std::map<int, bufferlist>& buffers);
+
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info,
 		       optional_yield y) override;
