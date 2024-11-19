@@ -479,7 +479,11 @@ export class TaskMessageService {
     'cephfs/snapshot/schedule/deactivate': this.newTaskMessage(
       this.commonOperations.deactivate,
       (metadata) => this.snapshotSchedule(metadata)
-    )
+    ),
+    // smb
+    'smb/cluster/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.smb(metadata)
+    ),
   };
 
   newTaskMessage(
@@ -537,6 +541,10 @@ export class TaskMessageService {
     return $localize`NFS '${metadata.cluster_id}\:${
       metadata.export_id ? metadata.export_id : metadata.path
     }'`;
+  }
+
+  smb(metadata: any) {
+    return $localize`SMB '${metadata.cluster_id}'`;
   }
 
   service(metadata: any) {

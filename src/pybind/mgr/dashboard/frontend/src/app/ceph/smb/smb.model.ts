@@ -1,11 +1,12 @@
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
 
 export interface SMBCluster {
+  resource_type: string;
   cluster_id: string;
   auth_mode: AuthMode;
-  intent: string;
+  intent?: string;
   domain_settings?: DomainSettings;
-  user_group_settings?: string[];
+  user_group_settings?: DomainSettings['join_sources'][];
   custom_dns?: string[];
   placement?: CephServicePlacement;
   clustering?: string;
@@ -14,7 +15,7 @@ export interface SMBCluster {
 
 export interface DomainSettings {
   realm?: string;
-  join_sources_ref?: string[];
+  join_sources?: string[];
 }
 
 export interface PublicAddress {
@@ -26,3 +27,5 @@ export interface AuthMode {
   user: 'User';
   activeDirectory: 'active-directory';
 }
+
+export const Resource_Type = 'ceph.smb.cluster';
