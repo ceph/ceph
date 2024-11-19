@@ -4,7 +4,7 @@ tasks:
     timeout: 30m
     clients:
       client.0:
-        - nvmeof/fio_test.sh --rbd_iostat
+        - nvmeof/fio_test.sh
     env:
       RBD_POOL: mypool
       IOSTAT_INTERVAL: '10'

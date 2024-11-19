@@ -11,6 +11,7 @@ overrides:
       - NVMEOF_SINGLE_GATEWAY
       - NVMEOF_GATEWAY_DOWN
       - are in unavailable state
+      - is unavailable
       - is in error state
       - failed cephadm daemon
 
