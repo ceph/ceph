@@ -1,0 +1,27 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - FS_DEGRADED
+      - fs.*is degraded
+      - filesystem is degraded
+      - FS_INLINE_DATA_DEPRECATED
+      - FS_WITH_FAILED_MDS
+      - MDS_ALL_DOWN
+      - filesystem is offline
+      - MDS_DAMAGE
+      - MDS_DEGRADED
+      - MDS_FAILED
+      - MDS_INSUFFICIENT_STANDBY
+      - insufficient standby MDS daemons available
+      - MDS_UP_LESS_THAN_MAX
+      - online, but wants
+      - filesystem is online with fewer MDS than max_mds
+      - POOL_APP_NOT_ENABLED
+      - do not have an application enabled
+      - overall HEALTH_
+      - Replacing daemon
+      - deprecated feature inline_data
+      - BLUESTORE_SLOW_OP_ALERT
+      - slow operation indications in BlueStore
+      - experiencing slow operations in BlueStore
+      - MGR_MODULE_ERROR
