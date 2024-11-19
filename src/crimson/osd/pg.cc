@@ -907,11 +907,23 @@ void PG::mutate_object(
   }
 }
 
+void PG::enqueue_push_for_backfill(
+  const hobject_t &obj,
+  const eversion_t &v,
+  const std::vector<pg_shard_t> &peers)
+{
+  assert(recovery_handler);
+  assert(recovery_handler->backfill_state);
+  auto backfill_state = recovery_handler->backfill_state.get();
+  backfill_state->enqueue_standalone_push(obj, v, peers);
+}
+
 PG::interruptible_future<
   std::tuple<PG::interruptible_future<>,
              PG::interruptible_future<>>>
 PG::submit_transaction(
   ObjectContextRef&& obc,
+  ObjectContextRef&& new_clone,
   ceph::os::Transaction&& txn,
   osd_op_params_t&& osd_op_p,
   std::vector<pg_log_entry_t>&& log_entries)
@@ -924,8 +936,9 @@ PG::submit_transaction(
   }
 
   epoch_t map_epoch = get_osdmap_epoch();
+  auto at_version = osd_op_p.at_version;
 
-  peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, osd_op_p.at_version);
+  peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, at_version);
   peering_state.update_trim_to();
 
   ceph_assert(!log_entries.empty());
@@ -939,6 +952,7 @@ PG::submit_transaction(
   auto [submitted, all_completed] = co_await backend->submit_transaction(
       peering_state.get_acting_recovery_backfill(),
       obc->obs.oi.soid,
+      std::move(new_clone),
       std::move(txn),
       std::move(osd_op_p),
       peering_state.get_last_peering_reset(),
@@ -947,8 +961,8 @@ PG::submit_transaction(
   co_return std::make_tuple(
     std::move(submitted),
     all_completed.then_interruptible(
-      [this, last_complete=peering_state.get_info().last_complete,
-      at_version=osd_op_p.at_version](auto acked) {
+      [this, last_complete=peering_state.get_info().last_complete, at_version]
+      (auto acked) {
       for (const auto& peer : acked) {
         peering_state.update_peer_last_complete_ondisk(
           peer.shard, peer.last_complete_ondisk);
@@ -1153,11 +1167,13 @@ PG::submit_executer_fut PG::submit_executer(
     [FNAME, this](auto&& txn,
 		  auto&& obc,
 		  auto&& osd_op_p,
-		  auto&& log_entries) {
+		  auto&& log_entries,
+                  auto&& new_clone) {
       DEBUGDPP("object {} submitting txn", *this, obc->get_oid());
       mutate_object(obc, txn, osd_op_p);
       return submit_transaction(
 	std::move(obc),
+        std::move(new_clone),
 	std::move(txn),
 	std::move(osd_op_p),
 	std::move(log_entries));
@@ -1604,7 +1620,7 @@ bool PG::should_send_op(
     //    missing set
     hoid <= peering_state.get_peer_info(peer).last_backfill ||
     (has_backfill_state() && hoid <= get_last_backfill_started() &&
-     !peering_state.get_peer_missing(peer).is_missing(hoid)));
+     !is_missing_on_peer(peer, hoid)));
   if (!should_send) {
     ceph_assert(is_backfill_target(peer));
     logger().debug("{} issue_repop shipping empty opt to osd."
