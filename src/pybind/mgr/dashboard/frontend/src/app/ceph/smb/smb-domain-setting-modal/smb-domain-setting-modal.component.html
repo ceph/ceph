@@ -1,0 +1,120 @@
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="false"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+  </cds-modal-header>
+
+  <div cdsModalContent>
+    <form name="domainSettingForm"
+          #formDir="ngForm"
+          [formGroup]="domainSettingsForm"
+          novalidate>
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="realm"
+          [invalid]="
+            domainSettingsForm.controls.realm.invalid &&
+            (domainSettingsForm.controls.realm.touched || domainSettingsForm.controls.realm.dirty)
+          "
+          [invalidText]="realmNameError"
+          cdRequiredField="Realm Name"
+          i18n
+          >Realm Name
+          <input
+            cdsText
+            type="text"
+            placeholder="Realm name..."
+            id="realm"
+            name="realm"
+            formControlName="realm"
+            [invalid]="
+              domainSettingsForm.controls.realm.invalid &&
+              (domainSettingsForm.controls.realm.touched || domainSettingsForm.controls.realm.dirty)
+            "
+            [autofocus]="true"
+            modal-primary-focus
+          />
+        </cds-text-label>
+        <ng-template #realmNameError>
+          <span
+            class="invalid-feedback"
+            *ngIf="domainSettingsForm.showError('realm', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+
+      <!-- Join Source -->
+      <ng-container
+        formArrayName="joinSources"
+        *ngFor="let joinSource of joinSources.controls; index as i"
+      >
+        <ng-container [formGroupName]="i">
+          <div cdsRow
+               class="form-item form-item-append">
+            <div cdsCol
+                 [columnNumbers]="{ lg: 7 }">
+              <input
+                cdsText
+                type="text"
+                placeholder="Ref.."
+                [id]="'ref' + i"
+                [name]="'ref' + i"
+                formControlName="ref"
+                modal-primary-focus
+                [invalid]="
+                domainSettingsForm.controls['joinSources'].controls[i].invalid &&
+                domainSettingsForm.controls['joinSources'].dirty
+              "
+              [invalidText]="refError"
+                i18n/>
+              <ng-template #refError>
+                <span
+                  class="invalid-feedback"
+                  *ngIf="domainSettingsForm.showError('joinSources', formDir, 'required')"
+                  i18n
+                  >This field is required.</span
+                >
+              </ng-template>
+            </div>
+            <div cdsCol
+                 [columnNumbers]="{ lg: 1 }"
+                 class="item-action-btn">
+              <cds-icon-button kind="tertiary"
+                               size="sm"
+                               (click)="removeJoinSource(i)">
+                <svg cdsIcon="trash-can"
+                     size="32"
+                     class="cds--btn__icon"></svg>
+              </cds-icon-button>
+            </div>
+          </div>
+        </ng-container>
+      </ng-container>
+
+      <div class="form-item">
+        <button cdsButton="tertiary"
+                type="button"
+                (click)="addJoinSource()"
+                i18n>
+          Add Join Source
+          <svg cdsIcon="add"
+               size="32"
+               class="cds--btn__icon"
+               icon></svg>
+        </button>
+      </div>
+    </form>
+  </div>
+  <cd-form-button-panel
+    (submitActionEvent)="submit()"
+    [form]="domainSettingsForm"
+    [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+    [modalForm]="true"
+  >
+  </cd-form-button-panel>
+</cds-modal>
