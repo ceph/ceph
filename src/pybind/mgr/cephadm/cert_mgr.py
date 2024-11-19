@@ -133,6 +133,18 @@ class CertKeyStore():
     def _init_known_cert_key_dicts(self) -> None:
         # In an effort to try and track all the certs we manage in cephadm
         # we're being explicit here and listing them out.
+        self.cert_to_service {
+            'rgw_frontend_ssl_cert': 'rgw',
+            'iscsi_ssl_cert': 'iscsi',
+            'ingress_ssl_cert': 'ingress',
+            'nvmeof_server_cert': 'nvmeof',
+            'nvmeof_client_cert': 'nvmeof',
+            'nvmeof_root_ca_cert': 'nvmeof',
+            'mgmt_gw_cert': 'mgmt-gateway',
+            'oauth2_proxy_cert': 'oauth2-proxy',
+            'grafana_cert': 'grafana',
+        }
+
         self.known_certs = {
             'rgw_frontend_ssl_cert': {},  # service-name -> cert
             'iscsi_ssl_cert': {},  # service-name -> cert
@@ -341,18 +353,25 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
-    def check_cert_key_pair(self, cert_ref: str, cert: str, key: str, instance: str = '') -> None:
+    def check_certificate(self, cert_ref: str, cert: str, key: str, instance: str = '') -> Option[str]:
         """Helper method to validate a cert/key pair and handle errors."""
         if not cert.strip() and not key.strip():
             # Both cert and key are empty, nothing to check
             return
         try:
-            get_cert_issuer_info(cert)
+            (org, cn) = get_cert_issuer_info(cert)
             days_to_expiration = verify_tls(cert, key)
             if days_to_expiration < self.renewal_threshold_days:
-                # trigger renewal
+                # trigger certificate renewal using local self-signed certificates
                 logger.info(f'Certificate for "{cert_ref}" must be renewed as only {days_to_expiration} are left for expiration.')
-                pass
+                if org == 'Ceph' and cn == 'cephadm':
+                    new_cert, new_key = self.ssl_certs.renew_cert(cert, self.certificate_duration_days)
+                    self.ssl_certs.save_cert(cert_ref, new_cert)
+                    self.ssl_certs.save_key(cert_ref, new_key)
+                    return True
+                else:
+                    # TODO(redo): contact ACME to get a new certificate
+                    # self.enqueue_acme_certificate_renewal(cert_ref)
             else:
                 logger.info(f'Certificate for "{cert_ref}" is still valid for {days_to_expiration} days.')
             # self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
@@ -370,6 +389,7 @@ class CertMgr:
                 1,
                 [err_msg]
             )
+            return False
 
     def check_certificates(self) -> None:
 
@@ -387,6 +407,8 @@ class CertMgr:
             key = self.cert_key_store.get_key(key_ref, service_name=service_name, host=host)
             return cert, key, instance
 
+        #services_to_reconfig = self.get_acme_ready_certificates()
+        services_to_reconfig = []
         for cert_ref, cert_entries in self.cert_key_store.cert_ls().items():
             if not cert_entries:
                 # No certificates to check for this reference
@@ -397,8 +419,14 @@ class CertMgr:
                 instances = [instance for instance, exists in cert_entries.items() if exists]
                 for instance in instances:
                     cert, key, instance_info = get_cert_and_key(cert_ref, instance)
-                    self.check_cert_key_pair(cert_ref, cert, key, instance_info)
+                    if self.check_certificate(cert_ref, cert, key, instance_info):
+                        # TODO(redo): get srv name from the instance info
+                        services_to_reconfig.append(self.cert_key_store.cert_to_service[cert_ref])
             else:
                 # Global cert case
                 cert, key, _ = get_cert_and_key(cert_ref)
-                self.check_cert_key_pair(cert_ref, cert, key)
+                if self.check_certificate(cert_ref, cert, key):
+                    services_to_reconfig.append(self.cert_key_store.cert_to_service[cert_ref])
+
+        # return the list of services that need reconfiguration
+        return services_to_reconfig

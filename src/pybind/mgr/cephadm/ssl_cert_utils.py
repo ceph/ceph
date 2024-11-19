@@ -125,6 +125,67 @@ class SSLCerts:
 
         return (cert_str, key_str)
 
+
+    def renew_cert(
+        self,
+        old_cert: str,
+        new_duration_days: Optional[int] = None
+    ) -> Tuple[str, str]:
+        """
+        Renews a certificate, generating a new private key and extending its duration.
+
+        :param old_cert: The existing certificate (PEM format) to be renewed.
+        :param new_duration_days: The new validity duration for the certificate in days.
+                                  If not provided, it defaults to `self.certificate_duration_days`.
+        :return: A tuple containing the renewed certificate and the new private key (PEM format).
+        """
+        try:
+            # Load the old certificate
+            old_certificate = x509.load_pem_x509_certificate(old_cert.encode('utf-8'), backend=default_backend())
+
+            # Generate a new private key
+            new_private_key = rsa.generate_private_key(
+                public_exponent=65537, key_size=4096, backend=default_backend()
+            )
+
+            # Extract existing SANs
+            san_extension = old_certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+            san_list = san_extension.value
+
+            # Build a new certificate with the same attributes
+            builder = x509.CertificateBuilder()
+            builder = builder.subject_name(old_certificate.subject)
+            builder = builder.issuer_name(old_certificate.issuer)
+            builder = builder.not_valid_before(datetime.now())
+            builder = builder.not_valid_after(
+                datetime.now() + timedelta(days=new_duration_days or self.certificate_duration_days)
+            )
+            builder = builder.serial_number(x509.random_serial_number())
+            builder = builder.public_key(new_private_key.public_key())
+
+            # Reuse SANs
+            builder = builder.add_extension(san_list, critical=False)
+
+            # Retain the original basic constraints
+            basic_constraints = old_certificate.extensions.get_extension_for_class(x509.BasicConstraints)
+            builder = builder.add_extension(basic_constraints.value, critical=basic_constraints.critical)
+
+            # Sign the new certificate
+            renewed_cert = builder.sign(private_key=self.root_key, algorithm=hashes.SHA256(), backend=default_backend())
+
+            # Convert certificate and key to PEM format
+            cert_str = renewed_cert.public_bytes(encoding=serialization.Encoding.PEM).decode('utf-8')
+            key_str = new_private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption()
+            ).decode('utf-8')
+
+            return cert_str, key_str
+
+        except Exception as e:
+            raise SSLConfigException(f"Failed to renew certificate: {e}")
+
     def get_root_cert(self) -> str:
         try:
             return self.root_cert.public_bytes(encoding=serialization.Encoding.PEM).decode('utf-8')
