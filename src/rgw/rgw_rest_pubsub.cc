@@ -494,11 +494,11 @@ void RGWPSListTopicsOp::execute(optional_yield y) {
 
   const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2) &&
-      driver->stat_topics_v1(s->bucket->get_tenant(), null_yield, this) == -ENOENT) {
-    op_ret = ps.get_topics_v1(this, result, y);
-  } else {
+      driver->stat_topics_v1(get_account_or_tenant(s->owner.id), null_yield, this) == -ENOENT) {
     constexpr int max_items = 100;
     op_ret = ps.get_topics_v2(this, start_token, max_items, result, next_token, y);
+  } else {
+    op_ret = ps.get_topics_v1(this, result, y);
   }
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
