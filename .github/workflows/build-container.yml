@@ -1,0 +1,41 @@
+---
+name: "Containerized CEPH build"
+on:
+  push:
+    tags:
+      - '*'
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - main
+# Credit: https://stackoverflow.com/a/72408109
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  BUILD_ARTIFACT: build.tar.bz2
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 480  # Set timeout to 8 hours
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build ceph in centos9 stream container
+        run: |
+          docker run --rm -v "$(pwd):/src" -w /src quay.io/centos/centos:stream9 /bin/bash -c "./do_containerized_build.sh"
+
+      - name: Save ceph build
+        run: |
+          tar -cjf ${{ env.BUILD_ARTIFACT }} -C ./build .
+
+      - name: Upload ceph build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ceph_build
+          path: |
+            ${{ env.BUILD_ARTIFACT }}
