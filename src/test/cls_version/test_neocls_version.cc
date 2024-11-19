@@ -199,6 +199,7 @@ CORO_TEST_F(neocls_version, test_version_inc_check, NeoRadosTest)
     operation_canceled);
 }
 
+#if 0 // Disabled until we get rid of GCC11.
 TEST(neocls_version_bare, lambdata)
 {
   asio::io_context c;
@@ -234,3 +235,4 @@ TEST(neocls_version_bare, lambdata)
   c.run();
   ASSERT_EQ(iver, ever);
 }
+#endif
