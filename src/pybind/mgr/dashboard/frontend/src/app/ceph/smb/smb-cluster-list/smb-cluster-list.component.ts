@@ -78,11 +78,20 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   }
 
   ngOnInit() {
-    console.log(this.urlBuilder.getCreate());
     this.columns = [
       {
         name: $localize`Cluster`,
         prop: 'cluster_id',
+        flexGrow: 2
+      },
+      {
+        name: $localize`Auth Mode`,
+        prop: 'auth_mode',
+        flexGrow: 2
+      },
+      {
+        name: $localize`Intent`,
+        prop: 'intent',
         flexGrow: 2
       }
     ];
@@ -95,9 +104,7 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   loadSMBCluster(context: CdTableFetchDataContext) {
     this.smbService.list().subscribe(
       (resp: any[]) => {
-        this.smbClusters = resp.map((item) => ({
-          cluster_id: item
-        }));
+        this.smbClusters = resp;
       },
       () => {
         context.error();
