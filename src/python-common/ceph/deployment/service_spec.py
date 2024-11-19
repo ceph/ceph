@@ -1342,6 +1342,10 @@ class NvmeofServiceSpec(ServiceSpec):
                  ping_spdk_under_lock: Optional[bool] = False,
                  max_hosts_per_namespace: Optional[int] = 1,
                  max_namespaces_with_netmask: Optional[int] = 1000,
+                 max_subsystems: Optional[int] = 128,
+                 max_namespaces: Optional[int] = 1024,
+                 max_namespaces_per_subsystem: Optional[int] = 256,
+                 max_hosts_per_subsystem: Optional[int] = 32,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1425,6 +1429,14 @@ class NvmeofServiceSpec(ServiceSpec):
         self.max_hosts_per_namespace = max_hosts_per_namespace
         #: ``max_namespaces_with_netmask`` max number of namespaces which are not auto visible
         self.max_namespaces_with_netmask = max_namespaces_with_netmask
+        #: ``max_subsystems`` max number of subsystems
+        self.max_subsystems = max_subsystems
+        #: ``max_namespaces`` max number of namespaces on all subsystems
+        self.max_namespaces = max_namespaces
+        #: ``max_namespaces_per_subsystem`` max number of namespaces per one subsystem
+        self.max_namespaces_per_subsystem = max_namespaces_per_subsystem
+        #: ``max_hosts_per_subsystem`` max number of hosts per subsystems
+        self.max_hosts_per_subsystem = max_hosts_per_subsystem
         #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
@@ -1612,6 +1624,36 @@ class NvmeofServiceSpec(ServiceSpec):
             and self.max_log_directory_backups < 0
         ):
             raise SpecValidationError("Log file directory backups can't be negative")
+
+        if (self.max_hosts_per_namespace and self.max_hosts_per_namespace < 0):
+            raise SpecValidationError("Max hosts per namespace can't be negative")
+
+        if (self.max_namespaces_with_netmask and self.max_namespaces_with_netmask < 0):
+            raise SpecValidationError("Max namespaces with netmask can't be negative")
+
+        if type(self.max_subsystems) != int:
+            raise SpecValidationError("Max subsystems must be an integer")
+
+        if self.max_subsystems <= 0:
+            raise SpecValidationError("Max subsystems must be greater than zero")
+
+        if type(self.max_namespaces) != int:
+            raise SpecValidationError("Max namespaces must be an integer")
+
+        if self.max_namespaces <= 0:
+            raise SpecValidationError("Max namespaces must be greater than zero")
+
+        if type(self.max_namespaces_per_subsystem) != int:
+            raise SpecValidationError("Max namespaces per subsystem must be an integer")
+
+        if self.max_namespaces_per_subsystem <= 0:
+            raise SpecValidationError("Max namespaces per subsystem must be greater than zero")
+
+        if type(self.max_hosts_per_subsystem) != int:
+            raise SpecValidationError("Max hosts per subsystem must be an integer")
+
+        if self.max_hosts_per_subsystem <= 0:
+            raise SpecValidationError("Max hosts per subsystem must be greater than zero")
 
         if (
             self.monitor_timeout
