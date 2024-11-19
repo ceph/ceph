@@ -1,6 +1,6 @@
-pylint==2.6.0
-flake8==3.9.0
-flake8-colors==0.1.6
+pylint
+flake8
+#flake8-colors
 #TODO: Fix docstring issues: https://tracker.ceph.com/issues/41224
 #flake8-docstrings
 #pep8-naming
