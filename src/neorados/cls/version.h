@@ -22,11 +22,10 @@
 /// `VersionCond`. The byte strings are incomparable. Two versions
 /// with different strings will always conflict.
 
-#include <coroutine>
-#include <string>
 #include <utility>
 
 #include <boost/asio/async_result.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <boost/system/error_code.hpp>
 
 #include "include/neorados/RADOS.hpp"
@@ -166,6 +165,7 @@ namespace neorados::cls::version {
   }};
 }
 
+#if 0 // Disabled until we're off GCC11
 /// \brief Read the stored object version
 ///
 /// Execute an asynchronous operation that reads the stored version.
@@ -189,5 +189,30 @@ inline auto read(RADOS& r, Object o, IOContext ioc,
     [](cls_version_read_ret&& ret) {
       return std::move(ret.objv);
     }, std::forward<CompletionToken>(token));
+}
+#endif
+
+/// \brief Read the stored object version
+///
+/// Execute an asynchronous operation that reads the stored version.
+///
+/// \param r RADOS handle
+/// \param o Object to query
+/// \param ioc IOContext determining the object location
+///
+/// \return The object version in a way appropriate to the completion
+/// token. See Boost.Asio documentation.
+template<typename E>
+inline boost::asio::awaitable<obj_version, E>
+read(RADOS& r, Object o, IOContext ioc,
+     // Hack to avoid changing most current uses
+     boost::asio::use_awaitable_t<E> = boost::asio::use_awaitable)
+{
+  ReadOp op;
+  obj_version objv;
+  op.exec(read(&objv));
+  co_await r.execute(std::move(o), std::move(ioc), std::move(op),
+		     nullptr, boost::asio::use_awaitable);
+  co_return objv;
 }
 } // namespace neorados::cls::version
