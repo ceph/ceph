@@ -64,7 +64,8 @@ public:
   uint64_t get_supported_optimizations() const override {
     return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
       FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
-      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION;
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
   }
 
   unsigned int get_chunk_count() const override {
@@ -144,6 +145,13 @@ public:
 			  char **data,
 			  char **coding,
 			  int blocksize) override;
+
+  void encode_delta(const ceph::bufferptr &old_data,
+                    const ceph::bufferptr &new_data,
+                    ceph::bufferptr *delta_maybe_in_place);
+	void apply_delta(const shard_id_map<ceph::bufferptr> &in,
+	                 shard_id_map<ceph::bufferptr> &out);
+
   unsigned get_alignment() const override;
   size_t get_minimum_granularity() override
   {
