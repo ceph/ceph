@@ -1328,7 +1328,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
                  ping_spdk_under_lock: Optional[bool] = False,
-                 max_hosts_per_namespace: Optional[int] = 1,
+                 max_hosts_per_namespace: Optional[int] = 8,
                  max_namespaces_with_netmask: Optional[int] = 1000,
                  max_subsystems: Optional[int] = 128,
                  max_namespaces: Optional[int] = 1024,
@@ -1619,25 +1619,25 @@ class NvmeofServiceSpec(ServiceSpec):
         if (self.max_namespaces_with_netmask and self.max_namespaces_with_netmask < 0):
             raise SpecValidationError("Max namespaces with netmask can't be negative")
 
-        if type(self.max_subsystems) != int:
+        if not isinstance(self.max_subsystems, int):
             raise SpecValidationError("Max subsystems must be an integer")
 
         if self.max_subsystems <= 0:
             raise SpecValidationError("Max subsystems must be greater than zero")
 
-        if type(self.max_namespaces) != int:
+        if not isinstance(self.max_namespaces, int):
             raise SpecValidationError("Max namespaces must be an integer")
 
         if self.max_namespaces <= 0:
             raise SpecValidationError("Max namespaces must be greater than zero")
 
-        if type(self.max_namespaces_per_subsystem) != int:
+        if not isinstance(self.max_namespaces_per_subsystem, int):
             raise SpecValidationError("Max namespaces per subsystem must be an integer")
 
         if self.max_namespaces_per_subsystem <= 0:
             raise SpecValidationError("Max namespaces per subsystem must be greater than zero")
 
-        if type(self.max_hosts_per_subsystem) != int:
+        if not isinstance(self.max_hosts_per_subsystem, int):
             raise SpecValidationError("Max hosts per subsystem must be an integer")
 
         if self.max_hosts_per_subsystem <= 0:
