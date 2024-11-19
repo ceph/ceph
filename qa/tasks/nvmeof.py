@@ -469,7 +469,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
 
                 self.log(f'waiting for {revive_delay} secs before reviving')
                 time.sleep(revive_delay) # blocking wait
-                self.log('done waiting before reviving')
+                self.log(f'done waiting before reviving - iteration #{len(summary)}: {iteration_summary}')
 
                 self.do_checks()
                 self.switch_task()
@@ -488,7 +488,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 if thrash_delay > 0.0:
                     self.log(f'waiting for {thrash_delay} secs before thrashing')
                     time.sleep(thrash_delay) # blocking
-                    self.log('done waiting before thrashing')
+                    self.log('done waiting before thrashing - everything should be up now')
 
                 self.do_checks()
                 self.switch_task()
