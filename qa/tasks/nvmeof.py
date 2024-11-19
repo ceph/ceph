@@ -128,12 +128,11 @@ class Nvmeof(Task):
 
             total_images = int(self.namespaces_count) * int(self.subsystems_count)
             log.info(f'[nvmeof]: creating {total_images} images')
+            rbd_create_cmd = []
             for i in range(1, total_images + 1):
                 imagename = self.image_name_prefix + str(i)
-                log.info(f'[nvmeof]: rbd create {poolname}/{imagename} --size {self.rbd_size}')
-                _shell(self.ctx, self.cluster_name, self.remote, [
-                    'rbd', 'create', f'{poolname}/{imagename}', '--size', f'{self.rbd_size}'
-                ])
+                rbd_create_cmd += ['rbd', 'create', f'{poolname}/{imagename}', '--size', f'{self.rbd_size}', run.Raw(';')]           
+            _shell(self.ctx, self.cluster_name, self.remote, rbd_create_cmd)     
 
         for role, i in daemons.items():
             remote, id_ = i
@@ -311,7 +310,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
 
         self.min_thrash_delay = int(self.config.get('min_thrash_delay', 60))
         self.max_thrash_delay = int(self.config.get('max_thrash_delay', self.min_thrash_delay + 30))
-        self.min_revive_delay = int(self.config.get('min_revive_delay', 100))
+        self.min_revive_delay = int(self.config.get('min_revive_delay', 60))
         self.max_revive_delay = int(self.config.get('max_revive_delay', self.min_revive_delay + 30))
 
     def _get_devices(self, remote):
@@ -422,13 +421,11 @@ class NvmeofThrasher(Thrasher, Greenlet):
         while not self.stopping.is_set():
             killed_daemons = defaultdict(list)
 
-            weight = 1.0 / len(self.daemons)
-            count = 0
+            thrash_daemon_num = self.rng.randint(1, self.max_thrash_daemons)
+            selected_daemons = self.rng.sample(self.daemons, thrash_daemon_num)
             for daemon in self.daemons:
-                skip = self.rng.uniform(0.0, 1.0)
-                if weight <= skip:
-                    self.log('skipping daemon {label} with skip ({skip}) > weight ({weight})'.format(
-                        label=daemon.id_, skip=skip, weight=weight))
+                if daemon not in selected_daemons:
+                    self.log(f'skipping daemon {daemon.id_} ...')
                     continue
 
                 # For now, nvmeof daemons can only be thrashed 3 times in last 30mins. 
@@ -446,16 +443,10 @@ class NvmeofThrasher(Thrasher, Greenlet):
                         continue
 
                 self.log('kill {label}'.format(label=daemon.id_))
-                # daemon.stop()
                 kill_method = self.kill_daemon(daemon)
 
                 killed_daemons[kill_method].append(daemon)
                 daemons_thrash_history[daemon.id_] += [datetime.now()]
-
-                # only thrash max_thrash_daemons amount of daemons
-                count += 1
-                if count >= self.max_thrash_daemons:
-                    break
 
             if killed_daemons:
                 iteration_summary = "thrashed- "
