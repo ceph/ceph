@@ -567,38 +567,39 @@ __s32  hostos_to_ceph_errno(__s32 e);
 #endif
 
 struct errorcode32_t {
-  __s32 code;
+  using code_t = __s32;
+  code_t code;
 
   errorcode32_t() : code(0) {}
   // cppcheck-suppress noExplicitConstructor
-  explicit errorcode32_t(__s32 i) : code(i) {}
+  explicit errorcode32_t(code_t i) : code(i) {}
 
-  operator __s32() const  { return code; }
-  __s32* operator&()      { return &code; }
-  errorcode32_t& operator=(__s32 i) {
+  operator code_t() const  { return code; }
+  code_t* operator&()      { return &code; }
+  errorcode32_t& operator=(code_t i) {
     code = i;
     return *this;
   }
   bool operator==(const errorcode32_t&) const = default;
   auto operator<=>(const errorcode32_t&) const = default;
 
-  inline __s32 convert_encode() const {
+  inline code_t get_host_to_wire() const {
     return hostos_to_ceph_errno(code);
   }
 
-  inline void convert_decode() {
+  inline void set_wire_to_host() {
     code = ceph_to_hostos_errno(code);
   }
 
   void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
-    auto new_code = convert_encode();
+    auto new_code = get_host_to_wire();
     encode(new_code, bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
     decode(code, bl);
-    convert_decode();
+    set_wire_to_host();
   }
   void dump(ceph::Formatter *f) const {
     f->dump_int("code", code);
