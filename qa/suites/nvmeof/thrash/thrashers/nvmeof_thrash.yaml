@@ -13,3 +13,4 @@ overrides:
 tasks:
 - nvmeof.thrash:
     checker_host: 'client.0'
+    randomize: False
