@@ -64,7 +64,8 @@ public:
   uint64_t get_supported_optimizations() const override {
     return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
       FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
-      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION;
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
   }
 
   unsigned int get_chunk_count() const override {
@@ -97,13 +98,6 @@ public:
   int decode_chunks(const std::set<int> &want_to_read,
 		    const std::map<int, ceph::buffer::list> &chunks,
 		    std::map<int, ceph::buffer::list> *decoded) override;
-
-  void encode_delta(const ceph::bufferptr &old_data,
-                    const ceph::bufferptr &new_data,
-                    ceph::bufferptr *delta);
-
-  void apply_delta(const std::map<int, ceph::bufferptr> &in,
-                   std::map <int, ceph::bufferptr> &out);
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
   virtual void shec_encode(char **data,
@@ -151,6 +145,13 @@ public:
 			  char **data,
 			  char **coding,
 			  int blocksize) override;
+
+  void encode_delta(const ceph::bufferptr &old_data,
+                    const ceph::bufferptr &new_data,
+                    ceph::bufferptr *delta);
+  void apply_delta(const std::map<int, ceph::bufferptr> &in,
+                   std::map <int, ceph::bufferptr> &out);
+
   unsigned get_alignment() const override;
   void prepare() override;
 private:
