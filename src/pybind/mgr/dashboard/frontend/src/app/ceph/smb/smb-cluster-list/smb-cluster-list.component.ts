@@ -14,19 +14,23 @@ import { Permission } from '~/app/shared/models/permissions';
 
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SmbService } from '~/app/shared/api/smb.service';
-import { SMBCluster } from '../smb.model';
+
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { SMBCluster } from '../smb.model';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 
+const BASE_URL = 'cephfs/smb';
 @Component({
   selector: 'cd-smb-cluster-list',
   templateUrl: './smb-cluster-list.component.html',
-  styleUrls: ['./smb-cluster-list.component.scss']
+  styleUrls: ['./smb-cluster-list.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })
@@ -35,9 +39,9 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   permission: Permission;
   tableActions: CdTableAction[];
   context: CdTableFetchDataContext;
+  selection = new CdTableSelection();
   smbClusters$: Observable<SMBCluster[]>;
   subject$ = new BehaviorSubject<SMBCluster[]>([]);
-  selection = new CdTableSelection();
   modalRef: NgbModalRef;
 
   constructor(
@@ -45,7 +49,8 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
     public actionLabels: ActionLabelsI18n,
     private smbService: SmbService,
     private modalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private urlBuilder: URLBuilderService
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().smb;
@@ -70,6 +75,16 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
         name: $localize`Authentication Mode`,
         prop: 'auth_mode',
         flexGrow: 2
+      }
+    ];
+    this.tableActions = [
+      {
+        name: `${this.actionLabels.CREATE}`,
+        permission: 'create',
+        icon: Icons.add,
+        routerLink: () => this.urlBuilder.getCreate(),
+
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
       }
     ];
 
