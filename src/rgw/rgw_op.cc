@@ -6725,17 +6725,27 @@ void RGWAbortMultipart::execute(optional_yield y)
     return;
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+  meta_obj = upload->get_meta_obj();
+  meta_obj->set_in_extra_data(true);
+  meta_obj->get_obj_attrs(s->yield, this);
+
   jspan_context trace_ctx(false, false);
   if (tracing::rgw::tracer.is_enabled()) {
     // read meta object attributes for trace info
-    meta_obj = upload->get_meta_obj();
-    meta_obj->set_in_extra_data(true);
-    meta_obj->get_obj_attrs(s->yield, this);
     extract_span_context(meta_obj->get_attrs(), trace_ctx);
   }
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
 
+  int max_lock_secs_mp =
+    s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
+  utime_t dur(max_lock_secs_mp, 0);
+  auto serializer = meta_obj->get_serializer(this, "RGWCompleteMultipart");
+  op_ret = serializer->try_lock(this, dur, y);
+  if (op_ret < 0) {
+    return;
+  }
   op_ret = upload->abort(this, s->cct);
+  serializer->unlock();
 }
 
 int RGWListMultipart::verify_permission(optional_yield y)
