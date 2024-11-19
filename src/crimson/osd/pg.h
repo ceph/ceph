@@ -45,6 +45,7 @@
 class MQuery;
 class OSDMap;
 class PGBackend;
+class ReplicatedBackend;
 class PGPeeringEvent;
 class osd_op_params_t;
 
@@ -678,6 +679,7 @@ private:
     std::tuple<interruptible_future<>, interruptible_future<>>>
   submit_transaction(
     ObjectContextRef&& obc,
+    ObjectContextRef&& new_clone,
     ceph::os::Transaction&& txn,
     osd_op_params_t&& oop,
     std::vector<pg_log_entry_t>&& log_entries);
@@ -885,6 +887,10 @@ private:
   friend class SnapTrimObjSubEvent;
 private:
 
+  void enqueue_push_for_backfill(
+    const hobject_t &obj,
+    const eversion_t &v,
+    const std::vector<pg_shard_t> &peers);
   void mutate_object(
     ObjectContextRef& obc,
     ceph::os::Transaction& txn,
@@ -893,13 +899,18 @@ private:
   bool can_discard_op(const MOSDOp& m) const;
   void context_registry_on_change();
   bool is_missing_object(const hobject_t& soid) const {
-    return peering_state.get_pg_log().get_missing().get_items().count(soid);
+    return get_local_missing().is_missing(soid);
   }
   bool is_unreadable_object(const hobject_t &oid,
 			    eversion_t* v = 0) const final {
     return is_missing_object(oid) ||
       !peering_state.get_missing_loc().readable_with_acting(
 	oid, get_actingset(), v);
+  }
+  bool is_missing_on_peer(
+    const pg_shard_t &peer,
+    const hobject_t &soid) const {
+    return peering_state.get_peer_missing(peer).is_missing(soid);
   }
   bool is_degraded_or_backfilling_object(const hobject_t& soid) const;
   const std::set<pg_shard_t> &get_actingset() const {
@@ -908,6 +919,7 @@ private:
 
 private:
   friend class IOInterruptCondition;
+  friend class ::ReplicatedBackend;
   struct log_update_t {
     std::set<pg_shard_t> waiting_on;
     seastar::shared_promise<> all_committed;
