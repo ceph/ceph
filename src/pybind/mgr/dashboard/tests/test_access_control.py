@@ -9,11 +9,12 @@ import unittest
 from datetime import datetime, timedelta
 
 from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
+from mgr_util import password_hash
 
 from .. import mgr
 from ..security import Permission, Scope
 from ..services.access_control import SYSTEM_ROLES, AccessControlDB, \
-    PasswordPolicy, load_access_control_db, password_hash
+    PasswordPolicy, load_access_control_db
 from ..settings import Settings
 from ..tests import CLICommandTestMixin, CmdException
 
