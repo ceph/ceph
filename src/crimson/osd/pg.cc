@@ -1354,13 +1354,13 @@ void PG::log_operation(
 
 void PG::replica_clear_repop_obc(
   const std::vector<pg_log_entry_t> &logv) {
-    logger().debug("{} clearing {} entries", __func__, logv.size());
-    for (auto &&e: logv) {
-      logger().debug(" {} get_object_boundary(from): {} "
-                     " head version(to): {}",
-                     e.soid,
-                     e.soid.get_object_boundary(),
-                     e.soid.get_head());
+  logger().debug("{} clearing {} entries", __func__, logv.size());
+  for (auto &&e: logv) {
+    logger().debug(" {} get_object_boundary(from): {} "
+		   " head version(to): {}",
+		   e.soid,
+		   e.soid.get_object_boundary(),
+		   e.soid.get_head());
     /* Have to blast all clones, they share a snapset */
     obc_registry.clear_range(
       e.soid.get_object_boundary(), e.soid.get_head());
