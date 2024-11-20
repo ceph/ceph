@@ -49,6 +49,10 @@ ifneq (,$(filter with_system_libs,$(DEB_BUILD_OPTIONS)))
   extraopts += -DWITH_SYSTEM_PMDK=ON
 endif
 
+ifeq ($(DWZ), false)
+override_dh_dwz:
+endif
+
 # for python3-${pkg} packages
 py3_bindings := rados cephfs rbd rgw ceph-argparse ceph-common
 # for packages with its own py3dist-overrides files, those file should be named
