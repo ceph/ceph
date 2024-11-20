@@ -159,6 +159,7 @@ static constexpr auto max_list_entries = 1000u;
   }};
 }
 
+#if 0 // Until we are at last free of GCC11
 /// \brief List log entries
 ///
 /// Execute an asynchronous operation that lists log entries
@@ -199,6 +200,7 @@ auto list(RADOS& r, Object o, IOContext ioc, ceph::real_time from,
       return std::make_tuple(res, std::move(marker));
     }, std::forward<CompletionToken>(token));
 }
+#endif
 
 /// \brief Get log header
 ///
@@ -230,6 +232,7 @@ auto list(RADOS& r, Object o, IOContext ioc, ceph::real_time from,
   }};
 }
 
+#if 0
 /// \brief Get log header
 ///
 /// Execute an asynchronous operation that returns the log header
@@ -251,6 +254,7 @@ auto info(RADOS& r, Object o, IOContext ioc, CompletionToken&& token)
       return ret.header;
     }, std::forward<CompletionToken>(token));
 }
+#endif
 
 // Since trim uses the string markers and ignores the time if the
 // string markers are present, there's no benefit to having a function
@@ -325,6 +329,7 @@ inline constexpr std::string_view end_marker{"9"};
 }
 
 
+#if 0 // Until we're freed from GCC11
 // Asio's co_compse generates spurious warnings when compiled with
 // -O0. the 'mismatched' `operator new` calls directly into the
 // matching `operator new`, returning its result.
@@ -407,7 +412,6 @@ auto trim(RADOS& r, Object oid, IOContext ioc, ceph::real_time from_time,
 	 real_time from_time, real_time to_time) -> void {
        try {
 	 for (;;) {
-	   
 	   co_await r.execute(oid, ioc, WriteOp{}.exec(trim(from_time, to_time)),
 			      asio::deferred);
 	 }
@@ -421,4 +425,132 @@ auto trim(RADOS& r, Object oid, IOContext ioc, ceph::real_time from_time,
      token, std::ref(r), std::move(oid), std::move(ioc), from_time, to_time);
 }
 #pragma GCC diagnostic pop
+#endif
+
+
+/// \brief Trim entries from the log
+///
+/// Execute an asynchronous operation that trims a range of entries
+/// from the log.
+///
+/// \param op Write operation to modify
+/// \param from_marker Start of range, based on markers from list
+/// \param to_marker End of range, based on markers from list
+///
+/// \note Use \ref begin_marker to trim everything up to a given point.
+/// Use \ref end_marker to trim everything after a given point. Use them
+/// both together to trim all entries.
+///
+/// \return As appropriate to the completion token. See Boost.Asio
+/// documentation.
+template <typename E>
+boost::asio::awaitable<void, E>
+trim(RADOS& r, Object oid, IOContext ioc,
+     std::string_view from_marker, std::string_view to_marker,
+     boost::asio::use_awaitable_t<E> ua = boost::asio::use_awaitable)
+{
+  using boost::system::error_code;
+  using boost::system::system_error;
+  using ceph::real_time;
+  using boost::system::errc::no_message_available;
+
+  for (;;) try {
+      co_await r.execute(oid, ioc,
+			 WriteOp{}.exec(trim(from_marker, to_marker)),
+			 ua);
+    } catch (const system_error& e) {
+      if (e.code() != no_message_available) {
+	throw;
+      }
+    }
+  co_return;
+}
+
+/// \brief Trim entries from the log
+///
+/// Execute an asynchronous operation that trims a range of entries
+/// from the log.
+///
+/// \param op Write operation to modify
+/// \param from_time Start of range, based on the timestamp supplied to add
+/// \param to_time End of range, based on the timestamp supplied to add
+///
+/// \return As appropriate to the completion token. See Boost.Asio
+/// documentation.
+template<typename E>
+boost::asio::awaitable<void, E>
+trim(RADOS& r, Object oid, IOContext ioc,
+     ceph::real_time from_time, ceph::real_time to_time,
+     boost::asio::use_awaitable_t<E> ua = boost::asio::use_awaitable)
+{
+  using boost::system::error_code;
+  using boost::system::system_error;
+  using ceph::real_time;
+  using boost::system::errc::no_message_available;
+
+  for (;;) try {
+      co_await r.execute(oid, ioc, WriteOp{}.exec(trim(from_time, to_time)),
+			 ua);
+    } catch (const system_error& e) {
+      if (e.code() != no_message_available) {
+	co_return e.code();
+      }
+    }
+  co_return error_code{};
+}
+
+/// \brief List log entries
+///
+/// Execute an asynchronous operation that lists log entries
+///
+/// \param r RADOS handle
+/// \param o Object associated with log
+/// \param ioc Object locator context
+/// \param from Start of range
+/// \param to End of range
+/// \param in_marker Point to resume truncated listing
+///
+/// \return (entries, marker) in a way appropriate to the
+/// completion token. See Boost.Asio documentation.
+template<typename E>
+boost::asio::awaitable<std::tuple<std::span<entry>,
+				  std::string>,
+		       E>
+list(RADOS& r, Object o, IOContext ioc, ceph::real_time from,
+     ceph::real_time to, std::string in_marker,
+     std::span<entry> entries,
+     boost::asio::use_awaitable_t<E> ua = boost::asio::use_awaitable)
+{
+  using namespace std::literals;
+  ReadOp op;
+  std::span<entry> out;
+  std::string out_marker;
+  op.exec(list(from, to, in_marker, entries, &out, &out_marker));
+  co_await r.execute(std::move(o), std::move(ioc), std::move(op), nullptr, ua);
+  co_return std::make_tuple(out, std::move(out_marker));
+}
+
+/// \brief Get log header
+///
+/// Execute an asynchronous operation that returns the log header
+///
+/// \param r RADOS handle
+/// \param o Object associated with log
+/// \param ioc Object locator context
+///
+/// \return The log header in a way appropriate to the completion
+/// token. See Boost.Asio documentation.
+template<typename E>
+boost::asio::awaitable<header, E>
+info(RADOS& r, Object o, IOContext ioc,
+     boost::asio::use_awaitable_t<E> ua = boost::asio::use_awaitable)
+{
+  using namespace std::literals;
+  ReadOp op;
+  header h;
+  op.exec(info(&h));
+  co_await r.execute(std::move(o), std::move(ioc), std::move(op), nullptr, ua);
+  co_return h;
+}
+
 } // namespace neorados::cls::log
