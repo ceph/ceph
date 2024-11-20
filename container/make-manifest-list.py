@@ -186,8 +186,8 @@ def build_prerelease(sysargs):
 
     # create manifest list image with the standard list of tags
     # ignore failure on manifest rm
-    run_command(f'podman manifest rm localhost/m')
-    run_command_show_failure(f'podman manifest create localhost/m')
+    run_command(f'podman manifest rm {LOCALMANIFEST}')
+    run_command_show_failure(f'podman manifest create {LOCALMANIFEST}')
     for p in paths_with_tags:
         run_command_show_failure(f'podman manifest add m {p}')
     base = f'{manifest_host}/{manifest_repo}'
@@ -201,7 +201,7 @@ def build_prerelease(sysargs):
             print(f'skipping podman manifest push {LOCALMANIFEST} {base}:{t}')
         else:
             run_command_show_failure(
-              f'podman manifest push localhost/m {base}:{t}')
+              f'podman manifest push {LOCALMANIFEST} {base}:{t}')
 
 def promote(sysargs):
     manifest_host = os.environ.get('MANIFEST_HOST', 'quay.ceph.io')
