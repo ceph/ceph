@@ -89,7 +89,7 @@ RUN set -x && \
         REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/el9/" ;\
     fi && \
     rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el9.noarch.rpm" ; \
-    if [[ IS_RELEASE ]] ; then \
+    if [[ "$IS_RELEASE" == 1 ]] ; then \
 	sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
 	dnf clean expire-cache ; \
     fi
