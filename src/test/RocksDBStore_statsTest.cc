@@ -149,7 +149,13 @@ INSTANTIATE_TEST_SUITE_P(
     RocksDBMetricsTest,
     ::testing::Values(
         RocksDBMetricsTestParams{true, "telemetry"},
-        RocksDBMetricsTestParams{false, "telemetry"}));
+        RocksDBMetricsTestParams{false, "telemetry"}
+        // RocksDBMetricsTestParams{true, "objectstore"},
+        // RocksDBMetricsTestParams{false, "objectstore"}
+        // RocksDBMetricsTestParams{true, "debug"},
+        // RocksDBMetricsTestParams{false, "debug"}
+        ));
+        
 
 TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
 {
@@ -201,7 +207,7 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
         EXPECT_EQ(main["rocksdb.bytes.read"].get<int>(), 340);
         EXPECT_EQ(main["rocksdb.bytes.written"].get<int>(), 3480);
 
-        if (params.mode == "telemetry" || params.mode == "all")
+        if (params.mode == "telemetry" || params.mode == "all" || params.mode == "objectstore")
         {
             EXPECT_EQ(main["rocksdb.memtable.hit"].get<int>(), 0);
             EXPECT_EQ(main["rocksdb.memtable.miss"].get<int>(), 50);
@@ -212,19 +218,28 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
             EXPECT_EQ(main["rocksdb.block.cache.hit"].get<int>(), 150);
             EXPECT_EQ(main["rocksdb.block.cache.miss"].get<int>(), 3);
         }
+        else if (params.mode == "debug"){
+            
+        }
     }
     else
     {
-        EXPECT_EQ(main["rocksdb.bytes.read"].get<int>(), -1);
-        EXPECT_EQ(main["rocksdb.bytes.written"].get<int>(), -1);
-        EXPECT_EQ(main["rocksdb.memtable.hit"].get<int>(), -1);
-        EXPECT_EQ(main["rocksdb.memtable.miss"].get<int>(), -1);
-        EXPECT_EQ(main["rocksdb.block.cache.data.hit"].get<int>(), -1);
-        EXPECT_EQ(main["rocksdb.block.cache.data.miss"].get<int>(), -1);
-        EXPECT_EQ(main["rocksdb.block.cache.filter.add"].get<int>(), -1);
-        EXPECT_EQ(main["rocksdb.block.cache.filter.miss"].get<int>(), -1);
-        EXPECT_EQ(main["rocksdb.block.cache.hit"].get<int>(), -1);
-        EXPECT_EQ(main["rocksdb.block.cache.miss"].get<int>(), -1);
+        if (params.mode == "telemetry" || params.mode == "all" || params.mode == "objectstore")
+        {
+            EXPECT_EQ(main["rocksdb.bytes.read"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.bytes.written"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.memtable.hit"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.memtable.miss"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.data.hit"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.data.miss"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.add"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.miss"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.hit"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.miss"].get<int>(), -1);
+        }
+        else if (params.mode == "debug"){
+
+        }
     }
 
     // Validate histogram metrics
@@ -232,31 +247,44 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
 
     if (params.perf_counters_enabled)
     {
-        ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros"));
-        EXPECT_GT(histogram["rocksdb.db.get.micros"]["count"].get<int>(), 0);
-        EXPECT_GT(histogram["rocksdb.db.get.micros"]["avg"].get<double>(), 0.0);
+        if (params.mode == "telemetry" || params.mode == "all" || params.mode == "objectstore")
+        {
+            ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros"));
+            EXPECT_GT(histogram["rocksdb.db.get.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.db.get.micros"]["avg"].get<double>(), 0.0);
 
-        ASSERT_TRUE(histogram.contains("rocksdb.db.write.micros"));
-        EXPECT_GT(histogram["rocksdb.db.write.micros"]["count"].get<int>(), 0);
-        EXPECT_GT(histogram["rocksdb.db.write.micros"]["avg"].get<double>(), 0.0);
+            ASSERT_TRUE(histogram.contains("rocksdb.db.write.micros"));
+            EXPECT_GT(histogram["rocksdb.db.write.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.db.write.micros"]["avg"].get<double>(), 0.0);
 
-        ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros"));
-        EXPECT_GT(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), 0);
-        EXPECT_GT(histogram["rocksdb.sst.read.micros"]["avg"].get<int>(), 0);
+            ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros"));
+            EXPECT_GT(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.sst.read.micros"]["avg"].get<int>(), 0);
+        }
+        else if (params.mode == "debug"){
+
+        }
     }
     else
     {
-        ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros"));
-        EXPECT_EQ(histogram["rocksdb.db.get.micros"]["count"].get<int>(), -1);
-        EXPECT_EQ(histogram["rocksdb.db.get.micros"]["avg"].get<int>(), -1);
+        if (params.mode == "telemetry" || params.mode == "all" || params.mode == "objectstore")
+        {
+            ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros"));
+            EXPECT_EQ(histogram["rocksdb.db.get.micros"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.db.get.micros"]["avg"].get<int>(), -1);
 
-        ASSERT_TRUE(histogram.contains("rocksdb.db.write.micros"));
-        EXPECT_EQ(histogram["rocksdb.db.write.micros"]["count"].get<int>(), -1);
-        EXPECT_EQ(histogram["rocksdb.db.write.micros"]["avg"].get<int>(), -1);
+            ASSERT_TRUE(histogram.contains("rocksdb.db.write.micros"));
+            EXPECT_EQ(histogram["rocksdb.db.write.micros"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.db.write.micros"]["avg"].get<int>(), -1);
 
-        ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros"));
-        EXPECT_EQ(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), -1);
-        EXPECT_EQ(histogram["rocksdb.sst.read.micros"]["avg"].get<int>(), -1);
+            ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros"));
+            EXPECT_EQ(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.sst.read.micros"]["avg"].get<int>(), -1);
+        }
+        else if (params.mode == "debug"){
+
+
+        }
     }
 
     // Validate columns metrics
@@ -271,7 +299,7 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
         EXPECT_EQ(columns["all_columns"]["total_slowdown"].get<int>(), 0);
         EXPECT_EQ(columns["all_columns"]["total_stop"].get<int>(), 0);
     }
-    else
+    else if (params.mode == "telemetry" || params.mode == "all")
     {
         ASSERT_TRUE(columns.contains("all_columns"));
         EXPECT_EQ(columns["all_columns"]["sum"]["NumFiles"].get<int>(), 1);
@@ -279,6 +307,40 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
         EXPECT_EQ(columns["all_columns"]["sum"]["KeyIn"].get<int>(), 0);
         EXPECT_EQ(columns["all_columns"]["total_slowdown"].get<int>(), 0);
         EXPECT_EQ(columns["all_columns"]["total_stop"].get<int>(), 0);
+    }
+    else if (params.perf_counters_enabled && (params.mode == "objectstore")){
+        ASSERT_TRUE(columns.contains("default"));
+        EXPECT_EQ(columns["default"]["sum"]["NumFiles"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["sum"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["sum"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["NumFiles"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["NumFiles"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["l1"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["total_slowdown"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["total_stop"].get<int>(), 0);
+    }
+    else if (params.mode == "objectstore"){
+        ASSERT_TRUE(columns.contains("default"));
+        EXPECT_EQ(columns["default"]["sum"]["NumFiles"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["sum"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["sum"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["NumFiles"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["NumFiles"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["l1"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["total_slowdown"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["total_stop"].get<int>(), 0);
+    }
+    else if (params.perf_counters_enabled && (params.mode == "debug")){
+
+    }
+    else if (params.mode == "debug"){
+
     }
 }
 
