@@ -52,28 +52,22 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
     ceph_assert(lba_root->is_initial_pending()
       == root_block->is_pending());
     return {true,
-	    trans_intr::make_interruptible(
-	      c.cache.get_extent_viewable_by_trans(c.trans, lba_root))};
+            c.cache.get_extent_viewable_by_trans(c.trans, lba_root)};
   } else if (root_block->is_pending()) {
     auto &prior = static_cast<RootBlock&>(*root_block->get_prior_instance());
     lba_root = prior.lba_root_node;
     if (lba_root) {
       return {true,
-	      trans_intr::make_interruptible(
-		c.cache.get_extent_viewable_by_trans(c.trans, lba_root))};
+              c.cache.get_extent_viewable_by_trans(c.trans, lba_root)};
     } else {
       c.cache.account_absent_access(c.trans.get_src());
       return {false,
-	      trans_intr::make_interruptible(
-		Cache::get_extent_ertr::make_ready_future<
-		  CachedExtentRef>())};
+              Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
     }
   } else {
     c.cache.account_absent_access(c.trans.get_src());
     return {false,
-	    trans_intr::make_interruptible(
-	      Cache::get_extent_ertr::make_ready_future<
-		CachedExtentRef>())};
+            Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
   }
 }
 

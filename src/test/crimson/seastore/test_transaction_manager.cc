@@ -2209,9 +2209,11 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
       assert(pin->is_parent_viewable());
       assert(pin->parent_modified());
       pin->maybe_fix_pos();
-      auto v = pin->get_logical_extent(*t.t);
-      assert(v.has_child());
-      auto extent2 = v.get_child_fut().unsafe_get();
+      auto extent2 = with_trans_intr(*(t.t), [&pin](auto& trans) {
+        auto v = pin->get_logical_extent(trans);
+        assert(v.has_child());
+        return std::move(v.get_child_fut());
+      }).unsafe_get();
       assert(extent.get() == extent2.get());
       submit_transaction(std::move(t));
     }
