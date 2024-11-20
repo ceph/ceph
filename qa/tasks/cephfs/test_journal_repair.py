@@ -7,6 +7,7 @@ import json
 import logging
 from textwrap import dedent
 import time
+import tempfile
 
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
 from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
@@ -403,3 +404,49 @@ class TestJournalRepair(CephFSTestCase):
             "timeout": "1h"
         })
 
+    def test_journal_import_from_empty_dump_file(self):
+        """
+        That the 'journal import' recognizes empty file read and errors out.
+        """
+        fname = tempfile.NamedTemporaryFile(delete=False).name
+        self.mount_a.run_shell(["sudo", "touch", fname], omit_sudo=False)
+        self.fs.fail()
+        import_out = None
+        try:
+            import_out = self.fs.journal_tool(["journal", "import", fname], 0)
+        except CommandFailedError as e:
+            self.mount_a.run_shell(["sudo", "rm", fname], omit_sudo=False)
+            raise RuntimeError(f"Unexpected journal import error: {str(e)}")
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        try:
+            if import_out.endswith("done."):
+                assert False
+        except AssertionError:
+            raise RuntimeError(f"Unexpected journal-tool result: '{import_out}'")
+        finally:
+            self.mount_a.run_shell(["sudo", "rm", fname], omit_sudo=False)
+
+    def test_journal_import_from_invalid_dump_file(self):
+        """
+        That the 'journal import' recognizes invalid dump file and errors out.
+        """
+        # Create an invalid dump file with partial header
+        fname = tempfile.NamedTemporaryFile(delete=False).name
+        self.mount_a.run_shell(["sudo", "sh", "-c", f'printf "Ceph mds0 journal dump\n\
+        start offset 4194304 (0x400000)\n\
+        length 940 (0x3ac)\nwrite_pos 4194304 (0x400000)\n" > {fname}'], omit_sudo=False)
+        self.fs.fail()
+        try:
+            self.fs.journal_tool(["journal", "import", fname], 0)
+        except CommandFailedError as e:
+            self.fs.set_joinable()
+            self.fs.wait_for_daemons()
+            if e.exitstatus != 234:
+                raise RuntimeError(f"Unexpected journal import error: {str(e)}")
+        else:
+            self.fs.set_joinable()
+            self.fs.wait_for_daemons()
+            raise RuntimeError("Expected journal import to fail")
+        finally:
+            self.mount_a.run_shell(["sudo", "rm", fname], omit_sudo=False)
