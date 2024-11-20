@@ -1,0 +1,28 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MON_DOWN
+      - mons down
+      - mon down
+      - out of quorum
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+      - CEPHADM_AGENT_DOWN
+    log-only-match:
+      - CEPHADM_
+tasks:
+- cephadm:
+    conf:
+      mgr:
+        debug ms: 1
+        debug mgr: 20
+- cephadm.shell:
+    mon.a:
+      - stat -c '%u %g' /var/log/ceph | grep '167 167'
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
+      - ceph orch ls --format yaml
+      - ceph orch ls | grep '^osd '
