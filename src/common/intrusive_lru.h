@@ -94,6 +94,8 @@ public:
   friend void intrusive_ptr_add_ref<>(intrusive_lru_base<Config> *);
   friend void intrusive_ptr_release<>(intrusive_lru_base<Config> *);
 
+  unsigned get_use_count() const { return use_count; }
+
   virtual ~intrusive_lru_base() {}
 };
 
