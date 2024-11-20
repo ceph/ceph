@@ -134,6 +134,7 @@ void check_entry(const l::entry& entry, real_time start_time,
   ASSERT_EQ(ts, entry.timestamp);
 }
 
+#if 0
 template<boost::asio::completion_token_for<void(error_code)> CompletionToken>
 auto check_log(RADOS& r, Object oid, IOContext ioc, real_time start_time,
 	       int max, CompletionToken&& token)
@@ -173,6 +174,35 @@ auto check_log(RADOS& r, Object oid, IOContext ioc, real_time start_time,
      token, std::ref(r), std::move(oid),
      std::move(ioc), start_time, max);
 #pragma GCC diagnostic pop
+}
+#endif
+
+template <typename E>
+asio::awaitable<void, E>
+check_log(RADOS& r, Object oid, IOContext ioc, real_time start_time,
+	  int max, asio::use_awaitable_t<E> ua = asio::use_awaitable)
+{
+  try {
+    std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
+    std::string marker;
+    int i = 0;
+    do {
+      std::span<l::entry> result;
+      std::tie(result, marker) =
+	co_await neorados::cls::log::list(r, oid, ioc, {}, {},
+					  marker, entries, ua);
+      for (const auto& entry : result) {
+	auto num = decode<int>(entry.data);
+	EXPECT_EQ(i, num);
+	check_entry(entry, start_time, i, true);
+	++i;
+      }
+    } while (!marker.empty());
+    EXPECT_EQ(i, max);
+  } catch (const system_error& e) {
+    co_return {e.code()};
+  }
+  co_return {error_code{}};
 }
 
 template<typename CompletionToken>
@@ -442,6 +472,7 @@ CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
   }
 }
 
+#if 0 // Disable until we get rid of GCC11
 TEST(neocls_log_bare, lambdata)
 {
   asio::io_context c;
@@ -495,3 +526,4 @@ TEST(neocls_log_bare, lambdata)
   c.run();
   ASSERT_TRUE(completed);
 }
+#endif
