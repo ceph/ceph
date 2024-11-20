@@ -51,10 +51,12 @@ DEFAULT_PAD_WIDTH = 300  # for medium size windows
 FS_TOP_MAIN_WINDOW_COL_CLIENT_ID = "client_id"
 FS_TOP_MAIN_WINDOW_COL_MNT_ROOT = "mount_root"
 FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR = "mount_point@host/addr"
+FS_TOP_MAIN_WINDOW_COL_MNTPT_TYPE = 'mount_type'
 
 MAIN_WINDOW_TOP_LINE_ITEMS_START = [ITEMS_PAD,
                                     FS_TOP_MAIN_WINDOW_COL_CLIENT_ID,
-                                    FS_TOP_MAIN_WINDOW_COL_MNT_ROOT]
+                                    FS_TOP_MAIN_WINDOW_COL_MNT_ROOT,
+                                    FS_TOP_MAIN_WINDOW_COL_MNTPT_TYPE]
 MAIN_WINDOW_TOP_LINE_ITEMS_END = [FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR]
 
 MAIN_WINDOW_TOP_LINE_METRICS_LEGACY = ["READ_LATENCY",
@@ -184,6 +186,14 @@ class FSTopBase(object):
                 elif item == FS_TOP_MAIN_WINDOW_COL_MNT_ROOT:
                     client_id_meta.update({item:
                                            client_meta[CLIENT_METADATA_MOUNT_ROOT_KEY]})
+                elif item == FS_TOP_MAIN_WINDOW_COL_MNTPT_TYPE:
+                    if "kernel_version" in client_meta:
+                        client_id_meta.update({item: "kernel"})
+                    elif CLIENT_METADATA_MOUNT_POINT_KEY in client_meta \
+                            and client_meta[CLIENT_METADATA_MOUNT_POINT_KEY] != 'N/A':
+                        client_id_meta.update({item: "fuse"})
+                    else:
+                        client_id_meta.update({item: "libcephfs"})
             counters = [m.upper() for m in self.stats_json[GLOBAL_COUNTERS_KEY]]
             metrics = fs_key.get(client_id, {})
             cidx = 0
@@ -786,6 +796,18 @@ class FSTop(FSTopBase):
                         wrap(client_meta[CLIENT_METADATA_MOUNT_ROOT_KEY], hlen), curses.A_DIM)
                 else:
                     self.fsstats.addstr(y_coord, xp, "N/A", curses.A_DIM)
+            elif item == FS_TOP_MAIN_WINDOW_COL_MNTPT_TYPE:
+                hlen = len(item) + ITEMS_PAD_LEN
+                if "kernel_version" in client_meta:
+                    self.fsstats.addstr(
+                        y_coord, xp, wrap("kernel", hlen), curses.A_DIM)
+                elif CLIENT_METADATA_MOUNT_POINT_KEY in client_meta \
+                        and client_meta[CLIENT_METADATA_MOUNT_POINT_KEY] != 'N/A':
+                    self.fsstats.addstr(
+                        y_coord, xp, wrap("fuse", hlen), curses.A_DIM)
+                else:
+                    self.fsstats.addstr(
+                        y_coord, xp, wrap("libcephfs", hlen), curses.A_DIM)
             xp += hlen
 
         cidx = 0
