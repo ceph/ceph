@@ -8,4 +8,4 @@ tasks:
     env:
       RBD_POOL: mypool
       IOSTAT_INTERVAL: '10'
-      RUNTIME: '1200'
+      RUNTIME: '1800'
