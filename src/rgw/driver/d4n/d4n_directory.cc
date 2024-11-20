@@ -454,9 +454,10 @@ int ObjectDirectory::del(const DoutPrefixProvider* dpp, CacheObj* object, option
 
 int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& field, std::string& value, optional_yield y)
 {
+  int ret = -1;
   std::string key = build_index(object);
 
-  if (exist_key(dpp, object, y)) {
+  if ((ret = exist_key(dpp, object, y))) {
     try {
       if (field == "hosts") {
 	/* Append rather than overwrite */
@@ -506,10 +507,13 @@ int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* objec
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
       return -EINVAL;
     }
-  } else {
+  } else if (ret == -ENOENT) {
     ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "(): Object does not exist." << dendl;
-    return -ENOENT;
+  } else {
+    ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "(): ERROR: ret=" << ret << dendl;
   }
+  
+  return ret;
 }
 
 int ObjectDirectory::zadd(const DoutPrefixProvider* dpp, CacheObj* object, double score, const std::string& member, optional_yield y, bool multi)
@@ -1095,9 +1099,10 @@ int BlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, option
 
 int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& field, std::string& value, optional_yield y)
 {
+  int ret = -1;
   std::string key = build_index(block);
 
-  if (exist_key(dpp, block, y)) {
+  if ((ret = exist_key(dpp, block, y))) {
     try {
       if (field == "hosts") { 
 	/* Append rather than overwrite */
@@ -1147,10 +1152,13 @@ int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* bloc
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
       return -EINVAL;
     }
+  } else if (ret == -ENOENT) {
+    ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): Block does not exist." << dendl;
   } else {
-    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): Block does not exist." << dendl;
-    return -ENOENT;
+    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): ERROR: ret=" << ret << dendl;
   }
+  
+  return ret;
 }
 
 int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block, std::string& value, optional_yield y)
