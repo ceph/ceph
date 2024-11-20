@@ -1022,45 +1022,45 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       }
 
       f->open_object_section("modules");
-      {
-        // always_on_modules
-        f->open_array_section("always_on_modules");
-        for (const auto& module_name : always_on_modules) {
-          auto it = module_info_map.find(module_name);
-          if (it != module_info_map.end()) {
-            it->second->dump(f.get());
-          } 
-        }
-        f->close_section();
-
-        f->open_array_section("force_disabled_modules");
-        for (auto& p : map.force_disabled_modules) {
-          f->dump_string("module", p);
-        }
-        f->close_section();
-
-        // enabled_modules
-        f->open_array_section("enabled_modules");
-        for (const auto& module_name : map.modules) {
-          if (always_on_modules.count(module_name) > 0)
-            continue;
-          auto it = module_info_map.find(module_name);
-          if (it != module_info_map.end()) {
-            it->second->dump(f.get());
-          } 
-        }
-        f->close_section();
-
-        // disabled_modules
-        f->open_array_section("disabled_modules");
-        for (const auto& p : map.available_modules) {
-          if (map.modules.count(p.name) == 0 &&
-              always_on_modules.count(p.name) == 0) {
-            p.dump(f.get());
-          }
-        }
-        f->close_section();
+      
+      // always_on_modules
+      f->open_array_section("always_on_modules");
+      for (const auto& module_name : always_on_modules) {
+        auto it = module_info_map.find(module_name);
+        if (it != module_info_map.end()) {
+          it->second->dump(f.get());
+        } 
       }
+      f->close_section();
+
+      f->open_array_section("force_disabled_modules");
+      for (auto& p : map.force_disabled_modules) {
+        f->dump_string("module", p);
+      }
+      f->close_section();
+
+      // enabled_modules
+      f->open_array_section("enabled_modules");
+      for (const auto& module_name : map.modules) {
+        if (always_on_modules.count(module_name) > 0)
+          continue;
+        auto it = module_info_map.find(module_name);
+        if (it != module_info_map.end()) {
+          it->second->dump(f.get());
+        } 
+      }
+      f->close_section();
+
+      // disabled_modules
+      f->open_array_section("disabled_modules");
+      for (const auto& p : map.available_modules) {
+        if (map.modules.count(p.name) == 0 &&
+            always_on_modules.count(p.name) == 0) {
+          p.dump(f.get());
+        }
+      }
+      f->close_section();
+      
       f->close_section();
       f->flush(rdata);
   } else {
