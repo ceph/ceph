@@ -94,12 +94,14 @@ struct frag_info_t : public scatter_info_t {
     if (cur.mtime > mtime) {
       mtime = cur.mtime;
       if (touched_mtime)
-	*touched_mtime = true;
+        *touched_mtime = true;
+      if (touched_chattr)
+        *touched_chattr = true;
     }
     if (cur.change_attr > change_attr) {
       change_attr = cur.change_attr;
       if (touched_chattr)
-	*touched_chattr = true;
+        *touched_chattr = true;
     }
     nfiles += cur.nfiles - acc.nfiles;
     nsubdirs += cur.nsubdirs - acc.nsubdirs;
