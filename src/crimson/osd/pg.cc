@@ -1123,6 +1123,7 @@ PG::submit_executer_fut PG::submit_executer(
   OpsExecuter &&ox,
   const std::vector<OSDOp>& ops) {
   LOG_PREFIX(PG::submit_executer);
+  DEBUGDPP("", *this);
 
   // we need to build the pg log entries and submit the transaction
   // atomically to ensure log ordering
@@ -1287,20 +1288,21 @@ void PG::log_operation(
   bool transaction_applied,
   ObjectStore::Transaction &txn,
   bool async) {
-  logger().debug("{}", __func__);
+  LOG_PREFIX(PG::log_operation);
+  DEBUGDPP("", *this);
   if (is_primary()) {
     ceph_assert(trim_to <= peering_state.get_pg_committed_to());
   }
   auto last = logv.rbegin();
   if (is_primary() && last != logv.rend()) {
-    logger().debug("{} on primary, trimming projected log",
-                   __func__);
+    DEBUGDPP("on primary, trimming projected log", *this);
     projected_log.skip_can_rollback_to_to_head();
     projected_log.trim(shard_services.get_cct(), last->version,
                        nullptr, nullptr, nullptr);
   }
 
   if (!is_primary()) { // && !is_ec_pg()
+    DEBUGDPP("on replica, clearing obc", *this);
     replica_clear_repop_obc(logv);
   }
   if (!logv.empty()) {
@@ -1317,13 +1319,13 @@ void PG::log_operation(
 
 void PG::replica_clear_repop_obc(
   const std::vector<pg_log_entry_t> &logv) {
-  logger().debug("{} clearing {} entries", __func__, logv.size());
+  LOG_PREFIX(PG::replica_clear_repop_obc);
+  DEBUGDPP("clearing obc for {} log entries", logv.size());
   for (auto &&e: logv) {
-    logger().debug(" {} get_object_boundary(from): {} "
-		   " head version(to): {}",
-		   e.soid,
-		   e.soid.get_object_boundary(),
-		   e.soid.get_head());
+    DEBUGDPP("clearing entry for {} from: {} to: {}",
+	     e.soid,
+	     e.soid.get_object_boundary(),
+	     e.soid.get_head());
     /* Have to blast all clones, they share a snapset */
     obc_registry.clear_range(
       e.soid.get_object_boundary(), e.soid.get_head());
