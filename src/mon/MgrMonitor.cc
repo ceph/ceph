@@ -1015,10 +1015,10 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "mgr module ls") {
     if (f) {
       // Create a mapping from module names to ModuleInfo pointers
-      std::unordered_map<std::string, const MgrMap::ModuleInfo*> module_info_map;
+      std::unordered_map<std::string, bool> available_module_names;
       const auto always_on_modules = map.get_always_on_modules();
       for (const auto& mi : map.available_modules) {
-        module_info_map[mi.name] = &mi;
+        available_module_names[mi.name] = true;
       }
 
       f->open_object_section("modules");
@@ -1026,9 +1026,9 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       // always_on_modules
       f->open_array_section("always_on_modules");
       for (const auto& module_name : always_on_modules) {
-        auto it = module_info_map.find(module_name);
-        if (it != module_info_map.end()) {
-          it->second->dump(f.get());
+        if (available_module_names[module_name]) {
+          auto module_info = map.get_module_info(module_name);
+          if (module_info) module_info->dump(f.get());
         } 
       }
       f->close_section();
@@ -1044,9 +1044,9 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       for (const auto& module_name : map.modules) {
         if (always_on_modules.count(module_name) > 0)
           continue;
-        auto it = module_info_map.find(module_name);
-        if (it != module_info_map.end()) {
-          it->second->dump(f.get());
+        if (available_module_names[module_name]) {
+          auto module_info = map.get_module_info(module_name);
+          if (module_info) module_info->dump(f.get());
         } 
       }
       f->close_section();
