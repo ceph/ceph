@@ -527,8 +527,7 @@ public:
     return view->is_data_stable();
   }
 
-  using get_extent_ertr = base_ertr;
-  get_extent_ertr::future<CachedExtentRef>
+  get_extent_iertr::future<CachedExtentRef>
   get_extent_viewable_by_trans(
     Transaction &t,
     CachedExtentRef extent)
@@ -553,7 +552,7 @@ public:
         if (p_extent->is_mutable()) {
           assert(p_extent->is_fully_loaded());
           assert(!p_extent->is_pending_io());
-          return get_extent_ertr::make_ready_future<CachedExtentRef>(
+          return get_extent_iertr::make_ready_future<CachedExtentRef>(
             CachedExtentRef(p_extent));
         } else {
           assert(p_extent->is_exist_clean());
@@ -588,7 +587,7 @@ public:
       if (extent->is_mutable()) {
         assert(extent->is_fully_loaded());
         assert(!extent->is_pending_io());
-        return get_extent_ertr::make_ready_future<CachedExtentRef>(extent);
+        return get_extent_iertr::make_ready_future<CachedExtentRef>(extent);
       } else {
         assert(extent->is_exist_clean());
         p_extent = extent.get();
@@ -601,30 +600,31 @@ public:
     // also see read_extent_maybe_partial() and get_absent_extent()
     assert(is_logical_type(p_extent->get_type()) ||
            p_extent->is_fully_loaded());
-    return p_extent->wait_io(
-    ).then([p_extent] {
-      return get_extent_ertr::make_ready_future<CachedExtentRef>(
+
+    return trans_intr::make_interruptible(
+      p_extent->wait_io()
+    ).then_interruptible([p_extent] {
+      return get_extent_iertr::make_ready_future<CachedExtentRef>(
         CachedExtentRef(p_extent));
     });
   }
 
   template <typename T>
-  using read_extent_ret = get_extent_ertr::future<TCachedExtentRef<T>>;
-
-  template <typename T>
-  read_extent_ret<T> get_extent_viewable_by_trans(
+  get_extent_iertr::future<TCachedExtentRef<T>>
+  get_extent_viewable_by_trans(
     Transaction &t,
     TCachedExtentRef<T> extent)
   {
     return get_extent_viewable_by_trans(t, CachedExtentRef(extent.get())
-    ).safe_then([](auto p_extent) {
+    ).si_then([](auto p_extent) {
       return p_extent->template cast<T>();
     });
   }
 
   // wait extent io or do partial reads
   template <typename T>
-  read_extent_ret<T> read_extent_maybe_partial(
+  get_extent_iertr::future<TCachedExtentRef<T>>
+  read_extent_maybe_partial(
     Transaction &t,
     TCachedExtentRef<T> extent,
     extent_len_t partial_off,
@@ -642,13 +642,16 @@ public:
         extent->get_type());
       ++access_stats.load_present;
       ++stats.access.s.load_present;
-      return do_read_extent_maybe_partial(
-          std::move(extent), partial_off, partial_len, &t_src);
+      return trans_intr::make_interruptible(
+        do_read_extent_maybe_partial(
+          std::move(extent), partial_off, partial_len, &t_src));
     } else {
       // TODO(implement fine-grained-wait):
       // the range might be already loaded, but we don't know
-      return extent->wait_io().then([extent]() -> read_extent_ret<T> {
-        return seastar::make_ready_future<TCachedExtentRef<T>>(extent);
+      return trans_intr::make_interruptible(
+        extent->wait_io()
+      ).then_interruptible([extent] {
+        return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(extent);
       });
     }
   }
@@ -664,6 +667,9 @@ public:
   }
 
 private:
+  using get_extent_ertr = base_ertr;
+  template <typename T>
+  using read_extent_ret = get_extent_ertr::future<TCachedExtentRef<T>>;
   /// Implements exclusive call to read_extent() for the extent
   template <typename T>
   read_extent_ret<T> do_read_extent_maybe_partial(

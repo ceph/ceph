@@ -954,7 +954,7 @@ private:
   shard_stats_t& shard_stats;
 
   template <typename T>
-  std::variant<LBAMappingRef, base_iertr::future<TCachedExtentRef<T>>>
+  std::variant<LBAMappingRef, get_child_ifut<T>>
   get_extent_if_linked(
     Transaction &t,
     LBAMappingRef pin)
@@ -964,7 +964,8 @@ private:
     // and linking the absent child
     auto v = pin->get_logical_extent(t);
     if (v.has_child()) {
-      return v.get_child_fut().safe_then([pin=std::move(pin)](auto extent) {
+      return v.get_child_fut(
+      ).si_then([pin=std::move(pin)](auto extent) {
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalCachedExtent>();
         auto pin_laddr = pin->get_key();

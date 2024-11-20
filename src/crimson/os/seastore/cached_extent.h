@@ -12,9 +12,8 @@
 #include "seastar/core/shared_future.hh"
 
 #include "include/buffer.h"
-#include "crimson/common/errorator.h"
-#include "crimson/common/interruptible_future.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/transaction_interruptor.h"
 
 struct btree_lba_manager_test;
 struct lba_btree_test;
@@ -23,7 +22,6 @@ struct cache_test_t;
 
 namespace crimson::os::seastore {
 
-class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
 class SegmentedAllocator;
@@ -1303,14 +1301,17 @@ private:
   uint16_t pos = std::numeric_limits<uint16_t>::max();
 };
 
-using get_child_ertr = crimson::errorator<
-  crimson::ct_error::input_output_error>;
+using get_child_iertr = trans_iertr<crimson::errorator<
+  crimson::ct_error::input_output_error>>;
+template <typename T>
+using get_child_ifut = get_child_iertr::future<TCachedExtentRef<T>>;
+
 template <typename T>
 struct get_child_ret_t {
-  std::variant<child_pos_t, get_child_ertr::future<TCachedExtentRef<T>>> ret;
+  std::variant<child_pos_t, get_child_ifut<T>> ret;
   get_child_ret_t(child_pos_t pos)
     : ret(std::move(pos)) {}
-  get_child_ret_t(get_child_ertr::future<TCachedExtentRef<T>> child)
+  get_child_ret_t(get_child_ifut<T> child)
     : ret(std::move(child)) {}
 
   bool has_child() const {
@@ -1322,7 +1323,7 @@ struct get_child_ret_t {
     return std::get<0>(ret);
   }
 
-  get_child_ertr::future<TCachedExtentRef<T>> &get_child_fut() {
+  get_child_ifut<T> &get_child_fut() {
     ceph_assert(ret.index() == 1);
     return std::get<1>(ret);
   }
