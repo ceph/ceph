@@ -145,9 +145,7 @@ public:
       if (s.is_empty()) return;
 
       s.release_lock();
-      SUBDEBUGDPP(
-	osd, "released object {}, {}",
-	loader.dpp, s.obc->get_oid(), s.obc->obs);
+      SUBDEBUGDPP(osd, "releasing obc {}, {}", loader.dpp, *(s.obc), s.obc->obs);
       s.obc->remove_from(loader.obc_set_accessing);
       s = state_t();
     }
@@ -200,6 +198,11 @@ public:
     CommonOBCPipeline &obc_pp() {
       ceph_assert(orderer_obc);
       return orderer_obc->obc_pipeline;
+    }
+
+    ~Orderer() {
+      LOG_PREFIX(ObjectContextLoader::~Orderer);
+      SUBDEBUG(osd, "releasing obc {}, {}", *(orderer_obc));
     }
   };
 
