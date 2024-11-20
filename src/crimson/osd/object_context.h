@@ -9,6 +9,7 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/shared_ptr.hh>
 
+#include "common/fmt_common.h"
 #include "common/intrusive_lru.h"
 #include "osd/object_state.h"
 #include "crimson/common/exception.h"
@@ -154,6 +155,15 @@ public:
     if (--list_link_cnt == 0) {
       list.erase(std::decay_t<ListType>::s_iterator_to(*this));
     }
+  }
+
+  template <typename FormatContext>
+  auto fmt_print_ctx(FormatContext & ctx) const {
+    return fmt::format_to(
+      ctx.out(), "ObjectContext({}, oid={}, refcount={})",
+      (void*)this,
+      get_oid(),
+      get_use_count());
   }
 
   using obc_accessing_option_t = boost::intrusive::member_hook<
