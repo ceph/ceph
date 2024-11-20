@@ -2337,8 +2337,10 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       pf->accounted_fragstat = pf->fragstat;
       if (touched_mtime)
 	pi.inode->mtime = pi.inode->ctime = pi.inode->dirstat.mtime;
-      if (touched_chattr)
+      if (touched_chattr) {
 	pi.inode->change_attr++;
+        pi.inode->dirstat.change_attr++;
+      }
       dout(20) << "predirty_journal_parents     gives " << pi.inode->dirstat << " on " << *pin << dendl;
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
