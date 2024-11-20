@@ -1012,7 +1012,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       f->dump_object("mgrmap", m);
     }
     f->flush(rdata);
-} else if (prefix == "mgr module ls") {
+  } else if (prefix == "mgr module ls") {
     if (f) {
       // Create a mapping from module names to ModuleInfo pointers
       std::unordered_map<std::string, const MgrMap::ModuleInfo*> module_info_map;
@@ -1063,7 +1063,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       }
       f->close_section();
       f->flush(rdata);
-    } else {
+  } else {
       TextTable tbl;
       tbl.define_column("MODULE", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("      ", TextTable::LEFT, TextTable::LEFT);
