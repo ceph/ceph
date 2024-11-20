@@ -56,6 +56,8 @@
   an empty string can be assigned to it. Additionally, commands
   `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get` and
   `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
+* CephFS: `ceph.quota.max_bytes` can now accept float type values which can be set
+  by using the command `setfattr -n ceph.quota.max_bytes -v <value> <path>`
 
 >=19.0.0
 
