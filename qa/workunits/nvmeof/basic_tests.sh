@@ -38,8 +38,10 @@ disconnect_all() {
 connect_all() {
     sudo nvme connect-all --traddr=$NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --transport=tcp -l 3600
     sleep 5
-    output=$(sudo nvme list --output-format=json)
-    if ! echo "$output" | grep -q "$SPDK_CONTROLLER"; then
+    expected_devices_count=$1
+    actual_devices=$(sudo nvme list --output-format=json | grep -o "$SPDK_CONTROLLER" | wc -l) 
+    if [ "$actual_devices" -ne "$expected_devices_count" ]; then
+        sudo nvme list --output-format=json
         return 1
     fi
 }
@@ -72,10 +74,12 @@ test_run connect
 test_run list_subsys 1
 test_run disconnect_all
 test_run list_subsys 0
-test_run connect_all
+devices_count=$(( $NVMEOF_NAMESPACES_COUNT * $NVMEOF_SUBSYSTEMS_COUNT)) 
+test_run connect_all $devices_count
 gateways_count=$(( $(echo "$NVMEOF_GATEWAY_IP_ADDRESSES" | tr -cd ',' | wc -c) + 1 ))
 multipath_count=$(( $gateways_count * $NVMEOF_SUBSYSTEMS_COUNT)) 
 test_run list_subsys $multipath_count
+
 
 
 echo "-------------Test Summary-------------"
