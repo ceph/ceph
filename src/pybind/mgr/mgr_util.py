@@ -10,14 +10,17 @@ from ceph.fs.earmarking import (
 if 'UNITTEST' in os.environ:
     import tests  # noqa
 
+import base64
 import cephfs
 import contextlib
 import datetime
 import errno
-import socket
-import time
+import hashlib
 import logging
+import os
+import socket
 import sys
+import time
 from ipaddress import ip_address
 from threading import Lock, Condition
 from typing import no_type_check, NewType
@@ -58,6 +61,8 @@ COLOR_SEQ = "\033[1;%dm"
 COLOR_DARK_SEQ = "\033[0;%dm"
 BOLD_SEQ = "\033[1m"
 UNDERLINE_SEQ = "\033[4m"
+
+SCRYPT_SALT_LEN = 29
 
 logger = logging.getLogger(__name__)
 
@@ -984,3 +989,19 @@ def password_hash(password: Optional[str], salt_password: Optional[str] = None) 
     else:
         salt = salt_password.encode('utf8')
     return bcrypt.hashpw(password.encode('utf8'), salt).decode('utf8')
+
+
+def calculate_password_hash(password: str, input_salt: Optional[str] = None) -> str:
+    if input_salt is None:
+        salt = os.urandom(SCRYPT_SALT_LEN)
+    else:
+        salt = base64.b64decode(input_salt)[:SCRYPT_SALT_LEN]
+    hash = hashlib.scrypt(password.encode('utf8'), salt=salt, n=2**14, r=8, p=1)
+    return base64.b64encode(salt + hash).decode('utf8')
+
+
+def validate_password_hash(hash: str) -> None:
+    # make sure the hashed_password is actually a hashlib.scrypt hash
+    # 64 is the default derivedkey length
+    if len(base64.b64decode(hash)) != (SCRYPT_SALT_LEN + 64):
+        raise Exception
