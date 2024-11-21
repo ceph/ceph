@@ -219,7 +219,62 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
             EXPECT_EQ(main["rocksdb.block.cache.miss"].get<int>(), 3);
         }
         else if (params.mode == "debug"){
-            
+                        // Validate block cache metrics
+            EXPECT_EQ(main["rocksdb.block.cache.bytes.read"].get<int>(), 125984);
+            EXPECT_EQ(main["rocksdb.block.cache.bytes.write"].get<int>(), 2560);
+            EXPECT_EQ(main["rocksdb.block.cache.data.add"].get<int>(), 1);
+            EXPECT_EQ(main["rocksdb.block.cache.data.add.redundant"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.block.cache.data.bytes.insert"].get<int>(), 2128);
+
+            // Validate filter cache metrics
+            EXPECT_EQ(main["rocksdb.block.cache.filter.add"].get<int>(), 1);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.add.redundant"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.bytes.evict"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.bytes.insert"].get<int>(), 320);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.hit"].get<int>(), 50);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.miss"].get<int>(), 1);
+
+            // Validate index cache metrics
+            EXPECT_EQ(main["rocksdb.block.cache.index.add"].get<int>(), 1);
+            EXPECT_EQ(main["rocksdb.block.cache.index.add.redundant"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.block.cache.index.bytes.evict"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.block.cache.index.bytes.insert"].get<int>(), 112);
+            EXPECT_EQ(main["rocksdb.block.cache.index.hit"].get<int>(), 51);
+            EXPECT_EQ(main["rocksdb.block.cache.index.miss"].get<int>(), 1);
+
+            // Validate bloom filter metrics
+            EXPECT_EQ(main["rocksdb.bloom.filter.full.positive"].get<int>(), 50);
+            EXPECT_EQ(main["rocksdb.bloom.filter.full.true.positive"].get<int>(), 50);
+            EXPECT_EQ(main["rocksdb.bloom.filter.micros"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.bloom.filter.prefix.checked"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.bloom.filter.prefix.useful"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.bloom.filter.useful"].get<int>(), 0);
+
+            // Validate compaction metrics
+            EXPECT_EQ(main["rocksdb.compaction.cancelled"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.compaction.key.drop.new"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.compaction.key.drop.obsolete"].get<int>(), 0);
+
+            // Validate read/write metrics
+            EXPECT_EQ(main["rocksdb.bytes.read"].get<int>(), 340);
+            EXPECT_EQ(main["rocksdb.bytes.written"].get<int>(), 3480);
+
+            // Validate WAL metrics
+            EXPECT_EQ(main["rocksdb.wal.bytes"].get<int>(), 3480);
+            EXPECT_EQ(main["rocksdb.wal.synced"].get<int>(), 0);
+
+            // Validate memtable hit/miss
+            EXPECT_EQ(main["rocksdb.memtable.hit"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.memtable.miss"].get<int>(), 50);
+
+            // Validate L1 and L2+ hit rates
+            EXPECT_EQ(main["rocksdb.l1.hit"].get<int>(), 50);
+            EXPECT_EQ(main["rocksdb.l2andup.hit"].get<int>(), 0);
+
+            // Validate file metrics
+            EXPECT_EQ(main["rocksdb.no.file.closes"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.no.file.errors"].get<int>(), 0);
+            EXPECT_EQ(main["rocksdb.no.file.opens"].get<int>(), 1);
         }
     }
     else
@@ -238,7 +293,90 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
             EXPECT_EQ(main["rocksdb.block.cache.miss"].get<int>(), -1);
         }
         else if (params.mode == "debug"){
+            // Validate blobdb metrics
+            EXPECT_EQ(main["rocksdb.blobdb.num.get"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.blobdb.num.keys.read"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.blobdb.num.keys.written"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.blobdb.num.multiget"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.blobdb.num.next"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.blobdb.num.prev"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.blobdb.num.put"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.blobdb.num.seek"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.blobdb.num.write"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.blobdb.write.blob"].get<int>(), -1);
 
+            // Validate block cache metrics
+            EXPECT_EQ(main["rocksdb.block.cache.bytes.read"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.bytes.write"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.data.add"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.data.add.redundant"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.data.bytes.insert"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.data.hit"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.data.miss"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.add"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.add.redundant"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.bytes.evict"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.bytes.insert"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.hit"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.filter.miss"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.index.add"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.index.add.redundant"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.index.bytes.evict"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.index.bytes.insert"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.index.hit"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.index.miss"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.block.cache.miss"].get<int>(), -1);
+
+            // Validate bloom filter metrics
+            EXPECT_EQ(main["rocksdb.bloom.filter.full.positive"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.bloom.filter.full.true.positive"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.bloom.filter.micros"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.bloom.filter.prefix.checked"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.bloom.filter.prefix.useful"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.bloom.filter.useful"].get<int>(), -1);
+
+            // Validate bytes read/write metrics
+            EXPECT_EQ(main["rocksdb.bytes.read"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.bytes.written"].get<int>(), -1);
+
+            // Validate compaction metrics
+            EXPECT_EQ(main["rocksdb.compaction.cancelled"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compaction.key.drop.new"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compaction.key.drop.obsolete"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compaction.key.drop.range_del"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compaction.key.drop.user"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compaction.optimized.del.drop.obsolete"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compaction.range_del.drop.obsolete"].get<int>(), -1);
+
+            // Validate compact read/write metrics
+            EXPECT_EQ(main["rocksdb.compact.read.bytes"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compact.read.marked.bytes"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compact.read.periodic.bytes"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compact.read.ttl.bytes"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compact.write.bytes"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compact.write.marked.bytes"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compact.write.periodic.bytes"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.compact.write.ttl.bytes"].get<int>(), -1);
+
+            // Validate level hits and memtable stats
+            EXPECT_EQ(main["rocksdb.l0.hit"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.l0.num.files.stall.micros"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.l0.slowdown.micros"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.l1.hit"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.l2andup.hit"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.memtable.compaction.micros"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.memtable.hit"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.memtable.miss"].get<int>(), -1);
+
+            // Validate merge operation and file stats
+            EXPECT_EQ(main["rocksdb.merge.operation.time.nanos"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.no.file.closes"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.no.file.errors"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.no.file.opens"].get<int>(), -1);
+
+            // Validate WAL metrics
+            EXPECT_EQ(main["rocksdb.wal.bytes"].get<int>(), -1);
+            EXPECT_EQ(main["rocksdb.wal.synced"].get<int>(), -1);
         }
     }
 
@@ -262,7 +400,36 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
             EXPECT_GT(histogram["rocksdb.sst.read.micros"]["avg"].get<int>(), 0);
         }
         else if (params.mode == "debug"){
+            	    ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros"));
+            EXPECT_GT(histogram["rocksdb.db.get.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.db.get.micros"]["avg"].get<double>(), 0.0);
 
+            ASSERT_TRUE(histogram.contains("rocksdb.db.write.micros"));
+            EXPECT_GT(histogram["rocksdb.db.write.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.db.write.micros"]["avg"].get<double>(), 0.0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.db.flush.micros"));
+            EXPECT_GT(histogram["rocksdb.db.flush.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.db.flush.micros"]["avg"].get<double>(), 0.0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros"));
+            EXPECT_GT(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.sst.read.micros"]["avg"].get<double>(), 0.0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.db.multiget.micros"));
+            EXPECT_EQ(histogram["rocksdb.db.multiget.micros"]["count"].get<int>(), 0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.db.seek.micros"));
+            EXPECT_EQ(histogram["rocksdb.db.seek.micros"]["count"].get<int>(), 0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.db.write.stall"));
+            EXPECT_EQ(histogram["rocksdb.db.write.stall"]["count"].get<int>(), 0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.sst.batch.size"));
+            EXPECT_EQ(histogram["rocksdb.sst.batch.size"]["count"].get<int>(), 0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.wal.file.sync.micros"));
+            EXPECT_EQ(histogram["rocksdb.wal.file.sync.micros"]["count"].get<int>(), 0);
         }
     }
     else
@@ -283,7 +450,36 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
         }
         else if (params.mode == "debug"){
 
+            	    ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros"));
+            EXPECT_GT(histogram["rocksdb.db.get.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.db.get.micros"]["avg"].get<double>(), 0.0);
 
+            ASSERT_TRUE(histogram.contains("rocksdb.db.write.micros"));
+            EXPECT_GT(histogram["rocksdb.db.write.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.db.write.micros"]["avg"].get<double>(), 0.0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.db.flush.micros"));
+            EXPECT_GT(histogram["rocksdb.db.flush.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.db.flush.micros"]["avg"].get<double>(), 0.0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros"));
+            EXPECT_GT(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.sst.read.micros"]["avg"].get<double>(), 0.0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.db.multiget.micros"));
+            EXPECT_EQ(histogram["rocksdb.db.multiget.micros"]["count"].get<int>(), 0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.db.seek.micros"));
+            EXPECT_EQ(histogram["rocksdb.db.seek.micros"]["count"].get<int>(), 0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.db.write.stall"));
+            EXPECT_EQ(histogram["rocksdb.db.write.stall"]["count"].get<int>(), 0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.sst.batch.size"));
+            EXPECT_EQ(histogram["rocksdb.sst.batch.size"]["count"].get<int>(), 0);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.wal.file.sync.micros"));
+            EXPECT_EQ(histogram["rocksdb.wal.file.sync.micros"]["count"].get<int>(), 0);
         }
     }
 
