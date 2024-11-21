@@ -2250,6 +2250,39 @@ Usage:
         res = raise_if_exception(completion)
         return HandleCommandResult(stdout=res)
 
+    @_cli_write_command("orch tuned-profile add-settings")
+    def _tuned_profile_add_settings(self, profile_name: str, settings: str) -> HandleCommandResult:
+        try:
+            setting_pairs = settings.split(",")
+            parsed_setting = {}
+            parsed_setting = {key.strip(): value.strip() for key, value in (s.split('=', 1) for s in setting_pairs)}
+            completion = self.tuned_profile_add_settings(profile_name, parsed_setting)
+            res = raise_if_exception(completion)
+            return HandleCommandResult(stdout=res)
+        except ValueError:
+            error_message = (
+                "Error: Invalid format detected. "
+                "The correct format is key=value pairs separated by commas,"
+                "e.g., 'vm.swappiness=11,vm.user_reserve_kbytes=116851'"
+            )
+            return HandleCommandResult(stderr=error_message)
+
+    @_cli_write_command("orch tuned-profile rm-settings")
+    def _tuned_profile_rm_settings(self, profile_name: str, settings: str) -> HandleCommandResult:
+        try:
+            setting = [s.strip() for s in settings.split(",") if s.strip()]
+            if not setting:
+                raise ValueError(
+                    "Error: Invalid format."
+                    "The correct format is key1,key2"
+                    "e.g., vm.swappiness,vm.user_reserve_kbytes"
+                )
+            completion = self.tuned_profile_rm_settings(profile_name, setting)
+            res = raise_if_exception(completion)
+            return HandleCommandResult(stdout=res)
+        except ValueError as e:
+            return HandleCommandResult(stderr=str(e))
+
     def self_test(self) -> None:
         old_orch = self._select_orchestrator()
         self._set_backend('')
