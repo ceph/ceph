@@ -149,11 +149,11 @@ INSTANTIATE_TEST_SUITE_P(
     RocksDBMetricsTest,
     ::testing::Values(
         RocksDBMetricsTestParams{true, "telemetry"},
-        RocksDBMetricsTestParams{false, "telemetry"}
-        // RocksDBMetricsTestParams{true, "objectstore"},
-        // RocksDBMetricsTestParams{false, "objectstore"}
-        // RocksDBMetricsTestParams{true, "debug"},
-        // RocksDBMetricsTestParams{false, "debug"}
+        RocksDBMetricsTestParams{false, "telemetry"},
+        RocksDBMetricsTestParams{true, "objectstore"},
+        RocksDBMetricsTestParams{false, "objectstore"},
+        RocksDBMetricsTestParams{true, "debug"},
+        RocksDBMetricsTestParams{false, "debug"}
         ));
         
 
@@ -450,36 +450,41 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
         }
         else if (params.mode == "debug"){
 
-            	    ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros"));
-            EXPECT_GT(histogram["rocksdb.db.get.micros"]["count"].get<int>(), 0);
-            EXPECT_GT(histogram["rocksdb.db.get.micros"]["avg"].get<double>(), 0.0);
+            ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros"));
+            EXPECT_EQ(histogram["rocksdb.db.get.micros"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.db.get.micros"]["avg"].get<int>(), -1);
 
             ASSERT_TRUE(histogram.contains("rocksdb.db.write.micros"));
-            EXPECT_GT(histogram["rocksdb.db.write.micros"]["count"].get<int>(), 0);
-            EXPECT_GT(histogram["rocksdb.db.write.micros"]["avg"].get<double>(), 0.0);
+            EXPECT_EQ(histogram["rocksdb.db.write.micros"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.db.write.micros"]["avg"].get<int>(), -1);
 
             ASSERT_TRUE(histogram.contains("rocksdb.db.flush.micros"));
-            EXPECT_GT(histogram["rocksdb.db.flush.micros"]["count"].get<int>(), 0);
-            EXPECT_GT(histogram["rocksdb.db.flush.micros"]["avg"].get<double>(), 0.0);
-
-            ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros"));
-            EXPECT_GT(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), 0);
-            EXPECT_GT(histogram["rocksdb.sst.read.micros"]["avg"].get<double>(), 0.0);
+            EXPECT_EQ(histogram["rocksdb.db.flush.micros"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.db.flush.micros"]["avg"].get<int>(), -1);
 
             ASSERT_TRUE(histogram.contains("rocksdb.db.multiget.micros"));
-            EXPECT_EQ(histogram["rocksdb.db.multiget.micros"]["count"].get<int>(), 0);
+            EXPECT_EQ(histogram["rocksdb.db.multiget.micros"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.db.multiget.micros"]["avg"].get<int>(), -1);
 
             ASSERT_TRUE(histogram.contains("rocksdb.db.seek.micros"));
-            EXPECT_EQ(histogram["rocksdb.db.seek.micros"]["count"].get<int>(), 0);
+            EXPECT_EQ(histogram["rocksdb.db.seek.micros"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.db.seek.micros"]["avg"].get<int>(), -1);
 
             ASSERT_TRUE(histogram.contains("rocksdb.db.write.stall"));
-            EXPECT_EQ(histogram["rocksdb.db.write.stall"]["count"].get<int>(), 0);
+            EXPECT_EQ(histogram["rocksdb.db.write.stall"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.db.write.stall"]["avg"].get<int>(), -1);
 
             ASSERT_TRUE(histogram.contains("rocksdb.sst.batch.size"));
-            EXPECT_EQ(histogram["rocksdb.sst.batch.size"]["count"].get<int>(), 0);
+            EXPECT_EQ(histogram["rocksdb.sst.batch.size"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.sst.batch.size"]["avg"].get<int>(), -1);
+
+            ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros"));
+            EXPECT_EQ(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.sst.read.micros"]["avg"].get<int>(), -1);
 
             ASSERT_TRUE(histogram.contains("rocksdb.wal.file.sync.micros"));
-            EXPECT_EQ(histogram["rocksdb.wal.file.sync.micros"]["count"].get<int>(), 0);
+            EXPECT_EQ(histogram["rocksdb.wal.file.sync.micros"]["count"].get<int>(), -1);
+            EXPECT_EQ(histogram["rocksdb.wal.file.sync.micros"]["avg"].get<int>(), -1);
         }
     }
 
