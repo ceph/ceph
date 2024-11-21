@@ -1,0 +1,8 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, client.0]
+tasks:
+- install:
+- exec:
+    client.0:
+      - mkdir $TESTDIR/ceph_test_bluefs && cd $TESTDIR/ceph_test_bluefs && ceph_test_bluefs --log-file $TESTDIR/archive/ceph_test_bluefs.log --debug-bluefs 5/20 --gtest_catch_exceptions=0
+      - rm -rf $TESTDIR/ceph_test_bluefs

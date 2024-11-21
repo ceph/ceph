@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+    clients:
+      client.0:
+      - suites/fsstress.sh
+- print: "**** done fsstress"
