@@ -157,6 +157,7 @@ class FIFO {
   ///@{
 
 public:
+#if 0
   /// \brief Retrieve FIFO metadata
   ///
   /// \param rados RADOS handle
@@ -188,7 +189,62 @@ public:
 			       ret.part_entry_overhead);
       }, std::forward<CompletionToken>(token));
   }
+#endif
 
+  /// \brief Retrieve FIFO metadata
+  ///
+  /// \param rados RADOS handle
+  /// \param obj Head object for FIFO
+  /// \param ioc Locator
+  /// \param objv Operation will fail if FIFO is not at this version
+  /// \param token Boost.Asio CompletionToken
+  ///
+  /// \return The metadata info, part header size, and entry overhead
+  /// in a way appropriate to the completion token.
+  template<boost::asio::completion_token_for<
+    void(boost::system::error_code, rados::cls::fifo::info,
+	 uint32_t, uint32_t)> CompletionToken>
+  static auto get_meta(neorados::RADOS& rados,
+		       neorados::Object obj,
+		       neorados::IOContext ioc,
+		       std::optional<rados::cls::fifo::objv> objv,
+		       CompletionToken&& token) {
+    namespace fifo = rados::cls::fifo;
+    namespace asio = boost::asio;
+    namespace sys = boost::system;
+    return asio::async_initiate<
+      CompletionToken, void(sys::error_code, rados::cls::fifo::info,
+			    uint32_t, uint32_t)>
+      (asio::experimental::co_composed<
+	void(sys::error_code, fifo::info, uint32_t, uint32_t)>
+       ([](auto state, RADOS& r, Object obj, IOContext ioc,
+	   std::optional<fifo::objv> objv) -> void {
+	 try {
+	   state.throw_if_cancelled(true);
+	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   buffer::list in;
+	   fifo::op::get_meta gm;
+	   gm.version = objv;
+	   encode(gm, in);
+	   ReadOp op;
+	   buffer::list out;
+	   op.exec(fifo::op::CLASS, fifo::op::GET_META, in, &out);
+	   co_await r.execute(std::move(obj), std::move(ioc), std::move(op), nullptr,
+			      asio::deferred);
+	   fifo::op::get_meta_reply ret;
+	   decode(ret, out);
+	   co_return std::make_tuple(sys::error_code{}, std::move(ret.info),
+				     ret.part_header_size,
+				     ret.part_entry_overhead);
+	 } catch (const sys::system_error& e) {
+	   co_return std::make_tuple(e.code(), fifo::info{}, uint32_t{},
+				     uint32_t{});
+	 }
+       }, rados.get_executor()),
+       token, std::ref(rados), std::move(obj), std::move(ioc), std::move(objv));
+  }
+
+#if 0
 private:
   /// \brief Retrieve part info
   ///
@@ -214,7 +270,51 @@ private:
 	return std::move(ret.header);
       }, std::forward<CompletionToken>(token));
   }
+#endif
 
+  /// \brief Retrieve part info
+  ///
+  /// \param part_num Number of part to query
+  /// \param token Boost.Asio CompletionToken
+  ///
+  /// \return The part info in a way appropriate to the completion token.
+  template<boost::asio::completion_token_for<
+	     void(boost::system::error_code, rados::cls::fifo::part_header)>
+	   CompletionToken>
+  auto get_part_info(std::int64_t part_num,
+		     CompletionToken&& token) {
+    namespace fifo = rados::cls::fifo;
+    namespace asio = boost::asio;
+    namespace sys = boost::system;
+    std::unique_lock l(m);
+    Object part_oid = info.part_oid(part_num);;
+    l.unlock();
+    return asio::async_initiate<
+      CompletionToken, void(sys::error_code, fifo::part_header)>
+      (asio::experimental::co_composed<
+	void(sys::error_code, fifo::part_header)>
+       ([](auto state, Object part_oid, FIFO* f) -> void {
+	 try {
+	   state.throw_if_cancelled(true);
+	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   buffer::list in;
+	   fifo::op::get_part_info gpi;
+	   encode(gpi, in);
+	   ReadOp op;
+	   buffer::list out;
+	   op.exec(fifo::op::CLASS, fifo::op::GET_PART_INFO, in, &out);
+	   co_await f->rados.execute(std::move(part_oid), f->ioc, std::move(op),
+				     nullptr, asio::deferred);
+
+	   fifo::op::get_part_info_reply ret;
+	   decode(ret, out);
+	   co_return std::make_tuple(sys::error_code{}, std::move(ret.header));
+	 } catch (const sys::system_error& e) {
+	   co_return std::make_tuple(e.code(), fifo::part_header{});
+	 }
+       }, rados.get_executor()),
+       token, std::move(part_oid), this);
+  }
 
   /// \brief Create a new part object
   ///
