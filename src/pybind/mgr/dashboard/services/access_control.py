@@ -2,13 +2,10 @@
 # pylint: disable=too-many-arguments,too-many-return-statements
 # pylint: disable=too-many-branches, too-many-locals, too-many-statements
 
-import base64
 import errno
-import hashlib
 import hmac
 import json
 import logging
-import os
 import re
 import threading
 import time
@@ -17,6 +14,7 @@ from string import ascii_lowercase, ascii_uppercase, digits, punctuation
 from typing import List, Optional, Sequence
 
 from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
+from mgr_util import calculate_password_hash, validate_password_hash
 
 from .. import mgr
 from ..exceptions import PasswordPolicyException, PermissionNotValid, \
@@ -28,7 +26,6 @@ from ..settings import Settings
 
 logger = logging.getLogger('access_control')
 DEFAULT_FILE_DESC = 'password/secret'
-SCRYPT_SALT_LEN = 29
 
 _P = Permission  # short alias
 
@@ -355,17 +352,8 @@ class User(object):
         self._enabled = value
         self.refresh_last_update()
 
-    @staticmethod
-    def calculate_password_hash(password: str, input_salt: Optional[str] = None) -> str:
-        if input_salt is None:
-            salt = os.urandom(SCRYPT_SALT_LEN)
-        else:
-            salt = base64.b64decode(input_salt)[:SCRYPT_SALT_LEN]
-        hash = hashlib.scrypt(password.encode('utf8'), salt=salt, n=2**14, r=8, p=1)
-        return base64.b64encode(salt + hash).decode('utf8')
-
     def set_password(self, password):
-        self.set_password_hash(self.calculate_password_hash(password))
+        self.set_password_hash(calculate_password_hash(password))
 
     def set_password_hash(self, hashed_password):
         self.invalid_auth_attempt = 0
@@ -382,7 +370,7 @@ class User(object):
         :return: `True` if the passwords are equal, otherwise `False`.
         :rtype: bool
         """
-        pass_hash = self.calculate_password_hash(password, input_salt=self.password)
+        pass_hash = calculate_password_hash(password, input_salt=self.password)
         return hmac.compare_digest(pass_hash, self.password)
 
     def is_pwd_expired(self):
@@ -512,7 +500,7 @@ class AccessControlDB(object):
             if pwd_expiration_date and \
                (pwd_expiration_date < int(time.mktime(datetime.utcnow().timetuple()))):
                 raise PwdExpirationDateNotValid()
-            user = User(username, User.calculate_password_hash(password), name, email, enabled=enabled,
+            user = User(username, calculate_password_hash(password), name, email, enabled=enabled,
                         pwd_expiration_date=pwd_expiration_date,
                         pwd_update_required=pwd_update_required)
             self.users[username] = user
@@ -916,6 +904,25 @@ def ac_user_set_password(_, username: str, inbuf: str,
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
 
+@CLIWriteCommand('dashboard ac-user-set-password-hash')
+@CLICheckNonemptyFileInput(desc=DEFAULT_FILE_DESC)
+def ac_user_set_password_hash(_, username: str, inbuf: str):
+    '''
+    Set user password hashlib.scrypt hash from -i <file>
+    '''
+    hashed_password = inbuf
+    try:
+        validate_password_hash(inbuf)
+
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
+        user.set_password_hash(hashed_password)
+
+        mgr.ACCESS_CTRL_DB.save()
+        return 0, json.dumps(user.to_dict()), ''
+    except ValueError:
+        return -errno.EINVAL, '', 'Invalid password hash'
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
 
 @CLIWriteCommand('dashboard ac-user-set-info')
 def ac_user_set_info(_, username: str, name: str, email: str):

@@ -9,7 +9,7 @@ import unittest
 from datetime import datetime, timedelta
 
 from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
-from mgr_util import password_hash
+from mgr_util import calculate_password_hash
 
 from .. import mgr
 from ..security import Permission, Scope
@@ -289,7 +289,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                              enabled=enabled, force_password=True,
                              pwd_expiration_date=pwdExpirationDate)
 
-        pass_hash = password_hash('admin', user['password'])
+        pass_hash = calculate_password_hash('admin', user['password'])
         self.assertDictEqual(user, {
             'username': username,
             'password': pass_hash,
@@ -497,7 +497,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_show_user(self):
         self.test_add_user_roles()
         user = self.exec_cmd('ac-user-show', username='admin')
-        pass_hash = password_hash('admin', user['password'])
+        pass_hash = calculate_password_hash('admin', user['password'])
         self.assertDictEqual(user, {
             'username': 'admin',
             'lastUpdate': user['lastUpdate'],
@@ -541,7 +541,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         user_orig = self.test_create_user()
         user = self.exec_cmd('ac-user-set-info', username='admin',
                              name='Admin Name', email='admin@admin.com')
-        pass_hash = password_hash('admin', user['password'])
+        pass_hash = calculate_password_hash('admin', user['password'])
         self.assertDictEqual(user, {
             'username': 'admin',
             'password': pass_hash,
@@ -569,7 +569,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         user_orig = self.test_create_user()
         user = self.exec_cmd('ac-user-set-password', username='admin',
                              inbuf='newpass', force_password=True)
-        pass_hash = password_hash('newpass', user['password'])
+        pass_hash = calculate_password_hash('newpass', user['password'])
         self.assertDictEqual(user, {
             'username': 'admin',
             'password': pass_hash,
@@ -594,7 +594,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             pwd_file.seek(0)
             user = self.exec_cmd('ac-user-set-password', username='admin',
                                  inbuf=pwd_file.read(), force_password=True)
-            pass_hash = password_hash(password, user['password'])
+            pass_hash = calculate_password_hash(password, user['password'])
             self.assertEqual(user['password'], pass_hash)
 
     def test_set_user_password_nonexistent_user(self):
@@ -616,8 +616,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_user_password_hash(self):
         user_orig = self.test_create_user()
         user = self.exec_cmd('ac-user-set-password-hash', username='admin',
-                             inbuf='$2b$12$Pt3Vq/rDt2y9glTPSV.VFegiLkQeIpddtkhoFetNApYmIJOY8gau2')
-        pass_hash = password_hash('newpass', user['password'])
+                             inbuf='2b12Pt3Vq/rDt2y9glTPSVVFegiLkQeIpddtkhoKbMQHMtDsOzPCTNwvPBoY+1xJX0kHZKblZeVcAOjeIh+pweEf0J8o1obBujPFb7NORgpy8pfl5GuSzJEum1NE')
+        pass_hash = calculate_password_hash('newpass', user['password'])
         self.assertDictEqual(user, {
             'username': 'admin',
             'password': pass_hash,
@@ -636,7 +636,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_user_password_hash_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('ac-user-set-password-hash', username='admin',
-                          inbuf='$2b$12$Pt3Vq/rDt2y9glTPSV.VFegiLkQeIpddtkhoFetNApYmIJOY8gau2')
+                          inbuf='2b12Pt3Vq/rDt2y9glTPSVVFegiLkQeIpddtkhoKbMQHMtDsOzPCTNwvPBoY+1xJX0kHZKblZeVcAOjeIh+pweEf0J8o1obBujPFb7NORgpy8pfl5GuSzJEum1NE')
 
         self.assertEqual(ctx.exception.retcode, -errno.ENOENT)
         self.assertEqual(str(ctx.exception), "User 'admin' does not exist")
@@ -654,7 +654,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.exec_cmd('set-login-credentials', username='admin',
                       inbuf='admin')
         user = self.exec_cmd('ac-user-show', username='admin')
-        pass_hash = password_hash('admin', user['password'])
+        pass_hash = calculate_password_hash('admin', user['password'])
         self.assertDictEqual(user, {
             'username': 'admin',
             'password': pass_hash,
@@ -674,7 +674,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.exec_cmd('set-login-credentials', username='admin',
                       inbuf='admin2')
         user = self.exec_cmd('ac-user-show', username='admin')
-        pass_hash = password_hash('admin2', user['password'])
+        pass_hash = calculate_password_hash('admin2', user['password'])
         self.assertDictEqual(user, {
             'username': 'admin',
             'password': pass_hash,
