@@ -1285,7 +1285,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             if latest < version:
                 raise RuntimeError(f"main.db version is newer ({version}) than module ({latest})")
             for i in range(version, latest):
-                self.log.info(f"upgrading main.db for {self.module_name} from {i-1}:{i}")
+                self.log.info(f"upgrading main.db for {self.module_name} from {i - 1}:{i}")
                 for sql in self.SCHEMA_VERSIONED[i]:
                     db.execute(sql)
             if version < latest:
