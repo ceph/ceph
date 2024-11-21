@@ -1165,6 +1165,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             result_str = self._process_cert_store_json(cert_ls, 0)
             return HandleCommandResult(stdout=result_str)
 
+    @_cli_read_command('orch cert-store cert check')
+    def _cert_store_cert_check(self, format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_cert_check()
+        cert_ls = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(cert_ls, format, many=False, cls=None))
+        else:
+            result_str = self._process_cert_store_json(cert_ls, 0)
+            return HandleCommandResult(stdout=result_str)
+
     @_cli_read_command('orch cert-store key ls')
     def _cert_store_key_ls(self, format: Format = Format.plain) -> HandleCommandResult:
         completion = self.cert_store_key_ls()

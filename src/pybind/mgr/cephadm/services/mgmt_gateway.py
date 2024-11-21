@@ -50,8 +50,8 @@ class MgmtGatewayService(CephadmService):
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
 
     def get_external_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        cert = self.mgr.cert_key_store.get_cert('mgmt_gw_cert')
-        key = self.mgr.cert_key_store.get_key('mgmt_gw_key')
+        cert = self.mgr.cert_mgr.get_cert('mgmt_gw_cert')
+        key = self.mgr.cert_mgr.get_key('mgmt_gw_key')
         if not (cert and key):
             # not available on store, check if provided on the spec
             if svc_spec.ssl_certificate and svc_spec.ssl_certificate_key:
@@ -64,8 +64,8 @@ class MgmtGatewayService(CephadmService):
                 cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, ips)
             # save certificates
             if cert and key:
-                self.mgr.cert_key_store.save_cert('mgmt_gw_cert', cert)
-                self.mgr.cert_key_store.save_key('mgmt_gw_key', key)
+                self.mgr.cert_mgr.save_cert('mgmt_gw_cert', cert)
+                self.mgr.cert_mgr.save_key('mgmt_gw_key', key)
             else:
                 logger.error("Failed to obtain certificate and key from mgmt-gateway.")
         return cert, key
@@ -165,5 +165,5 @@ class MgmtGatewayService(CephadmService):
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'redirect')
         if daemon.hostname is not None:
             # delete cert/key entires for this mgmt-gateway daemon
-            self.mgr.cert_key_store.rm_cert('mgmt_gw_cert')
-            self.mgr.cert_key_store.rm_key('mgmt_gw_key')
+            self.mgr.cert_mgr.rm_cert('mgmt_gw_cert')
+            self.mgr.cert_mgr.rm_key('mgmt_gw_key')
