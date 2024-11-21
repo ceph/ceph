@@ -200,7 +200,8 @@ RUN set -x && \
     # remove unnecessary files with big impact
     rm -rf /etc/selinux /usr/share/{doc,man,selinux} && \
     # don't keep compiled python binaries
-    find / -xdev \( -name "*.pyc" -o -name "*.pyo" \) -delete
+    find / -xdev \( -name "*.pyc" -o -name "*.pyo" \) -delete && \
+    rm -f /etc/yum.repos.d/{ceph,ganesha,tcmu-runner,ceph-iscsi}.repo
 
 # Verify that the packages installed haven't been accidentally cleaned, then
 # clean the package list and re-clean unnecessary RPM database files
