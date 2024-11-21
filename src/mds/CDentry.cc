@@ -309,7 +309,7 @@ void CDentry::push_projected_linkage(CInode *ref_inode, inodeno_t remote_ino)
   p->ref_inode = ref_inode;
   //flushing dirty_inode in try_to_expire
   ref_inode->push_projected_parent(this);
-  //ref_inode->set_remote_ino(remote_ino);
+  ref_inode->set_remote_ino(remote_ino);
 
   p->remote_ino = remote_ino;
   p->remote_d_type = ref_inode->d_type();
