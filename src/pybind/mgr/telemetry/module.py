@@ -628,24 +628,23 @@ class Module(MgrModule):
 
         return result
     
-    def get_rocksdb_metrics(self) -> dict:
-        # Initialize result dict to store metrics for each OSD separately
-        result = {"osd" : {},
-                  "mon" : {}}
+    def get_rocksdb_metrics(self) -> Dict[str, dict]:
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(lambda: defaultdict(str)))
         
         anonymized_daemons = {}
         osd_map = self.get('osd_map')
 
-        # Combine available daemons
+        # Get all osds
         daemons = []
         for osd in osd_map['osds']:
             daemons.append('osd'+'.'+str(osd['osd']))
 
-        if self.is_enabled_collection(Collection.perf_memory_metrics):
-            mon_map = self.get('mon_map')
-            for mon in mon_map['mons']:
-                daemons.append('mon'+'.'+mon['name'])
+        # Get all mons
+        mon_map = self.get('mon_map')
+        for mon in mon_map['mons']:
+            daemons.append('mon'+'.'+mon['name'])
 
+        # For each osd and mon id call dump_rocksdb_stats for telemetry
         for daemon in daemons:
             daemon_type, daemon_id = daemon.split('.', 1)
             cmd_dict = {
