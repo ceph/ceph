@@ -3071,8 +3071,43 @@ void MDSRankDispatcher::handle_asok_command(
     command_quiesce_db(cmdmap, on_finish);
     return;
   } else if (command == "dump stray") {
-    mdcache->stray_status(f);
-    goto out;
+    std::lock_guard l(mds_lock);
+
+    int r;
+    std::mutex m;
+    std::conditional_variable cv;
+    bool done = false;
+    int ttl = 2;
+    f.open_array_section("strays");
+    
+    std::function<void()> done_callback = [&]() {
+      dout(10) << "dump_stray callback" << dendl;
+      {
+        std::unique_lock<std::mutex> stray_lock(m);
+        done = true;
+      }
+      
+      f.close_section();
+      f.dump(*outbl);
+      cv.notify_all();
+    };
+
+    r = mdcache->stray_status(f, done_callback);
+    if (r == -EAGAIN) {
+      // just to be on safe side... callback can be called only once
+      if (--ttl == 0) {
+        dout(10) << "dump_stray timeout" << dendl;
+        on_finish(-ETIME, "", outbl);
+        return;
+      }
+      dout(10) << "dump_stray wait" << dendl;
+      std::unique_lock<std::mutex> stray_lock(m);
+      cv.wait(stray_lock, []{return done;});
+    }
+    
+    dout(10) << "dump_stray done" << dendl;
+    on_finish(0, "", outbl);
+    return;
   } else {
     r = -CEPHFS_ENOSYS;
   }

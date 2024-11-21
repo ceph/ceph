@@ -1271,7 +1271,7 @@ private:
   void handle_open_ino(const cref_t<MMDSOpenIno> &m, int err=0);
   void handle_open_ino_reply(const cref_t<MMDSOpenInoReply> &m);
 
-  int scan_stray_dir(dirfrag_t next=dirfrag_t(), Formatter* f = nullptr);
+  int scan_stray_dir(dirfrag_t next=dirfrag_t(), Formatter* f = nullptr, std::function<void()> done_callback = nullptr);
   // -- replicas --
   void handle_discover(const cref_t<MDiscover> &dis);
   void handle_discover_reply(const cref_t<MDiscoverReply> &m);
