@@ -196,6 +196,7 @@ List all collections with::
   ident_base                      NOT REPORTING: NOT OPTED-IN, CHANNEL ident IS OFF    User-provided identifying information about the cluster
   perf_memory_metrics             NOT REPORTING: NOT OPTED-IN, CHANNEL perf IS OFF     Heap stats and mempools for mon and mds
   perf_perf                       NOT REPORTING: NOT OPTED-IN, CHANNEL perf IS OFF     Information about performance counters of the cluster
+  perf_rocksdb_metrics            NOT REPORTING: NOT OPTED-IN, CHANNEL perf IS OFF     RocksDB metrics for OSD and MON (cache usage, data read/write operations, latency, etc.)
 
 Where:
 
