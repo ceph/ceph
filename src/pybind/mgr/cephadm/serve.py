@@ -1436,7 +1436,23 @@ class CephadmServe:
                         config_blobs=daemon_spec.final_config,
                     ).dump_json_str(),
                     use_current_daemon_image=reconfig,
+                    error_ok=True
                 )
+
+                # return number corresponding to DAEMON_FAILED_ERROR
+                # in src/cephadm/cephadmlib/constants.
+                # TODO: link these together so one cannot be changed without the other
+                if code == 17:
+                    # daemon failed on systemctl start command, meaning while
+                    # deployment failed the daemon is present and we should handle
+                    # this as if the deploy command "succeeded" and mark the daemon
+                    # as failed later when we fetch its status
+                    self.mgr.log.error(f'Deployment of {daemon_spec.name()} failed during "systemctl start" command')
+                elif code:
+                    # some other failure earlier in the deploy process. Just raise an exception
+                    # the same as we would in _run_cephadm on a nonzero rc
+                    raise OrchestratorError(
+                        f'cephadm exited with an error code: {code}, stderr: {err}')
 
                 if daemon_spec.daemon_type == 'agent':
                     self.mgr.agent_cache.agent_timestamp[daemon_spec.host] = datetime_now()
