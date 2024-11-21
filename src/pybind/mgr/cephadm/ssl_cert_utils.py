@@ -70,7 +70,12 @@ class SSLCerts:
 
         return (cert_str, key_str)
 
-    def generate_cert(self, _hosts: Union[str, List[str]], _addrs: Union[str, List[str]]) -> Tuple[str, str]:
+    def generate_cert(
+        self,
+        _hosts: Union[str, List[str]],
+        _addrs: Union[str, List[str]],
+        custom_san_list: Optional[List[str]] = None,
+    ) -> Tuple[str, str]:
 
         addrs = [_addrs] if isinstance(_addrs, str) else _addrs
         hosts = [_hosts] if isinstance(_hosts, str) else _hosts
@@ -97,6 +102,8 @@ class SSLCerts:
         san_list: List[x509.GeneralName] = [x509.DNSName(host) for host in hosts]
         if valid_ips:
             san_list.extend(ips)
+        if custom_san_list:
+            san_list.extend([x509.DNSName(n) for n in custom_san_list])
 
         builder = builder.add_extension(
             x509.SubjectAlternativeName(
