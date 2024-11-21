@@ -7525,6 +7525,9 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   _inode->version = dnpv;
   _inode->update_backtrace();
 
+  pi.inode->add_referent_ino(newi->ino());
+  dout(20) << "_link_local " << " referent_inodes " << pi.inode->get_referent_inodes() << " referent ino " << newi->ino() << dendl;
+
   //TODO layout, rstat accounting for referent inode ?
 
   // TODO - snapshot related inode updates - snaprealm on referent inode
@@ -7565,6 +7568,7 @@ void Server::_link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *ta
   CDentry::linkage_t *dnl = dn->pop_projected_linkage();
   if (!dnl->get_inode())
     dn->link_remote(dnl, targeti);
+
   dn->mark_dirty(dnpv, mdr->ls);
 
   // dirty secondary inode
@@ -7573,6 +7577,9 @@ void Server::_link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *ta
 
   // target inode
   mdr->apply();
+
+  auto target_inode = targeti->_get_inode();
+  dout(20) << "_link_local_finish referent inodes - " << target_inode->get_referent_inodes() << dendl;
 
   MDRequestRef null_ref;
   mdcache->send_dentry_link(dn, null_ref);
@@ -8295,6 +8302,12 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
   pi.inode->nlink--;
   if (pi.inode->nlink == 0)
     in->state_set(CInode::STATE_ORPHAN);
+
+  // Remove referent inode from primary link
+  if (dnl->is_referent()) {
+    pi.inode->remove_referent_ino(ref_in->ino());
+    dout(20) << "_unlink_local referent inodes " << pi.inode->get_referent_inodes() << dendl;
+  }
 
   if (mdr->more()->desti_srnode) {
     auto& desti_srnode = mdr->more()->desti_srnode;
