@@ -57,6 +57,7 @@ from cephadmlib.constants import (
     LOG_DIR_MODE,
     SYSCTL_DIR,
     UNIT_DIR,
+    DAEMON_FAILED_ERROR,
 )
 from cephadmlib.context import CephadmContext
 from cephadmlib.context_getters import (
@@ -72,6 +73,7 @@ from cephadmlib.exceptions import (
     ClusterAlreadyExists,
     Error,
     UnauthorizedRegistryError,
+    DaemonStartException,
 )
 from cephadmlib.exe_utils import find_executable, find_program
 from cephadmlib.call_wrappers import (
@@ -1246,7 +1248,11 @@ def deploy_daemon_units(
         call_throws(ctx, ['systemctl', 'enable', unit_name])
     if start:
         clean_cgroup(ctx, ident.fsid, unit_name)
-        call_throws(ctx, ['systemctl', 'start', unit_name])
+        try:
+            call_throws(ctx, ['systemctl', 'start', unit_name])
+        except Exception as e:
+            logger.error(f'systemctl start failed for {unit_name}: {str(e)}')
+            raise DaemonStartException()
 
 
 def _osd_unit_run_commands(
@@ -3050,7 +3056,10 @@ def get_deployment_type(
 @deprecated_command
 def command_deploy(ctx):
     # type: (CephadmContext) -> None
-    _common_deploy(ctx)
+    try:
+        _common_deploy(ctx)
+    except DaemonStartException:
+        sys.exit(DAEMON_FAILED_ERROR)
 
 
 def apply_deploy_config_to_ctx(
@@ -3093,7 +3102,10 @@ def command_deploy_from(ctx: CephadmContext) -> None:
     config_data = read_configuration_source(ctx)
     logger.debug('Loaded deploy configuration: %r', config_data)
     apply_deploy_config_to_ctx(config_data, ctx)
-    _common_deploy(ctx)
+    try:
+        _common_deploy(ctx)
+    except DaemonStartException:
+        sys.exit(DAEMON_FAILED_ERROR)
 
 
 def _common_deploy(ctx: CephadmContext) -> None:

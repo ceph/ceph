@@ -349,6 +349,7 @@ log_to_file = False"""
                             },
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -493,6 +494,7 @@ timeout = 1.0\n"""
                             }
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -605,6 +607,7 @@ class TestMonitoring:
                             "use_url_prefix": False,
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -700,6 +703,7 @@ class TestMonitoring:
                             "use_url_prefix": True,
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -792,6 +796,7 @@ class TestMonitoring:
                             "use_url_prefix": False,
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -837,6 +842,7 @@ class TestMonitoring:
                                                         "files": {
                                                             "ceph-exporter.crt": "mycert",
                                                             "ceph-exporter.key": "mykey"}}}),
+                                                error_ok=True,
                                                 use_current_daemon_image=False)
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -880,6 +886,7 @@ class TestMonitoring:
                         },
                         "config_blobs": {}
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -940,6 +947,7 @@ class TestMonitoring:
                             'web_config': '/etc/node-exporter/web.yml',
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1075,6 +1083,7 @@ class TestMonitoring:
                             "use_url_prefix": False
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1307,6 +1316,7 @@ class TestMonitoring:
                             "use_url_prefix": False
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1383,6 +1393,7 @@ class TestMonitoring:
                             },
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1442,6 +1453,7 @@ class TestMonitoring:
                             },
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1592,6 +1604,7 @@ class TestMonitoring:
                             "files": files,
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1722,6 +1735,7 @@ class TestMonitoring:
                             "files": files,
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1835,6 +1849,7 @@ class TestMonitoring:
                             "files": files,
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -2009,6 +2024,7 @@ spec:
                             },
                             "config_blobs": {},
                         }),
+                        error_ok=True,
                         use_current_daemon_image=False,
                     )
 
@@ -2116,6 +2132,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -2164,6 +2181,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -2216,6 +2234,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -2273,6 +2292,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -3365,6 +3385,7 @@ class TestJaeger:
                         },
                         "config_blobs": config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -3405,6 +3426,7 @@ class TestJaeger:
                         },
                         "config_blobs": es_config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
                 with with_service(cephadm_module, collector_spec):
@@ -3433,6 +3455,7 @@ class TestJaeger:
                             },
                             "config_blobs": collector_config,
                         }),
+                        error_ok=True,
                         use_current_daemon_image=False,
                     )
 
@@ -3473,6 +3496,7 @@ class TestJaeger:
                         },
                         "config_blobs": collector_config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
                 with with_service(cephadm_module, agent_spec):
@@ -3501,6 +3525,7 @@ class TestJaeger:
                             },
                             "config_blobs": agent_config,
                         }),
+                        error_ok=True,
                         use_current_daemon_image=False,
                     )
 
@@ -3558,6 +3583,7 @@ class TestCustomContainer:
                             },
                         }
                     ),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -3645,6 +3671,7 @@ class TestCustomContainer:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -3698,6 +3725,7 @@ class TestSMB:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -3770,6 +3798,7 @@ class TestSMB:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -4015,6 +4044,7 @@ class TestMgmtGateway:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -4356,6 +4386,7 @@ class TestMgmtGateway:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -4479,5 +4510,6 @@ class TestMgmtGateway:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
