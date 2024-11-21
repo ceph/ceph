@@ -10198,16 +10198,19 @@ void MDCache::notify_global_snaprealm_update(int snap_op)
 
 struct C_MDC_RetryScanStray : public MDCacheContext {
   dirfrag_t next;
-  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n) : MDCacheContext(c), next(n) { }
+  std::function<void()> done_callback
+  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n, std::functio<void()> cb) : MDCacheContext(c), next(n), done_callback(cb) { }
   void finish(int r) override {
-    mdcache->scan_stray_dir(next);
+    mdcache->scan_stray_dir(next, done_callback);
   }
 };
 
 // if the formatter is not null, the request comes from asok and formatter will
 // accumulate stray dirs info
 // the function returns EAGAIN to support waiting when called from asok
-int MDCache::scan_stray_dir(dirfrag_t next, Formatter* f)
+// If the callback is not nullptr, the caller is asok command handler, which will block 
+// if EAGAIN is returned, untill this callback will be called
+int MDCache::scan_stray_dir(dirfrag_t next, Formatter* f, std::function<void()> done_callback)
 {
   dout(10) << "scan_stray_dir " << next << dendl;
 
@@ -10235,7 +10238,7 @@ int MDCache::scan_stray_dir(dirfrag_t next, Formatter* f)
 	return -EAGAIN;
       }
 
-  std::stringstream ss;
+  
       for (auto &p : dir->items) {
 	CDentry *dn = p.second;
 	dn->state_set(CDentry::STATE_STRAY);
@@ -10243,6 +10246,7 @@ int MDCache::scan_stray_dir(dirfrag_t next, Formatter* f)
 	if (dnl->is_primary()) {
 	  CInode *in = dnl->get_inode();
     if (f) {
+      std::stringstream ss;
       f->open_object_section("stray_inode");
       ss << "ino: " << in->ino();
       ss << ", stray_prior_path: " << in->get_inode()->stray_prior_path;
@@ -10258,6 +10262,8 @@ int MDCache::scan_stray_dir(dirfrag_t next, Formatter* f)
     }
     next.frag = frag_t();
   }
+  if (done_callback)
+    done_callback();
   return 0;
 }
 
