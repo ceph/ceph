@@ -527,8 +527,8 @@ pattern_type=PatternType.fnmatch))
         labels = [x for x in strings if 'label:' in x]
         if len(labels) > 1:
             raise SpecValidationError('more than one label provided: {}'.format(labels))
-        for l in labels:
-            strings.remove(l)
+        for lbl in labels:
+            strings.remove(lbl)
         label = labels[0][6:] if labels else None
 
         host_patterns = strings
@@ -701,7 +701,7 @@ class ArgumentSpec:
         if isinstance(data, str):
             return cls(data, split=True, origin=cls.OriginalType.STRING)
         if 'argument' not in data:
-            raise SpecValidationError(f'ArgumentSpec must have an "argument" field')
+            raise SpecValidationError('ArgumentSpec must have an "argument" field')
         for k in data.keys():
             if k not in cls._fields:
                 raise SpecValidationError(f'ArgumentSpec got an unknown field {k!r}')

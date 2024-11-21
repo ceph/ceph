@@ -4489,8 +4489,9 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
 ##################################
 
 
-def check_time_sync(ctx, enabler=None):
-    # type: (CephadmContext, Optional[Packager]) -> bool
+def check_time_sync(
+    ctx: CephadmContext, enabler: Optional[Packager] = None
+) -> bool:
     units = [
         'chrony.service',  # 18.04 (at least)
         'chronyd.service',  # el / opensuse

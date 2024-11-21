@@ -19,11 +19,23 @@ supported top-level scopes.
 import errno
 import enum
 import logging
-from typing import List, NamedTuple, Optional, Tuple
+from typing import List, NamedTuple, Optional, Tuple, Protocol
 
 log = logging.getLogger(__name__)
 
 XATTR_SUBVOLUME_EARMARK_NAME = 'user.ceph.subvolume.earmark'
+
+
+class FSOperations(Protocol):
+    """Protocol class representing the file system operations earmarking
+    classes will perform.
+    """
+
+    def setxattr(
+        self, path: str, key: str, value: bytes, flags: int
+    ) -> None: ...
+
+    def getxattr(self, path: str, key: str) -> bytes: ...
 
 
 class EarmarkTopScope(enum.Enum):
@@ -53,11 +65,11 @@ class EarmarkParseError(ValueError):
 
 
 class CephFSVolumeEarmarking:
-    def __init__(self, fs, path: str) -> None:
+    def __init__(self, fs: FSOperations, path: str) -> None:
         self.fs = fs
         self.path = path
 
-    def _handle_cephfs_error(self, e: Exception, action: str) -> None:
+    def _handle_cephfs_error(self, e: Exception, action: str) -> Optional[str]:
         if isinstance(e, ValueError):
             raise EarmarkException(errno.EINVAL, f"Invalid earmark specified: {e}") from e
         elif isinstance(e, OSError):
@@ -135,7 +147,7 @@ class CephFSVolumeEarmarking:
         except Exception as e:
             return self._handle_cephfs_error(e, "getting")
 
-    def set_earmark(self, earmark: str):
+    def set_earmark(self, earmark: str) -> None:
         # Validate the earmark before attempting to set it
         if not self._validate_earmark(earmark):
             raise EarmarkException(

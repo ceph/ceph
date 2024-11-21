@@ -189,8 +189,9 @@ def normalize_image_digest(digest: str) -> str:
     return digest
 
 
-def get_legacy_config_fsid(cluster, legacy_dir=None):
-    # type: (str, Optional[str]) -> Optional[str]
+def get_legacy_config_fsid(
+    cluster: str, legacy_dir: Optional[str] = None
+) -> Optional[str]:
     config_file = '/etc/ceph/%s.conf' % cluster
     if legacy_dir is not None:
         config_file = os.path.abspath(legacy_dir + config_file)

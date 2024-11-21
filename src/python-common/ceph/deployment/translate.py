@@ -5,7 +5,7 @@ try:
 except ImportError:
     pass
 
-from ceph.deployment.drive_selection.selector import DriveSelection
+from ceph.deployment.drive_selection.selector import DriveSelection  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
