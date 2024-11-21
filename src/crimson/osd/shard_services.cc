@@ -124,6 +124,13 @@ seastar::future<> PerShardState::update_shard_superblock(OSDSuperblock superbloc
   return seastar::now();
 }
 
+seastar::future<> PerShardState::update_shard_pg_num_history(pool_pg_num_history_t pg_num_history)
+{
+  assert_core();
+  per_shard_pg_num_history = std::move(pg_num_history);
+  return seastar::now();
+}
+
 OSDSingletonState::OSDSingletonState(
   int whoami,
   crimson::net::Messenger &cluster_msgr,
@@ -466,7 +473,8 @@ seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
   });
 }
 
-seastar::future<> OSDSingletonState::store_maps(
+seastar::future<std::map<epoch_t, OSDMapService::local_cached_map_t>>
+OSDSingletonState::store_maps(
   ceph::os::Transaction& t,
   epoch_t start, Ref<MOSDMap> m)
 {
@@ -519,7 +527,7 @@ seastar::future<> OSDSingletonState::store_maps(
 	     added_maps.begin()->first,
 	     added_maps.rbegin()->first);
 	meta_coll->store_final_pool_info(t, lastmap, added_maps);
-	return seastar::now();
+	return seastar::make_ready_future<std::map<epoch_t, local_cached_map_t>>(std::move(added_maps));
       });
     });
   });
