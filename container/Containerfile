@@ -65,25 +65,25 @@ RUN \
     echo "enabled=1" >> /etc/yum.repos.d/ganesha.repo
 
 # ISCSI repo
-RUN set -x && \
+RUN set -ex && \
     curl -s -L https://shaman.ceph.com/api/repos/tcmu-runner/main/latest/centos/9/repo?arch=$(arch) -o /etc/yum.repos.d/tcmu-runner.repo && \
     case "${CEPH_REF}" in \
         quincy|reef) \
-            curl -s -L https://download.ceph.com/ceph-iscsi/3/rpm/el9/ceph-iscsi.repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
+            curl -fs -L https://download.ceph.com/ceph-iscsi/3/rpm/el9/ceph-iscsi.repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
             ;;\
         main|*) \
-            curl -s -L https://shaman.ceph.com/api/repos/ceph-iscsi/main/latest/centos/9/repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
+            curl -fs -L https://shaman.ceph.com/api/repos/ceph-iscsi/main/latest/centos/9/repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
             ;;\
     esac
 
 # Ceph repo
-RUN set -x && \
+RUN set -ex && \
     rpm --import 'https://download.ceph.com/keys/release.asc' && \
     ARCH=$(arch); if [ "${ARCH}" == "aarch64" ]; then ARCH="arm64"; fi ;\
     IS_RELEASE=0 ;\
     if [[ "${CI_CONTAINER}" == "true" ]] ; then \
         # TODO: this can return different ceph builds (SHA1) for x86 vs. arm runs. is it important to fix?
-        REPO_URL=$(curl -s "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/9/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
+        REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/9/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
     else \
         IS_RELEASE=1 ;\
         REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/el9/" ;\
@@ -192,7 +192,7 @@ RUN \
     grep -sqo "obtain_device_list_from_udev = 0" /etc/lvm/lvm.conf
 
 # CLEAN UP!
-RUN set -x && \
+RUN set -ex && \
     dnf clean all && \
     rm -rf /var/cache/dnf/* && \
     rm -rf /var/lib/dnf/* && \
