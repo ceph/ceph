@@ -10531,7 +10531,7 @@ next:
     }
 
     auto datalog_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
-    RGWDataChangesLog::LogMarker log_marker;
+    RGWDataChangesLogMarker log_marker;
 
     do {
       std::vector<rgw_data_change_log_entry> entries;
