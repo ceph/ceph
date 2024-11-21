@@ -15,7 +15,7 @@
 #include "include/types.h" // FIXME: ordering shouldn't be important, but right 
                            // now, this include has to come before the others.
 
-
+#include "include/utime.h"
 #include "common/perf_counters_key.h"
 #include "common/perf_counters_collection.h"
 #include "common/admin_socket_client.h"
