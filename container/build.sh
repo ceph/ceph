@@ -94,6 +94,14 @@ fi
 # BRANCH will be, say, origin/main.  remove <remote>/
 BRANCH=${BRANCH##*/}
 
+# podman build only supports secret files.
+# This must be removed after podman build
+touch prerelease.secret.txt
+chmod 600 prerelease.secret.txt
+echo -e "\
+    PRERELEASE_USERNAME=${PRERELEASE_USERNAME}\n
+    PRERELEASE_PASSWORD=${PRERELEASE_PASSWORD}\n " > prerelease.secret.txt
+
 podman build --pull=newer --squash -f $CFILE -t build.sh.output \
     --build-arg FROM_IMAGE=${FROM_IMAGE:-quay.io/centos/centos:stream9} \
     --build-arg CEPH_SHA1=${CEPH_SHA1} \
@@ -101,9 +109,10 @@ podman build --pull=newer --squash -f $CFILE -t build.sh.output \
     --build-arg CEPH_REF=${BRANCH:-main} \
     --build-arg OSD_FLAVOR=${FLAVOR:-default} \
     --build-arg CI_CONTAINER=${CI_CONTAINER:-default} \
-    --build-arg PRERELEASE_USERNAME=${PRERELEASE_USERNAME} \
-    --build-arg PRERELEASE_PASSWORD=${PRERELEASE_PASSWORD} \
+    --secret=id=prerelease_creds,src=./prerelease.secret.txt \
     2>&1 
+
+rm ./prerelease.secret.txt
 
 image_id=$(podman image ls localhost/build.sh.output --format '{{.ID}}')
 
