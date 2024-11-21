@@ -1351,7 +1351,9 @@ class NvmeofServiceSpec(ServiceSpec):
                  client_key: Optional[str] = None,
                  client_cert: Optional[str] = None,
                  root_ca_cert: Optional[str] = None,
+                 # unused and duplicate of tgt_path below, consider removing
                  spdk_path: Optional[str] = None,
+                 spdk_mem_size: Optional[int] = None,
                  tgt_path: Optional[str] = None,
                  spdk_timeout: Optional[float] = 60.0,
                  spdk_log_level: Optional[str] = '',
@@ -1455,8 +1457,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.client_cert = client_cert
         #: ``root_ca_cert`` CA cert for server/client certs
         self.root_ca_cert = root_ca_cert
-        #: ``spdk_path`` path to SPDK
+        #: ``spdk_path`` path is unused and duplicate of tgt_path below, consider removing
         self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
+        #: ``spdk_mem_size`` memory size in MB for DPDK
+        self.spdk_mem_size = spdk_mem_size
         #: ``tgt_path`` nvmeof target path
         self.tgt_path = tgt_path or '/usr/local/bin/nvmf_tgt'
         #: ``spdk_timeout`` SPDK connectivity timeout

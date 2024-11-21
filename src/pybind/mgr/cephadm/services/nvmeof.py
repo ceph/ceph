@@ -66,6 +66,10 @@ class NvmeofService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'ceph-nvmeof.conf': gw_conf}
 
+        # Indicate to the daemon whether to utilize huge pages
+        if spec.spdk_mem_size:
+            daemon_spec.extra_files['spdk_mem_size'] = str(spec.spdk_mem_size)
+
         if spec.enable_auth:
             if (
                 not spec.client_cert
