@@ -600,6 +600,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     lua_background->shutdown();
   }
 
+  env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into
   // closed storage.
   context_pool->finish();

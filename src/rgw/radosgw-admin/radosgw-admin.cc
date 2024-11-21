@@ -1238,9 +1238,14 @@ static void show_topics_info_v2(const rgw_pubsub_topic& topic,
 
 class StoreDestructor {
   rgw::sal::Driver* driver;
+  ceph::async::io_context_pool* pool;
 public:
-  explicit StoreDestructor(rgw::sal::Driver* _s) : driver(_s) {}
+  explicit StoreDestructor(rgw::sal::Driver* _s,
+			   ceph::async::io_context_pool* pool)
+    : driver(_s), pool(pool) {}
   ~StoreDestructor() {
+    driver->shutdown();
+    pool->finish();
     DriverManager::close_storage(driver);
     rgw_http_client_cleanup();
   }
@@ -4703,7 +4708,7 @@ int main(int argc, const char **argv)
 
   oath_init();
 
-  StoreDestructor store_destructor(driver);
+  StoreDestructor store_destructor(driver, &context_pool);
 
   if (raw_storage_op) {
     switch (opt_cmd) {
@@ -10859,7 +10864,7 @@ next:
     }
 
     auto datalog_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
-    RGWDataChangesLog::LogMarker log_marker;
+    RGWDataChangesLogMarker log_marker;
 
     do {
       std::vector<rgw_data_change_log_entry> entries;

@@ -97,6 +97,7 @@ void RGWRealmReloader::reload()
   // TODO: make RGWRados responsible for rgw_log_usage lifetime
   rgw_log_usage_finalize();
 
+  env.driver->shutdown();
   // destroy the existing driver
   DriverManager::close_storage(env.driver);
   env.driver = nullptr;
