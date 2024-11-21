@@ -12,7 +12,13 @@
  *
  */
 #include <poll.h>
+#include <signal.h>
 #include <sys/un.h>
+
+#ifndef WIN32
+#include <sys/wait.h>
+#endif
+
 #include <optional>
 
 #include <stdlib.h>

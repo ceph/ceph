@@ -16,13 +16,14 @@
 #define CEPH_DECAYCOUNTER_H
 
 #include "include/buffer.h"
-#include "common/Formatter.h"
 #include "common/StackStringStream.h"
 #include "common/ceph_time.h"
 
 #include <cmath>
 #include <list>
 #include <sstream>
+
+namespace ceph { class Formatter; }
 
 /**
  *

@@ -4,6 +4,8 @@
 #include <fmt/format.h>
 #include "gtest/gtest.h"
 
+#include <iostream> // for std::cout
+
 using namespace std;
 
 template < typename T >

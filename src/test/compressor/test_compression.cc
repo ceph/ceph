@@ -17,6 +17,9 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
+
+#include <iostream> // for std::cout
+
 #include "gtest/gtest.h"
 #include "common/ceph_context.h"
 #include "common/config.h"

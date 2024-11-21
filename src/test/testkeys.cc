@@ -1,4 +1,7 @@
 #include "auth/cephx/CephxKeyServer.h"
+
+#include <iostream> // for std::cout
+
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/config.h"

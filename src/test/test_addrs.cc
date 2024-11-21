@@ -17,6 +17,7 @@
 #include "msg/msg_types.h"
 #include "gtest/gtest.h"
 
+#include <iostream> // for std::cout
 #include <sstream>
 
 using namespace std;

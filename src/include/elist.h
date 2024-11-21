@@ -15,6 +15,10 @@
 #ifndef CEPH_ELIST_H
 #define CEPH_ELIST_H
 
+#include <cstddef> // for size_t
+
+#include "include/ceph_assert.h"
+
 /*
  * elist: embedded list.
  *
