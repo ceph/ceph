@@ -1888,7 +1888,6 @@ function repair() {
     local last_scrub=$(get_last_scrub_stamp $pgid)
     ceph pg repair $pgid
     wait_for_scrub $pgid "$last_scrub"
-    sleep 2
 }
 
 function test_repair() {
@@ -1902,7 +1901,7 @@ function test_repair() {
     wait_for_clean || return 1
     repair 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 repair 1.0 || return 1
+    ! TIMEOUT=2 repair 1.0 || return 1
     teardown $dir || return 1
 }
 #######################################################################
@@ -1949,7 +1948,7 @@ function test_pg_scrub() {
     wait_for_clean || return 1
     pg_scrub 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 pg_scrub 1.0 || return 1
+    ! TIMEOUT=2 pg_scrub 1.0 || return 1
     teardown $dir || return 1
 }
 
@@ -2089,7 +2088,7 @@ function test_wait_for_scrub() {
     wait_for_scrub $pgid "$last_scrub" || return 1
     kill_daemons $dir KILL osd || return 1
     last_scrub=$(get_last_scrub_stamp $pgid)
-    ! TIMEOUT=1 wait_for_scrub $pgid "$last_scrub" || return 1
+    ! TIMEOUT=2 wait_for_scrub $pgid "$last_scrub" || return 1
     teardown $dir || return 1
 }
 
