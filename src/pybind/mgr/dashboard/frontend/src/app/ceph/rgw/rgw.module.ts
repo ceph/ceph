@@ -83,8 +83,21 @@ import {
   TagModule,
   TooltipModule,
   ComboBoxModule,
-  ToggletipModule
+  ToggletipModule,
+  IconService
 } from 'carbon-components-angular';
+import EditIcon from '@carbon/icons/es/edit/16';
+import ScalesIcon from '@carbon/icons/es/scales/20';
+import UserIcon from '@carbon/icons/es/user/16';
+import CubeIcon from '@carbon/icons/es/cube/20';
+import ShareIcon from '@carbon/icons/es/share/16';
+import ViewIcon from '@carbon/icons/es/view/16';
+import PasswordIcon from '@carbon/icons/es/password/16';
+import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
+import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
+import ToolsIcon from '@carbon/icons/es/tools/32';
+import ParentChild from '@carbon/icons/es/parent-child/20';
+
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
@@ -201,7 +214,23 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
   ],
   providers: [TitleCasePipe]
 })
-export class RgwModule {}
+export class RgwModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([
+      EditIcon,
+      ScalesIcon,
+      CubeIcon,
+      UserIcon,
+      ShareIcon,
+      ViewIcon,
+      PasswordIcon,
+      ArrowDownIcon,
+      ProgressBarRoundIcon,
+      ToolsIcon,
+      ParentChild
+    ]);
+  }
+}
 
 const routes: Routes = [
   {

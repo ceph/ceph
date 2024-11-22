@@ -38,5 +38,10 @@
              let-row="data.row"
              let-value="data.value">
   <a [href]="value"
-     target="_blank"><i [ngClass]="[icons.lineChart]"></i> Source</a>
+     target="_blank">
+    <svg [cdsIcon]="icons.lineChart"
+         [size]="icons.size16"
+         >
+    </svg> Source
+  </a>
 </ng-template>
