@@ -9,4 +9,5 @@ export class ConfigFormModel {
   min: any;
   max: any;
   services: Array<string>;
+  can_update_at_runtime: boolean;
 }
