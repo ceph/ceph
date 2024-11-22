@@ -58,6 +58,7 @@ class TestStretchCluster(MgrTestCase):
     PEERING_CRUSH_BUCKET_TARGET = 3
     PEERING_CRUSH_BUCKET_BARRIER = 'datacenter'
     CRUSH_RULE = 'replicated_rule_custom'
+    DEFAULT_CRUSH_RULE = 'replicated_rule'
     SIZE = 6
     MIN_SIZE = 3
     BUCKET_MAX = SIZE // PEERING_CRUSH_BUCKET_TARGET
@@ -594,6 +595,17 @@ class TestStretchCluster(MgrTestCase):
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
 
+        # Unset the pool back to replicated rule expects PGs to be 100% active+clean
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'osd', 'pool', 'stretch', 'unset',
+            self.POOL, self.DEFAULT_CRUSH_RULE,
+            str(self.SIZE), str(self.MIN_SIZE))
+        self.wait_until_true_and_hold(
+            lambda: self._pg_all_active_clean(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
+        )
+
     def test_set_stretch_pool_no_active_pgs(self):
         """
         Test setting a pool to stretch cluster and checks whether
@@ -686,8 +698,18 @@ class TestStretchCluster(MgrTestCase):
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME)
 
-        # Bring back osds iin DC2 expects PGs to be 100% active+clean
+        # Bring back osds in DC2 expects PGs to be 100% active+clean
         self._bring_back_all_osds_in_dc('dc2')
+        self.wait_until_true_and_hold(
+            lambda: self._pg_all_active_clean(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
+        )
+        # Unset the pool back to replicated rule expects PGs to be 100% active+clean
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'osd', 'pool', 'stretch', 'unset',
+            self.POOL, self.DEFAULT_CRUSH_RULE,
+            str(self.SIZE), str(self.MIN_SIZE))
         self.wait_until_true_and_hold(
             lambda: self._pg_all_active_clean(),
             timeout=self.RECOVERY_PERIOD,
