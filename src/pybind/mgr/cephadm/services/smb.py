@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Tuple, cast, Optional
 from mgr_module import HandleCommandResult
 
 from ceph.deployment.service_spec import ServiceSpec, SMBSpec
+from .services_map import service_registry_decorator
 
 from orchestrator import DaemonDescription
 from .cephadmservice import (
@@ -17,6 +18,7 @@ from .cephadmservice import (
 logger = logging.getLogger(__name__)
 
 
+@service_registry_decorator
 class SMBService(CephService):
     TYPE = 'smb'
     DEFAULT_EXPORTER_PORT = 9922

@@ -19,6 +19,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 from mgr_module import MonCommandFailed
 
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+from .services_map import service_registry_decorator
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@service_registry_decorator
 class OSDService(CephService):
     TYPE = 'osd'
 

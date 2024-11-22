@@ -12,6 +12,7 @@ from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
+from .services_map import service_registry_decorator
 
 from orchestrator import DaemonDescription
 
@@ -20,6 +21,7 @@ from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec,
 logger = logging.getLogger(__name__)
 
 
+@service_registry_decorator
 class NFSService(CephService):
     TYPE = 'nfs'
     DEFAULT_EXPORTER_PORT = 9587

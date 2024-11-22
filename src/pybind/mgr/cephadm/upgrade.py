@@ -3,6 +3,7 @@ import logging
 import time
 import uuid
 from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast
+from cephadm.services.services_map import cephadm_services
 
 import orchestrator
 from cephadm.registry import Registry
@@ -535,7 +536,7 @@ class CephadmUpgrade:
 
             # setting force flag to retain old functionality.
             # note that known is an output argument for ok_to_stop()
-            r = self.mgr.cephadm_services[daemon_type_to_service(s.daemon_type)].ok_to_stop([
+            r = cephadm_services[daemon_type_to_service(s.daemon_type)].ok_to_stop([
                 s.daemon_id], known=known, force=True)
 
             if not r.retval:

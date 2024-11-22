@@ -26,6 +26,7 @@ from mgr_util import build_url, merge_dicts
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
 from cephadm import utils
+from .services_map import service_registry_decorator
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -264,6 +265,12 @@ class CephadmService(metaclass=ABCMeta):
     @abstractmethod
     def TYPE(self) -> str:
         pass
+
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        return []
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
@@ -576,6 +583,7 @@ class CephadmService(metaclass=ABCMeta):
 
 
 class CephService(CephadmService):
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         # Ceph.daemons (mon, mgr, mds, osd, etc)
         cephadm_config = self.get_config_and_keyring(
@@ -638,6 +646,7 @@ class CephService(CephadmService):
         })
 
 
+@service_registry_decorator
 class MonService(CephService):
     TYPE = 'mon'
 
@@ -801,6 +810,7 @@ class MonService(CephService):
                     logger.error(f'Failed setting crush location for mon {dd.daemon_id}: {e}')
 
 
+@service_registry_decorator
 class MgrService(CephService):
     TYPE = 'mgr'
 
@@ -922,6 +932,7 @@ class MgrService(CephService):
         return HandleCommandResult(0, warn_message, '')
 
 
+@service_registry_decorator
 class MdsService(CephService):
     TYPE = 'mds'
 
@@ -978,6 +989,7 @@ class MdsService(CephService):
         })
 
 
+@service_registry_decorator
 class RgwService(CephService):
     TYPE = 'rgw'
 
@@ -1237,6 +1249,7 @@ class RgwService(CephService):
         self.mgr.trigger_connect_dashboard_rgw()
 
 
+@service_registry_decorator
 class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
 
@@ -1271,6 +1284,7 @@ class RbdMirrorService(CephService):
         return HandleCommandResult(0, warn_message, '')
 
 
+@service_registry_decorator
 class CrashService(CephService):
     TYPE = 'crash'
 
@@ -1289,9 +1303,19 @@ class CrashService(CephService):
         return daemon_spec
 
 
+@service_registry_decorator
 class CephExporterService(CephService):
     TYPE = 'ceph-exporter'
     DEFAULT_SERVICE_PORT = 9926
+
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+
+        deps = [f'secure_monitoring_stack:{mgr.secure_monitoring_stack}']
+        deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
+        return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -1322,11 +1346,7 @@ class CephExporterService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
-
-        deps = []
-        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('mgmt-gateway')]
-        deps += [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
-        daemon_spec.deps = deps
+        daemon_spec.deps = self.get_dependencies(self.mgr)
 
         return daemon_spec
 
@@ -1336,6 +1356,7 @@ class CephExporterService(CephService):
         return self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
 
 
+@service_registry_decorator
 class CephfsMirrorService(CephService):
     TYPE = 'cephfs-mirror'
 
@@ -1368,8 +1389,23 @@ class CephfsMirrorService(CephService):
         return daemon_spec
 
 
+@service_registry_decorator
 class CephadmAgent(CephService):
     TYPE = 'agent'
+
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        agent = mgr.http_server.agent
+        return sorted(
+            [
+                str(mgr.get_mgr_ip()),
+                str(agent.server_port),
+                mgr.cert_mgr.get_root_ca(),
+                str(mgr.get_module_option("device_enhanced_scan")),
+            ]
+        )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type

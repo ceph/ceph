@@ -22,6 +22,7 @@ from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from mgr_util import test_port_allocation, PortAlreadyInUse
 from mgr_util import verify_tls_files
 import tempfile
+from cephadm.services.services_map import cephadm_services
 
 from urllib.error import HTTPError, URLError
 from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO
@@ -983,7 +984,7 @@ class CephadmAgentHelpers:
                 # we need to know the agent port to try to reconfig w/ http
                 # otherwise there is no choice but a full ssh reconfig
                 if host in self.mgr.agent_cache.agent_ports and root_cert_match and not down:
-                    daemon_spec = self.mgr.cephadm_services[daemon_type_to_service(
+                    daemon_spec = cephadm_services[daemon_type_to_service(
                         daemon_spec.daemon_type)].prepare_create(daemon_spec)
                     self.mgr.agent_helpers._request_agent_acks(
                         hosts={daemon_spec.host},

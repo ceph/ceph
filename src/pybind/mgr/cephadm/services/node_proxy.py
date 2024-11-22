@@ -3,14 +3,19 @@ import ssl
 import base64
 
 from urllib.error import HTTPError, URLError
-from typing import List, Any, Dict, Tuple, Optional, MutableMapping
+from typing import List, Any, Dict, Tuple, Optional, MutableMapping, TYPE_CHECKING
 
+from .services_map import service_registry_decorator
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from ceph.utils import http_req
 from orchestrator import OrchestratorError
 
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
+
+@service_registry_decorator
 class NodeProxy(CephService):
     TYPE = 'node-proxy'
 
@@ -28,6 +33,19 @@ class NodeProxy(CephService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
+
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        root_cert = ''
+        server_port = ''
+        try:
+            server_port = str(mgr.http_server.agent.server_port)
+            root_cert = mgr.cert_mgr.get_root_ca()
+        except Exception:
+            pass
+        return sorted([mgr.get_mgr_ip(), server_port, root_cert])
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         # node-proxy is re-using the agent endpoint and therefore
@@ -52,8 +70,7 @@ class NodeProxy(CephService):
         }
         config = {'node-proxy.json': json.dumps(cfg)}
 
-        return config, sorted([str(self.mgr.get_mgr_ip()), str(self.agent_endpoint.server_port),
-                               self.mgr.cert_mgr.get_root_ca()])
+        return config, self.get_dependencies(self.mgr)
 
     def handle_hw_monitoring_setting(self) -> bool:
         # function to apply or remove node-proxy service spec depending

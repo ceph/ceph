@@ -6,10 +6,12 @@ import base64
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import OAuth2ProxySpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
+from .services_map import service_registry_decorator
 
 logger = logging.getLogger(__name__)
 
 
+@service_registry_decorator
 class OAuth2ProxyService(CephadmService):
     TYPE = 'oauth2-proxy'
     SVC_TEMPLATE_PATH = 'services/oauth2-proxy/oauth2-proxy.conf.j2'
