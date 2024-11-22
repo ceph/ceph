@@ -1,3 +1,7 @@
 cds-tooltip {
   margin-left: 5px;
+
+  ::ng-deep .cds--tooltip-content {
+    max-inline-size: 25rem;
+  }
 }
