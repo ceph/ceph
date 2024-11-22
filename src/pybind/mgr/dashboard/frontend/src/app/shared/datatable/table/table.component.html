@@ -49,9 +49,8 @@
       <!-- column filters -->
       <ng-container *ngIf="columnFilters.length !== 0">
         <div class="d-inline-flex position-relative">
-          <svg cdsIcon="filter"
-               size="16"
-               class="align-self-center mb-2"></svg>
+        <svg [cdsIcon]="icons.filter"
+             [size]="icons.size16"></svg>
         </div>
         <cds-select (valueChange)="onSelectFilter($event)"
                     display="inline"
@@ -85,8 +84,8 @@
               class="toolbar-action"
               placement="bottom"
               *ngIf="fetchData?.observers?.length > 0">
-        <svg cdsIcon="renew"
-             size="16"
+        <svg [cdsIcon]="icons.refresh"
+             [size]="icons.size16"
              [ngClass]="{ 'cds--toolbar-action__icon': true, 'reload': loadingIndicator }"></svg>
       </cds-icon-button>
       <!-- end refresh button -->
@@ -97,8 +96,8 @@
               placement="bottom"
               [flip]="true"
               [offset]="{ x: 3, y: 0 }">
-        <svg cdsIcon="data-table"
-             size="16"
+        <svg [cdsIcon]="icons.dataTable"
+             [size]="icons.size16"
              class="cds--toolbar-action__icon"></svg>
       </button>
       <ng-template #showHideColumnsRef>
@@ -132,8 +131,8 @@
         <span class="me-2">{{ filter.column.name }}: {{ filter.value.formatted }}</span>
         <button class="cds--tag__close-icon"
                 (click)="onChangeFilter(filter)">
-          <svg cdsIcon="close"
-               size="16"></svg>
+          <svg [cdsIcon]="icons.destroy"
+               [size]="icons.size16"></svg>
         </button>
       </cds-tag>
     </ng-container>
