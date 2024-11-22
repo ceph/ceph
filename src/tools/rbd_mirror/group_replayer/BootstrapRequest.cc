@@ -37,7 +37,7 @@ static const uint32_t MAX_RETURN = 1024;
 bool is_demoted_snap_exists(
     const std::vector<cls::rbd::GroupSnapshot> &snaps) {
   for (auto it = snaps.rbegin(); it != snaps.rend(); it++) {
-     auto ns = std::get_if<cls::rbd::MirrorGroupSnapshotNamespace>(
+     auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
        &it->snapshot_namespace);
     if (ns != nullptr) {
       if (ns->is_demoted()) {
@@ -52,7 +52,7 @@ int get_last_mirror_snapshot_state(
     const std::vector<cls::rbd::GroupSnapshot> &snaps,
     cls::rbd::MirrorSnapshotState *state) {
   for (auto it = snaps.rbegin(); it != snaps.rend(); it++) {
-    auto ns = std::get_if<cls::rbd::MirrorGroupSnapshotNamespace>(
+    auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &it->snapshot_namespace);
     if (ns != nullptr) {
       // XXXMG: check primary_mirror_uuid matches?
@@ -114,20 +114,15 @@ template <typename I>
 void BootstrapRequest<I>::send() {
   *m_resync_requested = false;
 
-  std::string group_id;
-
   if (m_local_group_id && !m_local_group_id->empty()) {
     std::string group_header_oid = librbd::util::group_header_name(
         *m_local_group_id);
-    int r = librbd::cls_client::mirror_group_resync_get(&m_local_io_ctx,
-        group_header_oid,
-        m_global_group_id,
-        m_local_group_ctx->name,
-        &group_id);
-    if (r < 0) {
-      derr << "getting mirror group resync for global_group_id="
-        << m_global_group_id << " failed: " << cpp_strerror(r) << dendl;
-    } else if (r == 0 && group_id == *m_local_group_id) {
+    std::string value;
+    int r = librbd::cls_client::metadata_get(&m_local_io_ctx, group_header_oid,
+                                             RBD_GROUP_RESYNC, &value);
+    if (r < 0 && r != -ENOENT) {
+      derr << "failed reading metadata: " << cpp_strerror(r) << dendl;
+    } else if (r == 0) {
       *m_resync_requested = true;
     }
   }
@@ -1260,7 +1255,7 @@ void BootstrapRequest<I>::create_local_non_primary_group_snapshot() {
   std::string group_snap_id = librbd::util::generate_image_id(m_local_io_ctx);
   cls::rbd::GroupSnapshot group_snap{
     group_snap_id,
-    cls::rbd::MirrorGroupSnapshotNamespace{
+    cls::rbd::GroupSnapshotNamespaceMirror{
       cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY,
       {}, remote_pool_meta.mirror_peer_uuid, {}},
       prepare_non_primary_mirror_snap_name(m_global_group_id, group_snap_id),

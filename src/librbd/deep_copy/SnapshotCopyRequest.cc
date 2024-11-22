@@ -356,7 +356,7 @@ void SnapshotCopyRequest<I>::send_snap_create() {
     if (m_snap_seqs.find(src_snap_id) == m_snap_seqs.end()) {
       // the source snapshot is not in our mapping table, ...
       if (std::holds_alternative<cls::rbd::UserSnapshotNamespace>(snap_namespace) ||
-          std::holds_alternative<cls::rbd::GroupImageSnapshotNamespace>(snap_namespace)) {
+          std::holds_alternative<cls::rbd::ImageSnapshotNamespaceGroup>(snap_namespace)) {
         // ... create it since it's a user snapshot
         break;
       } else if (src_snap_id == m_src_snap_id_end) {
@@ -444,7 +444,7 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
       {cls::rbd::UserSnapshotNamespace(), m_snap_name});
   if (snap_it == m_dst_image_ctx->snap_ids.end()) {
     snap_it = m_dst_image_ctx->snap_ids.find(
-        {cls::rbd::GroupImageSnapshotNamespace(), m_snap_name});
+        {cls::rbd::ImageSnapshotNamespaceGroup(), m_snap_name});
   }
   ceph_assert(snap_it != m_dst_image_ctx->snap_ids.end());
   librados::snap_t dst_snap_id = snap_it->second;

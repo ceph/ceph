@@ -93,7 +93,9 @@ void EnableRequest<I>::handle_get_mirror_image(int r) {
     return;
   } else if (r == -ENOENT) {
     r = 0;
-    m_mirror_image.group_spec = {m_group_id, m_group_pool_id};
+    if (!m_group_snap_id.empty()) {
+      m_mirror_image.type = cls::rbd::MIRROR_IMAGE_TYPE_GROUP;
+    }
   } else {
     lderr(m_cct) << "failed to retrieve mirror image: " << cpp_strerror(r)
                  << dendl;
