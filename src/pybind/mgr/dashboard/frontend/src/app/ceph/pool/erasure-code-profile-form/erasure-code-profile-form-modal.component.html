@@ -179,8 +179,9 @@
                       i18n-ngbTooltip
                       type="button"
                       (click)="toggleDCalc()">
-                <i [ngClass]="dCalc ? icons.unlock : icons.lock"
-                   aria-hidden="true"></i>
+                <svg [cdsIcon]="dCalc ? icons.unlock : icons.lock"
+                     [size]="icons.size16"
+                     class="cds-info-color"></svg>
               </button>
             </div>
             <span class="form-text text-muted"

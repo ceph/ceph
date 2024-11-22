@@ -119,7 +119,9 @@
              i18n>Keyword:</label>
       <div class="input-group">
         <span class="input-group-text">
-          <i [ngClass]="[icons.search]"></i>
+          <svg [cdsIcon]="icons.search"
+               [size]="icons.size16"
+               ></svg>
         </span>
 
         <input class="form-control"
@@ -132,7 +134,9 @@
                 class="btn btn-light"
                 (click)="clearSearchKey()"
                 title="Clear">
-          <i class="icon-prepend {{ icons.destroy }}"></i>
+          <svg [cdsIcon]="icons.destroy"
+               [size]="icons.size16"
+               ></svg>
         </button>
       </div>
     </div>
@@ -155,7 +159,9 @@
                 class="btn btn-light"
                 (click)="clearDate()"
                 title="Clear">
-          <i class="icon-prepend {{ icons.destroy }}"></i>
+          <svg [cdsIcon]="icons.destroy"
+               [size]="icons.size16"
+               ></svg>
         </button>
       </div>
     </div>

@@ -19,12 +19,12 @@
                            size="md"
                            (click)="updateSiteName()"
                            [title]="editing ? 'Save' : 'Edit'">
-            <svg cdsIcon="edit"
-                 size="32"
+            <svg [cdsIcon]="icons.edit"
+                 [size]="icons.size32"
                  class="cds--btn__icon"
                  *ngIf="!editing"></svg>
-            <svg cdsIcon="checkmark"
-                 size="32"
+            <svg [cdsIcon]="icons.check"
+                 [size]="icons.size32"
                  class="cds--btn__icon"
                  *ngIf="editing"></svg>
           </cds-icon-button>

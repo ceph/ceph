@@ -183,11 +183,12 @@
                               [selectionLimit]="4"
                               (selection)="appSelection()">
             </cd-select-badges>
-            <i *ngIf="data.applications.selected <= 0"
-               i18n-title
-               title="Pools should be associated with an application tag"
-               class="{{icons.warning}} icon-warning-color">
-            </i>
+            <svg  *ngIf="data.applications.selected <= 0"
+                  [cdsIcon]="icons.warning"
+                  [size]="icons.size20"
+                  title="Pools should be associated with an application tag"
+                  class="cds-warning-color"
+                  i18n-title></svg>
             <span class="invalid-feedback"
                   *ngIf="!isApplicationsSelected && data.applications.selected <= 0"
                   i18n>Application selection is required!</span>
@@ -213,9 +214,7 @@
         </div>
         <!-- CRUSH -->
         <div *ngIf="isErasure || isReplicated">
-
           <legend i18n>CRUSH</legend>
-
           <!-- Erasure Profile select -->
           <div class="form-group row"
                *ngIf="isErasure">
@@ -247,15 +246,17 @@
                         id="ecp-info-button"
                         type="button"
                         (click)="data.erasureInfo = !data.erasureInfo">
-                  <i [ngClass]="[icons.questionCircle]"
-                     aria-hidden="true"></i>
+                  <svg [cdsIcon]="icons.questionCircle"
+                       [size]="icons.size20"
+                       class="cds-info-color "></svg>
                 </button>
                 <button class="btn btn-light"
                         type="button"
                         *ngIf="!editing"
                         (click)="addErasureCodeProfile()">
-                  <i [ngClass]="[icons.add]"
-                     aria-hidden="true"></i>
+                  <svg [cdsIcon]="icons.add"
+                       [size]="icons.size20"
+                       class="cds-info-color "></svg>
                 </button>
                 <button class="btn btn-light"
                         type="button"
@@ -265,8 +266,9 @@
                         triggers="manual"
                         #ecpDeletionBtn="ngbTooltip"
                         (click)="deleteErasureCodeProfile()">
-                  <i [ngClass]="[icons.trash]"
-                     aria-hidden="true"></i>
+                  <svg [cdsIcon]="icons.trash"
+                       [size]="icons.size16"
+                       class="cds-info-color"></svg>
                 </button>
               </div>
               <span class="form-text text-muted"
@@ -356,15 +358,17 @@
                           specify how CRUSH places data replicas."
                           i18n-ngbTooltip
                           (click)="data.crushInfo = !data.crushInfo">
-                    <i [ngClass]="[icons.questionCircle]"
-                       aria-hidden="true"></i>
+                    <svg [cdsIcon]="icons.questionCircle"
+                         [size]="icons.size20"
+                         class="cds-info-color"></svg>
                   </button>
                   <button class="btn btn-light"
                           type="button"
                           *ngIf="isReplicated && !editing"
                           (click)="addCrushRule()">
-                    <i [ngClass]="[icons.add]"
-                       aria-hidden="true"></i>
+                    <svg [cdsIcon]="icons.add"
+                         [size]="icons.size16"
+                         class="cds-info-color"></svg>
                   </button>
                   <button class="btn btn-light"
                           *ngIf="isReplicated && !editing"
@@ -374,8 +378,9 @@
                           triggers="manual"
                           #crushDeletionBtn="ngbTooltip"
                           (click)="deleteCrushRule()">
-                    <i [ngClass]="[icons.trash]"
-                       aria-hidden="true"></i>
+                    <svg [cdsIcon]="icons.trash"
+                         [size]="icons.size16"
+                         class="cds-info-color"></svg>
                   </button>
                 </div>
 
