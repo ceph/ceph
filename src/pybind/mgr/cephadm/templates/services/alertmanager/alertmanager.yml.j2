@@ -8,6 +8,8 @@ global:
     tls_config:
 {% if security_enabled %}
       ca_file: root_cert.pem
+      cert_file: alertmanager.crt
+      key_file: alertmanager.key
 {% else %}
       insecure_skip_verify: true
 {% endif %}

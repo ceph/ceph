@@ -632,6 +632,8 @@ class TestMonitoring:
                   http_config:
                     tls_config:
                       ca_file: root_cert.pem
+                      cert_file: alertmanager.crt
+                      key_file: alertmanager.key
 
                 route:
                   receiver: 'default'
@@ -726,6 +728,8 @@ class TestMonitoring:
                   http_config:
                     tls_config:
                       ca_file: root_cert.pem
+                      cert_file: alertmanager.crt
+                      key_file: alertmanager.key
 
                 route:
                   receiver: 'default'
@@ -1150,6 +1154,8 @@ class TestMonitoring:
                             password: sd_password
                           tls_config:
                             ca_file: root_cert.pem
+                            cert_file: prometheus.crt
+                            key_file:  prometheus.key
 
                 scrape_configs:
                   - job_name: 'ceph'
@@ -1171,6 +1177,8 @@ class TestMonitoring:
                         password: sd_password
                       tls_config:
                         ca_file: root_cert.pem
+                        cert_file: prometheus.crt
+                        key_file:  prometheus.key
 
                   - job_name: 'node'
                     relabel_configs:
@@ -1189,6 +1197,8 @@ class TestMonitoring:
                         password: sd_password
                       tls_config:
                         ca_file: root_cert.pem
+                        cert_file: prometheus.crt
+                        key_file:  prometheus.key
 
                   - job_name: 'haproxy'
                     relabel_configs:
@@ -1205,6 +1215,8 @@ class TestMonitoring:
                         password: sd_password
                       tls_config:
                         ca_file: root_cert.pem
+                        cert_file: prometheus.crt
+                        key_file:  prometheus.key
 
                   - job_name: 'ceph-exporter'
                     relabel_configs:
@@ -1222,6 +1234,8 @@ class TestMonitoring:
                         password: sd_password
                       tls_config:
                         ca_file: root_cert.pem
+                        cert_file: prometheus.crt
+                        key_file:  prometheus.key
 
                   - job_name: 'nvmeof'
                     honor_labels: true
@@ -1235,6 +1249,8 @@ class TestMonitoring:
                         password: sd_password
                       tls_config:
                         ca_file: root_cert.pem
+                        cert_file: prometheus.crt
+                        key_file:  prometheus.key
 
                   - job_name: 'nfs'
                     honor_labels: true
@@ -1248,6 +1264,8 @@ class TestMonitoring:
                         password: sd_password
                       tls_config:
                         ca_file: root_cert.pem
+                        cert_file: prometheus.crt
+                        key_file:  prometheus.key
 
                   - job_name: 'smb'
                     honor_labels: true
@@ -1261,6 +1279,8 @@ class TestMonitoring:
                         password: sd_password
                       tls_config:
                         ca_file: root_cert.pem
+                        cert_file: prometheus.crt
+                        key_file:  prometheus.key
 
                 """).lstrip()
 
@@ -3834,6 +3854,7 @@ class TestMgmtGateway:
                                          http {
 
                                              #access_log /dev/stdout;
+                                             error_log /dev/stderr info;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
@@ -4080,6 +4101,7 @@ class TestMgmtGateway:
                                          http {
 
                                              #access_log /dev/stdout;
+                                             error_log /dev/stderr info;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
