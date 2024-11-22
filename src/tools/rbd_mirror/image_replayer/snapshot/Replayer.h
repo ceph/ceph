@@ -319,9 +319,6 @@ private:
   void update_non_primary_snapshot(bool complete);
   void handle_update_non_primary_snapshot(bool complete, int r);
 
-  void update_image_snapshot();
-  void handle_update_image_snapshot(int r, uint64_t local_snap_id);
-
   void notify_image_update();
   void handle_notify_image_update(int r);
 
