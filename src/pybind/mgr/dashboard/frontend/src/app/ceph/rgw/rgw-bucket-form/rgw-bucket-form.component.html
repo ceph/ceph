@@ -451,7 +451,9 @@
                       class="btn btn-light float-end my-3"
                       [disabled]="tags.length > 19"
                       (click)="showTagModal()">
-                <i [ngClass]="[icons.add]"></i>
+                    <svg [cdsIcon]="icons.add"
+                      [size]="icons.size16"
+                      class="cds-info-color cds--btn__icon"></svg>
                 <ng-container i18n>Add tag</ng-container>
               </button>
             </div>
@@ -486,7 +488,9 @@
                           class="btn btn-light my-3"
                           (click)="clearTextArea('bucket_policy', '{}')"
                           i18n>
-                    <i [ngClass]="[icons.destroy]"></i>
+                          <svg [cdsIcon]="icons.destroy"
+                          [size]="icons.size16"
+                          class="cds-info-color cds--btn__icon"></svg>
                     Clear
                   </button>
                   <div class="btn-group float-end"
@@ -497,7 +501,9 @@
                             class="btn btn-light my-3"
                             (click)="openUrl('https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html?icmpid=docs_amazons3_console')"
                             i18n>
-                      <i [ngClass]="[icons.externalUrl]"></i>
+                        <svg [cdsIcon]="icons.launch"
+                            [size]="icons.size16"
+                            class="cds-info-color cds--btn__icon"></svg>
                       Policy examples
                     </button>
                     <button type="button"
@@ -505,7 +511,9 @@
                             class="btn btn-light my-3"
                             (click)="openUrl('https://awspolicygen.s3.amazonaws.com/policygen.html')"
                             i18n>
-                      <i [ngClass]="[icons.externalUrl]"></i>
+                        <svg [cdsIcon]="icons.launch"
+                            [size]="icons.size16"
+                            class="cds-info-color cds--btn__icon"></svg>
                       Policy generator
                     </button>
                   </div>
@@ -538,7 +546,9 @@
                           class="btn btn-light my-3"
                           (click)="clearTextArea('lifecycle', '{}')"
                           i18n>
-                    <i [ngClass]="[icons.destroy]"></i>
+                      <svg [cdsIcon]="icons.destroy"
+                          [size]="icons.size16"
+                          class="cds-info-color cds--btn__icon"></svg>
                     Clear
                   </button>
                   <div class="btn-group float-end"
@@ -549,7 +559,9 @@
                             class="btn btn-light my-3"
                             (click)="openUrl('https://docs.aws.amazon.com/cli/latest/reference/s3api/put-bucket-lifecycle.html#examples')"
                             i18n>
-                      <i [ngClass]="[icons.externalUrl]"></i>
+                        <svg [cdsIcon]="icons.launch"
+                            [size]="icons.size16"
+                            class="cds-info-color cds--btn__icon"></svg>
                       Policy examples
                     </button>
                   </div>
@@ -670,7 +682,9 @@
             i18n-ngbTooltip
             ngbTooltip="Edit"
             (click)="showTagModal(index)">
-      <i [ngClass]="[icons.edit]"></i>
+        <svg [cdsIcon]="icons.edit"
+            [size]="icons.size16"
+            class="cds-info-color cds--btn__icon"></svg>
     </button>
     <button type="button"
             class="btn btn-light"
@@ -678,7 +692,9 @@
             i18n-ngbTooltip
             ngbTooltip="Delete"
             (click)="deleteTag(index)">
-      <i [ngClass]="[icons.trash]"></i>
+        <svg [cdsIcon]="icons.trash"
+            [size]="icons.size16"
+            class="cds-info-color cds--btn__icon"></svg>
     </button>
   </div>
 </ng-template>

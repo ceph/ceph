@@ -264,14 +264,18 @@
               <span *ngFor="let subuser of subusers; let i=index;">
                 <div class="input-group">
                   <span class="input-group-text">
-                    <i class="{{ icons.user }}"></i>
+                    <svg [cdsIcon]="icons.user"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                   </span>
                   <input type="text"
                          class="cd-form-control"
                          value="{{ subuser.id }}"
                          readonly>
                   <span class="input-group-text">
-                    <i class="{{ icons.share }}"></i>
+                    <svg [cdsIcon]="icons.share"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                   </span>
                   <input type="text"
                          class="cd-form-control"
@@ -282,14 +286,18 @@
                           i18n-ngbTooltip
                           ngbTooltip="Edit"
                           (click)="showSubuserModal(i)">
-                    <i [ngClass]="[icons.edit]"></i>
+                    <svg [cdsIcon]="icons.edit"
+                    [size]="icons.size16"
+                    class="cds-info-color cds--btn__icon"></svg>
                   </button>
                   <button type="button"
                           class="btn btn-light tc_deleteSubuserButton"
                           i18n-ngbTooltip
                           ngbTooltip="Delete"
                           (click)="deleteSubuser(i)">
-                    <i [ngClass]="[icons.destroy]"></i>
+                    <svg [cdsIcon]="icons.destroy"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                   </button>
                 </div>
                 <span class="form-text text-muted"></span>
@@ -300,7 +308,9 @@
                   <button type="button"
                           class="btn btn-light float-end tc_addSubuserButton"
                           (click)="showSubuserModal()">
-                    <i [ngClass]="[icons.add]"></i>
+                    <svg [cdsIcon]="icons.add"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                     <ng-container i18n>{{ actionLabels.CREATE | titlecase }}
                       {{ subuserLabel | upperFirst }}</ng-container>
                   </button>
@@ -329,7 +339,9 @@
               <span *ngFor="let key of s3Keys; let i=index;">
                 <div class="input-group">
                   <div class="input-group-text">
-                    <i class="{{ icons.key }}"></i>
+                    <svg [cdsIcon]="icons.key"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                   </div>
                   <input type="text"
                          class="cd-form-control"
@@ -340,14 +352,18 @@
                           i18n-ngbTooltip
                           ngbTooltip="Show"
                           (click)="showS3KeyModal(i)">
-                    <i [ngClass]="[icons.show]"></i>
+                    <svg [cdsIcon]="icons.show"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                   </button>
                   <button type="button"
                           class="btn btn-light tc_deleteS3KeyButton"
                           i18n-ngbTooltip
                           ngbTooltip="Delete"
                           (click)="deleteS3Key(i)">
-                    <i [ngClass]="[icons.destroy]"></i>
+                    <svg [cdsIcon]="icons.destroy"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                   </button>
                 </div>
                 <span class="form-text text-muted"></span>
@@ -358,7 +374,9 @@
                   <button type="button"
                           class="btn btn-light float-end tc_addS3KeyButton"
                           (click)="showS3KeyModal()">
-                    <i [ngClass]="[icons.add]"></i>
+                      <svg [cdsIcon]="icons.add"
+                          [size]="icons.size16"
+                          class="cds--btn__icon"></svg>
                     <ng-container i18n>{{ actionLabels.CREATE | titlecase }}
                       {{ s3keyLabel | upperFirst }}</ng-container>
                   </button>
@@ -386,7 +404,9 @@
               <span *ngFor="let key of swiftKeys; let i=index;">
                 <div class="input-group">
                   <span class="input-group-text">
-                    <i class="{{ icons.key }}"></i>
+                    <svg [cdsIcon]="icons.key"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                   </span>
                   <input type="text"
                          class="cd-form-control"
@@ -397,7 +417,9 @@
                           i18n-ngbTooltip
                           ngbTooltip="Show"
                           (click)="showSwiftKeyModal(i)">
-                    <i [ngClass]="[icons.show]"></i>
+                    <svg [cdsIcon]="icons.show"
+                      [size]="icons.size16"
+                      class="cds--btn__icon"></svg>
                   </button>
                 </div>
                 <span class="form-text text-muted"></span>
@@ -421,7 +443,9 @@
               <span *ngFor="let cap of capabilities; let i=index;">
                 <div class="input-group">
                   <div class="input-group-text">
-                    <i class="{{ icons.share }}"></i>
+                    <svg [cdsIcon]="icons.share"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                   </div>
                   <input type="text"
                          class="cd-form-control"
@@ -432,14 +456,18 @@
                           i18n-ngbTooltip
                           ngbTooltip="Edit"
                           (click)="showCapabilityModal(i)">
-                    <i [ngClass]="[icons.edit]"></i>
+                    <svg [cdsIcon]="icons.edit"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                   </button>
                   <button type="button"
                           class="btn btn-light tc_deleteCapButton"
                           i18n-ngbTooltip
                           ngbTooltip="Delete"
                           (click)="deleteCapability(i)">
-                    <i [ngClass]="[icons.destroy]"></i>
+                    <svg [cdsIcon]="icons.destroy"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"></svg>
                   </button>
                 </div>
                 <span class="form-text text-muted"></span>
@@ -455,7 +483,9 @@
                           [disableTooltip]="!(capabilities | pipeFunction:hasAllCapabilities)"
                           triggers="pointerenter:pointerleave"
                           (click)="showCapabilityModal()">
-                    <i [ngClass]="[icons.add]"></i>
+                    <svg [cdsIcon]="icons.add"
+                    [size]="icons.size20"
+                    class="cds--btn__icon"></svg>
                     <ng-container i18n>{{ actionLabels.ADD | titlecase }}
                       {{ capabilityLabel | upperFirst }}</ng-container>
                   </button>
