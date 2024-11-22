@@ -3075,10 +3075,10 @@ void MDSRankDispatcher::handle_asok_command(
 
     int r;
     std::mutex m;
-    std::conditional_variable cv;
+    std::condition_variable cv;
     bool done = false;
     int ttl = 2;
-    f.open_array_section("strays");
+    f->open_array_section("strays");
     
     std::function<void()> done_callback = [&]() {
       dout(10) << "dump_stray callback" << dendl;
@@ -3087,8 +3087,8 @@ void MDSRankDispatcher::handle_asok_command(
         done = true;
       }
       
-      f.close_section();
-      f.dump(*outbl);
+      f->close_section();
+      f->flush(outbl);
       cv.notify_all();
     };
 
@@ -3102,10 +3102,10 @@ void MDSRankDispatcher::handle_asok_command(
       }
       dout(10) << "dump_stray wait" << dendl;
       std::unique_lock<std::mutex> stray_lock(m);
-      cv.wait(stray_lock, []{return done;});
+      cv.wait(stray_lock, [&]{return done;});
     }
     
-    dout(10) << "dump_stray done" << dendl;
+    dout(10) << "dump_stray done: " << r << dendl;
     on_finish(0, "", outbl);
     return;
   } else {
