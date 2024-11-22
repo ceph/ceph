@@ -92,6 +92,8 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
   static CreateNonPrimaryRequest* s_instance;
   static CreateNonPrimaryRequest *create(MockTestImageCtx *image_ctx,
                                          bool demoted,
+                                         const std::string group_id,
+                                         const std::string group_snap_id,
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
                                          SnapSeqs snap_seqs,
