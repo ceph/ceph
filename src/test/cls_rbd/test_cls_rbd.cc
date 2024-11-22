@@ -1753,11 +1753,17 @@ TEST_F(TestClsRbd, mirror_image) {
   ASSERT_EQ(-ENOENT, mirror_image_list(&ioctx, "", 0, false,
                                        &mirror_image_ids));
 
-  cls::rbd::MirrorImage image1(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid1", {},
+  cls::rbd::MirrorImage image1(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid1",
+                               cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE,
                                cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
-  cls::rbd::MirrorImage image2(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid2", {},
+  cls::rbd::MirrorImage image2(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid2",
+                               cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE,
                                cls::rbd::MIRROR_IMAGE_STATE_DISABLING);
-  cls::rbd::MirrorImage image3(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid3", {},
+  cls::rbd::MirrorImage image3(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid3",
+                               cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE,
+                               cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
+  cls::rbd::MirrorImage image4(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid4",
+                               cls::rbd::MIRROR_IMAGE_TYPE_GROUP,
                                cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
 
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id1", image1));
@@ -1769,6 +1775,7 @@ TEST_F(TestClsRbd, mirror_image) {
   ASSERT_EQ(-EINVAL, mirror_image_set(&ioctx, "image_id1", image2));
   ASSERT_EQ(-EEXIST, mirror_image_set(&ioctx, "image_id3", image2));
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id3", image3));
+  ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id4", image4));
 
   std::string image_id;
   ASSERT_EQ(0, mirror_image_get_image_id(&ioctx, "uuid2", &image_id));
@@ -1781,15 +1788,22 @@ TEST_F(TestClsRbd, mirror_image) {
   ASSERT_EQ(read_image, image2);
   ASSERT_EQ(0, mirror_image_get(&ioctx, "image_id3", &read_image));
   ASSERT_EQ(read_image, image3);
+  ASSERT_EQ(0, mirror_image_get(&ioctx, "image_id4", &read_image));
+  ASSERT_EQ(read_image, image4);
 
   ASSERT_EQ(0, mirror_image_list(&ioctx, "", 1, false, &mirror_image_ids));
   std::map<std::string, std::string> expected_mirror_image_ids = {
     {"image_id1", "uuid1"}};
   ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
 
-  ASSERT_EQ(0, mirror_image_list(&ioctx, "image_id1", 2, false,
+  ASSERT_EQ(0, mirror_image_list(&ioctx, "image_id1", 3, false,
                                  &mirror_image_ids));
   expected_mirror_image_ids = {{"image_id2", "uuid2"}, {"image_id3", "uuid3"}};
+  ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
+
+  ASSERT_EQ(0, mirror_image_list(&ioctx, "image_id1", 3, true,
+                                 &mirror_image_ids));
+  expected_mirror_image_ids = {{"image_id2", "uuid2"}, {"image_id3", "uuid3"}, {"image_id4", "uuid4"}};
   ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
 
   ASSERT_EQ(0, mirror_image_remove(&ioctx, "image_id2"));
@@ -1798,6 +1812,10 @@ TEST_F(TestClsRbd, mirror_image) {
 
   ASSERT_EQ(0, mirror_image_list(&ioctx, "", 3, false, &mirror_image_ids));
   expected_mirror_image_ids = {{"image_id1", "uuid1"}, {"image_id3", "uuid3"}};
+  ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
+
+  ASSERT_EQ(0, mirror_image_list(&ioctx, "", 3, true, &mirror_image_ids));
+  expected_mirror_image_ids = {{"image_id1", "uuid1"}, {"image_id3", "uuid3"}, {"image_id4", "uuid4"}};
   ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
 
   image1.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
@@ -3046,7 +3064,7 @@ TEST_F(TestClsRbd, group_snap_set_empty_name) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id,
-                                  cls::rbd::UserGroupSnapshotNamespace{}, "",
+                                  cls::rbd::GroupSnapshotNamespaceUser{}, "",
                                   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(-EINVAL, group_snap_set(&ioctx, group_id, snap));
 }
@@ -3059,7 +3077,7 @@ TEST_F(TestClsRbd, group_snap_set_empty_id) {
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
   string snap_id = "snap_id";
-  cls::rbd::GroupSnapshot snap = {"", cls::rbd::UserGroupSnapshotNamespace{},
+  cls::rbd::GroupSnapshot snap = {"", cls::rbd::GroupSnapshotNamespaceUser{},
                                   "snap_name",
                                   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(-EINVAL, group_snap_set(&ioctx, group_id, snap));
@@ -3074,13 +3092,13 @@ TEST_F(TestClsRbd, group_snap_set_duplicate_id) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id,
-                                  cls::rbd::UserGroupSnapshotNamespace{},
+                                  cls::rbd::GroupSnapshotNamespaceUser{},
                                   "snap_name",
                                   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
 
   cls::rbd::GroupSnapshot snap1 = {snap_id,
-                                   cls::rbd::UserGroupSnapshotNamespace{},
+                                   cls::rbd::GroupSnapshotNamespaceUser{},
                                    "snap_name1",
                                    cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(-EEXIST, group_snap_set(&ioctx, group_id, snap1));
@@ -3095,14 +3113,14 @@ TEST_F(TestClsRbd, group_snap_set_duplicate_name) {
 
   string snap_id1 = "snap_id1";
   cls::rbd::GroupSnapshot snap = {snap_id1,
-                                  cls::rbd::UserGroupSnapshotNamespace{},
+                                  cls::rbd::GroupSnapshotNamespaceUser{},
                                   "snap_name",
                                   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
 
   string snap_id2 = "snap_id2";
   cls::rbd::GroupSnapshot snap1 = {snap_id2,
-                                   cls::rbd::UserGroupSnapshotNamespace{},
+                                   cls::rbd::GroupSnapshotNamespaceUser{},
                                    "snap_name",
                                    cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(-EEXIST, group_snap_set(&ioctx, group_id, snap1));
@@ -3117,7 +3135,7 @@ TEST_F(TestClsRbd, group_snap_set) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id,
-                                  cls::rbd::UserGroupSnapshotNamespace{},
+                                  cls::rbd::GroupSnapshotNamespaceUser{},
                                   "test_snapshot",
                                   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
@@ -3141,21 +3159,21 @@ TEST_F(TestClsRbd, group_snap_list) {
 
   string snap_id1 = "snap_id1";
   cls::rbd::GroupSnapshot snap1 = {snap_id1,
-                                   cls::rbd::UserGroupSnapshotNamespace{},
+                                   cls::rbd::GroupSnapshotNamespaceUser{},
                                    "test_snapshot1",
 				   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap1));
 
   string snap_id0 = "snap_id0";
   cls::rbd::GroupSnapshot snap0 = {snap_id0,
-                                   cls::rbd::UserGroupSnapshotNamespace{},
+                                   cls::rbd::GroupSnapshotNamespaceUser{},
                                    "test_snapshot0",
 				   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap0));
 
   string snap_id2 = "snap_id2";
   cls::rbd::GroupSnapshot snap2 = {snap_id2,
-                                   cls::rbd::UserGroupSnapshotNamespace{},
+                                   cls::rbd::GroupSnapshotNamespaceUser{},
                                    "test_snapshot2",
 				   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap2));
@@ -3187,7 +3205,7 @@ TEST_F(TestClsRbd, group_snap_list) {
 
   string snap_id4 = "snap_id4";
   cls::rbd::GroupSnapshot snap4 = {snap_id4,
-                                   cls::rbd::UserGroupSnapshotNamespace{},
+                                   cls::rbd::GroupSnapshotNamespaceUser{},
                                    "test_snapshot4",
 				   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap4));
@@ -3217,7 +3235,7 @@ TEST_F(TestClsRbd, group_snap_list_max_return) {
   for (int i = 0; i < 15; ++i) {
     string snap_id = "snap_id" + hexify(i);
     cls::rbd::GroupSnapshot snap = {snap_id,
-                                    cls::rbd::UserGroupSnapshotNamespace{},
+                                    cls::rbd::GroupSnapshotNamespaceUser{},
 				    "test_snapshot" + hexify(i),
 				    cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
     ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
@@ -3252,7 +3270,7 @@ TEST_F(TestClsRbd, group_snap_list_max_read) {
   for (int i = 0; i < 150; ++i) {
     string snap_id = "snap_id" + hexify(i);
     cls::rbd::GroupSnapshot snap = {snap_id,
-                                    cls::rbd::UserGroupSnapshotNamespace{},
+                                    cls::rbd::GroupSnapshotNamespaceUser{},
                                     "test_snapshot" + hexify(i),
                                     cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
     ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
@@ -3277,7 +3295,7 @@ TEST_F(TestClsRbd, group_snap_remove) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id,
-                                  cls::rbd::UserGroupSnapshotNamespace{},
+                                  cls::rbd::GroupSnapshotNamespaceUser{},
                                   "test_snapshot",
                                   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
@@ -3310,7 +3328,7 @@ TEST_F(TestClsRbd, group_snap_remove_without_order) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id,
-                                  cls::rbd::UserGroupSnapshotNamespace{},
+                                  cls::rbd::GroupSnapshotNamespaceUser{},
                                   "test_snapshot",
                                   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
@@ -3346,7 +3364,7 @@ TEST_F(TestClsRbd, group_snap_unlink) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id,
-                                  cls::rbd::UserGroupSnapshotNamespace{},
+                                  cls::rbd::GroupSnapshotNamespaceUser{},
                                   "test_snapshot",
                                   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
@@ -3392,12 +3410,13 @@ TEST_F(TestClsRbd, group_snap_get_by_id) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id,
-                                  cls::rbd::UserGroupSnapshotNamespace{},
+                                  cls::rbd::GroupSnapshotNamespaceUser{},
                                   "test_snapshot",
                                   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
 
   cls::rbd::GroupSnapshot received_snap;
+  ASSERT_EQ(-ENOENT, group_snap_get_by_id(&ioctx, group_id, snap_id, &received_snap));
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
   ASSERT_EQ(0, group_snap_get_by_id(&ioctx, group_id, snap_id, &received_snap));
 
   ASSERT_EQ(snap.id, received_snap.id);
