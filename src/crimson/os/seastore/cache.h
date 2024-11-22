@@ -1055,7 +1055,9 @@ public:
     paddr_t remap_paddr,
     extent_len_t remap_length,
     laddr_t original_laddr,
-    std::optional<ceph::bufferptr> &original_bptr) {
+    const std::optional<ceph::bufferptr> &original_bptr) {
+    static_assert(T::TYPE != extent_types_t::REMAPPED_PLACEHOLDER,
+		  "use Cache::alloc_remapped_placeholder");
     LOG_PREFIX(Cache::alloc_remapped_extent);
     assert(remap_laddr >= original_laddr);
     TCachedExtentRef<T> ext;
@@ -1083,6 +1085,35 @@ public:
     SUBTRACET(seastore_cache, "allocated {} {}B, hint={}, has ptr? {} -- {}",
       t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *extent);
     return extent;
+  }
+
+  CachedExtentRef alloc_remapped_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    laddr_t remap_laddr,
+    paddr_t remap_paddr,
+    extent_len_t remap_length,
+    laddr_t original_laddr,
+    const std::optional<ceph::bufferptr> &original_bptr);
+
+  RemappedExtentPlaceholderRef alloc_remapped_placeholder(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t paddr,
+    extent_len_t length) {
+    LOG_PREFIX(Cache::alloc_remapped_placeholder);
+    SUBTRACET(seastore_cache, "remap {}~{} to {}", t, paddr, length, laddr);
+    auto ext = CachedExtent::make_placeholder_cached_extent_ref<
+      RemappedExtentPlaceholder>(length);
+
+    ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
+	      paddr,
+	      PLACEMENT_HINT_NULL,
+	      NULL_GENERATION,
+              t.get_trans_id());
+    ext->set_laddr(laddr);
+    t.add_fresh_extent(ext);
+    return ext;
   }
 
   /**
