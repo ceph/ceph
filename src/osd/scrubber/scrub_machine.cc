@@ -106,6 +106,25 @@ ceph::timespan ScrubMachine::get_time_scrubbing() const
   return ceph::timespan{};
 }
 
+std::optional<pg_scrubbing_status_t> ScrubMachine::get_reservation_status()
+    const
+{
+  const auto resv_state = state_cast<const ReservingReplicas*>();
+  if (!resv_state) {
+    return std::nullopt;
+  }
+  const auto session = state_cast<const Session*>();
+  dout(30) << fmt::format(
+		  "{}: we are reserving {:p}-{:p}", __func__, (void*)session,
+		  (void*)resv_state)
+	   << dendl;
+  if (!session || !session->m_reservations) {
+    dout(20) << fmt::format("{}: no reservations data", __func__) << dendl;
+    return std::nullopt;
+  }
+  return session->get_reservation_status();
+}
+
 // ////////////// the actual actions
 
 // ----------------------- NotActive -----------------------------------------
@@ -201,6 +220,23 @@ sc::result Session::react(const IntervalChanged&)
   m_reservations->discard_remote_reservations();
   m_abort_reason = delay_cause_t::interval;
   return transit<NotActive>();
+}
+
+std::optional<pg_scrubbing_status_t> Session::get_reservation_status() const
+{
+  if (!m_reservations) {
+    return std::nullopt;
+  }
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  const auto req = m_reservations->get_last_sent();
+  pg_scrubbing_status_t s;
+  s.m_osd_to_respond = req ? req->osd : 0;
+  s.m_ordinal_of_requested_replica = m_reservations->active_requests_cnt();
+  s.m_num_to_reserve = scrbr->get_pg()->get_actingset().size() - 1;
+  s.m_duration_seconds =
+      duration_cast<seconds>(context<ScrubMachine>().get_time_scrubbing())
+	  .count();
+  return s;
 }
 
 

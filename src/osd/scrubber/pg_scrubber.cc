@@ -2441,7 +2441,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 	  pg_scrub_sched_status_t::blocked,
 	  true,	 // active
 	  (m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow),
-	  false};
+	  (m_active_target->urgency() == urgency_t::periodic_regular)};
 
     } else {
       int32_t dur_seconds =
@@ -2452,9 +2452,11 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 	  pg_scrub_sched_status_t::active,
 	  true,	 // active
 	  (m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow),
-	  false /* is periodic? unknown, actually */};
+	  (m_active_target->urgency() == urgency_t::periodic_regular)};
     }
   }
+
+  // not registered to be scrubbed?
   if (!m_scrub_job->is_registered()) {
     return pg_scrubbing_status_t{
 	utime_t{},
@@ -2465,8 +2467,34 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 	false};
   }
 
-  // not taking 'no-*scrub' flags into account here.
+  // in session, but still reserving replicas?
+  const auto maybe_register = m_fsm->get_reservation_status();
+  if (maybe_register) {
+    // note that if we are here, we are scrubbing (even though
+    // m_active is false). The 'maybe_register' attests to being in
+    // ReservingReplicas state, and m_active wasn't set yet.
+    dout(20) << fmt::format(
+		    "{}:maybe_register: osd:{} {}s ({} of {})", __func__,
+		    maybe_register->m_osd_to_respond,
+		    maybe_register->m_duration_seconds,
+		    maybe_register->m_ordinal_of_requested_replica,
+		    maybe_register->m_num_to_reserve)
+	     << dendl;
+    return pg_scrubbing_status_t{
+	utime_t{},
+	maybe_register->m_duration_seconds,
+	pg_scrub_sched_status_t::active,
+	true,  // active
+	(m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow),
+	(m_active_target->urgency() == urgency_t::periodic_regular),
+	maybe_register->m_osd_to_respond,
+	maybe_register->m_ordinal_of_requested_replica,
+	maybe_register->m_num_to_reserve};
+  }
+
   const auto first_ready = m_scrub_job->earliest_eligible(now_is);
+  // eligible for scrubbing, but not yet selected to be scrubbed?
+  // (not taking 'no-*scrub' flags into account here.)
   if (first_ready) {
     const auto& targ = first_ready->get();
     return pg_scrubbing_status_t{
