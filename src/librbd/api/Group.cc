@@ -262,7 +262,7 @@ int GroupSnapshot_to_group_snap_info2(
 }
 
 bool is_user_snapshot(const cls::rbd::GroupSnapshot &group_snap) {
-  auto ns = std::get_if<cls::rbd::UserGroupSnapshotNamespace>(
+  auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceUser>(
       &group_snap.snapshot_namespace);
   return ns != nullptr;
 }

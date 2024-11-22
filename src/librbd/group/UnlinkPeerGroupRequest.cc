@@ -49,7 +49,7 @@ void UnlinkPeerGroupRequest<I>::unlink_peer() {
   auto unlink_unsynced_snap = snaps.end();
   bool unlink_unsynced = false;
   for (auto it = snaps.begin(); it != snaps.end(); it++) {
-    auto ns = std::get_if<cls::rbd::MirrorGroupSnapshotNamespace>(
+    auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &it->snapshot_namespace);
     if (ns != nullptr) {
       // FIXME: after relocate, on new primary the previous primary demoted
