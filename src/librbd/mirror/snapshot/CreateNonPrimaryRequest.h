@@ -27,19 +27,24 @@ class CreateNonPrimaryRequest {
 public:
   static CreateNonPrimaryRequest *create(ImageCtxT *image_ctx,
                                          bool demoted,
+                                         const std::string group_id,
+                                         const std::string group_snap_id,
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
                                          const SnapSeqs& snap_seqs,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
                                          Context *on_finish) {
-    return new CreateNonPrimaryRequest(image_ctx, demoted, primary_mirror_uuid,
+    return new CreateNonPrimaryRequest(image_ctx, demoted, group_id,
+                                       group_snap_id, primary_mirror_uuid,
                                        primary_snap_id, snap_seqs,
                                        image_state, snap_id, on_finish);
   }
 
   CreateNonPrimaryRequest(ImageCtxT *image_ctx,
                           bool demoted,
+                          const std::string group_id,
+                          const std::string group_snap_id,
                           const std::string &primary_mirror_uuid,
                           uint64_t primary_snap_id,
                           const SnapSeqs& snap_seqs,
@@ -77,6 +82,8 @@ private:
 
   ImageCtxT *m_image_ctx;
   const bool m_demoted;
+  const std::string m_group_id;
+  const std::string m_group_snap_id;
   const std::string m_primary_mirror_uuid;
   const uint64_t m_primary_snap_id;
   const SnapSeqs m_snap_seqs;

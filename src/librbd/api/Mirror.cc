@@ -514,7 +514,7 @@ int get_last_mirror_snapshot_state(librados::IoCtx &group_ioctx,
   }
 
   for (auto it = snaps.rbegin(); it != snaps.rend(); it++) {
-    auto ns = std::get_if<cls::rbd::MirrorGroupSnapshotNamespace>(
+    auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &it->snapshot_namespace);
     if (ns != nullptr) {
       // XXXMG: check primary_mirror_uuid matches?
@@ -2361,7 +2361,7 @@ int prepare_group_images(IoCtx& group_ioctx,
     return r;
   }
 
-  group_snap->snapshot_namespace = cls::rbd::MirrorGroupSnapshotNamespace{
+  group_snap->snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
                                      state, mirror_peer_uuids, {}, {}};
 
   for (auto image_ctx: *image_ctxs) {
@@ -2635,7 +2635,7 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
   uuid_gen.generate_random();
   cls::rbd::GroupSnapshot group_snap{
       group_snap_id,
-      cls::rbd::MirrorGroupSnapshotNamespace{},
+      cls::rbd::GroupSnapshotNamespaceMirror{},
       prepare_primary_mirror_snap_name(cct, uuid_gen.to_string(),
                                        group_snap_id),
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
@@ -2851,7 +2851,7 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
   }
 
   for (auto &snap : snaps) {
-    auto ns = std::get_if<cls::rbd::MirrorGroupSnapshotNamespace>(
+    auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &snap.snapshot_namespace);
     if (ns == nullptr) {
       continue;
@@ -3051,7 +3051,7 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
   std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
   cls::rbd::GroupSnapshot group_snap{
       group_snap_id,
-      cls::rbd::MirrorGroupSnapshotNamespace{},
+      cls::rbd::GroupSnapshotNamespaceMirror{},
       prepare_primary_mirror_snap_name(cct, mirror_group.global_group_id,
                                        group_snap_id),
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
@@ -3213,7 +3213,7 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
   std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
   cls::rbd::GroupSnapshot group_snap{
       group_snap_id,
-      cls::rbd::MirrorGroupSnapshotNamespace{},
+      cls::rbd::GroupSnapshotNamespaceMirror{},
       prepare_primary_mirror_snap_name(cct, mirror_group.global_group_id,
                                        group_snap_id),
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
@@ -3370,15 +3370,14 @@ int Mirror<I>::group_resync(IoCtx& group_ioctx, const char *group_name) {
                << " is primary, cannot resync to itself" << dendl;
     return -EINVAL;
   }
+  bufferlist bl;
+  bl.append("true");
 
-  r = cls_client::mirror_group_resync_set(&group_ioctx,
-                                          librbd::util::group_header_name(group_id),
-                                          mirror_group.global_group_id,
-                                          group_name, group_id);
+  r = cls_client::metadata_set(&group_ioctx,
+                               librbd::util::group_header_name(group_id),
+                               {{RBD_GROUP_RESYNC, bl}});
   if (r < 0) {
-    lderr(cct) << "setting group resync with global_group_id="
-               << mirror_group.global_group_id << " failed: "
-               << cpp_strerror(r) << dendl;
+    lderr(cct) << "failed setting metadata: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -3455,7 +3454,7 @@ int Mirror<I>::group_snapshot_create(IoCtx& group_ioctx, const char *group_name,
   std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
   cls::rbd::GroupSnapshot group_snap{
       group_snap_id,
-      cls::rbd::MirrorGroupSnapshotNamespace{},
+      cls::rbd::GroupSnapshotNamespaceMirror{},
       prepare_primary_mirror_snap_name(cct, mirror_group.global_group_id,
                                        group_snap_id),
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
@@ -3563,7 +3562,7 @@ int Mirror<I>::group_image_add(IoCtx &group_ioctx,
   std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
   cls::rbd::GroupSnapshot group_snap{
       group_snap_id,
-      cls::rbd::MirrorGroupSnapshotNamespace{},
+      cls::rbd::GroupSnapshotNamespaceMirror{},
       prepare_primary_mirror_snap_name(cct, mirror_info.global_group_id,
                                        group_snap_id),
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
@@ -3689,7 +3688,7 @@ int Mirror<I>::group_image_remove(IoCtx &group_ioctx,
   std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
   cls::rbd::GroupSnapshot group_snap{
       group_snap_id,
-      cls::rbd::MirrorGroupSnapshotNamespace{},
+      cls::rbd::GroupSnapshotNamespaceMirror{},
       prepare_primary_mirror_snap_name(cct, mirror_info.global_group_id,
                                        group_snap_id),
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};

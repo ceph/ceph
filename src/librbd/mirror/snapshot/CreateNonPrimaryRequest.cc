@@ -27,10 +27,12 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 CreateNonPrimaryRequest<I>::CreateNonPrimaryRequest(
-    I* image_ctx, bool demoted, const std::string &primary_mirror_uuid,
+    I* image_ctx, bool demoted, const std::string group_id,
+    const std::string group_snap_id, const std::string &primary_mirror_uuid,
     uint64_t primary_snap_id, const SnapSeqs& snap_seqs,
     const ImageState &image_state, uint64_t *snap_id, Context *on_finish)
   : m_image_ctx(image_ctx), m_demoted(demoted),
+    m_group_id(group_id), m_group_snap_id(group_snap_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
     m_primary_snap_id(primary_snap_id), m_snap_seqs(snap_seqs),
     m_image_state(image_state), m_snap_id(snap_id), m_on_finish(on_finish) {
@@ -186,6 +188,10 @@ void CreateNonPrimaryRequest<I>::create_snapshot() {
     m_primary_mirror_uuid, m_primary_snap_id};
   if (m_demoted) {
     ns.mirror_peer_uuids = m_mirror_peer_uuids;
+  }
+  if (!m_group_snap_id.empty()) {
+    ns.group_spec = {m_group_id, m_image_ctx->md_ctx.get_id()};
+    ns.group_snap_id = m_group_snap_id;
   }
   ns.snap_seqs = m_snap_seqs;
   ns.complete = is_orphan();

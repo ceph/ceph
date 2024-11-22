@@ -121,7 +121,7 @@ void ImageStateUpdateRequest<I>::handle_set_mirror_image(int r) {
 template <typename I>
 void ImageStateUpdateRequest<I>::notify_mirroring_watcher() {
   // skip image notification if mirroring for the image group is disabled
-  if (m_mirror_image.group_spec.is_valid()) {
+  if (m_mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_GROUP) {
     finish(0);
     return;
   }

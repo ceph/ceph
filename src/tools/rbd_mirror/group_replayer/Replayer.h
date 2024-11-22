@@ -143,13 +143,6 @@ private:
 
   void unlink_group_snapshots(const std::string &remote_group_snap_id);
 
-  void update_image_snapshot(
-    const std::string &remote_group_snap_id,
-    cls::rbd::ImageSnapshotSpec spec,
-    Context *on_finish);
-  void handle_update_image_snapshot(
-    int r, uint64_t local_snap_id, Context *on_finish);
-
   void create_regular_snapshot(
     const std::string &remote_group_snap_name,
     const std::string &remote_group_snap_id,
