@@ -46,14 +46,18 @@
                           || initiatorForm.get('addHost.addedHosts').controls.length === 32
                           || (initiatorForm.get('addHost.addedHosts').controls.length !== 1 && initiatorForm.get('addHost.addedHosts').controls.length !== hi+1)"
                           (click)="addHost()">
-                    <i class="fa fa-plus"></i>
+                    <svg [cdsIcon]="icons.add"
+                         [size]="icons.size16"
+                         ></svg>
                   </button>
                   <button class="btn btn-light"
                           type="button"
                           id="delete-button-{{hi}}"
                           [disabled]="addedHosts.controls.length === 1"
                           (click)="removeHost(hi)">
-                    <i class="fa fa-trash-o"></i>
+                    <svg [cdsIcon]="icons.trash"
+                         [size]="icons.size16"
+                         ></svg>
                   </button>
                   <ng-container *ngIf="initiatorForm.get('addHost.addedHosts').controls[hi].invalid
                                 && (initiatorForm.get('addHost.addedHosts').controls[hi].dirty

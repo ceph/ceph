@@ -93,11 +93,13 @@
                     [options]="zone.data.available"
                     (selection)="zoneSelection()">
   </cd-select-badges>
-  <i *ngIf="zone.data.selected.length <= 0"
-     i18n-title
-     title="Flow should be associated with {{name?.split('_').join(' ')}}"
-     class="{{ icons.warning }} icon-warning-color">
-  </i>
+
+  <svg *ngIf="zone.data.selected.length <= 0"
+       [cdsIcon]="icons.warning"
+       [size]="icons.size16"
+       title="Flow should be associated with {{name?.split('_').join(' ')}}"
+       class="cds-warning-color"
+       i18n-title></svg>
   <span class="invalid-feedback"
         *ngIf="currentFormGroupContext.showError(name, frm, 'required')"
         i18n>{{name?.split('_').join(' ')}} selection is required!

@@ -6,9 +6,8 @@
   <div class="row h-100 justify-content-center align-items-center">
     <div class="blank-page">
       <div *ngIf="header && message; else elseBlock">
-        <i [ngClass]="icon"
-           class="mx-auto d-block"></i>
-
+        <svg [cdsIcon]="icon"
+             class="cds-info-color cds-icon--size-10"></svg>
         <div class="mt-4 text-center">
           <h3><b>{{ header }}</b></h3>
           <h4 class="mt-3"
