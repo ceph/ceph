@@ -10198,10 +10198,12 @@ void MDCache::notify_global_snaprealm_update(int snap_op)
 
 struct C_MDC_RetryScanStray : public MDCacheContext {
   dirfrag_t next;
-  std::function<void()> done_callback
-  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n, std::functio<void()> cb) : MDCacheContext(c), next(n), done_callback(cb) { }
+  Formatter* dump_formatter;
+  std::function<void()> done_callback;
+  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n, Formatter* f, std::function<void()> cb) :
+   MDCacheContext(c), next(n), dump_formatter(f), done_callback(cb) { }
   void finish(int r) override {
-    mdcache->scan_stray_dir(next, done_callback);
+    mdcache->scan_stray_dir(next, dump_formatter, done_callback);
   }
 };
 
@@ -10210,7 +10212,7 @@ struct C_MDC_RetryScanStray : public MDCacheContext {
 // the function returns EAGAIN to support waiting when called from asok
 // If the callback is not nullptr, the caller is asok command handler, which will block 
 // if EAGAIN is returned, untill this callback will be called
-int MDCache::scan_stray_dir(dirfrag_t next, Formatter* f, std::function<void()> done_callback)
+int MDCache::scan_stray_dir(dirfrag_t next, Formatter* dump_formatter, std::function<void()> done_callback)
 {
   dout(10) << "scan_stray_dir " << next << dendl;
 
@@ -10229,12 +10231,12 @@ int MDCache::scan_stray_dir(dirfrag_t next, Formatter* f, std::function<void()> 
 	continue;
 
       if (!dir->can_auth_pin()) {
-	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RetryScanStray(this, dir->dirfrag()));
+	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RetryScanStray(this, dir->dirfrag(), dump_formatter, done_callback));
 	return -EAGAIN;
       }
 
       if (!dir->is_complete()) {
-	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
+	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag(), dump_formatter, done_callback));
 	return -EAGAIN;
       }
 
@@ -10245,14 +10247,12 @@ int MDCache::scan_stray_dir(dirfrag_t next, Formatter* f, std::function<void()> 
 	CDentry::linkage_t *dnl = dn->get_projected_linkage();
 	if (dnl->is_primary()) {
 	  CInode *in = dnl->get_inode();
-    if (f) {
-      std::stringstream ss;
-      f->open_object_section("stray_inode");
-      ss << "ino: " << in->ino();
-      ss << ", stray_prior_path: " << in->get_inode()->stray_prior_path;
-      f->dump_string("meta: ", ss.str());
-      in->dump(f, CInode::DUMP_CAPS);
-      f->close_section();
+    if (dump_formatter) {
+      dump_formatter->open_object_section("stray_inode");
+      dump_formatter->dump_int("ino: ", in->ino());
+      dump_formatter->dump_string("stray_prior_path: ", in->get_inode()->stray_prior_path);
+      in->dump(dump_formatter, CInode::DUMP_CAPS);
+      dump_formatter->close_section();
     }
 	  if (in->get_inode()->nlink == 0)
 	    in->state_set(CInode::STATE_ORPHAN);
@@ -10275,11 +10275,9 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
     mds->logger->inc(l_mds_openino_backtrace_fetch);
 }
 
-void MDCache::stray_status(Formatter *f)
+int MDCache::stray_status(Formatter *f, function<void()> done_callback)
 {
-  f->open_object_section("strays");
-  scan_stray_dir(dirfrag_t(), f);
-  f->close_section();
+  return scan_stray_dir(dirfrag_t(), f, done_callback);
 }
 
 // ========================================================================================

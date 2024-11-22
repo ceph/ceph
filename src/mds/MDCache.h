@@ -1071,7 +1071,7 @@ private:
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
 
   void cache_status(Formatter *f);
-  void stray_status(Formatter *f);
+  int stray_status(Formatter *f, std::function<void()> done_callback);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;
