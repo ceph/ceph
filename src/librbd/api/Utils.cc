@@ -156,12 +156,12 @@ template <typename I>
 librados::snap_t get_group_snap_id(
     I *ictx, const cls::rbd::SnapshotNamespace& in_snap_namespace) {
   ceph_assert(ceph_mutex_is_locked(ictx->image_lock));
-  auto it = ictx->snap_ids.lower_bound({cls::rbd::GroupImageSnapshotNamespace{},
+  auto it = ictx->snap_ids.lower_bound({cls::rbd::ImageSnapshotNamespaceGroup{},
                                         ""});
   for (; it != ictx->snap_ids.end(); ++it) {
     if (it->first.first == in_snap_namespace) {
       return it->second;
-    } else if (std::get_if<cls::rbd::GroupImageSnapshotNamespace>(
+    } else if (std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
                    &it->first.first) == nullptr) {
       break;
     }
@@ -178,7 +178,7 @@ int group_snap_remove(librados::IoCtx& group_ioctx, const std::string& group_id,
 
   std::vector<librbd::ImageCtx*> ictxs;
 
-  cls::rbd::GroupImageSnapshotNamespace snap_namespace{group_ioctx.get_id(),
+  cls::rbd::ImageSnapshotNamespaceGroup snap_namespace{group_ioctx.get_id(),
                                                        group_id, group_snap.id};
 
   ldout(cct, 20) << "Removing snapshot with group snap_id: " << group_snap.id

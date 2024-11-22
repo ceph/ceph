@@ -126,7 +126,7 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
   }
 
   if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_CREATING &&
-      !m_mirror_image.group_spec.is_valid()) {
+      m_mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE) {
     dout(5) << "local image is still in creating state, issuing a removal"
             << dendl;
     move_to_trash();
