@@ -653,6 +653,50 @@ public:
     return is_pending() && pending_for_transaction == id;
   }
 
+  enum class viewable_state_t {
+    stable,              // viewable
+    pending,             // viewable
+    invalid,             // unviewable
+    stable_retired,      // unviewable
+    stable_with_pending, // unviewable
+  };
+  friend std::ostream &operator<<(std::ostream &out, const viewable_state_t &state) {
+    switch(state) {
+    case viewable_state_t::stable:
+      return out << "stable";
+    case viewable_state_t::pending:
+      return out << "pending";
+    case viewable_state_t::invalid:
+      return out << "invalid";
+    case viewable_state_t::stable_retired:
+      return out << "stable_retired";
+    case viewable_state_t::stable_with_pending:
+      return out << "stable_with_pending";
+    default:
+      __builtin_unreachable();
+    }
+  }
+  std::pair<bool, viewable_state_t>
+  is_viewable_by_trans(transaction_id_t id) const {
+    if (!is_valid()) {
+      return std::make_pair(false, viewable_state_t::invalid);
+    }
+    if (is_pending()) {
+      assert(is_pending_in_trans(id));
+      return std::make_pair(true, viewable_state_t::pending);
+    }
+    // shared by multiple transactions
+    assert(is_stable_written());
+    auto cmp = trans_spec_view_t::cmp_t();
+    if (mutation_pendings.find(id, cmp) != mutation_pendings.end()) {
+      return std::make_pair(false, viewable_state_t::stable_with_pending);
+    }
+    if (retired_transactions.find(id, cmp) != retired_transactions.end()) {
+      return std::make_pair(false, viewable_state_t::stable_retired);
+    }
+    return std::make_pair(true, viewable_state_t::stable);
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -1486,6 +1530,7 @@ using lextent_list_t = addr_extent_list_base_t<
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::lba_pin_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::CachedExtent::viewable_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LBAMapping> : fmt::ostream_formatter {};
 #endif
