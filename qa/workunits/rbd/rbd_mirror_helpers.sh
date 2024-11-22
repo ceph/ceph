@@ -21,6 +21,9 @@
 #  RBD_MIRROR_INSTANCES  - number of daemons to start per cluster
 #  RBD_MIRROR_CONFIG_KEY - if not empty, use config-key for remote cluster
 #                          secrets
+#  RBD_MIRROR_SHOW_CMD     if not empty, external commands sent to the cluster and
+#                          more information on test failures will be printed.
+#                          The script will exit on fatal test failures
 # The cleanup can be done as a separate step, running the script with
 # `cleanup ${RBD_MIRROR_TEMDIR}' arguments.
 #
@@ -91,14 +94,20 @@ PARENT_POOL=mirror_parent
 NS1=ns1
 NS2=ns2
 TEMPDIR=
+CMD_STDOUT=last_cmd.stdout
+CMD_STDERR=last_cmd.stderr
 CEPH_ID=${CEPH_ID:-mirror}
 RBD_IMAGE_FEATURES=${RBD_IMAGE_FEATURES:-layering,exclusive-lock,journaling}
 MIRROR_USER_ID_PREFIX=${MIRROR_USER_ID_PREFIX:-${CEPH_ID}.}
 RBD_MIRROR_MODE=${RBD_MIRROR_MODE:-journal}
 MIRROR_POOL_MODE=${MIRROR_POOL_MODE:-pool}
+MIRROR_IMAGE_MODE=${MIRROR_IMAGE_MODE:-snapshot}
 if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
   MIRROR_POOL_MODE=image
 fi
+
+RED='\033[0;31m'
+NO_COLOUR='\033[0m'
 
 export CEPH_ARGS="--id ${CEPH_ID}"
 
@@ -145,8 +154,115 @@ set_cluster_instance()
         instance=0
     fi
 
-    eval ${cluster_var_name}=${cluster}
-    eval ${instance_var_name}=${instance}
+    eval "${cluster_var_name}"="${cluster}"
+    eval "${instance_var_name}"="${instance}"
+}
+
+print_stacktrace() {
+    local frame=1 LINE SUB FILE
+    while read -r LINE SUB FILE < <(caller "$frame"); do
+      printf '[%s]  %s @ %s:%s\n' "$((frame++))" "${SUB}" "${FILE}" "${LINE}" 1>&2
+    done
+}
+
+run_cmd_internal() {
+    local cmd=$1
+    local exit_on_failure=$2
+    local as_admin=$3
+    local rc
+    local frame=0 LINE SUB FILE
+
+    if [ -n "${RBD_MIRROR_SHOW_CMD}" ]; then
+        if [ 'true' = "${as_admin}" ]; then
+            echo "CEPH_ARGS=''" "$cmd"
+        else
+            echo "CEPH_ARGS='--id ${CEPH_ID}'" "$cmd"
+        fi
+    fi
+
+    if [ 'true' = "${as_admin}" ]; then
+        export CEPH_ARGS=''
+    else
+        export CEPH_ARGS="--id ${CEPH_ID}"
+    fi
+
+    # Don't exit immediately if the command exits with a non-zero status.
+    set +e
+    $cmd >"${CMD_STDOUT}" 2>"${CMD_STDERR}"
+    rc=$?
+    set -e
+
+    if [ -n "${RBD_MIRROR_SHOW_CMD}" ]; then
+        cat "$CMD_STDOUT"
+        cat "$CMD_STDERR" 1>&2
+    fi
+
+    if [ 0 = $rc ] ; then
+        return 0
+    fi
+
+    if [ 'true' = "${exit_on_failure}" ]; then
+        echo -e "${RED}ERR: rc=" $rc 1>&2
+        print_stacktrace
+        echo -e "${NO_COLOUR}"
+        exit $rc
+    else
+        local frame=1 LINE SUB FILE
+
+        if [ -n "${RBD_MIRROR_SHOW_CMD}" ]; then
+            echo "ERR: rc=" $rc 1>&2
+            read -r LINE SUB FILE < <(caller "$frame")
+            printf "ERR: Non-fatal failure at: %s:%s %s()\n" "${FILE}" "${LINE}" "${SUB}" 1>&2
+        fi
+
+        return $rc
+    fi
+}
+
+run_cmd() {
+    local cmd=$1
+
+    run_cmd_internal "$cmd" 'true' 'false'
+}
+
+# run the command but ignore any failure and return success
+try_cmd() {
+    local cmd=$1
+
+    run_cmd_internal "$cmd" 'false' 'false'
+}
+
+run_admin_cmd() {
+    local cmd=$1
+
+    run_cmd_internal "$cmd" 'true' 'true'
+}
+
+# run the command but ignore any failure and return success
+try_admin_cmd() {
+    local cmd=$1
+
+    run_cmd_internal "$cmd" 'false' 'true'
+}
+
+fail() {
+    local fatal=$1
+    local frame=0 LINE SUB FILE
+
+    if [ -z "${RBD_MIRROR_SHOW_CMD}" ]; then
+        return 0
+    fi
+
+    if [ -n "${fatal}" ]; then
+        echo "${fatal}" 1>&2
+        print_stacktrace
+        exit 1
+    fi
+
+    read -r LINE SUB FILE < <(caller "$frame")
+    printf 'ERR: Non-fatal failure at: %s:%s %s()\n' "${FILE}" "${LINE}" "${SUB}" 1>&2
+
+    return 0
 }
 
 daemon_asok_file()
@@ -157,7 +273,7 @@ daemon_asok_file()
 
     set_cluster_instance "${local_cluster}" local_cluster instance
 
-    echo $(ceph-conf --cluster $local_cluster --name "client.${MIRROR_USER_ID_PREFIX}${instance}" 'admin socket')
+    echo $(ceph-conf --cluster $local_cluster --name "client.${MIRROR_USER_ID_PREFIX}${instance}" 'admin socket') || fail
 }
 
 daemon_pid_file()
@@ -172,7 +288,7 @@ daemon_pid_file()
 
 testlog()
 {
-    echo $(date '+%F %T') $@ | tee -a "${TEMPDIR}/rbd-mirror.test.log" >&2
+    echo -e "${RED}"$(date '+%F %T') $@ "${NO_COLOUR}"| tee -a "${TEMPDIR}/rbd-mirror.test.log" >&2
 }
 
 expect_failure()
@@ -267,7 +383,7 @@ peer_add()
             # raced with a remote heartbeat ping -- remove and retry
             sleep $s
             peer_uuid=$(rbd mirror pool info --cluster ${cluster} --pool ${pool} --format xml | \
-                xmlstarlet sel -t -v "//peers/peer[site_name='${remote_cluster}']/uuid")
+                $XMLSTARLET sel -t -v "//peers/peer[site_name='${remote_cluster}']/uuid")
 
             CEPH_ARGS='' rbd --cluster ${cluster} --pool ${pool} mirror pool peer remove ${peer_uuid}
         else
@@ -349,7 +465,6 @@ setup_tempdir()
 
 setup()
 {
-    local c
     trap 'cleanup $?' INT TERM EXIT
 
     setup_tempdir
@@ -416,6 +531,8 @@ start_mirror()
     set_cluster_instance "${cluster}" cluster instance
 
     test -n "${RBD_MIRROR_USE_RBD_MIRROR}" && return
+    local log=${TEMPDIR}/rbd-mirror${instance}.out
+    ulimit -c unlimited
 
     rbd-mirror \
         --cluster ${cluster} \
@@ -427,6 +544,7 @@ start_mirror()
         --debug-rbd=30 --debug-journaler=30 \
         --debug-rbd_mirror=30 \
         --daemonize=true \
+        --log-file=${log} \
         ${RBD_MIRROR_ARGS}
 }
 
@@ -437,6 +555,31 @@ start_mirrors()
     for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
         start_mirror "${cluster}:${instance}"
     done
+}
+
+check_daemon_running()
+{
+    local cluster=$1
+    local restart=$2
+    local pid
+    local cmd
+
+    pid=$(cat "$(daemon_pid_file "${cluster}")" 2>/dev/null) || :
+    if [ -z "${pid}" ] && [ -z "${restart}" ]
+    then
+        fail 'cannot determine daemon pid'
+    fi
+
+    cmd=$(ps -p ${pid} -o comm -h) || :
+    if [ "${cmd}" != 'rbd-mirror' ] && [ -z "${restart}" ]; then
+        echo 'pid='"${pid}"
+        echo 'cmd='"${cmd}"
+        fail 'rdb-mirror not running'
+    fi
+
+    if [ -n "${restart}" ]; then
+        start_mirror "${cluster}"
+    fi
 }
 
 stop_mirror()
@@ -467,7 +610,7 @@ stop_mirrors()
     local cluster=$1
     local sig=$2
 
-    for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
+    for instance in $(seq 0 ${LAST_MIRROR_INSTANCE}); do
         stop_mirror "${cluster}:${instance}" "${sig}"
     done
 }
@@ -479,10 +622,10 @@ admin_daemon()
 
     set_cluster_instance "${cluster}" cluster instance
 
-    local asok_file=$(daemon_asok_file "${cluster}:${instance}" "${cluster}")
+    local asok_file=$(daemon_asok_file "${cluster}:${instance}" "${cluster}") || { fail; return 1; }
     test -S "${asok_file}"
 
-    ceph --admin-daemon ${asok_file} $@
+    try_cmd "ceph --admin-daemon ${asok_file} $*"
 }
 
 admin_daemons()
@@ -495,13 +638,14 @@ admin_daemons()
     for s in 0 1 2 4 8 8 8 8 8 8 8 8 16 16; do
         sleep ${s}
         if [ "${instance}" != "${cluster_instance}" ]; then
-            admin_daemon "${cluster}:${instance}" $@ && return 0
+            admin_daemon "${cluster}:${instance}" "$@" && return 0
         else
-            for loop_instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
-                admin_daemon "${cluster}:${loop_instance}" $@ && return 0
+            for loop_instance in $(seq 0 ${LAST_MIRROR_INSTANCE}); do
+                admin_daemon "${cluster}:${loop_instance}" "$@" && return 0
             done
         fi
     done
+    fail "daemon command failed after multiple retries"
     return 1
 }
 
@@ -509,8 +653,8 @@ all_admin_daemons()
 {
     local cluster=$1 ; shift
 
-    for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
-        admin_daemon "${cluster}:${instance}" $@
+    for instance in $(seq 0 ${LAST_MIRROR_INSTANCE}); do
+        admin_daemon "${cluster}:${instance}" "$@"
     done
 }
 
@@ -797,7 +941,7 @@ get_newest_mirror_snapshot()
     local log=$4
 
     rbd --cluster "${cluster}" snap list --all "${pool}/${image}" --format xml | \
-        xmlstarlet sel -t -c "//snapshots/snapshot[namespace/complete='true' and position()=last()]" > \
+        $XMLSTARLET sel -t -c "//snapshots/snapshot[namespace/complete='true' and position()=last()]" > \
         ${log} || true
 }
 
@@ -949,8 +1093,40 @@ create_image()
         shift
     fi
 
-    rbd --cluster ${cluster} create --size ${size} \
-        --image-feature "${RBD_IMAGE_FEATURES}" $@ ${pool}/${image}
+    run_cmd "rbd --cluster ${cluster} create --size ${size} \
+        --image-feature ${RBD_IMAGE_FEATURES} $@ ${pool}/${image}"
+}
+
+image_create()
+{
+    local cluster=$1 ; shift
+    local image_spec=$1 ; shift
+    local size=128
+
+    if [ -n "$1" ]; then
+        size=$1
+        shift
+    fi
+
+    run_cmd "rbd --cluster ${cluster} create --size ${size} --image-feature ${RBD_IMAGE_FEATURES} $@ ${image_spec}"
+}
+
+images_create()
+{
+  local cluster=$1 ; shift
+  local image_spec=$1 ; shift
+  local count=$1 ; shift
+  local size=128
+
+  if [ -n "$1" ]; then
+    size=$1
+    shift
+  fi
+
+  local loop_instance
+  for loop_instance in $(seq 0 $((count-1))); do
+    image_create "${cluster}" "${image_spec}${loop_instance}" "$size" || return 1
+  done
 }
 
 is_pool_mirror_mode_image()
@@ -1033,10 +1209,20 @@ remove_image()
     local pool=$2
     local image=$3
 
-    rbd --cluster=${cluster} snap purge ${pool}/${image}
-    rbd --cluster=${cluster} rm ${pool}/${image}
+    run_cmd "rbd --cluster=${cluster} snap purge ${pool}/${image}"
+    run_cmd "rbd --cluster=${cluster} rm ${pool}/${image}"
 }
 
+image_remove()
+{
+    local cluster=$1
+    local image_spec=$2
+
+    run_cmd "rbd --cluster=${cluster} snap purge ${image_spec}"
+    run_cmd "rbd --cluster=${cluster} rm ${image_spec}"
+}
+
+#TODO why does this need to retry - maybe waiting for purge to complete?
 remove_image_retry()
 {
     local cluster=$1
@@ -1048,6 +1234,18 @@ remove_image_retry()
         remove_image ${cluster} ${pool} ${image} && return 0
     done
     return 1
+}
+
+images_remove()
+{
+  local cluster=$1 ; shift
+  local image_prefix=$1 ; shift
+  local count=$1 ; shift
+
+  local loop_instance
+  for loop_instance in $(seq 0 $((count-1))); do
+      image_remove "${cluster}" "${image_prefix}${loop_instance}" || return 1
+  done
 }
 
 trash_move() {
@@ -1394,6 +1592,14 @@ disable_mirror()
     rbd --cluster=${cluster} mirror image disable ${pool}/${image}
 }
 
+mirror_image_disable()
+{
+    local cluster=$1 ; shift
+    local image_spec=$1 ; shift
+
+    run_cmd "rbd --cluster=${cluster} mirror image disable $* ${image_spec}"
+}
+
 enable_mirror()
 {
     local cluster=$1
@@ -1553,123 +1759,184 @@ wait_for_image_in_omap()
     wait_for_omap_keys ${cluster} ${pool} rbd_mirror_leader image_map
 }
 
-create_group()
+group_create()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
+    local group_spec=$2
 
-    rbd --cluster ${cluster} group create ${pool}/${group}
+    run_cmd "rbd --cluster ${cluster} group create ${group_spec}"
 }
 
-rename_group()
+group_rename()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local new_name=$4
+    local current_name=$2
+    local new_name=$3
 
-    rbd --cluster ${cluster} group rename ${pool}/${group} ${pool}/${new_name}
+    run_cmd "rbd --cluster ${cluster} group rename ${current_name} ${new_name}"
 }
 
-remove_group()
+group_remove()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
+    local group_spec=$2
 
-    rbd --cluster ${cluster} group remove ${pool}/${group}
+    run_cmd "rbd --cluster ${cluster} group remove ${group_spec}"
 }
 
-group_add_image()
+group_image_add()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local image_pool=$4
-    local image=$5
+    local group_spec=$2
+    local image_spec=$3
 
-    rbd --cluster ${cluster} \
-        group image add ${pool}/${group} ${image_pool}/${image}
+    run_cmd "rbd --cluster ${cluster} group image add ${group_spec} ${image_spec}"
 }
 
-group_remove_image()
+group_images_add()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local image_pool=$4
-    local image=$5
+    local group_spec=$2
+    local image_prefix=$3
+    local count=$4
 
-    rbd --cluster ${cluster} \
-        group image remove ${pool}/${group} ${image_pool}/${image}
+    local loop_instance
+    for loop_instance in $(seq 0 $((count-1))); do
+      group_image_add ${cluster} ${group_spec} ${image_prefix}${loop_instance}
+    done
 }
 
-enable_group_mirror()
+group_image_remove()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local mode=${4:-${MIRROR_IMAGE_MODE}}
+    local group_spec=$2
+    local image_spec=$3
 
-    rbd --cluster=${cluster} mirror group enable ${pool}/${group} ${mode}
+    run_cmd "rbd --cluster ${cluster} group image remove ${group_spec} ${image_spec}"
 }
 
-disable_group_mirror()
+group_images_remove()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
+    local group_spec=$2
+    local image_prefix=$3
+    local count=$4
 
-    rbd --cluster=${cluster} mirror group disable ${pool}/${group}
+    local loop_instance
+    for loop_instance in $(seq 0 $((count-1))); do
+      group_image_remove ${cluster} ${group_spec} ${image_prefix}${loop_instance}
+    done
+}
+
+mirror_group_enable()
+{
+    local cluster=$1
+    local group_spec=$2
+    local mode=${3:-${MIRROR_IMAGE_MODE}}
+
+    run_cmd "rbd --cluster=${cluster} mirror group enable ${group_spec} ${mode}"
+}
+
+mirror_group_disable()
+{
+    local cluster=$1 ; shift
+    local group_spec=$1 ; shift
+
+    run_cmd "rbd --cluster=${cluster} mirror group disable $* ${group_spec}"
 }
 
 create_group_and_enable_mirror()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local mode=${4:-${MIRROR_IMAGE_MODE}}
+    local group_spec=$2
+    local mode=${3:-${MIRROR_IMAGE_MODE}}
 
-    create_group ${cluster} ${pool} ${group}
-    enable_group_mirror ${cluster} ${pool} ${group} ${mode}
+    group_create ${cluster} ${group_spec}
+    mirror_group_enable ${cluster} ${group_spec} ${mode}
 }
 
-demote_group()
+mirror_group_demote()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
+    local group_spec=$2
 
-    rbd --cluster=${cluster} mirror group demote ${pool}/${group}
+    run_cmd "rbd --cluster=${cluster} mirror group demote ${group_spec}"
 }
 
-promote_group()
+mirror_group_promote()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local force=$4
+    local group_spec=$2
+    local force=$3
 
-    rbd --cluster=${cluster} mirror group promote ${pool}/${group} ${force}
+    run_cmd "rbd --cluster=${cluster} mirror group promote ${group_spec} ${force}"
 }
 
 mirror_group_snapshot()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
+    local group_spec=$2
 
-    rbd --cluster=${cluster} mirror group snapshot ${pool}/${group}
+    run_cmd "rbd --cluster=${cluster} mirror group snapshot ${group_spec}"
 }
 
-request_resync_group()
+group_snap_create()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
+    local group_spec=$2
+    local snap=$3
 
-    rbd --cluster=${cluster} mirror group resync ${pool}/${group}
+    run_cmd "rbd --cluster=${cluster} group snap create ${group_spec}@${snap}"
+}
+
+group_snap_remove()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap=$3
+
+    run_cmd "rbd --cluster=${cluster} group snap rm ${group_spec}@${snap}"
+}
+
+get_group_snap_count()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap=$3
+    local -n _group_snap_count=$4
+
+    run_cmd "rbd --cluster=${cluster} group snap ls --format xml --pretty-format ${group_spec}"
+    _group_snap_count="$($XMLSTARLET sel -t -v "count(//group_snaps/group_snap[snapshot='${snap}'])" < "$CMD_STDOUT")"
+}
+
+check_group_snap_doesnt_exist()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap=$3
+    local count
+
+    get_group_snap_count "${cluster}" "${group_spec}" "${snap}" count
+    test 0 = "${count}" || { fail "snap count = ${count}"; return 1; }
+}
+
+check_group_snap_exists()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap=$3
+    local count
+
+    get_group_snap_count "${cluster}" "${group_spec}" "${snap}" count
+    test 1 = "${count}" || { fail "snap count = ${count}"; return 1; }
+}
+
+mirror_group_resync()
+{
+    local cluster=$1
+    local group_spec=$2
+
+    run_cmd "rbd --cluster=${cluster} mirror group resync ${group_spec}"
 }
 
 test_group_present()
@@ -1677,19 +1944,38 @@ test_group_present()
     local cluster=$1
     local pool=$2
     local group=$3
-    local test_state=$4
+    local test_group_count=$4
     local test_image_count=$5
-    local current_state=deleted
     local current_image_count
 
-    rbd --cluster ${cluster} group list ${pool} | grep "^${group}$" &&
-        current_state=present
-    test "${test_state}" = "${current_state}" || return 1
+    run_cmd "rbd --cluster ${cluster} group list ${pool} --format xml --pretty-format"
+    test "${test_group_count}" = "$($XMLSTARLET sel -t -v "count(//groups[name='${group}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 
-    test "${current_state}" = present -a -n "${image_count}" || return 0
+    # if the group is not expected to be present in the list then don't bother checking for images
+    test "${test_group_count}" = 0 && return 0
 
-    current_image_count=$(rbd --cluster ${cluster} group image list ${pool}/${group} | wc -l)
-    test "${test_image_count}" = "${current_image_count}"
+    run_cmd "rbd --cluster ${cluster} group image list ${pool}/${group}"
+    current_image_count=$(wc -l < "$CMD_STDOUT")
+    test "${test_image_count}" = "${current_image_count}" || { fail; return 1; }
+}
+
+wait_for_test_group_present()
+{
+    local cluster=$1
+    local pool=$2
+    local group=$3
+    local test_group_count=$4
+    local image_count=$5
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        test_group_present \
+            "${cluster}" "${pool}" "${group}" "${test_group_count}" "${image_count}" &&
+        return 0
+    done
+    fail "wait for count of groups with name ${group} to be ${test_group_count} failed on ${cluster}"
+    return 1
 }
 
 wait_for_group_present()
@@ -1697,153 +1983,203 @@ wait_for_group_present()
     local cluster=$1
     local pool=$2
     local group=$3
-    local state=$4
-    local image_count=$5
-    local s
+    local image_count=$4
 
-    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
-        sleep ${s}
-        test_group_present \
-            "${cluster}" "${pool}" "${group}" "${state}" "${image_count}" &&
-        return 0
-    done
-    return 1
+    wait_for_test_group_present "${cluster}" "${pool}" "${group}" 1 "${image_count}"
+}
+
+wait_for_group_not_present()
+{
+    local cluster=$1
+    local pool=$2
+    local group=$3
+
+    wait_for_test_group_present "${cluster}" "${pool}" "${group}" 0 0
 }
 
 test_group_replay_state()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local test_state=$4
-    local image_count=$5
+    local group_spec=$2
+    local test_state=$3
+    local image_count=$4
     local status_result
     local current_state=stopped
+    local actual_image_count
+    local started_image_count
 
-    status_result=$(admin_daemons "${cluster}" rbd mirror group status ${pool}/${group} | grep -i 'state') || return 1
-    echo "${status_result}" | grep -i 'Replaying' && current_state=started
-    test "${test_state}" = "${current_state}" || return 1
+    # Query the state from the rbd-mirror daemon directly
+    admin_daemons "${cluster}" rbd mirror group status "${group_spec}" --format xml-pretty || { fail; return 1; }
+    test "Replaying" = "$($XMLSTARLET sel -t -v "//group_replayer/state" < "$CMD_STDOUT" )" && current_state=started
+    # from GroupReplayer.h, valid states are Starting, Replaying, Stopping, Stopped
+    test "${test_state}" = "${current_state}" || { fail; return 1; }
+    if [ -n "${image_count}" ]; then
+      actual_image_count=$($XMLSTARLET sel -t -v "count(//image_replayer/state)"  < "$CMD_STDOUT")
+      started_image_count=$($XMLSTARLET sel -t -v "count(//image_replayer[state='Replaying'])" < "$CMD_STDOUT")
+      test "${image_count}" = "${actual_image_count}" ||  { fail; return 1; }
 
-    test -n "${image_count}" || return 0
-
-    # TODO: test images when group image status is returned by the rbd-mirror
+      # If the group is started then check that all images are started too
+      test "${test_state}" = "started" || return 0
+      test "${image_count}" = "${started_image_count}" ||  { fail; return 1; }
+    fi
 }
 
 wait_for_group_replay_state()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local state=$4
-    local image_count=$5
+    local group_spec=$2
+    local state=$3
+    local image_count=$4
     local s
 
     # TODO: add a way to force rbd-mirror to update replayers
     for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16; do
         sleep ${s}
-        test_group_replay_state "${cluster}" "${pool}" "${group}" "${state}" \
-                                "${image_count}" &&
-            return 0
+        test_group_replay_state "${cluster}" "${group_spec}" "${state}" "${image_count}" && return 0
     done
+    fail "Failed to reach expected state"
     return 1
 }
 
 wait_for_group_replay_started()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local image_count=$4
+    local group_spec=$2
+    local image_count=$3
 
-    wait_for_group_replay_state "${cluster}" "${pool}" "${group}" started "${image_count}"
+    wait_for_group_replay_state "${cluster}" "${group_spec}" 'started' "${image_count}"
 }
 
 wait_for_group_replay_stopped()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local image_count=$4
+    local group_spec=$2
 
-    wait_for_group_replay_state "${cluster}" "${pool}" "${group}" stopped "${image_count}"
+    # image_count will be 0 if the group is stopped
+    wait_for_group_replay_state "${cluster}" "${group_spec}" 'stopped' 0
 }
 
-get_newest_group_mirror_snapshot()
+get_newest_group_mirror_snapshot_id()
 {
     local cluster=$1
-    local pool=$2
-    local image=$3
-    local log=$4
+    local group_spec=$2
+    local -n _group_snap_id=$3
 
-    rbd --cluster "${cluster}" group snap list "${pool}/${group}" --format xml | \
-        xmlstarlet sel -t -c "//group_snaps/group_snap[state='complete' and position()=last()]" > \
-        ${log} || true
+    # TODO - have seen this next cmd fail with rc=2 and an empty list
+    # this should not happen, but if it does then retry as a temp workaround
+    try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" &&
+      { _group_snap_id=$(xmlstarlet sel -t -v "//group_snaps/group_snap[state='complete' and position()=last()]/snapshot" "$CMD_STDOUT" | awk -F. '{print $NF}'); return; }
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16; do
+        echo -e "${RED}RETRYING COMMAND${NO_COLOUR}";
+        sleep ${s}
+        try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" && {
+          _group_snap_id=$(xmlstarlet sel -t -v "//group_snaps/group_snap[state='complete' and position()=last()]/snapshot" "$CMD_STDOUT" | awk -F. '{print $NF}'); return;
+        }
+    done
+    fail "Failed to execute command"
+    return 1
 }
 
-wait_for_group_snapshot_sync_complete()
+mirror_group_snapshot_and_wait_for_sync_complete()
 {
     local local_cluster=$1
     local cluster=$2
-    local pool=$3
-    local group=$4
+    local group_spec=$3
+    local group_snap_id
+    local local_group_snap_id
 
-    local status_log=${TEMPDIR}/$(mkfname ${cluster}-${pool}-${group}.status)
-    local local_status_log=${TEMPDIR}/$(mkfname ${local_cluster}-${pool}-${group}.status)
+    if [ "${MIRROR_IMAGE_MODE}" != "snapshot" ]; then
+        return 1
+    fi
 
-    mirror_group_snapshot "${cluster}" "${pool}" "${group}"
-    get_newest_group_mirror_snapshot "${cluster}" "${pool}" "${group}" "${status_log}"
-    local group_snap_id=$(xmlstarlet sel -t -v "//group_snap/snapshot" < ${status_log} | awk -F. '{print $NF}')
+    mirror_group_snapshot "${cluster}" "${group_spec}"
+    get_newest_group_mirror_snapshot_id "${cluster}" "${group_spec}" group_snap_id
 
     while true; do
         for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16 32 32; do
             sleep ${s}
 
-            get_newest_group_mirror_snapshot "${local_cluster}" "${pool}" "${image}" "${local_status_log}"
-            local local_group_snap_id=$(xmlstarlet sel -t -v "//group_snap/snapshot" < ${local_status_log} | awk -F. '{print $NF}')
-
+            get_newest_group_mirror_snapshot_id "${local_cluster}" "${group_spec}" local_group_snap_id
             test "${local_group_snap_id}" = "${group_snap_id}" && return 0
         done
-
+        fail "Failed to reach expected state"
         return 1
     done
     return 1
 }
 
-wait_for_group_replay_complete()
+test_group_and_image_sync_status()
 {
     local local_cluster=$1
     local cluster=$2
-    local pool=$3
-    local group=$4
+    local group_spec=$3
+    local image_spec=$4
 
-    if [ "${MIRROR_IMAGE_MODE}" = "snapshot" ]; then
-        wait_for_group_snapshot_sync_complete ${local_cluster} ${cluster} ${pool} ${group}
-    else
+    local group_snap_id
+    local local_group_snap_id
+
+    get_newest_group_mirror_snapshot_id "${cluster}" "${group_spec}" group_snap_id
+
+	local local_image_status_log=${TEMPDIR}/$(mkfname ${local_cluster}-${group_spec}-${image_spec}-${local_group_snap_id}.status)
+
+    while true; do
+        for s in 0.4 1 1 1 2 2 2 4 8 16 16 32 32; do
+            sleep ${s}
+
+            get_newest_group_mirror_snapshot_id "${local_cluster}" "${group_spec}" local_group_snap_id
+            if [ "${local_group_snap_id}" == "${group_snap_id}" ]; then
+#TODO: Get the image snap for this group snap. For now, compare against the last mirror image .group snap.
+# use rbd group snap info <snap_name> for this once it is working properly
+                rbd --cluster "${local_cluster}" snap list --all "${image_spec}" --format xml | \
+                   $XMLSTARLET sel -t -c "//snapshots/snapshot[namespace/type='mirror' and position()=last()]" > ${local_image_status_log}
+                local image_snap_complete=$(xmlstarlet sel -t -v "//snapshot/namespace/complete" < ${local_image_status_log})
+                if [ "${image_snap_complete}" != "true" ]; then
+                    return 1
+                else
+                    return 0
+                fi
+            else
+                continue
+            fi
+        done
         return 1
-    fi
+    done
 }
 
 test_group_status_in_pool_dir()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local state_pattern="$4"
-    local description_pattern="$5"
-    local service_pattern="$6"
+    local group_spec=$2
+    local state_pattern=$3
+    local image_count=$4
+    local description_pattern=$5
+    local current_state=stopped
 
-    local status_log=${TEMPDIR}/$(mkfname ${cluster}-${pool}-${group}.mirror_status)
-    CEPH_ARGS='' rbd --cluster ${cluster} mirror group status ${pool}/${group} |
-        tee ${status_log} >&2
-    grep "^  state: .*${state_pattern}" ${status_log} || return 1
-    grep "^  description: .*${description_pattern}" ${status_log} || return 1
+    # When running the split-brain test in rbd_mirror_group.sh this next command sometimes fails with a message
+    # "rbd: mirroring not enabled on the group" (even though it clearly is).  To stop the test from failing, treat this as a non-fatal
+    # error for now and the caller will retry the command.  TODO change back to run_admin_cmd.
+    try_admin_cmd "rbd --cluster ${cluster} mirror group status ${group_spec} --format xml --pretty-format" || { fail; return 1; }
 
-    if [ -n "${service_pattern}" ]; then
-        grep "service: *${service_pattern}" ${status_log} || return 1
-    elif echo ${state_pattern} | grep '^up+'; then
-        grep "service: *${MIRROR_USER_ID_PREFIX}.* on " ${status_log} || return 1
+    test -n "${state_pattern}" && { test "${state_pattern}" = $($XMLSTARLET sel -t -v "//group/state" < "${CMD_STDOUT}" ) || { fail; return 1; } }
+    test -n "${description_pattern}" && { test "${description_pattern}" = "$($XMLSTARLET sel -t -v "//group/description" "${CMD_STDOUT}" )" || { fail; return 1; } }
+
+    if echo ${state_pattern} | grep '^up+' >/dev/null; then
+        $XMLSTARLET sel -Q -t -v "//group/daemon_service/daemon_id[contains(text(), ${MIRROR_USER_ID_PREFIX})]" "${CMD_STDOUT}" || { fail; return 1; }
     else
-        grep "service: " ${status_log} && return 1
+        $XMLSTARLET sel -Q -t -v "//group/daemon_service/daemon_id" "${CMD_STDOUT}" && { fail; return 1; }
+    fi
+
+    test "Replaying" = "$($XMLSTARLET sel -t -v "//group_replayer/state" < "$CMD_STDOUT" )" && current_state=started
+    if [ -n "${image_count}" ]; then
+        actual_image_count=$($XMLSTARLET sel -t -v "count(/group/images/image/status)" "$CMD_STDOUT")
+        started_image_count=$($XMLSTARLET sel -t -v "count(/group/images/image/status[contains(text(), 'replaying')])" "$CMD_STDOUT")
+
+        test "${image_count}" = "${actual_image_count}" || { fail; return 1; }
+
+        # If the group is started then check that all images are started too
+        test "${current_state}" = "started" || return 0
+        test "${image_count}" = "${started_image_count}" ||  { fail; return 1; }
     fi
 
     return 0
@@ -1852,19 +2188,87 @@ test_group_status_in_pool_dir()
 wait_for_group_status_in_pool_dir()
 {
     local cluster=$1
-    local pool=$2
-    local group=$3
-    local state_pattern="$4"
-    local description_pattern="$5"
-    local service_pattern="$6"
+    local group_spec=$2
+    local state_pattern=$3
+    local image_count=$4
+    local description_pattern=$5
 
     for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
         sleep ${s}
-        test_group_status_in_pool_dir ${cluster} ${pool} ${group} \
-            "${state_pattern}" "${description_pattern}" "${service_pattern}" &&
+        test_group_status_in_pool_dir ${cluster} ${group_spec} \
+            "${state_pattern}" "${image_count}" "${description_pattern}" &&
             return 0
     done
+    fail 1 "failed to reach expected status"
     return 1
+}
+
+# useful function that attempts to delete all groups and images
+tidy()
+{
+    local primary_cluster=cluster2
+    local secondary_cluster=cluster1
+    local cluster pool group group_spec image image_spec
+
+    for cluster in ${primary_cluster} ${secondary_cluster}; do
+        echo 'cluster:'${cluster}
+        stop_mirrors ${cluster} '-9'
+    done
+
+    for cluster in ${primary_cluster} ${secondary_cluster}; do
+        echo 'cluster:'${cluster}
+        for pool in "${POOL}" "${PARENT_POOL}" "${POOL}/${NS1}" "${POOL}/${NS2}"; do
+            echo 'pool:'${pool}
+            for group in $(rbd --cluster ${cluster} group list ${pool} | xargs); do
+                group_spec=${pool}/${group}
+                echo 'group_spec:'${group_spec}
+                mirror_group_disable ${cluster} ${group_spec} '--force'
+                for image_spec in $(rbd --cluster ${cluster} group image list ${group_spec} | xargs); do
+                    echo 'image_spec:'"${image_spec}"
+                    mirror_image_disable ${cluster} ${image_spec} '--force'
+                    group_image_remove ${cluster} ${group_spec} ${image_spec}
+                done
+                group_remove ${cluster} ${group_spec}
+            done
+            for image in $(rbd --cluster ${cluster} list ${pool} | xargs); do
+                image_spec=${pool}/${image}
+                echo 'image_spec:'"${image_spec}"
+                mirror_image_disable ${cluster} ${image_spec} '--force'
+                image_remove ${cluster} ${image_spec}
+            done
+        done
+    done
+
+}
+
+# list all groups, images and snaps
+list()
+{
+    local primary_cluster=cluster2
+    local secondary_cluster=cluster1
+    local cluster pool group group_spec image image_spec
+
+    for cluster in ${primary_cluster} ${secondary_cluster}; do
+        echo 'cluster:'${cluster}
+        for pool in "${POOL}" "${PARENT_POOL}" "${POOL}/${NS1}" "${POOL}/${NS2}"; do
+            echo 'groups in pool:'"${pool}"
+            try_cmd "rbd --cluster ${cluster} group list ${pool}" || :
+            for group in $(rbd --cluster ${cluster} group list ${pool} | xargs); do
+                group_spec=${pool}/${group}
+                echo 'snaps for group:'"${group_spec}"
+                try_cmd "rbd --cluster ${cluster} group snap list ${group_spec}" || :
+                echo 'images in group:'"${group_spec}"
+                try_cmd "rbd --cluster ${cluster} group image list ${group_spec}" || :
+            done
+            echo 'images in pool:'"${pool}"
+            try_cmd "rbd --cluster ${cluster} list ${pool}" || :
+            for image in $(rbd --cluster ${cluster} list ${pool} | xargs); do
+                image_spec=${pool}/${image}
+                echo 'snaps for image:'"${image_spec}"
+                try_cmd "rbd --cluster ${cluster} snap list -a ${image_spec}" || :
+            done
+        done
+    done
 }
 
 #
@@ -1881,6 +2285,6 @@ then
 
     TEMPDIR="${RBD_MIRROR_TEMDIR}"
     cd ${TEMPDIR}
-    $@
+    "$@"
     exit $?
 fi
