@@ -29,6 +29,21 @@ class LBAManager {
 public:
   using base_iertr = Cache::base_iertr;
 
+  struct Iterator {
+    CachedExtentRef ext;
+    uint16_t pos = 0;
+
+    laddr_t laddr = L_ADDR_NULL;
+    pladdr_t pladdr = P_ADDR_NULL;
+    extent_len_t length = 0;
+    extent_ref_count_t refcount;
+    uint32_t checksum = 0;
+
+    iter_version_t ver = 0;
+
+    bool is_end() const;
+  };
+
   using mkfs_iertr = base_iertr;
   using mkfs_ret = mkfs_iertr::future<>;
   virtual mkfs_ret mkfs(
@@ -252,9 +267,69 @@ public:
     laddr_t laddr,
     extent_len_t len) = 0;
 
+  using make_mapping_iertr = base_iertr;
+  using make_mapping_ret = make_mapping_iertr::future<LBAMappingRef>;
+  virtual make_mapping_ret make_mapping(
+    Transaction &t, Iterator &iter) = 0;
+
+  using make_iterator_iertr = base_iertr;
+  using make_iterator_ret = make_iterator_iertr::future<Iterator>;
+  virtual make_iterator_ret make_iterator(
+    Transaction &t,
+    const LBAMapping &) = 0;
+  virtual make_iterator_ret make_iterator(
+    Transaction &t,
+    LogicalCachedExtentRef) = 0;
+
+  virtual make_iterator_ret next_iterator(
+    Transaction &t,
+    Iterator iter) = 0;
+
+  using get_iterator_ret = get_mapping_iertr::future<Iterator>;
+  virtual get_iterator_ret get_iterator(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
+  using get_iterators_ret = get_mappings_iertr::future<std::vector<Iterator>>;
+  virtual get_iterators_ret get_iterators(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t length) = 0;
+
+  using insert_mapping_iertr = base_iertr;
+  using insert_mapping_ret = insert_mapping_iertr::future<Iterator>;
+  virtual insert_mapping_ret insert_mapping(
+    Transaction &t,
+    Iterator iter,
+    laddr_t laddr,
+    pladdr_t pladdr,
+    extent_len_t length,
+    extent_ref_count_t refcount,
+    uint32_t checksum,
+    LogicalCachedExtent *nextent) = 0;
+
+  using change_mapping_ret = update_mapping_iertr::future<Iterator>;
+  virtual change_mapping_ret change_mapping(
+    Transaction &t,
+    Iterator iter,
+    laddr_t laddr,
+    pladdr_t pladdr,
+    extent_len_t length,
+    extent_ref_count_t refcount,
+    uint32_t checksum,
+    LogicalCachedExtent *nextent) = 0;
+
+  using remove_mapping_iertr = base_iertr;
+  using remove_mapping_ret = remove_mapping_iertr::future<Iterator>;
+  virtual remove_mapping_ret remove_mapping(
+    Transaction &t,
+    Iterator iter) = 0;
+
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;
+
+std::ostream &operator<<(std::ostream &, const LBAManager::Iterator &);
 
 class Cache;
 namespace lba_manager {
@@ -262,3 +337,7 @@ LBAManagerRef create_lba_manager(Cache &cache);
 }
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::LBAManager::Iterator> : fmt::ostream_formatter {};
+#endif
