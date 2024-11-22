@@ -12,6 +12,8 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
+const RGW = 'rgw';
+
 @Component({
   selector: 'cd-configuration',
   templateUrl: './configuration.component.html',
@@ -143,7 +145,9 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
     if (selection.selected.length !== 1) {
       return false;
     }
-
-    return selection.selected[0].can_update_at_runtime;
+    if ((this.selection.selected[0].name as string).includes(RGW)) {
+      return true;
+    }
+    return this.selection.selected[0].can_update_at_runtime;
   }
 }
