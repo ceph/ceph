@@ -83,7 +83,8 @@ BtreeLBAMappingRef LBALeafNode::get_mapping(
     this,
     iter.get_offset(),
     val,
-    lba_node_meta_t{laddr, (laddr + val.len).checked_to_laddr(), 0});
+    lba_node_meta_t{laddr, (laddr + val.len).checked_to_laddr(), 0},
+    c.trans.get_lba_iter_ver());
 }
 
 }

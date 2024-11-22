@@ -1113,6 +1113,8 @@ struct get_child_ret_t {
   }
 };
 
+using iter_version_t = uint32_t;
+
 template <typename key_t, typename>
 class PhysicalNodeMapping;
 
@@ -1174,6 +1176,8 @@ public:
   virtual void maybe_fix_pos() {
     ceph_abort("impossible");
   }
+
+  virtual iter_version_t get_iter_ver() const = 0;
 
   virtual ~PhysicalNodeMapping() {}
 protected:

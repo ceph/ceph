@@ -226,17 +226,21 @@ public:
       auto val = get_val();
       auto key = get_key();
       node_key_t end{};
+      iter_version_t ver;
       if constexpr (std::is_same_v<node_key_t, laddr_t>) {
         end = (key + val.len).checked_to_laddr();
+        ver = ctx.trans.get_lba_iter_ver();
       } else {
         end = key + val.len;
+        ver = ctx.trans.get_backref_iter_ver();
       }
       return std::make_unique<pin_t>(
         ctx,
 	leaf.node,
         leaf.pos,
 	val,
-	fixed_kv_node_meta_t<node_key_t>{ key, end, 0 });
+	fixed_kv_node_meta_t<node_key_t>{ key, end, 0 },
+        ver);
     }
 
     typename leaf_node_t::Ref get_leaf_node() {
@@ -743,6 +747,7 @@ public:
       c.trans,
       laddr,
       iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
+    inc_iter_version(c);
     return seastar::do_with(
       iter,
       [this, c, laddr, val, nextent](auto &ret) {
@@ -816,6 +821,11 @@ public:
       "update element at {}",
       c.trans,
       iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
+
+    // NOTE: Increment the version of iterator if update operation
+    // changes the layout of extents in the future.
+    // inc_iter_version(c);
+
     if (!iter.leaf.node->is_mutable()) {
       CachedExtentRef mut = c.cache.duplicate_for_write(
         c.trans, iter.leaf.node
@@ -855,6 +865,7 @@ public:
       iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
     assert(!iter.is_end());
     ++(get_tree_stats<self_type>(c.trans).num_erases);
+    inc_iter_version(c);
     return seastar::do_with(
       iter,
       [this, c](auto &ret) {
@@ -1220,6 +1231,14 @@ private:
 
   template <typename T>
   using node_position_t = typename iterator::template node_position_t<T>;
+
+  void inc_iter_version(op_context_t<node_key_t> c) {
+    if constexpr (std::is_same_v<node_key_t, laddr_t>) {
+      c.trans.inc_lba_iter_ver();
+    } else {
+      c.trans.inc_backref_iter_ver();
+    }
+  }
 
   using get_internal_node_iertr = base_iertr;
   using get_internal_node_ret = get_internal_node_iertr::future<InternalNodeRef>;
