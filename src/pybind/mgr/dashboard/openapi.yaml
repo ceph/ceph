@@ -3936,10 +3936,27 @@ paths:
           application/json:
             schema:
               properties:
+                force_update:
+                  description: Force update the config option
+                  type: boolean
                 name:
+                  description: Config option name
                   type: string
                 value:
-                  type: string
+                  description: Section and Value of the config option
+                  items:
+                    properties:
+                      section:
+                        description: Section/Client where config needs to be updated
+                        type: string
+                      value:
+                        description: Value of the config option
+                        type: string
+                    required:
+                    - section
+                    - value
+                    type: object
+                  type: array
               required:
               - name
               - value
@@ -3966,6 +3983,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Create/Update Cluster Configuration
       tags:
       - ClusterConfiguration
     put:
