@@ -3092,6 +3092,7 @@ void MDSRankDispatcher::handle_asok_command(
       cv.notify_all();
     };
 
+    dout(10) << "dump_stray start: " <<  dendl;
     r = mdcache->stray_status(f, done_callback);
     if (r == -EAGAIN) {
       // just to be on safe side... callback can be called only once
@@ -3105,7 +3106,7 @@ void MDSRankDispatcher::handle_asok_command(
       cv.wait(stray_lock, [&]{return done;});
     }
     
-    dout(10) << "dump_stray done: " << r << dendl;
+    dout(10) << "dump_stray done: " <<  dendl;
     on_finish(0, "", outbl);
     return;
   } else {
