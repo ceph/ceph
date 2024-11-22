@@ -104,6 +104,8 @@ ReplicatedBackend::submit_transaction(
     }
   }
 
+  co_await pg.update_snap_map(log_entries, txn);
+
   std::vector<pg_shard_t> to_push_clone;
   std::vector<pg_shard_t> to_push_delete;
   auto sends = std::make_unique<std::vector<seastar::future<>>>();
@@ -139,8 +141,6 @@ ReplicatedBackend::submit_transaction(
       shard_services.send_to_osd(
 	pg_shard.osd, std::move(m), map_epoch));
   }
-
-  co_await pg.update_snap_map(log_entries, txn);
 
   pg.log_operation(
     std::move(log_entries),
