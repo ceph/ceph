@@ -129,14 +129,14 @@ public:
   }
 
   bool is_valid() const {
-    return !invalidated_by_interval_change;
+    return !invalidated;
   }
 
 private:
   boost::intrusive::list_member_hook<> obc_accessing_hook;
   uint64_t list_link_cnt = 0;
   bool fully_loaded = false;
-  bool invalidated_by_interval_change = false;
+  bool invalidated = false;
 
   friend class ObjectContextRegistry;
   friend class ObjectContextLoader;
@@ -196,12 +196,14 @@ public:
 
   void clear_range(const hobject_t &from,
                    const hobject_t &to) {
-    obc_lru.clear_range(from, to);
+    obc_lru.clear_range(from, to, [](auto &obc) {
+      obc.invalidated = true;
+    });
   }
 
   void invalidate_on_interval_change() {
     obc_lru.clear([](auto &obc) {
-      obc.invalidated_by_interval_change = true;
+      obc.invalidated = true;
     });
   }
 
