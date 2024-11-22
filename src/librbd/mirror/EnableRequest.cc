@@ -101,7 +101,9 @@ void EnableRequest<I>::handle_get_mirror_image(int r) {
       return;
     }
   } else if (r == -ENOENT) {
-    m_mirror_image.group_spec = {m_group_id, m_group_pool_id};
+    if (!m_group_snap_id.empty()) {
+      m_mirror_image.type = cls::rbd::MIRROR_IMAGE_TYPE_GROUP;
+    }
     m_mirror_image.mode = m_mode;
     if (m_non_primary_global_image_id.empty()) {
       uuid_d uuid_gen;
