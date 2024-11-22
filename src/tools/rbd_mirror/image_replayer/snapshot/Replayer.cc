@@ -1023,6 +1023,7 @@ void Replayer<I>::create_non_primary_snapshot() {
     Replayer<I>, &Replayer<I>::handle_create_non_primary_snapshot>(this);
   auto req = librbd::mirror::snapshot::CreateNonPrimaryRequest<I>::create(
     local_image_ctx, m_remote_mirror_snap_ns.is_demoted(),
+    m_local_group_id, m_remote_mirror_snap_ns.group_snap_id,
     m_state_builder->remote_mirror_uuid, m_remote_snap_id_end,
     m_local_mirror_snap_ns.snap_seqs, m_image_state, &m_local_snap_id_end, ctx);
   req->send();
@@ -1040,68 +1041,6 @@ void Replayer<I>::handle_create_non_primary_snapshot(int r) {
   }
 
   dout(15) << "local_snap_id_end=" << m_local_snap_id_end << dendl;
-
-  update_image_snapshot();
-}
-
-template <typename I>
-void Replayer<I>::update_image_snapshot() {
-  if (!m_remote_mirror_snap_ns.group_spec.is_valid() &&
-      m_remote_mirror_snap_ns.group_snap_id.empty()) {
-    std::unique_lock locker{m_lock};
-    update_mirror_image_state();
-    return;
-  }
-  dout(10) << dendl;
-
-  auto local_image_ctx = m_state_builder->local_image_ctx;
-  bool snap_valid = false;
-  cls::rbd::SnapshotNamespace snap_namespace;
-  std::string snap_name;
-  uint64_t snap_id = m_local_snap_id_end;
-
-  {
-    std::shared_lock image_locker{local_image_ctx->image_lock};
-    auto snap_info = local_image_ctx->get_snap_info(snap_id);
-    if (snap_info != nullptr) {
-      snap_valid = true;
-      snap_namespace = snap_info->snap_namespace;
-      snap_name = snap_info->name;
-    }
-  }
-
-  if (!snap_valid) {
-    derr << "failed to get snap info" << dendl;
-    handle_replay_complete(-EINVAL, "invalid local mirror snapshot state");
-    return;
-  }
-  auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
-      &snap_namespace);
-  ceph_assert(mirror_ns != nullptr);
-  //mirror_ns->group_spec = {m_local_group_id, spec.pool};
-
-  m_local_mirror_snap_ns = *mirror_ns;
-  m_local_mirror_snap_ns.group_snap_id = m_remote_mirror_snap_ns.group_snap_id;
-
-  // write to disk
-  librados::ObjectWriteOperation op;
-  librbd::cls_client::snapshot_add(&op, snap_id, snap_name,
-                                   m_local_mirror_snap_ns);
-  auto ctx = new C_TrackedOp(
-    m_in_flight_op_tracker, new LambdaContext([this, snap_id](int r) {
-      handle_update_image_snapshot(r, snap_id);
-    }));
-  auto aio_comp = create_rados_callback(ctx);
-  int r = local_image_ctx->md_ctx.aio_operate(
-      local_image_ctx->header_oid, aio_comp, &op);
-  ceph_assert(r == 0);
-  aio_comp->release();
-}
-
-template <typename I>
-void Replayer<I>::handle_update_image_snapshot(
-    int r, uint64_t local_snap_id) {
-  dout(10) << "snap id: " << local_snap_id << ", r=" << r << dendl;
 
   update_mirror_image_state();
 }
