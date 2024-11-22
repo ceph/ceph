@@ -6,8 +6,10 @@
     <h5 class="cd-header">
       <legend (click)="toggleSectionVisibility(section.class)"
               class="collapsible">
-        {{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
-                                 aria-hidden="true"></i>
+        {{ section.heading }}
+        <svg [cdsIcon]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
+             [size]="icons.size20"
+             class="cds--btn__icon"></svg>
       </legend>
     </h5>
     <div class="{{ section.class }}"
