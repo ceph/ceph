@@ -120,7 +120,11 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
 
   m_dst_image_ctx->image_lock.lock_shared();
   auto snap_it = m_dst_image_ctx->snap_ids.find(
-    {cls::rbd::UserSnapshotNamespace(), m_snap_name});
+      {cls::rbd::UserSnapshotNamespace(), m_snap_name});
+  if (snap_it == m_dst_image_ctx->snap_ids.end()) {
+    snap_it = m_dst_image_ctx->snap_ids.find(
+      {cls::rbd::ImageSnapshotNamespaceGroup(), m_snap_name});
+  }
   if (snap_it == m_dst_image_ctx->snap_ids.end()) {
     lderr(m_cct) << "failed to locate snap: " << m_snap_name << dendl;
     m_dst_image_ctx->image_lock.unlock_shared();

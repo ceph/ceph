@@ -110,7 +110,7 @@ void EnableRequest<I>::handle_get_mirror_image(int r) {
       m_mirror_image.global_image_id = m_non_primary_global_image_id;
     }
     if (!m_group_snap_id.empty()) {
-      m_mirror_image.group_spec = {m_group_id, m_group_pool_id};
+      m_mirror_image.type = cls::rbd::MIRROR_IMAGE_TYPE_GROUP;
     }
   } else {
     lderr(m_cct) << "failed to retrieve mirror image: " << cpp_strerror(r)
