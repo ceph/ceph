@@ -96,11 +96,16 @@ ReplicatedBackend::submit_transaction(
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
+  bool is_delete = false;
   for (auto &le : log_entries) {
     le.mark_unrollbackable();
+    if (le.is_delete()) {
+      is_delete = true;
+    }
   }
 
   std::vector<pg_shard_t> to_push_clone;
+  std::vector<pg_shard_t> to_push_delete;
   auto sends = std::make_unique<std::vector<seastar::future<>>>();
   for (auto &pg_shard : pg_shards) {
     if (pg_shard == whoami) {
@@ -115,12 +120,17 @@ ReplicatedBackend::submit_transaction(
       m = new_repop_msg(
 	pg_shard, hoid, encoded_txn, osd_op_p,
 	min_epoch, map_epoch, log_entries, false, tid);
-      if (_new_clone && pg.is_missing_on_peer(pg_shard, hoid)) {
-	// The head is in the push queue but hasn't been pushed yet.
-	// We need to ensure that the newly created clone will be 
-	// pushed as well, otherwise we might skip it.
-	// See: https://tracker.ceph.com/issues/68808
-	to_push_clone.push_back(pg_shard);
+      if (pg.is_missing_on_peer(pg_shard, hoid)) {
+	if (_new_clone) {
+	  // The head is in the push queue but hasn't been pushed yet.
+	  // We need to ensure that the newly created clone will be
+	  // pushed as well, otherwise we might skip it.
+	  // See: https://tracker.ceph.com/issues/68808
+	  to_push_clone.push_back(pg_shard);
+	}
+	if (is_delete) {
+	  to_push_delete.push_back(pg_shard);
+	}
       }
     }
     pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
@@ -157,7 +167,8 @@ ReplicatedBackend::submit_transaction(
       return seastar::now();
     }
     return peers->all_committed.get_shared_future();
-  }).then_interruptible([pending_txn, this, _new_clone,
+  }).then_interruptible([pending_txn, this, _new_clone, &hoid,
+			to_push_delete=std::move(to_push_delete),
 			to_push_clone=std::move(to_push_clone)] {
     auto acked_peers = std::move(pending_txn->second.acked_peers);
     pending_trans.erase(pending_txn);
@@ -166,6 +177,9 @@ ReplicatedBackend::submit_transaction(
 	_new_clone->obs.oi.soid,
 	_new_clone->obs.oi.version,
 	to_push_clone);
+    }
+    if (!to_push_delete.empty()) {
+      pg.enqueue_delete_for_backfill(hoid, {}, to_push_delete);
     }
     return seastar::make_ready_future<
       crimson::osd::acked_peers_t>(std::move(acked_peers));
