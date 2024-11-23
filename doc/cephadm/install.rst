@@ -1,8 +1,8 @@
 .. _cephadm_deploying_new_cluster:
 
-============================
-Deploying a new Ceph cluster
-============================
+==========================================
+Using cephadm to Deploy a New Ceph Cluster
+==========================================
 
 Cephadm creates a new Ceph cluster by bootstrapping a single
 host, expanding the cluster to encompass any additional hosts, and
