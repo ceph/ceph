@@ -3291,7 +3291,7 @@ class PastIntervals {
 #ifdef WITH_SEASTAR
   using OSDMapRef = boost::local_shared_ptr<const OSDMap>;
 #else
-  using OSDMapRef = std::shared_ptr<const OSDMap>;
+  using OSDMapRef = std::atomic<std::shared_ptr<const OSDMap>>;
 #endif
 public:
   struct pg_interval_t {
@@ -3497,7 +3497,7 @@ public:
       old_up_primary, new_up_primary,
       old_up, new_up,
       same_interval_since, last_epoch_clean,
-      osdmap.get(), lastmap.get(),
+      osdmap.load(), lastmap.load(),
       pgid,
       could_have_gone_active,
       past_intervals,
