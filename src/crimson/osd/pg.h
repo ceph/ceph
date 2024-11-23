@@ -891,6 +891,11 @@ private:
     const hobject_t &obj,
     const eversion_t &v,
     const std::vector<pg_shard_t> &peers);
+  void enqueue_delete_for_backfill(
+    const hobject_t &obj,
+    const eversion_t &v,
+    const std::vector<pg_shard_t> &peers);
+
   void mutate_object(
     ObjectContextRef& obc,
     ceph::os::Transaction& txn,
