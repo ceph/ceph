@@ -2476,9 +2476,20 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (wildcard) {
       io_ctx.set_namespace(all_nspaces);
     }
+
+    bool long_display = false;
+    if ((nargs.size() == 3) && (strcmp(nargs[2], "-l") == 0)) {
+      long_display = true;
+    }
+
     bool use_stdout = (!output && (nargs.size() < 2 || (strcmp(nargs[1], "-") == 0)));
     if (!use_stdout && !output) {
-      cerr << "Please use --output to specify the output file name" << std::endl;
+      if( (nargs.size() >= 2) && (strcmp(nargs[1], "-l") == 0)) {
+	cerr << "Please use ls - -l (long listing is only supported on stdout)" << std::endl;
+      }
+      else {
+	cerr << "Please use --output to specify the output file name" << std::endl;
+      }
       return 1;
     }
 
@@ -2515,16 +2526,28 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
               break;
 	    }
           }
+	  auto oid = detail::get_oid(i, use_striper);
+	  uint64_t size = 0;
+	  ret = 0;
+	  if (long_display) {
+	    time_t mtime;
+	    ret = detail::stat(io_ctx, oid, size, mtime, use_striper);
+	  }
 	  if (!formatter) {
 	    // Only include namespace in output when wildcard specified
 	    if (wildcard) {
 	      *outstream << i->get_nspace() << "\t";
 	    }
-	    *outstream << detail::get_oid(i, use_striper);
+	    *outstream << oid;
 	    if (i->get_locator().size()) {
 	      *outstream << "\t" << i->get_locator();
 	    }
-	    *outstream << std::endl;
+	    if (ret == 0) {
+	      *outstream << "::" << size << std::endl;
+	    }
+	    else {
+	      *outstream << std::endl;
+	    }
 	  } else {
 	    formatter->open_object_section("object");
 	    formatter->dump_string("namespace", i->get_nspace());
