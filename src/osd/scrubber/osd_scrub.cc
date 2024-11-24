@@ -201,18 +201,9 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
     env_conditions.random_backoff_active = true;
 
   } else if (is_recovery_active && !conf->osd_scrub_during_recovery) {
-    if (conf->osd_repair_during_recovery) {
-      dout(15)
-	  << "will only schedule explicitly requested repair due to active "
-	     "recovery"
-	  << dendl;
-      env_conditions.allow_requested_repair_only = true;
-
-    } else {
-      dout(15) << "recovery in progress. Operator-initiated scrubs only."
-	       << dendl;
-      env_conditions.recovery_in_progress = true;
-    }
+    dout(15) << "recovery in progress. Operator-initiated scrubs only."
+	     << dendl;
+    env_conditions.recovery_in_progress = true;
   } else {
 
     // regular, i.e. non-high-priority scrubs are allowed
