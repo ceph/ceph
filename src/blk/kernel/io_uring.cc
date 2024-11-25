@@ -53,16 +53,20 @@ static int find_fixed_fd(struct ioring_data *d, int real_fd)
 static void init_sqe(struct ioring_data *d, struct io_uring_sqe *sqe,
 		     struct aio_t *io)
 {
-  int fixed_fd = find_fixed_fd(d, io->fd);
-
-  ceph_assert(fixed_fd != -1);
-
-  if (io->iocb.aio_lio_opcode == IO_CMD_PWRITEV)
+  if (io->iocb.aio_lio_opcode == IO_CMD_PWRITEV) {
+    int fixed_fd = find_fixed_fd(d, io->fd);
+    ceph_assert(fixed_fd != -1);
     io_uring_prep_writev(sqe, fixed_fd, &io->iov[0],
 			 io->iov.size(), io->offset);
-  else if (io->iocb.aio_lio_opcode == IO_CMD_PREADV)
+  }
+  else if (io->iocb.aio_lio_opcode == IO_CMD_PREADV) {
+    int fixed_fd = find_fixed_fd(d, io->fd);
+    ceph_assert(fixed_fd != -1);
     io_uring_prep_readv(sqe, fixed_fd, &io->iov[0],
 			io->iov.size(), io->offset);
+  }
+  else if (io->iocb.aio_lio_opcode == IO_CMD_NOOP)
+    io_uring_prep_nop(sqe);
   else
     ceph_assert(0);
 
