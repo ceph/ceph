@@ -993,7 +993,11 @@ private:
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
-      return std::move(v.get_child_fut());
+      return std::move(v.get_child_fut()
+      ).si_then([type](auto ext) {
+        ceph_assert(ext->get_type() == type);
+        return ext;
+      });
     } else {
       return pin_to_extent_by_type(t, std::move(pin), type);
     }
