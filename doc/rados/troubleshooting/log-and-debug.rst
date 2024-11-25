@@ -6,23 +6,24 @@ Ceph component debug log levels can be adjusted at runtime, while services are
 running. In some circumstances you might want to adjust debug log levels in
 ``ceph.conf`` or in the central config store. Increased debug logging can be
 useful if you are encountering issues when operating your cluster.  By default,
-Ceph log files are in ``/var/log/ceph``.
+Ceph log files are in ``/var/log/ceph``; containerized deployments often log
+elsewhere under ``/var/log``.
 
 .. tip:: Remember that debug output can slow down your system, and that this
    latency sometimes hides race conditions.
 
 Debug logging is resource intensive. If you encounter a problem in a specific
 component of your cluster, begin troubleshooting by enabling logging for only
-that component of the cluster. For example, if your OSDs are running without
-errors, but your metadata servers are not, enable logging for any specific
-metadata server instances that are having problems. Continue by enabling
+that component. For example, if your OSDs are running without
+errors, but your CephFS metadata servers (MDS) are not, enable logging for specific
+instances that are having problems. Continue by enabling
 logging for each subsystem only as needed.
 
 .. important:: Verbose logging sometimes generates over 1 GB of data per hour.
    If the disk that your operating system runs on (your "OS disk") reaches its
    capacity, the node associated with that disk will stop working.
 
-Whenever you enable or increase the rate of debug logging, make sure that you
+Whenever you enable or increase the level of debug logging, ensure that you
 have ample capacity for log files, as this may dramatically increase their
 size.  For details on rotating log files, see `Accelerating Log Rotation`_.
 When your system is running well again, remove unnecessary debugging settings
@@ -34,7 +35,7 @@ For details on available settings, see `Subsystem, Log and Debug Settings`_.
 Runtime
 =======
 
-To see the configuration settings at runtime, log in to a host that has a
+To see configuration settings at runtime, log in to a host that has a
 running daemon and run a command of the following form:
 
 .. prompt:: bash $
@@ -57,7 +58,7 @@ tell`` command of the following form:
 
 Here ``{daemon-type}`` is ``osd``, ``mon``, or ``mds``. Apply the runtime
 setting either to a specific daemon (by specifying its ID) or to all daemons of
-a particular type (by using the ``*`` operator).  For example, to increase
+a particular type (by using the ``*`` wildcard as the ID).  For example, to increase
 debug logging for a specific ``ceph-osd`` daemon named ``osd.0``, run the
 following command:
 
@@ -81,7 +82,8 @@ Boot Time
 =========
 
 To activate Ceph's debugging output (that is, the ``dout()`` logging function)
-at boot time, you must add settings to your Ceph configuration file.
+at boot time, you must add settings to your Ceph configuration file (or
+set corresponding values in the central config store).
 Subsystems that are common to all daemons are set under ``[global]`` in the
 configuration file. Subsystems for a specific daemon are set under the relevant
 daemon section in the configuration file (for example, ``[mon]``, ``[osd]``,
@@ -115,7 +117,7 @@ For details, see `Subsystem, Log and Debug Settings`_.
 Accelerating Log Rotation
 =========================
 
-If your log filesystem is nearly full, you can accelerate log rotation by
+If a host's log filesystem is nearly full, you can accelerate log rotation by
 modifying the Ceph log rotation file at ``/etc/logrotate.d/ceph``. To increase
 the frequency of log rotation (which will guard against a filesystem reaching
 capacity), add a ``size`` directive after the ``weekly`` frequency directive.
@@ -149,8 +151,8 @@ setting is shown immediately below.
 
       30 * * * * /usr/sbin/logrotate /etc/logrotate.d/ceph >/dev/null 2>&1
 
-In this example, the ``etc/logrotate.d/ceph`` file will be checked every 30
-minutes.
+In this example, the ``etc/logrotate.d/ceph`` file will be checked and possibly
+rotated every 30 minutes.
 
 Valgrind
 ========
@@ -175,7 +177,7 @@ For each subsystem, there is a logging level for its output logs (a so-called
 "log level") and a logging level for its in-memory logs (a so-called "memory
 level"). Different values may be set for these two logging levels in each
 subsystem. Ceph's logging levels operate on a scale of ``1`` to ``20``, where
-``1`` is terse and ``20`` is verbose.  In certain rare cases, there are logging
+``1`` is terse and ``20`` is verbose.  In a certain few cases, there are logging
 levels that can take a value greater than 20. The resulting logs are extremely
 verbose.
 
@@ -184,7 +186,7 @@ following conditions are true:
 
 - a fatal signal has been raised or
 - an assertion within Ceph code has been triggered or
-- the sending of in-memory logs to the output log has been manually triggered.
+- sending in-memory logs to the output log has been manually triggered.
   Consult `the portion of the "Ceph Administration Tool documentation
   that provides an example of how to submit admin socket commands
   <http://docs.ceph.com/en/latest/man/8/ceph/#daemon>`_ for more detail.
@@ -206,8 +208,8 @@ following:
     debug mds balancer = 1/20
 
 The following table provides a list of Ceph subsystems and their default log and
-memory levels. Once you complete your logging efforts, restore the subsystems
-to their default level or to a level suitable for normal operations.
+memory levels. Once you complete your logging efforts, restore each subsystem's
+values to their defaults or to a level suitable for normal operations.
 
 +--------------------------+-----------+--------------+
 | Subsystem                | Log Level | Memory Level |
