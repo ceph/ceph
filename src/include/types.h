@@ -587,8 +587,8 @@ struct errorcode32_t {
     return hostos_to_ceph_errno(code);
   }
 
-  inline void set_wire_to_host() {
-    code = ceph_to_hostos_errno(code);
+  inline void set_wire_to_host(code_t host_code) {
+    code = ceph_to_hostos_errno(host_code);
   }
 
   void encode(ceph::buffer::list &bl) const {
@@ -599,7 +599,7 @@ struct errorcode32_t {
   void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
     decode(code, bl);
-    set_wire_to_host();
+    set_wire_to_host(code);
   }
   void dump(ceph::Formatter *f) const {
     f->dump_int("code", code);
