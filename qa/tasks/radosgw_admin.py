@@ -16,6 +16,7 @@ import logging
 import time
 import datetime
 import sys
+import errno
 
 from io import StringIO
 from queue import Queue
@@ -723,6 +724,40 @@ def task(ctx, config):
         check_status=True)
 
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--tenant', tenant_name, '--uid', 'tenanteduser'],
+        check_status=True)
+
+    account_id = 'RGW12312312312312312'
+    account_name = 'testacct'
+    rgwadmin(ctx, client, [
+            'account', 'create',
+            '--account-id', account_id,
+            '--account-name', account_name,
+            ], check_status=True)
+    rgwadmin(ctx, client, [
+            'user', 'create',
+            '--account-id', account_id,
+            '--uid', 'testacctuser',
+            '--display-name', 'accountuser',
+            '--gen-access-key',
+            '--gen-secret',
+            ], check_status=True)
+
+    # TESTCASE 'bucket link', 'bucket', 'account user', 'fails'
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'link', '--bucket', bucket_name, '--uid', 'testacctuser'])
+    assert err == errno.EINVAL
+
+    rgwadmin(ctx, client, ['user', 'rm', '--uid', 'testacctuser'], check_status=True)
+
+    # TESTCASE 'bucket link', 'bucket', 'account', 'succeeds'
+    rgwadmin(ctx, client,
+        ['bucket', 'link', '--bucket', bucket_name, '--account-id', account_id],
+        check_status=True)
+
+    # relink the bucket to the first user and delete the account
+    rgwadmin(ctx, client,
+        ['bucket', 'link', '--bucket', bucket_name, '--uid', user1],
+        check_status=True)
+    rgwadmin(ctx, client, ['account', 'rm', '--account-id', account_id],
         check_status=True)
 
     # TESTCASE 'object-rm', 'object', 'rm', 'remove object', 'succeeds, object is removed'
