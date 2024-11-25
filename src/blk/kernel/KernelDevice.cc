@@ -541,9 +541,28 @@ void KernelDevice::_aio_stop()
   if (aio) {
     dout(10) << __func__ << dendl;
     aio_stop = true;
+    int pipe_fd[2];
+    bool pipe_created = (pipe(pipe_fd) == 0);
+    IOContext wakeup_ctx(cct, nullptr, false);
+    wakeup_ctx.num_running++;
+    if (pipe_created) {
+      aio_t aio_op(&wakeup_ctx, pipe_fd[1]);
+      bool use_ioring = cct->_conf.get_val<bool>("bdev_ioring");
+      if (use_ioring && ioring_queue_t::supported()) {
+         aio_op.iocb.aio_lio_opcode = IO_CMD_NOOP;
+      }      
+      int retries = 0;
+      std::list<aio_t> batch;
+      batch.push_back(aio_op);
+      io_queue->submit_batch(batch.begin(), batch.end(), &wakeup_ctx, &retries);
+    }
     aio_thread.join();
     aio_stop = false;
     io_queue->shutdown();
+    if (pipe_created) {
+      ::close(pipe_fd[0]);
+      ::close(pipe_fd[1]);
+    }
   }
 }
 
