@@ -390,8 +390,8 @@ public:
     // casting needed since error codes are signed int32 and head.result is unsigned int32
     // errortype_t::code_t is alias for __s32, which is signed
     // ceph_mds_reply_head::code_t is alias for __le32 which is unsigned
-    errorcode32_t temp{static_cast<errorcode32_t::code_t>(head.result)};
-    temp.set_wire_to_host();
+    errorcode32_t temp;
+    temp.set_wire_to_host(static_cast<errorcode32_t::code_t>(head.result));
     head.result = static_cast<ceph_mds_reply_head::code_t>(temp.code);
     decode(trace_bl, p);
     decode(extra_bl, p);
