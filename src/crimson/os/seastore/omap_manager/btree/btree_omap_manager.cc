@@ -18,17 +18,18 @@ BtreeOMapManager::BtreeOMapManager(
   : tm(tm) {}
 
 BtreeOMapManager::initialize_omap_ret
-BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint)
+BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint,
+  omap_type_t type)
 {
   LOG_PREFIX(BtreeOMapManager::initialize_omap);
   DEBUGT("hint: {}", t, hint);
   return tm.alloc_non_data_extent<OMapLeafNode>(t, hint, OMAP_LEAF_BLOCK_SIZE)
-    .si_then([hint, &t](auto&& root_extent) {
+    .si_then([hint, &t, type](auto&& root_extent) {
       root_extent->set_size(0);
       omap_node_meta_t meta{1};
       root_extent->set_meta(meta);
       omap_root_t omap_root;
-      omap_root.update(root_extent->get_laddr(), 1, hint);
+      omap_root.update(root_extent->get_laddr(), 1, hint, type);
       t.get_omap_tree_stats().depth = 1u;
       t.get_omap_tree_stats().extents_num_delta++;
       return initialize_omap_iertr::make_ready_future<omap_root_t>(omap_root);
