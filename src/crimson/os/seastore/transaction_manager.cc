@@ -726,7 +726,7 @@ TransactionManager::get_extents_if_live(
   ceph_assert(paddr.get_addr_type() == paddr_types_t::SEGMENT);
 
   return cache->get_extent_if_cached(t, paddr, type
-  ).si_then([=, this, &t](auto extent)
+  ).si_then([this, FNAME, type, paddr, laddr, len, &t](auto extent)
 	    -> get_extents_if_live_ret {
     if (extent && extent->get_length() == len) {
       DEBUGT("{} {}~0x{:x} {} is cached and alive -- {}",
@@ -743,19 +743,20 @@ TransactionManager::get_extents_if_live(
 	t,
 	laddr,
 	len
-      ).si_then([=, this, &t](lba_pin_list_t pin_list) {
+      ).si_then([this, FNAME, type, paddr, laddr, len, &t](lba_pin_list_t pin_list) {
 	return seastar::do_with(
 	  std::list<CachedExtentRef>(),
 	  std::move(pin_list),
-	  [=, this, &t]
+	  [this, FNAME, type, paddr, laddr, len, &t]
           (std::list<CachedExtentRef> &extent_list, auto& pin_list)
         {
           auto paddr_seg_id = paddr.as_seg_paddr().get_segment_id();
           return trans_intr::parallel_for_each(
             pin_list,
-            [=, this, &extent_list, &t](
+            [this, FNAME, type, paddr_seg_id, &extent_list, &t](
               LBAMappingRef& pin) -> Cache::get_extent_iertr::future<>
           {
+            DEBUGT("got pin, try read in parallel ... -- {}", t, *pin);
             auto pin_paddr = pin->get_val();
             if (pin_paddr.get_addr_type() != paddr_types_t::SEGMENT) {
               return seastar::now();
