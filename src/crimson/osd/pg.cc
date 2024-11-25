@@ -1039,8 +1039,9 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
   const std::error_code e,
   ceph_tid_t rep_tid)
 {
-  logger().debug("{}: {} rep_tid: {} error: {}",
-                 __func__, *m, rep_tid, e);
+  LOG_PREFIX(PG::submit_error_log);
+  DEBUGDPP("{} rep_tid: {} error: {}",
+	   *this, *m, rep_tid, e);
   const osd_reqid_t &reqid = m->get_reqid();
   mempool::osd_pglog::list<pg_log_entry_t> log_entries;
   log_entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR,
@@ -1080,9 +1081,8 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
       peering_state.get_pg_committed_to());
     waiting_on.insert(peer);
 
-    logger().debug("submit_error_log: sending log"
-		   "missing_request (rep_tid: {} entries: {})"
-		   " to osd {}", rep_tid, log_entries, peer.osd);
+    DEBUGDPP("sending log missing_request (rep_tid: {} entries: {}) to osd {}",
+	     *this, rep_tid, log_entries, peer.osd);
     co_await interruptor::make_interruptible(
       shard_services.send_to_osd(
 	peer.osd,
@@ -1090,7 +1090,7 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
 	get_osdmap_epoch()));
   }
   waiting_on.insert(pg_whoami);
-  logger().debug("submit_error_log: inserting rep_tid {}", rep_tid);
+  DEBUGDPP("inserting rep_tid {}", *this, rep_tid);
   log_entry_update_waiting_on.insert(
     std::make_pair(rep_tid,
 		   log_update_t{std::move(waiting_on)}));
