@@ -22,7 +22,7 @@ install(TARGETS
 add_executable(ceph_test_rados_io_sequence
   ${CMAKE_CURRENT_SOURCE_DIR}/ceph_test_rados_io_sequence.cc)
 target_link_libraries(ceph_test_rados_io_sequence
-  librados global object_io_exerciser)
+  librados global object_io_exerciser json_structures)
 install(TARGETS
   ceph_test_rados_io_sequence
   DESTINATION ${CMAKE_INSTALL_BINDIR})
