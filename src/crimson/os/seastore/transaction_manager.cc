@@ -746,14 +746,15 @@ TransactionManager::get_extents_if_live(
       ).si_then([=, this, &t](lba_pin_list_t pin_list) {
 	return seastar::do_with(
 	  std::list<CachedExtentRef>(),
-	  [=, this, &t, pin_list=std::move(pin_list)](
-            std::list<CachedExtentRef> &list) mutable
+	  std::move(pin_list),
+	  [=, this, &t]
+          (std::list<CachedExtentRef> &extent_list, auto& pin_list)
         {
           auto paddr_seg_id = paddr.as_seg_paddr().get_segment_id();
           return trans_intr::parallel_for_each(
             pin_list,
-            [=, this, &list, &t](
-              LBAMappingRef &pin) -> Cache::get_extent_iertr::future<>
+            [=, this, &extent_list, &t](
+              LBAMappingRef& pin) -> Cache::get_extent_iertr::future<>
           {
             auto pin_paddr = pin->get_val();
             auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
@@ -779,16 +780,16 @@ TransactionManager::get_extents_if_live(
             // ceph_assert(pin_seg_paddr >= paddr &&
             //             pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
             return read_pin_by_type(t, std::move(pin), type
-            ).si_then([&list](auto ret) {
-              list.emplace_back(std::move(ret));
+            ).si_then([&extent_list](auto ret) {
+              extent_list.emplace_back(std::move(ret));
               return seastar::now();
             });
-          }).si_then([&list, &t, FNAME, type, laddr, len, paddr] {
+          }).si_then([&extent_list, &t, FNAME, type, laddr, len, paddr] {
             DEBUGT("{} {}~0x{:x} {} is alive as {} extents",
-                   t, type, laddr, len, paddr, list.size());
+                   t, type, laddr, len, paddr, extent_list.size());
             return get_extents_if_live_ret(
               interruptible::ready_future_marker{},
-              std::move(list));
+              std::move(extent_list));
           });
         });
       }).handle_error_interruptible(crimson::ct_error::enoent::handle([] {
