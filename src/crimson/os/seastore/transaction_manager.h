@@ -523,6 +523,77 @@ public:
     });
   }
 
+  /**
+   * move_mappings
+   *
+   * Moves a range of continuous LBA mappings from src_base~length to
+   * dst_base~length efficiently.
+   *
+   * Typically, src_mappings and dst_mappings should match the result
+   * of get_pins(src_base, length).
+   * The dst_mappings should either be a single reserved mapping to be
+   * replaced by src_mappings, or must not overlap with src_mappings
+   * after merging them together.
+   */
+  using move_mappings_iertr = base_iertr;
+  using move_mappings_ret = move_mappings_iertr::future<>;
+  move_mappings_ret move_mappings(
+    Transaction &t,
+    laddr_t src_base,
+    laddr_t dst_base,
+    extent_len_t length,
+    lba_pin_list_t src_mappings,
+    lba_pin_list_t dst_mappings);
+
+  /**
+   * copy_indirect_mappings
+   *
+   * Copy a range of continuous indirect mappings(or zero reserved) from
+   * src_base~length to dst_base~length and increment the refcount of
+   * corresponding direct mapping.
+   *
+   * NOTE: dst_mapping should be a zero reserved mapping.
+   */
+  move_mappings_ret copy_indirect_mappings(
+    Transaction &t,
+    laddr_t src_base,
+    laddr_t dst_base,
+    extent_len_t length,
+    lba_pin_list_t src_mappings,
+    LBAMappingRef dst_mapping);
+
+  /**
+   * clone_mappings
+   *
+   * Moves all direct mappings and increases their reference count from the
+   * region from src_base~length to dst_base~length. Then make these mappings
+   * indirect to point to the corresponding dst mappings in place.
+   * Copies all indirect mappings from src_base~length to copy_dst_mapping.
+   * Finally, increments the reference count for direct mappings whose indirect
+   * mappings were not modified in the first step.
+   *
+   * NOTE: dst_mapping and copy_dst_mapping should be reserved zero mappings.
+   *
+   * FIXME: All three batch operations on LBA mappings require the caller to
+   * first reserve the region at dst. These mappings may become invalid after
+   * the processing of the src_mappings, typically it is the parent of the LBA
+   * mapping becomes invalid, which finally resulting in a new LBA search.
+   *
+   * There are two potential solutions to mitigate this overhead:
+   * 1. The implementation itself could be responsible for reserving the region
+   *    after processing the src_mappings.
+   * 2. The LBA manager could be extended to support finding a mapping using an
+   *    existing hint.
+   */
+  move_mappings_ret clone_mappings(
+    Transaction &t,
+    laddr_t src_base,
+    laddr_t dst_base,
+    extent_len_t length,
+    lba_pin_list_t src_mappings,
+    LBAMappingRef dst_mapping,
+    LBAMappingRef copy_dst_mapping);
+
   using reserve_extent_iertr = alloc_extent_iertr;
   using reserve_extent_ret = reserve_extent_iertr::future<LBAMappingRef>;
   reserve_extent_ret reserve_region(
@@ -872,6 +943,121 @@ private:
     }
   }
 
+  base_iertr::future<CachedExtentRef> retire_mapping(
+    Transaction &t, LBAMapping &mapping);
+
+  struct move_mappings_state_t {
+    struct lba_entry_t {
+      laddr_t laddr;
+      pladdr_t pladdr;
+      extent_len_t length;
+      extent_ref_count_t refcount;
+      uint32_t checksum;
+      LogicalCachedExtent *nextent;
+      // only pladdr is laddr could this field work
+      bool update_refcount;
+    };
+
+    static lba_entry_t make_lba_entry_from_iter(
+      LBAManager::Iterator &iter,
+      LogicalCachedExtent *extent) {
+      return lba_entry_t{
+	iter.laddr, iter.pladdr, iter.length,
+	iter.refcount, iter.checksum, extent,
+	false
+      };
+    }
+
+    move_mappings_state_t(laddr_t src, laddr_t dst, extent_len_t len,
+			  lba_pin_list_t srcs, lba_pin_list_t dsts)
+	: src(src), dst(dst), len(len), src_mappings(std::move(srcs)),
+	  dst_mapping(), dst_mappings(std::move(dsts)), entries(),
+	  copy_src(), lba_iter(std::nullopt) {}
+
+    move_mappings_state_t(laddr_t src, laddr_t dst, extent_len_t len,
+			  lba_pin_list_t srcs, LBAMappingRef dst_pin)
+	: src(src), dst(dst), len(len), src_mappings(std::move(srcs)),
+	  dst_mapping(std::move(dst_pin)), dst_mappings(), entries(),
+	  copy_src(), lba_iter(std::nullopt) {}
+
+    void validate() {
+      assert(!src_mappings.empty());
+      assert(dst_mapping || !dst_mappings.empty());
+      assert((src >= dst + len) || (src + len <= dst));
+      assert(src_mappings.front()->get_key() >= src);
+      assert(src_mappings.back()->get_key() + src_mappings.back()->get_length()
+	     <= src + len);
+      if (!dst_mappings.empty()) {
+	assert(dst_mappings.front()->get_key() >= dst);
+	assert(dst_mappings.back()->get_key() + dst_mappings.back()->get_length()
+	       <= dst + len);
+      }
+    }
+
+    bool dst_mapping_is_reserved() const {
+      auto d = dst_mapping.get();
+      if (!d) {
+        assert(!dst_mappings.empty());
+	if (dst_mappings.size() != 1) {
+	  return false;
+	}
+        d = dst_mappings.front().get();
+      }
+      assert(d);
+      return d->is_zero_reserved() && d->get_key() == dst &&
+             d->get_length() == len;
+    }
+
+    laddr_t src;
+    laddr_t dst;
+    extent_len_t len;
+    lba_pin_list_t src_mappings;
+    LBAMappingRef dst_mapping;
+    lba_pin_list_t dst_mappings;
+    lba_pin_list_t ret;
+    std::vector<lba_entry_t> entries;
+    std::vector<lba_entry_t> copy_src;
+    std::optional<LBAManager::Iterator> lba_iter;
+  };
+  friend std::ostream &operator<<(
+    std::ostream &out,
+    const move_mappings_state_t::lba_entry_t &e);
+  friend ::fmt::formatter<move_mappings_state_t::lba_entry_t>;
+
+  enum class remap_mode_t {
+    move,
+    clone
+  };
+  // remap state.src_mappings to state.dst, the raw info of
+  // mapping is placed into state.entries
+  // In clone remap mode, the src mappings are not removed
+  // and become indirect mappings point to the dst, and
+  // they stored in state.copy_src
+  move_mappings_ret remap_src_mappings(
+    Transaction &t,
+    move_mappings_state_t &state,
+    remap_mode_t mode);
+
+  using ProcessFunc = move_mappings_iertr::future<
+    LBAManager::Iterator>(LBAMapping &);
+  // iterate the state.src_mappings
+  move_mappings_ret process_src_mappings(
+    Transaction &t,
+    move_mappings_state_t &state,
+    bool remove_mapping_after_process,
+    std::function<ProcessFunc> func);
+
+  // 1. remove state.dst_mapping
+  // 2. insert state.entries to state.dst
+  move_mappings_ret replace_reserved_mapping(
+    Transaction &t,
+    move_mappings_state_t &state);
+
+  // merge state.entries with state.dst_mappings
+  move_mappings_ret merge_mappings(
+    Transaction &t,
+    move_mappings_state_t &state);
+
   base_iertr::future<LogicalCachedExtentRef> read_pin_by_type(
     Transaction &t,
     LBAMappingRef pin,
@@ -1070,3 +1256,9 @@ TransactionManagerRef make_transaction_manager(
     shard_stats_t& shard_stats,
     bool is_test);
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<
+  crimson::os::seastore::TransactionManager::move_mappings_state_t::lba_entry_t>
+    : fmt::ostream_formatter {};
+#endif
