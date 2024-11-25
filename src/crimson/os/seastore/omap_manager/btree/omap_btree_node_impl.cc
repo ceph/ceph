@@ -673,7 +673,7 @@ OMapLeafNode::make_split_children(omap_context_t oc)
 {
   LOG_PREFIX(OMapLeafNode::make_split_children);
   DEBUGT("this: {}", oc.t, *this);
-  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, OMAP_LEAF_BLOCK_SIZE, 2)
+  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, get_len(), 2)
     .si_then([this] (auto &&ext_pair) {
       auto left = ext_pair.front();
       auto right = ext_pair.back();
@@ -692,7 +692,7 @@ OMapLeafNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
   ceph_assert(right->get_type() == TYPE);
   LOG_PREFIX(OMapLeafNode::make_full_merge);
   DEBUGT("this: {}", oc.t, *this);
-  return oc.tm.alloc_non_data_extent<OMapLeafNode>(oc.t, oc.hint, OMAP_LEAF_BLOCK_SIZE)
+  return oc.tm.alloc_non_data_extent<OMapLeafNode>(oc.t, oc.hint, get_len())
     .si_then([this, right] (auto &&replacement) {
       replacement->merge_from(*this, *right->cast<OMapLeafNode>());
       return full_merge_ret(
@@ -710,7 +710,7 @@ OMapLeafNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
   ceph_assert(_right->get_type() == TYPE);
   LOG_PREFIX(OMapLeafNode::make_balanced);
   DEBUGT("this: {}",  oc.t, *this);
-  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, OMAP_LEAF_BLOCK_SIZE, 2)
+  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, get_len(), 2)
     .si_then([this, _right] (auto &&replacement_pair) {
       auto replacement_left = replacement_pair.front();
       auto replacement_right = replacement_pair.back();
