@@ -813,7 +813,7 @@ int ReplicatedBackend::be_deep_scrub(
     iter->seek_to_first();
   }
   int max = g_conf()->osd_deep_scrub_keys;
-  while (iter->status() == 0 && iter->valid()) {
+  while (iter->valid()) {
     pos.omap_bytes += iter->value().length();
     ++pos.omap_keys;
     --max;
@@ -828,12 +828,6 @@ int ReplicatedBackend::be_deep_scrub(
     if (iter->valid() && max == 0) {
       pos.omap_pos = iter->key();
       return -EINPROGRESS;
-    }
-    if (iter->status() < 0) {
-      dout(25) << __func__ << "  " << poid
-	       << " on omap scan, db status error" << dendl;
-      o.read_error = true;
-      return 0;
     }
   }
 
