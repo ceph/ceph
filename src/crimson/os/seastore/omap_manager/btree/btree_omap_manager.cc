@@ -64,7 +64,8 @@ BtreeOMapManager::handle_root_split(
                                 "", nroot->maybe_get_delta_buffer());
     nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr(),
                                 pivot, nroot->maybe_get_delta_buffer());
-    omap_root.update(nroot->get_laddr(), omap_root.get_depth() + 1, omap_root.hint);
+    omap_root.update(nroot->get_laddr(), omap_root.get_depth() + 1, omap_root.hint,
+      omap_root.get_type());
     oc.t.get_omap_tree_stats().depth = omap_root.depth;
     ++(oc.t.get_omap_tree_stats().extents_num_delta);
     return seastar::now();
@@ -87,7 +88,8 @@ BtreeOMapManager::handle_root_merge(
   omap_root.update(
     iter->get_val(),
     omap_root.depth -= 1,
-    omap_root.hint);
+    omap_root.hint,
+    omap_root.get_type());
   oc.t.get_omap_tree_stats().depth = omap_root.depth;
   oc.t.get_omap_tree_stats().extents_num_delta--;
   return oc.tm.remove(oc.t, root->get_laddr()
@@ -285,7 +287,7 @@ BtreeOMapManager::omap_clear(
     ).si_then([&omap_root] (auto ret) {
       omap_root.update(
 	L_ADDR_NULL,
-	0, L_ADDR_MIN);
+	0, L_ADDR_MIN, omap_root.get_type());
       return omap_clear_iertr::now();
     });
   }).handle_error_interruptible(
