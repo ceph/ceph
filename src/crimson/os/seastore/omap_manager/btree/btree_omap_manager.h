@@ -106,6 +106,14 @@ public:
     omap_root_t &omap_root,
     Transaction &t) final;
 
+  static extent_len_t get_leaf_size(omap_type_t type) {
+    if (type == omap_type_t::LOG) {
+      return LOG_LEAF_BLOCK_SIZE;
+    }
+    ceph_assert(type == omap_type_t::OMAP ||
+		type == omap_type_t::XATTR);
+    return OMAP_LEAF_BLOCK_SIZE;
+  }
 };
 using BtreeOMapManagerRef = std::unique_ptr<BtreeOMapManager>;
 

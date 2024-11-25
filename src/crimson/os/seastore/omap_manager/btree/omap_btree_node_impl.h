@@ -163,14 +163,14 @@ struct OMapLeafNode
 
   explicit OMapLeafNode(ceph::bufferptr &&ptr)
     : OMapNode(std::move(ptr)) {
-    this->set_layout_buf(this->get_bptr().c_str());
+    this->set_layout_buf(this->get_bptr().c_str(), this->get_bptr().length());
   }
   // Must be identical with OMapLeafNode(ptr) after on_fully_loaded()
   explicit OMapLeafNode(extent_len_t length)
     : OMapNode(length) {}
   OMapLeafNode(const OMapLeafNode &rhs)
     : OMapNode(rhs) {
-    this->set_layout_buf(this->get_bptr().c_str());
+    this->set_layout_buf(this->get_bptr().c_str(), this->get_bptr().length());
   }
 
   omap_node_meta_t get_node_meta() const final { return get_meta(); }
@@ -185,7 +185,7 @@ struct OMapLeafNode
   uint32_t get_node_size() { return get_size(); }
 
   void on_fully_loaded() final {
-    this->set_layout_buf(this->get_bptr().c_str());
+    this->set_layout_buf(this->get_bptr().c_str(), this->get_bptr().length());
   }
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
