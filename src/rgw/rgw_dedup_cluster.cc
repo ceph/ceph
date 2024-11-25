@@ -804,6 +804,7 @@ namespace rgw::dedup {
       return -1;
     }
     unsigned completed_work_shards_count = 0;
+    unsigned completed_md5_shards_count  = 0;
     utime_t md5_start_time;
     {
       std::map<std::string, member_time_t> owner_map;
@@ -838,39 +839,42 @@ namespace rgw::dedup {
       md5_start_time = show_time_func(epoch, show_time, owner_map);
     }
 
-    if (completed_work_shards_count == MAX_WORK_SHARD)
-      {
-	std::map<std::string, member_time_t> owner_map;
-	bool show_time = true;
-	md5_stats_t md5_stats_sum;
-	bufferlist bl_arr[MAX_WORK_SHARD];
-	named_time_lock_t ntl_arr[MAX_WORK_SHARD];
-	int cnt = collect_shard_stats(p_ioctx, dpp, MAX_MD5_SHARD, MD5_SHARD_PREFIX, bl_arr, ntl_arr);
-	if (cnt != MAX_MD5_SHARD) {
-	  std::cerr << ">>>Partial MD5_SHARD stats recived " << cnt << " / "
-		    << (int)MAX_MD5_SHARD << "\n" << std::endl;
-	}
-
-	for (unsigned shard = 0; shard < MAX_MD5_SHARD; shard++) {
-	  if (bl_arr[shard].length() == 0) {
-	    ntl_display_progress(ntl_arr[shard], shard);
-	    continue;
-	  }
-	  md5_stats_t stats;
-	  try {
-	    auto p = bl_arr[shard].cbegin();
-	    decode(stats, p);
-	    md5_stats_sum += stats;
-	  }catch (const buffer::error&) {
-	    std::cerr << __func__ << "::failed md5_stats_t decode #" << (int)shard << std::endl;
-	    continue;
-	  }
-	  collect_single_shard_stats(dpp, owner_map, ntl_arr, shard, &show_time, "MD5");
-	}
-	std::cout << "Aggreagted md5-shard stats counters:\n" << md5_stats_sum << std::endl;
-	show_time_func(md5_start_time, show_time, owner_map);
+    if (completed_work_shards_count == MAX_WORK_SHARD) {
+      std::map<std::string, member_time_t> owner_map;
+      bool show_time = true;
+      md5_stats_t md5_stats_sum;
+      bufferlist bl_arr[MAX_WORK_SHARD];
+      named_time_lock_t ntl_arr[MAX_WORK_SHARD];
+      int cnt = collect_shard_stats(p_ioctx, dpp, MAX_MD5_SHARD, MD5_SHARD_PREFIX, bl_arr, ntl_arr);
+      if (cnt != MAX_MD5_SHARD) {
+	std::cerr << ">>>Partial MD5_SHARD stats recived " << cnt << " / "
+		  << (int)MAX_MD5_SHARD << "\n" << std::endl;
       }
 
+      for (unsigned shard = 0; shard < MAX_MD5_SHARD; shard++) {
+	if (bl_arr[shard].length() == 0) {
+	  ntl_display_progress(ntl_arr[shard], shard);
+	  continue;
+	}
+	completed_md5_shards_count++;
+	md5_stats_t stats;
+	try {
+	  auto p = bl_arr[shard].cbegin();
+	  decode(stats, p);
+	  md5_stats_sum += stats;
+	}catch (const buffer::error&) {
+	  std::cerr << __func__ << "::failed md5_stats_t decode #" << (int)shard << std::endl;
+	  continue;
+	}
+	collect_single_shard_stats(dpp, owner_map, ntl_arr, shard, &show_time, "MD5");
+      }
+      std::cout << "Aggreagted md5-shard stats counters:\n" << md5_stats_sum << std::endl;
+      show_time_func(md5_start_time, show_time, owner_map);
+    }
+
+    if (completed_md5_shards_count == MAX_MD5_SHARD) {
+      std::cout << "DEDUP WORK WAS COMPLETED" << std::endl;
+    }
     return 0;
   }
 

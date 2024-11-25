@@ -10,6 +10,21 @@ import pytest
 from collections import namedtuple
 import boto3
 from boto3.s3.transfer import TransferConfig
+from dataclasses import dataclass
+
+@dataclass
+class Dedup_Stats:
+    skip_too_small: int = 0
+    skip_shared_manifest: int = 0
+    skip_singleton: int = 0
+    skip_src_record: int = 0
+    total_processed_objects: int = 0
+    loaded_objects: int = 0
+    set_shared_manifest : int = 0
+    deduped_obj: int = 0
+    singleton_obj : int = 0
+    unique_obj : int = 0
+    duplicate_obj : int = 0
 
 from . import(
     configfile,
@@ -236,9 +251,9 @@ def upload_objects(out_dir, bucket_name, files, conn):
         rados_obj_count=calc_rados_obj_count(filename, obj_size)
         rados_objects_total += (rados_obj_count * num_copies)
         duplicated_tail_objs += ((num_copies-1) * (rados_obj_count-1))
+        log.info("uploading %s::%d::%d", filename, obj_size, num_copies)
         for i in range(0, num_copies):
             key = gen_object_name(filename, i)
-            log.debug("uploading object %s", key)
             s3_objects_total += 1
             conn.upload_file(out_dir + filename, bucket_name, key, Config=config)
 
@@ -272,15 +287,93 @@ def verify_objects(out_dir, bucket_name, files, conn, expcted_results):
             os.remove(tempfile)
 
     assert expcted_results == count_object_parts_in_all_buckets(True)
-    #count_space_in_all_buckets()
+
+#-----------------------------------------------
+def process_stat_line(line):
+    return int(line.rsplit("=", maxsplit=1)[1].strip())
+
+#-----------------------------------------------
+def print_dedup_stats(dedup_stats):
+    log.info("total_processed_objects %d", dedup_stats.total_processed_objects)
+    log.info("loaded_objects = %d", dedup_stats.loaded_objects)
+
+    log.info("skip_too_small = %d", dedup_stats.skip_too_small)
+    log.info("skip_shared_manifest = %d", dedup_stats.skip_shared_manifest)
+    log.info("skip_singleton = %d", dedup_stats.skip_singleton)
+    log.info("skip_src_record = %d", dedup_stats.skip_src_record)
+
+    log.info("set_shared_manifest = %d", dedup_stats.set_shared_manifest)
+    log.info("deduped_obj = %d", dedup_stats.deduped_obj)
+
+    log.info("singleton_obj = %d", dedup_stats.singleton_obj)
+    log.info("unique_obj = %d", dedup_stats.unique_obj)
+    log.info("duplicate_obj = %d", dedup_stats.duplicate_obj)
+
+#-----------------------------------------------
+def read_dedup_stats():
+    result = admin(['dedup', 'stats'])
+    assert result[1] == 0
+
+    dedup_work_was_completed = False
+    dedup_stats = Dedup_Stats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    for line in result[0].splitlines():
+        if line.startswith("Total processed objects"):
+            dedup_stats.total_processed_objects = process_stat_line(line)
+
+        if line.startswith("Loaded objects"):
+            dedup_stats.loaded_objects = process_stat_line(line)
+
+        if line.startswith("Ingress skip: too small"):
+            dedup_stats.skip_too_small = process_stat_line(line)
+            process_stat_line(line)
+
+        if line.startswith("Skipped shared_manifest"):
+            dedup_stats.skip_shared_manifest = process_stat_line(line)
+
+        elif line.startswith("Skipped singleton"):
+            dedup_stats.skip_singleton = process_stat_line(line)
+
+        if line.startswith("Skipped source record"):
+            dedup_stats.skip_src_record = process_stat_line(line)
+
+        elif line.startswith("Set Shared-Manifest"):
+            dedup_stats.set_shared_manifest = process_stat_line(line)
+
+        if line.startswith("Deduped Obj (this cycle)"):
+            dedup_stats.deduped_obj = process_stat_line(line)
+
+        elif line.startswith("Singleton Obj"):
+            dedup_stats.singleton_obj = process_stat_line(line)
+
+        if line.startswith("Unique Obj"):
+            dedup_stats.unique_obj = process_stat_line(line)
+
+        elif line.startswith("Duplicate Obj"):
+            dedup_stats.duplicate_obj = process_stat_line(line)
+
+        elif line.startswith("DEDUP WORK WAS COMPLETED"):
+            log.info(line)
+            dedup_work_was_completed = True
+
+    return (dedup_work_was_completed, dedup_stats)
 
 #-----------------------------------------------
 def exec_dedup():
     log.info("\n==========================\nexec_dedup\n==========================")
     result = admin(['dedup', 'restart'])
     assert result[1] == 0
+
     # TBD - better monitoring for dedup completion !!
-    time.sleep(20)
+    dedup_stats = Dedup_Stats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    wait_for_completion = True
+    while wait_for_completion:
+        time.sleep(5)
+        ret = read_dedup_stats()
+        if ret[0]:
+            wait_for_completion = False
+            dedup_stats = ret[1]
+
+    print_dedup_stats(dedup_stats)
 
 #-----------------------------------------------
 def simple_dedup(out_dir, conn, bucket_name):
@@ -305,7 +398,7 @@ def simple_dedup(out_dir, conn, bucket_name):
     os.mkdir(out_dir)
     try:
         files=[]
-        gen_files(out_dir, 1*RADOS_OBJ_SIZE, 2, files)
+        gen_files(out_dir, 2*MB, 10, files)
         bucket = conn.create_bucket(Bucket=bucket_name)
         expcted_results = upload_objects(out_dir, bucket_name, files, conn)
         exec_dedup()
