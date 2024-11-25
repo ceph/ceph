@@ -1738,17 +1738,27 @@ struct __attribute__((packed)) object_data_le_t {
   }
 };
 
+enum class omap_type_t : uint8_t {
+  XATTR = 0,
+  OMAP,
+  LOG,
+  NONE,
+  NUM_TYPES
+};
+
 struct omap_root_t {
   laddr_t addr = L_ADDR_NULL;
   depth_t depth = 0;
   laddr_t hint = L_ADDR_MIN;
   bool mutated = false;
+  omap_type_t type = omap_type_t::NONE;
 
   omap_root_t() = default;
-  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min)
+  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min, omap_type_t type)
     : addr(addr),
       depth(depth),
-      hint(addr_min) {}
+      hint(addr_min),
+      type(type) {}
 
   omap_root_t(const omap_root_t &o) = default;
   omap_root_t(omap_root_t &&o) = default;
@@ -1763,11 +1773,12 @@ struct omap_root_t {
     return mutated;
   }
   
-  void update(laddr_t _addr, depth_t _depth, laddr_t _hint) {
+  void update(laddr_t _addr, depth_t _depth, laddr_t _hint, omap_type_t _type) {
     mutated = true;
     addr = _addr;
     depth = _depth;
     hint = _hint;
+    type = _type;
   }
   
   laddr_t get_location() const {
@@ -1781,18 +1792,25 @@ struct omap_root_t {
   laddr_t get_hint() const {
     return hint;
   }
+
+  omap_type_t get_type() const {
+    return type;
+  }
 };
 std::ostream &operator<<(std::ostream &out, const omap_root_t &root);
 
 class __attribute__((packed)) omap_root_le_t {
   laddr_le_t addr = laddr_le_t(L_ADDR_NULL);
   depth_le_t depth = init_depth_le(0);
+  omap_type_t type = omap_type_t::NONE;
 
 public: 
   omap_root_le_t() = default;
   
-  omap_root_le_t(laddr_t addr, depth_t depth)
-    : addr(addr), depth(init_depth_le(depth)) {}
+  omap_root_le_t(laddr_t addr, depth_t depth, omap_type_t type)
+    : addr(addr), depth(init_depth_le(depth)), type(type) {}
+
+  omap_root_le_t(omap_type_t type) : type(type) {}
 
   omap_root_le_t(const omap_root_le_t &o) = default;
   omap_root_le_t(omap_root_le_t &&o) = default;
@@ -1802,10 +1820,11 @@ public:
   void update(const omap_root_t &nroot) {
     addr = nroot.get_location();
     depth = init_depth_le(nroot.get_depth());
+    type = nroot.get_type();
   }
   
   omap_root_t get(laddr_t hint) const {
-    return omap_root_t(addr, depth, hint);
+    return omap_root_t(addr, depth, hint, type);
   }
 };
 
