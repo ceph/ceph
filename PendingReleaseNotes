@@ -56,6 +56,8 @@
   an empty string can be assigned to it. Additionally, commands
   `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get` and
   `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
+* CephFS: allow user to enable/disable progress bars for clone jobs. This can
+  be done through config option "mgr/volumes/disable_clone_progress_bars".
 
 >=19.0.0
 
