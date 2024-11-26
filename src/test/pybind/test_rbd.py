@@ -1391,7 +1391,8 @@ class TestImage(object):
             eq(str(i), cookies[i])
             self.image.unlock(str(i))
         eq([], self.image.list_lockers())
-
+        
+    @require_features([RBD_FEATURE_LAYERING])
     def test_diff_iterate(self):
         check_diff(self.image, 0, IMG_SIZE, None, [])
         self.image.write(b'a' * 256, 0)
@@ -1402,12 +1403,33 @@ class TestImage(object):
         check_diff(self.image, 0, IMG_SIZE, None, [(0, 512, True)])
 
         self.image.create_snap('snap1')
+        snap1_id = self.image.snap_get_id('snap1')
         self.image.discard(0, 1 << IMG_ORDER)
-        self.image.create_snap('snap2')
-        self.image.set_snap('snap2')
         check_diff(self.image, 0, IMG_SIZE, 'snap1', [(0, 512, False)])
+        self.image.write(b'b' * 512, 512)
+        check_diff(self.image, 0, IMG_SIZE, None, [(0, 1024, True)])
+
+        self.image.create_snap('snap2')
+        snap2_id = self.image.snap_get_id('snap2')
+
+        self.image.write(b'c' * 1024, 1024)
+        check_diff(self.image, 0, IMG_SIZE, None, [(0, 2048, True)])
+
+        clone_name2 = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, snap2_id, ioctx, clone_name2, features, clone_format=2)
+        with Image(ioctx, clone_name2) as clone2:
+            assert clone2.parent_info() == (ioctx.get_pool_name(), image_name, 'snap2')
+            check_diff(clone2, 0, IMG_SIZE, None, [(0, 1024, True)])
+
+        check_diff(self.image, 0, IMG_SIZE, snap2_id, [(1024, 1024, True)])
+        
+        self.image.write(b'c' * 512, 2048)
+        check_diff(self.image, 0, IMG_SIZE, None, [(0, 2560, True)])
         self.image.remove_snap('snap1')
         self.image.remove_snap('snap2')
+        check_diff(self.image, 0, IMG_SIZE, snap2_id, [(1024, 1536, True)])
+
+        self.rbd.remove(ioctx, clone_name2)
 
     def test_aio_read(self):
         # this is a list so that the local cb() can modify it
@@ -3140,6 +3162,57 @@ class TestGroups(object):
             assert read == data
 
         self.rbd.remove(ioctx, clone_name)
+
+    @require_features([RBD_FEATURE_LAYERING])
+    def test_group_snap_diff_iterate(self):
+        data1 = rand_data(256)
+        data2 = rand_data(512)
+        with Image(ioctx, image_name) as image:
+            image.write(data1, 0)
+        
+        self.group.add_image(ioctx, image_name)
+        self.group.create_snap("group_snap1")
+        group_snaps = self.group.list_snaps()
+        assert [snap['name'] for snap in group_snaps] == ["group_snap1"]
+        image_snaps = list(self.image.list_snaps())
+        assert len(image_snaps) == 1
+        assert image_snaps[0]['namespace'] == RBD_SNAP_NAMESPACE_TYPE_GROUP
+        snap1_id = image_snaps[0]['id']
+        
+        with Image(ioctx, image_name) as image:
+            image.write(data2, 256)
+        check_diff(self.image, 0, IMG_SIZE, snap1_id, [(256, 512, True)])
+        
+        self.group.create_snap("group_snap2")
+        group_snaps = self.group.list_snaps()
+        assert [snap['name'] for snap in group_snaps] == ["group_snap1", "group_snap2"]
+        image_snaps = list(self.image.list_snaps())
+        snap2_id = image_snaps[1]['id']
+
+        with Image(ioctx, image_name) as image:
+            image.write(rand_data(256), 768)
+        check_diff(self.image, 0, IMG_SIZE, snap2_id, [(768, 256, True)])
+        
+        clone_name = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, snap2_id, ioctx, clone_name, features, clone_format=2)
+        with Image(ioctx, clone_name) as clone:
+            parent_spec = clone.get_parent_image_spec()
+            assert parent_spec['pool_name'] == ioctx.get_pool_name()
+            assert parent_spec['image_name'] == image_name
+            assert parent_spec['snap_id'] == snap2_id
+            read_data = clone.read(256, 512)
+            assert read_data == data2
+        
+        self.group.remove_snap("group_snap2")
+        group_snaps = self.group.list_snaps()
+        assert [snap['name'] for snap in group_snaps] == ["group_snap1"]
+        image_snaps = list(self.image.list_snaps())
+        assert image_snaps[1]['namespace'] == RBD_SNAP_NAMESPACE_TYPE_TRASH
+        check_diff(self.image, 0, IMG_SIZE, snap2_id, [(768, 256, True)])
+        
+        self.rbd.remove(ioctx, clone_name)
+        self.group.remove_snap("group_snap1")
+        assert list(self.group.list_snaps()) == []
 
     def test_group_snap_rollback(self):
         for _ in range(1, 3):
