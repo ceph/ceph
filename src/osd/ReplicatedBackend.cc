@@ -715,6 +715,25 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
   maybe_kick_pct_update();
 }
 
+template <class T>
+static uint32_t crc32_netstring(const uint32_t orig_crc, T data)
+{
+  // XXX: This function MUST be compliant with the bufferlist marshalling format!
+  // Otherwise scrubs-during-upgrade will explode.
+  __u32 len = data.length();
+  auto crc = ceph_crc32c(orig_crc, (unsigned char*)&len, sizeof(len));
+  crc = ceph_crc32c(crc, (unsigned char*)data.c_str(), data.length());
+
+#ifndef _NDEBUG
+  // let's verify the compatibility but, due to performance penalty,
+  // only in debug builds.
+  ceph::bufferlist bl;
+  bl.append(data);
+  ceph_assert(crc = bl.crc32c(orig_crc));
+#endif
+  return crc;
+}
+
 int ReplicatedBackend::be_deep_scrub(
   const hobject_t &poid,
   ScrubMap &map,
@@ -775,7 +794,7 @@ int ReplicatedBackend::be_deep_scrub(
 
   // omap header
   if (pos.omap_pos.empty()) {
-    pos.omap_hash = bufferhash(-1);
+    pos.omap_hash = -1;
 
     bufferlist hdrbl;
     r = store->omap_get_header(
@@ -792,7 +811,7 @@ int ReplicatedBackend::be_deep_scrub(
     if (r == 0 && hdrbl.length()) {
       bool encoded = false;
       dout(25) << "CRC header " << cleanbin(hdrbl, encoded, true) << dendl;
-      pos.omap_hash << hdrbl;
+      pos.omap_hash = hdrbl.crc32c(pos.omap_hash);
     }
   }
 
@@ -812,12 +831,8 @@ int ReplicatedBackend::be_deep_scrub(
     pos.omap_bytes += iter->value().length();
     ++pos.omap_keys;
     --max;
-    // fixme: we can do this more efficiently.
-    bufferlist bl;
-    encode(iter->key(), bl);
-    encode(iter->value(), bl);
-    pos.omap_hash << bl;
-
+    pos.omap_hash = crc32_netstring(pos.omap_hash, iter->key());
+    pos.omap_hash = crc32_netstring(pos.omap_hash, iter->value());
     iter->next();
 
     if (iter->valid() && max == 0) {
@@ -839,7 +854,7 @@ int ReplicatedBackend::be_deep_scrub(
     map.has_large_omap_object_errors = true;
   }
 
-  o.omap_digest = pos.omap_hash.digest();
+  o.omap_digest = pos.omap_hash;
   o.omap_digest_present = true;
   dout(20) << __func__ << " done with " << poid << " omap_digest "
 	   << std::hex << o.omap_digest << std::dec << dendl;
