@@ -63,7 +63,7 @@ class VolumeClient(CephfsClient["Module"]):
         # volume specification
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
         self.cloner = Cloner(self, self.mgr.max_concurrent_clones, self.mgr.snapshot_clone_delay,
-                             self.mgr.snapshot_clone_no_wait)
+                             self.mgr.snapshot_clone_no_wait, self.mgr.disable_clone_progress_bars)
         self.clone_progress_reporter = CloneProgressReporter(self,
                                                              self.volspec)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
