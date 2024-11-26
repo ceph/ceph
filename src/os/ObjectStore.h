@@ -766,7 +766,10 @@ public:
    * operations in c.  Do not use filestore methods on c while
    * when iterating.  (Filling in a transaction is no problem).
    *
-   * @return error code, zero on success
+   * @return  - error code (negative value) on failure,
+   *          - positive value when the iteration has been
+   *            stopped (omap_iter_ret_t::STOP) by the callable,
+   *          - 0 otherwise.
    */
   struct omap_iter_seek_t {
     std::string seek_position;
