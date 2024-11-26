@@ -103,6 +103,10 @@ public:
                                char **coding,
                                int blocksize) override;
   unsigned get_alignment() const override;
+  size_t get_minimum_granularity() override
+  {
+    return 1;
+  }
   void prepare() override;
 private:
   int parse(ceph::ErasureCodeProfile& profile, std::ostream *ss) override;
@@ -133,6 +137,10 @@ public:
                                char **coding,
                                int blocksize) override;
   unsigned get_alignment() const override;
+  size_t get_minimum_granularity() override
+  {
+    return 1;
+  }
   void prepare() override;
 private:
   int parse(ceph::ErasureCodeProfile& profile, std::ostream *ss) override;
@@ -166,6 +174,10 @@ public:
                                char **coding,
                                int blocksize) override;
   unsigned get_alignment() const override;
+  size_t get_minimum_granularity() override
+  {
+    return w * packetsize;
+  }
   void prepare_schedule(int *matrix);
 private:
   int parse(ceph::ErasureCodeProfile& profile, std::ostream *ss) override;
@@ -215,6 +227,10 @@ public:
                                char **coding,
                                int blocksize) override;
   unsigned get_alignment() const override;
+  size_t get_minimum_granularity() override
+  {
+    return w * packetsize;
+  }
   virtual bool check_k(std::ostream *ss) const;
   virtual bool check_w(std::ostream *ss) const;
   virtual bool check_packetsize_set(std::ostream *ss) const;
