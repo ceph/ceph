@@ -13990,6 +13990,7 @@ int BlueStore::omap_iterate(
   }
 
   // iterate!
+  bool more = false;
   ceph::timespan next_lat_acc{0};
   while (it->valid()) {
     const auto& db_key = it->raw_key_as_sv().second;
@@ -13999,6 +14000,7 @@ int BlueStore::omap_iterate(
     std::string_view user_key = db_key.substr(userkey_offset_in_dbkey);
     omap_iter_ret_t ret = f(user_key, it->value_as_sv());
     if (ret == omap_iter_ret_t::STOP) {
+      more = true;
       break;
     } else if (ret == omap_iter_ret_t::NEXT) {
       ceph::time_guard<ceph::mono_clock> measure_next{next_lat_acc};
@@ -14012,7 +14014,7 @@ int BlueStore::omap_iterate(
     l_bluestore_omap_next_lat,
     next_lat_acc,
     c->store->cct->_conf->bluestore_log_omap_iterator_age);
-  return 0;
+  return more;
 }
 
 // -----------------

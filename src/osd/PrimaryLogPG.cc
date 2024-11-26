@@ -7789,7 +7789,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bufferlist bl;
 	if (oi.is_omap()) {
 	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
-	  result = osd->store->omap_iterate(
+	  const auto result = osd->store->omap_iterate(
 	    ch, ghobject_t(soid),
 	    // try to seek as many keys-at-once as possible for the sake of performance.
 	    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
