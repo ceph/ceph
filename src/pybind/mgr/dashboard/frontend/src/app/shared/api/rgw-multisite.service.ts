@@ -16,7 +16,7 @@ export class RgwMultisiteService {
 
   constructor(private http: HttpClient, public rgwDaemonService: RgwDaemonService) {}
 
-  migrate(realm: RgwRealm, zonegroup: RgwZonegroup, zone: RgwZone) {
+  migrate(realm: RgwRealm, zonegroup: RgwZonegroup, zone: RgwZone, username: string) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.appendAll({
         realm_name: realm.name,
@@ -24,8 +24,7 @@ export class RgwMultisiteService {
         zone_name: zone.name,
         zonegroup_endpoints: zonegroup.endpoints,
         zone_endpoints: zone.endpoints,
-        access_key: zone.system_key.access_key,
-        secret_key: zone.system_key.secret_key
+        username: username
       });
       return this.http.put(`${this.uiUrl}/migrate`, null, { params: params });
     });
