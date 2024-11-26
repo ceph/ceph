@@ -212,6 +212,10 @@
   DeleteBucket will start returning 409 BucketNotEmpty errors until empty
   on all zones when sync policy is enabled.
 
+* CephFS: Printing of progress bars for clone jobs in the output of ``ceph
+  status`` command can now be enabled or disabled using the config option
+  ``mgr/volumes/disable_clone_progress_bars``.
+
 * RADOS: A performance botteneck in the balancer mgr module has been fixed.
   Related Tracker: https://tracker.ceph.com/issues/68657
 
