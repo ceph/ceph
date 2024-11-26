@@ -1,0 +1,11 @@
+@use './src/styles/vendor/variables' as vv;
+.sm-width{
+    width:100px;
+    background-color: vv.$gray-200;
+}
+.hidden{
+    display: none;
+}
+.align-center{
+    align-self: center;
+}
