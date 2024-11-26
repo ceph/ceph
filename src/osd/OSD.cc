@@ -3862,14 +3862,9 @@ int OSD::init()
   if (superblock.compat_features.merge(initial)) {
     // Are we adding SNAPMAPPER2?
     if (diff.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER2)) {
-      dout(1) << __func__ << " upgrade snap_mapper (first start as octopus)"
-	      << dendl;
-      auto ch = service.meta_ch;
-      auto hoid = make_snapmapper_oid();
-      unsigned max = cct->_conf->osd_target_transaction_size;
-      r = SnapMapper::convert_legacy(cct, store.get(), ch, hoid, max);
-      if (r < 0)
-	goto out;
+      derr << __func__ << " snap_mapper upgrade from pre-octopus"
+	   << " is no longer supported" << dendl;
+      ceph_abort();
     }
     // We need to persist the new compat_set before we
     // do anything else
