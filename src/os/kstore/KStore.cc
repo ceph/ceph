@@ -1873,6 +1873,71 @@ ObjectMap::ObjectMapIterator KStore::get_omap_iterator(
   return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
 }
 
+int KStore::omap_iterate(
+  CollectionHandle &ch,   ///< [in] collection
+  const ghobject_t &oid, ///< [in] object
+  ObjectStore::omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+  std::function<omap_iter_ret_t(std::string_view, std::string_view)> f)
+{
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
+  {
+    std::shared_lock l{c->lock};
+
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
+      return -ENOENT;
+    }
+    o->flush();
+    dout(10) << __func__ << " header = " << o->onode.omap_head <<dendl;
+
+    KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
+    std::string tail;
+    std::string seek_key;
+    if (o->onode.omap_head) {
+      return 0; // nothing to do
+    }
+
+    // acquire data depedencies for seek & iterate
+    get_omap_key(o->onode.omap_head, start_from.seek_position, &seek_key);
+    get_omap_tail(o->onode.omap_head, &tail);
+
+    // acquire the iterator
+    {
+      it = db->get_iterator(PREFIX_OMAP);
+    }
+
+    // seek the iterator
+    {
+      if (start_from.seek_type == omap_iter_seek_t::LOWER_BOUND) {
+        it->lower_bound(seek_key);
+      } else {
+        it->upper_bound(seek_key);
+      }
+    }
+
+    // iterate!
+    while (it->valid()) {
+      std::string user_key;
+      if (const auto& db_key = it->raw_key().second; db_key >= tail) {
+        break;
+      } else {
+        decode_omap_key(db_key, &user_key);
+      }
+      omap_iter_ret_t ret = f(user_key, it->value_as_sv());
+      if (ret == omap_iter_ret_t::STOP) {
+        break;
+      } else if (ret == omap_iter_ret_t::NEXT) {
+        it->next();
+      } else {
+        ceph_abort();
+      }
+    }
+  }
+  return 0;
+}
+
 
 // -----------------
 // write helpers
