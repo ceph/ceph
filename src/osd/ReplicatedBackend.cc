@@ -2116,6 +2116,12 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
   }
 }
 
+static bufferlist to_bufferlist(std::string_view in) {
+  bufferlist bl;
+  bl.append(in);
+  return bl;
+}
+
 int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 				     const ObjectRecoveryProgress &progress,
 				     ObjectRecoveryProgress *out_progress,
@@ -2177,29 +2183,43 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   uint64_t available = cct->_conf->osd_recovery_max_chunk;
   if (!progress.omap_complete) {
-    ObjectMap::ObjectMapIterator iter =
-      store->get_omap_iterator(ch,
-			       ghobject_t(recovery_info.soid));
-    ceph_assert(iter);
-    for (iter->lower_bound(progress.omap_recovered_to);
-	 iter->valid();
-	 iter->next()) {
-      if (!out_op->omap_entries.empty() &&
-	  ((cct->_conf->osd_recovery_max_omap_entries_per_chunk > 0 &&
-	    out_op->omap_entries.size() >= cct->_conf->osd_recovery_max_omap_entries_per_chunk) ||
-	   available <= iter->key().size() + iter->value().length()))
-	break;
-      out_op->omap_entries.insert(make_pair(iter->key(), iter->value()));
-
-      if ((iter->key().size() + iter->value().length()) <= available)
-	available -= (iter->key().size() + iter->value().length());
-      else
-	available = 0;
-    }
-    if (!iter->valid())
+    std::optional<std::string> more_from;
+    using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+    auto result = store->omap_iterate(
+      ch,
+      ghobject_t{recovery_info.soid},
+      // try to seek as many keys-at-once as possible for the sake of performance.
+      // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
+      // than just seek(n).
+      ObjectStore::omap_iter_seek_t{
+        .seek_position = progress.omap_recovered_to,
+        .seek_type = omap_iter_seek_t::LOWER_BOUND
+      },
+      [&available, &more_from, &omap_entries=out_op->omap_entries,
+       max_entries=cct->_conf->osd_recovery_max_omap_entries_per_chunk]
+      (std::string_view key, std::string_view value) mutable {
+        const auto num_new_bytes = key.size() + value.size();
+        if (auto cur_num_entries = omap_entries.size(); cur_num_entries > 0) {
+	  if (max_entries > 0 && cur_num_entries >= max_entries) {
+	    more_from = key;
+            return ObjectStore::omap_iter_ret_t::STOP;
+	  }
+	  if (num_new_bytes >= available) {
+	    more_from = key;
+            return ObjectStore::omap_iter_ret_t::STOP;
+	  }
+        }
+        omap_entries.insert(make_pair(key, to_bufferlist(value)));
+	available -= std::min(available, num_new_bytes);
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      });
+    if (result < 0) {
+      return -EIO;
+    } else if (more_from) {
+      new_progress.omap_recovered_to = *more_from;
+    } else {
       new_progress.omap_complete = true;
-    else
-      new_progress.omap_recovered_to = iter->key();
+    }
   }
 
   if (available > 0) {
