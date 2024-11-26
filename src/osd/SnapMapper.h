@@ -182,17 +182,15 @@ public:
     ghobject_t mapping_hoid;
     ghobject_t purged_snaps_hoid;
 
-    ObjectMap::ObjectMapIterator psit;
     int64_t pool;
     snapid_t begin, end;
 
-    bool _parse_p();   ///< advance the purged_snaps pointer
+    bool _parse_p(ObjectMap::ObjectMapIterator& psit);   ///< advance the purged_snaps pointer
 
-    ObjectMap::ObjectMapIterator mapit;
     Mapping mapping;
     shard_id_t shard;
 
-    bool _parse_m();   ///< advance the (object) mapper pointer
+    bool _parse_m(ObjectMap::ObjectMapIterator& mapit);   ///< advance the (object) mapper pointer
 
     std::vector<std::tuple<int64_t, snapid_t, uint32_t, shard_id_t>> stray;
 
