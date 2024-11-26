@@ -21,10 +21,6 @@ import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
   styleUrls: ['./rgw-multisite-migrate.component.scss']
 })
 export class RgwMultisiteMigrateComponent implements OnInit {
-  readonly endpoints = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{2,4}$/;
-  readonly ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
-  readonly ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
-
   @Output()
   submitAction = new EventEmitter();
 
@@ -84,57 +80,12 @@ export class RgwMultisiteMigrateComponent implements OnInit {
           })
         ]
       }),
-      zone_endpoints: new UntypedFormControl([], {
-        validators: [
-          CdValidators.custom('endpoint', (value: string) => {
-            if (_.isEmpty(value)) {
-              return false;
-            } else {
-              if (value.includes(',')) {
-                value.split(',').forEach((url: string) => {
-                  return (
-                    !this.endpoints.test(url) && !this.ipv4Rgx.test(url) && !this.ipv6Rgx.test(url)
-                  );
-                });
-              } else {
-                return (
-                  !this.endpoints.test(value) &&
-                  !this.ipv4Rgx.test(value) &&
-                  !this.ipv6Rgx.test(value)
-                );
-              }
-              return false;
-            }
-          }),
-          Validators.required
-        ]
+      zone_endpoints: new UntypedFormControl(null, {
+        validators: [CdValidators.url, Validators.required]
       }),
-      zonegroup_endpoints: new UntypedFormControl(
-        [],
-        [
-          CdValidators.custom('endpoint', (value: string) => {
-            if (_.isEmpty(value)) {
-              return false;
-            } else {
-              if (value.includes(',')) {
-                value.split(',').forEach((url: string) => {
-                  return (
-                    !this.endpoints.test(url) && !this.ipv4Rgx.test(url) && !this.ipv6Rgx.test(url)
-                  );
-                });
-              } else {
-                return (
-                  !this.endpoints.test(value) &&
-                  !this.ipv4Rgx.test(value) &&
-                  !this.ipv6Rgx.test(value)
-                );
-              }
-              return false;
-            }
-          }),
-          Validators.required
-        ]
-      ),
+      zonegroup_endpoints: new UntypedFormControl(null, {
+        validators: [CdValidators.url, Validators.required]
+      }),
       access_key: new UntypedFormControl(null),
       secret_key: new UntypedFormControl(null)
     });
