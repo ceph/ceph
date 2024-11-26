@@ -631,7 +631,7 @@ int MemStore::omap_iterate(
 
   bool more = false;
   {
-    std::lock_guard lock{o->omap_mutex};
+    std::shared_lock lock{o->omap_mutex};
 
     // obtain seek the iterator
     decltype(o->omap)::iterator it;

@@ -33,7 +33,7 @@ class MemStore : public ObjectStore {
 public:
   struct Object : public RefCountedObject {
     ceph::mutex xattr_mutex{ceph::make_mutex("MemStore::Object::xattr_mutex")};
-    ceph::mutex omap_mutex{ceph::make_mutex("MemStore::Object::omap_mutex")};
+    ceph::shared_mutex omap_mutex{ceph::make_shared_mutex("MemStore::Object::omap_mutex")};
     std::map<std::string,ceph::buffer::ptr,std::less<>> xattr;
     ceph::buffer::list omap_header;
     std::map<std::string,ceph::buffer::list> omap;
