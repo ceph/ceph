@@ -9135,6 +9135,78 @@ class TestCloneProgressReporter(TestVolumesHelper, CloneProgressReporterHelper):
                 raise
 
 
+class TestDisableCloneProgressBars(TestVolumesHelper, CloneProgressReporterHelper):
+    '''
+    Tests related to config option mgr/volumes/disable_clone_progress_bars.
+    '''
+
+    CONF_OPT = 'mgr/volumes/disable_clone_progress_bars'
+
+    def test_for_1_progress_bar(self):
+        '''
+        When number of clone jobs is less than max_concurrent_jobs, 1 progress
+        bar is printed. Test that this progress bar is not printed when
+        disable_clone_progress_bars is true.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(4)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.config_set('mgr', self.CONF_OPT, 'true')
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        # ensure clone progress bars were not printed through out the lifetime
+        # of clone jobs.
+        try:
+            with safe_while(tries=10, sleep=2) as proceed:
+                while proceed():
+                    pevs = self.get_pevs_from_ceph_status(c, check=False)
+                    self.assertEqual(len(pevs), 0)
+        except Exception:
+            pass
+
+    def test_for_2_progress_bars(self):
+        '''
+        When number of clone jobs is more than max_concurrent_jobs, 2 progress
+        bars are printed. Test that these progress bars are not printed when
+        disable_clone_progress_bars is true.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(7)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.config_set('mgr', self.CONF_OPT, 'true')
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        # ensure clone progress bars were not printed through out the lifetime
+        # of clone jobs.
+        try:
+            with safe_while(tries=10, sleep=2) as proceed:
+                while proceed():
+                    pevs = self.get_pevs_from_ceph_status(c, check=False)
+                    self.assertEqual(len(pevs), 0)
+        except Exception:
+            pass
+
+
 class TestMisc(TestVolumesHelper):
     """Miscellaneous tests related to FS volume, subvolume group, and subvolume operations."""
     def test_connection_expiration(self):
