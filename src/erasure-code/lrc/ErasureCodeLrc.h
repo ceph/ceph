@@ -111,6 +111,8 @@ public:
 
   unsigned int get_chunk_size(unsigned int stripe_width) const override;
 
+  unsigned int get_minimum_granularity() override;
+
   int encode_chunks(const std::set<int> &want_to_encode,
 		    std::map<int, ceph::buffer::list> *encoded) override;
 

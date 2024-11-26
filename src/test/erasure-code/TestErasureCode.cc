@@ -45,6 +45,7 @@ public:
   unsigned int get_chunk_size(unsigned int object_size) const override {
     return chunk_size;
   }
+  unsigned int get_minimum_granularity() override { return 1; }
   int encode_chunks(const set<int> &want_to_encode,
 			    map<int, bufferlist> *encoded) override {
     encode_chunks_encoded = *encoded;
