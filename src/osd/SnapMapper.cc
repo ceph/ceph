@@ -40,7 +40,6 @@ using result_t = Scrub::SnapMapReaderI::result_t;
 using code_t = Scrub::SnapMapReaderI::result_t::code_t;
 
 
-const string SnapMapper::LEGACY_MAPPING_PREFIX = "MAP_";
 const string SnapMapper::MAPPING_PREFIX = "SNA_";
 const string SnapMapper::OBJECT_PREFIX = "OBJ_";
 
@@ -53,14 +52,6 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
   mapped to a particular snapshot, and (2) from object to snaps, so we
   can identify which reverse mappings exist for any given object (and,
   e.g., clean up on deletion).
-
-  "MAP_"
-  + ("%016x" % snapid)
-  + "_"
-  + (".%x" % shard_id)
-  + "_"
-  + hobject_t::to_str() ("%llx.%8x.%lx.name...." % pool, hash, snap)
-  -> SnapMapping::Mapping { snap, hoid }
 
   "SNA_"
   + ("%lld" % poolid)
@@ -990,122 +981,5 @@ void SnapMapper::Scrubber::run()
   dout(10) << __func__ << " end, found " << stray.size() << " stray" << dendl;
   psit = ObjectMap::ObjectMapIterator();
   mapit = ObjectMap::ObjectMapIterator();
-}
-#endif // !WITH_SEASTAR
-
-
-// -------------------------------------
-// legacy conversion/support
-
-string SnapMapper::get_legacy_prefix(snapid_t snap)
-{
-  ceph_assert(snap != CEPH_NOSNAP && snap != CEPH_SNAPDIR);
-  return fmt::sprintf("%s%.16X_",
-		      LEGACY_MAPPING_PREFIX,
-		      static_cast<uint64_t>(snap));
-}
-
-string SnapMapper::to_legacy_raw_key(
-  const pair<snapid_t, hobject_t> &in)
-{
-  return get_legacy_prefix(in.first) + shard_prefix + in.second.to_str();
-}
-
-bool SnapMapper::is_legacy_mapping(const string &to_test)
-{
-  return to_test.substr(0, LEGACY_MAPPING_PREFIX.size()) ==
-    LEGACY_MAPPING_PREFIX;
-}
-
-#ifndef WITH_SEASTAR
-/* Octopus modified the SnapMapper key format from
- *
- *  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
- *
- * to
- *
- *  <MAPPING_PREFIX><pool>_<snapid>_<shardid>_<hobject_t::to_str()>
- *
- * We can't reconstruct the new key format just from the value since the
- * Mapping object contains an hobject rather than a ghobject. Instead,
- * we exploit the fact that the new format is identical starting at <snapid>.
- *
- * Note that the original version of this conversion introduced in 94ebe0ea
- * had a crucial bug which essentially destroyed legacy keys by mapping
- * them to
- *
- *  <MAPPING_PREFIX><poolid>_<snapid>_
- *
- * without the object-unique suffix.
- * See https://tracker.ceph.com/issues/56147
- */
-std::string SnapMapper::convert_legacy_key(
-  const std::string& old_key,
-  const ceph::buffer::list& value)
-{
-  auto old = from_raw(make_pair(old_key, value));
-  std::string object_suffix = old_key.substr(
-    SnapMapper::LEGACY_MAPPING_PREFIX.length());
-  return SnapMapper::MAPPING_PREFIX + std::to_string(old.second.pool)
-    + "_" + object_suffix;
-}
-
-int SnapMapper::convert_legacy(
-  CephContext *cct,
-  ObjectStore *store,
-  ObjectStore::CollectionHandle& ch,
-  ghobject_t hoid,
-  unsigned max)
-{
-  uint64_t n = 0;
-
-  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
-  if (!iter) {
-    return -EIO;
-  }
-
-  auto start = ceph::mono_clock::now();
-
-  iter->upper_bound(SnapMapper::LEGACY_MAPPING_PREFIX);
-  map<string,ceph::buffer::list> to_set;
-  while (iter->valid()) {
-    bool valid = SnapMapper::is_legacy_mapping(iter->key());
-    if (valid) {
-      to_set.emplace(
-	convert_legacy_key(iter->key(), iter->value()),
-	iter->value());
-      ++n;
-      iter->next();
-    }
-    if (!valid || !iter->valid() || to_set.size() >= max) {
-      ObjectStore::Transaction t;
-      t.omap_setkeys(ch->cid, hoid, to_set);
-      int r = store->queue_transaction(ch, std::move(t));
-      ceph_assert(r == 0);
-      to_set.clear();
-      if (!valid) {
-	break;
-      }
-      dout(10) << __func__ << " converted " << n << " keys" << dendl;
-    }
-  }
-
-  auto end = ceph::mono_clock::now();
-
-  dout(1) << __func__ << " converted " << n << " keys in "
-	  << timespan_str(end - start) << dendl;
-
-  // remove the old keys
-  {
-    ObjectStore::Transaction t;
-    string end = SnapMapper::LEGACY_MAPPING_PREFIX;
-    ++end[end.size()-1]; // turn _ to whatever comes after _
-    t.omap_rmkeyrange(ch->cid, hoid,
-		      SnapMapper::LEGACY_MAPPING_PREFIX,
-		      end);
-    int r = store->queue_transaction(ch, std::move(t));
-    ceph_assert(r == 0);
-  }
-  return 0;
 }
 #endif // !WITH_SEASTAR
