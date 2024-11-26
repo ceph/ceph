@@ -791,7 +791,10 @@ public:
    *                object's OMAP or till the iteration is stopped
    *                by `STOP`. Please note that if there is no such
    *                entry, `visitor` will be called 0 times.
-   * @return error code, zero on success
+   * @return  - error code (negative value) on failure,
+   *          - positive value when the iteration has been
+   *            stopped (omap_iter_ret_t::STOP) by the callable,
+   *          - 0 otherwise.
    */
   virtual int omap_iterate(
     CollectionHandle &c,
