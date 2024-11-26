@@ -699,4 +699,13 @@
    fun:exit
    fun:(below main)
 }
-
+{
+   tracker #65779: __trans_list_add annoyance
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:__trans_list_add
+   ...
+   fun:_dl_init
+   ...
+}
