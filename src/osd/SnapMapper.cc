@@ -156,42 +156,54 @@ int OSDriver::get_keys(
 }
 
 int OSDriver::get_next(
-  const std::string &key,
+  const std::string &seek_key,
   std::pair<std::string, ceph::buffer::list> *next)
 {
-  ObjectMap::ObjectMapIterator iter =
-    os->get_omap_iterator(ch, hoid);
-  if (!iter) {
+  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+  const auto result = os->omap_iterate(
+    ch, hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = seek_key,
+      .seek_type = omap_iter_seek_t::UPPER_BOUND
+    },
+    [next] (std::string_view key, std::string_view value) mutable {
+      next->first = key;
+      next->second.clear();
+      next->second.append(value);
+      return ObjectStore::omap_iter_ret_t::STOP;
+    });
+  if (result < 0) {
     ceph_abort();
-    return -EINVAL;
-  }
-  iter->upper_bound(key);
-  if (iter->valid()) {
-    if (next)
-      *next = make_pair(iter->key(), iter->value());
-    return 0;
-  } else {
+  } else if (!result) {
     return -ENOENT;
+  } else {
+    return 0; // found and STOPped
   }
 }
 
 int OSDriver::get_next_or_current(
-  const std::string &key,
+  const std::string &seek_key,
   std::pair<std::string, ceph::buffer::list> *next_or_current)
 {
-  ObjectMap::ObjectMapIterator iter =
-    os->get_omap_iterator(ch, hoid);
-  if (!iter) {
+  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+  const auto result = os->omap_iterate(
+    ch, hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = seek_key,
+      .seek_type = omap_iter_seek_t::LOWER_BOUND
+    },
+    [next_or_current] (std::string_view key, std::string_view value) mutable {
+      next_or_current->first = key;
+      next_or_current->second.clear();
+      next_or_current->second.append(value);
+      return ObjectStore::omap_iter_ret_t::STOP;
+    });
+  if (result < 0) {
     ceph_abort();
-    return -EINVAL;
-  }
-  iter->lower_bound(key);
-  if (iter->valid()) {
-    if (next_or_current)
-      *next_or_current = make_pair(iter->key(), iter->value());
-    return 0;
-  } else {
+  } else if (!result) {
     return -ENOENT;
+  } else {
+    return 0; // found and STOPped
   }
 }
 #endif // WITH_SEASTAR
