@@ -683,4 +683,27 @@ export class CdValidators {
       return { invalidAddress: !(addressTest && portTest) };
     };
   }
+
+  /**
+   * Validator function to validate endpoints, allowing FQDN, IPv4, and IPv6 addresses with ports.
+   * Accepts multiple endpoints separated by commas.
+   */
+  static endpointValidator(): ValidatorFn {
+    const ENDPOINT_PATTERN = /^(https?:\/\/)?((\[[a-f0-9:]+\])|([a-zA-Z0-9-]+)|([a-zA-Z0-9-]+\.[a-zA-Z]{2,})|(\d{1,3}\.){3}\d{1,3})(:\d{2,5})?$/i;
+    return (control: AbstractControl): Record<string, boolean> | null => {
+      const value = control.value;
+      if (!value) {
+        return null;
+      }
+      const endpoints = value.split(',');
+      for (const endpoint of endpoints) {
+        const trimmedEndpoint = endpoint.trim();
+        const isValid = ENDPOINT_PATTERN.test(trimmedEndpoint);
+        if (!isValid) {
+          return { invalidEndpoint: true };
+        }
+      }
+      return null;
+    };
+  }
 }
