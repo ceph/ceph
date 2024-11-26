@@ -2721,6 +2721,13 @@ SeaStore::read_meta(const std::string& key)
   );
 }
 
+seastar::future<std::string> SeaStore::get_default_device_class()
+{
+  using crimson::common::get_conf;
+  std::string type = get_conf<std::string>("seastore_main_device_type");
+  return seastar::make_ready_future<std::string>(type);
+}
+
 uuid_d SeaStore::Shard::get_fsid() const
 {
   return device->get_meta().seastore_id;

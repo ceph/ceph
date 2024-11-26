@@ -143,6 +143,12 @@ CyanStore::list_collections()
   });
 }
 
+seastar::future<std::string>
+CyanStore::get_default_device_class()
+{
+  return seastar::make_ready_future<std::string>("");
+}
+
 CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 {
   static const char read_file_errmsg[]{"read_file"};
