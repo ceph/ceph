@@ -1298,8 +1298,7 @@ TEST_F(TestInternal, DiffIterateCloneOverwrite) {
                                               cls::rbd::UserSnapshotNamespace(),
                                               "one"));
   ASSERT_EQ(0, librbd::api::DiffIterate<>::diff_iterate(
-    ictx, cls::rbd::UserSnapshotNamespace(), nullptr, 0, size, true, false,
-    iterate_cb, (void *)&diff));
+    ictx, 0, 0, size, true, false, iterate_cb, (void *)&diff));
   ASSERT_EQ(one, diff);
 }
 
