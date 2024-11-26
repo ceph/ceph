@@ -1348,8 +1348,7 @@ class RgwMultisiteAutomation:
 
 class RgwMultisite:
     def migrate_to_multisite(self, realm_name: str, zonegroup_name: str, zone_name: str,
-                             zonegroup_endpoints: str, zone_endpoints: str, access_key: str,
-                             secret_key: str):
+                             zonegroup_endpoints: str, zone_endpoints: str, username: str):
         rgw_realm_create_cmd = ['realm', 'create', '--rgw-realm', realm_name, '--default']
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_realm_create_cmd, False)
@@ -1411,18 +1410,34 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-
-        if access_key and secret_key:
-            rgw_zone_modify_cmd = ['zone', 'modify', '--rgw-zone', zone_name,
-                                   '--access-key', access_key, '--secret', secret_key]
-            try:
-                exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_modify_cmd)
-                if exit_code > 0:
-                    raise DashboardException(e=err, msg='Unable to modify zone',
-                                             http_status_code=500, component='rgw')
-            except SubprocessError as error:
-                raise DashboardException(error, http_status_code=500, component='rgw')
         self.update_period()
+
+        try:
+            user_details = self.create_system_user(username, zone_name)
+            if user_details:
+                keys = user_details['keys'][0]
+                access_key = keys['access_key']
+                secret_key = keys['secret_key']
+                if access_key and secret_key:
+                    self.modify_zone(zone_name=zone_name,
+                                     zonegroup_name=zonegroup_name,
+                                     default='true', master='true',
+                                     endpoints=zone_endpoints,
+                                     access_key=keys['access_key'],
+                                     secret_key=keys['secret_key'])
+                else:
+                    raise DashboardException(msg='Access key or secret key is missing',
+                                             http_status_code=500, component='rgw')
+        except Exception as e:
+            raise DashboardException(msg='Failed to modify zone or create system user: %s' % e,
+                                     http_status_code=500, component='rgw')
+
+        try:
+            rgw_service_manager = RgwServiceManager()
+            rgw_service_manager.restart_rgw_daemons_and_set_credentials()
+        except Exception as e:
+            raise DashboardException(msg='Failed to restart RGW daemon: %s' % e,
+                                     http_status_code=500, component='rgw')
 
     def create_realm(self, realm_name: str, default: bool):
         rgw_realm_create_cmd = ['realm', 'create']

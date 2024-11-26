@@ -11,7 +11,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { RgwRealm, RgwZone, RgwZonegroup, SystemKey } from '../models/rgw-multisite';
+import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 
@@ -135,8 +135,9 @@ export class RgwMultisiteMigrateComponent implements OnInit {
           Validators.required
         ]
       ),
-      access_key: new UntypedFormControl(null),
-      secret_key: new UntypedFormControl(null)
+      username: new UntypedFormControl(null, {
+        validators: [Validators.required]
+      })
     });
   }
 
@@ -174,21 +175,21 @@ export class RgwMultisiteMigrateComponent implements OnInit {
     this.zone = new RgwZone();
     this.zone.name = values['zoneName'];
     this.zone.endpoints = values['zone_endpoints'];
-    this.zone.system_key = new SystemKey();
-    this.zone.system_key.access_key = values['access_key'];
-    this.zone.system_key.secret_key = values['secret_key'];
-    this.rgwMultisiteService.migrate(this.realm, this.zonegroup, this.zone).subscribe(
-      () => {
-        this.notificationService.show(
-          NotificationType.success,
-          $localize`Migration done successfully`
-        );
-        this.submitAction.emit();
-        this.activeModal.close();
-      },
-      () => {
-        this.notificationService.show(NotificationType.error, $localize`Migration failed`);
-      }
-    );
+    this.rgwMultisiteService
+      .migrate(this.realm, this.zonegroup, this.zone, values['username'])
+      .subscribe(
+        () => {
+          this.rgwMultisiteService.setRestartGatewayMessage(false);
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`Migration done successfully`
+          );
+          this.submitAction.emit();
+          this.activeModal.close();
+        },
+        () => {
+          this.notificationService.show(NotificationType.error, $localize`Migration failed`);
+        }
+      );
   }
 }
