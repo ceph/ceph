@@ -76,6 +76,10 @@ public:
     return _minimum_to_decode(want_to_read, available_chunks, minimum);
   }
 
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION;
+  }
+
   unsigned int get_chunk_count() const override {
     return DATA_CHUNKS + CODING_CHUNKS;
   }

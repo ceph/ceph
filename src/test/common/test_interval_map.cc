@@ -335,3 +335,18 @@ TYPED_TEST(IntervalMapTest, merge) {
   m.insert(10, 4, gen(4));
   m.insert(11, 1, gen(1));
 }
+
+TYPED_TEST(IntervalMapTest, contains) {
+  USING_WITH_MERGE;
+  imap m;
+  m.insert(10, 4, gen(4));
+
+  ASSERT_TRUE(m.begin().contains(10,4));
+  ASSERT_TRUE(m.begin().contains(11,3));
+  ASSERT_TRUE(m.begin().contains(10,3));
+  ASSERT_TRUE(m.begin().contains(11,2));
+  ASSERT_FALSE(m.begin().contains(8,2));
+  ASSERT_FALSE(m.begin().contains(14,2));
+  ASSERT_FALSE(m.begin().contains(8,3));
+  ASSERT_FALSE(m.begin().contains(13,2));
+}
