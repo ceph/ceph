@@ -337,9 +337,10 @@ int AsyncMessengerSocketHook::call(
   return -ENOSYS;
 }
 
-void AsyncMessengerSocketHook::add_messenger(
+bool AsyncMessengerSocketHook::add_messenger(
     const std::string& name, AsyncMessenger& msgr) {
-  m_msgrs.try_emplace(name, &msgr);
+  const auto result = m_msgrs.try_emplace(name, &msgr);
+  return result.second;
 }
 
 void AsyncMessengerSocketHook::remove_messenger(
@@ -392,25 +393,45 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
 
   cct->modify_msgr_hook(
       [&]() {
-	auto hook = new AsyncMessengerSocketHook(*this, mname);
-	const int asok_ret = cct->get_admin_socket()->register_command(
-	    AsyncMessengerSocketHook::COMMAND, hook,
-	    "dump messenger status");
-	if (asok_ret != 0) {
-	  ldout(cct, 0) << __func__ << " messenger asok command \""
-                             << AsyncMessengerSocketHook::COMMAND
-                             << "\" failed with" << asok_ret << dendl;
-	}
-	return hook;
+        auto hook = new AsyncMessengerSocketHook(*this, mname);
+        const int asok_ret = cct->get_admin_socket()->register_command(
+            AsyncMessengerSocketHook::COMMAND, hook, "dump messenger status");
+        if (asok_ret != 0) {
+          ldout(cct, 0) << __func__ << " messenger asok command \""
+                        << AsyncMessengerSocketHook::COMMAND << "\" failed with"
+                        << asok_ret << dendl;
+        }
+        return hook;
       },
       [&](AdminSocketHook* ptr) {
-	if (auto hook = dynamic_cast<AsyncMessengerSocketHook*>(ptr)) {
-	  hook->add_messenger(mname, *this);
-	} else {
-	  ceph_abort(
-	      "BUG: messenger hook obj set, but not of type "
-	      "AsyncMessengerSocketHook");
-	}
+        if (auto hook = dynamic_cast<AsyncMessengerSocketHook*>(ptr)) {
+          // Name collisions may occur. A common case is RGW running
+          // multiple librados connections - each with a "radosclient"
+          // messenger.
+          std::string msgr_key(mname);
+          if (mname == "radosclient") {  // librados
+            msgr_key.append("-");
+            msgr_key.append(std::to_string(_nonce));
+          }
+          bool added = hook->add_messenger(msgr_key, *this);
+          if (!added) {
+            msgr_key.append("-");
+            msgr_key.append(std::to_string(_nonce));
+          }
+          added = hook->add_messenger(msgr_key, *this);
+          if (!added) {
+            ldout(cct, 10)
+                << __func__ << " registering messenger " << mname
+                << " using key " << msgr_key
+                << " failed due to a name collision. "
+                   "messenger won't be available to \"messenger dump\""
+                << dendl;
+          }
+        } else {
+          ceph_abort(
+              "BUG: messenger hook obj set, but not of type "
+              "AsyncMessengerSocketHook");
+        }
       });
 }
 
