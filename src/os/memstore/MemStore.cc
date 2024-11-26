@@ -631,6 +631,7 @@ int MemStore::omap_iterate(
     return -ENOENT;
   }
 
+  bool more = false;
   {
     std::lock_guard lock{o->omap_mutex};
 
@@ -650,6 +651,7 @@ int MemStore::omap_iterate(
       omap_iter_ret_t ret =
         f(it->first, std::string_view{it->second.c_str(), it->second.length()});
       if (ret == omap_iter_ret_t::STOP) {
+        more = true;
         break;
       } else if (ret == omap_iter_ret_t::NEXT) {
         ++it;
@@ -658,7 +660,7 @@ int MemStore::omap_iterate(
       }
     }
   }
-  return 0;
+  return more;
 }
 
 
