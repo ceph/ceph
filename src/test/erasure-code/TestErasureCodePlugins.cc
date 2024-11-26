@@ -55,6 +55,14 @@ public:
   {
     return erasure_code->get_chunk_count();
   }
+  unsigned int get_w()
+  {
+    return std::stoul(profile["w"]);
+  }
+  unsigned int get_packetsize()
+  {
+    return std::stoul(profile["packetsize"]);
+  }
   void generate_chunk(bufferlist& bl)
   {
     ceph::util::random_number_generator<char> random_generator = ceph::util::random_number_generator<char>();
@@ -435,6 +443,16 @@ TEST_P(PluginTest,ParityDelta_MultipleDeltaMultipleParity)
     }
   }
   EXPECT_EQ(parity_matches, true);
+}
+TEST_P(PluginTest,MinimumGranularity)
+{
+  initialize();
+  if (profile.find("w") != profile.end() && profile.find("packetsize") != profile.end()) {
+    EXPECT_EQ(erasure_code->get_minimum_granularity(), get_w() * get_packetsize());
+  }
+  else {
+    EXPECT_EQ(erasure_code->get_minimum_granularity(), 1);
+  }
 }
 INSTANTIATE_TEST_SUITE_P(
   PluginTests,
