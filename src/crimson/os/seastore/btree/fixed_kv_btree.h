@@ -15,10 +15,6 @@
 #include "crimson/os/seastore/btree/btree_range_pin.h"
 #include "crimson/os/seastore/root_block.h"
 
-namespace crimson::os::seastore::lba_manager::btree {
-struct lba_map_val_t;
-}
-
 namespace crimson::os::seastore {
 
 bool is_valid_child_ptr(ChildableCachedExtent* child);
@@ -194,7 +190,7 @@ public:
       assert(!is_leaf_end());
       auto ret = leaf.node->iter_idx(leaf.pos).get_val();
       if constexpr (
-        std::is_same_v<crimson::os::seastore::lba_manager::btree::lba_map_val_t,
+        std::is_same_v<crimson::os::seastore::lba_map_val_t,
                        node_val_t>) {
         if (ret.pladdr.is_paddr()) {
           ret.pladdr = ret.pladdr.get_paddr().maybe_relative_to(

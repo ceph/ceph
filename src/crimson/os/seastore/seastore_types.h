@@ -1504,6 +1504,90 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t);
 using btree_iter_version_t = uint32_t;
 
 /**
+ * lba_map_val_t
+ *
+ * struct representing a single lba mapping
+ */
+struct lba_map_val_t {
+  extent_len_t len = 0;  ///< length of mapping
+  pladdr_t pladdr;         ///< physical addr of mapping or
+			   //	laddr of a physical lba mapping(see btree_lba_manager.h)
+  extent_ref_count_t refcount = 0; ///< refcount
+  uint32_t checksum = 0; ///< checksum of original block written at paddr (TODO)
+
+  lba_map_val_t() = default;
+  lba_map_val_t(
+    extent_len_t len,
+    pladdr_t pladdr,
+    extent_ref_count_t refcount,
+    uint32_t checksum)
+    : len(len), pladdr(pladdr), refcount(refcount), checksum(checksum) {}
+  bool operator==(const lba_map_val_t&) const = default;
+};
+
+std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
+
+/**
+ * lba_map_val_le_t
+ *
+ * On disk layout for lba_map_val_t.
+ */
+struct __attribute__((packed)) lba_map_val_le_t {
+  extent_len_le_t len = init_extent_len_le(0);
+  pladdr_le_t pladdr;
+  extent_ref_count_le_t refcount{0};
+  ceph_le32 checksum{0};
+
+  lba_map_val_le_t() = default;
+  lba_map_val_le_t(const lba_map_val_le_t &) = default;
+  explicit lba_map_val_le_t(const lba_map_val_t &val)
+    : len(init_extent_len_le(val.len)),
+      pladdr(pladdr_le_t(val.pladdr)),
+      refcount(val.refcount),
+      checksum(val.checksum) {}
+
+  operator lba_map_val_t() const {
+    return lba_map_val_t{ len, pladdr, refcount, checksum };
+  }
+};
+
+struct backref_map_val_t {
+  extent_len_t len = 0;	///< length of extents
+  laddr_t laddr = L_ADDR_MIN; ///< logical address of extents
+  extent_types_t type = extent_types_t::ROOT;
+
+  backref_map_val_t() = default;
+  backref_map_val_t(
+    extent_len_t len,
+    laddr_t laddr,
+    extent_types_t type)
+    : len(len), laddr(laddr), type(type) {}
+
+  bool operator==(const backref_map_val_t& rhs) const noexcept {
+    return len == rhs.len && laddr == rhs.laddr;
+  }
+};
+
+std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val);
+
+struct __attribute__((packed)) backref_map_val_le_t {
+  extent_len_le_t len = init_extent_len_le(0);
+  laddr_le_t laddr = laddr_le_t(L_ADDR_MIN);
+  extent_types_le_t type = 0;
+
+  backref_map_val_le_t() = default;
+  backref_map_val_le_t(const backref_map_val_le_t &) = default;
+  explicit backref_map_val_le_t(const backref_map_val_t &val)
+    : len(init_extent_len_le(val.len)),
+      laddr(val.laddr),
+      type(extent_types_le_t(val.type)) {}
+
+  operator backref_map_val_t() const {
+    return backref_map_val_t{len, laddr, (extent_types_t)type};
+  }
+};
+
+/**
  * rewrite_gen_t
  *
  * The goal is to group the similar aged extents in the same segment for better
@@ -3063,6 +3147,8 @@ template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ost
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::pladdr_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref_map_val_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::device_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};

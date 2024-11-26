@@ -112,6 +112,22 @@ std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
   }
 }
 
+std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
+{
+  return out << "lba_map_val_t("
+             << v.pladdr
+             << "~" << v.len
+             << ", refcount=" << v.refcount
+             << ", checksum=" << v.checksum
+             << ")";
+}
+
+std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val) {
+  return out << "backref_map_val_t("
+	     << val.laddr
+	     << "~" << val.len << ")";
+}
+
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 {
   auto id = rhs.get_device_id();
