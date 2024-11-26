@@ -6,13 +6,31 @@
 # It may repeat some of the tests from rbd_mirror_group.sh, but only those that are known to work
 # It has a number of extra tests that imclude multiple images in a group
 #
+# shellcheck disable=SC2034
 
 export RBD_MIRROR_NOCLEANUP=1
 export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
 export RBD_MIRROR_SHOW_CMD=1
 export RBD_MIRROR_MODE=snapshot
 
+group0=test-group0
+group1=test-group1
+pool0=mirror
+pool1=mirror_parent
+image_prefix=test-image
+
+# save and clear the cli args (can't call rbd_mirror_helpers with these defined)
+args=("$@")
+set --
+
 . $(dirname $0)/rbd_mirror_helpers.sh
+
+# create group with images then enable mirroring.  Remove group without disabling mirroring
+declare -a test_create_group_with_images_then_mirror_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 'false')
+# create group with images then enable mirroring.  Disable mirroring then remove group
+declare -a test_create_group_with_images_then_mirror_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 'true')
+
+test_create_group_with_images_then_mirror_scenarios=2
 
 test_create_group_with_images_then_mirror()
 {
@@ -62,6 +80,13 @@ test_create_group_with_images_then_mirror()
 
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" 5
 }
+
+# create group then enable mirroring before adding images to the group.  Disable mirroring before removing group
+declare -a test_create_group_mirror_then_add_images_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 'false')
+# create group then enable mirroring before adding images to the group.  Remove group with mirroring enabled
+declare -a test_create_group_mirror_then_add_images_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 'true')
+
+test_create_group_mirror_then_add_images_scenarios=2
 
 test_create_group_mirror_then_add_images()
 {
@@ -114,6 +139,13 @@ test_create_group_mirror_then_add_images()
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" 5
 }
 
+#test empty group
+declare -a test_empty_group_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}")
+#test empty group with namespace
+declare -a test_empty_group_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}/${NS1}" "${group0}")
+
+test_empty_group_scenarios=2
+
 test_empty_group()
 {
   local primary_cluster=$1
@@ -154,6 +186,11 @@ test_empty_group()
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
   check_daemon_running "${secondary_cluster}"
 }
+
+# test two empty groups
+declare -a test_empty_groups_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${group1}")
+
+test_empty_groups_scenarios=1
 
 test_empty_groups()
 {
@@ -198,6 +235,11 @@ test_empty_groups()
   check_daemon_running "${secondary_cluster}"
 }
 
+# add image from a different pool to group and test replay
+declare -a test_images_different_pools_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${pool1}" "${group0}" "${image_prefix}")
+
+test_images_different_pools_scenarios=1
+
 # This test is not MVP
 test_images_different_pools()
 {
@@ -239,6 +281,11 @@ test_images_different_pools()
   image_remove "${primary_cluster}" "${pool0}/${image_prefix}0"
   image_remove "${primary_cluster}" "${pool1}/${image_prefix}1"
 }
+
+# create regular group snapshots and test replay
+declare -a test_create_group_with_images_then_mirror_with_regular_snapshots_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}")
+
+test_create_group_with_images_then_mirror_with_regular_snapshots_scenarios=1
 
 test_create_group_with_images_then_mirror_with_regular_snapshots()
 {
@@ -296,6 +343,11 @@ test_create_group_with_images_then_mirror_with_regular_snapshots()
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" 5
 }
 
+# add a large image to group and test replay
+declare -a test_create_group_with_large_image_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}")
+
+test_create_group_with_large_image_scenarios=1
+
 test_create_group_with_large_image()
 {
   local primary_cluster=$1
@@ -341,6 +393,11 @@ test_create_group_with_large_image()
   image_remove "${primary_cluster}" "${pool0}/${image_prefix}"
 }
 
+# multiple images in group with io
+declare -a test_create_group_with_multiple_images_do_io_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}")
+
+test_create_group_with_multiple_images_do_io_scenarios=1
+
 test_create_group_with_multiple_images_do_io()
 {
   local primary_cluster=$1
@@ -365,14 +422,24 @@ test_create_group_with_multiple_images_do_io()
 
   local io_count=1024
   local io_size=4096
-  write_image "${primary_cluster}" "${pool}" "${image_prefix}0" "${io_count}" "${io_size}"
+
+  local loop_instance
+  for loop_instance in $(seq 0 $((5-1))); do
+    write_image "${primary_cluster}" "${pool}" "${image_prefix}${loop_instance}" "${io_count}" "${io_size}"
+  done
 
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}/${group}"
 
-exit 0
-  # TODO this test needs finishing.  The next function is not yet complete - see the TODO in it
-  test_group_and_image_sync_status "${secondary_cluster}" "${primary_cluster}" "${pool}/${group}" "${pool1}/${big_image}"
+  for loop_instance in $(seq 0 $((5-1))); do
+      compare_images "${primary_cluster}" "${secondary_cluster}" "${pool}" "${pool}" "${image_prefix}${loop_instance}"
+  done
 
+  for loop_instance in $(seq 0 $((5-1))); do
+    write_image "${primary_cluster}" "${pool}" "${image_prefix}${loop_instance}" "${io_count}" "${io_size}"
+  done
+
+  # TODO The next function is not yet complete - see the TODO in it
+#  test_group_and_image_sync_status "${secondary_cluster}" "${primary_cluster}" "${pool}/${group}" "${pool1}/${big_image}"
 
   snap='regular_snap'
   group_snap_create "${primary_cluster}" "${pool}/${group}" "${snap}"
@@ -380,6 +447,21 @@ exit 0
 
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group}"
   check_group_snap_exists "${secondary_cluster}" "${pool}/${group}" "${snap}"
+
+  for loop_instance in $(seq 0 $((5-1))); do
+      compare_images "${primary_cluster}" "${secondary_cluster}" "${pool}" "${pool}" "${image_prefix}${loop_instance}"
+  done
+
+  group_snap_remove "${primary_cluster}" "${pool}/${group}" "${snap}"
+  check_group_snap_doesnt_exist "${primary_cluster}" "${pool}/${group}" "${snap}"
+  # this next extra mirror_group_snapshot should not be needed - waiting for fix TODO
+  mirror_group_snapshot "${primary_cluster}" "${pool}/${group}"
+  mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group}"
+  check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group}" "${snap}"
+
+  for loop_instance in $(seq 0 $((5-1))); do
+      compare_images "${primary_cluster}" "${secondary_cluster}" "${pool}" "${pool}" "${image_prefix}${loop_instance}"
+  done
 
   mirror_group_disable "${primary_cluster}" "${pool}/${group}"
   group_remove "${primary_cluster}" "${pool}/${group}"
@@ -389,7 +471,51 @@ exit 0
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" 5
 }
 
-set -ex
+run_test()
+{
+  local test_name=$1
+  local test_scenario=$2
+
+  declare -n test_parameters="$test_name"_"$test_scenario"
+
+  testlog "TEST:$test_name scenario:$test_scenario parameters:" "${test_parameters[@]}"
+  "$test_name" "${test_parameters[@]}"
+}
+
+# exercise all scenarios that are defined for the specified test 
+run_test_scenarios()
+{
+  local test_name=$1
+
+  declare -n test_scenario_count="$test_name"_scenarios
+
+  local loop
+  for loop in $(seq 1 $test_scenario_count); do
+    run_test $test_name $loop
+  done
+}
+
+# exercise all scenarios for all tests
+run_tests()
+{
+  run_test_scenarios test_empty_group
+  # This next test is unreliable - image ends up in stopped - TODO enable
+  # run_test_scenarios test_create_group_mirror_then_add_images
+  run_test_scenarios test_create_group_with_images_then_mirror 
+  run_test_scenarios test_empty_groups 
+  # next test is not MVP - TODO
+  # run_test_scenarios test_images_different_pools
+  run_test_scenarios test_create_group_with_images_then_mirror_with_regular_snapshots
+  run_test_scenarios test_create_group_with_large_image
+  run_test_scenarios test_create_group_with_multiple_images_do_io
+  #TODO - test with mirrored images not in group
+}
+
+if [ -n "${RBD_MIRROR_SHOW_CMD}" ]; then
+  set -e
+else  
+  set -ex
+fi  
 
 # If the tmpdir or cluster conf file doesn't exist then assume that the cluster needs setting up
 if [ ! -d "${RBD_MIRROR_TEMDIR}" ] || [ ! -f "${RBD_MIRROR_TEMDIR}"'/cluster1.conf' ]
@@ -407,50 +533,22 @@ if [ -z "${pid}" ]
 then
     start_mirrors "${CLUSTER1}"
 fi
-check_daemon_running "${CLUSTER1}" 'restart'
+check_daemon_running "${CLUSTER1}"
 
-group0=test-group0
-group1=test-group1
-pool0=mirror
-pool1=mirror_parent
-image_prefix=test-image
+# restore the arguments from the cli
+set -- "${args[@]}"
 
-testlog "TEST: empty group"
-test_empty_group "${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}"
-
-testlog "TEST: empty group with namespace"
-test_empty_group "${CLUSTER2}" "${CLUSTER1}" "${pool0}/${NS1}" "${group0}"
-
-testlog "TEST: create group with images then enable mirroring.  Remove group without disabling mirroring"
-test_create_group_with_images_then_mirror "${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 'false'
-
-testlog "TEST: create group with images then enable mirroring.  Disable mirroring then remove group"
-test_create_group_with_images_then_mirror "${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 'true'
-
-testlog "TEST: create group then enable mirroring before adding images to the group.  Remove group without disabling mirroring"
-test_create_group_mirror_then_add_images "${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 'false'
-
-testlog "TEST: create group then enable mirroring before adding images to the group.  Disable mirroring then remove group"
-test_create_group_mirror_then_add_images "${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 'true'
-
-testlog "TEST: two empty groups"
-test_empty_groups "${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${group1}"
-
-# testlog "TEST: add image from a different pool to group and test replay"
-# different pools - not MVP
-# test_images_different_pools "${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${pool1}" "${group0}" "${image_prefix}"
-
-testlog "TEST: create regular group snapshots and test replay"
-test_create_group_with_images_then_mirror_with_regular_snapshots "${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}"
-
-testlog "TEST: add a large image to group and test replay"
-test_create_group_with_large_image "${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}"
-
-#TODO - test with mirrored images not in group
-
-: ' # TODO next test needs finishing
-testlog "TEST: multiple images in group with io"
-test_create_group_with_multiple_images_do_io "${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}"
-'
+# loop count is specified as first argument. default value is 1
+loop_count="${1:-1}"
+for loop in $(seq 1 "${loop_count}"); do
+  if [ "$#" -gt 2 ]
+  then
+    # second arg is test_name
+    # third ard is scenario number
+    run_test "$2" "$3"
+  else
+    run_tests
+  fi
+done
 
 exit 0

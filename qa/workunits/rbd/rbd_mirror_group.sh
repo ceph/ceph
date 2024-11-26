@@ -7,7 +7,11 @@
 # socket, temporary files, and launches rbd-mirror daemon.
 #
 
-set -ex
+if [ -n "${RBD_MIRROR_SHOW_CMD}" ]; then
+  set -e
+else  
+  set -ex
+fi  
 
 MIRROR_POOL_MODE=image
 MIRROR_IMAGE_MODE=snapshot
