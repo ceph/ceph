@@ -81,7 +81,7 @@ class AsyncMessengerSocketHook : public AdminSocketHook {
   int call(
       std::string_view command, const cmdmap_t& cmdmap, const bufferlist&,
       Formatter* f, std::ostream& errss, ceph::buffer::list& out) override;
-  void add_messenger(const std::string& name, AsyncMessenger& msgr);
+  bool add_messenger(const std::string& name, AsyncMessenger& msgr);
   void remove_messenger(AsyncMessenger& msgr);
   std::list<std::string> messengers() const;
 };
