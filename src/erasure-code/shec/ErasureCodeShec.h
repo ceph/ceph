@@ -139,6 +139,10 @@ public:
 			  char **coding,
 			  int blocksize) override;
   unsigned get_alignment() const override;
+  size_t get_minimum_granularity() override
+  {
+    return 1;
+  }
   void prepare() override;
 private:
   int parse(const ceph::ErasureCodeProfile &profile) override;

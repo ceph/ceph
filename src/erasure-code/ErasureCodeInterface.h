@@ -328,6 +328,15 @@ namespace ceph {
                                             std::set<int> *minimum) = 0;
 
     /**
+     * Return the minimum number of bytes that the plugin and technique
+     * support for partial writes. This is the minimum size of update
+     * to coding chunks that the particular technique supports.
+     *
+     * @return minimum number of bytes.
+     */
+    virtual size_t get_minimum_granularity() = 0;
+
+    /**
      * Encode the content of **in** and store the result in
      * **encoded**. All buffers pointed to by **encoded** have the
      * same size. The **encoded** map contains at least all chunk
