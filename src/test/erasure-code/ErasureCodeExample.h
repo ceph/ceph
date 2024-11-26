@@ -92,6 +92,10 @@ public:
     return ( object_size / DATA_CHUNKS ) + 1;
   }
 
+  unsigned int get_minimum_granularity() override {
+    return 1;
+  }
+
   int encode(const std::set<int> &want_to_encode,
                      const bufferlist &in,
                      std::map<int, bufferlist> *encoded) override {
