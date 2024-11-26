@@ -112,6 +112,11 @@ class CloneProgressReporter:
         self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clones'
 
     def initiate_reporting(self):
+        if self.volclient.cloner.disable_clone_progress_bars:
+            log.debug('mgr/vol/disable_clone_progress_bars is true, not '
+                      'initiating printing of clone progress bars.')
+            return
+
         if self.update_task.is_alive():
             log.info('progress reporting thread is already alive, not '
                      'initiating it again')
@@ -231,6 +236,13 @@ class CloneProgressReporter:
         '''
         clones = self._get_info_for_all_clones()
         if not clones:
+            self.finish()
+            return
+
+        log.info('here123 1')
+        if self.volclient.cloner.disable_clone_progress_bars:
+            log.debug('mgr/vol/disable_clone_progress_bars is true, clone '
+                      'progress bars won\'t be printed.')
             self.finish()
             return
 
