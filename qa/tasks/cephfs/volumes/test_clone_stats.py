@@ -7,7 +7,7 @@ from io import StringIO
 from tasks.cephfs.test_volumes import TestVolumesHelper
 
 from teuthology.contextutil import safe_while
-from teuthology.exceptions import CommandFailedError
+from teuthology.exceptions import CommandFailedError, MaxWhileTries
 
 log = getLogger(__name__)
 
@@ -157,7 +157,7 @@ class CloneProgressReporterHelper(TestVolumesHelper):
 
         return pevs
 
-    def wait_for_both_progress_bars_to_appear(self, sleep=1, iters=20):
+    def wait_for_clone_progress_bars(self, NUM_OF_BARS, sleep=0.5, iters=10):
         pevs = []
         msg = (f'Waited for {iters*sleep} seconds but couldn\'t 2 progress '
                 'bars in output of "ceph status" command.')
@@ -167,13 +167,7 @@ class CloneProgressReporterHelper(TestVolumesHelper):
                 o = json.loads(o)
                 pevs = o['progress_events']
                 pevs = self.filter_in_only_clone_pevs(pevs)
-                if len(pevs) == 2:
-                    v = tuple(pevs.values())
-                    if 'ongoing+pending' in v[1]['message']:
-                        self.assertIn('ongoing', v[0]['message'])
-                    else:
-                        self.assertIn('ongoing', v[1]['message'])
-                        self.assertIn('ongoing+pending', v[0]['message'])
+                if len(pevs) == NUM_OF_BARS:
                     break
 
     def get_onpen_count(self, pev):
@@ -867,3 +861,150 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
     # since other tests in this class also test this feature.
     def test_for_6_ongoing_clones(self):
         self._run_test(MAX_THREADS=6, NUM_OF_CLONES=24)
+
+
+class TestDisableCloneProgressBars(CloneProgressReporterHelper):
+    '''
+    Tests related to config option mgr/volumes/disable_clone_progress_bars.
+    '''
+
+    DISABLE_BAR_CONF_OPT = 'mgr/volumes/disable_clone_progress_bars'
+
+    def tearDown(self):
+        self.config_set('mgr', self.DISABLE_BAR_CONF_OPT, 'false')
+        super(TestDisableCloneProgressBars, self).tearDown()
+
+    def ensure_no_clone_progress_bar_was_printed(self, CLONES):
+        '''
+        Ensure that no clone progress bar was printed throughout the life of
+        clone jobs.
+        '''
+        try:
+            with safe_while(tries=10, sleep=2) as proceed:
+                while proceed():
+                    pevs = self.get_pevs_from_ceph_status(CLONES, check=False)
+                    self.assertEqual(len(pevs), 0)
+        # exception MaxWhileTries is expected since there is no break statement
+        # to break out of this safe_while.
+        except MaxWhileTries:
+            pass
+        else:
+            raise RuntimeError('MaxWhileTries was expected but wasn\'t raised.')
+
+    def test_for_1_progress_bar(self):
+        '''
+        When number of clone jobs is less than max_concurrent_jobs, 1 progress
+        bar is printed. Test that this progress bar is not printed when
+        disable_clone_progress_bars is true.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(4)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.config_set('mgr', self.DISABLE_BAR_CONF_OPT, 'true')
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        self.ensure_no_clone_progress_bar_was_printed(c)
+
+    def test_for_2_progress_bars(self):
+        '''
+        When number of clone jobs is more than max_concurrent_jobs, 2 progress
+        bars are printed. Test that these progress bars are not printed when
+        disable_clone_progress_bars is true.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(7)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.config_set('mgr', self.DISABLE_BAR_CONF_OPT, 'true')
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        self.ensure_no_clone_progress_bar_was_printed(c)
+
+    def wait_for_bars_to_removed(self, CLONES, tries=10, sleep=0.5):
+        with safe_while(tries=tries, sleep=sleep) as proceed:
+            while proceed():
+                pevs = self.get_pevs_from_ceph_status(CLONES, check=False)
+                if len(pevs) == 0:
+                    break
+                else:
+                    log.info(f'found {len(pevs)} clone progress bar instead of '
+                              'zero')
+
+    def test_for_1_progress_bar_midway(self):
+        '''
+        When number of clone jobs is less than max_concurrent_jobs, 1 progress
+        bars is printed. Test that the progress bar is printed by default since
+        disable_clone_progress_bars is false by default. Also test that the bar
+        is removed from the output of "ceph status" command as soon as
+        disable_clone_progress_bars is set to true. In this test, it is set to
+        true midway of lifetime of the clone jobs.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(4)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        self.wait_for_clone_progress_bars(1)
+        self.config_set('mgr', self.DISABLE_BAR_CONF_OPT, 'true')
+
+        self.wait_for_bars_to_removed(c)
+        self.ensure_no_clone_progress_bar_was_printed(c)
+
+    def test_for_2_progress_bars_midway(self):
+        '''
+        When number of clone jobs is more than max_concurrent_jobs, 2 progress
+        bars are printed. Test that these progress bars are printed by default
+        since disable_clone_progress_bars is false by default. Also test that
+        these progress bars are removed from "ceph status" output as soon as
+        disable_clone_progress_bars is set to true. In this test, it is set to
+        true midway of the lifetime of the clone jobs.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(7)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        self.wait_for_clone_progress_bars(2)
+        self.config_set('mgr', self.DISABLE_BAR_CONF_OPT, 'true')
+
+        self.wait_for_bars_to_removed(c)
+        self.ensure_no_clone_progress_bar_was_printed(c)
