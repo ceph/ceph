@@ -923,7 +923,7 @@ void SnapMapper::record_purged_snaps(
 
 
 #ifndef WITH_SEASTAR
-bool SnapMapper::Scrubber::_parse_p()
+bool SnapMapper::Scrubber::_parse_p(ObjectMap::ObjectMapIterator& psit)
 {
   if (!psit->valid()) {
     pool = -1;
@@ -944,7 +944,7 @@ bool SnapMapper::Scrubber::_parse_p()
   return true;
 }
 
-bool SnapMapper::Scrubber::_parse_m()
+bool SnapMapper::Scrubber::_parse_m(ObjectMap::ObjectMapIterator& mapit)
 {
   if (!mapit->valid()) {
     return false;
@@ -979,19 +979,22 @@ void SnapMapper::Scrubber::run()
 {
   dout(10) << __func__ << dendl;
 
+  ObjectMap::ObjectMapIterator psit;
+  ObjectMap::ObjectMapIterator mapit;
+
   psit = store->get_omap_iterator(ch, purged_snaps_hoid);
   psit->upper_bound(PURGED_SNAP_PREFIX);
-  _parse_p();
+  _parse_p(psit);
 
   mapit = store->get_omap_iterator(ch, mapping_hoid);
   mapit->upper_bound(MAPPING_PREFIX);
 
-  while (_parse_m()) {
+  while (_parse_m(mapit)) {
     // advance to next purged_snaps range?
     while (pool >= 0 &&
 	   (mapping.hoid.pool > pool ||
 	    (mapping.hoid.pool == pool && mapping.snap >= end))) {
-      _parse_p();
+      _parse_p(psit);
     }
     if (pool < 0) {
       dout(10) << __func__ << " passed final purged_snaps interval, rest ok"
