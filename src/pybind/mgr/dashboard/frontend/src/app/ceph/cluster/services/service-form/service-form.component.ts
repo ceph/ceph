@@ -1,6 +1,7 @@
+import { Location } from '@angular/common';
 import { HttpParams } from '@angular/common/http';
 import { Component, Input, OnInit, ViewChild } from '@angular/core';
-import { AbstractControl, UntypedFormControl, Validators } from '@angular/forms';
+import { AbstractControl, FormGroupDirective, UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbActiveModal, NgbModalRef, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
@@ -21,7 +22,6 @@ import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
-import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import {
   ActionLabelsI18n,
   TimerServiceInterval,
@@ -33,6 +33,7 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CdsComboBoxOption } from '~/app/shared/models/cds-combobox-model';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -57,6 +58,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   readonly DEFAULT_SSL_PROTOCOL_ITEM = [{ content: 'TLSv1.3', selected: true }];
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
+
+  @ViewChild("frm", {static:true})
+  frm: FormGroupDirective;
 
   @Input() hiddenServices: string[] = [];
 
@@ -106,7 +110,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     selected: false
   }));
   showMgmtGatewayMessage: boolean = false;
-
+  open = false;
   constructor(
     public actionLabels: ActionLabelsI18n,
     private cephServiceService: CephServiceService,
@@ -124,7 +128,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     public rgwMultisiteService: RgwMultisiteService,
     private route: ActivatedRoute,
     public activeModal: NgbActiveModal,
-    public modalService: ModalService
+    public modalService: ModalService,
+    private location: Location
   ) {
     super();
     this.resource = $localize`service`;
@@ -616,6 +621,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit(): void {
+    this.open = this.route.outlet === 'modal';
     this.action = this.actionLabels.CREATE;
     this.resolveRoute();
 
@@ -637,10 +643,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       this.serviceTypes = _.difference(resp, this.hiddenServices).sort();
     });
     this.hostService.getAllHosts().subscribe((resp: object[]) => {
-      const options: SelectOption[] = [];
+      const options: CdsComboBoxOption[] = [];
       _.forEach(resp, (host: object) => {
         if (_.get(host, 'sources.orchestrator', false)) {
-          const option = new SelectOption(false, _.get(host, 'hostname'), '');
+          const option = new CdsComboBoxOption(false, _.get(host, 'hostname'), '' );
           options.push(option);
         }
       });
@@ -1359,14 +1365,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     if (privacyProtocol === null) {
       this.serviceForm.get('snmp_v3_priv_password').clearValidators();
     }
-  }
+  }  
 
   createMultisiteSetup() {
     this.bsModalRef = this.modalService.show(CreateRgwServiceEntitiesComponent, {
-      size: 'lg'
+      size: 'lg'  
     });
     this.bsModalRef.componentInstance.submitAction.subscribe(() => {
       this.setRgwFields();
     });
+  }
+  closeModal(): void {
+    this.location.back(); 
   }
 }

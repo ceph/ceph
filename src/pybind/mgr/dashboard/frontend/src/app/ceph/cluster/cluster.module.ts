@@ -9,9 +9,12 @@ import {
   CheckboxModule,
   ButtonModule,
   GridModule,
+  NumberModule,
   ProgressIndicatorModule,
+  SelectModule,
+  ModalModule,
   InputModule,
-  ModalModule
+  FileUploaderModule
 } from 'carbon-components-angular';
 
 import { TreeModule } from '@circlon/angular-tree-component';
@@ -105,8 +108,12 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     GridModule,
     ProgressIndicatorModule,
     ButtonModule,
+    NumberModule,
+    SelectModule,
+    ModalModule,
     InputModule,
-    ModalModule
+    FileUploaderModule,
+    
   ],
   declarations: [
     HostsComponent,
