@@ -816,7 +816,6 @@ int ReplicatedBackend::be_deep_scrub(
 
   // omap
   using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
-  bool more = false;
   auto result = store->omap_iterate(
     ch,
     ghobject_t{
@@ -828,14 +827,13 @@ int ReplicatedBackend::be_deep_scrub(
       .seek_position = pos.omap_pos,
       .seek_type = omap_iter_seek_t::LOWER_BOUND
     },
-    [&pos, &more, max=cct->_conf->osd_deep_scrub_keys]
+    [&pos, max=cct->_conf->osd_deep_scrub_keys]
     (std::string_view key, std::string_view value) mutable {
       pos.omap_bytes += value.length();
       ++pos.omap_keys;
       pos.omap_hash = crc32_netstring(pos.omap_hash, key);
       pos.omap_hash = crc32_netstring(pos.omap_hash, value);
       if (--max == 0) {
-        more = true;
         pos.omap_pos = key;
         return ObjectStore::omap_iter_ret_t::STOP;
       } else {
@@ -844,7 +842,7 @@ int ReplicatedBackend::be_deep_scrub(
     });
   if (result < 0) {
     return -EIO;
-  } else if (more) {
+  } else if (const auto more = static_cast<bool>(result); more) {
     return -EINPROGRESS;
   }
 
@@ -2190,7 +2188,6 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   uint64_t available = cct->_conf->osd_recovery_max_chunk;
   if (!progress.omap_complete) {
-    std::optional<std::string> more_from;
     using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
     auto result = store->omap_iterate(
       ch,
@@ -2202,17 +2199,17 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
         .seek_position = progress.omap_recovered_to,
         .seek_type = omap_iter_seek_t::LOWER_BOUND
       },
-      [&available, &more_from, &omap_entries=out_op->omap_entries,
+      [&available, &new_progress, &omap_entries=out_op->omap_entries,
        max_entries=cct->_conf->osd_recovery_max_omap_entries_per_chunk]
       (std::string_view key, std::string_view value) mutable {
         const auto num_new_bytes = key.size() + value.size();
         if (auto cur_num_entries = omap_entries.size(); cur_num_entries > 0) {
 	  if (max_entries > 0 && cur_num_entries >= max_entries) {
-	    more_from = key;
-            return ObjectStore::omap_iter_ret_t::STOP;
+            new_progress.omap_recovered_to = key;
+            return ObjectStore::omap_iter_ret_t::STOP; // want more!
 	  }
 	  if (num_new_bytes >= available) {
-	    more_from = key;
+            new_progress.omap_recovered_to = key;
             return ObjectStore::omap_iter_ret_t::STOP;
 	  }
         }
@@ -2222,9 +2219,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
       });
     if (result < 0) {
       return -EIO;
-    } else if (more_from) {
-      new_progress.omap_recovered_to = *more_from;
-    } else {
+    } else if (const auto more = static_cast<bool>(result); !more) {
       new_progress.omap_complete = true;
     }
   }
