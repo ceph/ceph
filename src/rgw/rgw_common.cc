@@ -2988,7 +2988,9 @@ void RGWAccessKey::decode_json(JSONObj *obj) {
       subuser = user.substr(pos + 1);
     }
   }
-  JSONDecoder::decode_json("active", active, obj);
+  if (bool tmp = false; JSONDecoder::decode_json("active", tmp, obj)) {
+    active = tmp; // update only if "active" is present
+  }
   JSONDecoder::decode_json("create_date", create_date, obj);
 }
 
