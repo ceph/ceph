@@ -560,6 +560,11 @@ unsigned int ErasureCodeLrc::get_chunk_size(unsigned int stripe_width) const
   return layers.front().erasure_code->get_chunk_size(stripe_width);
 }
 
+unsigned int ErasureCodeLrc::get_minimum_granularity()
+{
+  return layers.front().erasure_code->get_minimum_granularity();
+}
+
 void p(const set<int> &s) { cerr << s; } // for gdb
 
 int ErasureCodeLrc::_minimum_to_decode(const set<int> &want_to_read,
