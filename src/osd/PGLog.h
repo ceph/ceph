@@ -1438,35 +1438,39 @@ public:
     // will get overridden below if it had been recorded
     eversion_t on_disk_can_rollback_to = info.last_update;
     eversion_t on_disk_rollback_info_trimmed_to = eversion_t();
-    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(ch,
-							      pgmeta_oid);
     std::map<eversion_t, hobject_t> divergent_priors;
     bool must_rebuild = false;
     missing.may_include_deletes = false;
     std::list<pg_log_entry_t> entries;
     std::list<pg_log_dup_t> dups;
     const auto NUM_DUPS_WARN_THRESHOLD = 2*cct->_conf->osd_pg_log_dups_tracked;
-    if (p) {
-      using ceph::decode;
-      for (p->seek_to_first(); p->valid() ; p->next()) {
+    store->omap_iterate(
+      ch, pgmeta_oid, ObjectStore::omap_iter_seek_t::min_lower_bound(),
+      [&, NUM_DUPS_WARN_THRESHOLD]
+      (std::string_view key, std::string_view value) mutable {
+        using ceph::decode;
 	// non-log pgmeta_oid keys are prefixed with _; skip those
-	if (p->key()[0] == '_')
-	  continue;
-	auto bl = p->value();//Copy ceph::buffer::list before creating iterator
+	if (key[0] == '_') {
+	  return ObjectStore::omap_iter_ret_t::NEXT;
+	}
+	ceph::bufferlist bl;
+	bl.append(value);
+	// memcopy the value. this is paranoia but no regression since
+	// get_omap_iterator. it could fixed with buffer::create_static()
 	auto bp = bl.cbegin();
-	if (p->key() == "divergent_priors") {
+	if (key == "divergent_priors") {
 	  decode(divergent_priors, bp);
 	  ldpp_dout(dpp, 20) << "read_log_and_missing " << divergent_priors.size()
 			     << " divergent_priors" << dendl;
 	  must_rebuild = true;
 	  debug_verify_stored_missing = false;
-	} else if (p->key() == "can_rollback_to") {
+	} else if (key == "can_rollback_to") {
 	  decode(on_disk_can_rollback_to, bp);
-	} else if (p->key() == "rollback_info_trimmed_to") {
+	} else if (key == "rollback_info_trimmed_to") {
 	  decode(on_disk_rollback_info_trimmed_to, bp);
-	} else if (p->key() == "may_include_deletes_in_missing") {
+	} else if (key == "may_include_deletes_in_missing") {
 	  missing.may_include_deletes = true;
-	} else if (p->key().substr(0, 7) == std::string("missing")) {
+	} else if (key.substr(0, 7) == std::string("missing")) {
 	  hobject_t oid;
 	  pg_missing_item item;
 	  decode(oid, bp);
@@ -1476,7 +1480,7 @@ public:
 	    ceph_assert(missing.may_include_deletes);
 	  }
 	  missing.add(oid, std::move(item));
-	} else if (p->key().substr(0, 4) == std::string("dup_")) {
+	} else if (key.substr(0, 4) == std::string("dup_")) {
 	  ++total_dups;
 	  pg_log_dup_t dup;
 	  decode(dup, bp);
@@ -1505,8 +1509,8 @@ public:
 	  if (log_keys_debug)
 	    log_keys_debug->insert(e.get_key_name());
 	}
-      }
-    }
+	return ObjectStore::omap_iter_ret_t::NEXT;
+      });
     if (info.pgid.is_no_shard()) {
       // replicated pool pg does not persist this key
       assert(on_disk_rollback_info_trimmed_to == eversion_t());
