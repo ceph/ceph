@@ -798,9 +798,7 @@ public:
     omap_iter_seek_t start_from,
     std::function<omap_iter_ret_t(std::string_view,
                                   std::string_view)> visitor
-  ) {
-    return -EOPNOTSUPP;
-  }
+  ) = 0;
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
 
