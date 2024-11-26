@@ -55,3 +55,20 @@ class DefaultImages(Enum):
     @property
     def desc(self) -> str:
         return self.value.desc
+
+
+class NonCephImageServiceTypes(Enum):
+    prometheus = 'prometheus'
+    loki = 'loki'
+    promtail = 'promtail'
+    node_exporter = 'node-exporter'
+    alertmanager = 'alertmanager'
+    grafana = 'grafana'
+    nvmeof = 'nvmeof'
+    snmp_gateway = 'snmp-gateway'
+    elasticsearch = 'elasticsearch'
+    jaeger_collector = 'jaeger-collector'
+    jaeger_query = 'jaeger-query'
+    jaeger_agent = 'jaeger-agent'
+    samba = 'smb'
+    oauth2_proxy = 'oauth2-proxy'
