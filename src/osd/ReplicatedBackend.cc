@@ -720,14 +720,13 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
   maybe_kick_pct_update();
 }
 
-template <class T>
-static uint32_t crc32_netstring(const uint32_t orig_crc, T data)
+static uint32_t crc32_netstring(const uint32_t orig_crc, std::string_view data)
 {
   // XXX: This function MUST be compliant with the bufferlist marshalling format!
   // Otherwise scrubs-during-upgrade will explode.
   __u32 len = data.length();
   auto crc = ceph_crc32c(orig_crc, (unsigned char*)&len, sizeof(len));
-  crc = ceph_crc32c(crc, (unsigned char*)data.c_str(), data.length());
+  crc = ceph_crc32c(crc, (unsigned char*)data.data(), data.length());
 
 #ifndef _NDEBUG
   // let's verify the compatibility but, due to performance penalty,
@@ -827,29 +826,39 @@ int ReplicatedBackend::be_deep_scrub(
   }
 
   // omap
-  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
+  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+  bool more = false;
+  auto result = store->omap_iterate(
     ch,
-    ghobject_t(
-      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-  ceph_assert(iter);
-  if (pos.omap_pos.length()) {
-    iter->lower_bound(pos.omap_pos);
-  } else {
-    iter->seek_to_first();
-  }
-  int max = g_conf()->osd_deep_scrub_keys;
-  while (iter->valid()) {
-    pos.omap_bytes += iter->value().length();
-    ++pos.omap_keys;
-    --max;
-    pos.omap_hash = crc32_netstring(pos.omap_hash, iter->key());
-    pos.omap_hash = crc32_netstring(pos.omap_hash, iter->value());
-    iter->next();
-
-    if (iter->valid() && max == 0) {
-      pos.omap_pos = iter->key();
-      return -EINPROGRESS;
-    }
+    ghobject_t{
+      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard},
+    // try to seek as many keys-at-once as possible for the sake of performance.
+    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
+    // than just seek(n).
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = pos.omap_pos,
+      .seek_type = omap_iter_seek_t::LOWER_BOUND
+    },
+    [&pos, &more, first=true, max=cct->_conf->osd_deep_scrub_keys]
+    (std::string_view key, std::string_view value) mutable {
+      --max;
+      if (first) {
+        first = false; // preserve exact compat on `max` with old code
+      } else if (max == 0) {
+        more = true;
+        pos.omap_pos = key;
+        return ObjectStore::omap_iter_ret_t::STOP;
+      }
+      pos.omap_bytes += value.length();
+      ++pos.omap_keys;
+      pos.omap_hash = crc32_netstring(pos.omap_hash, key);
+      pos.omap_hash = crc32_netstring(pos.omap_hash, value);
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    });
+  if (result < 0) {
+    return -EIO;
+  } else if (more) {
+    return -EINPROGRESS;
   }
 
   if (pos.omap_keys > cct->_conf->
