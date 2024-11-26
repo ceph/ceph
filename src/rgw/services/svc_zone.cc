@@ -743,8 +743,7 @@ bool RGWSI_Zone::is_meta_master() const
 
 bool RGWSI_Zone::need_to_log_metadata() const
 {
-  return is_meta_master() &&
-    (zonegroup->zones.size() > 1 || current_period->is_multi_zonegroups_with_zones());
+  return is_meta_master() && is_syncing_bucket_meta();
 }
 
 bool RGWSI_Zone::can_reshard() const
@@ -761,33 +760,16 @@ bool RGWSI_Zone::can_reshard() const
 
 /**
   * Check to see if the bucket metadata could be synced
-  * bucket: the bucket to check
   * Returns false is the bucket is not synced
   */
-bool RGWSI_Zone::is_syncing_bucket_meta(const rgw_bucket& bucket)
+bool RGWSI_Zone::is_syncing_bucket_meta() const
 {
-
   /* no current period  */
   if (current_period->get_id().empty()) {
     return false;
   }
 
-  /* zonegroup is not master zonegroup */
-  if (!zonegroup->is_master_zonegroup()) {
-    return false;
-  }
-
-  /* single zonegroup and a single zone */
-  if (current_period->is_single_zonegroup() && zonegroup->zones.size() == 1) {
-    return false;
-  }
-
-  /* zone is not master */
-  if (zonegroup->master_zone != zone_public_config->id) {
-    return false;
-  }
-
-  return true;
+  return zonegroup->zones.size() > 1 || current_period->is_multi_zonegroups_with_zones();
 }
 
 
