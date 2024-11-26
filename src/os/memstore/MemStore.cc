@@ -619,6 +619,48 @@ ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(
   return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o));
 }
 
+int MemStore::omap_iterate(
+  CollectionHandle &ch,   ///< [in] collection
+  const ghobject_t &oid, ///< [in] object
+  ObjectStore::omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+  std::function<omap_iter_ret_t(std::string_view, std::string_view)> f)
+{
+  Collection *c = static_cast<Collection*>(ch.get());
+  ObjectRef o = c->get_object(oid);
+  if (!o) {
+    return -ENOENT;
+  }
+
+  {
+    std::lock_guard lock{o->omap_mutex};
+
+    // obtain seek the iterator
+    decltype(o->omap)::iterator it;
+    {
+      if (start_from.seek_type == omap_iter_seek_t::LOWER_BOUND) {
+        it = o->omap.lower_bound(start_from.seek_position);
+      } else {
+        it = o->omap.upper_bound(start_from.seek_position);
+      }
+    }
+
+    // iterate!
+    while (it != o->omap.end()) {
+      // potentially rectifying memcpy but who cares for memstore?
+      omap_iter_ret_t ret =
+        f(it->first, std::string_view{it->second.c_str(), it->second.length()});
+      if (ret == omap_iter_ret_t::STOP) {
+        break;
+      } else if (ret == omap_iter_ret_t::NEXT) {
+        ++it;
+      } else {
+        ceph_abort();
+      }
+    }
+  }
+  return 0;
+}
+
 
 // ---------------
 // write operations
