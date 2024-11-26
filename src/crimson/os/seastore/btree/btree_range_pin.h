@@ -116,6 +116,7 @@ protected:
   extent_len_t len = 0;
   fixed_kv_node_meta_t<key_t> range;
   uint16_t pos = std::numeric_limits<uint16_t>::max();
+  btree_iter_version_t ver;
 
   virtual std::unique_ptr<BtreeNodeMapping> _duplicate(op_context_t<key_t>) const = 0;
   fixed_kv_node_meta_t<key_t> _get_pin_range() const {
@@ -132,17 +133,23 @@ public:
     uint16_t pos,
     pladdr_t value,
     extent_len_t len,
-    fixed_kv_node_meta_t<key_t> meta)
+    fixed_kv_node_meta_t<key_t> meta,
+    btree_iter_version_t ver)
     : ctx(ctx),
       parent(parent),
       value(value),
       len(len),
       range(meta),
-      pos(pos)
+      pos(pos),
+      ver(ver)
   {
     if (!parent->is_pending()) {
       this->child_pos = {parent, pos};
     }
+  }
+
+  btree_iter_version_t get_iter_ver() const final {
+    return ver;
   }
 
   CachedExtentRef get_parent() const final {

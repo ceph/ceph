@@ -1501,6 +1501,8 @@ constexpr bool is_real_type(extent_types_t type) {
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
+using btree_iter_version_t = uint32_t;
+
 /**
  * rewrite_gen_t
  *

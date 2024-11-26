@@ -67,14 +67,16 @@ public:
     LBALeafNodeRef parent,
     uint16_t pos,
     lba_map_val_t &val,
-    lba_node_meta_t meta)
+    lba_node_meta_t meta,
+    btree_iter_version_t ver)
     : BtreeNodeMapping(
 	c,
 	parent,
 	pos,
 	val.pladdr.is_paddr() ? val.pladdr.get_paddr() : P_ADDR_NULL,
 	val.len,
-	meta),
+	meta,
+	ver),
       key(meta.begin),
       indirect(val.pladdr.is_laddr()),
       intermediate_key(indirect ? val.pladdr.get_laddr() : L_ADDR_NULL),

@@ -1390,6 +1390,8 @@ public:
     ceph_abort("impossible");
   }
 
+  virtual btree_iter_version_t get_iter_ver() const = 0;
+
   virtual ~PhysicalNodeMapping() {}
 protected:
   std::optional<child_pos_t> child_pos = std::nullopt;

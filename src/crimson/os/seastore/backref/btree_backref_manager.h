@@ -21,14 +21,16 @@ public:
     CachedExtentRef parent,
     uint16_t pos,
     backref_map_val_t &val,
-    backref_node_meta_t &&meta)
+    backref_node_meta_t &&meta,
+    btree_iter_version_t ver)
     : BtreeNodeMapping(
 	ctx,
 	parent,
 	pos,
 	val.laddr,
 	val.len,
-	std::forward<backref_node_meta_t>(meta)),
+	std::forward<backref_node_meta_t>(meta),
+	ver),
       type(val.type)
   {}
   extent_types_t get_type() const final {
