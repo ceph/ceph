@@ -784,9 +784,7 @@ public:
     const ghobject_t &oid, ///< [in] object
     omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
     std::function<omap_iter_ret_t(std::string_view, std::string_view)> f
-  ) {
-    return -EOPNOTSUPP;
-  }
+  ) = 0;
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
 
