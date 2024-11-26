@@ -945,6 +945,9 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def update_service(self, service_type: str, service_image: str, image: str) -> OrchResult:
+        raise NotImplementedError()
+
     @_hide_in_features
     def upgrade_available(self) -> OrchResult:
         """
