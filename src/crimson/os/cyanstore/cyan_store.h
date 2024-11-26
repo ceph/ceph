@@ -221,6 +221,8 @@ public:
 
   seastar::future<std::vector<coll_core_t>> list_collections() final;
 
+  seastar::future<std::string> get_default_device_class() final;
+
 private:
   seastar::sharded<CyanStore::Shard> shard_stores;
   const std::string path;
