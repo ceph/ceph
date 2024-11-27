@@ -1219,12 +1219,33 @@ options:
   level: basic
   desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
     the OSD bench results for an OSD (for rotational media)
-  long_desc: This option specifies the threshold IOPS capacity for an OSD under
-    which the OSD bench results can be considered for QoS calculations. Only
-    considered for osd_op_queue = mclock_scheduler
+  long_desc: This option specifies the high threshold IOPS capacity for an OSD
+    below which the OSD bench results can be considered for QoS calculations.
+    Only considered when osd_op_queue = mclock_scheduler
   fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
-    ignore OSD bench results for an OSD (for rotational media)
+    ignore OSD bench results for an OSD (for rotational media) and fall back to
+    the last valid or default IOPS capacity defined by
+    ``osd_mclock_max_capacity_iops_hdd``.
   default: 500
+  see_also:
+  - osd_mclock_max_capacity_iops_hdd
+  flags:
+  - runtime
+- name: osd_mclock_iops_capacity_low_threshold_hdd
+  type: float
+  level: basic
+  desc: The threshold IOPs capacity (at 4KiB block size) below which to ignore
+    the OSD bench results for an OSD (for rotational media)
+  long_desc: This option specifies the low threshold IOPS capacity of an OSD
+    above which the OSD bench results can be considered for QoS calculations.
+    Only considered when osd_op_queue = mclock_scheduler
+  fmt_desc: The threshold IOPS capacity (at 4KiB block size) below which to
+    ignore OSD bench results for an OSD (for rotational media) and fall back to
+    the last valid or default IOPS capacity defined by
+    ``osd_mclock_max_capacity_iops_hdd``.
+  default: 50
+  see_also:
+  - osd_mclock_max_capacity_iops_hdd
   flags:
   - runtime
 - name: osd_mclock_iops_capacity_threshold_ssd
@@ -1232,12 +1253,33 @@ options:
   level: basic
   desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
     the OSD bench results for an OSD (for solid state media)
-  long_desc: This option specifies the threshold IOPS capacity for an OSD under
-    which the OSD bench results can be considered for QoS calculations. Only
-    considered for osd_op_queue = mclock_scheduler
+  long_desc: This option specifies the high threshold IOPS capacity for an OSD
+    below which the OSD bench results can be considered for QoS calculations.
+    Only considered when osd_op_queue = mclock_scheduler
   fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
-    ignore OSD bench results for an OSD (for solid state media)
+    ignore OSD bench results for an OSD (for solid state media) and fall back to
+    the last valid or default IOPS capacity defined by
+    ``osd_mclock_max_capacity_iops_ssd``.
   default: 80000
+  see_also:
+  - osd_mclock_max_capacity_iops_ssd
+  flags:
+  - runtime
+- name: osd_mclock_iops_capacity_low_threshold_ssd
+  type: float
+  level: basic
+  desc: The threshold IOPs capacity (at 4KiB block size) below which to ignore
+    the OSD bench results for an OSD (for solid state media)
+  long_desc: This option specifies the low threshold IOPS capacity for an OSD
+    above which the OSD bench results can be considered for QoS calculations.
+    Only considered when osd_op_queue = mclock_scheduler
+  fmt_desc: The threshold IOPS capacity (at 4KiB block size) below which to
+    ignore OSD bench results for an OSD (for solid state media) and fall back to
+    the last valid or default IOPS capacity defined by
+    ``osd_mclock_max_capacity_iops_ssd``.
+  default: 1000
+  see_also:
+  - osd_mclock_max_capacity_iops_ssd
   flags:
   - runtime
 # Set to true for testing.  Users should NOT set this.
