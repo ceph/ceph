@@ -537,10 +537,14 @@ void PGRecovery::enqueue_push(
   auto [recovering, added] = pg->get_recovery_backend()->add_recovering(obj);
   if (!added)
     return;
+  ongoing_pushes++;
   std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
   handle_exception_interruptible([] (auto) {
     ceph_abort_msg("got exception on backfill's push");
     return seastar::make_ready_future<>();
+  }).finally([this] {
+    ceph_assert(ongoing_pushes > 0);
+    ongoing_pushes--;
   }).then_interruptible([this, obj] {
     logger().debug("enqueue_push:{}", __func__);
     using BackfillState = crimson::osd::BackfillState;
@@ -609,8 +613,11 @@ void PGRecovery::update_peers_last_backfill(
 
 bool PGRecovery::budget_available() const
 {
-  // TODO: the limits!
-  return true;
+  auto max = crimson::common::get_conf<int64_t>("crimson_backfill_max_active_per_pg");
+  if (max == 0) {
+    return true;
+  }
+  return ongoing_pushes < max;
 }
 
 void PGRecovery::on_pg_clean()

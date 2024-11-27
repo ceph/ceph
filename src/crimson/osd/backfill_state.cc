@@ -354,6 +354,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 
   do {
     if (!backfill_listener().budget_available()) {
+      logger().debug("{}: throttle failed, turning to Waiting", __func__);
       post_event(RequestWaiting{});
       return;
     } else if (should_rescan_replicas(backfill_state().peer_backfill_info,
