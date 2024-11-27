@@ -2299,26 +2299,6 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     }
   }
 
-  // restricting shallow scrubs of PGs that have deep errors:
-  if (pg_cond.has_deep_errors && trgt.is_shallow()) {
-    if (trgt.urgency() < urgency_t::operator_requested) {
-      // if there are deep errors, we should have scheduled a deep scrub first.
-      // If we are here trying to perform a shallow scrub, it means that for some
-      // reason that deep scrub failed to be initiated. We will not try a shallow
-      // scrub until this is solved.
-      dout(10) << __func__ << ": Regular scrub skipped due to deep-scrub errors"
-	       << dendl;
-      requeue_penalized(
-	  s_or_d, delay_both_targets_t::no, delay_cause_t::pg_state, clock_now);
-      return schedule_result_t::target_specific_failure;
-    } else {
-      // we will honor the request anyway, but will report the issue
-      m_osds->clog->error() << fmt::format(
-	  "osd.{} pg {} Regular scrub request, deep-scrub details will be lost",
-	  m_osds->whoami, m_pg_id);
-    }
-  }
-
   // if only explicitly requested repairing is allowed - skip other types
   // of scrubbing
   if (osd_restrictions.allow_requested_repair_only &&
