@@ -1011,8 +1011,8 @@ void RADOS::lookup_pool_(std::string name, LookupPoolComp c)
 	  asio::dispatch(asio::append(std::move(c), bs::error_code{}, ret));
       });
   } else {
-    asio::post(get_executor(),
-	       asio::append(std::move(c), bs::error_code{}, ret));
+    asio::dispatch(get_executor(),
+		   asio::append(std::move(c), bs::error_code{}, ret));
   }
 }
 
