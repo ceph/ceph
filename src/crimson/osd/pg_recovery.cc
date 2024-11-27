@@ -26,6 +26,8 @@ using std::map;
 using std::set;
 using PglogBasedRecovery = crimson::osd::PglogBasedRecovery;
 
+thread_local uint64_t PGRecovery::ongoing_pushes = 0;
+
 void PGRecovery::start_pglogbased_recovery()
 {
   auto [op, fut] = pg->get_shard_services().start_operation<PglogBasedRecovery>(
@@ -40,10 +42,13 @@ PGRecovery::interruptible_future<bool>
 PGRecovery::start_recovery_ops(
   RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
   PglogBasedRecovery &recover_op,
-  size_t max_to_start)
+  size_t max)
 {
   assert(pg->is_primary());
   assert(pg->is_peered());
+  auto max_to_start = std::max(
+    max,
+    crimson::common::get_conf<uint64_t>("crimson_max_active_push_per_reactor"));
 
   if (pg->has_reset_since(recover_op.get_epoch_started()) ||
       recover_op.is_cancelled()) {
@@ -527,10 +532,14 @@ void PGRecovery::enqueue_push(
   if (!added)
     return;
   peering_state.prepare_backfill_for_missing(obj, v, peers);
+  ongoing_pushes++;
   std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
   handle_exception_interruptible([] (auto) {
     ceph_abort_msg("got exception on backfill's push");
     return seastar::make_ready_future<>();
+  }).finally([] {
+    ceph_assert(ongoing_pushes > 0);
+    ongoing_pushes--;
   }).then_interruptible([this, obj] {
     logger().debug("enqueue_push:{}", __func__);
     using BackfillState = crimson::osd::BackfillState;
@@ -605,8 +614,12 @@ void PGRecovery::update_peers_last_backfill(
 
 bool PGRecovery::budget_available() const
 {
-  // TODO: the limits!
-  return true;
+  auto max = crimson::common::get_conf<
+    uint64_t>("crimson_max_active_push_per_reactor");
+  if (max == 0) {
+    return true;
+  }
+  return ongoing_pushes < max;
 }
 
 void PGRecovery::on_pg_clean()
