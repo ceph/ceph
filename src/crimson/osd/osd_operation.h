@@ -76,6 +76,12 @@ struct CommonPGPipeline {
   } get_obc;
 };
 
+struct PGRepopPipeline {
+  struct Process : OrderedExclusivePhaseT<Process> {
+    static constexpr auto type_name = "PGRepopPipeline::process";
+  } process;
+};
+
 struct CommonOBCPipeline {
   struct Process : OrderedExclusivePhaseT<Process> {
     static constexpr auto type_name = "CommonOBCPipeline::process";
