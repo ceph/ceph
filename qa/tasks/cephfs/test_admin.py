@@ -1124,6 +1124,27 @@ class TestAdminCommandDumpTree(CephFSTestCase):
         self.fs.mds_asok(['dump', 'tree', '~mdsdir'])
 
 
+class TestAdminCommandDumpLoads(CephFSTestCase):
+    """
+    Tests for administration command dump loads.
+    """
+
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 1
+
+    def test_dump_loads(self):
+        """
+        make sure depth limit param is considered when dump loads for a MDS daemon.
+        """
+
+        log.info("dumping loads")
+        loads = self.fs.mds_asok(['dump', 'loads', '1'])
+        self.assertIsNotNone(loads)
+        self.assertIn("dirfrags", loads)
+        for d in loads["dirfrags"]:
+            self.assertLessEqual(d["path"].count("/"), 1)
+
+
 class TestPermErrMsg(CephFSTestCase):
 
     CLIENT_NAME = 'client.testuser'
