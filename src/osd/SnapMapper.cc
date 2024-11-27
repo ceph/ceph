@@ -923,44 +923,39 @@ void SnapMapper::record_purged_snaps(
 
 
 #ifndef WITH_SEASTAR
-bool SnapMapper::Scrubber::_parse_p(ObjectMap::ObjectMapIterator& psit)
+bool SnapMapper::Scrubber::_parse_p(std::string_view key, std::string_view value)
 {
-  if (!psit->valid()) {
+  if (key.find(PURGED_SNAP_PREFIX) != 0) {
     pool = -1;
     return false;
   }
-  if (psit->key().find(PURGED_SNAP_PREFIX) != 0) {
-    pool = -1;
-    return false;
-  }
-  ceph::buffer::list v = psit->value();
+  ceph::buffer::list v;
+  v.append(value);
   auto p = v.cbegin();
   ceph::decode(pool, p);
   ceph::decode(begin, p);
   ceph::decode(end, p);
   dout(20) << __func__ << " purged_snaps pool " << pool
 	   << " [" << begin << "," << end << ")" << dendl;
-  psit->next();
   return true;
 }
 
-bool SnapMapper::Scrubber::_parse_m(ObjectMap::ObjectMapIterator& mapit)
+bool SnapMapper::Scrubber::_parse_m(
+  std::string_view key,
+  std::string_view value)
 {
-  if (!mapit->valid()) {
+  if (key.find(MAPPING_PREFIX) != 0) {
     return false;
   }
-  if (mapit->key().find(MAPPING_PREFIX) != 0) {
-    return false;
-  }
-  auto v = mapit->value();
+  ceph::bufferlist v;
+  v.append(value); // create_static if decoding if anyhow visible a flamegraph
   auto p = v.cbegin();
   mapping.decode(p);
 
   {
     unsigned long long p, s;
     long sh;
-    string k = mapit->key();
-    int r = sscanf(k.c_str(), "SNA_%lld_%llx.%lx", &p, &s, &sh);
+    int r = sscanf(key.data(), "SNA_%lld_%llx.%lx", &p, &s, &sh);
     if (r != 1) {
       shard = shard_id_t::NO_SHARD;
     } else {
@@ -971,7 +966,6 @@ bool SnapMapper::Scrubber::_parse_m(ObjectMap::ObjectMapIterator& mapit)
 	   << " snap " << mapping.snap
 	   << " shard " << shard
 	   << " " << mapping.hoid << dendl;
-  mapit->next();
   return true;
 }
 
@@ -979,54 +973,62 @@ void SnapMapper::Scrubber::run()
 {
   dout(10) << __func__ << dendl;
 
-  ObjectMap::ObjectMapIterator psit;
-  ObjectMap::ObjectMapIterator mapit;
-
-  psit = store->get_omap_iterator(ch, purged_snaps_hoid);
-  psit->upper_bound(PURGED_SNAP_PREFIX);
-  _parse_p(psit);
-
-  mapit = store->get_omap_iterator(ch, mapping_hoid);
-  mapit->upper_bound(MAPPING_PREFIX);
-
-  while (_parse_m(mapit)) {
-    // advance to next purged_snaps range?
-    while (pool >= 0 &&
-	   (mapping.hoid.pool > pool ||
-	    (mapping.hoid.pool == pool && mapping.snap >= end))) {
-      _parse_p(psit);
-    }
-    if (pool < 0) {
-      dout(10) << __func__ << " passed final purged_snaps interval, rest ok"
-	       << dendl;
-      break;
-    }
-    if (mapping.hoid.pool < pool ||
-	mapping.snap < begin) {
-      // ok
-      dout(20) << __func__ << " ok " << mapping.hoid
-	       << " snap " << mapping.snap
-	       << " precedes pool " << pool
-	       << " purged_snaps [" << begin << "," << end << ")" << dendl;
-    } else {
-      assert(mapping.snap >= begin &&
-	     mapping.snap < end &&
-	     mapping.hoid.pool == pool);
-      // invalid
-      dout(10) << __func__ << " stray " << mapping.hoid
-	       << " snap " << mapping.snap
-	       << " in pool " << pool
-	       << " shard " << shard
-	       << " purged_snaps [" << begin << "," << end << ")" << dendl;
-      stray.emplace_back(std::tuple<int64_t,snapid_t,uint32_t,shard_id_t>(
-			   pool, mapping.snap, mapping.hoid.get_hash(),
-			   shard
-			   ));
-    }
-  }
-
+  store->omap_iterate(
+    ch, mapping_hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = MAPPING_PREFIX,
+      .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+    },
+    [this] (std::string_view key, std::string_view value) mutable {
+      if (!_parse_m(key, value)) {
+        return ObjectStore::omap_iter_ret_t::STOP;
+      }
+      // advance to next purged_snaps range?
+      store->omap_iterate(
+        ch, purged_snaps_hoid,
+        ObjectStore::omap_iter_seek_t{
+          .seek_position = PURGED_SNAP_PREFIX,
+          .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+        },
+        [this] (std::string_view key, std::string_view value) mutable {
+          _parse_p(key, value);
+          if (pool >= 0 &&
+                 (mapping.hoid.pool > pool ||
+                  (mapping.hoid.pool == pool && mapping.snap >= end))) {
+            return ObjectStore::omap_iter_ret_t::NEXT;
+	  } else {
+            return ObjectStore::omap_iter_ret_t::STOP;
+	  }
+        });
+      if (pool < 0) {
+        dout(10) << __func__ << " passed final purged_snaps interval, rest ok"
+                 << dendl;
+        return ObjectStore::omap_iter_ret_t::STOP;
+      }
+      if (mapping.hoid.pool < pool ||
+          mapping.snap < begin) {
+        // ok
+        dout(20) << __func__ << " ok " << mapping.hoid
+                 << " snap " << mapping.snap
+                 << " precedes pool " << pool
+                 << " purged_snaps [" << begin << "," << end << ")" << dendl;
+      } else {
+        assert(mapping.snap >= begin &&
+               mapping.snap < end &&
+               mapping.hoid.pool == pool);
+        // invalid
+        dout(10) << __func__ << " stray " << mapping.hoid
+                 << " snap " << mapping.snap
+                 << " in pool " << pool
+                 << " shard " << shard
+                 << " purged_snaps [" << begin << "," << end << ")" << dendl;
+        stray.emplace_back(std::tuple<int64_t,snapid_t,uint32_t,shard_id_t>(
+          		   pool, mapping.snap, mapping.hoid.get_hash(),
+          		   shard
+          		   ));
+      }
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    });
   dout(10) << __func__ << " end, found " << stray.size() << " stray" << dendl;
-  psit = ObjectMap::ObjectMapIterator();
-  mapit = ObjectMap::ObjectMapIterator();
 }
 #endif // !WITH_SEASTAR

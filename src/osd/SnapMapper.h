@@ -185,12 +185,12 @@ public:
     int64_t pool;
     snapid_t begin, end;
 
-    bool _parse_p(ObjectMap::ObjectMapIterator& psit);   ///< advance the purged_snaps pointer
+    bool _parse_p(std::string_view key, std::string_view value);
 
     Mapping mapping;
     shard_id_t shard;
 
-    bool _parse_m(ObjectMap::ObjectMapIterator& mapit);   ///< advance the (object) mapper pointer
+    bool _parse_m(std::string_view key, std::string_view value);
 
     std::vector<std::tuple<int64_t, snapid_t, uint32_t, shard_id_t>> stray;
 
