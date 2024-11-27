@@ -261,6 +261,9 @@
                 Another name for :term:`Dashboard`.
 
 	Dashboard Plugin
+        DC
+                **D**\ata **C**\enter.
+
         Flapping OSD
                 An OSD that is repeatedly marked ``up`` and then ``down`` in
                 rapid succession. See :ref:`rados_tshooting_flapping_osd`.
