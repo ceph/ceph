@@ -234,3 +234,14 @@ else
     [ $stop_rgw -eq 1 ] && do_killall radosgw lt-radosgw apache2
     [ $stop_cephadm -eq 1 ] && do_killcephadm
 fi
+
+# Check whether the --crimson-balance-cpu option was used, if so enable the HT sibling CPU core ids
+if [ "$ceph_osd" == "crimson-osd" ] && [ -f /tmp/disabled_ht.out ]; then
+    declare -a cpu_disabled
+    readarray -t cpu_disabled < /tmp/disabled_ht.out
+    discard="${cpu_disabled[@]}"
+    for x in $discard; do
+        echo "1" | /sys/devices/system/cpu/cpu${x}/online
+    done
+    rm -f /tmp/disabled_ht.out
+fi
