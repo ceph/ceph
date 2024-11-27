@@ -173,6 +173,11 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   default json format produces a rather massive output in large clusters and
   isn't scalable. So we have removed the 'network_ping_times' section from
   the output. Details in the tracker: https://tracker.ceph.com/issues/57460
+* mgr/REST: The REST manager module will trim requests based on the 'max_requests' option.
+  Without this feature, and in the absence of manual deletion of old requests,
+  the accumulation of requests in the array can lead to Out Of Memory (OOM) issues, 
+  resulting in the Manager crashing.
+
 * CephFS: The `subvolume snapshot clone` command now depends on the config option
   `snapshot_clone_no_wait` which is used to reject the clone operation when
   all the cloner threads are busy. This config option is enabled by default which means 
