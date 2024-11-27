@@ -78,7 +78,7 @@ class PG : public boost::intrusive_ref_counter<
   using ec_profile_t = std::map<std::string,std::string>;
   using cached_map_t = OSDMapService::cached_map_t;
 
-  ClientRequest::PGPipeline request_pg_pipeline;
+  CommonPGPipeline request_pg_pipeline;
   PGRepopPipeline repop_pipeline;
   PGPeeringPipeline peering_request_pg_pipeline;
 
