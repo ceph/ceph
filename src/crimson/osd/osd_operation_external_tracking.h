@@ -49,7 +49,8 @@ struct LttngBackend
     CommonOBCPipeline::Process::BlockingEvent::Backend,
     CommonOBCPipeline::WaitRepop::BlockingEvent::Backend,
     CommonOBCPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent::Backend,
-    CommonOBCPipeline::SendReply::BlockingEvent::Backend
+    CommonOBCPipeline::SendReply::BlockingEvent::Backend,
+    PGRepopPipeline::Process::BlockingEvent::Backend
 {
   void handle(ClientRequest::StartEvent&,
               const Operation&) override {}
@@ -185,6 +186,10 @@ struct LttngBackend
               const CommonOBCPipeline::SendReply& blocker) override {
   }
 
+  void handle(PGRepopPipeline::Process::BlockingEvent& ev,
+              const Operation& op,
+              const PGRepopPipeline::Process& blocker) override {
+  }
 
   void handle(ClientRequest::CompletionEvent&,
               const Operation&) override {}
@@ -221,7 +226,8 @@ struct HistoricBackend
     CommonOBCPipeline::Process::BlockingEvent::Backend,
     CommonOBCPipeline::WaitRepop::BlockingEvent::Backend,
     CommonOBCPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent::Backend,
-    CommonOBCPipeline::SendReply::BlockingEvent::Backend
+    CommonOBCPipeline::SendReply::BlockingEvent::Backend,
+    PGRepopPipeline::Process::BlockingEvent::Backend
 {
   void handle(ClientRequest::StartEvent&,
               const Operation&) override {}
@@ -362,6 +368,11 @@ struct HistoricBackend
   void handle(CommonOBCPipeline::SendReply::BlockingEvent& ev,
               const Operation& op,
               const CommonOBCPipeline::SendReply& blocker) override {
+  }
+
+  void handle(PGRepopPipeline::Process::BlockingEvent& ev,
+              const Operation& op,
+              const PGRepopPipeline::Process& blocker) override {
   }
 
   void handle(ClientRequest::CompletionEvent&, const Operation& op) override {

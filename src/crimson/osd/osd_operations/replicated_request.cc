@@ -58,9 +58,9 @@ PerShardPipeline &RepRequest::get_pershard_pipeline(
   return shard_services.get_replicated_request_pipeline();
 }
 
-ClientRequest::PGPipeline &RepRequest::client_pp(PG &pg)
+PGRepopPipeline &RepRequest::repop_pipeline(PG &pg)
 {
-  return pg.request_pg_pipeline;
+  return pg.repop_pipeline;
 }
 
 seastar::future<> RepRequest::with_pg(
@@ -72,7 +72,7 @@ seastar::future<> RepRequest::with_pg(
   return interruptor::with_interruption([this, pg] {
     LOG_PREFIX(RepRequest::with_pg);
     DEBUGI("{}: pg present", *this);
-    return this->template enter_stage<interruptor>(client_pp(*pg).await_map
+    return this->template enter_stage<interruptor>(repop_pipeline(*pg).process
     ).then_interruptible([this, pg] {
       return this->template with_blocking_event<
         PG_OSDMapGate::OSDMapBlocker::BlockingEvent
