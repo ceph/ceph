@@ -1,0 +1,84 @@
+[submodule "ceph-object-corpus"]
+	path = ceph-object-corpus
+	url = https://github.com/ceph/ceph-object-corpus.git
+[submodule "src/erasure-code/jerasure/jerasure"]
+	path = src/erasure-code/jerasure/jerasure
+	url = https://github.com/ceph/jerasure.git
+	branch = v2-ceph
+[submodule "src/erasure-code/jerasure/gf-complete"]
+	path = src/erasure-code/jerasure/gf-complete
+	url = https://github.com/ceph/gf-complete.git
+	branch = v3-ceph
+[submodule "src/rocksdb"]
+	path = src/rocksdb
+	url = https://github.com/ceph/rocksdb
+	ignore = dirty
+[submodule "ceph-erasure-code-corpus"]
+	path = ceph-erasure-code-corpus
+	url = https://github.com/ceph/ceph-erasure-code-corpus.git
+[submodule "src/googletest"]
+	path = src/googletest
+	url = https://github.com/ceph/googletest
+	branch = ceph-release-1.7.x
+[submodule "src/spdk"]
+	path = src/spdk
+	url = https://github.com/ceph/spdk.git
+[submodule "src/xxHash"]
+	path = src/xxHash
+	url = https://github.com/ceph/xxHash.git
+[submodule "src/isa-l"]
+	path = src/isa-l
+	url = https://github.com/ceph/isa-l
+[submodule "src/zstd"]
+	path = src/zstd
+	url = https://github.com/facebook/zstd
+[submodule "src/crypto/isa-l/isa-l_crypto"]
+	path = src/crypto/isa-l/isa-l_crypto
+	url = https://github.com/intel/isa-l_crypto
+[submodule "src/blkin"]
+	path = src/blkin
+	url = https://github.com/ceph/blkin
+[submodule "src/dmclock"]
+	path = src/dmclock
+	url = https://github.com/ceph/dmclock.git
+[submodule "src/seastar"]
+	path = src/seastar
+	url = https://github.com/ceph/seastar.git
+[submodule "src/fmt"]
+	path = src/fmt
+	url = https://github.com/ceph/fmt.git
+[submodule "src/c-ares"]
+	path = src/c-ares
+	url = https://github.com/ceph/c-ares.git
+[submodule "src/pybind/mgr/rook/rook-client-python"]
+	path = src/pybind/mgr/rook/rook-client-python
+	url = https://github.com/ceph/rook-client-python.git
+[submodule "s3select"]
+	path = src/s3select
+	url = https://github.com/ceph/s3select.git
+[submodule "src/libkmip"]
+	path = src/libkmip
+	url = https://github.com/ceph/libkmip
+	branch = ceph-master
+[submodule "src/arrow"]
+	path = src/arrow
+	url = https://github.com/apache/arrow.git
+[submodule "src/utf8proc"]
+	path = src/utf8proc
+	url = https://github.com/JuliaStrings/utf8proc
+[submodule "src/jaegertracing/opentelemetry-cpp"]
+	path = src/jaegertracing/opentelemetry-cpp
+	url = https://github.com/open-telemetry/opentelemetry-cpp.git
+[submodule "src/qatlib"]
+	path = src/qatlib
+	url = https://github.com/intel/qatlib.git
+[submodule "src/qatzip"]
+	path = src/qatzip
+	url = https://github.com/intel/qatzip.git
+[submodule "src/BLAKE3"]
+	path = src/BLAKE3
+	url = https://github.com/BLAKE3-team/BLAKE3.git
+[submodule "src/nvmeof/gateway"]
+	path = src/nvmeof/gateway
+	url = https://github.com/ceph/ceph-nvmeof.git
+	fetchRecurseSubmodules = false
