@@ -631,7 +631,7 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
     // 3. read the truncated extents
     // TODO: check if the returned extents are pruned
     return interruptor::make_interruptible(store->readv(coll, ghobject_t{oid},
-      push_op->data_included, 0));
+      push_op->data_included, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED));
   }).safe_then_interruptible([push_op, range_end=copy_subset.range_end()](auto &&bl) {
     push_op->data.claim_append(std::move(bl));
     uint64_t recovered_to = 0;
