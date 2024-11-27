@@ -125,6 +125,12 @@ class TripleWriteOp : public ReadWriteOp<OpType::Write3, 3> {
       uint64_t offset3, uint64_t length3);
 };
 
+class SingleAppendOp : public ReadWriteOp<OpType::Append, 1> {
+ public:
+  SingleAppendOp(uint64_t length);
+  static std::unique_ptr<SingleAppendOp> generate(uint64_t length);
+};
+
 class SingleFailedWriteOp : public ReadWriteOp<OpType::FailedWrite, 1> {
  public:
   SingleFailedWriteOp(uint64_t offset, uint64_t length);
