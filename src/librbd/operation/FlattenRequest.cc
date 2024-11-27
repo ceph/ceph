@@ -49,15 +49,6 @@ public:
       return -ERESTART;
     }
 
-    {
-      std::shared_lock image_lock{image_ctx.image_lock};
-      if (image_ctx.object_map != nullptr &&
-          !image_ctx.object_map->object_may_not_exist(m_object_no)) {
-        // can skip because the object already exists
-        return 1;
-      }
-    }
-
     if (!io::util::trigger_copyup(
             &image_ctx, m_object_no, m_io_context, this)) {
       // stop early if the parent went away - it just means
