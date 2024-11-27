@@ -1455,7 +1455,7 @@ record_t Cache::prepare_record(
     i->state = CachedExtent::extent_state_t::CLEAN;
     assert(i->is_logical());
     i->clear_modified_region();
-    touch_extent(*i, &trans_src);
+    touch_extent(*i, {trans_src, t.get_fadvise_flags()});
     DEBUGT("inplace rewrite ool block is commmitted -- {}", t, *i);
   }
 
@@ -1681,7 +1681,7 @@ void Cache::complete_commit(
     add_extent(i);
     assert(!i->is_dirty());
     const auto t_src = t.get_src();
-    touch_extent(*i, &t_src);
+    touch_extent(*i, {t_src, t.get_fadvise_flags()});
     epm.commit_space_used(i->get_paddr(), i->get_length());
     if (is_backref_mapped_extent_node(i)) {
       DEBUGT("backref_list new {} len 0x{:x}",
@@ -1802,7 +1802,7 @@ void Cache::complete_commit(
       if (i->is_dirty()) {
         add_to_dirty(i, &t_src);
       } else {
-        touch_extent(*i, &t_src);
+        touch_extent(*i, {t_src, t.get_fadvise_flags()});
       }
     }
   }
@@ -2002,9 +2002,9 @@ Cache::replay_delta(
         [](CachedExtent &) {},
         [this](CachedExtent &ext) {
           // replay is not included by the cache hit metrics
-          touch_extent(ext, nullptr);
+          touch_extent(ext, src_ext_null);
         },
-        nullptr) :
+	Transaction::src_t::MAX) :
       _get_extent_if_cached(
 	delta.paddr)
     ).handle_error(
@@ -2168,7 +2168,7 @@ Cache::do_get_caching_extent_by_type(
   extent_len_t length,
   extent_init_func_t &&extent_init_func,
   extent_init_func_t &&on_cache,
-  const Transaction::src_t* p_src)
+  Transaction::src_t p_src)
 {
   return [=, this, extent_init_func=std::move(extent_init_func)]() mutable {
     switch (type) {

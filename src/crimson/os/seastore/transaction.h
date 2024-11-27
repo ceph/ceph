@@ -406,6 +406,7 @@ public:
     OrderingHandle &&handle,
     bool weak,
     src_t src,
+    uint32_t fadvise_flags,
     journal_seq_t initiated_after,
     on_destruct_func_t&& f,
     transaction_id_t trans_id
@@ -413,7 +414,8 @@ public:
       handle(std::move(handle)),
       on_destruct(std::move(f)),
       src(src),
-      trans_id(trans_id)
+      trans_id(trans_id),
+      fadvise_flags(fadvise_flags)
   {}
 
   void invalidate_clear_write_set() {
@@ -571,6 +573,9 @@ public:
     return pre_alloc_list;
   }
 
+  uint32_t get_fadvise_flags() const {
+    return fadvise_flags;
+  }
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -669,6 +674,8 @@ private:
   transaction_id_t trans_id = TRANS_ID_NULL;
 
   seastar::lw_shared_ptr<rbm_pending_ool_t> pending_ool;
+
+  uint32_t fadvise_flags = 0;
 };
 using TransactionRef = Transaction::Ref;
 
@@ -679,6 +686,7 @@ inline TransactionRef make_test_transaction() {
     get_dummy_ordering_handle(),
     false,
     Transaction::src_t::MUTATE,
+    0,
     JOURNAL_SEQ_NULL,
     [](Transaction&) {},
     ++next_id
