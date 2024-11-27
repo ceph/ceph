@@ -42,22 +42,6 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
   unsigned instance_id = 0;
 
 public:
-  class PGPipeline : public CommonPGPipeline {
-    public:
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name = "ClientRequest::PGPipeline::await_map";
-    } await_map;
-    struct SendReply : OrderedExclusivePhaseT<SendReply> {
-      static constexpr auto type_name = "ClientRequest::PGPipeline::send_reply";
-    } send_reply;
-    friend class ClientRequest;
-    friend class LttngBackend;
-    friend class HistoricBackend;
-    friend class ReqRequest;
-    friend class LogMissingRequest;
-    friend class LogMissingRequestReply;
-  };
-
   /**
    * instance_handle_t
    *
