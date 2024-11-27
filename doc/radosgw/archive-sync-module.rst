@@ -7,7 +7,7 @@ Archive Sync Module
 The Archive Sync module uses the RGW versioning feature of S3 objects to
 maintain an archive zone that captures successive versions of objects
 as they are updated in other zones.  Archive zone objects can
-only be removed through gateways associated with the archive zone.
+be removed only through gateways associated with the archive zone.
 
 This enables a deployment where several
 non-versioned zones replicate their data and metadata through their zone
