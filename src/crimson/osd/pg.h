@@ -79,6 +79,7 @@ class PG : public boost::intrusive_ref_counter<
   using cached_map_t = OSDMapService::cached_map_t;
 
   ClientRequest::PGPipeline request_pg_pipeline;
+  PGRepopPipeline repop_pipeline;
   PGPeeringPipeline peering_request_pg_pipeline;
 
   ClientRequest::Orderer client_request_orderer;
