@@ -10990,7 +10990,7 @@ retry:
     // C_Read_Sync_NonBlocking::finish().
 
     // trim read based on file size?
-    if ((offset >= in->size) || (size == 0)) {
+    if (std::cmp_greater_equal(offset, in->size) || (size == 0)) {
       // read is requested at the EOF or the read len is zero, therefore just
       // release managed pointers and complete the C_Read_Finisher immediately with 0 bytes
 
