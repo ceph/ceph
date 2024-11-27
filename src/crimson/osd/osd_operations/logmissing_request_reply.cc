@@ -56,11 +56,6 @@ PerShardPipeline &LogMissingRequestReply::get_pershard_pipeline(
   return shard_services.get_replicated_request_pipeline();
 }
 
-ClientRequest::PGPipeline &LogMissingRequestReply::client_pp(PG &pg)
-{
-  return pg.request_pg_pipeline;
-}
-
 seastar::future<> LogMissingRequestReply::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
