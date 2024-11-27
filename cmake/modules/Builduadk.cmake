@@ -13,8 +13,7 @@ function(build_uadk)
 	    UPDATE_COMMAND "" # this disables rebuild on each run
 	    GIT_REPOSITORY "https://github.com/Linaro/uadk.git"
             GIT_CONFIG advice.detachedHead=false
-            GIT_SHALLOW 1
-            GIT_TAG "master"
+            GIT_TAG 90fb6f227427f568e34337309075ed7a3f71bab9
             SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/uadk"
             BUILD_IN_SOURCE 1
             CMAKE_ARGS -DCMAKE_CXX_COMPILER=which g++
