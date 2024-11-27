@@ -68,6 +68,12 @@ struct CommonPGPipeline {
   struct WaitRepop : OrderedConcurrentPhaseT<WaitRepop> {
     static constexpr auto type_name = "ClientRequest::PGPipeline::wait_repop";
   } wait_repop;
+  struct WaitPGReady : OrderedConcurrentPhaseT<WaitPGReady> {
+    static constexpr auto type_name = "CommonPGPipeline:::wait_pg_ready";
+  } wait_pg_ready;
+  struct GetOBC : OrderedExclusivePhaseT<GetOBC> {
+    static constexpr auto type_name = "CommonPGPipeline:::get_obc";
+  } get_obc;
 };
 
 struct CommonOBCPipeline {

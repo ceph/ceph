@@ -25,6 +25,9 @@ struct LttngBackend
     ConnectionPipeline::AwaitMap::BlockingEvent::Backend,
     ConnectionPipeline::GetPGMapping::BlockingEvent::Backend,
     PerShardPipeline::CreateOrWaitPG::BlockingEvent::Backend,
+    CommonPGPipeline::WaitPGReady::BlockingEvent::Backend,
+    CommonPGPipeline::WaitPGReady::BlockingEvent::ExitBarrierEvent::Backend,
+    CommonPGPipeline::GetOBC::BlockingEvent::Backend,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent::Backend,
     PGMap::PGCreationBlockingEvent::Backend,
     ClientRequest::PGPipeline::AwaitMap::BlockingEvent::Backend,
@@ -74,6 +77,20 @@ struct LttngBackend
   void handle(PerShardPipeline::CreateOrWaitPG::BlockingEvent& ev,
               const Operation& op,
               const PerShardPipeline::CreateOrWaitPG& blocker) override {
+  }
+
+  void handle(CommonPGPipeline::WaitPGReady::BlockingEvent& ev,
+              const Operation& op,
+              const CommonPGPipeline::WaitPGReady& blocker) override {
+  }
+
+  void handle(CommonPGPipeline::WaitPGReady::BlockingEvent::ExitBarrierEvent& ev,
+              const Operation& op) override {
+  }
+
+  void handle(CommonPGPipeline::GetOBC::BlockingEvent& ev,
+              const Operation& op,
+              const CommonPGPipeline::GetOBC& blocker) override {
   }
 
   void handle(PGMap::PGCreationBlockingEvent&,
@@ -180,6 +197,9 @@ struct HistoricBackend
     ConnectionPipeline::AwaitMap::BlockingEvent::Backend,
     ConnectionPipeline::GetPGMapping::BlockingEvent::Backend,
     PerShardPipeline::CreateOrWaitPG::BlockingEvent::Backend,
+    CommonPGPipeline::WaitPGReady::BlockingEvent::Backend,
+    CommonPGPipeline::WaitPGReady::BlockingEvent::ExitBarrierEvent::Backend,
+    CommonPGPipeline::GetOBC::BlockingEvent::Backend,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent::Backend,
     PGMap::PGCreationBlockingEvent::Backend,
     ClientRequest::PGPipeline::AwaitMap::BlockingEvent::Backend,
@@ -229,6 +249,20 @@ struct HistoricBackend
   void handle(PerShardPipeline::CreateOrWaitPG::BlockingEvent& ev,
               const Operation& op,
               const PerShardPipeline::CreateOrWaitPG& blocker) override {
+  }
+
+  void handle(CommonPGPipeline::WaitPGReady::BlockingEvent& ev,
+              const Operation& op,
+              const CommonPGPipeline::WaitPGReady& blocker) override {
+  }
+
+  void handle(CommonPGPipeline::WaitPGReady::BlockingEvent::ExitBarrierEvent& ev,
+              const Operation& op) override {
+  }
+
+  void handle(CommonPGPipeline::GetOBC::BlockingEvent& ev,
+              const Operation& op,
+              const CommonPGPipeline::GetOBC& blocker) override {
   }
 
   void handle(PGMap::PGCreationBlockingEvent&,
