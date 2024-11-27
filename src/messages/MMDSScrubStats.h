@@ -68,7 +68,7 @@ protected:
   ~MMDSScrubStats() override {}
 
 private:
-  unsigned epoch;
+  uint32_t epoch;
   std::set<std::string> scrubbing_tags;
   bool update_scrubbing = false;
   bool aborting = false;

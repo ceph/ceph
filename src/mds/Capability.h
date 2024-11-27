@@ -381,7 +381,7 @@ private:
   ceph_seq_t mseq = 0;
 
   int suppress = 0;
-  unsigned state = 0;
+  uint32_t state = 0;
 
   int lock_cache_allowed = 0;
 };

@@ -57,7 +57,7 @@ private:
   uint32_t caller_gid = 0;
 
   /* advisory CLIENT_CAPS_* flags to send to mds */
-  unsigned flags = 0;
+  uint32_t flags = 0;
 
   int      get_caps() const { return head.caps; }
   int      get_wanted() const { return head.wanted; }
