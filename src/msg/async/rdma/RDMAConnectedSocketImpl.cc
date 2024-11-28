@@ -468,16 +468,16 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
 {
   ldout(cct, 20) << __func__ << " QP: " << local_qpn << " " << tx_buffers[0] << dendl;
   auto current_buffer = tx_buffers.begin();
-  ibv_sge isge[tx_buffers.size()];
+  std::vector<ibv_sge> isge(tx_buffers.size());
   uint32_t current_sge = 0;
-  ibv_send_wr iswr[tx_buffers.size()];
+  std::vector<ibv_send_wr> iswr(tx_buffers.size());
   uint32_t current_swr = 0;
   ibv_send_wr* pre_wr = NULL;
 
   // FIPS zeroization audit 20191115: these memsets are not security related.
-  memset(iswr, 0, sizeof(iswr));
-  memset(isge, 0, sizeof(isge));
- 
+  memset(iswr.data(), 0, sizeof(ibv_send_wr) * iswr.size());
+  memset(isge.data(), 0, sizeof(ibv_sge) * isge.size());
+
   while (current_buffer != tx_buffers.end()) {
     isge[current_sge].addr = reinterpret_cast<uint64_t>((*current_buffer)->buffer);
     isge[current_sge].length = (*current_buffer)->get_offset();
@@ -501,7 +501,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
   }
 
   ibv_send_wr *bad_tx_work_request = nullptr;
-  if (ibv_post_send(qp->get_qp(), iswr, &bad_tx_work_request)) {
+  if (ibv_post_send(qp->get_qp(), iswr.data(), &bad_tx_work_request)) {
     ldout(cct, 1) << __func__ << " failed to send data"
                   << " (most probably should be peer not ready): "
                   << cpp_strerror(errno) << dendl;
