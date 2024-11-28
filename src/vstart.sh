@@ -293,7 +293,7 @@ parse_block_devs() {
     IFS=',' read -r -a block_devs <<< "$devs"
     for dev in "${block_devs[@]}"; do
         if [ ! -b $dev ] || [ ! -w $dev ]; then
-            echo "All $opt_name must refer to writable block devices"
+            echo "All $opt_name must refer to writable block devices, check device: $dev"
             exit 1
         fi
     done
@@ -308,7 +308,7 @@ parse_bluestore_db_devs() {
     IFS=',' read -r -a bluestore_db_devs <<< "$devs"
     for dev in "${bluestore_db_devs[@]}"; do
         if [ ! -b $dev ] || [ ! -w $dev ]; then
-            echo "All $opt_name must refer to writable block devices"
+            echo "All $opt_name must refer to writable block devices, check device: $dev"
             exit 1
         fi
     done
@@ -323,7 +323,7 @@ parse_bluestore_wal_devs() {
     IFS=',' read -r -a bluestore_wal_devs <<< "$devs"
     for dev in "${bluestore_wal_devs[@]}"; do
         if [ ! -b $dev ] || [ ! -w $dev ]; then
-            echo "All $opt_name must refer to writable block devices"
+            echo "All $opt_name must refer to writable block devices, check device: $dev"
             exit 1
         fi
     done
@@ -338,7 +338,7 @@ parse_secondary_devs() {
     IFS=',' read -r -a secondary_block_devs <<< "$devs"
     for dev in "${secondary_block_devs[@]}"; do
         if [ ! -b $dev ] || [ ! -w $dev ]; then
-            echo "All $opt_name must refer to writable block devices"
+            echo "All $opt_name must refer to writable block devices, check device: $dev"
             exit 1
         fi
     done
