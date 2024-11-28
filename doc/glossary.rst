@@ -261,9 +261,13 @@
                 Another name for :term:`Dashboard`.
 
 	Dashboard Plugin
+        DC
+                **D**\ata **C**\enter.
+
 	filestore
                 A back end for OSD daemons, where a Journal is needed and files
                 are written to the filesystem.
+
 
         Flapping OSD
                 An OSD that is repeatedly marked ``up`` and then ``down`` in
