@@ -268,8 +268,8 @@ static int write_header(cls_method_context_t hctx, const otp_header& h)
 static int parse_seed(const string& seed, SeedType seed_type, bufferlist *seed_bin)
 {
   size_t slen = seed.length();
-  char secret[seed.length()];
-  char *psecret = secret;
+  std::vector<char> secret(seed.length());
+  char *psecret = secret.data();
   int result;
   bool need_free = false;
 
@@ -277,7 +277,9 @@ static int parse_seed(const string& seed, SeedType seed_type, bufferlist *seed_b
 
   switch (seed_type) {
     case OTP_SEED_BASE32:
-      need_free = true; /* oath_base32_decode allocates dest buffer */
+      need_free = true;
+      // `oath_base32_decode` allocates its destination with malloc
+      // and replaces the value of psecret.
       result = oath_base32_decode(seed.c_str(), seed.length(),
                                   &psecret, &slen);
       break;
@@ -292,6 +294,8 @@ static int parse_seed(const string& seed, SeedType seed_type, bufferlist *seed_b
   seed_bin->append(psecret, slen);
 
   if (need_free) {
+    // If we're here, `psecret` is a pointer to memory allocated by
+    // `oath_base32_decode`.
     free(psecret);
   }
 
