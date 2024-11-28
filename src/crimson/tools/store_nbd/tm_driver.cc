@@ -82,11 +82,14 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	    return tm->read_pin<TestBlock>(
 	      t,
 	      std::move(pin)
-	    ).si_then([&ret](auto ref) mutable {
-	      ret.push_back(std::make_pair(ref->get_laddr(), ref));
+	    ).si_then([&ret](auto maybe_indirect_extent) mutable {
+	      assert(!maybe_indirect_extent.is_indirect());
+	      assert(!maybe_indirect_extent.is_clone);
+	      auto& e = maybe_indirect_extent.extent;
+	      ret.push_back(std::make_pair(e->get_laddr(), e));
 	      logger().debug(
 		"read_extents: got extent {}",
-		*ref);
+		*e);
 	      return seastar::now();
 	    });
 	  }).si_then([&ret] {

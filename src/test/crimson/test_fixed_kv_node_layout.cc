@@ -88,12 +88,14 @@ struct TestNode : FixedKVNodeLayout<
   uint32_t, ceph_le32,
   test_val_t, test_val_le_t> {
   char buf[4096];
-  TestNode() : FixedKVNodeLayout(buf) {
+  TestNode() : FixedKVNodeLayout() {
+    set_layout_buf(buf);
     memset(buf, 0, sizeof(buf));
     set_meta({0, std::numeric_limits<uint32_t>::max()});
   }
   TestNode(const TestNode &rhs)
-    : FixedKVNodeLayout(buf) {
+    : FixedKVNodeLayout() {
+    set_layout_buf(buf);
     ::memcpy(buf, rhs.buf, sizeof(buf));
   }
 

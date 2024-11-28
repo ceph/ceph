@@ -50,6 +50,8 @@ struct extent_to_write_t {
 
   extent_to_write_t(const extent_to_write_t &) = delete;
   extent_to_write_t(extent_to_write_t &&) = default;
+  extent_to_write_t& operator=(const extent_to_write_t&) = delete;
+  extent_to_write_t& operator=(extent_to_write_t&&) = default;
 
   bool is_data() const {
     return type == type_t::DATA;
@@ -827,7 +829,7 @@ namespace crimson::os::seastore {
  */
 using operate_ret_bare = std::pair<
   std::optional<extent_to_write_t>,
-  std::optional<bufferptr>>;
+  std::optional<ceph::bufferlist>>;
 using operate_ret = get_iertr::future<operate_ret_bare>;
 operate_ret operate_left(context_t ctx, LBAMappingRef &pin, const overwrite_plan_t &overwrite_plan)
 {
@@ -839,19 +841,26 @@ operate_ret operate_left(context_t ctx, LBAMappingRef &pin, const overwrite_plan
 
   if (overwrite_plan.left_operation == overwrite_operation_t::OVERWRITE_ZERO) {
     assert(pin->get_val().is_zero());
+
     auto zero_extent_len = overwrite_plan.get_left_extent_size();
     assert_aligned(zero_extent_len);
+    std::optional<extent_to_write_t> extent_to_write;
+    if (zero_extent_len != 0) {
+      extent_to_write = extent_to_write_t::create_zero(
+         overwrite_plan.pin_begin, zero_extent_len);
+    }
+
     auto zero_prepend_len = overwrite_plan.get_left_alignment_size();
+    std::optional<ceph::bufferlist> prepend_bl;
+    if (zero_prepend_len != 0) {
+      ceph::bufferlist zero_bl;
+      zero_bl.append_zero(zero_prepend_len);
+      prepend_bl = std::move(zero_bl);
+    }
+
     return get_iertr::make_ready_future<operate_ret_bare>(
-      (zero_extent_len == 0
-       ? std::nullopt
-       : std::make_optional(extent_to_write_t::create_zero(
-           overwrite_plan.pin_begin, zero_extent_len))),
-      (zero_prepend_len == 0
-       ? std::nullopt
-       : std::make_optional(bufferptr(
-           ceph::buffer::create(zero_prepend_len, 0))))
-    );
+      std::move(extent_to_write),
+      std::move(prepend_bl));
   } else if (overwrite_plan.left_operation == overwrite_operation_t::MERGE_EXISTING) {
     auto prepend_len = overwrite_plan.get_left_size();
     if (prepend_len == 0) {
@@ -859,16 +868,15 @@ operate_ret operate_left(context_t ctx, LBAMappingRef &pin, const overwrite_plan
         std::nullopt,
         std::nullopt);
     } else {
-      extent_len_t off = pin->get_intermediate_offset();
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
-      ).si_then([prepend_len, off](auto left_extent) {
+      ).si_then([prepend_len](auto maybe_indirect_left_extent) {
+        auto read_bl = maybe_indirect_left_extent.get_bl();
+        ceph::bufferlist prepend_bl;
+        prepend_bl.substr_of(read_bl, 0, prepend_len);
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::nullopt,
-          std::make_optional(bufferptr(
-            left_extent->get_bptr(),
-            off,
-            prepend_len)));
+          std::move(prepend_bl));
       });
     }
   } else {
@@ -888,18 +896,17 @@ operate_ret operate_left(context_t ctx, LBAMappingRef &pin, const overwrite_plan
         std::move(left_to_write_extent),
         std::nullopt);
     } else {
-      extent_len_t off = pin->get_intermediate_offset();
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
-      ).si_then([prepend_offset=extent_len + off, prepend_len,
+      ).si_then([prepend_offset=extent_len, prepend_len,
                  left_to_write_extent=std::move(left_to_write_extent)]
-                (auto left_extent) mutable {
+                (auto left_maybe_indirect_extent) mutable {
+        auto read_bl = left_maybe_indirect_extent.get_bl();
+        ceph::bufferlist prepend_bl;
+        prepend_bl.substr_of(read_bl, prepend_offset, prepend_len);
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::move(left_to_write_extent),
-          std::make_optional(bufferptr(
-            left_extent->get_bptr(),
-            prepend_offset,
-            prepend_len)));
+          std::move(prepend_bl));
       });
     }
   }
@@ -922,19 +929,26 @@ operate_ret operate_right(context_t ctx, LBAMappingRef &pin, const overwrite_pla
   assert(overwrite_plan.data_end >= right_pin_begin);
   if (overwrite_plan.right_operation == overwrite_operation_t::OVERWRITE_ZERO) {
     assert(pin->get_val().is_zero());
+
     auto zero_suffix_len = overwrite_plan.get_right_alignment_size();
+    std::optional<ceph::bufferlist> suffix_bl;
+    if (zero_suffix_len != 0) {
+      ceph::bufferlist zero_bl;
+      zero_bl.append_zero(zero_suffix_len);
+      suffix_bl = std::move(zero_bl);
+    }
+
     auto zero_extent_len = overwrite_plan.get_right_extent_size();
     assert_aligned(zero_extent_len);
+    std::optional<extent_to_write_t> extent_to_write;
+    if (zero_extent_len != 0) {
+      extent_to_write = extent_to_write_t::create_zero(
+        overwrite_plan.aligned_data_end, zero_extent_len);
+    }
+
     return get_iertr::make_ready_future<operate_ret_bare>(
-      (zero_extent_len == 0
-       ? std::nullopt
-       : std::make_optional(extent_to_write_t::create_zero(
-           overwrite_plan.aligned_data_end, zero_extent_len))),
-      (zero_suffix_len == 0
-       ? std::nullopt
-       : std::make_optional(bufferptr(
-           ceph::buffer::create(zero_suffix_len, 0))))
-    );
+      std::move(extent_to_write),
+      std::move(suffix_bl));
   } else if (overwrite_plan.right_operation == overwrite_operation_t::MERGE_EXISTING) {
     auto append_len = overwrite_plan.get_right_size();
     if (append_len == 0) {
@@ -944,17 +958,17 @@ operate_ret operate_right(context_t ctx, LBAMappingRef &pin, const overwrite_pla
     } else {
       auto append_offset =
 	overwrite_plan.data_end.get_byte_distance<
-	  extent_len_t>(right_pin_begin)
-	  + pin->get_intermediate_offset();
+	  extent_len_t>(right_pin_begin);
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
-      ).si_then([append_offset, append_len](auto right_extent) {
+      ).si_then([append_offset, append_len]
+                (auto right_maybe_indirect_extent) {
+        auto read_bl = right_maybe_indirect_extent.get_bl();
+        ceph::bufferlist suffix_bl;
+        suffix_bl.substr_of(read_bl, append_offset, append_len);
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::nullopt,
-          std::make_optional(bufferptr(
-            right_extent->get_bptr(),
-            append_offset,
-            append_len)));
+          std::move(suffix_bl));
       });
     }
   } else {
@@ -976,19 +990,18 @@ operate_ret operate_right(context_t ctx, LBAMappingRef &pin, const overwrite_pla
     } else {
       auto append_offset =
 	overwrite_plan.data_end.get_byte_distance<
-	  extent_len_t>(right_pin_begin)
-	  + pin->get_intermediate_offset();
+	  extent_len_t>(right_pin_begin);
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
       ).si_then([append_offset, append_len,
                  right_to_write_extent=std::move(right_to_write_extent)]
-                (auto right_extent) mutable {
+                (auto maybe_indirect_right_extent) mutable {
+        auto read_bl = maybe_indirect_right_extent.get_bl();
+        ceph::bufferlist suffix_bl;
+        suffix_bl.substr_of(read_bl, append_offset, append_len);
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::move(right_to_write_extent),
-          std::make_optional(bufferptr(
-            right_extent->get_bptr(),
-            append_offset,
-            append_len)));
+          std::move(suffix_bl));
       });
     }
   }
@@ -1136,22 +1149,18 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
               ctx.t,
               pin.duplicate()
             ).si_then([ctx, size, pin_offset, append_len, roundup_size,
-                      &pin, &object_data, &to_write](auto extent) {
-              bufferlist bl;
-	      bl.append(
-	        bufferptr(
-	          extent->get_bptr(),
-		  pin.get_intermediate_offset(),
-	          size - pin_offset
-	      ));
-              bl.append_zero(append_len);
+                      &pin, &object_data, &to_write](auto maybe_indirect_extent) {
+              auto read_bl = maybe_indirect_extent.get_bl();
+              ceph::bufferlist write_bl;
+              write_bl.substr_of(read_bl, 0, size - pin_offset);
+              write_bl.append_zero(append_len);
               LOG_PREFIX(ObjectDataHandler::trim_data_reservation);
               TRACET("First pin overlaps the boundary and has unaligned data"
                 "create data at addr:{}, len:{}",
-                ctx.t, pin.get_key(), bl.length());
+                ctx.t, pin.get_key(), write_bl.length());
 	      to_write.push_back(extent_to_write_t::create_data(
 	        pin.get_key(),
-	        bl));
+	        write_bl));
 	      to_write.push_back(extent_to_write_t::create_zero(
 	        (object_data.get_reserved_data_base() + roundup_size).checked_to_laddr(),
 	        object_data.get_reserved_data_len() - roundup_size));
@@ -1184,44 +1193,45 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
  * get_to_writes_with_zero_buffer
  *
  * Returns extent_to_write_t's reflecting a zero region extending
- * from offset~len with headptr optionally on the left and tailptr
+ * from offset~len with headbl optionally on the left and tailbl
  * optionally on the right.
  */
 extent_to_write_list_t get_to_writes_with_zero_buffer(
   laddr_t data_base,
   const extent_len_t block_size,
   objaddr_t offset, extent_len_t len,
-  std::optional<bufferptr> &&headptr, std::optional<bufferptr> &&tailptr)
+  std::optional<ceph::bufferlist> &&headbl,
+  std::optional<ceph::bufferlist> &&tailbl)
 {
   auto zero_left = p2roundup(offset, (objaddr_t)block_size);
   auto zero_right = p2align(offset + len, (objaddr_t)block_size);
-  auto left = headptr ? (offset - headptr->length()) : offset;
-  auto right = tailptr ?
-    (offset + len + tailptr->length()) :
+  auto left = headbl ? (offset - headbl->length()) : offset;
+  auto right = tailbl ?
+    (offset + len + tailbl->length()) :
     (offset + len);
 
   assert(
-    (headptr && ((zero_left - left) ==
-		 p2roundup(headptr->length(), block_size))) ^
-    (!headptr && (zero_left == left)));
+    (headbl && ((zero_left - left) ==
+		 p2roundup(headbl->length(), block_size))) ^
+    (!headbl && (zero_left == left)));
   assert(
-    (tailptr && ((right - zero_right) ==
-		 p2roundup(tailptr->length(), block_size))) ^
-    (!tailptr && (right == zero_right)));
+    (tailbl && ((right - zero_right) ==
+		 p2roundup(tailbl->length(), block_size))) ^
+    (!tailbl && (right == zero_right)));
 
   assert(right > left);
 
   // zero region too small for a reserved section,
-  // headptr and tailptr in same extent
+  // headbl and tailbl in same extent
   if (zero_right <= zero_left) {
     bufferlist bl;
-    if (headptr) {
-      bl.append(*headptr);
+    if (headbl) {
+      bl.append(*headbl);
     }
     bl.append_zero(
-      right - left - bl.length() - (tailptr ? tailptr->length() : 0));
-    if (tailptr) {
-      bl.append(*tailptr);
+      right - left - bl.length() - (tailbl ? tailbl->length() : 0));
+    if (tailbl) {
+      bl.append(*tailbl);
     }
     assert(bl.length() % block_size == 0);
     assert(bl.length() == (right - left));
@@ -1230,16 +1240,16 @@ extent_to_write_list_t get_to_writes_with_zero_buffer(
       (data_base + left).checked_to_laddr(), bl));
     return ret;
   } else {
-    // reserved section between ends, headptr and tailptr in different extents
+    // reserved section between ends, headbl and tailbl in different extents
     extent_to_write_list_t ret;
-    if (headptr) {
-      bufferlist headbl;
-      headbl.append(*headptr);
-      headbl.append_zero(zero_left - left - headbl.length());
-      assert(headbl.length() % block_size == 0);
-      assert(headbl.length() > 0);
+    if (headbl) {
+      bufferlist head_zero_bl;
+      head_zero_bl.append(*headbl);
+      head_zero_bl.append_zero(zero_left - left - head_zero_bl.length());
+      assert(head_zero_bl.length() % block_size == 0);
+      assert(head_zero_bl.length() > 0);
       ret.push_back(extent_to_write_t::create_data(
-		      (data_base + left).checked_to_laddr(), headbl));
+        (data_base + left).checked_to_laddr(), head_zero_bl));
     }
     // reserved zero region
     ret.push_back(extent_to_write_t::create_zero(
@@ -1247,14 +1257,14 @@ extent_to_write_list_t get_to_writes_with_zero_buffer(
       zero_right - zero_left));
     assert(ret.back().len % block_size == 0);
     assert(ret.back().len > 0);
-    if (tailptr) {
-      bufferlist tailbl;
-      tailbl.append(*tailptr);
-      tailbl.append_zero(right - zero_right - tailbl.length());
-      assert(tailbl.length() % block_size == 0);
-      assert(tailbl.length() > 0);
+    if (tailbl) {
+      bufferlist tail_zero_bl;
+      tail_zero_bl.append(*tailbl);
+      tail_zero_bl.append_zero(right - zero_right - tail_zero_bl.length());
+      assert(tail_zero_bl.length() % block_size == 0);
+      assert(tail_zero_bl.length() > 0);
       ret.push_back(extent_to_write_t::create_data(
-        (data_base + zero_right).checked_to_laddr(), tailbl));
+        (data_base + zero_right).checked_to_laddr(), tail_zero_bl));
     }
     return ret;
   }
@@ -1306,13 +1316,13 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
       overwrite_plan
     ).si_then([ctx, data_base, len, offset, overwrite_plan, bl=std::move(bl),
                &to_write, &pins, this](auto p) mutable {
-      auto &[left_extent, headptr] = p;
+      auto &[left_extent, headbl] = p;
       if (left_extent) {
         ceph_assert(left_extent->addr == overwrite_plan.pin_begin);
         append_extent_to_write(to_write, std::move(*left_extent));
       }
-      if (headptr) {
-        assert(headptr->length() > 0);
+      if (headbl) {
+        assert(headbl->length() > 0);
       }
       return operate_right(
         ctx,
@@ -1321,19 +1331,19 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
       ).si_then([ctx, data_base, len, offset,
                  pin_begin=overwrite_plan.pin_begin,
                  pin_end=overwrite_plan.pin_end,
-                 bl=std::move(bl), headptr=std::move(headptr),
+                 bl=std::move(bl), headbl=std::move(headbl),
                  &to_write, &pins, this](auto p) mutable {
-        auto &[right_extent, tailptr] = p;
+        auto &[right_extent, tailbl] = p;
         if (bl.has_value()) {
           auto write_offset = offset;
           bufferlist write_bl;
-          if (headptr) {
-            write_bl.append(*headptr);
-            write_offset = write_offset - headptr->length();
+          if (headbl) {
+            write_bl.append(*headbl);
+            write_offset = write_offset - headbl->length();
           }
           write_bl.claim_append(*bl);
-          if (tailptr) {
-            write_bl.append(*tailptr);
+          if (tailbl) {
+            write_bl.append(*tailbl);
             assert_aligned(write_bl.length());
           }
           splice_extent_to_write(
@@ -1347,8 +1357,8 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
               ctx.tm.get_block_size(),
               offset,
               len,
-              std::move(headptr),
-              std::move(tailptr)));
+              std::move(headbl),
+              std::move(tailbl)));
         }
         if (right_extent) {
           ceph_assert(right_extent->get_end_addr() == pin_end);
@@ -1501,83 +1511,74 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
             pins,
             [FNAME, ctx, l_start, l_end,
              &l_current, &ret](auto &pin) -> read_iertr::future<> {
-            auto pin_key = pin->get_key();
-            if (l_current == l_start) {
-              ceph_assert(l_current >= pin_key);
-            } else {
+            auto pin_start = pin->get_key();
+            extent_len_t read_start;
+            extent_len_t read_start_aligned;
+            if (l_current == l_start) { // first pin may skip head
+              ceph_assert(l_current.get_aligned_laddr() >= pin_start);
+              read_start = l_current.template
+                get_byte_distance<extent_len_t>(pin_start);
+              read_start_aligned = p2align(read_start, ctx.tm.get_block_size());
+            } else { // non-first pin must match start
               assert(l_current > l_start);
-              ceph_assert(l_current == pin_key);
+              ceph_assert(l_current == pin_start);
+              read_start = 0;
+              read_start_aligned = 0;
             }
+
             ceph_assert(l_current < l_end);
             auto pin_len = pin->get_length();
             assert(pin_len > 0);
-            laddr_offset_t l_pin_end = pin_key + pin_len;
-            ceph_assert(l_current < l_pin_end);
-            laddr_offset_t l_current_end = std::min(l_pin_end, l_end);
+            laddr_offset_t pin_end = pin_start + pin_len;
+            assert(l_current < pin_end);
+            laddr_offset_t l_current_end = std::min(pin_end, l_end);
+            extent_len_t read_len =
+              l_current_end.get_byte_distance<extent_len_t>(l_current);
+
             if (pin->get_val().is_zero()) {
               DEBUGT("got {}~{} from zero-pin {}~{}",
                 ctx.t,
                 l_current,
-                l_current_end.get_byte_distance<loffset_t>(l_current),
-                pin_key,
+                read_len,
+                pin_start,
                 pin_len);
-              ret.append_zero(
-		l_current_end.get_byte_distance<
-		  extent_len_t>(l_current));
+              ret.append_zero(read_len);
               l_current = l_current_end;
               return seastar::now();
             }
 
             // non-zero pin
-            bool is_indirect = pin->is_indirect();
-            laddr_t e_key;
-            extent_len_t e_len;
-            extent_len_t e_off;
-            if (is_indirect) {
-              e_key = pin->get_intermediate_base();
-              e_len = pin->get_intermediate_length();
-              e_off = pin->get_intermediate_offset();
-              DEBUGT("reading {}~{} from indirect-pin {}~{}, direct-pin {}~{}(off={})",
-                ctx.t,
-                l_current,
-		l_current_end.get_byte_distance<extent_len_t>(l_current),
-                pin_key,
-                pin_len,
-                e_key,
-                e_len,
-                e_off);
-              assert(e_key <= pin->get_intermediate_key());
-              assert(e_off + pin_len <= e_len);
-            } else {
-              DEBUGT("reading {}~{} from pin {}~{}",
-                ctx.t,
-                l_current,
-		l_current_end.get_byte_distance<
-		   extent_len_t>(l_current),
-                pin_key,
-                pin_len);
-              e_key = pin_key;
-              e_len = pin_len;
-              e_off = 0;
-            }
-            extent_len_t e_current_off = (l_current + e_off)
-		.template get_byte_distance<extent_len_t>(pin_key);
+            laddr_t l_current_end_aligned = l_current_end.get_roundup_laddr();
+            extent_len_t read_len_aligned =
+              l_current_end_aligned.get_byte_distance<extent_len_t>(pin_start);
+            read_len_aligned -= read_start_aligned;
+            extent_len_t unalign_start_offset = read_start - read_start_aligned;
+            DEBUGT("reading {}~{} from pin {}~{}",
+              ctx.t,
+              l_current,
+              read_len,
+              pin_start,
+              pin_len);
             return ctx.tm.read_pin<ObjectDataBlock>(
               ctx.t,
-              std::move(pin)
+              std::move(pin),
+              read_start_aligned,
+              read_len_aligned
             ).si_then([&ret, &l_current, l_current_end,
-#ifndef NDEBUG
-                       e_key, e_len, e_current_off](auto extent) {
-#else
-                       e_current_off](auto extent) {
-#endif
-              assert(e_key == extent->get_laddr());
-              assert(e_len == extent->get_length());
-              ret.append(
-                bufferptr(
-                  extent->get_bptr(),
-                  e_current_off,
-                  l_current_end.get_byte_distance<extent_len_t>(l_current)));
+                       read_start_aligned, read_len_aligned,
+                       unalign_start_offset, read_len](auto maybe_indirect_extent) {
+              auto aligned_bl = maybe_indirect_extent.get_range(
+                  read_start_aligned, read_len_aligned);
+              if (read_len < read_len_aligned) {
+                ceph::bufferlist unaligned_bl;
+                unaligned_bl.substr_of(
+                    aligned_bl, unalign_start_offset, read_len);
+                ret.append(std::move(unaligned_bl));
+              } else {
+                assert(read_len == read_len_aligned);
+                assert(unalign_start_offset == 0);
+                ret.append(std::move(aligned_bl));
+              }
               l_current = l_current_end;
               return seastar::now();
             }).handle_error_interruptible(

@@ -523,101 +523,111 @@ TransactionManager::rewrite_logical_extent(
     ceph_abort();
   }
 
-  auto lextent = extent->cast<LogicalCachedExtent>();
-  cache->retire_extent(t, extent);
-  if (get_extent_category(lextent->get_type()) == data_category_t::METADATA) {
-    auto nlextent = cache->alloc_new_extent_by_type(
+  if (get_extent_category(extent->get_type()) == data_category_t::METADATA) {
+    assert(extent->is_fully_loaded());
+    cache->retire_extent(t, extent);
+    auto nextent = cache->alloc_new_extent_by_type(
       t,
-      lextent->get_type(),
-      lextent->get_length(),
-      lextent->get_user_hint(),
+      extent->get_type(),
+      extent->get_length(),
+      extent->get_user_hint(),
       // get target rewrite generation
-      lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
-    nlextent->rewrite(t, *lextent, 0);
+      extent->get_rewrite_generation())->cast<LogicalCachedExtent>();
+    nextent->rewrite(t, *extent, 0);
 
-    DEBUGT("rewriting meta -- {} to {}", t, *lextent, *nlextent);
+    DEBUGT("rewriting meta -- {} to {}", t, *extent, *nextent);
 
 #ifndef NDEBUG
-    if (get_checksum_needed(lextent->get_paddr())) {
-      assert(lextent->get_last_committed_crc() == lextent->calc_crc32c());
+    if (get_checksum_needed(extent->get_paddr())) {
+      assert(extent->get_last_committed_crc() == extent->calc_crc32c());
     } else {
-      assert(lextent->get_last_committed_crc() == CRC_NULL);
+      assert(extent->get_last_committed_crc() == CRC_NULL);
     }
 #endif
-    nlextent->set_last_committed_crc(lextent->get_last_committed_crc());
+    nextent->set_last_committed_crc(extent->get_last_committed_crc());
     /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
      * extents since we're going to do it again once we either do the ool write
      * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
      * avoid this complication. */
     return lba_manager->update_mapping(
       t,
-      lextent->get_laddr(),
-      lextent->get_length(),
-      lextent->get_paddr(),
-      nlextent->get_length(),
-      nlextent->get_paddr(),
-      nlextent->get_last_committed_crc(),
-      nlextent.get()).discard_result();
+      extent->get_laddr(),
+      extent->get_length(),
+      extent->get_paddr(),
+      nextent->get_length(),
+      nextent->get_paddr(),
+      nextent->get_last_committed_crc(),
+      nextent.get()
+    ).discard_result();
   } else {
-    assert(get_extent_category(lextent->get_type()) == data_category_t::DATA);
-    auto extents = cache->alloc_new_data_extents_by_type(
-      t,
-      lextent->get_type(),
-      lextent->get_length(),
-      lextent->get_user_hint(),
-      // get target rewrite generation
-      lextent->get_rewrite_generation());
-    return seastar::do_with(
-      std::move(extents),
-      0,
-      lextent->get_length(),
-      extent_ref_count_t(0),
-      [this, FNAME, lextent, &t]
-      (auto &extents, auto &off, auto &left, auto &refcount) {
-      return trans_intr::do_for_each(
-        extents,
-        [lextent, this, FNAME, &t, &off, &left, &refcount](auto &nextent) {
-        bool first_extent = (off == 0);
-        ceph_assert(left >= nextent->get_length());
-        auto nlextent = nextent->template cast<LogicalCachedExtent>();
-        nlextent->rewrite(t, *lextent, off);
-        DEBUGT("rewriting data -- {} to {}", t, *lextent, *nlextent);
+    assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
+    auto length = extent->get_length();
+    return cache->read_extent_maybe_partial(
+      t, std::move(extent), 0, length
+    ).si_then([this, FNAME, &t](auto extent) {
+      assert(extent->is_fully_loaded());
+      cache->retire_extent(t, extent);
+      auto extents = cache->alloc_new_data_extents_by_type(
+        t,
+        extent->get_type(),
+        extent->get_length(),
+        extent->get_user_hint(),
+        // get target rewrite generation
+        extent->get_rewrite_generation());
+      return seastar::do_with(
+        std::move(extents),
+        0,
+        extent->get_length(),
+        extent_ref_count_t(0),
+        [this, FNAME, extent, &t]
+        (auto &extents, auto &off, auto &left, auto &refcount)
+      {
+        return trans_intr::do_for_each(
+          extents,
+          [extent, this, FNAME, &t, &off, &left, &refcount](auto &_nextent)
+        {
+          auto nextent = _nextent->template cast<LogicalCachedExtent>();
+          bool first_extent = (off == 0);
+          ceph_assert(left >= nextent->get_length());
+          nextent->rewrite(t, *extent, off);
+          DEBUGT("rewriting data -- {} to {}", t, *extent, *nextent);
 
-        /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
-         * extents since we're going to do it again once we either do the ool write
-         * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
-         * avoid this complication. */
-        auto fut = base_iertr::now();
-        if (first_extent) {
-          fut = lba_manager->update_mapping(
-            t,
-            (lextent->get_laddr() + off).checked_to_laddr(),
-            lextent->get_length(),
-            lextent->get_paddr(),
-            nlextent->get_length(),
-            nlextent->get_paddr(),
-            nlextent->get_last_committed_crc(),
-            nlextent.get()
-	  ).si_then([&refcount](auto c) {
-	    refcount = c;
-	  });
-        } else {
-	  ceph_assert(refcount != 0);
-          fut = lba_manager->alloc_extent(
-            t,
-            (lextent->get_laddr() + off).checked_to_laddr(),
-            *nlextent,
-	    refcount
-          ).si_then([lextent, nlextent, off](auto mapping) {
-            ceph_assert(mapping->get_key() == lextent->get_laddr() + off);
-            ceph_assert(mapping->get_val() == nlextent->get_paddr());
+          /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
+           * extents since we're going to do it again once we either do the ool write
+           * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
+           * avoid this complication. */
+          auto fut = base_iertr::now();
+          if (first_extent) {
+            fut = lba_manager->update_mapping(
+              t,
+              (extent->get_laddr() + off).checked_to_laddr(),
+              extent->get_length(),
+              extent->get_paddr(),
+              nextent->get_length(),
+              nextent->get_paddr(),
+              nextent->get_last_committed_crc(),
+              nextent.get()
+            ).si_then([&refcount](auto c) {
+              refcount = c;
+            });
+          } else {
+            ceph_assert(refcount != 0);
+            fut = lba_manager->alloc_extent(
+              t,
+              (extent->get_laddr() + off).checked_to_laddr(),
+              *nextent,
+              refcount
+            ).si_then([extent, nextent, off](auto mapping) {
+              ceph_assert(mapping->get_key() == extent->get_laddr() + off);
+              ceph_assert(mapping->get_val() == nextent->get_paddr());
+              return seastar::now();
+            });
+          }
+          return fut.si_then([&off, &left, nextent] {
+            off += nextent->get_length();
+            left -= nextent->get_length();
             return seastar::now();
           });
-        }
-        return fut.si_then([&off, &left, nlextent] {
-          off += nlextent->get_length();
-          left -= nlextent->get_length();
-          return seastar::now();
         });
       });
     });

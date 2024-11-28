@@ -41,8 +41,10 @@ class SeastoreSuper final: public Super {
 
 class SeastoreNodeExtent final: public NodeExtent {
  public:
-  SeastoreNodeExtent(ceph::bufferptr &&ptr)
+  explicit SeastoreNodeExtent(ceph::bufferptr &&ptr)
     : NodeExtent(std::move(ptr)) {}
+  explicit SeastoreNodeExtent(extent_len_t length)
+    : NodeExtent(length) {}
   SeastoreNodeExtent(const SeastoreNodeExtent& other)
     : NodeExtent(other) {}
   ~SeastoreNodeExtent() override = default;
@@ -111,10 +113,14 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       }
     }
     return tm.read_extent<SeastoreNodeExtent>(t, addr
-    ).si_then([addr, &t](auto&& e) -> read_iertr::future<NodeExtentRef> {
+    ).si_then([addr, &t](auto maybe_indirect_extent)
+              -> read_iertr::future<NodeExtentRef> {
+      auto e = maybe_indirect_extent.extent;
       SUBTRACET(seastore_onode,
           "read {}B at {} -- {}",
           t, e->get_length(), e->get_laddr(), *e);
+      assert(!maybe_indirect_extent.is_indirect());
+      assert(!maybe_indirect_extent.is_clone);
       assert(e->get_laddr() == addr);
       std::ignore = addr;
       return read_iertr::make_ready_future<NodeExtentRef>(e);
