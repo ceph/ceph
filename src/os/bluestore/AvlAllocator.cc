@@ -126,11 +126,72 @@ void AvlAllocator::_add_to_tree(uint64_t start, uint64_t size)
   }
 }
 
+void AvlAllocator::_process_range_removal_v2(uint64_t start, uint64_t end,
+  AvlAllocator::range_tree_t::iterator& rs)
+{
+  bool left_over = (rs->start != start);
+  bool right_over = (rs->end != end);
+  auto left_rest = start - rs->start;
+  auto right_rest = rs->end - end;
+  auto little_limit = avl_min_boundary;
+  _range_size_tree_rm(*rs);
+  if (left_over && right_over) {
+    if (left_rest <= little_limit && right_rest <= little_limit) {
+      _spillover_range(rs->start, start);
+      _spillover_range(end, rs->end);
+      range_tree.erase_and_dispose(rs, dispose_rs{});
+    } else if (left_rest <= little_limit) {
+      _spillover_range(rs->start, start);
+      rs->start = end;
+      _range_size_tree_try_insert(*rs);
+    } else if (right_rest <= little_limit) {
+      _spillover_range(end, rs->end);
+      rs->end = start;
+      _range_size_tree_try_insert(*rs);
+    } else {
+      auto old_right_end = rs->end;
+      auto insert_pos = rs;
+      ceph_assert(insert_pos != range_tree.end());
+      ++insert_pos;
+      rs->end = start;
+
+      // Insert tail first to be sure insert_pos hasn't been disposed.
+      // This woulnd't dispose rs though since it's out of range_size_tree.
+      // Don't care about a small chance of 'not-the-best-choice-for-removal' case
+      // which might happen if rs has the lowest size.
+      _try_insert_range(end, old_right_end, &insert_pos);
+      _range_size_tree_try_insert(*rs);
+    }
+  } else if (left_over) {
+    if (left_rest <= little_limit) {
+      _spillover_range(rs->start, start);
+      range_tree.erase_and_dispose(rs, dispose_rs{});
+    } else {
+      rs->end = start;
+      _range_size_tree_try_insert(*rs);
+    }
+  } else if (right_over) {
+    if (right_rest <= little_limit) {
+      _spillover_range(end, rs->end);
+      range_tree.erase_and_dispose(rs, dispose_rs{});
+    } else {
+      rs->start = end;
+      _range_size_tree_try_insert(*rs);
+    }
+  } else {
+    range_tree.erase_and_dispose(rs, dispose_rs{});
+  }
+}
+
 void AvlAllocator::_process_range_removal(uint64_t start, uint64_t end,
   AvlAllocator::range_tree_t::iterator& rs)
 {
   bool left_over = (rs->start != start);
   bool right_over = (rs->end != end);
+  if (avl_min_boundary != 0) {
+    _process_range_removal_v2(start, end, rs);
+    return;
+  }
 
   _range_size_tree_rm(*rs);
 
@@ -344,6 +405,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
   max_search_bytes(
     cct->_conf.get_val<Option::size_t>("bluestore_avl_alloc_ff_max_search_bytes")),
   range_count_cap(max_mem / sizeof(range_seg_t)),
+  avl_min_boundary(cct->_conf.get_val<uint64_t>("bluestore_hybrid_avl_boundary")),
   cct(cct)
 {}
 

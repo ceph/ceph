@@ -176,6 +176,8 @@ private:
   */
   uint64_t range_count_cap = 0;
 
+  uint64_t avl_min_boundary = 0;
+
   void _range_size_tree_rm(range_seg_t& r) {
     ceph_assert(num_free >= r.length());
     num_free -= r.length();
@@ -261,6 +263,9 @@ protected:
   void _shutdown();
 
   void _process_range_removal(uint64_t start, uint64_t end, range_tree_t::iterator& rs);
+  // _process_range_removal_v2 is used to implement the io diversion strategy, 
+  // and release the small segment space managed by the avl allocator to the bitmap allocator.
+  void _process_range_removal_v2(uint64_t start, uint64_t end, range_tree_t::iterator& rs);
   void _remove_from_tree(uint64_t start, uint64_t size);
   void _try_remove_from_tree(uint64_t start, uint64_t size,
     std::function<void(uint64_t offset, uint64_t length, bool found)> cb);
