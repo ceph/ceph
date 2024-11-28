@@ -861,9 +861,9 @@ TEST_F(TestLibRBD, GetId)
     size_t name_len = 0;
     ASSERT_EQ(-ERANGE, rbd_get_name(image, NULL, &name_len));
     ASSERT_EQ(name_len, name.size() + 1);
-    char image_name[name_len];
-    ASSERT_EQ(0, rbd_get_name(image, image_name, &name_len));
-    ASSERT_STREQ(name.c_str(), image_name);
+    std::array<char, 4096> image_name;
+    ASSERT_EQ(0, rbd_get_name(image, image_name.data(), &name_len));
+    ASSERT_STREQ(name.c_str(), image_name.data());
   }
 
   ASSERT_EQ(0, rbd_close(image));
@@ -1810,10 +1810,12 @@ TEST_F(TestLibRBD, TestDeepCopyPP)
 
 int test_ls_snaps(rbd_image_t image, int num_expected, ...)
 {
-  int num_snaps, i, j, max_size = 10;
+  int num_snaps, i, j;
+  static constexpr int max_size = 10;
   va_list ap;
-  rbd_snap_info_t snaps[max_size];
-  num_snaps = rbd_snap_list(image, snaps, &max_size);
+  std::array<rbd_snap_info_t, max_size> snaps;
+  auto max_snaps = max_size;
+  num_snaps = rbd_snap_list(image, snaps.data(), &max_snaps);
   printf("num snaps is: %d\nexpected: %d\n", num_snaps, num_expected);
 
   for (i = 0; i < num_snaps; i++) {
@@ -1896,8 +1898,9 @@ TEST_F(TestLibRBD, TestGetSnapShotTimeStamp)
   int order = 0;
   std::string name = get_temp_image_name();
   uint64_t size = 2 << 20;
-  int num_snaps, max_size = 10;
-  rbd_snap_info_t snaps[max_size];
+  int num_snaps;
+  static constexpr int max_size = 10;
+  std::array<rbd_snap_info_t, max_size> snaps;
 
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
@@ -1905,13 +1908,15 @@ TEST_F(TestLibRBD, TestGetSnapShotTimeStamp)
   ASSERT_EQ(-ENOENT, rbd_snap_get_timestamp(image, 0, NULL));
 
   ASSERT_EQ(0, rbd_snap_create(image, "snap1"));
-  num_snaps = rbd_snap_list(image, snaps, &max_size);
+  auto max_snaps = max_size;
+  num_snaps = rbd_snap_list(image, snaps.data(), &max_snaps);
   ASSERT_EQ(1, num_snaps);
   ASSERT_EQ(0, test_get_snapshot_timestamp(image, snaps[0].id));
   free((void *)snaps[0].name);
 
   ASSERT_EQ(0, rbd_snap_create(image, "snap2"));
-  num_snaps = rbd_snap_list(image, snaps, &max_size);
+  max_snaps = max_size;
+  num_snaps = rbd_snap_list(image, snaps.data(), &max_snaps);
   ASSERT_EQ(2, num_snaps);
   ASSERT_EQ(0, test_get_snapshot_timestamp(image, snaps[0].id));
   ASSERT_EQ(0, test_get_snapshot_timestamp(image, snaps[1].id));
@@ -6697,18 +6702,18 @@ TEST_F(TestLibRBD, TestClone2)
   // write something in
   ASSERT_EQ((ssize_t)strlen(childata), rbd_write(child, 20, strlen(childata), childata));
 
-  char test[strlen(data) * 2];
-  ASSERT_EQ((ssize_t)strlen(data), rbd_read(child, 20, strlen(data), test));
-  ASSERT_EQ(0, memcmp(test, childata, strlen(childata)));
+  std::array<char, 32> test;
+  ASSERT_EQ((ssize_t)strlen(data), rbd_read(child, 20, strlen(data), test.data()));
+  ASSERT_EQ(0, memcmp(test.data(), childata, strlen(childata)));
 
   // overlap
-  ASSERT_EQ((ssize_t)sizeof(test), rbd_read(child, 20 - strlen(data), sizeof(test), test));
-  ASSERT_EQ(0, memcmp(test, data, strlen(data)));
-  ASSERT_EQ(0, memcmp(test + strlen(data), childata, strlen(childata)));
+  ASSERT_EQ(std::ssize(test), rbd_read(child, 20 - strlen(data), test.size(), test.data()));
+  ASSERT_EQ(0, memcmp(test.data(), data, strlen(data)));
+  ASSERT_EQ(0, memcmp(test.data() + strlen(data), childata, strlen(childata)));
 
   // all parent
-  ASSERT_EQ((ssize_t)sizeof(test), rbd_read(child, 0, sizeof(test), test));
-  ASSERT_EQ(0, memcmp(test, data, strlen(data)));
+  ASSERT_EQ(std::ssize(test), rbd_read(child, 0, std::size(test), test.data()));
+  ASSERT_EQ(0, memcmp(test.data(), data, strlen(data)));
 
   ASSERT_PASSED(validate_object_map, child);
   ASSERT_PASSED(validate_object_map, parent);
@@ -6790,10 +6795,12 @@ static void test_list_children(rbd_image_t image, ssize_t num_expected, ...)
 
 static void test_list_children2(rbd_image_t image, int num_expected, ...)
 {
-  int num_children, i, j, max_size = 10;
+  int num_children, i, j;
+  static constexpr int max_size = 10;
   va_list ap;
-  rbd_child_info_t children[max_size];
-  num_children = rbd_list_children2(image, children, &max_size);
+  std::array<rbd_child_info_t, max_size> children;
+  auto max_snaps = max_size;
+  num_children = rbd_list_children2(image, children.data(), &max_snaps);
   printf("num children is: %d\nexpected: %d\n", num_children, num_expected);
 
   for (i = 0; i < num_children; i++) {
@@ -7258,7 +7265,7 @@ TEST_F(TestLibRBD, FlushAio)
   int order = 0;
   std::string name = get_temp_image_name();
   uint64_t size = 2 << 20;
-  size_t num_aios = 256;
+  static constexpr size_t num_aios = 256;
 
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
@@ -7269,7 +7276,7 @@ TEST_F(TestLibRBD, FlushAio)
     test_data[i] = (char) (rand() % (126 - 33) + 33);
   }
 
-  rbd_completion_t write_comps[num_aios];
+  std::array<rbd_completion_t, num_aios> write_comps;
   for (i = 0; i < num_aios; ++i) {
     ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &write_comps[i]));
     uint64_t offset = rand() % (size - TEST_IO_SIZE);
@@ -9176,8 +9183,8 @@ TEST_F(TestLibRBD, TestPendingAio)
     test_data[i] = (char) (rand() % (126 - 33) + 33);
   }
 
-  size_t num_aios = 256;
-  rbd_completion_t comps[num_aios];
+  static constexpr size_t num_aios = 256;
+  std::array<rbd_completion_t, num_aios> comps;
   for (size_t i = 0; i < num_aios; ++i) {
     ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &comps[i]));
     uint64_t offset = rand() % (size - TEST_IO_SIZE);
@@ -12900,11 +12907,12 @@ TEST_F(TestLibRBD, SnapRemoveWithChildMissing)
                       child_id2, pool_name1.c_str(), child_name2.c_str(), false,
                       child_id3, m_pool_name.c_str(), child_name3.c_str(), false);
 
-  size_t max_size = 10;
-  rbd_linked_image_spec_t children[max_size];
-  ASSERT_EQ(0, rbd_list_children3(parent, children, &max_size));
+  static constexpr size_t max_size = 10;
+  std::array<rbd_linked_image_spec_t, max_size> children;
+  auto max_images = max_size;
+  ASSERT_EQ(0, rbd_list_children3(parent, children.data(), &max_images));
   ASSERT_EQ(3, static_cast<int>(max_size));
-  rbd_linked_image_spec_list_cleanup(children, max_size);
+  rbd_linked_image_spec_list_cleanup(children.data(), max_size);
 
   ASSERT_EQ(0, rbd_close(child1));
   ASSERT_EQ(0, rbd_close(child2));
@@ -12916,23 +12924,27 @@ TEST_F(TestLibRBD, SnapRemoveWithChildMissing)
                     _pool_names.end());
   EXPECT_EQ(0, rados_wait_for_latest_osdmap(_cluster));
 
-  ASSERT_EQ(0, rbd_list_children3(parent, children, &max_size));
+  max_images = max_size;
+  ASSERT_EQ(0, rbd_list_children3(parent, children.data(), &max_images));
   ASSERT_EQ(3, static_cast<int>(max_size));
-  rbd_linked_image_spec_list_cleanup(children, max_size);
+  rbd_linked_image_spec_list_cleanup(children.data(), max_size);
   ASSERT_EQ(0, rbd_snap_remove(parent, "snap1"));
-  ASSERT_EQ(0, rbd_list_children3(parent, children, &max_size));
+  max_images = max_size;
+  ASSERT_EQ(0, rbd_list_children3(parent, children.data(), &max_images));
   ASSERT_EQ(2, static_cast<int>(max_size));
-  rbd_linked_image_spec_list_cleanup(children, max_size);
+  rbd_linked_image_spec_list_cleanup(children.data(), max_size);
 
   ASSERT_EQ(0, rbd_remove(ioctx1, child_name2.c_str()));
-  ASSERT_EQ(0, rbd_list_children3(parent, children, &max_size));
+  max_images = max_size;
+  ASSERT_EQ(0, rbd_list_children3(parent, children.data(), &max_images));
   ASSERT_EQ(1, static_cast<int>(max_size));
-  rbd_linked_image_spec_list_cleanup(children, max_size);
+  rbd_linked_image_spec_list_cleanup(children.data(), max_size);
 
   ASSERT_EQ(0, rbd_snap_remove(parent, "snap2"));
-  ASSERT_EQ(0, rbd_list_children3(parent, children, &max_size));
+  max_images = max_size;
+  ASSERT_EQ(0, rbd_list_children3(parent, children.data(), &max_images));
   ASSERT_EQ(0, static_cast<int>(max_size));
-  rbd_linked_image_spec_list_cleanup(children, max_size);
+  rbd_linked_image_spec_list_cleanup(children.data(), max_size);
   test_list_children2(parent, 0);
   ASSERT_EQ(0, test_ls_snaps(parent, 0));
 

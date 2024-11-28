@@ -2972,15 +2972,12 @@ namespace librbd {
 
   int Image::poll_io_events(RBD::AioCompletion **comps, int numcomp)
   {
-    io::AioCompletion *cs[numcomp];
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, poll_io_events_enter, ictx, numcomp);
-    int r = librbd::poll_io_events(ictx, cs, numcomp);
+    int r = librbd::poll_io_events(ictx,
+				   reinterpret_cast<rbd_completion_t*>(comps),
+				   numcomp);
     tracepoint(librbd, poll_io_events_exit, r);
-    if (r > 0) {
-      for (int i = 0; i < r; ++i)
-        comps[i] = (RBD::AioCompletion *)cs[i]->rbd_comp;
-    }
     return r;
   }
 
@@ -6589,14 +6586,9 @@ extern "C" int rbd_invalidate_cache(rbd_image_t image)
 extern "C" int rbd_poll_io_events(rbd_image_t image, rbd_completion_t *comps, int numcomp)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  librbd::io::AioCompletion *cs[numcomp];
   tracepoint(librbd, poll_io_events_enter, ictx, numcomp);
-  int r = librbd::poll_io_events(ictx, cs, numcomp);
+  int r = librbd::poll_io_events(ictx, comps, numcomp);
   tracepoint(librbd, poll_io_events_exit, r);
-  if (r > 0) {
-    for (int i = 0; i < r; ++i)
-      comps[i] = cs[i]->rbd_comp;
-  }
   return r;
 }
 

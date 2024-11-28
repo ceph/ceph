@@ -6,7 +6,6 @@
 #include "tools/rbd/Utils.h"
 #include "include/Context.h"
 #include "common/blkdev.h"
-#include "common/debug.h"
 #include "common/errno.h"
 #include "common/Throttle.h"
 #include "include/compat.h"
@@ -300,19 +299,17 @@ static int do_image_io(ImportDiffContext *idiffctx, bool write_zeroes,
   return r;
 }
 
-static int validate_banner(int fd, std::string banner)
+static int validate_banner(int fd, std::string_view banner)
 {
   int r;
-  char buf[banner.size() + 1];
-  memset(buf, 0, sizeof(buf));
-  r = safe_read_exact(fd, buf, banner.size());
+  std::string buf(banner.size(), '\0');
+  r = safe_read_exact(fd, buf.data(), banner.size());
   if (r < 0) {
     std::cerr << "rbd: failed to decode diff banner" << std::endl;
     return r;
   }
 
-  buf[banner.size()] = '\0';
-  if (strcmp(buf, banner.c_str())) {
+  if (buf != banner) {
     std::cerr << "rbd: invalid or unexpected diff banner" << std::endl;
     return -EINVAL;
   }

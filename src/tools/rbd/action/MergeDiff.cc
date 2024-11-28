@@ -38,7 +38,7 @@ static int parse_diff_header(int fd, __u8 *tag, string *from, string *to, uint64
       return r;
 
     buf[utils::RBD_DIFF_BANNER.size()] = '\0';
-    if (strcmp(buf, utils::RBD_DIFF_BANNER.c_str())) {
+    if (strcmp(buf, utils::RBD_DIFF_BANNER.data())) {
       std::cerr << "invalid banner '" << buf << "', expected '"
                 << utils::RBD_DIFF_BANNER << "'" << std::endl;
       return -EINVAL;
