@@ -1,8 +1,8 @@
 .. _cephadm_deploying_new_cluster:
 
-============================
-Deploying a new Ceph cluster
-============================
+==========================================
+Using cephadm to Deploy a New Ceph Cluster
+==========================================
 
 Cephadm creates a new Ceph cluster by bootstrapping a single
 host, expanding the cluster to encompass any additional hosts, and
@@ -95,67 +95,80 @@ that case, you can install cephadm directly. For example:
 
 .. _cephadm_install_curl:
 
-curl-based installation
------------------------
+Using curl to install cephadm 
+-----------------------------
 
-* First, determine what version of Ceph you wish to install. You can use the releases
-  page to find the `latest active releases <https://docs.ceph.com/en/latest/releases/#active-releases>`_.
-  For example, we might find that ``18.2.1`` is the latest
-  active release.
+#. Determine which version of Ceph you will install. Use the releases page to
+   find the `latest active releases
+   <https://docs.ceph.com/en/latest/releases/#active-releases>`_.  For example,
+   you might find that ``18.2.1`` is the latest active release.
 
-* Use ``curl`` to fetch a build of cephadm for that release.
+#. Use ``curl`` to fetch a build of cephadm for that release.
+
+   .. prompt:: bash #
+      :substitutions:
+
+      CEPH_RELEASE=18.2.0 # replace this with the active release
+      curl --silent --remote-name --location https://download.ceph.com/rpm-${CEPH_RELEASE}/el9/noarch/cephadm
+
+#.  Use ``chmod`` to make the ``cephadm`` file executable:
+
+   .. prompt:: bash #
+
+    chmod +x cephadm
+
+   After ``chmod`` has been run on cephadm, it can be run from the current
+   directory:
+
+   .. prompt:: bash #
+
+    ./cephadm <arguments...>
+
+cephadm Requires Python 3.6 or Later
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* ``cephadm`` requires Python 3.6 or later. If you encounter difficulties
+  running ``cephadm``, then you may not have Python or the correct version of
+  Python installed. This includes any errors that include the message ``bad
+  interpreter``. 
+  
+  You can manually run cephadm with a particular version of Python by prefixing
+  the command with your installed Python version. For example:
 
   .. prompt:: bash #
-     :substitutions:
-
-     CEPH_RELEASE=18.2.0 # replace this with the active release
-     curl --silent --remote-name --location https://download.ceph.com/rpm-${CEPH_RELEASE}/el9/noarch/cephadm
-
-  Ensure the ``cephadm`` file is executable:
-
-  .. prompt:: bash #
-
-   chmod +x cephadm
-
-  This file can be run directly from the current directory:
-
-  .. prompt:: bash #
-
-   ./cephadm <arguments...>
-
-* If you encounter any issues with running cephadm due to errors including
-  the message ``bad interpreter``, then you may not have Python or
-  the correct version of Python installed. The cephadm tool requires Python 3.6
-  or later. You can manually run cephadm with a particular version of Python by
-  prefixing the command with your installed Python version. For example:
-
-  .. prompt:: bash #
-     :substitutions:
 
      python3.8 ./cephadm <arguments...>
 
-* Although the standalone cephadm is sufficient to bootstrap a cluster, it is
-  best to have the ``cephadm`` command installed on the host.  To install
-  the packages that provide the ``cephadm`` command, run the following
-  commands:
+Installing cephadm on the Host
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  .. prompt:: bash #
-     :substitutions:
+Although the standalone ``cephadm`` is sufficient to bootstrap a cluster, it is
+best to have the ``cephadm`` command installed on the host. To install the
+packages that provide the ``cephadm`` command, run the following commands:
 
-     ./cephadm add-repo --release |stable-release|
-     ./cephadm install
+#. Add the repository:
 
-  Confirm that ``cephadm`` is now in your PATH by running ``which``:
+   .. prompt:: bash #
 
-  .. prompt:: bash #
+      ./cephadm add-repo --release |stable-release|
 
-    which cephadm
+#. Run ``cephadm install``:
 
-  A successful ``which cephadm`` command will return this:
+   .. prompt:: bash #
 
-  .. code-block:: bash
+      ./cephadm install
 
-    /usr/sbin/cephadm
+#. Confirm that ``cephadm`` is now in your PATH by running ``which``:
+
+   .. prompt:: bash #
+
+      which cephadm
+
+   A successful ``which cephadm`` command will return this:
+
+   .. code-block:: bash
+
+     /usr/sbin/cephadm
 
 Bootstrap a new cluster
 =======================

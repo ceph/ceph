@@ -65,7 +65,7 @@ void OsdScrub::dump_scrubs(ceph::Formatter* f) const
 void OsdScrub::dump_scrub_reservations(ceph::Formatter* f) const
 {
   m_resource_bookkeeper.dump_scrub_reservations(f);
-  f->open_array_section("remote_scrub_reservations");
+  f->open_object_section("remote_scrub_reservations");
   m_osd_svc.get_scrub_reserver().dump(f);
   f->close_section();
 }
@@ -220,8 +220,6 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
     env_conditions.restricted_time = !scrub_time_permit(scrub_clock_now);
     env_conditions.cpu_overloaded =
 	!m_load_tracker.scrub_load_below_threshold();
-    env_conditions.only_deadlined =
-	env_conditions.restricted_time || env_conditions.cpu_overloaded;
   }
 
   return env_conditions;

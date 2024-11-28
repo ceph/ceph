@@ -8,6 +8,7 @@ enable_auth = {{ spec.enable_auth }}
 state_update_notify = {{ spec.state_update_notify }}
 state_update_interval_sec = {{ spec.state_update_interval_sec }}
 enable_spdk_discovery_controller = {{ spec.enable_spdk_discovery_controller }}
+enable_key_encryption = {{ spec.enable_key_encryption }}
 enable_prometheus_exporter = {{ spec.enable_prometheus_exporter }}
 prometheus_exporter_ssl = False
 prometheus_port = 10008
@@ -22,6 +23,10 @@ ping_spdk_under_lock = {{ spec.ping_spdk_under_lock }}
 enable_monitor_client = {{ spec.enable_monitor_client }}
 max_hosts_per_namespace = {{ spec.max_hosts_per_namespace }}
 max_namespaces_with_netmask = {{ spec.max_namespaces_with_netmask }}
+max_subsystems = {{ spec.max_subsystems }}
+max_namespaces = {{ spec.max_namespaces }}
+max_namespaces_per_subsystem = {{ spec.max_namespaces_per_subsystem }}
+max_hosts_per_subsystem = {{ spec.max_hosts_per_subsystem }}
 
 [gateway-logs]
 log_level = {{ spec.log_level }}
@@ -65,6 +70,9 @@ protocol_log_level = {{ spec.spdk_protocol_log_level }}
 log_file_dir = {{ spec.spdk_log_file_dir }}
 {% endif %}
 conn_retries = {{ spec.conn_retries }}
+{% if spec.spdk_mem_size %}
+mem_size = {{ spec.spdk_mem_size }}
+{% endif %}
 transports = {{ spec.transports }}
 {% if transport_tcp_options %}
 transport_tcp_options = {{ transport_tcp_options }}

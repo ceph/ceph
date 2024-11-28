@@ -1,0 +1,91 @@
+roles:
+# Test is for basic smb deployment & functionality. one node cluster is OK
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - client.0
+- - host.b
+  - mon.b
+  - osd.2
+  - osd.3
+- - host.c
+  - mon.c
+  - osd.4
+  - osd.5
+# Reserve a host for acting as a domain controller and smb client
+- - host.d
+  - cephadm.exclude
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+tasks:
+- cephadm.configure_samba_client_container:
+    role: host.d
+- vip:
+    count: 1
+- cephadm:
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create cephfs
+- cephadm.wait_for_service:
+    service: mds.cephfs
+
+- cephadm.shell:
+    host.a:
+      # add subvolgroup & subvolumes for test
+      - cmd: ceph fs subvolumegroup create cephfs smb
+      - cmd: ceph fs subvolume create cephfs sv1 --group-name=smb --mode=0777
+      - cmd: ceph fs subvolume create cephfs sv2 --group-name=smb --mode=0777
+      # set up smb cluster and shares
+      - cmd: ceph mgr module enable smb
+      - cmd: sleep 30
+      - cmd: >
+          ceph smb cluster create modusr1 user
+          --define-user-pass=user1%t3stP4ss1
+          --placement=count:3
+          --clustering=default
+          --public_addrs={{VIP0}}/{{VIPPREFIXLEN}}
+      - cmd: ceph smb share create modusr1 share1 cephfs / --subvolume=smb/sv1
+      - cmd: ceph smb share create modusr1 share2 cephfs / --subvolume=smb/sv2
+# Wait for the smb service to start
+- cephadm.wait_for_service:
+    service: smb.modusr1
+
+# Check if shares exist
+- cephadm.exec:
+    host.d:
+      - sleep 30
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/share2 -c ls"
+
+# verify CTDB is healthy, cluster well formed
+- cephadm.exec:
+    host.a:
+      - "{{ctx.cephadm}} ls --no-detail  | {{ctx.cephadm}} shell jq -r 'map(select(.name | startswith(\"smb.modusr1\")))[-1].name' > /tmp/svcname"
+      - "{{ctx.cephadm}} enter -n $(cat /tmp/svcname) ctdb status > /tmp/ctdb_status"
+      - cat /tmp/ctdb_status
+      - grep 'pnn:0 .*OK' /tmp/ctdb_status
+      - grep 'pnn:1 .*OK' /tmp/ctdb_status
+      - grep 'pnn:2 .*OK' /tmp/ctdb_status
+      - grep 'Number of nodes:3' /tmp/ctdb_status
+      - rm -rf /tmp/svcname /tmp/ctdb_status
+
+# Test the assigned VIP
+- cephadm.exec:
+    host.d:
+      - sleep 30
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{VIP0}}/share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{VIP0}}/share2 -c ls"
+
+- cephadm.shell:
+    host.a:
+      - cmd: ceph smb share rm modusr1 share2
+      - cmd: ceph smb share rm modusr1 share1
+      - cmd: ceph smb cluster rm modusr1
+# Wait for the smb service to be removed
+- cephadm.wait_for_service_not_present:
+    service: smb.modusr1

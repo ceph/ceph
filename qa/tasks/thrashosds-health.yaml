@@ -30,3 +30,4 @@ overrides:
       - out of quorum
       - noscrub
       - nodeep-scrub
+      - is down

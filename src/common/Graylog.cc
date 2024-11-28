@@ -2,6 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Graylog.h"
+
+#include <iostream> // for std::cerr
+
 #include "common/Formatter.h"
 #include "common/LogEntry.h"
 #include "log/Entry.h"

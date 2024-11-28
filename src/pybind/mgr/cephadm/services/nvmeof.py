@@ -66,6 +66,10 @@ class NvmeofService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'ceph-nvmeof.conf': gw_conf}
 
+        # Indicate to the daemon whether to utilize huge pages
+        if spec.spdk_mem_size:
+            daemon_spec.extra_files['spdk_mem_size'] = str(spec.spdk_mem_size)
+
         if spec.enable_auth:
             if (
                 not spec.client_cert
@@ -185,19 +189,21 @@ class NvmeofService(CephService):
         # to clean the keyring up
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
         service_name = daemon.service_name()
+        daemon_name = daemon.name()
 
         # remove config for dashboard nvmeof gateways if any
-        ret, out, err = self.mgr.mon_command({
+        ret, _, err = self.mgr.mon_command({
             'prefix': 'dashboard nvmeof-gateway-rm',
             'name': service_name,
+            'daemon_name': daemon_name
         })
         if not ret:
-            logger.info(f'{daemon.hostname} removed from nvmeof gateways dashboard config')
+            logger.info(f'{daemon_name} removed from nvmeof gateways dashboard config')
 
         spec = cast(NvmeofServiceSpec,
                     self.mgr.spec_store.all_specs.get(daemon.service_name(), None))
         if not spec:
-            self.mgr.log.error(f'Failed to find spec for {daemon.name()}')
+            self.mgr.log.error(f'Failed to find spec for {daemon_name}')
             return
         pool = spec.pool
         group = spec.group

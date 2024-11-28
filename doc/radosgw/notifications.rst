@@ -7,6 +7,10 @@ Bucket Notifications
 .. versionchanged:: Squid
    A new "v2" format for Topic and Notification metadata can be enabled with
    the :ref:`feature_notification_v2` zone feature.
+   Enabling this feature after an upgrade from an older version will trigger
+   migration of the existing Topic and Notification metadata. 
+   In a greenfield deployment, the new format will be used.
+   The new format allows for the data to be synced between zones in the zonegroup.
 
 .. contents::
 
@@ -103,6 +107,18 @@ Remove a topic by running the following command:
 .. prompt:: bash #
 
    radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
+
+Fetch persistent topic stats (i.e. reservations, entries and size) by running the following command: 
+
+.. prompt:: bash #
+
+   radosgw-admin topic stats --topic={topic-name} [--tenant={tenant}]
+
+Dump (in JSON format) all pending bucket notifications of a persistent topic by running the following command: 
+
+.. prompt:: bash #
+
+   radosgw-admin topic dump --topic={topic-name} [--tenant={tenant}] [--max-entries={max-entries}]
 
 
 Notification Performance Statistics

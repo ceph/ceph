@@ -2,7 +2,7 @@ import enum
 import yaml
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import (
+from ceph.deployment.service_spec import (  # noqa: F401 (type comments)
     CustomConfig,
     GeneralArgList,
     PlacementSpec,
@@ -11,7 +11,7 @@ from ceph.deployment.service_spec import (
 from ceph.deployment.hostspec import SpecValidationError
 
 try:
-    from typing import Optional, List, Dict, Any, Union
+    from typing import Optional, List, Dict, Any, Union  # noqa: F401
 except ImportError:
     pass
 

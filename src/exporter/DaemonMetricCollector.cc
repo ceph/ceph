@@ -29,9 +29,16 @@ using json_object = boost::json::object;
 using json_value = boost::json::value;
 using json_array = boost::json::array;
 
-void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
-  timer.async_wait([&](const boost::system::error_code &e) {
-    std::cerr << e << std::endl;
+void DaemonMetricCollector::request_loop() {
+  timer.async_wait([this](const boost::system::error_code &e) {
+    if (shutdown_flag) {
+      dout(1) << "Metric collector request loop cancelled" << dendl;
+      return;
+    }
+
+    if (e) return; // Exit on error or cancellation
+
+    dout(10) << "Getting metrics loop..." << dendl;
     update_sockets();
 
     bool sort_metrics = g_conf().get_val<bool>("exporter_sort_metrics");
@@ -42,17 +49,22 @@ void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
     auto stats_period = g_conf().get_val<int64_t>("exporter_stats_period");
     // time to wait before sending requests again
     timer.expires_from_now(std::chrono::seconds(stats_period));
-    request_loop(timer);
+    request_loop();
   });
 }
 
 void DaemonMetricCollector::main() {
-  // time to wait before sending requests again
-
-  boost::asio::io_context io;
-  boost::asio::steady_timer timer{io, std::chrono::seconds(0)};
-  request_loop(timer);
+  shutdown_flag = false;
+  timer.expires_from_now(std::chrono::seconds(0));
+  request_loop();
   io.run();
+}
+
+void DaemonMetricCollector::shutdown(){
+  shutdown_flag = true;
+  timer.cancel();  // Explicitly cancel the timer
+  dout(1) << "Collector shutdown initiated, timer canceled" << dendl;
+  io.stop();
 }
 
 std::string DaemonMetricCollector::get_metrics() {
@@ -499,3 +511,4 @@ DaemonMetricCollector &collector_instance() {
   static DaemonMetricCollector instance;
   return instance;
 }
+

@@ -187,11 +187,12 @@ class Inventory:
 
     def add_label(self, host: str, label: str) -> None:
         host = self._get_stored_name(host)
-
+        labels = label.split(',') if ',' in label else [label]
         if 'labels' not in self._inventory[host]:
             self._inventory[host]['labels'] = list()
-        if label not in self._inventory[host]['labels']:
-            self._inventory[host]['labels'].append(label)
+        for label in labels:
+            if label not in self._inventory[host]['labels']:
+                self._inventory[host]['labels'].append(label)
         self.save()
 
     def rm_label(self, host: str, label: str) -> None:
@@ -637,6 +638,9 @@ class TunedProfileStore():
             logger.error(
                 f'Attempted to set setting "{setting}" for nonexistent os tuning profile "{profile}"')
 
+    def add_settings(self, profile: str, settings: dict) -> None:
+        self.process_settings(profile, settings, action='add')
+
     def rm_setting(self, profile: str, setting: str) -> None:
         if profile in self.profiles:
             if setting in self.profiles[profile].settings:
@@ -649,6 +653,39 @@ class TunedProfileStore():
         else:
             logger.error(
                 f'Attempted to remove setting "{setting}" from nonexistent os tuning profile "{profile}"')
+
+    def rm_settings(self, profile: str, settings: List[str]) -> None:
+        self.process_settings(profile, settings, action='remove')
+
+    def process_settings(self, profile: str, settings: Union[dict, list], action: str) -> None:
+        """
+        Process settings by either adding or removing them based on the action specified.
+        """
+        if profile not in self.profiles:
+            logger.error(f'Attempted to {action} settings for nonexistent os tuning profile "{profile}"')
+            return
+        profile_settings = self.profiles[profile].settings
+        if action == 'remove' and isinstance(settings, list):
+            invalid_settings = [s for s in settings if '=' in s or s not in profile_settings]
+            if invalid_settings:
+                raise OrchestratorError(
+                    f"Invalid settings: {', '.join(invalid_settings)}. "
+                    "Ensure settings are specified without '=' and exist in the profile. Correct format: key1,key2"
+                )
+        if action == 'add' and isinstance(settings, dict):
+            for setting, value in settings.items():
+                self.profiles[profile].settings[setting] = value
+        elif action == 'remove' and isinstance(settings, list):
+            for setting in settings:
+                self.profiles[profile].settings.pop(setting, '')
+        else:
+            logger.error(
+                f'Invalid action "{action}" for settings modification for tuned profile '
+                f'"{profile}". Valid actions are "add" and "remove"'
+            )
+            return
+        self.profiles[profile]._last_updated = datetime_to_str(datetime_now())
+        self.save()
 
     def add_profile(self, spec: TunedProfileSpec) -> None:
         spec._last_updated = datetime_to_str(datetime_now())

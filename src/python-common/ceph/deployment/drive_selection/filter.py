@@ -15,12 +15,10 @@ logger = logging.getLogger(__name__)
 
 
 class FilterGenerator(object):
-    def __init__(self, device_filter):
-        # type: (DeviceSelection) -> None
+    def __init__(self, device_filter: DeviceSelection) -> None:
         self.device_filter = device_filter
 
-    def __iter__(self):
-        # type: () -> Generator[Matcher, None, None]
+    def __iter__(self) -> Generator[Matcher, None, None]:
         if self.device_filter.actuators:
             yield EqualityMatcher('actuators', self.device_filter.actuators)
         if self.device_filter.size:

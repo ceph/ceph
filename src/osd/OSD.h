@@ -48,6 +48,7 @@
 
 #include "include/unordered_map.h"
 
+#include "common/intrusive_timer.h"
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "messages/MOSDOp.h"
@@ -731,6 +732,7 @@ public:
     osd_alert_list_t& alerts);
   osd_stat_t set_osd_stat(std::vector<int>& hb_peers, int num_pgs);
   void inc_osd_stat_repaired(void);
+  void set_osd_stat_repaired(int64_t count);
   float compute_adjusted_ratio(osd_stat_t new_stat, float *pratio, uint64_t adjust_used = 0);
   osd_stat_t get_osd_stat() {
     std::lock_guard l(stat_lock);
@@ -877,6 +879,8 @@ public:
   bool prepare_to_stop();
   void got_stop_ack();
 
+  // -- PG timer --
+  common::intrusive_timer pg_timer;
 
 #ifdef PG_DEBUG_REFS
   ceph::mutex pgid_lock = ceph::make_mutex("OSDService::pgid_lock");
@@ -1941,6 +1945,7 @@ private:
     case MSG_OSD_REP_SCRUBMAP:
     case MSG_OSD_PG_UPDATE_LOG_MISSING:
     case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+    case MSG_OSD_PG_PCT:
     case MSG_OSD_PG_RECOVERY_DELETE:
     case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
     case MSG_OSD_PG_LEASE:

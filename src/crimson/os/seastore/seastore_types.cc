@@ -246,6 +246,8 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "LADDR_LEAF";
   case extent_types_t::ONODE_BLOCK_STAGED:
     return out << "ONODE_BLOCK_STAGED";
+  case extent_types_t::ROOT_META:
+    return out << "ROOT_META";
   case extent_types_t::OMAP_INNER:
     return out << "OMAP_INNER";
   case extent_types_t::OMAP_LEAF:

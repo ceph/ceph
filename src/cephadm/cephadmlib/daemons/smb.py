@@ -1,3 +1,4 @@
+import dataclasses
 import enum
 import json
 import logging
@@ -13,7 +14,7 @@ from .. import data_utils
 from .. import deployment_utils
 from .. import file_utils
 from ..call_wrappers import call, CallVerbosity
-from ..constants import DEFAULT_SMB_IMAGE
+from ceph.cephadm.images import DEFAULT_SAMBA_IMAGE
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_engines import Podman
 from ..container_types import (
@@ -67,83 +68,32 @@ class ClusterPublicIP(NamedTuple):
         return cls(address, destinations)
 
 
+@dataclasses.dataclass(frozen=True)
 class Config:
     identity: DaemonIdentity
     instance_id: str
     source_config: str
-    samba_debug_level: int
-    ctdb_log_level: str
-    debug_delay: int
     domain_member: bool
     clustered: bool
-    join_sources: List[str]
-    user_sources: List[str]
-    custom_dns: List[str]
-    smb_port: int
-    ceph_config_entity: str
-    vhostname: str
-    metrics_image: str
-    metrics_port: int
+    samba_debug_level: int = 0
+    ctdb_log_level: str = ''
+    debug_delay: int = 0
+    join_sources: List[str] = dataclasses.field(default_factory=list)
+    user_sources: List[str] = dataclasses.field(default_factory=list)
+    custom_dns: List[str] = dataclasses.field(default_factory=list)
+    smb_port: int = 0
+    ceph_config_entity: str = 'client.admin'
+    vhostname: str = ''
+    metrics_image: str = ''
+    metrics_port: int = 0
     # clustering related values
-    rank: int
-    rank_generation: int
-    cluster_meta_uri: str
-    cluster_lock_uri: str
-
-    def __init__(
-        self,
-        *,
-        identity: DaemonIdentity,
-        instance_id: str,
-        source_config: str,
-        domain_member: bool,
-        clustered: bool,
-        samba_debug_level: int = 0,
-        ctdb_log_level: str = '',
-        debug_delay: int = 0,
-        join_sources: Optional[List[str]] = None,
-        user_sources: Optional[List[str]] = None,
-        custom_dns: Optional[List[str]] = None,
-        smb_port: int = 0,
-        ceph_config_entity: str = 'client.admin',
-        vhostname: str = '',
-        metrics_image: str = '',
-        metrics_port: int = 0,
-        rank: int = -1,
-        rank_generation: int = -1,
-        cluster_meta_uri: str = '',
-        cluster_lock_uri: str = '',
-        cluster_public_addrs: Optional[List[ClusterPublicIP]] = None,
-    ) -> None:
-        self.identity = identity
-        self.instance_id = instance_id
-        self.source_config = source_config
-        self.domain_member = domain_member
-        self.clustered = clustered
-        self.samba_debug_level = samba_debug_level
-        self.ctdb_log_level = ctdb_log_level
-        self.debug_delay = debug_delay
-        self.join_sources = join_sources or []
-        self.user_sources = user_sources or []
-        self.custom_dns = custom_dns or []
-        self.smb_port = smb_port
-        self.ceph_config_entity = ceph_config_entity
-        self.vhostname = vhostname
-        self.metrics_image = metrics_image
-        self.metrics_port = metrics_port
-        self.rank = rank
-        self.rank_generation = rank_generation
-        self.cluster_meta_uri = cluster_meta_uri
-        self.cluster_lock_uri = cluster_lock_uri
-        self.cluster_public_addrs = cluster_public_addrs
-
-    def __str__(self) -> str:
-        return (
-            f'SMB Config[id={self.instance_id},'
-            f' source_config={self.source_config},'
-            f' domain_member={self.domain_member},'
-            f' clustered={self.clustered}]'
-        )
+    rank: int = -1
+    rank_generation: int = -1
+    cluster_meta_uri: str = ''
+    cluster_lock_uri: str = ''
+    cluster_public_addrs: List[ClusterPublicIP] = dataclasses.field(
+        default_factory=list
+    )
 
     def config_uris(self) -> List[str]:
         uris = [self.source_config]
@@ -418,7 +368,7 @@ class SMB(ContainerDaemonForm):
 
     daemon_type = 'smb'
     daemon_base = '/usr/sbin/smbd'
-    default_image = DEFAULT_SMB_IMAGE
+    default_image = DEFAULT_SAMBA_IMAGE
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
@@ -432,7 +382,7 @@ class SMB(ContainerDaemonForm):
         self._raw_configs: Dict[str, Any] = context_getters.fetch_configs(ctx)
         self._config_keyring = context_getters.get_config_and_keyring(ctx)
         self._cached_layout: Optional[ContainerLayout] = None
-        self._rank_info = context_getters.fetch_rank_info(ctx)
+        self._rank_info = context_getters.fetch_rank_info(ctx) or (-1, -1)
         self.smb_port = 445
         self.metrics_port = 9922
         self._network_mapper = _NetworkMapper(ctx)
@@ -502,6 +452,7 @@ class SMB(ContainerDaemonForm):
             # cache the cephadm networks->devices mapping for later
             self._network_mapper.load()
 
+        rank, rank_gen = self._rank_info
         self._instance_cfg = Config(
             identity=self._identity,
             instance_id=instance_id,
@@ -516,15 +467,12 @@ class SMB(ContainerDaemonForm):
             vhostname=vhostname,
             metrics_image=metrics_image,
             metrics_port=metrics_port,
+            rank=rank,
+            rank_generation=rank_gen,
             cluster_meta_uri=cluster_meta_uri,
             cluster_lock_uri=cluster_lock_uri,
             cluster_public_addrs=_public_addrs,
         )
-        if self._rank_info:
-            (
-                self._instance_cfg.rank,
-                self._instance_cfg.rank_generation,
-            ) = self._rank_info
         self._files = files
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
         logger.debug('Configured files: %s', self._files)

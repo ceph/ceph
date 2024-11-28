@@ -828,7 +828,7 @@ void OpsExecuter::fill_op_params(OpsExecuter::modified_by m)
   osd_op_params->mtime = msg->get_mtime();
   osd_op_params->at_version = pg->get_next_version();
   osd_op_params->pg_trim_to = pg->get_pg_trim_to();
-  osd_op_params->min_last_complete_ondisk = pg->get_min_last_complete_ondisk();
+  osd_op_params->pg_committed_to = pg->get_pg_committed_to();
   osd_op_params->last_complete = pg->get_info().last_complete;
   osd_op_params->user_modify = (m == modified_by::user);
 }
@@ -940,6 +940,7 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
   };
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
   cloning_ctx->log_entry.clean_regions.mark_data_region_dirty(0, initial_obs.oi.size);
+  cloning_ctx->clone_obc = clone_obc;
 
   return cloning_ctx;
 }
@@ -966,7 +967,7 @@ void OpsExecuter::update_clone_overlap() {
 
 void OpsExecuter::CloningContext::apply_to(
   std::vector<pg_log_entry_t>& log_entries,
-  ObjectContext& processed_obc) &&
+  ObjectContext& processed_obc)
 {
   log_entry.mtime = processed_obc.obs.oi.mtime;
   log_entries.insert(log_entries.begin(), std::move(log_entry));
@@ -983,7 +984,7 @@ OpsExecuter::flush_clone_metadata(
   assert(!txn.empty());
   update_clone_overlap();
   if (cloning_ctx) {
-    std::move(*cloning_ctx).apply_to(log_entries, *obc);
+    cloning_ctx->apply_to(log_entries, *obc);
   }
   if (snapc.seq > obc->ssc->snapset.seq) {
      // update snapset with latest snap context

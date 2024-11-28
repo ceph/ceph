@@ -31,7 +31,7 @@ import { PoolFormInfo } from '~/app/shared/models/pool-form-info';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
 import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
@@ -95,7 +95,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private route: ActivatedRoute,
     private router: Router,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private poolService: PoolService,
     private authStorageService: AuthStorageService,
     private formatter: FormatterService,
@@ -167,7 +167,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
             CdValidators.custom(
               'required',
               (rule: CrushRule) =>
-                this.isReplicated && this.info.crush_rules_replicated.length > 0 && !rule
+                this.isReplicated && this.info?.crush_rules_replicated?.length > 0 && !rule
             )
           ]
         }),

@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <iostream> // for std::cout
+
 #include "include/types.h"
 #include "common/Thread.h"
 #include "common/debug.h"

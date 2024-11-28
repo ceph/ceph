@@ -1,5 +1,5 @@
-osd
-===
+OSDState
+========
 
 .. graphviz::
 

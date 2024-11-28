@@ -14,6 +14,9 @@
 #include <sys/un.h>
 #include <syslog.h>
 #include <unistd.h>
+
+#include <iostream> // for std::cerr
+
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
@@ -22,7 +25,6 @@
 #include "log/Entry.h"
 #include "log/SubsystemMap.h"
 #include "msg/msg_fmt.h"
-
 
 namespace ceph::logging {
 

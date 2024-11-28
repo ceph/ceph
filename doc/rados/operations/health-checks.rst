@@ -1100,6 +1100,13 @@ the object data, there might exist failing disks that are not registering any
 scrub errors. This repair count is maintained as a way of identifying any such
 failing disks.
 
+In order to allow clearing of the warning, a new command
+``ceph tell osd.# clear_shards_repaired [count]`` has been added.
+By default it will set the repair count to 0. A `count` value can be passed 
+to the command. Thus, the administrator has the option to re-enable the warning
+by passing the value of ``mon_osd_warn_num_repaired`` (or above) to the command.
+An alternative to using `clear_shards_repaired` is to mute the
+`OSD_TOO_MANY_REPAIRS` alert with `ceph health mute`.
 
 LARGE_OMAP_OBJECTS
 __________________
@@ -1502,10 +1509,10 @@ This health check is raised if a certain percentage (determined by
 :confval:`mon_warn_pg_not_deep_scrubbed_ratio`) of the interval has elapsed
 after the time the scrub was scheduled and no scrub has been performed.
 
-PGs will receive a deep scrub only if they are flagged as *clean* (which means
-that they are to be cleaned, and not that they have been examined and found to
-be clean). Misplaced or degraded PGs might not be flagged as ``clean`` (see
-*PG_AVAILABILITY* and *PG_DEGRADED* above).
+PGs will receive a deep scrub only if they are flagged as ``clean`` (which
+means that they are to be cleaned, and not that they have been examined and
+found to be clean). Misplaced or degraded PGs might not be flagged as ``clean``
+(see *PG_AVAILABILITY* and *PG_DEGRADED* above).
 
 This document offers two methods of setting the value of
 :confval:`osd_deep_scrub_interval`. The first method listed here changes the
@@ -1632,6 +1639,25 @@ Ceph to be confused when trying to process transitions between dividing buckets.
 We encourage you to fix this by making the weights even on both dividing buckets.
 This can be done by making sure the combined weight of the OSDs on each dividing
 bucket are the same.
+
+NVMeoF Gateway
+--------------
+
+NVMEOF_SINGLE_GATEWAY
+_____________________
+
+One of the gateway group has only one gateway. This is not ideal because it makes
+high availability (HA) impossible with a single gatway in a group. This can lead to 
+problems with failover and failback operations for the NVMeoF gateway.
+
+It's recommended to have multiple NVMeoF gateways in a group.
+
+NVMEOF_GATEWAY_DOWN
+___________________
+
+Some of the gateways are in the GW_UNAVAILABLE state. If a NVMeoF daemon has crashed, 
+the daemon log file (found at ``/var/log/ceph/``) may contain troubleshooting information.
+
 
 Miscellaneous
 -------------

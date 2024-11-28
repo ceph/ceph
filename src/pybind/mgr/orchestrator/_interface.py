@@ -503,7 +503,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def exit_host_maintenance(self, hostname: str) -> OrchResult:
+    def exit_host_maintenance(self, hostname: str, force: bool = False, offline: bool = False) -> OrchResult:
         """
         Return a host from maintenance, restarting the clusters systemd target
         """
@@ -901,9 +901,17 @@ class Orchestrator(object):
         """Change/Add a specific setting for a tuned profile"""
         raise NotImplementedError()
 
+    def tuned_profile_add_settings(self, profile_name: str, setting: dict) -> OrchResult[str]:
+        """Change/Add multiple settings for a tuned profile"""
+        raise NotImplementedError()
+
     def tuned_profile_rm_setting(self, profile_name: str, setting: str) -> OrchResult[str]:
         """Remove a specific setting for a tuned profile"""
         raise NotImplementedError()
+
+    def tuned_profile_rm_settings(self, profile_name: str, settings: List[str]) -> OrchResult[str]:
+        """Remove multiple settings from a tuned profile"""
+        raise NotImplementedError
 
     def upgrade_check(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
         raise NotImplementedError()

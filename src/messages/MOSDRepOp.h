@@ -54,7 +54,30 @@ public:
 
   // piggybacked osd/og state
   eversion_t pg_trim_to;   // primary->replica: trim to here
-  eversion_t min_last_complete_ondisk; // lower bound on committed version
+
+  /**
+   * pg_committed_to
+   *
+   * Used by the primary to propagate pg_committed_to to replicas for use in
+   * serving replica reads.
+   *
+   * Because updates <= pg_committed_to cannot become divergent, replicas
+   * may safely serve reads on objects which do not have more recent updates.
+   *
+   * See PeeringState::pg_committed_to, PeeringState::can_serve_replica_read
+   *
+   * Historical note: Prior to early 2024, this field was named
+   * min_last_complete_ondisk.  The replica, however, only actually relied on
+   * a single property of this field -- that any objects not modified since
+   * mlcod couldn't have uncommitted state.  Weakening the field to the condition
+   * above is therefore safe -- mlcod is always <= pg_committed_to and
+   * sending pg_committed_to to a replica expecting mlcod will work correctly
+   * as it only actually uses mlcod to check replica reads. The primary difference
+   * between mlcod and pg_committed_to is simply that mlcod doesn't advance past
+   * objects missing on replicas, but we check for that anyway.  This note may be
+   * removed in main after U is released.
+   */
+  eversion_t pg_committed_to;
 
   hobject_t new_temp_oid;      ///< new temp object that we must now start tracking
   hobject_t discard_temp_oid;  ///< previously used temp object that we can now stop tracking
@@ -110,14 +133,8 @@ public:
     decode(from, p);
     decode(updated_hit_set_history, p);
 
-    if (header.version >= 3) {
-      decode(min_last_complete_ondisk, p);
-    } else {
-      /* This field used to mean pg_roll_foward_to, but ReplicatedBackend
-       * simply assumes that we're rolling foward to version. */
-      eversion_t pg_roll_forward_to;
-      decode(pg_roll_forward_to, p);
-    }
+    ceph_assert(header.version >= 3);
+    decode(pg_committed_to, p);
     final_decode_needed = false;
   }
 
@@ -141,7 +158,7 @@ public:
     encode(discard_temp_oid, payload);
     encode(from, payload);
     encode(updated_hit_set_history, payload);
-    encode(min_last_complete_ondisk, payload);
+    encode(pg_committed_to, payload);
   }
 
   MOSDRepOp()
@@ -164,10 +181,6 @@ public:
     set_tid(rtid);
   }
 
-  void set_rollback_to(const eversion_t &rollback_to) {
-    header.version = 2;
-    min_last_complete_ondisk = rollback_to;
-  }
 private:
   ~MOSDRepOp() final {}
 
@@ -180,11 +193,7 @@ public:
       out << " " << poid << " v " << version;
       if (updated_hit_set_history)
         out << ", has_updated_hit_set_history";
-      if (header.version < 3) {
-	out << ", rollback_to(legacy)=" << min_last_complete_ondisk;
-      } else {
-	out << ", mlcod=" << min_last_complete_ondisk;
-      }
+      out << ", pct=" << pg_committed_to;
     }
     out << ")";
   }

@@ -908,11 +908,21 @@
         {
           alert: 'NVMeoFTooManySubsystems',
           'for': '1m',
-          expr: 'count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,"gateway_host","$1","instance","(.*):.*")) > %.2f' % [$._config.NVMeoFMaxSubsystemsPerGateway],
+          expr: 'count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,"gateway_host","$1","instance","(.*?)(?::.*)?")) > %.2f' % [$._config.NVMeoFMaxSubsystemsPerGateway],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'The number of subsystems defined to the gateway exceeds supported values%(cluster)s' % $.MultiClusterSummary(),
             description: 'Although you may continue to create subsystems in {{ $labels.gateway_host }}, the configuration may not be supported',
+          },
+        },
+        {
+          alert: 'NVMeoFTooManyNamespaces',
+          'for': '1m',
+          expr: 'sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,"gateway_host","$1","instance","(.*?)(?::.*)?")) > %.2f' % [$._config.NVMeoFMaxNamespaces],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'The number of namespaces defined to the gateway exceeds supported values%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Although you may continue to create namespaces in {{ $labels.gateway_host }}, the configuration may not be supported',
           },
         },
         {
@@ -933,6 +943,26 @@
           annotations: {
             summary: 'The number of clients connected to {{ $labels.nqn }} is too high%(cluster)s' % $.MultiClusterSummary(),
             description: 'The supported limit for clients connecting to a subsystem is %(NVMeoFHighClientCount)d' % $._config,
+          },
+        },
+        {
+          alert: 'NVMeoFMissingListener',
+          'for': '10m',
+          expr: 'ceph_nvmeof_subsystem_listener_count == 0 and on(nqn) sum(ceph_nvmeof_subsystem_listener_count) by (nqn) > 0',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'No listener added for {{ $labels.instance }} NVMe-oF Gateway to {{ $labels.nqn }} subsystem',
+            description: 'For every subsystem, each gateway should have a listener to balance traffic between gateways.',
+          },
+        },
+        {
+          alert: 'NVMeoFZeroListenerSubsystem',
+          'for': '10m',
+          expr: 'sum(ceph_nvmeof_subsystem_listener_count) by (nqn) == 0',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'No listeners added to {{ $labels.nqn }} subsystem',
+            description: 'NVMeoF gateway configuration incomplete; one of the subsystems have zero listeners.',
           },
         },
         {

@@ -23,6 +23,8 @@
 #include "common/Thread.h"
 #include "include/stringify.h"
 #include "osd/ReplicatedBackend.h"
+
+#include <iostream> // for std::cout
 #include <sstream>
 
 using namespace std;

@@ -349,6 +349,7 @@ log_to_file = False"""
                             },
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -397,6 +398,7 @@ enable_auth = False
 state_update_notify = True
 state_update_interval_sec = 5
 enable_spdk_discovery_controller = False
+enable_key_encryption = True
 enable_prometheus_exporter = True
 prometheus_exporter_ssl = False
 prometheus_port = 10008
@@ -409,8 +411,12 @@ allowed_consecutive_spdk_ping_failures = 1
 spdk_ping_interval_in_seconds = 2.0
 ping_spdk_under_lock = False
 enable_monitor_client = True
-max_hosts_per_namespace = 1
+max_hosts_per_namespace = 8
 max_namespaces_with_netmask = 1000
+max_subsystems = 128
+max_namespaces = 1024
+max_namespaces_per_subsystem = 256
+max_hosts_per_subsystem = 32
 
 [gateway-logs]
 log_level = INFO
@@ -489,6 +495,7 @@ timeout = 1.0\n"""
                             }
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -601,6 +608,7 @@ class TestMonitoring:
                             "use_url_prefix": False,
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -696,6 +704,7 @@ class TestMonitoring:
                             "use_url_prefix": True,
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -788,6 +797,7 @@ class TestMonitoring:
                             "use_url_prefix": False,
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -833,6 +843,7 @@ class TestMonitoring:
                                                         "files": {
                                                             "ceph-exporter.crt": "mycert",
                                                             "ceph-exporter.key": "mykey"}}}),
+                                                error_ok=True,
                                                 use_current_daemon_image=False)
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -876,6 +887,7 @@ class TestMonitoring:
                         },
                         "config_blobs": {}
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -936,6 +948,7 @@ class TestMonitoring:
                             'web_config': '/etc/node-exporter/web.yml',
                         }
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1071,6 +1084,7 @@ class TestMonitoring:
                             "use_url_prefix": False
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1303,6 +1317,7 @@ class TestMonitoring:
                             "use_url_prefix": False
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1379,6 +1394,7 @@ class TestMonitoring:
                             },
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1438,6 +1454,7 @@ class TestMonitoring:
                             },
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1588,6 +1605,7 @@ class TestMonitoring:
                             "files": files,
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1718,6 +1736,7 @@ class TestMonitoring:
                             "files": files,
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -1831,6 +1850,7 @@ class TestMonitoring:
                             "files": files,
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -2005,6 +2025,7 @@ spec:
                             },
                             "config_blobs": {},
                         }),
+                        error_ok=True,
                         use_current_daemon_image=False,
                     )
 
@@ -2112,6 +2133,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -2160,6 +2182,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -2212,6 +2235,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -2269,6 +2293,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -3189,7 +3214,9 @@ class TestIngressService:
             'NFS_CORE_PARAM {\n'
             '        Enable_NLM = true;\n'
             '        Enable_RQUOTA = false;\n'
-            '        Protocols = 4;\n'
+            '        Protocols = 3, 4;\n'
+            '        mount_path_pseudo = true;\n'
+            '        Enable_UDP = false;\n'
             '        NFS_Port = 2049;\n'
             '        allow_set_io_flusher_fail = true;\n'
             '        HAProxy_Hosts = 192.168.122.111, 10.10.2.20, 192.168.122.222;\n'
@@ -3359,6 +3386,7 @@ class TestJaeger:
                         },
                         "config_blobs": config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -3399,6 +3427,7 @@ class TestJaeger:
                         },
                         "config_blobs": es_config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
                 with with_service(cephadm_module, collector_spec):
@@ -3427,6 +3456,7 @@ class TestJaeger:
                             },
                             "config_blobs": collector_config,
                         }),
+                        error_ok=True,
                         use_current_daemon_image=False,
                     )
 
@@ -3467,6 +3497,7 @@ class TestJaeger:
                         },
                         "config_blobs": collector_config,
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
                 with with_service(cephadm_module, agent_spec):
@@ -3495,6 +3526,7 @@ class TestJaeger:
                             },
                             "config_blobs": agent_config,
                         }),
+                        error_ok=True,
                         use_current_daemon_image=False,
                     )
 
@@ -3552,6 +3584,7 @@ class TestCustomContainer:
                             },
                         }
                     ),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -3639,6 +3672,7 @@ class TestCustomContainer:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -3692,6 +3726,7 @@ class TestSMB:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -3764,6 +3799,7 @@ class TestSMB:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -4009,6 +4045,7 @@ class TestMgmtGateway:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -4350,6 +4387,7 @@ class TestMgmtGateway:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -4473,5 +4511,6 @@ class TestMgmtGateway:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )

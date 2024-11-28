@@ -66,6 +66,11 @@ void NVMeofGwMon::on_shutdown()
 
 void NVMeofGwMon::tick()
 {
+  if (++tick_ratio == 10) {
+    global_rebalance_index++;
+    dout(20) <<  "rebalance index " << global_rebalance_index << dendl;
+    tick_ratio = 0;
+  }
   if (!is_active() || !mon.is_leader()) {
     dout(10) << "NVMeofGwMon leader : " << mon.is_leader()
 	     << "active : " << is_active()  << dendl;
@@ -176,6 +181,11 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t)
 	   << HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA) << dendl;
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
+
+  //health
+  health_check_map_t checks;
+  pending_map.get_health_checks(&checks);
+  encode_health(checks, t);
 }
 
 void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
@@ -188,6 +198,7 @@ void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
     bufferlist bl;
     int err = get_version(version, bl);
     ceph_assert(err == 0);
+    load_health();
 
     auto p = bl.cbegin();
     map.decode(p);
@@ -317,6 +328,11 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
     f->dump_string("group", group);
     if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA)) {
       f->dump_string("features", "LB");
+      if (map.created_gws[group_key].size()) {
+        uint32_t index = (global_rebalance_index %
+              map.created_gws[group_key].size()) + 1;
+        f->dump_unsigned("rebalance_ana_group", index);
+      }
     }
     f->dump_unsigned("num gws", map.created_gws[group_key].size());
     if (map.created_gws[group_key].size() == 0) {
@@ -607,11 +623,13 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 
   if (sub.size() == 0) {
     avail = gw_availability_t::GW_CREATED;
+    dout(20) << "No-subsystems condition detected for GW " << gw_id <<dendl;
   } else {
-    bool listener_found = false;
+    bool listener_found = true;
     for (auto &subs: sub) {
-      if (subs.listeners.size()) {
-        listener_found = true;
+      if (subs.listeners.size() == 0) {
+        listener_found = false;
+        dout(10) << "No-listeners condition detected for GW " << gw_id << " for nqn " << subs.nqn << dendl;
         break;
       }
     }

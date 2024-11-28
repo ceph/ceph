@@ -233,6 +233,11 @@ class LocalRemoteProcess(object):
         else:
             self.stderr.write(err)
 
+    def _handle_subprocess_output(self, output, stream):
+        if isinstance(stream, StringIO):
+            return rm_nonascii_chars(output)
+        return output
+
     def wait(self, timeout=None):
         # Null subproc.stdin so communicate() does not try flushing/closing it
         # again.
@@ -250,7 +255,8 @@ class LocalRemoteProcess(object):
                 return
 
         out, err = self.subproc.communicate(timeout=timeout)
-        out, err = rm_nonascii_chars(out), rm_nonascii_chars(err)
+        out = self._handle_subprocess_output(out, self.stdout)
+        err = self._handle_subprocess_output(err, self.stderr)
         self._write_stdout(out)
         self._write_stderr(err)
 

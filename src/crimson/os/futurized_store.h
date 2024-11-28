@@ -203,6 +203,7 @@ public:
   using coll_core_t = std::pair<coll_t, core_id_t>;
   virtual seastar::future<std::vector<coll_core_t>> list_collections() = 0;
 
+  virtual seastar::future<std::string> get_default_device_class() = 0;
 protected:
   const core_id_t primary_core;
 };

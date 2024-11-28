@@ -4,6 +4,7 @@
 #include <seastar/core/future.hh>
 
 #include "crimson/osd/osd_operations/internal_client_request.h"
+#include "osd/object_state_fmt.h"
 
 namespace {
   seastar::logger& logger() {
@@ -81,14 +82,7 @@ InternalClientRequest::interruptible_future<>
 InternalClientRequest::with_interruption()
 {
   LOG_PREFIX(InternalClientRequest::with_interruption);
-  co_await enter_stage<interruptor>(
-    client_pp().wait_for_active
-  );
-
-  co_await with_blocking_event<PGActivationBlocker::BlockingEvent,
-			       interruptor>([this] (auto&& trigger) {
-    return pg->wait_for_active_blocker.wait(std::move(trigger));
-  });
+  assert(pg->is_active());
 
   co_await enter_stage<interruptor>(client_pp().recover_missing);
 
@@ -112,21 +106,25 @@ InternalClientRequest::with_interruption()
   [[maybe_unused]] const int ret = op_info.set_from_op(
     std::as_const(osd_ops), pg->get_pgid().pgid, *pg->get_osdmap());
   assert(ret == 0);
-  // call with_locked_obc() in order, but wait concurrently for loading.
+
+  auto obc_manager = pg->obc_loader.get_obc_manager(get_target_oid());
+
+  // initiate load_and_lock in order, but wait concurrently
   enter_stage_sync(client_pp().lock_obc);
 
-  auto fut = pg->with_locked_obc(
-    get_target_oid(), op_info,
-    [&osd_ops, this](auto, auto obc) {
-      return enter_stage<interruptor>(client_pp().process
-      ).then_interruptible(
-	[obc=std::move(obc), &osd_ops, this]() mutable {
-	  return do_process(std::move(obc), osd_ops);
-	});
-    }).handle_error_interruptible(
-      crimson::ct_error::assert_all("unexpected error")
-    );
-  co_await std::move(fut);
+  co_await pg->obc_loader.load_and_lock(
+    obc_manager, pg->get_lock_type(op_info)
+  ).handle_error_interruptible(
+    crimson::ct_error::assert_all("unexpected error")
+  );
+
+  DEBUGDPP("{}: got obc {}, entering process stage",
+	   *pg, *this, obc_manager.get_obc()->obs);
+  co_await enter_stage<interruptor>(client_pp().process);
+
+  DEBUGDPP("{}: in process stage, calling do_process",
+	   *pg, *this);
+  co_await do_process(obc_manager.get_obc(), osd_ops);
 
   logger().debug("{}: complete", *this);
   co_await interruptor::make_interruptible(handle.complete());

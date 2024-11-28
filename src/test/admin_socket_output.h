@@ -16,6 +16,7 @@
 #define CEPH_ADMIN_SOCKET_OUTPUT_H
 
 #include <filesystem>
+#include <iostream> // for std::cout
 #include <string>
 #include <map>
 #include <set>

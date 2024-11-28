@@ -261,6 +261,9 @@
                 Another name for :term:`Dashboard`.
 
 	Dashboard Plugin
+        DC
+                **D**\ata **C**\enter.
+
         Flapping OSD
                 An OSD that is repeatedly marked ``up`` and then ``down`` in
                 rapid succession. See :ref:`rados_tshooting_flapping_osd`.
@@ -402,7 +405,15 @@
                 placement group, and each placement group belongs to exactly
                 one Ceph pool. 
 
+        PLP 
+                **P**\ower **L**\oss **P**\rotection. A technology that
+                protects the data of solid-state drives by using capacitors to
+                extend the amount of time available for transferring data from
+                the DRAM cache to the SSD's permanent memory. Consumer-grade
+                SSDs are rarely equipped with PLP.
+
 	:ref:`Pool<rados_pools>`
+
 		A pool is a logical partition used to store objects.
 
 	Pools

@@ -13,7 +13,7 @@
 /src/pybind/mgr/rook                            @ceph/orchestrators
 /src/pybind/mgr/cephadm                         @ceph/orchestrators
 /src/pybind/mgr/test_orchestrator               @ceph/orchestrators
-/src/python-common/ceph/deployment              @ceph/orchestrators
+/src/python-common                              @ceph/orchestrators
 /qa/workunits/cephadm                           @ceph/orchestrators
 /qa/tasks/cephadm.py                            @ceph/orchestrators
 /qa/tasks/cephadm_cases                         @ceph/orchestrators

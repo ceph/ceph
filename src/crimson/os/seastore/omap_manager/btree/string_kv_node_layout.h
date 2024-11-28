@@ -504,8 +504,13 @@ public:
     inner_remove(iter);
   }
 
-  StringKVInnerNodeLayout(char *buf) :
-    buf(buf) {}
+  StringKVInnerNodeLayout() : buf(nullptr) {}
+
+  void set_layout_buf(char *_buf) {
+    assert(buf == nullptr);
+    assert(_buf != nullptr);
+    buf = _buf;
+  }
 
   uint32_t get_size() const {
     ceph_le32 &size = *layout.template Pointer<0>(buf);
@@ -1120,8 +1125,13 @@ public:
     leaf_remove(iter);
   }
 
-  StringKVLeafNodeLayout(char *buf) :
-    buf(buf) {}
+  StringKVLeafNodeLayout() : buf(nullptr) {}
+
+  void set_layout_buf(char *_buf) {
+    assert(buf == nullptr);
+    assert(_buf != nullptr);
+    buf = _buf;
+  }
 
   const_iterator iter_begin() const {
     return const_iterator(

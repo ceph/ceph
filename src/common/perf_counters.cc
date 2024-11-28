@@ -18,6 +18,7 @@
 #include "common/dout.h"
 #include "common/valgrind.h"
 #include "include/common_fwd.h"
+#include "include/utime.h"
 
 using std::ostringstream;
 using std::make_pair;

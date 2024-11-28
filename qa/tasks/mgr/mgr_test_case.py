@@ -1,5 +1,6 @@
 import json
 import logging
+import socket
 
 from unittest import SkipTest
 
@@ -108,7 +109,7 @@ class MgrTestCase(CephTestCase):
         # Unload all non-default plugins
         loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
                    "mgr", "module", "ls", "--format=json-pretty"))['enabled_modules']
-        unload_modules = set(loaded) - {"cephadm", "restful"}
+        unload_modules = set(loaded) - {"cephadm"}
 
         for m in unload_modules:
             cls.mgr_cluster.mon_manager.raw_cluster_cmd(
@@ -137,7 +138,7 @@ class MgrTestCase(CephTestCase):
             raise SkipTest(
                 "Only have {0} manager daemons, {1} are required".format(
                     len(cls.mgr_cluster.mgr_ids), cls.MGRS_REQUIRED))
-        
+
         # We expect laggy OSDs in this testing environment so turn off this warning.
         # See https://tracker.ceph.com/issues/61907
         cls.mgr_cluster.mon_manager.raw_cluster_cmd('config', 'set', 'mds',
@@ -229,15 +230,22 @@ class MgrTestCase(CephTestCase):
         """
         # Start handing out ports well above Ceph's range.
         assign_port = min_port
+        ip_addr = cls.mgr_cluster.get_mgr_map()['active_addr'].split(':')[0]
 
         for mgr_id in cls.mgr_cluster.mgr_ids:
             cls.mgr_cluster.mgr_stop(mgr_id)
             cls.mgr_cluster.mgr_fail(mgr_id)
 
+
         for mgr_id in cls.mgr_cluster.mgr_ids:
-            log.debug("Using port {0} for {1} on mgr.{2}".format(
-                assign_port, module_name, mgr_id
-            ))
+            # Find a port that isn't in use
+            while True:
+                if not cls.is_port_in_use(ip_addr, assign_port):
+                    break
+                log.debug(f"Port {assign_port} in use, trying next")
+                assign_port += 1
+
+            log.debug(f"Using port {assign_port} for {module_name} on mgr.{mgr_id}")
             cls.mgr_cluster.set_module_localized_conf(module_name, mgr_id,
                                                       config_name,
                                                       str(assign_port),
@@ -255,3 +263,8 @@ class MgrTestCase(CephTestCase):
                     mgr_map['active_name'], mgr_map['active_gid']))
             return done
         cls.wait_until_true(is_available, timeout=30)
+
+    @classmethod
+    def is_port_in_use(cls, ip_addr: str, port: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex((ip_addr, port)) == 0

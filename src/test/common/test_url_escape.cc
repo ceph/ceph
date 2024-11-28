@@ -3,6 +3,8 @@
 
 #include "common/url_escape.h"
 
+#include <iostream> // for std::cout
+
 #include "gtest/gtest.h"
 
 TEST(url_escape, escape) {

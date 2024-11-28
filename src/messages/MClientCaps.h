@@ -117,9 +117,9 @@ private:
   void set_ctime(const utime_t &t) { ctime = t; }
   void set_atime(const utime_t &t) { atime = t; }
 
-  void set_cap_peer(uint64_t id, ceph_seq_t seq, ceph_seq_t mseq, int mds, int flags) {
+  void set_cap_peer(uint64_t id, ceph_seq_t issue_seq, ceph_seq_t mseq, int mds, int flags) {
     peer.cap_id = id;
-    peer.seq = seq;
+    peer.issue_seq = issue_seq;
     peer.mseq = mseq;
     peer.mds = mds;
     peer.flags = flags;
@@ -137,11 +137,12 @@ protected:
 	      inodeno_t ino,
 	      inodeno_t realm,
 	      uint64_t id,
-	      long seq,
+	      ceph_seq_t seq,
 	      int caps,
 	      int wanted,
 	      int dirty,
-	      int mseq,
+	      ceph_seq_t mseq,
+              ceph_seq_t issue_seq,
               epoch_t oeb)
     : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
@@ -155,11 +156,12 @@ protected:
     head.wanted = wanted;
     head.dirty = dirty;
     head.migrate_seq = mseq;
+    head.issue_seq = issue_seq;
     memset(&peer, 0, sizeof(peer));
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
-	      uint64_t id, int mseq, epoch_t oeb)
+	      uint64_t id, ceph_seq_t mseq, epoch_t oeb)
     : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
@@ -181,7 +183,8 @@ public:
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " " << head.cap_id
-	<< " seq " << head.seq;
+	<< " seq " << head.seq
+	<< " issue_seq " << head.issue_seq;
     if (get_tid())
       out << " tid " << get_tid();
     out << " caps=" << ccap_string(head.caps)

@@ -53,11 +53,12 @@ MDLog::MDLog(MDSRank* m)
   event_large_threshold = g_conf().get_val<uint64_t>("mds_log_event_large_threshold");
   events_per_segment = g_conf().get_val<uint64_t>("mds_log_events_per_segment");
   pause = g_conf().get_val<bool>("mds_log_pause");
-  major_segment_event_ratio = g_conf().get_val<uint64_t>("mds_log_major_segment_event_ratio");
   max_segments = g_conf().get_val<uint64_t>("mds_log_max_segments");
   max_events = g_conf().get_val<int64_t>("mds_log_max_events");
   skip_corrupt_events = g_conf().get_val<bool>("mds_log_skip_corrupt_events");
   skip_unbounded_events = g_conf().get_val<bool>("mds_log_skip_unbounded_events");
+  log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
+  minor_segments_per_major_segment = g_conf().get_val<uint64_t>("mds_log_minor_segments_per_major_segment");
   upkeep_thread = std::thread(&MDLog::log_trim_upkeep, this);
 }
 
@@ -258,7 +259,7 @@ void MDLog::create(MDSContext *c)
   logger->set(l_mdl_expos, journaler->get_expire_pos());
   logger->set(l_mdl_wrpos, journaler->get_write_pos());
 
-  submit_thread.create("md_submit");
+  submit_thread.create("mds-log-submit");
 }
 
 void MDLog::open(MDSContext *c)
@@ -267,9 +268,9 @@ void MDLog::open(MDSContext *c)
 
   ceph_assert(!recovery_thread.is_started());
   recovery_thread.set_completion(c);
-  recovery_thread.create("md_recov_open");
+  recovery_thread.create("mds-log-recvr");
 
-  submit_thread.create("md_submit");
+  submit_thread.create("mds-log-submit");
   // either append() or replay() will follow.
 }
 
@@ -311,7 +312,7 @@ void MDLog::reopen(MDSContext *c)
   recovery_thread.join();
 
   recovery_thread.set_completion(new C_ReopenComplete(this, c));
-  recovery_thread.create("md_recov_reopen");
+  recovery_thread.create("mds-log-reopen");
 }
 
 void MDLog::append()
@@ -357,14 +358,15 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase* c)
   ceph_assert(!mds_is_shutting_down);
 
   event_seq++;
-  events_since_last_major_segment++;
 
   if (auto sb = dynamic_cast<SegmentBoundary*>(le); sb) {
     auto ls = _start_new_segment(sb);
     if (sb->is_major_segment_boundary()) {
       major_segments.insert(ls->seq);
       logger->set(l_mdl_segmjr, major_segments.size());
-      events_since_last_major_segment = 0;
+      minor_segments_since_last_major_segment = 0;
+    } else {
+      ++minor_segments_since_last_major_segment;
     }
   }
 
@@ -403,7 +405,7 @@ void MDLog::_segment_upkeep()
   uint64_t period = journaler->get_layout_period();
   auto ls = get_current_segment();
   // start a new segment?
-  if (events_since_last_major_segment > events_per_segment*major_segment_event_ratio) {
+  if (minor_segments_since_last_major_segment > minor_segments_per_major_segment) {
     dout(10) << __func__ << ": starting new major segment, current " << *ls << dendl;
     auto sle = mds->mdcache->create_subtree_map();
     _submit_entry(sle, NULL);
@@ -656,7 +658,13 @@ void MDLog::try_to_commit_open_file_table(uint64_t last_seq)
   }
 }
 
+bool MDLog::is_trim_slow() const {
+  return (segments.size() > (size_t)(max_segments * log_warn_factor));
+}
+
 void MDLog::log_trim_upkeep(void) {
+  ceph_pthread_setname("mds-log-trim");
+
   dout(10) << dendl;
 
   std::unique_lock mds_lock(mds->mds_lock);
@@ -1008,7 +1016,7 @@ void MDLog::replay(MDSContext *c)
   }
   already_replayed = true;
 
-  replay_thread.create("md_log_replay");
+  replay_thread.create("mds-log-replay");
 }
 
 
@@ -1474,7 +1482,6 @@ void MDLog::_replay_thread()
     }
     le->set_start_off(pos);
 
-    events_since_last_major_segment++;
     if (auto sb = dynamic_cast<SegmentBoundary*>(le.get()); sb) {
       auto seq = sb->get_seq();
       if (seq > 0) {
@@ -1487,7 +1494,9 @@ void MDLog::_replay_thread()
       if (sb->is_major_segment_boundary()) {
         major_segments.insert(event_seq);
         logger->set(l_mdl_segmjr, major_segments.size());
-        events_since_last_major_segment = 0;
+	minor_segments_since_last_major_segment = 0;
+      } else {
+	++minor_segments_since_last_major_segment;
       }
     } else {
       event_seq++;
@@ -1618,9 +1627,6 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   if (changed.count("mds_log_events_per_segment")) {
     events_per_segment = g_conf().get_val<uint64_t>("mds_log_events_per_segment");
   }
-  if (changed.count("mds_log_major_segment_event_ratio")) {
-    major_segment_event_ratio = g_conf().get_val<uint64_t>("mds_log_major_segment_event_ratio");
-  }
   if (changed.count("mds_log_max_events")) {
     max_events = g_conf().get_val<int64_t>("mds_log_max_events");
   }
@@ -1641,5 +1647,11 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   }
   if (changed.count("mds_log_trim_decay_rate")){
     log_trim_counter = DecayCounter(g_conf().get_val<double>("mds_log_trim_decay_rate"));
+  }
+  if (changed.count("mds_log_warn_factor")) {
+    log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
+  }
+  if (changed.count("mds_log_minor_segments_per_major_segment")) {
+    minor_segments_per_major_segment = g_conf().get_val<uint64_t>("mds_log_minor_segments_per_major_segment");
   }
 }

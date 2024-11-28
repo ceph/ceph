@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 #include <stdio.h>
 
+#include <iostream> // for std::cout
+
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_releases.h"

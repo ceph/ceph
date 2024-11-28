@@ -4,6 +4,7 @@ import time
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
+from teuthology.contextutil import safe_while, MaxWhileTries
 
 log = logging.getLogger(__name__)
 
@@ -628,3 +629,186 @@ done
         log.info("{0} migrations have occured due to the cluster resizing".format(count))
         # rebalancing from 3 -> 2 may cause half of rank 0/1 to move and all of rank 2
         self.assertLessEqual((count/len(subtrees_old)), (1.0/3.0/2.0 + 1.0/3.0/2.0 + 1.0/3.0)*1.25) # aka .66 with 25% overbudget
+
+class TestDumpExportStates(CephFSTestCase):
+    MDSS_REQUIRED = 2
+    CLIENTS_REQUIRED = 1
+
+    EXPORT_STATES = ['locking', 'discovering', 'freezing', 'prepping', 'warning', 'exporting']
+
+    def setUp(self):
+        super().setUp()
+
+        self.fs.set_max_mds(self.MDSS_REQUIRED)
+        self.status = self.fs.wait_for_daemons()
+
+        self.mount_a.run_shell_payload('mkdir -p test/export')
+
+    def tearDown(self):
+        super().tearDown()
+
+    def _wait_for_export_target(self, source, target, sleep=2, timeout=10):
+        try:
+            with safe_while(sleep=sleep, tries=timeout//sleep) as proceed:
+                while proceed():
+                    info = self.fs.getinfo().get_rank(self.fs.id, source)
+                    log.info(f'waiting for rank {target} to be added to the export target')
+                    if target in info['export_targets']:
+                        return
+        except MaxWhileTries as e:
+            raise RuntimeError(f'rank {target} has not been added to export target after {timeout}s') from e
+
+    def _dump_export_state(self, rank):
+        states = self.fs.rank_asok(['dump_export_states'], rank=rank, status=self.status)
+        self.assertTrue(type(states) is list)
+        self.assertEqual(len(states), 1)
+        return states[0]
+
+    def _test_base(self, path, source, target, state_index, kill):
+        self.fs.rank_asok(['config', 'set', 'mds_kill_import_at', str(kill)], rank=target, status=self.status)
+
+        self.fs.rank_asok(['export', 'dir', path, str(target)], rank=source, status=self.status)
+        self._wait_for_export_target(source, target)
+
+        target_rank = self.fs.get_rank(rank=target, status=self.status)
+        self.delete_mds_coredump(target_rank['name'])
+
+        state = self._dump_export_state(source)
+
+        self.assertTrue(type(state['tid']) is int)
+        self.assertEqual(state['path'], path)
+        self.assertEqual(state['state'], self.EXPORT_STATES[state_index])
+        self.assertEqual(state['peer'], target)
+
+        return state
+
+    def _test_state_history(self, state):
+        history = state['state_history']
+        self.assertTrue(type(history) is dict)
+        size = 0
+        for name in self.EXPORT_STATES:
+            self.assertTrue(type(history[name]) is dict)
+            size += 1
+            if name == state['state']:
+                break
+        self.assertEqual(len(history), size)
+
+    def _test_freeze_tree(self, state, waiters):
+        self.assertTrue(type(state['freeze_tree_time']) is float)
+        self.assertEqual(state['unfreeze_tree_waiters'], waiters)
+
+    def test_discovering(self):
+        state = self._test_base('/test', 0, 1, 1, 1)
+
+        self._test_state_history(state)
+        self._test_freeze_tree(state, 0)
+
+        self.assertEqual(state['last_cum_auth_pins'], 0)
+        self.assertEqual(state['num_remote_waiters'], 0)
+
+    def test_prepping(self):
+        client_id = self.mount_a.get_global_id()
+
+        state = self._test_base('/test', 0, 1, 3, 3)
+
+        self._test_state_history(state)
+        self._test_freeze_tree(state, 0)
+
+        self.assertEqual(state['flushed_clients'], [client_id])
+        self.assertTrue(type(state['warning_ack_waiting']) is list)
+
+    def test_exporting(self):
+        state = self._test_base('/test', 0, 1, 5, 5)
+
+        self._test_state_history(state)
+        self._test_freeze_tree(state, 0)
+
+        self.assertTrue(type(state['notify_ack_waiting']) is list)
+
+class TestKillExports(CephFSTestCase):
+    MDSS_REQUIRED = 2
+    CLIENTS_REQUIRED = 1
+
+    def setUp(self):
+        CephFSTestCase.setUp(self)
+
+        self.fs.set_max_mds(self.MDSS_REQUIRED)
+        self.status = self.fs.wait_for_daemons()
+
+        self.mount_a.run_shell_payload('mkdir -p test/export')
+
+    def tearDown(self):
+        super().tearDown()
+
+    def _kill_export_as(self, rank, kill):
+        self.fs.rank_asok(['config', 'set', 'mds_kill_export_at', str(kill)], rank=rank, status=self.status)
+
+    def _export_dir(self, path, source, target):
+        self.fs.rank_asok(['export', 'dir', path, str(target)], rank=source, status=self.status)
+
+    def _wait_failover(self):
+        self.wait_until_true(lambda: self.fs.status().hadfailover(self.status), timeout=self.fs.beacon_timeout)
+
+    def _clear_coredump(self, rank):
+        crash_rank = self.fs.get_rank(rank=rank, status=self.status)
+        self.delete_mds_coredump(crash_rank['name'])
+
+    def _run_kill_export(self, kill_at, exporter_rank=0, importer_rank=1, restart=True):
+        self._kill_export_as(exporter_rank, kill_at)
+        self._export_dir("/test", exporter_rank, importer_rank)
+        self._wait_failover()
+        self._clear_coredump(exporter_rank)
+
+        if restart:
+            self.fs.rank_restart(rank=exporter_rank, status=self.status)
+        self.status = self.fs.wait_for_daemons()
+
+    def test_session_cleanup(self):
+        """
+        Test importer's session cleanup after an export subtree task is interrupted.
+        Set 'mds_kill_export_at' to 9 or 10 so that the importer will wait for the exporter
+        to restart while the state is 'acking'.
+
+        See https://tracker.ceph.com/issues/61459
+        """
+
+        kill_export_at = [9, 10]
+
+        exporter_rank = 0
+        importer_rank = 1
+
+        for kill in kill_export_at:
+            log.info(f"kill_export_at: {kill}")
+            self._run_kill_export(kill, exporter_rank, importer_rank)
+
+            if len(self._session_list(importer_rank, self.status)) > 0:
+                client_id = self.mount_a.get_global_id()
+                self.fs.rank_asok(['session', 'evict', "%s" % client_id], rank=importer_rank, status=self.status)
+
+                # timeout if buggy
+                self.wait_until_evicted(client_id, importer_rank)
+
+            # for multiple tests
+            self.mount_a.remount()
+
+    def test_client_eviction(self):
+        # modify the timeout so that we don't have to wait too long
+        timeout = 30
+        self.fs.set_session_timeout(timeout)
+        self.fs.set_session_autoclose(timeout + 5)
+
+        kill_export_at = [9, 10]
+
+        exporter_rank = 0
+        importer_rank = 1
+
+        for kill in kill_export_at:
+            log.info(f"kill_export_at: {kill}")
+            self._run_kill_export(kill, exporter_rank, importer_rank)
+
+            client_id = self.mount_a.get_global_id()
+            self.wait_until_evicted(client_id, importer_rank, timeout + 10)
+            time.sleep(1)
+
+            # failed if buggy
+            self.mount_a.ls()

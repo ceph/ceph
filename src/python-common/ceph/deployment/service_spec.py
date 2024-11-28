@@ -527,8 +527,8 @@ pattern_type=PatternType.fnmatch))
         labels = [x for x in strings if 'label:' in x]
         if len(labels) > 1:
             raise SpecValidationError('more than one label provided: {}'.format(labels))
-        for l in labels:
-            strings.remove(l)
+        for lbl in labels:
+            strings.remove(lbl)
         label = labels[0][6:] if labels else None
 
         host_patterns = strings
@@ -701,7 +701,7 @@ class ArgumentSpec:
         if isinstance(data, str):
             return cls(data, split=True, origin=cls.OriginalType.STRING)
         if 'argument' not in data:
-            raise SpecValidationError(f'ArgumentSpec must have an "argument" field')
+            raise SpecValidationError('ArgumentSpec must have an "argument" field')
         for k in data.keys():
             if k not in cls._fields:
                 raise SpecValidationError(f'ArgumentSpec got an unknown field {k!r}')
@@ -1313,6 +1313,10 @@ class RGWSpec(ServiceSpec):
             raise SpecValidationError('"ssl" field must be set to true when "generate_cert" '
                                       'is set to true')
 
+        if self.generate_cert and self.rgw_frontend_ssl_certificate:
+            raise SpecValidationError('"generate_cert" field and "rgw_frontend_ssl_certificate" '
+                                      'field are mutually exclusive')
+
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
 
@@ -1330,6 +1334,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  state_update_notify: Optional[bool] = True,
                  state_update_interval_sec: Optional[int] = 5,
                  enable_spdk_discovery_controller: Optional[bool] = False,
+                 enable_key_encryption: Optional[bool] = True,
                  omap_file_lock_duration: Optional[int] = 20,
                  omap_file_lock_retries: Optional[int] = 30,
                  omap_file_lock_retry_sleep_interval: Optional[float] = 1.0,
@@ -1340,14 +1345,20 @@ class NvmeofServiceSpec(ServiceSpec):
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
                  ping_spdk_under_lock: Optional[bool] = False,
-                 max_hosts_per_namespace: Optional[int] = 1,
+                 max_hosts_per_namespace: Optional[int] = 8,
                  max_namespaces_with_netmask: Optional[int] = 1000,
+                 max_subsystems: Optional[int] = 128,
+                 max_namespaces: Optional[int] = 1024,
+                 max_namespaces_per_subsystem: Optional[int] = 256,
+                 max_hosts_per_subsystem: Optional[int] = 32,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
                  client_cert: Optional[str] = None,
                  root_ca_cert: Optional[str] = None,
+                 # unused and duplicate of tgt_path below, consider removing
                  spdk_path: Optional[str] = None,
+                 spdk_mem_size: Optional[int] = None,
                  tgt_path: Optional[str] = None,
                  spdk_timeout: Optional[float] = 60.0,
                  spdk_log_level: Optional[str] = '',
@@ -1409,6 +1420,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.state_update_interval_sec = state_update_interval_sec
         #: ``enable_spdk_discovery_controller`` SPDK or ceph-nvmeof discovery service
         self.enable_spdk_discovery_controller = enable_spdk_discovery_controller
+        #: ``enable_key_encryption`` encrypt DHCHAP and PSK keys before saving in OMAP
+        self.enable_key_encryption = enable_key_encryption
         #: ``enable_prometheus_exporter`` enables Prometheus exporter
         self.enable_prometheus_exporter = enable_prometheus_exporter
         #: ``verify_nqns`` enables verification of subsystem and host NQNs for validity
@@ -1425,6 +1438,14 @@ class NvmeofServiceSpec(ServiceSpec):
         self.max_hosts_per_namespace = max_hosts_per_namespace
         #: ``max_namespaces_with_netmask`` max number of namespaces which are not auto visible
         self.max_namespaces_with_netmask = max_namespaces_with_netmask
+        #: ``max_subsystems`` max number of subsystems
+        self.max_subsystems = max_subsystems
+        #: ``max_namespaces`` max number of namespaces on all subsystems
+        self.max_namespaces = max_namespaces
+        #: ``max_namespaces_per_subsystem`` max number of namespaces per one subsystem
+        self.max_namespaces_per_subsystem = max_namespaces_per_subsystem
+        #: ``max_hosts_per_subsystem`` max number of hosts per subsystems
+        self.max_hosts_per_subsystem = max_hosts_per_subsystem
         #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
@@ -1443,8 +1464,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.client_cert = client_cert
         #: ``root_ca_cert`` CA cert for server/client certs
         self.root_ca_cert = root_ca_cert
-        #: ``spdk_path`` path to SPDK
+        #: ``spdk_path`` path is unused and duplicate of tgt_path below, consider removing
         self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
+        #: ``spdk_mem_size`` memory size in MB for DPDK
+        self.spdk_mem_size = spdk_mem_size
         #: ``tgt_path`` nvmeof target path
         self.tgt_path = tgt_path or '/usr/local/bin/nvmf_tgt'
         #: ``spdk_timeout`` SPDK connectivity timeout
@@ -1612,6 +1635,36 @@ class NvmeofServiceSpec(ServiceSpec):
             and self.max_log_directory_backups < 0
         ):
             raise SpecValidationError("Log file directory backups can't be negative")
+
+        if (self.max_hosts_per_namespace and self.max_hosts_per_namespace < 0):
+            raise SpecValidationError("Max hosts per namespace can't be negative")
+
+        if (self.max_namespaces_with_netmask and self.max_namespaces_with_netmask < 0):
+            raise SpecValidationError("Max namespaces with netmask can't be negative")
+
+        if not isinstance(self.max_subsystems, int):
+            raise SpecValidationError("Max subsystems must be an integer")
+
+        if self.max_subsystems <= 0:
+            raise SpecValidationError("Max subsystems must be greater than zero")
+
+        if not isinstance(self.max_namespaces, int):
+            raise SpecValidationError("Max namespaces must be an integer")
+
+        if self.max_namespaces <= 0:
+            raise SpecValidationError("Max namespaces must be greater than zero")
+
+        if not isinstance(self.max_namespaces_per_subsystem, int):
+            raise SpecValidationError("Max namespaces per subsystem must be an integer")
+
+        if self.max_namespaces_per_subsystem <= 0:
+            raise SpecValidationError("Max namespaces per subsystem must be greater than zero")
+
+        if not isinstance(self.max_hosts_per_subsystem, int):
+            raise SpecValidationError("Max hosts per subsystem must be an integer")
+
+        if self.max_hosts_per_subsystem <= 0:
+            raise SpecValidationError("Max hosts per subsystem must be greater than zero")
 
         if (
             self.monitor_timeout

@@ -218,14 +218,20 @@ struct object_data_handler_test_t:
     objaddr_t offset,
     extent_len_t length) {
     auto ret = with_trans_intr(t, [&](auto &t) {
-      return tm->get_pins(t, laddr_t::from_byte_offset(offset), length);
+      auto &layout = onode->get_layout();
+      auto odata = layout.object_data.get();
+      auto obase = odata.get_reserved_data_base();
+      return tm->get_pins(t, (obase + offset).checked_to_laddr(), length);
     }).unsafe_get();
     return ret;
   }
   std::list<LBAMappingRef> get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
-      return tm->get_pins(t, laddr_t::from_byte_offset(offset), length);
+      auto &layout = onode->get_layout();
+      auto odata = layout.object_data.get();
+      auto obase = odata.get_reserved_data_base();
+      return tm->get_pins(t, (obase + offset).checked_to_laddr(), length);
     }).unsafe_get();
     return ret;
   }
@@ -253,12 +259,19 @@ struct object_data_handler_test_t:
 
   ObjectDataBlockRef get_extent(
     Transaction &t,
-    laddr_t addr,
+    loffset_t addr,
     extent_len_t len) {
-    auto ext = with_trans_intr(t, [&](auto& trans) {
-	return tm->read_extent<ObjectDataBlock>(trans, addr, len);
-	}).unsafe_get();
-    EXPECT_EQ(addr, ext->get_laddr());
+    auto &layout = onode->get_layout();
+    auto odata = layout.object_data.get();
+    auto obase = odata.get_reserved_data_base();
+    auto maybe_indirect_ext = with_trans_intr(t, [&](auto& trans) {
+      return tm->read_extent<ObjectDataBlock>(
+	trans, (obase + addr).checked_to_laddr(), len);
+    }).unsafe_get();
+    EXPECT_FALSE(maybe_indirect_ext.is_clone);
+    EXPECT_FALSE(maybe_indirect_ext.is_indirect());
+    auto ext = maybe_indirect_ext.extent;
+    EXPECT_EQ((obase + addr).checked_to_laddr(), ext->get_laddr());
     return ext;
   }
 
@@ -798,7 +811,7 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
       auto pins = get_mappings(*t, base, len);
       assert(pins.size() == 1);
       auto pin1 = remap_pin(*t, std::move(pins.front()), 4096, 8192);
-      auto ext = get_extent(*t, laddr_t::from_byte_offset(base + 4096), 4096 * 2);
+      auto ext = get_extent(*t, base + 4096, 4096 * 2);
       ASSERT_TRUE(ext->is_exist_clean());
       write(*t, base + 4096, 4096, 'y');
       ASSERT_TRUE(ext->is_exist_mutation_pending());
@@ -853,6 +866,31 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
 	4096));
     EXPECT_EQ(committed.length(), pending.length());
     EXPECT_NE(committed, pending);
+    disable_delta_based_overwrite();
+    enable_max_extent_size();
+  });
+}
+
+TEST_P(object_data_handler_test_t, parallel_partial_read) {
+  run_async([this] {
+    disable_max_extent_size();
+    enable_delta_based_overwrite();
+    auto t = create_mutate_transaction();
+    auto base = 0;
+    auto len = 4096 * 10;
+    write(*t, base, len, 'a');
+    submit_transaction(std::move(t));
+
+    restart();
+    epm->check_usage();
+    seastar::parallel_for_each(
+      boost::make_counting_iterator(0lu),
+      boost::make_counting_iterator(8lu),
+      [&](auto i) {
+        return seastar::async([&] {
+          read(i * 4096, 8192);
+        });
+      }).get();
     disable_delta_based_overwrite();
     enable_max_extent_size();
   });

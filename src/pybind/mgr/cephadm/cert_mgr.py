@@ -1,6 +1,6 @@
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
-from typing import TYPE_CHECKING, Tuple, Union, List
+from typing import TYPE_CHECKING, Tuple, Union, List, Optional
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -28,5 +28,10 @@ class CertMgr:
     def get_root_ca(self) -> str:
         return self.ssl_certs.get_root_cert()
 
-    def generate_cert(self, host_fqdn: Union[str, List[str]], node_ip: Union[str, List[str]]) -> Tuple[str, str]:
-        return self.ssl_certs.generate_cert(host_fqdn, node_ip)
+    def generate_cert(
+        self,
+        host_fqdn: Union[str, List[str]],
+        node_ip: Union[str, List[str]],
+        custom_san_list: Optional[List[str]] = None,
+    ) -> Tuple[str, str]:
+        return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)

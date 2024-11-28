@@ -1,5 +1,5 @@
 try:
-    from typing import List, Optional, Dict, Any, Union
+    from typing import List, Optional, Dict, Any, Union  # noqa: F401
 except ImportError:
     pass  # for type checking
 

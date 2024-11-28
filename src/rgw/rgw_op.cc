@@ -6811,6 +6811,8 @@ void RGWCompleteMultipart::execute(optional_yield y)
   if (upload->cksum_type != rgw::cksum::Type::none) {
     op_ret = try_sum_part_cksums(this, s->cct, upload.get(), parts, cksum, y);
     if (op_ret < 0) {
+      ldpp_dout(this, 16) << "ERROR: try_sum_part_cksums failed, obj="
+			  << meta_obj << " ret=" << op_ret << dendl;
       return;
     }
   }
@@ -6835,13 +6837,23 @@ void RGWCompleteMultipart::execute(optional_yield y)
       rgw::putobj::find_hdr_cksum(*(s->info.env));
 
       ldpp_dout_fmt(this, 10,
-		    "INFO: client supplied checksum {}: {}",
+		    "INFO: client supplied checksum {}: {} ",
 		    hdr_cksum.header_name(), supplied_cksum);
 
     if (! (supplied_cksum.empty()) &&
 	(supplied_cksum != armored_cksum)) {
-      op_ret = -ERR_INVALID_REQUEST;
-      return;
+      /* some minio SDK clients assert a checksum that is cryptographically
+       * valid but omits the part count */
+      auto parts_suffix = fmt::format("-{}", parts->parts.size());
+      auto suffix_len = armored_cksum->size() - parts_suffix.size();
+      if (armored_cksum->compare(0, suffix_len, supplied_cksum) != 0) {
+	ldpp_dout_fmt(this, 4,
+		      "{} content checksum mismatch"
+		      "\n\tcalculated={} != \n\texpected={}",
+		      hdr_cksum.header_name(), armored_cksum, supplied_cksum);
+	op_ret = -ERR_INVALID_REQUEST;
+	return;
+      }
     }
 
     buffer::list cksum_bl;

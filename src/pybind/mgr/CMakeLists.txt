@@ -42,7 +42,6 @@ set(mgr_modules
   progress
   prometheus
   rbd_support
-  restful
   rgw
   # rook (optional)
   selftest
@@ -54,8 +53,7 @@ set(mgr_modules
   telemetry
   # tests (for testing purpose only)
   test_orchestrator
-  volumes
-  zabbix)
+  volumes)
 
 install(DIRECTORY ${mgr_modules}
   DESTINATION ${CEPH_INSTALL_DATADIR}/mgr

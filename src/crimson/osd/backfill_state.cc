@@ -125,7 +125,6 @@ void BackfillState::Enqueuing::maybe_update_range()
     logger().info("{}: bi is current", __func__);
     ceph_assert(primary_bi.version == pg().get_projected_last_update());
   } else if (primary_bi.version >= peering_state().get_log_tail()) {
-#if 0
     if (peering_state().get_pg_log().get_log().empty() &&
         pg().get_projected_log().empty()) {
       /* Because we don't move log_tail on split, the log might be
@@ -137,13 +136,11 @@ void BackfillState::Enqueuing::maybe_update_range()
       ceph_assert(primary_bi.version == eversion_t());
       return;
     }
-#endif
     logger().debug("{}: bi is old, ({}) can be updated with log to {}",
                    __func__,
                    primary_bi.version,
                    pg().get_projected_last_update());
-    logger().debug("{}: scanning pg log first", __func__);
-    peering_state().scan_log_after(primary_bi.version,
+    auto func =
       [&](const pg_log_entry_t& e) {
         logger().debug("maybe_update_range(lambda): updating from version {}",
                        e.version);
@@ -160,7 +157,11 @@ void BackfillState::Enqueuing::maybe_update_range()
             primary_bi.objects.erase(e.soid);
           }
         }
-      });
+      };
+    logger().debug("{}: scanning pg log first", __func__);
+    peering_state().scan_log_after(primary_bi.version, func);
+    logger().debug("{}: scanning projected log", __func__);
+    pg().get_projected_log().scan_log_after(primary_bi.version, func);
     primary_bi.version = pg().get_projected_last_update();
   } else {
     ceph_abort_msg(
@@ -378,16 +379,17 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
       trim_backfilled_object_from_intervals(std::move(result),
 					    backfill_state().last_backfill_started,
 					    backfill_state().peer_backfill_info);
-    } else {
+      backfill_listener().maybe_flush();
+    } else if (!primary_bi.empty()) {
       auto result = update_on_peers(check);
       trim_backfilled_object_from_intervals(std::move(result),
 					    backfill_state().last_backfill_started,
 					    backfill_state().peer_backfill_info);
-      if (!primary_bi.empty()) {
-	primary_bi.pop_front();
-      }
+      primary_bi.pop_front();
+      backfill_listener().maybe_flush();
+    } else {
+      break;
     }
-    backfill_listener().maybe_flush();
   } while (!all_emptied(primary_bi, backfill_state().peer_backfill_info));
 
   if (backfill_state().progress_tracker->tracked_objects_completed()
@@ -607,6 +609,14 @@ void BackfillState::ProgressTracker::complete_to(
   } else {
     backfill_listener().update_peers_last_backfill(new_last_backfill);
   }
+}
+
+void BackfillState::enqueue_standalone_push(
+  const hobject_t &obj,
+  const eversion_t &v,
+  const std::vector<pg_shard_t> &peers) {
+  progress_tracker->enqueue_push(obj);
+  backfill_machine.backfill_listener.enqueue_push(obj, v, peers);
 }
 
 } // namespace crimson::osd

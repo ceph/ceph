@@ -197,10 +197,11 @@ private:
   struct CloningContext {
     SnapSet new_snapset;
     pg_log_entry_t log_entry;
+    ObjectContextRef clone_obc;
 
     void apply_to(
       std::vector<pg_log_entry_t>& log_entries,
-      ObjectContext& processed_obc) &&;
+      ObjectContext& processed_obc);
   };
   std::unique_ptr<CloningContext> cloning_ctx;
 
@@ -504,6 +505,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(
     ceph_assert(want_mutate);
   }
 
+  apply_stats();
   if (want_mutate) {
     auto log_entries = flush_clone_metadata(
       prepare_transaction(ops),
@@ -519,13 +521,14 @@ OpsExecuter::flush_changes_n_do_ops_effects(
       std::move(txn),
       std::move(obc),
       std::move(*osd_op_params),
-      std::move(log_entries));
+      std::move(log_entries),
+      cloning_ctx
+	? std::move(cloning_ctx->clone_obc)
+	: nullptr);
 
     submitted = std::move(_submitted);
     all_completed = std::move(_all_completed);
   }
-
-  apply_stats();
 
   if (op_effects.size()) [[unlikely]] {
     // need extra ref pg due to apply_stats() which can be executed after

@@ -496,7 +496,7 @@ MDSRank::MDSRank(
 
   objecter->unset_honor_pool_full();
 
-  finisher = new Finisher(cct, "MDSRank", "MR_Finisher");
+  finisher = new Finisher(cct, "MDSRank", "mds-rank-fin");
 
   mdcache = new MDCache(this, purge_queue);
   mdlog = new MDLog(this);
@@ -581,7 +581,7 @@ void MDSRankDispatcher::init()
   // who is interested in it.
   handle_osd_map();
 
-  progress_thread.create("mds_rank_progr");
+  progress_thread.create("mds-rank-progr");
 
   purge_queue.init();
 
@@ -2769,6 +2769,9 @@ void MDSRankDispatcher::handle_asok_command(
     if (!op_tracker.dump_historic_ops(f, true)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
+  } else if (command == "dump_export_states") {
+    std::lock_guard l(mds_lock);
+    mdcache->migrator->dump_export_states(f);
   } else if (command == "osdmap barrier") {
     int64_t target_epoch = 0;
     bool got_val = cmd_getval(cmdmap, "target_epoch", target_epoch);

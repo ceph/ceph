@@ -136,7 +136,7 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
         mock.call(host, 'osd', 'ceph-volume',
                   ['--', 'lvm', 'list', '--format', 'json'],
                   no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False),
-        mock.call(host, f'osd.{osd_id}', ['_orch', 'deploy'], [], stdin=mock.ANY, use_current_daemon_image=False),
+        mock.call(host, f'osd.{osd_id}', ['_orch', 'deploy'], [], stdin=mock.ANY, error_ok=True, use_current_daemon_image=False),
         mock.call(host, 'osd', 'ceph-volume',
                   ['--', 'raw', 'list', '--format', 'json'],
                   no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False),
@@ -499,7 +499,7 @@ class TestCephadm(object):
 
                 CephadmServe(cephadm_module)._check_daemons()
 
-                assert _save_host.called_with('test')
+                _save_host.assert_called_with('test')
                 assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -563,6 +563,7 @@ class TestCephadm(object):
                             },
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=True,
                 )
 
@@ -618,6 +619,7 @@ class TestCephadm(object):
                             "crush_location": "datacenter=a",
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -660,6 +662,7 @@ class TestCephadm(object):
                             "keyring": "[client.crash.test]\nkey = None\n",
                         },
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -702,6 +705,7 @@ class TestCephadm(object):
                         },
                         "config_blobs": {},
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -752,6 +756,7 @@ class TestCephadm(object):
                         },
                         "config_blobs": {},
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -806,6 +811,7 @@ class TestCephadm(object):
                         },
                         "config_blobs": {},
                     }),
+                    error_ok=True,
                     use_current_daemon_image=False,
                 )
 
@@ -2720,6 +2726,7 @@ Traceback (most recent call last):
             cephadm_module.cache.facts = facts
             assert cephadm_module._validate_tunedprofile_settings(spec) == expected_value
 
+    @mock.patch("cephadm.CephadmOrchestrator.set_maintenance_healthcheck", lambda _: None)
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_tuned_profiles_validation(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
@@ -2840,16 +2847,23 @@ Traceback (most recent call last):
             with cephadm_module.async_timeout_handler('hostC', 'very slow', 999):
                 cephadm_module.wait_async(_timeout())
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.CephadmOrchestrator.remove_osds")
     @mock.patch("cephadm.CephadmOrchestrator.add_host_label", lambda *a, **kw: None)
     @mock.patch("cephadm.inventory.HostCache.get_daemons_by_host", lambda *a, **kw: [])
     def test_host_drain_zap(self, _rm_osds, cephadm_module):
         # pass force=true in these tests to bypass _admin label check
-        cephadm_module.drain_host('host1', force=True, zap_osd_devices=False)
-        assert _rm_osds.called_with([], zap=False)
+        with with_host(cephadm_module, 'test', refresh_hosts=False, rm_with_force=True):
+            cephadm_module.drain_host('test', force=True, zap_osd_devices=False)
+            _rm_osds.assert_called_with([], zap=False)
 
-        cephadm_module.drain_host('host1', force=True, zap_osd_devices=True)
-        assert _rm_osds.called_with([], zap=True)
+        with with_host(cephadm_module, 'test', refresh_hosts=False, rm_with_force=True):
+            cephadm_module.drain_host('test', force=True, zap_osd_devices=True)
+            _rm_osds.assert_called_with([], zap=True)
+
+        with pytest.raises(OrchestratorError, match=r"Cannot find host 'host1' in the inventory."):
+            cephadm_module.drain_host('host1', force=True, zap_osd_devices=True)
+            _rm_osds.assert_called_with([], zap=True)
 
     def test_process_ls_output(self, cephadm_module):
         sample_ls_output = """[

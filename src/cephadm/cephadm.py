@@ -57,6 +57,7 @@ from cephadmlib.constants import (
     LOG_DIR_MODE,
     SYSCTL_DIR,
     UNIT_DIR,
+    DAEMON_FAILED_ERROR,
 )
 from cephadmlib.context import CephadmContext
 from cephadmlib.context_getters import (
@@ -72,6 +73,7 @@ from cephadmlib.exceptions import (
     ClusterAlreadyExists,
     Error,
     UnauthorizedRegistryError,
+    DaemonStartException,
 )
 from cephadmlib.exe_utils import find_executable, find_program
 from cephadmlib.call_wrappers import (
@@ -1246,7 +1248,11 @@ def deploy_daemon_units(
         call_throws(ctx, ['systemctl', 'enable', unit_name])
     if start:
         clean_cgroup(ctx, ident.fsid, unit_name)
-        call_throws(ctx, ['systemctl', 'start', unit_name])
+        try:
+            call_throws(ctx, ['systemctl', 'start', unit_name])
+        except Exception as e:
+            logger.error(f'systemctl start failed for {unit_name}: {str(e)}')
+            raise DaemonStartException()
 
 
 def _osd_unit_run_commands(
@@ -1988,11 +1994,15 @@ def get_image_info_from_inspect(out, image):
 def get_public_net_from_cfg(ctx: CephadmContext) -> Optional[str]:
     """Get mon public network from configuration file."""
     cp = read_config(ctx.config)
-    if not cp.has_option('global', 'public_network'):
+    public_network = ''
+    if cp.has_option('mon', 'public_network'):
+        public_network = cp.get('mon', 'public_network').strip('"').strip("'")
+    elif cp.has_option('global', 'public_network'):
+        public_network = cp.get('global', 'public_network').strip('"').strip("'")
+    else:
         return None
 
     # Ensure all public CIDR networks are valid
-    public_network = cp.get('global', 'public_network').strip('"').strip("'")
     rc, _, err_msg = check_subnet(public_network)
     if rc:
         raise Error(f'Invalid public_network {public_network} parameter: {err_msg}')
@@ -2597,7 +2607,7 @@ def finish_bootstrap_config(
 
     if mon_network:
         cp = read_config(ctx.config)
-        cfg_section = 'global' if cp.has_option('global', 'public_network') else 'mon'
+        cfg_section = 'mon' if cp.has_option('mon', 'public_network') else 'global'
         logger.info(f'Setting public_network to {mon_network} in {cfg_section} config section')
         cli(['config', 'set', cfg_section, 'public_network', mon_network])
 
@@ -3046,7 +3056,10 @@ def get_deployment_type(
 @deprecated_command
 def command_deploy(ctx):
     # type: (CephadmContext) -> None
-    _common_deploy(ctx)
+    try:
+        _common_deploy(ctx)
+    except DaemonStartException:
+        sys.exit(DAEMON_FAILED_ERROR)
 
 
 def apply_deploy_config_to_ctx(
@@ -3089,7 +3102,10 @@ def command_deploy_from(ctx: CephadmContext) -> None:
     config_data = read_configuration_source(ctx)
     logger.debug('Loaded deploy configuration: %r', config_data)
     apply_deploy_config_to_ctx(config_data, ctx)
-    _common_deploy(ctx)
+    try:
+        _common_deploy(ctx)
+    except DaemonStartException:
+        sys.exit(DAEMON_FAILED_ERROR)
 
 
 def _common_deploy(ctx: CephadmContext) -> None:
@@ -4485,8 +4501,9 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
 ##################################
 
 
-def check_time_sync(ctx, enabler=None):
-    # type: (CephadmContext, Optional[Packager]) -> bool
+def check_time_sync(
+    ctx: CephadmContext, enabler: Optional[Packager] = None
+) -> bool:
     units = [
         'chrony.service',  # 18.04 (at least)
         'chronyd.service',  # el / opensuse
