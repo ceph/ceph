@@ -428,7 +428,7 @@ int ObjBencher::write_bench(int secondsToRun,
 
   std::vector<string> name(concurrentios);
   std::string newName;
-  unique_ptr<bufferlist> contents[concurrentios];
+  std::vector<std::unique_ptr<bufferlist>> contents(concurrentios);
   int r = 0;
   bufferlist b_write;
   lock_cond lc(&lock);
@@ -659,8 +659,8 @@ int ObjBencher::seq_read_bench(
 
   std::vector<string> name(concurrentios);
   std::string newName;
-  unique_ptr<bufferlist> contents[concurrentios];
-  int index[concurrentios];
+  std::vector<std::unique_ptr<bufferlist>> contents(concurrentios);
+  std::vector<int> index(concurrentios);
   int errors = 0;
   double total_latency = 0;
   int r = 0;
@@ -868,8 +868,8 @@ int ObjBencher::rand_read_bench(
 
   std::vector<string> name(concurrentios);
   std::string newName;
-  unique_ptr<bufferlist> contents[concurrentios];
-  int index[concurrentios];
+  std::vector<std::unique_ptr<bufferlist>> contents(concurrentios);
+  std::vector<int> index(concurrentios);
   int errors = 0;
   int r = 0;
   double total_latency = 0;

@@ -10,20 +10,19 @@
 
 int gen_rand_base64(CephContext *cct, char *dest, size_t size) /* size should be the required string size + 1 */
 {
-  char buf[size];
-  char tmp_dest[size + 4]; /* so that there's space for the extra '=' characters, and some */
+  boost::container::small_vector<char, 1024> tmp_dest(size + 4); /* so that there's space for the extra '=' characters, and some */
   int ret;
 
-  cct->random()->get_bytes(buf, sizeof(buf));
+  cct->random()->get_bytes(dest, size);
 
-  ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
-		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
+  ret = ceph_armor(tmp_dest.data(), tmp_dest.data() + tmp_dest.size(),
+		   dest, dest + ((size - 1) * 3 + 4 - 1) / 4);
   if (ret < 0) {
     lderr(cct) << "ceph_armor failed" << dendl;
     return ret;
   }
   tmp_dest[ret] = '\0';
-  memcpy(dest, tmp_dest, size);
+  memcpy(dest, tmp_dest.data(), size);
   dest[size-1] = '\0';
 
   return 0;

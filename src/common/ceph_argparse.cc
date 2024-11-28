@@ -12,6 +12,7 @@
  *
  */
 #include <stdarg.h>
+#include <limits.h>
 
 #include "auth/Auth.h"
 #include "common/ceph_argparse.h"
@@ -276,9 +277,9 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, ...)
 {
   const char *first = *i;
-  char tmp[strlen(first)+1];
-  dashes_to_underscores(first, tmp);
-  first = tmp;
+  std::string tmp(strnlen(first, _POSIX_ARG_MAX), '\0');
+  dashes_to_underscores(first, tmp.data());
+  first = tmp.data();
   va_list ap;
 
   va_start(ap, i);
@@ -288,9 +289,9 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
       va_end(ap);
       return false;
     }
-    char a2[strlen(a)+1];
-    dashes_to_underscores(a, a2);
-    if (strcmp(a2, first) == 0) {
+    std::string a2(strnlen(a, _POSIX_ARG_MAX), '\0');
+    dashes_to_underscores(a, a2.data());
+    if (strcmp(a2.data(), first) == 0) {
       i = args.erase(i);
       va_end(ap);
       return true;
@@ -315,9 +316,9 @@ static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::ostream *oss, va_list ap)
 {
   const char *first = *i;
-  char tmp[strlen(first)+1];
-  dashes_to_underscores(first, tmp);
-  first = tmp;
+  std::vector<char> tmp(strlen(first) + 1);
+  dashes_to_underscores(first, tmp.data());
+  first = tmp.data();
 
   // does this argument match any of the possibilities?
   while (1) {
@@ -325,9 +326,9 @@ static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
     if (a == NULL)
       return false;
     int strlen_a = strlen(a);
-    char a2[strlen_a+1];
-    dashes_to_underscores(a, a2);
-    if (strncmp(a2, first, strlen(a2)) == 0) {
+    std::string a2(strlen_a, '\0');
+    dashes_to_underscores(a, a2.data());
+    if (strncmp(a2.data(), first, strlen(a2.data())) == 0) {
       if (first[strlen_a] == '=') {
 	i = args.erase(i);
 	const char *val = first + strlen_a + 1;
@@ -377,9 +378,9 @@ static int va_ceph_argparse_witharg(std::vector<const char*> &args,
 	std::ostream &oss, va_list ap)
 {
   const char *first = *i;
-  char tmp[strlen(first)+1];
-  dashes_to_underscores(first, tmp);
-  first = tmp;
+  std::vector<char> tmp(strlen(first) + 1);
+  dashes_to_underscores(first, tmp.data());
+  first = tmp.data();
 
   // does this argument match any of the possibilities?
   while (1) {
@@ -387,9 +388,9 @@ static int va_ceph_argparse_witharg(std::vector<const char*> &args,
     if (a == NULL)
       return 0;
     int strlen_a = strlen(a);
-    char a2[strlen_a+1];
-    dashes_to_underscores(a, a2);
-    if (strncmp(a2, first, strlen(a2)) == 0) {
+    std::vector<char> a2(strlen_a+1);
+    dashes_to_underscores(a, a2.data());
+    if (strncmp(a2.data(), first, strlen(a2.data())) == 0) {
       if (first[strlen_a] == '=') {
 	*ret = first + strlen_a + 1;
 	i = args.erase(i);

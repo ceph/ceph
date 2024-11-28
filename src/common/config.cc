@@ -869,10 +869,9 @@ int md_config_t::injectargs(ConfigValues& values,
 			    const std::string& s, std::ostream *oss)
 {
   int ret;
-  char b[s.length()+1];
-  strcpy(b, s.c_str());
+  std::string b(s);
   std::vector<const char*> nargs;
-  char *p = b;
+  char *p = b.data();
   while (*p) {
     nargs.push_back(p);
     while (*p && *p != ' ') p++;
@@ -885,8 +884,7 @@ int md_config_t::injectargs(ConfigValues& values,
   if (!nargs.empty()) {
     *oss << " failed to parse arguments: ";
     std::string prefix;
-    for (std::vector<const char*>::const_iterator i = nargs.begin();
-	 i != nargs.end(); ++i) {
+    for (auto i = nargs.begin(); i != nargs.end(); ++i) {
       *oss << prefix << *i;
       prefix = ",";
     }
