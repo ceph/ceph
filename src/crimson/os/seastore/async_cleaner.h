@@ -277,6 +277,8 @@ public:
 
   virtual ~ExtentCallbackInterface() = default;
 
+  virtual shard_stats_t& get_shard_stats() = 0;
+
   /// Creates empty transaction
   /// weak transaction should be type READ
   virtual TransactionRef create_transaction(
@@ -299,9 +301,7 @@ public:
     return do_with_transaction_intr<Func, true>(
         Transaction::src_t::READ, name, std::forward<Func>(f)
     ).handle_error(
-      crimson::ct_error::eagain::handle([] {
-        ceph_assert(0 == "eagain impossible");
-      }),
+      crimson::ct_error::eagain::assert_failure{"unexpected eagain"},
       crimson::ct_error::pass_further_all{}
     );
   }
@@ -416,6 +416,12 @@ public:
   // set the committed journal head
   virtual void set_journal_head(journal_seq_t) = 0;
 
+  // get the opened journal head sequence
+  virtual segment_seq_t get_journal_head_sequence() const = 0;
+
+  // set the opened journal head sequence
+  virtual void set_journal_head_sequence(segment_seq_t) = 0;
+
   // get the committed journal dirty tail
   virtual journal_seq_t get_dirty_tail() const = 0;
 
@@ -455,7 +461,9 @@ public:
     }
     assert(get_journal_head().segment_seq >=
            get_journal_tail().segment_seq);
-    return get_journal_head().segment_seq + 1 -
+    assert(get_journal_head_sequence() >=
+           get_journal_head().segment_seq);
+    return get_journal_head_sequence() + 1 -
            get_journal_tail().segment_seq;
   }
 };
@@ -485,16 +493,16 @@ public:
     void validate() const;
 
     static config_t get_default(
-        std::size_t roll_size, journal_type_t type);
+        std::size_t roll_size, backend_type_t type);
 
     static config_t get_test(
-        std::size_t roll_size, journal_type_t type);
+        std::size_t roll_size, backend_type_t type);
   };
 
   JournalTrimmerImpl(
     BackrefManager &backref_manager,
     config_t config,
-    journal_type_t type,
+    backend_type_t type,
     device_off_t roll_start,
     device_off_t roll_size);
 
@@ -509,6 +517,12 @@ public:
   }
 
   void set_journal_head(journal_seq_t) final;
+
+  segment_seq_t get_journal_head_sequence() const final {
+    return journal_head_seq;
+  }
+
+  void set_journal_head_sequence(segment_seq_t) final;
 
   journal_seq_t get_dirty_tail() const final {
     return journal_dirty_tail;
@@ -526,8 +540,8 @@ public:
       config.rewrite_dirty_bytes_per_cycle;
   }
 
-  journal_type_t get_journal_type() const {
-    return journal_type;
+  backend_type_t get_backend_type() const {
+    return backend_type;
   }
 
   void set_extent_callback(ExtentCallbackInterface *cb) {
@@ -539,6 +553,7 @@ public:
   }
 
   void reset() {
+    journal_head_seq = NULL_SEG_SEQ;
     journal_head = JOURNAL_SEQ_NULL;
     journal_dirty_tail = JOURNAL_SEQ_NULL;
     journal_alloc_tail = JOURNAL_SEQ_NULL;
@@ -551,7 +566,7 @@ public:
   bool should_block_io_on_trim() const {
     return get_tail_limit() >
       get_journal_tail().add_offset(
-        journal_type, reserved_usage, roll_start, roll_size);
+        backend_type, reserved_usage, roll_start, roll_size);
   }
 
   bool try_reserve_inline_usage(std::size_t usage) final {
@@ -574,7 +589,7 @@ public:
   static JournalTrimmerImplRef create(
       BackrefManager &backref_manager,
       config_t config,
-      journal_type_t type,
+      backend_type_t type,
       device_off_t roll_start,
       device_off_t roll_size) {
     return std::make_unique<JournalTrimmerImpl>(
@@ -614,10 +629,11 @@ private:
   BackrefManager &backref_manager;
 
   config_t config;
-  journal_type_t journal_type;
+  backend_type_t backend_type;
   device_off_t roll_start;
   device_off_t roll_size;
 
+  segment_seq_t journal_head_seq = NULL_SEG_SEQ;
   journal_seq_t journal_head;
   journal_seq_t journal_dirty_tail;
   journal_seq_t journal_alloc_tail;

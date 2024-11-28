@@ -79,7 +79,7 @@ const char* find_device_path(
 {
   for (auto& i : devs) {
     bluestore_bdev_label_t label;
-    int r = BlueStore::_read_bdev_label(cct, i, &label);
+    int r = BlueStore::read_bdev_label(cct, i, &label);
     if (r < 0) {
       cerr << "unable to read label for " << i << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -111,7 +111,7 @@ void parse_devices(
   }
   for (auto& d : devs) {
     bluestore_bdev_label_t label;
-    int r = BlueStore::_read_bdev_label(cct, d, &label);
+    int r = BlueStore::read_bdev_label(cct, d, &label);
     if (r < 0) {
       cerr << "unable to read label for " << d << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -307,6 +307,7 @@ int main(int argc, char **argv)
     ("key,k", po::value<string>(&key), "label metadata key name")
     ("value,v", po::value<string>(&value), "label metadata value")
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'")
+    ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
     ;
@@ -336,7 +337,9 @@ int main(int argc, char **argv)
         "free-fragmentation, "
         "bluefs-stats, "
         "reshard, "
-        "show-sharding")
+        "show-sharding, "
+        "zap-device"
+)
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -345,7 +348,11 @@ int main(int argc, char **argv)
   po::variables_map vm;
   try {
     po::parsed_options parsed =
-      po::command_line_parser(argc, argv).options(po_all).allow_unregistered().run();
+      po::command_line_parser(argc, argv).options(po_all)
+        .allow_unregistered()
+        .style(po::command_line_style::default_style &
+               ~po::command_line_style::allow_guessing)
+        .run();
     po::store( parsed, vm);
     po::notify(vm);
     ceph_option_strings = po::collect_unrecognized(parsed.options,
@@ -548,6 +555,18 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
   }
+  if (action == "zap-device") {
+    if (devs.empty()) {
+      cerr << "must specify device(s) with --dev option" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (!vm.count("yes-i-really-really-mean-it")) {
+      cerr << "zap-osd is a DESTRUCTIVE operation, it causes OSD data loss, "
+           << "please confirm with --yes-i-really-really-mean-it option"
+           << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
 
   if (action == "restore_cfb") {
 #ifndef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
@@ -625,7 +644,7 @@ int main(int argc, char **argv)
   }
   else if (action == "prime-osd-dir") {
     bluestore_bdev_label_t label;
-    int r = BlueStore::_read_bdev_label(cct.get(), devs.front(), &label);
+    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label);
     if (r < 0) {
       cerr << "failed to read label for " << devs.front() << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -679,7 +698,7 @@ int main(int argc, char **argv)
     jf.open_object_section("devices");
     for (auto& i : devs) {
       bluestore_bdev_label_t label;
-      int r = BlueStore::_read_bdev_label(cct.get(), i, &label);
+      int r = BlueStore::read_bdev_label(cct.get(), i, &label);
       if (r < 0) {
 	cerr << "unable to read label for " << i << ": "
 	     << cpp_strerror(r) << std::endl;
@@ -694,7 +713,11 @@ int main(int argc, char **argv)
   }
   else if (action == "set-label-key") {
     bluestore_bdev_label_t label;
-    int r = BlueStore::_read_bdev_label(cct.get(), devs.front(), &label);
+    std::vector<uint64_t> valid_positions;
+    bool is_multi = false;
+    int64_t epoch = -1;
+    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label,
+      &valid_positions, &is_multi, &epoch);
     if (r < 0) {
       cerr << "unable to read label for " << devs.front() << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -716,16 +739,32 @@ int main(int argc, char **argv)
     } else {
       label.meta[key] = value;
     }
-    r = BlueStore::_write_bdev_label(cct.get(), devs.front(), label);
-    if (r < 0) {
-      cerr << "unable to write label for " << devs.front() << ": "
-	   << cpp_strerror(r) << std::endl;
-      exit(EXIT_FAILURE);
+    if (is_multi) {
+      epoch++;
+      label.meta["epoch"] = std::to_string(epoch);
+    }
+    bool wrote_at_least_one = false;
+    for (uint64_t position : valid_positions) {
+      r = BlueStore::write_bdev_label(cct.get(), devs.front(), label, position);
+      if (r < 0) {
+        cerr << "unable to write label for " << devs.front()
+             << " at 0x" << std::hex << position << std::dec
+             << ": " << cpp_strerror(r) << std::endl;
+      } else {
+        wrote_at_least_one = true;
+      }
+    }
+    if (!wrote_at_least_one) {
+        exit(EXIT_FAILURE);
     }
   }
   else if (action == "rm-label-key") {
     bluestore_bdev_label_t label;
-    int r = BlueStore::_read_bdev_label(cct.get(), devs.front(), &label);
+    std::vector<uint64_t> valid_positions;
+    bool is_multi = false;
+    int64_t epoch = -1;
+    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label,
+      &valid_positions, &is_multi, &epoch);
     if (r < 0) {
       cerr << "unable to read label for " << devs.front() << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -736,11 +775,23 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     label.meta.erase(key);
-    r = BlueStore::_write_bdev_label(cct.get(), devs.front(), label);
-    if (r < 0) {
-      cerr << "unable to write label for " << devs.front() << ": "
-	   << cpp_strerror(r) << std::endl;
-      exit(EXIT_FAILURE);
+    if (is_multi) {
+      epoch++;
+      label.meta["epoch"] = std::to_string(epoch);
+    }
+    bool wrote_at_least_one = false;
+    for (uint64_t position : valid_positions) {
+      r = BlueStore::write_bdev_label(cct.get(), devs.front(), label, position);
+      if (r < 0) {
+        cerr << "unable to write label for " << devs.front()
+             << " at 0x" << std::hex << position << std::dec
+             << ": " << cpp_strerror(r) << std::endl;
+      } else {
+        wrote_at_least_one = true;
+      }
+    }
+    if (!wrote_at_least_one) {
+        exit(EXIT_FAILURE);
     }
   }
   else if (action == "bluefs-bdev-sizes") {
@@ -1151,6 +1202,14 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     cout << sharding << std::endl;
+  } else if (action == "zap-device") {
+    for(auto& dev : devs) {
+      int r = BlueStore::zap_device(cct.get(), dev);
+      if (r < 0) {
+        cerr << "error from zap: " << cpp_strerror(r) << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;

@@ -31,6 +31,15 @@ options:
   desc: CPU cores on which alienstore threads will run in cpuset(7) format
   flags:
   - startup
+- name: crimson_seastar_num_threads
+  type: uint
+  level: advanced
+  default: 0
+  desc: The number of threads for serving seastar reactors without CPU pinning, overridden if crimson_seastar_cpu_cores is set
+  flags:
+  - startup
+  min: 0
+  max: 32
 - name: crimson_osd_stat_interval
   type: int
   level: advanced
@@ -108,6 +117,8 @@ options:
   level: advanced
   desc: split extent if ratio of total extent size to write size exceeds this value
   default: 1.25
+# TODO: seastore_obj_data_write_amplification is no longer correct if 
+#       seastore_data_delta_based_overwrite is enabled. So, this should be reconsidered.
 - name: seastore_max_concurrent_transactions
   type: uint
   level: advanced
@@ -143,3 +154,10 @@ options:
   level: dev
   desc: overwrite the existing data block based on delta if the overwrite size is equal to or less than the value, otherwise do overwrite based on remapping, set to 0 to enforce the remap-based overwrite.
   default: 0
+- name: seastore_disable_end_to_end_data_protection 
+  type: bool
+  level: dev
+  desc: When false, upon mkfs, try to discover whether the nvme device supports
+        internal checksum feature without using sever CPU then enable if available,
+        set to true to disable unconditionally.
+  default: true

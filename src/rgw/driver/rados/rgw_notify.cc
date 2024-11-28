@@ -9,8 +9,8 @@
 #include <boost/asio/basic_waitable_timer.hpp>
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/spawn.hpp>
 #include <boost/context/protected_fixedsize_stack.hpp>
-#include <spawn/spawn.hpp>
 #include "include/function2.hpp"
 #include "rgw_sal_rados.h"
 #include "rgw_pubsub.h"
@@ -24,51 +24,6 @@
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::notify {
-
-struct event_entry_t {
-  rgw_pubsub_s3_event event;
-  std::string push_endpoint;
-  std::string push_endpoint_args;
-  std::string arn_topic;
-  ceph::coarse_real_time creation_time;
-  uint32_t time_to_live = DEFAULT_GLOBAL_VALUE;
-  uint32_t max_retries = DEFAULT_GLOBAL_VALUE;
-  uint32_t retry_sleep_duration = DEFAULT_GLOBAL_VALUE;
-  
-  void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
-    encode(event, bl);
-    encode(push_endpoint, bl);
-    encode(push_endpoint_args, bl);
-    encode(arn_topic, bl);
-    encode(creation_time, bl);
-    encode(time_to_live, bl);
-    encode(max_retries, bl);
-    encode(retry_sleep_duration, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
-    decode(event, bl);
-    decode(push_endpoint, bl);
-    decode(push_endpoint_args, bl);
-    decode(arn_topic, bl);
-    if (struct_v > 1) {
-      decode(creation_time, bl);
-    } else {
-      creation_time = ceph::coarse_real_clock::zero();
-    }
-    if (struct_v > 2) {
-      decode(time_to_live, bl);
-      decode(max_retries, bl);
-      decode(retry_sleep_duration, bl);
-    }
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(event_entry_t)
-
 
 struct persistency_tracker {
   ceph::coarse_real_time last_retry_time {ceph::coarse_real_clock::zero()};
@@ -88,27 +43,35 @@ auto make_stack_allocator() {
 const std::string Q_LIST_OBJECT_NAME = "queues_list_object";
 
 struct PublishCommitCompleteArg {
+    PublishCommitCompleteArg(const std::string& _queue_name, CephContext* _cct)
+            : queue_name{_queue_name}, cct{_cct} {}
 
-    PublishCommitCompleteArg(std::string _queue_name, const DoutPrefixProvider *_dpp)
-            : queue_name{std::move(_queue_name)}, dpp{_dpp} {}
-
-    std::string queue_name;
-    const DoutPrefixProvider *dpp;
+    const std::string queue_name;
+    CephContext* const cct;
 };
 
-void publish_commit_completion(rados_completion_t completion, void *arg) {
-    auto *comp_obj = reinterpret_cast<librados::AioCompletionImpl *>(completion);
-    std::unique_ptr<PublishCommitCompleteArg> pcc_arg(reinterpret_cast<PublishCommitCompleteArg *>(arg));
-    if (comp_obj->get_return_value() < 0) {
-        ldpp_dout(pcc_arg->dpp, 1) << "ERROR: failed to commit reservation to queue: "
-                                   << pcc_arg->queue_name << ". error: " << comp_obj->get_return_value()
-                                   << dendl;
-    }
+void publish_commit_completion(rados_completion_t completion, void* arg) {
+  std::unique_ptr<PublishCommitCompleteArg> pcc_args{reinterpret_cast<PublishCommitCompleteArg*>(arg)};
+  if (const auto rc = rados_aio_get_return_value(completion); rc < 0) {
+    ldout(pcc_args->cct, 1) << "ERROR: failed to commit reservation to queue: "
+      << pcc_args->queue_name << ". error: " << rc << dendl;
+  }
 };
+
+static inline std::ostream& operator<<(std::ostream& out,
+                                       const event_entry_t& e) {
+  return out << "notification id: '" << e.event.configurationId
+             << "', topic: '" << e.arn_topic
+             << "', endpoint: '" << e.push_endpoint
+             << "', bucket_owner: '" << e.event.bucket_ownerIdentity
+             << "', bucket: '" << e.event.bucket_name
+             << "', object: '" << e.event.object_key
+             << "', event type: '" << e.event.eventName << "'";
+}
+
 
 class Manager : public DoutPrefixProvider {
   bool shutdown = false;
-  const size_t max_queue_size;
   const uint32_t queues_update_period_ms;
   const uint32_t queues_update_retry_ms;
   const uint32_t queue_idle_sleep_us;
@@ -202,7 +165,7 @@ private:
       pending_tokens(0),
       timer(io_context) {}  
  
-    void async_wait(spawn::yield_context yield) { 
+    void async_wait(boost::asio::yield_context yield) {
       if (pending_tokens == 0) {
         return;
       }
@@ -224,8 +187,13 @@ private:
 
   // processing of a specific entry
   // return whether processing was successful (true) or not (false)
-  EntryProcessingResult process_entry(const ConfigProxy& conf, persistency_tracker& entry_persistency_tracker,
-                                      const cls_queue_entry& entry, spawn::yield_context yield) {
+  EntryProcessingResult process_entry(
+      const ConfigProxy& conf,
+      persistency_tracker& entry_persistency_tracker,
+      const cls_queue_entry& entry,
+      RGWPubSubEndpoint* const push_endpoint,
+      const rgw_pubsub_topic& topic,
+      boost::asio::yield_context yield) {
     event_entry_t event_entry;
     auto iter = entry.data.cbegin();
     try {
@@ -238,7 +206,12 @@ private:
     if (event_entry.creation_time == ceph::coarse_real_clock::zero()) {
       return EntryProcessingResult::Migrating;
     }
-
+    // overwrite the event entry values from the topics object fetched.
+    event_entry.event.opaque_data = topic.opaque_data;
+    event_entry.arn_topic = topic.dest.arn_topic;
+    event_entry.time_to_live = topic.dest.time_to_live;
+    event_entry.max_retries = topic.dest.max_retries;
+    event_entry.retry_sleep_duration = topic.dest.retry_sleep_duration;
     const auto topic_persistency_ttl = event_entry.time_to_live != DEFAULT_GLOBAL_VALUE ?
         event_entry.time_to_live : conf->rgw_topic_persistency_time_to_live;
     const auto topic_persistency_max_retries = event_entry.max_retries != DEFAULT_GLOBAL_VALUE ?
@@ -266,34 +239,27 @@ private:
 
     ++entry_persistency_tracker.retires_num;
     entry_persistency_tracker.last_retry_time = time_now;
-    ldpp_dout(this, 20) << "Processing entry retry_number=" << entry_persistency_tracker.retires_num << " time=" << dendl;
-    try {
-      // TODO move endpoint creation to queue level
-      const auto push_endpoint = RGWPubSubEndpoint::create(event_entry.push_endpoint, event_entry.arn_topic,
-          RGWHTTPArgs(event_entry.push_endpoint_args, this), 
-          cct);
-      ldpp_dout(this, 20) << "INFO: push endpoint created: " << event_entry.push_endpoint <<
-        " for entry: " << entry.marker << dendl;
-      const auto ret = push_endpoint->send(event_entry.event, optional_yield(io_context, yield));
-      if (ret < 0) {
-        ldpp_dout(this, 5) << "WARNING: push entry: " << entry.marker << " to endpoint: " << event_entry.push_endpoint 
-          << " failed. error: " << ret << " (will retry)" << dendl;
-        return EntryProcessingResult::Failure;
-      } else {
-        ldpp_dout(this, 20) << "INFO: push entry: " << entry.marker << " to endpoint: " << event_entry.push_endpoint 
-          << " ok" <<  dendl;
-        if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
-        return EntryProcessingResult::Successful;
-      }
-    } catch (const RGWPubSubEndpoint::configuration_error& e) {
-      ldpp_dout(this, 5) << "WARNING: failed to create push endpoint: " 
-          << event_entry.push_endpoint << " for entry: " << entry.marker << ". error: " << e.what() << " (will retry) " << dendl;
+    ldpp_dout(this, 20) << "Processing event entry with " << event_entry
+                        << " retry_number: "
+                        << entry_persistency_tracker.retires_num
+                        << " current time: " << time_now << dendl;
+    const auto ret = push_endpoint->send(event_entry.event, yield);
+    if (ret < 0) {
+      ldpp_dout(this, 5) << "WARNING: push entry marker: " << entry.marker
+                         << " failed. error: " << ret
+                         << " (will retry) for event with " << event_entry
+                         << dendl;
       return EntryProcessingResult::Failure;
     }
+    ldpp_dout(this, 5) << "INFO: push entry marker: " << entry.marker
+                       << " ok for event with " << event_entry << dendl;
+    if (perfcounter)
+      perfcounter->inc(l_rgw_pubsub_push_ok);
+    return EntryProcessingResult::Successful;
   }
 
   // clean stale reservation from queue
-  void cleanup_queue(const std::string& queue_name, spawn::yield_context yield) {
+  void cleanup_queue(const std::string& queue_name, boost::asio::yield_context yield) {
     while (!shutdown) {
       ldpp_dout(this, 20) << "INFO: trying to perform stale reservation cleanup for queue: " << queue_name << dendl;
       const auto now = ceph::coarse_real_time::clock::now();
@@ -306,7 +272,7 @@ private:
         "" /*no tag*/);
       cls_2pc_queue_expire_reservations(op, stale_time);
       // check ownership and do reservation cleanup in one batch
-      auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, optional_yield(io_context, yield));
+      auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, yield);
       if (ret == -ENOENT) {
         // queue was deleted
         ldpp_dout(this, 5) << "INFO: queue: " 
@@ -330,12 +296,12 @@ private:
   }
 
   // unlock (lose ownership) queue
-  int unlock_queue(const std::string& queue_name, spawn::yield_context yield) {
+  int unlock_queue(const std::string& queue_name, boost::asio::yield_context yield) {
     librados::ObjectWriteOperation op;
     op.assert_exists();
     rados::cls::lock::unlock(&op, queue_name+"_lock", lock_cookie);
     auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
-    const auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
+    const auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
     if (ret == -ENOENT) {
       ldpp_dout(this, 10) << "INFO: queue: " << queue_name
         << ". was removed. nothing to unlock" << dendl;
@@ -349,16 +315,55 @@ private:
     return ret;
   }
 
+  int get_topic_info(const std::string& queue_name,
+                     const cls_queue_entry& queue_entry,
+                     rgw_pubsub_topic& topic,
+                     boost::asio::yield_context yield) {
+    std::string queue_topic_tenant;
+    std::string queue_topic_name;
+    parse_topic_metadata_key(queue_name, queue_topic_tenant, queue_topic_name);
+    rgw_pubsub_topic topic_info;
+    RGWPubSub ps(&rados_store, queue_topic_tenant, site);
+    int ret = ps.get_topic(this, queue_topic_name, topic_info, yield, nullptr);
+    if (ret < 0) {
+      ldpp_dout(this, 1) << "WARNING: failed to fetch topic: "
+                         << queue_topic_name << " error: " << ret
+                         << ". using cached topic attributes!" << dendl;
+      event_entry_t event_entry;
+      auto iter = queue_entry.data.cbegin();
+      try {
+        decode(event_entry, iter);
+      } catch (buffer::error& err) {
+        ldpp_dout(this, 1) << "ERROR: failed to decode entry. error: "
+                           << err.what() << dendl;
+        return -EIO;
+      }
+      topic_info.dest.push_endpoint = event_entry.push_endpoint;
+      topic_info.dest.push_endpoint_args = event_entry.push_endpoint_args;
+      topic_info.dest.arn_topic = event_entry.arn_topic;
+      topic_info.dest.arn_topic = event_entry.arn_topic;
+      topic_info.dest.time_to_live = event_entry.time_to_live;
+      topic_info.dest.max_retries = event_entry.max_retries;
+      topic_info.dest.retry_sleep_duration = event_entry.retry_sleep_duration;
+      topic_info.opaque_data = event_entry.event.opaque_data;
+    }
+    topic = std::move(topic_info);
+    return 0;
+  }
+
   // processing of a specific queue
-  void process_queue(const std::string& queue_name, spawn::yield_context yield) {
+  void process_queue(const std::string& queue_name, boost::asio::yield_context yield) {
     constexpr auto max_elements = 1024;
     auto is_idle = false;
     const std::string start_marker;
 
     // start a the cleanup coroutine for the queue
-    spawn::spawn(io_context, [this, queue_name](spawn::yield_context yield) {
-            cleanup_queue(queue_name, yield);
-            }, make_stack_allocator());
+    boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
+            [this, queue_name](boost::asio::yield_context yield) {
+              cleanup_queue(queue_name, yield);
+            }, [] (std::exception_ptr eptr) {
+              if (eptr) std::rethrow_exception(eptr);
+            });
 
     CountersManager queue_counters_container(queue_name, this->get_cct());
 
@@ -389,7 +394,7 @@ private:
           "" /*no tag*/);
         cls_2pc_queue_list_entries(op, start_marker, max_elements, &obl, &rval);
         // check ownership and list entries in one batch
-        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, nullptr, optional_yield(io_context, yield));
+        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, nullptr, yield);
         if (ret == -ENOENT) {
           // queue was deleted
           topics_persistency_tracker.erase(queue_name);
@@ -422,7 +427,25 @@ private:
       // log when queue is not idle
       ldpp_dout(this, 20) << "INFO: found: " << total_entries << " entries in: " << queue_name <<
         ". end marker is: " << end_marker << dendl;
-      
+      rgw_pubsub_topic topic_info;
+      if (get_topic_info(queue_name, entries.front(), topic_info, yield) < 0) {
+        continue;
+      }
+      RGWPubSubEndpoint::Ptr push_endpoint;
+      try {
+        push_endpoint = RGWPubSubEndpoint::create(
+            topic_info.dest.push_endpoint, topic_info.dest.arn_topic,
+            RGWHTTPArgs(topic_info.dest.push_endpoint_args, this), cct);
+        ldpp_dout(this, 20)
+            << "INFO: push endpoint created: " << topic_info.dest.push_endpoint
+            << dendl;
+      } catch (const RGWPubSubEndpoint::configuration_error& e) {
+        ldpp_dout(this, 5) << "WARNING: failed to create push endpoint: "
+                           << topic_info.dest.push_endpoint
+                           << ". error: " << e.what()
+                           << " (will retry sending events) " << dendl;
+        continue;
+      }
       is_idle = false;
       auto has_error = false;
       auto remove_entries = false;
@@ -436,11 +459,15 @@ private:
         }
 
         entries_persistency_tracker& notifs_persistency_tracker = topics_persistency_tracker[queue_name];
-        spawn::spawn(yield, [this, &notifs_persistency_tracker, &queue_name, entry_idx, total_entries, &end_marker,
-                             &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector](spawn::yield_context yield) {
+        boost::asio::spawn(yield, std::allocator_arg, make_stack_allocator(),
+          [this, &notifs_persistency_tracker, &queue_name, entry_idx, total_entries, &end_marker,
+           &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector,
+           push_endpoint = push_endpoint.get(), &topic_info](boost::asio::yield_context yield) {
             const auto token = waiter.make_token();
             auto& persistency_tracker = notifs_persistency_tracker[entry.marker];
-            auto result = process_entry(this->get_cct()->_conf, persistency_tracker, entry, yield);
+            auto result =
+                process_entry(this->get_cct()->_conf, persistency_tracker,
+                              entry, push_endpoint, topic_info, yield);
             if (result == EntryProcessingResult::Successful || result == EntryProcessingResult::Expired
                 || result == EntryProcessingResult::Migrating) {
               ldpp_dout(this, 20) << "INFO: processing of entry: " << entry.marker
@@ -459,7 +486,9 @@ private:
               ldpp_dout(this, 20) << "INFO: processing of entry: " << 
                 entry.marker << " (" << entry_idx << "/" << total_entries << ") from: " << queue_name << " failed" << dendl;
             } 
-        }, make_stack_allocator());
+        }, [] (std::exception_ptr eptr) {
+          if (eptr) std::rethrow_exception(eptr);
+        });
         ++entry_idx;
       }
 
@@ -491,7 +520,7 @@ private:
           "" /*no tag*/);
         cls_2pc_queue_remove_entries(op, end_marker, entries_to_remove);
         // check ownership and deleted entries in one batch
-        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
+        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
         if (ret == -ENOENT) {
           // queue was deleted
           ldpp_dout(this, 5) << "INFO: queue: " << queue_name << ". was removed. processing will stop" << dendl;
@@ -519,7 +548,7 @@ private:
 
           rgw_pubsub_topic topic;
           auto ret_of_get_topic = ps.get_topic(this, queue_name, topic,
-                           optional_yield(io_context, yield), nullptr);
+                                               yield, nullptr);
           if (ret_of_get_topic < 0) {
             // we can't migrate entries without topic info
             ldpp_dout(this, 1) << "ERROR: failed to fetch topic: " << queue_name << " error: "
@@ -551,7 +580,7 @@ private:
           buffer::list obl;
           int rval;
           cls_2pc_queue_reserve(op, size_to_migrate, migration_vector.size(), &obl, &rval);
-          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield), librados::OPERATION_RETURNVEC);
+          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield, librados::OPERATION_RETURNVEC);
           if (ret < 0) {
             ldpp_dout(this, 1) << "ERROR: failed to reserve migration space on queue: " << queue_name << ". error: " << ret << dendl;
             return;
@@ -563,7 +592,7 @@ private:
           }
 
           cls_2pc_queue_commit(op, migration_vector, reservation_id);
-          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
+          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
           reservation_id = cls_2pc_reservation::NO_ID;
           if (ret < 0) {
             ldpp_dout(this, 1) << "ERROR: failed to commit reservation to queue: " << queue_name << ". error: " << ret << dendl;
@@ -590,7 +619,7 @@ private:
 
   // process all queues
   // find which of the queues is owned by this daemon and process it
-  void process_queues(spawn::yield_context yield) {
+  void process_queues(boost::asio::yield_context yield) {
     auto has_error = false;
     owned_queues_t owned_queues;
     size_t processed_queue_count = 0;
@@ -618,7 +647,7 @@ private:
       timer.async_wait(yield[ec]);
 
       queues_t queues;
-      auto ret = read_queue_list(queues, optional_yield(io_context, yield));
+      auto ret = read_queue_list(queues, yield);
       if (ret < 0) {
         has_error = true;
         continue;
@@ -637,7 +666,7 @@ private:
               failover_time,
               LOCK_FLAG_MAY_RENEW);
 
-        ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
+        ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
         if (ret == -EBUSY) {
           // lock is already taken by another RGW
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " owned (locked) by another daemon" << dendl;
@@ -659,7 +688,8 @@ private:
         if (owned_queues.insert(queue_name).second) {
           ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " now owned (locked) by this daemon" << dendl;
           // start processing this queue
-          spawn::spawn(io_context, [this, &queue_gc, &queue_gc_lock, queue_name, &processed_queue_count](spawn::yield_context yield) {
+          boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
+                             [this, &queue_gc, &queue_gc_lock, queue_name, &processed_queue_count](boost::asio::yield_context yield) {
             ++processed_queue_count;
             process_queue(queue_name, yield);
             // if queue processing ended, it means that the queue was removed or not owned anymore
@@ -675,7 +705,9 @@ private:
             queue_gc.push_back(queue_name);
             --processed_queue_count;
             ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " marked for removal" << dendl;
-          }, make_stack_allocator());
+          }, [] (std::exception_ptr eptr) {
+            if (eptr) std::rethrow_exception(eptr);
+          });
         } else {
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " ownership (lock) renewed" << dendl;
         }
@@ -713,9 +745,12 @@ public:
   }
 
   void init() {
-    spawn::spawn(io_context, [this](spawn::yield_context yield) {
+    boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
+        [this](boost::asio::yield_context yield) {
           process_queues(yield);
-        }, make_stack_allocator());
+        }, [] (std::exception_ptr eptr) {
+          if (eptr) std::rethrow_exception(eptr);
+        });
 
     // start the worker threads to do the actual queue processing
     const std::string WORKER_THREAD_NAME = "notif-worker";
@@ -728,20 +763,21 @@ public:
           throw err;
         }
       });
-      const auto rc = ceph_pthread_setname(workers.back().native_handle(), 
-        (WORKER_THREAD_NAME+std::to_string(worker_id)).c_str());
-      ceph_assert(rc == 0);
+      const auto thread_name = WORKER_THREAD_NAME+std::to_string(worker_id);
+      if (const auto rc = ceph_pthread_setname(workers.back().native_handle(), thread_name.c_str()); rc != 0) {
+        ldpp_dout(this, 1) << "ERROR: failed to set notification manager thread name to: " << thread_name
+          << ". error: " << rc << dendl;
+      }
     }
     ldpp_dout(this, 10) << "INfO: started notification manager with: " << worker_count << " workers" << dendl;
   }
 
   // ctor: start all threads
-  Manager(CephContext* _cct, uint32_t _max_queue_size, uint32_t _queues_update_period_ms, 
+  Manager(CephContext* _cct, uint32_t _queues_update_period_ms,
           uint32_t _queues_update_retry_ms, uint32_t _queue_idle_sleep_us, u_int32_t failover_time_ms, 
           uint32_t _stale_reservations_period_s, uint32_t _reservations_cleanup_period_s,
           uint32_t _worker_count, rgw::sal::RadosStore* store,
           const SiteConfig& site) :
-    max_queue_size(_max_queue_size),
     queues_update_period_ms(_queues_update_period_ms),
     queues_update_retry_ms(_queues_update_retry_ms),
     queue_idle_sleep_us(_queue_idle_sleep_us),
@@ -755,39 +791,6 @@ public:
     site(site),
     rados_store(*store)
     {}
-
-  int add_persistent_topic(const std::string& topic_queue, optional_yield y) {
-    if (topic_queue == Q_LIST_OBJECT_NAME) {
-      ldpp_dout(this, 1) << "ERROR: topic name cannot be: " << Q_LIST_OBJECT_NAME << " (conflict with queue list object name)" << dendl;
-      return -EINVAL;
-    }
-    librados::ObjectWriteOperation op;
-    op.create(true);
-    cls_2pc_queue_init(op, topic_queue, max_queue_size);
-    auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
-    auto ret = rgw_rados_operate(this, rados_ioctx, topic_queue, &op, y);
-    if (ret == -EEXIST) {
-      // queue already exists - nothing to do
-      ldpp_dout(this, 20) << "INFO: queue for topic: " << topic_queue << " already exists. nothing to do" << dendl;
-      return 0;
-    }
-    if (ret < 0) {
-      // failed to create queue
-      ldpp_dout(this, 1) << "ERROR: failed to create queue for topic: " << topic_queue << ". error: " << ret << dendl;
-      return ret;
-    }
-   
-    bufferlist empty_bl;
-    std::map<std::string, bufferlist> new_topic{{topic_queue, empty_bl}};
-    op.omap_set(new_topic);
-    ret = rgw_rados_operate(this, rados_ioctx, Q_LIST_OBJECT_NAME, &op, y);
-    if (ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to add queue: " << topic_queue << " to queue list. error: " << ret << dendl;
-      return ret;
-    } 
-    ldpp_dout(this, 20) << "INFO: queue: " << topic_queue << " added to queue list"  << dendl;
-    return 0;
-  }
 };
 
 std::unique_ptr<Manager> s_manager;
@@ -811,7 +814,7 @@ bool init(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* store,
     return false;
   }
   // TODO: take conf from CephContext
-  s_manager = std::make_unique<Manager>(dpp->get_cct(), MAX_QUEUE_SIZE, 
+  s_manager = std::make_unique<Manager>(dpp->get_cct(),
       Q_LIST_UPDATE_MSEC, Q_LIST_RETRY_MSEC, 
       IDLE_TIMEOUT_USEC, FAILOVER_TIME_MSEC, 
       STALE_RESERVATIONS_PERIOD_S, RESERVATIONS_CLEANUP_PERIOD_S,
@@ -828,11 +831,38 @@ void shutdown() {
   s_manager.reset();
 }
 
-int add_persistent_topic(const std::string& topic_name, optional_yield y) {
-  if (!s_manager) {
-    return -EAGAIN;
+int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx,
+                         const std::string& topic_queue, optional_yield y)
+{
+  if (topic_queue == Q_LIST_OBJECT_NAME) {
+    ldpp_dout(dpp, 1) << "ERROR: topic name cannot be: " << Q_LIST_OBJECT_NAME << " (conflict with queue list object name)" << dendl;
+    return -EINVAL;
   }
-  return s_manager->add_persistent_topic(topic_name, y);
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  cls_2pc_queue_init(op, topic_queue, MAX_QUEUE_SIZE);
+  auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, &op, y);
+  if (ret == -EEXIST) {
+    // queue already exists - nothing to do
+    ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_queue << " already exists. nothing to do" << dendl;
+    return 0;
+  }
+  if (ret < 0) {
+    // failed to create queue
+    ldpp_dout(dpp, 1) << "ERROR: failed to create queue for topic: " << topic_queue << ". error: " << ret << dendl;
+    return ret;
+  }
+
+  bufferlist empty_bl;
+  std::map<std::string, bufferlist> new_topic{{topic_queue, empty_bl}};
+  op.omap_set(new_topic);
+  ret = rgw_rados_operate(dpp, rados_ioctx, Q_LIST_OBJECT_NAME, &op, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to add queue: " << topic_queue << " to queue list. error: " << ret << dendl;
+    return ret;
+  }
+  ldpp_dout(dpp, 20) << "INFO: queue: " << topic_queue << " added to queue list"  << dendl;
+  return 0;
 }
 
 int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_queue, optional_yield y) {
@@ -859,13 +889,6 @@ int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rado
   }
   ldpp_dout(dpp, 20) << "INFO: queue: " << topic_queue << " removed from queue list"  << dendl;
   return 0;
-}
-
-int remove_persistent_topic(const std::string& topic_queue, optional_yield y) {
-  if (!s_manager) {
-    return -EAGAIN;
-  }
-  return remove_persistent_topic(s_manager.get(), s_manager->rados_store.getRados()->get_notif_pool_ctx(), topic_queue, y);
 }
 
 rgw::sal::Object* get_object_with_attributes(
@@ -1071,8 +1094,8 @@ int publish_reserve(const DoutPrefixProvider* dpp,
 
       // reload the topic in case it changed since the notification was added
       const std::string& topic_tenant = std::visit(fu2::overload(
-          [] (const rgw_user& u) -> const std::string& { return u.tenant; },
-          [] (const rgw_account_id& a) -> const std::string& { return a; }
+          [] (const rgw_user& u) -> std::string { return u.tenant; },
+          [] (const rgw_account_id& a) -> std::string { return a; }
           ), topic_cfg.owner);
       const RGWPubSub ps(res.store, topic_tenant, site);
       int ret = ps.get_topic(res.dpp, topic_cfg.dest.arn_topic,
@@ -1086,7 +1109,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
           // either the topic is deleted but the corresponding notification
           // still exist or in v2 mode the notification could have synced first
           // but topic is not synced yet.
-          return 0;
+          continue;
         }
         ldpp_dout(res.dpp, 1)
             << "WARN: Using the stored topic from bucket notification struct."
@@ -1203,19 +1226,17 @@ int publish_commit(rgw::sal::Object* obj,
       std::vector<buffer::list> bl_data_vec{std::move(bl)};
       librados::ObjectWriteOperation op;
       cls_2pc_queue_commit(op, bl_data_vec, topic.res_id);
-      aio_completion_ptr completion {librados::Rados::aio_create_completion()};
-      auto pcc_arg = make_unique<PublishCommitCompleteArg>(queue_name, dpp);
-      completion->set_complete_callback(pcc_arg.get(), publish_commit_completion);
-      auto &io_ctx = res.store->getRados()->get_notif_pool_ctx();
-      int ret = io_ctx.aio_operate(queue_name, completion.get(), &op);
       topic.res_id = cls_2pc_reservation::NO_ID;
-      if (ret < 0) {
+      auto pcc_arg = make_unique<PublishCommitCompleteArg>(queue_name, dpp->get_cct());
+      aio_completion_ptr completion{librados::Rados::aio_create_completion(pcc_arg.get(), publish_commit_completion)};
+      auto& io_ctx = res.store->getRados()->get_notif_pool_ctx();
+      if (const int ret = io_ctx.aio_operate(queue_name, completion.get(), &op); ret < 0) {
         ldpp_dout(dpp, 1) << "ERROR: failed to commit reservation to queue: "
                           << queue_name << ". error: " << ret << dendl;
         return ret;
       }
+      // args will be released inside the callback
       pcc_arg.release();
-      completion.release();
     } else {
       try {
         // TODO add endpoint LRU cache

@@ -1,5 +1,5 @@
 {
-    "image": "docker.io/prom/alertmanager:v0.20.0",
+    "image": "quay.io/prometheus/alertmanager:v0.20.0",
     "ports": [9093, 9094],
     "args": [
         "-p", "9093:9093",

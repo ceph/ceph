@@ -31,15 +31,15 @@ class TestMain(object):
     def setup_method(self):
         conf.log_path = '/tmp/'
 
-    def test_no_arguments_parsing_error(self):
+    def test_no_arguments_parsing_error(self, fake_filesystem):
         with pytest.raises(RuntimeError):
             main(args=[])
 
-    def test_parsing_suffix_error(self):
+    def test_parsing_suffix_error(self, fake_filesystem):
         with pytest.raises(exceptions.SuffixParsingError):
             main(args=['asdf'])
 
-    def test_correct_command(self, monkeypatch):
+    def test_correct_command(self, monkeypatch, fake_filesystem):
         run = Capture()
         monkeypatch.setattr(process, 'run', run)
         main(args=['ceph-volume-systemd', 'lvm-8715BEB4-15C5-49DE-BA6F-401086EC7B41-0' ])

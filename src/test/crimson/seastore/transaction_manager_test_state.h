@@ -183,7 +183,6 @@ class EphemeralTestState
   {
 #endif
 protected:
-  journal_type_t journal_type;
   size_t num_main_device_managers = 0;
   size_t num_cold_device_managers = 0;
   EphemeralDevicesRef devices;
@@ -220,7 +219,7 @@ protected:
   }
 
   void restart() {
-    restart_fut().get0();
+    restart_fut().get();
   }
 
   seastar::future<> tm_setup() {
@@ -274,6 +273,7 @@ protected:
   Cache* cache;
   ExtentPlacementManager *epm;
   uint64_t seq = 0;
+  shard_stats_t shard_stats;
 
   TMTestState() : EphemeralTestState(1, 0) {}
 
@@ -284,6 +284,7 @@ protected:
     auto sec_devices = devices->get_secondary_devices();
     auto p_dev = devices->get_primary_device();
     auto fut = seastar::now();
+#ifdef UNIT_TESTS_BUILT
     if (std::get<1>(GetParam()) == integrity_check_t::FULL_CHECK) {
       fut = crimson::common::local_conf().set_val(
 	"seastore_full_integrity_check", "true");
@@ -291,7 +292,9 @@ protected:
       fut = crimson::common::local_conf().set_val(
 	"seastore_full_integrity_check", "false");
     }
-    tm = make_transaction_manager(p_dev, sec_devices, true);
+#endif
+    shard_stats = {};
+    tm = make_transaction_manager(p_dev, sec_devices, shard_stats, true);
     epm = tm->get_epm();
     lba_manager = tm->get_lba_manager();
     cache = tm->get_cache();
@@ -369,8 +372,8 @@ protected:
   }
 
   void submit_transaction(TransactionRef t) {
-    submit_transaction_fut(*t).unsafe_get0();
-    epm->run_background_work_until_halt().get0();
+    submit_transaction_fut(*t).unsafe_get();
+    epm->run_background_work_until_halt().get();
   }
 };
 
@@ -436,6 +439,7 @@ protected:
 
   virtual seastar::future<> _init() final {
     auto fut = seastar::now();
+#ifdef UNIT_TESTS_BUILT
     if (std::get<1>(GetParam()) == integrity_check_t::FULL_CHECK) {
       fut = crimson::common::local_conf().set_val(
 	"seastore_full_integrity_check", "true");
@@ -443,6 +447,7 @@ protected:
       fut = crimson::common::local_conf().set_val(
 	"seastore_full_integrity_check", "false");
     }
+#endif
     seastore = make_test_seastore(
       std::make_unique<TestMDStoreState::Store>(mdstore_state.get_mdstore()));
     return fut.then([this] {

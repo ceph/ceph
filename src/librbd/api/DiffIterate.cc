@@ -10,6 +10,7 @@
 #include "librbd/internal.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
+#include "librbd/io/Utils.h"
 #include "librbd/object_map/DiffRequest.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
@@ -266,6 +267,7 @@ int DiffIterate<I>::diff_iterate(I *ictx,
 
 template <typename I>
 std::pair<uint64_t, uint64_t> DiffIterate<I>::calc_object_diff_range() {
+  ceph_assert(m_length > 0);
   uint64_t period = m_image_ctx.get_stripe_period();
   uint64_t first_period_off = round_down_to(m_offset, period);
   uint64_t last_period_off = round_down_to(m_offset + m_length - 1, period);
@@ -274,15 +276,15 @@ std::pair<uint64_t, uint64_t> DiffIterate<I>::calc_object_diff_range() {
   if (first_period_off != last_period_off) {
     // map only the tail of the first period and the front of the last
     // period instead of the entire range for efficiency
-    Striper::file_to_extents(m_image_ctx.cct, &m_image_ctx.layout,
-                             m_offset, first_period_off + period - m_offset,
-                             0, 0, &object_extents);
-    Striper::file_to_extents(m_image_ctx.cct, &m_image_ctx.layout,
-                        last_period_off, m_offset + m_length - last_period_off,
-                        0, 0, &object_extents);
+    io::util::area_to_object_extents(&m_image_ctx, m_offset,
+                                     first_period_off + period - m_offset,
+                                     io::ImageArea::DATA, 0, &object_extents);
+    io::util::area_to_object_extents(&m_image_ctx, last_period_off,
+                                     m_offset + m_length - last_period_off,
+                                     io::ImageArea::DATA, 0, &object_extents);
   } else {
-    Striper::file_to_extents(m_image_ctx.cct, &m_image_ctx.layout, m_offset,
-                             m_length, 0, 0, &object_extents);
+    io::util::area_to_object_extents(&m_image_ctx, m_offset, m_length,
+                                     io::ImageArea::DATA, 0, &object_extents);
   }
   return {object_extents.front().object_no, object_extents.back().object_no + 1};
 }
@@ -311,12 +313,12 @@ int DiffIterate<I>::execute() {
   if (from_snap_id == CEPH_NOSNAP) {
     return -ENOENT;
   }
-  if (from_snap_id == end_snap_id) {
+  if (from_snap_id > end_snap_id) {
+    return -EINVAL;
+  }
+  if (from_snap_id == end_snap_id || m_length == 0) {
     // no diff.
     return 0;
-  }
-  if (from_snap_id >= end_snap_id) {
-    return -EINVAL;
   }
 
   int r;
@@ -379,47 +381,43 @@ int DiffIterate<I>::execute() {
     uint64_t read_len = std::min(period_off + period - off, left);
 
     if (fast_diff_enabled) {
-      // map to extents
-      std::map<object_t,std::vector<ObjectExtent> > object_extents;
-      Striper::file_to_extents(cct, m_image_ctx.format_string,
-                               &m_image_ctx.layout, off, read_len, 0,
-                               object_extents, 0);
+      // map to objects (there would be one extent per object)
+      striper::LightweightObjectExtents object_extents;
+      io::util::area_to_object_extents(&m_image_ctx, off, read_len,
+                                       io::ImageArea::DATA, 0, &object_extents);
 
       // get diff info for each object and merge adjacent stripe units
       // into an aggregate (this also sorts them)
       io::SparseExtents aggregate_sparse_extents;
-      for (auto& [object, extents] : object_extents) {
-        const uint64_t object_no = extents.front().objectno;
-        ceph_assert(object_no >= start_object_no && object_no < end_object_no);
-        uint8_t diff_state = object_diff_state[object_no - start_object_no];
-        ldout(cct, 20) << "object " << object << ": diff_state="
-                       << (int)diff_state << dendl;
+      for (const auto& oe : object_extents) {
+        ceph_assert(oe.object_no >= start_object_no &&
+                    oe.object_no < end_object_no);
+        uint8_t diff_state = object_diff_state[oe.object_no - start_object_no];
+        ldout(cct, 20) << "object "
+                       << util::data_object_name(&m_image_ctx, oe.object_no)
+                       << ": diff_state=" << (int)diff_state << dendl;
 
         if (diff_state == object_map::DIFF_STATE_HOLE &&
             from_snap_id == 0 && !parent_diff.empty()) {
           // no data in child object -- report parent diff instead
-          for (auto& oe : extents) {
-            for (auto& be : oe.buffer_extents) {
-              interval_set<uint64_t> o;
-              o.insert(off + be.first, be.second);
-              o.intersection_of(parent_diff);
-              ldout(cct, 20) << " reporting parent overlap " << o << dendl;
-              for (auto e = o.begin(); e != o.end(); ++e) {
-                aggregate_sparse_extents.insert(e.get_start(), e.get_len(),
-                                                {io::SPARSE_EXTENT_STATE_DATA,
-                                                 e.get_len()});
-              }
+          for (const auto& be : oe.buffer_extents) {
+            interval_set<uint64_t> o;
+            o.insert(off + be.first, be.second);
+            o.intersection_of(parent_diff);
+            ldout(cct, 20) << " reporting parent overlap " << o << dendl;
+            for (auto e = o.begin(); e != o.end(); ++e) {
+              aggregate_sparse_extents.insert(e.get_start(), e.get_len(),
+                                              {io::SPARSE_EXTENT_STATE_DATA,
+                                               e.get_len()});
             }
           }
         } else if (diff_state == object_map::DIFF_STATE_HOLE_UPDATED ||
                    diff_state == object_map::DIFF_STATE_DATA_UPDATED) {
           auto state = (diff_state == object_map::DIFF_STATE_HOLE_UPDATED ?
               io::SPARSE_EXTENT_STATE_ZEROED : io::SPARSE_EXTENT_STATE_DATA);
-          for (auto& oe : extents) {
-            for (auto& be : oe.buffer_extents) {
-              aggregate_sparse_extents.insert(off + be.first, be.second,
-                                              {state, be.second});
-            }
+          for (const auto& be : oe.buffer_extents) {
+            aggregate_sparse_extents.insert(off + be.first, be.second,
+                                            {state, be.second});
           }
         }
       }

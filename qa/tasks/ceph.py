@@ -410,12 +410,7 @@ def create_rbd_pool(ctx, config):
             args=['sudo', 'ceph', '--cluster', cluster_name,
                   'osd', 'pool', 'create', 'rbd', '8'])
         mon_remote.run(
-            args=[
-                'sudo', 'ceph', '--cluster', cluster_name,
-                'osd', 'pool', 'application', 'enable',
-                'rbd', 'rbd', '--yes-i-really-mean-it'
-            ],
-            check_status=False)
+            args=['rbd', '--cluster', cluster_name, 'pool', 'init', 'rbd'])
     yield
 
 @contextlib.contextmanager

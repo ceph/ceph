@@ -21,20 +21,19 @@
 class MMDSQuiesceDbAck final : public MMDSOp {
 protected:
   MMDSQuiesceDbAck() : MMDSOp{MSG_MDS_QUIESCE_DB_ACK} {}
+  MMDSQuiesceDbAck(auto&& _ack)
+    : MMDSOp{MSG_MDS_QUIESCE_DB_ACK}
+    , ack(std::forward<decltype(_ack)>(_ack))
+    {}
   ~MMDSQuiesceDbAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "mds_quiesce_db_ack"; }
   void print(std::ostream& o) const override {
-
+    o << get_type_name();
   }
 
   void encode_payload(uint64_t features) override
-  {
-    // noop to prevent unnecessary overheads
-  }
-
-  void encode_payload_from(QuiesceDbPeerAck const& ack)
   {
     ::encode(ack, payload);
   }
@@ -43,10 +42,10 @@ public:
     // noop to prevent unnecessary overheads
   }
 
-  void decode_payload_into(QuiesceDbPeerAck &ack) const
+  void decode_payload_into(QuiesceDbPeerAck &_ack) const
   {
     auto p = payload.cbegin();
-    ::decode(ack, p);
+    ::decode(_ack, p);
   }
 
 private:
@@ -54,4 +53,6 @@ private:
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
   template<class T, typename... Args>
   friend MURef<T> crimson::make_message(Args&&... args);
+
+  QuiesceDbPeerAck ack;
 };

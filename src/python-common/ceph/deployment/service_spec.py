@@ -1331,6 +1331,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
                  client_cert: Optional[str] = None,
+                 root_ca_cert: Optional[str] = None,
                  spdk_path: Optional[str] = None,
                  tgt_path: Optional[str] = None,
                  spdk_timeout: Optional[float] = 60.0,
@@ -1408,13 +1409,15 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``bdevs_per_cluster`` number of bdevs per cluster
         self.bdevs_per_cluster = bdevs_per_cluster
         #: ``server_key`` gateway server key
-        self.server_key = server_key or './server.key'
+        self.server_key = server_key
         #: ``server_cert`` gateway server certificate
-        self.server_cert = server_cert or './server.crt'
+        self.server_cert = server_cert
         #: ``client_key`` client key
-        self.client_key = client_key or './client.key'
+        self.client_key = client_key
         #: ``client_cert`` client certificate
-        self.client_cert = client_cert or './client.crt'
+        self.client_cert = client_cert
+        #: ``root_ca_cert`` CA cert for server/client certs
+        self.root_ca_cert = root_ca_cert
         #: ``spdk_path`` path to SPDK
         self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
         #: ``tgt_path`` nvmeof target path
@@ -1469,9 +1472,15 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
 
         if self.enable_auth:
-            if not any([self.server_key, self.server_cert, self.client_key, self.client_cert]):
-                raise SpecValidationError(
-                    'enable_auth is true but client/server certificates are missing')
+            if not all([self.server_key, self.server_cert, self.client_key,
+                        self.client_cert, self.root_ca_cert]):
+                err_msg = 'enable_auth is true but '
+                for cert_key_attr in ['server_key', 'server_cert', 'client_key',
+                                      'client_cert', 'root_ca_cert']:
+                    if not hasattr(self, cert_key_attr):
+                        err_msg += f'{cert_key_attr}, '
+                err_msg += 'attribute(s) not set in the spec'
+                raise SpecValidationError(err_msg)
 
         if self.transports not in ['tcp']:
             raise SpecValidationError('Invalid transport. Valid values are tcp')
@@ -1494,40 +1503,76 @@ class NvmeofServiceSpec(ServiceSpec):
                 raise SpecValidationError(
                     'Invalid SPDK log level. Valid values are: DEBUG, INFO, WARNING, ERROR, NOTICE')
 
-        if self.spdk_ping_interval_in_seconds < 1.0:
+        if (
+            self.spdk_ping_interval_in_seconds
+            and self.spdk_ping_interval_in_seconds < 1.0
+        ):
             raise SpecValidationError("SPDK ping interval should be at least 1 second")
 
-        if self.allowed_consecutive_spdk_ping_failures < 1:
+        if (
+            self.allowed_consecutive_spdk_ping_failures
+            and self.allowed_consecutive_spdk_ping_failures < 1
+        ):
             raise SpecValidationError("Allowed consecutive SPDK ping failures should be at least 1")
 
-        if self.state_update_interval_sec < 0:
+        if (
+            self.state_update_interval_sec
+            and self.state_update_interval_sec < 0
+        ):
             raise SpecValidationError("State update interval can't be negative")
 
-        if self.omap_file_lock_duration < 0:
+        if (
+            self.omap_file_lock_duration
+            and self.omap_file_lock_duration < 0
+        ):
             raise SpecValidationError("OMAP file lock duration can't be negative")
 
-        if self.omap_file_lock_retries < 0:
+        if (
+            self.omap_file_lock_retries
+            and self.omap_file_lock_retries < 0
+        ):
             raise SpecValidationError("OMAP file lock retries can't be negative")
 
-        if self.omap_file_update_reloads < 0:
+        if (
+            self.omap_file_update_reloads
+            and self.omap_file_update_reloads < 0
+        ):
             raise SpecValidationError("OMAP file reloads can't be negative")
 
-        if self.spdk_timeout < 0.0:
+        if (
+            self.spdk_timeout
+            and self.spdk_timeout < 0.0
+        ):
             raise SpecValidationError("SPDK timeout can't be negative")
 
-        if self.conn_retries < 0:
+        if (
+            self.conn_retries
+            and self.conn_retries < 0
+        ):
             raise SpecValidationError("Connection retries can't be negative")
 
-        if self.max_log_file_size_in_mb < 0:
+        if (
+            self.max_log_file_size_in_mb
+            and self.max_log_file_size_in_mb < 0
+        ):
             raise SpecValidationError("Log file size can't be negative")
 
-        if self.max_log_files_count < 0:
+        if (
+            self.max_log_files_count
+            and self.max_log_files_count < 0
+        ):
             raise SpecValidationError("Log files count can't be negative")
 
-        if self.max_log_directory_backups < 0:
+        if (
+            self.max_log_directory_backups
+            and self.max_log_directory_backups < 0
+        ):
             raise SpecValidationError("Log file directory backups can't be negative")
 
-        if self.monitor_timeout < 0.0:
+        if (
+            self.monitor_timeout
+            and self.monitor_timeout < 0.0
+        ):
             raise SpecValidationError("Monitor timeout can't be negative")
 
         if self.port and self.port < 0:
@@ -2032,7 +2077,7 @@ class GrafanaSpec(MonitoringSpec):
                  port: Optional[int] = None,
                  protocol: Optional[str] = 'https',
                  initial_admin_password: Optional[str] = None,
-                 anonymous_access: Optional[bool] = True,
+                 anonymous_access: bool = True,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -2066,6 +2111,24 @@ class GrafanaSpec(MonitoringSpec):
                        'must be set to true. Otherwise the grafana dashboard will '
                        'be inaccessible.')
             raise SpecValidationError(err_msg)
+
+    def to_json(self) -> "OrderedDict[str, Any]":
+        json_dict = super(GrafanaSpec, self).to_json()
+        if not self.anonymous_access:
+            # This field was added as a boolean that defaults
+            # to True, which makes it get dropped when the user
+            # sets it to False and it is converted to json. This means
+            # the in memory version of the spec will have the option set
+            # correctly, but the persistent version we store in the config-key
+            # store will always drop this option. It's already been backported to
+            # some release versions, or we'd probably just rename it to
+            # no_anonymous_access and default it to False. This block is to
+            # handle this option specially and in the future, we should avoid
+            # boolean fields that default to True.
+            if 'spec' not in json_dict:
+                json_dict['spec'] = {}
+            json_dict['spec']['anonymous_access'] = False
+        return json_dict
 
 
 yaml.add_representer(GrafanaSpec, ServiceSpec.yaml_representer)

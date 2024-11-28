@@ -135,6 +135,7 @@ void Filesystem::dump(Formatter *f) const
 void FSMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", epoch);
+  f->dump_string("btime", fmt::format("{}", btime));
   // Use 'default' naming to match 'set-default' CLI
   f->dump_int("default_fscid", legacy_client_fscid);
 
@@ -168,6 +169,7 @@ void FSMap::dump(Formatter *f) const
 FSMap &FSMap::operator=(const FSMap &rhs)
 {
   epoch = rhs.epoch;
+  btime = rhs.btime;
   next_filesystem_id = rhs.next_filesystem_id;
   legacy_client_fscid = rhs.legacy_client_fscid;
   default_compat = rhs.default_compat;
@@ -206,6 +208,7 @@ void FSMap::generate_test_instances(std::list<FSMap*>& ls)
 void FSMap::print(ostream& out) const
 {
   out << "e" << epoch << std::endl;
+  out << "btime " << fmt::format("{}", btime) << std::endl;
   out << "enable_multiple, ever_enabled_multiple: " << enable_multiple << ","
       << ever_enabled_multiple << std::endl;
   out << "default compat: " << default_compat << std::endl;
@@ -296,6 +299,7 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
 {
   if (f) {
     f->dump_unsigned("epoch", get_epoch());
+    f->dump_string("btime", fmt::format("{}", btime));
     for (const auto& [fscid, fs] : filesystems) {
       f->dump_unsigned("id", fscid);
       f->dump_unsigned("up", fs.mds_map.up.size());
@@ -638,6 +642,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
   encode(standby_daemons, bl, features);
   encode(standby_epochs, bl);
   encode(ever_enabled_multiple, bl);
+  encode(btime, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -668,6 +673,9 @@ void FSMap::decode(bufferlist::const_iterator& p)
   decode(standby_epochs, p);
   if (struct_v >= 7) {
     decode(ever_enabled_multiple, p);
+  }
+  if (struct_v >= 8) {
+    decode(btime, p);
   }
   DECODE_FINISH(p);
 }
@@ -1006,6 +1014,12 @@ void FSMap::erase(mds_gid_t who, epoch_t blocklist_epoch)
         // the rank ever existed so that next time it's handed out
         // to a gid it'll go back into CREATING.
         fs.mds_map.in.erase(info.rank);
+      } else if (info.state == MDSMap::STATE_STARTING) {
+        // If this gid didn't make it past STARTING, then forget
+        // the rank ever existed so that next time it's handed out
+        // to a gid it'll go back into STARTING.
+        fs.mds_map.in.erase(info.rank);
+        fs.mds_map.stopped.insert(info.rank);
       } else {
         // Put this rank into the failed list so that the next available
         // STANDBY will pick it up.

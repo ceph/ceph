@@ -292,8 +292,8 @@ class CephExporter(ContainerDaemonForm):
         self.image = image
 
         self.sock_dir = config_json.get('sock-dir', '/var/run/ceph/')
-        ipv4_addrs, _ = get_ip_addresses(get_hostname())
-        addrs = '0.0.0.0' if ipv4_addrs else '::'
+        _, ipv6_addrs = get_ip_addresses(get_hostname())
+        addrs = '::' if ipv6_addrs else '0.0.0.0'
         self.addrs = config_json.get('addrs', addrs)
         self.port = config_json.get('port', self.DEFAULT_PORT)
         self.prio_limit = config_json.get('prio-limit', 5)
@@ -386,12 +386,17 @@ def get_ceph_mounts_for_type(
     """
     mounts = dict()
 
-    if daemon_type in ceph_daemons():
+    if daemon_type in ceph_daemons() or daemon_type in [
+        'ceph-volume',
+        'shell',
+    ]:
         if fsid:
             run_path = os.path.join('/var/run/ceph', fsid)
             if os.path.exists(run_path):
                 mounts[run_path] = '/var/run/ceph:z'
             log_dir = os.path.join(ctx.log_dir, fsid)
+            if not os.path.exists(log_dir):
+                os.mkdir(log_dir)
             mounts[log_dir] = '/var/log/ceph:z'
             crash_dir = '/var/lib/ceph/%s/crash' % fsid
             if os.path.exists(crash_dir):
@@ -400,14 +405,19 @@ def get_ceph_mounts_for_type(
                 journald_sock_dir = '/run/systemd/journal'
                 mounts[journald_sock_dir] = journald_sock_dir
 
-    if daemon_type in ['mon', 'osd', 'clusterless-ceph-volume']:
+    if daemon_type in [
+        'mon',
+        'osd',
+        'ceph-volume',
+        'clusterless-ceph-volume',
+    ]:
         mounts['/dev'] = '/dev'  # FIXME: narrow this down?
         mounts['/run/udev'] = '/run/udev'
-    if daemon_type in ['osd', 'clusterless-ceph-volume']:
+    if daemon_type in ['osd', 'ceph-volume', 'clusterless-ceph-volume']:
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
-    if daemon_type == 'osd':
+    if daemon_type in ['osd', 'ceph-volume']:
         # selinux-policy in the container may not match the host.
         if HostFacts(ctx).selinux_enabled:
             cluster_dir = f'{ctx.data_dir}/{fsid}'
@@ -420,7 +430,10 @@ def get_ceph_mounts_for_type(
                 logger.error(
                     f'Cluster direcotry {cluster_dir} does not exist.'
                 )
+    if daemon_type == 'osd':
         mounts['/'] = '/rootfs'
+    elif daemon_type == 'ceph-volume':
+        mounts['/'] = '/rootfs:rslave'
 
     try:
         if (

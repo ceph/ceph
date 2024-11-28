@@ -423,9 +423,10 @@ export class Mocks {
     return { name, type, type_id, id, children, device_class };
   }
 
-  static getPool = (name: string, id: number): Pool => {
+  static getPool = (name: string, id: number, application_metadata: string[] = ['rbd']): Pool => {
     return _.merge(new Pool(name), {
       pool: id,
+      application_metadata,
       type: 'replicated',
       pg_num: 256,
       pg_placement_num: 256,

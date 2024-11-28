@@ -32,7 +32,7 @@ const jestConfig = {
   },
   setupFiles: ['jest-canvas-mock'],
   coverageReporters: ['cobertura', 'html'],
-  modulePathIgnorePatterns: ['<rootDir>/coverage/', '<rootDir>/node_modules/simplebar-angular'],
+  modulePathIgnorePatterns: ['<rootDir>/coverage/', '<rootDir>/node_modules/simplebar-angular', '<rootDir>/cypress'],
   testMatch: ['**/*.spec.ts'],
   testRunner: 'jest-jasmine2'
 };

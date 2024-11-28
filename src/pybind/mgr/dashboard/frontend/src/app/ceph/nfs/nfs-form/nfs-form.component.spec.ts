@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
@@ -21,6 +21,7 @@ describe('NfsFormComponent', () => {
   let fixture: ComponentFixture<NfsFormComponent>;
   let httpTesting: HttpTestingController;
   let activatedRoute: ActivatedRouteStub;
+  let router: Router;
 
   configureTestBed(
     {
@@ -45,9 +46,8 @@ describe('NfsFormComponent', () => {
 
   const matchSquash = (backendSquashValue: string, uiSquashValue: string) => {
     component.ngOnInit();
-    httpTesting.expectOne('ui-api/nfs-ganesha/fsals').flush(['CEPH', 'RGW']);
-    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
     httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
+    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
     httpTesting.expectOne('api/nfs-ganesha/export/mynfs/1').flush({
       fsal: {
         name: 'RGW'
@@ -69,12 +69,16 @@ describe('NfsFormComponent', () => {
     component = fixture.componentInstance;
     httpTesting = TestBed.inject(HttpTestingController);
     activatedRoute = <ActivatedRouteStub>TestBed.inject(ActivatedRoute);
+    router = TestBed.inject(Router);
+
+    Object.defineProperty(router, 'url', {
+      get: jasmine.createSpy('url').and.returnValue('/cephfs/nfs')
+    });
     RgwHelper.selectDaemon();
     fixture.detectChanges();
 
-    httpTesting.expectOne('ui-api/nfs-ganesha/fsals').flush(['CEPH', 'RGW']);
-    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
     httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
+    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
     httpTesting.verify();
   });
 
@@ -82,28 +86,21 @@ describe('NfsFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should process all data', () => {
-    expect(component.allFsals).toEqual([
-      { descr: 'CephFS', value: 'CEPH', disabled: false },
-      { descr: 'Object Gateway', value: 'RGW', disabled: false }
-    ]);
-    expect(component.allFsNames).toEqual([{ id: 1, name: 'a' }]);
-    expect(component.allClusters).toEqual([{ cluster_id: 'mynfs' }]);
-  });
-
   it('should create the form', () => {
     expect(component.nfsForm.value).toEqual({
       access_type: 'RW',
       clients: [],
       cluster_id: 'mynfs',
-      fsal: { fs_name: 'a', name: 'CEPH' },
-      path: '/',
+      fsal: { fs_name: '', name: 'CEPH' },
+      path: '',
       protocolNfsv4: true,
       protocolNfsv3: true,
       pseudo: '',
       sec_label_xattr: 'security.selinux',
       security_label: false,
       squash: 'no_root_squash',
+      subvolume: '',
+      subvolume_group: '_nogroup',
       transportTCP: true,
       transportUDP: true
     });

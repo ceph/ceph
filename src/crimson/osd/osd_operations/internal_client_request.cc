@@ -25,7 +25,7 @@ SET_SUBSYS(osd);
 namespace crimson::osd {
 
 InternalClientRequest::InternalClientRequest(Ref<PG> pg)
-  : pg(std::move(pg))
+  : pg(pg), start_epoch(pg->get_osdmap_epoch())
 {
   assert(bool(this->pg));
   assert(this->pg->is_primary());
@@ -84,6 +84,8 @@ seastar::future<> InternalClientRequest::start()
             [[maybe_unused]] const int ret = op_info.set_from_op(
               std::as_const(osd_ops), pg->get_pgid().pgid, *pg->get_osdmap());
             assert(ret == 0);
+            // call with_locked_obc() in order, but wait concurrently for loading.
+            enter_stage_sync(client_pp().lock_obc);
             return pg->with_locked_obc(get_target_oid(), op_info,
               [&osd_ops, this](auto, auto obc) {
               return enter_stage<interruptor>(client_pp().process
@@ -123,7 +125,7 @@ seastar::future<> InternalClientRequest::start()
         } else {
           return seastar::stop_iteration::no;
         }
-      }, pg);
+      }, pg, start_epoch);
     }).then([this] {
       track_event<CompletionEvent>();
     }).finally([this] {

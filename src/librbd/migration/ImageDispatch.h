@@ -86,6 +86,8 @@ public:
 
 private:
   ImageCtxT* m_image_ctx;
+
+  // empty (nullptr) for native format
   std::unique_ptr<FormatInterface> m_format;
 
   void fail_io(int r, io::AioCompletion* aio_comp,

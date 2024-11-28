@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
@@ -11,6 +11,10 @@ import { DeploymentOptions } from '../models/osd-deployment-options';
 import { OsdSettings } from '../models/osd-settings';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
+import { CdFormGroup } from '../forms/cd-form-group';
+import { PaginateObservable } from './paginate.model';
+import { PaginateParams } from '../classes/paginate-params.class';
+import { Osd } from '../models/osd.model';
 
 @Injectable({
   providedIn: 'root'
@@ -20,6 +24,8 @@ export class OsdService {
   private uiPath = 'ui-api/osd';
 
   osdDevices: InventoryDeviceType[] = [];
+  selectedFormValues: CdFormGroup;
+  isDeployementModeSimple: boolean = true;
 
   osdRecvSpeedModalPriorities = {
     KNOWN_PRIORITIES: [
@@ -77,8 +83,10 @@ export class OsdService {
     return this.http.post(this.path, request, { observe: 'response' });
   }
 
-  getList() {
-    return this.http.get(`${this.path}`);
+  getList(params: HttpParams): PaginateObservable<Osd[]> {
+    return new PaginateObservable<Osd[]>(
+      this.http.get<Osd[]>(this.path, new PaginateParams(params, 1, 1))
+    );
   }
 
   getOsdSettings(): Observable<OsdSettings> {

@@ -83,15 +83,15 @@ struct seastore_test_t :
   }
 
   void do_transaction(CTransaction &&t) {
-    return sharded_seastore->do_transaction(
+    return (void)sharded_seastore->do_transaction(
       coll,
-      std::move(t)).get0();
+      std::move(t)).get();
   }
 
   void set_meta(
     const std::string& key,
     const std::string& value) {
-    return seastore->write_meta(key, value).get0();
+    return (void)seastore->write_meta(key, value).get();
   }
 
   std::tuple<int, std::string> get_meta(
@@ -120,7 +120,7 @@ struct seastore_test_t :
       touch(t);
       sharded_seastore.do_transaction(
         coll,
-        std::move(t)).get0();
+        std::move(t)).get();
     }
 
     void truncate(
@@ -136,20 +136,20 @@ struct seastore_test_t :
       truncate(t, off);
       sharded_seastore.do_transaction(
         coll,
-        std::move(t)).get0();
+        std::move(t)).get();
     }
 
     std::map<uint64_t, uint64_t> fiemap(
       SeaStoreShard &sharded_seastore,
       uint64_t off,
       uint64_t len) {
-      return sharded_seastore.fiemap(coll, oid, off, len).unsafe_get0();
+      return sharded_seastore.fiemap(coll, oid, off, len).unsafe_get();
     }
 
     bufferlist readv(
       SeaStoreShard &sharded_seastore,
       interval_set<uint64_t>&m) {
-      return sharded_seastore.readv(coll, oid, m).unsafe_get0();
+      return sharded_seastore.readv(coll, oid, m).unsafe_get();
     }
 
     void remove(
@@ -164,7 +164,7 @@ struct seastore_test_t :
       remove(t);
       sharded_seastore.do_transaction(
         coll,
-        std::move(t)).get0();
+        std::move(t)).get();
     }
 
     void set_omap(
@@ -188,7 +188,7 @@ struct seastore_test_t :
       set_omap(t, key, val);
       sharded_seastore.do_transaction(
 	coll,
-	std::move(t)).get0();
+	std::move(t)).get();
     }
 
     void write(
@@ -234,7 +234,7 @@ struct seastore_test_t :
       write(sharded_seastore, t, offset, bl);
       sharded_seastore.do_transaction(
 	coll,
-	std::move(t)).get0();
+	std::move(t)).get();
     }
 
     void clone(
@@ -246,7 +246,7 @@ struct seastore_test_t :
       t.clone(cid, oid, coid);
       sharded_seastore.do_transaction(
 	coll,
-	std::move(t)).get0();
+	std::move(t)).get();
       clone_contents[snap].reserve(contents.length());
       auto it = contents.begin();
       it.copy_all(clone_contents[snap]);
@@ -269,7 +269,7 @@ struct seastore_test_t :
       t.collection_move_rename(cid, oid, cid, other.oid);
       sharded_seastore.do_transaction(
 	coll,
-	std::move(t)).get0();
+	std::move(t)).get();
       other.contents = contents;
       other.omap = omap;
       other.clone_contents = clone_contents;
@@ -331,7 +331,7 @@ struct seastore_test_t :
       zero(sharded_seastore, t, offset, len);
       sharded_seastore.do_transaction(
         coll,
-        std::move(t)).get0();
+        std::move(t)).get();
     }
 
     void read(
@@ -349,7 +349,7 @@ struct seastore_test_t :
 	coll,
 	oid,
 	offset,
-	len).unsafe_get0();
+	len).unsafe_get();
       EXPECT_EQ(ret.length(), to_check.length());
       EXPECT_EQ(ret, to_check);
     }
@@ -357,7 +357,7 @@ struct seastore_test_t :
     void check_size(SeaStoreShard &sharded_seastore) {
       auto st = sharded_seastore.stat(
 	coll,
-	oid).get0();
+	oid).get();
       EXPECT_EQ(contents.length(), st.st_size);
     }
 
@@ -369,7 +369,7 @@ struct seastore_test_t :
       t.setattr(cid, oid, key, val);
       sharded_seastore.do_transaction(
         coll,
-        std::move(t)).get0();
+        std::move(t)).get();
     }
 
     void rm_attr(
@@ -379,7 +379,7 @@ struct seastore_test_t :
       t.rmattr(cid, oid, key);
       sharded_seastore.do_transaction(
         coll,
-        std::move(t)).get0();
+        std::move(t)).get();
     }
 
     void rm_attrs(
@@ -388,23 +388,24 @@ struct seastore_test_t :
       t.rmattrs(cid, oid);
       sharded_seastore.do_transaction(
         coll,
-        std::move(t)).get0();
+        std::move(t)).get();
     }
 
     SeaStoreShard::attrs_t get_attrs(
       SeaStoreShard &sharded_seastore) {
       return sharded_seastore.get_attrs(coll, oid)
-		     .handle_error(SeaStoreShard::get_attrs_ertr::discard_all{})
-		     .get();
+	.handle_error(
+	  SeaStoreShard::get_attrs_ertr::assert_all{"unexpected error"})
+	.get();
     }
 
     ceph::bufferlist get_attr(
       SeaStoreShard& sharded_seastore,
       std::string_view name) {
       return sharded_seastore.get_attr(coll, oid, name)
-		      .handle_error(
-			SeaStoreShard::get_attr_errorator::discard_all{})
-		      .get();
+	.handle_error(
+	  SeaStoreShard::get_attr_errorator::assert_all{"unexpected error"})
+	.get();
     }
 
     void check_omap_key(
@@ -415,7 +416,7 @@ struct seastore_test_t :
       auto result = sharded_seastore.omap_get_values(
 	coll,
 	oid,
-	to_check).unsafe_get0();
+	to_check).unsafe_get();
       if (result.empty()) {
 	EXPECT_EQ(omap.find(key), omap.end());
       } else {
@@ -435,7 +436,7 @@ struct seastore_test_t :
         auto [done, kvs] = sharded_seastore.omap_get_values(
           coll,
           oid,
-          start).unsafe_get0();
+          start).unsafe_get();
         auto iter = kvs.begin();
         while (true) {
 	  if ((done && iter == kvs.end()) && refiter == omap.end()) {
@@ -494,7 +495,7 @@ struct seastore_test_t :
         coll,
         ghobject_t(),
         ghobject_t::get_max(),
-        std::numeric_limits<uint64_t>::max()).get0();
+        std::numeric_limits<uint64_t>::max()).get();
     EXPECT_EQ(std::get<1>(ret), ghobject_t::get_max());
     EXPECT_EQ(std::get<0>(ret), oids);
   }
@@ -580,7 +581,7 @@ struct seastore_test_t :
 
       // get results from seastore
       auto [listed, next] = sharded_seastore->list_objects(
-	coll, left_bound, right_bound, limit).get0();
+	coll, left_bound, right_bound, limit).get();
 
       // compute correct answer
       auto correct_begin = std::find_if(
@@ -644,13 +645,13 @@ TEST_P(seastore_test_t, collection_create_list_remove)
   run_async([this] {
     coll_t test_coll{spg_t{pg_t{1, 0}}};
     {
-      sharded_seastore->create_new_collection(test_coll).get0();
+      sharded_seastore->create_new_collection(test_coll).get();
       {
 	CTransaction t;
 	t.create_collection(test_coll, 4);
 	do_transaction(std::move(t));
       }
-      auto colls_cores = seastore->list_collections().get0();
+      auto colls_cores = seastore->list_collections().get();
       std::vector<coll_t> colls;
       colls.resize(colls_cores.size());
       std::transform(
@@ -667,7 +668,7 @@ TEST_P(seastore_test_t, collection_create_list_remove)
 	t.remove_collection(test_coll);
 	do_transaction(std::move(t));
       }
-      auto colls_cores = seastore->list_collections().get0();
+      auto colls_cores = seastore->list_collections().get();
       std::vector<coll_t> colls;
       colls.resize(colls_cores.size());
       std::transform(

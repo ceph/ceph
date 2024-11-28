@@ -739,7 +739,8 @@ of ``K+M`` so that each chunk is stored in an OSD in the acting set. The rank of
 the chunk is stored as an attribute of the object.
 
 For instance an erasure coded pool can be created to use five OSDs (``K+M = 5``) and
-sustain the loss of two of them (``M = 2``).
+sustain the loss of two of them (``M = 2``). Data may be unavailable until (``K+1``)
+shards are restored.
 
 Reading and Writing Encoded Chunks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1214,7 +1215,7 @@ exemplary implementations.
 Summary
 -------
 
-Ceph Storage Clusters are dynamic--like a living organism. Whereas, many storage
+Ceph Storage Clusters are dynamic--like a living organism. Although many storage
 appliances do not fully utilize the CPU and RAM of a typical commodity server,
 Ceph does. From heartbeats, to  peering, to rebalancing the cluster or
 recovering from faults,  Ceph offloads work from clients (and from a centralized

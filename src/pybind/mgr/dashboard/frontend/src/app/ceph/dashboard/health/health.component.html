@@ -18,14 +18,7 @@
                   *ngIf="healthData.health?.status">
       <ng-container *ngIf="healthData.health?.checks?.length > 0">
         <ng-template #healthChecks>
-          <ng-container *ngTemplateOutlet="logsLink"></ng-container>
-          <ul>
-            <li *ngFor="let check of healthData.health.checks">
-              <span [ngStyle]="check.severity | healthColor"
-                    [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
-              {{ check.type }}</span>: {{ check.summary.message }}
-            </li>
-          </ul>
+          <cd-health-checks [healthData]="healthData"></cd-health-checks>
         </ng-template>
         <div class="info-card-content-clickable"
              [ngStyle]="healthData.health.status | healthColor"

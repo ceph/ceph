@@ -49,7 +49,9 @@ export class ServicesPageHelper extends PageHelper {
       switch (serviceType) {
         case 'rgw':
           cy.get('#service_id').type('foo');
-          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(String(count));
+          unmanaged
+            ? cy.get('label[for=unmanaged]').click()
+            : cy.get('#count').clear().type(String(count));
           break;
 
         case 'ingress':
@@ -65,7 +67,18 @@ export class ServicesPageHelper extends PageHelper {
 
         case 'nfs':
           cy.get('#service_id').type('testnfs');
-          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(String(count));
+          unmanaged
+            ? cy.get('label[for=unmanaged]').click()
+            : cy.get('#count').clear().type(String(count));
+          break;
+
+        case 'smb':
+          cy.get('#service_id').type('testsmb');
+          unmanaged
+            ? cy.get('label[for=unmanaged]').click()
+            : cy.get('#count').clear().type(String(count));
+          cy.get('#cluster_id').type('cluster_foo');
+          cy.get('#config_uri').type('rados://.smb/foo/scc.toml');
           break;
 
         case 'snmp-gateway':
@@ -89,7 +102,9 @@ export class ServicesPageHelper extends PageHelper {
 
         default:
           cy.get('#service_id').type('test');
-          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(String(count));
+          unmanaged
+            ? cy.get('label[for=unmanaged]').click()
+            : cy.get('#count').clear().type(String(count));
           break;
       }
       if (serviceType === 'snmp-gateway') {

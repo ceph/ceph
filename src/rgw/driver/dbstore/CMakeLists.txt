@@ -29,7 +29,7 @@ target_include_directories(dbstore_lib
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/store/rados"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
-set(link_targets spawn)
+set(link_targets Boost::context)
 if(WITH_JAEGER)
   list(APPEND link_targets jaeger_base)
 endif()

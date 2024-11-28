@@ -20,16 +20,18 @@ Complete General Prerequisites
 Go through the prerequisites required by both, kernel as well as FUSE mounts,
 in `Mount CephFS: Prerequisites`_ page.
 
-Is mount helper is present?
----------------------------
+Is mount helper present?
+------------------------
 ``mount.ceph`` helper is installed by Ceph packages. The helper passes the
-monitor address(es) and CephX user keyrings automatically saving the Ceph
-admin the effort to pass these details explicitly while mounting CephFS. In
-case the helper is not present on the client machine, CephFS can still be
-mounted using kernel but by passing these details explicitly to the ``mount``
-command. To check whether it is present on your system, do::
+monitor address(es) and CephX user keyrings, saving the Ceph admin the effort
+of passing these details explicitly while mounting CephFS. If the helper is not
+present on the client machine, CephFS can still be mounted using the kernel
+driver, but only by passing these details explicitly to the ``mount`` command.
+To check whether ``mount.ceph`` is present on your system, run the following command:
 
-    stat /sbin/mount.ceph
+.. prompt:: bash #
+
+   stat /sbin/mount.ceph
 
 Which Kernel Version?
 ---------------------

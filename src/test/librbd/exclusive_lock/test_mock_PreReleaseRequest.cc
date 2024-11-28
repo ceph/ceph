@@ -70,8 +70,6 @@ using ::testing::Return;
 using ::testing::StrEq;
 using ::testing::WithArg;
 
-static const std::string TEST_COOKIE("auto 123");
-
 class TestMockExclusiveLockPreReleaseRequest : public TestMockFixture {
 public:
   typedef ImageDispatch<MockTestImageCtx> MockImageDispatch;

@@ -79,7 +79,7 @@ describe('BreadcrumbsComponent', () => {
     tick();
     expect(component.crumbs).toEqual([
       { path: null, text: 'Cluster' },
-      { path: '/hosts', text: 'Hosts' }
+      { path: '/hosts', text: 'Hosts', disableSplit: false }
     ]);
   }));
 
@@ -125,9 +125,9 @@ describe('BreadcrumbsComponent', () => {
     });
     tick();
     expect(component.crumbs).toEqual([
-      { path: null, text: 'Block' },
-      { path: '/block/rbd', text: 'Images' },
-      { path: '/block/rbd/add', text: 'Add' }
+      { path: null, text: 'Block', disableSplit: false },
+      { path: '/block/rbd', text: 'Images', disableSplit: false },
+      { path: '/block/rbd/add', text: 'Add', disableSplit: false }
     ]);
   }));
 

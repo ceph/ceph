@@ -60,5 +60,24 @@ export enum CellTemplate {
   This template truncates a path to a shorter format and shows the whole path in a tooltip
   eg: /var/lib/ceph/osd/ceph-0 -> /var/.../ceph-0
   */
-  path = 'path'
+  path = 'path',
+  /*
+  This template is used to attach tooltip to the given column value
+  // {
+  //   ...
+  //   cellTransformation: CellTemplate.tooltip,
+  //   customTemplateConfig: {
+  //     map?: {
+  //       [key: any]: { class?: string, tooltip: string }
+  //     }
+  //  }
+  */
+  tooltip = 'tooltip',
+  /*
+  This template is used to attach copy to clipboard functionality to the given column value
+  // {
+  //   ...
+  //   cellTransformation: CellTemplate.copy,
+  */
+  copy = 'copy'
 }

@@ -1967,12 +1967,14 @@ namespace rgw {
       RGWCompressionInfo cs_info;
       cs_info.compression_type = plugin->get_type_name();
       cs_info.orig_size = state->obj_size;
+      cs_info.compressor_message = compressor->get_compressor_message();
       cs_info.blocks = std::move(compressor->get_compression_blocks());
       encode(cs_info, tmp);
       attrs[RGW_ATTR_COMPRESSION] = tmp;
       ldpp_dout(this, 20) << "storing " << RGW_ATTR_COMPRESSION
 			<< " with type=" << cs_info.compression_type
 			<< ", orig_size=" << cs_info.orig_size
+			<< ", compressor_message=" << cs_info.compressor_message
 			<< ", blocks=" << cs_info.blocks.size() << dendl;
     }
 

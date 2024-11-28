@@ -26,6 +26,7 @@ describe('RgwOverviewDashboardComponent', () => {
     server_hostname: 'ceph',
     realm_name: 'realm1',
     zonegroup_name: 'zg1-realm1',
+    zonegroup_id: 'zg1-id',
     zone_name: 'zone1-zg1-realm1',
     default: true,
     port: 80

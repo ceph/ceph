@@ -23,6 +23,9 @@ class JournalTrimmer;
 class Journal {
 public:
   virtual JournalTrimmer &get_trimmer() = 0;
+
+  virtual writer_stats_t get_writer_stats() const = 0;
+
   /**
    * initializes journal for mkfs writes -- must run prior to calls
    * to submit_record.
@@ -103,7 +106,9 @@ public:
 
   virtual ~Journal() {}
 
-  virtual journal_type_t get_type() = 0;
+  virtual backend_type_t get_type() = 0;
+
+  virtual bool is_checksum_needed() = 0; 
 };
 using JournalRef = std::unique_ptr<Journal>;
 

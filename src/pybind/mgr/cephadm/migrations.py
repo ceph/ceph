@@ -14,7 +14,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 6
+LAST_MIGRATION = 7
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,10 @@ class Migrations:
         if self.mgr.migration_current == 5:
             if self.migrate_5_6():
                 self.set(6)
+
+        if self.mgr.migration_current == 6:
+            if self.migrate_6_7():
+                self.set(7)
 
     def migrate_0_1(self) -> bool:
         """
@@ -408,6 +412,60 @@ class Migrations:
             else:
                 logger.info(f"No Migration is needed for rgw spec: {spec}")
         self.rgw_migration_queue = []
+        return True
+
+    def migrate_6_7(self) -> bool:
+        # start by placing certs/keys from rgw, iscsi, and ingress specs into cert store
+        for spec in self.mgr.spec_store.all_specs.values():
+            if spec.service_type in ['rgw', 'ingress', 'iscsi']:
+                logger.info(f'Migrating certs/keys for {spec.service_name()} spec to cert store')
+                self.mgr.spec_store._save_certs_and_keys(spec)
+
+        # Migrate service discovery and agent endpoint certs
+        # These constants were taken from where these certs were
+        # originally generated and should be the location they
+        # were store at prior to the cert store
+        KV_STORE_AGENT_ROOT_CERT = 'cephadm_agent/root/cert'
+        KV_STORE_AGENT_ROOT_KEY = 'cephadm_agent/root/key'
+        KV_STORE_SD_ROOT_CERT = 'service_discovery/root/cert'
+        KV_STORE_SD_ROOT_KEY = 'service_discovery/root/key'
+
+        agent_endpoint_cert = self.mgr.get_store(KV_STORE_AGENT_ROOT_CERT)
+        if agent_endpoint_cert:
+            logger.info('Migrating agent root cert to cert store')
+            self.mgr.cert_key_store.save_cert('agent_endpoint_root_cert', agent_endpoint_cert)
+        agent_endpoint_key = self.mgr.get_store(KV_STORE_AGENT_ROOT_KEY)
+        if agent_endpoint_key:
+            logger.info('Migrating agent root key to cert store')
+            self.mgr.cert_key_store.save_key('agent_endpoint_key', agent_endpoint_key)
+        service_discovery_cert = self.mgr.get_store(KV_STORE_SD_ROOT_CERT)
+        if service_discovery_cert:
+            logger.info('Migrating service discovery cert to cert store')
+            self.mgr.cert_key_store.save_cert('service_discovery_root_cert', service_discovery_cert)
+        service_discovery_key = self.mgr.get_store(KV_STORE_SD_ROOT_KEY)
+        if service_discovery_key:
+            logger.info('Migrating service discovery key to cert store')
+            self.mgr.cert_key_store.save_key('service_discovery_key', service_discovery_key)
+
+        # grafana certs are stored based on the host they are placed on
+        for grafana_daemon in self.mgr.cache.get_daemons_by_type('grafana'):
+            logger.info(f'Checking for cert/key for {grafana_daemon.name()}')
+            hostname = grafana_daemon.hostname
+            assert hostname is not None  # for mypy
+            grafana_cert_path = f'{hostname}/grafana_crt'
+            grafana_key_path = f'{hostname}/grafana_key'
+            grafana_cert = self.mgr.get_store(grafana_cert_path)
+            if grafana_cert:
+                logger.info(f'Migrating {grafana_daemon.name()} cert to cert store')
+                self.mgr.cert_key_store.save_cert('grafana_cert', grafana_cert, host=hostname)
+            grafana_key = self.mgr.get_store(grafana_key_path)
+            if grafana_key:
+                logger.info(f'Migrating {grafana_daemon.name()} key to cert store')
+                self.mgr.cert_key_store.save_key('grafana_key', grafana_key, host=hostname)
+
+        # NOTE: prometheus, alertmanager, and node-exporter certs were not stored
+        # and appeared to just be generated at daemon deploy time if secure_monitoring_stack
+        # was set to true. Therefore we have nothing to migrate for those daemons
         return True
 
 

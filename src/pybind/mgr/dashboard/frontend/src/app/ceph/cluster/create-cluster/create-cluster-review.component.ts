@@ -23,6 +23,8 @@ export class CreateClusterReviewComponent implements OnInit {
   services: Array<CephServiceSpec> = [];
   totalCPUs = 0;
   totalMemory = 0;
+  deploymentDescText: string;
+  isSimpleDeployment = true;
 
   constructor(
     public wizardStepsService: WizardStepsService,
@@ -40,6 +42,7 @@ export class CreateClusterReviewComponent implements OnInit {
     let dbDevices = 0;
     let dbDeviceCapacity = 0;
 
+    this.isSimpleDeployment = this.osdService.isDeployementModeSimple;
     const hostContext = new CdTableFetchDataContext(() => undefined);
     this.hostService.list(hostContext.toParams(), 'true').subscribe((resp: object[]) => {
       this.hosts = resp;
@@ -65,6 +68,21 @@ export class CreateClusterReviewComponent implements OnInit {
     if (this.osdService.osdDevices['db']) {
       dbDevices = this.osdService.osdDevices['db']?.length;
       dbDeviceCapacity = this.osdService.osdDevices['db']['capacity'];
+    }
+
+    if (this.isSimpleDeployment) {
+      this.osdService.getDeploymentOptions().subscribe((optionsObj) => {
+        if (!_.isEmpty(optionsObj)) {
+          Object.keys(optionsObj.options).forEach((option) => {
+            if (
+              this.osdService.selectedFormValues &&
+              this.osdService.selectedFormValues.get('deploymentOption').value === option
+            ) {
+              this.deploymentDescText = optionsObj.options[option].desc;
+            }
+          });
+        }
+      });
     }
 
     this.totalDevices = dataDevices + walDevices + dbDevices;

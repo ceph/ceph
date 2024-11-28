@@ -101,7 +101,7 @@ class MDSDaemon : public Dispatcher {
     const cmdmap_t& cmdmap,
     Formatter *f,
     const bufferlist &inbl,
-    std::function<void(int,const std::string&,bufferlist&)> on_finish);
+    asok_finisher on_finish);
 
   void dump_status(Formatter *f);
 
@@ -146,7 +146,7 @@ class MDSDaemon : public Dispatcher {
 
  private:
   bool ms_dispatch2(const ref_t<Message> &m) override;
-  int ms_handle_fast_authentication(Connection *con) override;
+  bool ms_handle_fast_authentication(Connection *con) override;
   void ms_handle_accept(Connection *con) override;
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;

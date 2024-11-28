@@ -6,7 +6,7 @@ import { of as observableOf } from 'rxjs';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CdValidators, DUE_TIMER } from '~/app/shared/forms/cd-validators';
 import { FormHelper } from '~/testing/unit-test-helper';
 
 let mockBucketExists = observableOf(true);
@@ -771,7 +771,7 @@ describe('CdValidators', () => {
   describe('bucket', () => {
     const testValidator = (name: string, valid: boolean, expectedError?: string) => {
       formHelper.setValue('x', name, true);
-      tick();
+      tick(DUE_TIMER);
       if (valid) {
         formHelper.expectValid('x');
       } else {

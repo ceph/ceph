@@ -6,7 +6,8 @@ set -e
 # if defined, debug messages will be displayed and prepended with the string
 # debug="DEBUG"
 
-huge_size=5100 # in megabytes
+#huge_size=5100 # in megabytes
+huge_size=51 # in megabytes
 big_size=7 # in megabytes
 
 huge_obj=/tmp/huge_obj.temp.$$
@@ -375,6 +376,95 @@ for f in $(seq 5 5) ;do
 done
 
 mys3cmd rb --recursive s3://$o_bkt
+
+############################################################
+# copy multipart objects and delete destination
+
+o_bkt="orig-mp-bkt-5"
+d_bkt="copy-mp-bkt-5"
+
+mys3cmd mb s3://$o_bkt
+
+for f in $(seq 2) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${o_bkt}/$dest_obj
+done
+
+mys3cmd mb s3://$d_bkt
+
+mys3cmd cp s3://${o_bkt}/orig-multipart-obj-1 \
+	s3://${d_bkt}/copied-multipart-obj-1
+
+for f in $(seq 5 5) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${d_bkt}/$dest_obj
+done
+
+mys3cmd rb --recursive s3://$d_bkt
+
+#####################################################################
+# FORCE GARBAGE COLLECTION
+sleep 6 # since for testing age at which gc can happen is 5 secs
+radosgw-admin gc process --include-all
+#####################################################################
+
+############################################################
+# copy multipart objects and delete original then destination
+
+o_bkt="orig-mp-bkt-6"
+d_bkt="copy-mp-bkt-6"
+
+mys3cmd mb s3://$o_bkt
+
+for f in $(seq 2) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${o_bkt}/$dest_obj
+done
+
+mys3cmd mb s3://$d_bkt
+
+mys3cmd cp s3://${o_bkt}/orig-multipart-obj-1 \
+	s3://${d_bkt}/copied-multipart-obj-1
+
+for f in $(seq 5 5) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${d_bkt}/$dest_obj
+done
+
+mys3cmd rb --recursive s3://$o_bkt
+mys3cmd rb --recursive s3://$d_bkt
+
+############################################################
+# copy multipart objects and delete destination then original
+
+o_bkt="orig-mp-bkt-7"
+d_bkt="copy-mp-bkt-7"
+
+mys3cmd mb s3://$o_bkt
+
+for f in $(seq 2) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${o_bkt}/$dest_obj
+done
+
+mys3cmd mb s3://$d_bkt
+
+mys3cmd cp s3://${o_bkt}/orig-multipart-obj-1 \
+	s3://${d_bkt}/copied-multipart-obj-1
+
+for f in $(seq 5 5) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${d_bkt}/$dest_obj
+done
+
+mys3cmd rb --recursive s3://$d_bkt
+mys3cmd rb --recursive s3://$o_bkt
+
+#####################################################################
+# FORCE GARBAGE COLLECTION
+sleep 6 # since for testing age at which gc can happen is 5 secs
+radosgw-admin gc process --include-all
+#####################################################################
 
 ########################################################################
 # SWIFT TESTS

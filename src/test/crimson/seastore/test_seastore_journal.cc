@@ -32,7 +32,7 @@ struct record_validator_t {
     for (auto &&block : record.extents) {
       auto test = manager.read(
 	record_final_offset.add_relative(addr),
-	block.bl.length()).unsafe_get0();
+	block.bl.length()).unsafe_get();
       addr = addr.add_offset(block.bl.length());
       bufferlist bl;
       bl.push_back(test);
@@ -93,6 +93,12 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
   journal_seq_t get_journal_head() const final { return dummy_tail; }
 
   void set_journal_head(journal_seq_t) final {}
+
+  segment_seq_t get_journal_head_sequence() const final {
+    return NULL_SEG_SEQ;
+  }
+
+  void set_journal_head_sequence(segment_seq_t) final {}
 
   journal_seq_t get_dirty_tail() const final { return dummy_tail; }
 
@@ -158,9 +164,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
     }).safe_then([this](auto) {
       dummy_tail = journal_seq_t{0,
         paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0)};
-    }, crimson::ct_error::all_same_way([] {
-      ASSERT_FALSE("Unable to mount");
-    }));
+    }, crimson::ct_error::assert_all{"Unable to mount"});
   }
 
   seastar::future<> tear_down_fut() final {
@@ -170,9 +174,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
       sms.reset();
       journal.reset();
     }).handle_error(
-      crimson::ct_error::all_same_way([](auto e) {
-        ASSERT_FALSE("Unable to close");
-      })
+      crimson::ct_error::assert_all{"Unable to close"}
     );
   }
 
@@ -220,7 +222,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 	}
 	return Journal::replay_ertr::make_ready_future<
 	  std::pair<bool, CachedExtentRef>>(true, nullptr);
-      }).unsafe_get0();
+      }).unsafe_get();
     ASSERT_EQ(record_iter, records.end());
     for (auto &i : records) {
       i.validate(*segment_manager);
@@ -234,7 +236,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
     OrderingHandle handle = get_dummy_ordering_handle();
     auto [addr, _] = journal->submit_record(
       std::move(record),
-      handle).unsafe_get0();
+      handle).unsafe_get();
     records.back().record_final_offset = addr;
     return addr;
   }

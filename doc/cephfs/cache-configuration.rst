@@ -209,3 +209,70 @@ cache. The limit is configured via:
 
 It is not recommended to set this value above 5M but it may be helpful with
 some workloads.
+
+
+Dealing with "clients failing to respond to cache pressure" messages
+--------------------------------------------------------------------
+
+Every second (or every interval set by the ``mds_cache_trim_interval``
+configuration paramater), the MDS runs the "cache trim" procedure. One of the
+steps of this procedure is "recall client state". During this step, the MDS
+checks every client (session) to determine whether it needs to recall caps.
+If any of the following are true, then the MDS needs to recall caps:
+
+1. the cache is full (the ``mds_cache_memory_limit`` has been exceeded) and
+   needs some inodes to be released
+2. the client exceeds ``mds_max_caps_per_client`` (1M by default)
+3. the client is inactive
+
+To determine whether a client (a session) is inactive, the session's
+``cache_liveness`` parameters is checked and compared with the value::
+
+   (num_caps >> mds_session_cache_liveness_magnitude)
+
+where ``mds_session_cache_liveness_magnitude`` is a config param (``10`` by
+default). If ``cache_liveness`` is smaller than this calculated value, the
+session is considered inactive and the MDS sends a "recall caps" request for
+all cached caps (the actual recall value is ``num_caps -
+mds_min_caps_per_client(100)``).
+
+Under certain circumstances, many "recall caps" requests can be sent so quickly
+that the health warning is generated: "clients failing to respond to cache
+pressure". If the client does not release the caps fast enough, the MDS repeats
+the "recall caps" request one second later.  This means that the MDS will send
+"recall caps" again and again. The "total" counter of "recall caps" for the
+session will grow and grow, and will eventually exceed the "mon warning limit".
+
+A throttling mechanism, controlled by the ``mds_recall_max_decay_threshold``
+parameter (126K by default), is available for reducing the rate of "recall
+caps" counter growth, but sometimes it is not enough to slow the "recall caps"
+counter's growth rate. If altering the ``mds_recall_max_decay_threshold`` value
+does not sufficiently reduce the rate of the "recall caps" counter's growth,
+decrease ``mds_recall_max_caps`` incrementally until the "clients failing to
+respond to cache pressure" messages no longer appear in the logs.
+
+Example Scenario
+~~~~~~~~~~~~~~~~
+
+Here is an example. A client is having 20k caps cached. At some moment the
+server decides the client is inactive (because the session's ``cache_liveness``
+value is low). It starts to ask the client to release caps down to
+``mds_min_caps_per_client`` value (100 by default). Every second, it
+sends recall_caps asking to release ``caps_num - mds_min_caps_per_client`` caps
+(but not more than ``mds_recall_max_caps``, which is 30k by default). A client
+is starting to release, but is releasing with a rate of (for example) only 100
+caps per second.
+
+So in the first second of time, the mds sends recall_caps = 20k - 100 the
+second second recall_caps = (20k - 100) - 100 the third second recall_caps =
+(20k - 200) - 100 and so on. And every time it sends recall_caps it updates the
+session's recall_caps value, which is calculated  how many recall_caps sent in
+the last minute. I.e. the counter is growing quickly, eventually exceeding
+mds_recall_warning_threshold, which is 128K by default, and ceph starts to
+report "failing to respond to cache pressure" warning in the status.  Now,
+after we set mds_recall_max_caps to 3K, in this situation the mds server sends
+only 3K recall_caps per second, and the maximum value the session's recall_caps
+value may have (if the mds is sending 3K every second for at least one minute)
+is 60 * 3K = 180K. This means that it is still possible to achieve
+``mds_recall_warning_threshold`` but only if a client does not "respond" for a
+long time, and as your experiments show it is not the case.

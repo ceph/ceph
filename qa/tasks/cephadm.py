@@ -208,7 +208,10 @@ def normalize_hostnames(ctx):
 def download_cephadm(ctx, config, ref):
     cluster_name = config['cluster']
 
-    if config.get('cephadm_mode') != 'cephadm-package':
+    if 'cephadm_binary_url' in config:
+        url = config['cephadm_binary_url']
+        _download_cephadm(ctx, url)
+    elif config.get('cephadm_mode') != 'cephadm-package':
         if ctx.config.get('redhat'):
             _fetch_cephadm_from_rpm(ctx)
         # TODO: come up with a sensible way to detect if we need an "old, uncompiled"
@@ -316,28 +319,8 @@ def _fetch_cephadm_from_chachra(ctx, config, cluster_name):
             sha1=sha1,
     )
     log.info("Discovered cachra url: %s", url)
-    ctx.cluster.run(
-        args=[
-            'curl', '--silent', '-L', url,
-            run.Raw('>'),
-            ctx.cephadm,
-            run.Raw('&&'),
-            'ls', '-l',
-            ctx.cephadm,
-        ],
-    )
+    _download_cephadm(ctx, url)
 
-    # sanity-check the resulting file and set executable bit
-    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
-    ctx.cluster.run(
-        args=[
-            'test', '-s', ctx.cephadm,
-            run.Raw('&&'),
-            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
-            run.Raw('&&'),
-            'chmod', '+x', ctx.cephadm,
-        ],
-    )
 
 def _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name):
     branch = config.get('compiled_cephadm_branch', 'reef')
@@ -365,6 +348,11 @@ def _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name):
             branch=branch,
     )
     log.info("Discovered cachra url: %s", url)
+    _download_cephadm(ctx, url)
+
+
+def _download_cephadm(ctx, url):
+    log.info("Downloading cephadm from url: %s", url)
     ctx.cluster.run(
         args=[
             'curl', '--silent', '-L', url,
@@ -576,22 +564,31 @@ def ceph_crash(ctx, config):
 def pull_image(ctx, config):
     cluster_name = config['cluster']
     log.info(f'Pulling image {ctx.ceph[cluster_name].image} on all hosts...')
-    run.wait(
-        ctx.cluster.run(
-            args=[
-                'sudo',
-                ctx.cephadm,
-                '--image', ctx.ceph[cluster_name].image,
-                'pull',
-            ],
-            wait=False,
-        )
-    )
+    cmd = [
+        'sudo',
+        ctx.cephadm,
+        '--image',
+        ctx.ceph[cluster_name].image,
+        'pull',
+    ]
+    if config.get('registry-login'):
+        registry = config['registry-login']
+        login_cmd = [
+            'sudo',
+            ctx.cephadm,
+            'registry-login',
+            '--registry-url', registry['url'],
+            '--registry-username', registry['username'],
+            '--registry-password', registry['password'],
+        ]
+        cmd = login_cmd + [run.Raw('&&')] + cmd
+    run.wait(ctx.cluster.run(args=cmd, wait=False))
 
     try:
         yield
     finally:
         pass
+
 
 @contextlib.contextmanager
 def setup_ca_signed_keys(ctx, config):
@@ -1083,8 +1080,18 @@ def ceph_osds(ctx, config):
                 short_dev = dev
             log.info('Deploying %s on %s with %s...' % (
                 osd, remote.shortname, dev))
-            _shell(ctx, cluster_name, remote, [
-                'ceph-volume', 'lvm', 'zap', dev])
+            remote.run(
+                args=[
+                    'sudo',
+                    ctx.cephadm,
+                    '--image', ctx.ceph[cluster_name].image,
+                    'ceph-volume',
+                    '-c', '/etc/ceph/{}.conf'.format(cluster_name),
+                    '-k', '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+                    '--fsid', ctx.ceph[cluster_name].fsid,
+                    '--', 'lvm', 'zap', dev
+                ]
+            )
             add_osd_args = ['ceph', 'orch', 'daemon', 'add', 'osd',
                             remote.shortname + ':' + short_dev]
             osd_method = config.get('osd_method')
@@ -1721,22 +1728,11 @@ def crush_setup(ctx, config):
 def create_rbd_pool(ctx, config):
     if config.get('create_rbd_pool', False):
       cluster_name = config['cluster']
-      log.info('Waiting for OSDs to come up')
-      teuthology.wait_until_osds_up(
-          ctx,
-          cluster=ctx.cluster,
-          remote=ctx.ceph[cluster_name].bootstrap_remote,
-          ceph_cluster=cluster_name,
-      )
       log.info('Creating RBD pool')
       _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
-          args=['sudo', 'ceph', '--cluster', cluster_name,
-                'osd', 'pool', 'create', 'rbd', '8'])
+          args=['ceph', 'osd', 'pool', 'create', 'rbd', '8'])
       _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
-          args=['sudo', 'ceph', '--cluster', cluster_name,
-                'osd', 'pool', 'application', 'enable',
-                'rbd', 'rbd', '--yes-i-really-mean-it'
-          ])
+          args=['rbd', 'pool', 'init', 'rbd'])
     yield
 
 

@@ -109,12 +109,12 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
 
         calls = [call('HARDWARE_STORAGE',
                       count=2,
-                      detail=['disk.bay.0:enclosure.internal.0-1:raid.integrated.1-1 is critical: Enabled',
-                              'disk.bay.9:enclosure.internal.0-1 is critical: Enabled'],
+                      detail=['[1]: disk.bay.0:enclosure.internal.0-1:raid.integrated.1-1 is critical: Enabled',
+                              '[1]: disk.bay.9:enclosure.internal.0-1 is critical: Enabled'],
                       summary='2 storage members are not ok'),
                  call('HARDWARE_MEMORY',
                       count=1,
-                      detail=['dimm.socket.a1 is critical: Enabled'],
+                      detail=['[1]: dimm.socket.a1 is critical: Enabled'],
                       summary='1 memory member is not ok')]
 
         assert TestNodeProxyEndpoint.mgr.set_health_warning.mock_calls == calls

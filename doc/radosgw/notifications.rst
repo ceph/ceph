@@ -61,9 +61,15 @@ Asynchronous Notifications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Notifications can be sent asynchronously. They are committed into persistent
-storage and then asynchronously sent to the topic's configured endpoint. In
-this case, the only latency added to the original operation is the latency
+storage and then asynchronously sent to the topic's configured endpoint.
+The notification will be committed to persistent storage only if the triggering
+operation was successful.
+In this case, the only latency added to the original operation is the latency
 added when the notification is committed to persistent storage.
+If the endpoint of the topic to which the notification is sent is not available for a long
+period of time, the persistent storage allocated for this topic will eventually fill up.
+When this happens the triggering operations will fail with ``503 Service Unavailable``, 
+which tells the client that it may retry later.
 
 .. note:: If the notification fails with an error, cannot be delivered, or
    times out, it is retried until it is successfully acknowledged.
@@ -97,6 +103,18 @@ Remove a topic by running the following command:
 .. prompt:: bash #
 
    radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
+
+Fetch persistent topic stats (i.e. reservations, entries and size) by running the following command: 
+
+.. prompt:: bash #
+
+   radosgw-admin topic stats --topic={topic-name} [--tenant={tenant}]
+
+Dump (in JSON format) all pending bucket notifications of a persistent topic by running the following command: 
+
+.. prompt:: bash #
+
+   radosgw-admin topic dump --topic={topic-name} [--tenant={tenant}] [--max-entries={max-entries}]
 
 
 Notification Performance Statistics

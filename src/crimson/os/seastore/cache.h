@@ -246,6 +246,9 @@ public:
   retire_extent_ret retire_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
+  void retire_absent_extent_addr(
+    Transaction &t, paddr_t addr, extent_len_t length);
+
   /**
    * get_root
    *
@@ -450,6 +453,15 @@ public:
     assert(extent);
     auto view = extent->get_transactional_view(t);
     return view->is_stable();
+  }
+
+  bool is_viewable_extent_data_stable(
+    Transaction &t,
+    CachedExtentRef extent)
+  {
+    assert(extent);
+    auto view = extent->get_transactional_view(t);
+    return view->is_data_stable();
   }
 
   using get_extent_ertr = base_ertr;
@@ -918,7 +930,7 @@ public:
     paddr_t remap_paddr,
     extent_len_t remap_length,
     laddr_t original_laddr,
-    std::optional<ceph::bufferptr> &&original_bptr) {
+    std::optional<ceph::bufferptr> &original_bptr) {
     LOG_PREFIX(Cache::alloc_remapped_extent);
     assert(remap_laddr >= original_laddr);
     TCachedExtentRef<T> ext;
@@ -941,10 +953,12 @@ public:
 	      NULL_GENERATION,
               t.get_trans_id());
 
+    auto extent = ext->template cast<T>();
+    extent->set_laddr(remap_laddr);
     t.add_fresh_extent(ext);
     SUBTRACET(seastore_cache, "allocated {} {}B, hint={}, has ptr? {} -- {}",
-      t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *ext);
-    return ext;
+      t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *extent);
+    return extent;
   }
 
   /**
@@ -1502,9 +1516,6 @@ private:
     }
   };
 
-  template <typename CounterT>
-  using counter_by_src_t = std::array<CounterT, TRANSACTION_TYPE_MAX>;
-
   static constexpr std::size_t NUM_SRC_COMB =
       TRANSACTION_TYPE_MAX * (TRANSACTION_TYPE_MAX + 1) / 2;
 
@@ -1542,14 +1553,6 @@ private:
     version_stat_t committed_dirty_version;
     version_stat_t committed_reclaim_version;
   } stats;
-
-  template <typename CounterT>
-  CounterT& get_by_src(
-      counter_by_src_t<CounterT>& counters_by_src,
-      Transaction::src_t src) {
-    assert(static_cast<std::size_t>(src) < counters_by_src.size());
-    return counters_by_src[static_cast<std::size_t>(src)];
-  }
 
   template <typename CounterT>
   CounterT& get_by_ext(
@@ -1648,7 +1651,7 @@ private:
       extent->get_length(),
       extent->get_bptr()
     ).safe_then(
-      [extent=std::move(extent)]() mutable {
+      [extent=std::move(extent), this]() mutable {
         LOG_PREFIX(Cache::read_extent);
 	if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
 	  extent->state = CachedExtent::extent_state_t::CLEAN;
@@ -1659,7 +1662,11 @@ private:
 	if (extent->is_valid()) {
 	  // crc will be checked against LBA leaf entry for logical extents,
 	  // or check against in-extent crc for physical extents.
-	  extent->last_committed_crc = extent->calc_crc32c();
+	  if (epm.get_checksum_needed(extent->get_paddr())) {
+	    extent->last_committed_crc = extent->calc_crc32c();
+	  } else {
+	    extent->last_committed_crc = CRC_NULL;
+	  }
 	  extent->on_clean_read();
 	}
         extent->complete_io();

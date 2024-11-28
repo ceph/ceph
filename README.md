@@ -45,19 +45,21 @@ out the git submodules associated with it:
 
 ## Build Prerequisites
 
-*section last updated 27 Jul 2023*
+*section last updated 06 Sep 2024*
 
-Make sure that ``curl`` is installed. The Debian and Ubuntu ``apt`` command is
-provided here, but if you use a system with a different package manager, then
-you must use whatever command is the proper counterpart of this one:
+We provide the Debian and Ubuntu ``apt`` commands in this procedure. If you use
+a system with a different package manager, then you will have to use different
+commands. 
+
+#. Install ``curl``:
 
     apt install curl
 
-Install Debian or RPM package dependencies by running the following command:
+#. Install package dependencies by running the ``install-deps.sh`` script:
 
 	./install-deps.sh
 
-Install the ``python3-routes`` package:
+#. Install the ``python3-routes`` package:
 
     apt install python3-routes
 
@@ -70,44 +72,56 @@ we recommend that you build `.deb` or `.rpm` packages, or refer to
 ``ceph.spec.in`` or ``debian/rules`` to see which configuration options are
 specified for production builds.
 
-To build Ceph, make sure that you are in the top-level `ceph` directory that
-contains `do_cmake.sh` and `CONTRIBUTING.rst` and run the following commands:
+To build Ceph, follow this procedure: 
 
-	./do_cmake.sh
-	cd build
-	ninja
+1. Make sure that you are in the top-level `ceph` directory that
+   contains `do_cmake.sh` and `CONTRIBUTING.rst`.
+2. Run the `do_cmake.sh` script:
 
-``do_cmake.sh`` by default creates a "debug build" of Ceph, which can be up to
-five times slower than a non-debug build.  Pass
-``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` to ``do_cmake.sh`` to create a non-debug
-build.
+       ./do_cmake.sh
 
-[Ninja](https://ninja-build.org/) is the buildsystem used by the Ceph project
-to build test builds.  The number of jobs used by `ninja` is derived from the
-number of CPU cores of the building host if unspecified. Use the `-j` option to
-limit the job number if the build jobs are running out of memory. If you
-attempt to run `ninja` and receive a message that reads `g++: fatal error:
-Killed signal terminated program cc1plus`, then you have run out of memory.
-Using the `-j` option with an argument appropriate to the hardware on which the
-`ninja` command is run is expected to result in a successful build. For example,
-to limit the job number to 3, run the command `ninja -j 3`. On average, each
-`ninja` job run in parallel needs approximately 2.5 GiB of RAM.
+   ``do_cmake.sh`` by default creates a "debug build" of Ceph, which can be 
+   up to five times slower than a non-debug build. Pass 
+   ``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` to ``do_cmake.sh`` to create a 
+   non-debug build.
+3. Move into the `build` directory:
 
-This documentation assumes that your build directory is a subdirectory of the
-`ceph.git` checkout. If the build directory is located elsewhere, point
-`CEPH_GIT_DIR` to the correct path of the checkout. Additional CMake args can
-be specified by setting ARGS before invoking ``do_cmake.sh``.  See [cmake
-options](#cmake-options) for more details. For example:
+       cd build
+4. Use the `ninja` buildsystem to build the development environment:
 
-    ARGS="-DCMAKE_C_COMPILER=gcc-7" ./do_cmake.sh
+       ninja -j3
 
-To build only certain targets, run a command of the following form:
+   > [IMPORTANT]
+   >
+   > [Ninja](https://ninja-build.org/) is the build system used by the Ceph
+   > project to build test builds.  The number of jobs used by `ninja` is 
+   > derived from the number of CPU cores of the building host if unspecified. 
+   > Use the `-j` option to limit the job number if build jobs are running 
+   > out of memory. If you attempt to run `ninja` and receive a message that 
+   > reads `g++: fatal error: Killed signal terminated program cc1plus`, then 
+   > you have run out of memory.
+   >
+   > Using the `-j` option with an argument appropriate to the hardware on
+   > which the `ninja` command is run is expected to result in a successful
+   > build. For example, to limit the job number to 3, run the command `ninja
+   > -j3`. On average, each `ninja` job run in parallel needs approximately
+   > 2.5 GiB of RAM.
 
-	ninja [target name]
+   This documentation assumes that your build directory is a subdirectory of
+   the `ceph.git` checkout. If the build directory is located elsewhere, point
+   `CEPH_GIT_DIR` to the correct path of the checkout. Additional CMake args 
+   can be specified by setting ARGS before invoking ``do_cmake.sh``. 
+   See [cmake options](#cmake-options) for more details. For example:
 
-To install:
+       ARGS="-DCMAKE_C_COMPILER=gcc-7" ./do_cmake.sh
 
-	ninja install
+   To build only certain targets, run a command of the following form:
+
+       ninja [target name]
+
+5. Install the vstart cluster:
+
+       ninja install
  
 ### CMake Options
 

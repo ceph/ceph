@@ -59,6 +59,8 @@ describe('CreateClusterComponent', () => {
   });
 
   it('should have project name as heading in welcome screen', () => {
+    component.startClusterCreation = true;
+    fixture.detectChanges();
     const heading = fixture.debugElement.query(By.css('h3')).nativeElement;
     expect(heading.innerHTML).toBe(`Welcome to ${projectConstants.projectName}`);
   });

@@ -2853,6 +2853,7 @@ check_clone(int clonenum, bool replay_image)
 	struct rbd_ctx cur_ctx = RBD_CTX_INIT;
 	struct stat file_info;
 	char *good_buf, *temp_buf;
+	uint64_t size;
 
         if (replay_image) {
                 replay_imagename(imagename, sizeof(imagename), clonenum);
@@ -2864,40 +2865,51 @@ check_clone(int clonenum, bool replay_image)
 		prterrcode("check_clone: ops->open", ret);
 		exit(167);
 	}
+	if ((ret = ops->get_size(&cur_ctx, &size)) < 0) {
+		prterrcode("check_clone: ops->get_size", ret);
+		exit(167);
+	}
 
 	clone_filename(filename, sizeof(filename), clonenum + 1);
 	if ((fd = open(filename, O_RDONLY | O_BINARY)) < 0) {
-		simple_err("check_clone: open", -errno);
+		prterrcode("check_clone: open", -errno);
 		exit(168);
+	}
+	if (fstat(fd, &file_info) < 0) {
+		prterrcode("check_clone: fstat", -errno);
+		exit(169);
 	}
 
 	prt("checking clone #%d, image %s against file %s\n",
 	    clonenum, imagename, filename);
-	if ((ret = fstat(fd, &file_info)) < 0) {
-		simple_err("check_clone: fstat", -errno);
-		exit(169);
+	if (size != (uint64_t)file_info.st_size) {
+		prt("check_clone: image size 0x%llx != file size 0x%llx\n",
+		    (unsigned long long)size,
+		    (unsigned long long)file_info.st_size);
+		exit(175);
 	}
 
 	good_buf = NULL;
-	ret = posix_memalign((void **)&good_buf,
-			     std::max(writebdy, (int)sizeof(void *)),
-			     file_info.st_size);
-	if (ret > 0) {
-		prterrcode("check_clone: posix_memalign(good_buf)", -ret);
-		exit(96);
-	}
-
 	temp_buf = NULL;
-	ret = posix_memalign((void **)&temp_buf,
-			     std::max(readbdy, (int)sizeof(void *)),
-			     file_info.st_size);
-	if (ret > 0) {
-		prterrcode("check_clone: posix_memalign(temp_buf)", -ret);
-		exit(97);
+	if (file_info.st_size > 0) {
+		ret = posix_memalign((void **)&good_buf,
+				     std::max(writebdy, (int)sizeof(void *)),
+				     file_info.st_size);
+		if (ret > 0) {
+			prterrcode("check_clone: posix_memalign(good_buf)", -ret);
+			exit(96);
+		}
+		ret = posix_memalign((void **)&temp_buf,
+				     std::max(readbdy, (int)sizeof(void *)),
+				     file_info.st_size);
+		if (ret > 0) {
+			prterrcode("check_clone: posix_memalign(temp_buf)", -ret);
+			exit(97);
+		}
 	}
 
-	if ((ret = pread(fd, good_buf, file_info.st_size, 0)) < 0) {
-		simple_err("check_clone: pread", -errno);
+	if (pread(fd, good_buf, file_info.st_size, 0) < 0) {
+		prterrcode("check_clone: pread", -errno);
 		exit(170);
 	}
 	if ((ret = ops->read(&cur_ctx, 0, file_info.st_size, temp_buf)) < 0) {

@@ -14,11 +14,11 @@ abstractions:
 
 * FS volumes, an abstraction for CephFS file systems
 
-* FS subvolumes, an abstraction for independent CephFS directory trees
-
 * FS subvolume groups, an abstraction for a directory level higher than FS
   subvolumes. Used to effect policies (e.g., :doc:`/cephfs/file-layouts`)
   across a set of subvolumes
+
+* FS subvolumes, an abstraction for independent CephFS directory trees
 
 Possible use-cases for the export abstractions:
 
@@ -276,7 +276,7 @@ Use a command of the following form to create a subvolume:
 
 .. prompt:: bash #
 
-   ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes>] [--group_name <subvol_group_name>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--namespace-isolated]
+   ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes>] [--group_name <subvol_group_name>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--namespace-isolated] [--earmark <earmark>]
 
 
 The command succeeds even if the subvolume already exists.
@@ -289,6 +289,15 @@ The subvolume can be created in a separate RADOS namespace by specifying the
 default subvolume group with an octal file mode of ``755``, a uid of its
 subvolume group, a gid of its subvolume group, a data pool layout of its parent
 directory, and no size limit.
+You can also assign an earmark to a subvolume using the ``--earmark`` option.
+The earmark is a unique identifier that tags the subvolume for specific purposes,
+such as NFS or SMB services. By default, no earmark is set, allowing for flexible
+assignment based on administrative needs. An empty string ("") can be used to remove
+any existing earmark from a subvolume.
+
+The earmarking mechanism ensures that subvolumes are correctly tagged and managed,
+helping to avoid conflicts and ensuring that each subvolume is associated
+with the intended service or use case.
 
 Removing a subvolume
 ~~~~~~~~~~~~~~~~~~~~
@@ -418,6 +427,7 @@ The output format is JSON and contains the following fields.
 * ``pool_namespace``: RADOS namespace of the subvolume
 * ``features``: features supported by the subvolume
 * ``state``: current state of the subvolume
+* ``earmark``: earmark of the subvolume
 
 If a subvolume has been removed but its snapshots have been retained, the
 output contains only the following fields.
@@ -521,6 +531,33 @@ subvolume using the metadata key:
 
 Using the ``--force`` flag allows the command to succeed when it would
 otherwise fail (if the metadata key did not exist).
+
+Getting earmark of a subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to get the earmark of a subvolume:
+
+.. prompt:: bash #
+
+   ceph fs subvolume earmark get <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+Setting earmark of a subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to set the earmark of a subvolume:
+
+.. prompt:: bash #
+
+   ceph fs subvolume earmark set <vol_name> <subvol_name> [--group_name <subvol_group_name>] <earmark>
+
+Removing earmark of a subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to remove the earmark of a subvolume:
+
+.. prompt:: bash #
+
+   ceph fs subvolume earmark rm <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
 Creating a Snapshot of a Subvolume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -676,7 +713,7 @@ Cloning Snapshots
 
 Subvolumes can be created by cloning subvolume snapshots. Cloning is an
 asynchronous operation that copies data from a snapshot to a subvolume. Because
-cloning is an operation that involves bulk copying, it is inefficient for
+cloning is an operation that involves bulk copying, it is slow for
 very large data sets.
 
 .. note:: Removing a snapshot (source subvolume) fails when there are
@@ -1339,6 +1376,29 @@ set with this id was present in the database
 .. prompt:: bash $ auto
 
   $ ceph fs quiesce fs1 sub1 sub2 sub3 --set-id="external-id" --if-version=0
+
+
+.. _disabling-volumes-plugin:
+
+Disabling Volumes Plugin
+------------------------
+By default the volumes plugin is enabled and set to ``always on``. However, in
+certain cases it might be appropriate to disable it. For example, when a CephFS
+is in a degraded state, the volumes plugin commands may accumulate in MGR
+instead of getting served. Which eventually causes policy throttles to kick in
+and the MGR becomes unresponsive.
+
+In this event, volumes plugin can be disabled even though it is an
+``always on`` module in MGR. To do so, run ``ceph mgr module disable volumes
+--yes-i-really-mean-it``. Do note that this command will disable operations
+and remove commands of volumes plugin since it will disable all CephFS
+services on the Ceph cluster accessed through this plugin.
+
+Before resorting to a measure as drastic as this, it is a good idea to try less
+drastic measures and then assess if the file system experience has improved due
+to it. One example of such less drastic measure is to disable asynchronous
+threads launched by volumes plugins for cloning and purging trash.
+
 
 .. _manila: https://github.com/openstack/manila
 .. _CSI: https://github.com/ceph/ceph-csi

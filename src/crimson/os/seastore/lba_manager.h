@@ -124,8 +124,7 @@ public:
    */
   virtual ref_ret decref_extent(
     Transaction &t,
-    laddr_t addr,
-    bool cascade_remove) = 0;
+    laddr_t addr) = 0;
 
   /**
    * Increments ref count on extent
@@ -136,15 +135,34 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
+  struct remap_entry {
+    extent_len_t offset;
+    extent_len_t len;
+    remap_entry(extent_len_t _offset, extent_len_t _len) {
+      offset = _offset;
+      len = _len;
+    }
+  };
+  struct lba_remap_ret_t {
+    ref_update_result_t ruret;
+    std::vector<LBAMappingRef> remapped_mappings;
+  };
+  using remap_iertr = ref_iertr;
+  using remap_ret = remap_iertr::future<lba_remap_ret_t>;
+
   /**
-   * Increments ref count on extent
+   * remap_mappings
    *
-   * @return returns resulting refcount
+   * Remap an original mapping into new ones
+   * Return the old mapping's info and new mappings
    */
-  virtual ref_ret incref_extent(
+  virtual remap_ret remap_mappings(
     Transaction &t,
-    laddr_t addr,
-    int delta) = 0;
+    LBAMappingRef orig_mapping,
+    std::vector<remap_entry> remaps,
+    std::vector<LogicalCachedExtentRef> extents  // Required if and only
+						 // if pin isn't indirect
+    ) = 0;
 
   /**
    * Should be called after replay on each cached extent.

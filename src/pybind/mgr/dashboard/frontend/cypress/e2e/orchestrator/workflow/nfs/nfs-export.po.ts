@@ -3,21 +3,18 @@ import { PageHelper } from '../../../page-helper.po';
 /* tslint:enable*/
 
 const pages = {
-  index: { url: '#/nfs', id: 'cd-nfs-list' },
-  create: { url: '#/nfs/create', id: 'cd-nfs-form' }
+  cephfs_index: { url: '#cephfs/nfs', id: 'cd-nfs-list' },
+  cephfs_create: { url: '#cephfs/nfs/create', id: 'cd-nfs-form' },
+  rgw_index: { url: '#rgw/nfs', id: 'cd-nfs-list' },
+  rgw_create: { url: '#rgw/nfs/create', id: 'cd-nfs-form' }
 };
 
 export class NFSPageHelper extends PageHelper {
   pages = pages;
-
-  @PageHelper.restrictTo(pages.create.url)
   create(backend: string, squash: string, client: object, pseudo: string, rgwPath?: string) {
     this.selectOption('cluster_id', 'testnfs');
-    // select a storage backend
-    this.selectOption('name', backend);
     if (backend === 'CephFS') {
       this.selectOption('fs_name', 'myfs');
-
       cy.get('#security_label').click({ force: true });
     } else {
       cy.get('input[data-testid=rgw_path]').type(rgwPath);
@@ -38,8 +35,8 @@ export class NFSPageHelper extends PageHelper {
     cy.get('cd-submit-button').click();
   }
 
-  editExport(pseudo: string, editPseudo: string) {
-    this.navigateEdit(pseudo);
+  editExport(pseudo: string, editPseudo: string, url: string) {
+    this.navigateEdit(pseudo, true, true, url);
 
     cy.get('input[name=pseudo]').clear().type(editPseudo);
 

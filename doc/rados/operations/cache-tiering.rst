@@ -549,6 +549,63 @@ disable and remove it.
 
       ceph osd tier remove cold-storage hot-storage
 
+Troubleshooting Unfound Objects
+===============================
+Under certain circumstances, restarting OSDs may result in unfound objects.
+
+Here is an example of unfound objects appearing during an upgrade from Ceph
+14.2.6 to Ceph 14.2.7::
+
+   2/543658058 objects unfound (0.000%)
+   pg 19.12 has 1 unfound objects
+   pg 19.2d has 1 unfound objects
+   
+   Possible data damage: 2 pgs recovery_unfound
+   pg 19.12 is active+recovery_unfound+undersized+degraded+remapped, acting [299,310], 1 unfound
+   pg 19.2d is active+recovery_unfound+undersized+degraded+remapped, acting [290,309], 1 unfound
+   
+   # ceph pg 19.12 list_unfound
+   {
+       "num_missing": 1,
+       "num_unfound": 1,
+       "objects": [
+           {
+               "oid": {
+                   "oid": "hit_set_19.12_archive_2020-02-25 13:43:50.256316Z_2020-02-25 13:43:50.325825Z",
+                   "key": "",
+                   "snapid": -2,
+                   "hash": 18,
+                   "max": 0,
+                   "pool": 19,
+                   "namespace": ".ceph-internal"
+               },
+               "need": "3312398'55868341",
+               "have": "0'0",
+               "flags": "none",
+               "locations": []
+           }
+       ],
+       "more": false
+
+Some tests in the field indicate that the unfound objects can be deleted with
+no adverse effects (see `Tracker Issue #44286, Note 3
+<https://tracker.ceph.com/issues/44286#note-3>`_). Pawel Stefanski suggests
+that deleting missing or unfound objects is safe as long as the objects are a
+part of ``.ceph-internal::hit_set_PGID_archive``.
+
+Various members of the upstream Ceph community have reported in `Tracker Issue
+#44286 <https://tracker.ceph.com/issues/44286>`_ that the following versions of
+Ceph have been affected by this issue:
+
+* 14.2.8
+* 14.2.16
+* 15.2.15
+* 16.2.5
+* 17.2.7
+
+See `Tracker Issue #44286 <https://tracker.ceph.com/issues/44286>`_ for the
+history of this issue.
+
 
 .. _Create a Pool: ../pools#create-a-pool
 .. _Pools - Set Pool Values: ../pools#set-pool-values

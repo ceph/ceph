@@ -14,8 +14,8 @@ BASIC ARCHITECTURE AND TERMINOLOGY
   Protocol. The agent is meant to be placed on the same host as the
   instrumented application. (The Jaeger agent acts like a sidecar listener.)
 * JAEGER COLLECTOR: A daemon that receives spans sent by the Jaeger agent. The
-  Jaeger collector then stitches the spans together to form a trace. (A databse
-  can be enabled to persist a database for these traces).
+  Jaeger collector then stitches the spans together to form a trace. (A database
+  can be enabled to persist these traces).
 * JAEGER QUERY AND CONSOLE FRONTEND: The UI-based frontend that presents
   reports of the jaeger traces. Accessible at  http://<jaeger frontend host>:16686.
 

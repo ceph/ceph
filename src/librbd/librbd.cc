@@ -777,9 +777,23 @@ namespace librbd {
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioctx));
     tracepoint(librbd, clone3_enter, p_ioctx.get_pool_name().c_str(), p_ioctx.get_id(), p_name, p_snap_name, c_ioctx.get_pool_name().c_str(), c_ioctx.get_id(), c_name, c_opts.opts);
-    int r = librbd::clone(p_ioctx, nullptr, p_name, p_snap_name, c_ioctx,
-                          nullptr, c_name, c_opts, "", "");
+    int r = librbd::clone(p_ioctx, nullptr, p_name, CEPH_NOSNAP, p_snap_name,
+                          c_ioctx, nullptr, c_name, c_opts, "", "");
     tracepoint(librbd, clone3_exit, r);
+    return r;
+  }
+
+  int RBD::clone4(IoCtx& p_ioctx, const char *p_name, uint64_t p_snap_id,
+		  IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioctx));
+    tracepoint(librbd, clone4_enter, p_ioctx.get_pool_name().c_str(),
+               p_ioctx.get_id(), p_name, p_snap_id,
+               c_ioctx.get_pool_name().c_str(), c_ioctx.get_id(), c_name,
+               c_opts.opts);
+    int r = librbd::clone(p_ioctx, nullptr, p_name, p_snap_id, nullptr,
+                          c_ioctx, nullptr, c_name, c_opts, "", "");
+    tracepoint(librbd, clone4_exit, r);
     return r;
   }
 
@@ -2466,8 +2480,29 @@ namespace librbd {
   int Image::snap_get_trash_namespace(uint64_t snap_id,
                                       std::string* original_name) {
     ImageCtx *ictx = (ImageCtx *)ctx;
+
+    snap_trash_namespace_t trash_snap;
+    int r = librbd::api::Snapshot<>::get_trash_namespace(ictx, snap_id,
+                                                         &trash_snap);
+    if (r < 0) {
+      return r;
+    }
+
+    *original_name = trash_snap.original_name;
+    return 0;
+  }
+
+  int Image::snap_get_trash_namespace2(
+      uint64_t snap_id, snap_trash_namespace_t *trash_snap,
+      size_t trash_snap_size) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    if (trash_snap_size != sizeof(snap_trash_namespace_t)) {
+      return -ERANGE;
+    }
+
     return librbd::api::Snapshot<>::get_trash_namespace(ictx, snap_id,
-                                                        original_name);
+                                                        trash_snap);
   }
 
   int Image::snap_get_mirror_namespace(
@@ -3961,9 +3996,27 @@ extern "C" int rbd_clone3(rados_ioctx_t p_ioctx, const char *p_name,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioc));
   tracepoint(librbd, clone3_enter, p_ioc.get_pool_name().c_str(), p_ioc.get_id(), p_name, p_snap_name, c_ioc.get_pool_name().c_str(), c_ioc.get_id(), c_name, c_opts);
   librbd::ImageOptions c_opts_(c_opts);
-  int r = librbd::clone(p_ioc, nullptr, p_name, p_snap_name, c_ioc, nullptr,
-                        c_name, c_opts_, "", "");
+  int r = librbd::clone(p_ioc, nullptr, p_name, CEPH_NOSNAP, p_snap_name,
+                        c_ioc, nullptr, c_name, c_opts_, "", "");
   tracepoint(librbd, clone3_exit, r);
+  return r;
+}
+
+extern "C" int rbd_clone4(rados_ioctx_t p_ioctx, const char *p_name,
+                          uint64_t p_snap_id, rados_ioctx_t c_ioctx,
+                          const char *c_name, rbd_image_options_t c_opts)
+{
+  librados::IoCtx p_ioc, c_ioc;
+  librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
+  librados::IoCtx::from_rados_ioctx_t(c_ioctx, c_ioc);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioc));
+  tracepoint(librbd, clone4_enter, p_ioc.get_pool_name().c_str(),
+             p_ioc.get_id(), p_name, p_snap_id, c_ioc.get_pool_name().c_str(),
+             c_ioc.get_id(), c_name, c_opts);
+  librbd::ImageOptions c_opts_(c_opts);
+  int r = librbd::clone(p_ioc, nullptr, p_name, p_snap_id, nullptr,
+                        c_ioc, nullptr, c_name, c_opts_, "", "");
+  tracepoint(librbd, clone4_exit, r);
   return r;
 }
 
@@ -7295,18 +7348,50 @@ extern "C" int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
                                             size_t max_length) {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
 
-  std::string cpp_original_name;
+  librbd::snap_trash_namespace_t trash_namespace;
   int r = librbd::api::Snapshot<>::get_trash_namespace(ictx, snap_id,
-                                                       &cpp_original_name);
+                                                       &trash_namespace);
   if (r < 0) {
     return r;
   }
 
-  if (cpp_original_name.length() >= max_length) {
+  if (trash_namespace.original_name.length() >= max_length) {
     return -ERANGE;
   }
 
-  strcpy(original_name, cpp_original_name.c_str());
+  strcpy(original_name, trash_namespace.original_name.c_str());
+  return 0;
+}
+
+extern "C" int rbd_snap_get_trash_namespace2(
+    rbd_image_t image, uint64_t snap_id,
+    rbd_snap_trash_namespace_t *trash_snap,
+    size_t trash_snap_size) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+
+  if (trash_snap_size != sizeof(rbd_snap_trash_namespace_t)) {
+    return -ERANGE;
+  }
+
+  librbd::snap_trash_namespace_t trash_namespace;
+  int r = librbd::api::Snapshot<>::get_trash_namespace(ictx, snap_id,
+                                                       &trash_namespace);
+  if (r < 0) {
+    return r;
+  }
+
+  trash_snap->original_namespace_type = trash_namespace.original_namespace_type;
+  trash_snap->original_name = strdup(trash_namespace.original_name.c_str());
+  return 0;
+}
+
+extern "C" int rbd_snap_trash_namespace_cleanup(
+    rbd_snap_trash_namespace_t *trash_snap, size_t trash_snap_size) {
+  if (trash_snap_size != sizeof(rbd_snap_trash_namespace_t)) {
+    return -ERANGE;
+  }
+
+  free(trash_snap->original_name);
   return 0;
 }
 

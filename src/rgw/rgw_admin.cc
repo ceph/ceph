@@ -32,6 +32,8 @@ extern "C" {
 
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
+#include "cls/2pc_queue/cls_2pc_queue_types.h"
+#include "cls/2pc_queue/cls_2pc_queue_client.h"
 
 #include "include/utime.h"
 #include "include/str_list.h"
@@ -221,6 +223,7 @@ void usage()
   cout << "  realm rename                     rename a realm\n";
   cout << "  realm set                        set realm info (requires infile)\n";
   cout << "  realm default                    set realm as default\n";
+  cout << "  realm default rm                 clear the current default realm\n";
   cout << "  realm pull                       pull a realm and its current period\n";
   cout << "  zonegroup add                    add a zone to a zonegroup\n";
   cout << "  zonegroup create                 create a new zone group info\n";
@@ -327,6 +330,7 @@ void usage()
   cout << "  topic get                        get a bucket notifications topic\n";
   cout << "  topic rm                         remove a bucket notifications topic\n";
   cout << "  topic stats                      get a bucket notifications persistent topic stats (i.e. reservations, entries & size)\n";
+  cout << "  topic dump                       dump (in JSON format) all pending bucket notifications of a persistent topic\n";
   cout << "  script put                       upload a Lua script to a context\n";
   cout << "  script get                       get the Lua script of a context\n";
   cout << "  script rm                        remove the Lua scripts of a context\n";
@@ -812,6 +816,7 @@ enum class OPT {
   REALM_RENAME,
   REALM_SET,
   REALM_DEFAULT,
+  REALM_DEFAULT_RM,
   REALM_PULL,
   PERIOD_DELETE,
   PERIOD_GET,
@@ -864,6 +869,7 @@ enum class OPT {
   PUBSUB_NOTIFICATION_GET,
   PUBSUB_NOTIFICATION_RM,
   PUBSUB_TOPIC_STATS,
+  PUBSUB_TOPIC_DUMP,
   SCRIPT_PUT,
   SCRIPT_GET,
   SCRIPT_RM,
@@ -1052,6 +1058,7 @@ static SimpleCmd::Commands all_cmds = {
   { "realm rename", OPT::REALM_RENAME },
   { "realm set", OPT::REALM_SET },
   { "realm default", OPT::REALM_DEFAULT },
+  { "realm default rm", OPT::REALM_DEFAULT_RM },
   { "realm pull", OPT::REALM_PULL },
   { "period delete", OPT::PERIOD_DELETE },
   { "period get", OPT::PERIOD_GET },
@@ -1112,6 +1119,7 @@ static SimpleCmd::Commands all_cmds = {
   { "notification get", OPT::PUBSUB_NOTIFICATION_GET },
   { "notification rm", OPT::PUBSUB_NOTIFICATION_RM },
   { "topic stats", OPT::PUBSUB_TOPIC_STATS },
+  { "topic dump", OPT::PUBSUB_TOPIC_DUMP },
   { "script put", OPT::SCRIPT_PUT },
   { "script get", OPT::SCRIPT_GET },
   { "script rm", OPT::SCRIPT_RM },
@@ -4247,7 +4255,7 @@ int main(int argc, const char **argv)
 			 OPT::REALM_LIST_PERIODS,
 			 OPT::REALM_GET_DEFAULT,
 			 OPT::REALM_RENAME, OPT::REALM_SET,
-			 OPT::REALM_DEFAULT, OPT::REALM_PULL};
+			 OPT::REALM_DEFAULT, OPT::REALM_DEFAULT_RM, OPT::REALM_PULL};
 
     std::set<OPT> readonly_ops_list = {
                          OPT::USER_INFO,
@@ -4323,6 +4331,7 @@ int main(int argc, const char **argv)
 			 OPT::PUBSUB_TOPIC_GET,
        OPT::PUBSUB_NOTIFICATION_GET,
        OPT::PUBSUB_TOPIC_STATS  ,
+       OPT::PUBSUB_TOPIC_DUMP  ,
 			 OPT::SCRIPT_GET,
     };
 
@@ -4423,6 +4432,7 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_TOPIC_RM
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_RM
                           && opt_cmd != OPT::PUBSUB_TOPIC_STATS
+                          && opt_cmd != OPT::PUBSUB_TOPIC_DUMP
 			  && opt_cmd != OPT::SCRIPT_PUT
 			  && opt_cmd != OPT::SCRIPT_GET
 			  && opt_cmd != OPT::SCRIPT_RM
@@ -5099,6 +5109,12 @@ int main(int argc, const char **argv)
 	  cerr << "failed to set realm as default: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+      }
+      break;
+    case OPT::REALM_DEFAULT_RM:
+      if (int ret = cfgstore->delete_default_realm_id(dpp(), null_yield); ret < 0) {
+        cerr << "failed to remove default realm: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
       }
       break;
     case OPT::REALM_PULL:
@@ -11066,22 +11082,22 @@ next:
     }
 
     formatter->open_object_section("result");
-    formatter->open_array_section("topics");
-    do {
-      rgw_pubsub_topics result;
-      int ret = ps.get_topics(dpp(), next_token, max_entries,
-                              result, next_token, null_yield);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      for (const auto& [_, topic] : result.topics) {
-        if (owner && *owner != topic.owner) {
-          continue;
+    rgw_pubsub_topics result;
+    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
+        driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
+      formatter->open_array_section("topics");
+      do {
+        int ret = ps.get_topics_v2(dpp(), next_token, max_entries,
+                                   result, next_token, null_yield);
+        if (ret < 0 && ret != -ENOENT) {
+          cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
         }
-        std::set<std::string> subscribed_buckets;
-        if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
-            driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
+        for (const auto& [_, topic] : result.topics) {
+          if (owner && *owner != topic.owner) {
+            continue;
+          }
+          std::set<std::string> subscribed_buckets;
           ret = driver->get_bucket_topic_mapping(topic, subscribed_buckets,
                                                  null_yield, dpp());
           if (ret < 0) {
@@ -11089,15 +11105,21 @@ next:
                  << topic.name << ", ret=" << ret << std::endl;
           }
           show_topics_info_v2(topic, subscribed_buckets, formatter.get());
-        } else {
-          encode_json("result", result, formatter.get());
+          if (max_entries_specified) {
+            --max_entries;
+          }
         }
-        if (max_entries_specified) {
-          --max_entries;
-        }
+        result.topics.clear();
+      } while (!next_token.empty() && max_entries > 0);
+      formatter->close_section(); // topics
+    } else { // v1, list all topics
+      int ret = ps.get_topics_v1(dpp(), result, null_yield);
+      if (ret < 0 && ret != -ENOENT) {
+        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
       }
-    } while (!next_token.empty() && max_entries > 0);
-    formatter->close_section(); // topics
+      encode_json("result", result, formatter.get());
+    }
     if (max_entries_specified) {
       encode_json("truncated", !next_token.empty(), formatter.get());
       if (!next_token.empty()) {
@@ -11260,15 +11282,77 @@ next:
       return ENOENT;
     }
 
+    auto ioctx = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_notif_pool_ctx();
     rgw::notify::rgw_topic_stats stats;
     ret = rgw::notify::get_persistent_queue_stats(
-        dpp(), static_cast<rgw::sal::RadosStore *>(driver)->getRados()->get_notif_pool_ctx(),
+        dpp(), ioctx,
         topic.dest.persistent_queue, stats, null_yield);
     if (ret < 0) {
       cerr << "ERROR: could not get persistent queue: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     encode_json("", stats, formatter.get());
+    formatter->flush(cout);
+  }
+  
+  if (opt_cmd == OPT::PUBSUB_TOPIC_DUMP) {
+    if (topic_name.empty()) {
+      cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
+      return EINVAL;
+    }
+    const std::string& account = !account_id.empty() ? account_id : tenant;
+    RGWPubSub ps(driver, account, *site);
+
+    rgw_pubsub_topic topic;
+    ret = ps.get_topic(dpp(), topic_name, topic, null_yield, nullptr);
+    if (ret < 0) {
+      cerr << "ERROR: could not get topic. error: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    if (topic.dest.persistent_queue.empty()) {
+      cerr << "ERROR: topic does not have a persistent queue" << std::endl;
+      return ENOENT;
+    }
+
+    auto ioctx = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_notif_pool_ctx();
+    std::string marker;
+    std::string end_marker;
+    librados::ObjectReadOperation rop;
+    std::vector<cls_queue_entry> queue_entries;
+    bool truncated = true;
+    formatter->open_array_section("eventEntries");
+    while (truncated) {
+      bufferlist bl;
+      int rc;
+      cls_2pc_queue_list_entries(rop, marker, max_entries, &bl, &rc);
+      ioctx.operate(topic.dest.persistent_queue, &rop, nullptr);
+      if (rc < 0 ) {
+        cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-ret) << std::endl;
+        return -rc;
+      }
+      rc = cls_2pc_queue_list_entries_result(bl, queue_entries, &truncated, end_marker);
+      if (rc < 0) {
+        cerr << "ERROR: failed to parse list entries from queue (skipping). error: " << cpp_strerror(-ret) << std::endl;
+        return -rc;
+      }
+
+      std::for_each(queue_entries.cbegin(), 
+        queue_entries.cend(), 
+        [&formatter](const auto& queue_entry) {
+          rgw::notify::event_entry_t event_entry;
+          bufferlist::const_iterator iter{&queue_entry.data};
+          try {
+            event_entry.decode(iter);
+            encode_json("", event_entry, formatter.get());
+          } catch (const buffer::error& e) {
+            cerr << "ERROR: failed to decode queue entry. error: " << e.what() << std::endl;
+          }
+        });
+      formatter->flush(cout);
+      marker = end_marker;
+    }
+    formatter->close_section();
     formatter->flush(cout);
   }
 

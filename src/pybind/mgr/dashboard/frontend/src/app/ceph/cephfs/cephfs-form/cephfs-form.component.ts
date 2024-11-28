@@ -21,7 +21,6 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 
 @Component({
   selector: 'cd-cephfs-form',
@@ -68,7 +67,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     private route: ActivatedRoute
   ) {
     super();
-    this.editing = this.router.url.startsWith(`/cephfs/${URLVerbs.EDIT}`);
+    this.editing = this.router.url.startsWith(`/cephfs/fs/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.resource = $localize`File System`;
     this.hosts = {
@@ -127,8 +126,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
         }
       });
     } else {
-      const hostContext = new CdTableFetchDataContext(() => undefined);
-      this.hostService.list(hostContext.toParams(), 'false').subscribe((resp: object[]) => {
+      this.hostService.getAllHosts().subscribe((resp: object[]) => {
         const options: SelectOption[] = [];
         _.forEach(resp, (host: object) => {
           if (_.get(host, 'sources.orchestrator', false)) {
@@ -176,7 +174,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
             this.form.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.router.navigate([BASE_URL]);
+            this.router.navigate([`${BASE_URL}/fs`]);
           }
         });
     } else {
@@ -210,7 +208,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
             self.form.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.router.navigate([BASE_URL]);
+            this.router.navigate([`${BASE_URL}/fs`]);
           }
         });
     }

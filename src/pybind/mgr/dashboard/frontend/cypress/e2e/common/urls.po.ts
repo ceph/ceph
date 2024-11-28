@@ -3,7 +3,7 @@ import { PageHelper } from '../page-helper.po';
 export class UrlsCollection extends PageHelper {
   pages = {
     // Cluster expansion
-    welcome: { url: '#/expand-cluster', id: 'cd-create-cluster' },
+    welcome: { url: '#/expand-cluster?welcome=true', id: 'cd-create-cluster' },
 
     // Landing page
     dashboard: { url: '#/dashboard', id: 'cd-dashboard' },
@@ -42,7 +42,7 @@ export class UrlsCollection extends PageHelper {
     'rgw daemons': { url: '#/rgw/daemon', id: 'cd-rgw-daemon-list' },
 
     // CephFS
-    cephfs: { url: '#/cephfs', id: 'cd-cephfs-list' },
-    'create cephfs': { url: '#/cephfs/create', id: 'cd-cephfs-form' }
+    cephfs: { url: '#/cephfs/fs', id: 'cd-cephfs-list' },
+    'create cephfs': { url: '#/cephfs/fs/create', id: 'cd-cephfs-form' }
   };
 }

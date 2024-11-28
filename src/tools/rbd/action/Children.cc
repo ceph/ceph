@@ -85,7 +85,7 @@ void get_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
   at::add_image_id_option(options);
-  at::add_snap_id_option(options);
+  at::add_snap_id_option(options, at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
     ("all,a", po::bool_switch(), "list all children (include trash)");
   options->add_options()

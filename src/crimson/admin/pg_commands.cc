@@ -174,7 +174,7 @@ public:
       return PG::interruptor::now();
     }, [FNAME, pg](std::exception_ptr ep) {
       DEBUGDPP("interrupted with {}", *pg, ep);
-    }, pg).then([format] {
+    }, pg, pg->get_osdmap_epoch()).then([format] {
       std::unique_ptr<Formatter> f{
 	Formatter::create(format, "json-pretty", "json-pretty")
       };

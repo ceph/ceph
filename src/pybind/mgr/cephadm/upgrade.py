@@ -9,7 +9,7 @@ from cephadm.registry import Registry
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, \
-    CEPH_TYPES, NON_CEPH_IMAGE_TYPES, GATEWAY_TYPES
+    CEPH_TYPES, CEPH_IMAGE_TYPES, NON_CEPH_IMAGE_TYPES, MONITORING_STACK_TYPES, GATEWAY_TYPES
 from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 
@@ -29,17 +29,17 @@ CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 def normalize_image_digest(digest: str, default_registry: str) -> str:
     """
     Normal case:
-    >>> normalize_image_digest('ceph/ceph', 'docker.io')
-    'docker.io/ceph/ceph'
+    >>> normalize_image_digest('ceph/ceph', 'quay.io')
+    'quay.io/ceph/ceph'
 
     No change:
-    >>> normalize_image_digest('quay.ceph.io/ceph/ceph', 'docker.io')
+    >>> normalize_image_digest('quay.ceph.io/ceph/ceph', 'quay.io')
     'quay.ceph.io/ceph/ceph'
 
-    >>> normalize_image_digest('docker.io/ubuntu', 'docker.io')
-    'docker.io/ubuntu'
+    >>> normalize_image_digest('quay.io/centos', 'quay.io')
+    'quay.io/centos'
 
-    >>> normalize_image_digest('localhost/ceph', 'docker.io')
+    >>> normalize_image_digest('localhost/ceph', 'quay.io')
     'localhost/ceph'
     """
     known_shortnames = [
@@ -1199,8 +1199,10 @@ class CephadmUpgrade:
             upgraded_daemon_count += done
             self._update_upgrade_progress(upgraded_daemon_count / len(daemons))
 
-            # make sure mgr and non-ceph-image daemons are properly redeployed in staggered upgrade scenarios
-            if daemon_type == 'mgr' or daemon_type in NON_CEPH_IMAGE_TYPES:
+            # make sure mgr and monitoring stack daemons are properly redeployed in staggered upgrade scenarios
+            # The idea here is to upgrade the mointoring daemons after the mgr is done upgrading as
+            # that means cephadm and the dashboard modules themselves have been upgraded
+            if daemon_type == 'mgr' or daemon_type in MONITORING_STACK_TYPES:
                 if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
                     need_upgrade_names = [d[0].name() for d in need_upgrade] + \
                         [d[0].name() for d in need_upgrade_deployer]
@@ -1214,6 +1216,20 @@ class CephadmUpgrade:
                 else:
                     # no point in trying to redeploy with new version if active mgr is not on the new version
                     need_upgrade_deployer = []
+            elif daemon_type in NON_CEPH_IMAGE_TYPES:
+                # Also handle daemons that are not on the ceph image but aren't monitoring daemons.
+                # This needs to be handled differently than the monitoring daemons as the nvmeof daemon,
+                # which falls in this category, relies on the mons being upgraded as well. This block
+                # sets these daemon types to be upgraded only when all ceph image daemons have been upgraded
+                if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
+                    ceph_daemons = [d for d in self.mgr.cache.get_daemons() if d.daemon_type in CEPH_IMAGE_TYPES]
+                    _, n1, n2, __ = self._detect_need_upgrade(ceph_daemons, target_digests, target_image)
+                    if not n1 and not n2:
+                        # no ceph daemons need upgrade
+                        dds = [d for d in self.mgr.cache.get_daemons_by_type(
+                            daemon_type) if d.name() not in need_upgrade_names]
+                        _, ___, n2, ____ = self._detect_need_upgrade(dds, target_digests, target_image)
+                        need_upgrade_deployer += n2
 
             if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
                 # only after the mgr itself is upgraded can we expect daemons to have

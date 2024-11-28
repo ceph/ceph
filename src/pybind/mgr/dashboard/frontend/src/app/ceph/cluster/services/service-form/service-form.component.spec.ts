@@ -13,8 +13,21 @@ import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { PaginateObservable } from '~/app/shared/api/paginate.model';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
-import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
+import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { ServiceFormComponent } from './service-form.component';
+import { PoolService } from '~/app/shared/api/pool.service';
+
+// for 'nvmeof' service
+const mockPools = [
+  Mocks.getPool('pool-1', 1, ['cephfs']),
+  Mocks.getPool('rbd', 2),
+  Mocks.getPool('pool-2', 3)
+];
+class MockPoolService {
+  getList() {
+    return of(mockPools);
+  }
+}
 
 describe('ServiceFormComponent', () => {
   let component: ServiceFormComponent;
@@ -25,7 +38,7 @@ describe('ServiceFormComponent', () => {
 
   configureTestBed({
     declarations: [ServiceFormComponent],
-    providers: [NgbActiveModal],
+    providers: [NgbActiveModal, { provide: PoolService, useClass: MockPoolService }],
     imports: [
       HttpClientTestingModule,
       NgbTypeaheadModule,
@@ -387,6 +400,149 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       });
     });
 
+    describe('should test service nvmeof', () => {
+      beforeEach(() => {
+        component.serviceType = 'nvmeof';
+        formHelper.setValue('service_type', 'nvmeof');
+        component.ngOnInit();
+        fixture.detectChanges();
+      });
+
+      it('should set rbd pools correctly onInit', () => {
+        expect(component.pools.length).toBe(3);
+        expect(component.rbdPools.length).toBe(2);
+      });
+
+      it('should set default values correctly onInit', () => {
+        expect(form.get('service_type').value).toBe('nvmeof');
+        expect(form.get('group').value).toBe('default');
+        expect(form.get('pool').value).toBe('rbd');
+        expect(form.get('service_id').value).toBe('rbd.default');
+      });
+
+      it('should reflect correct values on group change', () => {
+        // Initially the group value should be 'default'
+        expect(component.serviceForm.get('group')?.value).toBe('default');
+        const groupInput = fixture.debugElement.query(By.css('#group')).nativeElement;
+        // Simulate input value change
+        groupInput.value = 'foo';
+        // Trigger the input event
+        groupInput.dispatchEvent(new Event('input'));
+        // Trigger the change event
+        groupInput.dispatchEvent(new Event('change'));
+        fixture.detectChanges();
+        // Verify values after change
+        expect(form.get('group').value).toBe('foo');
+        expect(form.get('service_id').value).toBe('rbd.foo');
+      });
+
+      it('should reflect correct values on pool change', () => {
+        // Initially the pool value should be 'rbd'
+        expect(component.serviceForm.get('pool')?.value).toBe('rbd');
+        const poolInput = fixture.debugElement.query(By.css('#pool')).nativeElement;
+        // Simulate input value change
+        poolInput.value = 'pool-2';
+        // Trigger the input event
+        poolInput.dispatchEvent(new Event('input'));
+        // Trigger the change event
+        poolInput.dispatchEvent(new Event('change'));
+        fixture.detectChanges();
+        // Verify values after change
+        expect(form.get('pool').value).toBe('pool-2');
+        expect(form.get('service_id').value).toBe('pool-2.default');
+      });
+
+      it('should throw error when there is no service id', () => {
+        formHelper.expectErrorChange('service_id', '', 'required');
+      });
+
+      it('should throw error when there is no pool', () => {
+        formHelper.expectErrorChange('pool', '', 'required');
+      });
+
+      it('should throw error when there is no group', () => {
+        formHelper.expectErrorChange('group', '', 'required');
+      });
+
+      it('should hide the count element when service_type is "nvmeof"', () => {
+        const countEl = fixture.debugElement.query(By.css('#count'));
+        expect(countEl).toBeNull();
+      });
+
+      it('should not show certs and keys field with mTLS disabled', () => {
+        formHelper.setValue('ssl', true);
+        fixture.detectChanges();
+        const root_ca_cert = fixture.debugElement.query(By.css('#root_ca_cert'));
+        const client_cert = fixture.debugElement.query(By.css('#client_cert'));
+        const client_key = fixture.debugElement.query(By.css('#client_key'));
+        const server_cert = fixture.debugElement.query(By.css('#server_cert'));
+        const server_key = fixture.debugElement.query(By.css('#server_key'));
+        expect(root_ca_cert).toBeNull();
+        expect(client_cert).toBeNull();
+        expect(client_key).toBeNull();
+        expect(server_cert).toBeNull();
+        expect(server_key).toBeNull();
+      });
+
+      it('should submit nvmeof without mTLS', () => {
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'rbd.default',
+          placement: {},
+          unmanaged: false,
+          pool: 'rbd',
+          group: 'default',
+          enable_auth: false
+        });
+      });
+
+      it('should submit nvmeof with mTLS', () => {
+        formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('root_ca_cert', 'root_ca_cert');
+        formHelper.setValue('client_cert', 'client_cert');
+        formHelper.setValue('client_key', 'client_key');
+        formHelper.setValue('server_cert', 'server_cert');
+        formHelper.setValue('server_key', 'server_key');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'rbd.default',
+          placement: {},
+          unmanaged: false,
+          pool: 'rbd',
+          group: 'default',
+          enable_auth: true,
+          root_ca_cert: 'root_ca_cert',
+          client_cert: 'client_cert',
+          client_key: 'client_key',
+          server_cert: 'server_cert',
+          server_key: 'server_key'
+        });
+      });
+    });
+
+    describe('should test service smb', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'smb');
+        formHelper.setValue('service_id', 'foo');
+        formHelper.setValue('cluster_id', 'cluster_foo');
+        formHelper.setValue('config_uri', 'rados://.smb/foo/scc.toml');
+      });
+
+      it('should submit smb', () => {
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'smb',
+          placement: {},
+          unmanaged: false,
+          service_id: 'foo',
+          cluster_id: 'cluster_foo',
+          config_uri: 'rados://.smb/foo/scc.toml'
+        });
+      });
+    });
+
     describe('should test service ingress', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'ingress');
@@ -586,6 +742,43 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         const serviceId = fixture.debugElement.query(By.css('#service_id')).nativeElement;
         expect(serviceType.disabled).toBeTruthy();
         expect(serviceId.disabled).toBeTruthy();
+      });
+
+      it('should not edit pools for nvmeof service', () => {
+        component.serviceType = 'nvmeof';
+        formHelper.setValue('service_type', 'nvmeof');
+        component.ngOnInit();
+        fixture.detectChanges();
+        const poolId = fixture.debugElement.query(By.css('#pool')).nativeElement;
+        expect(poolId.disabled).toBeTruthy();
+      });
+
+      it('should not edit groups for nvmeof service', () => {
+        component.serviceType = 'nvmeof';
+        formHelper.setValue('service_type', 'nvmeof');
+        component.ngOnInit();
+        fixture.detectChanges();
+        const groupId = fixture.debugElement.query(By.css('#group')).nativeElement;
+        expect(groupId.disabled).toBeTruthy();
+      });
+
+      it('should update nvmeof service to disable mTLS', () => {
+        spyOn(cephServiceService, 'update').and.stub();
+        component.serviceType = 'nvmeof';
+        formHelper.setValue('service_type', 'nvmeof');
+        formHelper.setValue('pool', 'rbd');
+        formHelper.setValue('group', 'default');
+        // mTLS disabled
+        formHelper.setValue('enable_mtls', false);
+        component.onSubmit();
+        expect(cephServiceService.update).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          placement: {},
+          unmanaged: false,
+          pool: 'rbd',
+          group: 'default',
+          enable_auth: false
+        });
       });
     });
   });

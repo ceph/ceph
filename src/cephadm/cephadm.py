@@ -18,7 +18,7 @@ import tempfile
 import time
 import errno
 import ssl
-from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, TypeVar, cast, Iterable
+from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, TypeVar, cast
 
 import re
 import uuid
@@ -96,6 +96,7 @@ from cephadmlib.data_utils import (
     try_convert_datetime,
     read_config,
     with_units_to_int,
+    _extract_host_info_from_applied_spec,
 )
 from cephadmlib.file_utils import (
     get_file_timestamp,
@@ -585,6 +586,8 @@ def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional
             if digest and not digest.endswith('@'):
                 logger.info(f"Using ceph image with id '{image_id}' and tag '{tag}' created on {created_date}\n{digest}")
                 return digest
+    if container_info is not None:
+        logger.warning(f"Not using image '{container_info.image_id}' as it's not in list of non-dangling images with ceph=True label")
     return None
 
 
@@ -1577,10 +1580,10 @@ class CephadmAgent(DaemonForm):
                                               data=data,
                                               endpoint='/data',
                                               ssl_ctx=self.ssl_ctx)
-                response_json = json.loads(response)
                 if status != 200:
                     logger.error(f'HTTP error {status} while querying agent endpoint: {response}')
-                    raise RuntimeError
+                    raise RuntimeError(f'non-200 response <{status}> from agent endpoint: {response}')
+                response_json = json.loads(response)
                 total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
                 logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
             except Exception as e:
@@ -2465,6 +2468,14 @@ def prepare_bootstrap_config(
     ):
         cp.set('mon', 'auth_allow_insecure_global_id_reclaim', 'false')
 
+    if not cp.has_section('osd'):
+        cp.add_section('osd')
+    if (
+            not cp.has_option('osd', 'osd_memory_target_autotune')
+            and not cp.has_option('osd', 'osd memory target autotune')
+    ):
+        cp.set('osd', 'osd_memory_target_autotune', 'true')
+
     if ctx.single_host_defaults:
         logger.info('Adjusting default settings to suit single-host cluster...')
         # replicate across osds, not hosts
@@ -2556,93 +2567,17 @@ def finish_bootstrap_config(
     if ipv6 or ipv6_cluster_network:
         logger.info('Enabling IPv6 (ms_bind_ipv6) binding')
         cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
+        # note: Ceph does not fully support dual stack.
+        # kernel clients: https://tracker.ceph.com/issues/49581
+        # if we do not disable ipv4 binding, daemons will bind
+        # to 0.0.0.0 and clients will misbehave.
+        logger.info('Disabling IPv4 (ms_bind_ipv4) binding')
+        cli(['config', 'set', 'global', 'ms_bind_ipv4', 'false'])
 
     with open(ctx.output_config, 'w') as f:
         f.write(config)
     logger.info('Wrote config to %s' % ctx.output_config)
     pass
-
-
-def _extract_host_info_from_applied_spec(f: Iterable[str]) -> List[Dict[str, str]]:
-    # overall goal of this function is to go through an applied spec and find
-    # the hostname (and addr is provided) for each host spec in the applied spec.
-    # Generally, we should be able to just pass the spec to the mgr module where
-    # proper yaml parsing can happen, but for host specs in particular we want to
-    # be able to distribute ssh keys, which requires finding the hostname (and addr
-    # if possible) for each potential host spec in the applied spec.
-
-    specs: List[List[str]] = []
-    current_spec: List[str] = []
-    for line in f:
-        if re.search(r'^---\s+', line):
-            if current_spec:
-                specs.append(current_spec)
-            current_spec = []
-        else:
-            line = line.strip()
-            if line:
-                current_spec.append(line)
-    if current_spec:
-        specs.append(current_spec)
-
-    host_specs: List[List[str]] = []
-    for spec in specs:
-        for line in spec:
-            if 'service_type' in line:
-                try:
-                    _, type = line.split(':')
-                    type = type.strip()
-                    if type == 'host':
-                        host_specs.append(spec)
-                except ValueError as e:
-                    spec_str = '\n'.join(spec)
-                    logger.error(f'Failed to pull service_type from spec:\n{spec_str}. Got error: {e}')
-                break
-            spec_str = '\n'.join(spec)
-            logger.error(f'Failed to find service_type within spec:\n{spec_str}')
-
-    host_dicts = []
-    for s in host_specs:
-        host_dict = _extract_host_info_from_spec(s)
-        # if host_dict is empty here, we failed to pull the hostname
-        # for the host from the spec. This should have already been logged
-        # so at this point we just don't want to include it in our output
-        if host_dict:
-            host_dicts.append(host_dict)
-
-    return host_dicts
-
-
-def _extract_host_info_from_spec(host_spec: List[str]) -> Dict[str, str]:
-    # note:for our purposes here, we only really want the hostname
-    # and address of the host from each of these specs in order to
-    # be able to distribute ssh keys. We will later apply the spec
-    # through the mgr module where proper yaml parsing can be done
-    # The returned dicts from this function should only contain
-    # one or two entries, one (required) for hostname, one (optional) for addr
-    # {
-    #   hostname: <hostname>
-    #   addr: <ip-addr>
-    # }
-    # if we fail to find the hostname, an empty dict is returned
-
-    host_dict = {}  # type: Dict[str, str]
-    for line in host_spec:
-        for field in ['hostname', 'addr']:
-            if field in line:
-                try:
-                    _, field_value = line.split(':')
-                    field_value = field_value.strip()
-                    host_dict[field] = field_value
-                except ValueError as e:
-                    spec_str = '\n'.join(host_spec)
-                    logger.error(f'Error trying to pull {field} from host spec:\n{spec_str}. Got error: {e}')
-
-    if 'hostname' not in host_dict:
-        spec_str = '\n'.join(host_spec)
-        logger.error(f'Could not find hostname in host spec:\n{spec_str}')
-        return {}
-    return host_dict
 
 
 def _distribute_ssh_keys(ctx: CephadmContext, host_info: Dict[str, str], bootstrap_hostname: str) -> int:
@@ -2695,8 +2630,9 @@ def rollback(func: FuncT) -> FuncT:
             # another cluster with the provided fsid already exists: don't remove.
             raise
         except (KeyboardInterrupt, Exception) as e:
-            logger.error(f'{type(e).__name__}: {e}')
-            if ctx.no_cleanup_on_failure:
+            # If ctx.fsid is None it would print meaningless message suggesting
+            # running "cephadm rm-cluster --force --fsid None"
+            if ctx.no_cleanup_on_failure and ctx.fsid is not None:
                 logger.info('\n\n'
                             '\t***************\n'
                             '\tCephadm hit an issue during cluster installation. Current cluster files will NOT BE DELETED automatically. To change\n'
@@ -2706,7 +2642,10 @@ def rollback(func: FuncT) -> FuncT:
                             '\t   > cephadm rm-cluster --force --zap-osds --fsid <fsid>\n\n'
                             '\tfor more information please refer to https://docs.ceph.com/en/latest/cephadm/operations/#purging-a-cluster\n'
                             '\t***************\n\n')
-            else:
+            if not ctx.no_cleanup_on_failure:
+                # The logger.error() used to be called before these conditions, which resulted in the error being printed twice.
+                # Moving it inside this condition to print the error if _rm_cluster() is called and also fails.
+                logger.error(f'{type(e).__name__}: {e}')
                 logger.info('\n\n'
                             '\t***************\n'
                             '\tCephadm hit an issue during cluster installation. Current cluster files will be deleted automatically.\n'
@@ -2733,6 +2672,13 @@ def command_bootstrap(ctx):
         ctx.output_keyring = os.path.join(ctx.output_dir, CEPH_KEYRING)
     if not ctx.output_pub_ssh_key:
         ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, CEPH_PUBKEY)
+
+    if ctx.apply_spec and not os.path.exists(ctx.apply_spec):
+        # Given that nothing has been deployed at this point, setting `ctx.no_cleanup_on_failure = True`
+        # as there's no need to call _rm_cluster() which would generate the message:
+        # "ERROR: must select the cluster to delete by passing --fsid to proceed"
+        ctx.no_cleanup_on_failure = True
+        raise Error(f"--apply-spec has been specified but {ctx.apply_spec} doesn't exist.")
 
     if (
         (bool(ctx.ssh_private_key) is not bool(ctx.ssh_public_key))
@@ -2776,7 +2722,12 @@ def command_bootstrap(ctx):
             except PermissionError:
                 raise Error(f'Unable to create {dirname} due to permissions failure. Retry with root, or sudo or preallocate the directory.')
 
-    (user_conf, _) = get_config_and_keyring(ctx)
+    if getattr(ctx, 'custom_prometheus_alerts', None):
+        ctx.custom_prometheus_alerts = os.path.abspath(ctx.custom_prometheus_alerts)
+        if not os.path.isfile(ctx.custom_prometheus_alerts):
+            raise Error(f'No custom prometheus alerts file found at {ctx.custom_prometheus_alerts}')
+
+    _, _ = get_config_and_keyring(ctx)
 
     if ctx.ssh_user != 'root':
         check_ssh_connectivity(ctx)
@@ -2848,6 +2799,8 @@ def command_bootstrap(ctx):
             admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
             tmp_config.name: '/etc/ceph/ceph.conf:z',
         }
+        if getattr(ctx, 'custom_prometheus_alerts', None):
+            mounts[ctx.custom_prometheus_alerts] = '/etc/ceph/custom_alerts.yml:z'
         for k, v in extra_mounts.items():
             mounts[k] = v
         timeout = timeout or ctx.timeout
@@ -2874,18 +2827,17 @@ def command_bootstrap(ctx):
     # create mgr
     create_mgr(ctx, uid, gid, fsid, mgr_id, mgr_key, config, cli)
 
-    if user_conf:
-        # user given config settings were already assimilated earlier
-        # but if the given settings contained any attributes in
-        # the mgr (e.g. mgr/cephadm/container_image_prometheus)
-        # they don't seem to be stored if there isn't a mgr yet.
-        # Since re-assimilating the same conf settings should be
-        # idempotent we can just do it again here.
-        with tempfile.NamedTemporaryFile(buffering=0) as tmp:
-            tmp.write(user_conf.encode('utf-8'))
-            cli(['config', 'assimilate-conf',
-                 '-i', '/var/lib/ceph/user.conf'],
-                {tmp.name: '/var/lib/ceph/user.conf:z'})
+    # user given config settings were already assimilated earlier
+    # but if the given settings contained any attributes in
+    # the mgr (e.g. mgr/cephadm/container_image_prometheus)
+    # they don't seem to be stored if there isn't a mgr yet.
+    # Since re-assimilating the same conf settings should be
+    # idempotent we can just do it again here.
+    with tempfile.NamedTemporaryFile(buffering=0) as tmp:
+        tmp.write(config.encode('utf-8'))
+        cli(['config', 'assimilate-conf',
+             '-i', '/var/lib/ceph/user.conf'],
+            {tmp.name: '/var/lib/ceph/user.conf:z'})
 
     if getattr(ctx, 'log_dest', None):
         ldkey = 'mgr/cephadm/cephadm_log_destination'
@@ -2934,6 +2886,10 @@ def command_bootstrap(ctx):
 
     cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
 
+    if ctx.no_cgroups_split:
+        logger.info('Setting mgr/cephadm/cgroups_split to false')
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/cgroups_split', 'false', '--force'])
+
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
 
@@ -2967,10 +2923,6 @@ def command_bootstrap(ctx):
 
     save_cluster_config(ctx, uid, gid, fsid)
 
-    # enable autotune for osd_memory_target
-    logger.info('Enabling autotune for osd_memory_target')
-    cli(['config', 'set', 'osd', 'osd_memory_target_autotune', 'true'])
-
     # Notify the Dashboard to show the 'Expand cluster' page on first log in.
     cli(['config-key', 'set', 'mgr/dashboard/cluster/status', 'INSTALLED'])
 
@@ -2991,6 +2943,9 @@ def command_bootstrap(ctx):
 
     if getattr(ctx, 'deploy_cephadm_agent', None):
         cli(['config', 'set', 'mgr', 'mgr/cephadm/use_agent', 'true'])
+
+    if getattr(ctx, 'custom_prometheus_alerts', None):
+        cli(['orch', 'prometheus', 'set-custom-alerts', '-i', '/etc/ceph/custom_alerts.yml'])
 
     return ctx.error_code
 
@@ -3194,7 +3149,7 @@ def command_shell(ctx):
             daemon_type = ctx.name
             daemon_id = None
     else:
-        daemon_type = 'osd'  # get the most mounts
+        daemon_type = 'shell'  # get limited set of mounts
         daemon_id = None
 
     if ctx.fsid and daemon_type in ceph_daemons():
@@ -3332,7 +3287,7 @@ def command_ceph_volume(ctx):
         lock.acquire()
 
     (uid, gid) = (0, 0)  # ceph-volume runs as root
-    mounts = get_container_mounts_for_type(ctx, ctx.fsid, 'osd')
+    mounts = get_container_mounts_for_type(ctx, ctx.fsid, 'ceph-volume')
 
     tmp_config = None
     tmp_keyring = None
@@ -3580,7 +3535,7 @@ def list_daemons(
                                 elif daemon_type == 'grafana':
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
-                                                           'grafana-server', '-v'],
+                                                           'grafana', 'server', '-v'],
                                                           verbosity=CallVerbosity.QUIET)
                                     if not code and \
                                        out.startswith('Version '):
@@ -4080,7 +4035,7 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
     ports = Monitoring.port_map['grafana']
     endpoints = [EndPoint('0.0.0.0', p) for p in ports]
 
-    _stop_and_disable(ctx, 'grafana-server')
+    _stop_and_disable(ctx, 'grafana server')
 
     ident = DaemonIdentity(fsid, daemon_type, daemon_id)
     data_dir_dst = make_data_dir(
@@ -5014,6 +4969,11 @@ def _get_parser():
         action='store_true',
         default=CONTAINER_INIT,
         help=argparse.SUPPRESS)
+    parser_adopt.add_argument(
+        '--no-cgroups-split',
+        action='store_true',
+        default=False,
+        help='Do not run containers with --cgroups=split (currently only relevant when using podman)')
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
@@ -5394,6 +5354,9 @@ def _get_parser():
         '--deploy-cephadm-agent',
         action='store_true',
         help='deploy the cephadm-agent')
+    parser_bootstrap.add_argument(
+        '--custom-prometheus-alerts',
+        help='provide a file with custom prometheus alerts')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')

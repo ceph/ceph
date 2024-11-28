@@ -26,6 +26,8 @@ namespace crimson::os::seastore::lba_manager::btree {
 using base_iertr = LBAManager::base_iertr;
 using LBANode = FixedKVNode<laddr_t>;
 
+class BtreeLBAMapping;
+
 /**
  * lba_map_val_t
  *
@@ -171,6 +173,8 @@ struct LBALeafNode
 
     for (auto i : *this) {
       auto child = (LogicalCachedExtent*)this->children[i.get_offset()];
+      // Children may not be marked as stable yet,
+      // the specific order is undefined in the transaction prepare record phase.
       if (is_valid_child_ptr(child) && child->get_laddr() != i.get_key()) {
 	SUBERROR(seastore_fixedkv_tree,
 	  "stable child not valid: child {}, key {}",
@@ -194,8 +198,13 @@ struct LBALeafNode
 	iter.get_offset(),
 	*nextent);
       // child-ptr may already be correct, see LBAManager::update_mappings()
-      this->update_child_ptr(iter, nextent);
+      if (!nextent->has_parent_tracker()) {
+	this->update_child_ptr(iter, nextent);
+      }
+      assert(nextent->has_parent_tracker()
+	&& nextent->get_parent_node<LBALeafNode>().get() == this);
     }
+    this->on_modify();
     if (val.pladdr.is_paddr()) {
       val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
     }
@@ -216,6 +225,7 @@ struct LBALeafNode
       iter.get_offset(),
       addr,
       (void*)nextent);
+    this->on_modify();
     this->insert_child_ptr(iter, nextent);
     if (val.pladdr.is_paddr()) {
       val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
@@ -235,6 +245,7 @@ struct LBALeafNode
       iter.get_offset(),
       iter.get_key());
     assert(iter != this->end());
+    this->on_modify();
     this->remove_child_ptr(iter);
     return this->journal_remove(
       iter,
@@ -281,6 +292,9 @@ struct LBALeafNode
   }
 
   std::ostream &_print_detail(std::ostream &out) const final;
+
+  void maybe_fix_mapping_pos(BtreeLBAMapping &mapping);
+  std::unique_ptr<BtreeLBAMapping> get_mapping(op_context_t<laddr_t> c, laddr_t laddr);
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 

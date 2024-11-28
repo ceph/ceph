@@ -123,29 +123,28 @@ auto SharedMutexImpl::async_lock(Mutex& mtx, CompletionToken&& token)
 {
   using Request = AsyncRequest<Mutex, std::unique_lock>;
   using Signature = typename Request::Signature;
-  boost::asio::async_completion<CompletionToken, Signature> init(token);
-  auto& handler = init.completion_handler;
-  auto ex1 = mtx.get_executor();
-  {
-    std::lock_guard lock{mutex};
+  return boost::asio::async_initiate<CompletionToken, Signature>(
+      [this] (auto handler, Mutex& mtx) {
+        auto ex1 = mtx.get_executor();
 
-    boost::system::error_code ec;
-    if (state == Unlocked) {
-      state = Exclusive;
+        std::lock_guard lock{mutex};
 
-      // post a successful completion
-      auto ex2 = boost::asio::get_associated_executor(handler, ex1);
-      auto h = boost::asio::bind_executor(ex2, std::move(handler));
-      boost::asio::post(bind_handler(std::move(h), ec,
-                                     std::unique_lock{mtx, std::adopt_lock}));
-    } else {
-      // create a request and add it to the exclusive list
-      using LockCompletion = typename Request::LockCompletion;
-      auto request = LockCompletion::create(ex1, std::move(handler), mtx);
-      exclusive_queue.push_back(*request.release());
-    }
-  }
-  return init.result.get();
+        boost::system::error_code ec;
+        if (state == Unlocked) {
+          state = Exclusive;
+
+          // post a successful completion
+          auto ex2 = boost::asio::get_associated_executor(handler, ex1);
+          auto h = boost::asio::bind_executor(ex2, std::move(handler));
+          boost::asio::post(bind_handler(std::move(h), ec,
+                                         std::unique_lock{mtx, std::adopt_lock}));
+        } else {
+          // create a request and add it to the exclusive list
+          using LockCompletion = typename Request::LockCompletion;
+          auto request = LockCompletion::create(ex1, std::move(handler), mtx);
+          exclusive_queue.push_back(*request.release());
+        }
+      }, token, mtx);
 }
 
 inline void SharedMutexImpl::lock()
@@ -215,27 +214,26 @@ auto SharedMutexImpl::async_lock_shared(Mutex& mtx, CompletionToken&& token)
 {
   using Request = AsyncRequest<Mutex, std::shared_lock>;
   using Signature = typename Request::Signature;
-  boost::asio::async_completion<CompletionToken, Signature> init(token);
-  auto& handler = init.completion_handler;
-  auto ex1 = mtx.get_executor();
-  {
-    std::lock_guard lock{mutex};
+  return boost::asio::async_initiate<CompletionToken, Signature>(
+      [this] (auto handler, Mutex& mtx) {
+        auto ex1 = mtx.get_executor();
 
-    boost::system::error_code ec;
-    if (exclusive_queue.empty() && state < MaxShared) {
-      state++;
+        std::lock_guard lock{mutex};
 
-      auto ex2 = boost::asio::get_associated_executor(handler, ex1);
-      auto h = boost::asio::bind_executor(ex2, std::move(handler));
-      boost::asio::post(bind_handler(std::move(h), ec,
-                                     std::shared_lock{mtx, std::adopt_lock}));
-    } else {
-      using LockCompletion = typename Request::LockCompletion;
-      auto request = LockCompletion::create(ex1, std::move(handler), mtx);
-      shared_queue.push_back(*request.release());
-    }
-  }
-  return init.result.get();
+        boost::system::error_code ec;
+        if (exclusive_queue.empty() && state < MaxShared) {
+          state++;
+
+          auto ex2 = boost::asio::get_associated_executor(handler, ex1);
+          auto h = boost::asio::bind_executor(ex2, std::move(handler));
+          boost::asio::post(bind_handler(std::move(h), ec,
+                                         std::shared_lock{mtx, std::adopt_lock}));
+        } else {
+          using LockCompletion = typename Request::LockCompletion;
+          auto request = LockCompletion::create(ex1, std::move(handler), mtx);
+          shared_queue.push_back(*request.release());
+        }
+      }, token, mtx);
 }
 
 inline void SharedMutexImpl::lock_shared()

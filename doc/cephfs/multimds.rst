@@ -246,44 +246,47 @@ value to `-1`.
 Dynamic Subtree Partitioning
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-CephFS has long had a dynamic metadata blanacer (sometimes called the "default
+CephFS has long had a dynamic metadata balancer (sometimes called the "default
 balancer") which can split or merge subtrees while placing them on "colder" MDS
-ranks. Moving the metadata around can improve overall file system throughput
+ranks. Moving the metadata in this way improves overall file system throughput
 and cache size.
 
-However, the balancer has suffered from problem with efficiency and performance
-so it is by default turned off. This is to avoid an administrator "turning on
-multimds" by increasing the ``max_mds`` setting and then finding the balancer
-has made a mess of the cluster performance (reverting is straightforward but
-can take time).
+However, the balancer is sometimes inefficient or slow, so by default it is
+turned off. This is to avoid an administrator "turning on multimds" by
+increasing the ``max_mds`` setting only to find that the balancer has made a
+mess of the cluster performance (reverting from this messy state of affairs is
+straightforward but can take time).
 
-The setting to turn on the balancer is:
+To turn on the balancer, run a command of the following form: 
 
 .. prompt:: bash #
 
    ceph fs set <fs_name> balance_automate true
 
-Turning on the balancer should only be done with appropriate configuration,
-such as with the ``bal_rank_mask`` setting (described below). Careful
-monitoring of the file system performance and MDS is advised.
+Turn on the balancer only with an appropriate configuration, such as a
+configuration that includes the ``bal_rank_mask`` setting (described
+:ref:`below <bal-rank-mask>`).
+
+Careful monitoring of the file system performance and MDS is advised.
 
 
 Dynamic subtree partitioning with Balancer on specific ranks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The CephFS file system provides the ``bal_rank_mask`` option to enable the balancer
-to dynamically rebalance subtrees within particular active MDS ranks. This
-allows administrators to employ both the dynamic subtree partitioning and
-static pining schemes in different active MDS ranks so that metadata loads
-are optimized based on user demand. For instance, in realistic cloud
-storage environments, where a lot of subvolumes are allotted to multiple
-computing nodes (e.g., VMs and containers), some subvolumes that require
-high performance are managed by static partitioning, whereas most subvolumes
-that experience a moderate workload are managed by the balancer. As the balancer
-evenly spreads the metadata workload to all active MDS ranks, performance of
-static pinned subvolumes inevitably may be affected or degraded. If this option
-is enabled, subtrees managed by the balancer are not affected by
-static pinned subtrees.
+.. _bal-rank-mask:
+
+The CephFS file system provides the ``bal_rank_mask`` option to enable the
+balancer to dynamically rebalance subtrees within particular active MDS ranks.
+This allows administrators to employ both the dynamic subtree partitioning and
+static pining schemes in different active MDS ranks so that metadata loads are
+optimized based on user demand. For instance, in realistic cloud storage
+environments, where a lot of subvolumes are allotted to multiple computing
+nodes (e.g., VMs and containers), some subvolumes that require high performance
+are managed by static partitioning, whereas most subvolumes that experience a
+moderate workload are managed by the balancer. As the balancer evenly spreads
+the metadata workload to all active MDS ranks, performance of static pinned
+subvolumes inevitably may be affected or degraded. If this option is enabled,
+subtrees managed by the balancer are not affected by static pinned subtrees.
 
 This option can be configured with the ``ceph fs set`` command. For example:
 

@@ -317,6 +317,20 @@
   <span>{{ value | map:column?.customTemplateConfig }}</span>
 </ng-template>
 
+<ng-template #tooltipTpl
+             let-column="column"
+             let-value="value">
+  <span *ngFor="let item of (value | array);">
+    <span
+      i18n
+      i18n-ngbTooltip
+      class="{{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : ''}}"
+      ngbTooltip="{{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.tooltip) ? column.customTemplateConfig.map[item].tooltip : ''}}">
+      {{value}}
+    </span>
+  </span>
+</ng-template>
+
 <ng-template #truncateTpl
              let-column="column"
              let-value="value">
@@ -355,4 +369,14 @@
                                 [showIconOnly]="true">
     </cd-copy-2-clipboard-button>
   </span>
+</ng-template>
+
+<ng-template #copyTpl
+             let-value="value">
+  <span class="font-monospace">{{value}}</span>
+  <cd-copy-2-clipboard-button *ngIf="value"
+                              [source]="value"
+                              [byId]="false"
+                              [showIconOnly]="true">
+  </cd-copy-2-clipboard-button>
 </ng-template>

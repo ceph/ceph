@@ -45,11 +45,11 @@ void RecoveryBackend::clear_temp_obj(const hobject_t &oid)
 void RecoveryBackend::clean_up(ceph::os::Transaction& t,
 			       std::string_view why)
 {
-  for (auto& soid : temp_contents) {
+  for_each_temp_obj([&](auto &soid) {
     t.remove(pg.get_collection_ref()->get_cid(),
 	      ghobject_t(soid, ghobject_t::NO_GEN, pg.get_pg_whoami().shard));
-  }
-  temp_contents.clear();
+  });
+  clear_temp_objs();
 
   for (auto& [soid, recovery_waiter] : recovering) {
     if ((recovery_waiter->pull_info
@@ -66,16 +66,26 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
 }
 
 void RecoveryBackend::WaitForObjectRecovery::stop() {
-  readable.set_exception(
+  if (readable) {
+    readable->set_exception(
       crimson::common::system_shutdown_exception());
-  recovered.set_exception(
+    readable.reset();
+  }
+  if (recovered) {
+    recovered->set_exception(
       crimson::common::system_shutdown_exception());
-  pulled.set_exception(
+    recovered.reset();
+  }
+  if (pulled) {
+    pulled->set_exception(
       crimson::common::system_shutdown_exception());
+    pulled.reset();
+  }
   for (auto& [pg_shard, pr] : pushes) {
     pr.set_exception(
-	crimson::common::system_shutdown_exception());
+      crimson::common::system_shutdown_exception());
   }
+  pushes.clear();
 }
 
 void RecoveryBackend::handle_backfill_finish(

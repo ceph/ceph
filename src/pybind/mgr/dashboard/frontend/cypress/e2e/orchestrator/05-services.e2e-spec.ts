@@ -31,5 +31,14 @@ describe('Services page', () => {
 
       services.deleteService('ingress.rgw.foo');
     });
+
+    it('should create and delete a smb service', () => {
+      services.navigateTo('create');
+      services.addService('smb');
+
+      services.checkExist('smb.testsmb', true);
+
+      services.deleteService('smb.testsmb');
+    });
   });
 });

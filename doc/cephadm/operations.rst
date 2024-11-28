@@ -375,7 +375,7 @@ One or more hosts have failed the basic cephadm host check, which verifies
 that (1) the host is reachable and cephadm can be executed there, and (2)
 that the host satisfies basic prerequisites, like a working container
 runtime (podman or docker) and working time synchronization.
-If this test fails, cephadm will no be able to manage services on that host.
+If this test fails, cephadm will not be able to manage services on that host.
 
 You can manually run this check by running the following command:
 
@@ -734,3 +734,72 @@ Purge ceph daemons from all hosts in the cluster
 
   # For each host:
   cephadm rm-cluster --force --zap-osds --fsid <fsid>
+
+
+Replacing a device
+==================
+
+The ``ceph orch device replace`` command automates the process of replacing the underlying device of an OSD.
+Previously, this process required manual intervention at various stages.
+With this new command, all necessary operations are performed automatically, streamlining the replacement process
+and improving the overall user experience.
+
+.. note:: This only supports LVM-based deployed OSD(s)
+
+.. prompt:: bash #
+
+  ceph orch device replace <host> <device-path>
+
+In the case the device being replaced is shared by multiple OSDs (eg: DB/WAL device shared by multiple OSDs), the orchestrator will warn you.
+
+.. prompt:: bash #
+
+  [ceph: root@ceph /]# ceph orch device replace osd-1 /dev/vdd
+
+  Error EINVAL: /dev/vdd is a shared device.
+  Replacing /dev/vdd implies destroying OSD(s): ['0', '1'].
+  Please, *be very careful*, this can be a very dangerous operation.
+  If you know what you are doing, pass --yes-i-really-mean-it
+
+If you know what you are doing, you can go ahead and pass ``--yes-i-really-mean-it``.
+
+.. prompt:: bash #
+
+  [ceph: root@ceph /]# ceph orch device replace osd-1 /dev/vdd --yes-i-really-mean-it
+    Scheduled to destroy osds: ['6', '7', '8'] and mark /dev/vdd as being replaced.
+
+``cephadm`` will make ``ceph-volume`` zap and destroy all related devices and mark the corresponding OSD as ``destroyed`` so the
+different OSD(s) ID(s) will be preserved:
+
+.. prompt:: bash #
+
+  [ceph: root@ceph-1 /]# ceph osd tree
+    ID  CLASS  WEIGHT   TYPE NAME         STATUS     REWEIGHT  PRI-AFF
+    -1         0.97659  root default
+    -3         0.97659      host devel-1
+     0    hdd  0.29300          osd.0     destroyed   1.00000  1.00000
+     1    hdd  0.29300          osd.1     destroyed   1.00000  1.00000
+     2    hdd  0.19530          osd.2            up   1.00000  1.00000
+     3    hdd  0.19530          osd.3            up   1.00000  1.00000
+
+The device being replaced is finally seen as ``being replaced`` preventing ``cephadm`` from redeploying the OSDs too fast:
+
+.. prompt:: bash #
+
+  [ceph: root@ceph-1 /]# ceph orch device ls
+  HOST     PATH      TYPE  DEVICE ID   SIZE  AVAILABLE  REFRESHED  REJECT REASONS
+  osd-1  /dev/vdb  hdd               200G  Yes        13s ago
+  osd-1  /dev/vdc  hdd               200G  Yes        13s ago
+  osd-1  /dev/vdd  hdd               200G  Yes        13s ago    Is being replaced
+  osd-1  /dev/vde  hdd               200G  No         13s ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
+  osd-1  /dev/vdf  hdd               200G  No         13s ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
+
+If for any reason you need to clear the 'device replace header' on a device, then you can use ``ceph orch device replace <host> <device> --clear``:
+
+.. prompt:: bash #
+
+  [ceph: root@devel-1 /]# ceph orch device replace devel-1 /dev/vdk --clear
+  Replacement header cleared on /dev/vdk
+  [ceph: root@devel-1 /]#
+
+After that, ``cephadm`` will redeploy the OSD service spec within a few minutes (unless the service is set to ``unmanaged``).

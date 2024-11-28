@@ -1,5 +1,5 @@
 <div class="container h-75"
-     *ngIf="!startClusterCreation">
+     *ngIf="startClusterCreation">
   <div class="row h-100 justify-content-center align-items-center">
     <div class="blank-page">
       <!-- htmllint img-req-src="false" -->
@@ -30,7 +30,7 @@
 </div>
 
 <div class="card"
-     *ngIf="startClusterCreation">
+     *ngIf="!startClusterCreation">
   <div class="card-header"
        i18n>Expand Cluster</div>
   <div class="container-fluid">
@@ -45,7 +45,8 @@
           <cd-hosts [hiddenColumns]="['services']"
                     [hideMaintenance]="true"
                     [hasTableDetails]="false"
-                    [showGeneralActionsOnly]="true"></cd-hosts>
+                    [showGeneralActionsOnly]="true"
+                    [showExpandClusterBtn]="false"></cd-hosts>
         </div>
         <div *ngSwitchCase="'2'"
              class="ms-5">

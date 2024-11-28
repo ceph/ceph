@@ -56,7 +56,7 @@ distributions, execute the following:
 
 .. prompt:: bash $
 
-   sudo yum install librados2-devel
+   sudo yum install librados2-devel libradospp-devel
 
 Once you install ``librados`` for developers, you can find the required 
 headers for C/C++ under ``/usr/include/rados``:

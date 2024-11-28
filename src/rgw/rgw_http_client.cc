@@ -61,15 +61,13 @@ struct rgw_http_req_data : public RefCountedObject {
     memset(error_buf, 0, sizeof(error_buf));
   }
 
-  template <typename ExecutionContext, typename CompletionToken>
-  auto async_wait(ExecutionContext& ctx, CompletionToken&& token) {
-    boost::asio::async_completion<CompletionToken, Signature> init(token);
-    auto& handler = init.completion_handler;
-    {
-      std::unique_lock l{lock};
-      completion = Completion::create(ctx.get_executor(), std::move(handler));
-    }
-    return init.result.get();
+  template <typename Executor, typename CompletionToken>
+  auto async_wait(const Executor& ex, CompletionToken&& token) {
+    return boost::asio::async_initiate<CompletionToken, Signature>(
+        [this] (auto handler, auto ex) {
+          std::unique_lock l{lock};
+          completion = Completion::create(ex, std::move(handler));
+        }, token, ex);
   }
 
   int wait(optional_yield y) {
@@ -77,10 +75,9 @@ struct rgw_http_req_data : public RefCountedObject {
       return ret;
     }
     if (y) {
-      auto& context = y.get_io_context();
       auto& yield = y.get_yield_context();
       boost::system::error_code ec;
-      async_wait(context, yield[ec]);
+      async_wait(yield.get_executor(), yield[ec]);
       return -ec.value();
     }
     // work on asio threads should be asynchronous, so warn when they block
@@ -1150,7 +1147,6 @@ void *RGWHTTPManager::reqs_thread_entry()
           http_status = err.http_ret;
         }
         int id = req_data->id;
-	finish_request(req_data, status, http_status);
         switch (result) {
           case CURLE_OK:
             break;
@@ -1163,6 +1159,7 @@ void *RGWHTTPManager::reqs_thread_entry()
             dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << " req_data->error_buf=" << req_data->error_buf << dendl;
 	    break;
         }
+	finish_request(req_data, status, http_status);
       }
     }
   }

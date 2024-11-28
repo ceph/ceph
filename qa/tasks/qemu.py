@@ -8,6 +8,8 @@ import os
 import yaml
 import time
 
+from packaging.version import Version
+
 from tasks import rbd
 from tasks.util.workunit import get_refspec_after_overrides
 from teuthology import contextutil
@@ -492,7 +494,10 @@ def run_qemu(ctx, config):
             )
 
         nfs_service_name = 'nfs'
-        if remote.os.name in ['rhel', 'centos'] and float(remote.os.version) >= 8:
+        if (
+            remote.os.name in ['rhel', 'centos'] and
+            Version(remote.os.version.lower().removesuffix(".stream")) >= Version("8")
+        ):
             nfs_service_name = 'nfs-server'
 
         # make an nfs mount to use for logging and to

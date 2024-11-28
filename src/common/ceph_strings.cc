@@ -153,7 +153,15 @@ uint64_t ceph_release_features(int r)
 		return req;
 
 	req |= CEPH_FEATUREMASK_CRUSH_CHOOSE_ARGS; // and overlaps
-	if (r <= CEPH_RELEASE_LUMINOUS)
+	if (r <= CEPH_RELEASE_QUINCY)
+		return req;
+
+	req |= CEPH_FEATUREMASK_SERVER_REEF; // upmap-primary
+	if (r <= CEPH_RELEASE_REEF)
+		return req;
+
+	req |= CEPH_FEATUREMASK_CRUSH_MSR;
+	if (r <= CEPH_RELEASE_SQUID)
 		return req;
 
 	return req;

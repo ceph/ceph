@@ -81,6 +81,18 @@ Data Center B. In a situation of this kind, the loss of Data Center A means
 that the data is lost and Ceph will not be able to operate on it. This
 situation is surprisingly difficult to avoid using only standard CRUSH rules.
 
+Individual Stretch Pools
+========================
+Setting individual ``stretch pool`` is an option that allows for the configuration
+of specific pools to be distributed across ``two or more data centers``.
+This is achieved by executing the ``ceph osd pool stretch set`` command on each desired pool,
+as opposed to applying a cluster-wide configuration ``with stretch mode``.
+See :ref:`setting_values_for_a_stretch_pool`
+
+Use ``stretch mode`` when you have exactly ``two data centers`` and require a uniform
+configuration across the entire cluster. Conversely, opt for a ``stretch pool``
+when you need a particular pool to be replicated across ``more than two data centers``,
+providing a more granular level of control and a larger cluster size.
 
 Stretch Mode
 ============
@@ -129,6 +141,58 @@ your CRUSH map. This procedure shows how to do this.
              step chooseleaf firstn 2 type host
              step emit
      }
+
+   .. warning:: If a CRUSH rule is defined for a stretch mode cluster and the
+      rule has multiple "takes" in it, then ``MAX AVAIL`` for the pools
+      associated with the CRUSH rule will report that the available size is all
+      of the available space from the datacenter, not the available space for
+      the pools associated with the CRUSH rule.
+   
+      For example, consider a cluster with two CRUSH rules, ``stretch_rule`` and
+      ``stretch_replicated_rule``::
+
+         rule stretch_rule {
+              id 1
+              type replicated
+              step take DC1
+              step chooseleaf firstn 2 type host
+              step emit
+              step take DC2
+              step chooseleaf firstn 2 type host
+              step emit
+         }
+         
+         rule stretch_replicated_rule {
+                 id 2
+                 type replicated
+                 step take default
+                 step choose firstn 0 type datacenter
+                 step chooseleaf firstn 2 type host
+                 step emit
+         }
+
+      In the above example, ``stretch_rule`` will report an incorrect value for
+      ``MAX AVAIL``. ``stretch_replicated_rule`` will report the correct value.
+      This is because ``stretch_rule`` is defined in such a way that
+      ``PGMap::get_rule_avail`` considers only the available size of a single
+      data center, and not (as would be correct) the total available size from
+      both datacenters.
+      
+      Here is a workaround. Instead of defining the stretch rule as defined in
+      the ``stretch_rule`` function above, define it as follows::
+
+         rule stretch_rule {
+           id 2
+           type replicated
+           step take default
+           step choose firstn 0 type datacenter
+           step chooseleaf firstn 2 type host
+           step emit
+         }
+
+      See https://tracker.ceph.com/issues/56650 for more detail on this workaround.
+
+   *The above procedure was developed in May and June of 2024 by Prashant Dhange.*
 
 #. Inject the CRUSH map to make the rule available to the cluster:
 
@@ -208,8 +272,21 @@ SSDs (including NVMe OSDs). Hybrid HDD+SDD or HDD-only OSDs are not recommended
 due to the long time it takes for them to recover after connectivity between
 data centers has been restored. This reduces the potential for data loss.
 
-In the future, stretch mode might support erasure-coded pools and might support
-deployments that have more than two data centers.
+.. warning:: Device class is currently not supported in stretch mode.
+   For example, the following rule containing ``device class`` will not work::
+
+      rule stretch_replicated_rule {
+                 id 2
+                 type replicated class hdd
+                 step take default
+                 step choose firstn 0 type datacenter
+                 step chooseleaf firstn 2 type host
+                 step emit
+      }
+
+In the future, stretch mode could support erasure-coded pools,
+enable deployments across multiple data centers,
+and accommodate various device classes.
 
 Other commands
 ==============

@@ -3,14 +3,15 @@
 
 #pragma once
 
-#include <string>
-#include <unordered_map>
 #include <map>
+#include <optional>
+#include <string>
 #include <typeinfo>
+#include <unordered_map>
 #include <vector>
 
-#include <optional>
 #include <seastar/core/future.hh>
+#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/metrics_types.hh>
 
 #include "include/uuid.h"
@@ -203,6 +204,10 @@ public:
 
     void init_managers();
 
+    device_stats_t get_device_stats(bool report_detail) const;
+
+    shard_stats_t get_io_stats(bool report_detail) const;
+
   private:
     struct internal_context_t {
       CollectionRef ch;
@@ -240,23 +245,40 @@ public:
       const char* tname,
       op_type_t op_type,
       F &&f) {
+      // The below repeat_io_num requires MUTATE
+      assert(src == Transaction::src_t::MUTATE);
       return seastar::do_with(
         internal_context_t(
           ch, std::move(t),
           transaction_manager->create_transaction(src, tname)),
         std::forward<F>(f),
         [this, op_type](auto &ctx, auto &f) {
+        assert(shard_stats.starting_io_num);
+        --(shard_stats.starting_io_num);
+        ++(shard_stats.waiting_collock_io_num);
+
 	return ctx.transaction->get_handle().take_collection_lock(
 	  static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
 	).then([this] {
+	  assert(shard_stats.waiting_collock_io_num);
+	  --(shard_stats.waiting_collock_io_num);
+	  ++(shard_stats.waiting_throttler_io_num);
+
 	  return throttler.get(1);
 	}).then([&, this] {
+	  assert(shard_stats.waiting_throttler_io_num);
+	  --(shard_stats.waiting_throttler_io_num);
+	  ++(shard_stats.processing_inlock_io_num);
+
 	  return repeat_eagain([&, this] {
+	    ++(shard_stats.repeat_io_num);
+
 	    ctx.reset_preserve_handle(*transaction_manager);
 	    return std::invoke(f, ctx);
 	  }).handle_error(
 	    crimson::ct_error::all_same_way([&ctx](auto e) {
 	      on_error(ctx.ext_transaction);
+	      return seastar::now();
 	    })
 	  );
 	}).then([this, op_type, &ctx] {
@@ -283,6 +305,9 @@ public:
         ](auto &oid, auto &ret, auto &f)
       {
         return repeat_eagain([&, this, src, tname] {
+          assert(src == Transaction::src_t::READ);
+          ++(shard_stats.repeat_read_num);
+
           return transaction_manager->with_transaction_intr(
             src,
             tname,
@@ -476,6 +501,11 @@ public:
 
     seastar::metrics::metric_group metrics;
     void register_metrics();
+
+    mutable shard_stats_t shard_stats;
+    mutable seastar::lowres_clock::time_point last_tp =
+      seastar::lowres_clock::time_point::min();
+    mutable shard_stats_t last_shard_stats;
   };
 
 public:
@@ -493,6 +523,8 @@ public:
   mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
   seastar::future<store_statfs_t> stat() const final;
   seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const final;
+
+  seastar::future<> report_stats() final;
 
   uuid_d get_fsid() const final {
     ceph_assert(seastar::this_shard_id() == primary_core);
@@ -546,6 +578,11 @@ private:
   DeviceRef device;
   std::vector<DeviceRef> secondaries;
   seastar::sharded<SeaStore::Shard> shard_stores;
+
+  mutable seastar::lowres_clock::time_point last_tp =
+    seastar::lowres_clock::time_point::min();
+  mutable std::vector<device_stats_t> shard_device_stats;
+  mutable std::vector<shard_stats_t> shard_io_stats;
 };
 
 std::unique_ptr<SeaStore> make_seastore(

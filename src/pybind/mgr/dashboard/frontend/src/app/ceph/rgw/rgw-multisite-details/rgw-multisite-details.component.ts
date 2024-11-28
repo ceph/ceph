@@ -37,6 +37,7 @@ import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { Router } from '@angular/router';
+import { RgwMultisiteSyncPolicyComponent } from '../rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 
 @Component({
   selector: 'cd-rgw-multisite-details',
@@ -47,6 +48,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   private sub = new Subscription();
 
   @ViewChild('tree') tree: TreeComponent;
+  @ViewChild(RgwMultisiteSyncPolicyComponent) syncPolicyComp: RgwMultisiteSyncPolicyComponent;
 
   messages = {
     noDefaultRealm: $localize`Please create a default realm first to enable this feature`,
@@ -99,6 +101,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   rgwModuleStatus: boolean;
   restartGatewayMessage = false;
   rgwModuleData: string | any[] = [];
+  activeId: string;
 
   constructor(
     private modalService: ModalService,
@@ -267,7 +270,6 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
       }
     });
   }
-
   /* setConfigValues() {
     this.rgwDaemonService
       .setMultisiteConfig(

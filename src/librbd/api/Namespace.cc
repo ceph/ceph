@@ -64,24 +64,47 @@ int Namespace<I>::create(librados::IoCtx& io_ctx, const std::string& name)
     return r;
   }
 
+  int ret_val;
   librados::IoCtx ns_ctx;
   ns_ctx.dup(io_ctx);
   ns_ctx.set_namespace(name);
+
+  r = ns_ctx.create(RBD_TRASH, false);
+  if (r < 0) {
+    lderr(cct) << "failed to create trash: " << cpp_strerror(r) << dendl;
+    goto remove_namespace;
+  }
 
   r = cls_client::dir_state_set(&ns_ctx, RBD_DIRECTORY,
                                 cls::rbd::DIRECTORY_STATE_READY);
   if (r < 0) {
     lderr(cct) << "failed to initialize image directory: " << cpp_strerror(r)
                << dendl;
-    goto rollback;
+    goto remove_dir_and_trash;
   }
 
   return 0;
 
-rollback:
-  int ret_val = cls_client::namespace_remove(&default_ns_ctx, name);
+remove_dir_and_trash:
+  // dir_state_set method may fail before or after implicitly creating
+  // rbd_directory object
+  ret_val = ns_ctx.remove(RBD_DIRECTORY);
+  if (ret_val < 0 && ret_val != -ENOENT) {
+    lderr(cct) << "failed to remove image directory: " << cpp_strerror(ret_val)
+               << dendl;
+  }
+
+  ret_val = ns_ctx.remove(RBD_TRASH);
   if (ret_val < 0) {
-    lderr(cct) << "failed to remove namespace: " << cpp_strerror(ret_val) << dendl;
+    lderr(cct) << "failed to remove trash: " << cpp_strerror(ret_val)
+               << dendl;
+  }
+
+remove_namespace:
+  ret_val = cls_client::namespace_remove(&default_ns_ctx, name);
+  if (ret_val < 0) {
+    lderr(cct) << "failed to remove namespace: " << cpp_strerror(ret_val)
+               << dendl;
   }
 
   return r;

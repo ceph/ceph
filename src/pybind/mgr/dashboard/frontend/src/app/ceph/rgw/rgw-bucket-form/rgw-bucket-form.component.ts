@@ -10,7 +10,7 @@ import { AbstractControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
-import { forkJoin } from 'rxjs';
+import { Observable, forkJoin } from 'rxjs';
 import * as xml2js from 'xml2js';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -36,6 +36,10 @@ import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 import { BucketTagModalComponent } from '../bucket-tag-modal/bucket-tag-modal.component';
 import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-json-formatter.service';
+import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
+import { map, switchMap } from 'rxjs/operators';
+import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml-formatter.service';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -46,6 +50,8 @@ import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-js
 export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewChecked {
   @ViewChild('bucketPolicyTextArea')
   public bucketPolicyTextArea: ElementRef<any>;
+  @ViewChild('lifecycleTextArea')
+  public lifecycleTextArea: ElementRef<any>;
 
   bucketForm: CdFormGroup;
   editing = false;
@@ -72,6 +78,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   ];
   grantees: string[] = [Grantee.Owner, Grantee.Everyone, Grantee.AuthenticatedUsers];
   aclPermissions: AclPermissionsType[] = [aclPermission.FullControl];
+  multisiteStatus$: Observable<any>;
+  isDefaultZoneGroup$: Observable<boolean>;
 
   get isVersioningEnabled(): boolean {
     return this.bucketForm.getValue('versioning');
@@ -91,8 +99,11 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     private notificationService: NotificationService,
     private rgwEncryptionModal: RgwBucketEncryptionModel,
     private textAreaJsonFormatterService: TextAreaJsonFormatterService,
+    private textAreaXmlFormatterService: TextAreaXmlFormatterService,
     public actionLabels: ActionLabelsI18n,
-    private readonly changeDetectorRef: ChangeDetectorRef
+    private readonly changeDetectorRef: ChangeDetectorRef,
+    private rgwMultisiteService: RgwMultisiteService,
+    private rgwDaemonService: RgwDaemonService
   ) {
     super();
     this.editing = this.router.url.startsWith(`/rgw/bucket/${URLVerbs.EDIT}`);
@@ -103,7 +114,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   ngAfterViewChecked(): void {
     this.changeDetectorRef.detectChanges();
-    this.bucketPolicyOnChange();
+    this.textAreaOnChange(this.bucketPolicyTextArea);
+    this.textAreaOnChange(this.lifecycleTextArea);
   }
 
   createForm() {
@@ -153,8 +165,10 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       lock_mode: ['COMPLIANCE'],
       lock_retention_period_days: [10, [CdValidators.number(false), lockDaysValidator]],
       bucket_policy: ['{}', CdValidators.json()],
+      lifecycle: ['{}', CdValidators.jsonOrXml()],
       grantee: [Grantee.Owner, [Validators.required]],
-      aclPermission: [[aclPermission.FullControl], [Validators.required]]
+      aclPermission: [[aclPermission.FullControl], [Validators.required]],
+      replication: [false]
     });
   }
 
@@ -162,6 +176,16 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     const promises = {
       owners: this.rgwUserService.enumerate()
     };
+    this.multisiteStatus$ = this.rgwMultisiteService.status();
+    this.isDefaultZoneGroup$ = this.rgwDaemonService.selectedDaemon$.pipe(
+      switchMap((daemon) =>
+        this.rgwSiteService.get('default-zonegroup').pipe(
+          map((defaultZoneGroup) => {
+            return daemon.zonegroup_id === defaultZoneGroup;
+          })
+        )
+      )
+    );
 
     this.kmsProviders = this.rgwEncryptionModal.kmsProviders;
     this.rgwBucketService.getEncryptionConfig().subscribe((data) => {
@@ -239,9 +263,18 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
               bidResp['acl'],
               bidResp['owner']
             );
+            value['lifecycle'] = JSON.stringify(bidResp['lifecycle'] || {});
           }
           this.bucketForm.setValue(value);
           if (this.editing) {
+            // temporary fix until the s3 account management is implemented in
+            // the frontend. Disable changing the owner of the bucket in case
+            // its owned by the account.
+            // @TODO: Introduce account selection for a bucket.
+            if (!this.owners.includes(value['owner'])) {
+              this.owners.push(value['owner']);
+              this.bucketForm.get('owner').disable();
+            }
             this.isVersioningAlreadyEnabled = this.isVersioningEnabled;
             this.isMfaDeleteAlreadyEnabled = this.isMfaDeleteEnabled;
             this.setMfaDeleteValidators();
@@ -252,6 +285,14 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
               this.bucketForm
                 .get('bucket_policy')
                 .setValue(JSON.stringify(value['bucket_policy'], null, 2));
+            }
+            if (value['replication']) {
+              const replicationConfig = value['replication'];
+              if (replicationConfig?.['Rule']?.['Status'] === 'Enabled') {
+                this.bucketForm.get('replication').setValue(true);
+              } else {
+                this.bucketForm.get('replication').setValue(false);
+              }
             }
             this.filterAclPermissions();
           }
@@ -267,14 +308,22 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   submit() {
     // Exit immediately if the form isn't dirty.
-    if (this.bucketForm.getValue('encryption_enabled') == null) {
-      this.bucketForm.get('encryption_enabled').setValue(false);
-      this.bucketForm.get('encryption_type').setValue(null);
-    }
     if (this.bucketForm.pristine) {
       this.goToListView();
       return;
     }
+
+    // Ensure that no validation is pending
+    if (this.bucketForm.pending) {
+      this.bucketForm.setErrors({ cdSubmitButton: true });
+      return;
+    }
+
+    if (this.bucketForm.getValue('encryption_enabled') == null) {
+      this.bucketForm.get('encryption_enabled').setValue(false);
+      this.bucketForm.get('encryption_type').setValue(null);
+    }
+
     const values = this.bucketForm.value;
     const xmlStrTags = this.tagsToXML(this.tags);
     const bucketPolicy = this.getBucketPolicy();
@@ -284,11 +333,15 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       // Edit
       const versioning = this.getVersioningStatus();
       const mfaDelete = this.getMfaDeleteStatus();
+      // make the owner empty if the field is disabled.
+      // this ensures the bucket doesn't gets updated with owner when
+      // the bucket is owned by the account.
+      const owner = this.bucketForm.get('owner').disabled === true ? '' : values['owner'];
       this.rgwBucketService
         .update(
           values['bid'],
           values['id'],
-          values['owner'],
+          owner,
           versioning,
           values['encryption_enabled'],
           values['encryption_type'],
@@ -300,7 +353,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           values['lock_retention_period_days'],
           xmlStrTags,
           bucketPolicy,
-          cannedAcl
+          cannedAcl,
+          values['replication'],
+          values['lifecycle']
         )
         .subscribe(
           () => {
@@ -331,7 +386,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           values['keyId'],
           xmlStrTags,
           bucketPolicy,
-          cannedAcl
+          cannedAcl,
+          values['replication']
         )
         .subscribe(
           () => {
@@ -397,9 +453,11 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     });
   }
 
-  bucketPolicyOnChange() {
-    if (this.bucketPolicyTextArea) {
-      this.textAreaJsonFormatterService.format(this.bucketPolicyTextArea);
+  textAreaOnChange(textArea: ElementRef<any>) {
+    if (textArea?.nativeElement?.value?.startsWith?.('<')) {
+      this.textAreaXmlFormatterService.format(textArea);
+    } else {
+      this.textAreaJsonFormatterService.format(textArea);
     }
   }
 
@@ -407,8 +465,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     window.open(url, '_blank');
   }
 
-  clearBucketPolicy() {
-    this.bucketForm.get('bucket_policy').setValue('{}');
+  clearTextArea(field: string, defaultValue: string = '') {
+    this.bucketForm.get(field).setValue(defaultValue);
     this.bucketForm.markAsDirty();
     this.bucketForm.updateValueAndValidity();
   }

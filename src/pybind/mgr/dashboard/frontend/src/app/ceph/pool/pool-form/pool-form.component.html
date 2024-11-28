@@ -191,6 +191,25 @@
             </i>
           </div>
         </div>
+        <!-- Mirroring -->
+        <div class="form-group row"
+             *ngIf="data.applications.selected.includes('rbd')">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="rbdMirroring"
+                     name="rbdMirroring"
+                     type="checkbox"
+                     formControlName="rbdMirroring">
+              <label class="custom-control-label"
+                     for="rbdMirroring"
+                     i18n>Mirroring</label>
+              <cd-help-text>
+                <span i18n>Check this option to enable Pool based mirroring on a Block(RBD) pool.</span>
+              </cd-help-text>
+            </div>
+          </div>
+        </div>
         <!-- CRUSH -->
         <div *ngIf="isErasure || isReplicated">
 
@@ -207,7 +226,8 @@
                 <select class="form-select"
                         id="erasureProfile"
                         name="erasureProfile"
-                        formControlName="erasureProfile">
+                        formControlName="erasureProfile"
+                        (change)="erasureProfileChange()">
                   <option *ngIf="!ecProfiles"
                           ngValue=""
                           i18n>Loading...</option>
@@ -294,8 +314,14 @@
                    for="crushRule"
                    i18n>Crush ruleset</label>
             <div class="cd-col-form-input">
-              <span class="form-text text-muted"
+              <span *ngIf="!msrCrush; else msrCrushText"
+                    class="form-text text-muted"
                     i18n>A new crush ruleset will be implicitly created.</span>
+              <ng-template #msrCrushText>
+                <span class="form-text text-muted"
+                      i18n>A new crush MSR ruleset will be implicitly created.
+                      When crush-osds-per-failure-domain or crush-num-failure-domains is specified</span>
+              </ng-template>
             </div>
           </div>
           <div class="form-group row"

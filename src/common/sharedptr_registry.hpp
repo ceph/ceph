@@ -18,6 +18,7 @@
 #include <map>
 #include <memory>
 #include "common/ceph_mutex.h"
+#include "include/ceph_assert.h"
 
 /**
  * Provides a registry of shared_ptr<V> indexed by K while
@@ -60,6 +61,11 @@ public:
   SharedPtrRegistry() :
     waiting(0)
   {}
+
+  void reset() {
+    ceph_assert(!waiting);
+    contents.clear();
+  }
 
   bool empty() {
     std::lock_guard l(lock);

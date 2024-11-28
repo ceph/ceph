@@ -177,8 +177,8 @@ export class DashboardAreaChartComponent implements OnChanges {
   }
 
   private updateChartData(changes: SimpleChanges): void {
-    for (let index = 0; index < this.labelsArray.length; index++) {
-      const colorIndex = index % this.chartColors.length;
+    this.labelsArray.forEach((_label: string, index: number) => {
+      const colorIndex = index % this.chartColors?.length;
       this.chartData.dataset[index] = {
         label: '',
         data: [],
@@ -192,14 +192,14 @@ export class DashboardAreaChartComponent implements OnChanges {
         }
       };
       this.chartData.dataset[index].label = this.labelsArray[index];
-    }
+    });
 
     this.setChartTicks();
 
-    if (this.dataArray && this.dataArray.length && this.dataArray[0] && this.dataArray[0].length) {
+    if (this.dataArray?.[0]?.length) {
       this.dataArray = changes?.dataArray?.currentValue || this.dataArray;
       this.currentChartData = this.chartData;
-      for (let index = 0; index < this.dataArray.length; index++) {
+      this.dataArray?.forEach((_data: Array<[number, string]>, index: number) => {
         this.chartData.dataset[index].data = this.formatData(this.dataArray[index]);
         let currentDataValue = this.dataArray[index][this.dataArray[index].length - 1]
           ? this.dataArray[index][this.dataArray[index].length - 1][1]
@@ -213,7 +213,7 @@ export class DashboardAreaChartComponent implements OnChanges {
             this.maxValue
           ).split(' ');
         }
-      }
+      });
     }
 
     if (this.chart) {
@@ -289,11 +289,11 @@ export class DashboardAreaChartComponent implements OnChanges {
     let maxValue = 0;
     let maxValueDataUnits = '';
 
-    const allDataValues = this.dataArray.reduce((array: string[], data) => {
+    const allDataValues = this.dataArray?.reduce((array: string[], data) => {
       return array.concat(data?.map((values: [number, string]) => values[1]));
     }, []);
 
-    maxValue = Math.max(...allDataValues.map(Number));
+    maxValue = allDataValues ? Math.max(...allDataValues.map(Number)) : 0;
     [maxValue, maxValueDataUnits] = this.convertUnits(maxValue).split(' ');
 
     const yAxesTicks = this.chart.chart.options.scales.y;

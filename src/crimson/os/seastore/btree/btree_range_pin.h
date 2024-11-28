@@ -194,8 +194,41 @@ public:
     return parent->has_been_invalidated();
   }
 
+  bool is_unviewable_by_trans(CachedExtent& extent, Transaction &t) const {
+    if (!extent.is_valid()) {
+      return true;
+    }
+    if (extent.is_pending()) {
+      assert(extent.is_pending_in_trans(t.get_trans_id()));
+      return false;
+    }
+    auto &pendings = extent.mutation_pendings;
+    auto trans_id = t.get_trans_id();
+    bool unviewable = (pendings.find(trans_id, trans_spec_view_t::cmp_t()) !=
+		       pendings.end());
+    if (!unviewable) {
+      auto &trans = extent.retired_transactions;
+      unviewable = (trans.find(trans_id, trans_spec_view_t::cmp_t()) !=
+		 trans.end());
+      assert(unviewable == t.is_retired(extent.get_paddr(), extent.get_length()));
+    }
+    return unviewable;
+  }
+
   get_child_ret_t<LogicalCachedExtent> get_logical_extent(Transaction&) final;
   bool is_stable() const final;
+  bool is_data_stable() const final;
+  bool is_parent_viewable() const final {
+    ceph_assert(parent);
+    if (!parent->is_valid()) {
+      return false;
+    }
+    return !is_unviewable_by_trans(*parent, ctx.trans);
+  }
+  bool is_parent_valid() const final {
+    ceph_assert(parent);
+    return parent->is_valid();
+  }
 };
 
 }

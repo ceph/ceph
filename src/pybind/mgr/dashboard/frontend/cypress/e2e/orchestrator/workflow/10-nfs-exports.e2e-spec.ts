@@ -19,11 +19,11 @@ describe('nfsExport page', () => {
 
   beforeEach(() => {
     cy.login();
-    nfsExport.navigateTo();
   });
 
   describe('breadcrumb test', () => {
     it('should open and show breadcrumb', () => {
+      nfsExport.navigateTo('rgw_index');
       nfsExport.expectBreadcrumbText('NFS');
     });
   });
@@ -43,23 +43,24 @@ describe('nfsExport page', () => {
       buckets.navigateTo('create');
       buckets.create(bucketName, 'dashboard');
 
-      nfsExport.navigateTo();
+      nfsExport.navigateTo('rgw_index');
       nfsExport.existTableCell(rgwPseudo, false);
-      nfsExport.navigateTo('create');
+      nfsExport.navigateTo('rgw_create');
       nfsExport.create(backends[1], squash, client, rgwPseudo, bucketName);
       nfsExport.existTableCell(rgwPseudo);
     });
 
     // @TODO: uncomment this when a CephFS volume can be created through Dashboard.
     // it('should create a nfs-export with CephFS backend', () => {
-    //   nfsExport.navigateTo();
+    //   nfsExport.navigateTo('cephfs_index');
     //   nfsExport.existTableCell(fsPseudo, false);
-    //   nfsExport.navigateTo('create');
+    //   nfsExport.navigateTo('cephfs_create');
     //   nfsExport.create(backends[0], squash, client, fsPseudo);
     //   nfsExport.existTableCell(fsPseudo);
     // });
 
     it('should show Clients', () => {
+      nfsExport.navigateTo('rgw_index');
       nfsExport.clickTab('cd-nfs-details', rgwPseudo, 'Clients (1)');
       cy.get('cd-nfs-details').within(() => {
         nfsExport.getTableCount('total').should('be.gte', 0);
@@ -67,12 +68,13 @@ describe('nfsExport page', () => {
     });
 
     it('should edit an export', () => {
-      nfsExport.editExport(rgwPseudo, editPseudo);
+      nfsExport.editExport(rgwPseudo, editPseudo, 'rgw_index');
 
       nfsExport.existTableCell(editPseudo);
     });
 
     it('should delete exports and bucket', () => {
+      nfsExport.navigateTo('rgw_index');
       nfsExport.delete(editPseudo);
 
       buckets.navigateTo();

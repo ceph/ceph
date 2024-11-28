@@ -44,6 +44,12 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
 public:
   class PGPipeline : public CommonPGPipeline {
     public:
+    struct RecoverMissingLockOBC : OrderedConcurrentPhaseT<RecoverMissingLockOBC> {
+      static constexpr auto type_name = "ClientRequest::PGPipeline::recover_missing_lock_obc";
+    } recover_missing_lock_obc;
+    struct RecoverMissingSnaps : OrderedExclusivePhaseT<RecoverMissingSnaps> {
+      static constexpr auto type_name = "ClientRequest::PGPipeline::recover_missing_snaps";
+    } recover_missing_snaps;
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "ClientRequest::PGPipeline::await_map";
     } await_map;
@@ -105,20 +111,26 @@ public:
       PGPipeline::WaitForActive::BlockingEvent,
       PGActivationBlocker::BlockingEvent,
       PGPipeline::RecoverMissing::BlockingEvent,
+      PGPipeline::RecoverMissingLockOBC::BlockingEvent,
+      PGPipeline::RecoverMissingSnaps::BlockingEvent,
       scrub::PGScrubber::BlockingEvent,
       PGPipeline::GetOBC::BlockingEvent,
+      PGPipeline::LockOBC::BlockingEvent,
       PGPipeline::Process::BlockingEvent,
       PGPipeline::WaitRepop::BlockingEvent,
       PGPipeline::SendReply::BlockingEvent,
       CompletionEvent
       > pg_tracking_events;
 
+    template <class BlockingEventT>
+    typename BlockingEventT::template Trigger<ClientRequest>
+    get_trigger(ClientRequest &op) {
+      return {std::get<BlockingEventT>(pg_tracking_events), op};
+    }
+
     template <typename BlockingEventT, typename InterruptorT=void, typename F>
     auto with_blocking_event(F &&f, ClientRequest &op) {
-      auto ret = std::forward<F>(f)(
-	typename BlockingEventT::template Trigger<ClientRequest>{
-	  std::get<BlockingEventT>(pg_tracking_events), op
-	});
+      auto ret = std::forward<F>(f)(get_trigger<BlockingEventT>(op));
       if constexpr (std::is_same_v<InterruptorT, void>) {
 	return ret;
       } else {
@@ -136,6 +148,12 @@ public:
 	    return handle.template enter<ClientRequest>(
 	      stage, std::move(trigger));
 	  }, op);
+    }
+
+    template <typename StageT>
+    void enter_stage_sync(StageT &stage, ClientRequest &op) {
+      handle.template enter_sync<ClientRequest>(
+          stage, get_trigger<typename StageT::BlockingEvent>(op));
     }
 
     template <
@@ -162,6 +180,7 @@ public:
     instance_handle = new instance_handle_t;
   }
   auto get_instance_handle() { return instance_handle; }
+  auto get_instance_handle() const { return instance_handle; }
 
   std::set<snapid_t> snaps_need_to_recover() {
     std::set<snapid_t> ret;
@@ -280,6 +299,12 @@ private:
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_pg_op(
     Ref<PG> pg);
+  interruptible_future<>
+  recover_missing_snaps(
+    Ref<PG> pg,
+    instance_handle_t &ihref,
+    ObjectContextRef head,
+    std::set<snapid_t> &snaps);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_op(
       instance_handle_t &ihref,

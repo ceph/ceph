@@ -146,14 +146,14 @@ for pool in rbd rbdnonzero; do
     done
 done
 
-# rbd_directory, rbd_children, rbd_info + img0 header + ...
-NUM_META_RBDS=$((3 + 1 + 3 * (1*2 + 3*2)))
-# rbd_directory, rbd_children, rbd_info + ...
-NUM_META_CLONESONLY=$((3 + 2 * 3 * (3*2)))
+# rbd_directory, rbd_children, rbd_info + rbd_trash + img0 header + ...
+NUM_META_RBDS=$((4 + 1 + 3 * (1*2 + 3*2)))
+# rbd_directory, rbd_children, rbd_info + rbd_trash + ...
+NUM_META_CLONESONLY=$((4 + 2 * 3 * (3*2)))
 
 [[ $(rados -p rbd ls | wc -l) -eq $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
-[[ $(rados -p repdata ls | wc -l) -eq $((1 + 14 * NUM_OBJECTS)) ]]
-[[ $(rados -p ecdata ls | wc -l) -eq $((1 + 14 * NUM_OBJECTS)) ]]
+[[ $(rados -p repdata ls | wc -l) -eq $((2 + 14 * NUM_OBJECTS)) ]]
+[[ $(rados -p ecdata ls | wc -l) -eq $((2 + 14 * NUM_OBJECTS)) ]]
 [[ $(rados -p rbdnonzero ls | wc -l) -eq $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
 [[ $(rados -p clonesonly ls | wc -l) -eq $((NUM_META_CLONESONLY + 6 * NUM_OBJECTS)) ]]
 
@@ -192,8 +192,8 @@ done
 
 # mkfs_and_mount should discard some objects everywhere but in clonesonly
 [[ $(list_HEADs rbd | wc -l) -lt $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
-[[ $(list_HEADs repdata | wc -l) -lt $((1 + 14 * NUM_OBJECTS)) ]]
-[[ $(list_HEADs ecdata | wc -l) -lt $((1 + 14 * NUM_OBJECTS)) ]]
+[[ $(list_HEADs repdata | wc -l) -lt $((2 + 14 * NUM_OBJECTS)) ]]
+[[ $(list_HEADs ecdata | wc -l) -lt $((2 + 14 * NUM_OBJECTS)) ]]
 [[ $(list_HEADs rbdnonzero | wc -l) -lt $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
 [[ $(list_HEADs clonesonly | wc -l) -eq $((NUM_META_CLONESONLY + 6 * NUM_OBJECTS)) ]]
 

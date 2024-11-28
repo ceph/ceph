@@ -30,6 +30,8 @@
   a large buildup of session metadata resulting in the MDS going read-only due to
   the RADOS operation exceeding the size threshold. `mds_session_metadata_threshold`
   config controls the maximum size that a (encoded) session metadata can grow.
+* CephFS: A new "mds last-seen" command is available for querying the last time
+  an MDS was in the FSMap, subject to a pruning threshold.
 * CephFS: For clusters with multiple CephFS file systems, all the snap-schedule
   commands now expect the '--fs' argument.
 * CephFS: The period specifier ``m`` now implies minutes and the period specifier
@@ -77,6 +79,8 @@
   config option. Previously, they would ignore invalid or missing realms and
   go on to load a zone/zonegroup in a different realm. If startup fails with
   a  "failed to load realm" error, fix or remove the ``rgw_realm`` option.
+* rgw: The radosgw-admin commands ``realm create`` and ``realm pull`` no
+  longer set the default realm without ``--default``.
 * CephFS: Running the command "ceph fs authorize" for an existing entity now
   upgrades the entity's capabilities instead of printing an error. It can now
   also change read/write permissions in a capability that the entity already
@@ -158,12 +162,22 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   notifications to topics owned by other users. A new configuration parameter:
   ``rgw_topic_require_publish_policy`` can be enabled to deny ``sns:Publish``
   permissions unless explicitly granted by topic policy.
+* RGW: Fix issue with persistent notifications where the changes to topic param that
+  were modified while persistent notifications were in the queue will be reflected in notifications.
+  So if user sets up topic with incorrect config (e.g. endpoint address) causing failure while delivering the
+  notifications to broker, can now modify the incorrect topic attribute and on retry attempt to delivery
+  the notifications, new configs will be used.
 * RBD: The option ``--image-id`` has been added to `rbd children` CLI command,
   so it can be run for images in the trash.
 * PG dump: The default output of `ceph pg dump --format json` has changed. The
   default json format produces a rather massive output in large clusters and
   isn't scalable. So we have removed the 'network_ping_times' section from
   the output. Details in the tracker: https://tracker.ceph.com/issues/57460
+* mgr/REST: The REST manager module will trim requests based on the 'max_requests' option.
+  Without this feature, and in the absence of manual deletion of old requests,
+  the accumulation of requests in the array can lead to Out Of Memory (OOM) issues, 
+  resulting in the Manager crashing.
+
 * CephFS: The `subvolume snapshot clone` command now depends on the config option
   `snapshot_clone_no_wait` which is used to reject the clone operation when
   all the cloner threads are busy. This config option is enabled by default which means 
@@ -186,6 +200,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   and the new feature bit for more information.
 
 * cls_cxx_gather is marked as deprecated.
+* CephFS: cephfs-journal-tool is guarded against running on an online file system.
+  The 'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset' and
+  'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset --force'
+  commands require '--yes-i-really-really-mean-it'.
 
 * Dashboard: Rearranged Navigation Layout: The navigation layout has been reorganized
   for improved usability and easier access to key features.
@@ -205,6 +223,19 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 * Monitoring: RGW S3 Analytics: A new Grafana dashboard is now available, enabling you to
   visualize per bucket and user analytics data, including total GETs, PUTs, Deletes,
   Copies, and list metrics.
+* RBD: `Image::access_timestamp` and `Image::modify_timestamp` Python APIs now
+  return timestamps in UTC.
+* RBD: Support for cloning from non-user type snapshots is added.  This is
+  intended primarily as a building block for cloning new groups from group
+  snapshots created with `rbd group snap create` command, but has also been
+  exposed via the new `--snap-id` option for `rbd clone` command.
+* RBD: The output of `rbd snap ls --all` command now includes the original
+  type for trashed snapshots.
+
+* CephFS: Command "ceph mds fail" and "ceph fs fail" now requires a
+  confirmation flag when some MDSs exhibit health warning MDS_TRIM or
+  MDS_CACHE_OVERSIZED. This is to prevent accidental MDS failover causing
+  further delays in recovery.
 
 >=18.0.0
 

@@ -2102,7 +2102,9 @@ void PeeringState::calc_replicated_acting_stretch(
    * and then by the ordering token of the next osd */
   bucket_heap_t aheap;
   std::for_each(ancestors.begin(), ancestors.end(), [&](auto &anc) {
-    aheap.push_if_nonempty(anc.second);
+    if (anc.second.get_num_selected() < bucket_max) {
+      aheap.push_if_nonempty(anc.second);
+    }
   });
 
   /* and pull from this heap until it's empty or we have enough.

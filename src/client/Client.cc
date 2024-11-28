@@ -6271,6 +6271,11 @@ int Client::resolve_mds(
   if (role_r == 0) {
     // We got a role, resolve it to a GID
     const auto& mdsmap = fsmap->get_filesystem(role.fscid).get_mds_map();
+    if (mdsmap.is_down(role.rank)) {
+      lderr(cct) << __func__ << ": targets rank: " << role.rank
+                 << " is down" << dendl;
+      return -CEPHFS_EAGAIN;
+    }
     auto& info = mdsmap.get_info(role.rank);
     ldout(cct, 10) << __func__ << ": resolved " << mds_spec << " to role '"
       << role << "' aka " << info.human_name() << dendl;
@@ -9398,6 +9403,12 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     int r = _getattr(dn->inode, mask, dirp->perms);
     if (r < 0)
       return r;
+
+    /* fix https://tracker.ceph.com/issues/56288 */
+    if (dirp->inode->dir == NULL) {
+      ldout(cct, 0) << " dir is closed, so we should return" << dendl;
+      return -CEPHFS_EAGAIN;
+    }
     
     // the content of readdir_cache may change after _getattr(), so pd may be invalid iterator    
     pd = dir->readdir_cache.begin() + idx;
@@ -13861,7 +13872,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
 
   int xattr_flags = 0;
   if (!value)
-    xattr_flags |= CEPH_XATTR_REMOVE;
+    xattr_flags |= CEPH_XATTR_REMOVE | CEPH_XATTR_REMOVE2;
   if (flags & XATTR_CREATE)
     xattr_flags |= CEPH_XATTR_CREATE;
   if (flags & XATTR_REPLACE)
@@ -13919,6 +13930,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
       mode_t new_mode = in->mode;
       if (value) {
 	int ret = posix_acl_equiv_mode(value, size, &new_mode);
+	ldout(cct, 3) << __func__ << "(" << in->ino << ", \"" << name << "\") = " << ret << dendl;
 	if (ret < 0)
 	  return ret;
 	if (ret == 0) {
@@ -13967,6 +13979,11 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
 	!(in->snaprealm && in->snaprealm->ino == in->ino))
       ret = -CEPHFS_EOPNOTSUPP;
   }
+
+  if ((!strcmp(name, ACL_EA_ACCESS) ||
+      !strcmp(name, ACL_EA_DEFAULT)) &&
+      ret == -CEPHFS_ENODATA)
+    ret = 0;
 
   return ret;
 }
@@ -14056,7 +14073,7 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
 
   vinodeno_t vino = _get_vino(in);
 
-  ldout(cct, 3) << __func__ << " " << vino << " " << name << " size " << size << dendl;
+  ldout(cct, 3) << __func__ << " " << vino << " " << name << " size " << size << " value " << !!value << dendl;
   tout(cct) << __func__ << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
@@ -15779,6 +15796,10 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
     return -CEPHFS_ENOTCONN;
   }
 
+  /* We can't return bytes written larger than INT_MAX, clamp len to that */
+  len = std::min(len, (loff_t)INT_MAX);
+
+  std::scoped_lock lock(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -CEPHFS_EBADF;
@@ -15789,10 +15810,6 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
   tout(cct) << (uintptr_t)fh << std::endl;
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
-
-  /* We can't return bytes written larger than INT_MAX, clamp len to that */
-  len = std::min(len, (loff_t)INT_MAX);
-  std::scoped_lock lock(client_lock);
 
   int r = _read(fh, off, len, bl);
   ldout(cct, 3) << "ll_read " << fh << " " << off << "~" << len << " = " << r
@@ -15924,6 +15941,10 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
     return -CEPHFS_ENOTCONN;
   }
 
+  /* We can't return bytes written larger than INT_MAX, clamp len to that */
+  len = std::min(len, (loff_t)INT_MAX);
+
+  std::scoped_lock lock(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -CEPHFS_EBADF;
@@ -15935,10 +15956,6 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   tout(cct) << (uintptr_t)fh << std::endl;
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
-
-  /* We can't return bytes written larger than INT_MAX, clamp len to that */
-  len = std::min(len, (loff_t)INT_MAX);
-  std::scoped_lock lock(client_lock);
 
   int r = _write(fh, off, len, data, NULL, 0);
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
@@ -15953,12 +15970,11 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
     return -CEPHFS_ENOTCONN;
   }
 
+  std::scoped_lock cl(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -CEPHFS_EBADF;
   }
-
-  std::scoped_lock cl(client_lock);
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
 }
 
@@ -15969,12 +15985,11 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
     return -CEPHFS_ENOTCONN;
   }
 
+  std::scoped_lock cl(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -CEPHFS_EBADF;
   }
-
-  std::scoped_lock cl(client_lock);
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
 }
 
@@ -15997,17 +16012,23 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
       return retval;
     }
 
+    retval = 0;
+    std::unique_lock cl(client_lock);
+
     if(fh == NULL || !_ll_fh_exists(fh)) {
       ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
       retval = -CEPHFS_EBADF;
+    }
+
+    if (retval != 0) {
       if (onfinish != nullptr) {
+        cl.unlock();
         onfinish->complete(retval);
+        cl.lock();
         retval = 0;
       }
       return retval;
     }
-
-    std::scoped_lock cl(client_lock);
 
     retval = _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
                                     onfinish, bl, do_fsync, syncdataonly);
@@ -16029,9 +16050,9 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
     if (retval < 0) {
       if (onfinish != nullptr) {
         //async io failed
-        client_lock.unlock();
+        cl.unlock();
         onfinish->complete(retval);
-        client_lock.lock();
+        cl.lock();
         /* async call should always return zero to caller and allow the
         caller to wait on callback for the actual errno/retval. */
         retval = 0;

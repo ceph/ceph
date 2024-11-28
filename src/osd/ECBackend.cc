@@ -229,28 +229,20 @@ void ECBackend::handle_recovery_push(
 
   recovery_backend.handle_recovery_push(op, m, is_repair);
 
-  if (op.after_progress.data_complete) {
-    if ((get_parent()->pgb_is_primary())) {
-      if (get_parent()->pg_is_repair() || is_repair)
-        get_parent()->inc_osd_stat_repaired();
-    } else {
-      // If primary told us this is a repair, bump osd_stat_t::num_objects_repaired
-      if (is_repair)
-        get_parent()->inc_osd_stat_repaired();
-      if (get_parent()->pg_is_remote_backfilling()) {
-        struct stat st;
-        int r = store->stat(ch, ghobject_t(op.soid, ghobject_t::NO_GEN,
-                            get_parent()->whoami_shard().shard), &st);
-        if (r == 0) {
-          get_parent()->pg_sub_local_num_bytes(st.st_size);
-         // XXX: This can be way overestimated for small objects
-         get_parent()->pg_sub_num_bytes(st.st_size * get_ec_data_chunk_count());
-         dout(10) << __func__ << " " << op.soid
-                  << " sub actual data by " << st.st_size
-                  << " sub num_bytes by " << st.st_size * get_ec_data_chunk_count()
-                  << dendl;
-        }
-      }
+  if (op.after_progress.data_complete &&
+     !(get_parent()->pgb_is_primary()) &&
+     get_parent()->pg_is_remote_backfilling()) {
+    struct stat st;
+    int r = store->stat(ch, ghobject_t(op.soid, ghobject_t::NO_GEN,
+                        get_parent()->whoami_shard().shard), &st);
+    if (r == 0) {
+      get_parent()->pg_sub_local_num_bytes(st.st_size);
+      // XXX: This can be way overestimated for small objects
+      get_parent()->pg_sub_num_bytes(st.st_size * get_ec_data_chunk_count());
+      dout(10) << __func__ << " " << op.soid
+               << " sub actual data by " << st.st_size
+               << " sub num_bytes by " << st.st_size * get_ec_data_chunk_count()
+               << dendl;
     }
   }
 }
@@ -1726,7 +1718,8 @@ int ECBackend::be_deep_scrub(
   int r;
 
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
-                           CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+                           CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | 
+                           CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE;
 
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);

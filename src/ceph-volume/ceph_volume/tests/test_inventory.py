@@ -126,6 +126,7 @@ class TestInventory(object):
         'lvs',
         'device_id',
         'lsm_data',
+        'being_replaced'
     ]
 
     expected_sys_api_keys = [

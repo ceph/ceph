@@ -53,8 +53,7 @@ the MDS server. Even if a single MDS daemon is unable to fully utilize the
 hardware, it may be desirable later on to start more active MDS daemons on the
 same node to fully utilize the available cores and memory. Additionally, it may
 become clear with workloads on the cluster that performance improves with
-multiple active MDS on the same node rather than over-provisioning a single
-MDS.
+multiple active MDS on the same node rather than a single overloaded MDS.
 
 Finally, be aware that CephFS is a highly-available file system by supporting
 standby MDS (see also :ref:`mds-standby`) for rapid failover. To get a real
@@ -114,5 +113,12 @@ the following method.
 #. Remove the ``/var/lib/ceph/mds/ceph-${id}`` directory on the MDS. ::
 
 	$ sudo rm -rf /var/lib/ceph/mds/ceph-${id}
+
+
+.. note:: When an active MDS either has health warning MDS_TRIM or
+   MDS_CACHE_OVERSIZED, confirmation flag (--yes-i-really-mean-it)
+   needs to be passed, else the command will fail. It is not recommended to
+   restart an MDS which has these warnings since slow recovery at restart may
+   lead to more problems.
 
 .. _MDS Config Reference: ../mds-config-ref

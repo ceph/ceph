@@ -21,14 +21,56 @@ Bodies
 Ceph Executive Council
 ======================
 
-Responsibilities
-----------------
+.. _exec-council-responsibilities:
 
- * Arbiter in cases where decisions cannot be reached by consensus
- * Distribute key responsibilities amongst themselves or others
- * Point of contact for the project
- * Representatives for Ceph foundation board meetings
- * Ensure things get done
+Ceph Executive Council Responsibilities
+---------------------------------------
+
+- Spokesperson
+
+   - welcome/keynote for cephalocon
+     
+   - maintaining slides and presenting about the project
+
+   - Community focal point (user interaction, conference talks, mailing list,
+     etc)
+   
+- Community
+
+    - managing community manager
+
+    - LF Program Manager person, Social Media person
+
+    - liase with the ambassadors
+
+    - make sure ceph events happen, successfully: cephalocon, ceph days, cds, user/dev, cdm
+
+    - coordinating with LF
+
+    - creating program committee
+
+    - recordings on youtube
+
+    - getting sponsors for events
+
+    - communications, schedule, venue decisions
+
+    - coordinate blog posts
+
+
+- Ceph Foundation
+
+    - ensure foundation is healthy: financials, operations
+
+    - represent the CLT on the Board
+
+    - present project status regularly (yearly)
+
+    - collect member ideas / feedback
+
+    - ensure members feel valued
+
+    - guide the members how to support the project (events, testing, marketing, hardware, ...)
 
 Membership
 ----------
@@ -47,7 +89,7 @@ Membership
 Current Members
 ^^^^^^^^^^^^^^^
 
-* Dan van der Ster <daniel.vanderster@cern.ch>
+* Dan van der Ster <dan.vanderster@clyso.com>
 * Josh Durgin <jdurgin@redhat.com>
 * Neha Ojha <nojha@redhat.com>
 
@@ -82,28 +124,28 @@ Current Members
  * Casey Bodley <cbodley@redhat.com>
  * Dan van der Ster <dan.vanderster@clyso.com>
  * David Orman <ormandj@1111systems.com>
- * Ernesto Puerta <epuerta@redhat.com>
+ * Ernesto Puerta <epuertat@redhat.com>
  * Gregory Farnum <gfarnum@redhat.com>
  * Haomai Wang <haomai@xsky.com>
  * Ilya Dryomov <idryomov@redhat.com>
  * Igor Fedotov <igor.fedotov@croit.io>
  * Jeff Layton <jlayton@redhat.com>
  * Josh Durgin <jdurgin@redhat.com>
- * João Eduardo Luis <joao@suse.de>
+ * João Eduardo Luis <joao@clyso.com>
  * Ken Dreyer <kdreyer@redhat.com>
- * Mark Nelson <mnelson@redhat.com>
+ * Mark Nelson <mark.nelson@clyso.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
  * Myoungwon Oh <myoungwon.oh@samsung.com>
  * Neha Ojha <nojha@redhat.com>
- * Patrick Donnelly <pdonnell@redhat.com>
+ * Patrick Donnelly <pdonnell@ibm.com>
  * Sam Just <sjust@redhat.com>
  * Vikhyat Umrao <vikhyat@redhat.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yehuda Sadeh <yehuda@redhat.com>
  * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
- * Zac Dover <zac.dover@gmail.com>
+ * Zac Dover <zac.dover@proton.me>
 
 .. _ctl:
 

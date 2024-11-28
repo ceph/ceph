@@ -43,7 +43,7 @@ seastar::future<> RecoverySubRequest::with_pg(
     });
   }, [](std::exception_ptr) {
     return seastar::now();
-  }, pgref).finally([this, opref=std::move(opref), pgref] {
+  }, pgref, pgref->get_osdmap_epoch()).finally([this, opref=std::move(opref), pgref] {
     logger().debug("{}: exit", *this);
     track_event<CompletionEvent>();
     handle.exit();
@@ -53,7 +53,7 @@ seastar::future<> RecoverySubRequest::with_pg(
 ConnectionPipeline &RecoverySubRequest::get_connection_pipeline()
 {
   return get_osd_priv(&get_local_connection()
-         ).client_request_conn_pipeline;
+         ).peering_request_conn_pipeline;
 }
 
 PerShardPipeline &RecoverySubRequest::get_pershard_pipeline(

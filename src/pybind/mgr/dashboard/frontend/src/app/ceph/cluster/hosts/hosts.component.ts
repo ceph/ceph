@@ -78,12 +78,16 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   @Input()
   showGeneralActionsOnly = false;
 
+  @Input()
+  showExpandClusterBtn = true;
+
   permissions: Permissions;
   columns: Array<CdTableColumn> = [];
   hosts: Array<object> = [];
   isLoadingHosts = false;
   cdParams = { fromLink: '/hosts' };
   tableActions: CdTableAction[];
+  expandClusterActions: CdTableAction[];
   selection = new CdTableSelection();
   modalRef: NgbModalRef;
   isExecuting = false;
@@ -125,6 +129,16 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
+    this.expandClusterActions = [
+      {
+        name: this.actionLabels.EXPAND_CLUSTER,
+        permission: 'create',
+        icon: Icons.expand,
+        routerLink: '/expand-cluster',
+        disable: (selection: CdTableSelection) => this.getDisable('add', selection),
+        visible: () => this.showExpandClusterBtn
+      }
+    ];
     this.tableActions = [
       {
         name: this.actionLabels.ADD,

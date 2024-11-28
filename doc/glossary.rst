@@ -42,6 +42,11 @@
                 Ceph is a distributed network storage and file system with
                 distributed metadata management and POSIX semantics.
 
+        `ceph-ansible <https://docs.ceph.com/projects/ceph-ansible/en/latest/index.html>`_
+                A GitHub repository, supported from the Jewel release to the
+                Quincy release, that facilitates the installation of a Ceph
+                cluster.
+                
 	Ceph Block Device
                 Also called "RADOS Block Device" and :term:`RBD`. A software
                 instrument that orchestrates the storage of block-based data in
@@ -89,6 +94,11 @@
                 POSIX-compliant file system built on top of Ceph’s distributed
                 object store, RADOS.  See :ref:`CephFS Architecture
                 <arch-cephfs>` for more details.
+
+        :ref:`ceph-fuse <man-ceph-fuse>`
+                :ref:`ceph-fuse <man-ceph-fuse>` is a FUSE ("**F**\ilesystem in
+                **USE**\rspace") client for CephFS. ceph-fuse mounts a Ceph FS
+                ata  specified mount point. 
 
 	Ceph Interim Release
                 See :term:`Releases`.
@@ -251,6 +261,10 @@
                 Another name for :term:`Dashboard`.
 
 	Dashboard Plugin
+        Flapping OSD
+                An OSD that is repeatedly marked ``up`` and then ``down`` in
+                rapid succession. See :ref:`rados_tshooting_flapping_osd`.
+
         FQDN
                 **F**\ully **Q**\ualified **D**\omain **N**\ame. A domain name
                 that is applied to a node in a network and that specifies the
@@ -310,6 +324,12 @@
 	Node
                 See :term:`Ceph Node`.
 
+	Object Storage
+                Object storage is one of three kinds of storage relevant to
+                Ceph. The other two kinds of storage relevant to Ceph are file
+                storage and block storage. Object storage is the category of
+                storage most fundamental to Ceph.
+
 	Object Storage Device
                 See :term:`OSD`.
 
@@ -345,6 +365,9 @@
                 mid-2010s to insist that "OSD" should refer to "Object Storage
                 Device", so it is important to know which meaning is intended. 
 
+        OSD, flapping
+                See :term:`Flapping OSD`.
+
 	OSD FSID 
                 The OSD fsid is a unique identifier that is used to identify an
                 OSD. It is found in the OSD path in a file called ``osd_fsid``.
@@ -379,7 +402,15 @@
                 placement group, and each placement group belongs to exactly
                 one Ceph pool. 
 
+        PLP 
+                **P**\ower **L**\oss **P**\rotection. A technology that
+                protects the data of solid-state drives by using capacitors to
+                extend the amount of time available for transferring data from
+                the DRAM cache to the SSD's permanent memory. Consumer-grade
+                SSDs are rarely equipped with PLP.
+
 	:ref:`Pool<rados_pools>`
+
 		A pool is a logical partition used to store objects.
 
 	Pools
@@ -391,6 +422,12 @@
                 OSD") in an acting set. Primary affinity was introduced in
                 Firefly (v. 0.80). See :ref:`Primary Affinity
                 <rados_ops_primary_affinity>`.
+
+        :ref:`Prometheus <mgr-prometheus>`
+                An open-source monitoring and alerting toolkit. Ceph offers a
+                :ref:`"Prometheus module" <mgr-prometheus>`, which provides a
+                Prometheus exporter that passes performance counters from a
+                collection point in ``ceph-mgr`` to Prometheus.
 
         Quorum	
                 Quorum is the state that exists when a majority of the

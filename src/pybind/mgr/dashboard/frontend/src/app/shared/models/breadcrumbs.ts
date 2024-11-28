@@ -32,13 +32,14 @@ export class BreadcrumbsResolver implements Resolve<IBreadcrumb[]> {
   ): Observable<IBreadcrumb[]> | Promise<IBreadcrumb[]> | IBreadcrumb[] {
     const data = route.routeConfig.data;
     const path = data.path === null ? null : this.getFullPath(route);
+    const disableSplit = data.disableSplit || false;
 
     const text =
       typeof data.breadcrumbs === 'string'
         ? data.breadcrumbs
         : data.breadcrumbs.text || data.text || path;
 
-    const crumbs: IBreadcrumb[] = [{ text: text, path: path }];
+    const crumbs: IBreadcrumb[] = [{ text: text, path: path, disableSplit: disableSplit }];
 
     return of(crumbs);
   }
@@ -56,4 +57,5 @@ export class BreadcrumbsResolver implements Resolve<IBreadcrumb[]> {
 export interface IBreadcrumb {
   text: string;
   path: string;
+  disableSplit?: boolean;
 }

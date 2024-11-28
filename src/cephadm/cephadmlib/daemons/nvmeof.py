@@ -76,12 +76,30 @@ class CephNvmeof(ContainerDaemonForm):
         mounts[log_dir] = '/var/log/ceph:z'
         return mounts
 
+    def _get_tls_cert_key_mounts(
+        self, data_dir: str, files: Dict[str, str]
+    ) -> Dict[str, str]:
+        mounts = dict()
+        for fn in [
+            'server_cert',
+            'server_key',
+            'client_cert',
+            'client_key',
+            'root_ca_cert',
+        ]:
+            if fn in files:
+                mounts[
+                    os.path.join(data_dir, fn)
+                ] = f'/{fn.replace("_", ".")}'
+        return mounts
+
     def customize_container_mounts(
         self, ctx: CephadmContext, mounts: Dict[str, str]
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
         log_dir = os.path.join(ctx.log_dir, self.identity.fsid)
         mounts.update(self._get_container_mounts(data_dir, log_dir))
+        mounts.update(self._get_tls_cert_key_mounts(data_dir, self.files))
 
     def customize_container_binds(
         self, ctx: CephadmContext, binds: List[List[str]]

@@ -31,6 +31,12 @@ export interface CephServiceAdditionalSpec {
   monitor_port: number;
   virtual_interface_networks: string[];
   pool: string;
+  group: string;
+  root_ca_cert: string;
+  client_cert: string;
+  client_key: string;
+  server_cert: string;
+  server_key: string;
   rgw_frontend_ssl_certificate: string;
   ssl: boolean;
   ssl_cert: string;
@@ -40,6 +46,13 @@ export interface CephServiceAdditionalSpec {
   rgw_realm: string;
   rgw_zonegroup: string;
   rgw_zone: string;
+  cluster_id: string;
+  features: string[];
+  config_uri: string;
+  custom_dns: string[];
+  join_sources: string[];
+  include_ceph_users: string[];
+  enable_auth: boolean;
 }
 
 export interface CephServicePlacement {

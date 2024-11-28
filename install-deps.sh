@@ -502,14 +502,14 @@ else
             install_cortx_motr_on_ubuntu
         fi
         ;;
-    rocky|centos|fedora|rhel|ol|virtuozzo)
+    almalinux|rocky|centos|fedora|rhel|ol|virtuozzo)
         builddepcmd="dnf -y builddep --allowerasing"
         echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
                 $SUDO dnf install -y dnf-utils
                 ;;
-            rocky|centos|rhel|ol|virtuozzo)
+            almalinux|rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
                 $SUDO dnf install -y dnf-utils selinux-policy-targeted
                 rpm --quiet --query epel-release || \

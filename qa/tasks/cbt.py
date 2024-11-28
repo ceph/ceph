@@ -64,7 +64,7 @@ class CBT(Task):
                    (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
             benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:80/auth/v1.0;retry=9" %(ips[0])
         client_endpoints_config = self.config.get('client_endpoints', None)
-        monitoring_profiles = self.config.get('monitoring_profiles', None)
+        monitoring_profiles = self.config.get('monitoring_profiles', {})
 
         return dict(
             cluster=cluster_config,

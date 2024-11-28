@@ -19,6 +19,14 @@ export class CrushNodeSelectionClass {
   failureDomainKeys: string[] = [];
   devices: string[] = [];
   deviceCount = 0;
+  /**
+   * Handles manual or automatic update of device class.
+   *
+   * When set true, the device class form field is automatically
+   * updated with the first device in the list of devices.
+   * Otherwise, user manually selects a device class.
+   */
+  autoDeviceUpdate: boolean = true;
 
   static searchFailureDomains(
     nodes: CrushNode[],
@@ -120,8 +128,10 @@ export class CrushNodeSelectionClass {
     nodes: CrushNode[],
     rootControl: AbstractControl,
     failureControl: AbstractControl,
-    deviceControl: AbstractControl
+    deviceControl: AbstractControl,
+    autoDeviceUpdate: boolean = true
   ) {
+    this.autoDeviceUpdate = autoDeviceUpdate;
     this.nodes = nodes;
     this.idTree = CrushNodeSelectionClass.createIdTreeFromNodes(nodes);
     nodes.forEach((node) => {
@@ -208,7 +218,7 @@ export class CrushNodeSelectionClass {
       this.devices.length === 1
         ? this.devices[0]
         : this.getIncludedCustomValue(this.controls.device, this.devices);
-    this.silentSet(this.controls.device, device);
+    if (this.autoDeviceUpdate) this.silentSet(this.controls.device, device);
     this.onDeviceChange(device);
   }
 

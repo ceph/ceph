@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import json
 
 from io import StringIO
 from teuthology import misc as teuthology
@@ -66,12 +67,37 @@ def task(ctx, config):
 
         with contextutil.safe_while(sleep=1, tries=15) as proceed:
             while proceed():
-                p = remote.run(args=['sudo', 'nvme', 'list'], stdout=StringIO())
+                remote.run(args=['lsblk'], stdout=StringIO())
+                p = remote.run(args=['sudo', 'nvme', 'list', '-o', 'json'], stdout=StringIO())
                 new_devs = []
-                for line in p.stdout.getvalue().splitlines():
-                    dev, _, vendor = line.split()[0:3]
+                # `nvme list -o json` will return the following output:
+                '''{
+                     "Devices" : [
+                       {
+                         "DevicePath" : "/dev/nvme0n1",
+                         "Firmware" : "8DV101H0",
+                         "Index" : 0,
+                         "ModelNumber" : "INTEL SSDPEDMD400G4",
+                         "ProductName" : "Unknown Device",
+                         "SerialNumber" : "PHFT620400WB400BGN"
+                       },
+                       {
+                         "DevicePath" : "/dev/nvme1n1",
+                         "Firmware" : "5.15.0-1",
+                         "Index" : 1,
+                         "ModelNumber" : "Linux",
+                         "ProductName" : "Unknown Device",
+                         "SerialNumber" : "7672ce414766ba44a8e5"
+                       }
+                     ]
+                   }'''
+                nvme_list = json.loads(p.stdout.getvalue())
+                for device in nvme_list['Devices']:
+                    dev = device['DevicePath']
+                    vendor = device['ModelNumber']
                     if dev.startswith('/dev/') and vendor == 'Linux':
                         new_devs.append(dev)
+                        bluestore_zap(remote, dev)
                 log.info(f'new_devs {new_devs}')
                 assert len(new_devs) <= len(devs)
                 if len(new_devs) == len(devs):
@@ -104,3 +130,13 @@ def task(ctx, config):
                 data=old_scratch_by_remote[remote],
                 sudo=True
             )
+
+def bluestore_zap(remote, device: str) -> None:
+    for offset in [0, 1073741824, 10737418240]:
+        remote.run(args=['sudo', 'dd',
+                         'if=/dev/zero', f'of={device}',
+                         f'seek={offset}', 'bs=1',
+                         'count=4096'], stdout=StringIO())
+        remote.run(args=['sudo', 'hexdump', '-n22',
+                         '-C', f'-s{offset}', f'{device}'],
+                   stdout=StringIO())

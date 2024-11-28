@@ -85,6 +85,7 @@ void rgw_s3_key_filter::dump(Formatter *f) const {
     ::encode_json("Value", regex_rule, f);
     f->close_section();
   }
+  f->close_section();
 }
 
 bool rgw_s3_key_filter::decode_xml(XMLObj* obj) {
@@ -151,6 +152,7 @@ void rgw_s3_key_value_filter::dump(Formatter *f) const {
     ::encode_json("Value", key_value.second, f);
     f->close_section();
   }
+  f->close_section();
 }
 
 bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
@@ -378,6 +380,23 @@ void rgw_pubsub_s3_event::dump(Formatter *f) const {
   encode_json("opaqueData", opaque_data, f);
 }
 
+namespace rgw::notify {
+    void event_entry_t::dump(Formatter *f) const {
+      Formatter::ObjectSection s(*f, "entry");
+      {
+        Formatter::ObjectSection sub_s(*f, "event");
+        event.dump(f);
+      }
+      encode_json("pushEndpoint", push_endpoint, f);
+      encode_json("pushEndpointArgs", push_endpoint_args, f);
+      encode_json("topic", arn_topic, f);
+      encode_json("creationTime", creation_time, f);
+      encode_json("TTL", time_to_live, f);
+      encode_json("maxRetries", max_retries, f);
+      encode_json("retrySleepDuration", retry_sleep_duration, f);
+    }
+}
+
 void rgw_pubsub_topic::dump(Formatter *f) const
 {
   encode_json("owner", owner, f);
@@ -551,21 +570,15 @@ RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver,
 {
 }
 
-int RGWPubSub::get_topics(const DoutPrefixProvider* dpp,
-                          const std::string& start_marker, int max_items,
-                          rgw_pubsub_topics& result, std::string& next_marker,
-                          optional_yield y) const
+int RGWPubSub::get_topics_v2(const DoutPrefixProvider* dpp,
+                             const std::string& start_marker, int max_items,
+                             rgw_pubsub_topics& result, std::string& next_marker,
+                             optional_yield y) const
 {
   if (rgw::account::validate_id(tenant)) {
     // if our tenant is an account, return the account listing
     return list_account_topics(dpp, start_marker, max_items,
                                result, next_marker, y);
-  }
-
-  if (!use_notification_v2 || driver->stat_topics_v1(tenant, y, dpp) != -ENOENT) {
-    // in case of v1 or during migration we use v1 topics
-    // v1 returns all topics, ignoring marker/max_items
-    return read_topics_v1(dpp, result, nullptr, y);
   }
  
   // TODO: prefix filter on 'tenant:'
@@ -608,6 +621,13 @@ int RGWPubSub::get_topics(const DoutPrefixProvider* dpp,
     next_marker.clear();
   }
   return ret;
+}
+
+int RGWPubSub::get_topics_v1(const DoutPrefixProvider* dpp,
+                             rgw_pubsub_topics& result,
+                             optional_yield y) const
+{
+  return read_topics_v1(dpp, result, nullptr, y);
 }
 
 int RGWPubSub::list_account_topics(const DoutPrefixProvider* dpp,
@@ -1091,7 +1111,7 @@ int RGWPubSub::remove_topic_v2(const DoutPrefixProvider* dpp,
   const rgw_pubsub_dest& dest = topic.dest;
   if (!dest.push_endpoint.empty() && dest.persistent &&
       !dest.persistent_queue.empty()) {
-    ret = rgw::notify::remove_persistent_topic(dest.persistent_queue, y);
+    ret = driver->remove_persistent_topic(dpp, y, dest.persistent_queue);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, 1) << "WARNING: failed to remove queue for "
           "persistent topic: " << cpp_strerror(ret) << dendl;
@@ -1138,7 +1158,7 @@ int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& na
 
   if (!dest.push_endpoint.empty() && dest.persistent &&
       !dest.persistent_queue.empty()) {
-    ret = rgw::notify::remove_persistent_topic(dest.persistent_queue, y);
+    ret = driver->remove_persistent_topic(dpp, y, dest.persistent_queue);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, 1) << "WARNING: failed to remove queue for "
           "persistent topic: " << cpp_strerror(ret) << dendl;

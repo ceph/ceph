@@ -611,7 +611,7 @@ MDSRank::~MDSRank()
 void MDSRankDispatcher::init()
 {
   objecter->init();
-  messenger->add_dispatcher_head(objecter);
+  messenger->add_dispatcher_tail(objecter); // the default priority
 
   objecter->start();
 
@@ -796,7 +796,7 @@ void MDSRankDispatcher::tick()
       uint64_t pq_total = 0;
       size_t pq_in_flight = 0;
       if (!purge_queue.drain(&pq_progress, &pq_total, &pq_in_flight)) {
-        dout(7) << "shutdown_pass=true, but still waiting for purge queue"
+        dout(5) << "shutdown_pass=true, but still waiting for purge queue"
                 << dendl;
         // This takes unbounded time, so we must indicate progress
         // to the administrator: we do it in a slightly imperfect way
@@ -806,13 +806,13 @@ void MDSRankDispatcher::tick()
           << std::dec << pq_progress << "/" << pq_total << " " << pq_in_flight
           << " files purging" << ")";
       } else {
-        dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to "
+        dout(5) << "shutdown_pass=true, finished w/ shutdown, moving to "
                    "down:stopped" << dendl;
         stopping_done();
       }
     }
     else {
-      dout(7) << "shutdown_pass=false" << dendl;
+      dout(5) << "shutdown_pass=false" << dendl;
     }
   }
 
@@ -1217,7 +1217,6 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
     return true;
   }
 
-  dout(10) << "invalid message type: " << std::hex << type << std::dec << dendl;
   return false;
 }
 
@@ -1725,7 +1724,10 @@ void MDSRank::boot_start(BootStep step, int r)
       } else {
         dout(2) << "Booting: " << step << ": positioning at end of old mds log" << dendl;
         mdlog->append();
-        starting_done();
+        auto sle = mdcache->create_subtree_map();
+        mdlog->submit_entry(sle);
+        mdlog->flush();
+        mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::starting_done));
       }
       break;
     case MDS_BOOT_REPLAY_DONE:
@@ -1771,9 +1773,6 @@ void MDSRank::starting_done()
   dout(3) << "starting_done" << dendl;
   ceph_assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
-
-  auto sle = mdcache->create_subtree_map();
-  mdlog->submit_entry(sle);
 
   // sync snaptable cache
   snapclient->sync(new C_MDSInternalNoop);
@@ -2138,7 +2137,7 @@ void MDSRank::active_start()
 
   dout(10) << __func__ << ": initializing metrics handler" << dendl;
   metrics_handler.init();
-  messenger->add_dispatcher_tail(&metrics_handler);
+  messenger->add_dispatcher_tail(&metrics_handler, Dispatcher::PRIORITY_HIGH);
 
   // metric aggregation is solely done by rank 0
   if (is_rank0()) {
@@ -2652,7 +2651,7 @@ void MDSRankDispatcher::handle_asok_command(
   const cmdmap_t& cmdmap,
   Formatter *f,
   const bufferlist &inbl,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   int r = 0;
   CachedStackStringStream css;
@@ -2662,21 +2661,20 @@ void MDSRankDispatcher::handle_asok_command(
   struct AsyncResponse : Context {
     Formatter* f;
     decltype(on_finish) do_respond;
-    std::basic_ostringstream<char> css;
+    std::basic_ostringstream<char> ss;
 
     AsyncResponse(Formatter* f, decltype(on_finish)&& respond_action)
       : f(f), do_respond(std::forward<decltype(on_finish)>(respond_action)) {}
 
     void finish(int rc) override {
       f->open_object_section("result");
-      if (!css.view().empty()) {
-        f->dump_string("message", css.view());
-      }
+      f->dump_string("message", ss.view());
       f->dump_int("return_code", rc);
       f->close_section();
 
       bufferlist outbl;
-      do_respond(rc, {}, outbl);
+      f->flush(outbl); /* even for errors, dump f */
+      do_respond(rc, ss.view(), outbl);
     }
   };
 
@@ -2880,7 +2878,12 @@ void MDSRankDispatcher::handle_asok_command(
     r = config_client(client_id, !got_value, option, value, *css);
   } else if (command == "scrub start" ||
 	     command == "scrub_start") {
-    if (whoami != 0) {
+    if (!is_active()) {
+      *css << "MDS is not active";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    else if (whoami != 0) {
       *css << "Not rank 0";
       r = -CEPHFS_EXDEV;
       goto out;
@@ -2906,7 +2909,12 @@ void MDSRankDispatcher::handle_asok_command(
 	}));
     return;
   } else if (command == "scrub abort") {
-    if (whoami != 0) {
+    if (!is_active()) {
+      *css << "MDS is not active";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    else if (whoami != 0) {
       *css << "Not rank 0";
       r = -CEPHFS_EXDEV;
       goto out;
@@ -2921,7 +2929,12 @@ void MDSRankDispatcher::handle_asok_command(
         }));
     return;
   } else if (command == "scrub pause") {
-    if (whoami != 0) {
+    if (!is_active()) {
+      *css << "MDS is not active";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    else if (whoami != 0) {
       *css << "Not rank 0";
       r = -CEPHFS_EXDEV;
       goto out;
@@ -2936,7 +2949,12 @@ void MDSRankDispatcher::handle_asok_command(
         }));
     return;
   } else if (command == "scrub resume") {
-    if (whoami != 0) {
+    if (!is_active()) {
+      *css << "MDS is not active";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    else if (whoami != 0) {
       *css << "Not rank 0";
       r = -CEPHFS_EXDEV;
       goto out;
@@ -2964,7 +2982,7 @@ void MDSRankDispatcher::handle_asok_command(
     return;
   } else if (command == "flush journal") {
     auto respond = new AsyncResponse(f, std::move(on_finish));
-    C_Flush_Journal* flush_journal = new C_Flush_Journal(mdcache, mdlog, this, &respond->css, respond);
+    C_Flush_Journal* flush_journal = new C_Flush_Journal(mdcache, mdlog, this, &respond->ss, respond);
 
     std::lock_guard locker(mds_lock);
     flush_journal->send();
@@ -3091,7 +3109,7 @@ out:
  */
 void MDSRankDispatcher::evict_clients(
   const SessionFilter &filter,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   bufferlist outbl;
   if (is_any_replay()) {
@@ -3117,7 +3135,7 @@ void MDSRankDispatcher::evict_clients(
   dout(20) << __func__ << " matched " << victims.size() << " sessions" << dendl;
 
   if (victims.empty()) {
-    on_finish(0, {}, outbl);
+    on_finish(-ESRCH, "no hosts match", outbl);
     return;
   }
 
@@ -3474,7 +3492,7 @@ public:
   std::function<void(int, C_MDS_QuiescePathCommand const&)> finish_once;
 };
 
-void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
+void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, asok_finisher on_finish)
 {
   std::string path;
   if (!cmd_getval(cmdmap, "path", path)) {
@@ -3516,7 +3534,7 @@ void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::fu
   }
 }
 
-void MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
+void MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, asok_finisher on_finish)
 {
   std::string path;
 

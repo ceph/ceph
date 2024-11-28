@@ -131,6 +131,29 @@ private:
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;
   mutable seastar::gate op_gate;
+
+  /**
+   * coll_map
+   *
+   * Contains a reference to every CollectionRef returned to the upper layer.
+   * It's important that ObjectStore::CollectionHandle instances (in particular,
+   * those from BlueStore) not be released from seastar reactor threads.
+   * Keeping a reference here and breaking the
+   * CollectionRef->ObjectStore::CollectionHandle links in AlienStore::stop()
+   * ensures that all CollectionHandle's are released in the alien thread pool.
+   *
+   * Long term, we probably want to drop this map.  To do that two things need
+   * to happen:
+   * 1. ~AlienCollection() needs to submit the ObjectStore::CollectionHandle
+   *    instance to the alien thread pool to be released.
+   * 2. OSD shutdown needs to *guarantee* that all outstanding CollectionRefs
+   *    are released before unmounting and stopping the store.
+   *
+   * coll_map is accessed exclusively from alien threadpool threads under the
+   * coll_map_lock.
+   */
+  std::mutex coll_map_lock;
   std::unordered_map<coll_t, CollectionRef> coll_map;
+  CollectionRef get_alien_coll_ref(ObjectStore::CollectionHandle c);
 };
 }

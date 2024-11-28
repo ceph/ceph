@@ -102,19 +102,9 @@ void Beacon::init(const MDSMap &mdsmap)
   });
 }
 
-bool Beacon::ms_can_fast_dispatch2(const cref_t<Message>& m) const
-{
-  return m->get_type() == MSG_MDS_BEACON;
-}
-
-void Beacon::ms_fast_dispatch2(const ref_t<Message>& m)
-{
-  bool handled = ms_dispatch2(m);
-  ceph_assert(handled);
-}
-
 bool Beacon::ms_dispatch2(const ref_t<Message>& m)
 {
+  dout(25) << __func__ << ": processing " << m << dendl;
   if (m->get_type() == MSG_MDS_BEACON) {
     if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
       handle_mds_beacon(ref_cast<MMDSBeacon>(m));
@@ -514,9 +504,15 @@ void Beacon::notify_health(MDSRank const *mds)
   if (mds->mdcache->cache_overfull()) {
     CachedStackStringStream css;
     *css << "MDS cache is too large (" << bytes2str(mds->mdcache->cache_size())
-        << "/" << bytes2str(mds->mdcache->cache_limit_memory()) << "); "
-        << mds->mdcache->num_inodes_with_caps << " inodes in use by clients, "
-        << mds->mdcache->get_num_strays() << " stray files";
+        << "/" << bytes2str(mds->mdcache->cache_limit_memory()) << ")";
+    // Don't include inode and stray counters in the report for standby-replay
+    // MDSs. Since it is standby-replay, both will be zero, which might
+    // confuse users.
+    if (!mds->is_standby_replay()) {
+	*css << "; " << mds->mdcache->num_inodes_with_caps << " inodes in "
+	     << "use by clients, " << mds->mdcache->get_num_strays()
+	     << " stray files";
+    }
 
     MDSHealthMetric m(MDS_HEALTH_CACHE_OVERSIZED, HEALTH_WARN, css->strv());
     health.metrics.push_back(m);

@@ -27,9 +27,9 @@ public:
   std::string rs;
 
   MMonCommandAck() : PaxosServiceMessage{MSG_MON_COMMAND_ACK, 0} {}
-  MMonCommandAck(const std::vector<std::string>& c, int _r, std::string s, version_t v) :
+  MMonCommandAck(const std::vector<std::string>& c, int _r, auto&& s, version_t v) :
     PaxosServiceMessage{MSG_MON_COMMAND_ACK, v},
-    cmd(c), r(_r), rs(s) { }
+    cmd(c), r(_r), rs(std::forward<decltype(s)>(s)) { }
 private:
   ~MMonCommandAck() final {}
 

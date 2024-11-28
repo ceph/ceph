@@ -568,6 +568,7 @@ void CDentry::encode_remote(inodeno_t& ino, unsigned char d_type,
 
   // marker, name, ino
   ENCODE_START(2, 1, bl);
+  // WARNING: always put new fields at the end of bl
   encode(ino, bl);
   encode(d_type, bl);
   encode(alternate_name, bl);
@@ -599,6 +600,15 @@ void CDentry::dump(Formatter *f) const
   make_path(path);
 
   f->dump_string("path", path.get_path());
+  if (auto s =  get_alternate_name(); !s.empty()) {
+    bufferlist bl, b64;
+    bl.append(s);
+    bl.encode_base64(b64);
+    auto encoded = std::string_view(b64.c_str(), b64.length());
+    f->dump_string("alternate_name", encoded);
+  } else {
+    f->dump_string("alternate_name", "");
+  }
   f->dump_unsigned("path_ino", path.get_ino().val);
   f->dump_unsigned("snap_first", first);
   f->dump_unsigned("snap_last", last);

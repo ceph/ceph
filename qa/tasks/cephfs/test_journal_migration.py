@@ -67,6 +67,7 @@ class TestJournalMigration(CephFSTestCase):
             ))
 
         # Verify that cephfs-journal-tool can now read the rewritten journal
+        self.fs.fail()
         inspect_out = self.fs.journal_tool(["journal", "inspect"], 0)
         if not inspect_out.endswith(": OK"):
             raise RuntimeError("Unexpected journal-tool result: '{0}'".format(
@@ -84,6 +85,8 @@ class TestJournalMigration(CephFSTestCase):
         if event_count < 1000:
             # Approximate value of "lots", expected from having run fsstress
             raise RuntimeError("Unexpectedly few journal events: {0}".format(event_count))
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
 
         # Do some client work to check that writing the log is still working
         with self.mount_a.mounted_wait():

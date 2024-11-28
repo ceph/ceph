@@ -36,7 +36,7 @@ TEST_F(errorator_test_t, basic)
         return ertr::make_ready_future<seastar::stop_iteration>(
           seastar::stop_iteration::yes);
       }
-    }).unsafe_get0();
+    }).unsafe_get();
   });
 }
 
@@ -55,7 +55,7 @@ TEST_F(errorator_test_t, parallel_for_each)
 				       boost::make_counting_iterator(SIZE),
 				       0);
 	ASSERT_EQ(*sum, expected);
-      }).unsafe_get0();
+      }).unsafe_get();
   });
 }
 
@@ -67,7 +67,7 @@ TEST_F(errorator_test_t, non_copy_then)
     };
     return create_noncopyable().safe_then([](auto) {
       return ertr::now();
-    }).unsafe_get0();
+    }).unsafe_get();
   });
 }
 
@@ -82,6 +82,6 @@ TEST_F(errorator_test_t, test_futurization)
       return 42;
     }).safe_then([](int life) {
       return ertr::make_ready_future<int>(life);
-    }).unsafe_get0();
+    }).unsafe_get();
   });
 }

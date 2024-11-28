@@ -200,6 +200,23 @@ class UpgradeManager(ResourceManager):
         return self.api.upgrade_stop()
 
 
+class CertStoreManager(ResourceManager):
+
+    @wait_api_result
+    def get_cert(self, entity: str, service_name: Optional[str] = None,
+                 hostname: Optional[str] = None,
+                 ignore_missing_exception: bool = False) -> str:
+        return self.api.cert_store_get_cert(entity, service_name, hostname,
+                                            no_exception_when_missing=ignore_missing_exception)
+
+    @wait_api_result
+    def get_key(self, entity: str, service_name: Optional[str] = None,
+                hostname: Optional[str] = None,
+                ignore_missing_exception: bool = False) -> str:
+        return self.api.cert_store_get_key(entity, service_name, hostname,
+                                           no_exception_when_missing=ignore_missing_exception)
+
+
 class OrchClient(object):
 
     _instance = None
@@ -220,6 +237,7 @@ class OrchClient(object):
         self.osds = OsdManager(self.api)
         self.daemons = DaemonManager(self.api)
         self.upgrades = UpgradeManager(self.api)
+        self.cert_store = CertStoreManager(self.api)
 
     def available(self, features: Optional[List[str]] = None) -> bool:
         available = self.status()['available']

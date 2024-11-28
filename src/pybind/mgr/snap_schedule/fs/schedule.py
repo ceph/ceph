@@ -65,7 +65,7 @@ def parse_retention(retention: str) -> Dict[str, int]:
     return ret
 
 
-RETENTION_MULTIPLIERS = ['n', 'm', 'h', 'd', 'w', 'M', 'Y']
+RETENTION_MULTIPLIERS = ['n', 'm', 'h', 'd', 'w', 'M', 'y']
 
 TableRowT = Dict[str, Union[int, str]]
 
@@ -108,7 +108,7 @@ class Schedule(object):
         # test to see if period and spec are valid
         # this test will throw a ValueError exception if
         # period is negative or zero
-        # spec is empty or other than n,m,h,d,w,M,Y
+        # spec is empty or other than n,m,h,d,w,M,y
         rep = self.repeat
         self.retention = json.loads(retention_policy)
         if start is None:
@@ -412,7 +412,7 @@ class Schedule(object):
         except ValueError:
             raise ValueError('invalid schedule specified - period should be '
                              'non-zero positive value and multiplier should '
-                             'be one of h,d,w,M,Y e.g. 1h or 4d etc.')
+                             'be one of h,d,w,M,y e.g. 1h or 4d etc.')
         if period <= 0:
             raise ValueError('invalid schedule specified - period must be a '
                              'non-zero positive value e.g. 1h or 4d etc.')
@@ -427,11 +427,11 @@ class Schedule(object):
             return period * 60 * 60 * 24 * 7
         elif mult == 'M':
             return period * 60 * 60 * 24 * 30
-        elif mult == 'Y':
+        elif mult == 'y':
             return period * 60 * 60 * 24 * 365
         else:
             raise ValueError('invalid schedule specified - multiplier should '
-                             'be one of h,d,w,M,Y')
+                             'be one of h,d,w,M,y')
 
     UPDATE_LAST = '''UPDATE schedules_meta
     SET

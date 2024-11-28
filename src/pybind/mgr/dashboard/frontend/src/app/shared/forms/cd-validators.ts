@@ -20,6 +20,8 @@ export function isEmptyInputValue(value: any): boolean {
 
 export type existsServiceFn = (value: any, ...args: any[]) => Observable<boolean>;
 
+export const DUE_TIMER = 500;
+
 export class CdValidators {
   /**
    * Validator that performs email validation. In contrast to the Angular
@@ -192,6 +194,10 @@ export class CdValidators {
                   result = value.length >= prerequisite['arg1'];
                 }
                 break;
+              case 'minValue':
+                if (_.isNumber(value)) {
+                  result = value >= prerequisite['arg1'];
+                }
             }
             return result;
           }
@@ -347,9 +353,12 @@ export class CdValidators {
    *   boolean 'true' if the given value exists, otherwise 'false'.
    * @param serviceFnThis {any} The object to be used as the 'this' object
    *   when calling the serviceFn function. Defaults to null.
-   * @param {number|Date} dueTime The delay time to wait before the
-   *   serviceFn call is executed. This is useful to prevent calls on
-   *   every keystroke. Defaults to 500.
+   * @param usernameFn {Function} Specifically used in rgw user form to
+   *   validate the tenant$username format
+   * @param uidField {boolean} Specifically used in rgw user form to
+   *   validate the tenant$username format
+   * @param extraArgs {...any} Any extra arguments that need to be passed
+   *   to the serviceFn function.
    * @return {AsyncValidatorFn} Returns an asynchronous validator function
    *   that returns an error map with the `notUnique` property if the
    *   validation check succeeds, otherwise `null`.
@@ -377,7 +386,7 @@ export class CdValidators {
         }
       }
 
-      return observableTimer().pipe(
+      return observableTimer(DUE_TIMER).pipe(
         switchMapTo(serviceFn.call(serviceFnThis, uName, ...extraArgs)),
         map((resp: boolean) => {
           if (!resp) {
@@ -480,7 +489,7 @@ export class CdValidators {
       if (_.isFunction(usernameFn)) {
         username = usernameFn();
       }
-      return observableTimer(500).pipe(
+      return observableTimer(DUE_TIMER).pipe(
         switchMapTo(_.invoke(userServiceThis, 'validatePassword', control.value, username)),
         map((resp: { valid: boolean; credits: number; valuation: string }) => {
           if (_.isFunction(callback)) {
@@ -601,13 +610,12 @@ export class CdValidators {
       if (control.pristine || !control.value) {
         return observableOf({ required: true });
       }
-      return rgwBucketService
-        .exists(control.value)
-        .pipe(
-          map((existenceResult: boolean) =>
-            existenceResult === requiredExistenceResult ? null : { bucketNameNotAllowed: true }
-          )
-        );
+      return observableTimer(DUE_TIMER).pipe(
+        switchMapTo(rgwBucketService.exists(control.value)),
+        map((existenceResult: boolean) =>
+          existenceResult === requiredExistenceResult ? null : { bucketNameNotAllowed: true }
+        )
+      );
     };
   }
 
@@ -619,6 +627,42 @@ export class CdValidators {
         return null;
       } catch (e) {
         return { invalidJson: true };
+      }
+    };
+  }
+
+  static xml(): ValidatorFn {
+    return (control: AbstractControl): Record<string, boolean> | null => {
+      if (!control.value) return null;
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(control.value, 'application/xml');
+      const errorNode = xml.querySelector('parsererror');
+      if (errorNode) {
+        return { invalidXml: true };
+      }
+      return null;
+    };
+  }
+
+  static jsonOrXml(): ValidatorFn {
+    return (control: AbstractControl): Record<string, boolean> | null => {
+      if (!control.value) return null;
+
+      if (control.value.trim().startsWith('<')) {
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(control.value, 'application/xml');
+        const errorNode = xml.querySelector('parsererror');
+        if (errorNode) {
+          return { invalidXml: true };
+        }
+        return null;
+      } else {
+        try {
+          JSON.parse(control.value);
+          return null;
+        } catch (e) {
+          return { invalidJson: true };
+        }
       }
     };
   }

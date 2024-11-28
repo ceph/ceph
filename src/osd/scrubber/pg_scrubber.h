@@ -456,9 +456,6 @@ class PgScrubber : public ScrubPgIF,
 
   int build_replica_map_chunk() final;
 
-  bool set_reserving_now() final;
-  void clear_reserving_now() final;
-
   [[nodiscard]] bool was_epoch_changed() const final;
 
   void set_queued_or_active() final;
@@ -729,6 +726,8 @@ class PgScrubber : public ScrubPgIF,
   /// Returns epoch of current osdmap
   epoch_t get_osdmap_epoch() const { return get_osdmap()->get_epoch(); }
 
+  uint64_t get_scrub_cost(uint64_t num_chunk_objects);
+
   // collected statistics
   int m_shallow_errors{0};
   int m_deep_errors{0};
@@ -802,8 +801,11 @@ class PgScrubber : public ScrubPgIF,
    * - handling some head/clones issues
    *
    * The selected range is set directly into 'm_start' and 'm_end'
+   *
+   * Returns std::nullopt if the range is busy otherwise returns the
+   * number of objects in the range.
    */
-  bool select_range();
+  std::optional<uint64_t> select_range();
 
   std::list<Context*> m_callbacks;
 

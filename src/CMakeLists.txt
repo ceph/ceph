@@ -70,6 +70,10 @@ configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   @ONLY)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/src/ceph_release.h.in.cmake
+  ${CMAKE_BINARY_DIR}/src/include/ceph_release.h
+  @ONLY)
 
 add_definitions(
   -DHAVE_CONFIG_H
@@ -381,7 +385,7 @@ if(WITH_SEASTAR)
   set(Seastar_API_LEVEL "6" CACHE STRING "" FORCE)
   set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
   set(Seastar_IO_URING OFF CACHE BOOL "" FORCE)
-  set(Seastar_STD_OPTIONAL_VARIANT_STRINGVIEW ON CACHE BOOL "" FORCE)
+  set(Seastar_DEPRECATED_OSTREAM_FORMATTERS OFF CACHE BOOL "" FORCE)
   if(Seastar_DPDK)
     find_package(dpdk QUIET)
     if(NOT DPDK_FOUND)
@@ -894,10 +898,6 @@ if(WITH_RBD)
     DESTINATION ${CMAKE_INSTALL_BINDIR})
   add_subdirectory(rbd_replay)
 endif(WITH_RBD)
-
-set(SPAWN_BUILD_TESTS OFF CACHE INTERNAL "disable building of spawn unit tests")
-set(SPAWN_INSTALL OFF CACHE INTERNAL "disable installation of spawn headers")
-add_subdirectory(spawn)
 
 # RadosGW
 if(WITH_KVS)

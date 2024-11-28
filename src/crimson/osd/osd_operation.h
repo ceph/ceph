@@ -50,6 +50,7 @@ enum class OperationTypeCode {
   background_recovery_sub,
   internal_client_request,
   historic_client_request,
+  historic_slow_client_request,
   logmissing_request,
   logmissing_request_reply,
   snaptrim_event,
@@ -72,6 +73,7 @@ static constexpr const char* const OP_NAMES[] = {
   "background_recovery_sub",
   "internal_client_request",
   "historic_client_request",
+  "historic_slow_client_request",
   "logmissing_request",
   "logmissing_request_reply",
   "snaptrim_event",
@@ -153,11 +155,15 @@ protected:
     get_event<EventT>().trigger(*that(), std::forward<Args>(args)...);
   }
 
+  template <class BlockingEventT>
+  typename BlockingEventT::template Trigger<T>
+  get_trigger() {
+    return {get_event<BlockingEventT>(), *that()};
+  }
+
   template <class BlockingEventT, class InterruptorT=void, class F>
   auto with_blocking_event(F&& f) {
-    auto ret = std::forward<F>(f)(typename BlockingEventT::template Trigger<T>{
-      get_event<BlockingEventT>(), *that()
-    });
+    auto ret = std::forward<F>(f)(get_trigger<BlockingEventT>());
     if constexpr (std::is_same_v<InterruptorT, void>) {
       return ret;
     } else {
@@ -196,6 +202,12 @@ protected:
     });
   }
 
+  template <class StageT>
+  void enter_stage_sync(StageT& stage) {
+    that()->get_handle().template enter_sync<T>(
+        stage, this->template get_trigger<typename StageT::BlockingEvent>());
+  }
+
   template <class OpT>
   friend class crimson::os::seastore::OperationProxyT;
 
@@ -215,12 +227,15 @@ struct OSDOperationRegistry : OperationRegistryT<
   void do_stop() override;
 
   void put_historic(const class ClientRequest& op);
+  void _put_historic(
+    op_list& list,
+    const class ClientRequest& op,
+    uint64_t max);
 
   size_t dump_historic_client_requests(ceph::Formatter* f) const;
   size_t dump_slowest_historic_client_requests(ceph::Formatter* f) const;
 
 private:
-  op_list::const_iterator last_of_recents;
   size_t num_recent_ops = 0;
   size_t num_slow_ops = 0;
 };

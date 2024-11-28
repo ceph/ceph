@@ -66,14 +66,18 @@ public:
     return trimmer;
   }
 
+  writer_stats_t get_writer_stats() const final {
+    return record_submitter.get_stats();
+  }
+
   open_for_mkfs_ret open_for_mkfs() final;
 
   open_for_mount_ret open_for_mount() final;
 
   close_ertr::future<> close() final;
 
-  journal_type_t get_type() final {
-    return journal_type_t::RANDOM_BLOCK;
+  backend_type_t get_type() final {
+    return backend_type_t::RANDOM_BLOCK;
   }
 
   submit_record_ret submit_record(
@@ -180,6 +184,10 @@ public:
 
   int64_t get_segment_end_offset(paddr_t addr) final {
     return get_journal_end();
+  }
+
+  bool is_checksum_needed() final {
+    return cjs.is_checksum_needed();
   }
 
   // Test interfaces

@@ -14,8 +14,6 @@ from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.error import HTTPError
 from threading import Event
 
-from cephadm.service_discovery import ServiceDiscovery
-
 from ceph.deployment.service_spec import PrometheusSpec
 
 import string
@@ -78,8 +76,19 @@ from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCol
 from .services.node_proxy import NodeProxy
 from .services.smb import SMBService
 from .schedule import HostAssignment
-from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
-    ClientKeyringStore, ClientKeyringSpec, TunedProfileStore, NodeProxyCache
+from .inventory import (
+    Inventory,
+    SpecStore,
+    HostCache,
+    AgentCache,
+    EventStore,
+    ClientKeyringStore,
+    ClientKeyringSpec,
+    TunedProfileStore,
+    NodeProxyCache,
+    CertKeyStore,
+    OrchSecretNotFound,
+)
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
@@ -87,6 +96,7 @@ from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall
 from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
 from .tuned_profiles import TunedProfileUtils
+from .ceph_volume import CephVolume
 
 try:
     import asyncssh
@@ -118,16 +128,16 @@ os._exit = os_exit_noop   # type: ignore
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.io/ceph/ceph'
-DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.43.0'
-DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.5.0'
-DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.2.1'
-DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
-DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.4.0'
+DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.51.0'
+DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.7.0'
+DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.2.5'
+DEFAULT_LOKI_IMAGE = 'quay.io/ceph/loki:3.0.0'
+DEFAULT_PROMTAIL_IMAGE = 'quay.io/ceph/promtail:3.0.0'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.25.0'
-DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:9.4.12'
+DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:10.4.0'
 DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.2.4'
-DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
+DEFAULT_SNMP_GATEWAY_IMAGE = 'quay.io/ceph/snmp-notifier:v1.2.1'
 DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
 DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
@@ -414,7 +424,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Option(
             'default_registry',
             type='str',
-            default='docker.io',
+            default='quay.io',
             desc='Search-registry to which we should normalize unqualified image names. '
                  'This is not the default registry',
         ),
@@ -502,6 +512,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=15 * 60,
             desc='Default timeout applied to cephadm commands run directly on '
             'the host (in seconds)'
+        ),
+        Option(
+            'ssh_keepalive_interval',
+            type='int',
+            default=7,
+            desc='How often ssh connections are checked for liveness'
+        ),
+        Option(
+            'ssh_keepalive_count_max',
+            type='int',
+            default=3,
+            desc='How many times ssh connections can fail liveness checks '
+            'before the host is marked offline'
         ),
         Option(
             'cephadm_log_destination',
@@ -604,6 +627,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.default_cephadm_command_timeout = 0
             self.cephadm_log_destination = ''
             self.oob_default_addr = ''
+            self.ssh_keepalive_interval = 0
+            self.ssh_keepalive_count_max = 0
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -653,6 +678,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.tuned_profiles.load()
 
         self.tuned_profile_utils = TunedProfileUtils(self)
+
+        self.cert_key_store = CertKeyStore(self)
+        self.cert_key_store.load()
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
@@ -708,6 +736,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.iscsi_service: IscsiService = cast(IscsiService, self.cephadm_services['iscsi'])
         self.nvmeof_service: NvmeofService = cast(NvmeofService, self.cephadm_services['nvmeof'])
         self.node_proxy_service: NodeProxy = cast(NodeProxy, self.cephadm_services['node-proxy'])
+        self.rgw_service: RgwService = cast(RgwService, self.cephadm_services['rgw'])
 
         self.scheduled_async_actions: List[Callable] = []
 
@@ -729,6 +758,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.offline_watcher = OfflineHostWatcher(self)
         self.offline_watcher.start()
+
+        # Maps daemon names to timestamps (creation/removal time) for recently created or
+        # removed daemons. Daemons are added to the dict upon creation or removal and cleared
+        # as part of the handling of stray daemons
+        self.recently_altered_daemons: Dict[str, datetime.datetime] = {}
+
+        self.ceph_volume: CephVolume = CephVolume(self)
 
     def shutdown(self) -> None:
         self.log.debug('shutdown')
@@ -1004,6 +1040,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 ports=d.get('ports'),
                 ip=d.get('ip'),
                 deployed_by=d.get('deployed_by'),
+                systemd_unit=d.get('systemd_unit'),
                 rank=rank,
                 rank_generation=rank_generation,
                 extra_container_args=d.get('extra_container_args'),
@@ -1511,6 +1548,58 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 return self.wait_async(self.osd_service.deploy_osd_daemons_for_existing_osds(h, 'osd'))
 
         return HandleCommandResult(stdout='\n'.join(run(host)))
+
+    @orchestrator._cli_read_command('cephadm systemd-unit ls')
+    def _systemd_unit_ls(
+        self,
+        hostname: Optional[str] = None,
+        daemon_type: Optional[str] = None,
+        daemon_id: Optional[str] = None
+    ) -> HandleCommandResult:
+        daemons = self.systemd_unit_ls(hostname, daemon_type, daemon_id)
+        return HandleCommandResult(stdout=json.dumps(daemons, indent=4))
+
+    @orchestrator._cli_read_command('cephadm systemd-unit ls')
+    def systemd_unit_ls(
+        self,
+        hostname: Optional[str] = None,
+        daemon_type: Optional[str] = None,
+        daemon_id: Optional[str] = None
+    ) -> HandleCommandResult:
+        # First, some filtering
+        if hostname and daemon_type:
+            daemons = self.cache.get_daemons_by_type(daemon_type, hostname)
+        elif hostname:
+            daemons = self.cache.get_daemons_by_host(hostname)
+        elif daemon_type:
+            daemons = self.cache.get_daemons_by_type(daemon_type)
+        else:
+            daemons = self.cache.get_daemons()
+        if daemon_id:
+            daemons = [d for d in daemons if d.daemon_id == daemon_id]
+        # intended structure for the dict is
+        # {
+        #     <host>: {
+        #         <daemon_type>: {
+        #             <daemon_name>: systemd unit
+        #         }
+        #     }
+        # }
+        systemd_unit_dict: Dict[str, Dict[str, Dict[str, str]]] = {}
+        for d in daemons:
+            # for mypy
+            host = d.hostname
+            d_type = d.daemon_type
+            systemd_unit = d.systemd_unit
+            assert host is not None
+            assert d_type is not None
+            assert systemd_unit is not None
+            if host not in systemd_unit_dict:
+                systemd_unit_dict[host] = {}
+            if d_type not in systemd_unit_dict[host]:
+                systemd_unit_dict[host][d_type] = {}
+            systemd_unit_dict[host][d_type][d.name()] = systemd_unit
+        return HandleCommandResult(stdout=json.dumps(systemd_unit_dict, indent=4))
 
     @orchestrator._cli_read_command('orch client-keyring ls')
     def _client_keyring_ls(self, format: Format = Format.plain) -> HandleCommandResult:
@@ -2259,8 +2348,9 @@ Then run the following:
             if service_name is not None and service_name != nm:
                 continue
 
-            if spec.service_type not in ['osd', 'node-proxy']:
-                size = spec.placement.get_target_count(self.cache.get_schedulable_hosts())
+            if spec.service_type == 'osd':
+                # osd counting is special
+                size = 0
             elif spec.service_type == 'node-proxy':
                 # we only deploy node-proxy daemons on hosts we have oob info for
                 # Let's make the expected daemon count `orch ls` displays reflect that
@@ -2268,8 +2358,7 @@ Then run the following:
                 oob_info_hosts = [h for h in schedulable_hosts if h.hostname in self.node_proxy_cache.oob.keys()]
                 size = spec.placement.get_target_count(oob_info_hosts)
             else:
-                # osd counting is special
-                size = 0
+                size = spec.placement.get_target_count(self.cache.get_schedulable_hosts())
 
             sm[nm] = orchestrator.ServiceDescription(
                 spec=spec,
@@ -3009,7 +3098,7 @@ Then run the following:
             )
             daemons.append(sd)
 
-        @ forall_hosts
+        @forall_hosts
         def create_func_map(*args: Any) -> str:
             daemon_spec = self.cephadm_services[daemon_type].prepare_create(*args)
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
@@ -3088,6 +3177,14 @@ Then run the following:
         return 'prometheus multi-cluster targets updated'
 
     @handle_orch_error
+    def set_custom_prometheus_alerts(self, alerts_file: str) -> str:
+        self.set_store('services/prometheus/alerting/custom_alerts.yml', alerts_file)
+        # need to reconfig prometheus daemon(s) to pick up new alerts file
+        for prometheus_daemon in self.cache.get_daemons_by_type('prometheus'):
+            self._schedule_daemon_action(prometheus_daemon.name(), 'reconfig')
+        return 'Updated alerts file and scheduled reconfig of prometheus daemon(s)'
+
+    @handle_orch_error
     def set_alertmanager_access_info(self, user: str, password: str) -> str:
         self.set_store(AlertmanagerService.USER_CFG_KEY, user)
         self.set_store(AlertmanagerService.PASS_CFG_KEY, password)
@@ -3106,6 +3203,44 @@ Then run the following:
         return {'user': user,
                 'password': password,
                 'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
+
+    @handle_orch_error
+    def cert_store_cert_ls(self) -> Dict[str, Any]:
+        return self.cert_key_store.cert_ls()
+
+    @handle_orch_error
+    def cert_store_key_ls(self) -> Dict[str, Any]:
+        return self.cert_key_store.key_ls()
+
+    @handle_orch_error
+    def cert_store_get_cert(
+        self,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
+    ) -> str:
+        cert = self.cert_key_store.get_cert(entity, service_name or '', hostname or '')
+        if not cert:
+            if no_exception_when_missing:
+                return ''
+            raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
+        return cert
+
+    @handle_orch_error
+    def cert_store_get_key(
+        self,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
+    ) -> str:
+        key = self.cert_key_store.get_key(entity, service_name or '', hostname or '')
+        if not key:
+            if no_exception_when_missing:
+                return ''
+            raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
+        return key
 
     @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:
@@ -3223,7 +3358,7 @@ Then run the following:
 
     @handle_orch_error
     def service_discovery_dump_cert(self) -> str:
-        root_cert = self.get_store(ServiceDiscovery.KV_STORE_SD_ROOT_CERT)
+        root_cert = self.cert_key_store.get_cert('service_discovery_root_cert')
         if not root_cert:
             raise OrchestratorError('No certificate found for service discovery')
         return root_cert
@@ -3328,7 +3463,7 @@ Then run the following:
                         (f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {max(5, host_count)}.'))
             elif spec.service_type != 'osd':
                 if spec.placement.count > (max_count * host_count):
-                    raise OrchestratorError((f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {host_count*max_count} ({host_count}x{max_count}).'
+                    raise OrchestratorError((f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {host_count * max_count} ({host_count}x{max_count}).'
                                              + ' This limit can be adjusted by changing the mgr/cephadm/max_count_per_host config option'))
 
         if spec.placement.count_per_host is not None and spec.placement.count_per_host > max_count and spec.service_type != 'osd':
@@ -3563,8 +3698,55 @@ Then run the following:
         return self.upgrade.upgrade_stop()
 
     @handle_orch_error
+    def replace_device(self,
+                       hostname: str,
+                       device: str,
+                       clear: bool = False,
+                       yes_i_really_mean_it: bool = False) -> Any:
+        output: str = ''
+
+        self.ceph_volume.lvm_list.get_data(hostname=hostname)
+
+        if clear:
+            output = self.ceph_volume.clear_replace_header(hostname, device)
+        else:
+            osds_to_zap: List[str] = []
+            if hostname not in list(self.inventory.keys()):
+                raise OrchestratorError(f'{hostname} invalid host.')
+
+            if device not in self.ceph_volume.lvm_list.all_devices():
+                raise OrchestratorError(f"{device} doesn't appear to be used for an OSD, not a valid device in {hostname}.")
+
+            device_osd_mapping = self.ceph_volume.lvm_list.device_osd_mapping()
+            osds_to_zap = device_osd_mapping[device]['osd_ids']
+
+            if self.ceph_volume.lvm_list.is_shared_device(device):
+                if not yes_i_really_mean_it:
+                    raise OrchestratorError(f'{device} is a shared device.\n'
+                                            f'Replacing {device} implies destroying OSD(s): {osds_to_zap}.\n'
+                                            'Please, *be very careful*, this can be a very dangerous operation.\n'
+                                            'If you know what you are doing, pass --yes-i-really-mean-it')
+            if not self.to_remove_osds.rm_util.safe_to_destroy([int(osd_id) for osd_id in osds_to_zap]):
+                raise OrchestratorError(f"Destroying OSD(s) {osds_to_zap} would cause some PGs to be undersized/degraded.\n"
+                                        'Refusing to proceed.')
+            replace_block: bool = self.ceph_volume.lvm_list.is_block_device(device)
+            replace_db: bool = self.ceph_volume.lvm_list.is_db_device(device)
+            replace_wal: bool = self.ceph_volume.lvm_list.is_wal_device(device)
+
+            self.remove_osds(list(osds_to_zap),
+                             replace_block=replace_block,
+                             replace_db=replace_db,
+                             replace_wal=replace_wal)
+
+            output = f'Scheduled to destroy osds: {osds_to_zap} and mark {device} as being replaced.'
+        return output
+
+    @handle_orch_error
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
+                    replace_block: bool = False,
+                    replace_db: bool = False,
+                    replace_wal: bool = False,
                     force: bool = False,
                     zap: bool = False,
                     no_destroy: bool = False) -> str:
@@ -3587,6 +3769,9 @@ Then run the following:
             try:
                 self.to_remove_osds.enqueue(OSD(osd_id=int(daemon.daemon_id),
                                                 replace=replace,
+                                                replace_block=replace_block,
+                                                replace_db=replace_db,
+                                                replace_wal=replace_wal,
                                                 force=force,
                                                 zap=zap,
                                                 no_destroy=no_destroy,

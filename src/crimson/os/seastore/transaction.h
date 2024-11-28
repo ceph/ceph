@@ -92,7 +92,7 @@ public:
 	*out = CachedExtentRef(&*iter);
       SUBTRACET(seastore_cache, "{} is present in write_set -- {}",
                 *this, addr, *iter);
-      assert((*out)->is_valid());
+      assert(!out || (*out)->is_valid());
       return get_extent_ret::PRESENT;
     } else if (retired_set.count(addr)) {
       return get_extent_ret::RETIRED;
@@ -126,14 +126,14 @@ public:
       ref->set_invalid(*this);
       write_set.erase(*ref);
       assert(ref->prior_instance);
-      retired_set.insert(ref->prior_instance);
+      retired_set.emplace(ref->prior_instance, trans_id);
       assert(read_set.count(ref->prior_instance->get_paddr()));
       ref->prior_instance.reset();
     } else {
       // && retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
-      retired_set.insert(ref);
+      retired_set.emplace(ref, trans_id);
     }
   }
 
@@ -262,9 +262,9 @@ public:
     {
       auto where = retired_set.find(&placeholder);
       assert(where != retired_set.end());
-      assert(where->get() == &placeholder);
+      assert(where->extent.get() == &placeholder);
       where = retired_set.erase(where);
-      retired_set.emplace_hint(where, &extent);
+      retired_set.emplace_hint(where, &extent, trans_id);
     }
   }
 
@@ -317,19 +317,17 @@ public:
   }
 
   bool is_retired(paddr_t paddr, extent_len_t len) {
-    if (retired_set.empty()) {
+    auto iter = retired_set.lower_bound(paddr);
+    if (iter == retired_set.end()) {
       return false;
     }
-    auto iter = retired_set.lower_bound(paddr);
-    if (iter == retired_set.end() ||
-	(*iter)->get_paddr() > paddr) {
-      assert(iter != retired_set.begin());
-      --iter;
+    auto &extent = iter->extent;
+    if (extent->get_paddr() != paddr) {
+      return false;
+    } else {
+      assert(len == extent->get_length());
+      return true;
     }
-    auto retired_paddr = (*iter)->get_paddr();
-    auto retired_length = (*iter)->get_length();
-    return retired_paddr <= paddr &&
-      retired_paddr.add_offset(retired_length) >= paddr.add_offset(len);
   }
 
   template <typename F>
@@ -393,6 +391,7 @@ public:
     get_handle().exit();
     on_destruct(*this);
     invalidate_clear_write_set();
+    views.clear();
   }
 
   friend class crimson::os::seastore::SeaStore;
@@ -429,6 +428,7 @@ public:
       has_reset = true;
     }
     get_handle().exit();
+    views.clear();
   }
 
   bool did_reset() const {
@@ -514,6 +514,15 @@ public:
     return trans_id;
   }
 
+  using view_ref = std::unique_ptr<trans_spec_view_t>;
+  template <typename T, typename... Args,
+	   std::enable_if_t<std::is_base_of_v<trans_spec_view_t, T>, int> = 0>
+  T& add_transactional_view(Args&&... args) {
+    auto &view = views.emplace_back(
+      std::make_unique<T>(std::forward<Args>(args)...));
+    return static_cast<T&>(*view);
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -578,6 +587,8 @@ private:
   /// partial blocks of extents on disk, with data and refcounts
   std::list<CachedExtentRef> existing_block_list;
   existing_block_stats_t existing_block_stats;
+
+  std::list<view_ref> views;
 
   /**
    * retire_set

@@ -1867,6 +1867,9 @@ AuthMonitor::caps_update AuthMonitor::_gen_wanted_caps(EntityAuth& e_auth,
   map<string, string>& newcaps, ostream& out)
 {
   caps_update is_caps_update_reqd = CAPS_UPDATE_NOT_REQD;
+  caps_update is_caps_update_reqd_mon = CAPS_UPDATE_NOT_REQD;
+  caps_update is_caps_update_reqd_osd = CAPS_UPDATE_NOT_REQD;
+  caps_update is_caps_update_reqd_mds = CAPS_UPDATE_NOT_REQD;
 
   if (e_auth.caps.empty()) {
     return CAPS_UPDATE_REQD;
@@ -1888,15 +1891,29 @@ AuthMonitor::caps_update AuthMonitor::_gen_wanted_caps(EntityAuth& e_auth,
     }
 
     if (cap_entity == "mon") {
-      is_caps_update_reqd = _merge_caps<MonCap>(cap_entity, new_cap_str,
+      is_caps_update_reqd_mon = _merge_caps<MonCap>(cap_entity, new_cap_str,
 	cur_cap_str, newcaps, out);
     } else if (cap_entity == "osd") {
-      is_caps_update_reqd = _merge_caps<OSDCap>(cap_entity, new_cap_str,
+      is_caps_update_reqd_osd = _merge_caps<OSDCap>(cap_entity, new_cap_str,
 	cur_cap_str, newcaps, out);
     } else if (cap_entity == "mds") {
-      is_caps_update_reqd = _merge_caps<MDSAuthCaps>(cap_entity, new_cap_str,
-	cur_cap_str, newcaps, out);
+      is_caps_update_reqd_mds = _merge_caps<MDSAuthCaps>(cap_entity,
+	new_cap_str, cur_cap_str, newcaps, out);
     }
+  }
+
+  // if any one of MON, OSD or MDS caps failed to parse, it is pointless
+  // to run the update procedure.
+  if (is_caps_update_reqd_mon == CAPS_PARSING_ERR ||
+      is_caps_update_reqd_osd == CAPS_PARSING_ERR ||
+      is_caps_update_reqd_mds == CAPS_PARSING_ERR) {
+    is_caps_update_reqd = CAPS_PARSING_ERR;
+  // even if any one of MON, OSD or MDS caps needs an update, the update
+  // procedure needs to be executed.
+  } else if (is_caps_update_reqd_mon == CAPS_UPDATE_REQD ||
+      is_caps_update_reqd_osd == CAPS_UPDATE_REQD ||
+      is_caps_update_reqd_mds == CAPS_UPDATE_REQD) {
+    is_caps_update_reqd = CAPS_UPDATE_REQD;
   }
 
   return is_caps_update_reqd;

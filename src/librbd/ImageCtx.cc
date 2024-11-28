@@ -734,18 +734,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
 
     auto overlap = reduce_parent_overlap(raw_overlap, migration_write);
     if (area == overlap.second) {
-      // drop extents completely beyond the overlap
-      while (!image_extents.empty() &&
-             image_extents.back().first >= overlap.first) {
-        image_extents.pop_back();
-      }
-      if (!image_extents.empty()) {
-        // trim final overlapping extent
-        auto& last_extent = image_extents.back();
-        if (last_extent.first + last_extent.second > overlap.first) {
-          last_extent.second = overlap.first - last_extent.first;
-        }
-      }
+      io::util::prune_extents(image_extents, overlap.first);
     } else if (area == io::ImageArea::DATA &&
                overlap.second == io::ImageArea::CRYPTO_HEADER) {
       // all extents completely beyond the overlap

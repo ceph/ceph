@@ -24,3 +24,6 @@ overrides:
         osd shutdown pgref assert: true
     log-only-match:
       - CEPHADM_
+    log-ignorelist:
+      - CEPHADM_DAEMON_PLACE_FAIL
+      - CEPHADM_FAILED_DAEMON

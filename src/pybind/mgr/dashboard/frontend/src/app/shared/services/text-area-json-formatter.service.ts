@@ -7,7 +7,7 @@ export class TextAreaJsonFormatterService {
   constructor() {}
 
   format(textArea: ElementRef<any>): void {
-    const value = textArea.nativeElement.value;
+    const value = textArea?.nativeElement?.value;
     try {
       const formatted = JSON.stringify(JSON.parse(value), null, 2);
       textArea.nativeElement.value = formatted;

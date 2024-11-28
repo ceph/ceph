@@ -252,6 +252,46 @@
           </div>
         </div>
 
+        <div class="form-group row">
+          <label for="crushNumFailureDomains"
+                 class="cd-col-form-label">
+            <ng-container i18n>Crush num failure domain</ng-container>
+            <cd-helper [html]="tooltips.crushNumFailureDomains">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="number"
+                   id="crushNumFailureDomains"
+                   name="crushNumFailureDomains"
+                   class="form-control"
+                   formControlName="crushNumFailureDomains"
+                   min="0">
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('crushNumFailureDomains', frm, 'required')"
+                  i18n>This field is required when crush osds per failure domain is set!</span>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          <label for="crushOsdsPerFailureDomain"
+                 class="cd-col-form-label">
+            <ng-container i18n>Crush osds per failure domain</ng-container>
+            <cd-helper [html]="tooltips.crushOsdsPerFailureDomain">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="number"
+                   id="crushOsdsPerFailureDomain"
+                   name="crushOsdsPerFailureDomain"
+                   class="form-control"
+                   formControlName="crushOsdsPerFailureDomain"
+                   min="0">
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('crushOsdsPerFailureDomain', frm, 'required')"
+                  i18n>This field is required when crush num failure domain is set!</span>
+          </div>
+        </div>
+
         <div class="form-group row"
              *ngIf="plugin === PLUGIN.LRC">
           <label for="crushLocality"
@@ -370,8 +410,6 @@
           <label for="crushDeviceClass"
                  class="cd-col-form-label">
             <ng-container i18n>Crush device class</ng-container>
-            <cd-helper [html]="tooltips.crushDeviceClass">
-            </cd-helper>
           </label>
           <div class="cd-col-form-input">
             <select class="form-select"
@@ -379,12 +417,15 @@
                     name="crushDeviceClass"
                     formControlName="crushDeviceClass">
               <option ngValue=""
-                      i18n>Let Ceph decide</option>
+                      i18n>All devices</option>
               <option *ngFor="let deviceClass of devices"
                       [ngValue]="deviceClass">
                 {{ deviceClass }}
               </option>
             </select>
+            <cd-help-text>
+              <span i18n>{{tooltips.crushDeviceClass}}</span>
+            </cd-help-text>
             <span class="form-text text-muted"
                   i18n>Available OSDs: {{deviceCount}}</span>
           </div>

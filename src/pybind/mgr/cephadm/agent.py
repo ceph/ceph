@@ -44,9 +44,6 @@ cherrypy.log.access_log.propagate = False
 
 class AgentEndpoint:
 
-    KV_STORE_AGENT_ROOT_CERT = 'cephadm_agent/root/cert'
-    KV_STORE_AGENT_ROOT_KEY = 'cephadm_agent/root/key'
-
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         self.ssl_certs = SSLCerts()
@@ -60,14 +57,15 @@ class AgentEndpoint:
         cherrypy.tree.mount(self.node_proxy_endpoint, '/node-proxy', config=conf)
 
     def configure_tls(self, server: Server) -> None:
-        old_cert = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_CERT)
-        old_key = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_KEY)
+        old_cert = self.mgr.cert_key_store.get_cert('agent_endpoint_root_cert')
+        old_key = self.mgr.cert_key_store.get_key('agent_endpoint_key')
+
         if old_cert and old_key:
             self.ssl_certs.load_root_credentials(old_cert, old_key)
         else:
             self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
-            self.mgr.set_store(self.KV_STORE_AGENT_ROOT_CERT, self.ssl_certs.get_root_cert())
-            self.mgr.set_store(self.KV_STORE_AGENT_ROOT_KEY, self.ssl_certs.get_root_key())
+            self.mgr.cert_key_store.save_cert('agent_endpoint_root_cert', self.ssl_certs.get_root_cert())
+            self.mgr.cert_key_store.save_key('agent_endpoint_key', self.ssl_certs.get_root_key())
 
         host = self.mgr.get_hostname()
         addr = self.mgr.get_mgr_ip()
@@ -192,16 +190,18 @@ class NodeProxyEndpoint:
         """
         nok_members: List[Dict[str, str]] = []
 
-        for member in data.keys():
-            _status = data[member]['status']['health'].lower()
-            if _status.lower() != 'ok':
-                state = data[member]['status']['state']
-                _member = dict(
-                    member=member,
-                    status=_status,
-                    state=state
-                )
-                nok_members.append(_member)
+        for sys_id in data.keys():
+            for member in data[sys_id].keys():
+                _status = data[sys_id][member]['status']['health'].lower()
+                if _status.lower() != 'ok':
+                    state = data[sys_id][member]['status']['state']
+                    _member = dict(
+                        sys_id=sys_id,
+                        member=member,
+                        status=_status,
+                        state=state
+                    )
+                    nok_members.append(_member)
 
         return nok_members
 
@@ -229,7 +229,7 @@ class NodeProxyEndpoint:
         """
 
         for component in data['patch']['status'].keys():
-            alert_name = f"HARDWARE_{component.upper()}"
+            alert_name = f'HARDWARE_{component.upper()}'
             self.mgr.remove_health_warning(alert_name)
             nok_members = self.get_nok_members(data['patch']['status'][component])
 
@@ -239,7 +239,7 @@ class NodeProxyEndpoint:
                     alert_name,
                     summary=f'{count} {component} member{"s" if count > 1 else ""} {"are" if count > 1 else "is"} not ok',
                     count=count,
-                    detail=[f"{member['member']} is {member['status']}: {member['state']}" for member in nok_members],
+                    detail=[f"[{member['sys_id']}]: {member['member']} is {member['status']}: {member['state']}" for member in nok_members],
                 )
 
     @cherrypy.expose

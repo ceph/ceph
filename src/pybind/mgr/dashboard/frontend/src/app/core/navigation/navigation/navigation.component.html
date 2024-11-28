@@ -194,6 +194,12 @@
             <a i18n
                routerLink="/block/iscsi">iSCSI</a>
           </li>
+
+          <li routerLinkActive="active"
+              class="tc_submenuitem">
+            <a i18n
+               routerLink="/block/nvmeof">NVMe/TCP</a>
+          </li>
         </ul>
       </li>
 
@@ -244,7 +250,7 @@
               *ngIf="permissions.nfs.read && enabledFeature.nfs">
             <a i18n
                class="nav-link"
-               routerLink="/nfs">NFS</a>
+               routerLink="/rgw/nfs">NFS</a>
           </li>
         </ul>
       </li>
@@ -272,14 +278,14 @@
               *ngIf="permissions.cephfs.read && enabledFeature.cephfs">
             <a i18n
                class="nav-link"
-               routerLink="/cephfs">File Systems</a>
+               routerLink="/cephfs/fs">File Systems</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_file_nfs"
               *ngIf="permissions.nfs.read && enabledFeature.nfs">
             <a i18n
                class="nav-link"
-               routerLink="/nfs">NFS</a>
+               routerLink="/cephfs/nfs">NFS</a>
           </li>
         </ul>
       </li>

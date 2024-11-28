@@ -92,7 +92,7 @@ class Btree {
     ValueImpl value() {
       assert(!is_end());
       return p_tree->value_builder.build_value(
-          *p_tree->nm, p_tree->value_builder, p_cursor);
+        get_ghobj().hobj, *p_tree->nm, p_tree->value_builder, p_cursor);
     }
 
     bool operator==(const Cursor& o) const { return operator<=>(o) == 0; }

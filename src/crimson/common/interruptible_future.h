@@ -408,7 +408,7 @@ public:
   template <typename U>
   using interrupt_futurize_t =
     typename interruptor<InterruptCond>::template futurize_t<U>;
-  using core_type::get0;
+  using core_type::get;
   using core_type::core_type;
   using core_type::get_exception;
   using core_type::ignore_ready_future;
@@ -719,7 +719,7 @@ class [[nodiscard]] interruptible_future_detail<
 {
 public:
   using core_type = ErroratedFuture<crimson::errorated_future_marker<T>>;
-  using core_type::unsafe_get0;
+  using core_type::unsafe_get;
   using errorator_type = typename core_type::errorator_type;
   using interrupt_errorator_type =
     interruptible_errorator<InterruptCond, errorator_type>;
@@ -821,13 +821,17 @@ public:
       }, [func=std::move(errfunc),
 	  interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]
 	  (auto&& err) mutable -> decltype(auto) {
-	  constexpr bool return_void = std::is_void_v<
+	  static_assert(!std::is_void_v<
 	    std::invoke_result_t<ErrorVisitorT,
-	      std::decay_t<decltype(err)>>>;
+	      std::decay_t<decltype(err)>>>);
+	  constexpr bool is_assert = std::is_same_v<
+	    std::decay_t<std::invoke_result_t<ErrorVisitorT,
+	      std::decay_t<decltype(err)>>>,
+	    ::crimson::no_touch_error_marker>;
 	  constexpr bool return_err = ::crimson::is_error_v<
 	    std::decay_t<std::invoke_result_t<ErrorVisitorT,
 	      std::decay_t<decltype(err)>>>>;
-	  if constexpr (return_err || return_void) {
+	  if constexpr (return_err || is_assert) {
 	    return non_futurized_call_with_interruption(
 		      interrupt_condition,
 		      std::move(func),
@@ -857,13 +861,17 @@ public:
       }, [func=std::move(errfunc),
 	  interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]
 	  (auto&& err) mutable -> decltype(auto) {
-	  constexpr bool return_void = std::is_void_v<
+	  static_assert(!std::is_void_v<
 	    std::invoke_result_t<ErrorVisitorT,
-	      std::decay_t<decltype(err)>>>;
+	      std::decay_t<decltype(err)>>>);
+	  constexpr bool is_assert = std::is_same_v<
+	    std::decay_t<std::invoke_result_t<ErrorVisitorT,
+	      std::decay_t<decltype(err)>>>,
+	    ::crimson::no_touch_error_marker>;
 	  constexpr bool return_err = ::crimson::is_error_v<
 	    std::decay_t<std::invoke_result_t<ErrorVisitorT,
 	      std::decay_t<decltype(err)>>>>;
-	  if constexpr (return_err || return_void) {
+	  if constexpr (return_err || is_assert) {
 	    return non_futurized_call_with_interruption(
 		      interrupt_condition,
 		      std::move(func),
@@ -985,13 +993,17 @@ public:
 	[errfunc=std::move(errfunc),
 	 interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]
 	(auto&& err) mutable -> decltype(auto) {
-	  constexpr bool return_void = std::is_void_v<
+	  static_assert(!std::is_void_v<
 	    std::invoke_result_t<ErrorFunc,
-	      std::decay_t<decltype(err)>>>;
+	      std::decay_t<decltype(err)>>>);
+	  constexpr bool is_assert = std::is_same_v<
+	    std::decay_t<std::invoke_result_t<ErrorFunc,
+	      std::decay_t<decltype(err)>>>,
+	    ::crimson::no_touch_error_marker>;
 	  constexpr bool return_err = ::crimson::is_error_v<
 	    std::decay_t<std::invoke_result_t<ErrorFunc,
 	      std::decay_t<decltype(err)>>>>;
-	  if constexpr (return_err || return_void) {
+	  if constexpr (return_err || is_assert) {
 	    return non_futurized_call_with_interruption(
 		      interrupt_condition,
 		      std::move(errfunc),
@@ -1218,6 +1230,17 @@ public:
 	    };
   }
 
+  template <typename Lock, typename Func>
+  [[gnu::always_inline]]
+  static auto with_lock(Lock& lock, Func&& func) {
+    return seastar::with_lock(
+      lock,
+      [func=std::move(func),
+       interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]() mutable {
+      return call_with_interruption(interrupt_condition, func);
+    });
+  }
+
   template <typename Iterator,
 	    InvokeReturnsInterruptibleFuture<typename Iterator::reference> AsyncAction>
   [[gnu::always_inline]]
@@ -1398,7 +1421,7 @@ public:
         ret = seastar::futurize_invoke(mapper, *begin++).then_wrapped_interruptible(
 	    [s = s.get(), ret = std::move(ret)] (auto f) mutable {
             try {
-                s->result = s->reduce(std::move(s->result), std::move(f.get0()));
+                s->result = s->reduce(std::move(s->result), std::move(f.get()));
                 return std::move(ret);
             } catch (...) {
                 return std::move(ret).then_wrapped_interruptible([ex = std::current_exception()] (auto f) {

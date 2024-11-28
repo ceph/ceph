@@ -31,7 +31,7 @@ namespace rgw::notify {
     case ObjectExpirationCurrent:
       return "s3:ObjectLifecycle:Expiration:Current";
     case ObjectExpirationNoncurrent:
-      return "s3:ObjectLifecycle:Expiration:Noncurrent";
+      return "s3:ObjectLifecycle:Expiration:NonCurrent";
     case ObjectExpirationDeleteMarker:
       return "s3:ObjectLifecycle:Expiration:DeleteMarker";
     case ObjectExpirationAbortMPU:
@@ -41,7 +41,7 @@ namespace rgw::notify {
     case ObjectTransitionCurrent:
       return "s3:ObjectLifecycle:Transition:Current";
     case ObjectTransitionNoncurrent:
-      return "s3:ObjectLifecycle:Transition:Noncurrent";
+      return "s3:ObjectLifecycle:Transition:NonCurrent";
     case ObjectSynced:
       return "s3:ObjectSynced:*";
     case ObjectSyncedCreate:
@@ -99,8 +99,10 @@ namespace rgw::notify {
         return ObjectExpiration;
     if (s == "s3:ObjectLifecycle:Expiration:Current")
         return ObjectExpirationCurrent;
+    if (s == "s3:ObjectLifecycle:Expiration:NonCurrent")
+        return ObjectExpirationNonCurrent;
     if (s == "s3:ObjectLifecycle:Expiration:Noncurrent")
-        return ObjectExpirationNoncurrent;
+        return ObjectExpirationNonCurrent;
     if (s == "s3:ObjectLifecycle:Expiration:DeleteMarker")
         return ObjectExpirationDeleteMarker;
     if (s == "s3:ObjectLifecycle:Expiration:AbortMultipartUpload")
@@ -109,8 +111,10 @@ namespace rgw::notify {
         return ObjectTransition;
     if (s == "s3:ObjectLifecycle:Transition:Current")
         return ObjectTransitionCurrent;
+    if (s == "s3:ObjectLifecycle:Transition:NonCurrent")
+        return ObjectTransitionNonCurrent;
     if (s == "s3:ObjectLifecycle:Transition:Noncurrent")
-        return ObjectTransitionNoncurrent;
+        return ObjectTransitionNonCurrent;
     if (s == "s3:ObjectSynced:*")
         return ObjectSynced;
     if (s == "s3:ObjectSynced:Create")

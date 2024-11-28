@@ -243,6 +243,14 @@ int Pool<I>::init(librados::IoCtx& io_ctx, bool force) {
 
   int r = io_ctx.application_enable(pg_pool_t::APPLICATION_NAME_RBD, force);
   if (r < 0) {
+    lderr(cct) << "failed to enable RBD application: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  r = io_ctx.create(RBD_TRASH, false);
+  if (r < 0) {
+    lderr(cct) << "failed to create trash: " << cpp_strerror(r) << dendl;
     return r;
   }
 

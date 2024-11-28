@@ -257,11 +257,10 @@ static seastar::future<> run(
           return server.msgr->bind(entity_addrvec_t{addr}
           ).safe_then([&server] {
             return server.msgr->start({&server});
-          }, crimson::net::Messenger::bind_ertr::all_same_way(
+          }, crimson::net::Messenger::bind_ertr::assert_all_func(
               [addr] (const std::error_code& e) {
             logger().error("Server: "
                            "there is another instance running at {}", addr);
-            ceph_abort();
           }));
         });
       }
@@ -1108,8 +1107,8 @@ static seastar::future<> run(
           "ms_crc_data", crc_enabled ? "true" : "false");
     })
   ).then([=](auto&& ret) {
-    auto server = std::move(std::get<0>(ret).get0());
-    auto client = std::move(std::get<1>(ret).get0());
+    auto server = std::move(std::get<0>(ret).get());
+    auto client = std::move(std::get<1>(ret).get());
     // reserve core 0 for potentially better performance
     if (mode == perf_mode_t::both) {
       logger().info("\nperf settings:\n  smp={}\n  {}\n  {}\n",

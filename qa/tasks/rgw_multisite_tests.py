@@ -72,7 +72,9 @@ class RGWMultisiteTests(Task):
         # create test account/user
         log.info('creating test user..')
         user = multisite.User('rgw-multisite-test-user', account='RGW11111111111111111')
-        master_zone.cluster.admin(['account', 'create', '--account-id', user.account])
+        arg = ['--account-id', user.account]
+        arg += master_zone.zone_args()
+        master_zone.cluster.admin(['account', 'create'] + arg)
         user.create(master_zone, ['--display-name', 'TestUser',
                                   '--gen-access-key', '--gen-secret'])
 

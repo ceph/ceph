@@ -394,7 +394,7 @@ options:
   - rbd
 - name: rbd_validate_pool
   type: bool
-  level: advanced
+  level: dev
   desc: validate empty pools for RBD compatibility
   default: true
   services:

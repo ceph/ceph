@@ -44,6 +44,7 @@ private:
   seastar::future<> do_process();
 
   Ref<PG> pg;
+  epoch_t start_epoch;
   OpInfo op_info;
   PipelineHandle handle;
 
@@ -56,6 +57,7 @@ public:
     PGActivationBlocker::BlockingEvent,
     CommonPGPipeline::RecoverMissing::BlockingEvent,
     CommonPGPipeline::GetOBC::BlockingEvent,
+    CommonPGPipeline::LockOBC::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
     CompletionEvent
   > tracking_events;

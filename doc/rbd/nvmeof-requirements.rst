@@ -11,4 +11,4 @@ network for the gateway. For hardware recommendations, see
 
 .. note:: On the NVMe-oF gateway, the memory footprint is a function of the
    number of mapped RBD images and can grow to be large. Plan memory
-   requirements accordingly based on the number RBD images to be mapped.
+   requirements accordingly based on the number of RBD images to be mapped.

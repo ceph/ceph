@@ -101,19 +101,23 @@ seastar::future<> AlienStore::start()
   if (!store) {
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
   }
-  auto cpu_cores = seastar::resource::parse_cpuset(
-    get_conf<std::string>("crimson_alien_thread_cpu_cores"));
-  //  crimson_alien_thread_cpu_cores are assigned to alien threads.
-  if (!cpu_cores.has_value()) {
-    // no core isolation by default, seastar_cpu_cores will be
-    // shared between both alien and seastar reactor threads.
-    cpu_cores = seastar::resource::parse_cpuset(
-      get_conf<std::string>("crimson_seastar_cpu_cores"));
-    ceph_assert(cpu_cores.has_value());
+  /*
+   * crimson_alien_thread_cpu_cores must be set for optimal performance.
+   * Otherwise, no CPU pinning will take place.
+  */
+  std::optional<seastar::resource::cpuset> alien_thread_cpu_cores;
+
+  if (std::string conf_cpu_cores =
+        get_conf<std::string>("crimson_alien_thread_cpu_cores");
+      !conf_cpu_cores.empty()) {
+    logger().debug("{} using crimson_alien_thread_cpu_cores", __func__);
+    alien_thread_cpu_cores =
+      seastar::resource::parse_cpuset(conf_cpu_cores);
   }
+
   const auto num_threads =
     get_conf<uint64_t>("crimson_alien_op_num_threads");
-  tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, cpu_cores);
+  tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, alien_thread_cpu_cores);
   return tp->start();
 }
 
@@ -124,8 +128,12 @@ seastar::future<> AlienStore::stop()
     return seastar::now();
   }
   return tp->submit([this] {
-    for (auto [cid, ch]: coll_map) {
-      static_cast<AlienCollection*>(ch.get())->collection.reset();
+    {
+      std::lock_guard l(coll_map_lock);
+      for (auto [cid, ch]: coll_map) {
+	static_cast<AlienCollection*>(ch.get())->collection.reset();
+      }
+      coll_map.clear();
     }
     store.reset();
     cct.reset();
@@ -229,23 +237,9 @@ seastar::future<CollectionRef> AlienStore::create_new_collection(const coll_t& c
   logger().debug("{}", __func__);
   assert(tp);
   return tp->submit([this, cid] {
-    return store->create_new_collection(cid);
-  }).then([this, cid] (ObjectStore::CollectionHandle c) {
-    CollectionRef ch;
-    auto cp = coll_map.find(c->cid);
-    if (cp == coll_map.end()) {
-      ch = new AlienCollection(c);
-      coll_map[c->cid] = ch;
-    } else {
-      ch = cp->second;
-      auto ach = static_cast<AlienCollection*>(ch.get());
-      if (ach->collection != c) {
-        ach->collection = c;
-      }
-    }
-    return seastar::make_ready_future<CollectionRef>(ch);
+    ObjectStore::CollectionHandle c = store->create_new_collection(cid);
+    return get_alien_coll_ref(std::move(c));
   });
-
 }
 
 seastar::future<CollectionRef> AlienStore::open_collection(const coll_t& cid)
@@ -253,24 +247,12 @@ seastar::future<CollectionRef> AlienStore::open_collection(const coll_t& cid)
   logger().debug("{}", __func__);
   assert(tp);
   return tp->submit([this, cid] {
-    return store->open_collection(cid);
-  }).then([this] (ObjectStore::CollectionHandle c) {
+    ObjectStore::CollectionHandle c = store->open_collection(cid);
     if (!c) {
-      return seastar::make_ready_future<CollectionRef>();
-    }
-    CollectionRef ch;
-    auto cp = coll_map.find(c->cid);
-    if (cp == coll_map.end()){
-      ch = new AlienCollection(c);
-      coll_map[c->cid] = ch;
+      return CollectionRef{};
     } else {
-      ch = cp->second;
-      auto ach = static_cast<AlienCollection*>(ch.get());
-      if (ach->collection != c){
-        ach->collection = c;
-      }
+      return get_alien_coll_ref(std::move(c));
     }
-    return seastar::make_ready_future<CollectionRef>(ch);
   });
 }
 
@@ -651,6 +633,23 @@ AlienStore::read_errorator::future<std::map<uint64_t, uint64_t>> AlienStore::fie
       }
     });
   });
+}
+
+CollectionRef AlienStore::get_alien_coll_ref(ObjectStore::CollectionHandle c) {
+  std::lock_guard l(coll_map_lock);
+  CollectionRef ch;
+  auto cp = coll_map.find(c->cid);
+  if (cp == coll_map.end()) {
+    ch = new AlienCollection(c);
+    coll_map[c->cid] = ch;
+  } else {
+    ch = cp->second;
+    auto ach = static_cast<AlienCollection*>(ch.get());
+    if (ach->collection != c) {
+      ach->collection = c;
+    }
+  }
+  return ch;
 }
 
 }

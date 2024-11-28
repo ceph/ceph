@@ -37,6 +37,8 @@ import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule
 import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
 import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
+import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-modal/pool-edit-mode-response.model';
+import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -83,6 +85,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   crushUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   ecpUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   crushRuleMaxSize = 10;
+  msrCrush: boolean = false;
 
   private modalSubscription: Subscription;
 
@@ -97,7 +100,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
     private crushRuleService: CrushRuleService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private rbdMirroringService: RbdMirroringService
   ) {
     super();
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
@@ -176,7 +180,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
         ecOverwrites: new UntypedFormControl(false),
         compression: compressionForm,
         max_bytes: new UntypedFormControl(''),
-        max_objects: new UntypedFormControl(0)
+        max_objects: new UntypedFormControl(0),
+        rbdMirroring: new UntypedFormControl(false)
       },
       [CdValidators.custom('form', (): null => null)]
     );
@@ -194,6 +199,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       this.listenToChanges();
       this.setComplexValidators();
     });
+    this.erasureProfileChange();
   }
 
   private initInfo(info: PoolFormInfo) {
@@ -284,6 +290,11 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.data.pgs = this.form.getValue('pgNum');
     this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata));
     this.data.applications.selected = pool.application_metadata;
+    this.rbdMirroringService
+      .getPool(pool.pool_name)
+      .subscribe((resp: PoolEditModeResponseModel) => {
+        this.form.get('rbdMirroring').setValue(resp.mirror_mode === 'pool');
+      });
   }
 
   private setAvailableApps(apps: string[] = this.data.applications.default) {
@@ -775,7 +786,14 @@ export class PoolFormComponent extends CdForm implements OnInit {
         formControlName: 'max_objects',
         editable: true,
         resetValue: this.editing ? 0 : undefined
-      }
+      },
+      this.data.applications.selected.includes('rbd')
+        ? { externalFieldName: 'rbd_mirroring', formControlName: 'rbdMirroring' }
+        : {
+            externalFieldName: 'rbd_mirroring',
+            formControlName: 'rbdMirroring',
+            resetValue: undefined
+          }
     ]);
 
     if (this.info.is_all_bluestore) {
@@ -840,6 +858,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
     const apps = this.data.applications.selected;
     if (apps.length > 0 || this.editing) {
       pool['application_metadata'] = apps;
+      if (apps.includes('rbd')) {
+        pool['rbd_mirroring'] = this.form.getValue('rbdMirroring');
+      }
     }
 
     // Only collect configuration data for replicated pools, as QoS cannot be configured on EC
@@ -892,10 +913,11 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   private triggerApiTask(pool: Record<string, any>) {
+    const poolName = pool.hasOwnProperty('srcpool') ? pool.srcpool : pool.pool;
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('pool/' + (this.editing ? URLVerbs.EDIT : URLVerbs.CREATE), {
-          pool_name: pool.hasOwnProperty('srcpool') ? pool.srcpool : pool.pool
+          pool_name: poolName
         }),
         call: this.poolService[this.editing ? URLVerbs.UPDATE : URLVerbs.CREATE](pool)
       })
@@ -912,5 +934,13 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   appSelection() {
     this.form.get('name').updateValueAndValidity({ emitEvent: false, onlySelf: true });
+  }
+
+  erasureProfileChange() {
+    const profile = this.form.get('erasureProfile').value;
+    if (profile) {
+      this.msrCrush =
+        profile['crush-num-failure-domains'] > 0 || profile['crush-osds-per-failure-domain'] > 0;
+    }
   }
 }

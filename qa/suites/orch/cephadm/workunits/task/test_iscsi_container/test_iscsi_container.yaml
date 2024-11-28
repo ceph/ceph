@@ -10,6 +10,8 @@ overrides:
   ceph:
     log-only-match:
       - CEPHADM_
+    log-ignorelist:
+      - CEPHADM_FAILED_DAEMON
 tasks:
 - install:
 - cephadm:
@@ -23,3 +25,4 @@ tasks:
       client.0:
         - cephadm/test_iscsi_pids_limit.sh
         - cephadm/test_iscsi_etc_hosts.sh
+        - cephadm/test_iscsi_setup.sh

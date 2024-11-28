@@ -717,13 +717,13 @@ int RGWRadosBILogTrimCR::request_complete()
   return r;
 }
 
-int send_sync_notification(const DoutPrefixProvider* dpp,
-                           rgw::sal::RadosStore* store,
-                           rgw::sal::Bucket* bucket,
-                           rgw::sal::Object* obj,
-                           const rgw::sal::Attrs& attrs,
-                           uint64_t obj_size,
-                           const rgw::notify::EventTypeList& event_types) {
+void send_sync_notification(const DoutPrefixProvider* dpp,
+                            rgw::sal::RadosStore* store,
+                            rgw::sal::Bucket* bucket,
+                            rgw::sal::Object* obj,
+                            const rgw::sal::Attrs& attrs,
+                            uint64_t obj_size,
+                            const rgw::notify::EventTypeList& event_types) {
   // send notification that object was successfully synced
   std::string user_id = "rgw sync";
   std::string req_id = "0";
@@ -738,7 +738,6 @@ int send_sync_notification(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 1) << "ERROR: " << __func__
                         << ": caught buffer::error couldn't decode TagSet "
                         << dendl;
-      return -EIO;
     }
   }
   // bucket attrs are required for notification and since its not loaded,
@@ -748,7 +747,7 @@ int send_sync_notification(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 1) << "ERROR: failed to load bucket attrs for bucket:"
                       << bucket->get_name() << " with error ret= " << r
                       << " . Not sending notification" << dendl;
-    return r;
+    return;
   }
   rgw::notify::reservation_t notify_res(dpp, store, obj, nullptr, bucket,
                                         user_id, bucket->get_tenant(), req_id,
@@ -772,7 +771,6 @@ int send_sync_notification(const DoutPrefixProvider* dpp,
                         << ret << dendl;
     }
   }
-  return ret;
 }
 
 int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)

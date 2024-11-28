@@ -883,7 +883,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     return;
   }
   {
-    DECODE_START(8, bl); // client-usable data
+    DECODE_START(9, bl); // client-usable data
     decode(fsid, bl);
     decode(epoch, bl);
     decode(modified, bl);
@@ -1766,13 +1766,17 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES5;
   if (crush->has_incompat_choose_args())
     features |= CEPH_FEATUREMASK_CRUSH_CHOOSE_ARGS;
-  if (crush->has_nondefault_tunables_msr())
-    features |= CEPH_FEATURE_CRUSH_MSR;
+  if (crush->has_nondefault_tunables_msr() ||
+      crush->has_msr_rules())
+    features |= CEPH_FEATUREMASK_CRUSH_MSR;
   mask |= CEPH_FEATURES_CRUSH;
 
-  if (!pg_upmap.empty() || !pg_upmap_items.empty() || !pg_upmap_primaries.empty())
+  if (!pg_upmap.empty() || !pg_upmap_items.empty())
     features |= CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
   mask |= CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
+  if (!pg_upmap_primaries.empty())
+    features |= CEPH_FEATUREMASK_SERVER_REEF;
+  mask |= CEPH_FEATUREMASK_SERVER_REEF;
 
   for (auto &pool: pools) {
     if (pool.second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
@@ -1790,8 +1794,6 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_CRUSH_TUNABLES3;
       if (crush->is_v5_rule(ruleid))
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
-      if (crush->is_msr_rule(ruleid))
-	features |= CEPH_FEATURE_CRUSH_MSR;
     }
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
@@ -1848,6 +1850,9 @@ ceph_release_t OSDMap::get_min_compat_client() const
 
   if (HAVE_FEATURE(f, CRUSH_MSR)) {
     return ceph_release_t::squid;        // v19.2.0
+  }
+  if (HAVE_FEATURE(f, SERVER_REEF)) {	 // v18.2.3 (upmap-primary; see #61948)
+    return ceph_release_t::reef;
   }
   if (HAVE_FEATURE(f, OSDMAP_PG_UPMAP) ||      // v12.0.0-1733-g27d6f43
       HAVE_FEATURE(f, CRUSH_CHOOSE_ARGS)) {    // v12.0.1-2172-gef1ef28
@@ -3548,7 +3553,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(9, bl); // client-usable data
+    DECODE_START(10, bl); // client-usable data
     // base
     decode(fsid, bl);
     decode(epoch, bl);

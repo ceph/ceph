@@ -199,19 +199,17 @@ seastar::future<> OSD::mkfs(
   LOG_PREFIX(OSD::mkfs);
   return store.start().then([&store, FNAME, osd_uuid] {
     return store.mkfs(osd_uuid).handle_error(
-      crimson::stateful_ec::handle([FNAME] (const auto& ec) {
+      crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
         ERROR("error creating empty object store in {}: ({}) {}",
 	      local_conf().get_val<std::string>("osd_data"),
 	      ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
       }));
   }).then([&store, FNAME] {
     return store.mount().handle_error(
-      crimson::stateful_ec::handle([FNAME](const auto& ec) {
+      crimson::stateful_ec::assert_failure([FNAME](const auto& ec) {
         ERROR("error mounting object store in {}: ({}) {}",
 	      local_conf().get_val<std::string>("osd_data"),
 	      ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
       }));
   }).then([&store] {
     return open_or_create_meta_coll(store);
@@ -363,7 +361,12 @@ seastar::future<> OSD::start()
 {
   LOG_PREFIX(OSD::start);
   INFO("seastar::smp::count {}", seastar::smp::count);
-
+  if (auto cpu_cores =
+        local_conf().get_val<std::string>("crimson_seastar_cpu_cores");
+      cpu_cores.empty()) {
+    clog->warn() << "for optimal performance please set "
+                    "crimson_seastar_cpu_cores";
+  }
   startup_time = ceph::mono_clock::now();
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   return store.start().then([this] {
@@ -387,37 +390,46 @@ seastar::future<> OSD::start()
         std::ref(osd_states));
     });
   }).then([this, FNAME] {
+    heartbeat.reset(new Heartbeat{
+	whoami, get_shard_services(),
+	*monc, *hb_front_msgr, *hb_back_msgr});
+    return store.mount().handle_error(
+      crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
+        ERROR("error mounting object store in {}: ({}) {}",
+	      local_conf().get_val<std::string>("osd_data"),
+	      ec.value(), ec.message());
+      }));
+  }).then([this, FNAME] {
     auto stats_seconds = local_conf().get_val<int64_t>("crimson_osd_stat_interval");
     if (stats_seconds > 0) {
       shard_stats.resize(seastar::smp::count);
       stats_timer.set_callback([this, FNAME] {
-        std::ignore = shard_services.invoke_on_all(
-          [this](auto &local_service) {
-          auto stats = local_service.report_stats();
-          shard_stats[seastar::this_shard_id()] = stats;
-        }).then([this, FNAME] {
-          std::ostringstream oss;
-          for (const auto &stats : shard_stats) {
-            oss << int(stats.reactor_utilization);
-            oss << ",";
-          }
-          INFO("reactor_utilizations: {}", oss.str());
+        gate.dispatch_in_background("stats_osd", *this, [this, FNAME] {
+          return shard_services.invoke_on_all(
+            [this](auto &local_service) {
+            auto stats = local_service.report_stats();
+            shard_stats[seastar::this_shard_id()] = stats;
+          }).then([this, FNAME] {
+            std::ostringstream oss;
+            double agg_ru = 0;
+            int cnt = 0;
+            for (const auto &stats : shard_stats) {
+              agg_ru += stats.reactor_utilization;
+              ++cnt;
+              oss << int(stats.reactor_utilization);
+              oss << ",";
+            }
+            INFO("reactor_utilizations: {}({})",
+                 int(agg_ru/cnt), oss.str());
+          });
+        });
+        gate.dispatch_in_background("stats_store", *this, [this] {
+          return store.report_stats();
         });
       });
       stats_timer.arm_periodic(std::chrono::seconds(stats_seconds));
     }
 
-    heartbeat.reset(new Heartbeat{
-	whoami, get_shard_services(),
-	*monc, *hb_front_msgr, *hb_back_msgr});
-    return store.mount().handle_error(
-      crimson::stateful_ec::handle([FNAME] (const auto& ec) {
-        ERROR("error mounting object store in {}: ({}) {}",
-	      local_conf().get_val<std::string>("osd_data"),
-	      ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
-      }));
-  }).then([this] {
     return open_meta_coll();
   }).then([this] {
     return pg_shard_manager.get_meta_coll().load_superblock(
@@ -470,18 +482,16 @@ seastar::future<> OSD::start()
       cluster_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER))
         .safe_then([this, dispatchers]() mutable {
 	  return cluster_msgr->start(dispatchers);
-        }, crimson::net::Messenger::bind_ertr::all_same_way(
+        }, crimson::net::Messenger::bind_ertr::assert_all_func(
             [FNAME] (const std::error_code& e) {
           ERROR("cluster messenger bind(): {}", e);
-          ceph_abort();
         })),
       public_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC))
         .safe_then([this, dispatchers]() mutable {
 	  return public_msgr->start(dispatchers);
-        }, crimson::net::Messenger::bind_ertr::all_same_way(
+        }, crimson::net::Messenger::bind_ertr::assert_all_func(
             [FNAME] (const std::error_code& e) {
           ERROR("public messenger bind(): {}", e);
-          ceph_abort();
         })));
   }).then_unpack([this] {
     return seastar::when_all_succeed(monc->start(),
@@ -1173,6 +1183,13 @@ seastar::future<> OSD::committed_osd_maps(
       }
       if (should_restart()) {
         return restart();
+      } else if (!pg_shard_manager.is_stopping()) {
+        /* 
+         * TODO: Missing start_waiting_for_healthy() counterpart.
+         * Only subscribe to the next map until implemented.
+         * See https://tracker.ceph.com/issues/66832 
+        */
+	return get_shard_services().osdmap_subscribe(osdmap->get_epoch() + 1, false);
       } else {
         return seastar::now();
       }

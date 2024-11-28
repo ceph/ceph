@@ -162,4 +162,8 @@ export class HostService extends ApiClient {
       })
     );
   }
+
+  getAllHosts(): Observable<object[]> {
+    return this.http.get<object[]>(`${this.baseUIURL}/list`);
+  }
 }

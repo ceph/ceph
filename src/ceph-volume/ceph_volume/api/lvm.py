@@ -6,11 +6,12 @@ set of utilities for interacting with LVM.
 import logging
 import os
 import uuid
-import re
 from itertools import repeat
 from math import floor
 from ceph_volume import process, util, conf
 from ceph_volume.exceptions import SizeAllocationError
+from typing import Any, Dict
+
 
 logger = logging.getLogger(__name__)
 
@@ -808,13 +809,16 @@ LV_CMD_OPTIONS =  ['--noheadings', '--readonly', '--separator=";"', '-a',
                    '--units=b', '--nosuffix']
 
 
-class Volume(object):
+class Volume:
     """
     Represents a Logical Volume from LVM, with some top-level attributes like
     ``lv_name`` and parsed tags as a dictionary of key/value pairs.
     """
 
-    def __init__(self, **kw):
+    def __init__(self, **kw: str) -> None:
+        self.lv_path: str = ''
+        self.lv_name: str = ''
+        self.lv_uuid: str = ''
         for k, v in kw.items():
             setattr(self, k, v)
         self.lv_api = kw
@@ -825,13 +829,13 @@ class Volume(object):
         self.encrypted = self.tags.get('ceph.encrypted', '0') == '1'
         self.used_by_ceph = 'ceph.osd_id' in self.tags
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '<%s>' % self.lv_api['lv_path']
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def as_dict(self):
+    def as_dict(self) -> Dict[str, Any]:
         obj = {}
         obj.update(self.lv_api)
         obj['tags'] = self.tags
@@ -840,7 +844,7 @@ class Volume(object):
         obj['path'] = self.lv_path
         return obj
 
-    def report(self):
+    def report(self) -> Dict[str, Any]:
         if not self.used_by_ceph:
             return {
                 'name': self.lv_name,
@@ -1210,39 +1214,3 @@ def get_lv_by_fullname(full_name):
     except ValueError:
         res_lv = None
     return res_lv
-
-def get_lv_path_from_mapper(mapper):
-    """
-    This functions translates a given mapper device under the format:
-    /dev/mapper/LV to the format /dev/VG/LV.
-    eg:
-    from:
-    /dev/mapper/ceph--c1a97e46--234c--46aa--a549--3ca1d1f356a9-osd--block--32e8e896--172e--4a38--a06a--3702598510ec
-    to:
-    /dev/ceph-c1a97e46-234c-46aa-a549-3ca1d1f356a9/osd-block-32e8e896-172e-4a38-a06a-3702598510ec
-    """
-    results = re.split(r'^\/dev\/mapper\/(.+\w)-(\w.+)', mapper)
-    results = list(filter(None, results))
-
-    if len(results) != 2:
-        return None
-
-    return f"/dev/{results[0].replace('--', '-')}/{results[1].replace('--', '-')}"
-
-def get_mapper_from_lv_path(lv_path):
-    """
-    This functions translates a given lv path under the format:
-    /dev/VG/LV to the format /dev/mapper/LV.
-    eg:
-    from:
-    /dev/ceph-c1a97e46-234c-46aa-a549-3ca1d1f356a9/osd-block-32e8e896-172e-4a38-a06a-3702598510ec
-    to:
-    /dev/mapper/ceph--c1a97e46--234c--46aa--a549--3ca1d1f356a9-osd--block--32e8e896--172e--4a38--a06a--3702598510ec
-    """
-    results = re.split(r'^\/dev\/(.+\w)-(\w.+)', lv_path)
-    results = list(filter(None, results))
-
-    if len(results) != 2:
-        return None
-
-    return f"/dev/mapper/{results[0].replace('-', '--')}/{results[1].replace('-', '--')}"

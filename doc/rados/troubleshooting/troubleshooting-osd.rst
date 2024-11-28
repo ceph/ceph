@@ -655,7 +655,7 @@ Events from the OSD as it processes ops:
   is now being performed.
 - ``waiting for subops from``: The op has been sent to replica OSDs.
 
-Events from ```Filestore```:
+Events from ``Filestore``:
 
 - ``commit_queued_for_journal_write``: The op has been given to the FileStore.
 - ``write_thread_in_journal_buffer``: The op is in the journal's buffer and is waiting
@@ -667,7 +667,7 @@ Events from the OSD after data has been given to underlying storage:
 
 - ``op_commit``: The op has been committed (that is, written to journal) by the
   primary OSD.
-- ``op_applied``: The op has been `write()'en
+- ``op_applied``: The op has been `written with write()
   <https://www.freebsd.org/cgi/man.cgi?write(2)>`_ to the backing FS (that is,
   applied in memory but not flushed out to disk) on the primary.
 - ``sub_op_applied``: ``op_applied``, but for a replica's "subop".
@@ -676,9 +676,11 @@ Events from the OSD after data has been given to underlying storage:
   hears about the above, but for a particular replica (i.e. ``<X>``).
 - ``commit_sent``: We sent a reply back to the client (or primary OSD, for sub ops).
 
-Some of these events may appear redundant, but they cross important boundaries
-in the internal code (such as passing data across locks into new threads).
+Although some of these events may appear redundant, they cross important
+boundaries in the internal code (such as passing data across locks into new
+threads).
 
+.. _rados_tshooting_flapping_osd:
 
 Flapping OSDs
 =============

@@ -3,8 +3,8 @@ overrides:
     ceph:
       extra_packages:
         - rbd-nbd
-      extra_system_packages:
-        - pv
+    extra_system_packages:
+      - pv
 tasks:
 - workunit:
     clients:

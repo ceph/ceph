@@ -3,17 +3,126 @@ import json
 from ceph_node_proxy.basesystem import BaseSystem
 from ceph_node_proxy.redfish_client import RedFishClient
 from time import sleep
-from ceph_node_proxy.util import get_logger
+from ceph_node_proxy.util import get_logger, to_snake_case
 from typing import Dict, Any, List, Callable, Union
 from urllib.error import HTTPError, URLError
+
+
+class EndpointMgr:
+    NAME: str = 'EndpointMgr'
+
+    def __init__(self,
+                 client: RedFishClient,
+                 prefix: str = RedFishClient.PREFIX) -> None:
+        self.log = get_logger(f'{__name__}:{EndpointMgr.NAME}')
+        self.prefix: str = prefix
+        self.client: RedFishClient = client
+
+    def __getitem__(self, index: str) -> Any:
+        if index in self.__dict__:
+            return self.__dict__[index]
+        else:
+            raise RuntimeError(f'{index} is not a valid endpoint.')
+
+    def init(self) -> None:
+        _error_msg: str = "Can't discover entrypoint(s)"
+        try:
+            _, _data, _ = self.client.query(endpoint=self.prefix)
+            json_data: Dict[str, Any] = json.loads(_data)
+            for k, v in json_data.items():
+                if '@odata.id' in v:
+                    self.log.debug(f'entrypoint found: {to_snake_case(k)} = {v["@odata.id"]}')
+                    _name: str = to_snake_case(k)
+                    _url: str = v['@odata.id']
+                    e = Endpoint(_url, self.client)
+                    setattr(self, _name, e)
+            setattr(self, 'session', json_data['Links']['Sessions']['@odata.id'])  # TODO(guits): needs to be fixed
+        except (URLError, KeyError) as e:
+            msg = f'{_error_msg}: {e}'
+            self.log.error(msg)
+            raise RuntimeError
+
+
+class Endpoint:
+    NAME: str = 'Endpoint'
+
+    def __init__(self, url: str, client: RedFishClient) -> None:
+        self.log = get_logger(f'{__name__}:{Endpoint.NAME}')
+        self.url: str = url
+        self.client: RedFishClient = client
+        self.data: Dict[str, Any] = self.get_data()
+        self.id: str = ''
+        self.members_names: List[str] = []
+
+        if self.has_members:
+            self.members_names = self.get_members_names()
+
+        if self.data:
+            try:
+                self.id = self.data['Id']
+            except KeyError:
+                self.id = self.data['@odata.id'].split('/')[-1:]
+        else:
+            self.log.warning(f'No data could be loaded for {self.url}')
+
+    def __getitem__(self, index: str) -> Any:
+        if not getattr(self, index, False):
+            _url: str = f'{self.url}/{index}'
+            setattr(self, index, Endpoint(_url, self.client))
+        return self.__dict__[index]
+
+    def query(self, url: str) -> Dict[str, Any]:
+        data: Dict[str, Any] = {}
+        try:
+            self.log.debug(f'Querying {url}')
+            _, _data, _ = self.client.query(endpoint=url)
+            data = json.loads(_data)
+        except KeyError as e:
+            self.log.error(f'Error while querying {self.url}: {e}')
+        return data
+
+    def get_data(self) -> Dict[str, Any]:
+        return self.query(self.url)
+
+    def get_members_names(self) -> List[str]:
+        result: List[str] = []
+        if self.has_members:
+            for member in self.data['Members']:
+                name: str = member['@odata.id'].split('/')[-1:][0]
+                result.append(name)
+        return result
+
+    def get_name(self, endpoint: str) -> str:
+        return endpoint.split('/')[-1:][0]
+
+    def get_members_endpoints(self) -> Dict[str, str]:
+        members: Dict[str, str] = {}
+        name: str = ''
+        if self.has_members:
+            for member in self.data['Members']:
+                name = self.get_name(member['@odata.id'])
+                members[name] = member['@odata.id']
+        else:
+            name = self.get_name(self.data['@odata.id'])
+            members[name] = self.data['@odata.id']
+
+        return members
+
+    def get_members_data(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+        if self.has_members:
+            for member, endpoint in self.get_members_endpoints().items():
+                result[member] = self.query(endpoint)
+        return result
+
+    @property
+    def has_members(self) -> bool:
+        return 'Members' in self.data.keys()
 
 
 class BaseRedfishSystem(BaseSystem):
     def __init__(self, **kw: Any) -> None:
         super().__init__(**kw)
-        self.common_endpoints: List[str] = kw.get('common_endpoints', ['/Systems/System.Embedded.1',
-                                                                       '/UpdateService'])
-        self.chassis_endpoint: str = kw.get('chassis_endpoint', '/Chassis/System.Embedded.1')
         self.log = get_logger(__name__)
         self.host: str = kw['host']
         self.port: str = kw['port']
@@ -21,6 +130,7 @@ class BaseRedfishSystem(BaseSystem):
         self.password: str = kw['password']
         # move the following line (class attribute?)
         self.client: RedFishClient = RedFishClient(host=self.host, port=self.port, username=self.username, password=self.password)
+        self.endpoints: EndpointMgr = EndpointMgr(self.client)
         self.log.info(f'redfish system initialization, host: {self.host}, user: {self.username}')
         self.data_ready: bool = False
         self.previous_data: Dict = {}
@@ -48,6 +158,8 @@ class BaseRedfishSystem(BaseSystem):
     def main(self) -> None:
         self.stop = False
         self.client.login()
+        self.endpoints.init()
+
         while not self.stop:
             self.log.debug('waiting for a lock in the update loop.')
             with self.lock:
@@ -100,9 +212,7 @@ class BaseRedfishSystem(BaseSystem):
         return result
 
     def get_members(self, data: Dict[str, Any], path: str) -> List:
-        _path = data[path]['@odata.id']
-        _data = self._get_path(_path)
-        return [self._get_path(member['@odata.id']) for member in _data['Members']]
+        return [self._get_path(member['@odata.id']) for member in data['Members']]
 
     def get_system(self) -> Dict[str, Any]:
         result = {
@@ -117,15 +227,18 @@ class BaseRedfishSystem(BaseSystem):
                 'fans': self.get_fans()
             },
             'firmwares': self.get_firmwares(),
-            'chassis': {'redfish_endpoint': f'/redfish/v1{self.chassis_endpoint}'}  # TODO(guits): not ideal
         }
         return result
 
     def _update_system(self) -> None:
-        for endpoint in self.common_endpoints:
-            result = self.client.get_path(endpoint)
-            _endpoint = endpoint.strip('/').split('/')[0]
-            self._system[_endpoint] = result
+        system_members: Dict[str, Any] = self.endpoints['systems'].get_members_data()
+        update_service_members: Endpoint = self.endpoints['update_service']
+
+        for member, data in system_members.items():
+            self._system[member] = data
+            self._sys[member] = dict()
+
+        self._system[update_service_members.id] = update_service_members.data
 
     def _update_sn(self) -> None:
         raise NotImplementedError()
@@ -196,7 +309,7 @@ class BaseRedfishSystem(BaseSystem):
 
     def set_device_led(self, device: str, data: Dict[str, bool]) -> int:
         try:
-            _, response, status = self.client.query(
+            _, _, status = self.client.query(
                 data=json.dumps(data),
                 method='PATCH',
                 endpoint=self._sys['storage'][device]['redfish_endpoint']
@@ -207,7 +320,7 @@ class BaseRedfishSystem(BaseSystem):
         return status
 
     def get_chassis_led(self) -> Dict[str, Any]:
-        endpoint = f'/redfish/v1/{self.chassis_endpoint}'
+        endpoint = list(self.endpoints['chassis'].get_members_endpoints().values())[0]
         try:
             result = self.client.query(method='GET',
                                        endpoint=endpoint,
@@ -227,10 +340,10 @@ class BaseRedfishSystem(BaseSystem):
         # '{"IndicatorLED": "Lit"}'      -> LocationIndicatorActive = false
         # '{"IndicatorLED": "Blinking"}' -> LocationIndicatorActive = true
         try:
-            _, response, status = self.client.query(
+            _, _, status = self.client.query(
                 data=json.dumps(data),
                 method='PATCH',
-                endpoint=f'/redfish/v1{self.chassis_endpoint}'
+                endpoint=list(self.endpoints['chassis'].get_members_endpoints().values())[0]
             )
         except HTTPError as e:
             self.log.error(f"Couldn't set the ident chassis LED: {e}")
@@ -260,7 +373,7 @@ class BaseRedfishSystem(BaseSystem):
     def create_reboot_job(self, reboot_type: str) -> str:
         data: Dict[str, str] = dict(RebootJobType=reboot_type)
         try:
-            headers, response, status = self.client.query(
+            headers, _, _ = self.client.query(
                 data=json.dumps(data),
                 endpoint=self.create_reboot_job_endpoint
             )
@@ -273,7 +386,7 @@ class BaseRedfishSystem(BaseSystem):
     def schedule_reboot_job(self, job_id: str) -> int:
         data: Dict[str, Union[List[str], str]] = dict(JobArray=[job_id], StartTimeInterval='TIME_NOW')
         try:
-            headers, response, status = self.client.query(
+            _, _, status = self.client.query(
                 data=json.dumps(data),
                 endpoint=self.setup_job_queue_endpoint
             )

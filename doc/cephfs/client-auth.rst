@@ -28,11 +28,10 @@ This restriction impacts *only* the filesystem hierarchy, or, in other words,
 the metadata tree that is managed by the MDS. Clients will still be able to
 access the underlying file data in RADOS directly. To segregate clients fully,
 isolate untrusted clients in their own RADOS namespace. You can place a
-client's filesystem subtree in a particular namespace using `file layouts`_ and
-then restrict their RADOS access to that namespace using `OSD capabilities`_
+client's filesystem subtree in a particular namespace using :ref:`file
+layouts<file-layouts>` and then restrict their RADOS access to that namespace
+using :ref:`OSD capabilities<modify-user-capabilities>`.
 
-.. _file layouts: ./file-layouts
-.. _OSD capabilities: ../rados/operations/user-management/#authorization-capabilities
 
 Syntax
 ------
@@ -106,6 +105,8 @@ the client::
 If quotas are not enabled or if no quota is set on the mounted sub-directory,
 then the overall usage of the file system will be reported irrespective of the
 value of this setting.
+
+.. _cephfs-layout-and-quota-restriction:
 
 Layout and Quota restriction (the 'p' flag)
 ===========================================
@@ -275,7 +276,7 @@ Client ``someuser`` is authorized for only one file system:
         caps mon = "allow r"
         caps osd = "allow rw tag cephfs data=cephfs"
 
-Mounting ``cephfs1`` on the already-created mountpoint  ``/mnt/cephfs1``  with
+Mounting ``cephfs1`` on the already-created mount point  ``/mnt/cephfs1``  with
 ``someuser`` works:
 
 .. prompt:: bash #

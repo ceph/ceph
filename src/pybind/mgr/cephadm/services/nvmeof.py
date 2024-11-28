@@ -32,7 +32,7 @@ class NvmeofService(CephService):
 
         keyring = self.get_keyring_with_caps(self.get_auth_entity(nvmeof_gw_id),
                                              ['mon', 'profile rbd',
-                                              'osd', 'allow all tag rbd *=*'])
+                                              'osd', 'profile rbd'])
 
         # TODO: check if we can force jinja2 to generate dicts with double quotes instead of using json.dumps
         transport_tcp_options = json.dumps(spec.transport_tcp_options) if spec.transport_tcp_options else None
@@ -53,6 +53,28 @@ class NvmeofService(CephService):
 
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'ceph-nvmeof.conf': gw_conf}
+
+        if spec.enable_auth:
+            if (
+                not spec.client_cert
+                or not spec.client_key
+                or not spec.server_cert
+                or not spec.server_key
+                or not spec.root_ca_cert
+            ):
+                err_msg = 'enable_auth is true but '
+                for cert_key_attr in ['server_key', 'server_cert', 'client_key', 'client_cert', 'root_ca_cert']:
+                    if not hasattr(spec, cert_key_attr):
+                        err_msg += f'{cert_key_attr}, '
+                err_msg += 'attribute(s) missing from nvmeof spec'
+                self.mgr.log.error(err_msg)
+            else:
+                daemon_spec.extra_files['server_cert'] = spec.server_cert
+                daemon_spec.extra_files['client_cert'] = spec.client_cert
+                daemon_spec.extra_files['server_key'] = spec.server_key
+                daemon_spec.extra_files['client_key'] = spec.client_key
+                daemon_spec.extra_files['root_ca_cert'] = spec.root_ca_cert
+
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = []
         return daemon_spec
@@ -62,14 +84,14 @@ class NvmeofService(CephService):
             gateways = json.loads(out)['gateways']
             cmd_dicts = []
 
-            spec = cast(NvmeofServiceSpec,
-                        self.mgr.spec_store.all_specs.get(daemon_descrs[0].service_name(), None))
-
             for dd in daemon_descrs:
                 assert dd.hostname is not None
+                spec = cast(NvmeofServiceSpec,
+                            self.mgr.spec_store.all_specs.get(dd.service_name(), None))
+                service_name = dd.service_name()
 
                 if not spec:
-                    logger.warning(f'No ServiceSpec found for {dd.service_name()}')
+                    logger.warning(f'No ServiceSpec found for {service_name}')
                     continue
 
                 ip = utils.resolve_ip(self.mgr.inventory.get_addr(dd.hostname))
@@ -82,7 +104,9 @@ class NvmeofService(CephService):
                     cmd_dicts.append({
                         'prefix': 'dashboard nvmeof-gateway-add',
                         'inbuf': service_url,
-                        'name': dd.hostname
+                        'name': service_name,
+                        'group': spec.group,
+                        'daemon_name': dd.name()
                     })
             return cmd_dicts
 
@@ -116,11 +140,14 @@ class NvmeofService(CephService):
         """
         Called after the daemon is removed.
         """
-        logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
+        # to clean the keyring up
+        super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
+        service_name = daemon.service_name()
+
         # remove config for dashboard nvmeof gateways if any
         ret, out, err = self.mgr.mon_command({
             'prefix': 'dashboard nvmeof-gateway-rm',
-            'name': daemon.hostname,
+            'name': service_name,
         })
         if not ret:
             logger.info(f'{daemon.hostname} removed from nvmeof gateways dashboard config')

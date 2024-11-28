@@ -106,11 +106,13 @@ NOTE: if for some reason the build has to be restarted (for example if one distr
     +-------------------+--------------------------------------------------+
     | Release           | Distro Codemap                                   |
     +===================+==================================================+
-    | pacific (16.X.X)  | ``focal bionic centos8 buster bullseye``         |
+    | pacific (16.X.X)  | ``focal bionic buster bullseye``                 |
     +-------------------+--------------------------------------------------+
-    | quincy (17.X.X)   | ``focal centos8 centos9 bullseye``               |
+    | quincy (17.X.X)   | ``jammy focal centos9 bullseye``                 |
     +-------------------+--------------------------------------------------+
-    | reef (18.X.X)     | ``jammy focal centos8 centos9 windows bookworm`` |
+    | reef (18.X.X)     | ``jammy focal centos9 windows bookworm``         |
+    +-------------------+--------------------------------------------------+
+    | squid (19.X.X)    | ``jammy centos9 windows bookworm``               |
     +-------------------+--------------------------------------------------+
 
 5. Click ``Build``.

@@ -1,6 +1,6 @@
 Feature: CephFS Snapshot Management
 
-    Goal: To test out the CephFS snapshot management features
+    Goal: To test out the CephFS snapshot and clone management features
 
     Background: Login
         Given I am logged in
@@ -32,6 +32,48 @@ Feature: CephFS Snapshot Management
         When I expand the row "test_cephfs"
         And I go to the "Snapshots" tab
         Then I should see a table in the expanded row
+
+    Scenario: Create a CephFS Subvolume Snapshot
+        Given I am on the "cephfs" page
+        When I expand the row "test_cephfs"
+        And I go to the "Snapshots" tab
+        And I click on "Create" button from the expanded row
+        And enter "snapshotName" "test_snapshot" in the modal
+        And I click on "Create Snapshot" button
+        Then I should see a row with "test_snapshot" in the expanded row
+
+    Scenario: Create a CephFS Subvolume Snapshot Clone
+        Given I am on the "cephfs" page
+        When I expand the row "test_cephfs"
+        And I go to the "Snapshots" tab
+        And I select a row "test_snapshot" in the expanded row
+        And I click on "Clone" button from the table actions in the expanded row
+        And enter "cloneName" "test_clone" in the modal
+        And I click on "Create Clone" button
+        Then I wait for "5" seconds
+        And I go to the "Subvolumes" tab
+        Then I should see a row with "test_clone" in the expanded row
+
+    Scenario: Remove a CephFS Subvolume Snapshot Clone
+        Given I am on the "cephfs" page
+        When I expand the row "test_cephfs"
+        And I go to the "Subvolumes" tab
+        And I select a row "test_clone" in the expanded row
+        And I click on "Remove" button from the table actions in the expanded row
+        And I check the tick box in modal
+        And I click on "Remove Subvolume" button
+        Then I wait for "5" seconds
+        And I should not see a row with "test_clone" in the expanded row
+
+    Scenario: Remove a CephFS Subvolume Snapshot
+        Given I am on the "cephfs" page
+        When I expand the row "test_cephfs"
+        And I go to the "Snapshots" tab
+        And I select a row "test_snapshot" in the expanded row
+        And I click on "Remove" button from the table actions in the expanded row
+        And I check the tick box in modal
+        And I click on "Remove Snapshot" button
+        Then I should not see a row with "test_snapshot" in the expanded row
 
     Scenario: Remove a CephFS Subvolume
         Given I am on the "cephfs" page

@@ -49,7 +49,7 @@ void LogMissingRequest::dump_detail(Formatter *f) const
 ConnectionPipeline &LogMissingRequest::get_connection_pipeline()
 {
   return get_osd_priv(&get_local_connection()
-         ).client_request_conn_pipeline;
+         ).replicated_request_conn_pipeline;
 }
 
 PerShardPipeline &LogMissingRequest::get_pershard_pipeline(
@@ -89,7 +89,7 @@ seastar::future<> LogMissingRequest::with_pg(
     });
   }, [](std::exception_ptr) {
     return seastar::now();
-  }, pg).finally([this, ref=std::move(ref)] {
+  }, pg, pg->get_osdmap_epoch()).finally([this, ref=std::move(ref)] {
     logger().debug("{}: exit", *this);
     handle.exit();
   });

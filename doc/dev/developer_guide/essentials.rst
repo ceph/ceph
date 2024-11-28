@@ -8,25 +8,14 @@ Leads
 -----
 
 The Ceph project was created by Sage Weil and is led by the Ceph Leadership
-Team (CLT). In addition, each major project component has its own lead. The
-following table shows all the leads and their nicks on `GitHub`_:
+Team (CLT). Each major component of the Ceph project has its own lead. The
+`team list`_ on the Ceph community website shows all the leads and their nicks
+on `GitHub`_:
 
 .. _github: https://github.com/
+.. _team list: https://ceph.io/en/community/team
 
-========= ================== =============
-Scope     Lead               GitHub nick
-========= ================== =============
-RADOS     Radoslaw Zarzynski rzarzynski 
-RGW       Casey Bodley       cbodley 
-RGW       Matt Benjamin      mattbenjamin
-RBD       Ilya Dryomov       dis 
-CephFS    Venky Shankar      vshankar
-Dashboard Nizamudeen A       nizamial09 
-Build/Ops Ken Dreyer         ktdreyer
-Docs      Zac Dover          zdover23
-========= ================== =============
-
-The Ceph-specific acronyms in the table are explained in
+Ceph-specific acronyms in the table of leads are explained in
 :doc:`/architecture`.
 
 History
@@ -86,6 +75,8 @@ click on `New issue`_.
 
 .. _`jump to the Ceph project`: http://tracker.ceph.com/projects/ceph
 .. _`New issue`: http://tracker.ceph.com/projects/ceph/issues/new
+
+.. _ceph-slack:
 
 Slack
 -----
@@ -296,16 +287,13 @@ See :ref:`kubernetes-dev`
 Backporting
 -----------
 
-All bugfixes should be merged to the ``main`` branch before being
-backported. To flag a bugfix for backporting, make sure it has a
-`tracker issue`_ associated with it and set the ``Backport`` field to a
-comma-separated list of previous releases (e.g. "hammer,jewel") that you think
-need the backport.
-The rest (including the actual backporting) will be taken care of by the
-`Stable Releases and Backports`_ team.
+All bugfixes should be merged to the ``main`` branch before being backported.
+To flag a bugfix for backporting, make sure it has a `tracker issue`_
+associated with it and set the ``Backport`` field to a comma-separated list of
+previous releases (e.g. "hammer,jewel") that you think need the backport. You
+are responsible for the backporting of pull requests that you raise.
 
 .. _`tracker issue`: http://tracker.ceph.com/
-.. _`Stable Releases and Backports`: http://tracker.ceph.com/projects/ceph-releases/wiki
 
 Dependabot
 ----------

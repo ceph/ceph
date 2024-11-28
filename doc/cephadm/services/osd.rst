@@ -1,7 +1,6 @@
 ***********
 OSD Service
 ***********
-.. _device management: ../rados/operations/devices
 .. _libstoragemgmt: https://github.com/libstorage/libstoragemgmt
 
 List Devices
@@ -79,11 +78,44 @@ like this:
 
 In this example, libstoragemgmt has confirmed the health of the drives and the ability to
 interact with the Identification and Fault LEDs on the drive enclosures. For further
-information about interacting with these LEDs, refer to `device management`_.
+information about interacting with these LEDs, refer to :ref:`devices`.
 
 .. note::
     The current release of `libstoragemgmt`_ (1.8.8) supports SCSI, SAS, and SATA based
     local disks only. There is no official support for NVMe devices (PCIe)
+
+Retrieve Exact Size of Block Devices
+====================================
+
+Run a command of the following form to discover the exact size of a block
+device. The value returned here is used by the orchestrator when comparing high
+and low values:
+
+.. prompt:: bash #
+
+   cephadm shell ceph-volume inventory </dev/sda> --format json | jq .sys_api.human_readable_size
+
+The exact size in GB is the size reported in TB, multiplied by 1000.
+
+Example
+-------
+The following provides a specific example of this command based upon the
+general form of the command above:
+
+.. prompt:: bash #
+
+   cephadm shell ceph-volume inventory /dev/sdc --format json | jq .sys_api.human_readable_size
+
+::
+
+   "3.64 TB"
+
+This means that the exact device size is 3.64 * 1000, or 3640GB.
+
+This procedure was developed by Frédéric Nass. See `this thread on the
+[ceph-users] mailing list
+<https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/message/5BAAYFCQAZZDRSNCUPCVBNEPGJDARRZA/>`_
+for discussion of this matter.
 
 .. _cephadm-deploy-osds:
 
@@ -446,22 +478,27 @@ for that OSD and also set a specific memory target.  For example,
 Advanced OSD Service Specifications
 ===================================
 
-:ref:`orchestrator-cli-service-spec`\s of type ``osd`` are a way to describe a
-cluster layout, using the properties of disks. Service specifications give the
-user an abstract way to tell Ceph which disks should turn into OSDs with which
-configurations, without knowing the specifics of device names and paths.
+:ref:`orchestrator-cli-service-spec`\s of type ``osd`` provide a way to use the
+properties of disks to describe a Ceph cluster's layout. Service specifications
+are an abstraction used to tell Ceph which disks it should transform into OSDs
+and which configurations to apply to those OSDs.
+:ref:`orchestrator-cli-service-spec`\s make it possible to target these disks
+for transformation into OSDs even when the Ceph cluster operator does not know
+the specific device names and paths associated with those disks.
 
-Service specifications make it possible to define a yaml or json file that can
-be used to reduce the amount of manual work involved in creating OSDs.
+:ref:`orchestrator-cli-service-spec`\s make it possible to define a ``.yaml``
+or ``.json`` file that can be used to reduce the amount of manual work involved
+in creating OSDs.
 
 .. note::
-    It is recommended that advanced OSD specs include the ``service_id`` field
-    set. The plain ``osd`` service with no service id is where OSDs created
-    using ``ceph orch daemon add`` or ``ceph orch apply osd --all-available-devices``
-    are placed. Not including a ``service_id`` in your OSD spec would mix
-    the OSDs from your spec with those OSDs and potentially overwrite services
-    specs created by cephadm to track them. Newer versions of cephadm will even
-    block creation of advanced OSD specs without the service_id present
+   We recommend that advanced OSD specs include the ``service_id`` field set.
+   OSDs created using ``ceph orch daemon add`` or ``ceph orch apply osd
+   --all-available-devices`` are placed in the plain ``osd`` service. Failing
+   to include a ``service_id`` in your OSD spec causes the Ceph cluster to mix
+   the OSDs from your spec with those OSDs, which can potentially result in the
+   overwriting of service specs created by ``cephadm`` to track them. Newer
+   versions of ``cephadm`` will even block creation of advanced OSD specs that
+   do not include the ``service_id``. 
 
 For example, instead of running the following command:
 
@@ -469,8 +506,8 @@ For example, instead of running the following command:
 
   ceph orch daemon add osd *<host>*:*<path-to-device>*
 
-for each device and each host, we can define a yaml or json file that allows us
-to describe the layout. Here's the most basic example.
+for each device and each host, we can define a ``.yaml`` or ``.json`` file that
+allows us to describe the layout. Here is the most basic example:
 
 Create a file called (for example) ``osd_spec.yml``:
 
@@ -488,17 +525,18 @@ This means :
 
 #. Turn any available device (ceph-volume decides what 'available' is) into an
    OSD on all hosts that match the glob pattern '*'. (The glob pattern matches
-   against the registered hosts from `host ls`) A more detailed section on
-   host_pattern is available below.
+   against the registered hosts from `ceph orch host ls`) See
+   :ref:`cephadm-services-placement-by-pattern-matching` for more on using
+   ``host_pattern``-matching to turn devices into OSDs.
 
-#. Then pass it to `osd create` like this:
+#. Pass ``osd_spec.yml`` to ``osd create`` by using the following command:
 
    .. prompt:: bash [monitor.1]#
 
      ceph orch apply -i /path/to/osd_spec.yml
 
-   This instruction will be issued to all the matching hosts, and will deploy
-   these OSDs.
+   This instruction is issued to all the matching hosts, and will deploy these
+   OSDs.
 
    Setups more complex than the one specified by the ``all`` filter are
    possible. See :ref:`osd_filters` for details.
@@ -666,6 +704,21 @@ This example would deploy all OSDs with encryption enabled.
       data_devices:
         all: true
       encrypted: true
+
+Ceph Squid onwards support tpm2 token enrollment to LUKS2 devices.
+You can add the `tpm2` to your OSD spec:
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: example_osd_spec_with_tpm2
+    placement:
+      host_pattern: '*'
+    spec:
+      data_devices:
+        all: true
+      encrypted: true
+      tpm2: true
 
 See a full list in the DriveGroupSpecs
 

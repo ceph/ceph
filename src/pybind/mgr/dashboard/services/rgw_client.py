@@ -9,6 +9,8 @@ import logging
 import os
 import re
 import xml.etree.ElementTree as ET  # noqa: N814
+from collections import defaultdict
+from enum import Enum
 from subprocess import SubprocessError
 
 from mgr_util import build_url, name_to_config_section
@@ -27,6 +29,12 @@ except ImportError:
     pass  # For typing only
 
 logger = logging.getLogger('rgw_client')
+
+_SYNC_GROUP_ID = 'dashboard_admin_group'
+_SYNC_FLOW_ID = 'dashboard_admin_flow'
+_SYNC_PIPE_ID = 'dashboard_admin_pipe'
+
+_RGW_USER = 'dashboard'
 
 
 class NoRgwDaemonsException(Exception):
@@ -54,6 +62,7 @@ class RgwDaemon:
     ssl: bool
     realm_name: str
     zonegroup_name: str
+    zonegroup_id: str
     zone_name: str
 
 
@@ -73,6 +82,7 @@ def _get_daemons() -> Dict[str, RgwDaemon]:
             daemon.name = daemon_map[key]['metadata']['id']
             daemon.realm_name = daemon_map[key]['metadata']['realm_name']
             daemon.zonegroup_name = daemon_map[key]['metadata']['zonegroup_name']
+            daemon.zonegroup_id = daemon_map[key]['metadata']['zonegroup_id']
             daemon.zone_name = daemon_map[key]['metadata']['zone_name']
             daemons[daemon.name] = daemon
             logger.info('Found RGW daemon with configuration: host=%s, port=%d, ssl=%s',
@@ -249,7 +259,6 @@ def _get_user_keys(user: str, realm: Optional[str] = None) -> Tuple[str, str]:
 
 def configure_rgw_credentials():
     logger.info('Configuring dashboard RGW credentials')
-    user = 'dashboard'
     realms = []
     access_key = ''
     secret_key = ''
@@ -263,7 +272,7 @@ def configure_rgw_credentials():
             realm_access_keys = {}
             realm_secret_keys = {}
             for realm in realms:
-                realm_access_key, realm_secret_key = _get_user_keys(user, realm)
+                realm_access_key, realm_secret_key = _get_user_keys(_RGW_USER, realm)
                 if realm_access_key:
                     realm_access_keys[realm] = realm_access_key
                     realm_secret_keys[realm] = realm_secret_key
@@ -271,7 +280,7 @@ def configure_rgw_credentials():
                 access_key = json.dumps(realm_access_keys)
                 secret_key = json.dumps(realm_secret_keys)
         else:
-            access_key, secret_key = _get_user_keys(user)
+            access_key, secret_key = _get_user_keys(_RGW_USER)
 
         assert access_key and secret_key
         Settings.RGW_API_ACCESS_KEY = access_key
@@ -301,18 +310,25 @@ class RgwClient(RestClient):
 
     @staticmethod
     def _get_daemon_connection_info(daemon_name: str) -> dict:
+        access_key = None
+        secret_key = None
+
         try:
+            # Try to fetch realm-specific credentials first
             realm_name = RgwClient._daemons[daemon_name].realm_name
             access_key = Settings.RGW_API_ACCESS_KEY[realm_name]
             secret_key = Settings.RGW_API_SECRET_KEY[realm_name]
         except TypeError:
-            # Legacy string values.
+            # Handle legacy case where credentials are simple strings, not per-realm
             access_key = Settings.RGW_API_ACCESS_KEY
             secret_key = Settings.RGW_API_SECRET_KEY
         except KeyError as error:
-            raise DashboardException(msg='Credentials not found for RGW Daemon: {}'.format(error),
-                                     http_status_code=404,
-                                     component='rgw')
+            # If the realm-specific credentials are not found, try fetching dashboard user keys
+            access_key, secret_key = _get_user_keys('dashboard')
+            if not access_key:
+                raise DashboardException(msg='Credentials not found for RGW Daemon: {}'.format(error),  # noqa E501  # pylint: disable=line-too-long
+                                         http_status_code=404,
+                                         component='rgw')
 
         return {'access_key': access_key, 'secret_key': secret_key}
 
@@ -343,9 +359,25 @@ class RgwClient(RestClient):
         if not (Settings.RGW_API_ACCESS_KEY and Settings.RGW_API_SECRET_KEY):
             configure_rgw_credentials()
 
+        daemon_keys = RgwClient._daemons.keys()
         if not daemon_name:
-            # Select 1st daemon:
-            daemon_name = next(iter(RgwClient._daemons.keys()))
+            try:
+                if len(daemon_keys) > 1:
+                    default_zonegroup = (
+                        RgwMultisite()
+                        .get_all_zonegroups_info()['default_zonegroup']
+                    )
+                    if default_zonegroup:
+                        daemon_name = next(
+                            (daemon.name
+                             for daemon in RgwClient._daemons.values()
+                             if daemon.zonegroup_id == default_zonegroup),
+                            None
+                        )
+                daemon_name = daemon_name or next(iter(daemon_keys))
+            except Exception as e:  # pylint: disable=broad-except
+                logger.exception('Failed to determine default RGW daemon: %s', str(e))
+                daemon_name = next(iter(daemon_keys))
 
         # Discard all cached instances if any rgw setting has changed
         if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
@@ -353,29 +385,29 @@ class RgwClient(RestClient):
             RgwClient.drop_instance()
 
         if daemon_name not in RgwClient._config_instances:
-            connection_info = RgwClient._get_daemon_connection_info(daemon_name)
-            RgwClient._config_instances[daemon_name] = RgwClient(connection_info['access_key'],
+            connection_info = RgwClient._get_daemon_connection_info(daemon_name)  # type: ignore
+            RgwClient._config_instances[daemon_name] = RgwClient(connection_info['access_key'],  # type: ignore  # noqa E501  #pylint: disable=line-too-long
                                                                  connection_info['secret_key'],
-                                                                 daemon_name)
+                                                                 daemon_name)  # type: ignore
 
-        if not userid or userid == RgwClient._config_instances[daemon_name].userid:
-            return RgwClient._config_instances[daemon_name]
+        if not userid or userid == RgwClient._config_instances[daemon_name].userid:  # type: ignore
+            return RgwClient._config_instances[daemon_name]  # type: ignore
 
         if daemon_name not in RgwClient._user_instances \
                 or userid not in RgwClient._user_instances[daemon_name]:
             # Get the access and secret keys for the specified user.
-            keys = RgwClient._config_instances[daemon_name].get_user_keys(userid)
+            keys = RgwClient._config_instances[daemon_name].get_user_keys(userid)  # type: ignore
             if not keys:
                 raise RequestException(
                     "User '{}' does not have any keys configured.".format(
                         userid))
             instance = RgwClient(keys['access_key'],
                                  keys['secret_key'],
-                                 daemon_name,
+                                 daemon_name,  # type: ignore
                                  userid)
-            RgwClient._user_instances.update({daemon_name: {userid: instance}})
+            RgwClient._user_instances.update({daemon_name: {userid: instance}})  # type: ignore
 
-        return RgwClient._user_instances[daemon_name][userid]
+        return RgwClient._user_instances[daemon_name][userid]  # type: ignore
 
     @staticmethod
     def admin_instance(daemon_name: Optional[str] = None) -> 'RgwClient':
@@ -604,6 +636,9 @@ class RgwClient(RestClient):
                 return realm_info['name']
         return None
 
+    def get_default_zonegroup(self):
+        return self.daemon.zonegroup_name
+
     @RestClient.api_get('/{bucket_name}?versioning')
     def get_bucket_versioning(self, bucket_name, request=None):
         """
@@ -735,6 +770,99 @@ class RgwClient(RestClient):
             return "Data must be properly formatted"
         try:
             result = request(data=tags)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
+    @staticmethod
+    def _handle_rules(pairs):
+        result = defaultdict(list)
+        for key, value in pairs:
+            if key == 'Rule':
+                result['Rules'].append(value)
+            else:
+                result[key] = value
+        return result
+
+    @RestClient.api_get('/{bucket_name}?lifecycle')
+    def get_lifecycle(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            decoded_request = request(raw_content=True).decode("utf-8")  # type: ignore
+            result = {
+                'LifecycleConfiguration':
+                json.loads(
+                    decoded_request,
+                    object_pairs_hook=RgwClient._handle_rules
+                )
+            }
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get(
+                        'Code') == 'NoSuchLifecycleConfiguration':
+                    return None
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
+    @staticmethod
+    def dict_to_xml(data):
+        if not data or data == '{}':
+            return ''
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                raise DashboardException('Could not load json string')
+
+        def transform(data):
+            xml: str = ''
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    if isinstance(value, list):
+                        for item in value:
+                            if key == 'Rules':
+                                key = 'Rule'
+                            xml += f'<{key}>\n{transform(item)}</{key}>\n'
+                    elif isinstance(value, dict):
+                        xml += f'<{key}>\n{transform(value)}</{key}>\n'
+                    else:
+                        xml += f'<{key}>{str(value)}</{key}>\n'
+
+            elif isinstance(data, list):
+                for item in data:
+                    xml += transform(item)
+            else:
+                xml += f'{data}'
+
+            return xml
+
+        return transform(data)
+
+    @RestClient.api_put('/{bucket_name}?lifecycle')
+    def set_lifecycle(self, bucket_name, lifecycle, request=None):
+        # pylint: disable=unused-argument
+        lifecycle = lifecycle.strip()
+        if lifecycle.startswith('{'):
+            lifecycle = RgwClient.dict_to_xml(lifecycle)
+        try:
+            if lifecycle and '<LifecycleConfiguration>' not in str(lifecycle):
+                lifecycle = f'<LifecycleConfiguration>\n{lifecycle}\n</LifecycleConfiguration>'
+            result = request(data=lifecycle)  # type: ignore
+        except RequestException as e:
+            msg = ''
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get("Code") == "MalformedXML":
+                    msg = "Invalid Lifecycle document"
+            raise DashboardException(msg=msg or str(e), component='rgw')
+        return result
+
+    @RestClient.api_delete('/{bucket_name}?lifecycle')
+    def delete_lifecycle(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
         return result
@@ -983,6 +1111,62 @@ class RgwClient(RestClient):
             raise DashboardException(msg=msg, component='rgw')
         return retention_period_days, retention_period_years
 
+    @RestClient.api_put('/{bucket_name}?replication')
+    def set_bucket_replication(self, bucket_name, replication: bool, request=None):
+        # pGenerate the minimum replication configuration
+        # required for enabling the replication
+        root = ET.Element('ReplicationConfiguration',
+                          xmlns='http://s3.amazonaws.com/doc/2006-03-01/')
+        role = ET.SubElement(root, 'Role')
+        role.text = f'{bucket_name}_replication_role'
+
+        rule = ET.SubElement(root, 'Rule')
+        rule_id = ET.SubElement(rule, 'ID')
+        rule_id.text = _SYNC_PIPE_ID
+
+        status = ET.SubElement(rule, 'Status')
+        status.text = 'Enabled' if replication else 'Disabled'
+
+        filter_elem = ET.SubElement(rule, 'Filter')
+        prefix = ET.SubElement(filter_elem, 'Prefix')
+        prefix.text = ''
+
+        destination = ET.SubElement(rule, 'Destination')
+
+        bucket = ET.SubElement(destination, 'Bucket')
+        bucket.text = bucket_name
+
+        replication_config = ET.tostring(root, encoding='utf-8', method='xml').decode()
+
+        try:
+            request = request(data=replication_config)
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+
+    @RestClient.api_get('/{bucket_name}?replication')
+    def get_bucket_replication(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()
+            return result
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get('Code') == 'ReplicationConfigurationNotFoundError':
+                    return None
+            raise e
+
+
+class SyncStatus(Enum):
+    enabled = 'enabled'
+    allowed = 'allowed'
+    forbidden = 'forbidden'
+
+
+class SyncFlowTypes(Enum):
+    directional = 'directional'
+    symmetrical = 'symmetrical'
+
 
 class RgwMultisite:
     def migrate_to_multisite(self, realm_name: str, zonegroup_name: str, zone_name: str,
@@ -1060,6 +1244,7 @@ class RgwMultisite:
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
 
     def create_realm(self, realm_name: str, default: bool):
         rgw_realm_create_cmd = ['realm', 'create']
@@ -1492,8 +1677,9 @@ class RgwMultisite:
         rgw_zone_add_storage_class_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
                                           '--placement-id', placement_target,
                                           '--storage-class', storage_class,
-                                          '--data-pool', data_pool,
-                                          '--compression', compression]
+                                          '--data-pool', data_pool]
+        if compression:
+            rgw_zone_add_storage_class_cmd.extend(['--compression', compression])
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_storage_class_cmd)
             if exit_code > 0:
@@ -1643,13 +1829,21 @@ class RgwMultisite:
         rgw_realm_list = self.list_realms()
         rgw_zonegroup_list = self.list_zonegroups()
         rgw_zone_list = self.list_zones()
-        if len(rgw_realm_list['realms']) < 1 and len(rgw_zonegroup_list['zonegroups']) < 1 \
-                and len(rgw_zone_list['zones']) < 1:
+        if len(rgw_realm_list['realms']) < 1 and len(rgw_zonegroup_list['zonegroups']) <= 1 \
+                and len(rgw_zone_list['zones']) <= 1:
             is_multisite_configured = False
         return is_multisite_configured
 
-    def get_multisite_sync_status(self):
+    def get_multisite_sync_status(self, daemon_name: str):
         rgw_multisite_sync_status_cmd = ['sync', 'status']
+        daemons = _get_daemons()
+        try:
+            realm_name = daemons[daemon_name].realm_name
+        except (KeyError, AttributeError):
+            raise DashboardException('Unable to get realm name from daemon',
+                                     http_status_code=500, component='rgw')
+        if realm_name:
+            rgw_multisite_sync_status_cmd.extend(['--rgw-realm', realm_name])
         try:
             exit_code, out, _ = mgr.send_rgwadmin_command(rgw_multisite_sync_status_cmd, False)
             if exit_code > 0:
@@ -1744,3 +1938,261 @@ class RgwMultisite:
             return match.group(1)
 
         return ''
+
+    def get_sync_policy(self, bucket_name: str = '', zonegroup_name: str = ''):
+        rgw_sync_policy_cmd = ['sync', 'policy', 'get']
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        if zonegroup_name:
+            rgw_sync_policy_cmd += ['--rgw-zonegroup', zonegroup_name]
+        try:
+            exit_code, out, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException(f'Unable to get sync policy: {err}',
+                                         http_status_code=500, component='rgw')
+            return out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def get_sync_policy_group(self, group_id: str, bucket_name: str = '',
+                              zonegroup_name: str = ''):
+        rgw_sync_policy_cmd = ['sync', 'group', 'get', '--group-id', group_id]
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        if zonegroup_name:
+            rgw_sync_policy_cmd += ['--rgw-zonegroup', zonegroup_name]
+        try:
+            exit_code, out, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException(f'Unable to get sync policy group: {err}',
+                                         http_status_code=500, component='rgw')
+            return out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def create_sync_policy_group(self, group_id: str, status: str, bucket_name: str = '',
+                                 update_period=False):
+        rgw_sync_policy_cmd = ['sync', 'group', 'create', '--group-id', group_id,
+                               '--status', SyncStatus[status].value]
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException(f'Unable to create sync policy group: {err}',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        if not bucket_name and update_period:
+            self.update_period()
+
+    def update_sync_policy_group(self, group_id: str, status: str, bucket_name: str = '',
+                                 update_period=False):
+        rgw_sync_policy_cmd = ['sync', 'group', 'modify', '--group-id', group_id,
+                               '--status', SyncStatus[status].value]
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException(f'Unable to update sync policy group: {err}',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        if not bucket_name and update_period:
+            self.update_period()
+
+    def remove_sync_policy_group(self, group_id: str, bucket_name='', update_period=False):
+        rgw_sync_policy_cmd = ['sync', 'group', 'remove', '--group-id', group_id]
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException(f'Unable to remove sync policy group: {err}',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        if not bucket_name and update_period:
+            self.update_period()
+
+    def create_sync_flow(self, group_id: str, flow_id: str, flow_type: str,
+                         zones: Optional[Dict[str, List]] = None, bucket_name: str = '',
+                         source_zone: Optional[str] = None,
+                         destination_zone: Optional[str] = None,
+                         update_period=False):
+        rgw_sync_policy_cmd = ['sync', 'group', 'flow', 'create', '--group-id', group_id,
+                               '--flow-id', flow_id, '--flow-type', SyncFlowTypes[flow_type].value]
+
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+
+        if SyncFlowTypes[flow_type].value == 'directional':
+
+            if source_zone is not None:
+                rgw_sync_policy_cmd += ['--source-zone', source_zone]
+
+            if destination_zone is not None:
+                rgw_sync_policy_cmd += ['--dest-zone', destination_zone]
+
+            logger.info("Creating directional flow! %s", rgw_sync_policy_cmd)
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+                if exit_code > 0:
+                    raise DashboardException(f'Unable to create sync flow: {err}',
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+
+        else:
+            if zones is not None and (zones['added'] or zones['removed']):
+                if len(zones['added']) > 0:
+                    rgw_sync_policy_cmd += ['--zones', ','.join(zones['added'])]
+
+                    logger.info("Creating symmetrical flow! %s", rgw_sync_policy_cmd)
+                    try:
+                        exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+                        if exit_code > 0:
+                            raise DashboardException(f'Unable to create sync flow: {err}',
+                                                     http_status_code=500, component='rgw')
+                    except SubprocessError as error:
+                        raise DashboardException(error, http_status_code=500, component='rgw')
+
+                if len(zones['removed']) > 0:
+                    self.remove_sync_flow(group_id, flow_id, flow_type, source_zone,
+                                          destination_zone, zones['removed'], bucket_name)
+        if not bucket_name and update_period:
+            self.update_period()
+
+    def remove_sync_flow(self, group_id: str, flow_id: str, flow_type: str,
+                         source_zone='', destination_zone='',
+                         zones: Optional[List[str]] = None, bucket_name: str = '',
+                         update_period=False):
+        rgw_sync_policy_cmd = ['sync', 'group', 'flow', 'remove', '--group-id', group_id,
+                               '--flow-id', flow_id, '--flow-type', SyncFlowTypes[flow_type].value]
+
+        if SyncFlowTypes[flow_type].value == 'directional':
+            rgw_sync_policy_cmd += ['--source-zone', source_zone, '--dest-zone', destination_zone]
+        else:
+            if zones:
+                rgw_sync_policy_cmd += ['--zones', ','.join(zones)]
+
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+
+        logger.info("Removing sync flow! %s", rgw_sync_policy_cmd)
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException(f'Unable to remove sync flow: {err}',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        if not bucket_name and update_period:
+            self.update_period()
+
+    def create_sync_pipe(self, group_id: str, pipe_id: str,
+                         source_zones: Dict[str, Any],
+                         destination_zones: Dict[str, Any],
+                         source_bucket: str = '',
+                         destination_bucket: str = '',
+                         bucket_name: str = '',
+                         update_period=False,
+                         user: str = '', mode: str = ''):
+
+        if source_zones['added'] or destination_zones['added']:
+            rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'create',
+                                   '--group-id', group_id, '--pipe-id', pipe_id]
+
+            if bucket_name:
+                rgw_sync_policy_cmd += ['--bucket', bucket_name]
+
+            rgw_sync_policy_cmd += ['--source-bucket', source_bucket]
+
+            rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
+
+            if source_zones['added']:
+                rgw_sync_policy_cmd += ['--source-zones', ','.join(source_zones['added'])]
+
+            if destination_zones['added']:
+                rgw_sync_policy_cmd += ['--dest-zones', ','.join(destination_zones['added'])]
+
+            if user:
+                rgw_sync_policy_cmd += ['--uid', user]
+
+            if mode:
+                rgw_sync_policy_cmd += ['--mode', mode]
+
+            logger.info("Creating sync pipe!")
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+                if exit_code > 0:
+                    raise DashboardException(f'Unable to create sync pipe: {err}',
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            if not bucket_name and update_period:
+                self.update_period()
+
+        if ((source_zones['removed'] and '*' not in source_zones['added'])
+                or (destination_zones['removed'] and '*' not in destination_zones['added'])):
+            self.remove_sync_pipe(group_id, pipe_id, source_zones['removed'],
+                                  destination_zones['removed'],
+                                  bucket_name, True)
+
+    def remove_sync_pipe(self, group_id: str, pipe_id: str,
+                         source_zones: Optional[List[str]] = None,
+                         destination_zones: Optional[List[str]] = None,
+                         bucket_name: str = '',
+                         update_period=False):
+        rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'remove',
+                               '--group-id', group_id, '--pipe-id', pipe_id]
+
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+
+        if source_zones:
+            rgw_sync_policy_cmd += ['--source-zones', ','.join(source_zones)]
+
+        if destination_zones:
+            rgw_sync_policy_cmd += ['--dest-zones', ','.join(destination_zones)]
+
+        logger.info("Removing sync pipe! %s", rgw_sync_policy_cmd)
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException(f'Unable to remove sync pipe: {err}',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        if not bucket_name and update_period:
+            self.update_period()
+
+    def create_dashboard_admin_sync_group(self, zonegroup_name: str = ''):
+
+        zonegroup_info = self.get_zonegroup(zonegroup_name)
+        zone_names = []
+        for zones in zonegroup_info['zones']:
+            zone_names.append(zones['name'])
+
+        # create a sync policy group with status allowed
+        self.create_sync_policy_group(_SYNC_GROUP_ID, SyncStatus.allowed.value)
+        # create a sync flow with source and destination zones
+        self.create_sync_flow(_SYNC_GROUP_ID, _SYNC_FLOW_ID,
+                              SyncFlowTypes.symmetrical.value,
+                              zones={'added': zone_names, 'removed': []})
+        # create a sync pipe with source and destination zones
+        self.create_sync_pipe(_SYNC_GROUP_ID, _SYNC_PIPE_ID,
+                              source_zones={'added': '*', 'removed': []},
+                              destination_zones={'added': '*', 'removed': []}, source_bucket='*',
+                              destination_bucket='*')
+        # period update --commit
+        self.update_period()
+
+    def policy_group_exists(self, group_name: str, zonegroup_name: str):
+        try:
+            _ = self.get_sync_policy_group(
+                group_id=group_name, zonegroup_name=zonegroup_name)
+            return True
+        except DashboardException:
+            return False

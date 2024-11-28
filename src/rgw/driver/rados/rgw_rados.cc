@@ -1363,10 +1363,15 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
     using namespace rgw;
     if (svc.site->is_meta_master() &&
         all_zonegroups_support(*svc.site, zone_features::notification_v2)) {
-      spawn::spawn(v1_topic_migration, [this] (spawn::yield_context yield) {
+      boost::asio::spawn(v1_topic_migration, [this] (boost::asio::yield_context yield) {
             DoutPrefix dpp{cct, dout_subsys, "v1 topic migration: "};
             rgwrados::topic_migration::migrate(&dpp, driver, v1_topic_migration, yield);
+          }, [] (std::exception_ptr eptr) {
+            if (eptr) std::rethrow_exception(eptr);
           });
+      // TODO: we run this on a separate thread so shutdown can cancel it with
+      // v1_topic_migration.stop(), but we could run it on the global thread
+      // pool and cancel spawn() with a cancellation_signal instead
       v1_topic_migration.start(1);
     }
   }
@@ -2909,6 +2914,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
   jspan_context no_trace{false, false};
 
   r = copy_obj(obj_ctx,
+               obj_ctx,  /* src and dest share an obj_ctx */
                owner,
                remote_user,
                NULL, /* req_info *info */
@@ -3008,6 +3014,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
     jspan_context no_trace{false, false};
 
     int ret = copy_obj(obj_ctx,
+                       obj_ctx,  /* src and dest share an obj_ctx */
                        owner,
                        remote_user,
                        nullptr,       /* req_info *info */
@@ -3239,7 +3246,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   auto& ioctx = ref.ioctx;
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
-  r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, &op, rctx.y, 0, &trace);
+  r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, &op, rctx.y, 0, &trace, &epoch);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
@@ -3251,7 +3258,6 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     goto done_cancel;
   }
 
-  epoch = ioctx.get_last_version();
   poolid = ioctx.get_id();
 
   r = target->complete_atomic_modification(rctx.dpp, rctx.y);
@@ -4148,7 +4154,7 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
   return 0;
 }
 
-int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
+int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                const rgw_user& user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
@@ -4200,7 +4206,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   using namespace rgw::putobj;
   jspan_context no_trace{false, false};
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
-                                  owner, obj_ctx, dest_obj, olh_epoch,
+                                  owner, dest_obj_ctx, dest_obj, olh_epoch,
 				  tag, rctx.dpp, rctx.y, no_trace);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
@@ -4284,7 +4290,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_if_newer) {
     /* need to get mtime for destination */
-    ret = get_obj_state(rctx.dpp, &obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
+    ret = get_obj_state(rctx.dpp, &dest_obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
     if (ret < 0)
       goto set_err_state;
 
@@ -4492,8 +4498,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
     if (copy_if_newer && canceled) {
       ldpp_dout(rctx.dpp, 20) << "raced with another write of obj: " << dest_obj << dendl;
-      obj_ctx.invalidate(dest_obj); /* object was overwritten */
-      ret = get_obj_state(rctx.dpp, &obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
+      dest_obj_ctx.invalidate(dest_obj); /* object was overwritten */
+      ret = get_obj_state(rctx.dpp, &dest_obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
       if (ret < 0) {
         ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret << dendl;
         goto set_err_state;
@@ -4527,7 +4533,7 @@ set_err_state:
     // for OP_LINK_OLH to call set_olh() with a real olh_epoch
     if (olh_epoch && *olh_epoch > 0) {
       constexpr bool log_data_change = true;
-      ret = set_olh(rctx.dpp, obj_ctx, dest_bucket_info, dest_obj, false, nullptr,
+      ret = set_olh(rctx.dpp, dest_obj_ctx, dest_bucket_info, dest_obj, false, nullptr,
                     *olh_epoch, real_time(), false, rctx.y, zones_trace, log_data_change);
     } else {
       // we already have the latest copy
@@ -4602,7 +4608,8 @@ int RGWRados::copy_obj_to_remote_dest(const DoutPrefixProvider *dpp,
  * err: stores any errors resulting from the get of the original object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
+int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
+	       RGWObjectCtx& dest_obj_ctx,
                const ACLOwner& owner,
                const rgw_user& remote_user,
                req_info *info,
@@ -4663,7 +4670,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (remote_src || !source_zone.empty()) {
     rgw_zone_set_entry source_trace_entry{source_zone.id, std::nullopt};
     const req_context rctx{dpp, y, nullptr};
-    return fetch_remote_obj(obj_ctx, remote_user, info, source_zone,
+    return fetch_remote_obj(dest_obj_ctx, remote_user, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
@@ -4673,7 +4680,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   map<string, bufferlist> src_attrs;
-  RGWRados::Object src_op_target(this, src_bucket_info, obj_ctx, src_obj);
+  RGWRados::Object src_op_target(this, src_bucket_info, src_obj_ctx, src_obj);
   RGWRados::Object::Read read_op(&src_op_target);
 
   read_op.conds.mod_ptr = mod_ptr;
@@ -4717,6 +4724,10 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     src_attrs.erase(RGW_ATTR_OLH_VER);
   }
 
+  src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_TRACE);
+  src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_TIMESTAMP);
+  src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_STATUS);
+
   set_copy_attrs(src_attrs, attrs, attrs_mod);
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_PG_VER);
@@ -4730,7 +4741,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   RGWObjManifest *amanifest = nullptr;
 
   constexpr bool follow_olh = true;
-  ret = get_obj_state(dpp, &obj_ctx, src_bucket_info, src_obj,
+  ret = get_obj_state(dpp, &src_obj_ctx, src_bucket_info, src_obj,
                       &astate, &amanifest, follow_olh, y);
   if (ret < 0) {
     return ret;
@@ -4807,7 +4818,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
-    return copy_obj_data(obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
+    return copy_obj_data(dest_obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
                          mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
   }
 
@@ -4824,7 +4835,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   RGWObjManifest *pmanifest; 
   ldpp_dout(dpp, 20) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
 
-  RGWRados::Object dest_op_target(this, dest_bucket_info, obj_ctx, dest_obj);
+  RGWRados::Object dest_op_target(this, dest_bucket_info, dest_obj_ctx, dest_obj);
   RGWRados::Object::Write write_op(&dest_op_target);
 
   string tag;
@@ -5835,8 +5846,13 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
 
   store->remove_rgw_head_obj(op);
 
+  if (params.check_objv != nullptr) {
+    cls_version_check(op, *params.check_objv, VER_COND_EQ);
+  }
+
   auto& ioctx = ref.ioctx;
-  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, y);
+  version_t epoch = 0;
+  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, y, 0, nullptr, &epoch);
 
   /* raced with another operation, object state is indeterminate */
   const bool need_invalidate = (r == -ECANCELED);
@@ -5848,7 +5864,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
-    r = index_op.complete_del(dpp, poolid, ioctx.get_last_version(), state->mtime, params.remove_objs, y, log_op);
+    r = index_op.complete_del(dpp, poolid, epoch, state->mtime, params.remove_objs, y, log_op);
 
     int ret = target->complete_atomic_modification(dpp, y);
     if (ret < 0) {
@@ -6027,7 +6043,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
   int r = -ENOENT;
 
   if (!assume_noent) {
-    r = RGWRados::raw_obj_stat(dpp, raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL, y);
+    r = RGWRados::raw_obj_stat(dpp, raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), &s->objv_tracker, y);
   }
 
   if (r == -ENOENT) {
@@ -6566,26 +6582,38 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
   struct timespec mtime_ts = real_clock::to_timespec(mtime);
   op.mtime2(&mtime_ts);
   auto& ioctx = ref.ioctx;
-  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, y);
+  version_t epoch = 0;
+  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, y, 0, nullptr, &epoch);
   if (state) {
     if (r >= 0) {
       ACLOwner owner;
       if (iter = attrs.find(RGW_ATTR_ACL); iter != attrs.end()) {
         (void) decode_policy(dpp, iter->second, &owner);
+      } else if (iter = state->attrset.find(RGW_ATTR_ACL);
+                 iter != state->attrset.end()) {
+        (void) decode_policy(dpp, iter->second, &owner);
       }
       std::string etag;
       if (iter = attrs.find(RGW_ATTR_ETAG); iter != attrs.end()) {
+        etag = rgw_bl_str(iter->second);
+      } else if (iter = state->attrset.find(RGW_ATTR_ETAG);
+                 iter != state->attrset.end()) {
         etag = rgw_bl_str(iter->second);
       }
       std::string content_type;
       if (iter = attrs.find(RGW_ATTR_CONTENT_TYPE); iter != attrs.end()) {
         content_type = rgw_bl_str(iter->second);
+      } else if (iter = state->attrset.find(RGW_ATTR_CONTENT_TYPE);
+                 iter != state->attrset.end()) {
+        content_type = rgw_bl_str(iter->second);
       }
       string storage_class;
       if (iter = attrs.find(RGW_ATTR_STORAGE_CLASS); iter != attrs.end()) {
         storage_class = rgw_bl_str(iter->second);
+      } else if (iter = state->attrset.find(RGW_ATTR_STORAGE_CLASS);
+                 iter != state->attrset.end()) {
+        storage_class = rgw_bl_str(iter->second);
       }
-      uint64_t epoch = ioctx.get_last_version();
       int64_t poolid = ioctx.get_id();
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, storage_class, owner,
@@ -6634,12 +6662,15 @@ static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
   }
   // navigate to the requested part in the manifest
   RGWObjManifest::obj_iterator end = manifest->obj_end(dpp);
-  if (end.get_cur_part_id() == 0) { // not multipart
+  const int last_part_id = end.get_cur_part_id();
+  if (last_part_id == 0) { // not multipart
     ldpp_dout(dpp, 20) << "object does not have a multipart manifest" << dendl;
     return -ERR_INVALID_PART;
   }
   if (parts_count) {
-    *parts_count = end.get_cur_part_id() - 1;
+    // when a multipart upload only contains a single part, the last part id
+    // is off by one. don't let parts_count go to 0
+    *parts_count = std::max(1, last_part_id - 1);
   }
   ldpp_dout(dpp, 20) << "seeking to part #" << part_num
       << " in the object manifest" << dendl;
@@ -6699,7 +6730,7 @@ static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
   do {
     ++iter;
     gen.create_next(iter.get_ofs() - part_offset);
-  } while (iter.get_cur_part_id() == part_num);
+  } while (iter != end && iter.get_cur_part_id() == part_num);
 
   // update the object size
   sm->state.size = part_manifest.get_obj_size();
@@ -6735,9 +6766,20 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
     return -ENOENT;
   }
 
+  if (params.objv_tracker) {
+    *params.objv_tracker = astate->objv_tracker;
+  }
+
   RGWBucketInfo& bucket_info = source->get_bucket_info();
 
   if (params.part_num) {
+    map<string, bufferlist> src_attrset;
+    for (auto& iter : astate->attrset) {
+      if (boost::algorithm::starts_with(iter.first, RGW_ATTR_CRYPT_PREFIX)) {
+        ldpp_dout(dpp, 4) << "get src crypt attr: " << iter.first << dendl;
+        src_attrset[iter.first] = iter.second;
+      }
+    }
     int parts_count = 0;
     // use the manifest to redirect to the requested part number
     r = get_part_obj_state(dpp, y, store, bucket_info, &source->get_ctx(),
@@ -6759,6 +6801,13 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       return -ERR_INVALID_PART;
     } else {
       params.parts_count = parts_count;
+    }
+
+    for (auto& iter : src_attrset) {
+      ldpp_dout(dpp, 4) << "copy crypt attr: " << iter.first << dendl;
+      if (astate->attrset.find(iter.first) == astate->attrset.end()) {
+        astate->attrset[iter.first] = std::move(iter.second);
+      }
     }
   }
 
@@ -8652,13 +8701,9 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
   if (first_chunk) {
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
   }
+
   bufferlist outbl;
-  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &op, &outbl, y);
-
-  if (epoch) {
-    *epoch = ref.ioctx.get_last_version();
-  }
-
+  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &op, &outbl, y, 0, nullptr, epoch);
   if (r < 0)
     return r;
 
@@ -9503,6 +9548,12 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
     num_entries << " total entries" << dendl;
 
   auto& ioctx = index_pool;
+
+  // XXX: check_disk_state() relies on ioctx.get_last_version() but that
+  // returns 0 because CLSRGWIssueBucketList doesn't make any synchonous calls
+  rgw_bucket_entry_ver index_ver;
+  index_ver.pool = ioctx.get_id();
+
   std::map<int, rgw_cls_list_ret> shard_list_results;
   cls_rgw_obj_key start_after_key(start_after.name, start_after.instance);
   r = CLSRGWIssueBucketList(ioctx, start_after_key, prefix, delimiter,
@@ -9626,12 +9677,10 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       /* there are uncommitted ops. We need to check the current
        * state, and if the tags are old we need to do clean-up as
        * well. */
-      librados::IoCtx sub_ctx;
-      sub_ctx.dup(ioctx);
       ldout_bitx(bitx, dpp, 20) << "INFO: " << __func__ <<
 	" calling check_disk_state bucket=" << bucket_info.bucket <<
 	" entry=" << dirent.key << dendl_bitx;
-      r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent,
+      r = check_disk_state(dpp, bucket_info, index_ver, dirent, dirent,
 			   updates[tracker.oid_name], y);
       if (r < 0 && r != -ENOENT) {
 	ldpp_dout(dpp, 0) << __func__ <<
@@ -9851,6 +9900,9 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
     }
   }
 
+  rgw_bucket_entry_ver index_ver;
+  index_ver.pool = ioctx.get_id();
+
   uint32_t count = 0u;
   std::map<std::string, bufferlist> updates;
   rgw_obj_index_key last_added_entry;
@@ -9865,7 +9917,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
     cls_rgw_bucket_list_op(op, marker, prefix, empty_delimiter,
 			   num_entries,
                            list_versions, &result);
-    r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+    r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y, 0, nullptr, &index_ver.epoch);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	": error in rgw_rados_operate (bucket list op), r=" << r << dendl;
@@ -9882,12 +9934,10 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 	  force_check) {
 	/* there are uncommitted ops. We need to check the current state,
 	 * and if the tags are old we need to do cleanup as well. */
-	librados::IoCtx sub_ctx;
-	sub_ctx.dup(ioctx);
 	ldout_bitx(bitx, dpp, 20) << "INFO: " << __func__ <<
 	  ": calling check_disk_state bucket=" << bucket_info.bucket <<
 	  " entry=" << dirent.key << dendl_bitx;
-	r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent, updates[oid], y);
+	r = check_disk_state(dpp, bucket_info, index_ver, dirent, dirent, updates[oid], y);
 	if (r < 0 && r != -ENOENT) {
 	  ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	    ": error in check_disk_state, r=" << r << dendl;
@@ -10117,8 +10167,8 @@ int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp,
 }
 
 int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
-                               librados::IoCtx io_ctx,
                                RGWBucketInfo& bucket_info,
+                               const rgw_bucket_entry_ver& index_ver,
                                rgw_bucket_dir_entry& list_state,
                                rgw_bucket_dir_entry& object,
                                bufferlist& suggested_updates,
@@ -10146,8 +10196,6 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0) << "WARNING: generated locator (" << loc << ") is different from listed locator (" << list_state.locator << ")" << dendl;
   }
 
-  io_ctx.locator_set_key(list_state.locator);
-
   RGWObjState *astate = NULL;
   RGWObjManifest *manifest = nullptr;
   RGWObjectCtx octx(this->driver);
@@ -10168,8 +10216,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     }
 
     // encode a suggested removal of that key
-    list_state.ver.epoch = io_ctx.get_last_version();
-    list_state.ver.pool = io_ctx.get_id();
+    list_state.ver = index_ver;
     ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << ": encoding remove of " << list_state.key << " on suggested_updates" << dendl_bitx;
     cls_rgw_encode_suggestion(CEPH_RGW_REMOVE | suggest_flag, list_state, suggested_updates);
     return -ENOENT;

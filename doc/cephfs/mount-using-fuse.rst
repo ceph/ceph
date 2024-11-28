@@ -12,14 +12,19 @@ Prerequisites
 Go through the prerequisites required by both, kernel as well as FUSE mounts,
 in `Mount CephFS: Prerequisites`_ page.
 
-.. note:: Mounting CephFS using FUSE requires superuser privileges to trim dentries
-   by issuing a remount of itself.
+.. note:: Mounting CephFS using FUSE requires superuser privileges (sudo/root).
+          The libfuse interface does not provide a mechanism to trim cache entries in the
+          kernel so a remount (``mount(2)``) system call is required to force the kernel
+          to drop the cached metadata. ``ceph-fuse`` issues these remount system calls
+          periodically in response to cache pressure in the MDS or due to metadata cache revocations.
 
 Synopsis
 ========
-In general, the command to mount CephFS via FUSE looks like this::
+In general, the command to mount CephFS via FUSE looks like this:
 
-    ceph-fuse {mountpoint} {options}
+.. prompt:: bash #
+
+   ceph-fuse {mount point} {options}
 
 Mounting CephFS
 ===============

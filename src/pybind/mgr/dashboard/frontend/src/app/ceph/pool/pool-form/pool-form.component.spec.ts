@@ -1384,7 +1384,8 @@ describe('PoolFormComponent', () => {
               compression_max_blob_size: 0,
               compression_min_blob_size: 0,
               compression_required_ratio: 0,
-              pool: 'somePoolName'
+              pool: 'somePoolName',
+              rbd_mirroring: false
             },
             'pool/edit',
             'update'
@@ -1397,7 +1398,8 @@ describe('PoolFormComponent', () => {
             {
               application_metadata: ['ownApp', 'rbd'],
               compression_mode: 'unset',
-              pool: 'somePoolName'
+              pool: 'somePoolName',
+              rbd_mirroring: false
             },
             'pool/edit',
             'update'

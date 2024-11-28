@@ -231,6 +231,7 @@ public:
     WRITER_WAL,
     WRITER_SST,
   };
+  void collect_alerts(osd_alert_list_t& alerts);
 
   struct File : public RefCountedObject {
     MEMPOOL_CLASS_HELPERS();
@@ -433,7 +434,6 @@ public:
     FileRef file;
     explicit FileLock(FileRef f) : file(std::move(f)) {}
   };
-
 private:
   PerfCounters *logger = nullptr;
 
@@ -743,6 +743,7 @@ public:
 		       bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev) const;
+  BlockDevice* get_block_device(unsigned bdev) const;
 
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);

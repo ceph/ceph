@@ -124,8 +124,8 @@ namespace QuiesceInterface {
 }
 
 struct QuiesceDbVersion {
-  epoch_t epoch;
-  QuiesceSetVersion set_version;
+  epoch_t epoch = 0;
+  QuiesceSetVersion set_version = 0;
   auto operator<=>(QuiesceDbVersion const& other) const = default;
   QuiesceDbVersion& operator+(unsigned int delta) {
     set_version += delta;
@@ -340,8 +340,8 @@ struct QuiesceDbRequest {
   ///        for when `roots` is empty
   enum RootsOp: uint8_t {
     INCLUDE_OR_QUERY,
-    EXCLUDE_OR_RELEASE,
-    RESET_OR_CANCEL,
+    EXCLUDE_OR_CANCEL,
+    RESET_OR_RELEASE,
     __INVALID
   };
 
@@ -427,15 +427,15 @@ struct QuiesceDbRequest {
 
   bool is_mutating() const { return (control.roots_op != INCLUDE_OR_QUERY) || !roots.empty() || timeout || expiration; }
   bool is_cancel_all() const { return !set_id && is_cancel(); }
-  bool excludes_roots() const { return control.roots_op == RESET_OR_CANCEL || (control.roots_op == EXCLUDE_OR_RELEASE && !roots.empty()); }
-  bool includes_roots() const { return (control.roots_op == RESET_OR_CANCEL || control.roots_op == INCLUDE_OR_QUERY) && !roots.empty(); }
+  bool excludes_roots() const { return is_exclude() || is_reset(); }
+  bool includes_roots() const { return is_include() || is_reset(); }
 
   bool is_include() const { return control.roots_op == INCLUDE_OR_QUERY && !roots.empty(); }
   bool is_query() const { return control.roots_op == INCLUDE_OR_QUERY && roots.empty(); }
-  bool is_exclude() const { return control.roots_op == EXCLUDE_OR_RELEASE && !roots.empty(); }
-  bool is_release() const { return control.roots_op == EXCLUDE_OR_RELEASE && roots.empty(); }
-  bool is_reset() const { return control.roots_op == RESET_OR_CANCEL && !roots.empty(); }
-  bool is_cancel() const { return control.roots_op == RESET_OR_CANCEL && roots.empty(); }
+  bool is_exclude() const { return control.roots_op == EXCLUDE_OR_CANCEL && !roots.empty(); }
+  bool is_release() const { return control.roots_op == RESET_OR_RELEASE && roots.empty(); }
+  bool is_reset() const { return control.roots_op == RESET_OR_RELEASE && !roots.empty(); }
+  bool is_cancel() const { return control.roots_op == EXCLUDE_OR_CANCEL && roots.empty(); }
 
   bool is_verbose() const { return control.flags & Flags::VERBOSE; }
   bool is_exclusive() const { return control.flags & Flags::EXCLUSIVE; }
@@ -444,11 +444,11 @@ struct QuiesceDbRequest {
     switch (control.roots_op) {
     case INCLUDE_OR_QUERY:
       return false;
-    case EXCLUDE_OR_RELEASE:
-      return roots.contains(root);
-    case RESET_OR_CANCEL:
-      return !roots.contains(root);
-      default: ceph_abort("unknown roots_op"); return false;
+    case EXCLUDE_OR_CANCEL:
+      return roots.empty() || roots.contains(root);
+    case RESET_OR_RELEASE:
+      return !roots.empty() && !roots.contains(root);
+    default: ceph_abort("unknown roots_op"); return false;
     }
   }
 
@@ -493,22 +493,22 @@ struct QuiesceDbRequest {
   template <typename R = Roots>
   void exclude_roots(R&& roots)
   {
-    set_roots(EXCLUDE_OR_RELEASE, std::forward<R>(roots));
+    set_roots(EXCLUDE_OR_CANCEL, std::forward<R>(roots));
   }
 
-  void release_roots() {
-    set_roots(EXCLUDE_OR_RELEASE, {});
+  void release() {
+    set_roots(RESET_OR_RELEASE, {});
   }
 
   template <typename R = Roots>
   void reset_roots(R&& roots)
   {
-    set_roots(RESET_OR_CANCEL, std::forward<R>(roots));
+    set_roots(RESET_OR_RELEASE, std::forward<R>(roots));
   }
 
-  void cancel_roots()
+  void cancel()
   {
-    set_roots(RESET_OR_CANCEL, {});
+    set_roots(EXCLUDE_OR_CANCEL, {});
   }
 
   template <typename S = std::string>
@@ -522,10 +522,10 @@ struct QuiesceDbRequest {
     switch (control.roots_op) {
     case INCLUDE_OR_QUERY:
       return roots.empty() ? "query" : "include";
-    case EXCLUDE_OR_RELEASE:
-      return roots.empty() ? "release" : "exclude";
-    case RESET_OR_CANCEL:
-      return roots.empty() ? "cancel" : "reset";
+    case EXCLUDE_OR_CANCEL:
+      return roots.empty() ? "cancel" : "exclude";
+    case RESET_OR_RELEASE:
+      return roots.empty() ? "release" : "reset";
     default:
       return "<unknown>";
     }
@@ -547,11 +547,11 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const QuiesceDbRequest& req)
   os << "q-req[" << req.op_string();
 
   if (req.set_id) {
-    os << " \"" << req.set_id << "\"";
+    os << " \"" << *req.set_id << "\"";
   }
 
   if (req.if_version) {
-    os << " ?v:" << req.if_version;
+    os << " ?v:" << *req.if_version;
   }
 
   if (req.await) {

@@ -5,16 +5,41 @@ import time
 
 from textwrap import dedent
 
-from ceph_volume import decorators, terminal, process
+from ceph_volume import decorators, terminal, process, BEING_REPLACED_HEADER
 from ceph_volume.api import lvm as api
 from ceph_volume.util import system, encryption, disk, arg_validators, str_to_int, merge_dict
 from ceph_volume.util.device import Device
 from ceph_volume.systemd import systemctl
-from typing import List
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
 
+
+def zap_device(path: str) -> None:
+    """Remove any existing filesystem signatures.
+
+    Args:
+        path (str): The path to the device to zap.
+    """
+    zap_bluestore(path)
+    wipefs(path)
+    zap_data(path)
+
+def zap_bluestore(path: str) -> None:
+    """Remove all BlueStore signature on a device.
+
+    Args:
+        path (str): The path to the device to remove BlueStore signatures from.
+    """
+    terminal.info(f'Removing all BlueStore signature on {path} if any...')
+    process.run([
+        'ceph-bluestore-tool',
+        'zap-device',
+        '--dev',
+        path,
+        '--yes-i-really-really-mean-it'
+    ])
 
 def wipefs(path):
     """
@@ -70,29 +95,29 @@ def zap_data(path):
         'conv=fsync'
     ])
 
-
-def find_associated_devices(osd_id=None, osd_fsid=None):
+def find_associated_devices(osd_id: str = '', osd_fsid: str = '') -> List[api.Volume]:
     """
     From an ``osd_id`` and/or an ``osd_fsid``, filter out all the LVs in the
     system that match those tag values, further detect if any partitions are
     part of the OSD, and then return the set of LVs and partitions (if any).
     """
     lv_tags = {}
-    if osd_id:
-        lv_tags['ceph.osd_id'] = osd_id
-    if osd_fsid:
-        lv_tags['ceph.osd_fsid'] = osd_fsid
+    lv_tags = {key: value for key, value in {
+        'ceph.osd_id': osd_id,
+        'ceph.osd_fsid': osd_fsid
+    }.items() if value}
 
     lvs = api.get_lvs(tags=lv_tags)
+
     if not lvs:
         raise RuntimeError('Unable to find any LV for zapping OSD: '
-                           '%s' % osd_id or osd_fsid)
-
+                            f'{osd_id or osd_fsid}')
     devices_to_zap = ensure_associated_lvs(lvs, lv_tags)
+
     return [Device(path) for path in set(devices_to_zap) if path]
 
-
-def ensure_associated_lvs(lvs, lv_tags={}):
+def ensure_associated_lvs(lvs: List[api.Volume],
+                          lv_tags: Dict[str, Any] = {}) -> List[str]:
     """
     Go through each LV and ensure if backing devices (journal, wal, block)
     are LVs or partitions, so that they can be accurately reported.
@@ -141,14 +166,14 @@ def ensure_associated_lvs(lvs, lv_tags={}):
     return list(set(verified_devices))
 
 
-class Zap(object):
-
+class Zap:
     help = 'Removes all data and filesystems from a logical volume or partition.'
 
-    def __init__(self, argv):
+    def __init__(self, argv: List[str]) -> None:
         self.argv = argv
+        self.osd_ids_to_zap: List[str] = []
 
-    def unmount_lv(self, lv):
+    def unmount_lv(self, lv: api.Volume) -> None:
         if lv.tags.get('ceph.cluster_name') and lv.tags.get('ceph.osd_id'):
             lv_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
         else:
@@ -161,41 +186,95 @@ class Zap(object):
         if dmcrypt and dmcrypt_uuid:
             self.dmcrypt_close(dmcrypt_uuid)
 
-    def zap_lv(self, device):
+    def _write_replacement_header(self, device: str) -> None:
+        """Write a replacement header to a device.
+
+        This method writes the string defined in `BEING_REPLACED_HEADER`
+        to the specified device. This header indicates that the device
+        is in the process of being replaced.
+
+        Args:
+            device (str): The path to the device on which the replacement
+                          header will be written.
+        """
+        disk._dd_write(device,
+                       BEING_REPLACED_HEADER)
+
+    def clear_replace_header(self) -> bool:
+        """Safely erase the replacement header on a device if it is marked as being replaced.
+
+        This method checks whether the given device is marked as being replaced
+        (`device.is_being_replaced`). If true, it proceeds to erase the replacement header
+        from the device using the `_erase_replacement_header` method. The method returns
+        a boolean indicating whether any action was taken.
+
+        Args:
+            device (Device): The device object, which includes information about the device's
+                            path and status (such as whether it is currently being replaced).
+
+        Returns:
+            bool: True if the replacement header was successfully erased, False if the
+                device was not marked as being replaced or no action was necessary.
+        """
+        result: bool = False
+        device: Device = self.args.clear_replace_header
+        if device.is_being_replaced:
+            self._erase_replacement_header(device.path)
+            result = True
+        return result
+
+    def _erase_replacement_header(self, device: str) -> None:
+        """Erase the replacement header on a device.
+
+        This method writes a sequence of null bytes (`0x00`) over the area of the device
+        where the replacement header is stored, effectively erasing it.
+
+        Args:
+            device (str): The path to the device from which the replacement header will be erased.
+        """
+        disk._dd_write(device,
+                       b'\x00' * len(BEING_REPLACED_HEADER))
+
+    def zap_lv(self, device: Device) -> None:
         """
         Device examples: vg-name/lv-name, /dev/vg-name/lv-name
         Requirements: Must be a logical volume (LV)
         """
-        lv = api.get_single_lv(filters={'lv_name': device.lv_name, 'vg_name':
-                                        device.vg_name})
+        lv: api.Volume = device.lv_api
         self.unmount_lv(lv)
-
-        wipefs(device.path)
-        zap_data(device.path)
+        self.parent_device: str = disk.get_parent_device_from_mapper(lv.lv_path)
+        zap_device(device.path)
 
         if self.args.destroy:
             lvs = api.get_lvs(filters={'vg_name': device.vg_name})
-            if lvs == []:
-                mlogger.info('No LVs left, exiting', device.vg_name)
-                return
-            elif len(lvs) <= 1:
+            if len(lvs) <= 1:
                 mlogger.info('Only 1 LV left in VG, will proceed to destroy '
                              'volume group %s', device.vg_name)
                 pvs = api.get_pvs(filters={'lv_uuid': lv.lv_uuid})
                 api.remove_vg(device.vg_name)
                 for pv in pvs:
                     api.remove_pv(pv.pv_name)
+                replacement_args: Dict[str, bool] = {
+                    'block': self.args.replace_block,
+                    'db': self.args.replace_db,
+                    'wal': self.args.replace_wal
+                }
+                if replacement_args.get(lv.tags.get('ceph.type'), False):
+                    mlogger.info(f'Marking {self.parent_device} as being replaced')
+                    self._write_replacement_header(self.parent_device)
             else:
                 mlogger.info('More than 1 LV left in VG, will proceed to '
                              'destroy LV only')
                 mlogger.info('Removing LV because --destroy was given: %s',
                              device.path)
+                if self.args.replace_block:
+                    mlogger.info(f'--replace-block passed but the device still has {str(len(lvs))} LV(s)')
                 api.remove_lv(device.path)
         elif lv:
             # just remove all lvm metadata, leaving the LV around
             lv.clear_tags()
 
-    def zap_partition(self, device):
+    def zap_partition(self, device: Device) -> None:
         """
         Device example: /dev/sda1
         Requirements: Must be a partition
@@ -217,14 +296,13 @@ class Zap(object):
             mlogger.info("Unmounting %s", device.path)
             system.unmount(device.path)
 
-        wipefs(device.path)
-        zap_data(device.path)
+        zap_device(device.path)
 
         if self.args.destroy:
             mlogger.info("Destroying partition since --destroy was used: %s" % device.path)
             disk.remove_partition(device)
 
-    def zap_lvm_member(self, device):
+    def zap_lvm_member(self, device: Device) -> None:
         """
         An LVM member may have more than one LV and or VG, for example if it is
         a raw device with multiple partitions each belonging to a different LV
@@ -244,7 +322,7 @@ class Zap(object):
 
 
 
-    def zap_raw_device(self, device):
+    def zap_raw_device(self, device: Device) -> None:
         """
         Any whole (raw) device passed in as input will be processed here,
         checking for LVM membership and partitions (if any).
@@ -263,12 +341,20 @@ class Zap(object):
         for part_name in device.sys_api.get('partitions', {}).keys():
             self.zap_partition(Device('/dev/%s' % part_name))
 
-        wipefs(device.path)
-        zap_data(device.path)
+        zap_device(device.path)
+        # TODO(guits): I leave this commented out, this should be part of a separate patch in order to
+        # support device replacement with raw-based OSDs
+        # if self.args.replace_block:
+        #     disk._dd_write(device.path, 'CEPH_DEVICE_BEING_REPLACED')
 
     @decorators.needs_root
-    def zap(self, devices=None):
-        devices = devices or self.args.devices
+    def zap(self) -> None:
+        """Zap a device.
+
+        Raises:
+            SystemExit: When the device is a mapper and not a mpath device.
+        """
+        devices = self.args.devices
 
         for device in devices:
             mlogger.info("Zapping: %s", device.path)
@@ -295,21 +381,21 @@ class Zap(object):
             )
 
     @decorators.needs_root
-    def zap_osd(self):
+    def zap_osd(self) -> None:
         if self.args.osd_id and not self.args.no_systemd:
             osd_is_running = systemctl.osd_is_active(self.args.osd_id)
             if osd_is_running:
                 mlogger.error("OSD ID %s is running, stop it with:" % self.args.osd_id)
                 mlogger.error("systemctl stop ceph-osd@%s" % self.args.osd_id)
                 raise SystemExit("Unable to zap devices associated with OSD ID: %s" % self.args.osd_id)
-        devices = find_associated_devices(self.args.osd_id, self.args.osd_fsid)
-        self.zap(devices)
+        self.args.devices = find_associated_devices(self.args.osd_id, self.args.osd_fsid)
+        self.zap()
 
-    def dmcrypt_close(self, dmcrypt_uuid):
+    def dmcrypt_close(self, dmcrypt_uuid: str) -> None:
         mlogger.info("Closing encrypted volume %s", dmcrypt_uuid)
         encryption.dmcrypt_close(mapping=dmcrypt_uuid, skip_path_check=True)
 
-    def main(self):
+    def main(self) -> None:
         sub_command_help = dedent("""
         Zaps the given logical volume(s), raw device(s) or partition(s) for reuse by ceph-volume.
         If given a path to a logical volume it must be in the format of vg/lv. Any
@@ -397,11 +483,55 @@ class Zap(object):
             help='Skip systemd unit checks',
         )
 
+        parser.add_argument(
+            '--replace-block',
+            dest='replace_block',
+            action='store_true',
+            help='Mark the block device as unavailable.'
+        )
+
+        parser.add_argument(
+            '--replace-db',
+            dest='replace_db',
+            action='store_true',
+            help='Mark the db device as unavailable.'
+        )
+
+        parser.add_argument(
+            '--replace-wal',
+            dest='replace_wal',
+            action='store_true',
+            help='Mark the wal device as unavailable.'
+        )
+
+        parser.add_argument(
+            '--clear-replace-header',
+            dest='clear_replace_header',
+            type=arg_validators.ValidClearReplaceHeaderDevice(),
+            help='clear the replace header on devices.'
+        )
+
         if len(self.argv) == 0:
             print(sub_command_help)
             return
 
         self.args = parser.parse_args(self.argv)
+
+        if self.args.clear_replace_header:
+            rc: bool = False
+            try:
+                rc = self.clear_replace_header()
+            except Exception as e:
+                raise SystemExit(e)
+            if rc:
+                mlogger.info(f'Replacement header cleared on {self.args.clear_replace_header}')
+            else:
+                mlogger.info(f'No replacement header detected on {self.args.clear_replace_header}, nothing to do.')
+            raise SystemExit(not rc)
+
+        if self.args.replace_block or self.args.replace_db or self.args.replace_wal:
+            self.args.destroy = True
+            mlogger.info('--replace-block|db|wal passed, enforcing --destroy.')
 
         if self.args.osd_id or self.args.osd_fsid:
             self.zap_osd()

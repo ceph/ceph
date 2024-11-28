@@ -34,7 +34,7 @@ public:
 
     C_ImageReadRequest(AioCompletion *aio_completion,
                        uint64_t buffer_offset,
-                       const Extents image_extents);
+                       const Extents& image_extents);
 
     void finish(int r) override;
   };

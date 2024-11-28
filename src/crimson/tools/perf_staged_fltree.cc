@@ -132,7 +132,7 @@ seastar::future<> run(const bpo::variables_map& config) {
         {range1[0], range1[1]},
         {range0[0], range0[1]});
     PerfTree<TRACK> perf{is_dummy};
-    perf.run(kvs, erase_ratio).get0();
+    perf.run(kvs, erase_ratio).get();
   });
 }
 

@@ -176,7 +176,11 @@ class TestValue final : public Value {
     }
   };
 
-  TestValue(NodeExtentManager& nm, const ValueBuilder& vb, Ref<tree_cursor_t>& p_cursor)
+  TestValue(
+    const hobject_t &hobj,
+    NodeExtentManager& nm,
+    const ValueBuilder& vb,
+    Ref<tree_cursor_t>& p_cursor)
     : Value(nm, vb, p_cursor) {}
   ~TestValue() override = default;
 

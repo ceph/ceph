@@ -22,14 +22,53 @@ else:
     class NVMeoFClient(object):
         pb2 = pb2
 
-        def __init__(self):
+        def __init__(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
             logger.info("Initiating nvmeof gateway connection...")
+            try:
+                if not gw_group:
+                    service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info()
+                else:
+                    service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info(
+                        gw_group
+                    )
+            except TypeError as e:
+                raise DashboardException(
+                    f'Unable to retrieve the gateway info: {e}'
+                )
 
-            self.gateway_addr = list(
-                NvmeofGatewaysConfig.get_gateways_config()["gateways"].values()
-            )[0]["service_url"]
-            self.channel = grpc.insecure_channel("{}".format(self.gateway_addr))
-            logger.info("Found nvmeof gateway at %s", self.gateway_addr)
+            # While creating listener need to direct request to the gateway
+            # address where listener is supposed to be added.
+            if traddr:
+                gateways_info = NvmeofGatewaysConfig.get_gateways_config()
+                matched_gateway = next(
+                    (
+                        gateway
+                        for gateways in gateways_info['gateways'].values()
+                        for gateway in gateways
+                        if traddr in gateway['service_url']
+                    ),
+                    None
+                )
+                if matched_gateway:
+                    self.gateway_addr = matched_gateway.get('service_url')
+                    logger.debug("Gateway address set to: %s", self.gateway_addr)
+
+            root_ca_cert = NvmeofGatewaysConfig.get_root_ca_cert(service_name)
+            if root_ca_cert:
+                client_key = NvmeofGatewaysConfig.get_client_key(service_name)
+                client_cert = NvmeofGatewaysConfig.get_client_cert(service_name)
+
+            if root_ca_cert and client_key and client_cert:
+                logger.info('Securely connecting to: %s', self.gateway_addr)
+                credentials = grpc.ssl_channel_credentials(
+                    root_certificates=root_ca_cert,
+                    private_key=client_key,
+                    certificate_chain=client_cert,
+                )
+                self.channel = grpc.secure_channel(self.gateway_addr, credentials)
+            else:
+                logger.info("Insecurely connecting to: %s", self.gateway_addr)
+                self.channel = grpc.insecure_channel(self.gateway_addr)
             self.stub = pb2_grpc.GatewayStub(self.channel)
 
     def make_namedtuple_from_object(cls: Type[NamedTuple], obj: Any) -> NamedTuple:

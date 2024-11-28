@@ -1,5 +1,9 @@
 overrides:
   ceph:
+    log-ignorelist:
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+      - CEPHADM_AGENT_DOWN
     log-only-match:
       - CEPHADM_
 tasks:

@@ -1,5 +1,7 @@
 :orphan:
 
+.. _cephfs-shell:
+
 ===================================================
 cephfs-shell -- Shell-like tool talking with CephFS
 ===================================================

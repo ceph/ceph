@@ -437,6 +437,8 @@ done:
   } catch (rgw::io::Exception& e) {
     dout(0) << "ERROR: client_io->complete_request() returned "
             << e.what() << dendl;
+    perfcounter->inc(l_rgw_qlen, -1);
+    perfcounter->inc(l_rgw_qactive, -1);
   }
   if (should_log) {
     rgw_log_op(rest, s, op, penv.olog);

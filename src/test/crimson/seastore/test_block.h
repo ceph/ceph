@@ -111,6 +111,8 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
 
   std::vector<test_block_delta_t> delta = {};
 
+  void on_rewrite(Transaction&, CachedExtent&, extent_len_t) final {}
+
   TestBlockPhysical(ceph::bufferptr &&ptr)
     : CachedExtent(std::move(ptr)) {}
   TestBlockPhysical(const TestBlockPhysical &other)

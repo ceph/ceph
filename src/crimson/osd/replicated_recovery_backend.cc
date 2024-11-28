@@ -38,13 +38,13 @@ ReplicatedRecoveryBackend::recover_object(
       logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
       auto& recovery_waiter = get_recovering(soid);
       recovery_waiter.obc = obc;
-      recovery_waiter.obc->wait_recovery_read();
       return maybe_push_shards(head, soid, need);
     }, false).handle_error_interruptible(
       crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
       // TODO: may need eio handling?
       logger().error("recover_object saw error code {}, ignoring object {}",
                      code, soid);
+      return seastar::now();
     }));
   });
 }
@@ -97,10 +97,6 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     }
     return seastar::make_ready_future<>();
   }).handle_exception_interruptible([this, soid](auto e) {
-    auto &recovery = get_recovering(soid);
-    if (recovery.obc) {
-      recovery.obc->drop_recovery_read();
-    }
     recovering.erase(soid);
     return seastar::make_exception_future<>(e);
   });

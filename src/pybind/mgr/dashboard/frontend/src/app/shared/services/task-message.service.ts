@@ -318,6 +318,32 @@ export class TaskMessageService {
       this.rbd_mirroring.pool_peer,
       () => ({})
     ),
+    'rgw/multisite/sync-policy/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.group_names.length > 1
+            ? 'selected policy groups'
+            : `policy group '${metadata.group_names[0]}'`
+        }`;
+      }
+    ),
+    'rgw/multisite/sync-flow/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.flow_ids.length > 1 ? 'selected Flow' : `Flow '${metadata.flow_ids[0]}'`
+        }`;
+      }
+    ),
+    'rgw/multisite/sync-pipe/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.pipe_ids.length > 1 ? 'selected pipe' : `Pipe '${metadata.pipe_ids[0]}'`
+        }`;
+      }
+    ),
     // iSCSI target tasks
     'iscsi/target/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.iscsiTarget(metadata)
@@ -328,6 +354,35 @@ export class TaskMessageService {
     'iscsi/target/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.iscsiTarget(metadata)
     ),
+    // nvmeof
+    'nvmeof/subsystem/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.nvmeofSubsystem(metadata)
+    ),
+    'nvmeof/subsystem/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nvmeofSubsystem(metadata)
+    ),
+    'nvmeof/listener/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.nvmeofListener(metadata)
+    ),
+    'nvmeof/listener/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nvmeofListener(metadata)
+    ),
+    'nvmeof/namespace/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.nvmeofNamespace(metadata)
+    ),
+    'nvmeof/namespace/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.nvmeofNamespace(metadata)
+    ),
+    'nvmeof/namespace/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nvmeofNamespace(metadata)
+    ),
+    'nvmeof/initiator/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofInitiator(metadata)
+    ),
+    'nvmeof/initiator/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.nvmeofInitiator(metadata)
+    ),
+    // nfs
     'nfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nfs(metadata)
     ),
@@ -453,6 +508,25 @@ export class TaskMessageService {
     return $localize`target '${metadata.target_iqn}'`;
   }
 
+  nvmeofSubsystem(metadata: any) {
+    return $localize`subsystem '${metadata.nqn}'`;
+  }
+
+  nvmeofListener(metadata: any) {
+    return $localize`listener '${metadata.host_name} for subsystem ${metadata.nqn}`;
+  }
+
+  nvmeofNamespace(metadata: any) {
+    if (metadata?.nsid) {
+      return $localize`namespace ${metadata.nsid} for subsystem '${metadata.nqn}'`;
+    }
+    return $localize`namespace for subsystem '${metadata.nqn}'`;
+  }
+
+  nvmeofInitiator(metadata: any) {
+    return $localize`initiator${metadata?.plural ? 's' : ''} for subsystem ${metadata.nqn}`;
+  }
+
   nfs(metadata: any) {
     return $localize`NFS '${metadata.cluster_id}\:${
       metadata.export_id ? metadata.export_id : metadata.path
@@ -460,7 +534,7 @@ export class TaskMessageService {
   }
 
   service(metadata: any) {
-    return $localize`Service '${metadata.service_name}'`;
+    return $localize`service '${metadata.service_name}'`;
   }
 
   crudMessage(metadata: any) {

@@ -169,22 +169,22 @@ TEST_F(a_basic_test_t, 2_node_sizes)
     ValueBuilderImpl<UnboundedValue> vb;
     context_t c{*nm, vb, *t};
     std::array<std::pair<NodeImplURef, NodeExtentMutable>, 16> nodes = {
-      INTR_WITH_PARAM(InternalNode0::allocate, c, false, 1u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(InternalNode1::allocate, c, false, 1u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(InternalNode2::allocate, c, false, 1u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(InternalNode3::allocate, c, false, 1u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(InternalNode0::allocate, c, true, 1u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(InternalNode1::allocate, c, true, 1u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(InternalNode2::allocate, c, true, 1u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(InternalNode3::allocate, c, true, 1u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(LeafNode0::allocate, c, false, 0u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(LeafNode1::allocate, c, false, 0u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(LeafNode2::allocate, c, false, 0u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(LeafNode3::allocate, c, false, 0u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(LeafNode0::allocate, c, true, 0u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(LeafNode1::allocate, c, true, 0u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(LeafNode2::allocate, c, true, 0u).unsafe_get0().make_pair(),
-      INTR_WITH_PARAM(LeafNode3::allocate, c, true, 0u).unsafe_get0().make_pair()
+      INTR_WITH_PARAM(InternalNode0::allocate, c, false, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode1::allocate, c, false, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode2::allocate, c, false, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode3::allocate, c, false, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode0::allocate, c, true, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode1::allocate, c, true, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode2::allocate, c, true, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(InternalNode3::allocate, c, true, 1u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode0::allocate, c, false, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode1::allocate, c, false, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode2::allocate, c, false, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode3::allocate, c, false, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode0::allocate, c, true, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode1::allocate, c, true, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode2::allocate, c, true, 0u).unsafe_get().make_pair(),
+      INTR_WITH_PARAM(LeafNode3::allocate, c, true, 0u).unsafe_get().make_pair()
     };
     std::ostringstream oss;
     oss << "\nallocated nodes:";
@@ -209,9 +209,7 @@ struct b_dummy_tree_test_t : public seastar_test_suite_t {
       new UnboundedBtree(NodeExtentManager::create_dummy(IS_DUMMY_SYNC))
     );
     return INTR(tree->mkfs, *ref_t).handle_error(
-      crimson::ct_error::all_same_way([] {
-        ASSERT_FALSE("Unable to mkfs");
-      })
+      crimson::ct_error::assert_all{"Unable to mkfs"}
     );
   }
 
@@ -229,9 +227,9 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
                   "\nrandomized leaf node insert:\n");
     auto key_s = ghobject_t();
     auto key_e = ghobject_t::get_max();
-    ASSERT_TRUE(INTR_R(tree->find, *ref_t, key_s).unsafe_get0().is_end());
-    ASSERT_TRUE(INTR(tree->begin, *ref_t).unsafe_get0().is_end());
-    ASSERT_TRUE(INTR(tree->last, *ref_t).unsafe_get0().is_end());
+    ASSERT_TRUE(INTR_R(tree->find, *ref_t, key_s).unsafe_get().is_end());
+    ASSERT_TRUE(INTR(tree->begin, *ref_t).unsafe_get().is_end());
+    ASSERT_TRUE(INTR(tree->last, *ref_t).unsafe_get().is_end());
 
     std::map<ghobject_t,
              std::tuple<test_item_t, UnboundedBtree::Cursor>> insert_history;
@@ -240,10 +238,10 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
         const ghobject_t& key, const test_item_t& value) {
       auto conf = UnboundedBtree::tree_value_config_t{value.get_payload_size()};
       auto [cursor, success] = INTR_R(tree->insert,
-          *ref_t, key, conf).unsafe_get0();
+          *ref_t, key, conf).unsafe_get();
       initialize_cursor_from_item(*ref_t, key, value, cursor, success);
       insert_history.emplace(key, std::make_tuple(value, cursor));
-      auto cursor_ = INTR_R(tree->find, *ref_t, key).unsafe_get0();
+      auto cursor_ = INTR_R(tree->find, *ref_t, key).unsafe_get();
       ceph_assert(cursor_ != tree->end());
       ceph_assert(cursor_.value() == cursor.value());
       validate_cursor_from_item(key, value, cursor_);
@@ -251,12 +249,12 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
     };
 
     auto f_validate_erase = [this, &insert_history] (const ghobject_t& key) {
-      auto cursor_erase = INTR_R(tree->find, *ref_t, key).unsafe_get0();
-      auto cursor_next = INTR(cursor_erase.get_next, *ref_t).unsafe_get0();
-      auto cursor_ret = INTR_R(tree->erase, *ref_t, cursor_erase).unsafe_get0();
+      auto cursor_erase = INTR_R(tree->find, *ref_t, key).unsafe_get();
+      auto cursor_next = INTR(cursor_erase.get_next, *ref_t).unsafe_get();
+      auto cursor_ret = INTR_R(tree->erase, *ref_t, cursor_erase).unsafe_get();
       ceph_assert(cursor_erase.is_end());
       ceph_assert(cursor_ret == cursor_next);
-      auto cursor_lb = INTR_R(tree->lower_bound, *ref_t, key).unsafe_get0();
+      auto cursor_lb = INTR_R(tree->lower_bound, *ref_t, key).unsafe_get();
       ceph_assert(cursor_lb == cursor_next);
       auto it = insert_history.find(key);
       ceph_assert(std::get<1>(it->second).is_end());
@@ -279,10 +277,10 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
 
     // validate lookup
     {
-      auto cursor1_s = INTR_R(tree->lower_bound, *ref_t, key_s).unsafe_get0();
+      auto cursor1_s = INTR_R(tree->lower_bound, *ref_t, key_s).unsafe_get();
       ASSERT_EQ(cursor1_s.get_ghobj(), key1);
       ASSERT_EQ(cursor1_s.value(), test_value1);
-      auto cursor1_e = INTR_R(tree->lower_bound, *ref_t, key_e).unsafe_get0();
+      auto cursor1_e = INTR_R(tree->lower_bound, *ref_t, key_e).unsafe_get();
       ASSERT_TRUE(cursor1_e.is_end());
     }
 
@@ -291,7 +289,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
       auto value1_dup = values.pick();
       auto conf = UnboundedBtree::tree_value_config_t{value1_dup.get_payload_size()};
       auto [cursor1_dup, ret1_dup] = INTR_R(tree->insert,
-          *ref_t, key1, conf).unsafe_get0();
+          *ref_t, key1, conf).unsafe_get();
       ASSERT_FALSE(ret1_dup);
       validate_cursor_from_item(key1, value1, cursor1_dup);
     }
@@ -372,7 +370,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
     std::for_each(kvs.begin(), kvs.end(), [&f_insert_erase_insert] (auto& kv) {
       f_insert_erase_insert(kv.first, kv.second);
     });
-    ASSERT_EQ(INTR(tree->height, *ref_t).unsafe_get0(), 1);
+    ASSERT_EQ(INTR(tree->height, *ref_t).unsafe_get(), 1);
     ASSERT_FALSE(tree->test_is_clean());
 
     for (auto& [k, val] : insert_history) {
@@ -380,22 +378,22 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
       // validate values in tree keep intact
       auto cursor = with_trans_intr(*ref_t, [this, &k=k](auto& tr) {
         return tree->find(tr, k);
-      }).unsafe_get0();
+      }).unsafe_get();
       EXPECT_NE(cursor, tree->end());
       validate_cursor_from_item(k, v, cursor);
       // validate values in cursors keep intact
       validate_cursor_from_item(k, v, c);
     }
     {
-      auto cursor = INTR_R(tree->lower_bound, *ref_t, key_s).unsafe_get0();
+      auto cursor = INTR_R(tree->lower_bound, *ref_t, key_s).unsafe_get();
       validate_cursor_from_item(smallest_key, smallest_value, cursor);
     }
     {
-      auto cursor = INTR(tree->begin, *ref_t).unsafe_get0();
+      auto cursor = INTR(tree->begin, *ref_t).unsafe_get();
       validate_cursor_from_item(smallest_key, smallest_value, cursor);
     }
     {
-      auto cursor = INTR(tree->last, *ref_t).unsafe_get0();
+      auto cursor = INTR(tree->last, *ref_t).unsafe_get();
       validate_cursor_from_item(largest_key, largest_value, cursor);
     }
 
@@ -410,11 +408,11 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
       std::sort(kvs.begin(), kvs.end(), [](auto& l, auto& r) {
         return l.first < r.first;
       });
-      auto cursor = INTR(tree->begin, *ref_t).unsafe_get0();
+      auto cursor = INTR(tree->begin, *ref_t).unsafe_get();
       for (auto& [k, v] : kvs) {
         ASSERT_FALSE(cursor.is_end());
         validate_cursor_from_item(k, v, cursor);
-        cursor = INTR(cursor.get_next, *ref_t).unsafe_get0();
+        cursor = INTR(cursor.get_next, *ref_t).unsafe_get();
       }
       ASSERT_TRUE(cursor.is_end());
     }
@@ -428,12 +426,12 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
     for (auto& [k, v] : kvs) {
       auto e_size = with_trans_intr(*ref_t, [this, &k=k](auto& tr) {
         return tree->erase(tr, k);
-      }).unsafe_get0();
+      }).unsafe_get();
       ASSERT_EQ(e_size, 1);
     }
-    auto cursor = INTR(tree->begin, *ref_t).unsafe_get0();
+    auto cursor = INTR(tree->begin, *ref_t).unsafe_get();
     ASSERT_TRUE(cursor.is_end());
-    ASSERT_EQ(INTR(tree->height, *ref_t).unsafe_get0(), 1);
+    ASSERT_EQ(INTR(tree->height, *ref_t).unsafe_get(), 1);
   });
 }
 
@@ -480,15 +478,15 @@ class TestTree {
       std::pair<unsigned, unsigned> range_0,
       size_t value_size) {
     return seastar::async([this, range_2, range_1, range_0, value_size] {
-      INTR(tree.mkfs, t).unsafe_get0();
+      INTR(tree.mkfs, t).unsafe_get();
       //logger().info("\n---------------------------------------------"
       //              "\nbefore leaf node split:\n");
       auto keys = build_key_set(range_2, range_1, range_0);
       for (auto& key : keys) {
         auto value = values.create(value_size);
-        insert_tree(key, value).get0();
+        insert_tree(key, value).get();
       }
-      ASSERT_EQ(INTR(tree.height, t).unsafe_get0(), 1);
+      ASSERT_EQ(INTR(tree.height, t).unsafe_get(), 1);
       ASSERT_FALSE(tree.test_is_clean());
       //std::ostringstream oss;
       //tree.dump(t, oss);
@@ -499,18 +497,18 @@ class TestTree {
   seastar::future<> build_tree(
       const std::vector<ghobject_t>& keys, const std::vector<test_item_t>& values) {
     return seastar::async([this, keys, values] {
-      INTR(tree.mkfs, t).unsafe_get0();
+      INTR(tree.mkfs, t).unsafe_get();
       //logger().info("\n---------------------------------------------"
       //              "\nbefore leaf node split:\n");
       ASSERT_EQ(keys.size(), values.size());
       auto key_iter = keys.begin();
       auto value_iter = values.begin();
       while (key_iter != keys.end()) {
-        insert_tree(*key_iter, *value_iter).get0();
+        insert_tree(*key_iter, *value_iter).get();
         ++key_iter;
         ++value_iter;
       }
-      ASSERT_EQ(INTR(tree.height, t).unsafe_get0(), 1);
+      ASSERT_EQ(INTR(tree.height, t).unsafe_get(), 1);
       ASSERT_FALSE(tree.test_is_clean());
       //std::ostringstream oss;
       //tree.dump(t, oss);
@@ -530,13 +528,13 @@ class TestTree {
       UnboundedBtree tree_clone(std::move(ref_dummy));
       auto ref_t_clone = make_test_transaction();
       Transaction& t_clone = *ref_t_clone;
-      INTR_R(tree_clone.test_clone_from, t_clone, t, tree).unsafe_get0();
+      INTR_R(tree_clone.test_clone_from, t_clone, t, tree).unsafe_get();
 
       // insert and split
       logger().info("\n\nINSERT-SPLIT {}:", key_hobj_t(key));
       auto conf = UnboundedBtree::tree_value_config_t{value.get_payload_size()};
       auto [cursor, success] = INTR_R(tree_clone.insert,
-          t_clone, key, conf).unsafe_get0();
+          t_clone, key, conf).unsafe_get();
       initialize_cursor_from_item(t, key, value, cursor, success);
 
       {
@@ -544,17 +542,17 @@ class TestTree {
         tree_clone.dump(t_clone, oss);
         logger().info("dump new root:\n{}", oss.str());
       }
-      EXPECT_EQ(INTR(tree_clone.height, t_clone).unsafe_get0(), 2);
+      EXPECT_EQ(INTR(tree_clone.height, t_clone).unsafe_get(), 2);
 
       for (auto& [k, val] : insert_history) {
         auto& [v, c] = val;
         auto result = with_trans_intr(t_clone, [&tree_clone, &k=k] (auto& tr) {
           return tree_clone.find(tr, k);
-        }).unsafe_get0();
+        }).unsafe_get();
         EXPECT_NE(result, tree_clone.end());
         validate_cursor_from_item(k, v, result);
       }
-      auto result = INTR_R(tree_clone.find, t_clone, key).unsafe_get0();
+      auto result = INTR_R(tree_clone.find, t_clone, key).unsafe_get();
       EXPECT_NE(result, tree_clone.end());
       validate_cursor_from_item(key, value, result);
       EXPECT_TRUE(last_split.match(expected));
@@ -564,11 +562,11 @@ class TestTree {
       logger().info("\n\nERASE-MERGE {}:", key_hobj_t(key));
       auto nxt_cursor = with_trans_intr(t_clone, [&cursor=cursor](auto& tr) {
         return cursor.erase<true>(tr);
-      }).unsafe_get0();
+      }).unsafe_get();
 
       {
         // track root again to dump
-        auto begin = INTR(tree_clone.begin, t_clone).unsafe_get0();
+        auto begin = INTR(tree_clone.begin, t_clone).unsafe_get();
         std::ignore = begin;
         std::ostringstream oss;
         tree_clone.dump(t_clone, oss);
@@ -588,11 +586,11 @@ class TestTree {
         auto& [v, c] = val;
         auto result = with_trans_intr(t_clone, [&tree_clone, &k=k](auto& tr) {
           return tree_clone.find(tr, k);
-        }).unsafe_get0();
+        }).unsafe_get();
         EXPECT_NE(result, tree_clone.end());
         validate_cursor_from_item(k, v, result);
       }
-      EXPECT_EQ(INTR(tree_clone.height, t_clone).unsafe_get0(), 1);
+      EXPECT_EQ(INTR(tree_clone.height, t_clone).unsafe_get(), 1);
       EXPECT_EQ(p_dummy->size(), 1);
     });
   }
@@ -606,7 +604,7 @@ class TestTree {
     return seastar::async([this, &key, &value] {
       auto conf = UnboundedBtree::tree_value_config_t{value.get_payload_size()};
       auto [cursor, success] = INTR_R(tree.insert,
-          t, key, conf).unsafe_get0();
+          t, key, conf).unsafe_get();
       initialize_cursor_from_item(t, key, value, cursor, success);
       insert_history.emplace(key, std::make_tuple(value, cursor));
     });
@@ -630,182 +628,182 @@ TEST_F(c_dummy_test_t, 4_split_merge_leaf_node)
   run_async([] {
     {
       TestTree test;
-      test.build_tree({2, 5}, {2, 5}, {2, 5}, 120).get0();
+      test.build_tree({2, 5}, {2, 5}, {2, 5}, 120).get();
 
       auto value = test.create_value(1144);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left front at stage 2, 1, 0\n");
       test.split_merge(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), value,
                        {2u, 2u, true, InsertType::BEGIN},
-                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), value,
                        {2u, 1u, true, InsertType::BEGIN},
-                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), value,
                        {2u, 0u, true, InsertType::BEGIN},
-                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left back at stage 0, 1, 2, 1, 0\n");
       test.split_merge(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), value,
                        {2u, 0u, true, InsertType::LAST},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), value,
                        {2u, 1u, true, InsertType::LAST},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(2, 3, 3, "ns3", "oid3", 3, 3), value,
                        {2u, 2u, true, InsertType::LAST},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), value,
                        {2u, 1u, true, InsertType::LAST},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), value,
                        {2u, 0u, true, InsertType::LAST},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get();
 
       auto value0 = test.create_value(1416);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right front at stage 0, 1, 2, 1, 0\n");
       test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), value0,
                        {2u, 0u, false, InsertType::BEGIN},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), value0,
                        {2u, 1u, false, InsertType::BEGIN},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), value0,
                        {2u, 2u, false, InsertType::BEGIN},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), value0,
                        {2u, 1u, false, InsertType::BEGIN},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), value0,
                        {2u, 0u, false, InsertType::BEGIN},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right back at stage 0, 1, 2\n");
       test.split_merge(make_ghobj(4, 4, 4, "ns4", "oid4", 5, 5), value0,
                        {2u, 0u, false, InsertType::LAST},
-                       std::nullopt).get0();
+                       std::nullopt).get();
       test.split_merge(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), value0,
                        {2u, 1u, false, InsertType::LAST},
-                       std::nullopt).get0();
+                       std::nullopt).get();
       test.split_merge(make_ghobj(5, 5, 5, "ns3", "oid3", 3, 3), value0,
                        {2u, 2u, false, InsertType::LAST},
-                       std::nullopt).get0();
+                       std::nullopt).get();
 
       auto value1 = test.create_value(316);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left middle at stage 0, 1, 2, 1, 0\n");
       test.split_merge(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), value1,
                        {1u, 0u, true, InsertType::MID},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), value1,
                        {1u, 1u, true, InsertType::MID},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(2, 2, 3, "ns3", "oid3", 3, 3), value1,
                        {1u, 2u, true, InsertType::MID},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), value1,
                        {1u, 1u, true, InsertType::MID},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), value1,
                        {1u, 0u, true, InsertType::MID},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left back at stage 0, 1, 0\n");
       test.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2", 5, 5), value1,
                        {1u, 0u, true, InsertType::LAST},
-                       {make_ghobj(3, 3, 3, "ns3", "oid3", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns3", "oid3", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), value1,
                        {1u, 1u, true, InsertType::LAST},
-                       {make_ghobj(3, 3, 3, "ns3", "oid3", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns3", "oid3", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns3", "oid3", 1, 1), value1,
                        {1u, 0u, true, InsertType::LAST},
-                       {make_ghobj(3, 3, 3, "ns3", "oid3", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns3", "oid3", 2, 2)}).get();
 
       auto value2 = test.create_value(452);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to right front at stage 0, 1, 0\n");
       test.split_merge(make_ghobj(3, 3, 3, "ns3", "oid3", 5, 5), value2,
                        {1u, 0u, false, InsertType::BEGIN},
-                       {make_ghobj(3, 3, 3, "ns4", "oid4", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns4", "oid4", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns3", "oid4", 3, 3), value2,
                        {1u, 1u, false, InsertType::BEGIN},
-                       {make_ghobj(3, 3, 3, "ns4", "oid4", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns4", "oid4", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 1, 1), value2,
                        {1u, 0u, false, InsertType::BEGIN},
-                       {make_ghobj(3, 3, 3, "ns4", "oid4", 2, 2)}).get0();
+                       {make_ghobj(3, 3, 3, "ns4", "oid4", 2, 2)}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to right middle at stage 0, 1, 2, 1, 0\n");
       test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), value2,
                        {1u, 0u, false, InsertType::MID},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), value2,
                        {1u, 1u, false, InsertType::MID},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), value2,
                        {1u, 2u, false, InsertType::MID},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), value2,
                        {1u, 1u, false, InsertType::MID},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), value2,
                        {1u, 0u, false, InsertType::MID},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
 
       auto value3 = test.create_value(834);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to right middle at stage 0, 1, 2, 1, 0\n");
       test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), value3,
                        {0u, 0u, false, InsertType::MID},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), value3,
                        {0u, 1u, false, InsertType::MID},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), value3,
                        {0u, 2u, false, InsertType::MID},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), value3,
                        {0u, 1u, false, InsertType::MID},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
       test.split_merge(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), value3,
                        {0u, 0u, false, InsertType::MID},
-                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to right front at stage 0\n");
       test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 2, 3), value3,
                        {0u, 0u, false, InsertType::BEGIN},
-                       {make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3)}).get0();
+                       {make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3)}).get();
 
       auto value4 = test.create_value(572);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to left back at stage 0\n");
       test.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2", 3, 4), value4,
                        {0u, 0u, true, InsertType::LAST},
-                       {make_ghobj(3, 3, 3, "ns2", "oid2", 4, 4)}).get0();
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 4, 4)}).get();
     }
 
     {
       TestTree test;
-      test.build_tree({2, 4}, {2, 4}, {2, 4}, 232).get0();
+      test.build_tree({2, 4}, {2, 4}, {2, 4}, 232).get();
       auto value = test.create_value(1996);
       logger().info("\n---------------------------------------------"
                     "\nsplit at [0, 0, 0]; insert to left front at stage 2, 1, 0\n");
       test.split_merge(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), value,
                        {2u, 2u, true, InsertType::BEGIN},
-                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get();
       EXPECT_TRUE(last_split.match_split_pos({0, {0, {0}}}));
       test.split_merge(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), value,
                        {2u, 1u, true, InsertType::BEGIN},
-                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get();
       EXPECT_TRUE(last_split.match_split_pos({0, {0, {0}}}));
       test.split_merge(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), value,
                        {2u, 0u, true, InsertType::BEGIN},
-                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get();
       EXPECT_TRUE(last_split.match_split_pos({0, {0, {0}}}));
     }
 
@@ -817,21 +815,21 @@ TEST_F(c_dummy_test_t, 4_split_merge_leaf_node)
       std::vector<test_item_t> values = {
         test.create_value(1360),
         test.create_value(1632)};
-      test.build_tree(keys, values).get0();
+      test.build_tree(keys, values).get();
       auto value = test.create_value(1640);
       logger().info("\n---------------------------------------------"
                     "\nsplit at [END, END, END]; insert to right at stage 0, 1, 2\n");
       test.split_merge(make_ghobj(3, 3, 3, "ns3", "oid3", 4, 4), value,
                        {0u, 0u, false, InsertType::BEGIN},
-                       std::nullopt).get0();
+                       std::nullopt).get();
       EXPECT_TRUE(last_split.match_split_pos({1, {0, {1}}}));
       test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3), value,
                        {1u, 1u, false, InsertType::BEGIN},
-                       std::nullopt).get0();
+                       std::nullopt).get();
       EXPECT_TRUE(last_split.match_split_pos({1, {1, {0}}}));
       test.split_merge(make_ghobj(4, 4, 4, "ns3", "oid3", 3, 3), value,
                        {2u, 2u, false, InsertType::BEGIN},
-                       std::nullopt).get0();
+                       std::nullopt).get();
       EXPECT_TRUE(last_split.match_split_pos({2, {0, {0}}}));
     }
   });
@@ -1179,14 +1177,14 @@ class DummyChildPool {
       with_trans_intr(pool_clone.get_context().t, [&] (auto &t) {
         return node_to_split->insert_and_split(
           pool_clone.get_context(), key, pool_clone.splitable_nodes);
-      }).unsafe_get0();
+      }).unsafe_get();
       {
         std::ostringstream oss;
         pool_clone.p_btree->dump(pool_clone.t(), oss);
         logger().info("dump new root:\n{}", oss.str());
       }
       auto &pt = pool_clone.t();
-      EXPECT_EQ(INTR(pool_clone.p_btree->height, pt).unsafe_get0(), 3);
+      EXPECT_EQ(INTR(pool_clone.p_btree->height, pt).unsafe_get(), 3);
       EXPECT_TRUE(last_split.match(expected));
       EXPECT_EQ(pool_clone.p_dummy->size(), 3);
 
@@ -1197,9 +1195,9 @@ class DummyChildPool {
       with_trans_intr(pool_clone.get_context().t, [&] (auto &t) {
         return node_to_split->merge(
           pool_clone.get_context(), std::move(node_to_split));
-      }).unsafe_get0();
+      }).unsafe_get();
       auto &pt2 = pool_clone.t();
-      EXPECT_EQ(INTR(pool_clone.p_btree->height ,pt2).unsafe_get0(), 2);
+      EXPECT_EQ(INTR(pool_clone.p_btree->height ,pt2).unsafe_get(), 2);
       EXPECT_EQ(pool_clone.p_dummy->size(), 1);
     });
   }
@@ -1217,17 +1215,17 @@ class DummyChildPool {
                     pos, node_to_fix->get_name(), key_hobj_t(new_key), expect_split);
       with_trans_intr(pool_clone.get_context().t, [&] (auto &t) {
         return node_to_fix->fix_key(pool_clone.get_context(), new_key);
-      }).unsafe_get0();
+      }).unsafe_get();
       if (expect_split) {
         std::ostringstream oss;
         pool_clone.p_btree->dump(pool_clone.t(), oss);
         logger().info("dump new root:\n{}", oss.str());
         auto &pt = pool_clone.t();
-        EXPECT_EQ(INTR(pool_clone.p_btree->height, pt).unsafe_get0(), 3);
+        EXPECT_EQ(INTR(pool_clone.p_btree->height, pt).unsafe_get(), 3);
         EXPECT_EQ(pool_clone.p_dummy->size(), 3);
       } else {
         auto &pt = pool_clone.t();
-        EXPECT_EQ(INTR(pool_clone.p_btree->height, pt).unsafe_get0(), 2);
+        EXPECT_EQ(INTR(pool_clone.p_btree->height, pt).unsafe_get(), 2);
         EXPECT_EQ(pool_clone.p_dummy->size(), 1);
       }
 
@@ -1236,9 +1234,9 @@ class DummyChildPool {
                     pos, node_to_fix->get_name(), key_hobj_t(old_key));
       with_trans_intr(pool_clone.get_context().t, [&] (auto &t) {
           return node_to_fix->fix_key(pool_clone.get_context(), old_key);
-      }).unsafe_get0();
+      }).unsafe_get();
       auto &pt = pool_clone.t();
-      EXPECT_EQ(INTR(pool_clone.p_btree->height, pt).unsafe_get0(), 2);
+      EXPECT_EQ(INTR(pool_clone.p_btree->height, pt).unsafe_get(), 2);
       EXPECT_EQ(pool_clone.p_dummy->size(), 1);
     });
   }
@@ -1252,7 +1250,7 @@ class DummyChildPool {
     auto &pt = pool_clone.t();
     [[maybe_unused]] auto &tr = t();
     INTR_R(pool_clone.p_btree->test_clone_from,
-      pt, tr, *p_btree).unsafe_get0();
+      pt, tr, *p_btree).unsafe_get();
     pool_clone_in_progress = nullptr;
   }
 
@@ -1333,7 +1331,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 2, 2));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 3, 3));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 4, 4));
-      pool.build_tree(keys).unsafe_get0();
+      pool.build_tree(keys).unsafe_get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right front at stage 0, 1, 2, 1, 0\n");
@@ -1406,7 +1404,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 5, 5));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 6, 6));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 7, 7));
-      pool.build_tree(keys).unsafe_get0();
+      pool.build_tree(keys).unsafe_get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left back at stage 0, 1, 2, 1\n");
@@ -1433,7 +1431,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.insert(make_ghobj(4, 4, 4, "n", "o", 3, 3));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 5, 5));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 6, 6));
-      pool.build_tree(keys).unsafe_get0();
+      pool.build_tree(keys).unsafe_get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left back at stage (0, 1, 2, 1,) 0\n");
@@ -1449,7 +1447,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 2, 2));
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 3, 3));
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 4, 4));
-      pool.build_tree(keys).unsafe_get0();
+      pool.build_tree(keys).unsafe_get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to right front at stage 0, 1, 0\n");
@@ -1473,7 +1471,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 2, 2));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 3, 3));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 4, 4));
-      pool.build_tree(keys).unsafe_get0();
+      pool.build_tree(keys).unsafe_get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left back at stage 0, 1\n");
@@ -1504,7 +1502,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 2, 2));
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 3, 3));
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 4, 4));
-      pool.build_tree(keys).unsafe_get0();
+      pool.build_tree(keys).unsafe_get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left back at stage (0, 1,) 0\n");
@@ -1519,7 +1517,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding);
       keys.insert(make_ghobj(5, 5, 5, "ns3", "oid3" + std::string(270, '_'), 3, 3));
       keys.insert(make_ghobj(9, 9, 9, "ns~last", "oid~last", 9, 9));
-      pool.build_tree(keys).unsafe_get0();
+      pool.build_tree(keys).unsafe_get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to right front at stage 0\n");
@@ -1544,7 +1542,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding);
       keys.insert(make_ghobj(4, 4, 4, "ns5", "oid5" + padding, 3, 3));
       keys.insert(make_ghobj(9, 9, 9, "ns~last", "oid~last", 9, 9));
-      pool.build_tree(keys).unsafe_get0();
+      pool.build_tree(keys).unsafe_get();
 
       logger().info("\n---------------------------------------------"
                     "\nfix end index from stage 1 to 0, 1, 2\n");
@@ -1651,7 +1649,7 @@ TEST_P(d_seastore_tm_test_t, 6_random_tree_insert_erase)
     {
       auto t = create_read_transaction();
       INTR(tree->validate, *t).unsafe_get();
-      EXPECT_EQ(INTR(tree->height, *t).unsafe_get0(), 1);
+      EXPECT_EQ(INTR(tree->height, *t).unsafe_get(), 1);
     }
 
     if constexpr (!TEST_SEASTORE) {
@@ -1692,8 +1690,8 @@ TEST_P(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 	    return submit_transaction_fut(*t);
 	  });
 	});
-    }).unsafe_get0();
-    epm->run_background_work_until_halt().get0();
+    }).unsafe_get();
+    epm->run_background_work_until_halt().get();
 
     // insert
     logger().warn("start inserting {} kvs ...", kvs.size());
@@ -1712,8 +1710,8 @@ TEST_P(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 		return submit_transaction_fut(*t);
 	      });
 	    });
-        }).unsafe_get0();
-        epm->run_background_work_until_halt().get0();
+        }).unsafe_get();
+        epm->run_background_work_until_halt().get();
         ++iter;
       }
     }
@@ -1721,7 +1719,7 @@ TEST_P(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
     {
       p_nm->set_generate_eagain(false);
       auto t = create_read_transaction();
-      INTR(tree->get_stats, *t).unsafe_get0();
+      INTR(tree->get_stats, *t).unsafe_get();
       p_nm->set_generate_eagain(true);
     }
 
@@ -1736,7 +1734,7 @@ TEST_P(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
           auto t = create_read_transaction();
           return INTR_R(tree->validate_one, *t, iter
           ).safe_then([t=std::move(t)]{});
-        }).unsafe_get0();
+        }).unsafe_get();
         ++iter;
       }
     }
@@ -1758,8 +1756,8 @@ TEST_P(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 		return submit_transaction_fut(*t);
 	      });
 	    });
-        }).unsafe_get0();
-        epm->run_background_work_until_halt().get0();
+        }).unsafe_get();
+        epm->run_background_work_until_halt().get();
         ++iter;
       }
       kvs.erase_from_random(kvs.random_begin(), kvs.random_end());
@@ -1768,9 +1766,9 @@ TEST_P(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
     {
       p_nm->set_generate_eagain(false);
       auto t = create_read_transaction();
-      INTR(tree->get_stats, *t).unsafe_get0();
-      INTR(tree->validate, *t).unsafe_get0();
-      EXPECT_EQ(INTR(tree->height,*t).unsafe_get0(), 1);
+      INTR(tree->get_stats, *t).unsafe_get();
+      INTR(tree->validate, *t).unsafe_get();
+      EXPECT_EQ(INTR(tree->height,*t).unsafe_get(), 1);
     }
 
     // we can adjust EAGAIN_PROBABILITY to get a proper eagain_rate

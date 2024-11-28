@@ -22,7 +22,6 @@ tasks:
 - install.upgrade:
     # upgrade the single cluster node, which is running all the mon/mds/osd/mgr daemons
     mon.a:
-      branch: quincy
 - print: "**** done install.upgrade the host"
 - ceph.restart:
     daemons: [mon.*, mgr.*]
@@ -42,7 +41,7 @@ tasks:
     mon.a:
     - ceph versions
     - ceph osd dump -f json-pretty
-    - ceph osd require-osd-release quincy
+    - ceph osd require-osd-release squid
     - for f in `ceph osd pool ls` ; do ceph osd pool set $f pg_autoscale_mode off ; done
 - ceph.healthy:
 - print: "**** done ceph.restart"

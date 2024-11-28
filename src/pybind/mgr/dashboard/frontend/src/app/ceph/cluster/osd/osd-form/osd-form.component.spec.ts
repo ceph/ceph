@@ -237,6 +237,7 @@ describe('OsdFormComponent', () => {
 
     describe('without data devices selected', () => {
       it('should disable preview button', () => {
+        component.simpleDeployment = false;
         expectPreviewButton(false);
       });
 

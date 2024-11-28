@@ -19,6 +19,7 @@ export class Permissions {
   monitor: Permission;
   rbdImage: Permission;
   iscsi: Permission;
+  nvmeof: Permission;
   rbdMirroring: Permission;
   rgw: Permission;
   cephfs: Permission;
@@ -37,6 +38,7 @@ export class Permissions {
     this.monitor = new Permission(serverPermissions['monitor']);
     this.rbdImage = new Permission(serverPermissions['rbd-image']);
     this.iscsi = new Permission(serverPermissions['iscsi']);
+    this.nvmeof = new Permission(serverPermissions['nvme-of']);
     this.rbdMirroring = new Permission(serverPermissions['rbd-mirroring']);
     this.rgw = new Permission(serverPermissions['rgw']);
     this.cephfs = new Permission(serverPermissions['cephfs']);

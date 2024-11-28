@@ -766,13 +766,13 @@ class FSSnapshotMirror:
                         } # type: Dict[str, Any]
                         daemon_status = self.mgr.get_daemon_status('cephfs-mirror', daemon_key)
                         if not daemon_status:
-                            log.debug(f'daemon status not yet availble for cephfs-mirror daemon: {daemon_key}')
+                            log.debug(f'daemon status not yet available for cephfs-mirror daemon: {daemon_key}')
                             continue
                         status = json.loads(daemon_status['status_json'])
                         for fs_id, fs_desc in status.items():
                             fs = {'filesystem_id'   : int(fs_id),
                                 'name'            : fs_desc['name'],
-                                'directory_count' : fs_desc['directory_count'],
+                                'directory_count' : fs_desc.get('directory_count', 0),
                                 'peers'           : []
                             } # type: Dict[str, Any]
                             for peer_uuid, peer_desc in fs_desc['peers'].items():

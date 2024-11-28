@@ -31,7 +31,8 @@ CONFIG: Dict[str, Any] = {
 
 
 def get_logger(name: str, level: Union[int, str] = logging.NOTSET) -> logging.Logger:
-    if level == logging.NOTSET:
+    log_level: Union[int, str] = level
+    if log_level == logging.NOTSET:
         log_level = CONFIG['logging']['level']
     logger = logging.getLogger(name)
     logger.setLevel(log_level)
@@ -183,7 +184,9 @@ def http_req(hostname: str = '',
             response_code = response.code
         return response_headers, response_str.decode(), response_code
     except (HTTPError, URLError) as e:
-        print(f'{e}')
+        # Log level is debug only.
+        # We let whatever calls `http_req()` catching and printing the error
+        logger.debug(f'url={url} err={e}')
         # handle error here if needed
         raise
 

@@ -262,8 +262,8 @@ Using custom images
 ~~~~~~~~~~~~~~~~~~~
 
 It is possible to install or upgrade monitoring components based on other
-images.  To do so, the name of the image to be used needs to be stored in the
-configuration first.  The following configuration options are available.
+images. The ID of the image that you plan to use must be stored in the
+configuration. The following configuration options are available:
 
 - ``container_image_prometheus``
 - ``container_image_grafana``
@@ -279,51 +279,53 @@ configuration first.  The following configuration options are available.
 - ``container_image_jaeger_collector``
 - ``container_image_jaeger_query``
 
-Custom images can be set with the ``ceph config`` command
+Custom images can be set with the ``ceph config`` command. To set custom images, run a command of the following form:
+ 
+.. prompt:: bash #
 
-.. code-block:: bash
+   ceph config set mgr mgr/cephadm/<option_name> <value>
 
-     ceph config set mgr mgr/cephadm/<option_name> <value>
-
-For example
-
-.. code-block:: bash
-
-     ceph config set mgr mgr/cephadm/container_image_prometheus prom/prometheus:v1.4.1
-
-If there were already running monitoring stack daemon(s) of the type whose
-image you've changed, you must redeploy the daemon(s) in order to have them
-actually use the new image.
-
-For example, if you had changed the prometheus image
+For example:
 
 .. prompt:: bash #
 
-     ceph orch redeploy prometheus
+   ceph config set mgr mgr/cephadm/container_image_prometheus prom/prometheus:v1.4.1
+
+If you were already running monitoring stack daemon(s) of the same image type
+that you changed, then you must redeploy the daemon(s) in order to make them
+use the new image.
+
+For example, if you changed the Prometheus image, you would have to run the
+following command in order to pick up the changes:
+
+.. prompt:: bash #
+
+   ceph orch redeploy prometheus
 
 
 .. note::
 
      By setting a custom image, the default value will be overridden (but not
-     overwritten).  The default value changes when updates become available.
-     By setting a custom image, you will not be able to update the component
-     you have set the custom image for automatically.  You will need to
-     manually update the configuration (image name and tag) to be able to
-     install updates.
+     overwritten). The default value will change when an update becomes
+     available. If you set a custom image, you will not be able automatically
+     to update the component you have modified with the custom image. You will
+     need to manually update the configuration (that includes the image name
+     and the tag) to be able to install updates.
 
-     If you choose to go with the recommendations instead, you can reset the
-     custom image you have set before.  After that, the default value will be
-     used again.  Use ``ceph config rm`` to reset the configuration option
+     If you choose to accept the recommendations, you can reset the custom
+     image that you have set before. If you do this, the default value will be
+     used again.  Use ``ceph config rm`` to reset the configuration option, in
+     a command of the following form:
 
-     .. code-block:: bash
+     .. prompt:: bash #
 
-          ceph config rm mgr mgr/cephadm/<option_name>
+        ceph config rm mgr mgr/cephadm/<option_name>
 
-     For example
+     For example:
 
-     .. code-block:: bash
+     .. prompt:: bash #
 
-          ceph config rm mgr mgr/cephadm/container_image_prometheus
+        ceph config rm mgr mgr/cephadm/container_image_prometheus
 
 See also :ref:`cephadm-airgap`.
 
@@ -343,7 +345,7 @@ definition and management of the embedded Prometheus service. The endpoint liste
 ``https://<mgr-ip>:8765/sd/`` (the port is
 configurable through the variable ``service_discovery_port``) and returns scrape target
 information in `http_sd_config format
-<https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config/>`_
+<https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config>`_
 
 Customers with external monitoring stack can use `ceph-mgr` service discovery endpoint
 to get scraping configuration. Root certificate of the server can be obtained by the

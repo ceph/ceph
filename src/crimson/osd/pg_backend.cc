@@ -163,15 +163,10 @@ PGBackend::mutate_object(
 {
   logger().trace("mutate_object: num_ops={}", txn.get_num_ops());
   if (obc->obs.exists) {
-#if 0
-    obc->obs.oi.version = ctx->at_version;
-    obc->obs.oi.prior_version = ctx->obs->oi.version;
-#endif
-
     obc->obs.oi.prior_version = obc->obs.oi.version;
     obc->obs.oi.version = osd_op_p.at_version;
-    if (osd_op_p.user_at_version > obc->obs.oi.user_version)
-      obc->obs.oi.user_version = osd_op_p.user_at_version;
+    if (osd_op_p.user_modify)
+      obc->obs.oi.user_version = osd_op_p.at_version.version;
     obc->obs.oi.last_reqid = osd_op_p.req_id;
     obc->obs.oi.mtime = osd_op_p.mtime;
     obc->obs.oi.local_mtime = ceph_clock_now();
@@ -241,13 +236,19 @@ PGBackend::read(const ObjectState& os, OSDOp& osd_op,
       (op.extent.truncate_size < size)) {
     size = op.extent.truncate_size;
   }
-  if (offset >= size) {
-    // read size was trimmed to zero and it is expected to do nothing,
-    return read_errorator::now();
-  }
   if (!length) {
     // read the whole object if length is 0
     length = size;
+  }
+  if (offset >= size) {
+    // read size was trimmed to zero and it is expected to do nothing,
+    return read_errorator::now();
+  } else if (offset + length > size) {
+    length = size - op.extent.offset;
+    if (!length) {
+      // this is the second trimmed_read case
+      return read_errorator::now();
+    }
   }
   return _read(oi.soid, offset, length, op.flags).safe_then_interruptible_tuple(
     [&delta_stats, &oi, &osd_op](auto&& bl) -> read_errorator::future<> {
@@ -341,8 +342,6 @@ namespace {
     auto init_value_p = init_value_bl.cbegin();
     try {
       decode(init_value, init_value_p);
-      // chop off the consumed part
-      init_value_bl.splice(0, init_value_p.get_off());
     } catch (const ceph::buffer::end_of_buffer&) {
       logger().warn("{}: init value not provided", __func__);
       return crimson::ct_error::invarg::make();
@@ -993,8 +992,6 @@ PGBackend::create_iertr::future<> PGBackend::create(
     }
   }
   maybe_create_new_object(os, txn, delta_stats);
-  txn.create(coll->get_cid(),
-             ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
   return seastar::now();
 }
 

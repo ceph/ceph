@@ -86,8 +86,8 @@ int execute(const po::variables_map &vm,
 }
 
 Shell::Action action(
-  {"rename"}, {"mv"}, "Rename image within pool.", "", &get_arguments,
-  &execute);
+  {"rename"}, {"mv"}, "Rename an image within its pool or namespace.", "",
+  &get_arguments, &execute);
 
 } // namespace rename
 } // namespace action

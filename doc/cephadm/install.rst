@@ -1,8 +1,8 @@
 .. _cephadm_deploying_new_cluster:
 
-============================
-Deploying a new Ceph cluster
-============================
+==========================================
+Using cephadm to Deploy a New Ceph Cluster
+==========================================
 
 Cephadm creates a new Ceph cluster by bootstrapping a single
 host, expanding the cluster to encompass any additional hosts, and
@@ -23,6 +23,10 @@ Requirements
 
 Any modern Linux distribution should be sufficient.  Dependencies
 are installed automatically by the bootstrap process below.
+
+See `Docker Live Restore <https://docs.docker.com/engine/daemon/live-restore/>`_
+for an optional feature that allows restarting Docker Engine without restarting
+all running containers.
 
 See the section :ref:`Compatibility With Podman
 Versions<cephadm-compatibility-with-podman>` for a table of Ceph versions that

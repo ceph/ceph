@@ -585,7 +585,7 @@ int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, opti
 
       std::unique_ptr<rgw::sal::Object> object = get_object(key);
 
-      ret = object->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP);
+      ret = object->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
       if (ret < 0 && ret != -ENOENT) {
         ldpp_dout(dpp, 0) << "ERROR: remove_bucket rgw_remove_object failed rc=" << ret << dendl;
 	      return ret;
@@ -1502,7 +1502,11 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
   return 0;
 }
 
-int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
+int MotrObject::delete_object(const DoutPrefixProvider* dpp,
+    optional_yield y,
+    uint32_t flags,
+    std::list<rgw_obj_index_key>* remove_objs,
+    RGWObjVersionTracker* objv)
 {
   MotrObject::MotrDeleteOp del_op(this);
   del_op.params.bucket_owner = bucket->get_info().owner;
@@ -2668,7 +2672,8 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				   RGWCompressionInfo& cs_info, off_t& off,
 				   std::string& tag, ACLOwner& owner,
 				   uint64_t olh_epoch,
-				   rgw::sal::Object* target_obj)
+				   rgw::sal::Object* target_obj,
+				   prefix_map_t& processed_prefixes)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -2762,9 +2767,13 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
       bool part_compressed = (part->cs_info.compression_type != "none");
       if ((handled_parts > 0) &&
           ((part_compressed != compressed) ||
-            (cs_info.compression_type != part->cs_info.compression_type))) {
-          ldpp_dout(dpp, 0) << "ERROR: compression type was changed during multipart upload ("
-                           << cs_info.compression_type << ">>" << part->cs_info.compression_type << ")" << dendl;
+           (cs_info.compression_type != obj_part.cs_info.compression_type) ||
+           (cs_info.compressor_message.has_value() &&
+           (cs_info.compressor_message != obj_part.cs_info.compressor_message)))) {
+          ldpp_dout(dpp, 0) << "ERROR: compression type or compressor message was changed during multipart upload ("
+                           << cs_info.compression_type << ">>" << part->cs_info.compression_type << "),"
+                           << cs_info.compressor_message << ">>" << obj_part.cs_info.compressor_message << ")"
+                           << dendl;
           rc = -ERR_INVALID_PART;
           return rc;
       }
@@ -2784,8 +2793,11 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
           cs_info.blocks.push_back(cb);
           new_ofs = cb.new_ofs + cb.len;
         }
-        if (!compressed)
+        if (!compressed) {
           cs_info.compression_type = part->cs_info.compression_type;
+          if (obj_part.cs_info.compressor_message.has_value())
+            cs_info.compressor_message = obj_part.cs_info.compressor_message;
+        }
         cs_info.orig_size += part->cs_info.orig_size;
         compressed = true;
       }
@@ -2869,6 +2881,15 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): remove from bucket multipartindex " << dendl;
   return store->do_idx_op_by_name(bucket_multipart_iname,
                                   M0_IC_DEL, meta_obj->get_key().get_oid(), bl);
+}
+
+int MotrMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+    CephContext *cct, optional_yield y,
+    const rgw_obj& obj,
+    std::list<rgw_obj_index_key>& remove_objs,
+    prefix_map_t& processed_prefixes)
+{
+  return -ENOTSUP;
 }
 
 int MotrMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs)

@@ -131,13 +131,3 @@ class TestWriteUnicode(object):
         writer.seek(0)
         val = buffer.getvalue()
         assert self.octpus_and_squid_en.encode(encoding) in val
-
-    def test_writer_uses_log_on_unicodeerror(self, stream, monkeypatch, capture):
-
-        if sys.version_info > (3,):
-            pytest.skip("Something breaks inside of pytest's capsys")
-        monkeypatch.setattr(terminal.terminal_logger, 'info', capture)
-        buffer = io.BytesIO()
-        writer = stream(buffer, 'ascii')
-        terminal._Write(_writer=writer).raw(self.message)
-        assert self.octpus_and_squid_en in capture.calls[0]['args'][0]

@@ -68,6 +68,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   telemetryEnabled: boolean;
   telemetryURL = 'https://telemetry-public.ceph.com/';
   origin = window.location.origin;
+  private subs = new Subscription();
 
   constructor(
     private summaryService: SummaryService,
@@ -106,6 +107,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   ngOnDestroy() {
     this.interval.unsubscribe();
     this.prometheusService.unsubscribe();
+    this.subs?.unsubscribe();
   }
 
   getHealth() {
@@ -125,11 +127,13 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.orchestratorService.getName().subscribe((data: string) => {
       this.detailsCardData.orchestrator = data;
     });
-    this.summaryService.subscribe((summary) => {
-      const version = summary.version.replace('ceph version ', '').split(' ');
-      this.detailsCardData.cephVersion =
-        version[0] + ' ' + version.slice(2, version.length).join(' ');
-    });
+    this.subs.add(
+      this.summaryService.subscribe((summary) => {
+        const version = summary.version.replace('ceph version ', '').split(' ');
+        this.detailsCardData.cephVersion =
+          version[0] + ' ' + version.slice(2, version.length).join(' ');
+      })
+    );
   }
 
   getCapacityCardData() {

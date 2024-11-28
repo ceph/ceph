@@ -50,7 +50,7 @@ if [ ! -s $JOURNAL_FILE ] ; then
 fi
 
 # Can we execute a journal reset?
-$BIN journal reset
+$BIN journal reset --yes-i-really-really-mean-it
 $BIN journal inspect
 $BIN header get
 
@@ -86,6 +86,6 @@ $BIN event splice summary
 # Metadata objects have been modified by the 'event recover_dentries' command.
 # Journal is no long consistent with respect to metadata objects (especially inotable).
 # To ensure mds successfully replays its journal, we need to do journal reset.
-$BIN journal reset
+$BIN journal reset --yes-i-really-really-mean-it
 cephfs-table-tool all reset session
 

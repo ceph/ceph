@@ -91,6 +91,14 @@
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('owner', frm, 'required')"
                   i18n>This field is required.</span>
+            <cd-alert-panel
+              type="info"
+              *ngIf="bucketForm.get('owner').disabled"
+              spacingClass="me-1 mt-1"
+              i18n>
+                The bucket is owned by an account. UI does not support changing
+                the ownership of bucket owned by an account.
+            </cd-alert-panel>
           </div>
         </div>
 
@@ -387,6 +395,41 @@
           </div>
         </fieldset>
 
+        <!-- Replication -->
+        <fieldset>
+          <legend class="cd-header"
+                  i18n>Replication</legend>
+          <div class="form-group row">
+            <label class="cd-col-form-label pt-0"
+                   for="replication"
+                   i18n>
+                    Enable
+            </label>
+            <div class="cd-col-form-input"
+                 *ngIf="{status: multisiteStatus$, isDefaultZg: isDefaultZoneGroup$ | async} as multisiteStatus; else loadingTpl">
+              <input type="checkbox"
+                     class="form-check-input"
+                     id="replication"
+                     name="replication"
+                     formControlName="replication"
+                     [attr.disabled]="!multisiteStatus.isDefaultZg && !multisiteStatus.status.available ? true : null">
+              <cd-help-text>
+                <span i18n>Enables replication for the objects in the bucket.</span>
+              </cd-help-text>
+              <div class="mt-1"
+                   *ngIf="!editing">
+                <cd-alert-panel type="info"
+                                class="me-1"
+                                id="replication-info"
+                                i18n>
+                  A bi-directional sync policy group will be created by the dashboard along with flows and pipes.
+                  The pipe id will then be used for applying the replication policy to the bucket.
+                </cd-alert-panel>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
         <!-- Tags -->
         <fieldset>
           <legend class="cd-header"
@@ -432,15 +475,15 @@
                             class="form-control resize-vertical"
                             id="bucket_policy"
                             formControlName="bucket_policy"
-                            (change)="bucketPolicyOnChange()">
+                            (change)="textAreaOnChange('bucketPolicyTextArea')">
                   </textarea>
                   <span class="invalid-feedback"
                         *ngIf="bucketForm.showError('bucket_policy', frm, 'invalidJson')"
-                        i18n>Invalid json text</span>
+                        i18n>Invalid json text.</span>
                   <button type="button"
                           id="clear-bucket-policy"
                           class="btn btn-light my-3"
-                          (click)="clearBucketPolicy()"
+                          (click)="clearTextArea('bucket_policy', '{}')"
                           i18n>
                     <i [ngClass]="[icons.destroy]"></i>
                     Clear
@@ -463,6 +506,50 @@
                             i18n>
                       <i [ngClass]="[icons.externalUrl]"></i>
                       Policy generator
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Lifecycle -->
+              <div *ngIf="editing"
+                   class="form-group row">
+              <label i18n
+                     class="cd-col-form-label"
+                     for="id">Lifecycle
+                <cd-helper>JSON or XML formatted document</cd-helper>
+              </label>
+                <div class="cd-col-form-input">
+                  <textarea #lifecycleTextArea
+                            class="form-control resize-vertical"
+                            id="lifecycle"
+                            formControlName="lifecycle"
+                            (change)="textAreaOnChange('lifecycleTextArea')">
+                  </textarea>
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('lifecycle', frm, 'invalidJson')"
+                        i18n>Invalid json text.</span>
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('lifecycle', frm, 'invalidXml')"
+                        i18n>Invalid xml text.</span>
+                  <button type="button"
+                          id="clear-lifecycle"
+                          class="btn btn-light my-3"
+                          (click)="clearTextArea('lifecycle', '{}')"
+                          i18n>
+                    <i [ngClass]="[icons.destroy]"></i>
+                    Clear
+                  </button>
+                  <div class="btn-group float-end"
+                       role="group"
+                       aria-label="bucket-policy-helpers">
+                    <button type="button"
+                            id="lifecycle-examples-button"
+                            class="btn btn-light my-3"
+                            (click)="openUrl('https://docs.aws.amazon.com/cli/latest/reference/s3api/put-bucket-lifecycle.html#examples')"
+                            i18n>
+                      <i [ngClass]="[icons.externalUrl]"></i>
+                      Policy examples
                     </button>
                   </div>
                 </div>
@@ -592,5 +679,11 @@
             (click)="deleteTag(index)">
       <i [ngClass]="[icons.trash]"></i>
     </button>
+  </div>
+</ng-template>
+
+<ng-template #loadingTpl>
+  <div class="cd-col-form-input">
+    <cd-loading-panel i18n>Checking multi-site status...</cd-loading-panel>
   </div>
 </ng-template>

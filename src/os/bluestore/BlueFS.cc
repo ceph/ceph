@@ -490,7 +490,7 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
       break;
     case BDEV_DB:
     case BDEV_NEWDB:
-      reserved = DB_SUPER_RESERVED;
+      reserved = SUPER_RESERVED;
       break;
     case BDEV_SLOW:
       reserved = 0;
@@ -544,6 +544,13 @@ uint64_t BlueFS::get_block_device_size(unsigned id) const
   if (id < bdev.size() && bdev[id])
     return bdev[id]->get_size();
   return 0;
+}
+
+BlockDevice* BlueFS::get_block_device(unsigned id) const
+{
+  if (id < bdev.size() && bdev[id])
+    return bdev[id];
+  return nullptr;
 }
 
 void BlueFS::handle_discard(unsigned id, interval_set<uint64_t>& to_release)
@@ -2763,7 +2770,6 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool permit_dev_fallback,
 
   // we're mostly done
   dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
-  logger->inc(l_bluefs_log_compactions);
 
   // Part 4
   // Finalization. Release old space.
@@ -4213,6 +4219,15 @@ bool BlueFS::debug_get_is_dev_dirty(FileWriter *h, uint8_t dev)
 {
   std::lock_guard l(h->lock);
   return h->dirty_devs[dev];
+}
+
+void BlueFS::collect_alerts(osd_alert_list_t& alerts) {
+  if (bdev[BDEV_DB]) {
+    bdev[BDEV_DB]->collect_alerts(alerts, "DB");
+  }
+  if (bdev[BDEV_WAL]) {
+    bdev[BDEV_WAL]->collect_alerts(alerts, "WAL");
+  }
 }
 
 int BlueFS::open_for_read(

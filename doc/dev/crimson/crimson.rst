@@ -16,8 +16,7 @@ Building Crimson
 Crimson is not enabled by default. Enable it at build time by running::
 
   $ WITH_SEASTAR=true ./install-deps.sh
-  $ mkdir build && cd build
-  $ cmake -DWITH_SEASTAR=ON ..
+  $ ./do_cmake.sh -DWITH_SEASTAR=ON
 
 Please note, `ASan`_ is enabled by default if Crimson is built from a source
 cloned using ``git``.
@@ -28,7 +27,7 @@ Testing crimson with cephadm
 ===============================
 
 The Ceph CI/CD pipeline builds containers with
-``crimson-osd`` subsitituted for ``ceph-osd``.
+``crimson-osd`` substituted for ``ceph-osd``.
 
 Once a branch at commit <sha1> has been built and is available in
 ``shaman``, you can deploy it using the cephadm instructions outlined
@@ -44,8 +43,99 @@ use a Crimson build:
 You'll likely need to supply the ``--allow-mismatched-release`` flag to
 use a non-release branch.
 
-Additionally, prior to deploying OSDs, you'll need enable Crimson to
-direct the default pools to be created as Crimson pools.  From the cephadm shell run:
+Configure Crimson with Bluestore
+================================
+
+As Bluestore is not a Crimson native `object store backend`_,
+deploying Crimson with Bluestore as the back end requires setting
+one of the two following configuration options:
+
+.. note::
+
+   #. These two options, along with ``crimson_alien_op_num_threads``,
+      can't be changed after deployment.
+   #. `vstart.sh`_ sets these options using the ``--crimson-smp`` flag.
+
+
+1) ``crimson_seastar_num_threads``
+
+   In order to allow easier cluster deployments, this option can be used
+   instead of setting the CPU mask manually for each OSD.
+
+   It's recommended to let the **number of OSDs on each host** multiplied by
+   ``crimson_seastar_num_threads`` to be less than the node's number of CPU
+   cores (``nproc``).
+
+   For example, for deploying two nodes with eight CPU cores and two OSDs each:
+
+   .. code-block:: yaml
+
+      conf:
+        # Global to all OSDs
+        osd:
+          crimson seastar num threads: 3
+
+   .. note::
+
+      #. For optimal performance ``crimson_seastar_cpu_cores`` should be set instead.
+
+2) ``crimson_seastar_cpu_cores`` and ``crimson_alien_thread_cpu_cores``.
+
+   Explicitly set the CPU core allocation for each ``crimson-osd``
+   and for the BlueStore back end. It's recommended for each set to be mutually exclusive.
+
+   For example, for deploying two nodes with eight CPU cores and two OSDs each:
+
+   .. code-block:: yaml
+
+      conf:
+        # Both nodes
+        osd:
+          crimson alien thread cpu cores: 6-7
+
+        # First node
+        osd.0:
+          crimson seastar cpu cores: 0-2
+        osd.1:
+          crimson seastar cpu cores: 3-5
+
+        # Second node
+        osd.2:
+          crimson seastar cpu cores: 0-2
+        osd.3:
+          crimson seastar cpu cores: 3-5
+
+   For a single node with eight node and three OSDs:
+
+   .. code-block:: yaml
+
+        conf:
+          osd:
+            crimson alien thread cpu cores: 6-7
+          osd.0:
+            crimson seastar cpu cores: 0-1
+          osd.1:
+            crimson seastar cpu cores: 2-3
+          osd.2:
+            crimson seastar cpu cores: 4-5
+
+Running Crimson
+===============
+
+.. note::
+   Crimson is in a tech preview stage. 
+   As you might expect, Crimson does not yet have as extensive a feature set as does ceph-osd. 
+   Malfunctions including crashes and data loss are to be expected. 
+
+Enabling Crimson
+================
+
+After building Crimson and starting your cluster, but prior to deploying OSDs, you'll need to
+`Configure Crimson with Bluestore`_ and enable Crimson to
+direct the default pools to be created as Crimson pools.  You can proceed by running the following after you have a running cluster:
+
+.. note::
+   `vstart.sh`_ enables crimson automatically when `--crimson` is used.
 
 .. prompt:: bash #
 
@@ -53,9 +143,7 @@ direct the default pools to be created as Crimson pools.  From the cephadm shell
    ceph osd set-allow-crimson --yes-i-really-mean-it
    ceph config set mon osd_pool_default_crimson true
 
-The first command enables the ``crimson`` experimental feature.  Crimson
-is highly experimental, and malfunctions including crashes
-and data loss are to be expected.
+The first command enables the ``crimson`` experimental feature.  
 
 The second enables the ``allow_crimson`` OSDMap flag.  The monitor will
 not allow ``crimson-osd`` to boot without that flag.
@@ -64,13 +152,82 @@ The last causes pools to be created by default with the ``crimson`` flag.
 Crimson pools are restricted to operations supported by Crimson.
 ``Crimson-osd`` won't instantiate PGs from non-Crimson pools.
 
-Running Crimson
-===============
+vstart.sh
+=========
 
-As you might expect, Crimson does not yet have as extensive a feature set as does ``ceph-osd``.
+The following options can be used with ``vstart.sh``.
 
-object store backend
---------------------
+``--crimson``
+    Start ``crimson-osd`` instead of ``ceph-osd``.
+
+``--nodaemon``
+    Do not daemonize the service.
+
+``--redirect-output``
+    Redirect the ``stdout`` and ``stderr`` to ``out/$type.$num.stdout``.
+
+``--osd-args``
+    Pass extra command line options to ``crimson-osd`` or ``ceph-osd``.
+    This is useful for passing Seastar options to ``crimson-osd``. For
+    example, one can supply ``--osd-args "--memory 2G"`` to set the amount of
+    memory to use. Please refer to the output of::
+
+      crimson-osd --help-seastar
+
+    for additional Seastar-specific command line options.
+
+``--crimson-smp``
+    The number of cores to use for each OSD.
+    If BlueStore is used, the balance of available cores
+    (as determined by `nproc`) will be assigned to the object store.
+
+``--bluestore``
+    Use the alienized BlueStore as the object store backend. This is the default (see below section on the `object store backend`_ for more details)
+
+``--cyanstore``
+    Use CyanStore as the object store backend.
+
+``--memstore``
+    Use the alienized MemStore as the object store backend.
+
+``--seastore``
+    Use SeaStore as the back end object store.
+
+``--seastore-devs``
+    Specify the block device used by SeaStore.
+
+``--seastore-secondary-devs``
+    Optional.  SeaStore supports multiple devices.  Enable this feature by
+    passing the block device to this option.
+
+``--seastore-secondary-devs-type``
+    Optional.  Specify the type of secondary devices.  When the secondary
+    device is slower than main device passed to ``--seastore-devs``, the cold
+    data in faster device will be evicted to the slower devices over time.
+    Valid types include ``HDD``, ``SSD``(default), ``ZNS``, and ``RANDOM_BLOCK_SSD``
+    Note secondary devices should not be faster than the main device.
+
+To start a cluster with a single Crimson node, run::
+
+  $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh \
+    --without-dashboard --bluestore --crimson \
+    --redirect-output
+
+Another SeaStore example::
+
+  $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
+    --without-dashboard --seastore \
+    --crimson --redirect-output \
+    --seastore-devs /dev/sda \
+    --seastore-secondary-devs /dev/sdb \
+    --seastore-secondary-devs-type HDD
+
+Stop this ``vstart`` cluster by running::
+
+  $ ../src/stop.sh --crimson
+
+Object Store Backend
+====================
 
 At the moment, ``crimson-osd`` offers both native and alienized object store
 backends. The native object store backends perform IO using the SeaStar reactor.
@@ -91,7 +248,7 @@ managed by the Seastar framework. They are:
 
 .. describe:: memstore
 
-   The memory backed object store
+   The memory backend object store
 
 .. describe:: bluestore
 
@@ -109,7 +266,7 @@ a replica of the thread that called `fork()`_. Tackling this problem in Crimson
 would unnecessarily complicate the code.
 
 Since supported GNU/Linux distributions use ``systemd``, which is able to
-daemonize the application, there is no need to daemonize ourselves. 
+daemonize processes, there is no need to daemonize ourselves. 
 Those using sysvinit can use ``start-stop-daemon`` to daemonize ``crimson-osd``.
 If this is does not work out, a helper utility may be devised.
 
@@ -143,93 +300,19 @@ does not send log messages directly to a specified ``log_file``. It writes
 the logging messages to stdout and/or syslog. This behavior can be
 changed using ``--log-to-stdout`` and ``--log-to-syslog`` command line
 options. By default, ``log-to-stdout`` is enabled, and ``--log-to-syslog`` is disabled.
-
-
-vstart.sh
----------
-
-The following options can be used with ``vstart.sh``.
-
-``--crimson``
-    Start ``crimson-osd`` instead of ``ceph-osd``.
-
-``--nodaemon``
-    Do not daemonize the service.
-
-``--redirect-output``
-    Redirect the ``stdout`` and ``stderr`` to ``out/$type.$num.stdout``.
-
-``--osd-args``
-    Pass extra command line options to ``crimson-osd`` or ``ceph-osd``.
-    This is useful for passing Seastar options to ``crimson-osd``. For
-    example, one can supply ``--osd-args "--memory 2G"`` to set the amount of
-    memory to use. Please refer to the output of::
-
-      crimson-osd --help-seastar
-
-    for additional Seastar-specific command line options.
-
-``--cyanstore``
-    Use CyanStore as the object store backend.
-
-``--bluestore``
-    Use the alienized BlueStore as the object store backend. This is the default.
-
-``--memstore``
-    Use the alienized MemStore as the object store backend.
-
-``--seastore``
-    Use SeaStore as the back end object store.
-
-``--seastore-devs``
-    Specify the block device used by SeaStore.
-
-``--seastore-secondary-devs``
-    Optional.  SeaStore supports multiple devices.  Enable this feature by
-    passing the block device to this option.
-
-``--seastore-secondary-devs-type``
-    Optional.  Specify the type of secondary devices.  When the secondary
-    device is slower than main device passed to ``--seastore-devs``, the cold
-    data in faster device will be evicted to the slower devices over time.
-    Valid types include ``HDD``, ``SSD``(default), ``ZNS``, and ``RANDOM_BLOCK_SSD``
-    Note secondary devices should not be faster than the main device.
-
-To start a cluster with a single Crimson node, run::
-
-  $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
-    --without-dashboard --cyanstore \
-    --crimson --redirect-output \
-    --osd-args "--memory 4G"
-
-Here we assign 4 GiB memory and a single thread running on core-0 to ``crimson-osd``.
-
-Another SeaStore example::
-
-  $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
-    --without-dashboard --seastore \
-    --crimson --redirect-output \
-    --seastore-devs /dev/sda \
-    --seastore-secondary-devs /dev/sdb \
-    --seastore-secondary-devs-type HDD
-
-Stop this ``vstart`` cluster by running::
-
-  $ ../src/stop.sh --crimson
-
 Metrics and Tracing
 ===================
 
 Crimson offers three ways to report stats and metrics.
 
-pg stats reported to mgr
+PG stats reported to mgr
 ------------------------
 
 Crimson collects the per-pg, per-pool, and per-osd stats in a `MPGStats`
 message which is sent to the Ceph Managers. Manager modules can query
 them using the `MgrModule.get()` method.
 
-asock command
+Asock command
 -------------
 
 An admin socket command is offered for dumping metrics::
@@ -252,7 +335,7 @@ see `Prometheus`_ for more details.
 Profiling Crimson
 =================
 
-fio
+Fio
 ---
 
 ``crimson-store-nbd`` exposes configurable ``FuturizedStore`` internals as an
@@ -424,7 +507,7 @@ When a Seastar application crashes, it leaves us with a backtrace of addresses, 
 The ``seastar-addr2line`` utility provided by Seastar can be used to map these
 addresses to functions. The script expects input on ``stdin``,
 so we need to copy and paste the above addresses, then send EOF by inputting
-``control-D`` in the terminal.  One might  use ``echo`` or ``cat`` instead`::
+``control-D`` in the terminal.  One might  use ``echo`` or ``cat`` instead::
 
   $ ../src/seastar/scripts/seastar-addr2line -e bin/crimson-osd
 

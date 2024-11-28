@@ -88,6 +88,7 @@
     realm rename                     rename a realm
     realm set                        set realm info (requires infile)
     realm default                    set realm as default
+    realm default rm                 clear the current default realm
     realm pull                       pull a realm and its current period
     zonegroup add                    add a zone to a zonegroup
     zonegroup create                 create a new zone group info
@@ -194,6 +195,7 @@
     topic get                        get a bucket notifications topic
     topic rm                         remove a bucket notifications topic
     topic stats                      get a bucket notifications persistent topic stats (i.e. reservations, entries & size)
+    topic dump                       dump (in JSON format) all pending bucket notifications of a persistent topic
     script put                       upload a Lua script to a context
     script get                       get the Lua script of a context
     script rm                        remove the Lua scripts of a context

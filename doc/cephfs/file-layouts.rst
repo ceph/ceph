@@ -6,6 +6,9 @@ File layouts
 The layout of a file controls how its contents are mapped to Ceph RADOS objects.  You can
 read and write a file's layout using *virtual extended attributes* or xattrs.
 
+Clients must use the ``p`` flag when writing a file's layout. See :ref:`Layout
+and Quota restriction (the 'p' flag) <cephfs-layout-and-quota-restriction>`.
+
 The name of the layout xattrs depends on whether a file is a regular file or a directory.  Regular
 files' layout xattrs are called ``ceph.file.layout``, whereas directories' layout xattrs are called
 ``ceph.dir.layout``.  Where subsequent examples refer to ``ceph.file.layout``, substitute ``dir`` as appropriate
@@ -20,26 +23,38 @@ Layout fields
 -------------
 
 pool
-    String, giving ID or name. String can only have characters in the set [a-zA-Z0-9\_-.]. Which RADOS pool a file's data objects will be stored in.
+    This is a string and contains either an ID or a name. Strings may contain
+    only characters in the set ``[a-zA-Z0-9\_-.]``. This determines the RADOS
+    pool that stores a file's data objects.
 
 pool_id
-    String of digits. This is the system assigned pool id for the RADOS pool whenever it is created.
+    This is a string of digits. This is the pool ID that was assigned by Ceph
+    at the time of the creation of the RADOS pool.
 
 pool_name
-    String, given name. This is the user defined name for the RADOS pool whenever user creates it.
+    This is a string. This is the name of the RADOS pool as defined by the user
+    when the pool was created. 
 
 pool_namespace
-    String with only characters in the set [a-zA-Z0-9\_-.].  Within the data pool, which RADOS namespace the objects will
-    be written to.  Empty by default (i.e. default namespace).
+    This is a string containing only characters in the set ``[a-zA-Z0-9\_-.]``.
+    This determines which RADOS namespace within the data pool that the objects
+    will be written to.
+    Empty by default (i.e. default namespace).
 
 stripe_unit
-    Integer in bytes.  The size (in bytes) of a block of data used in the RAID 0 distribution of a file. All stripe units for a file have equal size. The last stripe unit is typically incomplete–i.e. it represents the data at the end of the file as well as unused “space” beyond it up to the end of the fixed stripe unit size.
+    This is an integer. The size (in bytes) of a block of data used in the
+    distribution of a file. All stripe units for a file have equal size. The
+    last stripe unit is typically only partly full of data: it holds file data
+    through EOF as well as padding that fills the balance of the fixed stripe
+    unit size. 
 
 stripe_count
-    Integer.  The number of consecutive stripe units that constitute a RAID 0 “stripe” of file data.
+    Integer. The number of consecutive stripe units that constitute a RAID 0
+    “stripe” of file data.
 
 object_size
-    Integer in bytes.  File data is chunked into RADOS objects of this size.
+    Integer. The size of the object in bytes. File data is chunked into RADOS
+    objects of this size.
 
 .. tip::
 

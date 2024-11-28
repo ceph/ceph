@@ -2,6 +2,12 @@ overrides:
   ceph:
     log-ignorelist:
       - MON_DOWN
+      - mons down
+      - mon down
+      - out of quorum
+      - CEPHADM_STRAY_HOST
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
     log-only-match:
       - CEPHADM_
 roles:

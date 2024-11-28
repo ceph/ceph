@@ -141,6 +141,7 @@ private:
   struct SnapSyncStat {
     uint64_t nr_failures = 0; // number of consecutive failures
     boost::optional<monotime> last_failed; // lat failed timestamp
+    boost::optional<std::string> last_failed_reason;
     bool failed = false; // hit upper cap for consecutive failures
     boost::optional<std::pair<uint64_t, std::string>> last_synced_snap;
     boost::optional<std::pair<uint64_t, std::string>> current_syncing_snap;
@@ -149,6 +150,8 @@ private:
     uint64_t renamed_snap_count = 0;
     monotime last_synced = clock::zero();
     boost::optional<double> last_sync_duration;
+    boost::optional<uint64_t> last_sync_bytes; //last sync bytes for display in status
+    uint64_t sync_bytes = 0; //sync bytes counter, independently for each directory sync.
   };
 
   void _inc_failed_count(const std::string &dir_root) {
@@ -175,6 +178,7 @@ private:
     sync_stat.nr_failures = 0;
     sync_stat.failed = false;
     sync_stat.last_failed = boost::none;
+    sync_stat.last_failed_reason = boost::none;
   }
 
   void _set_last_synced_snap(const std::string &dir_root, uint64_t snap_id,
@@ -187,6 +191,8 @@ private:
                             const std::string &snap_name) {
     std::scoped_lock locker(m_lock);
     _set_last_synced_snap(dir_root, snap_id, snap_name);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.sync_bytes = 0;
   }
   void set_current_syncing_snap(const std::string &dir_root, uint64_t snap_id,
                                 const std::string &snap_name) {
@@ -216,9 +222,14 @@ private:
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.last_synced = clock::now();
     sync_stat.last_sync_duration = duration;
+    sync_stat.last_sync_bytes = sync_stat.sync_bytes;
     ++sync_stat.synced_snap_count;
   }
-
+  void inc_sync_bytes(const std::string &dir_root, const uint64_t& b) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.sync_bytes += b;
+  }
   bool should_backoff(const std::string &dir_root, int *retval) {
     if (m_fs_mirror->is_blocklisted()) {
       *retval = -EBLOCKLISTED;
@@ -276,7 +287,7 @@ private:
   int try_lock_directory(const std::string &dir_root, SnapshotReplayerThread *replayer,
                          DirRegistry *registry);
   void unlock_directory(const std::string &dir_root, const DirRegistry &registry);
-  void sync_snaps(const std::string &dir_root, std::unique_lock<ceph::mutex> &locker);
+  int sync_snaps(const std::string &dir_root, std::unique_lock<ceph::mutex> &locker);
 
 
   int build_snap_map(const std::string &dir_root, std::map<uint64_t, std::string> *snap_map,
@@ -300,6 +311,8 @@ private:
 
   int do_synchronize(const std::string &dir_root, const Snapshot &current,
                      boost::optional<Snapshot> prev);
+
+  int do_synchronize(const std::string &dir_root, const Snapshot &current);
 
   int synchronize(const std::string &dir_root, const Snapshot &current,
                   boost::optional<Snapshot> prev);

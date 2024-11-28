@@ -29,6 +29,12 @@ class KeyStore;
 
 class Dispatcher {
 public:
+  /* Ordering of dispatch for a list of Dispatchers. */
+  using priority_t = uint32_t;
+  static constexpr priority_t PRIORITY_HIGH = std::numeric_limits<priority_t>::max() / 4;
+  static constexpr priority_t PRIORITY_DEFAULT = std::numeric_limits<priority_t>::max() / 2;
+  static constexpr priority_t PRIORITY_LOW = (std::numeric_limits<priority_t>::max() / 4) * 3;
+
   explicit Dispatcher(CephContext *cct_)
     : cct(cct_)
   {
@@ -209,12 +215,14 @@ public:
    *
    * Do not acquire locks in this method! It is considered "fast" delivery.
    *
-   * return 1 for success
-   * return 0 for no action (let another Dispatcher handle it)
-   * return <0 for failure (failure to parse caps, for instance)
+   * Note: MonClient is the only caller of this method and it is configured
+   *       to only call a single dispatcher.
+   *
+   * return true for success (auth succeeds for this stage of session construction)
+   * return false for failure (failure to parse caps, for instance)
    */
-  virtual int ms_handle_fast_authentication(Connection *con) {
-    return 0;
+  [[nodiscard]] virtual bool ms_handle_fast_authentication(Connection *con) {
+    return false;
   }
 
   /**

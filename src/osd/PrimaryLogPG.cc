@@ -1001,7 +1001,7 @@ void PrimaryLogPG::do_command(
   string_view orig_prefix,
   const cmdmap_t& cmdmap,
   const bufferlist& idata,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   string format;
   cmd_getval(cmdmap, "format", format);
@@ -12635,7 +12635,7 @@ void PrimaryLogPG::do_update_log_missing_reply(OpRequestRef &op)
  */
 void PrimaryLogPG::mark_all_unfound_lost(
   int what,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   dout(3) << __func__ << " " << pg_log_entry_t::get_op_name(what) << dendl;
   list<hobject_t> oids;

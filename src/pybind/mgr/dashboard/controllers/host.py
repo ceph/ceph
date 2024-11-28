@@ -512,3 +512,14 @@ class HostUi(BaseController):
     @handle_orchestrator_error('host')
     def inventory(self, refresh=None):
         return get_inventories(None, refresh)
+
+    @Endpoint('GET')
+    @ReadPermission
+    def list(self):
+        """
+        Get all hosts.
+        This endpoint is introduced to get all the available hosts in cases where
+        service instance is not needed (ex: hosts selection in forms), and also
+        get_hosts method helps in caching the response which makes it performant.
+        """
+        return get_hosts()

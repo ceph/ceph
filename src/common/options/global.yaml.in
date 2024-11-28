@@ -104,8 +104,8 @@ options:
 - name: public_network_interface
   type: str
   level: advanced
-  desc: Interface name(s) from which to choose an address from a public_network to
-    bind to; public_network must also be specified.
+  desc: Interface name(s) from which to choose an address from a ``public_network`` to
+    bind to; ``public_network`` must also be specified.
   tags:
   - network
   services:
@@ -135,8 +135,8 @@ options:
 - name: cluster_network_interface
   type: str
   level: advanced
-  desc: Interface name(s) from which to choose an address from a cluster_network to
-    bind to; cluster_network must also be specified.
+  desc: Interface name(s) from which to choose an address from a ``cluster_network`` to
+    bind to; ``cluster_network`` must also be specified.
   tags:
   - network
   services:
@@ -767,6 +767,11 @@ options:
   level: advanced
   desc: Set the maximum number of session within Qatzip when using QAT compressor
   default: 256
+- name: qat_compressor_busy_polling
+  type: bool
+  level: advanced
+  desc: Set QAT busy bolling to reduce latency at the cost of potentially increasing CPU usage
+  default: false
 - name: plugin_crypto_accelerator
   type: str
   level: advanced
@@ -3633,7 +3638,7 @@ options:
 - name: osd_requested_scrub_priority
   type: uint
   level: advanced
-  default: 120
+  default: 5
   fmt_desc: The priority set for user requested scrub on the work queue.  If
     this value were to be smaller than ``osd_client_op_priority`` it
     can be boosted to the value of ``osd_client_op_priority`` when
@@ -4010,15 +4015,26 @@ options:
   default: false
   with_legacy: true
 - name: bdev_enable_discard
+  desc: send discards to the block device
   type: bool
   level: advanced
   default: false
   with_legacy: true
-- name: bdev_async_discard
-  type: bool
+  flags:
+  - runtime
+  see_also:
+  - bdev_async_discard_threads
+- name: bdev_async_discard_threads
+  desc: number of discard threads used to issue discards to the device
+  type: uint
   level: advanced
-  default: false
-  with_legacy: true
+  default: 0
+  min: 0
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bdev_enable_discard
 - name: bdev_flock_retry_interval
   type: float
   level: advanced
@@ -4325,6 +4341,40 @@ options:
   flags:
   - create
   with_legacy: true
+- name: bluestore_bdev_label_multi
+  type: bool
+  level: advanced
+  desc: Keep multiple copies of block device label.
+  long_desc: Having multiple labels is only useful in error conditions.
+    The label located at offset 0 has been known to be sometimes overwritten by unknown causes,
+    but without it OSD cannot run.
+  default: true
+  flags:
+  - create
+  with_legacy: false
+- name: bluestore_bdev_label_require_all
+  type: bool
+  level: advanced
+  desc: Require all copies to match.
+  long_desc: Under normal conditions, all copies should be the same.
+    Clearing this flag allows to run OSD if at least one of labels
+    could be properly read.
+  default: true
+  see_also:
+  - bluestore_bdev_label_multi
+  flags:
+  - runtime
+  with_legacy: false
+- name: bluestore_bdev_label_multi_upgrade
+  type: bool
+  level: advanced
+  desc: Let repair upgrade to multi label.
+  long_desc: By default single label is preserved.
+    Setting this variable before running fsck-repair upgrades single label into multi label.
+  default: false
+  flags:
+  - startup
+  with_legacy: false
 # whether preallocate space if block/db_path/wal_path is file rather that block device.
 - name: bluestore_block_preallocate_file
   type: bool
@@ -4994,10 +5044,17 @@ options:
     [hash_begin..hash_end) defines characters to use for hash calculation. Recommended
     hash ranges: O(0-13) P(0-8) m(0-16). Sharding of S,T,C,M,B prefixes is inadvised'
   fmt_desc: Definition of BlueStore's RocksDB sharding.
-    The optimal value depends on multiple factors, and modification is invadvisable.
+    The optimal value depends on multiple factors, and modification is inadvisable.
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L=min_write_buffer_number_to_merge=32 P=min_write_buffer_number_to_merge=32
+- name: bluestore_async_db_compaction
+  type: bool
+  level: dev
+  desc: Perform DB compaction requests asynchronously
+  long_desc: 'How to perform DB compactions triggered either through async socket or
+    by OSD initialization procedure on start.'
+  default: true
 - name: bluestore_qfsck_on_mount
   type: bool
   level: dev
@@ -5224,12 +5281,6 @@ options:
   level: dev
   default: false
   with_legacy: true
-- name: bluestore_debug_prefill
-  type: float
-  level: dev
-  desc: simulate fragmentation
-  default: 0
-  with_legacy: true
 - name: bluestore_debug_prefragment_max
   type: size
   level: dev
@@ -5309,6 +5360,18 @@ options:
   level: advanced
   desc: Enable health indication when spurious read errors are observed by OSD
   default: true
+  with_legacy: true
+- name: bluestore_slow_ops_warn_lifetime
+  type: uint
+  level: advanced
+  desc: A configurable duration for slow ops warning to be appeared if number of occurence pass `bluestore_slow_ops_warn_threshold` in `bluestore_slow_ops_warn_lifetime` seconds
+  default: 86400
+  with_legacy: true
+- name: bluestore_slow_ops_warn_threshold
+  type: uint
+  level: advanced
+  desc: A configurable number for slow ops warning to be appeared if number of occurence pass `bluestore_slow_ops_warn_threshold` in `bluestore_slow_ops_warn_lifetime` seconds
+  default: 1
   with_legacy: true
 - name: bluestore_fsck_error_on_no_per_pool_omap
   type: bool
@@ -6205,6 +6268,54 @@ options:
   level: dev
   desc: Time to wait during shutdown to deregister service with mgr
   default: 1
+- name: mgr_enable_op_tracker
+  type: bool
+  level: advanced
+  desc: Enable / disable MGR Op Tracker
+  default: true
+  with_legacy: true
+- name: mgr_num_op_tracker_shard
+  type: uint
+  level: advanced
+  desc: The number of shards for holding the ops
+  default: 32
+  with_legacy: true
+- name: mgr_op_complaint_time
+  type: float
+  level: advanced
+  default: 30
+  desc: An operation becomes complaint worthy after the specified number of seconds have elapsed.
+  with_legacy: true
+- name: mgr_op_log_threshold
+  type: int
+  level: advanced
+  default: 5
+  fmt_desc: How many operations logs to display at once.
+  with_legacy: true
+- name: mgr_op_history_size
+  type: uint
+  level: advanced
+  default: 20
+  fmt_desc: The maximum number of completed operations to track.
+  with_legacy: true
+- name: mgr_op_history_duration
+  type: uint
+  level: advanced
+  default: 600
+  desc: The oldest completed operation to track.
+  with_legacy: true
+- name: mgr_op_history_slow_op_size
+  type: uint
+  level: advanced
+  default: 20
+  desc: Max number of slow ops to track
+  with_legacy: true
+- name: mgr_op_history_slow_op_threshold
+  type: float
+  level: advanced
+  default: 10
+  desc: Duration of an op to be considered as a historical slow op
+  with_legacy: true
 - name: throttler_perf_counter
   type: bool
   level: advanced
@@ -6345,6 +6456,18 @@ options:
   - aio
   - spdk
   - pmem
+- name: bdev_stalled_read_warn_lifetime
+  type: uint
+  level: advanced
+  desc: A configurable duration for stalled read warning to be appeared if number of stalled read occurence pass `bdev_stalled_read_warn_threshold` in `bdev_stalled_read_warn_lifetime` seconds
+  default: 86400
+  with_legacy: true
+- name: bdev_stalled_read_warn_threshold
+  type: uint
+  level: advanced
+  desc: A configurable number for stalled read warning to be appeared if number of stalled read occurence pass `bdev_stalled_read_warn_threshold` in `bdev_stalled_read_warn_lifetime` seconds
+  default: 1
+  with_legacy: true
 - name: bluestore_cleaner_sleep_interval
   type: float
   level: advanced

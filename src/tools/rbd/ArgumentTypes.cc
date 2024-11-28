@@ -163,9 +163,21 @@ void add_snap_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
-void add_snap_id_option(po::options_description *opt) {
+void add_snap_id_option(po::options_description *opt,
+                        ArgumentModifier modifier) {
+  std::string name = SNAPSHOT_ID;
+  std::string description = "snapshot id";
+  switch (modifier) {
+  case ARGUMENT_MODIFIER_NONE:
+  case ARGUMENT_MODIFIER_DEST:
+    break;
+  case ARGUMENT_MODIFIER_SOURCE:
+    description = "source " + description;
+    break;
+  }
+
   opt->add_options()
-    (SNAPSHOT_ID.c_str(), po::value<uint64_t>(), "snapshot id");
+    (name.c_str(), po::value<uint64_t>(), description.c_str());
 }
 
 void add_pool_options(boost::program_options::options_description *pos,
