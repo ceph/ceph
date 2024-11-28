@@ -15,7 +15,7 @@
 #include <vector>
 #include "common/hex.h"
 
-void hex2str(const char *s, int len, char *buf, int dest_len)
+int hex2str(const char *s, int len, char *buf, int dest_len)
 {
   int pos = 0;
   for (int i=0; i<len && pos<dest_len; i++) {
@@ -25,6 +25,7 @@ void hex2str(const char *s, int len, char *buf, int dest_len)
       pos += snprintf(&buf[pos], dest_len-pos, "\n");
     pos += snprintf(&buf[pos], dest_len-pos, "%.2x ", (int)(unsigned char)s[i]);
   }
+  return pos;
 }
 
 std::string hexdump(const std::string &msg, const char *s, int len)

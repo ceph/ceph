@@ -18,8 +18,7 @@
 
 #include <string>
 
-extern void hex2str(const char *s, int len, char *buf, int dest_len);
+int hex2str(const char *s, int len, char *buf, int dest_len);
 
-extern std::string hexdump(std::string msg, const char *s, int len);
-
+std::string hexdump(std::string msg, const char *s, int len);
 #endif
