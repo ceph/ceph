@@ -5360,6 +5360,18 @@ options:
   desc: Enable health indication when spurious read errors are observed by OSD
   default: true
   with_legacy: true
+- name: bluestore_slow_ops_warn_lifetime
+  type: uint
+  level: advanced
+  desc: A configurable duration for slow ops warning to be appeared if number of occurence pass `bluestore_slow_ops_warn_threshold` in `bluestore_slow_ops_warn_lifetime` seconds
+  default: 86400
+  with_legacy: true
+- name: bluestore_slow_ops_warn_threshold
+  type: uint
+  level: advanced
+  desc: A configurable number for slow ops warning to be appeared if number of occurence pass `bluestore_slow_ops_warn_threshold` in `bluestore_slow_ops_warn_lifetime` seconds
+  default: 1
+  with_legacy: true
 - name: bluestore_fsck_error_on_no_per_pool_omap
   type: bool
   level: advanced
@@ -6396,6 +6408,18 @@ options:
   - spdk
   - pmem
   - hm_smr
+- name: bdev_stalled_read_warn_lifetime
+  type: uint
+  level: advanced
+  desc: A configurable duration for stalled read warning to be appeared if number of stalled read occurence pass `bdev_stalled_read_warn_threshold` in `bdev_stalled_read_warn_lifetime` seconds
+  default: 86400
+  with_legacy: true
+- name: bdev_stalled_read_warn_threshold
+  type: uint
+  level: advanced
+  desc: A configurable number for stalled read warning to be appeared if number of stalled read occurence pass `bdev_stalled_read_warn_threshold` in `bdev_stalled_read_warn_lifetime` seconds
+  default: 1
+  with_legacy: true
 - name: bluestore_cleaner_sleep_interval
   type: float
   level: advanced

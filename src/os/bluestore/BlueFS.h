@@ -225,6 +225,7 @@ public:
     WRITER_WAL,
     WRITER_SST,
   };
+  void collect_alerts(osd_alert_list_t& alerts);
 
   struct File : public RefCountedObject {
     MEMPOOL_CLASS_HELPERS();
@@ -427,7 +428,6 @@ public:
     FileRef file;
     explicit FileLock(FileRef f) : file(std::move(f)) {}
   };
-
 private:
   PerfCounters *logger = nullptr;
 

@@ -1331,6 +1331,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 	 << " since " << start1 << ", timeout is "
 	 << age
 	 << "s" << dendl;
+    add_stalled_read_event();
   }
   if (r < 0) {
     if (ioc->allow_eio && is_expected_ioerr(-errno)) {
@@ -1404,6 +1405,7 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
 	 << " since " << start1 << ", timeout is "
 	 << age
 	 << "s" << dendl;
+    add_stalled_read_event();
   }
 
   if (r < 0) {
@@ -1467,6 +1469,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
            << " (buffered) since " << start1 << ", timeout is "
 	   << age
 	   << "s" << dendl;
+      add_stalled_read_event();
     }
   } else {
     //direct and aligned read
@@ -1477,6 +1480,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
            << " (direct) since " << start1 << ", timeout is "
 	   << age
 	   << "s" << dendl;
+      add_stalled_read_event();
     }
     if (r < 0) {
       r = -errno;
