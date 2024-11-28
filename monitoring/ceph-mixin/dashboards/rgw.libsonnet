@@ -265,7 +265,7 @@ local u = import 'utils.libsonnet';
           label_replace(
             rate(ceph_rgw_get_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
               rate(ceph_rgw_get_initial_lat_count{%(matchers)s}[$__rate_interval]) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s},
             "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
           )
         ||| % $.matchers(),
@@ -281,7 +281,7 @@ local u = import 'utils.libsonnet';
               label_replace(
                 rate(ceph_rgw_put_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
                   rate(ceph_rgw_put_initial_lat_count{%(matchers)s}[$__rate_interval]) *
-                  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
+                  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s},
                 "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
               )
             ||| % $.matchers(),
@@ -298,7 +298,7 @@ local u = import 'utils.libsonnet';
           sum by (rgw_host) (
             label_replace(
               rate(ceph_rgw_req{%(matchers)s}[$__rate_interval]) *
-                on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
+                on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s},
               "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
             )
           )
@@ -318,7 +318,7 @@ local u = import 'utils.libsonnet';
           label_replace(
             rate(ceph_rgw_get_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
               rate(ceph_rgw_get_initial_lat_count{%(matchers)s}[$__rate_interval]) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s},
             "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
           )
         ||| % $.matchers(),
@@ -352,7 +352,7 @@ local u = import 'utils.libsonnet';
           label_replace(sum by (instance_id) (
             rate(ceph_rgw_get_b{%(matchers)s}[$__rate_interval]) +
               rate(ceph_rgw_put_b{%(matchers)s}[$__rate_interval])) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s},
             "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
           )
         ||| % $.matchers(),
