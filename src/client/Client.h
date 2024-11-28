@@ -843,6 +843,16 @@ public:
 
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
 			  const UserPerm& request_perms);
+  Inode* create_new_inode(InodeStat* st);
+  void update_inode_common_attributes(Inode* in, InodeStat* st);
+  bool should_update_inode_version(Inode* in, InodeStat* st, int& issued, int& new_issued, bool& need_snapdir_attr_refresh);
+  void update_inode_auth_attributes(Inode* in, InodeStat* st);
+  void update_inode_attributes(Inode* in, InodeStat* st, bool new_version, int issued, int new_issued, bool& need_snapdir_attr_refresh);
+  void update_inode_directory_attributes(Inode* in, InodeStat* st);
+  void update_xattr_and_inline_data(Inode* in, InodeStat* st, bool& need_snapdir_attr_refresh, int issued);
+  void update_change_attr(Inode* in, InodeStat* st);
+  void handle_snap_and_caps(Inode* in, InodeStat* st, MetaSession* session, const UserPerm& request_perms, int issued);
+  void refresh_snapdir_attrs_for_directory(Inode* in);
   Dentry *insert_dentry_inode(Dir *dir, const std::string& dname, LeaseStat *dlease,
 			      Inode *in, utime_t from, MetaSession *session,
 			      Dentry *old_dentry = NULL);
