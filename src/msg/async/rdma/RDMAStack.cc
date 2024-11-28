@@ -263,7 +263,7 @@ int RDMADispatcher::post_chunks_to_rq(int num, QueuePair *qp)
 void RDMADispatcher::polling()
 {
   ceph_pthread_setname("rdma-polling");
-  static int MAX_COMPLETIONS = 32;
+  static constexpr int MAX_COMPLETIONS = 32;
   ibv_wc wc[MAX_COMPLETIONS];
 
   std::map<RDMAConnectedSocketImpl*, std::vector<ibv_wc> > polled;
