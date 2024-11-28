@@ -195,9 +195,7 @@ struct rgw_obj_key {
       return std::string("_") + name;
     };
 
-    char buf[ns.size() + 16];
-    snprintf(buf, sizeof(buf), "_%s_", ns.c_str());
-    return std::string(buf) + name;
+    return fmt::format("_{}_{}", ns.c_str(), name);
   };
 
   void get_index_key(rgw_obj_index_key* key) const {
