@@ -5015,6 +5015,11 @@ std::vector<Option> get_global_options() {
     .set_default(64_M)
     .set_description("Maximum RAM hybrid allocator should use before enabling bitmap supplement"),
 
+    Option("bluestore_hybrid_bitmap_boundary", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_min_max(0_K, 128_K)
+    .set_description("Under the hybrid allocator, use the bitmap allocator for io sizes smaller than bluestore_hybrid_bitmap_boundary(such as 0,8_K,24_K,...,0 means use the original logic), and use the avl allocator for the rest."),
+
     Option("bluestore_volume_selection_policy", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("use_some_extra")
     .set_enum_allowed({ "rocksdb_original", "use_some_extra", "fit_to_fast" })

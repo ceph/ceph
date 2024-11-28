@@ -15,6 +15,7 @@ public:
                   uint64_t max_mem,
 	          const std::string& name) :
       AvlAllocator(cct, device_size, _block_size, max_mem, name) {
+    bitmap_boundary_value = cct->_conf.get_val<uint64_t>("bluestore_hybrid_bitmap_boundary");
   }
   const char* get_type() const override
   {
@@ -50,4 +51,6 @@ private:
 
   // called when extent to be released/marked free
   void _add_to_tree(uint64_t start, uint64_t size) override;
+      
+  uint64_t bitmap_boundary_value;
 };

@@ -50,10 +50,15 @@ int64_t HybridAllocator::allocate(
     --orig_pos;
   }
 
+  bool use_bitmap = true;
+  if (bitmap_boundary_value != 0 && want > bitmap_boundary_value) {
+    use_bitmap = false;
+  }
+
   // try bitmap first to avoid unneeded contiguous extents split if
   // desired amount is less than shortes range in AVL
   if (bmap_alloc && bmap_alloc->get_free() &&
-    want < _lowest_size_available()) {
+    want < _lowest_size_available() && use_bitmap) {
     res = bmap_alloc->allocate(want, unit, max_alloc_size, hint, extents);
     if (res < 0) {
       // got a failure, release already allocated and
