@@ -1075,14 +1075,14 @@ options:
   default: false
   services:
   - mds
-- name: mds_kill_skip_replaying_inotable
+- name: mds_kill_after_journal_logs_flushed
   type: bool
   level: dev
   default: false
   services:
   - mds
-  fmt_desc: Ceph will skip replaying the inotable when replaying the journal, and
-    the premary MDS will crash, while the replacing MDS won't.
+  fmt_desc: The primary MDS will crash just after the mknod/openc journal logs
+    are flushed to the pool.
     (for testing only).
   with_legacy: true
 - name: mds_inject_skip_replaying_inotable
@@ -1091,8 +1091,7 @@ options:
   default: false
   services:
   - mds
-  fmt_desc: Ceph will skip replaying the inotable when replaying the journal, and
-    the premary MDS will crash, while the replacing MDS won't.
+  fmt_desc: MDS will skip replaying the inotable when replaying the journal logs.
     (for testing only).
   with_legacy: true
 #  percentage of MDS modify replies to skip sending the client a trace on [0-1]

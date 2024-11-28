@@ -4544,7 +4544,7 @@ public:
     ceph_assert(r == 0);
 
     // crash current MDS and the replacing MDS will test the journal
-    ceph_assert(!g_conf()->mds_kill_skip_replaying_inotable);
+    ceph_assert(!g_conf()->mds_kill_after_journal_logs_flushed);
 
     dn->pop_projected_linkage();
 
@@ -6856,7 +6856,7 @@ public:
     ceph_assert(r == 0);
 
     // crash current MDS and the replacing MDS will test the journal
-    ceph_assert(!g_conf()->mds_kill_skip_replaying_inotable);
+    ceph_assert(!g_conf()->mds_kill_after_journal_logs_flushed);
 
     // link the inode
     dn->pop_projected_linkage();
@@ -7171,7 +7171,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   mds->balancer->maybe_fragment(dir, false);
 
   // flush the journal as soon as possible
-  if (g_conf()->mds_kill_skip_replaying_inotable) {
+  if (g_conf()->mds_kill_after_journal_logs_flushed) {
     mdlog->flush();
   }
 }
