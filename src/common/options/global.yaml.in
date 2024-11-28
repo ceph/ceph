@@ -5485,15 +5485,21 @@ options:
 - name: bluestore_slow_ops_warn_lifetime
   type: uint
   level: advanced
-  desc: A configurable duration for slow ops warning to be appeared if number of occurence pass `bluestore_slow_ops_warn_threshold` in `bluestore_slow_ops_warn_lifetime` seconds
+  desc: Set the time period during which a BlueStore slow ops warning will be raised when the `bluestore_slow_ops_warn_threshold` is exceeded.  This is not the same as `osd_op_complaint_time`, which is about RADOS ops at the OSD level.
   default: 86400
   with_legacy: true
+  see_also:
+  - bluestore_slow_ops_warn_threshold
+  - osd_op_complaint_time
 - name: bluestore_slow_ops_warn_threshold
   type: uint
   level: advanced
-  desc: A configurable number for slow ops warning to be appeared if number of occurence pass `bluestore_slow_ops_warn_threshold` in `bluestore_slow_ops_warn_lifetime` seconds
+  desc: Set the minimum number of BluesStore slow ops before raising a health warning state
   default: 1
   with_legacy: true
+  see_also:
+  - bluestore_slow_ops_warn_lifetime
+  - osd_op_complaint_time
 - name: bluestore_fsck_error_on_no_per_pool_omap
   type: bool
   level: advanced
@@ -5566,7 +5572,7 @@ options:
   level: dev
   desc: Sets threshold at which shrinking max free chunk size triggers enabling best-fit
     mode.
-  long_desc: 'AVL allocator works in two modes: near-fit and best-fit. By default,
+  long_desc: 'The AVL allocator works in two modes: near-fit and best-fit. By default,
     it uses very fast near-fit mode, in which it tries to fit a new block near the
     last allocated block of similar size. The second mode is much slower best-fit
     mode, in which it tries to find an exact match for the requested allocation. This
@@ -5586,7 +5592,7 @@ options:
     last allocated block of similar size. The second mode is much slower best-fit
     mode, in which it tries to find an exact match for the requested allocation. This
     mode is used when either the device gets fragmented or when it is low on free
-    space. When free space is smaller than ''bluestore_avl_alloc_bf_free_pct'', best-fit
+    space. When free space is smaller than `bluestore_avl_alloc_bf_free_pct`, best-fit
     mode is used.'
   default: 4
   see_also:

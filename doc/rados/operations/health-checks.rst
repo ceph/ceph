@@ -824,25 +824,27 @@ Or, to disable this alert on a specific OSD, run the following command:
 BLOCK_DEVICE_STALLED_READ_ALERT
 _______________________________
 
-There are certain BlueStore log messages that surface storage drive issues 
+There are BlueStore log messages that reveal storage drive issues 
 that can cause performance degradation and potentially data unavailability or
-loss.
+loss.  These may indicate a storage drive that is failing and should be
+evaluated and possibly removed and replaced.
 
 ``read stalled read 0x29f40370000~100000 (buffered) since 63410177.290546s, timeout is 5.000000s``
 
-However, this is difficult to spot as there's no discernible warning (a
+However, this is difficult to spot because there no discernible warning (a
 health warning or info in ``ceph health detail`` for example). More observations
 can be found here: https://tracker.ceph.com/issues/62500
 
-As there can be false positive ``stalled read`` instances, a mechanism
-has been added for more reliability. If in last ``bdev_stalled_read_warn_lifetime``
-duration the number of ``stalled read`` indications are found to be more than or equal to
+Also because there can be false positive ``stalled read`` instances, a mechanism
+has been added to increase accuracy. If in the last ``bdev_stalled_read_warn_lifetime``
+seconds the number of ``stalled read`` events is found to be greater than or equal to
 ``bdev_stalled_read_warn_threshold`` for a given BlueStore block device, this
-warning will be reported in ``ceph health detail``.
+warning will be reported in ``ceph health detail``.  The warning state will be
+removed when the condition clears.
 
-By default value of ``bdev_stalled_read_warn_lifetime = 86400s`` and
-``bdev_stalled_read_warn_threshold = 1``. But user can configure it for
-individual OSDs.
+The defaults for :confval:`bdev_stalled_read_warn_lifetime`
+and :confval:`bdev_stalled_read_warn_threshold` may be overridden globally or for
+specific OSDs.
 
 To change this, run the following command:
 
@@ -851,7 +853,8 @@ To change this, run the following command:
    ceph config set global bdev_stalled_read_warn_lifetime 10
    ceph config set global bdev_stalled_read_warn_threshold 5
 
-this may be done surgically for individual OSDs or a given mask
+this may be done for specific OSDs or a given mask. For example,
+to apply only to SSD OSDs:
 
 .. prompt:: bash $
 
@@ -863,40 +866,45 @@ this may be done surgically for individual OSDs or a given mask
 WAL_DEVICE_STALLED_READ_ALERT
 _____________________________
 
-A similar warning like ``BLOCK_DEVICE_STALLED_READ_ALERT`` will be raised to
-identify ``stalled read`` instances on a given BlueStore OSD's ``WAL_DEVICE``.
-This warning can be configured via ``bdev_stalled_read_warn_lifetime`` and
-``bdev_stalled_read_warn_threshold`` parameters similarly described in the
+The warning state ``WAL_DEVICE_STALLED_READ_ALERT`` is raised to
+indicate ``stalled read`` instances on a given BlueStore OSD's ``WAL_DEVICE``.
+This warning can be configured via the :confval:`bdev_stalled_read_warn_lifetime` and
+:confval:`bdev_stalled_read_warn_threshold` options with commands similar to those
+described in the
 ``BLOCK_DEVICE_STALLED_READ_ALERT`` warning section.
 
 DB_DEVICE_STALLED_READ_ALERT
 ____________________________
 
-A similar warning like ``BLOCK_DEVICE_STALLED_READ_ALERT`` will be raised to
-identify ``stalled read`` instances on a given BlueStore OSD's ``WAL_DEVICE``.
-This warning can be configured via ``bdev_stalled_read_warn_lifetime`` and
-``bdev_stalled_read_warn_threshold`` parameters similarly described in the
+The warning state ``DB_DEVICE_STALLED_READ_ALERT`` is raised to
+indicate ``stalled read`` instances on a given BlueStore OSD's ``DB_DEVICE``.
+This warning can be configured via the :confval:`bdev_stalled_read_warn_lifetime` and
+:confval:`bdev_stalled_read_warn_threshold` options with commands similar to those
+described in the
 ``BLOCK_DEVICE_STALLED_READ_ALERT`` warning section.
 
 BLUESTORE_SLOW_OP_ALERT
 _______________________
 
-There are certain BlueStore log messages that surface storage drive issues 
+There are BlueStore log messages that reveal storage drive issues 
 that can lead to performance degradation and data unavailability or loss.
+These indicate that the storage drive may be failing and should be investigated
+and potentially replaced.
 
 ``log_latency_fn slow operation observed for _txc_committed_kv, latency = 12.028621219s, txc = 0x55a107c30f00``
 ``log_latency_fn slow operation observed for upper_bound, latency = 6.25955s``
 ``log_latency slow operation observed for submit_transaction..``
 
 As there can be false positive ``slow ops`` instances, a mechanism has
-been added for more reliability. If in last ``bluestore_slow_ops_warn_lifetime``
-duration ``slow ops`` indications are found more than or equal to
-``bluestore_slow_ops_warn_threshold`` for a given BlueStore OSD, this warning
-will be reported in ``ceph health detail``.
+been added for more reliability. If in the last ``bluestore_slow_ops_warn_lifetime``
+seconds the number of ``slow ops`` indications are found greater than or equal to
+:confval:`bluestore_slow_ops_warn_threshold` for a given BlueStore OSD, this
+warning will be reported in ``ceph health detail``. The warning state is
+cleared when the condition clears.
 
-By default value of ``bluestore_slow_ops_warn_lifetime = 86400s`` and
-``bluestore_slow_ops_warn_threshold = 1``. But user can configure it for
-individual OSDs.
+The defaults for :confval:`bluestore_slow_ops_warn_lifetime` and
+:confval:`bluestore_slow_ops_warn_threshold` may be overidden globally or for
+specific OSDs.
 
 To change this, run the following command:
 
@@ -905,7 +913,7 @@ To change this, run the following command:
    ceph config set global bluestore_slow_ops_warn_lifetime 10
    ceph config set global bluestore_slow_ops_warn_threshold 5
 
-this may be done surgically for individual OSDs or a given mask
+this may be done for specific OSDs or a given mask, for example:
 
 .. prompt:: bash $
 
@@ -931,8 +939,9 @@ the system. Note that this marking ``out`` is normally done automatically if
 ``mgr/devicehealth/mark_out_threshold``).  If an OSD device is compromised but
 the OSD(s) on that device are still ``up``, recovery can be degraded.  In such
 cases it may be advantageous to forcibly stop the OSD daemon(s) in question so
-that recovery can proceed from surviving healthly OSDs.  This should only be
-done with extreme care so that data availability is not compromised.
+that recovery can proceed from surviving healthly OSDs.  This must be
+done with extreme care and attention to failure domains so that data availability
+is not compromised.
 
 To check device health, run the following command:
 
@@ -940,8 +949,8 @@ To check device health, run the following command:
 
    ceph device info <device-id>
 
-Device life expectancy is set either by a prediction model that the Manager
-runs or by an external tool that is activated by running the following command:
+Device life expectancy is set either by a prediction model that the Ceph Manager
+runs or by an external tool that runs a command the following form:
 
 .. prompt:: bash $
 
@@ -1095,7 +1104,7 @@ ____________________
 The count of read repairs has exceeded the config value threshold
 ``mon_osd_warn_num_repaired`` (default: ``10``).  Because scrub handles errors
 only for data at rest, and because any read error that occurs when another
-replica is available will be repaired immediately so that the client can get
+replica is available is repaired immediately so that the client can get
 the object data, there might exist failing disks that are not registering any
 scrub errors. This repair count is maintained as a way of identifying any such
 failing disks.
@@ -1354,7 +1363,7 @@ data have too many PGs. See *TOO_MANY_PGS* above.
 To silence the health check, raise the threshold by adjusting the
 ``mon_pg_warn_max_object_skew`` config option on the managers.
 
-The health check will be silenced for a specific pool only if
+The health check is silenced for a specific pool only if
 ``pg_autoscale_mode`` is set to ``on``.
 
 POOL_APP_NOT_ENABLED
@@ -1489,7 +1498,7 @@ percentage (determined by ``mon_warn_pg_not_scrubbed_ratio``) of the interval
 has elapsed after the time the scrub was scheduled and no scrub has been
 performed.
 
-PGs will be scrubbed only if they are flagged as ``clean`` (which means that
+PGs are scrubbed only if they are flagged as ``clean`` (which means that
 they are to be cleaned, and not that they have been examined and found to be
 clean). Misplaced or degraded PGs will not be flagged as ``clean`` (see
 *PG_AVAILABILITY* and *PG_DEGRADED* above).
