@@ -1642,12 +1642,10 @@ void OSDMap::get_out_of_subnet_osd_counts(CephContext *cct,
   for (int i = 0; i < max_osd; i++) {
     if (exists(i) && is_up(i)) {
       if (const auto& addrs = get_addrs(i).v; addrs.size() >= 2) {
-        auto v1_addr = addrs[0].ip_only_to_str();
-        if (!is_addr_in_subnet(cct, public_network, v1_addr)) {
+        if (!is_addr_in_subnet(cct, public_network, addrs[0])) {
           unreachable->emplace(i);
         }
-        auto v2_addr = addrs[1].ip_only_to_str();
-        if (!is_addr_in_subnet(cct, public_network, v2_addr)) {
+        if (!is_addr_in_subnet(cct, public_network, addrs[1])) {
           unreachable->emplace(i);
         }
       }
