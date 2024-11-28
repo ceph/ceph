@@ -282,12 +282,12 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
   int max_tries = 100;
   do {
     // create a vector to hold our trial mappings
-    int temp_array[devices_requested];
+    std::vector<int> temp_array(devices_requested);
     for (int i = 0; i < devices_requested; i++){
       temp_array[i] = lrand48() % (crush.get_max_devices());
     }
 
-    trial_placement.assign(temp_array, temp_array + devices_requested);
+    trial_placement.assign(temp_array.begin(), temp_array.begin() + devices_requested);
     accept_placement = check_valid_placement(ruleno, trial_placement, weight);
     attempted_tries++;
   } while (accept_placement == false && attempted_tries < max_tries);
