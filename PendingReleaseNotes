@@ -273,6 +273,13 @@
   exposed via the new `--snap-id` option for `rbd clone` command.
 * RBD: The output of `rbd snap ls --all` command now includes the original
   type for trashed snapshots.
+* CephFS: fixes to the implementation of the ``root_squash`` mechanism enabled
+  via cephx ``mds`` caps on a client credential require a new client feature
+  bit, ``client_mds_auth_caps``. Clients using credentials with ``root_squash``
+  without this feature will trigger the MDS to raise a HEALTH_ERR on the
+  cluster, MDS_CLIENTS_BROKEN_ROOTSQUASH. See the documentation on this warning
+  and the new feature bit for more information.
+
 
 >=18.0.0
 
