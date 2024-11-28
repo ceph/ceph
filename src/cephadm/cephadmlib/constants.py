@@ -2,7 +2,7 @@
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:main'
-DEFAULT_IMAGE_IS_MAIN = True
+DEFAULT_IMAGE_IS_MAIN = False
 DEFAULT_IMAGE_RELEASE = 'squid'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.43.0'
 DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
