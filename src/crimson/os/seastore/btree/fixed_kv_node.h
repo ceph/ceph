@@ -165,6 +165,11 @@ struct FixedKVNode : ChildableCachedExtent {
     : ChildableCachedExtent(std::move(ptr)),
       children(capacity, nullptr),
       capacity(capacity) {}
+  // Must be identical with FixedKVNode(capacity, ptr) after on_fully_loaded()
+  explicit FixedKVNode(uint16_t capacity, extent_len_t length)
+    : ChildableCachedExtent(length),
+      children(capacity, nullptr),
+      capacity(capacity) {}
   FixedKVNode(const FixedKVNode &rhs)
     : ChildableCachedExtent(rhs),
       range(rhs.range),
@@ -708,12 +713,17 @@ struct FixedKVInternalNode
     node_size,
     node_type_t>;
 
-  FixedKVInternalNode(ceph::bufferptr &&ptr)
-    : FixedKVNode<NODE_KEY>(CAPACITY, std::move(ptr)),
-      node_layout_t(this->get_bptr().c_str()) {}
+  explicit FixedKVInternalNode(ceph::bufferptr &&ptr)
+    : FixedKVNode<NODE_KEY>(CAPACITY, std::move(ptr)) {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
+  // Must be identical with FixedKVInternalNode(ptr) after on_fully_loaded()
+  explicit FixedKVInternalNode(extent_len_t length)
+    : FixedKVNode<NODE_KEY>(CAPACITY, length) {}
   FixedKVInternalNode(const FixedKVInternalNode &rhs)
-    : FixedKVNode<NODE_KEY>(rhs),
-      node_layout_t(this->get_bptr().c_str()) {}
+    : FixedKVNode<NODE_KEY>(rhs) {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
 
   bool have_children() const final {
     return true;
@@ -985,6 +995,10 @@ struct FixedKVInternalNode
       pivot);
   }
 
+  void on_fully_loaded() final {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
+
   /**
    * Internal relative addresses on read or in memory prior to commit
    * are either record or block relative depending on whether this
@@ -994,8 +1008,7 @@ struct FixedKVInternalNode
    * resolve_relative_addrs fixes up relative internal references
    * based on base.
    */
-  void resolve_relative_addrs(paddr_t base)
-  {
+  void resolve_relative_addrs(paddr_t base) final {
     LOG_PREFIX(FixedKVInternalNode::resolve_relative_addrs);
     for (auto i: *this) {
       if (i->get_val().is_relative()) {
@@ -1122,13 +1135,18 @@ struct FixedKVLeafNode
     node_type_t,
     has_children>;
   using base_t = FixedKVNode<NODE_KEY>;
-  FixedKVLeafNode(ceph::bufferptr &&ptr)
-    : FixedKVNode<NODE_KEY>(has_children ? CAPACITY : 0, std::move(ptr)),
-      node_layout_t(this->get_bptr().c_str()) {}
+  explicit FixedKVLeafNode(ceph::bufferptr &&ptr)
+    : FixedKVNode<NODE_KEY>(has_children ? CAPACITY : 0, std::move(ptr)) {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
+  // Must be identical with FixedKVLeafNode(ptr) after on_fully_loaded()
+  explicit FixedKVLeafNode(extent_len_t length)
+    : FixedKVNode<NODE_KEY>(has_children ? CAPACITY : 0, length) {}
   FixedKVLeafNode(const FixedKVLeafNode &rhs)
     : FixedKVNode<NODE_KEY>(rhs),
-      node_layout_t(this->get_bptr().c_str()),
-      modifications(rhs.modifications) {}
+      modifications(rhs.modifications) {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
 
   static constexpr bool do_has_children = has_children;
   // for the stable extent, modifications is always 0;
@@ -1233,6 +1251,10 @@ struct FixedKVLeafNode
 	parent->children[off] = nullptr;
       }
     }
+  }
+
+  void on_fully_loaded() final {
+    this->set_layout_buf(this->get_bptr().c_str());
   }
 
   void prepare_commit() final {

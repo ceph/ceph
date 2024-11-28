@@ -32,10 +32,6 @@ inline ChildableCachedExtent* get_reserved_ptr() {
 template <typename T>
 phy_tree_root_t& get_phy_tree_root(root_t& r);
 
-using get_child_iertr =
-  ::crimson::interruptible::interruptible_errorator<
-    typename trans_intr::condition,
-    get_child_ertr>;
 using get_phy_tree_root_node_ret =
   std::pair<bool, get_child_iertr::future<CachedExtentRef>>;
 
@@ -1501,7 +1497,7 @@ private:
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
-      return trans_intr::make_interruptible(std::move(v.get_child_fut())
+      return std::move(v.get_child_fut()
       ).si_then([on_found=std::move(on_found), node_iter, c,
                 parent_entry](auto child) {
         LOG_PREFIX(FixedKVBtree::lookup_internal_level);
@@ -1571,7 +1567,7 @@ private:
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
-      return trans_intr::make_interruptible(std::move(v.get_child_fut())
+      return std::move(v.get_child_fut()
       ).si_then([on_found=std::move(on_found), node_iter, c,
                 parent_entry](auto child) {
         LOG_PREFIX(FixedKVBtree::lookup_leaf);
@@ -2126,7 +2122,7 @@ private:
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
-      return trans_intr::make_interruptible(std::move(v.get_child_fut())
+      return std::move(v.get_child_fut()
       ).si_then([do_merge=std::move(do_merge), &pos,
                 donor_iter, donor_is_left, c, parent_pos](auto child) {
         LOG_PREFIX(FixedKVBtree::merge_level);

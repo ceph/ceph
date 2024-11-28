@@ -51,12 +51,12 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 
   interval_set<extent_len_t> modified_region;
 
-  TestBlock(ceph::bufferptr &&ptr)
+  explicit TestBlock(ceph::bufferptr &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
+  explicit TestBlock(extent_len_t length)
+    : LogicalCachedExtent(length) {}
   TestBlock(const TestBlock &other)
     : LogicalCachedExtent(other), modified_region(other.modified_region) {}
-  TestBlock(extent_len_t length)
-    : LogicalCachedExtent(length) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new TestBlock(*this));
@@ -113,8 +113,10 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
 
   void on_rewrite(Transaction&, CachedExtent&, extent_len_t) final {}
 
-  TestBlockPhysical(ceph::bufferptr &&ptr)
+  explicit TestBlockPhysical(ceph::bufferptr &&ptr)
     : CachedExtent(std::move(ptr)) {}
+  explicit TestBlockPhysical(extent_len_t length)
+    : CachedExtent(length) {}
   TestBlockPhysical(const TestBlockPhysical &other)
     : CachedExtent(other) {}
 

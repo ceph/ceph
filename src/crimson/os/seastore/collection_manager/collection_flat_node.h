@@ -96,6 +96,8 @@ struct CollectionNode
 
   explicit CollectionNode(ceph::bufferptr &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
+  explicit CollectionNode(extent_len_t length)
+    : LogicalCachedExtent(length) {}
   explicit CollectionNode(const CollectionNode &other)
     : LogicalCachedExtent(other),
       decoded(other.decoded) {}

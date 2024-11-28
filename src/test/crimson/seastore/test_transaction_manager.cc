@@ -506,9 +506,10 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.contains(addr, t.mapping_delta));
     ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
 
-    auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
+    auto maybe_indirect_ext = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->read_pin<TestBlock>(trans, std::move(pin));
     }).unsafe_get();
+    auto ext = maybe_indirect_ext.extent;
     EXPECT_EQ(addr, ext->get_laddr());
     return ext;
   }
@@ -520,9 +521,10 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.contains(addr, t.mapping_delta));
     ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
 
-    auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
+    auto maybe_indirect_ext = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->read_extent<TestBlock>(trans, addr, len);
     }).unsafe_get();
+    auto ext = maybe_indirect_ext.extent;
     EXPECT_EQ(addr, ext->get_laddr());
     return ext;
   }
@@ -533,11 +535,10 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.contains(addr, t.mapping_delta));
 
     using ertr = with_trans_ertr<TransactionManager::read_extent_iertr>;
-    using ret = ertr::future<TestBlockRef>;
     auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->read_extent<TestBlock>(trans, addr);
-    }).safe_then([](auto ext) -> ret {
-      return ertr::make_ready_future<TestBlockRef>(ext);
+    }).safe_then([](auto ret) {
+      return ertr::make_ready_future<TestBlockRef>(ret.extent);
     }).handle_error(
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<TestBlockRef>();
@@ -560,11 +561,10 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
 
     using ertr = with_trans_ertr<TransactionManager::read_extent_iertr>;
-    using ret = ertr::future<TestBlockRef>;
     auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->read_extent<TestBlock>(trans, addr, len);
-    }).safe_then([](auto ext) -> ret {
-      return ertr::make_ready_future<TestBlockRef>(ext);
+    }).safe_then([](auto ret) {
+      return ertr::make_ready_future<TestBlockRef>(ret.extent);
     }).handle_error(
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<TestBlockRef>();
@@ -583,14 +583,13 @@ struct transaction_manager_test_t :
     test_transaction_t &t,
     LBAMappingRef &&pin) {
     using ertr = with_trans_ertr<TransactionManager::base_iertr>;
-    using ret = ertr::future<TestBlockRef>;
     bool indirect = pin->is_indirect();
     auto addr = pin->get_key();
     auto im_addr = indirect ? pin->get_intermediate_base() : L_ADDR_NULL;
     auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->read_pin<TestBlock>(trans, std::move(pin));
-    }).safe_then([](auto ext) -> ret {
-      return ertr::make_ready_future<TestBlockRef>(ext);
+    }).safe_then([](auto ret) {
+      return ertr::make_ready_future<TestBlockRef>(ret.extent);
     }).handle_error(
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<TestBlockRef>();
@@ -2189,7 +2188,7 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
     using namespace crimson::os::seastore::lba_manager::btree;
     {
       auto t = create_transaction();
-      for (int i = 0; i < LEAF_NODE_CAPACITY; i++) {
+      for (unsigned i = 0; i < LEAF_NODE_CAPACITY; i++) {
 	auto extent = alloc_extent(
 	  t,
 	  get_laddr_hint(i * 4096),
@@ -2210,9 +2209,11 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
       assert(pin->is_parent_viewable());
       assert(pin->parent_modified());
       pin->maybe_fix_pos();
-      auto v = pin->get_logical_extent(*t.t);
-      assert(v.has_child());
-      auto extent2 = v.get_child_fut().unsafe_get();
+      auto extent2 = with_trans_intr(*(t.t), [&pin](auto& trans) {
+        auto v = pin->get_logical_extent(trans);
+        assert(v.has_child());
+        return std::move(v.get_child_fut());
+      }).unsafe_get();
       assert(extent.get() == extent2.get());
       submit_transaction(std::move(t));
     }
