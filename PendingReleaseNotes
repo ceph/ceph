@@ -274,6 +274,11 @@
 * RBD: The output of `rbd snap ls --all` command now includes the original
   type for trashed snapshots.
 
+* CephFS: Command "ceph mds fail" and "ceph fs fail" now requires a
+  confirmation flag when some MDSs exhibit health warning MDS_TRIM or
+  MDS_CACHE_OVERSIZED. This is to prevent accidental MDS failover causing
+  further delays in recovery.
+
 >=18.0.0
 
 * RBD: The semantics of compare-and-write C++ API (`Image::compare_and_write`

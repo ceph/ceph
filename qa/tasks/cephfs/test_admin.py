@@ -8,6 +8,7 @@ from os.path import join as os_path_join
 
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError
+from teuthology.contextutil import safe_while
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, classhook
 from tasks.cephfs.filesystem import FileLayout, FSMissing
@@ -37,6 +38,38 @@ class TestAdminCommands(CephFSTestCase):
         self.run_ceph_cmd('osd', 'pool', 'create', n+"-data", "8", "erasure", n+"-profile")
         if overwrites:
             self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
+
+    def _get_unhealthy_mds_id(self, health_report, health_warn):
+        '''
+        Return MDS ID for which health warning in "health_warn" has been
+        generated.
+        '''
+        # variable "msg" should hold string something like this -
+        # 'mds.b(mds.0): Behind on trimming (865/10) max_segments: 10,
+        # num_segments: 86
+        msg = health_report['checks'][health_warn]['detail'][0]['message']
+        mds_id = msg.split('(')[0]
+        mds_id = mds_id.replace('mds.', '')
+        return mds_id
+
+    def wait_till_health_warn(self, health_warn, active_mds_id, sleep=3,
+                              tries=10):
+        errmsg = (f'Expected health warning "{health_warn}" to eventually '
+                  'show up in output of command "ceph health detail". Tried '
+                  f'{tries} times with interval of {sleep} seconds but the '
+                  'health warning didn\'t turn up.')
+
+        with safe_while(sleep=sleep, tries=tries, action=errmsg) as proceed:
+            while proceed():
+                self.get_ceph_cmd_stdout(
+                    f'tell mds.{active_mds_id} cache status')
+
+                health_report = json.loads(self.get_ceph_cmd_stdout(
+                    'health detail --format json'))
+
+                if health_warn in health_report['checks']:
+                    return
+
 
 @classhook('_add_valid_tell')
 class TestValidTell(TestAdminCommands):
@@ -1208,3 +1241,181 @@ class TestPermErrMsg(CephFSTestCase):
                 args=(f'fs authorize {self.fs.name} {self.CLIENT_NAME} / '
                       f'{wrong_perm}'), retval=self.EXPECTED_ERRNO,
                 errmsgs=self.EXPECTED_ERRMSG)
+
+
+class TestFSFail(TestAdminCommands):
+
+    MDSS_REQUIRED = 2
+    CLIENTS_REQUIRED = 1
+
+    def test_with_health_warn_oversize_cache(self):
+        '''
+        Test that, when health warning MDS_CACHE_OVERSIZE is present for an
+        MDS, command "ceph fs fail" fails without confirmation flag and passes
+        when confirmation flag is passed.
+        '''
+        health_warn = 'MDS_CACHE_OVERSIZED'
+        self.config_set('mds', 'mds_cache_memory_limit', '1K')
+        self.config_set('mds', 'mds_health_cache_threshold', '1.00000')
+        active_mds_id = self.fs.get_active_names()[0]
+
+        self.mount_a.open_n_background('.', 400)
+        self.wait_till_health_warn(health_warn, active_mds_id)
+
+        # actual testing begins now.
+        errmsg = 'mds_cache_oversized'
+        self.negtest_ceph_cmd(args=f'fs fail {self.fs.name}',
+                              retval=1, errmsgs=errmsg)
+        self.run_ceph_cmd(f'fs fail {self.fs.name} --yes-i-really-mean-it')
+
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+    def test_with_health_warn_trim(self):
+        '''
+        Test that, when health warning MDS_TRIM is present for an MDS, command
+        "ceph fs fail" fails without confirmation flag and passes when
+        confirmation flag is passed.
+        '''
+        health_warn = 'MDS_TRIM'
+        # for generating health warning MDS_TRIM
+        self.config_set('mds', 'mds_debug_subtrees', 'true')
+        # this will really really slow the trimming, so that MDS_TRIM stays
+        # for longer.
+        self.config_set('mds', 'mds_log_trim_decay_rate', '60')
+        self.config_set('mds', 'mds_log_trim_threshold', '1')
+        active_mds_id = self.fs.get_active_names()[0]
+
+        self.mount_a.open_n_background('.', 400)
+        self.wait_till_health_warn(health_warn, active_mds_id)
+
+        # actual testing begins now.
+        errmsg = 'mds_trim'
+        self.negtest_ceph_cmd(args=f'fs fail {self.fs.name}',
+                              retval=1, errmsgs=errmsg)
+        self.run_ceph_cmd(f'fs fail {self.fs.name} --yes-i-really-mean-it')
+
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+    def test_with_health_warn_with_2_active_MDSs(self):
+        '''
+        Test that, when a CephFS has 2 active MDSs and one of them have either
+        health warning MDS_TRIM or MDS_CACHE_OVERSIZE, running "ceph fs fail"
+        fails without confirmation flag and passes when confirmation flag is
+        passed.
+        '''
+        health_warn = 'MDS_CACHE_OVERSIZED'
+        self.fs.set_max_mds(2)
+        self.config_set('mds', 'mds_cache_memory_limit', '1K')
+        self.config_set('mds', 'mds_health_cache_threshold', '1.00000')
+        self.fs.wait_for_daemons()
+        mds1_id, mds2_id = self.fs.get_active_names()
+
+        self.mount_a.open_n_background('.', 400)
+        # MDS ID for which health warning has been generated.
+        self.wait_till_health_warn(health_warn, mds1_id)
+
+        # actual testing begins now.
+        errmsg = 'mds_cache_oversized'
+        self.negtest_ceph_cmd(args=f'fs fail {self.fs.name}',
+                              retval=1, errmsgs=errmsg)
+        self.run_ceph_cmd(f'fs fail {self.fs.name} --yes-i-really-mean-it')
+
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+
+class TestMDSFail(TestAdminCommands):
+
+    MDSS_REQUIRED = 2
+    CLIENTS_REQUIRED = 1
+
+    def test_with_health_warn_oversize_cache(self):
+        '''
+        Test that, when health warning MDS_CACHE_OVERSIZE is present for an
+        MDS, command "ceph mds fail" fails without confirmation flag and
+        passes when confirmation flag is passed.
+        '''
+        health_warn = 'MDS_CACHE_OVERSIZED'
+        self.config_set('mds', 'mds_cache_memory_limit', '1K')
+        self.config_set('mds', 'mds_health_cache_threshold', '1.00000')
+        active_mds_id = self.fs.get_active_names()[0]
+
+        self.mount_a.open_n_background('.', 400)
+        self.wait_till_health_warn(health_warn, active_mds_id)
+
+        # actual testing begins now.
+        errmsg = 'mds_cache_oversized'
+        self.negtest_ceph_cmd(args=f'mds fail {active_mds_id}',
+                              retval=1, errmsgs=errmsg)
+        self.run_ceph_cmd(f'mds fail {active_mds_id} --yes-i-really-mean-it')
+
+    def test_with_health_warn_trim(self):
+        '''
+        Test that, when health warning MDS_TRIM is present for an MDS, command
+        "ceph mds fail" fails without confirmation flag and passes when
+        confirmation is passed.
+        '''
+        health_warn = 'MDS_TRIM'
+        # for generating health warning MDS_TRIM
+        self.config_set('mds', 'mds_debug_subtrees', 'true')
+        # this will really really slow the trimming, so that MDS_TRIM stays
+        # for longer.
+        self.config_set('mds', 'mds_log_trim_decay_rate', '60')
+        self.config_set('mds', 'mds_log_trim_threshold', '1')
+        active_mds_id = self.fs.get_active_names()[0]
+
+        self.mount_a.open_n_background('.', 400)
+        self.wait_till_health_warn(health_warn, active_mds_id)
+
+        # actual testing begins now...
+        errmsg = 'mds_trim'
+        self.negtest_ceph_cmd(args=f'mds fail {active_mds_id}',
+                              retval=1, errmsgs=errmsg)
+        self.run_ceph_cmd(f'mds fail {active_mds_id} --yes-i-really-mean-it')
+
+    def test_with_health_warn_with_2_active_MDSs(self):
+        '''
+        Test when a CephFS has 2 active MDSs and one of them have either
+        health warning MDS_TRIM or MDS_CACHE_OVERSIZE, running "ceph mds fail"
+        fails for both MDSs without confirmation flag and passes for both when
+        confirmation flag is passed.
+        '''
+        health_warn = 'MDS_CACHE_OVERSIZED'
+        self.fs.set_max_mds(2)
+        self.config_set('mds', 'mds_cache_memory_limit', '1K')
+        self.config_set('mds', 'mds_health_cache_threshold', '1.00000')
+        self.fs.wait_for_daemons()
+        mds1_id, mds2_id = self.fs.get_active_names()
+
+        self.mount_a.open_n_background('.', 400)
+        self.wait_till_health_warn(health_warn, mds1_id)
+
+        health_report = json.loads(self.get_ceph_cmd_stdout('health detail '
+                                                            '--format json'))
+        # MDS ID for which health warning has been generated.
+        hw_mds_id = self._get_unhealthy_mds_id(health_report, health_warn)
+        if mds1_id == hw_mds_id:
+            non_hw_mds_id = mds2_id
+        elif mds2_id == hw_mds_id:
+            non_hw_mds_id = mds1_id
+        else:
+            raise RuntimeError('There are only 2 MDSs right now but apparently'
+                               'health warning was raised for an MDS other '
+                               'than these two. This is definitely an error.')
+
+        # actual testing begins now...
+        errmsg = 'mds_cache_oversized'
+        self.negtest_ceph_cmd(args=f'mds fail {non_hw_mds_id}', retval=1,
+                              errmsgs=errmsg)
+        self.negtest_ceph_cmd(args=f'mds fail {hw_mds_id}', retval=1,
+                              errmsgs=errmsg)
+        self.run_ceph_cmd(f'mds fail {mds1_id} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'mds fail {mds2_id} --yes-i-really-mean-it')
