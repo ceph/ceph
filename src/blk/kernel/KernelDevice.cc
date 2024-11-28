@@ -629,9 +629,9 @@ void KernelDevice::_aio_thread()
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
     int max = cct->_conf->bdev_aio_reap_max;
-    aio_t *aio[max];
+    std::vector<aio_t*> aio(max);
     int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms,
-					 aio, max);
+					 aio.data(), max);
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
       ceph_abort_msg("got unexpected error from io_getevents");

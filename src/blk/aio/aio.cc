@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <algorithm>
+#include <boost/container/small_vector.hpp>
 #include "aio.h"
 
 std::ostream& operator<<(std::ostream& os, const aio_t& aio)
@@ -26,7 +27,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
 
   aio_iter cur = begin;
 #if defined(HAVE_LIBAIO)
-  struct aio_t *piocb[max_iodepth];
+  boost::container::small_vector<struct aio_t*, 1024> piocb(max_iodepth);
 #endif
   int done = 0;
   int pushed = 0; //used for LIBAIO only
@@ -40,7 +41,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
       ++cur;
     }
     int toSubmit = pulled - pushed;
-    r = io_submit(ctx, toSubmit, (struct iocb**)(piocb + pushed));
+    r = io_submit(ctx, toSubmit, (struct iocb**)(piocb.data() + pushed));
     if (r >= 0 && r < toSubmit) {
       pushed += r;
       done += r;
@@ -84,9 +85,9 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
 int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
 {
 #if defined(HAVE_LIBAIO)
-  io_event events[max];
+  boost::container::small_vector<io_event, 10> events(max);
 #elif defined(HAVE_POSIXAIO)
-  struct kevent events[max];
+  boost::container::small_vector<struct kevent,10> events[max];
 #endif
   struct timespec t = {
     timeout_ms / 1000,
@@ -96,9 +97,9 @@ int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
   int r = 0;
   do {
 #if defined(HAVE_LIBAIO)
-    r = io_getevents(ctx, 1, max, events, &t);
+    r = io_getevents(ctx, 1, max, events.data(), &t);
 #elif defined(HAVE_POSIXAIO)
-    r = kevent(ctx, NULL, 0, events, max, &t);
+    r = kevent(ctx, NULL, 0, events.data(), max, &t);
     if (r < 0)
       r = -errno;
 #endif
