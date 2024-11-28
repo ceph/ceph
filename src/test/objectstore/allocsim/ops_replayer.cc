@@ -414,12 +414,12 @@ int main(int argc, char** argv) {
     }
     uint64_t start_offset = 0;
     uint64_t step_size = file_stat.st_size / nparser_threads;
-    for (int i = 0; i < nparser_threads; i++) {
+    for (int i = 0; std::cmp_less(i, nparser_threads); i++) {
       char* end = mapped_buffer + start_offset + step_size;
       while(*end != '\n') {
           end--;
       }
-      if (i == nparser_threads - 1) {
+      if (std::cmp_equal(i, nparser_threads - 1)) {
           end = mapped_buffer + file_stat.st_size;
       }
       shared_ptr<ParserContext> context = make_shared<ParserContext>();
@@ -480,7 +480,7 @@ int main(int argc, char** argv) {
 
   // process ops
   vector<thread> worker_threads;
-  for (int i = 0; i < nworker_threads; i++) {
+  for (int i = 0; std::cmp_less(i, nworker_threads); i++) {
       worker_threads.push_back(thread(worker_thread_entry, i, nworker_threads, std::ref(ops), max_buffer_size, io_depth, &io));
   }
   for (auto& worker : worker_threads) {
