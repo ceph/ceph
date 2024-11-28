@@ -1502,18 +1502,15 @@ int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
 }
 
 int cls_log(int level, const char *format, ...) {
-  int size = 256;
+  static constexpr int size = 256;
   va_list ap;
-  while (1) {
-    char buf[size];
-    va_start(ap, format);
-    int n = vsnprintf(buf, size, format, ap);
-    va_end(ap);
-    if ((n > -1 && n < size) || size > 8196) {
-      dout(ceph::dout::need_dynamic(level)) << buf << dendl;
-      return n;
-    }
-    size *= 2;
+  std::array<char, size> buf;
+  va_start(ap, format);
+  int n = vsnprintf(buf.data(), size, format, ap);
+  va_end(ap);
+  if ((n > -1 && n < size) || size > 8196) {
+    dout(ceph::dout::need_dynamic(level)) << buf.data() << dendl;
+    return n;
   }
   return 0;
 }
