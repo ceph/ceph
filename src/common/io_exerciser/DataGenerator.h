@@ -51,6 +51,8 @@ class DataGenerator {
   // Used for testing debug outputs from data generation
   virtual bufferlist generate_wrong_data(uint64_t offset, uint64_t length);
 
+  using SeedBytes = int;
+
  protected:
   const ObjectModel& m_model;
 

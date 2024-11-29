@@ -37,6 +37,8 @@ std::unique_ptr<IoSequence> EcIoSequence::generate_sequence(
     case Sequence::SEQUENCE_SEQ11:
       [[fallthrough]];
     case Sequence::SEQUENCE_SEQ12:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ13:
       return std::make_unique<ReadInjectSequence>(obj_size_range, seed,
                                                   sequence, k, m);
     case Sequence::SEQUENCE_SEQ10:
