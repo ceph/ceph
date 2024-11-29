@@ -561,7 +561,8 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
       uint64_t chunk_size = read_pipeline.sinfo.get_chunk_size();
       uint64_t trim_offset = 0;
       for (auto shard : wanted_to_read) {
-	if (shard * chunk_size < aligned_offset_in_stripe) {
+	if (read_pipeline.sinfo.get_raw_shard(shard) * chunk_size <
+	    aligned_offset_in_stripe) {
 	  trim_offset += chunk_size;
 	} else {
 	  break;
