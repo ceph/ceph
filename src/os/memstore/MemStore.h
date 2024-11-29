@@ -185,9 +185,6 @@ public:
   typedef Collection::Ref CollectionRef;
 
 private:
-  class OmapIteratorImpl;
-
-
   std::unordered_map<coll_t, CollectionRef> coll_map;
   /// rwlock to protect coll_map
   ceph::shared_mutex coll_lock{
@@ -373,12 +370,6 @@ public:
     const ghobject_t &oid,   ///< [in] Object containing omap
     const std::set<std::string> &keys, ///< [in] Keys to check
     std::set<std::string> *out         ///< [out] Subset of keys defined on oid
-    ) override;
-
-  using ObjectStore::get_omap_iterator;
-  ObjectMap::ObjectMapIterator get_omap_iterator(
-    CollectionHandle& c,              ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
     ) override;
 
   int omap_iterate(

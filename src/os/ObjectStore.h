@@ -744,21 +744,6 @@ public:
     std::set<std::string> *out         ///< [out] Subset of keys defined on oid
     ) = 0;
 
-  /**
-   * Returns an object map iterator
-   *
-   * Warning!  The returned iterator is an implicit lock on filestore
-   * operations in c.  Do not use filestore methods on c while the returned
-   * iterator is live.  (Filling in a transaction is no problem).
-   *
-   * @return iterator, null on error
-   */
-  [[deprecated("in favor of omap_iterate()")]]
-  virtual ObjectMap::ObjectMapIterator get_omap_iterator(
-    CollectionHandle &c,   ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
-    ) = 0;
-
   struct omap_iter_seek_t {
     std::string seek_position;
     enum {

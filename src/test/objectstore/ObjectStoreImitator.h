@@ -341,12 +341,6 @@ public:
       ) override {
     return 0;
   }
-  ObjectMap::ObjectMapIterator
-  get_omap_iterator(CollectionHandle &c,  ///< [in] collection
-                    const ghobject_t &oid ///< [in] object
-                    ) override {
-    return {};
-  }
 
   int omap_iterate(CollectionHandle &c,   ///< [in] collection
                    const ghobject_t &oid, ///< [in] object
