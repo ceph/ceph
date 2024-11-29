@@ -7,22 +7,47 @@
 
 Bucket and Host Name
 --------------------
-There are two different modes of accessing the buckets. The first (preferred) method
-identifies the bucket as the top-level directory in the URI. ::
+There are two different modes of accessing buckets. The first method identifies
+the bucket as the top-level directory in the URI::
 
 	GET /mybucket HTTP/1.1
 	Host: cname.domain.com
 
-The second method identifies the bucket via a virtual bucket host name. For example::
+Most S3 clients nowadays rely on vhost-style access. The desired bucket is
+indicated by a DNS FQDN. For example::
 
 	GET / HTTP/1.1
 	Host: mybucket.cname.domain.com
 
-To configure virtual hosted buckets, you can either set ``rgw_dns_name = cname.domain.com`` in ceph.conf, or add ``cname.domain.com`` to the list of ``hostnames`` in your zonegroup configuration. See `Ceph Object Gateway - Multisite Configuration`_ for more on zonegroups.
+The second method is deprecated by AWS. See the `Amazon S3 Path Deprecation
+Plan`_ for more information.
 
-.. tip:: We prefer the first method, because the second method requires expensive domain certification and DNS wild cards.
+To configure virtual hosted buckets, you can either set ``rgw_dns_name =
+cname.domain.com`` in ``ceph.conf`` or add ``cname.domain.com`` to the list of
+``hostnames`` in your zonegroup configuration. See `Ceph Object Gateway -
+Multisite Configuration`_ for more on zonegroups.
 
-.. tip:: You can define multiple hostname directly with the :confval:`rgw_dns_name` parameter.
+Here is an example of a ``ceph config set`` comamnd that sets ``rgw_dns_name``
+to ``cname.domain.com``:
+
+.. prompt:: bash $
+
+   ceph config set client.rgw.<ceph authx client for rgw> rgw_dns_name cname.domain.dom
+
+.. tip:: You can define multiple hostnames directly with the
+   :confval:`rgw_dns_name` parameter.
+
+.. tip:: When SSL is enabled, the certificates must use a wildcard in the
+   domain name in order to match the bucket subdomains.
+
+.. note:: When Ceph Object Gateways are behind a proxy, use the proxy's DNS
+   name instead. Then you can use ``ceph config set client.rgw`` to set the DNS
+   name for all instances.
+   
+.. note:: The static website view for the `s3website` API must be served under
+   a different domain name. This is configured separately from
+   :confval:`rgw_dns_name`, in :confval:`rgw_dns_s3website_name`.
+
 
 Common Request Headers
 ----------------------
@@ -111,3 +136,4 @@ Common Response Status
 +---------------+-----------------------------------+
 
 .. _`Ceph Object Gateway - Multisite Configuration`: ../../multisite
+.. _`Amazon S3 Path Deprecation Plan`: https://aws.amazon.com/blogs/aws/amazon-s3-path-deprecation-plan-the-rest-of-the-story/
