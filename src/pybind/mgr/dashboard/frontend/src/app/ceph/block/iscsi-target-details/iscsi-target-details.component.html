@@ -1,23 +1,21 @@
 <div class="row">
-  <div class="col-6">
+  <div class="col-6 card-tree">
     <legend i18n>iSCSI Topology</legend>
 
-    <tree-root #tree
-               [nodes]="nodes"
-               [options]="treeOptions"
-               (updateData)="onUpdateData()">
-      <ng-template #treeNodeTemplate
-                   let-node
-                   let-index="index">
-        <i [class]="node.data.cdIcon"></i>
-        <span>{{ node.data.name }}</span>
-        &nbsp;
-        <span class="badge"
-              [ngClass]="{'badge-success': ['logged_in'].includes(node.data.status), 'badge-danger': ['logged_out'].includes(node.data.status)}">
-          {{ node.data.status }}
-        </span>
-      </ng-template>
-    </tree-root>
+    <cds-tree-view #tree
+                   [tree]="nodes"
+                   (select)="onNodeSelected($event)">
+    </cds-tree-view>
+    <ng-template #treeNodeTemplate
+                 let-node>
+      <i [class]="node?.cdIcon"></i>
+      <span>{{ node?.name }}</span>
+      &nbsp;
+      <span class="badge"
+            [ngClass]="{'badge-success': ['logged_in'].includes(node?.status), 'badge-danger': ['logged_out'].includes(node?.status)}">
+        {{ node?.status }}
+      </span>
+    </ng-template>
   </div>
 
   <div class="col-6 metadata"

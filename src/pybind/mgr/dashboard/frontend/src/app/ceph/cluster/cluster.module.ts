@@ -11,10 +11,10 @@ import {
   GridModule,
   ProgressIndicatorModule,
   InputModule,
-  ModalModule
+  ModalModule,
+  TreeviewModule
 } from 'carbon-components-angular';
 
-import { TreeModule } from '@circlon/angular-tree-component';
 import {
   NgbActiveModal,
   NgbDatepickerModule,
@@ -91,7 +91,7 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     MgrModulesModule,
     NgbTypeaheadModule,
     NgbTimepickerModule,
-    TreeModule,
+    TreeviewModule,
     CephSharedModule,
     NgbDatepickerModule,
     NgbPopoverModule,

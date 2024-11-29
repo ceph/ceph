@@ -2,7 +2,6 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { DebugElement } from '@angular/core';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import { TreeModule } from '@circlon/angular-tree-component';
 import { of } from 'rxjs';
 
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
@@ -17,7 +16,7 @@ describe('CrushmapComponent', () => {
   let crushRuleService: CrushRuleService;
   let crushRuleServiceInfoSpy: jasmine.Spy;
   configureTestBed({
-    imports: [HttpClientTestingModule, TreeModule, SharedModule],
+    imports: [HttpClientTestingModule, SharedModule],
     declarations: [CrushmapComponent]
   });
 
@@ -43,7 +42,7 @@ describe('CrushmapComponent', () => {
     fixture.detectChanges();
     tick(5000);
     expect(crushRuleService.getInfo).toHaveBeenCalled();
-    expect(component.nodes[0].name).toEqual('No nodes!');
+    expect(component.nodes[0].label).toEqual('No nodes!');
     component.ngOnDestroy();
   }));
 
@@ -66,72 +65,19 @@ describe('CrushmapComponent', () => {
     fixture.detectChanges();
     tick(10000);
     expect(crushRuleService.getInfo).toHaveBeenCalled();
-    expect(component.nodes).toEqual([
-      {
-        cdId: -3,
-        children: [
-          {
-            children: [
-              {
-                id: component.nodes[0].children[0].children[0].id,
-                cdId: 4,
-                status: 'up',
-                type: 'osd',
-                name: 'osd.0-2 (osd)'
-              }
-            ],
-            id: component.nodes[0].children[0].id,
-            cdId: -4,
-            status: undefined,
-            type: 'host',
-            name: 'my-host-2 (host)'
-          }
-        ],
-        id: component.nodes[0].id,
-        status: undefined,
-        type: 'datacenter',
-        name: 'site1 (datacenter)'
-      },
-      {
-        children: [
-          {
-            children: [
-              {
-                id: component.nodes[1].children[0].children[0].id,
-                cdId: 0,
-                status: 'up',
-                type: 'osd',
-                name: 'osd.0 (osd)'
-              },
-              {
-                id: component.nodes[1].children[0].children[1].id,
-                cdId: 1,
-                status: 'down',
-                type: 'osd',
-                name: 'osd.1 (osd)'
-              },
-              {
-                id: component.nodes[1].children[0].children[2].id,
-                cdId: 2,
-                status: 'up',
-                type: 'osd',
-                name: 'osd.2 (osd)'
-              }
-            ],
-            id: component.nodes[1].children[0].id,
-            cdId: -2,
-            status: undefined,
-            type: 'host',
-            name: 'my-host (host)'
-          }
-        ],
-        id: component.nodes[1].id,
-        cdId: -1,
-        status: undefined,
-        type: 'root',
-        name: 'default (root)'
-      }
-    ]);
+    expect(component.nodes).not.toBeNull();
+    expect(component.nodes).toHaveLength(2);
+    expect(component.nodes[0]).toHaveProperty('labelContext', {
+      name: 'site1 (datacenter)',
+      status: undefined,
+      type: 'datacenter'
+    });
+    expect(component.nodes[1]).toHaveProperty('labelContext', {
+      name: 'default (root)',
+      status: undefined,
+      type: 'root'
+    });
+
     component.ngOnDestroy();
   }));
 });

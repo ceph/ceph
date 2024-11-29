@@ -1,7 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { DebugElement } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { TreeModule } from '@circlon/angular-tree-component';
 import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 
@@ -19,7 +18,6 @@ describe('RgwMultisiteDetailsComponent', () => {
     declarations: [RgwMultisiteDetailsComponent],
     imports: [
       HttpClientTestingModule,
-      TreeModule,
       SharedModule,
       ToastrModule.forRoot(),
       RouterTestingModule,
