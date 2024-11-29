@@ -1,12 +1,6 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import {
-  ITreeOptions,
-  TreeComponent,
-  TreeModel,
-  TreeNode,
-  TREE_ACTIONS
-} from '@circlon/angular-tree-component';
+import { Node } from 'carbon-components-angular/treeview/tree-node.types';
 import _ from 'lodash';
 
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -14,6 +8,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { BooleanTextPipe } from '~/app/shared/pipes/boolean-text.pipe';
 import { IscsiBackstorePipe } from '~/app/shared/pipes/iscsi-backstore.pipe';
+import { TreeViewService } from '~/app/shared/services/tree-view.service';
 
 @Component({
   selector: 'cd-iscsi-target-details',
@@ -40,7 +35,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     }
   }
 
-  @ViewChild('tree') tree: TreeComponent;
+  @ViewChild('treeNodeTemplate', { static: true }) labelTpl: TemplateRef<any>;
 
   icons = Icons;
   columns: CdTableColumn[];
@@ -49,19 +44,12 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   selectedItem: any;
   title: string;
 
-  nodes: any[] = [];
-  treeOptions: ITreeOptions = {
-    useVirtualScroll: true,
-    actionMapping: {
-      mouse: {
-        click: this.onNodeSelected.bind(this)
-      }
-    }
-  };
+  nodes: Node[] = [];
 
   constructor(
     private iscsiBackstorePipe: IscsiBackstorePipe,
-    private booleanTextPipe: BooleanTextPipe
+    private booleanTextPipe: BooleanTextPipe,
+    public treeViewService: TreeViewService
   ) {}
 
   ngOnInit() {
@@ -132,33 +120,41 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
 
     const disks: any[] = [];
     _.forEach(this.selectedItem.disks, (disk) => {
-      const cdId = 'disk_' + disk.pool + '_' + disk.image;
-      this.metadata[cdId] = {
+      const id = 'disk_' + disk.pool + '_' + disk.image;
+      this.metadata[id] = {
         controls: disk.controls,
         backstore: disk.backstore
       };
       ['wwn', 'lun'].forEach((k) => {
         if (k in disk) {
-          this.metadata[cdId][k] = disk[k];
+          this.metadata[id][k] = disk[k];
         }
       });
       disks.push({
+        id: id,
         name: `${disk.pool}/${disk.image}`,
-        cdId: cdId,
-        cdIcon: cssClasses.disks.leaf
+        label: `${disk.pool}/${disk.image}`,
+        value: { cdIcon: cssClasses.disks.leaf }
       });
     });
 
-    const portals: any[] = [];
+    const portals: Node[] = [];
     _.forEach(this.selectedItem.portals, (portal) => {
       portals.push({
-        name: `${portal.host}:${portal.ip}`,
-        cdIcon: cssClasses.portals.leaf
+        label: this.labelTpl,
+        labelContext: {
+          name: `${portal.host}:${portal.ip}`,
+          cdIcon: cssClasses.portals.leaf
+        },
+        value: {
+          name: `${portal.host}:${portal.ip}`,
+          cdIcon: cssClasses.portals.leaf
+        }
       });
     });
 
-    const clients: any[] = [];
-    _.forEach(this.selectedItem.clients, (client) => {
+    const clients: Node[] = [];
+    _.forEach(this.selectedItem.clients, (client: Node) => {
       const client_metadata = _.cloneDeep(client.auth);
       if (client.info) {
         _.extend(client_metadata, client.info);
@@ -169,12 +165,19 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       }
       this.metadata['client_' + client.client_iqn] = client_metadata;
 
-      const luns: any[] = [];
-      client.luns.forEach((lun: Record<string, any>) => {
+      const luns: Node[] = [];
+      client.luns.forEach((lun: Node) => {
         luns.push({
-          name: `${lun.pool}/${lun.image}`,
-          cdId: 'disk_' + lun.pool + '_' + lun.image,
-          cdIcon: cssClasses.disks.leaf
+          label: this.labelTpl,
+          labelContext: {
+            name: `${lun.pool}/${lun.image}`,
+            cdIcon: cssClasses.disks.leaf
+          },
+          value: {
+            name: `${lun.pool}/${lun.image}`,
+            cdIcon: cssClasses.disks.leaf
+          },
+          id: 'disk_' + lun.pool + '_' + lun.image
         });
       });
 
@@ -183,46 +186,66 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
         status = Object.keys(client.info.state).includes('LOGGED_IN') ? 'logged_in' : 'logged_out';
       }
       clients.push({
-        name: client.client_iqn,
-        status: status,
-        cdId: 'client_' + client.client_iqn,
-        children: luns,
-        cdIcon: cssClasses.initiators.leaf
+        label: this.labelTpl,
+        labelContext: {
+          name: client.client_iqn,
+          status: status,
+          cdIcon: cssClasses.initiators.leaf
+        },
+        value: {
+          name: client.client_iqn,
+          status: status,
+          cdIcon: cssClasses.initiators.leaf
+        },
+        id: 'client_' + client.client_iqn,
+        children: luns
       });
     });
 
-    const groups: any[] = [];
-    _.forEach(this.selectedItem.groups, (group) => {
-      const luns: any[] = [];
-      group.disks.forEach((disk: Record<string, any>) => {
+    const groups: Node[] = [];
+    _.forEach(this.selectedItem.groups, (group: Node) => {
+      const luns: Node[] = [];
+      group.disks.forEach((disk: Node) => {
         luns.push({
-          name: `${disk.pool}/${disk.image}`,
-          cdId: 'disk_' + disk.pool + '_' + disk.image,
-          cdIcon: cssClasses.disks.leaf
+          label: this.labelTpl,
+          labelContext: {
+            name: `${disk.pool}/${disk.image}`,
+            cdIcon: cssClasses.disks.leaf
+          },
+          value: {
+            name: `${disk.pool}/${disk.image}`,
+            cdIcon: cssClasses.disks.leaf
+          },
+          id: 'disk_' + disk.pool + '_' + disk.image
         });
       });
 
-      const initiators: any[] = [];
+      const initiators: Node[] = [];
       group.members.forEach((member: string) => {
         initiators.push({
-          name: member,
-          cdId: 'client_' + member
+          label: this.labelTpl,
+          labelContext: { name: member },
+          value: { name: member },
+          id: 'client_' + member
         });
       });
 
       groups.push({
-        name: group.group_id,
-        cdIcon: cssClasses.groups.leaf,
+        label: this.labelTpl,
+        labelContext: { name: group.group_id, cdIcon: cssClasses.groups.leaf },
+        value: { name: group.group_id, cdIcon: cssClasses.groups.leaf },
         children: [
           {
-            name: 'Disks',
-            children: luns,
-            cdIcon: cssClasses.disks.expanded
+            label: this.labelTpl,
+            labelContext: { name: 'Disks', cdIcon: cssClasses.disks.expanded },
+            value: { name: 'Disks', cdIcon: cssClasses.disks.expanded },
+            children: luns
           },
           {
-            name: 'Initiators',
-            children: initiators,
-            cdIcon: cssClasses.initiators.expanded
+            label: this.labelTpl,
+            labelContext: { name: 'Initiators', cdIcon: cssClasses.initiators.expanded },
+            value: { name: 'Initiators', cdIcon: cssClasses.initiators.expanded },
+            children: initiators
           }
         ]
       });
@@ -230,34 +253,45 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
 
     this.nodes = [
       {
-        name: this.selectedItem.target_iqn,
-        cdId: 'root',
-        isExpanded: true,
-        cdIcon: cssClasses.target.expanded,
+        id: 'root',
+        label: this.labelTpl,
+        labelContext: {
+          name: this.selectedItem.target_iqn,
+          cdIcon: cssClasses.target.expanded
+        },
+        value: {
+          name: this.selectedItem.target_iqn,
+          cdIcon: cssClasses.target.expanded
+        },
+        expanded: true,
         children: [
           {
-            name: 'Disks',
-            isExpanded: true,
-            children: disks,
-            cdIcon: cssClasses.disks.expanded
+            label: this.labelTpl,
+            labelContext: { name: 'Disks', cdIcon: cssClasses.disks.expanded },
+            value: { name: 'Disks', cdIcon: cssClasses.disks.expanded },
+            expanded: true,
+            children: disks
           },
           {
-            name: 'Portals',
-            isExpanded: true,
-            children: portals,
-            cdIcon: cssClasses.portals.expanded
+            label: this.labelTpl,
+            labelContext: { name: 'Portals', cdIcon: cssClasses.portals.expanded },
+            value: { name: 'Portals', cdIcon: cssClasses.portals.expanded },
+            expanded: true,
+            children: portals
           },
           {
-            name: 'Initiators',
-            isExpanded: true,
-            children: clients,
-            cdIcon: cssClasses.initiators.expanded
+            label: this.labelTpl,
+            labelContext: { name: 'Initiators', cdIcon: cssClasses.initiators.expanded },
+            value: { name: 'Initiators', cdIcon: cssClasses.initiators.expanded },
+            expanded: true,
+            children: clients
           },
           {
-            name: 'Groups',
-            isExpanded: true,
-            children: groups,
-            cdIcon: cssClasses.groups.expanded
+            label: this.labelTpl,
+            labelContext: { name: 'Groups', cdIcon: cssClasses.groups.expanded },
+            value: { name: 'Groups', cdIcon: cssClasses.groups.expanded },
+            expanded: true,
+            children: groups
           }
         ]
       }
@@ -271,13 +305,12 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     return value;
   }
 
-  onNodeSelected(tree: TreeModel, node: TreeNode) {
-    TREE_ACTIONS.ACTIVATE(tree, node, true);
-    if (node.data.cdId) {
-      this.title = node.data.name;
-      const tempData = this.metadata[node.data.cdId] || {};
+  onNodeSelected(node: Node) {
+    if (node.id) {
+      this.title = node?.value?.name;
+      const tempData = this.metadata[node.id] || {};
 
-      if (node.data.cdId === 'root') {
+      if (node.id === 'root') {
         this.detailTable?.toggleColumn({ prop: 'default', isHidden: true });
         this.data = _.map(this.settings.target_default_controls, (value, key) => {
           value = this.format(value);
@@ -297,7 +330,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
             });
           });
         }
-      } else if (node.data.cdId.toString().startsWith('disk_')) {
+      } else if (node.id.toString().startsWith('disk_')) {
         this.detailTable?.toggleColumn({ prop: 'default', isHidden: true });
         this.data = _.map(this.settings.disk_default_controls[tempData.backstore], (value, key) => {
           value = this.format(value);
@@ -338,9 +371,5 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     }
 
     this.detailTable?.updateColumns();
-  }
-
-  onUpdateData() {
-    this.tree.treeModel.expandAll();
   }
 }

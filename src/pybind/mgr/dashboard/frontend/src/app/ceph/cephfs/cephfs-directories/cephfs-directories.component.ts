@@ -1,13 +1,8 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { AbstractControl, Validators } from '@angular/forms';
 
-import {
-  ITreeOptions,
-  TreeComponent,
-  TreeModel,
-  TreeNode,
-  TREE_ACTIONS
-} from '@circlon/angular-tree-component';
+import { TreeViewComponent } from 'carbon-components-angular';
+import { Node } from 'carbon-components-angular/treeview/tree-node.types';
 import _ from 'lodash';
 import moment from 'moment';
 
@@ -35,6 +30,7 @@ import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { TreeViewService } from '~/app/shared/services/tree-view.service';
 
 class QuotaSetting {
   row: {
@@ -51,14 +47,16 @@ class QuotaSetting {
   };
 }
 
+type TQuotaSettings = 'max_bytes' | 'max_files';
+
 @Component({
   selector: 'cd-cephfs-directories',
   templateUrl: './cephfs-directories.component.html',
   styleUrls: ['./cephfs-directories.component.scss']
 })
 export class CephfsDirectoriesComponent implements OnInit, OnChanges {
-  @ViewChild(TreeComponent)
-  treeComponent: TreeComponent;
+  @ViewChild(TreeViewComponent)
+  treeComponent: TreeViewComponent;
   @ViewChild('origin', { static: true })
   originTmpl: TemplateRef<any>;
 
@@ -72,20 +70,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
 
   icons = Icons;
   loadingIndicator = false;
-  loading = {};
-  treeOptions: ITreeOptions = {
-    useVirtualScroll: true,
-    getChildren: (node: TreeNode): Promise<any[]> => {
-      return this.updateDirectory(node.id);
-    },
-    actionMapping: {
-      mouse: {
-        click: this.selectAndShowNode.bind(this),
-        expanderClick: this.selectAndShowNode.bind(this)
-      }
-    }
-  };
-
+  loading: Record<string, boolean> = {};
   permission: Permission;
   selectedDir: CephfsDir;
   settings: QuotaSetting[];
@@ -101,7 +86,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     tableActions: CdTableAction[];
     updateSelection: Function;
   };
-  nodes: any[];
+  nodes: Node[] = [];
   alreadyExists: boolean;
 
   constructor(
@@ -111,21 +96,18 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     private cdDatePipe: CdDatePipe,
     private actionLabels: ActionLabelsI18n,
     private notificationService: NotificationService,
-    private dimlessBinaryPipe: DimlessBinaryPipe
+    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private treeViewService: TreeViewService
   ) {}
 
-  private selectAndShowNode(tree: TreeModel, node: TreeNode, $event: any) {
-    TREE_ACTIONS.TOGGLE_EXPANDED(tree, node, $event);
-    this.selectNode(node);
-  }
-
-  private selectNode(node: TreeNode) {
-    TREE_ACTIONS.TOGGLE_ACTIVE(undefined, node, undefined);
+  async selectNode(node: Node) {
     this.selectedDir = this.getDirectory(node);
     if (node.id === '/') {
       return;
     }
     this.setSettings(node);
+    await this.updateDirectory(node.id);
+    this.nodes = this.treeViewService.expandNode(this.nodes, node);
   }
 
   ngOnInit() {
@@ -259,20 +241,21 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     this.nodes = [
       {
         name: '/',
+        label: '/',
         id: '/',
-        isExpanded: true
+        expanded: true
       }
     ];
   }
 
   private firstCall() {
     const path = '/';
-    setTimeout(() => {
-      this.getNode(path).loadNodeChildren();
+    setTimeout(async () => {
+      await this.updateDirectory(path);
     }, 10);
   }
 
-  updateDirectory(path: string): Promise<any[]> {
+  updateDirectory(path: string): Promise<Node[]> {
     this.unsetLoadingIndicator();
     if (!this.requestedPaths.includes(path)) {
       this.requestedPaths.push(path);
@@ -288,8 +271,9 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         resolve(this.getChildren(path));
         this.setLoadingIndicator(path, false);
 
-        if (path === '/' && this.treeComponent.treeModel.activeNodes?.length === 0) {
-          this.selectNode(this.getNode('/'));
+        const hasActiveNodes = !!this.treeViewService.findNode(true, this.nodes, 'active');
+        if (path === '/' && !hasActiveNodes) {
+          this.treeComponent.select.emit(this.getNode('/'));
         }
       });
     });
@@ -304,29 +288,34 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     return tree.filter((d) => d.parent === path);
   }
 
-  private getChildren(path: string): any[] {
+  private getChildren(path: string): Node[] {
     const subTree = this.getSubTree(path);
     return _.sortBy(this.getSubDirectories(path), 'path').map((dir) =>
       this.createNode(dir, subTree)
     );
   }
 
-  private createNode(dir: CephfsDir, subTree?: CephfsDir[]): any {
+  private createNode(dir: CephfsDir, subTree?: CephfsDir[]): Node {
     this.nodeIds[dir.path] = dir;
     if (!subTree) {
       this.getSubTree(dir.parent);
     }
 
     if (dir.path === '/volumes') {
-      const innerNode = this.treeComponent.treeModel.getNodeById('/volumes');
+      const innerNode = this.treeViewService.findNode('/volumes', this.nodes);
       if (innerNode) {
-        innerNode.expand();
+        this.treeComponent.select.emit(innerNode);
       }
     }
     return {
+      label: dir.name,
       name: dir.name,
       id: dir.path,
-      hasChildren: this.getSubDirectories(dir.path, subTree).length > 0
+      expanded: dir.path === '/volumes',
+      children: this.getSubDirectories(dir.path, subTree).map(this.toNode),
+      value: {
+        parent: dir?.parent
+      }
     };
   }
 
@@ -334,7 +323,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     return this.dirs.filter((d) => d.parent && d.parent.startsWith(path));
   }
 
-  private setSettings(node: TreeNode) {
+  private setSettings(node: Node) {
     const readable = (value: number, fn?: (arg0: number) => number | string): number | string =>
       value ? (fn ? fn(value) : value) : '';
 
@@ -347,8 +336,8 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   }
 
   private getQuota(
-    tree: TreeNode,
-    quotaKey: string,
+    tree: Node,
+    quotaKey: TQuotaSettings,
     valueConvertFn: (number: number) => number | string
   ): QuotaSetting {
     // Get current maximum
@@ -361,13 +350,16 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     let nextMaxValue = value;
     let nextMaxPath = dir.path;
     if (tree.id === currentPath) {
-      if (tree.parent.id === '/') {
+      if (tree.value?.parent === '/') {
         // The value will never inherit any other value, so it has no maximum.
         nextMaxValue = 0;
       } else {
-        const nextMaxDir = this.getDirectory(this.getOrigin(tree.parent, quotaKey));
-        nextMaxValue = nextMaxDir.quotas[quotaKey];
-        nextMaxPath = nextMaxDir.path;
+        const parent = this.getParent(this.dirs, tree.value?.parent);
+        if (parent) {
+          const nextMaxDir = this.getDirectory(this.getOrigin(parent, quotaKey));
+          nextMaxValue = nextMaxDir.quotas[quotaKey];
+          nextMaxPath = nextMaxDir.path;
+        }
       }
     }
     return {
@@ -398,12 +390,13 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
    * | /a (10)       |     4th    |       10 => true      |   /a   |
    *
    */
-  private getOrigin(tree: TreeNode, quotaSetting: string): TreeNode {
-    if (tree.parent && tree.parent.id !== '/') {
+  private getOrigin(tree: Node, quotaSetting: TQuotaSettings): Node {
+    const parent = this.getParent(this.dirs, tree.value?.parent);
+    if (parent && parent?.id !== '/') {
       const current = this.getQuotaFromTree(tree, quotaSetting);
 
       // Get the next used quota and node above the current one (until it hits the root directory)
-      const originTree = this.getOrigin(tree.parent, quotaSetting);
+      const originTree = this.getOrigin(parent, quotaSetting);
       const inherited = this.getQuotaFromTree(originTree, quotaSetting);
 
       // Select if the current quota is in use or the above
@@ -413,21 +406,21 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     return tree;
   }
 
-  private getQuotaFromTree(tree: TreeNode, quotaSetting: string): number {
+  private getQuotaFromTree(tree: Node, quotaSetting: TQuotaSettings): number {
     return this.getDirectory(tree).quotas[quotaSetting];
   }
 
-  private getDirectory(node: TreeNode): CephfsDir {
+  private getDirectory(node: Node): CephfsDir {
     const path = node.id as string;
     return this.nodeIds[path];
   }
 
   selectOrigin(path: string) {
-    this.selectNode(this.getNode(path));
+    this.treeComponent.select.emit(this.getNode(path));
   }
 
-  private getNode(path: string): TreeNode {
-    return this.treeComponent.treeModel.getNodeById(path);
+  private getNode(path: string): Node {
+    return this.treeViewService.findNode(path, this.nodes);
   }
 
   updateQuotaModal() {
@@ -501,7 +494,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
 
   private updateQuota(values: CephfsQuotas, onSuccess?: Function) {
     const path = this.selectedDir.path;
-    const key = this.quota.selection.first().quotaKey;
+    const key: TQuotaSettings = this.quota.selection.first().quotaKey;
     const action =
       this.selectedDir.quotas[key] === 0
         ? this.actionLabels.SET
@@ -600,9 +593,14 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       // Parent has to be called in order to update the object referring
       // to the current selected directory
       path = dir.parent ? dir.parent : dir.path;
+      const node = this.getNode(path);
+      this.treeComponent.select.emit(node);
+      const selectedNode = this.getNode(dir.path);
+      this.treeComponent.select.emit(selectedNode);
+      return;
     }
     const node = this.getNode(path);
-    node.loadNodeChildren();
+    this.treeComponent.select.emit(node);
   }
 
   private updateTreeStructure(dirs: CephfsDir[]) {
@@ -654,9 +652,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       return;
     }
     const children = this.getChildren(parent);
-    node.data.children = children;
-    node.data.hasChildren = children.length > 0;
-    this.treeComponent.treeModel.update();
+    node.children = children;
   }
 
   private addNewDirectory(newDir: CephfsDir) {
@@ -683,9 +679,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       // is omitted and only be called if all updates were loaded.
       return;
     }
-    this.treeComponent.treeModel.update();
     this.nodes = [...this.nodes];
-    this.treeComponent.sizeChanged();
   }
 
   deleteSnapshotModal() {
@@ -739,5 +733,31 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       // The problem is that we can't subscribe to an useful updated tree event and the time
       // between fetching all calls and rebuilding the tree can take some time
     }, 3000);
+  }
+
+  /**
+   * Converts a CephfsDir object to Node type
+   * @param directory CephfsDir object
+   * @returns Converted Node object
+   */
+  toNode(directory: CephfsDir): Node {
+    return {
+      id: directory.path,
+      label: directory.name,
+      children: [],
+      expanded: false,
+      value: { parent: directory?.parent }
+    };
+  }
+
+  /**
+   * Get parent node for a given CephfsDir directory
+   * @param dirs CephfsDir directories array
+   * @param path Parent path
+   * @returns Parent node
+   */
+  getParent(dirs: CephfsDir[], path: string): Node {
+    const parentNode = dirs?.find?.((dir: CephfsDir) => dir.path === path);
+    return parentNode ? this.toNode(parentNode) : null;
   }
 }

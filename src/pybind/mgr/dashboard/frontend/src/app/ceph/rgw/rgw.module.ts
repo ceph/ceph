@@ -34,7 +34,6 @@ import { RgwUserSubuserModalComponent } from './rgw-user-subuser-modal/rgw-user-
 import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 import { RgwUserTabsComponent } from './rgw-user-tabs/rgw-user-tabs.component';
 import { RgwMultisiteDetailsComponent } from './rgw-multisite-details/rgw-multisite-details.component';
-import { TreeModule } from '@circlon/angular-tree-component';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-multisite-realm-form.component';
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
@@ -73,7 +72,8 @@ import {
   ProgressIndicatorModule,
   CodeSnippetModule,
   InputModule,
-  CheckboxModule
+  CheckboxModule,
+  TreeviewModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 
@@ -90,7 +90,7 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     NgbTooltipModule,
     NgbPopoverModule,
     NgxPipeFunctionModule,
-    TreeModule,
+    TreeviewModule,
     DataTableModule,
     DashboardV3Module,
     NgbTypeaheadModule,
