@@ -23,7 +23,13 @@ from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
 from ..exceptions import Error
-from ..net_utils import get_fqdn, get_hostname, get_ip_addresses, wrap_ipv6
+from ..net_utils import (
+    get_fqdn,
+    get_hostname,
+    get_ip_addresses,
+    wrap_ipv6,
+    EndPoint,
+)
 
 
 @register_daemon_form
@@ -96,11 +102,6 @@ class Monitoring(ContainerDaemonForm):
             'image': DEFAULT_ALERTMANAGER_IMAGE,
             'cpus': '2',
             'memory': '2GB',
-            'args': [
-                '--cluster.listen-address=:{}'.format(
-                    port_map['alertmanager'][1]
-                ),
-            ],
             'config-json-files': [
                 'alertmanager.yml',
             ],
@@ -255,11 +256,14 @@ class Monitoring(ContainerDaemonForm):
                     ip = meta['ip']
                 if 'ports' in meta and meta['ports']:
                     port = meta['ports'][0]
-            if daemon_type == 'prometheus':
-                config = fetch_configs(ctx)
+            config = fetch_configs(ctx)
+            if daemon_type in ['prometheus', 'alertmanager']:
                 ip_to_bind_to = config.get('ip_to_bind_to', '')
                 if ip_to_bind_to:
                     ip = ip_to_bind_to
+                web_listen_addr = str(EndPoint(ip, port))
+                r += [f'--web.listen-address={web_listen_addr}']
+            if daemon_type == 'prometheus':
                 retention_time = config.get('retention_time', '15d')
                 retention_size = config.get(
                     'retention_size', '0'
@@ -283,9 +287,11 @@ class Monitoring(ContainerDaemonForm):
                     r += ['--web.route-prefix=/prometheus/']
                 else:
                     r += [f'--web.external-url={scheme}://{host}:{port}']
-            r += [f'--web.listen-address={ip}:{port}']
         if daemon_type == 'alertmanager':
-            config = fetch_configs(ctx)
+            clus_listen_addr = str(
+                EndPoint(ip, self.port_map[daemon_type][1])
+            )
+            r += [f'--cluster.listen-address={clus_listen_addr}']
             use_url_prefix = config.get('use_url_prefix', False)
             peers = config.get('peers', list())  # type: ignore
             for peer in peers:
@@ -301,13 +307,11 @@ class Monitoring(ContainerDaemonForm):
         if daemon_type == 'promtail':
             r += ['--config.expand-env']
         if daemon_type == 'prometheus':
-            config = fetch_configs(ctx)
             try:
                 r += [f'--web.config.file={config["web_config"]}']
             except KeyError:
                 pass
         if daemon_type == 'node-exporter':
-            config = fetch_configs(ctx)
             try:
                 r += [f'--web.config.file={config["web_config"]}']
             except KeyError:

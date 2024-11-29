@@ -3,6 +3,7 @@ import logging
 import os
 import socket
 from typing import List, Any, Tuple, Dict, Optional, cast
+import ipaddress
 
 from mgr_module import HandleCommandResult
 
@@ -57,6 +58,8 @@ class GrafanaService(CephadmService):
             if ip_to_bind_to:
                 daemon_spec.port_ips = {str(grafana_port): ip_to_bind_to}
                 grafana_ip = ip_to_bind_to
+                if ipaddress.ip_network(grafana_ip).version == 6:
+                    grafana_ip = f"[{grafana_ip}]"
 
         domain = self.mgr.get_fqdn(daemon_spec.host)
         mgmt_gw_ips = []
@@ -354,6 +357,13 @@ class AlertmanagerService(CephadmService):
             addr = self.mgr.get_fqdn(dd.hostname)
             peers.append(build_url(host=addr, port=port).lstrip('/'))
 
+        ip_to_bind_to = ''
+        if spec.only_bind_port_on_networks and spec.networks:
+            assert daemon_spec.host is not None
+            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec) or ''
+            if ip_to_bind_to:
+                daemon_spec.port_ips = {str(port): ip_to_bind_to}
+
         deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
         if security_enabled:
             alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
@@ -376,7 +386,8 @@ class AlertmanagerService(CephadmService):
                 },
                 'peers': peers,
                 'web_config': '/etc/alertmanager/web.yml',
-                'use_url_prefix': mgmt_gw_enabled
+                'use_url_prefix': mgmt_gw_enabled,
+                'ip_to_bind_to': ip_to_bind_to
             }, sorted(deps)
         else:
             return {
@@ -384,7 +395,8 @@ class AlertmanagerService(CephadmService):
                     "alertmanager.yml": yml
                 },
                 "peers": peers,
-                'use_url_prefix': mgmt_gw_enabled
+                'use_url_prefix': mgmt_gw_enabled,
+                'ip_to_bind_to': ip_to_bind_to
             }, sorted(deps)
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
