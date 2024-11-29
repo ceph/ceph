@@ -96,7 +96,7 @@ int ec_init(const std::string &profile_str,
   uint64_t stripe_size = atoi(profile["k"].c_str());
   ceph_assert(stripe_size > 0);
   uint64_t stripe_width = stripe_size * stripe_unit;
-  sinfo->reset(new ECUtil::stripe_info_t(stripe_size, stripe_width));
+  sinfo->reset(new ECUtil::stripe_info_t(*ec_impl, stripe_width));
 
   return 0;
 }

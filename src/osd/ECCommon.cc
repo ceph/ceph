@@ -322,19 +322,15 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
   const uint64_t offset,
   const uint64_t length,
   const ECUtil::stripe_info_t& sinfo,
-  const vector<int>& chunk_mapping,
   set<int> *want_to_read)
 {
   const auto [left_chunk_index, right_chunk_index] =
     sinfo.offset_length_to_data_chunk_indices(offset, length);
   const auto distance =
-    std::min(right_chunk_index - left_chunk_index,
-             sinfo.get_data_chunk_count());
+    std::min(right_chunk_index - left_chunk_index, (uint64_t)sinfo.get_k());
   for(uint64_t i = 0; i < distance; i++) {
-    auto raw_chunk = (left_chunk_index + i) % sinfo.get_data_chunk_count();
-    auto chunk = chunk_mapping.size() > raw_chunk ?
-      chunk_mapping[raw_chunk] : static_cast<int>(raw_chunk);
-    want_to_read->insert(chunk);
+    auto raw_shard = (left_chunk_index + i) % sinfo.get_k();
+    want_to_read->insert(sinfo.get_shard(raw_shard));
   }
 }
 
@@ -343,8 +339,7 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
   const uint64_t length,
   set<int> *want_to_read)
 {
-  get_min_want_to_read_shards(
-    offset, length, sinfo, ec_impl->get_chunk_mapping(), want_to_read);
+  get_min_want_to_read_shards(offset, length, sinfo, want_to_read);
   dout(20) << __func__ << ": offset " << offset << " length " << length
 	   << " want_to_read " << *want_to_read << dendl;
 }
@@ -502,10 +497,8 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
 void ECCommon::ReadPipeline::get_want_to_read_shards(
   std::set<int> *want_to_read) const
 {
-  const std::vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
-  for (int i = 0; i < (int)ec_impl->get_data_chunk_count(); ++i) {
-    int chunk = (int)chunk_mapping.size() > i ? chunk_mapping[i] : i;
-    want_to_read->insert(chunk);
+  for (int i = 0; i < (int)sinfo.get_k(); ++i) {
+    want_to_read->insert(sinfo.get_shard(i));
   }
 }
 
