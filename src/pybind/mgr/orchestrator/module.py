@@ -2363,8 +2363,7 @@ Usage:
         out = json.dumps(r, indent=4)
         if r.get('in_progress'):
             return HandleCommandResult(stdout=out)
-        else:
-            return HandleCommandResult(stdout="There are no upgrades in progress currently.")
+        return HandleCommandResult(stdout="There are no upgrades in progress currently.")
 
     @_cli_write_command('orch upgrade start')
     def _upgrade_start(self,
