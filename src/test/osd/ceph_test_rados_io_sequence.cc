@@ -308,7 +308,7 @@ ceph::io_sequence::tester::SelectErasurePlugin::SelectErasurePlugin(
 
 ceph::io_sequence::tester::SelectErasureChunkSize::SelectErasureChunkSize(
     ceph::util::random_number_generator<int>& rng, po::variables_map vm)
-    : ProgramOptionSelector(rng, vm, "chunksize", true, false) {}
+    : ProgramOptionSelector(rng, vm, "chunksize", true, true) {}
 
 ceph::io_sequence::tester::SelectECPool::SelectECPool(
     ceph::util::random_number_generator<int>& rng, po::variables_map vm,
