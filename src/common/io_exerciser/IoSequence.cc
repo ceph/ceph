@@ -46,6 +46,9 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os,
     case Sequence::SEQUENCE_SEQ12:
       os << "SEQUENCE_SEQ12";
       break;
+    case Sequence::SEQUENCE_SEQ13:
+      os << "SEQUENCE_SEQ13";
+      break;
     case Sequence::SEQUENCE_END:
       os << "SEQUENCE_END";
       break;
@@ -89,6 +92,8 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(
       return std::make_unique<Seq11>(obj_size_range, seed);
     case Sequence::SEQUENCE_SEQ12:
       return std::make_unique<Seq12>(obj_size_range, seed);
+    case Sequence::SEQUENCE_SEQ13:
+      return std::make_unique<Seq13>(obj_size_range, seed);
     default:
       break;
   }
@@ -593,4 +598,41 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq12::_next() {
   barrier = true;
   return SingleWriteOp::generate((count * obj_size) - overlap,
                                  obj_size + overlap);
+}
+
+ceph::io_exerciser::Seq13::Seq13(std::pair<int, int> obj_size_range, int seed)
+    : IoSequence(obj_size_range, seed), count(0), gap(1), doneread(false) {
+  set_min_object_size(2);
+}
+
+Sequence ceph::io_exerciser::Seq13::get_id() const {
+  return Sequence::SEQUENCE_SEQ13;
+}
+
+std::string ceph::io_exerciser::Seq13::get_name() const {
+  return "Permutations of length sequential gap+append I/O";
+}
+
+std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq13::_next() {
+  if (count >= 16) {
+    if (!doneread) {
+      doneread = true;
+      return SingleReadOp::generate(0, obj_size * (count + 1));
+    }
+    doneread = false;
+    count = 0;
+    gap++;
+    if (gap >= obj_size) {
+      gap = 1;
+      return increment_object_size();
+    } else {
+      create = true;
+      barrier = true;
+      remove = true;
+      return BarrierOp::generate();
+    }
+  }
+  count++;
+  barrier = true;
+  return SingleWriteOp::generate((count * obj_size) + gap, obj_size - gap);
 }
