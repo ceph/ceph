@@ -11,7 +11,8 @@ import {
   GridModule,
   ProgressIndicatorModule,
   InputModule,
-  ModalModule
+  ModalModule,
+  ListModule
 } from 'carbon-components-angular';
 
 import { TreeModule } from '@circlon/angular-tree-component';
@@ -106,7 +107,8 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ProgressIndicatorModule,
     ButtonModule,
     InputModule,
-    ModalModule
+    ModalModule,
+    ListModule
   ],
   declarations: [
     HostsComponent,

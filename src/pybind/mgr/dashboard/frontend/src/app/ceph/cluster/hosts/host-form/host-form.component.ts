@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import expand from 'brace-expansion';
@@ -13,7 +13,6 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { Location } from '@angular/common';
 
 @Component({
   selector: 'cd-host-form',
@@ -33,7 +32,6 @@ export class HostFormComponent extends CdForm implements OnInit {
   pageURL: string;
   hostPattern = false;
   labelsOption: Array<SelectOption> = [];
-  hideMaintenance: boolean;
 
   messages = new SelectMessages({
     empty: $localize`There are no labels.`,
@@ -47,7 +45,8 @@ export class HostFormComponent extends CdForm implements OnInit {
     private hostService: HostService,
     private taskWrapper: TaskWrapperService,
     private route: ActivatedRoute,
-    private location: Location
+
+    @Inject('hideMaintenance') @Optional() public hideMaintenance?: boolean
   ) {
     super();
     this.resource = $localize`host`;
@@ -55,6 +54,9 @@ export class HostFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
+    if (this.router.url.includes('hosts')) {
+      this.pageURL = 'hosts';
+    }
     this.open = this.route.outlet === 'modal';
     this.createForm();
     const hostContext = new CdTableFetchDataContext(() => undefined);
@@ -163,15 +165,15 @@ export class HostFormComponent extends CdForm implements OnInit {
             this.hostForm.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.pageURL === 'hosts'
-              ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
-              : this.location.back();
+            this.closeModal();
           }
         });
     });
   }
 
   closeModal(): void {
-    this.location.back();
+    this.pageURL === 'hosts'
+      ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
+      : (this.open = false);
   }
 }
