@@ -26,8 +26,11 @@ class BtreeOMapManager : public OMapManager {
   TransactionManager &tm;
 
   omap_context_t get_omap_context(
-    Transaction &t, laddr_t addr_min) {
-    return omap_context_t{tm, t, addr_min};
+    Transaction &t, const omap_root_t &omap_root) {
+    ceph_assert(omap_root.type == omap_type_t::OMAP || 
+		omap_root.type == omap_type_t::LOG ||
+		omap_root.type == omap_type_t::XATTR);
+    return omap_context_t{tm, t, omap_root.hint, omap_root.type};
   }
 
   /* get_omap_root
