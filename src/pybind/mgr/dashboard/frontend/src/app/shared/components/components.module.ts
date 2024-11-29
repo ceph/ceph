@@ -83,6 +83,7 @@ import { ProgressComponent } from './progress/progress.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
+import { ChartsModule } from '@carbon/charts-angular';
 
 @NgModule({
   imports: [
@@ -121,7 +122,8 @@ import InfoIcon from '@carbon/icons/es/information/16';
     DropdownModule,
     SelectModule,
     ComboBoxModule,
-    ProgressIndicatorModule
+    ProgressIndicatorModule,
+    ChartsModule
   ],
   declarations: [
     SparklineComponent,
