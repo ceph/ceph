@@ -9,6 +9,7 @@
 #include "crimson/os/seastore/omap_manager/btree/omap_btree_node.h"
 #include "crimson/os/seastore/omap_manager/btree/omap_btree_node_impl.h"
 #include "seastar/core/thread.hh"
+#include "crimson/os/seastore/omap_manager/btree/btree_omap_manager.h"
 
 SET_SUBSYS(seastore_omap);
 
@@ -747,7 +748,8 @@ omap_load_extent(omap_context_t oc, laddr_t laddr, depth_t depth)
     });
   } else {
     return oc.tm.read_extent<OMapLeafNode>(
-        oc.t, laddr, OMAP_LEAF_BLOCK_SIZE
+        oc.t, laddr,
+	BtreeOMapManager::get_leaf_size(oc.type)
     ).handle_error_interruptible(
       omap_load_extent_iertr::pass_further{},
       crimson::ct_error::assert_all{ "Invalid error in omap_load_extent" }
