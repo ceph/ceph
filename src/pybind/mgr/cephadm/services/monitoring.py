@@ -2,6 +2,7 @@ import errno
 import logging
 import os
 import socket
+import time
 from typing import List, Any, Tuple, Dict, Optional, cast
 
 from mgr_module import HandleCommandResult
@@ -423,6 +424,36 @@ class AlertmanagerService(CephadmService):
                 service_url
             )
 
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called before Alertmanager is removed
+        """
+        if daemon.hostname is None:
+            return
+        try:
+            current_api_host = self.mgr.check_mon_command({"prefix": "dashboard get-alertmanager-api-host"}).stdout.strip()
+            daemon_addr = daemon.ip if daemon.ip else self.mgr.get_fqdn(daemon.hostname)
+            daemon_port = daemon.ports[0] if daemon.ports else self.DEFAULT_SERVICE_PORT
+            service_url = build_url(scheme='http', host=daemon_addr, port=daemon_port)
+
+            if current_api_host == service_url:
+                # This is the active daemon, update or reset the settings
+                remaining_daemons = [
+                    d for d in self.mgr.cache.get_daemons_by_service(self.TYPE)
+                    if d.name() != daemon.name()
+                ]
+                if remaining_daemons:
+                    self.config_dashboard(remaining_daemons)
+                    logger.info("Updated dashboard API settings to point to a remaining Alertmanager daemon")
+                else:
+                    self.mgr.check_mon_command({"prefix": "dashboard reset-alertmanager-api-host"})
+                    self.mgr.check_mon_command({"prefix": "dashboard reset-alertmanager-api-ssl-verify"})
+                    logger.info("Reset dashboard API settings as no Alertmnager daemons are remaining")
+            else:
+                logger.info(f"Alertmanager {daemon.name()} removed; no changes to dashboard API settings")
+        except Exception as e:
+            logger.error(f"Error in Alertmanager pre_remove: {str(e)}")
+
     def ok_to_stop(self,
                    daemon_ids: List[str],
                    force: bool = False,
@@ -692,6 +723,37 @@ class PrometheusService(CephadmService):
                 'dashboard set-prometheus-api-host',
                 service_url
             )
+
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called before Prometheus daemon is removed
+        """
+        WAIT_FOR_DAEMON_TO_BE_UP = 30
+        if daemon.hostname is None:
+            return
+        try:
+            current_api_host = self.mgr.check_mon_command({"prefix": "dashboard get-prometheus-api-host"}).stdout.strip()
+            daemon_addr = daemon.ip if daemon.ip else self.mgr.get_fqdn(daemon.hostname)
+            daemon_port = daemon.ports[0] if daemon.ports else self.DEFAULT_SERVICE_PORT
+            service_url = build_url(scheme="http", host=daemon_addr, port=daemon_port)
+
+            if current_api_host == service_url:
+                remaining_daemons = [
+                    d for d in self.mgr.cache.get_daemons_by_service(self.TYPE)
+                    if d.name() != daemon.name()
+                ]
+                if remaining_daemons:
+                    self.config_dashboard(remaining_daemons)
+                    logger.info("Updated Dashboard Settings to point to remaining Prometheus daemons")
+                    time.sleep(WAIT_FOR_DAEMON_TO_BE_UP)
+                else:
+                    self.mgr.check_mon_command({"prefix": "dashboard reset-prometheus-api-host"})
+                    self.mgr.check_mon_command({"prefix": "dashboard reset-prometheus-api-ssl-verify"})
+                    logger.info("Reset Prometheus API settings as no daemons are remaining")
+            else:
+                logger.info("Prometheus daemon removed; no changes to dashboard API settings")
+        except Exception as e:
+            logger.error(f"Error in Prometheus pre_remove {str(e)}")
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
