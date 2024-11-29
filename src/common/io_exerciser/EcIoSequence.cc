@@ -176,6 +176,7 @@ ceph::io_exerciser::Seq10::Seq10(std::pair<int, int> obj_size_range, int seed,
     : EcIoSequence(obj_size_range, seed),
       offset(0),
       length(1),
+      inject_error_done(false),
       failed_write_done(false),
       read_done(false),
       successful_write_done(false),
@@ -239,6 +240,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq10::_next() {
 
     if (offset + length >= obj_size) {
       if (!test_all_lengths) {
+        remove = true;
         done = true;
         return BarrierOp::generate();
       }
@@ -247,6 +249,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq10::_next() {
       length++;
       if (length > obj_size) {
         if (!test_all_sizes) {
+          remove = true;
           done = true;
           return BarrierOp::generate();
         }
