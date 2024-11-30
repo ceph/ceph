@@ -104,7 +104,7 @@ BtreeBackrefManager::get_mapping(
       c, offset
     ).si_then([offset, c](auto iter) -> get_mapping_ret {
       LOG_PREFIX(BtreeBackrefManager::get_mapping);
-      if (iter.is_tree_end() || iter.get_key() != offset) {
+      if (iter.is_tree_end(c.trans) || iter.get_key() != offset) {
 	ERRORT("{} doesn't exist", c.trans, offset);
 	return crimson::ct_error::enoent::make();
       } else {
@@ -136,7 +136,7 @@ BtreeBackrefManager::get_mappings(
 	btree.upper_bound_right(c, offset),
 	[&ret, offset, end, c](auto &pos) {
 	  LOG_PREFIX(BtreeBackrefManager::get_mappings);
-	  if (pos.is_tree_end() || pos.get_key() >= end) {
+	  if (pos.is_tree_end(c.trans) || pos.get_key() >= end) {
 	    TRACET("{}~{} done with {} results",
 	           c.trans, offset, end, ret.size());
 	    return BackrefBtree::iterate_repeat_ret_inner(
@@ -195,7 +195,7 @@ BtreeBackrefManager::new_mapping(
 	[&state, len, addr, &t, key/*, lookup_attempts*/](auto &pos) {
 	  LOG_PREFIX(BtreeBackrefManager::new_mapping);
 	  //++stats.num_alloc_extents_iter_nexts;
-	  if (pos.is_tree_end()) {
+	  if (pos.is_tree_end(t)) {
 	    DEBUGT("{}~{}, paddr={}, state: end, insert at {}",
                    t, addr, len, key,
                    //stats.num_alloc_extents_iter_nexts - lookup_attempts,
@@ -385,7 +385,7 @@ BtreeBackrefManager::scan_mapped_space(
 	  c,
 	  P_ADDR_MIN),
 	[c, &scan_visitor, block_size, FNAME](auto &pos) {
-	  if (pos.is_tree_end()) {
+	  if (pos.is_tree_end(c.trans)) {
 	    return BackrefBtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
@@ -475,8 +475,8 @@ BtreeBackrefManager::scan_mapped_space(
 	      c,
 	      P_ADDR_MIN,
 	      &tree_visitor),
-	    [](auto &pos) {
-	      if (pos.is_tree_end()) {
+	    [c](auto &pos) {
+	      if (pos.is_tree_end(c.trans)) {
 		return BackrefBtree::iterate_repeat_ret_inner(
 		  interruptible::ready_future_marker{},
 		  seastar::stop_iteration::yes);
@@ -550,7 +550,7 @@ BtreeBackrefManager::remove_mapping(
 	c, addr
       ).si_then([&btree, c, addr](auto iter)
 		-> remove_mapping_ret {
-	if (iter.is_tree_end() || iter.get_key() != addr) {
+	if (iter.is_tree_end(c.trans) || iter.get_key() != addr) {
 	  LOG_PREFIX(BtreeBackrefManager::remove_mapping);
 	  WARNT("paddr={} doesn't exist, state: {}, leaf {}",
 	    c.trans, addr, iter.get_key(), *iter.get_leaf_node());

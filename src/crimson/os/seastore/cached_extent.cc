@@ -176,6 +176,26 @@ std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs)
   return out << ']';
 }
 
+std::ostream &operator<<(
+  std::ostream &out,
+  const CachedExtent::viewable_state_t &state)
+{
+  switch(state) {
+  case CachedExtent::viewable_state_t::stable:
+    return out << "stable";
+  case CachedExtent::viewable_state_t::pending:
+    return out << "pending";
+  case CachedExtent::viewable_state_t::invalid:
+    return out << "invalid";
+  case CachedExtent::viewable_state_t::stable_retired:
+    return out << "stable_retired";
+  case CachedExtent::viewable_state_t::stable_with_pending:
+    return out << "stable_with_pending";
+  default:
+    __builtin_unreachable();
+  }
+}
+
 bool BufferSpace::is_range_loaded(extent_len_t offset, extent_len_t length) const
 {
   assert(length > 0);
