@@ -1595,6 +1595,48 @@ struct __attribute__((packed)) backref_map_val_le_t {
   }
 };
 
+class CachedExtent;
+
+/**
+ * ErasedBtreeIter
+ *
+ * ErasedBtreeIter is a wrapper of FixedKVBtree::iterator that povides
+ * more capabilities to operate the LBA/Backref btree compared to
+ * PhysicalNodeMapping. Supported operations are listed in LBAManager
+ * and BackrefManager(TODO).
+ *
+ * The invalidation rule of ErasedBtreeIter:
+ * The iterator becomes invalid when its parent is not viewable(see
+ * CachedExtent::is_viewable_by_trans()) by current transaction. The
+ * btree_iter_version_t field in ErasedBtreeIter records the version
+ * number of btree when it was created. This version is transaction-local
+ * and all insert and remove operations increment this version. The
+ * LBAManager/BackrefManager and FixedKVBtree are responsible for making
+ * sure the iterator is valid.
+ *
+ * 1. When the parent is valid but unviewable by current transaction,
+ *    we could use FixedKVNode::find_pending_version() to find the latest
+ *    pending extent.
+ * 2. When the parent is invalid, start a new lookup to rebuild the iterator.
+ *
+ * When the ErasedBtreeIter is at the end of FixedKVBtree, the key should
+ * be min_max_t<Key>::max.
+ */
+template <typename Key, typename Val>
+struct ErasedBtreeIter {
+  CachedExtent *parent;
+  uint16_t pos;
+  Key key;
+  Val val;
+  btree_iter_version_t ver;
+};
+
+using LBAIter = ErasedBtreeIter<laddr_t, lba_map_val_t>;
+using BackrefIter = ErasedBtreeIter<paddr_t, backref_map_val_t>;
+
+std::ostream &operator<<(std::ostream &out, const LBAIter &iter);
+std::ostream &operator<<(std::ostream &out, const BackrefIter &iter);
+
 /**
  * rewrite_gen_t
  *
@@ -3157,6 +3199,8 @@ template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream
 template <> struct fmt::formatter<crimson::os::seastore::pladdr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba_map_val_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backref_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::LBAIter> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::BackrefIter> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::device_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};

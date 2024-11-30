@@ -128,6 +128,20 @@ std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val) {
 	     << "~" << val.len << ")";
 }
 
+std::ostream& operator<<(std::ostream &out, const LBAIter &iter) {
+  return out << "LBAIter("
+	     << (void*)iter.parent << ", pos=" << iter.pos
+	     << ", " << iter.key << ", " << iter.val
+	     << ")";
+}
+
+std::ostream& operator<<(std::ostream &out, const BackrefIter &iter) {
+  return out << "BackrefIter("
+	     << (void*)iter.parent << ", pos=" << iter.pos
+	     << ", " << iter.key << ", " << iter.val
+	     << ")";
+}
+
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 {
   auto id = rhs.get_device_id();
