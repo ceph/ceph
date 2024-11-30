@@ -618,7 +618,8 @@ public:
 
   /// Returns true if extent is a plcaeholder
   bool is_placeholder() const {
-    return is_retired_placeholder_type(get_type());
+    return is_retired_placeholder_type(get_type())
+	|| is_remapped_placeholder_type(get_type());
   }
 
   bool is_pending_io() const {
@@ -1627,6 +1628,41 @@ struct ref_laddr_cmp {
     return lhs->get_laddr() < rhs;
   }
 };
+
+/**
+ * RemappedExtentPlaceholder
+ *
+ * This placeholder represents a slice remapped from a logical cached extent
+ * that is stable but not resident in memory. These extents are transaction-local,
+ * so they should not be added to the cache. It is used by the backref manager
+ * to update the extent type of remapped backref entries correctly. See
+ * BtreeBackrefManager::merge_cached_backrefs() for more details.
+ */
+struct RemappedExtentPlaceholder : LogicalCachedExtent {
+  explicit RemappedExtentPlaceholder(extent_len_t length)
+      : LogicalCachedExtent(length) {}
+
+  CachedExtentRef duplicate_for_write(Transaction&) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return CachedExtentRef();
+  }
+
+  ceph::bufferlist get_delta() final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return ceph::bufferlist();
+  }
+
+  void apply_delta(const ceph::bufferlist &) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+  }
+
+  static constexpr extent_types_t TYPE = extent_types_t::REMAPPED_PLACEHOLDER;
+  extent_types_t get_type() const final {
+    return TYPE;
+  }
+};
+using RemappedExtentPlaceholderRef =
+    TCachedExtentRef<RemappedExtentPlaceholder>;
 
 template <typename T>
 read_set_item_t<T>::read_set_item_t(T *t, CachedExtentRef ref)

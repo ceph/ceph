@@ -1395,8 +1395,9 @@ enum class extent_types_t : uint8_t {
   TEST_BLOCK_PHYSICAL = 14,
   BACKREF_INTERNAL = 15,
   BACKREF_LEAF = 16,
+  REMAPPED_PLACEHOLDER = 17,
   // None and the number of valid extent_types_t
-  NONE = 17,
+  NONE = 18,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1415,12 +1416,18 @@ constexpr bool is_logical_metadata_type(extent_types_t type) {
          type <= extent_types_t::COLL_BLOCK;
 }
 
+constexpr bool is_remapped_placeholder_type(extent_types_t type) {
+  return type == extent_types_t::REMAPPED_PLACEHOLDER;
+}
+
 constexpr bool is_logical_type(extent_types_t type) {
   if ((type >= extent_types_t::ROOT_META &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
-      type == extent_types_t::TEST_BLOCK) {
+      type == extent_types_t::TEST_BLOCK ||
+      type == extent_types_t::REMAPPED_PLACEHOLDER) {
     assert(is_logical_metadata_type(type) ||
-           is_data_type(type));
+           is_data_type(type) ||
+           is_remapped_placeholder_type(type));
     return true;
   } else {
     assert(!is_logical_metadata_type(type) &&
@@ -1472,7 +1479,8 @@ constexpr bool is_backref_mapped_type(extent_types_t type) {
   if ((type >= extent_types_t::LADDR_INTERNAL &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK ||
-      type == extent_types_t::TEST_BLOCK_PHYSICAL) {
+      type == extent_types_t::TEST_BLOCK_PHYSICAL ||
+      type == extent_types_t::REMAPPED_PLACEHOLDER) {
     assert(is_logical_type(type) ||
 	   is_lba_node(type) ||
 	   type == extent_types_t::TEST_BLOCK_PHYSICAL);

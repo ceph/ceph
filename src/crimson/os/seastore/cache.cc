@@ -175,7 +175,8 @@ void Cache::register_metrics()
     {extent_types_t::TEST_BLOCK,          sm::label_instance("ext", "TEST_BLOCK")},
     {extent_types_t::TEST_BLOCK_PHYSICAL, sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")},
     {extent_types_t::BACKREF_INTERNAL,    sm::label_instance("ext", "BACKREF_INTERNAL")},
-    {extent_types_t::BACKREF_LEAF,        sm::label_instance("ext", "BACKREF_LEAF")}
+    {extent_types_t::BACKREF_LEAF,        sm::label_instance("ext", "BACKREF_LEAF")},
+    {extent_types_t::REMAPPED_PLACEHOLDER,sm::label_instance("ext", "REMAPPED_PLACEHOLDER")}
   };
   assert(labels_by_ext.size() == (std::size_t)extent_types_t::NONE);
 
@@ -1115,6 +1116,47 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   }
 }
 
+CachedExtentRef Cache::alloc_remapped_extent_by_type(
+  Transaction &t,
+  extent_types_t type,
+  laddr_t remap_laddr,
+  paddr_t remap_paddr,
+  extent_len_t remap_length,
+  laddr_t original_laddr,
+  const std::optional<ceph::bufferptr> &original_bptr)
+{
+  ceph_assert(is_logical_type(type));
+  switch (type) {
+  case extent_types_t::ROOT_META:
+    return alloc_remapped_extent<RootMetaBlock>(
+      t, remap_laddr, remap_paddr, remap_length, original_laddr, original_bptr);
+  case extent_types_t::OMAP_INNER:
+    return alloc_remapped_extent<omap_manager::OMapInnerNode>(
+      t, remap_laddr, remap_paddr, remap_length, original_laddr, original_bptr);
+  case extent_types_t::OMAP_LEAF:
+    return alloc_remapped_extent<omap_manager::OMapLeafNode>(
+      t, remap_laddr, remap_paddr, remap_length, original_laddr, original_bptr);
+  case extent_types_t::ONODE_BLOCK_STAGED:
+    return alloc_remapped_extent<onode::SeastoreNodeExtent>(
+      t, remap_laddr, remap_paddr, remap_length, original_laddr, original_bptr);
+  case extent_types_t::COLL_BLOCK:
+    return alloc_remapped_extent<collection_manager::CollectionNode>(
+      t, remap_laddr, remap_paddr, remap_length, original_laddr, original_bptr);
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    return alloc_remapped_extent<ObjectDataBlock>(
+      t, remap_laddr, remap_paddr, remap_length, original_laddr, original_bptr);
+  case extent_types_t::TEST_BLOCK:
+    return alloc_remapped_extent<TestBlock>(
+      t, remap_laddr, remap_paddr, remap_length, original_laddr, original_bptr);
+  case extent_types_t::REMAPPED_PLACEHOLDER:
+    ceph_abort("use Cache::alloc_remapped_placeholder");
+    return CachedExtentRef();
+  default:
+    ceph_abort("invalid extent type");
+    return CachedExtentRef();
+  }
+}
+
 std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag
@@ -1508,12 +1550,14 @@ record_t Cache::prepare_record(
     }
 
     // exist mutation pending extents must be in t.mutated_block_list
-    add_extent(i);
-    const auto t_src = t.get_src();
-    if (i->is_dirty()) {
-      add_to_dirty(i, &t_src);
-    } else {
-      touch_extent(*i, &t_src);
+    if (!is_remapped_placeholder_type(i->get_type())) {
+      add_extent(i);
+      const auto t_src = t.get_src();
+      if (i->is_dirty()) {
+	add_to_dirty(i, &t_src);
+      } else {
+	touch_extent(*i, &t_src);
+      }
     }
 
     alloc_delta.alloc_blk_ranges.emplace_back(

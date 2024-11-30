@@ -248,6 +248,24 @@ BtreeBackrefManager::new_mapping(
     });
 }
 
+struct removed_mappings_t {
+  using entry_t = BackrefManager::remove_mapping_result_t;
+  std::map<paddr_t, entry_t> mappings;
+
+  void insert(paddr_t key, entry_t val) {
+    mappings.insert_or_assign(key, val);
+  }
+  entry_t find(paddr_t paddr, extent_len_t length) {
+    assert(!mappings.empty());
+    auto iter = mappings.upper_bound(paddr);
+    assert(iter != mappings.begin());
+    --iter;
+    assert(iter->first <= paddr);
+    assert(iter->first + iter->second.len >= paddr + length);
+    return iter->second;
+  }
+};
+
 BtreeBackrefManager::merge_cached_backrefs_ret
 BtreeBackrefManager::merge_cached_backrefs(
   Transaction &t,
@@ -264,9 +282,12 @@ BtreeBackrefManager::merge_cached_backrefs(
     return seastar::do_with(
       backref_entryrefs_by_seq.begin(),
       JOURNAL_SEQ_NULL,
-      [this, &t, &limit, &backref_entryrefs_by_seq, max](auto &iter, auto &inserted_to) {
+      removed_mappings_t{},
+      [this, &t, &limit, &backref_entryrefs_by_seq, max]
+      (auto &iter, auto &inserted_to, auto &removed_mappings) {
       return trans_intr::repeat(
-        [&iter, this, &t, &limit, &backref_entryrefs_by_seq, max, &inserted_to]()
+        [&iter, this, &t, &limit, &backref_entryrefs_by_seq,
+	 max, &inserted_to, &removed_mappings]()
         -> merge_cached_backrefs_iertr::future<seastar::stop_iteration> {
         if (iter == backref_entryrefs_by_seq.end()) {
           return seastar::make_ready_future<seastar::stop_iteration>(
@@ -281,21 +302,31 @@ BtreeBackrefManager::merge_cached_backrefs(
           inserted_to = seq;
           return trans_intr::do_for_each(
             backref_entry_refs,
-            [this, &t](auto &backref_entry_ref) {
+            [this, &t, &removed_mappings](auto &backref_entry_ref) {
             LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
             auto &backref_entry = *backref_entry_ref;
             if (backref_entry.laddr != L_ADDR_NULL) {
-              DEBUGT("new mapping: {}~{} -> {}",
-                t,
-                backref_entry.paddr,
-                backref_entry.len,
-                backref_entry.laddr);
+	      auto type = backref_entry.type;
+	      auto op = "new";
+	      if (is_remapped_placeholder_type(type)) {
+		auto v = removed_mappings.find(
+		  backref_entry.paddr, backref_entry.len);
+		type = v.type;
+		op = "remap";
+	      }
+	      DEBUGT("{} mapping: {}~{} {} -> {}",
+		     t,
+		     op,
+		     backref_entry.paddr,
+		     backref_entry.len,
+		     type,
+		     backref_entry.laddr);
               return new_mapping(
                 t,
                 backref_entry.paddr,
                 backref_entry.len,
                 backref_entry.laddr,
-                backref_entry.type).si_then([](auto &&pin) {
+                type).si_then([](auto &&pin) {
                 return seastar::now();
               });
             } else {
@@ -303,7 +334,9 @@ BtreeBackrefManager::merge_cached_backrefs(
               return remove_mapping(
                 t,
                 backref_entry.paddr
-              ).si_then([](auto&&) {
+              ).si_then([&removed_mappings, paddr=backref_entry.paddr]
+			(auto&& res) {
+		removed_mappings.insert(paddr, res);
                 return seastar::now();
               }).handle_error_interruptible(
                 crimson::ct_error::input_output_error::pass_further(),
@@ -528,7 +561,9 @@ BtreeBackrefManager::remove_mapping(
 	auto ret = remove_mapping_result_t{
 	  iter.get_key(),
 	  iter.get_val().len,
-	  iter.get_val().laddr};
+	  iter.get_val().laddr,
+	  iter.get_val().type
+	};
 	return btree.remove(
 	  c,
 	  iter

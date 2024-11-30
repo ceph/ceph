@@ -989,8 +989,8 @@ struct transaction_manager_test_t :
         extent_types_t::BACKREF_LEAF
       };
       // exclude DINK_LADDR_LEAF, RETIRED_PLACEHOLDER,
-      //         ALLOC_INFO, JOURNAL_TAIL
-      assert(all_extent_types.size() == EXTENT_TYPES_MAX - 4);
+      //         ALLOC_INFO, JOURNAL_TAIL, REMAPPED_PLACEHOLDER
+      assert(all_extent_types.size() == EXTENT_TYPES_MAX - 5);
 
       std::vector<rewrite_gen_t> all_generations;
       for (auto i = INIT_GENERATION; i < REWRITE_GENERATIONS; i++) {
