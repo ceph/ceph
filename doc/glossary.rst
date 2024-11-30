@@ -261,6 +261,17 @@
                 Another name for :term:`Dashboard`.
 
 	Dashboard Plugin
+                The dashboard plugin was a Mimic-era web application that
+                visualized information and statistics about the Ceph cluster
+                using a web server hosted by the :ref:`Ceph
+                Manager<ceph-manager-daemon>`.
+
+                See `the Mimic-era Dashboard Plugin documentation
+                <https://docs.ceph.com/en/mimic/mgr/dashboard/>`_.
+
+        DC
+                **D**\ata **C**\enter.
+
         Flapping OSD
                 An OSD that is repeatedly marked ``up`` and then ``down`` in
                 rapid succession. See :ref:`rados_tshooting_flapping_osd`.
