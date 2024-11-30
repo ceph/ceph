@@ -131,7 +131,7 @@ BtreeLBAManager::get_mappings(
 	  c,
 	  btree.upper_bound_right(c, offset),
 	  [&pin_list, offset, length, c, FNAME](auto &pos) {
-	    if (pos.is_end() || pos.get_key() >= (offset + length)) {
+	    if (pos.is_tree_end() || pos.get_key() >= (offset + length)) {
 	      TRACET("{}~{} done with {} results",
 		     c.trans, offset, length, pin_list.size());
 	      return LBABtree::iterate_repeat_ret_inner(
@@ -263,7 +263,7 @@ BtreeLBAManager::_get_mapping(
       return btree.lower_bound(
 	c, offset
       ).si_then([FNAME, offset, c](auto iter) -> _get_mapping_ret {
-	if (iter.is_end() || iter.get_key() != offset) {
+	if (iter.is_tree_end() || iter.get_key() != offset) {
 	  ERRORT("laddr={} doesn't exist", c.trans, offset);
 	  return crimson::ct_error::enoent::make();
 	} else {
@@ -357,7 +357,7 @@ BtreeLBAManager::_alloc_extents(
 	[this, &state, total_len, addr, &t, hint,
 	lookup_attempts, FNAME](auto &pos) {
 	++stats.num_alloc_extents_iter_nexts;
-	if (pos.is_end()) {
+	if (pos.is_tree_end()) {
 	  DEBUGT("{}~{}, hint={}, state: end, done with {} attempts, insert at {}",
 		 t, addr, total_len, hint,
 		 stats.num_alloc_extents_iter_nexts - lookup_attempts,
@@ -460,7 +460,7 @@ _init_cached_extent(
       logn->get_laddr()
     ).si_then([e, c, logn, &ret](auto iter) {
       LOG_PREFIX(BtreeLBAManager::init_cached_extent);
-      if (!iter.is_end() &&
+      if (!iter.is_tree_end() &&
 	  iter.get_key() == logn->get_laddr() &&
 	  iter.get_val().pladdr.is_paddr() &&
 	  iter.get_val().pladdr.get_paddr() == logn->get_paddr()) {
@@ -533,7 +533,7 @@ BtreeLBAManager::scan_mappings(
 	c,
 	btree.upper_bound_right(c, begin),
 	[f=std::move(f), begin, end](auto &pos) {
-	  if (pos.is_end() || pos.get_key() >= end) {
+	  if (pos.is_tree_end() || pos.get_key() >= end) {
 	    return typename LBABtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
@@ -687,7 +687,7 @@ BtreeLBAManager::_decref_intermediate(
       return seastar::do_with(
 	std::move(iter),
 	[&btree, addr, len, c](auto &iter) {
-	ceph_assert(!iter.is_end());
+	ceph_assert(!iter.is_tree_end());
 	ceph_assert(iter.get_key() <= addr);
 	auto val = iter.get_val();
 	ceph_assert(iter.get_key() + val.len >= addr + len);
@@ -795,7 +795,7 @@ BtreeLBAManager::_update_mapping(
 	c, addr
       ).si_then([&btree, f=std::move(f), c, addr, nextent](auto iter)
 		-> _update_mapping_ret {
-	if (iter.is_end() || iter.get_key() != addr) {
+	if (iter.is_tree_end() || iter.get_key() != addr) {
 	  LOG_PREFIX(BtreeLBAManager::_update_mapping);
 	  ERRORT("laddr={} doesn't exist", c.trans, addr);
 	  return crimson::ct_error::enoent::make();

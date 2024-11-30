@@ -346,7 +346,7 @@ struct lba_btree_test : btree_test_base {
       return btree.lower_bound(
 	get_op_context(t), addr
       ).si_then([this, len, addr, &btree, &t](auto iter) {
-	EXPECT_FALSE(iter.is_end());
+	EXPECT_FALSE(iter.is_leaf_end());
 	EXPECT_TRUE(iter.get_key() == addr);
 	EXPECT_TRUE(iter.get_val().len == len);
 	return btree.remove(
@@ -363,7 +363,7 @@ struct lba_btree_test : btree_test_base {
 	get_op_context(t), addr
       ).si_then([](auto iter)
 		-> std::optional<std::pair<const laddr_t, const lba_map_val_t>> {
-	if (iter.is_end()) {
+	if (iter.is_leaf_end()) {
 	  return std::nullopt;
 	} else {
 	  return std::make_optional(

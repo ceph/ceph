@@ -95,7 +95,7 @@ public:
       mapped_space_visitor_t *visitor=nullptr) const
     {
       assert_valid();
-      assert(!is_end());
+      assert(!is_leaf_end());
 
       auto ret = *this;
       ret.leaf.pos++;
@@ -120,7 +120,7 @@ public:
     iterator_fut prev(op_context_t<node_key_t> c) const
     {
       assert_valid();
-      assert(!is_begin());
+      assert(!is_tree_begin());
 
       auto ret = *this;
 
@@ -187,11 +187,11 @@ public:
     }
 
     node_key_t get_key() const {
-      assert(!is_end());
+      assert(!is_leaf_end());
       return leaf.node->iter_idx(leaf.pos).get_key();
     }
     node_val_t get_val() const {
-      assert(!is_end());
+      assert(!is_leaf_end());
       auto ret = leaf.node->iter_idx(leaf.pos).get_val();
       if constexpr (
         std::is_same_v<crimson::os::seastore::lba_manager::btree::lba_map_val_t,
@@ -204,21 +204,45 @@ public:
       return ret;
     }
 
-    bool is_end() const {
+    bool is_leaf_end() const {
       // external methods may only resolve at a boundary if at end
       return at_boundary();
     }
 
-    bool is_begin() const {
-      for (auto &i: internal) {
-	if (i.pos != 0)
-	  return false;
+    bool is_tree_end() const {
+      auto match_meta = leaf.node->get_node_meta().end
+          == min_max_t<node_key_t>::max;
+      auto ret = is_leaf_end() && match_meta;
+#ifndef NDEBUG
+      if (match_meta) {
+        for (auto &i: internal) {
+          assert(i.pos == i.node->get_size() - 1);
+        }
       }
+#endif
+      return ret;
+    }
+
+    bool is_leaf_begin() const {
       return leaf.pos == 0;
     }
 
+    bool is_tree_begin() const {
+      auto match_meta = leaf.node->get_node_meta().begin
+          == min_max_t<node_key_t>::min;
+      auto ret = is_leaf_begin() && match_meta;
+#ifndef NDEBUG
+      if (match_meta) {
+        for (auto &i: internal) {
+          assert(i.pos == 0);
+        }
+      }
+#endif
+      return ret;
+    }
+
     std::unique_ptr<pin_t> get_pin(op_context_t<node_key_t> ctx) const {
-      assert(!is_end());
+      assert(!is_leaf_end());
       auto val = get_val();
       auto key = get_key();
       node_key_t end{};
@@ -442,7 +466,7 @@ public:
     return lower_bound(
       c, addr
     ).si_then([c, addr](auto iter) {
-      if (!iter.is_end() && iter.get_key() == addr) {
+      if (!iter.is_tree_end() && iter.get_key() == addr) {
 	return iter.next(c);
       } else {
 	return iterator_fut(
@@ -466,7 +490,7 @@ public:
     return lower_bound(
       c, addr
     ).si_then([c, addr](auto iter) {
-      if (iter.is_begin()) {
+      if (iter.is_tree_begin()) {
 	return iterator_fut(
 	  interruptible::ready_future_marker{},
 	  iter);
@@ -489,7 +513,7 @@ public:
   }
 
   iterator_fut begin(op_context_t<node_key_t> c) const {
-    return lower_bound(c, 0);
+    return lower_bound(c, min_max_t<node_key_t>::min);
   }
   iterator_fut end(op_context_t<node_key_t> c) const {
     return upper_bound(c, min_max_t<node_key_t>::max);
@@ -654,7 +678,7 @@ public:
           min_max_t<node_key_t>::min,
           &checker),
         [](auto &pos) {
-          if (pos.is_end()) {
+          if (pos.is_tree_end()) {
             return base_iertr::make_ready_future<
               seastar::stop_iteration>(
                 seastar::stop_iteration::yes);
@@ -692,7 +716,7 @@ public:
 		    interruptible::ready_future_marker{},
 		    seastar::stop_iteration::yes);
 		} else {
-		  ceph_assert(!pos.is_end());
+		  ceph_assert(!pos.is_tree_end());
 		  return pos.next(
 		    c, visitor
 		  ).si_then([&pos](auto next) {
@@ -738,7 +762,7 @@ public:
       "inserting laddr {} at iter {}",
       c.trans,
       laddr,
-      iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
+      iter.is_tree_end() ? min_max_t<node_key_t>::max : iter.get_key());
     return seastar::do_with(
       iter,
       [this, c, laddr, val, nextent](auto &ret) {
@@ -811,7 +835,7 @@ public:
       seastore_fixedkv_tree,
       "update element at {}",
       c.trans,
-      iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
+      iter.is_tree_end() ? min_max_t<node_key_t>::max : iter.get_key());
     if (!iter.leaf.node->is_mutable()) {
       CachedExtentRef mut = c.cache.duplicate_for_write(
         c.trans, iter.leaf.node
@@ -848,8 +872,8 @@ public:
       seastore_fixedkv_tree,
       "remove element at {}",
       c.trans,
-      iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
-    assert(!iter.is_end());
+      iter.is_tree_end() ? min_max_t<node_key_t>::max : iter.get_key());
+    assert(!iter.is_leaf_end());
     ++(get_tree_stats<self_type>(c.trans).num_erases);
     return seastar::do_with(
       iter,
@@ -891,7 +915,7 @@ public:
       return lower_bound(
         c, eint->get_node_meta().begin
       ).si_then([e, c, eint](auto iter) {
-        // Note, this check is valid even if iter.is_end()
+        // Note, this check is valid even if iter.is_leaf_end()
         LOG_PREFIX(FixedKVTree::init_cached_extent);
         depth_t cand_depth = eint->get_node_meta().depth;
         if (cand_depth <= iter.get_depth() &&
@@ -916,7 +940,7 @@ public:
       return lower_bound(
         c, eleaf->get_node_meta().begin
       ).si_then([c, e, eleaf](auto iter) {
-        // Note, this check is valid even if iter.is_end()
+        // Note, this check is valid even if iter.is_leaf_end()
         LOG_PREFIX(FixedKVTree::init_cached_extent);
         if (iter.leaf.node == &*eleaf) {
           SUBTRACET(
@@ -1735,8 +1759,8 @@ private:
     node_key_t laddr,
     iterator &iter)
   {
-    assert(iter.is_end() || iter.get_key() >= laddr);
-    if (!iter.is_end() && iter.get_key() == laddr) {
+    assert(iter.is_tree_end() || iter.get_key() >= laddr);
+    if (!iter.is_tree_end() && iter.get_key() == laddr) {
       return seastar::now();
     } else if (iter.leaf.node->get_node_meta().begin <= laddr) {
 #ifndef NDEBUG
