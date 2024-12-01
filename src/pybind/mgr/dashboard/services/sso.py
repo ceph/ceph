@@ -77,7 +77,7 @@ class SsoDB(object):
         protocol = dict_db.get('protocol')
         # keep backward-compatibility
         if protocol == '':
-            protocol = AuthType.LOCAL
+            protocol = AuthType.LOCAL.value
         protocol = AuthType(protocol)
         config: BaseAuth = BaseAuth.from_protocol(protocol).from_dict(dict_db.get(protocol))
         return cls(dict_db['version'], protocol, config)
@@ -89,7 +89,7 @@ def load_sso_db():
 
 @CLIWriteCommand("dashboard sso enable oauth2")
 def enable_sso(_):
-    mgr.SSO_DB.protocol = AuthType.OAUTH2
+    mgr.SSO_DB.protocol = AuthType.OAUTH2.value
     mgr.SSO_DB.save()
     mgr.set_module_option('sso_oauth2', True)
     return HandleCommandResult(stdout='SSO is "enabled" with "OAuth2" protocol.')
@@ -150,7 +150,7 @@ def handle_sso_command(cmd):
         return -errno.EPERM, '', 'Required library not found: `python3-saml`'
 
     if cmd['prefix'] == 'dashboard sso disable':
-        mgr.SSO_DB.protocol = AuthType.LOCAL
+        mgr.SSO_DB.protocol = AuthType.LOCAL.value
         mgr.SSO_DB.save()
         mgr.set_module_option('sso_oauth2', False)
         return 0, 'SSO is "disabled".', ''
@@ -158,14 +158,14 @@ def handle_sso_command(cmd):
     if cmd['prefix'] == 'dashboard sso enable saml2':
         configured = _is_sso_configured()
         if configured:
-            mgr.SSO_DB.protocol = AuthType.SAML2
+            mgr.SSO_DB.protocol = AuthType.SAML2.value
             mgr.SSO_DB.save()
             return 0, 'SSO is "enabled" with "saml2" protocol.', ''
         return -errno.EPERM, '', 'Single Sign-On is not configured: ' \
             'use `ceph dashboard sso setup saml2`'
 
     if cmd['prefix'] == 'dashboard sso status':
-        if not mgr.SSO_DB.protocol == AuthType.LOCAL:
+        if not mgr.SSO_DB.protocol == AuthType.LOCAL.value:
             return 0, f'SSO is "enabled" with "{mgr.SSO_DB.protocol}" protocol.', ''
 
         return 0, 'SSO is "disabled".', ''
@@ -278,7 +278,7 @@ def _set_saml_settings(cmd, sp_x_509_cert, sp_private_key, has_sp_cert):
     }
     settings = Saml2Parser.merge_settings(settings, idp_settings)
     mgr.SSO_DB.config.onelogin_settings = settings
-    mgr.SSO_DB.protocol = AuthType.SAML2
+    mgr.SSO_DB.protocol = AuthType.SAML2.value
     mgr.SSO_DB.save()
 
 
