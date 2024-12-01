@@ -986,11 +986,11 @@ $CMONDEBUG
         auth allow insecure global id reclaim = false
 EOF
 
-    if [ "$crimson" -eq 1 ]; then
-        wconf <<EOF
-        osd pool default crimson = true
-EOF
-    fi
+#   if [ "$crimson" -eq 1 ]; then
+#       wconf <<EOF
+#       osd pool default crimson = true
+#EOF
+#   fi
 
     # this is most probably a bug in ceph_mon
     # but public_bind_addr set in [global] doesn't work
@@ -1124,9 +1124,9 @@ EOF
         run 'mon' $f $CEPH_BIN/ceph-mon -i $f $ARGS $CMON_ARGS
     done
 
-    if [ "$crimson" -eq 1 ]; then
-        $CEPH_BIN/ceph osd set-allow-crimson --yes-i-really-mean-it
-    fi
+#      if [ "$crimson" -eq 1 ]; then
+#          $CEPH_BIN/ceph osd set-allow-crimson --yes-i-really-mean-it
+#      fi
 
     if [ -n "$require_osd_and_client_version" ]; then
         $CEPH_BIN/ceph osd set-require-min-compat-client $require_osd_and_client_version

@@ -2061,8 +2061,37 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
   }
 
+  auto m = op->get_req<MOSDBoot>();
+  int from = m->get_orig_source_inst().name.num();
   // health
   health_check_map_t next;
+
+  if (auto type_iter = m->metadata.find("osd_type");
+      type_iter != m->metadata.end()) {
+    const auto &otype = type_iter->second;
+    // m->metadata["osd_type"] must be "crimson", classic doesn't send osd_type
+    if (otype == "crimson" && !tmp.get_allow_crimson()) {        
+      int stuck_osds = 0;
+      for (int i = 0; i < tmp.get_max_osd(); i++) {
+        if (tmp.is_in(i) && !tmp.is_up(i)) {
+          stuck_osds++;
+        }
+      }
+      if (stuck_osds > 0) {
+        ostringstream ss, ss2;
+        ss << stuck_osds << " Crimson OSDs are IN but not UP: 'set-allow-crimson' flag not set";
+        auto& d = next.add("CRIMSON_ALLOW_FLAG_NOT_SET", HEALTH_WARN, ss.str(), stuck_osds);
+        ss2 << "Run 'ceph osd set-allow-crimson --yes-i-really-mean-it' to allow Crimson OSDs to come up.";
+        d.detail.push_back(ss2.str());
+      } else {
+        ostringstream ss, ss2;
+        ss << "Crimson 'set-allow-crimson' flag not set";
+        auto& d = next.add("CRIMSON_ALLOW_FLAG_NOT_SET", HEALTH_WARN, ss.str(), 1);
+        ss2 << "Run 'ceph osd set-allow-crimson --yes-i-really-mean-it' to allow Crimson OSDs to come up.";
+        d.detail.push_back(ss2.str());
+      }
+    }
+  }
   tmp.check_health(cct, &next);
   encode_health(next, t);
 }
