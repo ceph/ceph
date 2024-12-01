@@ -10,6 +10,7 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "common/async/yield_context.h"
+#include "rgw_s3_filter.h"
 
 class XMLObj;
 namespace ceph { class Formatter; }
@@ -48,6 +49,26 @@ namespace rgw::bucketlogging {
       <LoggingType>Standard|Journal</LoggingType>       <!-- Ceph extension -->
       <ObjectRollTime>integer</ObjectRollTime>          <!-- Ceph extension -->
       <RecordsBatchSize>integer</RecordsBatchSize>      <!-- Ceph extension -->
+      <Filter>
+         <S3Key>
+            <FilterRule>
+               <Name>suffix/prefix/regex</Name>
+               <Value></Value>
+            </FilterRule>
+         </S3Key>
+         <S3Metadata>
+            <FilterRule>
+               <Name></Name>
+               <Value></Value>
+            </FilterRule>
+         </S3Metadata>
+         <S3Tags>
+            <FilterRule>
+               <Name></Name>
+               <Value></Value>
+            </FilterRule>
+         </S3Tags>
+      </Filter>
    </LoggingEnabled>
 </BucketLoggingStatus>
 */
@@ -78,6 +99,7 @@ struct configuration {
   PartitionDateSource date_source = PartitionDateSource::DeliveryTime;
   // EventTime: use only year, month, and day. The hour, minutes and seconds are set to 00 in the key
   // DeliveryTime: the time the log object was created
+  rgw_s3_filter s3_filter;
   bool decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
   void dump(Formatter *f) const; // json
@@ -92,6 +114,9 @@ struct configuration {
     encode(static_cast<int>(logging_type), bl);
     encode(records_batch_size, bl);
     encode(static_cast<int>(date_source), bl);
+    if (logging_type == LoggingType::Journal) {
+      encode(s3_filter, bl);
+    }
     ENCODE_FINISH(bl);
   }
 
@@ -108,6 +133,9 @@ struct configuration {
     decode(records_batch_size, bl);
     decode(type, bl);
     date_source = static_cast<PartitionDateSource>(type);
+    if (logging_type == LoggingType::Journal) {
+      decode(s3_filter, bl);
+    }
     DECODE_FINISH(bl);
   }
 };

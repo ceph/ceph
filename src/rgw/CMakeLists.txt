@@ -90,6 +90,7 @@ set(librgw_common_srcs
   rgw_notify_event_type.cc
   rgw_period_history.cc
   rgw_period_puller.cc
+  rgw_s3_filter.cc
   rgw_pubsub.cc
   rgw_coroutine.cc
   rgw_cr_rest.cc
