@@ -187,7 +187,41 @@ class TestAdminCommands(CephFSTestCase):
 
         self.wait_for_health(health_warn, 30)
 
+    def run_dump_stray_command(self):
+        """
+        Test MDS asok dump stray command
+        """
 
+        LOW_LIMIT = 50
+        # need to create more folder to force fragmentation
+        # we want to test the case when dumping stray folder must wait for the next dirfrag
+        NUM_DIRS = LOW_LIMIT * 30
+        TOP_DIR = "topdir"
+        self.config_set("mds", "mds_bal_split_size", str(LOW_LIMIT))
+        self.assertEqual(self.config_get("mds", "mds_bal_split_size"), str(LOW_LIMIT), "LOW_LIMIT was not set on mds!")
+
+         # enable snaps
+        self.fs.set_allow_new_snaps(True)
+      
+        # create 2 level tree with enough folders to force the stray folder be fragmented
+        # total of LOW_LIMIT * 20 subdirs will be created
+        self.mount_a.run_shell(f"mkdir -p {TOP_DIR}/subdir{{1..{NUM_DIRS}}}")  
+        # create snapshot
+        self.mount_a.run_shell(f"mkdir {TOP_DIR}/.snap/snap1")
+
+        # delete second level folders
+        self.mount_a.run_shell(f"rm -rf {TOP_DIR}/*")
+        
+        # run dump stray command to check number of stray records
+        self.wait_until_equal(
+            lambda: len(self.fs.rank_tell(["dump", "stray"])),
+            expect_val=NUM_DIRS, timeout=60)
+
+        self.mount_a.run_shell(f"rmdir {TOP_DIR}/.snap/snap1")
+        self.wait_until_equal(
+            lambda: len(self.fs.rank_tell(["dump", "stray"])),
+            expect_val=0, timeout=60)
+        
 class TestMdsLastSeen(CephFSTestCase):
     """
     Tests for `mds last-seen` command.
