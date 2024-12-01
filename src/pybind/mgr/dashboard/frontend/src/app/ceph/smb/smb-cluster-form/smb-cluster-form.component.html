@@ -1,0 +1,248 @@
+<div cdsCol [columnNumbers]="{ md: 4 }" *ngIf="orchStatus$ | async as orchStatus">
+    <!-- <ng-container *cdFormLoading="loading"> -->
+    <form name="smbForm" #formDir="ngForm" [formGroup]="smbForm" novalidate>
+      <div i18n="form title" class="form-header">Create Cluster</div>
+
+ <!-- Cluster Id -->
+ <div class="form-item">
+<cds-text-label for="cluster_id"
+              i18n
+              helperText="A cluster id in a CephFS file system."
+              cdRequiredField="Cluster ID"
+              [invalid]="smbForm.controls.cluster_id.invalid && (smbForm.controls.cluster_id.dirty)"
+              [invalidText]="clusterError">Cluster ID
+<input cdsText
+       type="text"
+       placeholder="Cluster ID..."
+       i18n-placeholder
+       id="cluster_id"
+       name="cluster_id"
+       formControlName="cluster_id"
+       [invalid]="smbForm.controls.cluster_id.invalid && (smbForm.controls.cluster_id.dirty)">
+</cds-text-label>
+<ng-template #clusterError>
+<span class="invalid-feedback"
+      *ngIf="smbForm.showError('cluster_id', formDir, 'required')"
+      i18n>This field is required.</span>
+</ng-template>
+</div> 
+
+
+
+      <!-- Auth Mode -->
+      <div class="form-item">
+        <cds-select formControlName="auth_mode"
+                    name="auth_mode"
+                    for="auth_mode"
+                    label="Auth Mode"
+                    cdRequiredField="Auth Mode"
+                    id="auth_mode"
+                    [invalid]="smbForm.controls.auth_mode.invalid && (smbForm.controls.auth_mode.dirty)"
+                    [invalidText]="authModeError"
+                    (change)="onAuthModeChange()"
+                    i18n>
+                    <option value="">-- Select the auth mode --</option>
+                    <option value="active-directory">Active Directory</option>
+                    <option value="user">User</option>
+        
+        </cds-select>
+    
+        <ng-template #authModeError>
+          <span class="invalid-feedback"
+                *ngIf="smbForm.showError('auth_mode', formDir, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+        <!-- Domain Setting -->
+        <div class="form-item" *ngIf="this.smbForm.get('auth_mode').value === 'active-directory'">
+          <div cdsCol
+               [columnNumbers]="{md: 12}"
+               class="d-flex">
+               <cds-text-label for="domain_setting"
+               i18n
+             
+               cdRequiredField="Domain Setting"
+               [invalid]="smbForm.controls.domain_setting.invalid && (smbForm.controls.domain_setting.dirty)"
+               [invalidText]="domainError">Domain Setting
+              <div class="cds-input-group">
+                <input cdsText
+             type="text"
+             placeholder="Domain Setting..."
+             i18n-placeholder
+             id="domain_setting"
+             name="domain_setting"
+             formControlName="domain_setting"
+             [invalid]="smbForm.controls.domain_setting.invalid && (smbForm.controls.domain_setting.dirty)">
+           
+            <cds-icon-button kind="ghost"
+            size="md"
+          >
+                   <svg cdsIcon="edit"
+                   size="32"
+                   class="cds--btn__icon"
+                   icon></svg>
+               
+               
+                 </cds-icon-button>
+                
+                
+             <cds-icon-button kind="ghost"
+             size="md"
+           >
+                    <svg cdsIcon="trash-can"
+                    size="32"
+                    class="cds--btn__icon"
+                    icon></svg>
+                
+                
+                  </cds-icon-button>
+                  <button cdsButton="tertiary"
+                  type="button"
+                  (click)="showDomainSettingModal()"
+                  >
+                  Domain Setting
+            <svg cdsIcon="add"
+                 size="32"
+                 class="cds--btn__icon"
+                 icon></svg>
+          </button>
+              </div>
+            </cds-text-label>
+          </div>
+          </div>
+
+            <!-- User Group Setting -->
+          <div class="form-item" *ngIf="this.smbForm.get('auth_mode').value === 'user'">
+            <cds-text-label for="user_group_setting" 
+                          i18n
+                        
+                          cdRequiredField="User group Setting"
+                          [invalid]="smbForm.controls.user_group_setting.invalid && (smbForm.controls.user_group_setting.dirty)"
+                          [invalidText]="userGroupError">User Group Setting
+            <input cdsText
+                   type="text"
+                   placeholder="User Group Setting..."
+                   i18n-placeholder
+                   id="user_group_setting"
+                   name="user_group_setting"
+                   formControlName="user_group_setting"
+                   [invalid]="smbForm.controls.user_group_setting.invalid && (smbForm.controls.user_group_setting.dirty)">
+            </cds-text-label>
+            <ng-template #userGroupError>
+            <span class="invalid-feedback"
+                  *ngIf="smbForm.showError('user_group_setting', formDir, 'required')"
+                  i18n>This field is required.</span>
+            </ng-template>
+            </div> 
+
+       <!-- Intent -->
+       <div class="form-item">
+        <cds-select formControlName="intent"
+                    name="intent"
+                    for="intent"
+                    label="Intent"
+                    cdRequiredField="Intent"
+                    id="intent"
+                    [invalid]="smbForm.controls.intent.invalid && (smbForm.controls.intent.dirty)"
+                    [invalidText]="intentError"
+                    i18n>
+                    <option value="">-- Select the Intent --</option>
+                    <option value="present">Present</option>
+                    <option value="removed">Removed</option>
+        
+        </cds-select>
+    
+        <ng-template #intentError>
+          <span class="invalid-feedback"
+                *ngIf="smbForm.showError('intent', formDir, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+       <!-- Placement -->
+      <ng-container *ngIf="orchStatus.available">
+        <!-- Placement -->
+        <div class="form-item">
+          <cds-select
+            label="Placement"
+            for="placement"
+            formControlName="placement"
+            name="placement"
+            id="placement"
+            i18n
+          >
+            <option value="hosts">Hosts</option>
+            <option value="label">Labels</option>
+          </cds-select>
+        </div>
+  <ng-container *ngIf="hostsAndLabels$ | async as data">
+    <!-- Label -->
+    <div *ngIf="smbForm.controls.placement.value === 'label'"
+         class="form-item">
+      <cds-combo-box type="multi"
+                     selectionFeedback="top-after-reopen"
+                     label="Label"
+                     for="label"
+                     name="label"
+                     formControlName="label"
+                     id="label"
+                     placeholder="Select labels..."
+                     [appendInline]="true"
+                     [items]="data.labels"
+                     i18n-placeholder
+                     (selected)="multiSelector($event, 'label')"
+                     [invalid]="smbForm.controls.label.invalid && (smbForm.controls.label.dirty)"
+                     [invalidText]="labelError"
+                     cdRequiredField="Label"
+                     i18n>
+        <cds-dropdown-list></cds-dropdown-list>
+      </cds-combo-box>
+      
+    </div>
+
+    <!-- Hosts -->
+    <div *ngIf="smbForm.controls.placement.value === 'hosts'"
+         class="form-item">
+      <cds-combo-box type="multi"
+                     selectionFeedback="top-after-reopen"
+                     label="Hosts"
+                     for="hosts"
+                     name="hosts"
+                     formControlName="hosts"
+                     id="hosts"
+                     placeholder="Select hosts..."
+                     i18n-placeholder
+                     [appendInline]="true"
+                     [items]="data.hosts"
+                     (selected)="multiSelector($event, 'hosts')"
+                     i18n>
+        <cds-dropdown-list></cds-dropdown-list>
+      </cds-combo-box>
+    </div>
+  </ng-container>
+      </ng-container>
+
+
+      <!-- Clustering -->
+      <div class="form-item">
+        <cds-select formControlName="clustering"
+                    name="clustering"
+                    for="clustering"
+                    label="Clusering"
+                    id="clustering"
+                    i18n>
+                    <option *ngFor="let data of allClustering"> {{data}}</option>
+        
+        </cds-select>
+    
+      </div>
+
+ <cd-form-button-panel (submitActionEvent)="submitAction()"
+                              [form]="smbForm"
+                        
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
+
+      </form>
+</div>

@@ -1,0 +1,19 @@
+<cd-table #table
+          [data]="smbClusters"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="id"
+          forceIdentifier="true"
+          selectionType="single"
+          [hasDetails]="false"
+          (setExpandedRow)="setExpandedRow($event)"
+          (fetchData)="loadSMBCluster($event)"
+          >
+  <div class="table-actions">
+    <cd-table-actions class="btn-group"
+                      [permission]="permission"
+                      [selection]="selection"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+  </div>
+</cd-table>

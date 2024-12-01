@@ -7,6 +7,7 @@ import { ClusterModule } from './cluster/cluster.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { NfsModule } from './nfs/nfs.module';
 import { PerformanceCounterModule } from './performance-counter/performance-counter.module';
+import { SmbModule } from './smb/smb.module';
 
 @NgModule({
   imports: [
@@ -16,6 +17,7 @@ import { PerformanceCounterModule } from './performance-counter/performance-coun
     PerformanceCounterModule,
     CephfsModule,
     NfsModule,
+    SmbModule,
     SharedModule
   ],
   declarations: []

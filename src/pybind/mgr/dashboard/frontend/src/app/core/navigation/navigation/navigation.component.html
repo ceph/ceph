@@ -240,7 +240,7 @@
         <!-- Filesystem -->
         <cds-sidenav-menu title="File"
                           i18n-title
-                          *ngIf="permissions.nfs.read && enabledFeature.nfs || permissions.cephfs.read && enabledFeature.cephfs"
+                          *ngIf="permissions.nfs.read && enabledFeature.nfs || permissions.cephfs.read && enabledFeature.cephfs || permissions.smb.read"
                           class="tc_menuitem_file">
           <svg cdsIcon="file-storage"
                icon
@@ -257,6 +257,12 @@
                             i18n-title
                             *ngIf="permissions.nfs.read && enabledFeature.nfs"
                             class="tc_submenuitem tc_submenuitem_file_nfs"><span i18n>NFS</span></cds-sidenav-item>
+          <cds-sidenav-item route="/cephfs/smb"
+                            [useRouter]="true"
+                            title="SMB"
+                            i18n-title
+                            *ngIf="permissions.smb.read"
+                            class="tc_submenuitem tc_submenuitem_file_smb"><span i18n>SMB</span></cds-sidenav-item>
         </cds-sidenav-menu>
         <!-- Observability -->
         <cds-sidenav-menu title="Observability"
