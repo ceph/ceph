@@ -39,6 +39,17 @@ bucket_logging_conf = {'LoggingEnabled': {
     },
     'ObjectRollTime': 60,
     'LoggingType': 'Journal',
+    "Filter": {
+      "Key": {
+        "FilterRules":
+        [
+          {
+            "Name": "prefix",
+            "Value": "myfile"
+          }
+        ]
+      }
+    }
   }
 }
 
