@@ -8146,6 +8146,10 @@ next:
 	dendl;
       return -ret;
     }
+    if (bucket->get_info().is_indexless()) {
+      cerr << "ERROR: indexless bucket has no index to list" << std::endl;
+      return EINVAL;
+    }
 
     std::list<rgw_cls_bi_entry> entries;
     bool is_truncated;
