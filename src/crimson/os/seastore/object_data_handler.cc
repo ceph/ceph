@@ -525,7 +525,7 @@ ObjectDataHandler::write_ret do_insertions(
       if (region.is_data()) {
 	assert_aligned(region.len);
 	ceph_assert(region.len == region.bl->length());
-	DEBUGT("allocating extent: {}~{}",
+	DEBUGT("allocating extent: {}~0x{:x}",
 	       ctx.t,
 	       region.addr,
 	       region.len);
@@ -556,7 +556,7 @@ ObjectDataHandler::write_ret do_insertions(
 	  ObjectDataHandler::write_iertr::pass_further{}
 	);
       } else if (region.is_zero()) {
-	DEBUGT("reserving: {}~{}",
+	DEBUGT("reserving: {}~0x{:x}",
 	       ctx.t,
 	       region.addr,
 	       region.len);
@@ -698,7 +698,7 @@ public:
 	       << ", aligned_data_end=" << overwrite_plan.aligned_data_end
 	       << ", left_operation=" << overwrite_plan.left_operation
 	       << ", right_operation=" << overwrite_plan.right_operation
-	       << ", block_size=" << overwrite_plan.block_size
+	       << ", block_size=0x" << std::hex << overwrite_plan.block_size << std::dec
 	       << ", is_left_fresh=" << overwrite_plan.is_left_fresh
 	       << ", is_right_fresh=" << overwrite_plan.is_right_fresh
 	       << ")";
@@ -1059,13 +1059,13 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   ceph_assert(size <= max_object_size);
   if (!object_data.is_null()) {
     ceph_assert(object_data.get_reserved_data_len() == max_object_size);
-    DEBUGT("reservation present: {}~{}",
+    DEBUGT("reservation present: {}~0x{:x}",
            ctx.t,
            object_data.get_reserved_data_base(),
            object_data.get_reserved_data_len());
     return write_iertr::now();
   } else {
-    DEBUGT("reserving: {}~{}",
+    DEBUGT("reserving: {}~0x{:x}",
            ctx.t,
            ctx.onode.get_data_hint(),
            max_object_size);
@@ -1098,7 +1098,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
       LOG_PREFIX(ObjectDataHandler::trim_data_reservation);
       auto data_base = object_data.get_reserved_data_base();
       auto data_len = object_data.get_reserved_data_len();
-      DEBUGT("object_data: {}~{}", ctx.t, data_base, data_len);
+      DEBUGT("object_data: {}~0x{:x}", ctx.t, data_base, data_len);
       laddr_t aligned_start = (data_base + size).get_aligned_laddr();
       loffset_t aligned_length =
 	  data_len - aligned_start.get_byte_distance<loffset_t>(data_base);
@@ -1134,7 +1134,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
           if (append_len == 0) {
             LOG_PREFIX(ObjectDataHandler::trim_data_reservation);
             TRACET("First pin overlaps the boundary and has aligned data"
-              "create existing at addr:{}, len:{}",
+              "create existing at addr:{}, len:0x{:x}",
               ctx.t, pin.get_key(), size - pin_offset);
             to_write.push_back(extent_to_write_t::create_existing(
               pin.duplicate(),
@@ -1156,7 +1156,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
               write_bl.append_zero(append_len);
               LOG_PREFIX(ObjectDataHandler::trim_data_reservation);
               TRACET("First pin overlaps the boundary and has unaligned data"
-                "create data at addr:{}, len:{}",
+                "create data at addr:{}, len:0x{:x}",
                 ctx.t, pin.get_key(), write_bl.length());
 	      to_write.push_back(extent_to_write_t::create_data(
 	        pin.get_key(),
@@ -1303,7 +1303,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
     (auto &pins, auto &to_write) mutable
   {
     LOG_PREFIX(ObjectDataHandler::overwrite);
-    DEBUGT("overwrite: {}~{}",
+    DEBUGT("overwrite: 0x{:x}~0x{:x}",
            ctx.t,
            offset,
            len);
@@ -1393,7 +1393,7 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
     ctx,
     [this, ctx, offset, len](auto &object_data) {
       LOG_PREFIX(ObjectDataHandler::zero);
-      DEBUGT("zero to {}~{}, object_data: {}~{}, is_null {}",
+      DEBUGT("zero to 0x{:x}~0x{:x}, object_data: {}~0x{:x}, is_null {}",
              ctx.t,
              offset,
              len,
@@ -1434,7 +1434,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
     ctx,
     [this, ctx, offset, &bl](auto &object_data) {
       LOG_PREFIX(ObjectDataHandler::write);
-      DEBUGT("writing to {}~{}, object_data: {}~{}, is_null {}",
+      DEBUGT("writing to 0x{:x}~0x{:x}, object_data: {}~0x{:x}, is_null {}",
              ctx.t,
              offset,
 	     bl.length(),
@@ -1479,7 +1479,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
       ctx,
       [ctx, obj_offset, len, &ret](const auto &object_data) {
       LOG_PREFIX(ObjectDataHandler::read);
-      DEBUGT("reading {}~{}",
+      DEBUGT("reading {}~0x{:x}",
              ctx.t,
              object_data.get_reserved_data_base(),
              object_data.get_reserved_data_len());
@@ -1536,7 +1536,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
               l_current_end.get_byte_distance<extent_len_t>(l_current);
 
             if (pin->get_val().is_zero()) {
-              DEBUGT("got {}~{} from zero-pin {}~{}",
+              DEBUGT("got {}~0x{:x} from zero-pin {}~0x{:x}",
                 ctx.t,
                 l_current,
                 read_len,
@@ -1553,7 +1553,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
               l_current_end_aligned.get_byte_distance<extent_len_t>(pin_start);
             read_len_aligned -= read_start_aligned;
             extent_len_t unalign_start_offset = read_start - read_start_aligned;
-            DEBUGT("reading {}~{} from pin {}~{}",
+            DEBUGT("reading {}~0x{:x} from pin {}~0x{:x}",
               ctx.t,
               l_current,
               read_len,
@@ -1609,7 +1609,7 @@ ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
       [ctx, obj_offset, len, &ret](const auto &object_data) {
       LOG_PREFIX(ObjectDataHandler::fiemap);
       DEBUGT(
-	"{}~{}, reservation {}~{}",
+	"0x{:x}~0x{:x}, reservation {}~0x{:x}",
         ctx.t,
         obj_offset,
         len,
@@ -1664,7 +1664,7 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
     ctx,
     [this, ctx, offset](auto &object_data) {
       LOG_PREFIX(ObjectDataHandler::truncate);
-      DEBUGT("truncating {}~{} offset: {}",
+      DEBUGT("truncating {}~0x{:x} offset: 0x{:x}",
 	     ctx.t,
 	     object_data.get_reserved_data_base(),
 	     object_data.get_reserved_data_len(),
@@ -1707,7 +1707,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
   laddr_t data_base)
 {
   LOG_PREFIX(ObjectDataHandler::clone_extents);
-  TRACET(" object_data: {}~{}, data_base: {}",
+  TRACET("object_data: {}~0x{:x}, data_base: 0x{:x}",
     ctx.t,
     object_data.get_reserved_data_base(),
     object_data.get_reserved_data_len(),
@@ -1792,7 +1792,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
       auto len = object_data.get_reserved_data_len();
       object_data.clear();
       LOG_PREFIX(ObjectDataHandler::clone);
-      DEBUGT("cloned obj reserve_data_base: {}, len {}",
+      DEBUGT("cloned obj reserve_data_base: {}, len 0x{:x}",
 	ctx.t,
 	d_object_data.get_reserved_data_base(),
 	d_object_data.get_reserved_data_len());
@@ -1802,7 +1802,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
 	d_object_data.get_reserved_data_len()
       ).si_then([&d_object_data, ctx, &object_data, base, len, this] {
 	LOG_PREFIX("ObjectDataHandler::clone");
-	DEBUGT("head obj reserve_data_base: {}, len {}",
+	DEBUGT("head obj reserve_data_base: {}, len 0x{:x}",
 	  ctx.t,
 	  object_data.get_reserved_data_base(),
 	  object_data.get_reserved_data_len());
