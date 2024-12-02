@@ -616,7 +616,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_user_password_hash(self):
         user_orig = self.test_create_user()
         user = self.exec_cmd('ac-user-set-password-hash', username='admin',
-                             inbuf='2b12Pt3Vq/rDt2y9glTPSVVFegiLkQeIpddtkhoKbMQHMtDsOzPCTNwvPBoY+1xJX0kHZKblZeVcAOjeIh+pweEf0J8o1obBujPFb7NORgpy8pfl5GuSzJEum1NE')
+                             inbuf='2b12Pt3Vq/rDt2y9glTPSVVFegiLkQeIpddtkhoKbMQHMtDsOzPCTNwvPBoY+1xJX0kHZKblZeVcAOjeIh+pweEf0J8o1obBujPFb7NORgpy8pfl5GuSzJEum1NE')  # noqa: E501
         pass_hash = calculate_password_hash('newpass', user['password'])
         self.assertDictEqual(user, {
             'username': 'admin',
@@ -636,7 +636,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_user_password_hash_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('ac-user-set-password-hash', username='admin',
-                          inbuf='2b12Pt3Vq/rDt2y9glTPSVVFegiLkQeIpddtkhoKbMQHMtDsOzPCTNwvPBoY+1xJX0kHZKblZeVcAOjeIh+pweEf0J8o1obBujPFb7NORgpy8pfl5GuSzJEum1NE')
+                          inbuf='2b12Pt3Vq/rDt2y9glTPSVVFegiLkQeIpddtkhoKbMQHMtDsOzPCTNwvPBoY+1xJX0kHZKblZeVcAOjeIh+pweEf0J8o1obBujPFb7NORgpy8pfl5GuSzJEum1NE')  # noqa: E501
 
         self.assertEqual(ctx.exception.retcode, -errno.ENOENT)
         self.assertEqual(str(ctx.exception), "User 'admin' does not exist")
