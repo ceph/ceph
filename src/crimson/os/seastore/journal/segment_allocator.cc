@@ -189,7 +189,7 @@ SegmentAllocator::write(ceph::bufferlist&& to_write)
   auto write_length = to_write.length();
   auto write_start_offset = written_to;
   if (unlikely(LOCAL_LOGGER.is_enabled(seastar::log_level::trace))) {
-    TRACE("{} {}~{}", print_name, get_written_to(), write_length);
+    TRACE("{} {}~0x{:x}", print_name, get_written_to(), write_length);
   }
   assert(write_length > 0);
   assert((write_length % get_block_size()) == 0);
@@ -250,7 +250,7 @@ SegmentAllocator::close_segment()
     close_seg_info.num_extents};
   ceph::bufferlist bl;
   encode(tail, bl);
-  INFO("{} close segment {}, written_to={}",
+  INFO("{} close segment {}, written_to=0x{:x}",
        print_name,
        tail,
        written_to);
