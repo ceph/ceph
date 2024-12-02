@@ -576,7 +576,11 @@ Commands
   details for every mirror-enabled image in the pool or namespace.
 
 :command:`mirror snapshot schedule add` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval* [*start-time*]
-  Add mirror snapshot schedule.
+  Add mirror snapshot schedule. The ``interval`` can be specified in
+  days, hours, or minutes using the d, h, m suffix respectively.
+  The ``start-time`` is a time string in ISO 8601 format. Not providing the
+  ``--pool``, ``--namespace`` and ``--image`` options creates a global
+  schedule which applies to all mirror-enabled images in the cluster.
 
 :command:`mirror snapshot schedule list` [-R | --recursive] [--format *format*] [--pretty-format] [-p | --pool *pool*] [--namespace *namespace*] [--image *image*]
   List mirror snapshot schedule.
@@ -1031,6 +1035,9 @@ To restore an image from trash and rename it::
 
        rbd trash restore mypool/myimage-id --image mynewimage
 
+To create a mirror snapshot schedule for an image::
+
+       rbd mirror snapshot schedule add --pool mypool --image myimage 12h 14:00:00-05:00
 
 Availability
 ============
