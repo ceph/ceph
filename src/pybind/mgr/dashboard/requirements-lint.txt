@@ -7,6 +7,6 @@ flake8
 rstcheck==3.3.1
 autopep8==1.5.7
 pyfakefs==5.3.3
-isort==5.5.3
+isort
 jsonschema~=4.0
 PyJWT~=2.0
