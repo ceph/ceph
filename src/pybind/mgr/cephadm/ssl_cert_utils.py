@@ -15,11 +15,12 @@ class SSLConfigException(Exception):
 
 
 class SSLCerts:
-    def __init__(self) -> None:
+    def __init__(self, fsid= "") -> None:
         self.root_cert: Any
         self.root_key: Any
         self.key_file: IO[bytes]
         self.cert_file: IO[bytes]
+        self.mgr_cluster_fsid: str = fsid
 
     def generate_root_cert(
         self,
@@ -51,6 +52,13 @@ class SSLCerts:
                 san_list
             ),
             critical=False
+        )
+
+        # Create a FSID extension and add it to root builder
+        mgr_cluster_fsid = ObjectIdentifier(self.mgr_cluster_fsid)
+        root_builder = root_builder.add_extension(
+            x509.UnrecognizedExtension(mgr_cluster_fsid, b"Manager Cluster FSID"),
+            critical = True
         )
 
         root_builder = root_builder.add_extension(
