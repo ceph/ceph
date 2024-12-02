@@ -118,7 +118,7 @@
 
           <input cdsText type="text"
             [class.hidden]="!['mds', 'rgw', 'nfs', 'iscsi', 'nvmeof', 'smb', 'ingress'].includes(serviceForm.controls.service_type.value)"
-            readonly="true" class="sm-width"
+            disabled class="sm-width"
             [placeholder]="['mds', 'rgw', 'nfs', 'iscsi', 'nvmeof', 'smb', 'ingress'].includes(serviceForm.controls.service_type.value) ? serviceForm.controls.service_type.value + '.' : ''">
 
           <input cdsText type="text" [id]="service_id" [name]="service_id" formControlName="service_id"
