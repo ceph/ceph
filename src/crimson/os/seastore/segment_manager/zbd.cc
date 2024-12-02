@@ -56,7 +56,7 @@ static open_device_ret open_device(
     path, seastar::follow_symlink::yes
   ).then([FNAME, mode, &path](auto stat) mutable {
     return seastar::open_file_dma(path, mode).then([=](auto file) {
-       DEBUG("open of device {} successful, size {}",
+       DEBUG("open of device {} successful, size 0x{:x}",
         path,
         stat.size);
       return std::make_pair(file, stat);
@@ -100,11 +100,12 @@ static zbd_sm_metadata_t make_metadata(
 
   WARN("Ignoring configuration values for device and segment size");
   INFO(
-    "device size: {}, available size: {}, block size: {}, allocated size: {},"
-    " total zones {}, zone size: {}, zone capacity: {},"
-    " total segments: {}, zones per segment: {}, segment size: {}"
+    "device size: 0x{:x}, available size: 0x{:x},"
+    " block size: 0x{:x}, allocated size: 0x{:x},"
+    " total zones {}, zone size: 0x{:x}, zone capacity: 0x{:x},"
+    " total segments: {}, zones per segment: {}, segment size: 0x{:x}"
     " conv zones: {}, swr zones: {}, per shard segments: {}"
-    " per shard available size: {}",
+    " per shard available size: 0x{:x}",
     total_size,
     available_size,
     data.block_size,
@@ -126,8 +127,8 @@ static zbd_sm_metadata_t make_metadata(
     shard_infos[i].segments = per_shard_segments;
     shard_infos[i].first_segment_offset = zone_size * skipped_zones
       + i * segment_size * per_shard_segments;
-    INFO("First segment offset for shard {} is: {}",
-		    i, shard_infos[i].first_segment_offset);
+    INFO("First segment offset for shard {} is: 0x{:x}",
+         i, shard_infos[i].first_segment_offset);
   }
 
   zbd_sm_metadata_t ret = zbd_sm_metadata_t{
@@ -248,7 +249,7 @@ static write_ertr::future<> do_write(
   bufferptr &bptr)
 {
   LOG_PREFIX(ZBDSegmentManager::do_write);
-  DEBUG("offset {} len {}",
+  DEBUG("offset 0x{:x} len 0x{:x}",
     offset,
     bptr.length());
   return device.dma_write(
@@ -277,7 +278,7 @@ static write_ertr::future<> do_writev(
   size_t block_size)
 {
   LOG_PREFIX(ZBDSegmentManager::do_writev);
-  DEBUG("{} offset {} len {}",
+  DEBUG("{} offset 0x{:x} len 0x{:x}",
     device_id_printer_t{device_id}, offset, bl.length());
   // writev requires each buffer to be aligned to the disks' block
   // size, we need to rebuild here
@@ -295,23 +296,23 @@ static write_ertr::future<> do_writev(
       auto off = offset + p.offset;
       auto len = p.length;
       auto& iov = p.iov;
-      DEBUG("{} poffset={}~{} dma_write ...",
+      DEBUG("{} poffset=0x{:x}~0x{:x} dma_write ...",
 	    device_id_printer_t{device_id},
             off, len);
       return device.dma_write(off, std::move(iov)
       ).handle_exception(
         [FNAME, device_id, off, len](auto e) -> write_ertr::future<size_t>
       {
-        ERROR("{} poffset={}~{} dma_write got error -- {}",
+        ERROR("{} poffset=0x{:x}~0x{:x} dma_write got error -- {}",
 	      device_id_printer_t{device_id}, off, len, e);
         return crimson::ct_error::input_output_error::make();
       }).then([FNAME, device_id, off, len](size_t written) -> write_ertr::future<> {
         if (written != len) {
-          ERROR("{} poffset={}~{} dma_write len={} inconsistent",
+          ERROR("{} poffset=0x{:x}~0x{:x} dma_write len=0x{:x} inconsistent",
 		device_id_printer_t{device_id}, off, len, written);
           return crimson::ct_error::input_output_error::make();
         }
-        DEBUG("{} poffset={}~{} dma_write done",
+        DEBUG("{} poffset=0x{:x}~0x{:x} dma_write done",
 	      device_id_printer_t{device_id},
               off, len);
         return write_ertr::now();
@@ -329,12 +330,12 @@ write_metadata(seastar::file &device, zbd_sm_metadata_t sb)
     bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
     [=, &device](auto &bp) {
       LOG_PREFIX(ZBDSegmentManager::write_metadata);
-      DEBUG("block_size {}", sb.block_size);
+      DEBUG("block_size 0x{:x}", sb.block_size);
       bufferlist bl;
       encode(sb, bl);
       auto iter = bl.begin();
       assert(bl.length() < sb.block_size);
-      DEBUG("buffer length {}", bl.length());
+      DEBUG("buffer length 0x{:x}", bl.length());
       iter.copy(bl.length(), bp.c_str());
       DEBUG("doing writeout");
       return do_write(device, 0, bp);
@@ -349,7 +350,7 @@ static read_ertr::future<> do_read(
 {
   LOG_PREFIX(ZBDSegmentManager::do_read);
   assert(len <= bptr.length());
-  DEBUG("offset {} len {}",
+  DEBUG("offset 0x{:x} len 0x{:x}",
     offset,
     len);
   return device.dma_read(
@@ -659,7 +660,7 @@ SegmentManager::read_ertr::future<> ZBDSegmentManager::read(
   }
   
   if (seg_addr.get_segment_off() + len > metadata.segment_capacity) {
-    ERROR("invalid read offset {}, len {}",
+    ERROR("invalid read offset {}, len 0x{:x}",
       addr,
       len);
     return crimson::ct_error::invarg::make();
@@ -703,7 +704,7 @@ Segment::write_ertr::future<> ZBDSegmentManager::segment_write(
   assert(addr.get_device_id() == get_device_id());
   assert((bl.length() % metadata.block_size) == 0);
   auto& seg_addr = addr.as_seg_paddr();
-  DEBUG("write to segment {} at offset {}, physical offset {}, len {}",
+  DEBUG("write to segment {} at offset 0x{:x}, physical offset 0x{:x}, len 0x{:x}",
     seg_addr.get_segment_id(),
     seg_addr.get_segment_off(),
     get_offset(addr),
@@ -756,7 +757,7 @@ Segment::write_ertr::future<> ZBDSegment::write(
   LOG_PREFIX(ZBDSegment::write);
   if (offset != write_pointer || offset % manager.metadata.block_size != 0) {
     ERROR("Segment offset and zone write pointer mismatch. "
-          "segment {} segment-offset {} write pointer {}",
+          "segment {} segment-offset 0x{:x} write pointer 0x{:x}",
           id, offset, write_pointer);
     return crimson::ct_error::invarg::make();
   }
@@ -772,7 +773,7 @@ Segment::write_ertr::future<> ZBDSegment::write_padding_bytes(
   size_t padding_bytes)
 {
   LOG_PREFIX(ZBDSegment::write_padding_bytes);
-  DEBUG("Writing {} padding bytes to segment {} at wp {}",
+  DEBUG("Writing 0x{:x} padding bytes to segment {} at wp 0x{:x}",
         padding_bytes, id, write_pointer);
 
   return crimson::repeat([FNAME, padding_bytes, this] () mutable {
@@ -804,7 +805,7 @@ Segment::write_ertr::future<> ZBDSegment::advance_wp(
 {
   LOG_PREFIX(ZBDSegment::advance_wp);
 
-  DEBUG("Advancing write pointer from {} to {}", write_pointer, offset);
+  DEBUG("Advancing write pointer from 0x{:x} to 0x{:x}", write_pointer, offset);
   if (offset < write_pointer) {
     return crimson::ct_error::invarg::make();
   }
