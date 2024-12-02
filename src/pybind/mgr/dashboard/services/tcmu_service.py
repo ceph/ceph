@@ -5,7 +5,7 @@ from dashboard.services.ceph_service import CephService
 from .. import mgr
 
 try:
-    from typing import Dict
+    from typing import Dict  # noqa: F401
 except ImportError:
     pass  # Just for type checking
 

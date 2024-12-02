@@ -11,7 +11,7 @@ from mgr_util import get_most_recent_rate, get_time_series_rates, name_to_config
 from .. import mgr
 
 try:
-    from typing import Any, Dict, List, Optional, Union
+    from typing import Any, Dict, List, Optional, Union  # noqa: F401
 except ImportError:
     pass  # For typing only
 

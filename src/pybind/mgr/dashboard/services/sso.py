@@ -7,7 +7,7 @@ import logging
 import os
 import threading
 import warnings
-from typing import Dict
+from typing import Dict  # noqa: F401
 from urllib import parse
 
 from mgr_module import CLIWriteCommand, HandleCommandResult

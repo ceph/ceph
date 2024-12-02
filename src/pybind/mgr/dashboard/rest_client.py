@@ -27,7 +27,7 @@ try:
 except ImportError:
     from urllib3.exceptions import SSLError  # type: ignore
 
-from typing import List, Optional
+from typing import List, Optional  # noqa: F401
 
 from mgr_util import build_url
 
