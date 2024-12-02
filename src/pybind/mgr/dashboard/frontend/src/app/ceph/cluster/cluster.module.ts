@@ -14,7 +14,8 @@ import {
   SelectModule,
   ModalModule,
   InputModule,
-  FileUploaderModule
+  FileUploaderModule,
+  PlaceholderModule
 } from 'carbon-components-angular';
 
 import { TreeModule } from '@circlon/angular-tree-component';
@@ -113,6 +114,7 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ModalModule,
     InputModule,
     FileUploaderModule,
+    PlaceholderModule
     
   ],
   declarations: [
