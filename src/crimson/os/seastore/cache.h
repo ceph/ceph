@@ -1336,7 +1336,7 @@ public:
   {
     LOG_PREFIX(Cache::init_cached_extents);
     SUBINFOT(seastore_cache,
-        "start with {}({}B) extents, {} dirty, dirty_from={}, alloc_from={}",
+        "start with {}(0x{:x}B) extents, {} dirty, dirty_from={}, alloc_from={}",
         t,
         extents_index.size(),
         extents_index.get_bytes(),
@@ -1379,7 +1379,7 @@ public:
       }
     ).si_then([this, FNAME, &t] {
       SUBINFOT(seastore_cache,
-          "finish with {}({}B) extents, {} dirty, dirty_from={}, alloc_from={}",
+          "finish with {}(0x{:x}B) extents, {} dirty, dirty_from={}, alloc_from={}",
           t,
           extents_index.size(),
           extents_index.get_bytes(),

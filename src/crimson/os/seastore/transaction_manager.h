@@ -1066,7 +1066,7 @@ private:
         auto crc = ref->calc_crc32c();
         SUBTRACET(
 	  seastore_tm,
-	  "got extent -- {}, chksum in the lba tree: {}, actual chksum: {}",
+	  "got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
 	  t,
 	  *ref,
 	  pin->get_checksum(),
@@ -1080,7 +1080,7 @@ private:
         }
         if (unlikely(inconsistent)) {
 	  SUBERRORT(seastore_tm,
-	    "extent checksum inconsistent, recorded: {}, actual: {}, {}",
+	    "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
 	    t,
 	    pin->get_checksum(),
 	    crc,
@@ -1142,7 +1142,7 @@ private:
       auto crc = ref->calc_crc32c();
       SUBTRACET(
 	seastore_tm,
-	"got extent -- {}, chksum in the lba tree: {}, actual chksum: {}",
+	"got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
 	t,
 	*ref,
 	pin->get_checksum(),
@@ -1157,7 +1157,7 @@ private:
       }
       if (unlikely(inconsistent)) {
 	SUBERRORT(seastore_tm,
-	  "extent checksum inconsistent, recorded: {}, actual: {}, {}",
+	  "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
 	  t,
 	  pin->get_checksum(),
 	  crc,

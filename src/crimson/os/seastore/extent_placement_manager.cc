@@ -1069,8 +1069,8 @@ RandomBlockOolWriter::do_write(
       w_info.bp = bp;
       writes.push_back(w_info);
     }
-    TRACE("current extent: base off {} len {},\
-      maybe-merged current extent: base off {} len {}",
+    TRACE("current extent: {}~0x{:x},\
+      maybe-merged current extent: {}~0x{:x}",
       paddr, ex->get_length(), writes.back().offset, writes.back().bp.length());
   }
 
