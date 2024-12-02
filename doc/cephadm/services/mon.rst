@@ -23,8 +23,8 @@ cluster to a particular subnet. ``cephadm`` designates that subnet as the
 default subnet of the cluster. New monitor daemons will be assigned by
 default to that subnet unless cephadm is instructed to do otherwise. 
 
-If all of the ceph monitor daemons in your cluster are in the same subnet,
-manual administration of the ceph monitor daemons is not necessary.
+If all of the Ceph monitor daemons in your cluster are in the same subnet,
+manual administration of the Ceph monitor daemons is not necessary.
 ``cephadm`` will automatically add up to five monitors to the subnet, as
 needed, as new hosts are added to the cluster.
 
@@ -35,7 +35,7 @@ the placement of daemons.
 Designating a Particular Subnet for Monitors
 --------------------------------------------
 
-To designate a particular IP subnet for use by ceph monitor daemons, use a
+To designate a particular IP subnet for use by Ceph monitor daemons, use a
 command of the following form, including the subnet's address in `CIDR`_
 format (e.g., ``10.1.2.0/24``):
 
