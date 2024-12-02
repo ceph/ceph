@@ -66,7 +66,6 @@ enum TestOpType {
   TEST_OP_UNSET_REDIRECT,
   TEST_OP_CHUNK_READ,
   TEST_OP_TIER_PROMOTE,
-  TEST_OP_TIER_FLUSH,
   TEST_OP_SET_CHUNK,
   TEST_OP_TIER_EVICT
 };
@@ -2914,113 +2913,6 @@ public:
   std::string getType() override
   {
     return "TierPromoteOp";
-  }
-};
-
-class TierFlushOp : public TestOp {
-public:
-  librados::AioCompletion *completion;
-  librados::ObjectReadOperation op;
-  std::string oid;
-  std::shared_ptr<int> in_use;
-  int snap;
-  ObjectDesc src_value;
-
-
-  TierFlushOp(int n,
-	       RadosTestContext *context,
-	       const std::string &oid,
-	       TestOpStat *stat)
-    : TestOp(n, context, stat),
-      completion(NULL),
-      oid(oid),
-      snap(-1)
-  {}
-
-  void _begin() override
-  {
-    context->state_lock.lock();
-
-    context->oid_in_use.insert(oid);
-    context->oid_not_in_use.erase(oid);
-
-    if (0 && !(rand() % 4) && !context->snaps.empty()) {
-      snap = rand_choose(context->snaps)->first;
-      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
-    } else {
-      snap = -1;
-    }
-
-    std::cout << num << ": tier_flush oid " << oid << " snap " << snap << std::endl;
-
-    if (snap >= 0) {
-      context->io_ctx.snap_set_read(context->snaps[snap]);
-    }
-
-    context->find_object(oid, &src_value, snap); 
-
-    std::pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
-      new std::pair<TestOp*, TestOp::CallbackInfo*>(this,
-					       new TestOp::CallbackInfo(0));
-    completion = context->rados.aio_create_completion((void *) cb_arg, 
-						      &write_callback);
-    context->state_lock.unlock();
-
-    op.tier_flush();
-    unsigned flags = librados::OPERATION_IGNORE_CACHE;
-    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
-					&op, flags, NULL);
-    ceph_assert(!r);
-
-    if (snap >= 0) {
-      context->io_ctx.snap_set_read(0);
-    }
-  }
-
-  void _finish(CallbackInfo *info) override
-  {
-    context->state_lock.lock();
-    ceph_assert(!done);
-    ceph_assert(completion->is_complete());
-
-    int r = completion->get_return_value();
-    std::cout << num << ":  got " << cpp_strerror(r) << std::endl;
-    if (r == 0) {
-      // sucess
-      context->update_object_tier_flushed(oid, snap);
-      context->update_object_version(oid, completion->get_version64(), snap);
-    } else if (r == -EBUSY) {
-      // could fail if snap is not oldest
-      ceph_assert(!context->check_oldest_snap_flushed(oid, snap)); 
-    } else if (r == -ENOENT) {
-      // could fail if object is removed
-      if (src_value.deleted()) {
-	std::cout << num << ":  got expected ENOENT (src dne)" << std::endl;
-      } else {
-	std::cerr << num << ": got unexpected ENOENT" << std::endl;
-	ceph_abort();
-      }
-    } else {
-      if (r != -ENOENT && src_value.deleted()) {
-	std::cerr << num << ": src dne, but r is not ENOENT" << std::endl;
-      }
-      ceph_abort_msg("shouldn't happen");
-    }
-    context->oid_in_use.erase(oid);
-    context->oid_not_in_use.insert(oid);
-    context->kick();
-    done = true;
-    context->state_lock.unlock();
-  }
-
-  bool finished() override
-  {
-    return done;
-  }
-
-  std::string getType() override
-  {
-    return "TierFlushOp";
   }
 };
 

@@ -405,11 +405,6 @@ private:
       cout << m_op << ": " << "tier_promote oid " << oid << std::endl;
       return new TierPromoteOp(m_op, &context, oid, m_stats);
 
-    case TEST_OP_TIER_FLUSH:
-      oid = *(rand_choose(context.oid_not_in_use));
-      cout << m_op << ": " << "tier_flush oid " << oid << std::endl;
-      return new TierFlushOp(m_op, &context, oid, m_stats);
-
     case TEST_OP_SET_REDIRECT:
       oid = *(rand_choose(context.oid_not_in_use));
       oid2 = *(rand_choose(context.oid_redirect_not_in_use));
@@ -500,7 +495,6 @@ int main(int argc, char **argv)
     { TEST_OP_UNSET_REDIRECT, "unset_redirect", true },
     { TEST_OP_CHUNK_READ, "chunk_read", true },
     { TEST_OP_TIER_PROMOTE, "tier_promote", true },
-    { TEST_OP_TIER_FLUSH, "tier_flush", true },
     { TEST_OP_SET_CHUNK, "set_chunk", true },
     { TEST_OP_TIER_EVICT, "tier_evict", true },
     { TEST_OP_READ /* grr */, NULL },
