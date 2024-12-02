@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2018 Red Hat, Inc
+ * Copyright (C) 2018-2024 Red Hat, Inc
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -21,25 +21,34 @@
 
 #include "acconfig.h"
 
+#include <optional>
+
 /// optional-like wrapper for a boost::asio::yield_context. operations that take
 /// an optional_yield argument will, when passed a non-empty yield context,
 /// suspend this coroutine instead of the blocking the thread of execution
-class optional_yield {
-  boost::asio::yield_context *y = nullptr;
+
+namespace detail { using opt_t = std::optional<boost::asio::yield_context>; }
+
+struct optional_yield final : detail::opt_t
+{
+ using detail::opt_t::opt_t;
+
  public:
-  /// construct with a valid io and yield_context
-  optional_yield(boost::asio::yield_context& y) noexcept : y(&y) {}
+ operator bool() const noexcept { return has_value(); }
 
-  /// type tag to construct an empty object
-  struct empty_t {};
-  optional_yield(empty_t) noexcept {}
-
-  /// implicit conversion to bool, returns true if non-empty
-  operator bool() const noexcept { return y; }
-
-  /// return a reference to the yield_context. only valid if non-empty
-  boost::asio::yield_context& get_yield_context() const noexcept { return *y; }
+ /// IMPORTANT: UB if non-empty; check for value first:
+ boost::asio::yield_context& get_yield_context() const noexcept { return const_cast<value_type&>(**this); }
 };
 
-// type tag object to construct an empty optional_yield
-static constexpr optional_yield::empty_t null_yield{};
+/// type tag object to construct an empty optional_yield:
+static constexpr auto& null_yield = std::nullopt;
+
+inline std::ostream& operator<<(std::ostream& os, const optional_yield& x)
+{
+ if(x) {
+  os << *x;
+ }
+
+ return os;
+}
+
