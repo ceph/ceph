@@ -6105,7 +6105,11 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
   const bool need_invalidate = (r == -ECANCELED);
 
   int64_t poolid = ioctx.get_id();
-  if (r >= 0) {
+  if (r == -ETIMEDOUT) {
+    // rgw can't determine whether or not the delete succeeded, shouldn't be calling either of complete_del() or cancel()
+    // leaving that pending entry in the index so that bucket listing can recover with check_disk_state() and cls_rgw_suggest_changes()
+    ldpp_dout(dpp, 0) << "ERROR: rgw_rados_operate returned r=" << r << dendl;
+  } else if (r >= 0 || r == -ENOENT) {
     tombstone_cache_t *obj_tombstone_cache = store->get_tombstone_cache();
     if (obj_tombstone_cache) {
       tombstone_entry entry{*state};
