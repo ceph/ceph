@@ -30,7 +30,7 @@ namespace crimson::os::seastore {
 
 std::ostream &operator<<(std::ostream &out, const backref_entry_t &ent) {
   return out << "backref_entry_t{"
-	     << ent.paddr << "~" << ent.len << ", "
+	     << ent.paddr << "~0x" << std::hex << ent.len << std::dec << ", "
 	     << "laddr: " << ent.laddr << ", "
 	     << "type: " << ent.type << ", "
 	     << "seq: " << ent.seq << ", "
@@ -44,7 +44,7 @@ Cache::Cache(
 	  "seastore_cache_lru_size"))
 {
   LOG_PREFIX(Cache::Cache);
-  INFO("created, lru_capacity={}B", lru.get_capacity_bytes());
+  INFO("created, lru_capacity=0x{:x}B", lru.get_capacity_bytes());
   register_metrics();
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
 }
