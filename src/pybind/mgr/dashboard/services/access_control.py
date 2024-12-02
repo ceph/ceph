@@ -904,6 +904,7 @@ def ac_user_set_password(_, username: str, inbuf: str,
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
 
+
 @CLIWriteCommand('dashboard ac-user-set-password-hash')
 @CLICheckNonemptyFileInput(desc=DEFAULT_FILE_DESC)
 def ac_user_set_password_hash(_, username: str, inbuf: str):
@@ -923,6 +924,7 @@ def ac_user_set_password_hash(_, username: str, inbuf: str):
         return -errno.EINVAL, '', 'Invalid password hash'
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
+
 
 @CLIWriteCommand('dashboard ac-user-set-info')
 def ac_user_set_info(_, username: str, name: str, email: str):

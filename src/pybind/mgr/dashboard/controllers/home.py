@@ -83,8 +83,8 @@ class HomeController(BaseController, LanguageMixin):
                 ratio = 1.0
             result.append((locale, ratio))
 
-        result.sort(key=lambda l: l[0])
-        result.sort(key=lambda l: l[1], reverse=True)
+        result.sort(key=lambda x: x[0])
+        result.sort(key=lambda x: x[1], reverse=True)
         logger.debug("language preference: %s", result)
         return [r[0] for r in result]
 
