@@ -12,6 +12,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { RgwRealm, RgwZonegroup, RgwZone, SystemKey } from '../models/rgw-multisite';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { Subscription } from 'rxjs';
+import { ActivatedRoute } from '@angular/router';
 
 @Component({
   selector: 'cd-create-rgw-service-entities',
@@ -28,6 +29,10 @@ export class CreateRgwServiceEntitiesComponent {
   @Output()
   submitAction = new EventEmitter();
 
+  @Output()
+  closeAction = new EventEmitter();
+
+  open = false;
   constructor(
     public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
@@ -36,8 +41,10 @@ export class CreateRgwServiceEntitiesComponent {
     public notificationService: NotificationService,
     public rgwZonegroupService: RgwZonegroupService,
     public rgwRealmService: RgwRealmService,
-    public modalService: ModalService
+    public modalService: ModalService,
+    private route: ActivatedRoute,
   ) {
+    this.open = this.route.outlet === 'modal';
     this.createForm();
   }
 
@@ -95,5 +102,9 @@ export class CreateRgwServiceEntitiesComponent {
               });
           });
       });
+  }
+  closeModal(){
+    this.closeAction.emit();
+    // this.modalService.dismissAll();
   }
 }

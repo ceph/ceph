@@ -16,7 +16,8 @@ import {
   ModalModule,
   TreeviewModule,
   ListModule,
-  FileUploaderModule
+  FileUploaderModule,
+  PlaceholderModule
 } from 'carbon-components-angular';
 
 import {
@@ -115,6 +116,7 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ModalModule,
     ListModule,
     FileUploaderModule,
+    PlaceholderModule
     
   ],
   declarations: [
