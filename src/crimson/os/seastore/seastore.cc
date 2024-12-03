@@ -1530,7 +1530,8 @@ SeaStore::Shard::do_omap_get_values(
   const omap_root_le_t& omap_root)
 {
   LOG_PREFIX(SeaStoreS::do_omap_get_values);
-  DEBUGT("start={} ...", t, start.has_value() ? *start : "");
+  DEBUGT("start={} type={} ...", t, start.has_value() ? *start : "",
+    omap_root.get_type());
   return omap_list(
     onode,
     omap_root,
