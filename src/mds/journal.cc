@@ -717,8 +717,10 @@ void EMetaBlob::remotebit::encode(bufferlist& bl, uint64_t features) const
   encode(d_type, bl);
   encode(dirty, bl);
   encode(alternate_name, bl);
-  encode(referent_ino, bl);
-  encode(*referent_inode, bl, features);
+  if (referent) {
+    encode(referent_ino, bl);
+    encode(*referent_inode, bl, features);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -735,11 +737,13 @@ void EMetaBlob::remotebit::decode(bufferlist::const_iterator &bl)
   if (struct_v >= 3)
     decode(alternate_name, bl);
   if (struct_v >= 4) {
-    decode(referent_ino, bl);
-    {
-      auto _inode = CInode::allocate_inode();
-      decode(*_inode, bl);
-      referent_inode = std::move(_inode);
+    if (referent) {
+      decode(referent_ino, bl);
+      {
+        auto _inode = CInode::allocate_inode();
+        decode(*_inode, bl);
+        referent_inode = std::move(_inode);
+      }
     }
   }
   DECODE_FINISH(bl);
@@ -1471,8 +1475,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
 	  dir->unlink_inode(dn, false);
 	}
         dn->set_alternate_name(mempool::mds_co::string(rb.alternate_name));
-	if (!rb.referent_ino)
-	  dir->link_remote_inode(dn, rb.ino, rb.d_type);
+	//rb.referent_ino can be 0
+        dir->link_remote_inode(dn, rb.ino, rb.d_type);
 	dn->set_version(rb.dnv);
 	if (rb.dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay for [" << rb.dnfirst << "," << rb.dnlast << "] had " << *dn << dendl;
@@ -1480,26 +1484,33 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
 	ceph_assert(dn->last == rb.dnlast);
       }
 
-      CInode *ref_in = mds->mdcache->get_inode(rb.referent_ino, rb.dnlast);
-      if (!ref_in) {
-	ref_in = new CInode(mds->mdcache, dn->is_auth(), rb.dnfirst, rb.dnlast);
-        rb.update_referent_inode(mds, ref_in);
-	ceph_assert(ref_in->_get_inode()->remote_ino == rb.ino);
-	ceph_assert(ref_in->_get_inode()->ino == rb.referent_ino);
-	mds->mdcache->add_inode(ref_in);
-        dout(10) << "HRK EMetaBlob.replay referent inode created for dn " << *dn << " inode " << *ref_in << "ref ino " << rb.referent_ino << dendl;
-      } else {
-	ref_in->first = rb.dnfirst;
-        ref_in->set_remote_ino(rb.ino);
-	// TODO: Cleanup up the referent inode if the referent linkage is incorrect
+      /* In multi-version inode, i.e., a file has hardlinks and the primary link is being deleted,
+       * the primary inode is added as remote in the journal. In this case, it will not have a
+       * referent inode. So rb.referent_ino=0.
+       */
+      CInode *ref_in = NULL;
+      if (rb.referent_ino != 0) {
+        ref_in = mds->mdcache->get_inode(rb.referent_ino, rb.dnlast);
+        if (!ref_in) {
+          ref_in = new CInode(mds->mdcache, dn->is_auth(), rb.dnfirst, rb.dnlast);
+          rb.update_referent_inode(mds, ref_in);
+	  ceph_assert(ref_in->_get_inode()->remote_ino == rb.ino);
+	  ceph_assert(ref_in->_get_inode()->ino == rb.referent_ino);
+	  mds->mdcache->add_inode(ref_in);
+          dout(10) << "HRK EMetaBlob.replay referent inode created for dn " << *dn << " inode " << *ref_in << "ref ino " << rb.referent_ino << dendl;
+        } else {
+	  ref_in->first = rb.dnfirst;
+          ref_in->set_remote_ino(rb.ino);
+	  // TODO: Cleanup up the referent inode if the referent linkage is incorrect
+        }
+
+        dout(10) << "HRK EMetaBlob.replay remote dentry found, link/set referent inode " << *dn << dendl;
+        dir->set_referent_inode(dn, ref_in);
+
+        //TODO: dirty referent inode parent in->mark_dirty_parent(logseg, fb.is_dirty_pool());
+        // for now mark dirty always
+        ref_in->mark_dirty_parent(logseg, true);
       }
-
-      dout(10) << "HRK EMetaBlob.replay remote dentry found, link/set referent inode " << *dn << dendl;
-      dir->set_referent_inode(dn, ref_in);
-
-      //TODO: dirty referent inode parent in->mark_dirty_parent(logseg, fb.is_dirty_pool());
-      // for now mark dirty always
-      ref_in->mark_dirty_parent(logseg, true);
 
       if (lump.is_importing())
 	dn->mark_auth();

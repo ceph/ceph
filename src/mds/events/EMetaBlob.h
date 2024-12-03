@@ -149,10 +149,13 @@ public:
     unsigned char d_type = '\0';
     inodeno_t referent_ino = 0;
     CInode::inode_const_ptr referent_inode;      // if it's not XXX should not be part of mempool; wait for std::pmr to simplify
+    bool referent = false;
     bool dirty = false;
 
+    remotebit(std::string_view d, std::string_view an, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) :
+      dn(d), alternate_name(an), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     remotebit(std::string_view d, std::string_view an, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, inodeno_t ref_ino, const CInode::inode_const_ptr& ref_inode, bool dr) :
-      dn(d), alternate_name(an), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), referent_ino(ref_ino), referent_inode(ref_inode), dirty(dr) { }
+      dn(d), alternate_name(an), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), referent_ino(ref_ino), referent_inode(ref_inode), dirty(dr) {referent = true; }
     explicit remotebit(bufferlist::const_iterator &p) { decode(p); }
     remotebit() = default;
 
@@ -438,20 +441,29 @@ private:
   void add_remote_dentry(dirlump& lump, CDentry *dn, bool dirty, 
 			 inodeno_t rino=0, unsigned char rdt=0, inodeno_t referent_ino=0, CInode *ref_in=NULL) {
     dn->check_corruption(false);
+    /* In multi-version inode, i.e., a file has hardlinks and the primary link is being deleted,
+     * the primary inode is added as remote in the journal. In this case, it will not have a
+     * referent inode. So referent_ino=0 and ref_in=NULL.
+     */
     if (!rino) {
       rino = dn->get_projected_linkage()->get_remote_ino();
       rdt = dn->get_projected_linkage()->get_remote_d_type();
       referent_ino = dn->get_projected_linkage()->get_referent_ino();
-    }
-    if (!ref_in)
       ref_in = dn->get_projected_linkage()->get_referent_inode();
-
-    const auto& ref_pi = ref_in->get_projected_inode();
-    ceph_assert(ref_pi->version > 0);
+    }
 
     lump.nremote++;
-    lump.add_dremote(dn->get_name(), dn->get_alternate_name(), dn->first, dn->last,
-		     dn->get_projected_version(), rino, rdt, referent_ino, ref_pi, dirty);
+    if (ref_in) {
+      ceph_assert(referent_ino > 0);
+      const auto& ref_pi = ref_in->get_projected_inode();
+      ceph_assert(ref_pi->version > 0);
+      lump.add_dremote(dn->get_name(), dn->get_alternate_name(), dn->first, dn->last,
+                       dn->get_projected_version(), rino, rdt, referent_ino, ref_pi, dirty);
+    } else {
+      ceph_assert(referent_ino == 0);
+      lump.add_dremote(dn->get_name(), dn->get_alternate_name(), dn->first, dn->last,
+                       dn->get_projected_version(), rino, rdt, dirty);
+    }
   }
 
   // return remote pointer to to-be-journaled inode
