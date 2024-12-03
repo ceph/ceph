@@ -1497,27 +1497,27 @@ TEST(LibCephFS, GetExtentOsds) {
   EXPECT_GT(ret, 0);
 
   int64_t len;
-  int osds[ret];
+  std::vector<int> osds(ret);
 
   /* full stripe extent */
-  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 0, &len, osds, ret));
+  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 0, &len, osds.data(), ret));
   EXPECT_EQ(len, (int64_t)stripe_unit);
 
   /* half stripe extent */
-  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, stripe_unit/2, &len, osds, ret));
+  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, stripe_unit/2, &len, osds.data(), ret));
   EXPECT_EQ(len, (int64_t)stripe_unit/2);
 
   /* 1.5 stripe unit offset -1 byte */
-  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 3*stripe_unit/2-1, &len, osds, ret));
+  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 3*stripe_unit/2-1, &len, osds.data(), ret));
   EXPECT_EQ(len, (int64_t)stripe_unit/2+1);
 
   /* 1.5 stripe unit offset +1 byte */
-  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 3*stripe_unit/2+1, &len, osds, ret));
+  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 3*stripe_unit/2+1, &len, osds.data(), ret));
   EXPECT_EQ(len, (int64_t)stripe_unit/2-1);
 
   /* only when more than 1 osd */
   if (ret > 1) {
-    EXPECT_EQ(-CEPHFS_ERANGE, ceph_get_file_extent_osds(cmount, fd, 0, NULL, osds, 1));
+    EXPECT_EQ(-CEPHFS_ERANGE, ceph_get_file_extent_osds(cmount, fd, 0, NULL, osds.data(), 1));
   }
 
   ceph_close(cmount, fd);
@@ -1551,8 +1551,8 @@ TEST(LibCephFS, GetOsdCrushLocation) {
   EXPECT_GT(ret, 0);
 
   /* full stripe extent */
-  int osds[ret];
-  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 0, NULL, osds, ret));
+  std::vector<int> osds(ret);
+  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 0, NULL, osds.data(), ret));
 
   ASSERT_GT(ceph_get_osd_crush_location(cmount, 0, path, 0), 0);
   ASSERT_EQ(ceph_get_osd_crush_location(cmount, 0, path, 1), -CEPHFS_ERANGE);
@@ -3034,10 +3034,10 @@ TEST(LibCephFS, Readlinkat) {
   fd = ceph_open(cmount, "/", O_DIRECTORY | O_RDONLY, 0);
   ASSERT_LE(0, fd);
   size_t target_len = strlen(rel_file_path);
-  char target[target_len+1];
-  ASSERT_EQ(target_len, ceph_readlinkat(cmount, fd, rel_link_path, target, target_len));
+  std::vector<char> target(target_len+1);
+  ASSERT_EQ(target_len, ceph_readlinkat(cmount, fd, rel_link_path, target.data(), target_len));
   target[target_len] = '\0';
-  ASSERT_EQ(0, memcmp(target, rel_file_path, target_len));
+  ASSERT_EQ(0, memcmp(target.data(), rel_file_path, target_len));
 
   ASSERT_EQ(0, ceph_close(cmount, fd));
 #if defined(__linux__) && defined(O_PATH)
@@ -3045,10 +3045,10 @@ TEST(LibCephFS, Readlinkat) {
   fd = ceph_open(cmount, link_path, O_PATH | O_NOFOLLOW, 0);
   ASSERT_LE(0, fd);
   size_t link_target_len = strlen(rel_file_path);
-  char link_target[link_target_len+1];
-  ASSERT_EQ(link_target_len, ceph_readlinkat(cmount, fd, "", link_target, link_target_len));
+  std::vector<char> link_target(link_target_len + 1);
+  ASSERT_EQ(link_target_len, ceph_readlinkat(cmount, fd, "", link_target.data(), link_target_len));
   link_target[link_target_len] = '\0';
-  ASSERT_EQ(0, memcmp(link_target, rel_file_path, link_target_len));
+  ASSERT_EQ(0, memcmp(link_target.data(), rel_file_path, link_target_len));
   ASSERT_EQ(0, ceph_close(cmount, fd));
 #endif /* __linux */
 
@@ -3088,10 +3088,10 @@ TEST(LibCephFS, ReadlinkatATFDCWD) {
 
   ASSERT_EQ(0, ceph_chdir(cmount, dir_path));
   size_t target_len = strlen(rel_file_path);
-  char target[target_len+1];
-  ASSERT_EQ(target_len, ceph_readlinkat(cmount, CEPHFS_AT_FDCWD, rel_link_path, target, target_len));
+  std::vector<char> target(target_len + 1);
+  ASSERT_EQ(target_len, ceph_readlinkat(cmount, CEPHFS_AT_FDCWD, rel_link_path, target.data(), target_len));
   target[target_len] = '\0';
-  ASSERT_EQ(0, memcmp(target, rel_file_path, target_len));
+  ASSERT_EQ(0, memcmp(target.data(), rel_file_path, target_len));
 
   ASSERT_EQ(0, ceph_unlink(cmount, link_path));
   ASSERT_EQ(0, ceph_unlink(cmount, file_path));
@@ -3133,10 +3133,10 @@ TEST(LibCephFS, Symlinkat) {
   ASSERT_EQ(0, ceph_symlinkat(cmount, rel_file_path, fd, rel_link_path));
 
   size_t target_len = strlen(rel_file_path);
-  char target[target_len+1];
-  ASSERT_EQ(target_len, ceph_readlinkat(cmount, fd, rel_link_path, target, target_len));
+  std::vector<char> target(target_len + 1);
+  ASSERT_EQ(target_len, ceph_readlinkat(cmount, fd, rel_link_path, target.data(), target_len));
   target[target_len] = '\0';
-  ASSERT_EQ(0, memcmp(target, rel_file_path, target_len));
+  ASSERT_EQ(0, memcmp(target.data(), rel_file_path, target_len));
 
   ASSERT_EQ(0, ceph_close(cmount, fd));
   ASSERT_EQ(0, ceph_unlink(cmount, link_path));
@@ -3175,10 +3175,10 @@ TEST(LibCephFS, SymlinkatATFDCWD) {
   ASSERT_EQ(0, ceph_symlinkat(cmount, rel_file_path, CEPHFS_AT_FDCWD, rel_link_path));
 
   size_t target_len = strlen(rel_file_path);
-  char target[target_len+1];
-  ASSERT_EQ(target_len, ceph_readlinkat(cmount, CEPHFS_AT_FDCWD, rel_link_path, target, target_len));
+  std::vector<char> target(target_len+1);
+  ASSERT_EQ(target_len, ceph_readlinkat(cmount, CEPHFS_AT_FDCWD, rel_link_path, target.data(), target_len));
   target[target_len] = '\0';
-  ASSERT_EQ(0, memcmp(target, rel_file_path, target_len));
+  ASSERT_EQ(0, memcmp(target.data(), rel_file_path, target_len));
 
   ASSERT_EQ(0, ceph_unlink(cmount, link_path));
   ASSERT_EQ(0, ceph_unlink(cmount, file_path));
