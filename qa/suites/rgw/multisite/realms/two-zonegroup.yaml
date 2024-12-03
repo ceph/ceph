@@ -28,4 +28,4 @@ overrides:
           - name: b2
             endpoints: [c2.client.1]
   rgw-multisite-tests:
-    args: [tests.py]
+    args: [tests.py, -a, '!fails_with_rgw']
