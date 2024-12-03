@@ -1,0 +1,6 @@
+This suite upgrades the client (octopus to quincy) and then sets a compat flag
+for one of the client and then expects the other client to get evicted.
+
+This suite upgrades to quincy, once quincy reaches EOL, this suite will need
+to be removed or we'll have to cook up a dummy feature so that we can test
+client eviction with recent (supported) release.
