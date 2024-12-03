@@ -15,7 +15,6 @@
 
 using namespace std;
 
-const string CONTROL_PREFIX = "CONTROL";
 const string PRIMARY_PREFIX = "PREFIX";
 const int NUM_COPIES = 100;
 const int NUM_THREADS = 30;
