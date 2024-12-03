@@ -5,6 +5,7 @@ import ipaddress
 from datetime import datetime, timedelta
 from cryptography import x509
 from cryptography.x509.oid import NameOID
+from cryptography.x509 import ObjectIdentifier
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
@@ -15,7 +16,7 @@ class SSLConfigException(Exception):
 
 
 class SSLCerts:
-    def __init__(self, fsid= "") -> None:
+    def __init__(self, fsid:str = "") -> None:
         self.root_cert: Any
         self.root_key: Any
         self.key_file: IO[bytes]
@@ -55,11 +56,12 @@ class SSLCerts:
         )
 
         # Create a FSID extension and add it to root builder
-        mgr_cluster_fsid = ObjectIdentifier(self.mgr_cluster_fsid)
-        root_builder = root_builder.add_extension(
-            x509.UnrecognizedExtension(mgr_cluster_fsid, b"Manager Cluster FSID"),
-            critical = True
-        )
+        if self.mgr_cluster_fsid:
+            mgr_cluster_fsid = ObjectIdentifier(self.mgr_cluster_fsid)
+            root_builder = root_builder.add_extension(
+                x509.UnrecognizedExtension(mgr_cluster_fsid, b"Manager Cluster FSID"),
+                critical = False
+            )
 
         root_builder = root_builder.add_extension(
             x509.BasicConstraints(ca=True, path_length=None), critical=True,
