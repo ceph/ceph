@@ -519,13 +519,11 @@ double eventcenter_dispatch()
 double memcpy_shared(size_t size)
 {
   int count = 1000000;
-  char src[size], dst[size];
-
-  memset(src, 0, sizeof(src));
+  std::vector<char> src(size, 0), dst(size, 0);
 
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    memcpy(dst, src, size);
+    memcpy(dst.data(), src.data(), size);
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
