@@ -517,14 +517,22 @@ OpsExecuter::flush_changes_n_do_ops_effects(
       ceph_assert(log_rit->version == osd_op_params->at_version);
     }
 
+    /*
+     * This works around the gcc bug causing the generated code to incorrectly
+     * execute unconditionally before the predicate.
+     *
+     * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101244
+     */
+    ObjectContextRef clone_obc = (cloning_ctx
+        ? std::move(cloning_ctx->clone_obc)
+        : nullptr);
+
     auto [_submitted, _all_completed] = co_await mut_func(
       std::move(txn),
       std::move(obc),
       std::move(*osd_op_params),
       std::move(log_entries),
-      cloning_ctx
-	? std::move(cloning_ctx->clone_obc)
-	: nullptr);
+      std::move(clone_obc));
 
     submitted = std::move(_submitted);
     all_completed = std::move(_all_completed);
