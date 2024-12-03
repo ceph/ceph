@@ -2008,6 +2008,7 @@ CDentry *CDir::_load_dentry(
       } else {
         dout(12) << "_fetched  got remote link " << remote_ino << " (don't have it)" << dendl;
 	dn->get_linkage()->referent_inode = ref_in;
+	dn->get_linkage()->referent_ino = referent_ino;
       }
     }
   } else if (type == 'I' || type == 'i') {

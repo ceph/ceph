@@ -280,6 +280,7 @@ void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *remote_in, CInode *re
   if (referent_in) {
     ceph_assert(referent_in->get_remote_ino() == dnl->get_remote_ino());
     dnl->referent_inode = referent_in;
+    dnl->referent_ino = referent_in->ino();
   }
 
   if (dnl == &linkage)
