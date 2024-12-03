@@ -626,6 +626,9 @@ public:
       }
       password = topic_password.get();
     }
+    if (brokers.has_value()) {
+      broker = brokers.get();
+    }
 
     // this should be validated by the regex in parse_url()
     ceph_assert(user.empty() == password.empty());

@@ -48,7 +48,7 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> ca_location,
              boost::optional<const std::string&> mechanism,
              boost::optional<const std::string&> user_name,
-             boost::optional<const std::string&> password
+             boost::optional<const std::string&> password,
              boost::optional<const std::string&> brokers);
 
 // publish a message over a connection that was already created
@@ -90,4 +90,3 @@ size_t get_max_inflight();
 size_t get_max_queue();
 
 }
-
