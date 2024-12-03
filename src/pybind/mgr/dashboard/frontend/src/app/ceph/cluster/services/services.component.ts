@@ -176,6 +176,11 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         prop: 'status.last_refresh',
         pipe: this.relativeDatePipe,
         flexGrow: 1
+      },
+      {
+        name: $localize`Ports`,
+        prop: 'status.ports',
+        flexGrow: 1
       }
     ];
 
