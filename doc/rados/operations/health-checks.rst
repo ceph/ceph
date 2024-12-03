@@ -29,58 +29,57 @@ Monitor
 DAEMON_OLD_VERSION
 __________________
 
-Warn if one or more Ceph daemons are running an old Ceph release.  A health
-check is raised if multiple versions are detected.  This condition must exist
-for a period of time greater than ``mon_warn_older_version_delay`` (set to one
-week by default) in order for the health check to be raised. This allows most
+One or more Ceph daemons are running an old Ceph release.  A health check is
+raised if multiple versions are detected.  This condition must exist for a
+period of time greater than ``mon_warn_older_version_delay`` (set to one week
+by default) in order for the health check to be raised. This allows most
 upgrades to proceed without raising a warning that is both expected and
-ephemeral. If the upgrade
-is paused for an extended time, ``health mute`` can be used by running
-``ceph health mute DAEMON_OLD_VERSION --sticky``. Be sure, however, to run
-``ceph health unmute DAEMON_OLD_VERSION`` after the upgrade has finished so
-that any future, unexpected instances are not masked.
+ephemeral. If the upgrade is paused for an extended time, ``health mute`` can
+be used by running ``ceph health mute DAEMON_OLD_VERSION --sticky``. Be sure,
+however, to run ``ceph health unmute DAEMON_OLD_VERSION`` after the upgrade has
+finished so that any future, unexpected instances are not masked.
 
 MON_DOWN
 ________
 
 One or more Ceph Monitor daemons are down. The cluster requires a majority
-(more than one-half) of the provsioned monitors to be available. When one or more monitors
-are down, clients may have a harder time forming their initial connection to
-the cluster, as they may need to try additional IP addresses before they reach an
-operating monitor.
+(more than one-half) of the provsioned monitors to be available. When one or
+more monitors are down, clients may have a harder time forming their initial
+connection to the cluster, as they may need to try additional IP addresses
+before they reach an operating monitor.
 
-Down monitor daemons should be restored or restarted as soon as possible to reduce the
-risk that an additional monitor failure may cause a service outage.
+Down monitor daemons should be restored or restarted as soon as possible to
+reduce the risk that an additional monitor failure may cause a service outage.
 
 MON_CLOCK_SKEW
 ______________
 
-The clocks on hosts running Ceph Monitor daemons are not
-well-synchronized. This health check is raised if the cluster detects a clock
-skew greater than ``mon_clock_drift_allowed``.
+The clocks on hosts running Ceph Monitor daemons are not well-synchronized.
+This health check is raised if the cluster detects a clock skew greater than
+``mon_clock_drift_allowed``.
 
 This issue is best resolved by synchronizing the clocks by using a tool like
-the legacy ``ntpd`` or the newer ``chrony``.  It is ideal to configure
-NTP daemons to sync against multiple internal and external sources for resilience;
+the legacy ``ntpd`` or the newer ``chrony``.  It is ideal to configure NTP
+daemons to sync against multiple internal and external sources for resilience;
 the protocol will adaptively determine the best available source.  It is also
-beneficial to have the NTP daemons on Ceph Monitor hosts sync against each other,
-as it is even more important that Monitors be synchronized with each other than it
-is for them to be _correct_ with respect to reference time.
+beneficial to have the NTP daemons on Ceph Monitor hosts sync against each
+other, as it is even more important that Monitors be synchronized with each
+other than it is for them to be _correct_ with respect to reference time.
 
 If it is impractical to keep the clocks closely synchronized, the
-``mon_clock_drift_allowed`` threshold can be increased. However, this
-value must stay significantly below the ``mon_lease`` interval in order for the
+``mon_clock_drift_allowed`` threshold can be increased. However, this value
+must stay significantly below the ``mon_lease`` interval in order for the
 monitor cluster to function properly.  It is not difficult with a quality NTP
-or PTP configuration to have sub-millisecond synchronization, so there are very, very
-few occasions when it is appropriate to change this value.
+or PTP configuration to have sub-millisecond synchronization, so there are
+very, very few occasions when it is appropriate to change this value.
 
 MON_MSGR2_NOT_ENABLED
 _____________________
 
-The :confval:`ms_bind_msgr2` option is enabled but one or more monitors are
-not configured in the cluster's monmap to bind to a v2 port. This
-means that features specific to the msgr2 protocol (for example, encryption)
-are unavailable on some or all connections.
+The :confval:`ms_bind_msgr2` option is enabled but one or more monitors are not
+configured in the cluster's monmap to bind to a v2 port. This means that
+features specific to the msgr2 protocol (for example, encryption) are
+unavailable on some or all connections.
 
 In most cases this can be corrected by running the following command:
 
@@ -100,32 +99,32 @@ manually.
 MON_DISK_LOW
 ____________
 
-One or more monitors are low on storage space. This health check is raised if the
-percentage of available space on the file system used by the monitor database
-(normally ``/var/lib/ceph/mon``) drops below the percentage value
+One or more monitors are low on storage space. This health check is raised if
+the percentage of available space on the file system used by the monitor
+database (normally ``/var/lib/ceph/mon``) drops below the percentage value
 ``mon_data_avail_warn`` (default: 30%).
 
 This alert might indicate that some other process or user on the system is
-filling up the file system used by the monitor. It might also
-indicate that the monitor database is too large (see ``MON_DISK_BIG``
-below).  Another common scenario is that Ceph logging subsystem levels have
-been raised for troubleshooting purposes without subsequent return to default
-levels.  Ongoing verbose logging can easily fill up the files system containing
-``/var/log``. If you trim logs that are currently open, remember to restart or
-instruct your syslog or other daemon to re-open the log file.
+filling up the file system used by the monitor. It might also indicate that the
+monitor database is too large (see ``MON_DISK_BIG`` below).  Another common
+scenario is that Ceph logging subsystem levels have been raised for
+troubleshooting purposes without subsequent return to default levels.  Ongoing
+verbose logging can easily fill up the files system containing ``/var/log``. If
+you trim logs that are currently open, remember to restart or instruct your
+syslog or other daemon to re-open the log file.
 
-If space cannot be freed, the monitor's data directory might need to be
-moved to another storage device or file system (this relocation process must be carried out while the monitor
-daemon is not running).
+If space cannot be freed, the monitor's data directory might need to be moved
+to another storage device or file system (this relocation process must be
+carried out while the monitor daemon is not running).
 
 
 MON_DISK_CRIT
 _____________
 
-One or more monitors are critically low on storage space. This health check is raised if the
-percentage of available space on the file system used by the monitor database
-(normally ``/var/lib/ceph/mon``) drops below the percentage value
-``mon_data_avail_crit`` (default: 5%). See ``MON_DISK_LOW``, above.
+One or more monitors are critically low on storage space. This health check is
+raised if the percentage of available space on the file system used by the
+monitor database (normally ``/var/lib/ceph/mon``) drops below the percentage
+value ``mon_data_avail_crit`` (default: 5%). See ``MON_DISK_LOW``, above.
 
 MON_DISK_BIG
 ____________
@@ -235,8 +234,8 @@ this alert can be temporarily silenced by running the following command:
 
    ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED 1w   # 1 week
 
-Although we do NOT recommend doing so, you can also disable this alert indefinitely
-by running the following command:
+Although we do NOT recommend doing so, you can also disable this alert
+indefinitely by running the following command:
 
 .. prompt:: bash $
 
@@ -258,8 +257,8 @@ However, the cluster will still be able to perform client I/O operations and
 recover from failures.
 
 The down manager daemon(s) should be restarted as soon as possible to ensure
-that the cluster can be monitored (for example, so that ``ceph -s``
-information is available and up to date, and so that metrics can be scraped by Prometheus).
+that the cluster can be monitored (for example, so that ``ceph -s`` information
+is available and up to date, and so that metrics can be scraped by Prometheus).
 
 
 MGR_MODULE_DEPENDENCY
@@ -300,9 +299,8 @@ ________
 
 One or more OSDs are marked ``down``. The ceph-osd daemon(s) or their host(s)
 may have crashed or been stopped, or peer OSDs might be unable to reach the OSD
-over the public or private network.
-Common causes include a stopped or crashed daemon, a "down" host, or a network
-failure.
+over the public or private network.  Common causes include a stopped or crashed
+daemon, a "down" host, or a network failure.
 
 Verify that the host is healthy, the daemon is started, and the network is
 functioning. If the daemon has crashed, the daemon log file
@@ -513,9 +511,9 @@ or newer to start. To safely set the flag, run the following command:
 OSD_FILESTORE
 __________________
 
-Warn if OSDs are running the old Filestore back end. The Filestore OSD back end is
-deprecated; the BlueStore back end has been the default object store since the
-Ceph Luminous release.
+Warn if OSDs are running the old Filestore back end. The Filestore OSD back end
+is deprecated; the BlueStore back end has been the default object store since
+the Ceph Luminous release.
 
 The 'mclock_scheduler' is not supported for Filestore OSDs. For this reason,
 the default 'osd_op_queue' is set to 'wpq' for Filestore OSDs and is enforced
@@ -545,9 +543,9 @@ of any update to Reef or to later releases.
 OSD_UNREACHABLE
 _______________
 
-Registered v1/v2 public address of one or more OSD(s) is/are out of the
-defined `public_network` subnet, which will prevent these unreachable OSDs
-from communicating with ceph clients properly.
+The registered v1/v2 public address or addresses of one or more OSD(s) is or
+are out of the defined `public_network` subnet, which prevents these
+unreachable OSDs from communicating with ceph clients properly.
 
 Even though these unreachable OSDs are in up state, rados clients
 will hang till TCP timeout before erroring out due to this inconsistency.
@@ -555,7 +553,7 @@ will hang till TCP timeout before erroring out due to this inconsistency.
 POOL_FULL
 _________
 
-One or more pools have reached their quota and are no longer allowing writes.
+One or more pools have reached quota and no longer allow writes.
 
 To see pool quotas and utilization, run the following command:
 
