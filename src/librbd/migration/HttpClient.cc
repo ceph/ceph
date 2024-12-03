@@ -445,10 +445,10 @@ private:
         ldout(cct, 5) << "remote peer stream closed, retrying request" << dendl;
         m_receive_queue.push_front(work);
       } else if (ec == boost::beast::error::timeout) {
-        lderr(cct) << "timed-out while issuing request" << dendl;
+        lderr(cct) << "timed-out while receiving response" << dendl;
         work->complete(-ETIMEDOUT, {});
       } else {
-        lderr(cct) << "failed to issue request: " << ec.message() << dendl;
+        lderr(cct) << "failed to receive response: " << ec.message() << dendl;
         work->complete(-ec.value(), {});
       }
 
@@ -473,7 +473,7 @@ private:
       r = -EACCES;
     } else if (boost::beast::http::to_status_class(result) !=
                  boost::beast::http::status_class::successful) {
-      lderr(cct) << "failed to retrieve size: HTTP " << result << dendl;
+      lderr(cct) << "failed to retrieve resource: HTTP " << result << dendl;
       r = -EIO;
     }
 
