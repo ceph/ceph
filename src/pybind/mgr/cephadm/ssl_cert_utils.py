@@ -5,7 +5,7 @@ import ipaddress
 from datetime import datetime, timedelta
 from cryptography import x509
 from cryptography.x509.oid import NameOID
-from cryptography.x509 import ObjectIdentifier
+# from cryptography.x509 import ObjectIdentifier
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
@@ -33,10 +33,10 @@ class SSLCerts:
         root_public_key = self.root_key.public_key()
         root_builder = x509.CertificateBuilder()
         root_builder = root_builder.subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
+            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-{}-root'.format(self.mgr_cluster_fsid)),
         ]))
         root_builder = root_builder.issuer_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
+            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-{}-root'.format(self.mgr_cluster_fsid)),
         ]))
         root_builder = root_builder.not_valid_before(datetime.now())
         root_builder = root_builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))
@@ -55,13 +55,13 @@ class SSLCerts:
             critical=False
         )
 
-        # Create a FSID extension and add it to root builder
-        if self.mgr_cluster_fsid:
-            mgr_cluster_fsid = ObjectIdentifier(self.mgr_cluster_fsid)
-            root_builder = root_builder.add_extension(
-                x509.UnrecognizedExtension(mgr_cluster_fsid, b"Manager Cluster FSID"),
-                critical = False
-            )
+        # # Create a FSID extension and add it to root builder
+        # if self.mgr_cluster_fsid:
+        #     mgr_cluster_fsid = ObjectIdentifier(self.mgr_cluster_fsid)
+        #     root_builder = root_builder.add_extension(
+        #         x509.UnrecognizedExtension(mgr_cluster_fsid, b"Manager Cluster FSID"),
+        #         critical = False
+        #     )
 
         root_builder = root_builder.add_extension(
             x509.BasicConstraints(ca=True, path_length=None), critical=True,
