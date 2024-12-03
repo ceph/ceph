@@ -206,7 +206,7 @@ const vector<uint64_t> bdev_label_positions = {
 template<typename S>
 static void append_escaped(const string &in, S *out)
 {
-  char hexbyte[in.length() * 3 + 1];
+  std::vector<char> hexbyte(in.length() * 3 + 1);
   char* ptr = &hexbyte[0];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
     if (*i <= '#') { // bug: unexpected result for *i > 0x7f
@@ -222,7 +222,7 @@ static void append_escaped(const string &in, S *out)
     }
   }
   *ptr++ = '!';
-  out->append(hexbyte, ptr - &hexbyte[0]);
+  out->append(hexbyte.data(), ptr - &hexbyte[0]);
 }
 
 inline unsigned h2i(char c)
