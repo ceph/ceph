@@ -1745,6 +1745,7 @@ enum class omap_type_t : uint8_t {
   NONE,
   NUM_TYPES
 };
+std::ostream &operator<<(std::ostream &out, const omap_type_t &type);
 
 struct omap_root_t {
   laddr_t addr = L_ADDR_NULL;
@@ -1825,6 +1826,10 @@ public:
   
   omap_root_t get(laddr_t hint) const {
     return omap_root_t(addr, depth, hint, type);
+  }
+  
+  omap_type_t get_type() const {
+    return type;
   }
 };
 
@@ -3060,5 +3065,6 @@ template <> struct fmt::formatter<crimson::os::seastore::segment_tail_t> : fmt::
 template <> struct fmt::formatter<crimson::os::seastore::segment_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::transaction_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::write_result_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::omap_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ceph::buffer::list> : fmt::ostream_formatter {};
 #endif

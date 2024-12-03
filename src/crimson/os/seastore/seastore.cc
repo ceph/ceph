@@ -1508,7 +1508,8 @@ SeaStore::Shard::do_omap_get_values(
   const omap_root_le_t& omap_root)
 {
   LOG_PREFIX(SeaStoreS::do_omap_get_values);
-  DEBUGT("start={} ...", t, start.has_value() ? *start : "");
+  DEBUGT("start={} type={} ...", t, start.has_value() ? *start : "",
+    omap_root.get_type());
   return omap_list(
     onode,
     omap_root,
@@ -1888,6 +1889,8 @@ SeaStore::Shard::_do_transaction_step(
       {
         std::map<std::string, ceph::bufferlist> aset;
         i.decode_attrset(aset);
+        DEBUGT("op LOG_SETKEYS, oid={}, omap size={} ...",
+               *ctx.transaction, oid, aset.size());
         return _omap_set_values(ctx, onodes[op->oid], std::move(aset),
 	  onodes[op->oid]->get_layout().log_root);
       }
@@ -1912,6 +1915,8 @@ SeaStore::Shard::_do_transaction_step(
       {
         omap_keys_t keys;
         i.decode_keyset(keys);
+        DEBUGT("op LOG_RMKEYS, oid={}, omap size={} ...",
+               *ctx.transaction, oid, keys.size());
         return _omap_rmkeys(ctx, onodes[op->oid], std::move(keys),
 	  onodes[op->oid]->get_layout().log_root);
       }
@@ -1932,6 +1937,8 @@ SeaStore::Shard::_do_transaction_step(
         std::string first, last;
         first = i.decode_string();
         last = i.decode_string();
+        DEBUGT("op LOG_RMKEYRANGE, oid={}, first={}, last={} ...",
+               *ctx.transaction, oid, first, last);
         return _omap_rmkeyrange(
 	  ctx, onodes[op->oid],
 	  std::move(first), std::move(last),
