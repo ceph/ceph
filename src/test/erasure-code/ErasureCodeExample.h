@@ -76,6 +76,10 @@ public:
     return _minimum_to_decode(want_to_read, available_chunks, minimum);
   }
 
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION;
+  }
+
   unsigned int get_chunk_count() const override {
     return DATA_CHUNKS + CODING_CHUNKS;
   }
@@ -86,6 +90,10 @@ public:
 
   unsigned int get_chunk_size(unsigned int object_size) const override {
     return ( object_size / DATA_CHUNKS ) + 1;
+  }
+
+  unsigned int get_minimum_granularity() override {
+    return 1;
   }
 
   int encode(const std::set<int> &want_to_encode,
@@ -130,6 +138,17 @@ public:
 			    std::map<int, bufferlist> *encoded) override {
     ceph_abort();
     return 0;
+  }
+
+  void encode_delta(const bufferptr &old_data,
+                              const bufferptr &new_data,
+                              bufferptr *delta) override {
+    ceph_abort();
+  }
+
+  void apply_delta(const std::map<int, bufferptr> &in,
+                             std::map <int, bufferptr> &out) override {
+    ceph_abort();
   }
 
   int _decode(const std::set<int> &want_to_read,

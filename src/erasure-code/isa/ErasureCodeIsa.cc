@@ -117,16 +117,54 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
 // -----------------------------------------------------------------------------
 
 void
+ErasureCodeIsa::isa_xor(char **data, char *coding, int blocksize, int data_vectors)
+{
+  char * xor_bufs[data_vectors+1];
+  for (int i = 0; i < data_vectors; i++) {
+    xor_bufs[i] = data[i];
+  }
+  xor_bufs[data_vectors] = coding;
+
+  // If addresses are aligned to 32 bytes, then we can use xor_gen()
+  // Otherwise, use byte_xor()
+  bool aligned = true;
+  for (int i = 0; i <= data_vectors; i++) {
+    aligned &= is_aligned(xor_bufs[i], EC_ISA_ADDRESS_ALIGNMENT);
+  }
+
+  if (aligned) {
+    xor_gen(data_vectors + 1, blocksize, (void**) xor_bufs);
+  }
+  else {
+    byte_xor(data_vectors, blocksize, xor_bufs);
+  }
+}
+
+void
+ErasureCodeIsa::byte_xor(int data_vects, int blocksize, char **array)
+{
+  for (int i = 0; i < blocksize; i++) {
+    char parity = array[0][i];
+    for (int j = 1; j < data_vects; j++ ) {
+      parity ^= array[j][i];
+    }
+    array[data_vects][i] = parity;
+  }
+}
+
+// -----------------------------------------------------------------------------
+
+void
 ErasureCodeIsaDefault::isa_encode(char **data,
                                   char **coding,
                                   int blocksize)
 {
-  if (m == 1)
-    // single parity stripe
-    xor_gen(k+m, blocksize, (void**) data);
-  else
+  if (m == 1) {
+    isa_xor(data, coding[0], blocksize, k);
+  } else {
     ec_encode_data(blocksize, k, m, encode_tbls,
                    (unsigned char**) data, (unsigned char**) coding);
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -143,6 +181,56 @@ ErasureCodeIsaDefault::erasure_contains(int *erasures, int i)
 
 // -----------------------------------------------------------------------------
 
+void
+ErasureCodeIsaDefault::encode_delta(const bufferptr &old_data,
+                                  const bufferptr &new_data,
+                                  bufferptr *delta)
+{
+  //TODO handle old_data or new_data being a special zero buffer.
+  constexpr int data_vectors = 2;
+  char * data[data_vectors];
+  data[0] = const_cast<char*>(old_data.c_str());
+  data[1] = const_cast<char*>(new_data.c_str());
+  char * coding = delta->c_str();
+
+  isa_xor(data, coding, delta->length(), data_vectors);
+
+  //TODO return a special zero buffer if delta is all zeroes
+}
+
+// -----------------------------------------------------------------------------
+
+void
+ErasureCodeIsaDefault::apply_delta(const map<int, bufferptr> &in,
+                                        map <int, bufferptr> &out)
+{
+  auto first = in.begin();
+  const unsigned blocksize = first->second.length();
+
+  for (auto const& [datashard, databuf] : in) {
+    if (datashard < k) {
+      for (auto const& [codingshard, codingbuf] : out) {
+        if (codingshard >= k) {
+          ceph_assert(codingbuf.length() == blocksize);
+          if (m==1) {
+            int data_vectors = 2;
+            char * data[data_vectors];
+            data[0] = const_cast<char*>(databuf.c_str());
+            data[1] = const_cast<char*>(codingbuf.c_str());
+            char * coding = const_cast<char*>(codingbuf.c_str());
+            isa_xor(data, coding, blocksize, data_vectors);
+          }
+          else {
+            unsigned char* data = reinterpret_cast<unsigned char*>(const_cast<char*>(databuf.c_str()));
+            unsigned char* coding = reinterpret_cast<unsigned char*>(const_cast<char*>(codingbuf.c_str()));
+            ec_encode_data_update(blocksize, k, 1, datashard, encode_tbls + (32 * k * (codingshard - k)), data, &coding);
+          }
+          //TODO return a special zero buffer if coding buffer is all zeroes
+        }
+      }
+    }
+  }
+}
 
 
 // -----------------------------------------------------------------------------
@@ -158,7 +246,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
 
   unsigned char *recover_source[k];
   unsigned char *recover_target[m];
-  unsigned char *recover_buf[k+1];
+  char *recover_buf[k+1];
 
   // count the errors
   for (int l = 0; erasures[l] != -1; l++) {
@@ -181,18 +269,18 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
     for (i = 0; i < (k + 1); i++) {
       if (erasure_contains(erasures, i)) {
           if (i < k) {
-            recover_buf[i] = (unsigned char*) coding[0];
-            recover_buf[k] = (unsigned char*) data[i];
+            recover_buf[i] = coding[0];
+            recover_buf[k] = data[i];
             parity_set = true;
           } else {
-            recover_buf[i] = (unsigned char*) coding[0];
+            recover_buf[i] = coding[0];
           }
       } else {
         if (i < k) {
-          recover_buf[i] = (unsigned char*) data[i];
+          recover_buf[i] = data[i];
         } else {
           if (!parity_set) {
-            recover_buf[i] = (unsigned char*) coding[0];
+            recover_buf[i] = coding[0];
           }
         }
       }
@@ -230,7 +318,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
       ((matrixtype == kVandermonde) && (nerrs == 1) && (erasures[0] < (k + 1)))) {
     // single parity decoding
     dout(20) << "isa_decode: reconstruct using xor_gen [" << erasures[0] << "]" << dendl;
-    xor_gen(k+1, blocksize, (void **) recover_buf);
+    isa_xor(recover_buf, recover_buf[k], blocksize, k);
     return 0;
   }
 

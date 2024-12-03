@@ -39,6 +39,7 @@ public:
     return 0;
   }
 
+  uint64_t get_supported_optimizations() const override { return 0; }
   unsigned int get_chunk_count() const override { return k + m; }
   unsigned int get_data_chunk_count() const override { return k; }
   unsigned int get_chunk_size(unsigned int object_size) const override {
@@ -53,6 +54,15 @@ public:
                     const map<int, bufferlist> &chunks,
                     map<int, bufferlist> *decoded) override {
     ceph_abort_msg("ErasureCode::decode_chunks not implemented");
+  }
+  void encode_delta(const bufferptr &old_data,
+                    const bufferptr &new_data,
+                    bufferptr *delta) override {
+    ceph_abort_msg("ErasureCode::encode_delta not implemented");
+  }
+    virtual void apply_delta(const std::map<int, bufferptr> &in,
+                             std::map <int, bufferptr> &out) override {
+    ceph_abort_msg("ErasureCode::apply_delta not implemented");
   }
 
   int create_rule(const string &name,

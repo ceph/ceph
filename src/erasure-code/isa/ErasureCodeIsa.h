@@ -32,6 +32,9 @@
 
 #define EC_ISA_ADDRESS_ALIGNMENT 32u
 
+#define is_aligned(POINTER, BYTE_COUNT) \
+  (((uintptr_t)(const void *)(POINTER)) % (BYTE_COUNT) == 0)
+
 class ErasureCodeIsa : public ceph::ErasureCode {
 public:
 
@@ -61,6 +64,13 @@ public:
   {
   }
 
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+  }
+
   unsigned int
   get_chunk_count() const override
   {
@@ -84,10 +94,13 @@ public:
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
+  void isa_xor(char **data, char *coding, int blocksize, int data_vectors);
+
+  void byte_xor(int data_vects, int blocksize, char **array);
+
   virtual void isa_encode(char **data,
                           char **coding,
                           int blocksize) = 0;
-
 
   virtual int isa_decode(int *erasures,
                          char **data,
@@ -143,7 +156,19 @@ public:
                          char **coding,
                          int blocksize) override;
 
+  void encode_delta(const ceph::bufferptr &old_data,
+                    const ceph::bufferptr &new_data,
+                    ceph::bufferptr *delta);
+
+  void apply_delta(const std::map<int, ceph::bufferptr> &in,
+                   std::map <int, ceph::bufferptr> &out);
+
   unsigned get_alignment() const override;
+
+  unsigned int get_minimum_granularity() override
+  {
+    return 1;
+  }
 
   void prepare() override;
 

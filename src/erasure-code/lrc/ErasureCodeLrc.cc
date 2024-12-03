@@ -560,6 +560,17 @@ unsigned int ErasureCodeLrc::get_chunk_size(unsigned int stripe_width) const
   return layers.front().erasure_code->get_chunk_size(stripe_width);
 }
 
+unsigned int ErasureCodeLrc::get_minimum_granularity()
+{
+  unsigned int largest = 1;
+  for (vector<Layer>::reverse_iterator layer = layers.rbegin();
+      layer != layers.rend();
+      ++layer) {
+        largest = layer->erasure_code->get_minimum_granularity() > largest ? layer->erasure_code->get_minimum_granularity() : largest;
+      }
+  return largest;
+}
+
 void p(const set<int> &s) { cerr << s; } // for gdb
 
 int ErasureCodeLrc::_minimum_to_decode(const set<int> &want_to_read,
@@ -856,4 +867,17 @@ int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
   } else {
     return 0;
   }
+}
+
+void ErasureCodeLrc::encode_delta(const bufferptr &old_data,
+                                  const bufferptr &new_data,
+                                  bufferptr *delta)
+{
+  ceph_abort("Not yet supported by this plugin");
+}
+
+void ErasureCodeLrc::apply_delta(const std::map<int, bufferptr> &in,
+                                 std::map <int, bufferptr> &out)
+{
+  ceph_abort("Not yet supported by this plugin");
 }
