@@ -342,8 +342,10 @@ private:
   struct ScrubState {
     std::pair<std::string,std::string> last_key; ///< last scrubbed key
     bool finished;
+    const utime_t start;
 
-    ScrubState() : finished(false) { }
+    ScrubState() : finished(false),
+                   start(ceph_clock_now()) { }
     virtual ~ScrubState() { }
   };
   std::shared_ptr<ScrubState> scrub_state; ///< keeps track of current scrub
