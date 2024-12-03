@@ -1041,14 +1041,14 @@ TEST_F(CrushWrapperTest, choose_args_compat) {
   weight_set.weights = &weights;
   int maxbuckets = c.get_max_buckets();
   ceph_assert(maxbuckets > 0);
-  crush_choose_arg choose_args[maxbuckets];
-  memset(choose_args, '\0', sizeof(crush_choose_arg) * maxbuckets);
+  std::vector<crush_choose_arg> choose_args(maxbuckets);
+  memset(choose_args.data(), '\0', sizeof(crush_choose_arg) * maxbuckets);
   choose_args[-1-id].ids_size = 0;
   choose_args[-1-id].weight_set_positions = 1;
   choose_args[-1-id].weight_set = &weight_set;
   crush_choose_arg_map arg_map;
   arg_map.size = c.get_max_buckets();
-  arg_map.args = choose_args;
+  arg_map.args = choose_args.data();
 
   uint64_t features = CEPH_FEATURE_CRUSH_TUNABLES5|CEPH_FEATURE_INCARNATION_2;
   int64_t caid = CrushWrapper::DEFAULT_CHOOSE_ARGS;
