@@ -998,8 +998,8 @@ int main(int argc, const char **argv)
 	if (lower_pos == lower_items.size())
 	  break;
 
-	int items[num_osds];
-	int weights[num_osds];
+	std::vector<int> items(num_osds);
+	std::vector<int> weights(num_osds);
 
 	int weight = 0;
 	int j;
@@ -1014,7 +1014,7 @@ int main(int argc, const char **argv)
 	}
 
 	int id;
-	int r = crush.add_bucket(0, buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights, &id);
+	int r = crush.add_bucket(0, buckettype, CRUSH_HASH_DEFAULT, type, j, items.data(), weights.data(), &id);
 	if (r < 0) {
           cerr << " Couldn't add bucket: " << cpp_strerror(r) << std::endl;
           return r;

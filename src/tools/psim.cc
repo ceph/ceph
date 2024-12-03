@@ -31,14 +31,11 @@ int main(int argc, char **argv)
   //osdmap.set_primary_affinity(3, 0);
 
   int n = osdmap.get_max_osd();
-  int count[n];
-  int first_count[n];
-  int primary_count[n];
+  std::vector<int> count(n, 0);
+  std::vector<int> first_count(n, 0);
+  std::vector<int> primary_count(n, 0);
   int size[4];
 
-  memset(count, 0, sizeof(count));
-  memset(first_count, 0, sizeof(first_count));
-  memset(primary_count, 0, sizeof(primary_count));
   memset(size, 0, sizeof(size));
 
   for (int i=0; i<n; i++) {
