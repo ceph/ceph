@@ -39,11 +39,11 @@ bufferlist DataGenerator::generate_wrong_data(uint64_t offset,
                                               uint64_t length) {
   bufferlist retlist;
   uint64_t block_size = m_model.get_block_size();
-  char buffer[block_size];
   for (uint64_t block_offset = offset; block_offset < offset + length;
        block_offset++) {
-    std::memset(buffer, 0, block_size);
-    retlist.append(ceph::bufferptr(buffer, block_size));
+    buffer::ptr buffer(block_size);
+    buffer.zero();
+    retlist.append(std::move(buffer));
   }
   return retlist;
 }
@@ -55,7 +55,7 @@ bool DataGenerator::validate(bufferlist& bufferlist, uint64_t offset,
 
 ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset) {
   uint64_t block_size = m_model.get_block_size();
-  char buffer[block_size];
+  buffer::ptr buffer(block_size);
 
   std::mt19937_64 random_generator(m_model.get_seed(block_offset));
   uint64_t rand1 = random_generator();
@@ -65,26 +65,27 @@ ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset) {
 
   for (uint64_t i = 0; i < block_size;
        i += (2 * generation_length), rand1++, rand2--) {
-    std::memcpy(buffer + i, &rand1, generation_length);
-    std::memcpy(buffer + i + generation_length, &rand2, generation_length);
+    std::memcpy(buffer.c_str() + i, &rand1, generation_length);
+    std::memcpy(buffer.c_str() + i + generation_length, &rand2,
+		generation_length);
   }
 
   size_t remainingBytes = block_size % (generation_length * 2);
   if (remainingBytes > generation_length) {
     size_t remainingBytes2 = remainingBytes - generation_length;
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
-    std::memcpy(buffer + block_size - remainingBytes2, &rand2, remainingBytes2);
+    std::memcpy(buffer.c_str() + block_size - remainingBytes, &rand1, remainingBytes);
+    std::memcpy(buffer.c_str() + block_size - remainingBytes2, &rand2, remainingBytes2);
   } else if (remainingBytes > 0) {
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
+    std::memcpy(buffer.c_str() + block_size - remainingBytes, &rand1, remainingBytes);
   }
 
-  return ceph::bufferptr(buffer, block_size);
+  return buffer;
 }
 
 ceph::bufferptr SeededRandomGenerator::generate_wrong_block(
     uint64_t block_offset) {
   uint64_t block_size = m_model.get_block_size();
-  char buffer[block_size];
+  ceph::buffer::ptr buffer(block_size);
 
   std::mt19937_64 random_generator(m_model.get_seed(block_offset));
   uint64_t rand1 = random_generator() - 1;
@@ -94,20 +95,20 @@ ceph::bufferptr SeededRandomGenerator::generate_wrong_block(
 
   for (uint64_t i = 0; i < block_size;
        i += (2 * generation_length), rand1++, rand2--) {
-    std::memcpy(buffer + i, &rand1, generation_length);
-    std::memcpy(buffer + i + generation_length, &rand2, generation_length);
+    std::memcpy(buffer.c_str() + i, &rand1, generation_length);
+    std::memcpy(buffer.c_str() + i + generation_length, &rand2, generation_length);
   }
 
   size_t remainingBytes = block_size % (generation_length * 2);
   if (remainingBytes > generation_length) {
     size_t remainingBytes2 = remainingBytes - generation_length;
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
-    std::memcpy(buffer + block_size - remainingBytes2, &rand2, remainingBytes2);
+    std::memcpy(buffer.c_str() + block_size - remainingBytes, &rand1, remainingBytes);
+    std::memcpy(buffer.c_str() + block_size - remainingBytes2, &rand2, remainingBytes2);
   } else if (remainingBytes > 0) {
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
+    std::memcpy(buffer.c_str() + block_size - remainingBytes, &rand1, remainingBytes);
   }
 
-  return ceph::bufferptr(buffer, block_size);
+  return buffer;
 }
 
 bufferlist SeededRandomGenerator::generate_data(uint64_t offset,
@@ -276,8 +277,8 @@ void HeaderedSeededRandomGenerator ::printDebugInformationForBlock(
   TimeBytes read_time = 0;
   std::time_t ttp;
 
-  char read_bytes[m_model.get_block_size()];
-  char generated_bytes[m_model.get_block_size()];
+  std::vector<char> read_bytes(m_model.get_block_size());
+  std::vector<char> generated_bytes(m_model.get_block_size());
 
   if (blockError == ErrorType::DATA_MISMATCH ||
       blockError == ErrorType::UNKNOWN) {
@@ -337,9 +338,10 @@ void HeaderedSeededRandomGenerator ::printDebugInformationForBlock(
           " Data written at {}\nExpected data: \n{:02x}\nRead data:{:02x}",
           block_offset, block_offset * m_model.get_block_size(),
           std::ctime(&ttp),
-          fmt::join(generated_bytes, generated_bytes + m_model.get_block_size(),
-                    ""),
-          fmt::join(read_bytes, read_bytes + m_model.get_block_size(), ""));
+          fmt::join(generated_bytes.data(),
+		    generated_bytes.data() + m_model.get_block_size(), ""),
+          fmt::join(read_bytes.data(),
+		    read_bytes.data() + m_model.get_block_size(), ""));
     } break;
 
     case ErrorType::DATA_NOT_FOUND: {
@@ -362,9 +364,10 @@ void HeaderedSeededRandomGenerator ::printDebugInformationForBlock(
           "Data mismatch detected at block {}"
           " (byte offset {}).\nExpected data:\n{:02x}\nRead data:\n{:02x}",
           block_offset, block_offset * m_model.get_block_size(),
-          fmt::join(generated_bytes, generated_bytes + m_model.get_block_size(),
-                    ""),
-          fmt::join(read_bytes, read_bytes + m_model.get_block_size(), ""));
+          fmt::join(generated_bytes.data(),
+		    generated_bytes.data() + m_model.get_block_size(), ""),
+          fmt::join(read_bytes.data(),
+		    read_bytes.data() + m_model.get_block_size(), ""));
     } break;
   }
   dout(0) << error_string << dendl;
