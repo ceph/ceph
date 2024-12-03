@@ -83,7 +83,7 @@ ErasureCodeIsa::get_chunk_size(unsigned int stripe_width) const
 int ErasureCodeIsa::encode_chunks(const set<int> &want_to_encode,
                                   map<int, bufferlist> *encoded)
 {
-  char *chunks[k + m];
+  std::vector<char*> chunks(k + m);
   for (int i = 0; i < k + m; i++)
     chunks[i] = (*encoded)[i].c_str();
   isa_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
@@ -95,10 +95,10 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
                                   map<int, bufferlist> *decoded)
 {
   unsigned blocksize = (*chunks.begin()).second.length();
-  int erasures[k + m + 1];
+  std::vector<int> erasures(k + m + 1);
   int erasures_count = 0;
-  char *data[k];
-  char *coding[m];
+  std::vector<char*> data(k);
+  std::vector<char*> coding(m);
   for (int i = 0; i < k + m; i++) {
     if (chunks.find(i) == chunks.end()) {
       erasures[erasures_count] = i;
@@ -111,7 +111,7 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
   }
   erasures[erasures_count] = -1;
   ceph_assert(erasures_count > 0);
-  return isa_decode(erasures, data, coding, blocksize);
+  return isa_decode(erasures.data(), data.data(), coding.data(), blocksize);
 }
 
 // -----------------------------------------------------------------------------
@@ -188,9 +188,9 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
   int nerrs = 0;
   int i, r, s;
 
-  unsigned char *recover_source[k];
-  unsigned char *recover_target[m];
-  char *recover_buf[k+1];
+  std::vector<unsigned char*> recover_source(k, nullptr);
+  std::vector<unsigned char*> recover_target(m, nullptr);
+  std::vector<char*> recover_buf(k+1, nullptr);
 
   // count the errors
   for (int l = 0; erasures[l] != -1; l++) {
@@ -203,12 +203,12 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
   // -----------------------------------
   // Assign source and target buffers.
   // -----------------------------------
-  if ((m == 1) || 
+  if ((m == 1) ||
       ((matrixtype == kVandermonde) && (nerrs == 1) && (erasures[0] < (k + 1)))) {
     // We need a single buffer to use the xor_gen() optimisation.
     // The last index must point to the erasure, and index that contained
     // the erasure must point to the parity.
-    memset(recover_buf, 0, sizeof (recover_buf));
+    recover_buf.assign(recover_buf.size(), nullptr);
     bool parity_set = false;
     for (i = 0; i < (k + 1); i++) {
       if (erasure_contains(erasures, i)) {
@@ -233,8 +233,8 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
   else {
     // We need source and target buffers to use ec_encode_data().
     // The erasure must be moved to the target buffer.
-    memset(recover_source, 0, sizeof (recover_source));
-    memset(recover_target, 0, sizeof (recover_target));
+    memset(recover_source.data(), 0, recover_source.size());
+    memset(recover_target.data(), 0, recover_target.size());
     for (i = 0, s = 0, r = 0; ((r < k) || (s < nerrs)) && (i < (k + m)); i++) {
       if (!erasure_contains(erasures, i)) {
         if (r < k) {
@@ -262,15 +262,15 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
       ((matrixtype == kVandermonde) && (nerrs == 1) && (erasures[0] < (k + 1)))) {
     // single parity decoding
     dout(20) << "isa_decode: reconstruct using xor_gen [" << erasures[0] << "]" << dendl;
-    isa_xor(recover_buf, &recover_buf[k], blocksize);
+    isa_xor(recover_buf.data(), &recover_buf[k], blocksize);
     return 0;
   }
 
-  unsigned char d[k * (m + k)];
-  unsigned char decode_tbls[k * (m + k)*32];
-  unsigned char *p_tbls = decode_tbls;
+  std::vector<unsigned char> d(k * (m + k));
+  std::vector<unsigned char> decode_tbls(k * (m + k)*32);
+  unsigned char *p_tbls = decode_tbls.data();
 
-  int decode_index[k];
+  std::vector<int> decode_index(k);
 
   std::string erasure_signature; // describes a matrix configuration for caching
 
@@ -300,8 +300,8 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
   // ---------------------------------------------
   if (!tcache.getDecodingTableFromCache(erasure_signature, p_tbls, matrixtype, k, m)) {
     int j;
-    unsigned char b[k * (m + k)];
-    unsigned char c[k * (m + k)];
+    std::vector<unsigned char> b(k * (m + k));
+    std::vector<unsigned char> c(k * (m + k));
 
     for (i = 0; i < k; i++) {
       r = decode_index[i];
@@ -320,7 +320,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
     // inverted when m chunks are lost and this optimizations
     // does not help. Therefor we keep the code simpler.
     // --------------------------------------------------------
-    if (gf_invert_matrix(b, d, k) < 0) {
+    if (gf_invert_matrix(b.data(), d.data(), k) < 0) {
       dout(0) << "isa_decode: bad matrix" << dendl;
       return -1;
     }
@@ -347,12 +347,13 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
     // ---------------------------------------------
     // Initialize Decoding Table
     // ---------------------------------------------
-    ec_init_tables(k, nerrs, c, decode_tbls);
+    ec_init_tables(k, nerrs, c.data(), decode_tbls.data());
     tcache.putDecodingTableToCache(erasure_signature, p_tbls, matrixtype, k, m);
   }
   // Recover data sources
   ec_encode_data(blocksize,
-                 k, nerrs, decode_tbls, recover_source, recover_target);
+                 k, nerrs, decode_tbls.data(), recover_source.data(),
+                 recover_target.data());
 
 
   return 0;
