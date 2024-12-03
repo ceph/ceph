@@ -341,11 +341,11 @@ void KernelDevice::close()
   extblkdev::release_device(ebd_impl);
 
   for (int i = 0; i < WRITE_LIFE_MAX; i++) {
-    assert(fd_directs[i] >= 0);
+    ceph_assert(fd_directs[i] >= 0);
     VOID_TEMP_FAILURE_RETRY(::close(fd_directs[i]));
     fd_directs[i] = -1;
 
-    assert(fd_buffereds[i] >= 0);
+    ceph_assert(fd_buffereds[i] >= 0);
     VOID_TEMP_FAILURE_RETRY(::close(fd_buffereds[i]));
     fd_buffereds[i] = -1;
   }
@@ -931,10 +931,8 @@ void KernelDevice::aio_submit(IOContext *ioc)
 
   void *priv = static_cast<void*>(ioc);
   int r, retries = 0;
-  // num of pending aios should not overflow when passed to submit_batch()
-  assert(pending <= std::numeric_limits<uint16_t>::max());
   r = io_queue->submit_batch(ioc->running_aios.begin(), e,
-			     pending, priv, &retries);
+			     priv, &retries);
 
   if (retries)
     derr << __func__ << " retries " << retries << dendl;
