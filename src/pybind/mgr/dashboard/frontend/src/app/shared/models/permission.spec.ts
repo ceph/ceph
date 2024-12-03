@@ -19,7 +19,8 @@ describe('cd-notification classes', () => {
       rbdImage: { create: false, delete: false, read: false, update: false },
       rbdMirroring: { create: false, delete: false, read: false, update: false },
       rgw: { create: false, delete: false, read: false, update: false },
-      user: { create: false, delete: false, read: false, update: false }
+      user: { create: false, delete: false, read: false, update: false },
+      smb: { create: false, delete: false, read: false, update: false }
     });
   });
 
@@ -40,7 +41,8 @@ describe('cd-notification classes', () => {
       'rbd-image': ['create', 'read', 'update', 'delete'],
       'rbd-mirroring': ['create', 'read', 'update', 'delete'],
       rgw: ['create', 'read', 'update', 'delete'],
-      user: ['create', 'read', 'update', 'delete']
+      user: ['create', 'read', 'update', 'delete'],
+      smb: ['create', 'read', 'update', 'delete']
     };
     expect(new Permissions(fullyGranted)).toEqual({
       cephfs: { create: true, delete: true, read: true, update: true },
@@ -59,7 +61,8 @@ describe('cd-notification classes', () => {
       rbdImage: { create: true, delete: true, read: true, update: true },
       rbdMirroring: { create: true, delete: true, read: true, update: true },
       rgw: { create: true, delete: true, read: true, update: true },
-      user: { create: true, delete: true, read: true, update: true }
+      user: { create: true, delete: true, read: true, update: true },
+      smb: { create: true, delete: true, read: true, update: true }
     });
   });
 });
