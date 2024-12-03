@@ -32,7 +32,7 @@ class DefaultImages(Enum):
     GRAFANA = _create_image('quay.io/ceph/grafana:10.4.8', 'grafana')
     HAPROXY = _create_image('quay.io/ceph/haproxy:2.3', 'haproxy')
     KEEPALIVED = _create_image('quay.io/ceph/keepalived:2.2.4', 'keepalived')
-    NVMEOF = _create_image('quay.io/ceph/nvmeof:1.2.17', 'nvmeof')
+    NVMEOF = _create_image('quay.io/ceph/nvmeof:1.4', 'nvmeof')
     SNMP_GATEWAY = _create_image('docker.io/maxwo/snmp-notifier:v1.2.1', 'snmp_gateway')
     ELASTICSEARCH = _create_image('quay.io/omrizeneva/elasticsearch:6.8.23', 'elasticsearch')
     JAEGER_COLLECTOR = _create_image('quay.io/jaegertracing/jaeger-collector:1.29',
