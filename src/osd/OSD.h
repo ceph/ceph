@@ -1670,8 +1670,11 @@ protected:
  protected:
 
   // -- osd map --
-  // TODO: switch to std::atomic<OSDMapRef> when C++20 will be available.
+#if defined(__cpp_lib_atomic_shared_ptr)
+  std::atomic<OSDMapRef>       _osdmap;
+#else
   OSDMapRef       _osdmap;
+#endif
   void set_osdmap(OSDMapRef osdmap) {
     std::atomic_store(&_osdmap, osdmap);
   }
