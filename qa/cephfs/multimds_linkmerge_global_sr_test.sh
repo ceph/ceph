@@ -152,8 +152,9 @@ setup_test_bed
 dir1_file1_size_for_dir1_snap0=$(stat -c "%s" $MNT/dir1/sub_dir1/dir1_file1)
 
 #create snaps
+echo "Created snapshot dir1_snap0 dir1_snap1"
 mkdir $MNT/dir1/.snap/dir1_snap0
-mkdir $MNT/dir2/.snap/dir1_snap1
+mkdir $MNT/dir1/.snap/dir1_snap1
 
 #List rados snaps - observe no snaps at rados yet
 snap_count=$($RADOS -p cephfs.a.data listsnaps $DIR1_SUBDIR1_FILE1_DATA_OBJ --format=json-pretty | jq -r '.clones[].snapshots[].id' | jq -s 'length')
@@ -163,6 +164,7 @@ if [ "$snap_count" -ne 0 ]; then
 fi
 
 #COW - Write data - rados takes snapshot on next write
+echo "Write data to $MNT/dir1/sub_dir1/dir1_file1 to trigger rados snapshot - COW"
 echo "data for dir2_snap0 " >> $MNT/dir1/sub_dir1/dir1_file1
 
 #List rados snaps - observe snaps
@@ -173,6 +175,9 @@ if [ "$snap_count" -ne 2 ]; then
 fi
 
 #Remove primary file and wait for re-integration
+echo "Tree before removal"
+tree $MNT/
+echo "Remove primary link file - $MNT/dir1/sub_dir1/dir1_file1 to trigger re-integration"
 rm -f $MNT/dir1/sub_dir1/dir1_file1
 flush_mds_journal
 echo "Waiting 15 secs reintegration"
@@ -182,9 +187,11 @@ sleep 15
 dir2_hl_file1_size_for_dir2_snap0=$(stat -c "%s" $MNT/dir2/sub_dir2/dir2_hl_file1)
 
 #Take snaps on dir2 - secondary hardlink file is present (became primary)
+echo "Create snapshot dir2_snap0"
 mkdir $MNT/dir2/.snap/dir2_snap0
 
 #truncate hardlink file - observe previous snapshots
+echo "Truncate the file $MNT/dir2/sub_dir2/dir2_hl_file1"
 truncate -s 0 $MNT/dir2/sub_dir2/dir2_hl_file1
 flush_mds_journal
 
