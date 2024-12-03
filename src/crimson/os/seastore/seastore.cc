@@ -1537,7 +1537,8 @@ SeaStore::Shard::do_omap_get_values(
   const omap_root_le_t& omap_root)
 {
   LOG_PREFIX(SeaStoreS::do_omap_get_values);
-  DEBUGT("start={} ...", t, start.has_value() ? *start : "");
+  DEBUGT("start={} type={} ...", t, start.has_value() ? *start : "",
+    omap_root.get_type());
   return omap_list(
     onode,
     omap_root,
@@ -1906,9 +1907,9 @@ SeaStore::Shard::_do_transaction_step(
       {
         std::map<std::string, ceph::bufferlist> aset;
         i.decode_attrset(aset);
-        DEBUGT("op OMAP_SETKEYS, oid={}, omap size={} ...",
-               *ctx.transaction, oid, aset.size());
 	const omap_root_le_t &root = select_log_omap_root(*onodes[op->oid]);
+        DEBUGT("op OMAP_SETKEYS, oid={}, omap size={}, type={} ...",
+               *ctx.transaction, oid, aset.size(), root.get_type());
         return _omap_set_values(ctx, onodes[op->oid], std::move(aset),
 	  root);
       }
@@ -1924,9 +1925,9 @@ SeaStore::Shard::_do_transaction_step(
       {
         omap_keys_t keys;
         i.decode_keyset(keys);
-        DEBUGT("op OMAP_RMKEYS, oid={}, omap size={} ...",
-               *ctx.transaction, oid, keys.size());
 	const omap_root_le_t &root = select_log_omap_root(*onodes[op->oid]);
+        DEBUGT("op OMAP_RMKEYS, oid={}, omap size={}, type={} ...",
+               *ctx.transaction, oid, keys.size(), root.get_type());
         return _omap_rmkeys(ctx, onodes[op->oid], std::move(keys), root);
       }
       case Transaction::OP_OMAP_RMKEYRANGE:
@@ -1934,9 +1935,9 @@ SeaStore::Shard::_do_transaction_step(
         std::string first, last;
         first = i.decode_string();
         last = i.decode_string();
-        DEBUGT("op OMAP_RMKEYRANGE, oid={}, first={}, last={} ...",
-               *ctx.transaction, oid, first, last);
 	const omap_root_le_t &root = select_log_omap_root(*onodes[op->oid]);
+        DEBUGT("op OMAP_RMKEYRANGE, oid={}, first={}, last={}, type={}...",
+               *ctx.transaction, oid, first, last, root.get_type());
         return _omap_rmkeyrange(
 	  ctx, onodes[op->oid],
 	  std::move(first), std::move(last),
