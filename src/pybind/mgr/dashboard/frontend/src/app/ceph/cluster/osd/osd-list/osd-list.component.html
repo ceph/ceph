@@ -1,0 +1,156 @@
+<nav ngbNav
+     #nav="ngbNav"
+     class="nav-tabs">
+  <ng-container ngbNavItem>
+    <a ngbNavLink
+       i18n>OSDs List</a>
+    <ng-template ngbNavContent>
+      <cd-table [data]="osds"
+                (fetchData)="getOsdList($event)"
+                [columns]="columns"
+                selectionType="multiClick"
+                [hasDetails]="true"
+                (setExpandedRow)="setExpandedRow($event)"
+                (updateSelection)="updateSelection($event)"
+                [updateSelectionOnRefresh]="'never'"
+                [serverSide]="true"
+                [count]="count">
+
+        <div class="table-actions">
+          <cd-table-actions [permission]="permissions.osd"
+                            [selection]="selection"
+                            class="btn-group"
+                            id="osd-actions"
+                            [tableActions]="tableActions">
+          </cd-table-actions>
+          <cd-table-actions [permission]="{read: true}"
+                            [selection]="selection"
+                            dropDownOnly="Cluster-wide configuration"
+                            btnColor="light"
+                            class="btn-group"
+                            id="cluster-wide-actions"
+                            [tableActions]="clusterWideActions">
+          </cd-table-actions>
+        </div>
+
+        <cd-osd-details *cdTableDetail
+                        [selection]="expandedRow">
+        </cd-osd-details>
+      </cd-table>
+    </ng-template>
+  </ng-container>
+
+  <ng-container ngbNavItem
+                *ngIf="permissions.grafana.read">
+    <a ngbNavLink
+       i18n>Overall Performance</a>
+    <ng-template ngbNavContent>
+      <cd-grafana i18n-title
+                  title="OSD list"
+                  [grafanaPath]="'osd-overview?'"
+                  [type]="'metrics'"
+                  uid="lo02I1Aiz"
+                  grafanaStyle="four">
+      </cd-grafana>
+    </ng-template>
+  </ng-container>
+</nav>
+
+<div [ngbNavOutlet]="nav"></div>
+
+<ng-template #markOsdConfirmationTpl
+             let-markActionDescription="markActionDescription"
+             let-osdIds="osdIds">
+  <ng-container i18n><strong>OSD(s) {{ osdIds | join }}</strong> will be marked
+  <strong>{{ markActionDescription }}</strong> if you proceed.</ng-container>
+</ng-template>
+
+<ng-template #criticalConfirmationTpl
+             let-safeToPerform="safeToPerform"
+             let-message="message"
+             let-active="active"
+             let-missingStats="missingStats"
+             let-storedPgs="storedPgs"
+             let-actionDescription="actionDescription"
+             let-osdIds="osdIds">
+  <div *ngIf="!safeToPerform"
+       class="danger mb-3">
+    <cd-alert-panel type="warning">
+      <span i18n>
+        The {selection.hasSingleSelection, select, true {OSD is} other {OSDs are}} not safe to be
+        {{ actionDescription }}!
+      </span>
+      <br>
+      <ul class="mb-0 ps-4">
+        <li *ngIf="active.length > 0"
+             i18n>
+          {selection.hasSingleSelection, select, true {} other {{{ active | join }} : }}
+          Some PGs are currently mapped to
+          {active.length === 1, select, true {it} other {them}}.
+        </li>
+        <li *ngIf="missingStats.length > 0"
+             i18n>
+          {selection.hasSingleSelection, select, true {} other {{{ missingStats | join }} : }}
+          There are no reported stats and not all PGs are active and clean.
+        </li>
+        <li *ngIf="storedPgs.length > 0"
+             i18n>
+          {selection.hasSingleSelection, select, true {OSD} other {{{ storedPgs | join }} : OSDs }}
+          still store some PG data and not all PGs are active and clean.
+        </li>
+        <li *ngIf="message">
+          {{ message }}
+        </li>
+      </ul>
+    </cd-alert-panel>
+  </div>
+  <div *ngIf="safeToPerform"
+       class="danger mb-3">
+    <cd-alert-panel type="info">
+      <span i18n>
+        The {selection.hasSingleSelection, select, true {OSD is} other {OSDs are}}
+        safe to destroy without reducing data durability.
+      </span>
+    </cd-alert-panel>
+  </div>
+  <ng-container i18n><strong>OSD {{ osdIds | join }}</strong> will be
+  <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
+</ng-template>
+
+<ng-template #flagsTpl
+             let-row="data.row">
+  <span *ngFor="let flag of row.cdClusterFlags;"
+        class="badge badge-hdd me-1">{{ flag }}</span>
+  <span *ngFor="let flag of row.cdIndivFlags;"
+        class="badge badge-info me-1">{{ flag }}</span>
+</ng-template>
+
+<ng-template #osdUsageTpl
+             let-row="data.row">
+  <cd-usage-bar [title]="'osd ' + row.osd"
+                [total]="row.stats.stat_bytes"
+                [used]="row.stats.stat_bytes_used"
+                [warningThreshold]="osdSettings.nearfull_ratio"
+                [errorThreshold]="osdSettings.full_ratio">
+  </cd-usage-bar>
+</ng-template>
+
+<ng-template #deleteOsdExtraTpl
+             let-form="form">
+  <ng-container [formGroup]="form">
+    <ng-container formGroupName="child">
+      <div class="form-group">
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox"
+                 class="custom-control-input"
+                 name="preserve"
+                 id="preserve"
+                 formControlName="preserve">
+          <label class="custom-control-label"
+                 for="preserve"
+                 i18n>Preserve OSD ID(s) for replacement.</label>
+        </div>
+      </div>
+    </ng-container>
+  </ng-container>
+</ng-template>

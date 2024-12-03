@@ -1,0 +1,146 @@
+---
+# Defines deployment design and assigns role to server groups
+
+- hosts:
+  - mons
+  - osds
+  - mgrs
+
+  gather_facts: false
+  any_errors_fatal: true
+  become: true
+
+  tags:
+    - always
+
+  vars:
+    delegate_facts_host: True
+    dashboard_enabled: False
+
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+  pre_tasks:
+    # Ansible will try to auto-install python-apt, in some systems this might be
+    # python3-apt, or python-apt, and it has caused whole runs to fail because
+    # it is trying to do an interactive prompt
+    - name: install python-apt and aptitude in debian based systems
+      raw: sudo apt-get -y install "{{ item }}"
+      ignore_errors: yes
+      with_items:
+        - python3-apt
+        - python-apt
+        - aptitude
+
+    - name: gather facts
+      setup:
+      when:
+        - not delegate_facts_host | bool
+
+    - name: gather and delegate facts
+      setup:
+      delegate_to: "{{ item }}"
+      delegate_facts: True
+      with_items: "{{ groups['all'] }}"
+      run_once: true
+      when:
+        - delegate_facts_host | bool
+
+    - name: install required packages for fedora > 23
+      raw: sudo dnf -y install python2-dnf libselinux-python ntp
+      when:
+        - ansible_facts['distribution'] == 'Fedora'
+        - ansible_facts['distribution_major_version']|int >= 23
+
+    - name: check if it is atomic host
+      stat:
+        path: /run/ostree-booted
+      register: stat_ostree
+
+    - name: set_fact is_atomic
+      set_fact:
+        is_atomic: '{{ stat_ostree.stat.exists }}'
+
+    - name: force rpm pkg upgrade
+      package:
+        name: rpm
+        state: latest
+      when: not is_atomic | bool
+
+    - name: install net-tools
+      package:
+        name: net-tools
+        state: present
+      when: not is_atomic | bool
+
+    - name: update the system
+      command: dnf update -y
+      changed_when: false
+      when: not is_atomic | bool
+
+  tasks:
+    - import_role:
+        name: ceph-defaults
+    - import_role:
+        name: ceph-facts
+    - import_role:
+        name: ceph-validate
+
+- hosts:
+  - mons
+  - osds
+  - mgrs
+  gather_facts: false
+  become: True
+  any_errors_fatal: true
+  vars:
+    dashboard_enabled: False
+  tasks:
+    - import_role:
+        name: ceph-defaults
+    - import_role:
+        name: ceph-facts
+    - import_role:
+        name: ceph-handler
+    - import_role:
+        name: ceph-common
+
+    - name: rsync ceph-volume to test nodes on centos
+      synchronize:
+        src: "{{ toxinidir }}/../../../../ceph_volume"
+        dest: "/usr/lib/python3.6/site-packages"
+        use_ssh_args: true
+      when:
+        - ansible_facts['os_family'] == "RedHat"
+        - inventory_hostname in groups.get(osd_group_name, [])
+
+    - name: rsync ceph-volume to test nodes on ubuntu
+      synchronize:
+        src: "{{ toxinidir }}/../../../../ceph_volume"
+        dest: "/usr/lib/python2.7/dist-packages"
+        use_ssh_args: true
+      when:
+        - ansible_facts['os_family'] == "Debian"
+        - inventory_hostname in groups.get(osd_group_name, [])
+
+    - name: run ceph-config role
+      import_role:
+        name: ceph-config
+
+    - name: run ceph-mon role
+      import_role:
+        name: ceph-mon
+      when:
+        - inventory_hostname in groups.get(mon_group_name, [])
+
+    - name: run ceph-mgr role
+      import_role:
+        name: ceph-mgr
+      when:
+        - inventory_hostname in groups.get(mgr_group_name, [])
+
+    - name: run ceph-osd role
+      import_role:
+        name: ceph-osd
+      when:
+        - inventory_hostname in groups.get(osd_group_name, [])
