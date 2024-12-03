@@ -640,6 +640,29 @@ private:
     bool ap_freeze = false;
   };
 
+  /**
+   * Helper wrapper, provides both context object with finish function
+   * and placeholder for formatter. Better alternative to passing formatter as another argument
+   * to the MDSCache function
+   */
+  class C_MDS_DumpStrayDirCtx : public MDSInternalContext {
+  public:
+  void finish(int r) override {
+    ceph_assert(on_finish);
+    on_finish(r);
+  }
+  Formatter* get_formatter() const {
+    ceph_assert(dump_formatter);
+    return dump_formatter;
+  }
+  C_MDS_DumpStrayDirCtx(MDCache *c, Formatter* f, std::function<void(int)>&& ext_on_finish) : 
+   MDSInternalContext(c->mds), cache(c), dump_formatter(f), on_finish(std::move(ext_on_finish)) {}
+  private:
+  MDCache *cache;
+  Formatter* dump_formatter;
+  std::function<void(int)> on_finish;
+  };
+
   MDRequestRef lock_path(LockPathConfig config, std::function<void(MDRequestRef const& mdr)> on_locked = {});
 
   void clean_open_file_lists();
@@ -1071,7 +1094,7 @@ private:
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
 
   void cache_status(Formatter *f);
-  int stray_status(Formatter *f, std::function<void()> done_callback);
+  int stray_status(std::unique_ptr<C_MDS_DumpStrayDirCtx> ctx);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;
@@ -1196,7 +1219,6 @@ private:
     int last_err = 0;
     MDSContext::vec waiters;
   };
-
   ceph_tid_t open_ino_last_tid = 0;
   std::map<inodeno_t,open_ino_info_t> opening_inodes;
 
@@ -1206,7 +1228,6 @@ private:
   friend struct C_MDC_OpenInoTraverseDir;
   friend struct C_MDC_OpenInoParentOpened;
   friend struct C_MDC_RetryScanStray;
-
   friend class C_IO_MDC_OpenInoBacktraceFetched;
   friend class C_MDC_Join;
   friend class C_MDC_RespondInternalRequest;
@@ -1271,7 +1292,7 @@ private:
   void handle_open_ino(const cref_t<MMDSOpenIno> &m, int err=0);
   void handle_open_ino_reply(const cref_t<MMDSOpenInoReply> &m);
 
-  int scan_stray_dir(dirfrag_t next=dirfrag_t(), Formatter* f = nullptr, std::function<void()> done_callback = nullptr);
+  int scan_stray_dir(dirfrag_t next=dirfrag_t(), std::unique_ptr<C_MDS_DumpStrayDirCtx> ctx = nullptr);
   // -- replicas --
   void handle_discover(const cref_t<MDiscover> &dis);
   void handle_discover_reply(const cref_t<MDiscoverReply> &m);

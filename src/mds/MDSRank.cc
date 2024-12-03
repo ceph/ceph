@@ -3071,43 +3071,23 @@ void MDSRankDispatcher::handle_asok_command(
     command_quiesce_db(cmdmap, on_finish);
     return;
   } else if (command == "dump stray") {
-    std::lock_guard l(mds_lock);
-
-    int r;
-    std::mutex m;
-    std::condition_variable cv;
-    bool done = false;
-    int ttl = 2;
     f->open_array_section("strays");
-    
-    std::function<void()> done_callback = [&]() {
-      dout(10) << "dump_stray callback" << dendl;
-      {
-        std::unique_lock<std::mutex> stray_lock(m);
-        done = true;
-      }
-      
+    dout(10) << "dump_stray start" <<  dendl;
+    // the context is a wrapper for formatter to be used while scanning stray dir
+    auto context = std::make_unique<MDCache::C_MDS_DumpStrayDirCtx>(mdcache, f,
+     [this, f, on_finish](int r) {
+      // completion callback, will be called when scan is done
+      dout(10) << "dump_stray done" <<  dendl;
+      bufferlist bl;
       f->close_section();
-      f->flush(outbl);
-      cv.notify_all();
-    };
-
-    dout(10) << "dump_stray start: " <<  dendl;
-    r = mdcache->stray_status(f, done_callback);
+      on_finish(r, "", bl);
+    });
+    std::lock_guard l(mds_lock);
+    r = mdcache->stray_status(std::move(context));
+    // since the scanning op can be async, we want to know it, for better semantics
     if (r == -EAGAIN) {
-      // just to be on safe side... callback can be called only once
-      if (--ttl == 0) {
-        dout(10) << "dump_stray timeout" << dendl;
-        on_finish(-ETIME, "", outbl);
-        return;
-      }
-      dout(10) << "dump_stray wait" << dendl;
-      std::unique_lock<std::mutex> stray_lock(m);
-      cv.wait(stray_lock, [&]{return done;});
+     dout(10) << "dump_stray wait" << dendl;
     }
-    
-    dout(10) << "dump_stray done: " <<  dendl;
-    on_finish(0, "", outbl);
     return;
   } else {
     r = -CEPHFS_ENOSYS;
@@ -3545,7 +3525,7 @@ void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, asok_fi
 
   // This is a little ugly, apologies.
   // We should still be under the mds lock for this test to be valid.
-  // MDCache will delete the quiesce_ctx if it manages to complete syncrhonously,
+  // MDCache will delete the quiesce_ctx if it manages  
   // so we are testing the `mdr->internal_op_finish` to see if that has happend
   if (!await && mdr && mdr->internal_op_finish) {
     ceph_assert(mdr->internal_op_finish == quiesce_ctx);
