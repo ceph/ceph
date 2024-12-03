@@ -137,27 +137,27 @@ static void get_bucket_index_objects(const string& bucket_oid_base,
   if (!num_shards) {
     bucket_objects[0] = bucket_oid_base;
   } else {
-    char buf[bucket_oid_base.size() + 64];
+    std::vector<char> buf(bucket_oid_base.size() + 64);
     if (shard_id < 0) {
       for (uint32_t i = 0; i < num_shards; ++i) {
         if (gen_id) {
-          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, i);
+          bucket_obj_with_generation(buf.data(), buf.size(), bucket_oid_base, gen_id, i);
         } else {
-          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, i);
+          bucket_obj_without_generation(buf.data(), buf.size(), bucket_oid_base, i);
         }
-        bucket_objects[i] = buf;
+        bucket_objects[i] = buf.data();
       }
     } else {
       if (std::cmp_greater(shard_id, num_shards)) {
         return;
       } else {
         if (gen_id) {
-          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, shard_id);
+          bucket_obj_with_generation(buf.data(), buf.size(), bucket_oid_base, gen_id, shard_id);
         } else {
           // for backward compatibility, gen_id(0) will not be added in the object name
-          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, shard_id);
+          bucket_obj_without_generation(buf.data(), buf.size(), bucket_oid_base, shard_id);
         }
-        bucket_objects[shard_id] = buf;
+        bucket_objects[shard_id] = buf.data();
       }
     }
   }
@@ -225,15 +225,15 @@ void RGWSI_BucketIndex_RADOS::get_bucket_index_object(
     // By default with no sharding, we use the bucket oid as itself
     (*bucket_obj) = bucket_oid_base;
   } else {
-    char buf[bucket_oid_base.size() + 64];
+    std::vector<char> buf(bucket_oid_base.size() + 64);
     if (gen_id) {
-      bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, shard_id);
-      (*bucket_obj) = buf;
-	  ldout(cct, 10) << "bucket_obj is " << (*bucket_obj) << dendl;
+      bucket_obj_with_generation(buf.data(), buf.size(), bucket_oid_base, gen_id, shard_id);
+      (*bucket_obj) = buf.data();
+      ldout(cct, 10) << "bucket_obj is " << (*bucket_obj) << dendl;
     } else {
       // for backward compatibility, gen_id(0) will not be added in the object name
-      bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, shard_id);
-      (*bucket_obj) = buf;
+      bucket_obj_without_generation(buf.data(), buf.size(), bucket_oid_base, shard_id);
+      (*bucket_obj) = buf.data();
     }
   }
 }
@@ -255,13 +255,13 @@ int RGWSI_BucketIndex_RADOS::get_bucket_index_object(
         }
       } else {
         uint32_t sid = bucket_shard_index(obj_key, normal.num_shards);
-        char buf[bucket_oid_base.size() + 64];
+	std::vector<char> buf(bucket_oid_base.size() + 64);
         if (gen_id) {
-          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, sid);
+          bucket_obj_with_generation(buf.data(), buf.size(), bucket_oid_base, gen_id, sid);
         } else {
-          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, sid);
+          bucket_obj_without_generation(buf.data(), buf.size(), bucket_oid_base, sid);
         }
-        (*bucket_obj) = buf;
+        (*bucket_obj) = buf.data();
         if (shard_id) {
           *shard_id = (int)sid;
         }

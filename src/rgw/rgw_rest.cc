@@ -139,20 +139,21 @@ map<int, const char *> http_status_names;
  */
 string lowercase_underscore_http_attr(const string& orig)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '-':
-        buf[i] = '_';
-        break;
-      default:
-        buf[i] = tolower(*s);
-    }
-  }
-  return string(buf);
+  std::string mod;
+  mod.reserve(orig.size());
+  std::transform(orig.cbegin(),
+		 orig.cend(),
+		 std::back_inserter(mod),
+		 [](char c) {
+		   switch (c) {
+		   case '-':
+		     return '_';
+		     break;
+		   default:
+		     return char(tolower(c));
+		   }
+		 });
+  return mod;
 }
 
 /*
@@ -161,20 +162,21 @@ string lowercase_underscore_http_attr(const string& orig)
  */
 string uppercase_underscore_http_attr(const string& orig)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '-':
-        buf[i] = '_';
-        break;
-      default:
-        buf[i] = toupper(*s);
-    }
-  }
-  return string(buf);
+  std::string mod;
+  mod.reserve(orig.size());
+  std::transform(orig.cbegin(),
+		 orig.cend(),
+		 std::back_inserter(mod),
+		 [](char c) {
+		   switch (c) {
+		   case '-':
+		     return '_';
+		     break;
+		   default:
+		     return char(toupper(c));
+		   }
+		 });
+  return mod;
 }
 
 /* avoid duplicate hostnames in hostnames lists */
