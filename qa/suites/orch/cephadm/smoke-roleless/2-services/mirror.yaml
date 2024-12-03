@@ -1,0 +1,9 @@
+tasks:
+- cephadm.shell:
+    host.a:
+      - ceph orch apply rbd-mirror "--placement=*"
+      - ceph orch apply cephfs-mirror "--placement=*"
+- cephadm.wait_for_service:
+    service: rbd-mirror
+- cephadm.wait_for_service:
+    service: cephfs-mirror
