@@ -112,24 +112,24 @@ int cls_gen_random_bytes(char *buf, int size)
 
 int cls_gen_rand_base64(char *dest, int size) /* size should be the required string size + 1 */
 {
-  char buf[size];
-  char tmp_dest[size + 4]; /* so that there's space for the extra '=' characters, and some */
+  std::vector<char> buf(size);
+  std::vector<char> tmp_dest(size + 4); /* so that there's space for the extra '=' characters, and some */
   int ret;
 
-  ret = cls_gen_random_bytes(buf, sizeof(buf));
+  ret = cls_gen_random_bytes(buf.data(), buf.size());
   if (ret < 0) {
     derr << "cannot get random bytes: " << ret << dendl;
     return -1;
   }
 
-  ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
-		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
+  ret = ceph_armor(tmp_dest.data(), &tmp_dest[tmp_dest.size()],
+		   (const char *)buf.data(), ((const char *)buf.data()) + ((size - 1) * 3 + 4 - 1) / 4);
   if (ret < 0) {
     derr << "ceph_armor failed" << dendl;
     return -1;
   }
   tmp_dest[ret] = '\0';
-  memcpy(dest, tmp_dest, size);
+  memcpy(dest, tmp_dest.data(), size);
   dest[size-1] = '\0';
 
   return 0;
