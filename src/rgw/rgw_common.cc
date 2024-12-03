@@ -2220,26 +2220,12 @@ bool match_policy(const std::string& pattern, const std::string& input,
  */
 string lowercase_dash_http_attr(const string& orig, bool bidirection)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
+  std::string buf;
+  buf.reserve(orig.size());
 
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '_':
-        buf[i] = '-';
-        break;
-      case '-':
-        if (bidirection)
-          buf[i] = '_';
-        else
-          buf[i] = tolower(*s);
-        break;
-      default:
-        buf[i] = tolower(*s);
-    }
-  }
-  return string(buf);
+  lowercase_dash_transform(orig.begin(), orig.cend(), bidirection,
+			   std::back_inserter(buf));
+  return buf;
 }
 
 /*
@@ -2248,29 +2234,30 @@ string lowercase_dash_http_attr(const string& orig, bool bidirection)
  */
 string camelcase_dash_http_attr(const string& orig, bool convert2dash)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
+  std::string buf;
+  buf.reserve(orig.size());
 
   bool last_sep = true;
 
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '_':
-      case '-':
-        buf[i] = convert2dash ? '-' : *s;
-        last_sep = true;
-        break;
-      default:
-        if (last_sep) {
-          buf[i] = toupper(*s);
-        } else {
-          buf[i] = tolower(*s);
-        }
-        last_sep = false;
-    }
-  }
-  return string(buf);
+  std::transform(orig.cbegin(), orig.cend(),
+		 std::back_inserter(buf),
+		 [convert2dash, &last_sep](char c) -> char {
+		   switch (c) {
+		   case '_':
+		   case '-':
+		     return convert2dash ? '-' : c;
+		     last_sep = true;
+		     break;
+		   default:
+		     if (last_sep) {
+		       return toupper(c);
+		     } else {
+		       return tolower(c);
+		     }
+		     last_sep = false;
+		   }
+		 });
+  return buf;
 }
 
 RGWBucketInfo::RGWBucketInfo()

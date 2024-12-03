@@ -133,26 +133,24 @@ map<string, string> rgw_to_http_attrs;
 static map<string, string> generic_attrs_map;
 map<int, const char *> http_status_names;
 
+// Turn a dash to an underscore
+inline char underscise(char c)
+{
+  return c == '-' ? '_' : c;
+}
+
 /*
  * make attrs look_like_this
  * converts dashes to underscores
  */
 string lowercase_underscore_http_attr(const string& orig)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '-':
-        buf[i] = '_';
-        break;
-      default:
-        buf[i] = tolower(*s);
-    }
-  }
-  return string(buf);
+  std::string mod;
+  mod.reserve(orig.size());
+  std::transform(orig.cbegin(), orig.cend(),
+		 std::back_inserter(mod),
+		 &underscise);
+  return mod;
 }
 
 /*
@@ -161,20 +159,12 @@ string lowercase_underscore_http_attr(const string& orig)
  */
 string uppercase_underscore_http_attr(const string& orig)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '-':
-        buf[i] = '_';
-        break;
-      default:
-        buf[i] = toupper(*s);
-    }
-  }
-  return string(buf);
+  std::string mod;
+  mod.reserve(orig.size());
+  std::transform(orig.cbegin(), orig.cend(),
+		 std::back_inserter(mod),
+		 [](char c) { return char(toupper(underscise(c))); });
+  return mod;
 }
 
 /* avoid duplicate hostnames in hostnames lists */

@@ -308,11 +308,11 @@ int run_rgw_admin(string& cmd, string& resp) {
     /* child */
     list<string> l;
     get_str_list(cmd, " \t", l);
-    char *argv[l.size()];
+    std::vector<char*> argv(l.size());
     unsigned loop = 1;
 
     argv[0] = (char *)"radosgw-admin";
-    for (list<string>::iterator it = l.begin(); 
+    for (list<string>::iterator it = l.begin();
          it != l.end(); ++it) {
       argv[loop++] = (char *)(*it).c_str();
     }
@@ -320,7 +320,7 @@ int run_rgw_admin(string& cmd, string& resp) {
     if (!freopen(RGW_ADMIN_RESP_PATH, "w+", stdout)) {
       cout << "Unable to open stdout file" << std::endl;
     }
-    execv((g_test->get_rgw_admin_path()).c_str(), argv); 
+    execv((g_test->get_rgw_admin_path()).c_str(), argv.data()); 
   } else if (pid > 0) {
     int status;
     waitpid(pid, &status, 0);
