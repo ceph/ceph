@@ -254,7 +254,7 @@ static void bluefs_import(
   const string dir = file_path.parent_path().native();
   const string file_name = file_path.filename().native();
   bs->open_for_write(dir, file_name, &h, false);
-  uint64_t max_block = 4096;
+  static constexpr uint64_t max_block = 4096;
   char buf[max_block];
   uint64_t left = fs::file_size(input_file.c_str());
   uint64_t size = 0;
