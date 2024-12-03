@@ -20,20 +20,18 @@ class StriperTestRT : public StriperTestParam {
 public:
   StriperTestRT() : StriperTestParam() {}
 protected:
-  char* getObjName(const std::string& soid, uint64_t nb)
+  std::string getObjName(const std::string& soid, uint64_t nb)
   {
-    char name[soid.size()+18];
-    sprintf(name, "%s.%016llx", soid.c_str(), (long long unsigned int)nb);
-    return strdup(name);
+    return fmt::format("{}.{:016x}", soid, nb);
   }
-  
+
   void checkObjectFromRados(const std::string& soid, bufferlist &bl,
                             uint64_t exp_stripe_unit, uint64_t exp_stripe_count,
                             uint64_t exp_object_size, size_t size)
   {
     checkObjectFromRados(soid, bl, exp_stripe_unit, exp_stripe_count, exp_object_size, size, size);
   }
-      
+
   void checkObjectFromRados(const std::string& soid, bufferlist &bl,
                             uint64_t exp_stripe_unit, uint64_t exp_stripe_count,
                             uint64_t exp_object_size, size_t size,
@@ -41,7 +39,7 @@ protected:
   {
     // checking first object's rados xattrs
     bufferlist xattrbl;
-    char* firstOid = getObjName(soid, 0);
+    auto firstOid = getObjName(soid, 0);
     ASSERT_LT(0, ioctx.getxattr(firstOid, "striper.layout.stripe_unit", xattrbl));
     std::string s_xattr(xattrbl.c_str(), xattrbl.length()); // adds 0 byte at the end
     uint64_t stripe_unit = strtoll(s_xattr.c_str(), NULL, 10);
@@ -91,7 +89,7 @@ protected:
       }
       bufferlist stripe_data;
       // check object content
-      char* oid = getObjName(soid, object_nb);
+      auto oid = getObjName(soid, object_nb);
       int rc = ioctx.read(oid, stripe_data, len, start);
       if (actual_size_if_sparse < size and
           (actual_size_if_sparse+stripe_unit-1)/stripe_unit <= stripe_nb) {
@@ -108,7 +106,6 @@ protected:
         original_data.substr_of(bl, stripe_nb*stripe_unit, len);
         ASSERT_EQ(0, memcmp(original_data.c_str(), stripe_data.c_str(), len));
       }
-      free(oid);
     }
     // checking rados object sizes; we go object by object
     uint64_t nb_full_object_sets = nb_stripes_in_object / stripe_per_objectset;
@@ -118,7 +115,7 @@ protected:
     for (uint64_t object_nb = 0; object_nb < nb_objects; object_nb++) {
       uint64_t rados_size;
       time_t mtime;
-      char* oid = getObjName(soid, object_nb);
+      auto oid = getObjName(soid, object_nb);
       uint64_t nb_full_object_set = object_nb / stripe_count;
       uint64_t object_index_in_set = object_nb % stripe_count;
       uint64_t object_start_stripe = nb_full_object_set * stripe_per_objectset + object_index_in_set;
@@ -142,18 +139,15 @@ protected:
         }
         ASSERT_EQ(len, rados_size);
       }
-      free(oid);
     }
     // check we do not have an extra object behind
     uint64_t rados_size;
     time_t mtime;
-    char* oid = getObjName(soid, nb_objects);
+    auto oid = getObjName(soid, nb_objects);
     ASSERT_EQ(-ENOENT, ioctx.stat(oid, &rados_size, &mtime));
-    free(oid);
-    free(firstOid);
   }
 };
-  
+
 TEST_P(StriperTestRT, StripedRoundtrip) {
   // get striping parameters and apply them
   TestData testData = GetParam();
@@ -226,13 +220,12 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
     ASSERT_EQ(0, striper.remove(soid));
     // check that the removal was successful
     uint64_t size;
-    time_t mtime;   
+    time_t mtime;
     for (uint64_t object_nb = 0;
          object_nb < testData.size*2/testData.object_size + testData.stripe_count;
          object_nb++) {
-      char* oid = getObjName(soid, object_nb);
+      auto oid = getObjName(soid, object_nb);
       ASSERT_EQ(-ENOENT, ioctx.stat(oid, &size, &mtime));
-      free(oid);
     }
   }
   {
@@ -240,12 +233,11 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
     // recreate object
     ASSERT_EQ(0, striper.write(soid, bl1, testData.size*2, 0));
     // remove the object size attribute from the striped object
-    char* firstOid = getObjName(soid, 0);
+    auto firstOid = getObjName(soid, 0);
     ASSERT_EQ(0, ioctx.rmxattr(firstOid, "striper.size"));
-    free(firstOid);
     // check that stat fails
     uint64_t size;
-    time_t mtime;   
+    time_t mtime;
     ASSERT_EQ(-ENODATA, striper.stat(soid, &size, &mtime));
     // call remove
     ASSERT_EQ(0, striper.remove(soid));
@@ -253,9 +245,8 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
     for (uint64_t object_nb = 0;
          object_nb < testData.size*2/testData.object_size + testData.stripe_count;
          object_nb++) {
-      char* oid = getObjName(soid, object_nb);
+      auto oid = getObjName(soid, object_nb);
       ASSERT_EQ(-ENOENT, ioctx.stat(oid, &size, &mtime));
-      free(oid);
     }
   }
 }
