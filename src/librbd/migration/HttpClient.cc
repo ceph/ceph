@@ -118,7 +118,7 @@ public:
     ceph_assert(m_http_client->m_strand.running_in_this_thread());
 
     auto cct = m_http_client->m_cct;
-    ldout(cct, 20) << "work=" << work.get() << ", r=" << -ec.value() << dendl;
+    ldout(cct, 20) << "work=" << work.get() << ", ec=" << ec.what() << dendl;
 
     ceph_assert(m_in_flight_requests > 0);
     --m_in_flight_requests;
@@ -414,7 +414,7 @@ private:
   void handle_receive(boost::system::error_code ec,
                       std::shared_ptr<Work>&& work) {
     auto cct = m_http_client->m_cct;
-    ldout(cct, 15) << "work=" << work.get() << ", r=" << -ec.value() << dendl;
+    ldout(cct, 15) << "work=" << work.get() << ", ec=" << ec.what() << dendl;
 
     ceph_assert(m_in_flight_requests > 0);
     --m_in_flight_requests;
