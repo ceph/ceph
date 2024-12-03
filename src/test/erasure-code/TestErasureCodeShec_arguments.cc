@@ -211,14 +211,14 @@ TEST(ParameterTest, combination_all)
 
   for (unsigned int w1 = 0; w1 <= shec->get_chunk_count(); ++w1) {
     // combination(k+m,w1)
-    int array_want_to_read[shec->get_chunk_count()];
+    std::vector<int> array_want_to_read(shec->get_chunk_count());
     for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
       array_want_to_read[i] = i < w1 ? 1 : 0;
     }
 
     for (unsigned w2 = 0; w2 <= shec->get_chunk_count(); ++w2) {
       // combination(k+m,w2)
-      int array_available_chunks[shec->get_chunk_count()];
+      std::vector<int> array_available_chunks(shec->get_chunk_count());
       for (unsigned int i = 0; i < shec->get_chunk_count(); ++i ) {
         array_available_chunks[i] = i < w2 ? 1 : 0;
       }
@@ -333,12 +333,12 @@ TEST(ParameterTest, combination_all)
             }
           }
         } while (std::prev_permutation(
-		   array_want_to_read,
-		   array_want_to_read + shec->get_chunk_count()));
+		   array_want_to_read.data(),
+		   array_want_to_read.data() + shec->get_chunk_count()));
 
       } while (std::prev_permutation(
-                 array_available_chunks,
-                 array_available_chunks + shec->get_chunk_count()));
+                 array_available_chunks.data(),
+                 array_available_chunks.data() + shec->get_chunk_count()));
     }
   }
 
