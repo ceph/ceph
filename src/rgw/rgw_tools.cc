@@ -18,8 +18,8 @@ static std::map<std::string, std::string>* ext_mime_map;
 
 void parse_mime_map_line(const char *start, const char *end)
 {
-  std::vector<char> line(end - start + 1);
-  strncpy(line.data(), start, end - start);
+  std::vector<char> line(start, end);
+  line.push_back('\0');
   line[end - start] = '\0';
   char *l = line.data();
 #define DELIMS " \t\n\r"

@@ -472,8 +472,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   }
 
   auth_url.append("token");
-  char url_buf[auth_url.size() + 1 + token.length() + 1];
-  sprintf(url_buf, "%s/%s", auth_url.c_str(), token.c_str());
+  auto url_buf = fmt::format("{}/{}", auth_url, token);
 
   RGWHTTPHeadersCollector validator(cct, "GET", url_buf, { "X-Auth-Groups", "X-Auth-Ttl" });
 
@@ -541,8 +540,8 @@ static int build_token(const string& swift_user,
 
   bufferptr p(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
 
-  char buf[bl.length() * 2 + 1];
-  buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
+  std::vector<char> buf(bl.length() * 2 + 1);
+  buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf.data());
   dout(20) << "build_token token=" << buf << dendl;
 
   char k[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
@@ -675,10 +674,10 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   if (memcmp(local_tok_bl.c_str(), tok_bl.c_str(),
              local_tok_bl.length()) != 0) {
-    char buf[local_tok_bl.length() * 2 + 1];
+    std::vector<char> buf(local_tok_bl.length() * 2 + 1);
 
     buf_to_hex(reinterpret_cast<const unsigned char *>(local_tok_bl.c_str()),
-               local_tok_bl.length(), buf);
+               local_tok_bl.length(), buf.data());
 
     ldpp_dout(dpp, 0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
     return result_t::deny(-EPERM);
@@ -800,15 +799,16 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
     goto done;
 
   {
-    static constexpr size_t PREFIX_LEN = sizeof("AUTH_rgwtk") - 1;
-    char token_val[PREFIX_LEN + bl.length() * 2 + 1];
+    static constexpr std::string_view prefix{"AUTH_rgwtk"};
+    std::vector<char> token_val(prefix.size() + bl.length() * 2 + 1);
 
-    snprintf(token_val, PREFIX_LEN + 1, "AUTH_rgwtk");
+    std::copy(prefix.cbegin(), prefix.cend(),
+	      token_val.begin());
     buf_to_hex((const unsigned char *)bl.c_str(), bl.length(),
-	       token_val + PREFIX_LEN);
+	       token_val.data() + prefix.size());
 
-    dump_header(s, "X-Storage-Token", token_val);
-    dump_header(s, "X-Auth-Token", token_val);
+    dump_header(s, "X-Storage-Token", token_val.data());
+    dump_header(s, "X-Auth-Token", token_val.data());
   }
 
   ret = STATUS_NO_CONTENT;

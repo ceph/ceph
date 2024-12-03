@@ -1589,10 +1589,10 @@ static inline int rgw_str_to_bool(const char *s, int def_val)
 static inline void append_rand_alpha(CephContext *cct, const std::string& src, std::string& dest, int len)
 {
   dest = src;
-  char buf[len + 1];
-  gen_rand_alphanumeric(cct, buf, len);
+  std::vector<char> buf(len + 1, '\0');
+  gen_rand_alphanumeric(cct, buf.data(), len);
   dest.append("_");
-  dest.append(buf);
+  dest.append(buf.data());
 }
 
 static inline uint64_t rgw_rounded_kb(uint64_t bytes)
@@ -1920,8 +1920,8 @@ static inline void rgw_escape_str(const std::string& s, char esc_char,
 				  char special_char, std::string *dest)
 {
   const char *src = s.c_str();
-  char dest_buf[s.size() * 2 + 1];
-  char *destp = dest_buf;
+  std::vector<char> dest_buf(s.size() * 2 + 1, '\0');
+  char *destp = dest_buf.data();
 
   for (size_t i = 0; i < s.size(); i++) {
     char c = src[i];
@@ -1931,7 +1931,7 @@ static inline void rgw_escape_str(const std::string& s, char esc_char,
     *destp++ = c;
   }
   *destp++ = '\0';
-  *dest = dest_buf;
+  *dest = dest_buf.data();
 }
 
 static inline ssize_t rgw_unescape_str(const std::string& s, ssize_t ofs,
@@ -1939,8 +1939,8 @@ static inline ssize_t rgw_unescape_str(const std::string& s, ssize_t ofs,
 				       std::string *dest)
 {
   const char *src = s.c_str();
-  char dest_buf[s.size() + 1];
-  char *destp = dest_buf;
+  std::vector<char> dest_buf(s.size() + 1, '\0');
+  char *destp = dest_buf.data();
   bool esc = false;
 
   dest_buf[0] = '\0';
@@ -1953,14 +1953,14 @@ static inline ssize_t rgw_unescape_str(const std::string& s, ssize_t ofs,
     }
     if (!esc && c == special_char) {
       *destp = '\0';
-      *dest = dest_buf;
+      *dest = dest_buf.data();
       return (ssize_t)i + 1;
     }
     *destp++ = c;
     esc = false;
   }
   *destp = '\0';
-  *dest = dest_buf;
+  *dest = dest_buf.data();
   return std::string::npos;
 }
 
