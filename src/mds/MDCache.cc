@@ -10198,21 +10198,21 @@ void MDCache::notify_global_snaprealm_update(int snap_op)
 
 struct C_MDC_RetryScanStray : public MDCacheContext {
   dirfrag_t next;
-  Formatter* dump_formatter;
-  std::function<void()> done_callback;
-  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n, Formatter* f, std::function<void()> cb) :
-   MDCacheContext(c), next(n), dump_formatter(f), done_callback(cb) { }
+  std::unique_ptr<MDCache::C_MDS_DumpStrayDirCtx> cmd_ctx;
+  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n, std::unique_ptr<MDCache::C_MDS_DumpStrayDirCtx> ctx) :
+   MDCacheContext(c), next(n), cmd_ctx(std::move(ctx)) {}
   void finish(int r) override {
-    mdcache->scan_stray_dir(next, dump_formatter, done_callback);
+    mdcache->scan_stray_dir(next, std::move(cmd_ctx));
   }
 };
 
-// if the formatter is not null, the request comes from asok and formatter will
-// accumulate stray dirs info
-// the function returns EAGAIN to support waiting when called from asok
-// If the callback is not nullptr, the caller is asok command handler, which will block 
-// if EAGAIN is returned, untill this callback will be called
-int MDCache::scan_stray_dir(dirfrag_t next, Formatter* dump_formatter, std::function<void()> done_callback)
+/*
+ * If the cmd_ctx is not nullptr, the caller is asok command handler,
+ * which will block until the on_finish will be called.
+ * The cmd_ctx holds the formatter to dump stray dir content while scanning.
+ * The function can return EAGAIN, to make possible waiting semantics clear.
+*/
+int MDCache::scan_stray_dir(dirfrag_t next, std::unique_ptr<MDCache::C_MDS_DumpStrayDirCtx> cmd_ctx)
 {
   dout(10) << "scan_stray_dir " << next << dendl;
 
@@ -10231,12 +10231,12 @@ int MDCache::scan_stray_dir(dirfrag_t next, Formatter* dump_formatter, std::func
 	continue;
 
       if (!dir->can_auth_pin()) {
-	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RetryScanStray(this, dir->dirfrag(), dump_formatter, done_callback));
+	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RetryScanStray(this, dir->dirfrag(), std::move(cmd_ctx)));
 	return -EAGAIN;
       }
 
       if (!dir->is_complete()) {
-	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag(), dump_formatter, done_callback));
+	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag(), std::move(cmd_ctx)));
 	return -EAGAIN;
       }
 
@@ -10247,23 +10247,29 @@ int MDCache::scan_stray_dir(dirfrag_t next, Formatter* dump_formatter, std::func
 	CDentry::linkage_t *dnl = dn->get_projected_linkage();
 	if (dnl->is_primary()) {
 	  CInode *in = dnl->get_inode();
-    if (dump_formatter) {
-      dump_formatter->open_object_section("stray_inode");
-      dump_formatter->dump_int("ino: ", in->ino());
-      dump_formatter->dump_string("stray_prior_path: ", in->get_inode()->stray_prior_path);
-      in->dump(dump_formatter, CInode::DUMP_CAPS);
-      dump_formatter->close_section();
+    // only if we came from asok cmd handler
+    if (cmd_ctx) {
+      cmd_ctx->get_formatter()->open_object_section("stray_inode");
+      cmd_ctx->get_formatter()->dump_int("ino: ", in->ino());
+      cmd_ctx->get_formatter()->dump_string("stray_prior_path: ", in->get_inode()->stray_prior_path);
+      in->dump(cmd_ctx->get_formatter(), CInode::DUMP_CAPS);
+      cmd_ctx->get_formatter()->close_section();
     }
 	  if (in->get_inode()->nlink == 0)
 	    in->state_set(CInode::STATE_ORPHAN);
-	  maybe_eval_stray(in);
+    // no need to evaluate stray when dumping the dir content
+    if (!cmd_ctx) {
+	    maybe_eval_stray(in);
+    }
 	}
       }
     }
     next.frag = frag_t();
   }
-  if (done_callback)
-    done_callback();
+  // only if we came from asok cmd handler
+  if (cmd_ctx) {
+    cmd_ctx->finish(0);
+  }
   return 0;
 }
 
@@ -10275,9 +10281,9 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
     mds->logger->inc(l_mds_openino_backtrace_fetch);
 }
 
-int MDCache::stray_status(Formatter *f, function<void()> done_callback)
+int MDCache::stray_status(std::unique_ptr<C_MDS_DumpStrayDirCtx> ctx)
 {
-  return scan_stray_dir(dirfrag_t(), f, done_callback);
+  return scan_stray_dir(dirfrag_t(), std::move(ctx));
 }
 
 // ========================================================================================
