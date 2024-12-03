@@ -586,6 +586,11 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, &op, rctx.y);
   }
   if (r < 0) {
+    if (r == -ETIMEDOUT) {
+      // The meta_obj_ref write may eventually succeed, clear the set of objects for deletion. if it
+      // doesn't ever succeed, we'll orphan any tail objects as if we'd crashed before that write
+      writer.clear_written();
+    }
     return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
   }
 
@@ -766,6 +771,11 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
 			accounted_size + *cur_accounted_size,
 			attrs, rctx, writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0) {
+      if (r == -ETIMEDOUT) {
+      // The head object write may eventually succeed, clear the set of objects for deletion. if it
+      // doesn't ever succeed, we'll orphan any tail objects as if we'd crashed before that write
+      writer.clear_written();
+    }
     return r;
   }
   if (!obj_op.meta.canceled) {
