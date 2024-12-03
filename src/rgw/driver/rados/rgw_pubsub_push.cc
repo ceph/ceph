@@ -272,27 +272,17 @@ private:
     throw configuration_error("Kafka: invalid kafka-ack-level: " + str_ack_level);
   }
 
-  const std::string& get_brokers(const RGWHTTPArgs& args) {
-    bool exists;
-    const auto& str_brokers = args.get("kafka-brokers", &exists);
-    if (!exists) {
-      return nullptr;
-    }
-    return str_brokers
-  }
-
 public:
   RGWPubSubKafkaEndpoint(const std::string& _endpoint,
       const std::string& _topic,
       const RGWHTTPArgs& args) :
         topic(_topic),
-        ack_level(get_ack_level(args))
-        brokers(get_brokers(args)) {
+        ack_level(get_ack_level(args)) {
    if (!kafka::connect(
            conn_id, _endpoint, get_bool(args, "use-ssl", false),
            get_bool(args, "verify-ssl", true), args.get_optional("ca-location"),
            args.get_optional("mechanism"), args.get_optional("user-name"),
-           args.get_optional("password"), brokers)) {
+           args.get_optional("password"), args.get_optional("kafka-brokers"))) {
      throw configuration_error("Kafka: failed to create connection to: " +
                                _endpoint);
    }
