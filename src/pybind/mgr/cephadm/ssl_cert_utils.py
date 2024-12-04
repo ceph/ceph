@@ -16,7 +16,7 @@ class SSLConfigException(Exception):
 
 
 class SSLCerts:
-    def __init__(self, fsid:str = "") -> None:
+    def __init__(self, fsid: str = "") -> None:
         self.root_cert: Any
         self.root_key: Any
         self.key_file: IO[bytes]
