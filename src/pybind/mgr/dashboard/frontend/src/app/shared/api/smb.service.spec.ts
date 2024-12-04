@@ -28,4 +28,10 @@ describe('SmbService', () => {
     const req = httpTesting.expectOne('api/smb/cluster');
     expect(req.request.method).toBe('GET');
   });
+
+  it('should call remove', () => {
+    service.removeCluster('cluster_1').subscribe();
+    const req = httpTesting.expectOne('api/smb/cluster/cluster_1');
+    expect(req.request.method).toBe('DELETE');
+  });
 });

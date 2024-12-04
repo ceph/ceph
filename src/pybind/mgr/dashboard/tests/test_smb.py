@@ -121,6 +121,27 @@ class SMBClusterTest(ControllerTestCase):
         self.assertStatus(201)
         self.assertInJsonBody(json.dumps(self._clusters['resources'][1]))
 
+    def test_remove(self):
+        _res = {
+            "resource": {
+                "resource_type": "ceph.smb.cluster",
+                "cluster_id": "smbRemoveCluster",
+                "intent": "removed"
+            },
+            "state": "removed",
+            "success": "true"
+        }
+        _res_simplified = {
+            "resource_type": "ceph.smb.cluster",
+            "cluster_id": "smbRemoveCluster",
+            "intent": "removed"
+        }
+        mgr.remote = Mock(return_value=Mock(return_value=_res))
+        mgr.remote.return_value.one.return_value.to_simplified = Mock(return_value=_res_simplified)
+        self._delete(f'{self._endpoint}/smbRemoveCluster')
+        self.assertStatus(204)
+        mgr.remote.assert_called_once_with('smb', 'apply_resources', json.dumps(_res_simplified))
+
 
 class SMBShareTest(ControllerTestCase):
     _endpoint = '/api/smb/share'
