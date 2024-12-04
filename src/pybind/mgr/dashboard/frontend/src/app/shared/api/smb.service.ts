@@ -15,4 +15,10 @@ export class SmbService {
   listClusters(): Observable<SMBCluster[]> {
     return this.http.get<SMBCluster[]>(`${this.baseURL}/cluster`);
   }
+
+  removeCluster(clusterId: string) {
+    return this.http.delete(`${this.baseURL}/cluster/${clusterId}`, {
+      observe: 'response'
+    });
+  }
 }
