@@ -1331,7 +1331,7 @@ seastar::future<struct stat> SeaStore::Shard::_stat(
   st.st_blksize = device->get_block_size();
   st.st_blocks = (st.st_size + st.st_blksize - 1) / st.st_blksize;
   st.st_nlink = 1;
-  DEBUGT("oid={}, size={}, blksize={}",
+  DEBUGT("oid={}, size=0x{:x}, blksize=0x{:x}",
          t, oid, st.st_size, st.st_blksize);
   return seastar::make_ready_future<struct stat>(st);
 }
@@ -1640,7 +1640,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     [this, num_bytes](auto &ctx) {
       LOG_PREFIX(SeaStoreS::do_transaction_no_callbacks);
       return with_trans_intr(*ctx.transaction, [&ctx, this, FNAME, num_bytes](auto &t) {
-        DEBUGT("cid={}, {} operations, {} bytes, {} colls, {} objects ...",
+        DEBUGT("cid={}, {} operations, 0x{:x} bytes, {} colls, {} objects ...",
                t, ctx.ch->get_cid(),
                ctx.ext_transaction.get_num_ops(),
                num_bytes,

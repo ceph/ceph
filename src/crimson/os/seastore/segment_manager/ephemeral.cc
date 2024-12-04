@@ -20,8 +20,11 @@ namespace {
 namespace crimson::os::seastore::segment_manager {
 
 std::ostream &operator<<(std::ostream &lhs, const ephemeral_config_t &c) {
-  return lhs << "ephemeral_config_t(size=" << c.size << ", block_size=" << c.block_size
-	     << ", segment_size=" << c.segment_size << ")";
+  return lhs << "ephemeral_config_t(size=0x"
+             << std::hex << c.size
+             << ", block_size=0x" << c.block_size
+             << ", segment_size=0x" << c.segment_size
+             << std::dec << ")";
 }
 
 EphemeralSegmentManagerRef create_test_ephemeral() {
@@ -141,7 +144,8 @@ Segment::write_ertr::future<> EphemeralSegmentManager::segment_write(
 {
   auto& seg_addr = addr.as_seg_paddr();
   logger().debug(
-    "segment_write to segment {} at offset {}, physical offset {}, len {}, crc {}",
+    "segment_write to segment {} at offset 0x{:x}, "
+    "physical offset 0x{:x}, len 0x{:x}, crc 0x{:x}",
     seg_addr.get_segment_id(),
     seg_addr.get_segment_off(),
     get_offset(addr),
@@ -268,7 +272,7 @@ SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
 
   if (seg_addr.get_segment_off() + len > config.segment_size) {
     logger().error(
-      "EphemeralSegmentManager::read: invalid offset {}~{}!",
+      "EphemeralSegmentManager::read: invalid offset {}~0x{:x}!",
       addr,
       len);
     return crimson::ct_error::invarg::make();
@@ -279,7 +283,8 @@ SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
   bufferlist bl;
   bl.push_back(out);
   logger().debug(
-    "segment_read to segment {} at offset {}, physical offset {}, length {}, crc {}",
+    "segment_read to segment {} at offset 0x{:x}, "
+    "physical offset 0x{:x}, length 0x{:x}, crc 0x{:x}",
     seg_addr.get_segment_id().device_segment_id(),
     seg_addr.get_segment_off(),
     get_offset(addr),

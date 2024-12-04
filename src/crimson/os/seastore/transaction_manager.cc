@@ -221,7 +221,7 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
   TRACET("{}", t, offset);
   return lba_manager->incref_extent(t, offset
   ).si_then([FNAME, offset, &t](auto result) {
-    DEBUGT("extent refcount is incremented to {} -- {}~{}, {}",
+    DEBUGT("extent refcount is incremented to {} -- {}~0x{:x}, {}",
            t, result.refcount, offset, result.length, result.addr);
     return result.refcount;
   });
@@ -508,7 +508,7 @@ TransactionManager::get_next_dirty_extents(
   size_t max_bytes)
 {
   LOG_PREFIX(TransactionManager::get_next_dirty_extents);
-  DEBUGT("max_bytes={}B, seq={}", t, max_bytes, seq);
+  DEBUGT("max_bytes=0x{:x}B, seq={}", t, max_bytes, seq);
   return cache->get_next_dirty_extents(t, seq, max_bytes);
 }
 

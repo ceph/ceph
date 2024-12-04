@@ -131,7 +131,7 @@ void segments_info_t::add_segment_manager(
   auto ssize = segment_manager.get_segment_size();
   auto nsegments = segment_manager.get_num_segments();
   auto sm_size = segment_manager.get_available_size();
-  INFO("adding segment manager {}, size={}, ssize={}, segments={}",
+  INFO("adding segment manager {}, size=0x{:x}, segment size=0x{:x}, segments={}",
        device_id_printer_t{d_id}, sm_size, ssize, nsegments);
   ceph_assert(ssize > 0);
   ceph_assert(nsegments > 0);
@@ -329,9 +329,9 @@ std::ostream &operator<<(std::ostream &os, const segments_info_t &infos)
             << ", closed=" << infos.get_num_closed()
             << ", type_journal=" << infos.get_num_type_journal()
             << ", type_ool=" << infos.get_num_type_ool()
-            << ", total=" << infos.get_total_bytes() << "B"
-            << ", available=" << infos.get_available_bytes() << "B"
-            << ", unavailable=" << infos.get_unavailable_bytes() << "B"
+            << ", total=0x" << std::hex << infos.get_total_bytes() << "B"
+            << ", available=0x" << infos.get_available_bytes() << "B"
+            << ", unavailable=0x" << infos.get_unavailable_bytes() << "B" << std::dec
             << ", available_ratio=" << infos.get_available_ratio()
             << ", submitted_head=" << infos.get_submitted_journal_head()
             << ", time_bound=" << sea_time_point_printer_t{infos.get_time_bound()}
@@ -765,10 +765,10 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
   for (auto i = b; i < e; ++i) {
     if (bitmap[i]) {
       if (!error) {
-        ERROR("found allocated in {}, {} ~ {}", segment, offset, len);
+        ERROR("found allocated in {}, 0x{:x}~0x{:x}", segment, offset, len);
 	error = true;
       }
-      DEBUG("block {} allocated", i * block_size);
+      DEBUG("block 0x{:x}B allocated", i * block_size);
     }
     bitmap[i] = true;
   }
@@ -792,10 +792,10 @@ int64_t SpaceTrackerDetailed::SegmentMap::release(
   for (auto i = b; i < e; ++i) {
     if (!bitmap[i]) {
       if (!error) {
-	ERROR("found unallocated in {}, {} ~ {}", segment, offset, len);
+	ERROR("found unallocated in {}, 0x{:x}~0x{:x}", segment, offset, len);
 	error = true;
       }
-      DEBUG("block {} unallocated", i * block_size);
+      DEBUG("block 0x{:x}B unallocated", i * block_size);
     }
     bitmap[i] = false;
   }
@@ -831,7 +831,7 @@ void SpaceTrackerDetailed::SegmentMap::dump_usage(extent_len_t block_size) const
   INFO("dump start");
   for (unsigned i = 0; i < bitmap.size(); ++i) {
     if (bitmap[i]) {
-      LOCAL_LOGGER.info("    {} still live", i * block_size);
+      LOCAL_LOGGER.info("    0x{:x}B still live", i * block_size);
     }
   }
 }
@@ -847,7 +847,7 @@ void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
 void SpaceTrackerSimple::dump_usage(segment_id_t id) const
 {
   LOG_PREFIX(SpaceTrackerSimple::dump_usage);
-  INFO("id: {}, live_bytes: {}",
+  INFO("id: {}, live_bytes: 0x{:x}",
        id, live_bytes_by_segment[id].live_bytes);
 }
 
@@ -1165,7 +1165,7 @@ SegmentCleaner::do_reclaim_space(
 	    [this, &extents, &t](auto &ent)
 	  {
 	    LOG_PREFIX(SegmentCleaner::do_reclaim_space);
-	    TRACET("getting extent of type {} at {}~{}",
+	    TRACET("getting extent of type {} at {}~0x{:x}",
 	      t,
 	      ent.type,
 	      ent.paddr,
@@ -1568,7 +1568,7 @@ void SegmentCleaner::mark_space_used(
 
   background_callback->maybe_wake_background();
   assert(ret > 0);
-  DEBUG("segment {} new len: {}~{}, live_bytes: {}",
+  DEBUG("segment {} new len: {}~0x{:x}, live_bytes: 0x{:x}",
         seg_addr.get_segment_id(),
         addr,
         len,
@@ -1591,7 +1591,7 @@ void SegmentCleaner::mark_space_free(
   stats.used_bytes -= len;
   auto& seg_addr = addr.as_seg_paddr();
 
-  DEBUG("segment {} free len: {}~{}",
+  DEBUG("segment {} free len: {}~0x{:x}",
         seg_addr.get_segment_id(), addr, len);
   auto old_usage = calc_utilization(seg_addr.get_segment_id());
   [[maybe_unused]] auto ret = space_tracker->release(
@@ -1602,7 +1602,7 @@ void SegmentCleaner::mark_space_free(
   adjust_segment_util(old_usage, new_usage);
   background_callback->maybe_wake_blocked_io();
   assert(ret >= 0);
-  DEBUG("segment {} free len: {}~{}, live_bytes: {}",
+  DEBUG("segment {} free len: {}~0x{:x}, live_bytes: 0x{:x}",
         seg_addr.get_segment_id(),
         addr,
         len,
@@ -1687,11 +1687,11 @@ void SegmentCleaner::print(std::ostream &os, bool is_detailed) const
      << ", reclaim_ratio=" << get_reclaim_ratio()
      << ", alive_ratio=" << get_alive_ratio();
   if (is_detailed) {
-    os << ", unavailable_unreclaimable="
+    os << ", unavailable_unreclaimable=0x" << std::hex
        << get_unavailable_unreclaimable_bytes() << "B"
-       << ", unavailable_reclaimble="
+       << ", unavailable_reclaimble=0x"
        << get_unavailable_reclaimable_bytes() << "B"
-       << ", alive=" << stats.used_bytes << "B"
+       << ", alive=0x" << stats.used_bytes << "B" << std::dec
        << ", " << segments;
   }
   os << ")";
@@ -1722,7 +1722,7 @@ void RBMCleaner::mark_space_used(
   for (auto rbm : rbms) {
     if (addr.get_device_id() == rbm->get_device_id()) {
       if (rbm->get_start() <= addr) {
-	DEBUG("allocate addr: {} len: {}", addr, len);
+	DEBUG("allocate addr: {} len: 0x{:x}", addr, len);
 	stats.used_bytes += len;
 	rbm->mark_space_used(addr, len);
       }
@@ -1741,7 +1741,7 @@ void RBMCleaner::mark_space_free(
   for (auto rbm : rbms) {
     if (addr.get_device_id() == rbm->get_device_id()) {
       if (rbm->get_start() <= addr) {
-	DEBUG("free addr: {} len: {}", addr, len);
+	DEBUG("free addr: {} len: 0x{:x}", addr, len);
 	ceph_assert(stats.used_bytes >= len);
 	stats.used_bytes -= len;
 	rbm->mark_space_free(addr, len);
