@@ -137,6 +137,9 @@ class TestCommandListNetworks:
                    valid_lft forever preferred_lft forever
             """),
             {
+                "::1/128": {
+                    "lo": {"::1"},
+                },
                 "fe80::/64": {
                     "eno1": {"fe80::225:90ff:fee5:26e8"},
                     "br-3d443496454c": {"fe80::42:23ff:fe9d:ee4"},
@@ -180,6 +183,9 @@ class TestCommandListNetworks:
                    valid_lft forever preferred_lft forever
             """),
             {
+                "::1/128": {
+                    "lo": {"::1"},
+                },
                 '2001:1458:301:eb::100:1a/128': {
                     'ens20f0': {
                         '2001:1458:301:eb::100:1a'
@@ -217,6 +223,9 @@ class TestCommandListNetworks:
                    valid_lft forever preferred_lft forever
             """),
             {
+                "::1/128": {
+                    "lo": {"::1"},
+                },
                 'fe80::/64': {
                     'brx.0': {'fe80::a4cb:54ff:fecc:f2a2'},
                     'ceph-brx': {'fe80::d8a1:69ff:fede:8f58'}

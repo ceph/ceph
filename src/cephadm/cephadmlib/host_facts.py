@@ -864,7 +864,35 @@ def _list_ipv4_networks(
         [execstr, 'route', 'ls'],
         verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
     )
-    return _parse_ipv4_route(out)
+    res = _parse_ipv4_route(out)
+
+    # get loopback interface details
+    out, _, _ = call_throws(
+        ctx,
+        [execstr, 'route', 'ls', 'tab', 'local', 'dev', 'lo'],
+        verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+    )
+    res.update(_parse_loopback_ipv4_route(out))
+    return res
+
+
+def _parse_loopback_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
+    r = {}  # type: Dict[str, Dict[str, Set[str]]]
+    p = re.compile(r'^local (\S+/\S+) (.*)src (\S+)')
+    for line in out.splitlines():
+        m = p.findall(line)
+        if not m:
+            continue
+        net = m[0][0]
+        if '/' not in net:
+            net += '/32'
+        ip = m[0][2]
+        if net not in r:
+            r[net] = {}
+        if 'lo' not in r[net]:
+            r[net]['lo'] = set()
+        r[net]['lo'].add(ip)
+    return r
 
 
 def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
@@ -925,8 +953,6 @@ def _parse_ipv6_route(
         if '/' not in net:  # aggregate /128 mask for single host sub-networks
             net += '/128'
         iface = m[0][1]
-        if iface == 'lo':  # skip loopback devices
-            continue
         if net not in r:
             r[net] = {}
         if iface not in r[net]:
