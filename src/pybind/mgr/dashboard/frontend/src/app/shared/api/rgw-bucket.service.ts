@@ -2,8 +2,9 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
-import { of as observableOf } from 'rxjs';
-import { catchError, mapTo } from 'rxjs/operators';
+import { BehaviorSubject, of as observableOf } from 'rxjs';
+import { catchError, map, mapTo } from 'rxjs/operators';
+import { Bucket } from '~/app/ceph/rgw/models/rgw-bucket';
 
 import { ApiClient } from '~/app/shared/api/api-client';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
@@ -15,9 +16,63 @@ import { cdEncode } from '~/app/shared/decorators/cd-encode';
 })
 export class RgwBucketService extends ApiClient {
   private url = 'api/rgw/bucket';
+  private bucketsSubject = new BehaviorSubject<Bucket[]>([]);
+  private totalNumObjectsSubject = new BehaviorSubject<number>(0);
+  private totalUsedCapacitySubject = new BehaviorSubject<number>(0);
+  private averageObjectSizeSubject = new BehaviorSubject<number>(0);
+  buckets$ = this.bucketsSubject.asObservable();
+  totalNumObjects$ = this.totalNumObjectsSubject.asObservable();
+  totalUsedCapacity$ = this.totalUsedCapacitySubject.asObservable();
+  averageObjectSize$ = this.averageObjectSizeSubject.asObservable();
 
   constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {
     super();
+  }
+
+  fetchAndTransformBuckets() {
+    return this.list(true).pipe(
+      map((buckets: Bucket[]) => {
+        let totalNumObjects = 0;
+        let totalUsedCapacity = 0;
+        let averageObjectSize = 0;
+        const transformedBuckets = buckets.map((bucket) => this.transformBucket(bucket));
+        transformedBuckets.forEach((bucket) => {
+          totalNumObjects += bucket?.num_objects || 0;
+          totalUsedCapacity += bucket?.bucket_size || 0;
+        });
+        averageObjectSize = this.calculateAverageObjectSize(totalNumObjects, totalUsedCapacity);
+        this.bucketsSubject.next(transformedBuckets);
+        this.totalNumObjectsSubject.next(totalNumObjects);
+        this.totalUsedCapacitySubject.next(totalUsedCapacity);
+        this.averageObjectSizeSubject.next(averageObjectSize);
+      })
+    );
+  }
+
+  transformBucket(bucket: Bucket) {
+    const maxBucketSize = bucket?.bucket_quota?.max_size ?? 0;
+    const maxBucketObjects = bucket?.bucket_quota?.max_objects ?? 0;
+    const bucket_size = bucket['usage']?.['rgw.main']?.['size_actual'] || 0;
+    const num_objects = bucket['usage']?.['rgw.main']?.['num_objects'] || 0;
+    return {
+      ...bucket,
+      bucket_size,
+      num_objects,
+      size_usage: this.calculateSizeUsage(bucket_size, maxBucketSize),
+      object_usage: this.calculateObjectUsage(num_objects, maxBucketObjects)
+    };
+  }
+
+  calculateSizeUsage(bucket_size: number, maxBucketSize: number) {
+    return maxBucketSize > 0 ? bucket_size / maxBucketSize : undefined;
+  }
+
+  calculateObjectUsage(num_objects: number, maxBucketObjects: number) {
+    return maxBucketObjects > 0 ? num_objects / maxBucketObjects : undefined;
+  }
+
+  calculateAverageObjectSize(totalNumObjects: number, totalUsedCapacity: number) {
+    return totalNumObjects > 0 ? totalUsedCapacity / totalNumObjects : 0;
   }
 
   /**
