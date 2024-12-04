@@ -1,0 +1,8 @@
+@use '@carbon/type';
+::ng-deep .cds--accordion__content {
+  padding-inline-end: 0;
+}
+
+.custom-control-label {
+  @include type.type-scale(3);
+}

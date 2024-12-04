@@ -20,9 +20,9 @@
                    type="text"
                    formControlName="user_id"
                    [readonly]="editing">
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('user_id', frm, 'required')"
-                    i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="userForm.showError('user_id', frm, 'required')"
+                  i18n>This field is required.</span>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('user_id', frm, 'pattern')"
                   i18n>The value is not valid.</span>
@@ -32,22 +32,22 @@
           </div>
         </div>
 
-          <!-- Show Tenant -->
-          <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="show_tenant"
-                       type="checkbox"
-                       (click)="updateFieldsWhenTenanted()"
-                       formControlName="show_tenant"
-                       [readonly]="true">
-                <label class="custom-control-label"
-                       for="show_tenant"
-                       i18n>Show Tenant</label>
-              </div>
+        <!-- Show Tenant -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="show_tenant"
+                     type="checkbox"
+                     (click)="updateFieldsWhenTenanted()"
+                     formControlName="show_tenant"
+                     [readonly]="true">
+              <label class="custom-control-label spacing-03"
+                     for="show_tenant"
+                     i18n>Show Tenant</label>
             </div>
           </div>
+        </div>
 
         <!-- Tenant -->
         <div class="form-group row"
@@ -67,7 +67,8 @@
                   i18n>The value is not valid.</span>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('tenant', frm, 'notUnique')"
-                  i18n>The chosen user ID exists in this tenant.</span>
+                  i18n>The chosen user
+              ID exists in this tenant.</span>
           </div>
         </div>
 
@@ -156,7 +157,7 @@
                      id="suspended"
                      type="checkbox"
                      formControlName="suspended">
-              <label class="custom-control-label"
+              <label class="custom-control-label spacing-03"
                      for="suspended"
                      i18n>Suspended</label>
               <cd-helper i18n>Suspending the user disables the user and subuser.</cd-helper>
@@ -172,10 +173,11 @@
                      id="system"
                      type="checkbox"
                      formControlName="system">
-              <label class="custom-control-label"
+              <label class="custom-control-label spacing-03"
                      for="system"
                      i18n>System user</label>
-              <cd-helper i18n>System users are distinct from regular users, they are used by the RGW service to perform administrative tasks, manage buckets and objects</cd-helper>
+              <cd-helper i18n>System users are distinct from regular users, they are used by the RGW service to perform
+                administrative tasks, manage buckets and objects</cd-helper>
             </div>
           </div>
         </div>
@@ -192,7 +194,7 @@
                        id="generate_key"
                        type="checkbox"
                        formControlName="generate_key">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="generate_key"
                        i18n>Auto-generate key</label>
               </div>
@@ -245,7 +247,8 @@
               </div>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('secret_key', frm, 'required')"
-                    i18n>This field is required.</span>
+                    i18n>This field
+                is required.</span>
             </div>
           </div>
         </fieldset>
@@ -478,7 +481,7 @@
                        id="user_quota_enabled"
                        type="checkbox"
                        formControlName="user_quota_enabled">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="user_quota_enabled"
                        i18n>Enabled</label>
               </div>
@@ -494,7 +497,7 @@
                        id="user_quota_max_size_unlimited"
                        type="checkbox"
                        formControlName="user_quota_max_size_unlimited">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="user_quota_max_size_unlimited"
                        i18n>Unlimited size</label>
               </div>
@@ -534,9 +537,10 @@
                        id="user_quota_max_objects_unlimited"
                        type="checkbox"
                        formControlName="user_quota_max_objects_unlimited">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="user_quota_max_objects_unlimited"
-                       i18n>Unlimited objects</label>
+                       i18n>Unlimited
+                  objects</label>
               </div>
             </div>
           </div>
@@ -558,7 +562,8 @@
                     i18n>This field is required.</span>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('user_quota_max_objects', frm, 'min')"
-                    i18n>The entered value must be >= 0.</span>
+                    i18n>The
+                entered value must be >= 0.</span>
             </div>
           </div>
         </fieldset>
@@ -575,7 +580,7 @@
                        id="bucket_quota_enabled"
                        type="checkbox"
                        formControlName="bucket_quota_enabled">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="bucket_quota_enabled"
                        i18n>Enabled</label>
               </div>
@@ -591,7 +596,7 @@
                        id="bucket_quota_max_size_unlimited"
                        type="checkbox"
                        formControlName="bucket_quota_max_size_unlimited">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="bucket_quota_max_size_unlimited"
                        i18n>Unlimited size</label>
               </div>
@@ -631,7 +636,7 @@
                        id="bucket_quota_max_objects_unlimited"
                        type="checkbox"
                        formControlName="bucket_quota_max_objects_unlimited">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="bucket_quota_max_objects_unlimited"
                        i18n>Unlimited objects</label>
               </div>
@@ -659,6 +664,187 @@
             </div>
           </div>
         </fieldset>
+
+
+      <!-- Advanced Section -->
+      <cd-form-advanced-fieldset>
+        <!-- Features -->
+
+        <!-- User Rate Limit -->
+        <fieldset>
+          <legend i18n>User Rate Limit</legend>
+
+
+          <!-- Enabled -->
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="user_rate_limit_enabled"
+                       type="checkbox"
+                       formControlName="user_rate_limit_enabled">
+                <label class="custom-control-label spacing-03"
+                       for="user_rate_limit_enabled"
+                       i18n>Enabled</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Unlimited size -->
+          <div class="form-group row"
+               *ngIf="userForm.controls.user_rate_limit_enabled.value">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="user_rate_limit_max_readOps_unlimited"
+                       type="checkbox"
+                       formControlName="user_rate_limit_max_readOps_unlimited">
+                <label class="custom-control-label spacing-03"
+                       for="user_rate_limit_max_readOps_unlimited"
+                       i18n>Unlimited Read Ops</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Maximum size -->
+          <div class="form-group row"
+               *ngIf="userForm.controls.user_rate_limit_enabled.value && !userForm.getValue('user_rate_limit_max_readOps_unlimited')">
+            <label class="cd-col-form-label required"
+                   for="user_rate_limit_max_readOps"
+                   i18n>Max. Read Ops</label>
+            <div class="cd-col-form-input">
+              <input id="user_rate_limit_max_readOps"
+                     class="form-control"
+                     type="text"
+                     formControlName="user_rate_limit_max_readOps"
+                     cdDimlessBinary>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('user_rate_limit_max_readOps', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('user_rate_limit_max_readOps', frm, 'quotaMaxSize')"
+                    i18n>The value is not valid.</span>
+              <span *ngIf="userForm.showError('user_rate_limit_max_readOps', formDir, 'pattern')"
+                    class="invalid-feedback"
+                    i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
+            </div>
+          </div>
+
+          <!-- Unlimited Write Ops -->
+          <div class="form-group row"
+               *ngIf="userForm.controls.user_rate_limit_enabled.value">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="user_rate_limit_max_writeOps_unlimited"
+                       type="checkbox"
+                       formControlName="user_rate_limit_max_writeOps_unlimited">
+                <label class="custom-control-label spacing-03"
+                       for="user_rate_limit_max_writeOps_unlimited"
+                       i18n>Unlimited Write Ops</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Maximum Write Ops -->
+          <div class="form-group row"
+               *ngIf="userForm.controls.user_rate_limit_enabled.value && !userForm.getValue('user_rate_limit_max_writeOps_unlimited')">
+            <label class="cd-col-form-label required"
+                   for="user_rate_limit_max_writeOps"
+                   i18n>Max. Write Ops</label>
+            <div class="cd-col-form-input">
+              <input id="user_rate_limit_max_writeOps"
+                     class="form-control"
+                     type="number"
+                     formControlName="user_rate_limit_max_writeOps"
+                     min="0">
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('user_rate_limit_max_writeOps', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('user_rate_limit_max_writeOps', frm, 'min')"
+                    i18n>The entered value must be >= 0.</span>
+            </div>
+          </div>
+
+
+          <!-- Unlimited Read Bytes -->
+          <div class="form-group row"
+               *ngIf="userForm.controls.user_rate_limit_enabled.value">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="user_rate_limit_max_readBytes_unlimited"
+                       type="checkbox"
+                       formControlName="user_rate_limit_max_readBytes_unlimited">
+                <label class="custom-control-label spacing-03"
+                       for="user_rate_limit_max_readBytes_unlimited"
+                       i18n>Unlimited Read Bytes</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Maximum Read Bytes -->
+          <div class="form-group row"
+               *ngIf="userForm.controls.user_rate_limit_enabled.value && !userForm.getValue('user_rate_limit_max_readBytes_unlimited')">
+            <label class="cd-col-form-label required"
+                   for="user_rate_limit_max_readBytes"
+                   i18n>Max. Read Bytes</label>
+            <div class="cd-col-form-input">
+              <input id="user_rate_limit_max_readBytes"
+                     class="form-control"
+                     type="number"
+                     formControlName="user_rate_limit_max_readBytes"
+                     min="0">
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('user_rate_limit_max_readBytes', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('user_rate_limit_max_readBytes', frm, 'min')"
+                    i18n>The entered value must be >= 0.</span>
+            </div>
+          </div>
+
+
+          <!-- Unlimited Write Bytes -->
+          <div class="form-group row"
+               *ngIf="userForm.controls.user_rate_limit_enabled.value">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="user_rate_limit_max_writeBytes_unlimited"
+                       type="checkbox"
+                       formControlName="user_rate_limit_max_writeBytes_unlimited">
+                <label class="custom-control-label spacing-03"
+                       for="user_rate_limit_max_writeBytes_unlimited"
+                       i18n>Unlimited Write Bytes</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Maximum Write Bytes -->
+            <div class="form-group row"
+                 *ngIf="userForm.controls.user_rate_limit_enabled.value && !userForm.getValue('user_rate_limit_max_writeBytes_unlimited')">
+              <label class="cd-col-form-label required"
+                     for="user_rate_limit_max_writeBytes"
+                     i18n>Max. Write Bytes</label>
+              <div class="cd-col-form-input">
+              <input id="user_rate_limit_max_writeBytes"
+                     class="form-control"
+                     type="number"
+                     formControlName="user_rate_limit_max_writeBytes"
+                     min="0">
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('user_rate_limit_max_writeBytes', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('user_rate_limit_max_writeBytes', frm, 'min')"
+                    i18n>The entered value must be >= 0.</span>
+            </div>
+          </div>
+
+        </fieldset>
+      </cd-form-advanced-fieldset>
       </div>
 
       <div class="card-footer">
