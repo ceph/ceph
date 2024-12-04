@@ -424,7 +424,7 @@ SegmentedJournal::submit_record(
   ).get_encoded_length();
   auto max_record_length = journal_segment_allocator.get_max_write_length();
   if (expected_size > max_record_length) {
-    ERROR("H{} {} exceeds max record size {}",
+    ERROR("H{} {} exceeds max record size 0x{:x}",
           (void*)&handle, record, max_record_length);
     return crimson::ct_error::erange::make();
   }

@@ -236,9 +236,9 @@ struct io_usage_t {
   cleaner_usage_t cleaner_usage;
   friend std::ostream &operator<<(std::ostream &out, const io_usage_t &usage) {
     return out << "io_usage_t("
-               << "inline_usage=" << usage.inline_usage
-               << ", main_cleaner_usage=" << usage.cleaner_usage.main_usage
-               << ", cold_cleaner_usage=" << usage.cleaner_usage.cold_ool_usage
+               << "inline_usage=0x" << std::hex << usage.inline_usage
+               << ", main_cleaner_usage=0x" << usage.cleaner_usage.main_usage
+               << ", cold_cleaner_usage=0x" << usage.cleaner_usage.cold_ool_usage << std::dec
                << ")";
   }
 };
@@ -424,7 +424,7 @@ public:
                         : ext.start + (ext.len - left);
           allocs.emplace_back(alloc_result_t{start, std::move(bp), gen});
           SUBDEBUGT(seastore_epm,
-                    "allocated {} {}B extent at {}, hint={}, gen={}",
+                    "allocated {} 0x{:x}B extent at {}, hint={}, gen={}",
                     t, type, len, start, hint, gen);
           left -= len;
         }

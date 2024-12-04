@@ -1618,8 +1618,8 @@ struct delta_info_t {
   extent_types_t type = extent_types_t::NONE;  ///< delta type
   paddr_t paddr;                               ///< physical address
   laddr_t laddr = L_ADDR_NULL;                 ///< logical address
-  uint32_t prev_crc = 0;
-  uint32_t final_crc = 0;
+  checksum_t prev_crc = 0;
+  checksum_t final_crc = 0;
   extent_len_t length = 0;                     ///< extent length
   extent_version_t pversion;                   ///< prior version
   segment_seq_t ext_seq;		       ///< seq of the extent's segment

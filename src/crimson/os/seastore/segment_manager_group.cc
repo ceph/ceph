@@ -26,13 +26,13 @@ SegmentManagerGroup::read_segment_tail(segment_id_t segment)
     }
   ).safe_then([=, &segment_manager](bufferptr bptr) -> read_segment_tail_ret {
     LOG_PREFIX(SegmentManagerGroup::read_segment_tail);
-    DEBUG("segment {} bptr size {}", segment, bptr.length());
+    DEBUG("segment {} bptr size 0x{:x}", segment, bptr.length());
 
     segment_tail_t tail;
     bufferlist bl;
     bl.push_back(bptr);
 
-    DEBUG("segment {} block crc {}",
+    DEBUG("segment {} block crc 0x{:x}",
           segment,
           bl.begin().crc32c(segment_manager.get_block_size(), 0));
 
@@ -66,13 +66,13 @@ SegmentManagerGroup::read_segment_header(segment_id_t segment)
     }
   ).safe_then([=, &segment_manager](bufferptr bptr) -> read_segment_header_ret {
     LOG_PREFIX(SegmentManagerGroup::read_segment_header);
-    DEBUG("segment {} bptr size {}", segment, bptr.length());
+    DEBUG("segment {} bptr size 0x{:x}", segment, bptr.length());
 
     segment_header_t header;
     bufferlist bl;
     bl.push_back(bptr);
 
-    DEBUG("segment {} block crc {}",
+    DEBUG("segment {} block crc 0x{:x}",
           segment,
           bl.begin().crc32c(segment_manager.get_block_size(), 0));
 
@@ -111,7 +111,7 @@ SegmentManagerGroup::read(paddr_t start, size_t len)
   LOG_PREFIX(SegmentManagerGroup::read);
   assert(has_device(start.get_device_id()));
   auto& segment_manager = *segment_managers[start.get_device_id()];
-  TRACE("reading data {}~{}", start, len);
+  TRACE("reading data {}~0x{:x}", start, len);
   return segment_manager.read(
     start,
     len 

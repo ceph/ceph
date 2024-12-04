@@ -12,7 +12,7 @@ namespace crimson::os::seastore {
 std::ostream& operator<<(std::ostream& out, const device_spec_t& ds)
 {
   return out << "device_spec("
-             << "magic=" << ds.magic
+             << "magic=0x" << std::hex << ds.magic << std::dec
              << ", dtype=" << ds.dtype
              << ", " << device_id_printer_t{ds.id}
              << ")";
