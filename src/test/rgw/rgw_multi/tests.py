@@ -1792,21 +1792,11 @@ def test_bucket_log_trim_after_delete_bucket():
     # create a 'test' bucket
     test_bucket = make_test_bucket()
 
-    # checking bucket layout before resharding
-    json_obj_1 = bucket_layout(secondary.zone, test_bucket.name)
-
-    first_gen = json_obj_1['layout']['current_index']['gen']
-
-    before_reshard_bilog = bilog_list(secondary.zone, test_bucket.name, ['--gen', str(first_gen)])
-
     # Resharding the bucket
     secondary.zone.cluster.admin(['bucket', 'reshard',
         '--bucket', test_bucket.name,
         '--num-shards', '13',
         '--yes-i-really-mean-it'])
-
-    # check bucket layout after 1st resharding
-    json_obj_2 = bucket_layout(secondary.zone, test_bucket.name)
 
     # Delete the objects
     for obj in ('a', 'b', 'c', 'd'):
@@ -1815,20 +1805,22 @@ def test_bucket_log_trim_after_delete_bucket():
         cmd += ['--object', obj]
         primary.zone.cluster.admin(cmd)
 
-    zonegroup_bucket_checkpoint(zonegroup_conns, test_bucket.name)
 
     # delete bucket and test bilog autotrim
     primary.conn.delete_bucket(test_bucket.name)
 
+    zonegroup_data_checkpoint(zonegroup_conns)
     zonegroup_meta_checkpoint(zonegroup)
 
     # run bilog trim twice to clean up previous gen
     bilog_autotrim(secondary.zone)
-
-    bilog_autotrim(secondary.zone)
+    time.sleep(config.checkpoint_delay)
 
     # trim bilog on primary
     bilog_autotrim(primary.zone)
+    time.sleep(config.checkpoint_delay)
+    
+    bilog_autotrim(secondary.zone)
 
     # verify the bucket instance has been removed on both zones
     assert check_bucket_instance_metadata(secondary.zone, test_bucket.name)
@@ -1856,21 +1848,10 @@ def test_bucket_log_trim_after_delete_bucket_primary_reshard():
     # create a 'test' bucket
     test_bucket = make_test_bucket()
 
-    # checking bucket layout before resharding
-    json_obj_1 = bucket_layout(primary.zone, test_bucket.name)
-
-    first_gen = json_obj_1['layout']['current_index']['gen']
-
-    before_reshard_bilog = bilog_list(primary.zone, test_bucket.name, ['--gen', str(first_gen)])
-
     # Resharding the bucket
     primary.zone.cluster.admin(['bucket', 'reshard',
         '--bucket', test_bucket.name,
-        '--num-shards', '13',
-        '--yes-i-really-mean-it'])
-
-    # check bucket layout after 1st resharding
-    json_obj_2 = bucket_layout(primary.zone, test_bucket.name)
+        '--num-shards', '13'])
 
     # Delete the objects
     for obj in ('a', 'b', 'c', 'd'):
@@ -1879,21 +1860,23 @@ def test_bucket_log_trim_after_delete_bucket_primary_reshard():
         cmd += ['--object', obj]
         primary.zone.cluster.admin(cmd)
 
-    zonegroup_bucket_checkpoint(zonegroup_conns, test_bucket.name)
-
     # delete bucket and test bilog autotrim
     primary.conn.delete_bucket(test_bucket.name)
 
+    zonegroup_data_checkpoint(zonegroup_conns)
     zonegroup_meta_checkpoint(zonegroup)
 
     # run bilog trim twice to clean up previous gen
     bilog_autotrim(primary.zone)
-
+    time.sleep(config.checkpoint_delay)
+    
     bilog_autotrim(primary.zone)
 
     # trim bilog on secondary
     bilog_autotrim(secondary.zone)
+    time.sleep(config.checkpoint_delay)
 
+    bilog_autotrim(primary.zone)
     # verify the bucket instance has been removed on both zones
     assert check_bucket_instance_metadata(primary.zone, test_bucket.name)
     assert check_bucket_instance_metadata(secondary.zone, test_bucket.name)
