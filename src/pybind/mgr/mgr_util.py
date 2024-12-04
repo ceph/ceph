@@ -631,19 +631,8 @@ def create_self_signed_cert(organisation: str = 'Ceph',
 
     """
 
-    from OpenSSL import crypto
-    from uuid import uuid4
-
     # RDN = Relative Distinguished Name
     valid_RDN_list = ['C', 'ST', 'L', 'O', 'OU', 'CN', 'emailAddress']
-
-    # create a key pair
-    pkey = crypto.PKey()
-    pkey.generate_key(crypto.TYPE_RSA, 2048)
-
-    # Create a "subject" object
-    req = crypto.X509Req()
-    subj = req.get_subject()
 
     if dname:
         # dname received, so check it contains valid RDNs
@@ -652,42 +641,78 @@ def create_self_signed_cert(organisation: str = 'Ceph',
     else:
         dname = {"O": organisation, "CN": common_name}
 
-    # populate the subject with the dname settings
-    for k, v in dname.items():
-        setattr(subj, k, v)
+    __create_self_signed_cert = """from OpenSSL import crypto
+from uuid import uuid4
 
-    # create a self-signed cert
-    cert = crypto.X509()
-    cert.set_subject(req.get_subject())
-    cert.set_serial_number(int(uuid4()))
-    cert.gmtime_adj_notBefore(0)
-    cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)  # 10 years
-    cert.set_issuer(cert.get_subject())
-    cert.set_pubkey(pkey)
-    cert.sign(pkey, 'sha512')
+dname = {}
 
-    cert = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
-    pkey = crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey)
+# create a key pair
+pkey = crypto.PKey()
+pkey.generate_key(crypto.TYPE_RSA, 2048)
 
-    return cert.decode('utf-8'), pkey.decode('utf-8')
+# Create a "subject" object
+req = crypto.X509Req()
+subj = req.get_subject()
+
+# populate the subject with the dname settings
+for k, v in dname.items():
+    setattr(subj, k, v)
+
+# create a self-signed cert
+cert = crypto.X509()
+cert.set_subject(req.get_subject())
+cert.set_serial_number(int(uuid4()))
+cert.gmtime_adj_notBefore(0)
+cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)  # 10 years
+cert.set_issuer(cert.get_subject())
+cert.set_pubkey(pkey)
+cert.sign(pkey, 'sha512')
+
+print(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+print("######")
+print(crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey))""".format(dname)
+
+    import subprocess
+    result = subprocess.run(["/usr/bin/python3", "-c", __create_self_signed_cert], capture_output=True, text=True)
+
+    # Check result with a CompletedProcess
+    if result.returncode != 0 or result.stderr != '':
+        raise ValueError(result.stderr)
+
+    cert, pkey = result.stdout.split("######")
+
+    return eval(cert).decode('utf-8'), eval(pkey).decode('utf-8')
 
 
 def verify_cacrt_content(crt):
     # type: (str) -> None
-    from OpenSSL import crypto
+
     try:
-        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
-        x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
-        if x509.has_expired():
-            org, cn = get_cert_issuer_info(crt)
-            no_after = x509.get_notAfter()
-            end_date = None
-            if no_after is not None:
-                end_date = datetime.datetime.strptime(no_after.decode('ascii'), '%Y%m%d%H%M%SZ')
-            msg = f'Certificate issued by "{org}/{cn}" expired on {end_date}'
-            logger.warning(msg)
-            raise ServerConfigException(msg)
-    except (ValueError, crypto.Error) as e:
+        _verify_cacrt_content = """
+from OpenSSL import crypto
+import base64
+
+crt = base64.b64decode("{}").decode("ascii")
+
+crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
+if x509.has_expired():
+    org, cn = get_cert_issuer_info(crt)
+    no_after = x509.get_notAfter()
+    end_date = None
+    if no_after is not None:
+        end_date = datetime.datetime.strptime(no_after.decode('ascii'), '%Y%m%d%H%M%SZ')
+        msg = 'Certificate issued by "%s/%s" expired on %s' % (org,cn,end_date)
+        print(msg)""".format(base64.b64encode(crt.encode('ascii')).decode("ascii"))
+
+        import subprocess
+        result = subprocess.run(["/usr/bin/python3", "-c", _verify_cacrt_content], capture_output=True, text=True)
+
+        # Check result of CompletedProcess
+        if result.returncode != 0 or result.stdout != "":
+            logger.warning(result.stdout)
+            raise ValueError(result.stdout)
+    except (ValueError) as e:
         raise ServerConfigException(f'Invalid certificate: {e}')
 
 
@@ -731,30 +756,49 @@ def verify_tls(crt, key):
     # type: (str, str) -> None
     verify_cacrt_content(crt)
 
-    from OpenSSL import crypto, SSL
     try:
-        _key = crypto.load_privatekey(crypto.FILETYPE_PEM, key)
-        _key.check()
-    except (ValueError, crypto.Error) as e:
-        raise ServerConfigException(
-            'Invalid private key: {}'.format(str(e)))
-    try:
-        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
-        _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
-    except ValueError as e:
-        raise ServerConfigException(
-            'Invalid certificate key: {}'.format(str(e))
+        __verify_tls = """
+from OpenSSL import crypto, SSL
+import base64
+
+crt = base64.b64decode("{}").decode("ascii")
+key = base64.b64decode("{}").decode("ascii")
+
+try:
+    _key = crypto.load_privatekey(crypto.FILETYPE_PEM, key)
+    _key.check()
+except (ValueError, crypto.Error) as e:
+    print('Invalid private key: %s' % str(e))
+try:
+    crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+    _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
+except ValueError as e:
+    print('Invalid certificate key: %s' % str(e))
+
+try:
+    context = SSL.Context(SSL.TLSv1_METHOD)
+    context.use_certificate(_crt)
+    context.use_privatekey(_key)
+    context.check_privatekey()
+except crypto.Error as e:
+    print('Private key and certificate do not match up: %s' % str(e))
+except SSL.Error as e:
+    print(f'Invalid cert/key pair: %s' % e)""".format(
+            base64.b64encode(crt.encode('ascii')).decode("ascii"),
+            base64.b64encode(key.encode('ascii')).decode("ascii")
         )
 
-    try:
-        context = SSL.Context(SSL.TLSv1_METHOD)
-        context.use_certificate(_crt)
-        context.use_privatekey(_key)
-        context.check_privatekey()
-    except crypto.Error as e:
-        logger.warning('Private key and certificate do not match up: {}'.format(str(e)))
-    except SSL.Error as e:
-        raise ServerConfigException(f'Invalid cert/key pair: {e}')
+        # print(__verify_tls)
+
+        import subprocess
+        result = subprocess.run(["/usr/bin/python3", "-c", __verify_tls], capture_output=True, text=True)
+
+        # Check result of CompletedProcess
+        if result.returncode != 0 or result.stdout != "":
+            logger.warning(result.stdout)
+            raise ServerConfigException(result.stdout)
+    except (ServerConfigException) as e:
+        raise ServerConfigException(f'Invalid certificate: {e}')
 
 
 def verify_tls_files(cert_fname, pkey_fname):
@@ -782,24 +826,14 @@ def verify_tls_files(cert_fname, pkey_fname):
     if not os.path.isfile(pkey_fname):
         raise ServerConfigException('private key %s does not exist' % pkey_fname)
 
-    from OpenSSL import crypto, SSL
+    if not os.path.isfile(cert_fname):
+        raise ServerConfigException('certificate %s does not exist' % cert_fname)
 
     try:
-        with open(pkey_fname) as f:
-            pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read())
-            pkey.check()
-    except (ValueError, crypto.Error) as e:
-        raise ServerConfigException(
-            'Invalid private key {}: {}'.format(pkey_fname, str(e)))
-    try:
-        context = SSL.Context(SSL.TLSv1_METHOD)
-        context.use_certificate_file(cert_fname, crypto.FILETYPE_PEM)
-        context.use_privatekey_file(pkey_fname, crypto.FILETYPE_PEM)
-        context.check_privatekey()
-    except crypto.Error as e:
-        logger.warning(
-            'Private key {} and certificate {} do not match up: {}'.format(
-                pkey_fname, cert_fname, str(e)))
+        with open(pkey_fname) as key_file, open(cert_fname) as cert_file:
+            verify_tls(cert_file.read(), key_file.read())
+    except (ServerConfigException) as e:
+        raise ServerConfigException({e})
 
 
 def get_most_recent_rate(rates: Optional[List[Tuple[float, float]]]) -> float:
