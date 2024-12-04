@@ -1428,8 +1428,8 @@ resolution, see :ref:`storage-capacity` and :ref:`no-free-drive-space`.
 OBJECT_MISPLACED
 ________________
 
-One or more objects in the cluster are not stored on the node that CRUSH would
-prefer that they be stored on. This alert is an indication that data migration
+One or more objects in the cluster are not stored on the node that CRUSH
+prefers that they be stored on. This alert is an indication that data migration
 due to a recent cluster change has not yet completed.
 
 Misplaced data is not a dangerous condition in and of itself; data consistency
@@ -1628,9 +1628,10 @@ Stretch Mode
 INCORRECT_NUM_BUCKETS_STRETCH_MODE
 __________________________________
 
-Stretch mode currently only support 2 dividing buckets with OSDs, this warning suggests
-that the number of dividing buckets is not equal to 2 after stretch mode is enabled.
-You can expect unpredictable failures and MON assertions until the condition is fixed.
+Stretch mode currently only support 2 dividing buckets with OSDs, this warning
+suggests that the number of dividing buckets is not equal to 2 after stretch
+mode is enabled.  You can expect unpredictable failures and MON assertions
+until the condition is fixed.
 
 We encourage you to fix this by removing additional dividing buckets or bump the
 number of dividing buckets to 2.
@@ -1653,17 +1654,19 @@ NVMeoF Gateway
 NVMEOF_SINGLE_GATEWAY
 _____________________
 
-One of the gateway group has only one gateway. This is not ideal because it makes
-high availability (HA) impossible with a single gatway in a group. This can lead to 
-problems with failover and failback operations for the NVMeoF gateway.
+One of the gateway group has only one gateway. This is not ideal because it
+makes high availability (HA) impossible with a single gatway in a group. This
+can lead to problems with failover and failback operations for the NVMeoF
+gateway.
 
 It's recommended to have multiple NVMeoF gateways in a group.
 
 NVMEOF_GATEWAY_DOWN
 ___________________
 
-Some of the gateways are in the GW_UNAVAILABLE state. If a NVMeoF daemon has crashed, 
-the daemon log file (found at ``/var/log/ceph/``) may contain troubleshooting information.
+Some of the gateways are in the GW_UNAVAILABLE state. If a NVMeoF daemon has
+crashed, the daemon log file (found at ``/var/log/ceph/``) may contain
+troubleshooting information.
 
 
 Miscellaneous
