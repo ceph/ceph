@@ -447,7 +447,8 @@ int PeerReplayer::try_lock_directory(const std::string &dir_root,
            << dendl;
     }
 
-    if (ceph_close(m_remote_mount, fd) < 0) {
+    r = ceph_close(m_remote_mount, fd);
+    if (r < 0) {
       derr << ": failed to close (cleanup) remote dir_root=" << dir_root << ": "
            << cpp_strerror(r) << dendl;
     }
