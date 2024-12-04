@@ -1752,7 +1752,8 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       mut->add_cow_dentry(olddn);
     } else {
       ceph_assert(dnl->is_remote() || dnl->is_referent());
-      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), dnl->get_referent_ino(), dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
+      //No need to journal referent inode for cow
+      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), 0, dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
 
       olddn->set_projected_version(dir->get_projected_version());

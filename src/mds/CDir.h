@@ -388,7 +388,7 @@ public:
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
   void link_remote_inode( CDentry *dn, CInode *in );
   void link_primary_inode( CDentry *dn, CInode *in );
-  void set_referent_inode(CDentry *dn, CInode *ref_in);
+  void set_referent_inode(CDentry *dn, CInode *ref_in, bool link_referent_inode=true);
   void link_referent_inode(CDentry *dn, CInode *in, inodeno_t ino, inodeno_t referent_ino, unsigned char d_type);
   void unlink_inode(CDentry *dn, bool adjust_lru=true);
   void try_remove_unlinked_dn(CDentry *dn);

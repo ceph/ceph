@@ -111,6 +111,20 @@ ostream& operator<<(ostream& out, const CDentry& dn)
      }
   }
 
+  {
+    out << " remote_ino=";
+    out << dn.get_linkage()->get_remote_ino();
+    const CInode *ref_inode = dn.get_linkage()->get_referent_inode();
+    out << " ref_inode=";
+     if (ref_inode) {
+       out << ref_inode;
+     } else {
+       out << "(nil)";
+     }
+    out << " ref_ino=";
+    out << dn.get_linkage()->get_referent_ino();
+  }
+
   out << " state=" << dn.get_state();
   if (dn.is_new()) out << "|new";
   if (dn.state_test(CDentry::STATE_BOTTOMLRU)) out << "|bottomlru";
