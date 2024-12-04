@@ -14313,6 +14313,43 @@ paths:
       tags:
       - SMB
   /api/smb/cluster/{cluster_id}:
+    delete:
+      description: "\n        Remove an smb cluster\n\n        :param cluster_id:\
+        \ Cluster identifier\n        :return: None.\n        "
+      parameters:
+      - description: Unique identifier for the cluster
+        in: path
+        name: cluster_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties: {}
+                type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Remove an smb cluster
+      tags:
+      - SMB
     get:
       description: "\n        Get an smb cluster by cluster id\n        "
       parameters:
