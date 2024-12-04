@@ -639,9 +639,10 @@ command:
 BLUESTORE_FRAGMENTATION
 _______________________
 
-As BlueStore operates, the free space on the underlying storage will become
-fragmented.  This is normal and unavoidable, but excessive fragmentation causes
-slowdown.  To inspect BlueStore fragmentation, run the following command:
+``BLUESTORE_FRAGMENTATION`` indicates that the free space that underlies
+BlueStore has become fragmented. This is normal and unavoidable, but excessive
+fragmentation causes slowdown. To inspect BlueStore fragmentation, run the
+following command:
 
 .. prompt:: bash $
 
@@ -680,11 +681,9 @@ One or more OSDs have BlueStore volumes that were created prior to the
 Nautilus release. (In Nautilus, BlueStore tracks its internal usage
 statistics on a granular, per-pool basis.)
 
-If *all* OSDs
-are older than Nautilus, this means that the per-pool metrics are
-simply unavailable. But if there is a mixture of pre-Nautilus and
-post-Nautilus OSDs, the cluster usage statistics reported by ``ceph
-df`` will be inaccurate.
+If *all* OSDs are older than Nautilus, this means that the per-pool metrics are
+simply unavailable. But if there is a mixture of pre-Nautilus and post-Nautilus
+OSDs, the cluster usage statistics reported by ``ceph df`` will be inaccurate.
 
 The old OSDs can be updated to use the new usage-tracking scheme by stopping
 each OSD, running a repair operation, and then restarting the OSD. For example,
@@ -796,7 +795,7 @@ about the source of the problem.
 BLUESTORE_SPURIOUS_READ_ERRORS
 ______________________________
 
-One or more BlueStore OSDs detect read errors on the main device.
+One (or more) BlueStore OSDs detects read errors on the main device.
 BlueStore has recovered from these errors by retrying disk reads.  This alert
 might indicate issues with underlying hardware, issues with the I/O subsystem,
 or something similar.  Such issues can cause permanent data
@@ -824,7 +823,7 @@ _______________________________
 
 There are BlueStore log messages that reveal storage drive issues 
 that can cause performance degradation and potentially data unavailability or
-loss.  These may indicate a storage drive that is failing and should be
+loss. These may indicate a storage drive that is failing and should be
 evaluated and possibly removed and replaced.
 
 ``read stalled read 0x29f40370000~100000 (buffered) since 63410177.290546s, timeout is 5.000000s``
@@ -851,7 +850,7 @@ To change this, run the following command:
    ceph config set global bdev_stalled_read_warn_lifetime 10
    ceph config set global bdev_stalled_read_warn_threshold 5
 
-this may be done for specific OSDs or a given mask. For example,
+This may be done for specific OSDs or a given mask. For example,
 to apply only to SSD OSDs:
 
 .. prompt:: bash $
@@ -864,30 +863,28 @@ to apply only to SSD OSDs:
 WAL_DEVICE_STALLED_READ_ALERT
 _____________________________
 
-The warning state ``WAL_DEVICE_STALLED_READ_ALERT`` is raised to
-indicate ``stalled read`` instances on a given BlueStore OSD's ``WAL_DEVICE``.
-This warning can be configured via the :confval:`bdev_stalled_read_warn_lifetime` and
-:confval:`bdev_stalled_read_warn_threshold` options with commands similar to those
-described in the
-``BLOCK_DEVICE_STALLED_READ_ALERT`` warning section.
+The warning state ``WAL_DEVICE_STALLED_READ_ALERT`` is raised to indicate
+``stalled read`` instances on a given BlueStore OSD's ``WAL_DEVICE``.  This
+warning can be configured via the :confval:`bdev_stalled_read_warn_lifetime`
+and :confval:`bdev_stalled_read_warn_threshold` options with commands similar
+to those described in the ``BLOCK_DEVICE_STALLED_READ_ALERT`` warning section.
 
 DB_DEVICE_STALLED_READ_ALERT
 ____________________________
 
-The warning state ``DB_DEVICE_STALLED_READ_ALERT`` is raised to
-indicate ``stalled read`` instances on a given BlueStore OSD's ``DB_DEVICE``.
-This warning can be configured via the :confval:`bdev_stalled_read_warn_lifetime` and
-:confval:`bdev_stalled_read_warn_threshold` options with commands similar to those
-described in the
-``BLOCK_DEVICE_STALLED_READ_ALERT`` warning section.
+The warning state ``DB_DEVICE_STALLED_READ_ALERT`` is raised to indicate
+``stalled read`` instances on a given BlueStore OSD's ``DB_DEVICE``.  This
+warning can be configured via the :confval:`bdev_stalled_read_warn_lifetime`
+and :confval:`bdev_stalled_read_warn_threshold` options with commands similar
+to those described in the ``BLOCK_DEVICE_STALLED_READ_ALERT`` warning section.
 
 BLUESTORE_SLOW_OP_ALERT
 _______________________
 
-There are BlueStore log messages that reveal storage drive issues 
-that can lead to performance degradation and data unavailability or loss.
-These indicate that the storage drive may be failing and should be investigated
-and potentially replaced.
+There are BlueStore log messages that reveal storage drive issues that can lead
+to performance degradation and data unavailability or loss. These indicate
+that the storage drive may be failing and should be investigated and
+potentially replaced.
 
 ``log_latency_fn slow operation observed for _txc_committed_kv, latency = 12.028621219s, txc = 0x55a107c30f00``
 ``log_latency_fn slow operation observed for upper_bound, latency = 6.25955s``
@@ -1119,8 +1116,8 @@ LARGE_OMAP_OBJECTS
 __________________
 
 One or more pools contain large omap objects, as determined by
-``osd_deep_scrub_large_omap_object_key_threshold`` (threshold for the number of
-keys to determine what is considered a large omap object) or
+``osd_deep_scrub_large_omap_object_key_threshold`` (the threshold for the
+number of keys to determine what is considered a large omap object) or
 ``osd_deep_scrub_large_omap_object_value_sum_threshold`` (the threshold for the
 summed size in bytes of all key values to determine what is considered a large
 omap object) or both.  To find more information on object name, key count, and
@@ -1140,7 +1137,7 @@ CACHE_POOL_NEAR_FULL
 ____________________
 
 A cache-tier pool is nearly full, as determined by the ``target_max_bytes`` and
-``target_max_objects`` properties of the cache pool. Once the pool reaches the
+``target_max_objects`` properties of the cache pool. When the pool reaches the
 target threshold, write requests to the pool might block while data is flushed
 and evicted from the cache. This state normally leads to very high latencies
 and poor performance.
@@ -1286,10 +1283,10 @@ For more information, see :ref:`choosing-number-of-placement-groups` and
 POOL_TARGET_SIZE_BYTES_OVERCOMMITTED
 ____________________________________
 
-One or more pools have a ``target_size_bytes`` property that is set in order to
-estimate the expected size of the pool, but the value(s) of this property are
-greater than the total available storage (either by themselves or in
-combination with other pools).
+One or more pools does have a ``target_size_bytes`` property that is set in
+order to estimate the expected size of the pool, but the value or values of
+this property are greater than the total available storage (either by
+themselves or in combination with other pools).
 
 This alert is usually an indication that the ``target_size_bytes`` value for
 the pool is too large and should be reduced or set to zero. To reduce the
