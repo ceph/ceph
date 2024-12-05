@@ -147,59 +147,52 @@ WebTokenEngine::is_cert_valid(const vector<string>& thumbprints, const string& c
 
 template <typename T>
 void
-WebTokenEngine::recurse_and_insert(const string& key, const jwt::claim& c, T& t) const
+WebTokenEngine::recurse_and_insert(const string& key, const jwt::basic_claim<traits>& c, T& t) const
 {
   string s_val;
-  jwt::claim::type c_type = c.get_type();
+  auto c_type = c.get_type();
   switch(c_type) {
-    case jwt::claim::type::null:
-      break;
-    case jwt::claim::type::boolean:
-    case jwt::claim::type::number:
-    case jwt::claim::type::int64:
+    case jwt::json::type::boolean:
+    case jwt::json::type::number:
+    case jwt::json::type::integer:
     {
       s_val = c.to_json().serialize();
       t.emplace(std::make_pair(key, s_val));
       break;
     }
-    case jwt::claim::type::string:
+    case jwt::json::type::string:
     {
       s_val = c.to_json().to_str();
       t.emplace(std::make_pair(key, s_val));
       break;
     }
-    case jwt::claim::type::array:
+    case jwt::json::type::array:
     {
-      const picojson::array& arr = c.as_array();
+      const auto& arr = c.as_array();
       for (auto& a : arr) {
-        recurse_and_insert(key, jwt::claim(a), t);
+        recurse_and_insert(key, jwt::basic_claim<traits>(a), t);
       }
       break;
     }
-    case jwt::claim::type::object:
-    {
-      const picojson::object& obj = c.as_object();
-      for (auto& m : obj) {
-        recurse_and_insert(m.first, jwt::claim(m.second), t);
-      }
+    case jwt::json::type::object:
+      // Claims are not nested.
       break;
-    }
   }
   return;
 }
 
 //Extract all token claims so that they can be later used in the Condition element of Role's trust policy
 WebTokenEngine::token_t
-WebTokenEngine::get_token_claims(const jwt::decoded_jwt& decoded) const
+WebTokenEngine::get_token_claims(const jwt::decoded_jwt<traits>& decoded) const
 {
   WebTokenEngine::token_t token;
-  const auto& claims = decoded.get_payload_claims();
+  const auto& claims = decoded.get_payload_json();
 
   for (auto& c : claims) {
     if (c.first == string(princTagsNamespace)) {
       continue;
     }
-    recurse_and_insert(c.first, c.second, token);
+    recurse_and_insert(c.first, jwt::basic_claim<traits>(c.second), token);
   }
   return token;
 }
@@ -249,8 +242,8 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
       throw -EACCES;
     }
     if (decoded.has_payload_claim(string(princTagsNamespace))) {
-      auto& cl = decoded.get_payload_claim(string(princTagsNamespace));
-      if (cl.get_type() == jwt::claim::type::object || cl.get_type() == jwt::claim::type::array) {
+      auto cl = decoded.get_payload_claim(string(princTagsNamespace));
+      if (cl.get_type() == jwt::json::type::object || cl.get_type() == jwt::json::type::array) {
         recurse_and_insert("dummy", cl, principal_tags);
         for (auto it : principal_tags) {
           ldpp_dout(dpp, 5) << "Key: " << it.first << " Value: " << it.second << dendl;
@@ -275,7 +268,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     }
     //Validate signature
     if (decoded.has_algorithm()) {
-      auto& algorithm = decoded.get_algorithm();
+      auto algorithm = decoded.get_algorithm();
       try {
         validate_signature(dpp, decoded, algorithm, iss, provider.thumbprints, y);
       } catch (...) {
@@ -339,7 +332,7 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
 }
 
 void
-WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
+WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt<traits>& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
     string cert_url = get_cert_url(iss, dpp, y);
