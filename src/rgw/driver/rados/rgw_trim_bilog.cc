@@ -589,13 +589,6 @@ class BucketTrimInstanceCR : public RGWCoroutine {
       auto log = clean_info->first.layout.logs.cbegin();
       clean_info->second = *log;
 
-      if (clean_info->first.layout.logs.size() == 1) {
-	ldpp_dout(dpp, -1)
-	  << "Critical error! Attempt to remove only log generation! "
-	  << "log.gen=" << log->gen << ", totrim.gen=" << totrim.gen
-	  << dendl;
-	return -EIO;
-      }
       clean_info->first.layout.logs.erase(log);
     }
     return 0;
