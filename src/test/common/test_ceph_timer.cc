@@ -66,7 +66,7 @@ void run_orderly()
                         });
   }
 
-  EXPECT_LT(first.get(), second.get());
+  EXPECT_LT(first.get().time_since_epoch(), second.get().time_since_epoch());
 }
 
 struct Destructo {
