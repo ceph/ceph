@@ -848,6 +848,9 @@ options:
 - name: osd_op_num_threads_per_shard
   type: int
   level: advanced
+  fmt_desc: The number of worker threads spawned per OSD shard for a given OSD.
+    Each worker thread when operational processes items in the shard queue.
+    This setting overrides _ssd and _hdd if non-zero.
   default: 0
   flags:
   - startup
@@ -855,7 +858,9 @@ options:
 - name: osd_op_num_threads_per_shard_hdd
   type: int
   level: advanced
-  default: 1
+  fmt_desc: The number of worker threads spawned per OSD shard for a given OSD
+    (for rotational media).
+  default: 5
   see_also:
   - osd_op_num_threads_per_shard
   flags:
@@ -864,6 +869,8 @@ options:
 - name: osd_op_num_threads_per_shard_ssd
   type: int
   level: advanced
+  fmt_desc: The number of worker threads spawned per OSD shard for a given OSD
+    (for solid state media).
   default: 2
   see_also:
   - osd_op_num_threads_per_shard
@@ -884,7 +891,7 @@ options:
   type: int
   level: advanced
   fmt_desc: the number of shards allocated for a given OSD (for rotational media).
-  default: 5
+  default: 1
   see_also:
   - osd_op_num_shards
   flags:
