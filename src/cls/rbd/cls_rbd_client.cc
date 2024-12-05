@@ -2538,7 +2538,7 @@ int mirror_image_map_list(
   mirror_image_map_list_start(&op, start_after, max_read);
 
   bufferlist out_bl;
-  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  int r = ioctx->operate(RBD_MIRROR_LEADER, &op, &out_bl);
   if (r < 0) {
     return r;
   }
