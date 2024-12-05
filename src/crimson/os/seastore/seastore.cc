@@ -2151,10 +2151,10 @@ SeaStore::Shard::_clone_omaps(
   OnodeRef &d_onode,
   const omap_type_t otype)
 {
-  return trans_intr::repeat([&ctx, onode, d_onode, this, otype] {
+  return trans_intr::repeat([&ctx, &onode, &d_onode, this, otype] {
     return seastar::do_with(
       std::optional<std::string>(std::nullopt),
-      [&ctx, onode, d_onode, this, otype](auto &start) {
+      [&ctx, &onode, &d_onode, this, otype](auto &start) {
       auto& layout = onode->get_layout();
       return omap_list(
 	*onode,
@@ -2164,7 +2164,7 @@ SeaStore::Shard::_clone_omaps(
 	*ctx.transaction,
 	start,
 	OMapManager::omap_list_config_t().with_inclusive(false, false)
-      ).si_then([&ctx, onode, d_onode, this, otype, &start](auto p) mutable {
+      ).si_then([&ctx, &onode, &d_onode, this, otype, &start](auto p) mutable {
 	auto complete = std::get<0>(p);
 	auto &attrs = std::get<1>(p);
 	if (attrs.empty()) {
@@ -2174,23 +2174,15 @@ SeaStore::Shard::_clone_omaps(
 	      seastar::stop_iteration::yes);
 	}
 	std::string nstart = attrs.rbegin()->first;
-	return _omap_set_kvs(
+	return _omap_set_values(
+	  ctx,
 	  d_onode,
+	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end()),
 	  otype == omap_type_t::XATTR
 	    ? d_onode->get_layout().xattr_root
-	    : d_onode->get_layout().omap_root,
-	  *ctx.transaction,
-	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end())
+	    : d_onode->get_layout().omap_root
 	).si_then([complete, nstart=std::move(nstart),
-		  &start, &ctx, d_onode, otype](auto root) mutable {
-	  if (root.must_update()) {
-	    if (otype == omap_type_t::XATTR) {
-	      d_onode->update_xattr_root(*ctx.transaction, root);
-	    } else {
-	      assert(otype == omap_type_t::OMAP);
-	      d_onode->update_omap_root(*ctx.transaction, root);
-	    }
-	  }
+		  &start]() mutable {
 	  if (complete) {
 	    return seastar::make_ready_future<
 	      seastar::stop_iteration>(
@@ -2308,6 +2300,8 @@ SeaStore::Shard::_omap_set_values(
     if (root.must_update()) {
       if (root.get_type() == omap_type_t::OMAP) {
 	onode->update_omap_root(*ctx.transaction, root);
+      } else if (root.get_type() == omap_type_t::XATTR) {
+	onode->update_xattr_root(*ctx.transaction, root);
       } else {
 	ceph_assert(root.get_type() == omap_type_t::LOG);
 	onode->update_log_root(*ctx.transaction, root);
@@ -2525,16 +2519,11 @@ SeaStore::Shard::_setattrs(
   DEBUGT("set attrs in omap", *ctx.transaction);
   return fut.si_then(
     [this, onode, &ctx, aset=std::move(aset)]() mutable {
-    return _omap_set_kvs(
+    return _omap_set_values(
+      ctx,
       onode,
-      onode->get_layout().xattr_root,
-      *ctx.transaction,
-      std::move(aset)
-    ).si_then([onode, &ctx](auto root) {
-      if (root.must_update()) {
-	onode->update_xattr_root(*ctx.transaction, root);
-      }
-    });
+      std::move(aset),
+      onode->get_layout().xattr_root);
   });
 }
 
