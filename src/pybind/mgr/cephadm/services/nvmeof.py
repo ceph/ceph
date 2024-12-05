@@ -91,6 +91,9 @@ class NvmeofService(CephService):
                 daemon_spec.extra_files['client_key'] = spec.client_key
                 daemon_spec.extra_files['root_ca_cert'] = spec.root_ca_cert
 
+        if spec.encryption_key:
+            daemon_spec.extra_files['encryption_key'] = spec.encryption_key
+
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = []
         return daemon_spec
