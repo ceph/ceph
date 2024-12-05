@@ -2084,6 +2084,12 @@ SeaStore::Shard::_remove(
       onode,
       onode->get_layout().xattr_root.get(
 	onode->get_metadata_hint(device->get_block_size())));
+  }).si_then([this, &ctx, onode]() mutable {
+    return _remove_omaps(
+      ctx,
+      onode,
+      onode->get_layout().log_root.get(
+	onode->get_metadata_hint(device->get_block_size())));
   }).si_then([this, &ctx, onode] {
     return seastar::do_with(
       ObjectDataHandler(max_object_size),
