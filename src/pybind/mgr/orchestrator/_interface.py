@@ -1069,6 +1069,39 @@ class UpgradeStatusSpec(object):
             'is_paused': self.is_paused,
         }
 
+    def to_dict(self) -> Dict:
+        out: Dict[str, Any] = {}
+        out['in_progress'] = self.in_progress
+        out['target_image'] = self.target_image
+        out['services_complete'] = self.services_complete
+        out['which'] = self.which
+        out['progress'] = self.progress
+        out['message'] = self.message
+        out['is_paused'] = self.is_paused
+        return out
+
+    @classmethod
+    def from_json(cls, data: dict) -> 'UpgradeStatusSpec':
+        if not isinstance(data, dict):
+            raise ValueError(f'Expected a dictionary, but got {type(data)}')
+        instance = cls()
+        instance.in_progress = data.get('in_progress', False)
+        instance.target_image = data.get('target_image', None)
+        instance.services_complete = data.get('services_complete', [])
+        instance.which = data.get('which', '<unknown>')
+        instance.progress = data.get('progress', None)
+        instance.message = data.get('message', "")
+        instance.is_paused = data.get('is_paused', False)
+
+        return instance
+
+    @staticmethod
+    def yaml_representer(dumper: 'yaml.Dumper', data: 'UpgradeStatusSpec') -> yaml.Node:
+        return dumper.represent_dict(cast(Mapping, data.to_json().items()))
+
+
+yaml.add_representer(UpgradeStatusSpec, UpgradeStatusSpec.yaml_representer)
+
 
 def handle_type_error(method: FuncT) -> FuncT:
     @wraps(method)
