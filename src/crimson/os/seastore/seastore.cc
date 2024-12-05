@@ -1271,10 +1271,8 @@ SeaStore::Shard::_get_attrs(
   LOG_PREFIX(SeaStoreS::_get_attrs);
   DEBUGT("...", t);
   auto& layout = onode.get_layout();
-  return omap_list(onode, layout.xattr_root, t, std::nullopt,
-    OMapManager::omap_list_config_t()
-      .with_inclusive(false, false)
-      .without_max()
+  return do_omap_get_values(t, onode, std::nullopt,
+    onode.get_layout().xattr_root
   ).si_then([&layout, &t, FNAME](auto p) {
     auto& attrs = std::get<1>(p);
     DEBUGT("got {} attrs, OI length=0x{:x}, SS length=0x{:x}",
