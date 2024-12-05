@@ -347,7 +347,7 @@ void IOHandler::do_set_io_state(
 {
   ceph_assert_always(seastar::this_shard_id() == get_shard_id());
   auto prv_state = get_io_state();
-  logger().debug("{} got {}do_set_io_state(): prv_state={}, new_state={}, "
+  logger().debug("{} got {} do_set_io_state(): prv_state={}, new_state={}, "
                  "fa={}, set_notify_out={}, at {}",
                  conn,
                  cc_seq.has_value() ? fmt::format("{} ", *cc_seq) : "",
@@ -984,7 +984,7 @@ void IOHandler::notify_out_dispatch()
       });
     });
   }
-  if (shard_states->try_enter_out_dispatching()) {
+  if (shard_states->try_enter_out_dispatching(conn)) {
     shard_states->dispatch_in_background(
         "do_out_dispatch", conn, [this] {
       return do_out_dispatch(*shard_states);
