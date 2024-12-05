@@ -1318,7 +1318,7 @@ def test_zg_master_zone_delete():
     assert(len(master_zg.zones) >= 1)
     master_cluster = master_zg.zones[0].cluster
 
-    rm_zg = ZoneGroup('remove_zg')
+    rm_zg = ZoneGroup('remove_zg', realm.current_period)
     rm_zg.create(master_cluster)
 
     rm_zone = Zone('remove', rm_zg, master_cluster)
