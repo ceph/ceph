@@ -2177,13 +2177,11 @@ SeaStore::Shard::_clone_omaps(
       auto& layout = onode->get_layout();
       return omap_list(
 	*onode,
-	otype == omap_type_t::XATTR
-	  ? layout.xattr_root
-	  : layout.omap_root,
+	layout.get_root(otype),
 	*ctx.transaction,
 	start,
 	OMapManager::omap_list_config_t().with_inclusive(false, false)
-      ).si_then([&ctx, &onode, &d_onode, this, otype, &start](auto p) mutable {
+      ).si_then([&ctx, &d_onode, this, otype, &start](auto p) mutable {
 	auto complete = std::get<0>(p);
 	auto &attrs = std::get<1>(p);
 	if (attrs.empty()) {
@@ -2197,9 +2195,7 @@ SeaStore::Shard::_clone_omaps(
 	  ctx,
 	  d_onode,
 	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end()),
-	  otype == omap_type_t::XATTR
-	    ? d_onode->get_layout().xattr_root
-	    : d_onode->get_layout().omap_root
+	  d_onode->get_layout().get_root(otype)
 	).si_then([complete, nstart=std::move(nstart),
 		  &start]() mutable {
 	  if (complete) {
@@ -2239,6 +2235,8 @@ SeaStore::Shard::_clone(
     return _clone_omaps(ctx, onode, d_onode, omap_type_t::XATTR);
   }).si_then([&ctx, &onode, &d_onode, this] {
     return _clone_omaps(ctx, onode, d_onode, omap_type_t::OMAP);
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return _clone_omaps(ctx, onode, d_onode, omap_type_t::LOG);
   });
 }
 
