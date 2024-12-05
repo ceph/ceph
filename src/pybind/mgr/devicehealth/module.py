@@ -328,7 +328,6 @@ class Module(MgrModule):
 
         done = False
         with ioctx, self._db_lock, self.db:
-            self.db.execute('BEGIN;')
             count = 0
             for obj in ioctx.list_objects():
                 try:
@@ -521,7 +520,6 @@ class Module(MgrModule):
         """
 
         with self._db_lock, self.db:
-            self.db.execute('BEGIN;')
             self._create_device(devid)
             self.db.execute(SQL, (devid, json.dumps(data)))
             self._prune_device_metrics()
@@ -576,7 +574,6 @@ class Module(MgrModule):
         self.log.debug(f"_get_device_metrics: {devid} {sample} {min_sample}")
 
         with self._db_lock, self.db:
-            self.db.execute('BEGIN;')
             if isample:
                 cursor = self.db.execute(SQL_EXACT, (devid, isample))
             else:
