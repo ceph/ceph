@@ -1681,10 +1681,12 @@ def test_bucket_reshard_incremental():
 
     # reshard in each zone
     for z in zonegroup_conns.rw_zones:
-        z.zone.cluster.admin(['bucket', 'reshard',
+        args = ['bucket', 'reshard',
             '--bucket', bucket.name,
             '--num-shards', '3',
-            '--yes-i-really-mean-it'])
+            '--yes-i-really-mean-it']
+        args += z.zone.zone_args()
+        z.zone.cluster.admin(args)
 
     # upload more objects
     for objname in ('e', 'f', 'g', 'h'):
@@ -1715,10 +1717,12 @@ def test_bucket_reshard_full():
             k.set_contents_from_string('foo')
 
         # reshard on first zone
-        zone.zone.cluster.admin(['bucket', 'reshard',
+        args = ['bucket', 'reshard',
             '--bucket', bucket.name,
             '--num-shards', '3',
             '--yes-i-really-mean-it'])
+        args += z.zone.zone_args()
+        z.zone.cluster.admin(args)
 
         # upload more objects
         for objname in ('e', 'f', 'g', 'h'):
