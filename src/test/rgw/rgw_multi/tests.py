@@ -99,7 +99,8 @@ def datalog_autotrim(zone):
 
 def bilog_list(zone, bucket, args = None):
     cmd = ['bilog', 'list', '--bucket', bucket] + (args or [])
-    cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
+    cmd += ['--tenant', config.tenant] if config.tenant else []
+    cmd += zone.zone_args()
     bilog, _ = zone.cluster.admin(cmd, read_only=True)
     return json.loads(bilog)
 
