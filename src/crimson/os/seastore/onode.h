@@ -42,6 +42,16 @@ struct onode_layout_t {
 
   onode_layout_t() : omap_root(omap_type_t::OMAP), log_root(omap_type_t::LOG),
     xattr_root(omap_type_t::XATTR) {}
+
+  const omap_root_le_t& get_root(omap_type_t type) const {
+    if (type == omap_type_t::XATTR) {
+      return xattr_root;
+    } else if (type == omap_type_t::OMAP) {
+      return omap_root;
+    }
+    ceph_assert(type == omap_type_t::LOG);
+    return log_root;
+  }
 } __attribute__((packed));
 
 class Transaction;
