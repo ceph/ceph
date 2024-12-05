@@ -292,7 +292,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
 }
 
 std::string
-WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, optional_yield y) const
+WebTokenEngine::get_jwks_url(const string& iss, const DoutPrefixProvider *dpp, optional_yield y) const
 {
   string cert_url;
   string openidc_wellknown_url = iss;
@@ -331,133 +331,137 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
   return cert_url;
 }
 
-void
-WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt<traits>& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
-{
-  if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
-    string cert_url = get_cert_url(iss, dpp, y);
-    if (cert_url.empty()) {
-      throw -EINVAL;
-    }
-
-    // Get certificate
-    bufferlist cert_resp;
-    RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
-    //Headers
-    cert_req.append_header("Content-Type", "application/x-www-form-urlencoded");
-
-    int res = cert_req.process(dpp, y);
-    if (res < 0) {
-      ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
-      throw -EINVAL;
-    }
-    //Debug only
-    ldpp_dout(dpp, 20) << "HTTP status: " << cert_req.get_http_status() << dendl;
-    ldpp_dout(dpp, 20) << "JSON Response is: " << cert_resp.c_str() << dendl;
-
-    JSONParser parser;
-    if (parser.parse(cert_resp.c_str(), cert_resp.length())) {
-      JSONObj::data_val val;
-      if (parser.get_data("keys", &val)) {
-        if (val.str[0] == '[') {
-          val.str.erase(0, 1);
-        }
-        if (val.str[val.str.size() - 1] == ']') {
-          val.str = val.str.erase(val.str.size() - 1, 1);
-        }
-        if (parser.parse(val.str.c_str(), val.str.size())) {
-          vector<string> x5c;
-          if (JSONDecoder::decode_json("x5c", x5c, &parser)) {
-            string cert;
-            bool found_valid_cert = false;
-            for (auto& it : x5c) {
-              cert = "-----BEGIN CERTIFICATE-----\n" + it + "\n-----END CERTIFICATE-----";
-              ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;
-              if (is_cert_valid(thumbprints, cert)) {
-               found_valid_cert = true;
-               break;
-              }
-            }
-            if (! found_valid_cert) {
-              ldpp_dout(dpp, 0) << "Cert doesn't match that with the thumbprints registered with oidc provider: " << cert.c_str() << dendl;
-              throw -EINVAL;
-            }
-            try {
-              //verify method takes care of expired tokens also
-              if (algorithm == "RS256") {
-                auto verifier = jwt::verify()
-                            .allow_algorithm(jwt::algorithm::rs256{cert});
-
-                verifier.verify(decoded);
-              } else if (algorithm == "RS384") {
-                auto verifier = jwt::verify()
-                            .allow_algorithm(jwt::algorithm::rs384{cert});
-
-                verifier.verify(decoded);
-              } else if (algorithm == "RS512") {
-                auto verifier = jwt::verify()
-                            .allow_algorithm(jwt::algorithm::rs512{cert});
-
-                verifier.verify(decoded);
-              } else if (algorithm == "ES256") {
-                auto verifier = jwt::verify()
-                            .allow_algorithm(jwt::algorithm::es256{cert});
-
-                verifier.verify(decoded);
-              } else if (algorithm == "ES384") {
-                auto verifier = jwt::verify()
-                            .allow_algorithm(jwt::algorithm::es384{cert});
-
-                verifier.verify(decoded);
-              } else if (algorithm == "ES512") {
-                auto verifier = jwt::verify()
-                              .allow_algorithm(jwt::algorithm::es512{cert});
-
-                verifier.verify(decoded);
-              } else if (algorithm == "PS256") {
-                auto verifier = jwt::verify()
-                              .allow_algorithm(jwt::algorithm::ps256{cert});
-
-                verifier.verify(decoded);
-              } else if (algorithm == "PS384") {
-                auto verifier = jwt::verify()
-                              .allow_algorithm(jwt::algorithm::ps384{cert});
-
-                verifier.verify(decoded);
-              } else if (algorithm == "PS512") {
-                auto verifier = jwt::verify()
-                              .allow_algorithm(jwt::algorithm::ps512{cert});
-
-                verifier.verify(decoded);
-              }
-            } catch (std::runtime_error& e) {
-              ldpp_dout(dpp, 0) << "Signature validation failed: " << e.what() << dendl;
-              throw;
-            }
-            catch (...) {
-              ldpp_dout(dpp, 0) << "Signature validation failed" << dendl;
-              throw;
-            }
-          } else {
-            ldpp_dout(dpp, 0) << "x5c not present" << dendl;
-            throw -EINVAL;
-          }
-        } else {
-          ldpp_dout(dpp, 0) << "Malformed JSON object for keys" << dendl;
-          throw -EINVAL;
-        }
-      } else {
-        ldpp_dout(dpp, 0) << "keys not present in JSON" << dendl;
-        throw -EINVAL;
-      } //if-else get-data
+bool
+WebTokenEngine::validate_jwt_with_cert_pem(const DoutPrefixProvider* dpp, const string& cert_pem,
+    const jwt::decoded_jwt<traits>& token, const string& algorithm) const {
+  ldpp_dout(dpp, 20) << "Verifying jwt with 'x5c' from jwk" << dendl; 
+  ldpp_dout(dpp, 20) << "Certificate is: " << cert_pem << dendl;
+  try {
+    auto verifier = jwt::verify();
+    if (algorithm == "RS256") {
+      verifier.allow_algorithm(jwt::algorithm::rs256{cert_pem});
+    } else if (algorithm == "RS384") {
+      verifier.allow_algorithm(jwt::algorithm::rs384{cert_pem});
+    } else if (algorithm == "RS512") {
+      verifier.allow_algorithm(jwt::algorithm::rs512{cert_pem});
+    } else if (algorithm == "ES256") {
+      verifier.allow_algorithm(jwt::algorithm::es256{cert_pem});
+    } else if (algorithm == "ES384") {
+      verifier.allow_algorithm(jwt::algorithm::es384{cert_pem});
+    } else if (algorithm == "ES512") {
+      verifier.allow_algorithm(jwt::algorithm::es512{cert_pem});
+    } else if (algorithm == "PS256") {
+      verifier.allow_algorithm(jwt::algorithm::ps256{cert_pem});
+    } else if (algorithm == "PS384") {
+      verifier.allow_algorithm(jwt::algorithm::ps384{cert_pem});
+    } else if (algorithm == "PS512") {
+      verifier.allow_algorithm(jwt::algorithm::ps512{cert_pem});
     } else {
-      ldpp_dout(dpp, 0) << "Malformed json returned while fetching cert" << dendl;
-      throw -EINVAL;
-    } //if-else parser cert_resp
-  } else {
+      return false;
+    }
+    verifier.verify(token); // Throws on verification failure.
+  } catch (std::runtime_error& e) {
+    ldpp_dout(dpp, 0) << "Signature validation with cert PEM failed: " << e.what() << dendl;
+    return false;
+  }
+  return true;
+}
+
+bool
+WebTokenEngine::validate_jwt_with_rsa_bare_key(const DoutPrefixProvider* dpp, const jwt::jwk<traits>& key,
+    const jwt::decoded_jwt<traits>& token, const string& algorithm) const {
+  if (!key.has_jwk_claim("n") || !key.has_jwk_claim("e")) {
+    return false;
+  }
+  const auto modulus = key.get_jwk_claim("n").as_string();
+  const auto exponent = key.get_jwk_claim("e").as_string();
+  try {
+    const auto pub_key = jwt::helper::create_public_key_from_rsa_components(modulus, exponent);
+    auto verifier = jwt::verify();
+    if (algorithm == "RS256") {
+      verifier.allow_algorithm(jwt::algorithm::rs256{pub_key});
+    } else if (algorithm == "RS384") {
+      verifier.allow_algorithm(jwt::algorithm::rs384{pub_key});
+    } else if (algorithm == "RS512") {
+      verifier.allow_algorithm(jwt::algorithm::rs512{pub_key});
+    } else {
+      return false;
+    }
+    verifier.verify(token);
+  } catch (std::runtime_error& e) {
+    ldpp_dout(dpp, 0) << "Signature validation failed with RSA bare key validation: " << e.what() << dendl;
+    return false;
+  }
+  return true;
+}
+
+void
+WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt<traits>& token, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
+{
+  if (algorithm == "HS256" || algorithm == "HS384" || algorithm == "HS512") {
     ldpp_dout(dpp, 0) << "JWT signed by HMAC algos are currently not supported" << dendl;
     throw -EINVAL;
   }
+
+  auto jwks_url = get_jwks_url(iss, dpp, y);
+  if (jwks_url.empty()) {
+    throw -EINVAL;
+  }
+
+  // Get certificate
+  bufferlist jwks_resp;
+  RGWHTTPTransceiver jwks_req(cct, "GET", jwks_url, &jwks_resp);
+  //Headers
+  jwks_req.append_header("Content-Type", "application/x-www-form-urlencoded");
+
+  int res = jwks_req.process(dpp, y);
+  if (res < 0) {
+    ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
+    throw -EINVAL;
+  }
+  //Debug only
+  ldpp_dout(dpp, 20) << "HTTP status: " << jwks_req.get_http_status() << dendl;
+  ldpp_dout(dpp, 20) << "JSON Response is: " << jwks_resp.c_str() << dendl;
+
+  auto decoded_jwks = jwt::jwks<traits>(jwks_resp.c_str());
+  
+  if (token.has_key_id()) {
+    if (decoded_jwks.has_jwk(token.get_key_id())) {
+      const auto jwk = decoded_jwks.get_jwk(token.get_key_id());
+      if (jwk.has_x5c()) {
+        const auto cert = jwt::helper::convert_base64_der_to_pem(jwk.get_x5c_key_value());
+        if (validate_jwt_with_cert_pem(dpp, cert, token, algorithm)) {
+          return;
+        }
+      } else if (validate_jwt_with_rsa_bare_key(dpp, jwk, token, algorithm)) {
+        return;
+      }
+      throw -EINVAL;
+    } else {
+      ldpp_dout(dpp, 20) << fmt::format("JWT with key_id {} could not find corresponding JWK",
+          token.get_key_id()) << dendl;
+      throw -EINVAL;
+    }
+  } else {
+    for (const auto& jwk : decoded_jwks) {
+      if (jwk.has_x5c()) {
+        for (const auto& x5c : jwk.get_x5c()) {
+          const auto cert = jwt::helper::convert_base64_der_to_pem(x5c.get<string>());
+          if (is_cert_valid(thumbprints, cert)) {
+            const auto primary_cert = jwt::helper::convert_base64_der_to_pem(jwk.get_x5c_key_value());
+            if (validate_jwt_with_cert_pem(dpp, primary_cert, token, algorithm)) {
+              return;
+            } else {
+              throw -EINVAL;
+            }
+          }
+        }
+      }
+    }
+    throw -EINVAL;
+  }
+
+  throw -EINVAL;
 }
 
 WebTokenEngine::result_t
