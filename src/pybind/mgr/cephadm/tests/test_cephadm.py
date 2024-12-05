@@ -1797,15 +1797,18 @@ class TestCephadm(object):
         grafana_host1_key = 'fake-grafana-host1-key'
         nvmeof_client_key = 'nvmeof-client-key'
         nvmeof_server_key = 'nvmeof-server-key'
+        nvmeof_encryption_key = 'nvmeof-encryption-key'
         grafana_host1_key = 'fake-grafana-host1-cert'
         cephadm_module.cert_key_store.save_key('grafana_key', grafana_host1_key, host='host1')
         cephadm_module.cert_key_store.save_key('nvmeof_client_key', nvmeof_client_key, service_name='nvmeof.foo')
         cephadm_module.cert_key_store.save_key('nvmeof_server_key', nvmeof_server_key, service_name='nvmeof.foo')
+        cephadm_module.cert_key_store.save_key('nvmeof_encryption_key', nvmeof_encryption_key, service_name='nvmeof.foo')
 
         expected_calls = [
             mock.call(f'{CERT_STORE_KEY_PREFIX}grafana_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json()})),
             mock.call(f'{CERT_STORE_KEY_PREFIX}nvmeof_client_key', json.dumps({'nvmeof.foo': PrivKey(nvmeof_client_key).to_json()})),
             mock.call(f'{CERT_STORE_KEY_PREFIX}nvmeof_server_key', json.dumps({'nvmeof.foo': PrivKey(nvmeof_server_key).to_json()})),
+            mock.call(f'{CERT_STORE_KEY_PREFIX}nvmeof_encryption_key', json.dumps({'nvmeof.foo': PrivKey(nvmeof_encryption_key).to_json()})),
         ]
         _set_store.assert_has_calls(expected_calls)
 
@@ -1822,15 +1825,19 @@ class TestCephadm(object):
             'ingress_ssl_key': False,
             'nvmeof_client_key': False,
             'nvmeof_server_key': False,
+            'nvmeof_encryption_key': False,
         }
         assert cephadm_module.cert_key_store.key_ls() == expected_ls
 
         cephadm_module.cert_key_store.save_key('nvmeof_client_key', 'xxx', service_name='nvmeof.foo')
         cephadm_module.cert_key_store.save_key('nvmeof_server_key', 'xxx', service_name='nvmeof.foo')
+        cephadm_module.cert_key_store.save_key('nvmeof_encryption_key', 'xxx', service_name='nvmeof.foo')
         expected_ls['nvmeof_server_key'] = {}
         expected_ls['nvmeof_server_key']['nvmeof.foo'] = True
         expected_ls['nvmeof_client_key'] = {}
         expected_ls['nvmeof_client_key']['nvmeof.foo'] = True
+        expected_ls['nvmeof_encryption_key'] = {}
+        expected_ls['nvmeof_encryption_key']['nvmeof.foo'] = True
         assert cephadm_module.cert_key_store.key_ls() == expected_ls
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix")
@@ -1844,6 +1851,7 @@ class TestCephadm(object):
         nvmeof_root_ca_cert = 'nvmeof-root-ca-cert'
         nvmeof_server_key = 'nvmeof-server-key'
         nvmeof_client_key = 'nvmeof-client-key'
+        nvmeof_encryption_key = 'nvmeof-encryption-key'
 
         def _fake_prefix_store(key):
             if key == 'cert_store.cert.':
@@ -1858,6 +1866,7 @@ class TestCephadm(object):
                     f'{CERT_STORE_KEY_PREFIX}grafana_key': json.dumps({'host1': PrivKey(grafana_host1_key).to_json()}),
                     f'{CERT_STORE_KEY_PREFIX}nvmeof_server_key': json.dumps({'nvmeof.foo': PrivKey(nvmeof_server_key).to_json()}),
                     f'{CERT_STORE_KEY_PREFIX}nvmeof_client_key': json.dumps({'nvmeof.foo': PrivKey(nvmeof_client_key).to_json()}),
+                    f'{CERT_STORE_KEY_PREFIX}nvmeof_encryption_key': json.dumps({'nvmeof.foo': PrivKey(nvmeof_encryption_key).to_json()}),
                 }
             else:
                 raise Exception(f'Get store with unexpected value {key}')
@@ -1871,6 +1880,7 @@ class TestCephadm(object):
         assert cephadm_module.cert_key_store.known_keys['grafana_key']['host1'] == PrivKey(grafana_host1_key)
         assert cephadm_module.cert_key_store.known_keys['nvmeof_server_key']['nvmeof.foo'] == PrivKey(nvmeof_server_key)
         assert cephadm_module.cert_key_store.known_keys['nvmeof_client_key']['nvmeof.foo'] == PrivKey(nvmeof_client_key)
+        assert cephadm_module.cert_key_store.known_keys['nvmeof_encryption_key']['nvmeof.foo'] == PrivKey(nvmeof_encryption_key)
 
     def test_cert_store_get_cert_key(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.cert_key_store._init_known_cert_key_dicts()
@@ -1898,13 +1908,16 @@ class TestCephadm(object):
 
         grafana_host1_key = 'fake-grafana-host1-cert'
         nvmeof_server_key = 'nvmeof-server-key'
+        nvmeof_encryption_key = 'nvmeof-encryption-key'
         cephadm_module.cert_key_store.save_key('grafana_key', grafana_host1_key, host='host1')
         cephadm_module.cert_key_store.save_key('grafana_key', grafana_host1_key, host='host1')
         cephadm_module.cert_key_store.save_key('nvmeof_server_key', nvmeof_server_key, service_name='nvmeof.foo')
+        cephadm_module.cert_key_store.save_key('nvmeof_encryption_key', nvmeof_encryption_key, service_name='nvmeof.foo')
 
         assert cephadm_module.cert_key_store.get_key('grafana_key', host='host1') == grafana_host1_key
         assert cephadm_module.cert_key_store.get_key('nvmeof_server_key', service_name='nvmeof.foo') == nvmeof_server_key
         assert cephadm_module.cert_key_store.get_key('nvmeof_client_key', service_name='nvmeof.foo') == ''
+        assert cephadm_module.cert_key_store.get_key('nvmeof_encryption_key', service_name='nvmeof.foo') == nvmeof_encryption_key
 
         with pytest.raises(OrchestratorError, match='Attempted to access priv key for unknown entity'):
             cephadm_module.cert_key_store.get_key('unknown_entity')

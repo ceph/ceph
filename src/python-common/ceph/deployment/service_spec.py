@@ -1335,6 +1335,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  state_update_interval_sec: Optional[int] = 5,
                  enable_spdk_discovery_controller: Optional[bool] = False,
                  enable_key_encryption: Optional[bool] = True,
+                 encryption_key: Optional[str] = None,
                  omap_file_lock_duration: Optional[int] = 20,
                  omap_file_lock_retries: Optional[int] = 30,
                  omap_file_lock_retry_sleep_interval: Optional[float] = 1.0,
@@ -1422,6 +1423,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.enable_spdk_discovery_controller = enable_spdk_discovery_controller
         #: ``enable_key_encryption`` encrypt DHCHAP and PSK keys before saving in OMAP
         self.enable_key_encryption = enable_key_encryption
+        #: ``encryption_key`` gateway encryption key
+        self.encryption_key = encryption_key
         #: ``enable_prometheus_exporter`` enables Prometheus exporter
         self.enable_prometheus_exporter = enable_prometheus_exporter
         #: ``verify_nqns`` enables verification of subsystem and host NQNs for validity

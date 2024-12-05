@@ -399,6 +399,7 @@ state_update_notify = True
 state_update_interval_sec = 5
 enable_spdk_discovery_controller = False
 enable_key_encryption = True
+encryption_key = /encryption.key
 enable_prometheus_exporter = True
 prometheus_exporter_ssl = False
 prometheus_port = 10008
