@@ -169,7 +169,7 @@ struct spawn_throttle_handler {
   }
 };
 
-spawn_throttle_handler spawn_throttle_impl::get()
+inline spawn_throttle_handler spawn_throttle_impl::get()
 {
   report_exception(); // throw unreported exception
 
@@ -307,7 +307,7 @@ class async_spawn_throttle_impl final :
 
       boost::asio::async_initiate<boost::asio::yield_context, WaitSignature>(
           [this] (auto handler) {
-            auto slot = get_associated_cancellation_slot(handler);
+            auto slot = boost::asio::get_associated_cancellation_slot(handler);
             if (slot.is_connected()) {
               slot.template emplace<op_cancellation>(this);
             }
@@ -323,6 +323,8 @@ class async_spawn_throttle_impl final :
   {
     auto w = std::move(*waiter);
     waiter.reset();
+    auto slot = boost::asio::get_associated_cancellation_slot(w.handler);
+    slot.clear(); // remove our cancellation handler
     boost::asio::dispatch(boost::asio::append(std::move(w.handler), ec));
   }
 
@@ -345,8 +347,8 @@ class async_spawn_throttle_impl final :
   }
 };
 
-auto spawn_throttle_impl::create(optional_yield y, size_t limit,
-                                 cancel_on_error on_error)
+inline auto spawn_throttle_impl::create(optional_yield y, size_t limit,
+                                        cancel_on_error on_error)
     -> boost::intrusive_ptr<spawn_throttle_impl>
 {
   if (y) {

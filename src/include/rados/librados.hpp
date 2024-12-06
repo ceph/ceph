@@ -202,6 +202,9 @@ inline namespace v14_2_0 {
     int set_complete_callback(void *cb_arg, callback_t cb);
     int set_safe_callback(void *cb_arg, callback_t cb)
       __attribute__ ((deprecated));
+    /// Request immediate cancellation with error code -ECANCELED
+    /// if the operation hasn't already completed.
+    int cancel();
     int wait_for_complete();
     int wait_for_safe() __attribute__ ((deprecated));
     int wait_for_complete_and_cb();

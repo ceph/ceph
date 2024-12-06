@@ -475,11 +475,11 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
-int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_entry& entry)
+int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string& oid, rgw_cls_bi_entry entry)
 {
   bufferlist in, out;
   rgw_cls_bi_put_op call;
-  call.entry = entry;
+  call.entry = std::move(entry);
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_PUT, in, out);
   if (r < 0)
@@ -488,11 +488,11 @@ int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_e
   return 0;
 }
 
-void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, const rgw_cls_bi_entry& entry)
+void cls_rgw_bi_put(ObjectWriteOperation& op, rgw_cls_bi_entry entry)
 {
   bufferlist in, out;
   rgw_cls_bi_put_op call;
-  call.entry = entry;
+  call.entry = std::move(entry);
   encode(call, in);
   op.exec(RGW_CLASS, RGW_BI_PUT, in);
 }
@@ -515,21 +515,24 @@ void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
 /* nb: any entries passed in are replaced with the results of the cls
  * call, so caller does not need to clear entries between calls
  */
-int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
-		    const std::string& name_filter, const std::string& marker, uint32_t max,
-		    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog)
+void cls_rgw_bi_list(librados::ObjectReadOperation& op,
+                     std::string name_filter, std::string marker,
+                     uint32_t max, bool reshardlog, bufferlist& out)
 {
-  bufferlist in, out;
+  bufferlist in;
   rgw_cls_bi_list_op call;
-  call.name_filter = name_filter;
-  call.marker = marker;
+  call.name_filter = std::move(name_filter);
+  call.marker = std::move(marker);
   call.max = max;
   call.reshardlog = reshardlog;
   encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_LIST, in, out);
-  if (r < 0)
-    return r;
+  op.exec(RGW_CLASS, RGW_BI_LIST, in, &out, nullptr);
+}
 
+int cls_rgw_bi_list_decode(const bufferlist& out,
+                           std::list<rgw_cls_bi_entry>& entries,
+                           bool& is_truncated)
+{
   rgw_cls_bi_list_ret op_ret;
   auto iter = out.cbegin();
   try {
@@ -538,8 +541,8 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
     return -EIO;
   }
 
-  entries->swap(op_ret.entries);
-  *is_truncated = op_ret.is_truncated;
+  entries.swap(op_ret.entries);
+  is_truncated = op_ret.is_truncated;
 
   return 0;
 }
@@ -1156,18 +1159,22 @@ void cls_rgw_reshard_add(librados::ObjectWriteOperation& op,
   op.exec(RGW_CLASS, RGW_RESHARD_ADD, in);
 }
 
-int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& marker, uint32_t max,
-                         list<cls_rgw_reshard_entry>& entries, bool* is_truncated)
+void cls_rgw_reshard_list(librados::ObjectReadOperation& op,
+                          std::string marker, uint32_t max,
+                          bufferlist& out)
 {
-  bufferlist in, out;
+  bufferlist in;
   cls_rgw_reshard_list_op call;
-  call.marker = marker;
+  call.marker = std::move(marker);
   call.max = max;
   encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_RESHARD_LIST, in, out);
-  if (r < 0)
-    return r;
+  op.exec(RGW_CLASS, RGW_RESHARD_LIST, in, &out, nullptr);
+}
 
+int cls_rgw_reshard_list_decode(const bufferlist& out,
+                                std::vector<cls_rgw_reshard_entry>& entries,
+                                bool* is_truncated)
+{
   cls_rgw_reshard_list_ret op_ret;
   auto iter = out.cbegin();
   try {
@@ -1182,16 +1189,21 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& mar
   return 0;
 }
 
-int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_reshard_entry& entry)
+void cls_rgw_reshard_get(librados::ObjectReadOperation& op,
+                         std::string tenant, std::string bucket_name,
+                         bufferlist& out)
 {
-  bufferlist in, out;
+  bufferlist in;
   cls_rgw_reshard_get_op call;
-  call.entry = entry;
+  call.entry.tenant = std::move(tenant);
+  call.entry.bucket_name = std::move(bucket_name);
   encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_RESHARD_GET, in, out);
-  if (r < 0)
-    return r;
+  op.exec(RGW_CLASS, RGW_RESHARD_GET, in, &out, nullptr);
+}
 
+int cls_rgw_reshard_get_decode(const bufferlist& out,
+                               cls_rgw_reshard_entry& entry)
+{
   cls_rgw_reshard_get_ret op_ret;
   auto iter = out.cbegin();
   try {
@@ -1200,7 +1212,7 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_resh
     return -EIO;
   }
 
-  entry = op_ret.entry;
+  entry = std::move(op_ret.entry);
 
   return 0;
 }

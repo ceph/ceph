@@ -1103,6 +1103,12 @@ void librados::AioCompletion::release()
   delete this;
 }
 
+int librados::AioCompletion::cancel()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->io->aio_cancel(pc);
+}
+
 ///////////////////////////// IoCtx //////////////////////////////
 librados::IoCtx::IoCtx() : io_ctx_impl(NULL)
 {
