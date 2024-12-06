@@ -290,3 +290,17 @@ class CephfsTest(DashboardTestCase):
         ui_api_ls = self.ui_ls_dir('/pictures', 0)
         self.assertEqual(api_ls, ui_api_ls)
         self.rm_dir('/pictures')
+
+    def test_cephfs_clients_get_after_mds_down(self):
+        fs_id = self.get_fs_id()
+        self._get(f"/api/cephfs/{fs_id}/clients")
+        self.assertStatus(200)
+
+        self.fs.fail()
+        params = {'suppress_client_ls_errors': 'False'}
+        self._get(f"/api/cephfs/{fs_id}/clients", params=params)
+        self.assertStatus(500)
+
+        self.fs.set_joinable()
+        self._get(f"/api/cephfs/{fs_id}/clients")
+        self.assertStatus(200)
