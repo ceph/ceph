@@ -13,6 +13,8 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { ConfigFormCreateRequestModel } from './configuration-form-create-request.model';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-configuration-form',
@@ -29,13 +31,15 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
   maxValue: number;
   patternHelpText: string;
   availSections = ['global', 'mon', 'mgr', 'osd', 'mds', 'client'];
+  forceUpdate: boolean;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
     private route: ActivatedRoute,
     private router: Router,
     private configService: ConfigurationService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private modalService: ModalCdsService
   ) {
     super();
     this.createForm();
@@ -95,7 +99,6 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
   setResponse(response: ConfigFormModel) {
     this.response = response;
     const validators = this.getValidators(response);
-
     this.configForm.get('name').setValue(response.name);
     this.configForm.get('desc').setValue(response.desc);
     this.configForm.get('long_desc').setValue(response.long_desc);
@@ -118,7 +121,8 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
         this.configForm.get('values').get(value.section).setValue(sectionValue);
       });
     }
-
+    this.forceUpdate =
+      !this.response.can_update_at_runtime && response.name.includes('rgw') ? true : false;
     this.availSections.forEach((section) => {
       this.configForm.get('values').get(section).setValidators(validators);
     });
@@ -134,7 +138,7 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
 
     this.availSections.forEach((section) => {
       const sectionValue = this.configForm.getValue(section);
-      if (sectionValue !== null && sectionValue !== '') {
+      if (sectionValue !== null) {
         values.push({ section: section, value: sectionValue });
       }
     });
@@ -143,10 +147,26 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
       const request = new ConfigFormCreateRequestModel();
       request.name = this.configForm.getValue('name');
       request.value = values;
+      if (this.forceUpdate) {
+        request.force_update = this.forceUpdate;
+      }
       return request;
     }
 
     return null;
+  }
+
+  openCriticalConfirmModal() {
+    this.modalService.show(CriticalConfirmationModalComponent, {
+      buttonText: $localize`Force Edit`,
+      actionDescription: $localize`force edit`,
+      itemDescription: $localize`configuration`,
+      infoMessage: 'Updating this configuration might require restarting the client',
+      submitAction: () => {
+        this.modalService.dismissAll();
+        this.submit();
+      }
+    });
   }
 
   submit() {

@@ -26,10 +26,26 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
   selection = new CdTableSelection();
   filters: CdTableColumn[] = [
     {
+      name: $localize`Modified`,
+      prop: 'modified',
+      filterOptions: ['yes', 'no'],
+      filterInitValue: 'yes',
+      filterPredicate: (row, value) => {
+        if (value === 'yes' && row.hasOwnProperty('value')) {
+          return true;
+        }
+
+        if (value === 'no' && !row.hasOwnProperty('value')) {
+          return true;
+        }
+
+        return false;
+      }
+    },
+    {
       name: $localize`Level`,
       prop: 'level',
       filterOptions: ['basic', 'advanced', 'dev'],
-      filterInitValue: 'basic',
       filterPredicate: (row, value) => {
         enum Level {
           basic = 0,
@@ -59,22 +75,6 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
           return false;
         }
         return row.source.includes(value);
-      }
-    },
-    {
-      name: $localize`Modified`,
-      prop: 'modified',
-      filterOptions: ['yes', 'no'],
-      filterPredicate: (row, value) => {
-        if (value === 'yes' && row.hasOwnProperty('value')) {
-          return true;
-        }
-
-        if (value === 'no' && !row.hasOwnProperty('value')) {
-          return true;
-        }
-
-        return false;
       }
     }
   ];
@@ -143,7 +143,9 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
     if (selection.selected.length !== 1) {
       return false;
     }
-
-    return selection.selected[0].can_update_at_runtime;
+    if ((this.selection.selected[0].name as string).includes('rgw')) {
+      return true;
+    }
+    return this.selection.selected[0].can_update_at_runtime;
   }
 }
