@@ -19,21 +19,20 @@ overrides:
       - is down
 tasks:
 - install:
-    branch: quincy
+    branch: squid
     exclude_packages:
       - ceph-volume
 - print: "**** done install task..."
-- print: "**** done start installing quincy cephadm ..."
+- print: "**** done start installing squid cephadm ..."
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:quincy
-    cephadm_branch: quincy
-    cephadm_git_url: https://github.com/ceph/ceph
+    image: quay.ceph.io/ceph-ci/ceph:squid
+    compiled_cephadm_branch: squid
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used
         osd_class_load_list: "*"
         osd_class_default_list: "*"
-- print: "**** done end installing quincy cephadm ..."
+- print: "**** done end installing squid cephadm ..."
 
 - print: "**** done start cephadm.shell ceph config set mgr..."
 - cephadm.shell:
@@ -41,12 +40,12 @@ tasks:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
 - print: "**** done cephadm.shell ceph config set mgr..."
 
-- print: "**** done start telemetry quincy..."
+- print: "**** done start telemetry squid..."
 - workunit:
     clients:
       client.0:
-        - test_telemetry_quincy.sh
-- print: "**** done end telemetry quincy..."
+        - test_telemetry_squid.sh
+- print: "**** done end telemetry squid..."
 
 - print: "**** done start upgrade sequence..."
 - sequential:
@@ -73,6 +72,6 @@ tasks:
     - workunit:
         clients:
           client.0:
-            - test_telemetry_quincy_x.sh
+            - test_telemetry_squid_x.sh
     - print: "**** done end telemetry x..."
 - print: "**** done end upgrade sequence..."
