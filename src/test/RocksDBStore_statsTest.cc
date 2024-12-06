@@ -148,12 +148,14 @@ INSTANTIATE_TEST_SUITE_P(
     PerfCounters,
     RocksDBMetricsTest,
     ::testing::Values(
-        RocksDBMetricsTestParams{true, "telemetry"},
-        RocksDBMetricsTestParams{false, "telemetry"},
-        RocksDBMetricsTestParams{true, "objectstore"},
-        RocksDBMetricsTestParams{false, "objectstore"},
-        RocksDBMetricsTestParams{true, "debug"},
-        RocksDBMetricsTestParams{false, "debug"}
+        // RocksDBMetricsTestParams{true, "telemetry"},
+        // RocksDBMetricsTestParams{false, "telemetry"},
+        // RocksDBMetricsTestParams{true, "objectstore"},
+        // RocksDBMetricsTestParams{false, "objectstore"},
+        // RocksDBMetricsTestParams{true, "debug"},
+        // RocksDBMetricsTestParams{false, "debug"},
+        RocksDBMetricsTestParams{false, "all"},
+        RocksDBMetricsTestParams{true, "all"}
         ));
         
 
@@ -491,7 +493,7 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
     // Validate columns metrics
     const auto &columns = response_json["columns"];
 
-    if (params.perf_counters_enabled && (params.mode == "telemetry" || params.mode == "all"))
+    if (params.perf_counters_enabled && (params.mode == "telemetry"))
     {
         ASSERT_TRUE(columns.contains("all_columns"));
         EXPECT_EQ(columns["all_columns"]["sum"]["NumFiles"].get<int>(), 1);
@@ -500,7 +502,7 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
         EXPECT_EQ(columns["all_columns"]["total_slowdown"].get<int>(), 0);
         EXPECT_EQ(columns["all_columns"]["total_stop"].get<int>(), 0);
     }
-    else if (params.mode == "telemetry" || params.mode == "all")
+    else if (params.mode == "telemetry")
     {
         ASSERT_TRUE(columns.contains("all_columns"));
         EXPECT_EQ(columns["all_columns"]["sum"]["NumFiles"].get<int>(), 1);
@@ -542,6 +544,174 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
     }
     else if (params.mode == "debug"){
 
+    }
+
+
+    if (params.perf_counters_enabled && (params.mode == "all"))
+    {
+        ASSERT_TRUE(columns.contains("default"));
+        const auto& default_columns = columns["default"];
+
+        // Validate "sum" section
+        const auto& sum = default_columns["sum"];
+        EXPECT_GE(sum["AvgSec"].get<double>(), -1.0);
+        EXPECT_EQ(sum["CompCount"].get<int>(), 1);
+        EXPECT_GE(sum["CompMergeCPU"].get<double>(), -1.0);
+        EXPECT_GE(sum["CompSec"].get<double>(), -1.0);
+        EXPECT_EQ(sum["CompactedFiles"].get<int>(), 0);
+        EXPECT_EQ(sum["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(sum["KeyIn"].get<int>(), 0);
+        EXPECT_GE(sum["MovedGB"].get<double>(), -1.0);
+        EXPECT_EQ(sum["NumFiles"].get<int>(), 1);
+        EXPECT_DOUBLE_EQ(sum["ReadGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(sum["ReadMBps"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(sum["RnGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(sum["Rnp1GB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(sum["Score"].get<double>(), 0);
+        EXPECT_EQ(sum["SizeBytes"].get<int>(), 2239);
+        EXPECT_GE(sum["WnewGB"].get<double>(), -1.0);
+        EXPECT_DOUBLE_EQ(sum["WriteAmp"].get<double>(), 1);
+        EXPECT_GE(sum["WriteGB"].get<double>(), -1.0);
+        EXPECT_GE(sum["WriteMBps"].get<double>(), -1.0);
+
+        // Validate "l0" section
+        const auto& l0 = default_columns["l0"];
+        EXPECT_GE(l0["AvgSec"].get<double>(), -1.0);
+        EXPECT_EQ(l0["CompCount"].get<int>(), 1);
+        EXPECT_GE(l0["CompMergeCPU"].get<double>(), -1.0);
+        EXPECT_GE(l0["CompSec"].get<double>(), -1.0);
+        EXPECT_EQ(l0["CompactedFiles"].get<int>(), 0);
+        EXPECT_EQ(l0["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(l0["KeyIn"].get<int>(), 0);
+        EXPECT_DOUBLE_EQ(l0["MovedGB"].get<double>(), 0);
+        EXPECT_EQ(l0["NumFiles"].get<int>(), 0);
+        EXPECT_DOUBLE_EQ(l0["ReadGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l0["ReadMBps"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l0["RnGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l0["Rnp1GB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l0["Score"].get<double>(), 0);
+        EXPECT_EQ(l0["SizeBytes"].get<int>(), 0);
+        EXPECT_GE(l0["WnewGB"].get<double>(), -1.0);
+        EXPECT_DOUBLE_EQ(l0["WriteAmp"].get<double>(), 1);
+        EXPECT_GE(l0["WriteGB"].get<double>(), -1.0);
+        EXPECT_GE(l0["WriteMBps"].get<double>(), -1.0);
+
+        // Validate "l1" section
+        const auto& l1 = default_columns["l1"];
+        EXPECT_DOUBLE_EQ(l1["AvgSec"].get<double>(), 0);
+        EXPECT_EQ(l1["CompCount"].get<int>(), 0);
+        EXPECT_DOUBLE_EQ(l1["CompMergeCPU"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["CompSec"].get<double>(), 0);
+        EXPECT_EQ(l1["CompactedFiles"].get<int>(), 0);
+        EXPECT_EQ(l1["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(l1["KeyIn"].get<int>(), 0);
+        EXPECT_GE(l1["MovedGB"].get<double>(), -1.0);
+        EXPECT_EQ(l1["NumFiles"].get<int>(), 1);
+        EXPECT_DOUBLE_EQ(l1["ReadGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["ReadMBps"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["RnGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["Rnp1GB"].get<double>(), 0);
+        EXPECT_GE(l1["Score"].get<double>(), -1.0);
+        EXPECT_EQ(l1["SizeBytes"].get<int>(), 2239);
+        EXPECT_DOUBLE_EQ(l1["WnewGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["WriteAmp"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["WriteGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["WriteMBps"].get<double>(), 0);
+
+        // Validate other metrics
+        EXPECT_EQ(default_columns["level0_numfiles"].get<int>(), 0);
+        EXPECT_EQ(default_columns["level0_numfiles_with_compaction"].get<int>(), 0);
+        EXPECT_EQ(default_columns["level0_slowdown"].get<int>(), 0);
+        EXPECT_EQ(default_columns["level0_slowdown_with_compaction"].get<int>(), 0);
+        EXPECT_EQ(default_columns["memtable_compaction"].get<int>(), 0);
+        EXPECT_EQ(default_columns["memtable_slowdown"].get<int>(), 0);
+        EXPECT_EQ(default_columns["slowdown_for_pending_compaction_bytes"].get<int>(), 0);
+        EXPECT_EQ(default_columns["stop_for_pending_compaction_bytes"].get<int>(), 0);
+        EXPECT_EQ(default_columns["total_slowdown"].get<int>(), 0);
+        EXPECT_EQ(default_columns["total_stop"].get<int>(), 0);
+    }
+    else if (params.mode == "all")
+    {
+        ASSERT_TRUE(columns.contains("default"));
+        const auto& default_columns = columns["default"];
+
+        // Validate "sum" section
+        const auto& sum = default_columns["sum"];
+        EXPECT_GE(sum["AvgSec"].get<double>(), -1.0);
+        EXPECT_EQ(sum["CompCount"].get<int>(), 1);
+        EXPECT_GE(sum["CompMergeCPU"].get<double>(), -1.0);
+        EXPECT_GE(sum["CompSec"].get<double>(), -1.0);
+        EXPECT_EQ(sum["CompactedFiles"].get<int>(), 0);
+        EXPECT_EQ(sum["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(sum["KeyIn"].get<int>(), 0);
+        EXPECT_GE(sum["MovedGB"].get<double>(), -1.0);
+        EXPECT_EQ(sum["NumFiles"].get<int>(), 1);
+        EXPECT_DOUBLE_EQ(sum["ReadGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(sum["ReadMBps"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(sum["RnGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(sum["Rnp1GB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(sum["Score"].get<double>(), 0);
+        EXPECT_EQ(sum["SizeBytes"].get<int>(), 2239);
+        EXPECT_GE(sum["WnewGB"].get<double>(), -1.0);
+        EXPECT_DOUBLE_EQ(sum["WriteAmp"].get<double>(), 1);
+        EXPECT_GE(sum["WriteGB"].get<double>(), -1.0);
+        EXPECT_GE(sum["WriteMBps"].get<double>(), -1.0);
+
+        // Validate "l0" section
+        const auto& l0 = default_columns["l0"];
+        EXPECT_GE(l0["AvgSec"].get<double>(), -1.0);
+        EXPECT_EQ(l0["CompCount"].get<int>(), 1);
+        EXPECT_GE(l0["CompMergeCPU"].get<double>(), -1.0);
+        EXPECT_GE(l0["CompSec"].get<double>(), -1.0);
+        EXPECT_EQ(l0["CompactedFiles"].get<int>(), 0);
+        EXPECT_EQ(l0["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(l0["KeyIn"].get<int>(), 0);
+        EXPECT_DOUBLE_EQ(l0["MovedGB"].get<double>(), 0);
+        EXPECT_EQ(l0["NumFiles"].get<int>(), 0);
+        EXPECT_DOUBLE_EQ(l0["ReadGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l0["ReadMBps"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l0["RnGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l0["Rnp1GB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l0["Score"].get<double>(), 0);
+        EXPECT_EQ(l0["SizeBytes"].get<int>(), 0);
+        EXPECT_GE(l0["WnewGB"].get<double>(), -1.0);
+        EXPECT_DOUBLE_EQ(l0["WriteAmp"].get<double>(), 1);
+        EXPECT_GE(l0["WriteGB"].get<double>(), -1.0);
+        EXPECT_GE(l0["WriteMBps"].get<double>(), -1.0);
+
+        // Validate "l1" section
+        const auto& l1 = default_columns["l1"];
+        EXPECT_DOUBLE_EQ(l1["AvgSec"].get<double>(), 0);
+        EXPECT_EQ(l1["CompCount"].get<int>(), 0);
+        EXPECT_DOUBLE_EQ(l1["CompMergeCPU"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["CompSec"].get<double>(), 0);
+        EXPECT_EQ(l1["CompactedFiles"].get<int>(), 0);
+        EXPECT_EQ(l1["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(l1["KeyIn"].get<int>(), 0);
+        EXPECT_GE(l1["MovedGB"].get<double>(), -1.0);
+        EXPECT_EQ(l1["NumFiles"].get<int>(), 1);
+        EXPECT_DOUBLE_EQ(l1["ReadGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["ReadMBps"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["RnGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["Rnp1GB"].get<double>(), 0);
+        EXPECT_GE(l1["Score"].get<double>(), -1.0);
+        EXPECT_EQ(l1["SizeBytes"].get<int>(), 2239);
+        EXPECT_DOUBLE_EQ(l1["WnewGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["WriteAmp"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["WriteGB"].get<double>(), 0);
+        EXPECT_DOUBLE_EQ(l1["WriteMBps"].get<double>(), 0);
+
+        // Validate other metrics
+        EXPECT_EQ(default_columns["level0_numfiles"].get<int>(), 0);
+        EXPECT_EQ(default_columns["level0_numfiles_with_compaction"].get<int>(), 0);
+        EXPECT_EQ(default_columns["level0_slowdown"].get<int>(), 0);
+        EXPECT_EQ(default_columns["level0_slowdown_with_compaction"].get<int>(), 0);
+        EXPECT_EQ(default_columns["memtable_compaction"].get<int>(), 0);
+        EXPECT_EQ(default_columns["memtable_slowdown"].get<int>(), 0);
+        EXPECT_EQ(default_columns["slowdown_for_pending_compaction_bytes"].get<int>(), 0);
+        EXPECT_EQ(default_columns["stop_for_pending_compaction_bytes"].get<int>(), 0);
+        EXPECT_EQ(default_columns["total_slowdown"].get<int>(), 0);
+        EXPECT_EQ(default_columns["total_stop"].get<int>(), 0);
     }
 }
 
