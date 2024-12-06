@@ -193,7 +193,6 @@ Rados RadosTestPP::s_cluster;
 void RadosTestPP::SetUpTestCase()
 {
   init_rand();
-
   auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
   pool_name = get_temp_pool_name(pool_prefix);
   ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
@@ -405,3 +404,15 @@ void RadosTestECPP::TearDown()
   ioctx.close();
 }
 
+void RadosTestECPP::recreate_pool()
+{
+  SKIP_IF_CRIMSON();
+  ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
+  ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+  SetUp();
+}
+
+void RadosTestECPP::set_allow_ec_overwrites(std::string pool, bool allow)
+{
+  ASSERT_EQ("", set_allow_ec_overwrites_pp(pool, cluster, allow));
+}
