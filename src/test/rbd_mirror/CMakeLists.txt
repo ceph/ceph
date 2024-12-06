@@ -13,7 +13,7 @@ set(rbd_mirror_test_srcs
 add_library(rbd_mirror_test STATIC ${rbd_mirror_test_srcs})
 target_link_libraries(rbd_mirror_test
   rbd_test_support
-  GTest::GTest)
+  GTest::gtest)
 
 add_executable(unittest_rbd_mirror
   test_main.cc
