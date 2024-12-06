@@ -6906,13 +6906,13 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
   }
 
   return 0;
-}
+} /* RGWRados::set_attrs() */
 
-static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
-                              RGWRados* store, RGWBucketInfo& bucket_info,
-                              RGWObjectCtx* rctx, RGWObjManifest* manifest,
-                              int part_num, int* parts_count, bool prefetch,
-                              RGWObjState** pstate, RGWObjManifest** pmanifest)
+int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
+				 RGWRados* store, RGWBucketInfo& bucket_info,
+				 RGWObjectCtx* rctx, RGWObjManifest* manifest,
+				 int part_num, int* parts_count, bool prefetch,
+				 RGWObjState** pstate, RGWObjManifest** pmanifest)
 {
   if (!manifest) {
     return -ERR_INVALID_PART;
@@ -6991,6 +6991,9 @@ static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 
   // update the object size
   sm->state.size = part_manifest.get_obj_size();
+  if (!sm->state.attrset.count(RGW_ATTR_COMPRESSION)) {
+    sm->state.accounted_size = sm->state.size;
+  }
 
   *pmanifest = &part_manifest;
   return 0;
