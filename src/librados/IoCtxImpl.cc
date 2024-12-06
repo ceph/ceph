@@ -646,9 +646,10 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  if (!o->size())
+  if (!o->size()) {
+    ldout(client->cct, 10) << "::Warnning: Empty operation, do nothing and return success!" << dendl;
     return 0;
-
+  }
   ceph::mutex mylock = ceph::make_mutex("IoCtxImpl::operate::mylock");
   ceph::condition_variable cond;
   bool done;
