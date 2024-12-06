@@ -334,9 +334,12 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
   params.list_versions = true;
   params.allow_unordered = true;
 
-  ListResults results;
+  const bool own_bucket = store->get_zone()->get_zonegroup().get_id() == info.zonegroup;
 
-  do {
+  ListResults results;
+  results.is_truncated = own_bucket; // if we don't have the index, we're done
+
+  while (results.is_truncated) {
     results.objs.clear();
 
     ret = list(dpp, params, 1000, results, y);
@@ -358,11 +361,13 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
 	return ret;
       }
     }
-  } while(results.is_truncated);
+  }
 
-  ret = abort_multiparts(dpp, store->ctx(), y);
-  if (ret < 0) {
-    return ret;
+  if (own_bucket) {
+    ret = abort_multiparts(dpp, store->ctx(), y);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   // remove lifecycle config, if any (XXX note could be made generic)
@@ -397,9 +402,11 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
   }
 
   librados::Rados& rados = *store->getRados()->get_rados_handle();
-  ret = store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, nullptr);
-  if (ret < 0) {
-     ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+  if (own_bucket) {
+    ret = store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, nullptr);
+    if (ret < 0) {
+      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+    }
   }
 
   RGWObjVersionTracker ot;
