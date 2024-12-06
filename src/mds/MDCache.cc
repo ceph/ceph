@@ -2211,12 +2211,8 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
       if (do_parent_mtime) {
 	pf->fragstat.mtime = mut->get_op_stamp();
-
-        uint64_t dirstat_change_attr = pin->get_inode()->dirstat.change_attr;
-        /* If a dentry is added or deleted in any dir frag, the change_attr of the directory should be increased */
-        pf->fragstat.change_attr = (pf->fragstat.change_attr >= dirstat_change_attr) ? pf->fragstat.change_attr + 1 : dirstat_change_attr + 1;
-
-        dout(10) << "predirty_journal_parents bumping fragstat change_attr to " << pf->fragstat.change_attr << " on " << parent << dendl;
+	pf->fragstat.change_attr++;
+	dout(10) << "predirty_journal_parents bumping fragstat change_attr to " << pf->fragstat.change_attr << " on " << parent << dendl;
 	if (pf->fragstat.mtime > pf->rstat.rctime) {
 	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
 	  pf->rstat.rctime = pf->fragstat.mtime;
@@ -2341,10 +2337,8 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       pf->accounted_fragstat = pf->fragstat;
       if (touched_mtime)
 	pi.inode->mtime = pi.inode->ctime = pi.inode->dirstat.mtime;
-
-      // if mtime or linkunlink changed, just increment change_attr
       if (touched_chattr)
-        pi.inode->change_attr++;
+	pi.inode->change_attr++;
       dout(20) << "predirty_journal_parents     gives " << pi.inode->dirstat << " on " << *pin << dendl;
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
