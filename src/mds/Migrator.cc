@@ -2352,7 +2352,7 @@ void Migrator::handle_export_discover(const cref_t<MExportDirDiscover> &m, bool 
     int r = mdcache->path_traverse(null_ref, cf, fpath, flags, &trace);
     if (r > 0) return;
     if (r < 0) {
-      if (r == -CEPHFS_EAGAIN) {
+      if (r == -EAGAIN) {
         dout(5) << "blocking import during quiesce" << dendl;
         import_reverse_discovering(df);
         mds->send_message_mds(make_message<MExportDirDiscoverAck>(df, m->get_tid(), false), from);
