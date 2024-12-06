@@ -589,6 +589,7 @@ public:
   int stat(image_info_t &info, size_t infosize);
   int get_name(std::string *name);
   int get_id(std::string *id);
+  int get_snap_id(const char *in_snap_name, uint64_t *snap_id);
   std::string get_block_name_prefix();
   int64_t get_data_pool_id();
   int parent_info(std::string *parent_poolname, std::string *parent_name,
@@ -758,7 +759,11 @@ public:
 		    uint64_t ofs, uint64_t len,
                     bool include_parent, bool whole_object,
 		    int (*cb)(uint64_t, size_t, int, void *), void *arg);
-
+  int diff_iterate3(uint64_t from_snap_id,
+		    uint64_t ofs, uint64_t len,
+                    bool include_parent, bool whole_object,
+		    int (*cb)(uint64_t, size_t, int, void *), void *arg);
+ 
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t write2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
