@@ -945,6 +945,10 @@ void ECBackend::handle_sub_write(
   }
   trace.event("handle_sub_write");
 
+  if (cct->_conf->bluestore_debug_inject_read_err &&
+      ec_inject_test_write_error3(op.soid)) {
+    ceph_abort_msg("Error inject - OSD down");
+  }
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction localt;
@@ -1191,6 +1195,15 @@ void ECBackend::handle_sub_write_reply(
     i->second->on_all_commit = 0;
     i->second->trace.event("ec write all committed");
   }
+  if (cct->_conf->bluestore_debug_inject_read_err &&
+      (i->second->pending_commit.size() == 1) &&
+      ec_inject_test_write_error2(i->second->hoid)) {
+    std::string cmd =
+      "{ \"prefix\": \"osd down\", \"ids\": [\"" + std::to_string( get_parent()->whoami() ) + "\"] }";
+    vector<std::string> vcmd{cmd};
+    dout(0) << __func__ << " Error inject - marking OSD down" << dendl;
+    get_parent()->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+  }
   rmw_pipeline.check_ops();
 }
 
@@ -1208,6 +1221,19 @@ void ECBackend::handle_sub_read_reply(
     return;
   }
   ReadOp &rop = iter->second;
+  if (cct->_conf->bluestore_debug_inject_read_err) {
+    for (auto i = op.buffers_read.begin();
+	 i != op.buffers_read.end();
+	 ++i) {
+      if (ec_inject_test_read_error0(ghobject_t(i->first, ghobject_t::NO_GEN, op.from.shard))) {
+	dout(0) << __func__ << " Error inject - EIO error for shard " << op.from.shard << dendl;
+	op.buffers_read.erase(i->first);
+	op.attrs_read.erase(i->first);
+	op.errors[i->first] = -EIO;
+      }
+
+    }
+  }
   for (auto i = op.buffers_read.begin();
        i != op.buffers_read.end();
        ++i) {
