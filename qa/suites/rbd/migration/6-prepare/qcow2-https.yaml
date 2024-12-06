@@ -1,0 +1,8 @@
+tasks:
+  - exec:
+      client.0:
+        - mkdir /home/ubuntu/cephtest/migration
+        - qemu-img create -f qcow2 /home/ubuntu/cephtest/migration/empty.qcow2 1G
+        - echo '{"type":"qcow","stream":{"type":"http","url":"https://download.ceph.com/qa/ubuntu-12.04.qcow2"}}' | rbd migration prepare --import-only --source-spec-path - client.0.0
+        - rbd migration prepare --import-only --source-spec '{"type":"qcow","stream":{"type":"file","file_path":"/home/ubuntu/cephtest/migration/empty.qcow2"}}' client.0.1
+        - rbd migration prepare --import-only --source-spec '{"type":"qcow","stream":{"type":"file","file_path":"/home/ubuntu/cephtest/migration/empty.qcow2"}}' client.0.2
