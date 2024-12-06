@@ -867,7 +867,7 @@ protected:
   std::set<int> probe_targets;
 
 protected:
-  BackfillInterval backfill_info;
+  std::optional<BackfillInterval> backfill_info;
   std::map<pg_shard_t, BackfillInterval> peer_backfill_info;
   bool backfill_reserving;
 

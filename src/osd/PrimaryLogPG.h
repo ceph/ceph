@@ -1127,9 +1127,11 @@ protected:
     f->close_section();
     f->dump_stream("last_backfill_started") << last_backfill_started;
     {
-      f->open_object_section("backfill_info");
-      backfill_info.dump(f);
-      f->close_section();
+      if (backfill_info) {
+        f->open_object_section("backfill_info");
+        backfill_info->dump(f);
+        f->close_section();
+      }
     }
     {
       f->open_array_section("peer_backfill_info");
@@ -1319,11 +1321,12 @@ protected:
    *
    * @min return at least this many items, unless we are done
    * @max return no more than this many items
-   * @bi.begin first item should be >= this value
-   * @bi [out] resulting std::map of objects to eversion_t's
+   * @scan_start first item should be >= this value
+   * @vesion the version in which the scan has occurred
+   * @returns the scanned populated interval
    */
-  void scan_range(
-    int min, int max, BackfillInterval *bi,
+  BackfillInterval scan_range(
+    int min, int max, hobject_t scan_start, eversion_t vesion,
     ThreadPool::TPHandle &handle
     );
 
