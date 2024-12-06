@@ -177,29 +177,72 @@ Allocator *Allocator::create(
   std::string_view name)
 {
   Allocator* alloc = nullptr;
-  if (type == "stupid") {
-    alloc = new StupidAllocator(cct, size, block_size, name);
-  } else if (type == "bitmap") {
-    alloc = new BitmapAllocator(cct, size, block_size, name);
-  } else if (type == "avl") {
-    return new AvlAllocator(cct, size, block_size, name);
-  } else if (type == "btree") {
-    return new BtreeAllocator(cct, size, block_size, name);
-  } else if (type == "hybrid") {
-    return new HybridAvlAllocator(cct, size, block_size,
-      cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
-      name);
-  }  else if (type == "hybrid_btree2") {
-    return new HybridBtree2Allocator(cct, size, block_size,
-      cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
-      cct->_conf.get_val<double>("bluestore_btree2_alloc_weight_factor"),
-      name);
-  }
-  if (alloc == nullptr) {
+  auto it = all_allocators.find(string(type));
+  if (it != all_allocators.end()) {
+    alloc = it->second(cct, size, block_size, name);
+  } else {
     lderr(cct) << "Allocator::" << __func__ << " unknown alloc type "
 	     << type << dendl;
   }
   return alloc;
+}
+
+std::map<std::string, std::function<Allocator*(
+  CephContext* cct, int64_t size, int64_t block_size, std::string_view name
+)> > Allocator::all_allocators =
+{
+  {"stupid",
+    [](CephContext* cct, int64_t size, int64_t block_size, std::string_view name) -> Allocator*
+    {
+      return new StupidAllocator(cct, size, block_size, name);
+    }
+  },
+  {"bitmap",
+    [](CephContext* cct, int64_t size, int64_t block_size, std::string_view name) -> Allocator*
+    {
+      return new BitmapAllocator(cct, size, block_size, name);
+    }
+  },
+  {"avl",
+    [](CephContext* cct, int64_t size, int64_t block_size, std::string_view name) -> Allocator*
+    {
+      return new AvlAllocator(cct, size, block_size, name);
+    }
+  },
+  {"btree",
+    [](CephContext* cct, int64_t size, int64_t block_size, std::string_view name) -> Allocator*
+    {
+      return new BtreeAllocator(cct, size, block_size, name);
+    }
+  },
+  {"hybrid",
+    [](CephContext* cct, int64_t size, int64_t block_size, std::string_view name) -> Allocator*
+    {
+      return new HybridAvlAllocator(cct, size, block_size,
+        cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
+        name);
+    }
+  },
+  {"hybrid_btree2",
+    [](CephContext* cct, int64_t size, int64_t block_size, std::string_view name) -> Allocator*
+    {
+      return new HybridBtree2Allocator(cct, size, block_size,
+        cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
+        cct->_conf.get_val<double>("bluestore_btree2_alloc_weight_factor"),
+        name);
+    }
+  }
+};
+
+void Allocator::register_type(
+  const std::string_view type, //type of allocator
+  std::function<Allocator*(
+    CephContext* cct,
+    int64_t size,
+    int64_t block_size,
+    const std::string_view name)> creator)
+{
+  all_allocators[string(type)] = creator;
 }
 
 void Allocator::release(const PExtentVector& release_vec)

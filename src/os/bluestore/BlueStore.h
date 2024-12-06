@@ -2812,7 +2812,11 @@ private:
   * opens both DB and dependant super_meta, FreelistManager and allocator
   * in the proper order
   */
-  int _open_db_and_around(bool read_only, bool to_repair = false);
+  int _open_db_and_around(
+    bool read_only,
+    bool to_repair = false,
+    bool apply_deferred = false,
+    bool remove_deferred = false);
   void _close_db_and_around();
   void _close_around_db();
 
@@ -2937,7 +2941,7 @@ public:
 private:
   void _deferred_submit_unlock(OpSequencer *osr);
   void _deferred_aio_finish(OpSequencer *osr);
-  int _deferred_replay();
+  int _deferred_replay(std::vector<std::string>* keys_to_remove);
   bool _eliminate_outdated_deferred(bluestore_deferred_transaction_t* deferred_txn,
 				    interval_set<uint64_t>& bluefs_extents);
 
@@ -3586,6 +3590,19 @@ public:
   void debug_set_prefer_deferred_size(uint64_t s) {
     prefer_deferred_size = s;
   }
+  void debug_set_deferred_replay_start(std::function<void()> action) {
+    debug_deferred_replay_start = action;
+  }
+  void debug_set_deferred_replay_end(std::function<void()> action) {
+    debug_deferred_replay_end = action;
+  }
+  void debug_set_deferred_replay_track(
+    std::function<void(const bluestore_deferred_transaction_t&)> action) {
+    debug_deferred_replay_track = action;
+  }
+  void debug_set_init_alloc_done(std::function<void()> action) {
+    debug_init_alloc_done = action;
+  }
   inline void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,
@@ -3601,6 +3618,11 @@ public:
     int idx2 = l_bluestore_first);
 
 private:
+  std::function<void()> debug_deferred_replay_start = nullptr;
+  std::function<void()> debug_deferred_replay_end = nullptr;
+  std::function<void(const bluestore_deferred_transaction_t&)>
+    debug_deferred_replay_track = nullptr;
+  std::function<void()> debug_init_alloc_done = nullptr;
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;

@@ -305,7 +305,20 @@ public:
     int64_t block_size,
     const std::string_view name = ""
     );
-
+  /*
+   * Register new allocator type.
+   * The function is intended for unittest use.
+   * Special versions of allocators can be added without
+   * the need to link it everywhere
+   */
+  static void register_type(
+    const std::string_view type, //type of allocator
+    std::function<Allocator*(
+      CephContext* cct,
+      int64_t size,
+      int64_t block_size,
+      const std::string_view name)> creator
+  );
 
   const std::string& get_name() const;
   int64_t get_capacity() const
@@ -354,6 +367,8 @@ public:
 private:
   class SocketHook;
   SocketHook* asok_hook = nullptr;
+  static std::map<std::string, std::function<Allocator*(
+    CephContext* cct, int64_t, int64_t, std::string_view)> > all_allocators;
 protected:
   const int64_t device_size = 0;
   const int64_t block_size = 0;

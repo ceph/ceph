@@ -31,6 +31,7 @@
 #if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
 #include "os/bluestore/BlueFS.h"
+#include "os/bluestore/Allocator.h"
 #endif
 #include "include/Context.h"
 #include "common/buffer_instrumentation.h"
@@ -10820,6 +10821,24 @@ TEST_P(StoreTestDeferredSetup, DISABLED_BluestoreHugeReads)
     ASSERT_EQ(bl_3_plain.get_num_buffers(), 1);
     ASSERT_FALSE(is_hugepaged(bl_3_plain.front()));
   }
+}
+
+TEST_P(StoreTestDeferredSetup, CustomAllocator)
+{
+  if (string(GetParam()) != "bluestore") {
+    return;
+  }
+  //alias "123testing" to AVL
+  Allocator::register_type("123testing",
+    [](CephContext* cct, int64_t size, int64_t block_size, std::string_view name) -> Allocator*
+    {
+      return Allocator::create(cct, "avl", size, block_size, name);
+    }
+  );
+
+  SetVal(g_conf(), "bluestore_allocator", "avl");
+  g_conf()->bluestore_allocator = "123testing";
+  DeferredSetup();
 }
 
 TEST_P(StoreTest, SpuriousReadErrorTest) {
