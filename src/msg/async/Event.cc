@@ -19,6 +19,10 @@
 #include <cerrno>
 #include "Event.h"
 
+#ifdef WITH_URING
+#include "UringManager.h"
+#endif
+
 #ifdef HAVE_DPDK
 #include "dpdk/EventDPDK.h"
 #endif
@@ -192,6 +196,11 @@ EventCenter::~EventCenter()
       external_events.pop_front();
     }
   }
+
+#ifdef WITH_URING
+  uring.reset();
+#endif // WITH_URING
+
   time_events.clear();
   //assert(time_events.empty());
 
@@ -223,6 +232,22 @@ void EventCenter::set_owner()
     }
   }
 }
+
+#ifdef WITH_URING
+
+  UringManager *EventCenter::get_uring() noexcept {
+    if (!uring) {
+      try {
+	uring = std::make_unique<UringManager>(*this);
+      } catch (const std::exception &e) {
+	lderr(cct) << __func__ << " io_uring initialization failed: " << e.what() << dendl;
+      }
+    }
+
+    return uring.get();
+}
+
+#endif // WITH_URING
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
