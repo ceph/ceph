@@ -2934,7 +2934,9 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   // we need to flush all bdev because we will be streaming all dirty files to log
   // TODO - think - if _flush_and_sync_log_jump will not add dirty files nor release pending allocations
   // then flush_bdev() will not be necessary
+  if (debug_stop_async_compat_at == 1) _exit(107);
   _flush_bdev();
+  if (debug_stop_async_compat_at == 2) _exit(107);
   _flush_and_sync_log_jump_D(old_log_jump_to);
 
   //
@@ -3057,14 +3059,18 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
 
   // 3.2. flush and wait
   _flush_special(new_log_writer);
+  if (debug_stop_async_compat_at == 3) _exit(107);
   _flush_bdev(new_log_writer, false); // do not check log.lock is locked
 
   // Part 4.
   // Write out new superblock to reflect all the changes.
   //
 
+  if (debug_stop_async_compat_at == 4) _exit(107);
   _write_super(BDEV_DB);
+  if (debug_stop_async_compat_at == 5) _exit(107);
   _flush_bdev();
+  if (debug_stop_async_compat_at == 6) _exit(107);
 
   // Part 5.
   // Apply new log fnode
