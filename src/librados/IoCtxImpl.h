@@ -94,6 +94,7 @@ struct librados::IoCtxImpl {
 
   int get_object_hash_position(const std::string& oid, uint32_t *hash_position);
   int get_object_pg_hash_position(const std::string& oid, uint32_t *pg_hash_position);
+  int get_object_osd_position(const std::string& oid, int *acting_primary);
 
   ::ObjectOperation *prepare_assert_ops(::ObjectOperation *op);
 
