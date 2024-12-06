@@ -5,7 +5,7 @@ Standalone Rados Gateway (RGW) on DBStore (Experimental)
 ## CMake Option
 Add below cmake option (enabled by default)
 
-    -DWITH_RADOSGW_DBSTORE=ON 
+    -DWITH_RADOSGW_DBSTORE=ON
 
 
 ## Build
@@ -40,8 +40,8 @@ The location and prefix for the database files can be configured using the follo
 To execute DBStore unit test cases (using Gtest framework), from build directory
 
     ninja unittest_dbstore_tests
-    ./bin/unittest_dbstore_tests [logfile] [loglevel]
-    (default logfile: rgw_dbstore_tests.log, loglevel: 20)
+    ./bin/unittest_dbstore_tests [logfile] [loglevel] [tenantname]
+    (default logfile: rgw_dbstore_tests.log, loglevel: 20, default_ns_<timestamp_at_time_of_run>)
     ninja unittest_dbstore_mgr_tests
     ./bin/unittest_dbstore_mgr_tests
 
@@ -50,4 +50,3 @@ To execute Sample test file
     ninja src/rgw/driver/dbstore/install
     ./bin/dbstore-bin [logfile] [loglevel]
     (default logfile: rgw_dbstore_bin.log, loglevel: 20)
-
