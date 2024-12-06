@@ -296,7 +296,9 @@ Request parameters:
   - "none": Messages are considered "delivered" if sent to the broker.
   - "broker": Messages are considered "delivered" if acked by the broker. (This
     is the default.)
- - kafka-brokers: Set endpoint with broker(s) as a comma-separated list of host or host:port (default port 9092).
+
+ - kafka-brokers: A command-separated list of host:port of kafka brokers. These brokers (may contain a broker which is defined in kafka uri) will be added to kafka uri to support sending notifcations to a kafka cluster.
+
 .. note::
 
     - The key-value pair of a specific parameter need not reside in the same

@@ -410,17 +410,25 @@ kafka_server = 'localhost'
 
 class KafkaReceiver(object):
     """class for receiving and storing messages on a topic from the kafka broker"""
-    def __init__(self, topic, security_type):
+    def __init__(self, topic, security_type, kafka_server='localhost'):
         from kafka import KafkaConsumer
         remaining_retries = 10
         port = 9092
         if security_type != 'PLAINTEXT':
             security_type = 'SSL'
             port = 9093
+
+        if kafka_server is None:
+            endpoint = "localhost" + ":" + str(port)
+        elif ":" not in kafka_server:
+            endpoint = kafka_server + ":" + str(port)
+        else:
+            endpoint = kafka_server
+
         while remaining_retries > 0:
             try:
                 self.consumer = KafkaConsumer(topic,
-                        bootstrap_servers = kafka_server+':'+str(port),
+                        bootstrap_servers=endpoint,
                         security_protocol=security_type,
                         consumer_timeout_ms=16000,
                         auto_offset_reset='earliest')
@@ -468,9 +476,9 @@ def kafka_receiver_thread_runner(receiver):
         print('Kafka receiver ended unexpectedly: ' + str(error))
 
 
-def create_kafka_receiver_thread(topic, security_type='PLAINTEXT'):
+def create_kafka_receiver_thread(topic, security_type='PLAINTEXT', kafka_brokers=None):
     """create kafka receiver and thread"""
-    receiver = KafkaReceiver(topic, security_type)
+    receiver = KafkaReceiver(topic, security_type, kafka_server=kafka_brokers)
     task = threading.Thread(target=kafka_receiver_thread_runner, args=(receiver,))
     task.daemon = True
     return task, receiver
@@ -1304,7 +1312,7 @@ def test_ps_s3_notification_errors_on_master():
     conn.delete_bucket(bucket_name)
 
 
-def notification_push(endpoint_type, conn, account=None, cloudevents=False):
+def notification_push(endpoint_type, conn, account=None, cloudevents=False, kafka_brokers=None):
     """ test pushinging notification """
     zonegroup = get_config_zonegroup()
     # create bucket
@@ -1359,11 +1367,13 @@ def notification_push(endpoint_type, conn, account=None, cloudevents=False):
         assert_equal(status/100, 2)
     elif endpoint_type == 'kafka':
         # start amqp receiver
-        task, receiver = create_kafka_receiver_thread(topic_name)
+        task, receiver = create_kafka_receiver_thread(topic_name, kafka_brokers=kafka_brokers)
         task.start()
         endpoint_address = 'kafka://' + kafka_server
         # without acks from broker
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'
+        if kafka_brokers is not None:
+            endpoint_args += '&kafka-brokers=' + kafka_brokers
         # create s3 topic
         topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
         topic_arn = topic_conf.set_config()
@@ -1579,6 +1589,20 @@ def test_notification_push_kafka():
     """ test pushing kafka s3 notification on master """
     conn = connection()
     notification_push('kafka', conn)
+
+
+@attr('kafka_failover')
+def test_notification_push_kafka_multiple_brokers_override():
+    """ test pushing kafka s3 notification on master """
+    conn = connection()
+    notification_push('kafka', conn, kafka_brokers='localhost:9092,localhost:19092')
+
+
+@attr('kafka_failover')
+def test_notification_push_kafka_multiple_brokers_append():
+    """ test pushing kafka s3 notification on master """
+    conn = connection()
+    notification_push('kafka', conn, kafka_brokers='localhost:19092')
 
 
 @attr('http_test')
