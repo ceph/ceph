@@ -609,9 +609,16 @@ function TEST_backfill_grow() {
 
     wait_for_clean || return 1
 
+    #Capture the timestamp after complete cleanup or finish the recovery progress
+    current_timestamp=$(date +"%Y-%m-%dT%H:%M:%S")
+
     delete_pool $poolname
     kill_daemons $dir || return 1
-    ! grep -q "num_bytes mismatch" $dir/osd.*.log || return 1
+
+    #Ignore the num_bytes mismatch messages before calling wait_cleanup
+    if ! awk -v ts="$current_timestamp" '$0 >= ts && /num_bytes mismatch/' $dir/osd.*.log > /dev/null; then
+	return 1
+    fi
 }
 
 # Create a 5 shard EC pool on 6 OSD cluster
