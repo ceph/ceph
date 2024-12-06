@@ -253,7 +253,7 @@ struct MockImageCtx {
   uint64_t atime_update_interval;
   bool cache;
 
-  ConfigProxy config;
+  ImageConfigProxy config;
   std::set<std::string> config_overrides;
 };
 
