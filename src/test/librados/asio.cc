@@ -21,9 +21,13 @@
 
 #include <boost/range/begin.hpp>
 #include <boost/range/end.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/use_future.hpp>
+
+#include <optional>
 
 #define dout_subsys ceph_subsys_rados
 #define dout_context g_ceph_context
@@ -76,6 +80,15 @@ using read_result = std::tuple<version_t, bufferlist>;
 
 void rethrow(std::exception_ptr eptr) {
   if (eptr) std::rethrow_exception(eptr);
+}
+
+auto capture(std::optional<error_code>& out) {
+  return [&out] (error_code ec, ...) { out = ec; };
+}
+
+auto capture(boost::asio::cancellation_signal& signal,
+             std::optional<error_code>& out) {
+  return boost::asio::bind_cancellation_slot(signal.slot(), capture(out));
 }
 
 TEST_F(AsioRados, AsyncReadCallback)
@@ -384,6 +397,130 @@ TEST_F(AsioRados, AsyncWriteOperationYield)
 
   service.run();
 }
+
+// FIXME: this crashes on windows with:
+// Thread 1 received signal SIGILL, Illegal instruction.
+#ifndef _WIN32
+
+TEST_F(AsioRados, AsyncReadOperationCancelTerminal)
+{
+  // cancellation tests are racy, so retry if completion beats the cancellation
+  boost::system::error_code ec;
+  int tries = 10;
+  do {
+    boost::asio::io_context service;
+    boost::asio::cancellation_signal signal;
+    std::optional<error_code> result;
+
+    librados::ObjectReadOperation op;
+    op.assert_exists();
+    librados::async_operate(service, io, "noexist", &op, 0, nullptr,
+                            capture(signal, result));
+
+    service.poll();
+    EXPECT_FALSE(service.stopped());
+    EXPECT_FALSE(result);
+
+    signal.emit(boost::asio::cancellation_type::terminal);
+
+    service.run();
+    ASSERT_TRUE(result);
+    ec = *result;
+
+    signal.emit(boost::asio::cancellation_type::all); // noop
+  } while (ec == std::errc::no_such_file_or_directory && --tries);
+
+  EXPECT_EQ(ec, boost::asio::error::operation_aborted);
+}
+
+TEST_F(AsioRados, AsyncReadOperationCancelTotal)
+{
+  // cancellation tests are racy, so retry if completion beats the cancellation
+  boost::system::error_code ec;
+  int tries = 10;
+  do {
+    boost::asio::io_context service;
+    boost::asio::cancellation_signal signal;
+    std::optional<error_code> result;
+
+    librados::ObjectReadOperation op;
+    op.assert_exists();
+    librados::async_operate(service, io, "noexist", &op, 0, nullptr,
+                            capture(signal, result));
+
+    service.poll();
+    EXPECT_FALSE(service.stopped());
+    EXPECT_FALSE(result);
+
+    signal.emit(boost::asio::cancellation_type::total);
+
+    service.run();
+    ASSERT_TRUE(result);
+    ec = *result;
+
+    signal.emit(boost::asio::cancellation_type::all); // noop
+  } while (ec == std::errc::no_such_file_or_directory && --tries);
+
+  EXPECT_EQ(ec, boost::asio::error::operation_aborted);
+}
+
+TEST_F(AsioRados, AsyncWriteOperationCancelTerminal)
+{
+  // cancellation tests are racy, so retry if completion beats the cancellation
+  boost::system::error_code ec;
+  int tries = 10;
+  do {
+    boost::asio::io_context service;
+    boost::asio::cancellation_signal signal;
+    std::optional<error_code> result;
+
+    librados::ObjectWriteOperation op;
+    op.assert_exists();
+    librados::async_operate(service, io, "noexist", &op, 0, nullptr,
+                            capture(signal, result));
+
+    service.poll();
+    EXPECT_FALSE(service.stopped());
+    EXPECT_FALSE(result);
+
+    signal.emit(boost::asio::cancellation_type::terminal);
+
+    service.run();
+    ASSERT_TRUE(result);
+    ec = *result;
+
+    signal.emit(boost::asio::cancellation_type::all); // noop
+  } while (ec == std::errc::no_such_file_or_directory && --tries);
+
+  EXPECT_EQ(ec, boost::asio::error::operation_aborted);
+}
+
+TEST_F(AsioRados, AsyncWriteOperationCancelTotal)
+{
+  boost::asio::io_context service;
+  boost::asio::cancellation_signal signal;
+  std::optional<error_code> ec;
+
+  librados::ObjectWriteOperation op;
+  op.assert_exists();
+  librados::async_operate(service, io, "noexist", &op, 0, nullptr,
+                          capture(signal, ec));
+
+  service.poll();
+  EXPECT_FALSE(service.stopped());
+  EXPECT_FALSE(ec);
+
+  // noop, write only supports terminal
+  signal.emit(boost::asio::cancellation_type::total);
+
+  service.run();
+  ASSERT_TRUE(ec);
+  EXPECT_EQ(ec, std::errc::no_such_file_or_directory);
+
+  signal.emit(boost::asio::cancellation_type::all); // noop
+}
+
+#endif // not _WIN32
 
 int main(int argc, char **argv)
 {
