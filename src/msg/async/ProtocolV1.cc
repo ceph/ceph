@@ -422,6 +422,17 @@ bool ProtocolV1::is_queued() {
   return !out_q.empty() || connection->is_queued();
 }
 
+void ProtocolV1::dump(Formatter* f) {
+  f->open_object_section("v1");
+  f->dump_string("state", get_state_name(state));
+  f->dump_unsigned("connect_seq", connect_seq);
+  f->dump_unsigned("peer_global_seq", peer_global_seq);
+  if (auth_meta) {
+    f->dump_string("con_mode", ceph_con_mode_name(auth_meta->con_mode));
+  }
+  f->close_section();  // v1
+}
+
 void ProtocolV1::run_continuation(CtPtr pcontinuation) {
   if (pcontinuation) {
     CONTINUATION_RUN(*pcontinuation);
