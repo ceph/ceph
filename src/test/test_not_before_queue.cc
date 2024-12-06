@@ -216,15 +216,15 @@ TEST_F(NotBeforeTest, RemoveIfByClass_no_cond) {
   // removing less than / more than available matches
   EXPECT_EQ(
       queue.remove_if_by_class(
-	  17, [](const tv_t &v) { return true; }, 1),
+	  17u, [](const tv_t &v) { return true; }, 1),
       1);
   EXPECT_EQ(
       queue.remove_if_by_class(
-	  17, [](const tv_t &v) { return true; }, 10),
+	  17u, [](const tv_t &v) { return true; }, 10),
       3);
   EXPECT_EQ(
       queue.remove_if_by_class(
-	  57, [](const tv_t &v) { return v.ordering_value == 41; }),
+	  57u, [](const tv_t &v) { return v.ordering_value == 41; }),
       3);
 }
 
@@ -237,17 +237,17 @@ TEST_F(NotBeforeTest, RemoveIfByClass_with_cond) {
   // rm from both eligible and non-eligible
   EXPECT_EQ(
       queue.remove_if_by_class(
-	  57, [](const tv_t &v) { return v.ordering_value == 43; }),
+	  57u, [](const tv_t &v) { return v.ordering_value == 43; }),
       3);
   EXPECT_EQ(
       queue.remove_if_by_class(
-	  53, [](const tv_t &v) { return v.ordering_value == 44; }),
+	  53u, [](const tv_t &v) { return v.ordering_value == 44; }),
       2);
 
   ASSERT_EQ(queue.total_count(), 17);
   EXPECT_EQ(
       queue.remove_if_by_class(
-	  57, [](const tv_t &v) { return v.ordering_value > 10; }, 20),
+	  57u, [](const tv_t &v) { return v.ordering_value > 10; }, 20),
       5);
 }
 
