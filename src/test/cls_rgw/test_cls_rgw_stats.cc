@@ -116,7 +116,8 @@ void read_stats(librados::IoCtx& ioctx, const std::string& oid,
   std::map<int, rgw_cls_list_ret> results;
   ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, results, 8)());
   ASSERT_EQ(1, results.size());
-  stats = std::move(results.begin()->second.dir.header.stats);
+  ASSERT_TRUE(results.begin()->second.dir.header.has_value());
+  stats = std::move(results.begin()->second.dir.header->stats);
 }
 
 static void account_entry(rgw_bucket_dir_stats& stats,
