@@ -214,7 +214,7 @@ def task(ctx, config):
         yield
     finally:
         log.info('joining thrashosds')
-        thrash_proc.do_join()
+        thrash_proc.stop_and_join()
         cluster_manager.wait_for_all_osds_up()
         cluster_manager.flush_all_pg_stats()
         cluster_manager.wait_for_recovery(config.get('timeout', 360))
