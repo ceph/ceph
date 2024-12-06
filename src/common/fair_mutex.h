@@ -4,7 +4,10 @@
 
 #include "common/ceph_mutex.h"
 
+#ifdef CEPH_DEBUG_MUTEX
 #include <thread>
+#endif
+
 #include <string>
 
 namespace ceph {

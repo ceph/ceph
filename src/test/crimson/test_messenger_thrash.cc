@@ -22,6 +22,8 @@
 #include "crimson/net/Messenger.h"
 #include "test/crimson/ctest_utils.h"
 
+#include <boost/random/uniform_int.hpp>
+
 using namespace std::chrono_literals;
 namespace bpo = boost::program_options;
 using crimson::common::local_conf;

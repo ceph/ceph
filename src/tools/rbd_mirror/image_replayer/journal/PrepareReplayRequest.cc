@@ -12,6 +12,8 @@
 #include "tools/rbd_mirror/ProgressContext.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix

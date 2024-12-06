@@ -20,6 +20,12 @@
 
 #include "common/Cond.h"
 
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_cephfs_mirror
 #undef dout_prefix

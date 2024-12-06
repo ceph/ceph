@@ -26,6 +26,7 @@
 #include "include/random.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/strtol.h"
 #include "common/numa.h"
 

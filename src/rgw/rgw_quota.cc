@@ -16,6 +16,7 @@
 
 #include "include/function2.hpp"
 #include "include/utime.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/lru_map.h"
 #include "common/RefCountedObj.h"
 #include "common/Thread.h"

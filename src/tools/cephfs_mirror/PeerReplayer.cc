@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <sys/time.h>
 #include <sys/file.h>
+#include <boost/optional/optional_io.hpp>
 #include <boost/scope_exit.hpp>
 
 #include "common/admin_socket.h"
@@ -15,11 +16,18 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/perf_counters_key.h"
+#include "include/stringify.h"
 #include "FSMirror.h"
 #include "PeerReplayer.h"
 #include "Utils.h"
 
 #include "json_spirit/json_spirit.h"
+
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_cephfs_mirror

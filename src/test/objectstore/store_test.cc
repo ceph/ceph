@@ -39,7 +39,9 @@
 #include "global/global_init.h"
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
+#include "common/debug.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "common/options.h" // for the size literals
 #include "common/pretty_binary.h"
 #include "include/stringify.h"

@@ -7,7 +7,7 @@
 class sstring_wrapper {
   using sstring16 = basic_sstring<char, uint32_t, 16>;
   sstring16 s1;
-  using sstring24 = basic_sstring<unsigned char, uint16_t, 24>;
+  using sstring24 = basic_sstring<char8_t, uint16_t, 24>;
   sstring24 s2;
  public:
   sstring_wrapper() = default;

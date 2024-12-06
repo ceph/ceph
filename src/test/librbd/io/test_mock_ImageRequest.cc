@@ -10,6 +10,8 @@
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/Utils.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 namespace librbd {
 namespace {
 

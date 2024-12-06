@@ -44,6 +44,7 @@ template <typename char_type, typename Size, Size max_size>
 class basic_sstring {
     static_assert(
             (std::is_same<char_type, char>::value
+             || std::is_same<char_type, char8_t>::value
              || std::is_same<char_type, signed char>::value
              || std::is_same<char_type, unsigned char>::value),
             "basic_sstring only supports single byte char types");

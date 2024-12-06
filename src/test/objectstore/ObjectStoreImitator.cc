@@ -6,6 +6,7 @@
  */
 #include "test/objectstore/ObjectStoreImitator.h"
 #include "common/Clock.h"
+#include "common/debug.h"
 #include "common/Finisher.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
@@ -13,6 +14,7 @@
 #include "os/bluestore/bluestore_types.h"
 #include <algorithm>
 #include <cmath>
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_test
