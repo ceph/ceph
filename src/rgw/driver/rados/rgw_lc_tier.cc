@@ -257,10 +257,6 @@ static int cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
 
   /* init input connection */
   req_params.get_op = !head;
-  req_params.prepend_metadata = true;
-  req_params.rgwx_stat = true;
-  req_params.sync_manifest = true;
-  req_params.skip_decrypt = true;
 
   ret = tier_ctx.conn.get_obj(tier_ctx.dpp, dest_obj, req_params, true /* send */, &in_req);
   if (ret < 0) {
