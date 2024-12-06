@@ -496,6 +496,14 @@ namespace rgw::sal {
     return std::make_unique<DBLuaManager>(this);
   }
 
+  int DBObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			   int max_parts, int marker, int* next_marker,
+			   bool* truncated, list_parts_each_t each_func,
+			   optional_yield y)
+  {
+    return -EOPNOTSUPP;
+  }
+
   int DBObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
   {
     RGWObjState* astate;
@@ -837,6 +845,7 @@ namespace rgw::sal {
 
     multipart_upload_info upload_info;
     upload_info.dest_placement = dest_placement;
+    upload_info.cksum_type = cksum_type;
 
     bufferlist bl;
     encode(upload_info, bl);
@@ -983,7 +992,7 @@ namespace rgw::sal {
 
         ofs += obj_part.size;
         accounted_size += obj_part.accounted_size;
-      }
+      } /* for-each part: parts [obj_iter]*/
     } while (truncated);
     hash.Final((unsigned char *)final_etag);
 
@@ -1017,6 +1026,12 @@ namespace rgw::sal {
     obj_op.meta.completeMultipart = true;
 
     ret = obj_op.write_meta(dpp, ofs, accounted_size, attrs);
+    if (ret < 0)
+      return ret;
+
+    /* XXX write-back now-known ObjInstance into ObjectData rows inserted by
+     * this upload */
+    ret = obj_op.update_obj_data(dpp, get_upload_id(), target_obj->get_instance());
     if (ret < 0)
       return ret;
 
@@ -1099,7 +1114,9 @@ namespace rgw::sal {
       ldpp_dout(dpp, 0) << "ERROR: failed to decode multipart upload info" << dendl;
       return -EIO;
     }
+    cksum_type = upload_info.cksum_type;
     placement = upload_info.dest_placement;
+    upload_information = upload_info;
     *rule = &placement;
 
     return 0;
@@ -1120,14 +1137,14 @@ namespace rgw::sal {
 
   DBMultipartWriter::DBMultipartWriter(const DoutPrefixProvider *dpp,
 	    	    optional_yield y,
-                MultipartUpload* upload,
+            MultipartUpload* upload,
 		        rgw::sal::Object* obj,
 		        DBStore* _driver,
     		    const ACLOwner& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
-                uint64_t _part_num, const std::string& _part_num_str):
-			StoreWriter(dpp, y),
-			store(_driver),
+            uint64_t _part_num, const std::string& _part_num_str):
+			          StoreWriter(dpp, y),
+			          store(_driver),
                 owner(_owner),
                 ptail_placement_rule(_ptail_placement_rule),
                 head_obj(obj),
@@ -1143,8 +1160,9 @@ namespace rgw::sal {
   int DBMultipartWriter::prepare(optional_yield y)
   {
     parent_op.prepare(NULL);
+    parent_op.set_part_num(part_num);
     parent_op.set_mp_part_str(upload_id + "." + std::to_string(part_num));
-    // XXX: do we need to handle part_num_str??
+    parent_op.set_upload_id(upload_id);
     return 0;
   }
 
@@ -1197,7 +1215,7 @@ namespace rgw::sal {
           tail_part_offset += max_chunk_size;
         }
         /* reset tail parts or update if excess data */
-        if (excess_size > 0) { /* wrote max_chunk_size data */
+        if (excess_size > 0) { /* wrote max_chunk_size */
           tail_part_size = excess_size;
           bufferlist tmp;
           tail_part_data.begin(write_ofs).copy(excess_size, tmp);
@@ -1230,7 +1248,7 @@ namespace rgw::sal {
 		       size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
-		       const std::optional<rgw::cksum::Cksum>& cksum,
+                       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,

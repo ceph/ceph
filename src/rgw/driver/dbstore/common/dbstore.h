@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <errno.h>
 #include <stdlib.h>
 #include <string>
@@ -96,7 +97,10 @@ struct DBOpObjectInfo {
 struct DBOpObjectDataInfo {
   RGWObjState state;
   uint64_t part_num;
+  uint64_t stripe_num;
   std::string multipart_part_str;
+  std::string upload_id;
+  std::string obj_instance; // XXX ordering?
   uint64_t offset;
   uint64_t size;
   bufferlist data{};
@@ -292,10 +296,13 @@ struct DBOpObjectPrepareInfo {
 
 struct DBOpObjectDataPrepareInfo {
   static constexpr const char* part_num = ":part_num";
+  static constexpr const char* stripe_num = ":stripe_num";
   static constexpr const char* offset = ":offset";
   static constexpr const char* data = ":data";
   static constexpr const char* size = ":size";
   static constexpr const char* multipart_part_str = ":multipart_part_str";
+  static constexpr const char* upload_id = ":upload_id";
+  static constexpr const char* obj_instance = ":obj_instance";
 };
 
 struct DBOpLCEntryPrepareInfo {
@@ -580,6 +587,8 @@ class DBOp {
       /* Extra field 'MultipartPartStr' added which signifies multipart
        * <uploadid + partnum>. For regular object, it is '0.0'
        *
+       * XXX working to supercede MultiPartPartStr with explicit PartNum and
+       *
        *  - part: a collection of stripes that make a contiguous part of an
        object. A regular object will only have one part (although might have
        many stripes), a multipart object might have many parts. Each part
@@ -593,12 +602,14 @@ class DBOp {
       BucketName TEXT NOT NULL , \
       ObjID      TEXT NOT NULL , \
       MultipartPartStr TEXT, \
+      UploadID TEXT, \
       PartNum  INTEGER NOT NULL, \
+      StripeNum INTEGER NOT NULL, \
       Offset   INTEGER, \
       Size 	 INTEGER, \
       Mtime  BLOB,       \
       Data     BLOB,             \
-      PRIMARY KEY (ObjName, BucketName, ObjInstance, ObjID, MultipartPartStr, PartNum), \
+      PRIMARY KEY (ObjName, BucketName, ObjInstance, ObjID, MultipartPartStr, UploadID, PartNum), \
       FOREIGN KEY (BucketName) \
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
@@ -1239,8 +1250,8 @@ class PutObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
       "INSERT OR REPLACE INTO '{}' \
-      (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Mtime, Data) \
-      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
+      (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, UploadID, PartNum, StripeNum, Offset, Size, Mtime, Data) \
+      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
 
   public:
     virtual ~PutObjectDataOp() {}
@@ -1253,7 +1264,9 @@ class PutObjectDataOp: virtual public DBOp {
           params.op.bucket.bucket_name,
           params.op.obj.obj_id,
           params.op.obj_data.multipart_part_str,
+          params.op.obj_data.upload_id,
           params.op.obj_data.part_num,
+          params.op.obj_data.stripe_num,
           params.op.obj_data.offset,
           params.op.obj_data.size,
           params.op.obj.mtime,
@@ -1261,12 +1274,13 @@ class PutObjectDataOp: virtual public DBOp {
     }
 };
 
-/* XXX: Recheck if this is really needed */
+/* This query is now used to update ObjInstance with a non-NULL value
+ * on successful complete-multipart */
 class UpdateObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
       "UPDATE '{}' \
-      SET Mtime = {} WHERE ObjName = {} and ObjInstance = {} and \
+      SET Mtime = {}, ObjInstance = {} WHERE ObjName = {} and \
       BucketName = {} and ObjID = {}";
 
   public:
@@ -1276,7 +1290,8 @@ class UpdateObjectDataOp: virtual public DBOp {
       return fmt::format(Query,
           params.objectdata_table,
           params.op.obj.mtime,
-          params.op.obj.obj_name, params.op.obj.obj_instance,
+          params.op.obj.obj_instance,
+          params.op.obj.obj_name,
           params.op.bucket.bucket_name,
           params.op.obj.obj_id);
     }
@@ -1286,8 +1301,9 @@ class GetObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
       "SELECT  \
-      ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Mtime, Data \
-      from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} and ObjID = {} ORDER BY MultipartPartStr, PartNum";
+      ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, UploadID, PartNum, StripeNum, Offset, Size, Mtime, Data \
+      from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} and ObjID = {} \
+      ORDER BY MultipartPartStr, PartNum, StripeNum ";
 
   public:
     virtual ~GetObjectDataOp() {}
@@ -1499,22 +1515,21 @@ class DB {
 
   public:
     DB(std::string db_name, CephContext *_cct) : db_name(db_name),
-    user_table(db_name+"_user_table"),
-    bucket_table(db_name+"_bucket_table"),
-    quota_table(db_name+"_quota_table"),
-    lc_head_table(db_name+"_lc_head_table"),
-    lc_entry_table(db_name+"_lc_entry_table"),
+    user_table(/* db_name+ */"user_table"),
+    bucket_table(/* db_name+ */"bucket_table"),
+    quota_table(/* db_name+ */"quota_table"),
+    lc_head_table(/* db_name+ */"lc_head_table"),
+    lc_entry_table(/* db_name+ */"lc_entry_table"),
     cct(_cct),
     dp(_cct, ceph_subsys_rgw, "rgw DBStore backend: ")
   {}
     /*	DB() {}*/
 
     DB(CephContext *_cct) : db_name("default_db"),
-    user_table(db_name+"_user_table"),
-    bucket_table(db_name+"_bucket_table"),
-    quota_table(db_name+"_quota_table"),
-    lc_head_table(db_name+"_lc_head_table"),
-    lc_entry_table(db_name+"_lc_entry_table"),
+    user_table(/* db_name+ */"user_table"),
+    bucket_table(/* db_name+ */"bucket_table"),
+    quota_table(/* db_name+ */"quota_table"),
+    lc_head_table(/* db_name+ */"lc_head_table"),
     cct(_cct),
     dp(_cct, ceph_subsys_rgw, "rgw DBStore backend: ")
   {}
@@ -1528,13 +1543,13 @@ class DB {
     const std::string getLCHeadTable() { return lc_head_table; }
     const std::string getLCEntryTable() { return lc_entry_table; }
     const std::string getObjectTable(std::string bucket) {
-      return db_name+"_"+bucket+"_object_table"; }
+      return /* db_name+ "_"+ */bucket+"_object_table"; }
     const std::string getObjectDataTable(std::string bucket) {
-      return db_name+"_"+bucket+"_objectdata_table"; }
+      return /* db_name+ "_"+ */bucket+"_objectdata_table"; }
     const std::string getObjectView(std::string bucket) {
-      return db_name+"_"+bucket+"_object_view"; }
+      return /* db_name+ "_"+ */bucket+"_object_view"; }
     const std::string getObjectTrigger(std::string bucket) {
-      return db_name+"_"+bucket+"_object_trigger"; }
+      return /* db_name+ "_"+ */bucket+"_object_trigger"; }
 
     std::map<std::string, class ObjectOp*> getObjectMap();
 
@@ -1627,6 +1642,7 @@ class DB {
     // "<bucketname>_<objname>_<objinstance>_<multipart-part-str>_<partnum>"
     static constexpr std::string_view raw_obj_oid = "{0}_{1}_{2}_{3}_{4}";
 
+    // XXX [Matt] I think these are actual part numbers, and that we don't need stripe here
     std::string to_oid(std::string_view bucket, std::string_view obj_name,
                        std::string_view obj_instance, std::string_view obj_id,
                        std::string_view mp_str, uint64_t partnum) {
@@ -1658,7 +1674,9 @@ class DB {
       std::string obj_ns;
       std::string obj_id;
       std::string multipart_part_str;
+      std::string upload_id;
       uint64_t part_num;
+      uint64_t stripe_num;
 
       std::string obj_table;
       std::string obj_data_table;
@@ -1668,7 +1686,8 @@ class DB {
       }
 
       raw_obj(DB* _db, std::string& _bname, std::string& _obj_name, std::string& _obj_instance,
-          std::string& _obj_ns, std::string& _obj_id, std::string _mp_part_str, int _part_num) {
+          std::string& _obj_ns, std::string& _obj_id, std::string _mp_part_str,
+          std::string _upload_id, uint64_t _part_num, uint64_t _stripe_num) {
         db = _db;
         bucket_name = _bname;
         obj_name = _obj_name;
@@ -1676,7 +1695,9 @@ class DB {
         obj_ns = _obj_ns;
         obj_id = _obj_id;
         multipart_part_str = _mp_part_str;
+        upload_id = _upload_id;
         part_num = _part_num;
+        stripe_num = _stripe_num;
 
         obj_table = bucket_name+".object.table";
         obj_data_table = bucket_name+".objectdata.table";
@@ -1691,6 +1712,7 @@ class DB {
         if (r < 0) {
           multipart_part_str = "0.0";
           part_num = 0;
+          stripe_num = 0;
         }
 
         obj_table = db->getObjectTable(bucket_name);
@@ -1857,11 +1879,13 @@ class DB {
       struct Write {
         DB::Object *target;
         RGWObjState obj_state;
-        std::string mp_part_str = "0.0"; // multipart num
+        uint64_t part_num; // multipart part num as integer
+        std::string mp_part_str = "0.0"; // multipart num (XXX needed?)
+        std::string upload_id; // XXXX where will we get this? can we save a pointer to the upload?
 
         struct MetaParams {
           ceph::real_time *mtime;
-	  std::map<std::string, bufferlist>* rmattrs;
+	        std::map<std::string, bufferlist>* rmattrs;
           const bufferlist *data;
           RGWObjManifest *manifest;
           const std::string *ptag;
@@ -1889,16 +1913,20 @@ class DB {
 
         explicit Write(DB::Object *_target) : target(_target) {}
 
-        void set_mp_part_str(std::string _mp_part_str) { mp_part_str = _mp_part_str;}
+        void set_part_num(uint64_t _part_num) { part_num = _part_num; }
+        void set_mp_part_str(std::string _mp_part_str) { mp_part_str = _mp_part_str; }
+        void set_upload_id(std::string _upload_id) { upload_id = _upload_id; }
         int prepare(const DoutPrefixProvider* dpp);
         int write_data(const DoutPrefixProvider* dpp,
                                bufferlist& data, uint64_t ofs);
         int _do_write_meta(const DoutPrefixProvider *dpp,
             uint64_t size, uint64_t accounted_size,
-	    std::map<std::string, bufferlist>& attrs,
+	          std::map<std::string, bufferlist>& attrs,
             bool assume_noent, bool modify_tail);
         int write_meta(const DoutPrefixProvider *dpp, uint64_t size,
-	    uint64_t accounted_size, std::map<std::string, bufferlist>& attrs);
+	          uint64_t accounted_size, std::map<std::string, bufferlist>& attrs);
+        int update_obj_data(const DoutPrefixProvider *dpp, const std::string& upload_id,
+            const std::string& instance_id);
       };
 
       struct Delete {

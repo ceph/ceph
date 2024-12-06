@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "dbstore.h"
+#include <cstdint>
 
 using namespace std;
 
@@ -847,6 +848,7 @@ int DB::raw_obj::InitializeParamsfromRawObj(const DoutPrefixProvider *dpp,
 
   params->op.obj_data.multipart_part_str = multipart_part_str;
   params->op.obj_data.part_num = part_num;
+  params->op.obj_data.stripe_num = stripe_num;
 
   return ret;
 }
@@ -1212,6 +1214,10 @@ int DB::raw_obj::write(const DoutPrefixProvider *dpp, int64_t ofs, int64_t write
   db->InitializeParams(dpp, &params);
   InitializeParamsfromRawObj(dpp, &params);
 
+  /* pseudo fk for this upload, we'll use this to scope updates to part/stripe
+   * rows (e.g., setting obj_instance) during multipart-complete */
+  params.op.obj_data.upload_id = upload_id;
+
   /* XXX: Check for chunk_size ?? */
   params.op.obj_data.offset = ofs;
   unsigned write_len = std::min((uint64_t)bl.length() - write_ofs, len);
@@ -1465,10 +1471,11 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   }
 
   /* tail object */
-  int part_num = (ofs / max_chunk_size);
+  uint64_t stripe_num = (ofs / max_chunk_size);
   /* XXX: Handle multipart_str */
   raw_obj read_obj(store, source->get_bucket_info().bucket.name, astate->obj.key.name, 
-      astate->obj.key.instance, astate->obj.key.ns, source->obj_id, "0.0", part_num);
+      astate->obj.key.instance, astate->obj.key.ns, source->obj_id, "0.0", "" /* upload_id*/,
+      0UL, stripe_num);
 
   read_len = len;
 
@@ -1573,17 +1580,21 @@ int DB::Object::iterate_obj(const DoutPrefixProvider *dpp,
   else
     len = end - ofs + 1;
 
-  /* XXX: Will it really help to store all parts info in astate like manifest in Rados? */
-  int part_num = 0;
+  /* XXX: Will it really help to store all parts info in astate like manifest in Rados? 
+   * [Matt] agree, we seem to be doing ok without a manifest.  However, what we formerly called
+   * part in this method is actually stripe, so rename that and pass it (with part_num)
+   * explicitly to the representation for use in SELECT. */
+  int stripe_num = 0;
   int head_data_size = astate->data.length();
 
   while (ofs <= end && (uint64_t)ofs < astate->size) {
-    part_num = (ofs / max_chunk_size);
+    stripe_num = (ofs / max_chunk_size);
     uint64_t read_len = std::min(len, max_chunk_size);
 
     /* XXX: Handle multipart_str */
     raw_obj read_obj(store, get_bucket_info().bucket.name, astate->obj.key.name, 
-        astate->obj.key.instance, astate->obj.key.ns, obj_id, "0.0", part_num);
+        astate->obj.key.instance, astate->obj.key.ns, obj_id, "0.0", "" /* upload_id */,
+        0UL, stripe_num);
     bool reading_from_head = (ofs < head_data_size);
 
     r = cb(dpp, read_obj, ofs, read_len, reading_from_head, astate, arg);
@@ -1629,9 +1640,9 @@ int DB::Object::Write::write_data(const DoutPrefixProvider* dpp,
                                bufferlist& data, uint64_t ofs) {
   DB *store = target->get_store();
   /* tail objects */
-  /* XXX: Split into parts each of max_chunk_size. But later make tail
+  /* XXX: Split into stripes each of max_chunk_size. But later make tail
    * object chunk size limit to sqlite blob limit */
-  int part_num = 0;
+  uint64_t stripe_num = 0;
 
   uint64_t max_chunk_size = store->get_max_chunk_size();
 
@@ -1648,12 +1659,13 @@ int DB::Object::Write::write_data(const DoutPrefixProvider* dpp,
    * maybe this while loop is not needed
    */
   while (write_ofs < end) {
-    part_num = (ofs / max_chunk_size);
+    stripe_num = (ofs / max_chunk_size);
     uint64_t len = std::min(end, max_chunk_size);
 
-    /* XXX: Handle multipart_str */
+    /* XXX: mp_part_str still needed? */
     raw_obj write_obj(store, target->get_bucket_info().bucket.name, obj_state.obj.key.name, 
-        obj_state.obj.key.instance, obj_state.obj.key.ns, target->obj_id, mp_part_str, part_num);
+        obj_state.obj.key.instance, obj_state.obj.key.ns, target->obj_id,
+        mp_part_str, upload_id, part_num, stripe_num);
 
 
     ldpp_dout(dpp, 20) << "dbstore->write obj-ofs=" << ofs << " write_len=" << len << dendl;
@@ -1815,6 +1827,38 @@ int DB::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t size, 
   return r;
 }
 
+int DB::Object::Write::update_obj_data(const DoutPrefixProvider *dpp, const std::string& upload_id,
+    const std::string& instance_id)
+{
+  /* Now that tail objects are associated with objectID, they are not deleted
+   * as part of this DeleteObj operation. Such tail objects (with no head object
+   * in *.object.table are cleaned up later by GC thread.
+   *
+   * To avoid races between writes/reads & GC delete, mtime is maintained for each
+   * tail object. This mtime is updated when tail object is written and also when
+   * its corresponding head object is deleted (like here in this case).
+   */
+  // XXXX couch
+
+  int ret = 0;
+  DBOpParams update_params = {};
+
+  DB* store = target->get_store();
+  store->InitializeParams(dpp, &update_params); // XXX check
+  target->InitializeParamsfromObject(dpp, &update_params); // XXX check
+
+  // XXX we have instance_id in params->op.obj.state.obj.key.instance
+  update_params.op.obj.state.mtime = real_clock::now();
+  update_params.op.obj_data.upload_id = upload_id; // XXX but is this just update_params.op.obj.obj_id?
+
+  ret = store->ProcessOp(dpp, "UpdateObjectData", &update_params);
+  if (ret) {
+    ldpp_dout(dpp, 0) << "Updating tail objects obj_instance and mtime failed err:(" <<ret<<")" << dendl;
+  }
+
+  return ret;
+}
+
 int DB::Object::Delete::delete_obj(const DoutPrefixProvider *dpp) {
   int ret = 0;
   DBOpParams del_params = {};
@@ -1908,21 +1952,6 @@ int DB::Object::Delete::delete_obj_impl(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  /* Now that tail objects are associated with objectID, they are not deleted
-   * as part of this DeleteObj operation. Such tail objects (with no head object
-   * in *.object.table are cleaned up later by GC thread.
-   *
-   * To avoid races between writes/reads & GC delete, mtime is maintained for each
-   * tail object. This mtime is updated when tail object is written and also when
-   * its corresponding head object is deleted (like here in this case).
-   */
-  DBOpParams update_params = del_params;
-  update_params.op.obj.state.mtime = real_clock::now();
-  ret = store->ProcessOp(dpp, "UpdateObjectData", &update_params);
-
-  if (ret) {
-    ldpp_dout(dpp, 0) << "Updating tail objects mtime failed err:(" <<ret<<")" << dendl;
-  }
   return ret;
 }
 
