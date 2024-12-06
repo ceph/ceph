@@ -97,6 +97,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
         this.notifications = _.orderBy(notifications, ['timestamp'], ['desc']);
+        console.log(this.notifications)
         this.cdRef.detectChanges();
       })
     );
