@@ -279,10 +279,6 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
 
   /* init input connection */
   req_params.get_op = !head;
-  req_params.prepend_metadata = true;
-  req_params.rgwx_stat = true;
-  req_params.sync_manifest = true;
-  req_params.skip_decrypt = true;
   req_params.cb = (RGWHTTPStreamRWRequest::ReceiveCB *)cb;
 
   ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): fetching object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << dendl;
