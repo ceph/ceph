@@ -12,6 +12,7 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "librbd/deep_copy/SetHeadRequest.h"
 #include "librbd/image/AttachParentRequest.h"
+#include "librbd/image/DetachChildRequest.h"
 #include "librbd/image/DetachParentRequest.h"
 
 namespace librbd {
@@ -70,6 +71,28 @@ public:
 };
 
 DetachParentRequest<MockTestImageCtx> *DetachParentRequest<MockTestImageCtx>::s_instance;
+
+template <>
+class DetachChildRequest<MockTestImageCtx> {
+public:
+  static DetachChildRequest *s_instance;
+  static DetachChildRequest *create(MockTestImageCtx &image_ctx,
+                                    Context *on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  Context *on_finish = nullptr;
+
+  DetachChildRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+DetachChildRequest<MockTestImageCtx> *DetachChildRequest<MockTestImageCtx>::s_instance;
 
 } // namespace image
 } // namespace librbd
