@@ -268,8 +268,8 @@ static int write_header(cls_method_context_t hctx, const otp_header& h)
 static int parse_seed(const string& seed, SeedType seed_type, bufferlist *seed_bin)
 {
   size_t slen = seed.length();
-  char secret[seed.length()];
-  char *psecret = secret;
+  std::vector<char> secret(seed.length());
+  char *psecret = secret.data();
   int result;
   bool need_free = false;
 
