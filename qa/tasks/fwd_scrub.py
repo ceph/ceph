@@ -33,6 +33,8 @@ class ForwardScrubber(ThrasherGreenlet):
     def _run(self):
         try:
             self.do_scrub()
+        except ThrasherGreenlet.Stopped:
+            pass
         except Exception as e:
             self.set_thrasher_exception(e)
             self.logger.exception("exception:")
