@@ -733,6 +733,18 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
   }
 
   rgw_bucket_dir dir;
+  uint64_t total_size_sum = 0;
+  uint64_t entris = 0;
+  for (const auto& stat : dir.header.stats) {
+    total_size_sum += stat.second.total_size;
+    entris += stat.second.num_entries;
+  }
+  
+  // Sử dụng CLS_LOG để ghi log
+  CLS_LOG(20, "test() total_size newone: %lu", total_size_sum);
+  CLS_LOG(20, "test() entris newone: %lu", entris);
+  CLS_LOG(10, "entered %s", __func__);
+
 
   return write_bucket_header(hctx, &dir.header);
 }
@@ -823,7 +835,11 @@ static void unaccount_entry(rgw_bucket_dir_header& header,
 			    rgw_bucket_dir_entry& entry)
 {
   if (entry.exists) {
-    rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
+    RGWObjCategory category = entry.meta.category;
+    if (!entry.meta.storage_class.empty()) {
+      category = get_category_from_storage_class(entry.meta.storage_class);
+    }
+    rgw_bucket_category_stats& stats = header.stats[category];
     stats.num_entries--;
     stats.total_size -= entry.meta.accounted_size;
     stats.total_size_rounded -=
@@ -977,7 +993,13 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   rgw_bucket_dir_entry entry;
   bool ondisk = true;
-
+  uint64_t total_size_new = 0;
+ for (const auto& stat : header.stats) {
+    total_size_new += stat.second.total_size;
+  }
+  
+    CLS_LOG(20, "test() total_size: %lu", 
+    total_size_new); 
   std::string idx;
   rc = read_key_entry(hctx, op.key, &idx, &entry);
   if (rc == -ENOENT) {
@@ -1049,7 +1071,15 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   else if (op.op == CLS_RGW_OP_DEL) {
     // unaccount deleted entry
     unaccount_entry(header, entry);
-
+    CLS_LOG(20, "TEST123: %s",
+                 escape_str(idx).c_str());
+    uint64_t total_size_new3 = 0;
+ for (const auto& stat : header.stats) {
+    total_size_new3 += stat.second.total_size;
+  }
+  
+    CLS_LOG(20, "test() total_size: %lu", 
+    total_size_new3);
     entry.meta = op.meta;
     if (!ondisk) {
       // no entry to erase
@@ -1071,10 +1101,22 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   } // CLS_RGW_OP_DEL
   else if (op.op == CLS_RGW_OP_ADD) {
     // unaccount overwritten entry
+     uint64_t total_size_new1 = 0;
+ for (const auto& stat : header.stats) {
+    total_size_new1 += stat.second.total_size;
+  }
+  
+    CLS_LOG(20, "test() total_size: %lu", 
+    total_size_new1);
+
     unaccount_entry(header, entry);
 
     rgw_bucket_dir_entry_meta& meta = op.meta;
-    rgw_bucket_category_stats& stats = header.stats[meta.category];
+    RGWObjCategory category = meta.category;
+    if (!meta.storage_class.empty()) {
+      category = get_category_from_storage_class(meta.storage_class);
+    }
+    rgw_bucket_category_stats& stats = header.stats[category];
     entry.meta = meta;
     entry.key = op.key;
     entry.exists = true;
@@ -1084,6 +1126,24 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     stats.total_size += meta.accounted_size;
     stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
     stats.actual_size += meta.size;
+    stats.storage_class = meta.storage_class;
+    CLS_LOG(20, "test() %lu",
+          stats.num_entries); 
+    CLS_LOG(20, "test() %lu",
+          stats.total_size); 
+    CLS_LOG(20, "test() total_meta: %s", 
+    meta.storage_class.c_str());
+    uint64_t total_size_sum = 0;
+    std::string storage_class;
+  for (const auto& stat : header.stats) {
+    total_size_sum += stat.second.total_size;
+    storage_class = stat.second.storage_class;
+  }
+  
+    CLS_LOG(20, "test() total_size: %lu", 
+    total_size_sum); 
+    CLS_LOG(20, "test() total_meta: %s", 
+    storage_class.c_str()); 
     bufferlist new_key_bl;
     encode(entry, new_key_bl);
     rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
@@ -1101,7 +1161,18 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       return rc;
     }
   }
-
+  CLS_LOG(20, "test() %s",
+          header.max_marker.c_str());
+  CLS_LOG(20, "test() %lu",
+          header.ver);
+   uint64_t total_size_new4 = 0;
+ for (const auto& stat : header.stats) {
+    total_size_new4 += stat.second.total_size;
+  }
+  
+    CLS_LOG(20, "test() total_size: %lu", 
+    total_size_new4);      
+    
   CLS_LOG(20, "rgw_bucket_complete_op(): remove_objs.size()=%d",
           (int)op.remove_objs.size());
   for (const auto& remove_key : op.remove_objs) {
