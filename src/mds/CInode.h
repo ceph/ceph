@@ -651,6 +651,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // -- accessors --
 
   inodeno_t ino() const { return get_inode()->ino; }
+  inodeno_t get_remote_ino() const { return get_inode()->remote_ino; }
   vinodeno_t vino() const { return vinodeno_t(ino(), last); }
   int d_type() const { return IFTODT(get_inode()->mode); }
   bool is_root() const { return ino() == CEPH_INO_ROOT; }
@@ -670,6 +671,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool will_block_for_quiesce(const MDRequestRef& mdr = MDRequestRef {});
 
   bool is_head() const { return last == CEPH_NOSNAP; }
+
+  // set remote inode
+  void set_remote_ino(inodeno_t ino) { _get_inode()->remote_ino = ino; }
 
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() const {

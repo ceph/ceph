@@ -15455,6 +15455,8 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
   in->break_all_delegs();
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
+  req->set_inode_owner_uid_gid(perm.uid(), perm.gid());
+
   filepath path(newname, dir->ino);
   req->set_filepath(path);
   req->set_alternate_name(std::move(alternate_name));
