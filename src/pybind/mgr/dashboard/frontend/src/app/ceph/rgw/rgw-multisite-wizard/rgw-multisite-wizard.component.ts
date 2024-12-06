@@ -53,6 +53,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
   rgwEndpoints: { value: any[]; options: any[]; messages: any };
   executingTask: ExecutingTask;
   setupCompleted = false;
+  rgwEndpointsArray: string[];
 
   constructor(
     private wizardStepsService: WizardStepsService,
@@ -105,13 +106,21 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
         })
       )
       .subscribe((daemonStatsArray) => {
-        this.rgwEndpoints.value = daemonStatsArray.map((daemonStats) => {
-          const protocol = daemonStats.frontendConfig.includes('ssl_port') ? 'https' : 'http';
-          return `${protocol}://${daemonStats.hostname}:${daemonStats.port}`;
+        const uniqueHostnames = new Set<string>();
+        const options: SelectOption[] = [];
+        this.rgwEndpoints.value = [];
+        this.rgwEndpointsArray = [];
+        daemonStatsArray.forEach((daemonStats) => {
+          const hostname = daemonStats.hostname;
+          if (!uniqueHostnames.has(hostname)) {
+            uniqueHostnames.add(hostname);
+            this.rgwEndpoints.value.push(hostname);
+            options.push(new SelectOption(false, hostname, ''));
+            const protocol = daemonStats.frontendConfig.includes('ssl_port') ? 'https' : 'http';
+            const endpoint = `${protocol}://${hostname}:${daemonStats.port}`;
+            this.rgwEndpointsArray.push(endpoint);
+          }
         });
-        const options: SelectOption[] = this.rgwEndpoints.value.map(
-          (endpoint: string) => new SelectOption(false, endpoint, '')
-        );
         this.rgwEndpoints.options = [...options];
       });
 
@@ -149,6 +158,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
       realmName: new UntypedFormControl('default_realm', {
         validators: [Validators.required]
       }),
+      default_realm: new UntypedFormControl(false),
       zonegroupName: new UntypedFormControl('default_zonegroup', {
         validators: [Validators.required]
       }),
@@ -219,15 +229,17 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
     this.loading = true;
     const values = this.multisiteSetupForm.getRawValue();
     const realmName = values['realmName'];
+    const defaultRealm = values['default_realm'];
     const zonegroupName = values['zonegroupName'];
-    const zonegroupEndpoints = this.rgwEndpoints.value.join(',');
+    const zonegroupEndpoints = this.rgwEndpointsArray.join(',');
     const zoneName = values['zoneName'];
-    const zoneEndpoints = this.rgwEndpoints.value.join(',');
+    const zoneEndpoints = this.rgwEndpointsArray.join(',');
     const username = values['username'];
     if (!this.isMultiClusterConfigured || this.stepsToSkip['Select Cluster']) {
       this.rgwMultisiteService
         .setUpMultisiteReplication(
           realmName,
+          defaultRealm,
           zonegroupName,
           zonegroupEndpoints,
           zoneName,
@@ -247,6 +259,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
       this.rgwMultisiteService
         .setUpMultisiteReplication(
           realmName,
+          defaultRealm,
           zonegroupName,
           zonegroupEndpoints,
           zoneName,
