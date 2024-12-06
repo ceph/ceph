@@ -325,13 +325,13 @@ void ConnectionReport::dump(ceph::Formatter *f) const
   f->dump_int("rank", rank);
   f->dump_int("epoch", epoch);
   f->dump_int("version", epoch_version);
-  f->open_object_section("peer_scores");
+  f->open_array_section("peer_scores");
   for (auto i : history) {
     f->open_object_section("peer");
     f->dump_int("peer_rank", i.first);
     f->dump_float("peer_score", i.second);
     f->dump_bool("peer_alive", current.find(i.first)->second);
-    f->close_section();
+    f->close_section(); // peer
   }
   f->close_section(); // peer scores
 }
@@ -354,11 +354,11 @@ void ConnectionTracker::dump(ceph::Formatter *f) const
   f->dump_int("version", version);
   f->dump_float("half_life", half_life);
   f->dump_int("persist_interval", persist_interval);
-  f->open_object_section("reports");
+  f->open_array_section("reports");
   for (const auto& i : peer_reports) {
     f->open_object_section("report");
     i.second.dump(f);
-    f->close_section();
+    f->close_section(); // report
   }
   f->close_section(); // reports
 }
