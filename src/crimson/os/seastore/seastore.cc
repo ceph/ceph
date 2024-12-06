@@ -65,6 +65,9 @@ template <> struct fmt::formatter<crimson::os::seastore::op_type_t>
     case op_type_t::OMAP_GET_VALUES2:
       name = "omap_get_values2";
       break;
+    case op_type_t::LOG_GET_VALUES:
+      name = "log_get_values";
+      break;
     case op_type_t::MAX:
       name = "unknown";
       break;
@@ -150,6 +153,7 @@ void SeaStore::Shard::register_metrics()
     {op_type_t::STAT,             sm::label_instance("latency", "STAT")},
     {op_type_t::OMAP_GET_VALUES,  sm::label_instance("latency", "OMAP_GET_VALUES")},
     {op_type_t::OMAP_GET_VALUES2, sm::label_instance("latency", "OMAP_GET_VALUES2")},
+    {op_type_t::LOG_GET_VALUES,   sm::label_instance("latency", "LOG_GET_VALUES")},
   };
 
   for (auto& [op_type, label] : labels_by_op_type) {
@@ -1529,8 +1533,7 @@ SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_paged_t>
 SeaStore::Shard::omap_get_values(
   CollectionRef ch,
   const ghobject_t &oid,
-  const std::optional<std::string> &start,
-  omap_type_t omap_type)
+  const std::optional<std::string> &start)
 {
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
@@ -1541,14 +1544,33 @@ SeaStore::Shard::omap_get_values(
     Transaction::src_t::READ,
     "omap_get_values2",
     op_type_t::OMAP_GET_VALUES2,
-    [this, start, omap_type](auto &t, auto &onode) {
-    if (omap_type == omap_type_t::OMAP) {
-      return do_omap_get_values(t, onode, start,
-	onode.get_layout().omap_root);
-    }
-    ceph_assert(omap_type == omap_type_t::LOG);
-    return do_omap_get_values(t, onode, start,
-      onode.get_layout().log_root);
+    [this, start](auto &t, auto &onode)
+  {
+    return do_omap_get_values(t, onode, start, onode.get_layout().omap_root);
+  }).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
+  });
+}
+
+SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_paged_t>
+SeaStore::Shard::log_get_values(
+  CollectionRef ch,
+  const ghobject_t &oid,
+  const std::optional<std::string> &start)
+{
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
+  return repeat_with_onode<omap_values_paged_t>(
+    ch,
+    oid,
+    Transaction::src_t::READ,
+    "log_get_values",
+    op_type_t::LOG_GET_VALUES,
+    [this, start](auto &t, auto &onode)
+  {
+    return do_omap_get_values(t, onode, start, onode.get_layout().log_root);
   }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);

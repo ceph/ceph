@@ -43,6 +43,7 @@ enum class op_type_t : uint8_t {
     STAT,
     OMAP_GET_VALUES,
     OMAP_GET_VALUES2,
+    LOG_GET_VALUES,
     MAX
 };
 
@@ -134,30 +135,18 @@ public:
       const ghobject_t& oid,
       const omap_keys_t& keys) final;
 
-    read_errorator::future<omap_values_paged_t> omap_get_values(
-      CollectionRef c,           ///< [in] collection
-      const ghobject_t &oid,     ///< [in] oid
-      const std::optional<std::string> &start, ///< [in] start, empty for begin
-      omap_type_t omap_type
-    );  ///< @return <done, values> values.empty() iff done
-
     /// Retrieves paged set of values > start (if present)
     read_errorator::future<omap_values_paged_t> omap_get_values(
       CollectionRef c,           ///< [in] collection
       const ghobject_t &oid,     ///< [in] oid
       const std::optional<std::string> &start ///< [in] start, empty for begin
-      ) final ///< @return <done, values> values.empty() iff done
-    {
-      return omap_get_values(c, oid, start, omap_type_t::OMAP);
-    }
+    ) final; ///< @return <done, values> values.empty() iff done
 
     read_errorator::future<omap_values_paged_t> log_get_values(
       CollectionRef c,           ///< [in] collection
       const ghobject_t &oid,     ///< [in] oid
       const std::optional<std::string> &start ///< [in] start, empty for begin
-      ) final {
-      return omap_get_values(c, oid, start, omap_type_t::LOG);
-    }
+    ) final;
 
     bool support_log_interfaces() {
       return true;
