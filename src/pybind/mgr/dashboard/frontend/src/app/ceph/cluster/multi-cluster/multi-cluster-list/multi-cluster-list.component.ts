@@ -134,9 +134,9 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            1: { value: 'DISCONNECTED', class: 'badge-danger' },
-            0: { value: 'CONNECTED', class: 'badge-success' },
-            2: { value: 'CHECKING..', class: 'badge-info' }
+            1: { value: 'DISCONNECTED', class: 'tags-danger' },
+            0: { value: 'CONNECTED', class: 'tags-success' },
+            2: { value: 'CHECKING..', class: 'tags-info' }
           }
         }
       },

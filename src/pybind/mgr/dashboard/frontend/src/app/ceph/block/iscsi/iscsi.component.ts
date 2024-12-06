@@ -42,8 +42,8 @@ export class IscsiComponent implements OnInit {
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            up: { class: 'badge-success' },
-            down: { class: 'badge-danger' }
+            up: { class: 'tags-success' },
+            down: { class: 'tags-danger' }
           }
         }
       },
