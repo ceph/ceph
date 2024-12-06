@@ -68,6 +68,14 @@ add_executable(unittest_ecbackend
 add_ceph_unittest(unittest_ecbackend)
 target_link_libraries(unittest_ecbackend osd global)
 
+# unittest_ecutil
+add_executable(unittest_ecutil
+        TestECUtil.cc
+        $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_ecutil)
+target_link_libraries(unittest_ecutil osd global)
+
 # unittest_osdscrub
 add_executable(unittest_osdscrub
   TestOSDScrub.cc

@@ -39,6 +39,7 @@ public:
     return 0;
   }
 
+  uint64_t get_supported_optimizations() const override { return 0; }
   unsigned int get_chunk_count() const override { return k + m; }
   unsigned int get_data_chunk_count() const override { return k; }
   unsigned int get_chunk_size(unsigned int object_size) const override {
