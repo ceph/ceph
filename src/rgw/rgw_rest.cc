@@ -645,8 +645,10 @@ static void build_redirect_url(req_state *s, const string& redirect_base, string
     dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
   }
   dest_uri += s->info.request_uri;
-  dest_uri += "?";
-  dest_uri += s->info.request_params;
+  if (!s->info.request_params.empty()) {
+    dest_uri += "?";
+    dest_uri += s->info.request_params;
+  }
 }
 
 void abort_early(req_state *s, RGWOp* op, int err_no,
