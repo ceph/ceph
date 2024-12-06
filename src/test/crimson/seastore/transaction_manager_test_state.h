@@ -335,17 +335,17 @@ protected:
 
   auto create_mutate_transaction() {
     return tm->create_transaction(
-        Transaction::src_t::MUTATE, "test_mutate");
+        Transaction::src_t::MUTATE, "test_mutate", 0);
   }
 
   auto create_read_transaction() {
     return tm->create_transaction(
-        Transaction::src_t::READ, "test_read");
+        Transaction::src_t::READ, "test_read", 0);
   }
 
   auto create_weak_transaction() {
     return tm->create_transaction(
-        Transaction::src_t::READ, "test_read_weak", true);
+        Transaction::src_t::READ, "test_read_weak", true, 0);
   }
 
   auto submit_transaction_fut2(Transaction& t) {
