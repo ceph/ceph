@@ -15,8 +15,7 @@
 #ifndef CEPH_ASYNC_FORWARD_HANDLER_H
 #define CEPH_ASYNC_FORWARD_HANDLER_H
 
-#include <boost/asio/associated_allocator.hpp>
-#include <boost/asio/associated_executor.hpp>
+#include <boost/asio/associator.hpp>
 
 namespace ceph::async {
 
@@ -47,25 +46,25 @@ struct ForwardingHandler {
   void operator()(Args&& ...args) {
     std::move(handler)(std::forward<Args>(args)...);
   }
-
-  using allocator_type = boost::asio::associated_allocator_t<Handler>;
-  allocator_type get_allocator() const noexcept {
-    return boost::asio::get_associated_allocator(handler);
-  }
 };
 
 } // namespace ceph::async
 
 namespace boost::asio {
 
-// specialize boost::asio::associated_executor<> for ForwardingHandler
-template <typename Handler, typename Executor>
-struct associated_executor<ceph::async::ForwardingHandler<Handler>, Executor> {
-  using type = boost::asio::associated_executor_t<Handler, Executor>;
-
-  static type get(const ceph::async::ForwardingHandler<Handler>& handler,
-                  const Executor& ex = Executor()) noexcept {
-    return boost::asio::get_associated_executor(handler.handler, ex);
+// forward the handler's associated executor, allocator, cancellation slot, etc
+template <template <typename, typename> class Associator,
+          typename Handler, typename DefaultCandidate>
+struct associator<Associator,
+    ceph::async::ForwardingHandler<Handler>, DefaultCandidate>
+  : Associator<Handler, DefaultCandidate>
+{
+  static auto get(const ceph::async::ForwardingHandler<Handler>& h) noexcept {
+    return Associator<Handler, DefaultCandidate>::get(h.handler);
+  }
+  static auto get(const ceph::async::ForwardingHandler<Handler>& h,
+                  const DefaultCandidate& c) noexcept {
+    return Associator<Handler, DefaultCandidate>::get(h.handler, c);
   }
 };
 
