@@ -4246,7 +4246,7 @@ void OSD::final_init()
 
   r = admin_socket->register_command("compact",
 				     asok_hook,
-				     "Commpact object store's omap."
+				     "Compact object store's omap."
                                      " WARNING: Compaction probably slows your requests");
   ceph_assert(r == 0);
 
