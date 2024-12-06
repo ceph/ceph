@@ -214,7 +214,7 @@ options:
 - name: osd_repair_during_recovery
   type: bool
   level: advanced
-  desc: Allow requested repairing when PGs on the OSD are undergoing recovery
+  desc: not in use
   default: false
   with_legacy: true
 - name: osd_scrub_begin_hour
