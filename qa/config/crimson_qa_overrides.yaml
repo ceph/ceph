@@ -9,6 +9,7 @@ overrides:
         osd pool default crimson: true
       osd:
         crimson osd obc lru size: 10
+        debug ms: 20
     flavor: crimson
   workunit:
     env:
