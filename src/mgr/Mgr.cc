@@ -588,16 +588,16 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
       handle_mgr_digest(ref_cast<MMgrDigest>(m));
       break;
     case CEPH_MSG_MON_MAP:
+      /* MonClient passthrough of MonMap to us */
+      handle_mon_map(); /* use monc's monmap */
       py_module_registry->notify_all("mon_map", "");
-      handle_mon_map();
       break;
     case CEPH_MSG_FS_MAP:
-      py_module_registry->notify_all("fs_map", "");
       handle_fs_map(ref_cast<MFSMap>(m));
+      py_module_registry->notify_all("fs_map", "");
       return false; // I shall let this pass through for Client
     case CEPH_MSG_OSD_MAP:
       handle_osd_map();
-
       py_module_registry->notify_all("osd_map", "");
 
       // Continuous subscribe, so that we can generate notifications
