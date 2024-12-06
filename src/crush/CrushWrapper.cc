@@ -2530,34 +2530,92 @@ int CrushWrapper::get_take_weight_osd_map(int root, map<int,float> *pmap) const
   return 0;
 }
 
+void CrushWrapper::_normalize_weight_map(float sum,
+           int choose_val,
+           unsigned size,
+           const map<int,float>& m,
+           map<int,float> *pmap) const {
+  for (auto& p : m) {
+    map<int,float>::iterator q = pmap->find(p.first);
+    // float w = p.second / (sum / (choose_val / size));
+    float w = (1.0 * p.second * choose_val) / (sum * size);
+    if (q == pmap->end()) {
+      (*pmap)[p.first] = w;
+    } else {
+      if(q->second < w)
+        q->second = w;
+    }
+  }  
+}
+
+/*
+ *  size: pool size
+ */
 int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno,
-					  map<int,float> *pmap) const
+					  map<int,float> *pmap, unsigned size) const
 {
   if (ruleno >= crush->max_rules)
     return -ENOENT;
   if (crush->rules[ruleno] == NULL)
     return -ENOENT;
-  crush_rule *rule = crush->rules[ruleno];
+  if(size == 0)
+    return -EINVAL;  
+  crush_rule *rule = crush->rules[ruleno]; 
 
-  // build a weight map for each TAKE in the rule, and then merge them
+ // build a weight map for each TAKE in the rule, and then merge them
+ // FIXME: if there are multiple takes that place a different number of
+ // objects we do not take that into account.  (Also, note that doing this
+ // right is also a function of the pool, since the crush rule
+ // might choose 2 + choose 2 but pool size may only be 3.)
+  int choose_val = 0;
+  int take_item = -1;
+  bool has_take = false;
 
-  // FIXME: if there are multiple takes that place a different number of
-  // objects we do not take that into account.  (Also, note that doing this
-  // right is also a function of the pool, since the crush rule
-  // might choose 2 + choose 2 but pool size may only be 3.)
-  for (unsigned i=0; i<rule->len; ++i) {
-    map<int,float> m;
+  for (unsigned i=0; i<rule->len; ++i){
+    const struct crush_rule_step *curstep = &rule->steps[i];
+    int  choose_num = 0;
+    map<int,float> omap;
+    int val;
     float sum = 0;
-    if (rule->steps[i].op == CRUSH_RULE_TAKE) {
-      int n = rule->steps[i].arg1;
-      if (n >= 0) {
-	m[n] = 1.0;
-	sum = 1.0;
-      } else {
-	sum += _get_take_weight_osd_map(n, &m);
+    switch (curstep->op) {
+    case CRUSH_RULE_TAKE:
+      take_item = curstep->arg1;
+      choose_val = 0;
+      has_take = true;
+      break;
+
+    case CRUSH_RULE_CHOOSELEAF_FIRSTN:
+    case CRUSH_RULE_CHOOSE_FIRSTN:
+    case CRUSH_RULE_CHOOSELEAF_INDEP:
+    case CRUSH_RULE_CHOOSE_INDEP:
+      val = curstep->arg1;
+      if(val == 0){
+        choose_num = size;
+      } else if(val > 0){
+        choose_num = std::min(val, (int)size);
+      }else{
+        choose_num = std::min(val + (int)size, (int)size);
       }
+      if(choose_val <= 0)
+        choose_val = choose_num;
+      else
+        choose_val *= choose_num;
+      break;
+    case CRUSH_RULE_EMIT:
+      if(choose_val > 0 && has_take){
+        if(take_item >= 0){
+          omap[take_item] = 1.0;
+          sum = 1.0;
+        }else{
+          sum = _get_take_weight_osd_map(take_item, &omap);
+        }
+        _normalize_weight_map(sum, choose_val, size, omap, pmap);
+      }
+      take_item = -1;
+      choose_val = 0;
+      has_take = false;
+      break;
     }
-    _normalize_weight_map(sum, m, pmap);
   }
 
   return 0;
