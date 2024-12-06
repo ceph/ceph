@@ -163,11 +163,9 @@ export class PrometheusService {
                 checkNan
               ) {
                 queriesResults[queryName].forEach((valueArray: any[]) => {
-                  valueArray.forEach((val, index) => {
-                    if (isNaN(parseFloat(val[1]))) {
-                      valueArray[index][1] = '0';
-                    }
-                  });
+                  if (isNaN(parseFloat(valueArray[1]))) {
+                    valueArray[1] = '0';
+                  }
                 });
               }
             });
