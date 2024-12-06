@@ -31,6 +31,21 @@ int cls_2pc_queue_get_capacity_result(const bufferlist& bl, uint64_t& size) {
   return 0;
 }
 
+int cls_2pc_queue_get_topic_stats_result(const bufferlist& bl, uint32_t& committed_entries, uint64_t& size) {
+  cls_queue_get_stats_ret op_ret;
+  auto iter = bl.cbegin();
+  try {
+    decode(op_ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  committed_entries = op_ret.queue_entries;
+  size = op_ret.queue_size;
+
+  return 0;
+}
+
 #ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_2pc_queue_get_capacity(IoCtx& io_ctx, const std::string& queue_name, uint64_t& size) {
   bufferlist in, out;
@@ -44,10 +59,29 @@ int cls_2pc_queue_get_capacity(IoCtx& io_ctx, const std::string& queue_name, uin
 #endif
 
 // optionally async method for getting capacity (bytes) 
-// after answer is received, call cls_2pc_queue_get_capacity_result() to prase the results
+// after answer is received, call cls_2pc_queue_get_capacity_result() to parse the results
 void cls_2pc_queue_get_capacity(ObjectReadOperation& op, bufferlist* obl, int* prval) {
   bufferlist in;
   op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_GET_CAPACITY, in, obl, prval);
+}
+
+#ifndef CLS_CLIENT_HIDE_IOCTX
+int cls_2pc_queue_get_topic_stats(IoCtx& io_ctx, const std::string& queue_name, uint32_t& committed_entries, uint64_t& size) {
+  bufferlist in, out;
+  const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_GET_TOPIC_STATS, in, out);
+  if (r < 0 ) {
+    return r;
+  }
+
+  return cls_2pc_queue_get_topic_stats_result(out, committed_entries, size);
+}
+#endif
+
+// optionally async method for getting number of commited entries and size (bytes)
+// after answer is received, call cls_2pc_queue_get_topic_stats_result() to parse the results
+void cls_2pc_queue_get_topic_stats(ObjectReadOperation& op, bufferlist* obl, int* prval) {
+  bufferlist in;
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_GET_TOPIC_STATS, in, obl, prval);
 }
 
 
@@ -192,10 +226,11 @@ void cls_2pc_queue_list_reservations(ObjectReadOperation& op, bufferlist* obl, i
   op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_LIST_RESERVATIONS, in, obl, prval);
 }
 
-void cls_2pc_queue_remove_entries(ObjectWriteOperation& op, const std::string& end_marker) {
+void cls_2pc_queue_remove_entries(ObjectWriteOperation& op, const std::string& end_marker, uint64_t entries_to_remove) {
   bufferlist in;
-  cls_queue_remove_op rem_op;
+  cls_2pc_queue_remove_op rem_op;
   rem_op.end_marker = end_marker;
+  rem_op.entries_to_remove = entries_to_remove;
   encode(rem_op, in);
   op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_REMOVE_ENTRIES, in);
 }
