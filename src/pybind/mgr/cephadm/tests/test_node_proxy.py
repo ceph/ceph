@@ -36,7 +36,7 @@ class FakeMgr:
         self.node_proxy = MagicMock()
         self.http_server = MagicMock()
         self.http_server.agent = MagicMock()
-        self.http_server.agent.ssl_certs = SSLCerts()
+        self.http_server.agent.ssl_certs = SSLCerts("fake fsid")
         self.http_server.agent.ssl_certs.generate_root_cert(addr=self.get_mgr_ip())
         self.cert_mgr = FakeCertMgr()
 

@@ -15,11 +15,12 @@ class SSLConfigException(Exception):
 
 
 class SSLCerts:
-    def __init__(self) -> None:
+    def __init__(self, fsid: str) -> None:
         self.root_cert: Any
         self.root_key: Any
         self.key_file: IO[bytes]
         self.cert_file: IO[bytes]
+        self.mgr_cluster_fsid: str = fsid
 
     def generate_root_cert(
         self,
@@ -31,10 +32,10 @@ class SSLCerts:
         root_public_key = self.root_key.public_key()
         root_builder = x509.CertificateBuilder()
         root_builder = root_builder.subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
+            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-{}-root'.format(self.mgr_cluster_fsid)),
         ]))
         root_builder = root_builder.issuer_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
+            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-{}-root'.format(self.mgr_cluster_fsid)),
         ]))
         root_builder = root_builder.not_valid_before(datetime.now())
         root_builder = root_builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))

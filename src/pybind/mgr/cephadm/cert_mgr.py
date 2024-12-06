@@ -12,7 +12,7 @@ class CertMgr:
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
 
     def __init__(self, mgr: "CephadmOrchestrator", ip: str) -> None:
-        self.ssl_certs: SSLCerts = SSLCerts()
+        self.ssl_certs: SSLCerts = SSLCerts(fsid=mgr._cluster_fsid)
         old_cert = mgr.cert_key_store.get_cert(self.CEPHADM_ROOT_CA_CERT)
         old_key = mgr.cert_key_store.get_key(self.CEPHADM_ROOT_CA_KEY)
         if old_key and old_cert:
