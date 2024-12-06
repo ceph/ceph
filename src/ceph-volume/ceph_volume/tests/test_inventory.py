@@ -118,7 +118,7 @@ def device_data(device_info):
 class TestInventory(object):
 
     expected_keys = [
-        'ceph_device',
+        'ceph_device_lvm',
         'path',
         'rejected_reasons',
         'sys_api',
