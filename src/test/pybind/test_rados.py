@@ -207,7 +207,7 @@ class TestRados(object):
 
     def test_get_fsid(self):
         fsid = self.rados.get_fsid()
-        assert re.match('[0-9a-f\-]{36}', fsid, re.I)
+        assert re.match(r'[0-9a-f\-]{36}', fsid, re.I)
 
     def test_blocklist_add(self):
         self.rados.blocklist_add("1.2.3.4/123", 1)
