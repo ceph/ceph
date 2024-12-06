@@ -187,6 +187,7 @@ protected:
   virtual void connect(boost::asio::ip::tcp::resolver::results_type results,
                        Context* on_finish) = 0;
   virtual void disconnect(Context* on_finish) = 0;
+  virtual void reset_stream() = 0;
 
   void close_socket() {
     auto cct = m_http_client->m_cct;
@@ -527,6 +528,7 @@ private:
       ceph_assert(next_state == STATE_RESET_CONNECTING);
       ceph_assert(on_finish == nullptr);
       shutdown_socket();
+      reset_stream();
       resolve_host(nullptr);
       return;
     } else if (current_state == STATE_RESET_CONNECTING) {
@@ -612,9 +614,12 @@ protected:
     on_finish->complete(0);
   }
 
+  void reset_stream() override {
+    // no-op -- tcp_stream object can be reused after shut down
+  }
+
 private:
   boost::beast::tcp_stream m_stream;
-
 };
 
 #undef dout_prefix
@@ -666,6 +671,17 @@ protected:
     m_stream.async_shutdown(
       asio::util::get_callback_adapter([this, on_finish](int r) {
         shutdown(r, on_finish); }));
+  }
+
+  void reset_stream() override {
+    auto http_client = this->m_http_client;
+    auto cct = http_client->m_cct;
+    ldout(cct, 15) << dendl;
+
+    // ssl_stream object can't be reused after shut down -- move-in
+    // a freshly constructed instance
+    m_stream = boost::beast::ssl_stream<boost::beast::tcp_stream>(
+      http_client->m_strand, http_client->m_ssl_context);
   }
 
 private:
