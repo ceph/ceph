@@ -29,7 +29,7 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Driver* driver,
 
   if (driver) {
     key = driver->get_zone()->get_system_key();
-    self_zone_group = driver->get_zone()->get_zonegroup().get_id();
+    self_zone = driver->get_zone()->get_id();
   }
 }
 
@@ -37,13 +37,13 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
                          RGWAccessKey _cred,
-                         std::string _zone_group,
+                         std::string _zone,
                          std::optional<string> _api_name,
                          HostStyle _host_style)
   : cct(_cct),
     endpoints(remote_endpoints.begin(), remote_endpoints.end()),
     key(_cred),
-    self_zone_group(_zone_group),
+    self_zone(_zone),
     remote_id(_remote_id),
     api_name(_api_name),
     host_style(_host_style)
@@ -60,7 +60,7 @@ RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
     endpoints(std::move(other.endpoints)),
     endpoints_status(std::move(other.endpoints_status)),
     key(std::move(other.key)),
-    self_zone_group(std::move(other.self_zone_group)),
+    self_zone(std::move(other.self_zone)),
     remote_id(std::move(other.remote_id)),
     counter(other.counter.load())
 {
@@ -72,7 +72,7 @@ RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
   endpoints = std::move(other.endpoints);
   endpoints_status = std::move(other.endpoints_status);
   key = std::move(other.key);
-  self_zone_group = std::move(other.self_zone_group);
+  self_zone = std::move(other.self_zone);
   remote_id = std::move(other.remote_id);
   counter = other.counter.load();
   return *this;
@@ -147,10 +147,10 @@ void RGWRESTConn::set_url_unconnectable(const std::string& endpoint)
   ldout(cct, 10) << "set endpoint unconnectable. url=" << endpoint << dendl;
 }
 
-void RGWRESTConn::populate_params(param_vec_t& params, const rgw_owner* uid, const string& zonegroup)
+void RGWRESTConn::populate_params(param_vec_t& params, const rgw_owner* uid, const string& zone)
 {
   populate_uid(params, uid);
-  populate_zonegroup(params, zonegroup);
+  populate_zone(params, zone);
 }
 
 int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
@@ -164,7 +164,7 @@ int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid, co
     if (ret < 0)
       return ret;
     param_vec_t params;
-    populate_params(params, &uid, self_zone_group);
+    populate_params(params, &uid, self_zone);
     if (objv) {
       params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
       char buf[16];
@@ -226,7 +226,7 @@ int RGWRESTConn::put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair
     return ret;
 
   param_vec_t params;
-  populate_params(params, nullptr, self_zone_group);
+  populate_params(params, nullptr, self_zone);
 
   if (extra_params) {
     append_param_list(params, extra_params);
@@ -249,7 +249,7 @@ int RGWRESTConn::put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_own
     return ret;
 
   param_vec_t params;
-  populate_params(params, &uid, self_zone_group);
+  populate_params(params, &uid, self_zone);
   RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params, api_name, host_style);
   // coverity[uninit_use_in_call:SUPPRESS]
   wr->put_obj_init(dpp, key, obj, attrs);
@@ -328,7 +328,7 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, cons
     return ret;
 
   param_vec_t params;
-  populate_params(params, &in_params.uid, self_zone_group);
+  populate_params(params, &in_params.uid, self_zone);
   if (in_params.prepend_metadata) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", "true"));
   }
@@ -452,7 +452,7 @@ int RGWRESTConn::get_resource(const DoutPrefixProvider *dpp,
       params.insert(params.end(), extra_params->begin(), extra_params->end());
     }
 
-    populate_params(params, nullptr, self_zone_group);
+    populate_params(params, nullptr, self_zone);
 
     RGWStreamIntoBufferlist cb(bl);
 
@@ -506,7 +506,7 @@ int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const std::string&
       params = make_param_list(extra_params);
     }
 
-    populate_params(params, nullptr, self_zone_group);
+    populate_params(params, nullptr, self_zone);
 
     RGWStreamIntoBufferlist cb(bl);
 
@@ -565,7 +565,7 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
 
 void RGWRESTReadResource::init_common(param_vec_t *extra_headers)
 {
-  conn->populate_params(params, nullptr, conn->get_self_zonegroup());
+  conn->populate_params(params, nullptr, conn->get_self_zone());
 
   if (extra_headers) {
     headers.insert(extra_headers->begin(), extra_headers->end());
@@ -629,7 +629,7 @@ RGWRESTSendResource::RGWRESTSendResource(RGWRESTConn *_conn,
 
 void RGWRESTSendResource::init_common(param_vec_t *extra_headers)
 {
-  conn->populate_params(params, nullptr, conn->get_self_zonegroup());
+  conn->populate_params(params, nullptr, conn->get_self_zone());
 
   if (extra_headers) {
     headers.insert(extra_headers->begin(), extra_headers->end());
