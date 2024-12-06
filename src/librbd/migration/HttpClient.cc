@@ -229,7 +229,6 @@ private:
     auto cct = m_http_client->m_cct;
     ldout(cct, 15) << dendl;
 
-    shutdown_socket();
     m_resolver.async_resolve(
       m_http_client->m_url_spec.host, m_http_client->m_url_spec.port,
       [this, on_finish](boost::system::error_code ec, auto results) {
@@ -601,6 +600,7 @@ protected:
     auto cct = http_client->m_cct;
     ldout(cct, 15) << dendl;
 
+    ceph_assert(!m_stream.socket().is_open());
     m_stream.async_connect(
       results,
       [on_finish](boost::system::error_code ec, const auto& endpoint) {
@@ -645,6 +645,7 @@ protected:
     auto cct = http_client->m_cct;
     ldout(cct, 15) << dendl;
 
+    ceph_assert(!boost::beast::get_lowest_layer(m_stream).socket().is_open());
     boost::beast::get_lowest_layer(m_stream).async_connect(
       results,
       [this, on_finish](boost::system::error_code ec, const auto& endpoint) {
