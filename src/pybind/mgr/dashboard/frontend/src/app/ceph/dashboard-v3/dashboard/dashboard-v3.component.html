@@ -67,10 +67,9 @@
                class="pt-4"
                aria-label="Inventory card">
         <!-- Hosts -->
-        <cd-card-row [data]="healthData.hosts"
+        <cd-card-row [data]="hosts | hostSummary"
                      link="/hosts"
                      title="Host"
-                     summaryType="simplified"
                      *ngIf="healthData.hosts != null"
                      [dropdownData]="(isHardwareEnabled$ | async) && (hardwareSummary$ | async)">
         </cd-card-row>
