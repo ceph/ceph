@@ -21,6 +21,7 @@
 #include "rgw_lua_request.h"
 #include "rgw_tracer.h"
 #include "rgw_ratelimit.h"
+#include "rgw_bucket_logging.h"
 
 #include "services/svc_zone_utils.h"
 
@@ -443,6 +444,18 @@ done:
   if (should_log) {
     rgw_log_op(rest, s, op, penv.olog);
   }
+
+  std::ignore = rgw::bucketlogging::log_record(driver, 
+      rgw::bucketlogging::LoggingType::Standard,
+      s->object.get(),
+      s, 
+      op->canonical_name(), 
+      "", 
+      (s->src_object ? s->src_object->get_size() : (s->object ? s->object->get_size() : 0)),
+      op, 
+      yield, 
+      true,
+      false);
 
   if (http_ret != nullptr) {
     *http_ret = s->err.http_ret;

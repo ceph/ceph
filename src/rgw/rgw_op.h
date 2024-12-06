@@ -83,6 +83,10 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
                                        RGWAccessControlPolicy& policy,
                                        optional_yield y);
 
+std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp, req_state* s, bool check_obj_exist_tag=true);
+
+int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s);
+
 class RGWHandler {
 protected:
   rgw::sal::Driver* driver{nullptr};
@@ -296,6 +300,7 @@ public:
   }
   virtual const char* name() const = 0;
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }
+  virtual std::string canonical_name() const { return fmt::format("REST.{}.{}", s->info.method, name()); }
 
   virtual uint32_t op_mask() { return 0; }
 
@@ -972,18 +977,6 @@ public:
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   virtual bool need_container_stats() { return false; }
-};
-
-class RGWGetBucketLogging : public RGWOp {
-public:
-  RGWGetBucketLogging() {}
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield) override { }
-
-  void send_response() override = 0;
-  const char* name() const override { return "get_bucket_logging"; }
-  RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOGGING; }
-  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 class RGWGetBucketLocation : public RGWOp {
