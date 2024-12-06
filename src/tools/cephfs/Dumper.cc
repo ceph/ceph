@@ -227,23 +227,54 @@ int Dumper::undump(const char *dump_file, bool force)
   char buf[HEADER_LEN];
   r = safe_read(fd, buf, sizeof(buf));
   if (r < 0) {
+    derr << "Error reading " << dump_file << dendl;
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return r;
+  } else if (r == 0) {
+    //Empty file read
+    cout << "No-op since empty journal dump file " << dump_file << std::endl;
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return r;
   }
 
   long long unsigned start, len, write_pos, format, trimmed_pos;
   long unsigned stripe_unit, stripe_count, object_size;
-  sscanf(strstr(buf, "start offset"), "start offset %llu", &start);
-  sscanf(strstr(buf, "length"), "length %llu", &len);
-  sscanf(strstr(buf, "write_pos"), "write_pos %llu", &write_pos);
-  sscanf(strstr(buf, "format"), "format %llu", &format);
+  char *phdr = strstr(buf, "start offset");
+  if (phdr == NULL) {
+      derr  << "Invalid header, no 'start offset' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+  }
+  sscanf(phdr, "start offset %llu", &start);
+  phdr = strstr(buf, "length");
+  if (phdr == NULL) {
+      derr  << "Invalid header, no 'length' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+  }
+  sscanf(phdr, "length %llu", &len);
+  phdr = strstr(buf, "write_pos");
+  if (phdr == NULL) {
+      derr  << "Invalid header, no 'write_pos' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+  }
+  sscanf(phdr, "write_pos %llu", &write_pos);
+  phdr = strstr(buf, "format");
+  if (phdr == NULL) {
+      derr  << "Invalid header, no 'format' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+  }
+  sscanf(phdr, "format %llu", &format);
 
   if (!force) {
     // need to check if fsid match onlien cluster fsid
-    if (strstr(buf, "fsid")) {
+    phdr = strstr(buf, "fsid");
+    if (phdr) {
       uuid_d fsid;
       char fsid_str[40];
-      sscanf(strstr(buf, "fsid"), "fsid %39s", fsid_str);
+      sscanf(phdr, "fsid %39s", fsid_str);
       r = fsid.parse(fsid_str);
       if (!r) {
 	derr  << "Invalid fsid" << dendl;
