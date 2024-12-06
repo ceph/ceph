@@ -33,6 +33,7 @@ overrides:
         osd shutdown pgref assert: true
     log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
+      - is down
       - OSD_DOWN
       - mons down
       - mon down
