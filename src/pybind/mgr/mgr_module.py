@@ -18,6 +18,7 @@ import subprocess
 import threading
 from collections import defaultdict
 from enum import IntEnum, Enum
+import os
 import rados
 import re
 import socket
@@ -583,6 +584,11 @@ if TYPE_CHECKING:
 # common/options.h: value_t
 OptionValue = Optional[Union[bool, int, float, str]]
 
+class OptionLevel(IntEnum):
+    BASIC = 0
+    ADVANCED = 1
+    DEV = 2
+    UNKNOWN = 3
 
 class Option(Dict):
     """
@@ -593,6 +599,7 @@ class Option(Dict):
     def __init__(
             self,
             name: str,
+            level: OptionLevel = OptionLevel.ADVANCED,
             default: OptionValue = None,
             type: 'OptionTypeLabel' = 'str',
             desc: Optional[str] = None,
@@ -869,6 +876,8 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
                                  'warning', '']))
         cls.MODULE_OPTIONS.append(
             Option(name='log_to_file', type='bool', default=False, runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='sqlite3_killpoint', level=OptionLevel.DEV, type='int', default=0, runtime=True))
         if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
             cls.MODULE_OPTIONS.append(
                 Option(name='log_to_cluster', type='bool', default=False,
@@ -988,8 +997,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
 
     # Database Schema
-    SCHEMA = None # type: Optional[str]
-    SCHEMA_VERSIONED = None # type: Optional[List[str]]
+    SCHEMA = None # type: Optional[List[str]]
+    SCHEMA_VERSIONED = None # type: Optional[List[List[str]]]
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -1071,6 +1080,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                                  'warning', '']))
         cls.MODULE_OPTIONS.append(
             Option(name='log_to_file', type='bool', default=False, runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='sqlite3_killpoint', level=OptionLevel.DEV, type='int', default=0, runtime=True))
         if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
             cls.MODULE_OPTIONS.append(
                 Option(name='log_to_cluster', type='bool', default=False,
@@ -1172,15 +1183,20 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self.appify_pool(self.MGR_POOL_NAME, 'mgr')
 
     def create_skeleton_schema(self, db: sqlite3.Connection) -> None:
-        SQL = """
+        SQL = [
+        """
         CREATE TABLE IF NOT EXISTS MgrModuleKV (
           key TEXT PRIMARY KEY,
           value NOT NULL
         ) WITHOUT ROWID;
-        INSERT OR IGNORE INTO MgrModuleKV (key, value) VALUES ('__version', 0);
+        """,
         """
+        INSERT OR IGNORE INTO MgrModuleKV (key, value) VALUES ('__version', 0);
+        """,
+        ]
 
-        db.executescript(SQL)
+        for sql in SQL:
+            db.execute(sql)
 
     def update_schema_version(self, db: sqlite3.Connection, version: int) -> None:
         SQL = "UPDATE OR ROLLBACK MgrModuleKV SET value = ? WHERE key = '__version';"
@@ -1219,7 +1235,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         if version <= 0:
             self.log.info(f"creating main.db for {self.module_name}")
             assert self.SCHEMA is not None
-            db.executescript(self.SCHEMA)
+            for sql in self.SCHEMA:
+                db.execute(sql)
             self.update_schema_version(db, 1)
         else:
             assert self.SCHEMA_VERSIONED is not None
@@ -1228,8 +1245,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 raise RuntimeError(f"main.db version is newer ({version}) than module ({latest})")
             for i in range(version, latest):
                 self.log.info(f"upgrading main.db for {self.module_name} from {i-1}:{i}")
-                SQL = self.SCHEMA_VERSIONED[i]
-                db.executescript(SQL)
+                for sql in self.SCHEMA_VERSIONED[i]:
+                    db.execute(sql)
             if version < latest:
                 self.update_schema_version(db, latest)
 
@@ -1238,13 +1255,21 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         SELECT value FROM MgrModuleKV WHERE key = '__version';
         """
 
+        kv = self.get_module_option('sqlite3_killpoint')
         with db:
+            db.execute('BEGIN;')
             self.create_skeleton_schema(db)
+            if kv == 1:
+                os._exit(120)
             cur = db.execute(SQL)
             row = cur.fetchone()
             self.maybe_upgrade(db, int(row['value']))
             assert cur.fetchone() is None
             cur.close()
+            if kv == 2:
+                os._exit(120)
+        if kv == 3:
+            os._exit(120)
 
     def configure_db(self, db: sqlite3.Connection) -> None:
         db.execute('PRAGMA FOREIGN_KEYS = 1')
@@ -1268,7 +1293,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self.create_mgr_pool()
         uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph";
         self.log.debug(f"using uri {uri}")
-        db = sqlite3.connect(uri, check_same_thread=False, uri=True)
+        try:
+            db = sqlite3.connect(uri, check_same_thread=False, uri=True, autocommit=False) # type: ignore[call-arg]
+        except TypeError:
+            db = sqlite3.connect(uri, check_same_thread=False, uri=True, isolation_level=None)
         # if libcephsqlite reconnects, update the addrv for blocklist
         with db:
             cur = db.execute('SELECT json_extract(ceph_status(), "$.addr");')
