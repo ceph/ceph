@@ -1557,6 +1557,20 @@ class CephFSMountBase(object):
             # gives you [''] instead of []
             return []
 
+    def removexattr(self, path, key, **kwargs):
+        """
+        Wrap setfattr removal.
+
+        :param path: relative to mount point
+        :param key: xattr name
+        :return: None
+        """
+        kwargs['args'] = ["setfattr", "-x", key, path]
+        if kwargs.pop('sudo', False):
+            kwargs['args'].insert(0, 'sudo')
+            kwargs['omit_sudo'] = False
+        self.run_shell(**kwargs)
+
     def setfattr(self, path, key, val, **kwargs):
         """
         Wrap setfattr.
