@@ -1,7 +1,11 @@
 tasks:
 - cephadm.shell:
     host.a:
+      - ceph fs fail foo
+      - ceph fs set foo refuse_client_session true
       - ceph fs volume rename foo bar --yes-i-really-mean-it
+      - ceph fs set bar joinable true
+      - ceph fs set bar refuse_client_session false
 - fs.ready:
     timeout: 300
 - cephadm.shell:
