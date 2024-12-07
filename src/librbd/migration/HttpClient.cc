@@ -663,11 +663,6 @@ protected:
     auto cct = http_client->m_cct;
     ldout(cct, 15) << dendl;
 
-    if (!m_ssl_enabled) {
-      on_finish->complete(0);
-      return;
-    }
-
     m_stream.async_shutdown(
       asio::util::get_callback_adapter([this, on_finish](int r) {
         shutdown(r, on_finish); }));
@@ -686,7 +681,6 @@ protected:
 
 private:
   boost::beast::ssl_stream<boost::beast::tcp_stream> m_stream;
-  bool m_ssl_enabled = false;
 
   void handle_connect(int r, Context* on_finish) {
     auto http_client = this->m_http_client;
@@ -761,7 +755,6 @@ private:
       return;
     }
 
-    m_ssl_enabled = true;
     on_finish->complete(0);
   }
 
