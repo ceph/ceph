@@ -148,12 +148,12 @@ INSTANTIATE_TEST_SUITE_P(
     PerfCounters,
     RocksDBMetricsTest,
     ::testing::Values(
-        // RocksDBMetricsTestParams{true, "telemetry"},
-        // RocksDBMetricsTestParams{false, "telemetry"},
-        // RocksDBMetricsTestParams{true, "objectstore"},
-        // RocksDBMetricsTestParams{false, "objectstore"},
-        // RocksDBMetricsTestParams{true, "debug"},
-        // RocksDBMetricsTestParams{false, "debug"},
+        RocksDBMetricsTestParams{true, "telemetry"},
+        RocksDBMetricsTestParams{false, "telemetry"},
+        RocksDBMetricsTestParams{true, "objectstore"},
+        RocksDBMetricsTestParams{false, "objectstore"},
+        RocksDBMetricsTestParams{true, "debug"},
+        RocksDBMetricsTestParams{false, "debug"},
         RocksDBMetricsTestParams{false, "all"},
         RocksDBMetricsTestParams{true, "all"}
         ));
@@ -540,10 +540,76 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
         EXPECT_EQ(columns["default"]["total_stop"].get<int>(), 0);
     }
     else if (params.perf_counters_enabled && (params.mode == "debug")){
+        ASSERT_TRUE(columns.contains("default"));
+        EXPECT_EQ(columns["default"]["sum"]["CompCount"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["sum"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["sum"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["sum"]["NumFiles"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["sum"]["ReadGB"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["sum"]["ReadMBps"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["sum"]["WriteAmp"].get<int>(), 1);
 
+        EXPECT_EQ(columns["default"]["l0"]["CompCount"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["l0"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["NumFiles"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["ReadGB"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["ReadMBps"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["WriteAmp"].get<int>(), 1);
+
+        EXPECT_EQ(columns["default"]["l1"]["CompCount"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["CompMergeCPU"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["NumFiles"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["l1"]["ReadGB"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["ReadMBps"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["WriteAmp"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["WriteGB"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["WriteMBps"].get<double>(), 0);
+
+        EXPECT_EQ(columns["default"]["level0_numfiles"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["level0_numfiles_with_compaction"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["level0_slowdown"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["level0_slowdown_with_compaction"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["slowdown_for_pending_compaction_bytes"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["stop_for_pending_compaction_bytes"].get<int>(), 0);
     }
     else if (params.mode == "debug"){
+        ASSERT_TRUE(columns.contains("default"));
+        EXPECT_EQ(columns["default"]["sum"]["CompCount"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["sum"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["sum"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["sum"]["NumFiles"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["sum"]["ReadGB"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["sum"]["ReadMBps"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["sum"]["WriteAmp"].get<int>(), 1);
 
+        EXPECT_EQ(columns["default"]["l0"]["CompCount"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["l0"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["NumFiles"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["ReadGB"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["ReadMBps"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l0"]["WriteAmp"].get<int>(), 1);
+
+        EXPECT_EQ(columns["default"]["l1"]["CompCount"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["CompMergeCPU"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["KeyDrop"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["KeyIn"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["NumFiles"].get<int>(), 1);
+        EXPECT_EQ(columns["default"]["l1"]["ReadGB"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["ReadMBps"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["WriteAmp"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["WriteGB"].get<double>(), 0);
+        EXPECT_EQ(columns["default"]["l1"]["WriteMBps"].get<double>(), 0);
+
+        EXPECT_EQ(columns["default"]["level0_numfiles"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["level0_numfiles_with_compaction"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["level0_slowdown"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["level0_slowdown_with_compaction"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["slowdown_for_pending_compaction_bytes"].get<int>(), 0);
+        EXPECT_EQ(columns["default"]["stop_for_pending_compaction_bytes"].get<int>(), 0);
     }
 
 
