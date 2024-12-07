@@ -739,19 +739,20 @@ private:
     // Perform the SSL/TLS handshake
     m_stream.async_handshake(
       boost::asio::ssl::stream_base::client,
-      asio::util::get_callback_adapter(
-        [this, on_finish](int r) { handle_handshake(r, on_finish); }));
+      [this, on_finish](boost::system::error_code ec) {
+        handle_handshake(ec, on_finish);
+      });
   }
 
-  void handle_handshake(int r, Context* on_finish) {
+  void handle_handshake(boost::system::error_code ec, Context* on_finish) {
     auto http_client = this->m_http_client;
     auto cct = http_client->m_cct;
-    ldout(cct, 15) << "r=" << r << dendl;
+    ldout(cct, 15) << "ec=" << ec.what() << dendl;
 
-    if (r < 0) {
-      lderr(cct) << "failed to complete handshake: " << cpp_strerror(r)
+    if (ec) {
+      lderr(cct) << "failed to complete SSL handshake: " << ec.message()
                  << dendl;
-      on_finish->complete(r);
+      on_finish->complete(-ec.value());
       return;
     }
 
