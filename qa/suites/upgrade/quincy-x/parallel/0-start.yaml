@@ -46,3 +46,4 @@ overrides:
       - pg .* is stuck inactive
       - pg .* is .*degraded
       - OSDMAP_FLAGS
+      - OSD_UPGRADE_FINISHED
