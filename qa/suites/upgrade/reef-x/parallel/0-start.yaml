@@ -47,3 +47,4 @@ overrides:
       - pg .* is .*degraded
       - FS_DEGRADED
       - OSDMAP_FLAGS
+      - OSD_UPGRADE_FINISHED
