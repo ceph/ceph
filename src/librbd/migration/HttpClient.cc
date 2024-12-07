@@ -757,8 +757,7 @@ private:
     if (r < 0) {
       lderr(cct) << "failed to complete handshake: " << cpp_strerror(r)
                  << dendl;
-      disconnect(new LambdaContext([r, on_finish](int) {
-        on_finish->complete(r); }));
+      on_finish->complete(r);
       return;
     }
 
