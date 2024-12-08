@@ -230,6 +230,10 @@ std::pair<int, std::string> PyModuleConfig::set_config(
   }
 }
 
+  PyModule::PyModule(const std::string &module_name_)
+    : module_name(module_name_)
+  { pymodule_perf_counters_start(g_ceph_context); }
+
 PyObject* PyModule::init_ceph_logger()
 {
   auto py_logger = PyModule_Create(&ceph_logger_module);
@@ -687,6 +691,61 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
   Py_DECREF(mgr_module_type);
 
   return *py_class ? 0 : -EINVAL;
+}
+
+void PyModule::update_perf_counters() {
+  ceph_assert(perfcounter);
+  ceph_assert(process_obj);
+  PyGILState_STATE gstate = PyGILState_Ensure();
+  _update_cpu_perf_counter();
+  _update_memory_perf_counter();
+  PyGILState_Release(gstate);
+}
+
+void PyModule::_update_cpu_perf_counter() {
+  uint64_t cpu_usage = 0;
+  PyObject* threads = PyObject_CallMethod(*process_obj.get(), "threads", nullptr);
+  if (threads) {
+    for (Py_ssize_t i = 0; i < PyList_Size(threads); i++) {
+      PyObject* thread = PyList_GetItem(threads, i);
+      if (!thread) continue;
+      PyObject* tid_obj = PyObject_GetAttrString(thread, "id");
+      if (tid_obj) {
+        unsigned long long thread_id = PyLong_AsUnsignedLongLong(tid_obj);
+        Py_DECREF(tid_obj);
+
+        if (thread_id && thread_id == static_cast<unsigned long long>(tid)) {
+          
+          PyObject* user_time = PyObject_GetAttrString(thread, "user_time");
+          PyObject* system_time = PyObject_GetAttrString(thread, "system_time");
+
+          if (user_time && system_time) {
+              cpu_usage = PyFloat_AsDouble(user_time) + PyFloat_AsDouble(system_time);
+              Py_DECREF(user_time);
+              Py_DECREF(system_time);
+          }
+          break;
+        }
+      
+      }
+    }
+    Py_DECREF(threads);
+    perfcounter->inc(l_pym_cpu, cpu_usage);
+  }
+}
+
+void PyModule::_update_memory_perf_counter() {
+  PyObject* memory_info = PyObject_CallMethod(*process_obj.get(), "memory_info", nullptr);
+  uint64_t memory_usage = 0;
+  if (memory_info) {
+    PyObject* rss = PyObject_GetAttrString(memory_info, "rss");
+    if (rss) {
+      memory_usage = PyLong_AsUnsignedLongLong(rss);
+      Py_DECREF(rss);
+    }
+    Py_DECREF(memory_info);
+    perfcounter->inc(l_pym_mem, memory_usage);
+  }
 }
 
 PyModule::~PyModule()

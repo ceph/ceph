@@ -105,6 +105,7 @@ void* PyModuleRunner::PyModuleRunnerThread::entry()
 {
   // No need to acquire the GIL here; the module does it.
   dout(4) << "Entering thread for " << mod->get_name() << dendl;
+  mod->py_module->set_thread_tid(ceph_gettid());
   mod->serve();
   return nullptr;
 }
