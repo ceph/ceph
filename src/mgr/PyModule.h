@@ -18,7 +18,9 @@
 #include <string>
 #include <vector>
 #include <boost/optional.hpp>
+#include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
+#include "common/perf_counters.h"
 #include "Python.h"
 #include "Gil.h"
 #include "mon/MgrMap.h"
@@ -90,16 +92,14 @@ private:
   std::set<std::string> notify_types;
 
 public:
+  std::unique_ptr<PerfCounters> perfcounter;
   static std::string mgr_store_prefix;
 
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
 
-  explicit PyModule(const std::string &module_name_)
-    : module_name(module_name_)
-  {
-  }
+  explicit PyModule(const std::string &module_name_);
 
   ~PyModule();
 
@@ -169,6 +169,35 @@ public:
   bool get_can_run() const {
     std::lock_guard l(lock) ; return can_run;
   }
+
+  enum PerfModuleCounters {
+    l_pym_first = 10000,
+    l_pym_notify_avg_usec,
+    l_pym_cmd_avg_usec,
+    l_pym_serve_avg_usec,
+    l_pym_alive,
+    l_pym_cpu_usage,
+    l_pym_mem_rss_change,
+    l_pym_mem_rss_current,
+    l_pym_last // marks end
+  };
+
+  int perf_counter_build(CephContext *cct) {
+    ceph_assert(perfcounter == nullptr);
+    PerfCountersBuilder pcb(cct, "mgr_module_" + get_name(), l_pym_first, l_pym_last);
+    pcb.add_u64_avg(l_pym_notify_avg_usec, "notify_avg_usec", "Average time spent in notify calls", "nsec", 0);
+    pcb.add_u64_avg(l_pym_cmd_avg_usec, "cmd_avg_usec", "Average time spent in command calls", "csec", 0);
+    pcb.add_u64_avg(l_pym_serve_avg_usec, "serve_avg_usec", "Average time spent in serve calls", "ssec", 0);
+    pcb.add_u64(l_pym_alive, "alive", "Is the module alive?", "aliv", 0, uint64_t(1));
+    pcb.add_u64(l_pym_cpu_usage, "cpu_usage", "CPU usage in percent", "cpu", 0, uint64_t(100));
+    pcb.add_u64(l_pym_mem_rss_change, "mem_rss_change", "Memory RSS change in bytes", "", 0);
+    pcb.add_u64(l_pym_mem_rss_current, "mem_rss_current", "Memory RSS current in bytes", "", 0);
+    perfcounter = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
+    cct->get_perfcounters_collection()->add(perfcounter.get());
+
+    return 0;
+  }
+
 };
 
 typedef std::shared_ptr<PyModule> PyModuleRef;

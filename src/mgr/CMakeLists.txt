@@ -32,6 +32,7 @@ if(WITH_MGR)
     PyModuleRunner.cc
     PyOSDMap.cc
     StandbyPyModules.cc
+    ThreadMonitor.cc
     mgr_commands.cc
     MgrOpRequest.cc
     ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
