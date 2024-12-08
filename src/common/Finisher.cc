@@ -47,6 +47,7 @@ Finisher::~Finisher() {
 void Finisher::start()
 {
   ldout(cct, 10) << __func__ << dendl;
+  started_future = tid_promise.get_future();
   finisher_thread.create(thread_name.c_str());
 }
 
@@ -86,6 +87,8 @@ void *Finisher::finisher_thread_entry()
   std::unique_lock ul(finisher_lock);
   ldout(cct, 10) << "finisher_thread start" << dendl;
 
+  finisher_tid.store(ceph_gettid());
+  tid_promise.set_value();
   utime_t start;
   uint64_t count = 0;
   while (!finisher_stop) {

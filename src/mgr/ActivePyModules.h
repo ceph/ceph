@@ -62,6 +62,7 @@ class ActivePyModules
   Objecter &objecter;
   Finisher &finisher;
   TTLCache<std::string, PyObject*> ttl_cache;
+  ThreadMonitor* m_thread_monitor = nullptr;
 public:
   Finisher cmd_finisher;
 private:
@@ -79,7 +80,7 @@ public:
     bool mon_provides_kv_sub,
     DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
     LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_,
-    Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
+    Finisher &f, DaemonServer &server, PyModuleRegistry &pmr, ThreadMonitor *monitor = nullptr);
 
   ~ActivePyModules();
 
