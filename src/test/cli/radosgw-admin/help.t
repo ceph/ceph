@@ -43,6 +43,7 @@
     bucket sync disable              disable bucket sync
     bucket sync enable               enable bucket sync
     bucket radoslist                 list rados objects backing bucket's objects
+    bucket logging flush             flush pending log records object of source bucket to the log bucket to bucket
     bi get                           retrieve bucket index object entries
     bi put                           store bucket index object entries
     bi list                          list raw bucket index entries
