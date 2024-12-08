@@ -1,11 +1,8 @@
 overrides:
   ceph:
     log-ignorelist:
-      - mons down
-      - mon down
-      - MON_DOWN
-      - out of quorum
-      - PG_AVAILABILITY
+      - Telemetry requires re-opt-in
+      - telemetry module includes new collections
 tasks:
 - install:
     branch: quincy
