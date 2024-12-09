@@ -408,6 +408,7 @@ SeaStore::Shard::mkfs_managers()
       return transaction_manager->with_transaction_intr(
 	Transaction::src_t::MUTATE,
 	"mkfs_seastore",
+	0,
 	[this](auto& t)
       {
         LOG_PREFIX(SeaStoreS::mkfs_managers);
@@ -917,6 +918,7 @@ SeaStore::Shard::list_objects(CollectionRef ch,
       return transaction_manager->with_transaction_intr(
         Transaction::src_t::READ,
         "list_objects",
+	0,
         [this, ch, start, end, &limit, &ret](auto &t)
       {
         LOG_PREFIX(SeaStoreS::list_objects);
@@ -1054,6 +1056,7 @@ SeaStore::Shard::list_collections()
         return transaction_manager->with_transaction_intr(
           Transaction::src_t::READ,
           "list_collections",
+	  0,
           [this, &ret](auto& t)
         {
           LOG_PREFIX(SeaStoreS::list_collections);
@@ -1136,6 +1139,7 @@ SeaStore::Shard::read(
     oid,
     Transaction::src_t::READ,
     "read",
+    op_flags,
     op_type_t::READ,
     [this, offset, len, op_flags](auto &t, auto &onode) {
     return _read(t, onode, offset, len, op_flags);
@@ -1159,6 +1163,7 @@ SeaStore::Shard::exists(
     oid,
     Transaction::src_t::READ,
     "exists",
+    0,
     op_type_t::READ,
     [FNAME](auto& t, auto&) {
     DEBUGT("exists", t);
@@ -1250,6 +1255,7 @@ SeaStore::Shard::get_attr(
     oid,
     Transaction::src_t::READ,
     "get_attr",
+    0,
     op_type_t::GET_ATTR,
     [this, name](auto &t, auto& onode) {
     return _get_attr(t, onode, name);
@@ -1306,6 +1312,7 @@ SeaStore::Shard::get_attrs(
     oid,
     Transaction::src_t::READ,
     "get_attrs",
+    0,
     op_type_t::GET_ATTRS,
     [this](auto &t, auto& onode) {
     return _get_attrs(t, onode);
@@ -1348,6 +1355,7 @@ seastar::future<struct stat> SeaStore::Shard::stat(
     oid,
     Transaction::src_t::READ,
     "stat",
+    0,
     op_type_t::STAT,
     [this, oid](auto &t, auto &onode) {
     return _stat(t, onode, oid);
@@ -1399,6 +1407,7 @@ SeaStore::Shard::omap_get_values(
     oid,
     Transaction::src_t::READ,
     "omap_get_values",
+    0,
     op_type_t::OMAP_GET_VALUES,
     [this, keys](auto &t, auto &onode) {
     return do_omap_get_values(t, onode, keys);
@@ -1539,6 +1548,7 @@ SeaStore::Shard::omap_get_values(
     oid,
     Transaction::src_t::READ,
     "omap_get_values2",
+    0,
     op_type_t::OMAP_GET_VALUES2,
     [this, start](auto &t, auto &onode) {
     return do_omap_get_values(t, onode, start);
@@ -1599,6 +1609,7 @@ SeaStore::Shard::fiemap(
     oid,
     Transaction::src_t::READ,
     "fiemap",
+    0,
     op_type_t::READ,
     [this, off, len](auto &t, auto &onode) {
     return _fiemap(t, onode, off, len);
@@ -2677,6 +2688,7 @@ seastar::future<> SeaStore::Shard::write_meta(
     return transaction_manager->with_transaction_intr(
       Transaction::src_t::MUTATE,
       "write_meta",
+      0,
       [this, &key, &value](auto& t)
     {
       LOG_PREFIX(SeaStoreS::write_meta);
