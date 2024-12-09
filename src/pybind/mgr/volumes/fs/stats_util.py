@@ -5,6 +5,7 @@ and destination directory for the copy operation that is performed for snapshot
 cloning) and pass, print, log and convert them to human readable format
 conveniently.
 '''
+import errno
 from os.path import join as os_path_join
 from typing import Optional
 from logging import getLogger
@@ -190,7 +191,7 @@ class CloneProgressReporter:
                                  f'Printing the exception: {e}')
                         continue
                     except VolumeException as e:
-                        if e.error_str != 'error fetching subvolume metadata':
+                        if e.errno != -errno.EINVAL:
                             raise
                         log.info('Exception VolumeException was raised. Apparently '
                                  'an entry from the metadata file of clone source '
