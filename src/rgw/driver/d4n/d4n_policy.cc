@@ -511,10 +511,10 @@ bool LFUDAPolicy::_erase(const DoutPrefixProvider* dpp, const std::string& key, 
   weightSum -= ((p->second->localWeight < 0) ? 0 : p->second->localWeight);
 
   entries_heap.erase(p->second->handle);
-  entries_map.erase(p);
   delete p->second;
   p->second = nullptr;
-
+  entries_map.erase(p);
+  
   return true;
 }
 
@@ -533,9 +533,9 @@ bool LFUDAPolicy::erase_dirty_object(const DoutPrefixProvider* dpp, const std::s
   }
 
   object_heap.erase(p->second.first->handle);
-  o_entries_map.erase(p);
   delete p->second.first;
   p->second.first = nullptr;
+  o_entries_map.erase(p);
   state_cond.notify_one();
 
   return true;
