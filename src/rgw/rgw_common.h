@@ -1746,24 +1746,22 @@ rgw::IAM::Effect evaluate_iam_policies(
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             req_state * const s,
-                            const RGWAccessControlPolicy& user_acl,
-                            const std::vector<rgw::IAM::Policy>& user_policies,
-                            const std::vector<rgw::IAM::Policy>& session_policies,
-                            const rgw::ARN& res,
-                            const uint64_t op,
-                            bool mandatory_policy=true);
-bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
-                                      req_state * const s,
-                                      const RGWAccessControlPolicy& user_acl,
-                                      const int perm);
-bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            req_state * const s,
                             const rgw::ARN& res,
                             const uint64_t op,
                             bool mandatory_policy=true);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       req_state * const s,
                                       int perm);
+bool verify_bucket_permission(const DoutPrefixProvider* dpp,
+                              struct perm_state_base * const s,
+                              const rgw::ARN& arn,
+                              bool account_root,
+                              const RGWAccessControlPolicy& user_acl,
+                              const RGWAccessControlPolicy& bucket_acl,
+			      const boost::optional<rgw::IAM::Policy>& bucket_policy,
+                              const std::vector<rgw::IAM::Policy>& identity_policies,
+                              const std::vector<rgw::IAM::Policy>& session_policies,
+                              const uint64_t op);
 bool verify_bucket_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
@@ -2011,3 +2009,8 @@ struct AioCompletionDeleter {
   void operator()(librados::AioCompletion* c) { c->release(); }
 };
 using aio_completion_ptr = std::unique_ptr<librados::AioCompletion, AioCompletionDeleter>;
+
+extern boost::optional<rgw::IAM::Policy>
+get_iam_policy_from_attr(CephContext* cct,
+                         const std::map<std::string, bufferlist>& attrs,
+                         const std::string& tenant);
