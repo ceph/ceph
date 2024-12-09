@@ -1441,6 +1441,26 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_read)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_read);
 
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_get_object_osd_position)(
+  rados_ioctx_t io,
+  const char *o,
+  int *acting_primary)
+{
+  tracepoint(librados, rados_get_object_osd_position_enter, io, o, acting_primary);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  int ret;
+
+  ret = ctx->get_object_osd_position(std::string(o), acting_primary);
+  if (ret != 0) {
+    tracepoint(librados, rados_get_object_osd_position_exit, -EINVAL, NULL);
+    return -EINVAL;
+  }
+
+  tracepoint(librados, rados_get_object_osd_position_exit, ret, acting_primary);
+  return 0;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_get_object_osd_position);
+
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_checksum)(
   rados_ioctx_t io, const char *o,
   rados_checksum_type_t type,
