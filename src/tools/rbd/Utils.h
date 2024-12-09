@@ -277,6 +277,8 @@ int mgr_command(librados::Rados& rados, const std::string& cmd,
                 const std::map<std::string, std::string> &args,
                 std::ostream *out_os, std::ostream *err_os);
 
+bool is_blk_dev(std::string_view path);
+
 } // namespace utils
 } // namespace rbd
 
