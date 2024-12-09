@@ -10,6 +10,7 @@
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "log/Log.h"
 
 #define dout_context g_ceph_context
 

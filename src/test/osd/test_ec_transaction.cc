@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 #include "osd/PGTransaction.h"
 #include "osd/ECTransaction.h"
+#include "common/debug.h"
 
 #include "test/unit.cc"
 
