@@ -72,6 +72,7 @@
 #include "messages/MOSDMap.h"
 
 #include "mds/flock.h"
+#include "mds/fscrypt.h"
 #include "mds/cephfs_features.h"
 #include "mds/snap.h"
 #include "osd/OSDMap.h"
@@ -905,7 +906,6 @@ void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
 				    uint64_t truncate_seq, uint64_t truncate_size)
 {
   uint64_t prior_size = in->effective_size();
-
   // In the case of a pending trunc size that is smaller than orig size
   // (i.e. truncating from 8M to 4M) passed truncate_seq will be larger
   // than inode truncate_seq. This shows passed size is latest.
@@ -914,10 +914,11 @@ void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
     ldout(cct, 10) << "size " << in->effective_size() << " -> " << size << dendl;
     if (in->is_fscrypt_enabled()) {
       in->set_effective_size(size);
-      size = fscrypt_next_block_start(size);
+      in->size = in->reported_size = fscrypt_next_block_start(size);
+    } else {
+      in->size = in->reported_size = size;
     }
-    in->size = size;
-    in->reported_size = size;
+
     if (truncate_seq != in->truncate_seq) {
       ldout(cct, 10) << "truncate_seq " << in->truncate_seq << " -> "
 	       << truncate_seq << dendl;
@@ -926,7 +927,14 @@ void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
 
       // truncate cached file data
       if (prior_size > size) {
-	_invalidate_inode_cache(in, size, prior_size - size);
+	if (in->is_fscrypt_enabled()) {
+          // in the case of fscrypt truncate, you'll want to invalidate
+          // the whole fscrypt block (from start of block to end)
+          // otherwise on a read you'll have an invalid fscrypt block
+	  _invalidate_inode_cache(in, fscrypt_block_start(size), FSCRYPT_BLOCK_SIZE);
+	} else {
+          _invalidate_inode_cache(in, size, prior_size - size);
+	}
       }
     }
 
@@ -1081,7 +1089,6 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->snap_btime = st->snap_btime;
     in->snap_metadata = st->snap_metadata;
     in->fscrypt_auth = st->fscrypt_auth;
-    in->fscrypt_file = st->fscrypt_file;
     in->fscrypt_ctx = in->init_fscrypt_ctx(fscrypt.get());
     need_snapdir_attr_refresh = true;
   }
@@ -1100,7 +1107,13 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   if (new_version ||
       (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
     in->layout = st->layout;
-    update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
+    int size = st->size;
+    if (in->fscrypt_ctx) {
+      if (st->fscrypt_file.size() >= sizeof(uint64_t)) {
+        size = *(ceph_le64 *)st->fscrypt_file.data();
+      }
+    }
+    update_inode_file_size(in, issued, size, st->truncate_seq, st->truncate_size);
   }
 
   if (in->is_dir()) {
@@ -5632,7 +5645,7 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, const MConstRef<M
 
   uint64_t size = m->effective_size();
   ldout(cct, 10) << __func__ << " on ino " << *in
-	   << " size " << in->size << " -> " << size
+	   << " size " << in->effective_size() << " -> " << size
 	   << dendl;
 
   int issued;
@@ -8257,6 +8270,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   MetaRequest *req;
   std::vector<uint8_t> alt_aux;
   std::vector<uint8_t> *paux = aux;
+  int setting_smaller = 0;
+  bufferlist lastblockbl;
 
   if (aux)
     auxsize = aux->size();
@@ -8437,13 +8452,84 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     }
 
     ldout(cct,10) << "changing size to " << stx_size << dendl;
+    // client portion for fscrypt last block
+    //
+    // last block is only needed when truncating smaller
+    // and truncate size is non-zero.
+    if (in->is_fscrypt_enabled() && stx_size < in->effective_size() &&
+        (mask & CEPH_SETATTR_FSCRYPT_FILE) && stx_size != 0){
+      // steps:
+      // 1. read last block
+      int	offset;
+      offset = fscrypt_block_start(stx->stx_size);
+
+      bufferlist bl;
+      bufferlist ebl;
+      ceph_fscrypt_last_block_header header;
+
+      int r;
+      C_SaferCond onfinish("Client::_read_sync flock");
+
+      uint64_t read_start;
+      uint64_t read_len;
+
+      FSCryptFDataDencRef fscrypt_denc;
+      fscrypt->prepare_data_read(in->fscrypt_ctx,
+                                 &in->fscrypt_key_validator,
+                                 offset, stx->stx_size, in->size,
+                                 &read_start, &read_len,
+                                 &fscrypt_denc);
+
+
+      FSCryptFDataDencRef denc = fscrypt->get_fdata_denc(in->fscrypt_ctx, &in->fscrypt_key_validator);
+      std::vector<ObjectCacher::ObjHole> holes;
+      r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
+                                     read_start, read_len, &bl, 0, &holes, &onfinish);
+      if (bl.length() == 0) {
+	//this is a hole
+        header.data_len = (8 + 8 + 4);
+	header.file_offset = 0;
+      } else {
+        r = denc->decrypt_bl(offset, stx->stx_size, read_start, holes, &bl);
+        if (r < 0) {
+          ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
+          return r;
+        }
+
+	// 2. encrypt bl
+        if (denc)
+          r = denc->encrypt_bl(offset, bl.length(), bl, &ebl);
+
+        // 3. prepare lastblockbl
+        // TODO: support hole
+        header.ver = 1;
+        header.compat = 1;
+        header.change_attr = in->change_attr;
+        header.block_size = FSCRYPT_BLOCK_SIZE;
+        header.data_len = (8 + 8 + 4 + ebl.length());
+        header.file_offset = offset;
+      }
+
+      ENCODE_START(1, 1, lastblockbl);
+      encode(header.change_attr, lastblockbl);
+      encode(header.file_offset, lastblockbl);
+      encode(header.block_size, lastblockbl);
+      lastblockbl.append(ebl);
+      ENCODE_FINISH(lastblockbl);
+      ldout(cct, 10) << "finished preparing last block" << dendl;
+      setting_smaller = 1;
+    }
+
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL) &&
         !(mask & CEPH_SETATTR_KILL_SGUID) &&
-        stx_size >= in->size) {
-      if (stx_size > in->size) {
-        in->reported_size = stx_size;
-        in->set_effective_size(stx_size);
-        in->size = fscrypt_next_block_start(stx_size);
+        stx_size >= in->effective_size()) {
+      if (stx_size > in->effective_size()) {
+        int size = stx_size;
+        if (in->is_fscrypt_enabled()) {
+	  in->set_effective_size(size);
+          size = fscrypt_next_block_start(size);
+	}
+        in->size = in->reported_size = size;
         in->cap_dirtier_uid = perms.uid();
         in->cap_dirtier_gid = perms.gid();
         in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
@@ -8454,7 +8540,10 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
         mask &= ~(CEPH_SETATTR_SIZE);
       }
     } else {
-      args.setattr.size = stx_size;
+      int size = stx_size;
+      if (in->is_fscrypt_enabled())
+        size = fscrypt_next_block_start(stx_size);
+      args.setattr.size = size;
       inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
                     CEPH_CAP_FILE_WR;
     }
@@ -8468,11 +8557,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
-      if (paux) {
-        in->fscrypt_file = *paux;
-      }
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
-      mask &= ~CEPH_SETATTR_FSCRYPT_FILE;
     } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
                (paux && in->fscrypt_file != *paux)) {
       inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR;
@@ -8544,6 +8629,10 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   in->make_nosnap_relative_path(path);
   req->set_filepath(path);
   req->set_inode(in);
+
+  if(setting_smaller) {
+    req->set_data(lastblockbl);
+  }
 
   req->head.args = args;
   req->inode_drop = inode_drop;
@@ -11213,7 +11302,7 @@ retry:
     // C_Read_Sync_NonBlocking::finish().
 
     // trim read based on file size?
-    if (std::cmp_greater_equal(offset, in->size) || (size == 0)) {
+    if (std::cmp_greater_equal(offset, in->effective_size()) || (size == 0)) {
       // read is requested at the EOF or the read len is zero, therefore just
       // release managed pointers and complete the C_Read_Finisher immediately with 0 bytes
 

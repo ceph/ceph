@@ -5456,6 +5456,8 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
       auto bl = req->get_data().cbegin();
       DECODE_START(1, bl);
       decode(header.change_attr, bl);
+      decode(header.file_offset, bl);
+      decode(header.block_size, bl);
       DECODE_FINISH(bl);
 
       dout(20) << __func__ << " mdr->retry:" << mdr->retry
