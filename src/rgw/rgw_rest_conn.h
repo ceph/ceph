@@ -74,7 +74,7 @@ class RGWRESTConn
   std::vector<std::string> endpoints;
   endpoint_status_map endpoints_status;
   RGWAccessKey key;
-  std::string self_zone_group;
+  std::string self_zone;
   std::string remote_id;
   std::optional<std::string> api_name;
   HostStyle host_style;
@@ -92,7 +92,7 @@ public:
 	      const std::string& _remote_id,
 	      const std::list<std::string>& endpoints,
 	      RGWAccessKey _cred,
-	      std::string _zone_group,
+	      std::string _zone,
 	      std::optional<std::string> _api_name,
 	      HostStyle _host_style = PathStyle);
 
@@ -104,8 +104,8 @@ public:
   int get_url(std::string& endpoint);
   std::string get_url();
   void set_url_unconnectable(const std::string& endpoint);
-  const std::string& get_self_zonegroup() {
-    return self_zone_group;
+  const std::string& get_self_zone() {
+    return self_zone;
   }
   const std::string& get_remote_id() {
     return remote_id;
@@ -218,9 +218,9 @@ public:
                         optional_yield y, T& t);
 
 private:
-  void populate_zonegroup(param_vec_t& params, const std::string& zonegroup) {
-    if (!zonegroup.empty()) {
-      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", zonegroup));
+  void populate_zone(param_vec_t& params, const std::string& zone) {
+    if (!zone.empty()) {
+      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zone", zone));
     }
   }
   void populate_uid(param_vec_t& params, const rgw_owner* uid) {
@@ -236,12 +236,12 @@ public:
 
   S3RESTConn(CephContext *_cct, rgw::sal::Driver* driver, const std::string& _remote_id, const std::list<std::string>& endpoints, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle) :
     RGWRESTConn(_cct, driver, _remote_id, endpoints, _api_name, _host_style) {}
-  S3RESTConn(CephContext *_cct, const std::string& _remote_id, const std::list<std::string>& endpoints, RGWAccessKey _cred, std::string _zone_group, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle):
-    RGWRESTConn(_cct, _remote_id, endpoints, _cred, _zone_group, _api_name, _host_style) {}
+  S3RESTConn(CephContext *_cct, const std::string& _remote_id, const std::list<std::string>& endpoints, RGWAccessKey _cred, std::string _zone, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle):
+    RGWRESTConn(_cct, _remote_id, endpoints, _cred, _zone, _api_name, _host_style) {}
   ~S3RESTConn() override = default;
 
   void populate_params(param_vec_t& params, const rgw_owner* uid,
-                       const std::string& zonegroup) override {
+                       const std::string& zone) override {
     // do not populate any params in S3 REST Connection.
     return;
   }
