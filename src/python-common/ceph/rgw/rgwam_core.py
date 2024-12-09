@@ -149,11 +149,12 @@ class RGWCmdBase:
             opt_arg(self.cmd_suffix, '--rgw-zone', zone_env.zone.name)
             opt_arg(self.cmd_suffix, '--zone-id', zone_env.zone.id)
 
-    def run(self, cmd):
+    def run(self, cmd, stdin=None):
         args = cmd + self.cmd_suffix
-        cmd, returncode, stdout, stderr = self.mgr.tool_exec(self.prog, args)
+        cmd, returncode, stdout, stderr = self.mgr.tool_exec(self.prog, args, stdin)
 
         log.debug('cmd=%s' % str(cmd))
+        log.debug(f'stdin={stdin}')
         log.debug('stdout=%s' % stdout)
 
         if returncode != 0:
@@ -174,8 +175,8 @@ class RGWAdminJSONCmd(RGWAdminCmd):
     def __init__(self, zone_env: ZoneEnv):
         super().__init__(zone_env)
 
-    def run(self, cmd):
-        stdout, _ = RGWAdminCmd.run(self, cmd)
+    def run(self, cmd, stdin=None):
+        stdout, _ = RGWAdminCmd.run(self, cmd, stdin)
 
         return json.loads(stdout)
 
@@ -237,8 +238,12 @@ class ZonegroupOp:
     def get(self, zonegroup: EntityKey = None):
         ze = ZoneEnv(self.env)
         params = ['zonegroup', 'get']
-        opt_arg(params, '--rgw-zonegroup', zonegroup)
         return RGWAdminJSONCmd(ze).run(params)
+
+    def set(self, zonegroup: EntityKey, zg_json: str):
+        ze = ZoneEnv(self.env)
+        params = ['zonegroup', 'set']
+        return RGWAdminJSONCmd(ze).run(params, stdin=zg_json.encode('utf-8'))
 
     def create(self, realm: EntityKey, zg: EntityKey = None, endpoints=None, is_master=True):
         ze = ZoneEnv(self.env, realm=realm).init_zg(zg, gen=True)
@@ -723,6 +728,43 @@ class RGWAM:
         logging.debug(period.to_json())
 
         return (0, success_message, '')
+
+    def zonegroup_modify(self, realm_name, zonegroup_name, zone_name, hostnames):
+        if realm_name is None:
+            raise RGWAMException('Realm name is a mandatory parameter')
+        if zone_name is None:
+            raise RGWAMException('Zone name is a mandatory parameter')
+        if zonegroup_name is None:
+            raise RGWAMException('Zonegroup name is a mandatory parameter')
+
+        realm = EntityName(realm_name)
+        zone = EntityName(zone_name)
+        period_info = self.period_op().get(realm)
+        period = RGWPeriod(period_info)
+        logging.info('Period: ' + period.id)
+        zonegroup = period.find_zonegroup_by_name(zonegroup_name)
+        if not zonegroup:
+            raise RGWAMException(f'zonegroup {zonegroup_name} not found')
+        zg = EntityName(zonegroup.name)
+        zg_json = self.zonegroup_op().get(zg)
+
+        if hostnames:
+            zg_json['hostnames'] = hostnames
+
+        try:
+            self.zonegroup_op().set(zg, json.dumps(zg_json))
+        except RGWAMException as e:
+            raise RGWAMException('failed to set zonegroup', e)
+
+        try:
+            period_info = self.period_op().update(realm, zg, zone, True)
+        except RGWAMException as e:
+            raise RGWAMException('failed to update period', e)
+
+        period = RGWPeriod(period_info)
+        logging.debug(period.to_json())
+
+        return (0, f'Modified zonegroup {zonegroup_name} of realm {realm_name}', '')
 
     def get_realms_info(self):
         realms_info = []
