@@ -51,8 +51,6 @@ class KernelMountBase(CephFSMount):
 
         if not self.cephfs_mntpt:
             self.cephfs_mntpt = '/'
-        if not self.cephfs_name:
-            self.cephfs_name = 'cephfs'
 
         self._create_mntpt()
 
@@ -109,6 +107,11 @@ class KernelMountBase(CephFSMount):
             if self.cephfs_name:
                 optd['mds_namespace'] = self.cephfs_name
         elif self.syntax_style == 'v2':
+            if not self.cephfs_name:
+                raise RuntimeError('self.cephfs_name is not set. It is '
+                                   'mandatory to provide it when using '
+                                   'v2 style kernel mount command.')
+
             mnt_stx = f'{self.client_id}@.{self.cephfs_name}={self.cephfs_mntpt}'
         else:
             assert 0, f'invalid syntax style: {self.syntax_style}'
