@@ -262,11 +262,8 @@ RecoveryBackend::scan_for_backfill(
 	}
       });
     }).then_interruptible([version_map, start=std::move(start), next=std::move(next), this] {
-      BackfillInterval bi;
-      bi.begin = std::move(start);
-      bi.end = std::move(next);
-      bi.version = pg.get_info().last_update;
-      bi.objects = std::move(*version_map);
+      BackfillInterval bi(std::move(start), std::move(next));
+      bi.populate(std::move(*version_map), pg.get_info().last_update);
       logger().debug("{} BackfillInterval filled, leaving, {}",
                      "scan_for_backfill",
 		     bi);
@@ -300,35 +297,30 @@ RecoveryBackend::handle_scan_get_digest(
     [this, query_epoch=m.query_epoch, conn
     ](auto backfill_interval) {
       auto reply = crimson::make_message<MOSDPGScan>(
-	MOSDPGScan::OP_SCAN_DIGEST,
+	MOSDPGScan::OP_SCAN_DIGEST_REPLY,
 	pg.get_pg_whoami(),
 	pg.get_osdmap_epoch(),
 	query_epoch,
 	spg_t(pg.get_info().pgid.pgid, pg.get_primary().shard),
-	backfill_interval.begin,
-	backfill_interval.end);
-      encode(backfill_interval.objects, reply->get_data());
+	backfill_interval.get_begin(),
+	backfill_interval.get_end(),
+	backfill_interval.get_interval_version());
+      encode(backfill_interval.get_objects(), reply->get_data());
       return conn->send(std::move(reply));
     });
 }
 
 RecoveryBackend::interruptible_future<>
-RecoveryBackend::handle_scan_digest(
+RecoveryBackend::handle_scan_digest_reply(
   MOSDPGScan& m)
 {
   logger().debug("{}", __func__);
   // Check that from is in backfill_targets vector
   ceph_assert(pg.is_backfill_target(m.from));
 
-  BackfillInterval bi;
-  bi.begin = m.begin;
-  bi.end = m.end;
-  {
-    auto p = m.get_data().cbegin();
-    // take care to preserve ordering!
-    bi.clear_objects();
-    ::decode_noclear(bi.objects, p);
-  }
+  BackfillInterval bi(m.begin, m.end);
+  bi.populate(m.get_data(), m.version);
+
   shard_services.start_operation<crimson::osd::BackfillRecovery>(
     static_cast<crimson::osd::PG*>(&pg),
     shard_services,
@@ -350,8 +342,8 @@ RecoveryBackend::handle_scan(
   switch (m.op) {
     case MOSDPGScan::OP_SCAN_GET_DIGEST:
       return handle_scan_get_digest(m, conn);
-    case MOSDPGScan::OP_SCAN_DIGEST:
-      return handle_scan_digest(m);
+    case MOSDPGScan::OP_SCAN_DIGEST_REPLY:
+      return handle_scan_digest_reply(m);
     default:
       // FIXME: move to errorator
       ceph_assert("unknown op type for pg scan");
