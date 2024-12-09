@@ -201,6 +201,8 @@ class RGWStatBucket_ObjStore : public RGWStatBucket {
 public:
   RGWStatBucket_ObjStore() {}
   ~RGWStatBucket_ObjStore() override {}
+
+  int get_params(optional_yield y) override;
 };
 
 class RGWCreateBucket_ObjStore : public RGWCreateBucket {
