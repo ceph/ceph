@@ -169,7 +169,8 @@ int RGWBucket::init(rgw::sal::Driver* _driver, RGWBucketAdminOpState& op_state,
 
   driver = _driver;
 
-  std::string bucket_name = op_state.get_bucket_name();
+  auto bucket_name = op_state.get_bucket_name();
+  auto bucket_id = op_state.get_bucket_id();
 
   if (bucket_name.empty() && op_state.get_user_id().empty())
     return -EINVAL;
@@ -184,7 +185,7 @@ int RGWBucket::init(rgw::sal::Driver* _driver, RGWBucketAdminOpState& op_state,
     bucket_name = bucket_name.substr(pos + 1);
   }
 
-  int r = driver->load_bucket(dpp, rgw_bucket(tenant, bucket_name),
+  int r = driver->load_bucket(dpp, rgw_bucket(tenant, bucket_name, bucket_id),
                               &bucket, y);
   if (r < 0) {
       set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket_name);
