@@ -4,7 +4,6 @@
 #define CEPH_PAXOSSERVICEMESSAGE_H
 
 #include "msg/Message.h"
-#include "mon/Session.h"
 #include "include/encoding.h"
 #include "include/types.h" // for epoch_t, version_t
 
