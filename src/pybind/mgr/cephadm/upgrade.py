@@ -756,8 +756,6 @@ class CephadmUpgrade:
             assert d.daemon_type is not None
             assert d.daemon_id is not None
             assert d.hostname is not None
-            if self.mgr.use_agent and not self.mgr.cache.host_metadata_up_to_date(d.hostname):
-                continue
             correct_image = False
             # check if the container digest for the digest we're upgrading to matches
             # the container digest for the daemon if "use_repo_digest" setting is true
@@ -1178,6 +1176,13 @@ class CephadmUpgrade:
             logger.debug(f'Filtering daemons to upgrade by hosts: {self.upgrade_state.hosts}')
             daemons = [d for d in daemons if d.hostname in self.upgrade_state.hosts]
         upgraded_daemon_count: int = 0
+        # with the agent, the metadata about what daemons have been
+        # deployed on the host is gathered asynchronously. Don't try
+        # to upgrade daemons until that we've marked that information
+        # as "up to date" (refreshed since we last deployed/removed a daemon)
+        if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
+            self.mgr.agent_helpers.request_ack_all_not_up_to_date()
+            return
         for daemon_type in CEPH_UPGRADE_ORDER:
             if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0:
                 # we hit our limit and should end the upgrade
@@ -1293,11 +1298,6 @@ class CephadmUpgrade:
             # complete mds upgrade?
             if daemon_type == 'mds':
                 self._complete_mds_upgrade()
-
-            # Make sure all metadata is up to date before saying we are done upgrading this daemon type
-            if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
-                self.mgr.agent_helpers._request_ack_all_not_up_to_date()
-                return
 
             logger.debug('Upgrade: Upgraded %s daemon(s).' % daemon_type)
 
