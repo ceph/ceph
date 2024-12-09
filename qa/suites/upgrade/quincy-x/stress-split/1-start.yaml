@@ -1,7 +1,10 @@
 overrides:
   ceph:
     log-ignorelist:
-      - \(POOL_APP_NOT_ENABLED\)
+      - do not have an application enabled
+      - application not enabled
+      - or freeform for custom applications
+      - POOL_APP_NOT_ENABLED
       - is down
       - OSD_DOWN
       - mons down
