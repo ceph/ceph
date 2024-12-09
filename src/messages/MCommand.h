@@ -15,6 +15,7 @@
 #ifndef CEPH_MCOMMAND_H
 #define CEPH_MCOMMAND_H
 
+#include <string>
 #include <vector>
 
 #include "msg/Message.h"

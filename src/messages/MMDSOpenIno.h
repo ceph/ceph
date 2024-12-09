@@ -15,6 +15,9 @@
 #ifndef CEPH_MDSOPENINO_H
 #define CEPH_MDSOPENINO_H
 
+#include <ostream>
+#include <vector>
+
 #include "messages/MMDSOp.h"
 #include "mds/inode_backtrace.h" // for inode_backpointer_t
 
