@@ -78,11 +78,6 @@ int main(int argc, const char** argv)
     }
   }
 
-  if (tenant.empty()) {
-    std::cerr << cmdname << ": must specify tenant name" << std::endl;
-    helpful_exit(cmdname);
-  }
-
   bool success = true;
 
   if (args.empty()) {
