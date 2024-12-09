@@ -4697,7 +4697,11 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
 
   if (remote_src || !source_zone.empty()) {
     rgw_zone_set_entry source_trace_entry{source_zone.id, std::nullopt};
-    const req_context rctx{dpp, y, nullptr};
+    // null_yield resolves a crash when calling progress_cb(), because the beast
+    // frontend tried to use this same yield context to write the progress
+    // response to the frontend socket. call fetch_remote_obj() synchronously so
+    // that only one thread tries to suspend that coroutine
+    const req_context rctx{dpp, null_yield, nullptr};
     return fetch_remote_obj(dest_obj_ctx, remote_user, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                dest_placement, src_mtime, mtime, mod_ptr,
