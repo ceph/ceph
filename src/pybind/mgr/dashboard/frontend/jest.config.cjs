@@ -17,7 +17,6 @@ const jestConfig = {
       isolatedModules: true
     }
   },
-  globalSetup: 'jest-preset-angular/global-setup',
   moduleNameMapper: {
     '\\.scss$': 'identity-obj-proxy',
     '~/(.*)$': '<rootDir>/src/$1',
@@ -35,6 +34,9 @@ const jestConfig = {
   coverageReporters: ['cobertura', 'html'],
   modulePathIgnorePatterns: ['<rootDir>/coverage/', '<rootDir>/node_modules/simplebar-angular', '<rootDir>/cypress'],
   testMatch: ['**/*.spec.ts'],
-  testRunner: 'jest-jasmine2'
+  testRunner: 'jest-jasmine2',
+  testEnvironmentOptions: {
+    detectOpenHandles: true,
+  },
 };
 module.exports = jestConfig;
