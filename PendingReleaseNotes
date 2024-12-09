@@ -249,6 +249,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
    - osd_op_num_shards_hdd = 1 (was 5)
    - osd_op_num_threads_per_shard_hdd = 5 (was 1)
   For more details see https://tracker.ceph.com/issues/66289.
+* NFS: The export create/apply of CephFS based exports will now have a additional parameter `cmount_path` under FSAL block,
+* NFS: The export create/apply of CephFS based exports will now have a additional parameter `cmount_path` under the FSAL block,
+  which specifies the path within the CephFS to mount this export on. If this and the other
+  `EXPORT { FSAL {} }` options are the same between multiple exports, those exports will share a single CephFS client. If not specified, the default is `/`.
 
 >=18.0.0
 
