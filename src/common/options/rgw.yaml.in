@@ -4250,3 +4250,19 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_data_sync_start_full_sync
+  type: bool
+  level: advanced
+  default: true
+  desc: Controls whether bucket replication starts with a full sync for newly enabled replication buckets.
+  long_desc:
+    This configuration option determines whether bucket replication, when enabled for a specific bucket,
+    should start with a full sync of all existing objects or only replicate new changes going forward.
+    When set to 'true', the full sync will replicate all objects in the bucket, including those created
+    before replication was enabled.
+    When set to 'false', replication will only apply to changes and new objects created after replication was
+    enabled, which can be helpful for buckets with a large number of existing objects where you do not want to
+    wait for the full sync to complete. This reduces the initial load and speeds up the start of replication.
+  services:
+  - rgw
+  with_legacy: true

@@ -176,6 +176,7 @@ void usage()
   cout << "  bucket sync checkpoint           poll a bucket's sync status until it catches up to its remote\n";
   cout << "  bucket sync disable              disable bucket sync\n";
   cout << "  bucket sync enable               enable bucket sync\n";
+  cout << "  bucket sync init                 initialize bucket sync indicated by --state flag\n";
   cout << "  bucket radoslist                 list rados objects backing bucket's objects\n";
   cout << "  bi get                           retrieve bucket index object entries\n";
   cout << "  bi put                           store bucket index object entries\n";
@@ -3597,6 +3598,7 @@ int main(int argc, const char **argv)
   std::optional<string> opt_dest_bucket_id;
   std::optional<string> opt_effective_zone_name;
   std::optional<rgw_zone_id> opt_effective_zone_id;
+  std::optional<string> opt_state;
 
   std::optional<string> opt_prefix;
   std::optional<string> opt_prefix_rm;
@@ -4086,6 +4088,8 @@ int main(int argc, const char **argv)
       opt_group_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--status", (char*)NULL)) {
       opt_status = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--state", (char*)NULL)) {
+      opt_state = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--flow-type", (char*)NULL)) {
       opt_flow_type = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zones", "--zone-names", (char*)NULL)) {
@@ -9765,7 +9769,15 @@ next:
       cerr << "ERROR: sync.init() returned error=" << sync.error() << std::endl;
       return -sync.error();
     }
-    ret = (*sync)->init_sync_status(dpp());
+    BucketSyncState state = BucketSyncState::Init;
+    if (opt_state) {
+      ret = bucket_sync_state_from_str(*opt_state, state);
+      if (ret < 0) {
+        cerr << "ERROR: invalid state: " << *opt_state << std::endl;
+        return -ret;
+      }
+    }
+    ret = (*sync)->init_sync_status(dpp(), state);
     if (ret < 0) {
       cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;
