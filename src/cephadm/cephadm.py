@@ -111,6 +111,7 @@ from cephadmlib.file_utils import (
     unlink_file,
     write_new,
     write_tmp,
+    update_meta_file,
 )
 from cephadmlib.net_utils import (
     build_addrv_params,
@@ -3453,6 +3454,7 @@ def list_daemons(
     detail: bool = True,
     legacy_dir: Optional[str] = None,
     daemon_name: Optional[str] = None,
+    type_of_daemon: Optional[str] = None,
 ) -> List[Dict[str, str]]:
     host_version: Optional[str] = None
     ls = []
@@ -3489,6 +3491,8 @@ def list_daemons(
     if os.path.exists(data_dir):
         for i in os.listdir(data_dir):
             if i in ['mon', 'osd', 'mds', 'mgr', 'rgw']:
+                if type_of_daemon and type_of_daemon != i:
+                    continue
                 daemon_type = i
                 for j in os.listdir(os.path.join(data_dir, i)):
                     if '-' not in j:
@@ -3525,6 +3529,8 @@ def list_daemons(
                         if daemon_name and name != daemon_name:
                             continue
                         (daemon_type, daemon_id) = j.split('.', 1)
+                        if type_of_daemon and type_of_daemon != daemon_type:
+                            continue
                         unit_name = get_unit_name(fsid,
                                                   daemon_type,
                                                   daemon_id)
@@ -4705,6 +4711,34 @@ def command_list_images(ctx: CephadmContext) -> None:
     # print default images
     cp_obj.write(sys.stdout)
 
+
+def update_service_for_daemon(ctx: CephadmContext,
+                              available_daemons: list,
+                              update_daemons: list) -> None:
+    """ Update the unit.meta file of daemon with required service name for valid daemons"""
+
+    data = {'service_name': ctx.service_name}
+    # check if all the daemon names are valid
+    if not set(update_daemons).issubset(set(available_daemons)):
+        raise Error(f'Error EINVAL: one or more daemons of {update_daemons} does not exist on this host')
+    for name in update_daemons:
+        path = os.path.join(ctx.data_dir, ctx.fsid, name, 'unit.meta')
+        update_meta_file(path, data)
+        print(f'Successfully updated daemon {name} with service {ctx.service_name}')
+
+
+@infer_fsid
+def command_update_osd_service(ctx: CephadmContext) -> int:
+    """update service for provided daemon"""
+    update_daemons = [f'osd.{osd_id}' for osd_id in ctx.osd_ids.split(',')]
+    daemons = list_daemons(ctx, detail=False, type_of_daemon='osd')
+    if not daemons:
+        raise Error(f'Daemon {ctx.osd_ids} does not exists on this host')
+    available_daemons = [d['name'] for d in daemons]
+    update_service_for_daemon(ctx, available_daemons, update_daemons)
+    return 0
+
+
 ##################################
 
 
@@ -5571,6 +5605,14 @@ def _get_parser():
     parser_list_images = subparsers.add_parser(
         'list-images', help='list all the default images')
     parser_list_images.set_defaults(func=command_list_images)
+
+    parser_update_service = subparsers.add_parser(
+        'update-osd-service', help='update service for provided daemon')
+    parser_update_service.set_defaults(func=command_update_osd_service)
+    parser_update_service.add_argument('--fsid', help='cluster FSID')
+    parser_update_service.add_argument('--osd-ids', required=True, help='Comma-separated OSD IDs')
+    parser_update_service.add_argument('--service-name', required=True, help='OSD service name')
+
     return parser
 
 
