@@ -56,6 +56,8 @@
   an empty string can be assigned to it. Additionally, commands
   `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get` and
   `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
+* RADOS: Add ``messenger dump`` command to retrieve runtime information
+  on connections, sockets, and kernel TCP stats from the messenger.
 
 >=19.0.0
 
