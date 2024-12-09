@@ -1251,10 +1251,8 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
   }
 
   // process queue
-  unsigned max = std::max<int64_t>(1, g_conf()->mon_osd_max_creating_pgs);
   const auto total = pending_creatings.pgs.size();
-  while (pending_creatings.pgs.size() < max &&
-	 !pending_creatings.queue.empty()) {
+  while (!pending_creatings.queue.empty()) {
     auto p = pending_creatings.queue.begin();
     int64_t poolid = p->first;
     dout(10) << __func__ << " pool " << poolid
@@ -1262,21 +1260,16 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
 	     << " modified " << p->second.modified
 	     << " [" << p->second.start << "-" << p->second.end << ")"
 	     << dendl;
-    int64_t n = std::min<int64_t>(max - pending_creatings.pgs.size(),
-				  p->second.end - p->second.start);
-    ps_t first = p->second.start;
-    ps_t end = first + n;
-    for (ps_t ps = first; ps < end; ++ps) {
+    for (ps_t ps = p->second.start; ps < p->second.end; ++ps) {
       const pg_t pgid{ps, static_cast<uint64_t>(poolid)};
-      // NOTE: use the *current* epoch as the PG creation epoch so that the
-      // OSD does not have to generate a long set of PastIntervals.
+      // The current epoch must be the pool creation epoch
       pending_creatings.pgs.emplace(
 	pgid,
-	creating_pgs_t::pg_create_info(inc.epoch,
+	creating_pgs_t::pg_create_info(p->second.created,
 				       p->second.modified));
       dout(10) << __func__ << " adding " << pgid << dendl;
     }
-    p->second.start = end;
+    p->second.start = p->second.end;
     if (p->second.done()) {
       dout(10) << __func__ << " done with queue for " << poolid << dendl;
       pending_creatings.queue.erase(p);
