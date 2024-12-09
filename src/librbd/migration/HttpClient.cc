@@ -664,8 +664,9 @@ protected:
     ldout(cct, 15) << dendl;
 
     m_stream.async_shutdown(
-      asio::util::get_callback_adapter([this, on_finish](int r) {
-        shutdown(r, on_finish); }));
+      [this, on_finish](boost::system::error_code ec) {
+        handle_disconnect(ec, on_finish);
+      });
   }
 
   void reset_stream() override {
@@ -759,12 +760,18 @@ private:
     on_finish->complete(0);
   }
 
-  void shutdown(int r, Context* on_finish) {
+  void handle_disconnect(boost::system::error_code ec, Context* on_finish) {
     auto http_client = this->m_http_client;
     auto cct = http_client->m_cct;
-    ldout(cct, 15) << "r=" << r << dendl;
+    ldout(cct, 15) << "ec=" << ec.what() << dendl;
 
-    on_finish->complete(r);
+    if (ec && ec != boost::asio::ssl::error::stream_truncated) {
+      lderr(cct) << "failed to shut down SSL: " << ec.message() << dendl;
+      on_finish->complete(-ec.value());
+      return;
+    }
+
+    on_finish->complete(0);
   }
 };
 
