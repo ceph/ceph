@@ -5406,7 +5406,8 @@ namespace {
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
-    DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO };
+    DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
+    DEEP_SCRUB_DEFRAGMENT, DEEP_SCRUB_RECOMPRESS };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6213,7 +6214,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"dedup_chunk_algorithm", DEDUP_CHUNK_ALGORITHM},
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
       {"bulk", BULK},
-      {"read_ratio", READ_RATIO}
+      {"read_ratio", READ_RATIO},
+      {"deep_scrub_defragment", DEEP_SCRUB_DEFRAGMENT},
+      {"deep_scrub_recompress", DEEP_SCRUB_RECOMPRESS},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6460,6 +6463,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case DEEP_SCRUB_DEFRAGMENT:
+	  case DEEP_SCRUB_RECOMPRESS:
             pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
             if (p->opts.is_set(key)) {
               if(*it == CSUM_TYPE) {
@@ -6624,6 +6629,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case DEEP_SCRUB_DEFRAGMENT:
+	  case DEEP_SCRUB_RECOMPRESS:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
