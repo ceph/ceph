@@ -4120,18 +4120,40 @@ cdef class Image(object):
         :raises: :class:`InvalidArgument`, :class:`IOError`,
                  :class:`ImageNotFound`
         """
-        from_snapshot = cstr(from_snapshot, 'from_snapshot', opt=True)
         cdef:
-            char *_from_snapshot = opt_str(from_snapshot)
+            char *_from_snap_name = NULL
+            char *_from_snapshot
             uint64_t _offset = offset, _length = length
             uint8_t _include_parent = include_parent
             uint8_t _whole_object = whole_object
+            
+        if from_snapshot is not None:
+            if isinstance(from_snapshot, str):
+                from_snap_name = cstr(from_snapshot, 'from_snapshot')
+                _from_snap_name = from_snap_name
+
+            elif isinstance(from_snapshot, int):
+                if from_snapshot != 0:
+                    try:
+                        snap_name = self.snap_get_name(from_snapshot)
+                    except Exception as e:
+                        raise make_ex(-1, f"Failed to get name for snapshot ID {from_snapshot}: {e}")
+                    from_snap_name = cstr(snap_name, "snap_name")
+                    _from_snap_name = from_snap_name
+                else:
+                    _from_snap_name = NULL
+
+            else:
+                raise TypeError("from_snapshot must be a string or an integer")
+
+        _from_snapshot = opt_str(_from_snap_name)
+
         with nogil:
             ret = rbd_diff_iterate2(self.image, _from_snapshot, _offset,
                                     _length, _include_parent, _whole_object,
                                     &diff_iterate_cb, <void *>iterate_cb)
         if ret < 0:
-            msg = 'error generating diff from snapshot %s' % from_snapshot
+            msg = f"Error generating diff from snapshot {from_snapshot}"
             raise make_ex(ret, msg)
 
     @requires_not_closed
