@@ -25,9 +25,10 @@ using namespace std;
 TEST(ECUtil, stripe_info_t)
 {
   const uint64_t swidth = 4096;
-  const uint64_t ssize = 4;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
 
-  ECUtil::stripe_info_t s(ssize, swidth);
+  ECUtil::stripe_info_t s(k, m, swidth);
   ASSERT_EQ(s.get_stripe_width(), swidth);
 
   ASSERT_EQ(s.logical_to_next_chunk_offset(0), 0u);
@@ -54,20 +55,32 @@ TEST(ECUtil, stripe_info_t)
   ASSERT_EQ(s.aligned_chunk_offset_to_logical_offset(2*s.get_chunk_size()),
 	    2*s.get_stripe_width());
 
+  // Stripe 1 + 1 chunk for 10 stripes needs to read 11 stripes starting
+  // from 1 because there is a partial stripe at the start and end
   ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(
 	      make_pair(swidth+s.get_chunk_size(), 10*swidth)),
-	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
+	    make_pair(s.get_chunk_size(), 11*s.get_chunk_size()));
 
+  // Stripe 1 + 0 chunks for 10 stripes needs to read 10 stripes starting
+  // from 1 because there are no partial stripes
   ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(swidth, 10*swidth)),
 	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
 
-  // round down offset if it's under stripe width
+  // Stripe 0 + 1 chunk for 10 stripes needs to read 11 stripes starting
+  // from 0 because there is a partial stripe at the start and end
   ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(s.get_chunk_size(), 10*swidth)),
-	    make_pair<uint64_t>(0, 10*s.get_chunk_size()));
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
 
-  // round up size if above stripe
+  // Stripe 0 + 1 chunk for (10 stripes + 1 chunk) needs to read 11 stripes
+  // starting from 0 because there is a partial stripe at the start and end
   ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(s.get_chunk_size(),
 							  10*swidth + s.get_chunk_size())),
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  // Stripe 0 + 2 chunks for (10 stripes + 2 chunks) needs to read 11 stripes
+  // starting from 0 because there is a partial stripe at the start
+  ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(2*s.get_chunk_size(),
+							  10*swidth + 2*s.get_chunk_size())),
 	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
 
   ASSERT_EQ(s.offset_len_to_stripe_bounds(make_pair(swidth-10, (uint64_t)20)),
@@ -78,9 +91,10 @@ TEST(ECUtil, offset_length_is_same_stripe)
 {
   const uint64_t swidth = 4096;
   const uint64_t schunk = 1024;
-  const uint64_t ssize = 4;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
 
-  ECUtil::stripe_info_t s(ssize, swidth);
+  ECUtil::stripe_info_t s(k, m, swidth);
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), schunk);
 
@@ -153,19 +167,18 @@ TEST(ECUtil, offset_length_is_same_stripe)
 TEST(ECCommon, get_min_want_to_read_shards)
 {
   const uint64_t swidth = 4096;
-  const uint64_t ssize = 4;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
 
-  ECUtil::stripe_info_t s(ssize, swidth);
+  ECUtil::stripe_info_t s(k, m, swidth);
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), 1024);
-
-  const std::vector<int> chunk_mapping = {}; // no remapping
 
   // read nothing at the very beginning
   {
     std::set<int> want_to_read;
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      0, 0, s, chunk_mapping, &want_to_read);
+      0, 0, s, &want_to_read);
     ASSERT_TRUE(want_to_read == std::set<int>{});
   }
 
@@ -173,7 +186,7 @@ TEST(ECCommon, get_min_want_to_read_shards)
   {
     std::set<int> want_to_read;
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      2048, 0, s, chunk_mapping, &want_to_read);
+      2048, 0, s, &want_to_read);
     ASSERT_TRUE(want_to_read == std::set<int>{});
   }
 
@@ -181,7 +194,7 @@ TEST(ECCommon, get_min_want_to_read_shards)
   {
     std::set<int> want_to_read;
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      2048, 42, s, chunk_mapping, &want_to_read);
+      2048, 42, s, &want_to_read);
     ASSERT_TRUE(want_to_read == std::set<int>{2});
   }
 
@@ -189,7 +202,7 @@ TEST(ECCommon, get_min_want_to_read_shards)
   {
     std::set<int> want_to_read;
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      1024, 1024+42, s, chunk_mapping, &want_to_read);
+      1024, 1024+42, s, &want_to_read);
     // extra () due to a language / macro limitation
     ASSERT_TRUE(want_to_read == (std::set<int>{1, 2}));
   }
@@ -198,7 +211,7 @@ TEST(ECCommon, get_min_want_to_read_shards)
   {
     std::set<int> want_to_read;
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      0, 3*1024, s, chunk_mapping, &want_to_read);
+      0, 3*1024, s, &want_to_read);
     // extra () due to a language / macro limitation
     ASSERT_TRUE(want_to_read == (std::set<int>{0, 1, 2}));
   }
@@ -207,7 +220,7 @@ TEST(ECCommon, get_min_want_to_read_shards)
   {
     std::set<int> want_to_read;
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      1024, swidth-1024, s, chunk_mapping, &want_to_read);
+      1024, swidth-1024, s, &want_to_read);
     // extra () due to a language / macro limitation
     ASSERT_TRUE(want_to_read == (std::set<int>{1, 2, 3}));
   }
@@ -216,7 +229,7 @@ TEST(ECCommon, get_min_want_to_read_shards)
   {
     std::set<int> want_to_read;
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      1024, swidth*42, s, chunk_mapping, &want_to_read);
+      1024, swidth*42, s, &want_to_read);
     // extra () due to a language / macro limitation
     ASSERT_TRUE(want_to_read == (std::set<int>{0, 1, 2, 3}));
   }
@@ -225,7 +238,7 @@ TEST(ECCommon, get_min_want_to_read_shards)
   {
     std::set<int> want_to_read;
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      0, swidth*42, s, chunk_mapping, &want_to_read);
+      0, swidth*42, s, &want_to_read);
     // extra () due to a language / macro limitation
     ASSERT_TRUE(want_to_read == (std::set<int>{0, 1, 2, 3}));
   }
@@ -234,13 +247,12 @@ TEST(ECCommon, get_min_want_to_read_shards)
 TEST(ECCommon, get_min_want_to_read_shards_bug67087)
 {
   const uint64_t swidth = 4096;
-  const uint64_t ssize = 4;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
 
-  ECUtil::stripe_info_t s(ssize, swidth);
+  ECUtil::stripe_info_t s(k, m, swidth);
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), 1024);
-
-  const std::vector<int> chunk_mapping = {}; // no remapping
 
   std::set<int> want_to_read;
 
@@ -248,10 +260,10 @@ TEST(ECCommon, get_min_want_to_read_shards_bug67087)
   // multi-region reads.
   {
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      512, 512, s, chunk_mapping, &want_to_read);
+      512, 512, s, &want_to_read);
     ASSERT_EQ(want_to_read, std::set<int>{0});
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      512+16*1024, 512, s, chunk_mapping, &want_to_read);
+      512+16*1024, 512, s, &want_to_read);
     ASSERT_EQ(want_to_read, std::set<int>{0});
   }
 }
