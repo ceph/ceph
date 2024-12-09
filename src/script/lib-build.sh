@@ -49,6 +49,14 @@ function get_processors() {
     fi
 }
 
+# has_build_dir returns true if a build directory exists and can be used
+# for builds. has_build_dir is designed to interoperate with do_cmake.sh
+# and uses the same BUILD_DIR environment variable. It checks for the
+# directory relative to the current working directory.
+function has_build_dir() {
+    ( cd "${BUILD_DIR:=build}" && [[ -f build.ninja || -f Makefile ]] )
+}
+
 # discover_compiler takes one argument, purpose, which may be used
 # to adjust the results for a specific need. It sets three environment
 # variables `discovered_c_compiler`, `discovered_cxx_compiler` and
