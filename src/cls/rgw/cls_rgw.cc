@@ -647,10 +647,17 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         continue;
       }
 
-      // filter out noncurrent versions, delete markers, and initial marker
+      //When it is not a list versions request, filter out noncurrent versions, delete markers, and initial marker
       if (!op.list_versions &&
 	  (!entry.is_visible() || op.start_obj.name == key.name)) {
         CLS_LOG(20, "%s: entry %s[%s] is not visible",
+		__func__, key.name.c_str(), key.instance.c_str());
+        continue;
+      }
+
+      //When it is a list versions request with just key marker, filter out objects key marker
+      if (op.list_versions && op.start_obj.instance.empty() && op.start_obj.name == key.name) {
+        CLS_LOG(20, "%s: skipping the initial marker %s[%s]",
 		__func__, key.name.c_str(), key.instance.c_str());
         continue;
       }
