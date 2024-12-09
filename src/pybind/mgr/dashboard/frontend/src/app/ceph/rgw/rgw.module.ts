@@ -76,6 +76,7 @@ import {
   TreeviewModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
+import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
 
 @NgModule({
   imports: [
@@ -154,7 +155,8 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     RgwMultisiteSyncPolicyDetailsComponent,
     RgwMultisiteSyncFlowModalComponent,
     RgwMultisiteSyncPipeModalComponent,
-    RgwMultisiteTabsComponent
+    RgwMultisiteTabsComponent,
+    RgwUserAccountsComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -185,6 +187,11 @@ const routes: Routes = [
     ]
   },
   {
+    path: 'accounts',
+    data: { breadcrumbs: 'Accounts' },
+    children: [{ path: '', component: RgwUserAccountsComponent }]
+  },
+  {
     path: 'roles',
     data: {
       breadcrumbs: 'Roles',
@@ -193,6 +200,10 @@ const routes: Routes = [
         {
           name: 'Users',
           url: '/rgw/user'
+        },
+        {
+          name: 'Accounts',
+          url: '/rgw/accounts'
         },
         {
           name: 'Roles',
