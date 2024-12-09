@@ -278,6 +278,29 @@ class TestFSCryptRMW(FSCryptTestCase):
             #swap which client does the truncate
             tside, rside = rside, tside
 
+    def test_fscrypt_truncate_contents(self):
+        """ Test invalidate cache on truncate"""
+
+        file = f'{self.path}/file.log'
+        contents = 'ab'
+
+        # set up file with initial contents
+        self.mount_a.write_file_ex(file, contents)
+
+        # check to ensure contents for size 1 get returned only
+        expected_contents = 'a'
+        self.mount_a.truncate(file, 1)
+        contents = self.mount_a.read_file(file)
+        if expected_contents != contents:
+            raise ValueError
+
+        # extend file and ensure old data got invalidated
+        expected_contents = 'a\0\0\0'
+        self.mount_a.truncate(file, 4)
+        contents = self.mount_a.read_file(file)
+        if expected_contents != contents:
+            raise ValueError
+
     def strided_tests(self, fscrypt_block_size, write_size, num_writes, shared_file, fill):
         wside = self.mount_a
         rside = self.mount_b
