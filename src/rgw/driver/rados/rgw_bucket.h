@@ -344,7 +344,7 @@ public:
   int check_index_unlinked(rgw::sal::RadosStore* rados_store, const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state,
                            RGWFormatterFlusher& flusher);
 
-  int check_index(const DoutPrefixProvider *dpp,
+  int check_index(const DoutPrefixProvider *dpp, optional_yield y,
           RGWBucketAdminOpState& op_state,
           std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
           std::map<RGWObjCategory, RGWStorageStats>& calculated_stats,
