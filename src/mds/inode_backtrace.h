@@ -23,7 +23,8 @@ namespace ceph {
  */
 struct inode_backpointer_t {
   inode_backpointer_t() {}
-  inode_backpointer_t(inodeno_t i, std::string_view d, version_t v) : dirino(i), dname(d), version(v) {}
+  inode_backpointer_t(inodeno_t i, std::string_view d, version_t v, int a=-1) :
+    dirino(i), dname(d), version(v), is_auth(a) {}
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
@@ -34,6 +35,9 @@ struct inode_backpointer_t {
   inodeno_t dirino;    // containing directory ino
   std::string dname;        // linking dentry name
   version_t version = 0;   // child's version at time of backpointer creation
+
+  // This won't be persisted to disk
+  int is_auth = -1;   // < 0: unknown, == 0: is replica, > 0: is auth
 };
 WRITE_CLASS_ENCODER(inode_backpointer_t)
 
@@ -42,7 +46,14 @@ inline bool operator==(const inode_backpointer_t& l, const inode_backpointer_t& 
 }
 
 inline std::ostream& operator<<(std::ostream& out, const inode_backpointer_t& ib) {
-  return out << "<" << ib.dirino << "/" << ib.dname << " v" << ib.version << ">";
+  out << "<" << ib.dirino << "/" << ib.dname << " v" << ib.version << " auth:";
+  if (ib.is_auth > 0)
+    out << " yes";
+  else if (ib.is_auth == 0)
+    out << " no";
+  else
+    out << " unknown";
+  return out << ">";
 }
 
 /*
@@ -63,15 +74,12 @@ struct inode_backtrace_t {
    * @pre The backtraces are for the same inode
    *
    * @param other The backtrace to compare ourselves with
-   * @param equivalent A bool pointer which will be set to true if
-   * the other backtrace is equivalent to our own (has the same dentries)
    * @param divergent A bool pointer which will be set to true if
    * the backtraces have differing entries without versions supporting them
    *
    * @returns 1 if we are newer than the other, 0 if equal, -1 if older
    */
-  int compare(const inode_backtrace_t& other,
-               bool *equivalent, bool *divergent) const;
+  int compare(const inode_backtrace_t& other, bool *divergent) const;
 
   void clear() {
     ancestors.clear();
