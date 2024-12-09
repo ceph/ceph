@@ -1367,30 +1367,6 @@ public:
 	    bluestore_extent_map_inline_shard_prealloc_size),
 	bc(*this) {
     }
-    Onode(Collection* c, const ghobject_t& o,
-      const std::string& k)
-      : c(c),
-        oid(o),
-        key(k),
-        exists(false),
-        cached(false),
-        extent_map(this,
-	  c->store->cct->_conf->
-	    bluestore_extent_map_inline_shard_prealloc_size),
-	bc(*this) {
-    }
-    Onode(Collection* c, const ghobject_t& o,
-      const char* k)
-      : c(c),
-        oid(o),
-        key(k),
-        exists(false),
-        cached(false),
-        extent_map(this,
-	  c->store->cct->_conf->
-	    bluestore_extent_map_inline_shard_prealloc_size),
-	bc(*this) {
-    }
     Onode(CephContext* cct)
       : c(nullptr),
         exists(false),
