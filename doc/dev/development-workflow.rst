@@ -243,6 +243,8 @@ differences:
 * All commits are cherry-picked with ``git cherry-pick -x`` to
   reference the original commit
 
+.. note: Developers are responsible for backporting their pull requests.
+
 See `the backporter manual
 <https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst>`_ for
 more information.
