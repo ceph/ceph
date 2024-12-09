@@ -1410,6 +1410,21 @@ private:
     void finish(int r) override;
   };
 
+  // A wrapper callback which takes the 'client_lock' and finishes the context.
+  // One of the usecase is the filer->write_trunc which doesn't hold client_lock
+  // in the call back passed. So, use this wrapper in such cases.
+  class C_Lock_Client_Finisher : public Context {
+  public:
+    C_Lock_Client_Finisher(Client *clnt, Context *onfinish)
+      : clnt(clnt), onfinish(onfinish) {}
+
+  private:
+    Client *clnt;
+    Context *onfinish;
+
+    void finish(int r) override;
+  };
+
   class C_Write_Finisher : public Context {
   public:
     void finish_io(int r);
