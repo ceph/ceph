@@ -967,7 +967,30 @@ int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, c
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
-    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): set_attr: key: " << attr_name << " val: " << attr_val << dendl;
+    if (attr_name == RGW_ATTR_ACL) {
+      if (dpp->get_cct()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+        std::string policy_json;
+        RGWAccessControlPolicy policy;
+        bufferlist bl;
+        bl.append(attr_val);
+        auto bliter = bl.cbegin();
+        try {
+          policy.decode(bliter);
+          Formatter *f = Formatter::create("json");
+          policy.dump(f);
+          std::stringstream ss;
+          f->flush(ss);
+          policy_json = ss.str();
+          delete f;
+        } catch (buffer::error& err) {
+          ldpp_dout(dpp, 0) << "ERROR: decode policy failed" << err.what() << dendl;
+          policy_json = "ERROR: decode policy failed";
+        }
+        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): set_attr: key: " << attr_name << " val: " << policy_json << dendl;
+      }
+    } else {
+      ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): set_attr: key: " << attr_name << " val: " << attr_val << dendl;
+    }
 
     auto ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), 0);
     if (ret < 0) {
