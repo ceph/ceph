@@ -18,6 +18,7 @@
 
       span.health-warn-description {
         color: vv.$health-color-warning-800 !important;
+        fill: vv.$health-color-warning-800;
       }
     }
   }
