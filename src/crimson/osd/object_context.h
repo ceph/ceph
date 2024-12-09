@@ -9,6 +9,7 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/shared_ptr.hh>
 
+#include "common/fmt_common.h"
 #include "common/intrusive_lru.h"
 #include "osd/object_state.h"
 #include "crimson/common/exception.h"
@@ -73,6 +74,8 @@ public:
   using watch_key_t = std::pair<uint64_t, entity_name_t>;
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
 
+  CommonOBCPipeline obc_pipeline;
+
   ObjectContext(hobject_t hoid) : lock(hoid),
                                   obs(std::move(hoid)) {}
 
@@ -128,14 +131,15 @@ public:
   }
 
   bool is_valid() const {
-    return !invalidated_by_interval_change;
+    return !invalidated;
   }
 
 private:
   boost::intrusive::list_member_hook<> obc_accessing_hook;
   uint64_t list_link_cnt = 0;
+  bool loading = false;
   bool fully_loaded = false;
-  bool invalidated_by_interval_change = false;
+  bool invalidated = false;
 
   friend class ObjectContextRegistry;
   friend class ObjectContextLoader;
@@ -154,6 +158,15 @@ public:
     if (--list_link_cnt == 0) {
       list.erase(std::decay_t<ListType>::s_iterator_to(*this));
     }
+  }
+
+  template <typename FormatContext>
+  auto fmt_print_ctx(FormatContext & ctx) const {
+    return fmt::format_to(
+      ctx.out(), "ObjectContext({}, oid={}, refcount={})",
+      (void*)this,
+      get_oid(),
+      get_use_count());
   }
 
   using obc_accessing_option_t = boost::intrusive::member_hook<
@@ -186,12 +199,14 @@ public:
 
   void clear_range(const hobject_t &from,
                    const hobject_t &to) {
-    obc_lru.clear_range(from, to);
+    obc_lru.clear_range(from, to, [](auto &obc) {
+      obc.invalidated = true;
+    });
   }
 
   void invalidate_on_interval_change() {
     obc_lru.clear([](auto &obc) {
-      obc.invalidated_by_interval_change = true;
+      obc.invalidated = true;
     });
   }
 
