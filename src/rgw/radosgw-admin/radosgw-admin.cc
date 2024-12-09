@@ -170,6 +170,9 @@ void usage()
   cout << "  bucket sync checkpoint           poll a bucket's sync status until it catches up to its remote\n";
   cout << "  bucket sync disable              disable bucket sync\n";
   cout << "  bucket sync enable               enable bucket sync\n";
+  cout << "  bucket sync init                 reset the bucket sync state to init to restore consistency of a bucket\n";
+  cout << "  bucket sync batch-replicate      reset the bucket sync state to full-sync to perform a full sync of a bucket (replicate existing objects)\n";
+  cout << "  bucket sync skip-full-sync       reset the bucket sync state to incremental-sync to perform an incremental sync of a bucket (skip existing objects)\n";
   cout << "  bucket radoslist                 list rados objects backing bucket's objects\n";
   cout << "  bucket logging flush             flush pending log records object of source bucket to the log bucket to bucket\n";
   cout << "  bi get                           retrieve bucket index object entries\n";
@@ -689,6 +692,8 @@ enum class OPT {
   BUCKET_SYNC_STATUS,
   BUCKET_SYNC_MARKERS,
   BUCKET_SYNC_INIT,
+  BUCKET_SYNC_BATCH_REPLICATE,
+  BUCKET_SYNC_SKIP_FULL_SYNC,
   BUCKET_SYNC_RUN,
   BUCKET_SYNC_DISABLE,
   BUCKET_SYNC_ENABLE,
@@ -926,6 +931,8 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket sync status", OPT::BUCKET_SYNC_STATUS },
   { "bucket sync markers", OPT::BUCKET_SYNC_MARKERS },
   { "bucket sync init", OPT::BUCKET_SYNC_INIT },
+  { "bucket sync batch-replicate", OPT::BUCKET_SYNC_BATCH_REPLICATE },
+  { "bucket sync skip-full-sync", OPT::BUCKET_SYNC_SKIP_FULL_SYNC },
   { "bucket sync run", OPT::BUCKET_SYNC_RUN },
   { "bucket sync disable", OPT::BUCKET_SYNC_DISABLE },
   { "bucket sync enable", OPT::BUCKET_SYNC_ENABLE },
@@ -9940,6 +9947,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
+
     int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
@@ -9963,7 +9971,96 @@ next:
       cerr << "ERROR: sync.init() returned error=" << sync.error() << std::endl;
       return -sync.error();
     }
-    ret = (*sync)->init_sync_status(dpp());
+    ret = (*sync)->init_sync_status(dpp(), BucketSyncState::Init);
+    if (ret < 0) {
+      cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::BUCKET_SYNC_SKIP_FULL_SYNC) {
+    if (source_zone.empty()) {
+      cerr << "ERROR: source zone not specified" << std::endl;
+      return EINVAL;
+    }
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    auto opt_sb = opt_source_bucket;
+    CHECK_TRUE(require_opt(opt_sb), "ERROR: --source-bucket not specified", EINVAL);
+
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    if (opt_sb->bucket_id.empty()) {
+      string sbid;
+      std::unique_ptr<rgw::sal::Bucket> sbuck;
+      int ret = init_bucket_for_sync(opt_sb->tenant, opt_sb->name, sbid, &sbuck);
+      if (ret < 0) {
+        return -ret;
+      }
+      opt_sb = sbuck->get_key();
+    }
+
+    if (opt_sb->match(bucket->get_key())) {
+      cerr << "ERROR: Full sync cannot be skipped when the source and destination buckets are the same. "
+           << "This restriction ensures symmetric replication. If you encounter issues with the full sync process, "
+           << "please checkout the bucket sync init command." << std::endl;
+      return EINVAL;
+    }
+
+    auto sync = RGWBucketPipeSyncStatusManager::construct(
+      dpp(), static_cast<rgw::sal::RadosStore*>(driver), source_zone, opt_sb,
+      bucket->get_key(), extra_info ? &std::cout : nullptr);
+
+    if (!sync) {
+      cerr << "ERROR: sync.init() returned error=" << sync.error() << std::endl;
+      return -sync.error();
+    }
+    ret = (*sync)->init_sync_status(dpp(), BucketSyncState::Incremental);
+    if (ret < 0) {
+      cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::BUCKET_SYNC_BATCH_REPLICATE) {
+    if (source_zone.empty()) {
+      cerr << "ERROR: source zone not specified" << std::endl;
+      return EINVAL;
+    }
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    auto opt_sb = opt_source_bucket;
+    CHECK_TRUE(require_opt(opt_sb), "ERROR: --source-bucket not specified", EINVAL);
+
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    if (opt_sb->bucket_id.empty()) {
+      string sbid;
+      std::unique_ptr<rgw::sal::Bucket> sbuck;
+      int ret = init_bucket_for_sync(opt_sb->tenant, opt_sb->name, sbid, &sbuck);
+      if (ret < 0) {
+        return -ret;
+      }
+      opt_sb = sbuck->get_key();
+    }
+
+    auto sync = RGWBucketPipeSyncStatusManager::construct(
+      dpp(), static_cast<rgw::sal::RadosStore*>(driver), source_zone, opt_sb,
+      bucket->get_key(), extra_info ? &std::cout : nullptr);
+
+    if (!sync) {
+      cerr << "ERROR: sync.init() returned error=" << sync.error() << std::endl;
+      return -sync.error();
+    }
+    ret = (*sync)->init_sync_status(dpp(), BucketSyncState::Full);
     if (ret < 0) {
       cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;

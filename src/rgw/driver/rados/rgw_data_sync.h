@@ -833,7 +833,7 @@ public:
   unsigned get_subsys() const override;
   std::ostream& gen_prefix(std::ostream& out) const override;
 
-  int init_sync_status(const DoutPrefixProvider *dpp);
+  int init_sync_status(const DoutPrefixProvider *dpp, BucketSyncState state);
   tl::expected<std::map<int, rgw_bucket_shard_sync_info>, int> read_sync_status(
     const DoutPrefixProvider *dpp);
   int run(const DoutPrefixProvider *dpp);
