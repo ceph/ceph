@@ -5,6 +5,7 @@ import json
 import uuid
 import botocore
 import time
+import threading
 from common import exec_cmd, create_user, boto_connect
 from botocore.config import Config
 
@@ -100,7 +101,33 @@ def main():
         exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
     get_resp = bucket.Object(key).get()
     assert put_resp.e_tag == get_resp['ETag'], 'get did not return null version with correct etag'
-        
+
+    # TESTCASE 'verify that concurrent delete requests do not leave behind olh entries'
+    log.debug('TEST: verify that concurrent delete requests do not leave behind olh entries\n')
+    bucket.object_versions.all().delete()
+    
+    key = 'concurrent-delete'
+    # create a delete marker
+    resp = bucket.Object(key).delete()
+    version_id = resp['ResponseMetadata']['HTTPHeaders']['x-amz-version-id']
+    try:
+        exec_cmd('ceph config set client rgw_debug_inject_latency_bi_unlink 2')
+        time.sleep(1)
+
+        def do_delete():
+            connection.ObjectVersion(bucket.name, key, version_id).delete()
+            
+        t2 = threading.Thread(target=do_delete)
+        t2.start()
+        do_delete()
+        t2.join()
+    finally:
+        exec_cmd('ceph config rm client rgw_debug_inject_latency_bi_unlink')
+    out = exec_cmd(f'radosgw-admin bucket check olh --bucket {bucket.name} --dump-keys')
+    num_leftover_olh_entries = len(json.loads(out))
+    assert num_leftover_olh_entries == 0, \
+      'Found leftover olh entries after concurrent deletes'
+
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
     bucket.object_versions.all().delete()
