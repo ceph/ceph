@@ -208,10 +208,12 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, const string& hostname,
 
 }
 
+const size_t nsbuf_size = 8192;
+
 int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string& hostname, 
     entity_addr_t *addr) {
 
-  u_char nsbuf[NS_PACKETSZ];
+  u_char nsbuf[nsbuf_size];
   int len;
   int family = cct->_conf->ms_bind_ipv6 ? AF_INET6 : AF_INET;
   int type = cct->_conf->ms_bind_ipv6 ? ns_t_aaaa : ns_t_a;
@@ -284,7 +286,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     });
 #endif
 
-  u_char nsbuf[NS_PACKETSZ];
+  u_char nsbuf[nsbuf_size];
   int num_hosts;
 
   string proto_str = srv_protocol_to_str(trans_protocol);
