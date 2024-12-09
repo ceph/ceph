@@ -290,6 +290,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        MessageRef, Connection *con) = 0;
      virtual void send_message_osd_cluster(
        Message *m, const ConnectionRef& con) = 0;
+     virtual void start_mon_command(
+       const std::vector<std::string>& cmd, const bufferlist& inbl,
+       bufferlist *outbl, std::string *outs,
+       Context *onfinish) = 0;
      virtual ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) = 0;
      virtual entity_name_t get_cluster_msgr_name() = 0;
 
@@ -422,6 +426,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
    virtual int get_ec_data_chunk_count() const { return 0; };
    virtual int get_ec_stripe_chunk_size() const { return 0; };
+   virtual uint64_t object_size_to_shard_size(const uint64_t size, int shard) const { return size; };
 
    virtual void dump_recovery_info(ceph::Formatter *f) const = 0;
 
@@ -532,6 +537,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      version_t gen,
      const std::vector<std::pair<uint64_t, uint64_t> > &extents,
      const hobject_t &hoid,
+     const uint64_t shard_size,
      ObjectStore::Transaction *t);
  public:
 
@@ -581,6 +587,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual void objects_read_async(
      const hobject_t &hoid,
+     uint64_t object_size,
      const std::list<std::pair<ECCommon::ec_align_t,
 		std::pair<ceph::buffer::list*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
@@ -606,7 +613,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      coll_t coll,
      ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
-     CephContext *cct);
+     CephContext *cct,
+     ECExtentCache::LRU &ec_extent_cache_lru);
 };
 
 #endif
