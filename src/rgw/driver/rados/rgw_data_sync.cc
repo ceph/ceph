@@ -2590,19 +2590,25 @@ public:
 
 class RGWDefaultSyncModuleInstance : public RGWSyncModuleInstance {
   RGWDefaultDataSyncModule data_handler;
+  bool start_full_sync{true};
 public:
-  RGWDefaultSyncModuleInstance() {}
+  RGWDefaultSyncModuleInstance(CephContext *cct) {
+    start_full_sync = cct->_conf->rgw_data_sync_start_full_sync;
+  }
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
   bool supports_user_writes() override {
     return true;
   }
+  bool should_full_sync() const override {
+    return start_full_sync;
+  }
 };
 
 int RGWDefaultSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance)
 {
-  instance->reset(new RGWDefaultSyncModuleInstance());
+  instance->reset(new RGWDefaultSyncModuleInstance(cct));
   return 0;
 }
 
@@ -3116,7 +3122,7 @@ public:
 class RGWArchiveSyncModuleInstance : public RGWDefaultSyncModuleInstance {
   RGWArchiveDataSyncModule data_handler;
 public:
-  RGWArchiveSyncModuleInstance() {}
+  RGWArchiveSyncModuleInstance(CephContext *cct) : RGWDefaultSyncModuleInstance(cct) {}
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
@@ -3138,7 +3144,7 @@ public:
 
 int RGWArchiveSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance)
 {
-  instance->reset(new RGWArchiveSyncModuleInstance());
+  instance->reset(new RGWArchiveSyncModuleInstance(cct));
   return 0;
 }
 
@@ -6102,7 +6108,7 @@ int RGWBucketPipeSyncStatusManager::do_init(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  sync_module.reset(new RGWDefaultSyncModuleInstance());
+  sync_module.reset(new RGWDefaultSyncModuleInstance(driver->ctx()));
   auto async_rados = driver->svc()->async_processor;
 
   sync_env.init(this, driver->ctx(), driver,
