@@ -1234,6 +1234,9 @@ COMMAND("osd pool stretch set "
         "osd", "rw")
 COMMAND("osd pool stretch unset "
 		"name=pool,type=CephPoolname",
+		"name=crush_rule,type=CephString "
+		"name=size,type=CephInt,range=0 "
+		"name=min_size,type=CephInt,range=0 "
 		"unset the stretch mode for the pool",
 		"osd", "rw")
 COMMAND("osd utilization",
