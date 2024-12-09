@@ -4,8 +4,9 @@
 #ifndef CEPH_MOSDFASTDISPATCHOP_H
 #define CEPH_MOSDFASTDISPATCHOP_H
 
+#include "include/types.h" // for epoch_t
 #include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types.h" // for spg_t
 
 class MOSDFastDispatchOp : public Message {
 public:

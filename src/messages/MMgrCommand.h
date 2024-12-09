@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ostream>
+#include <string>
 #include <vector>
 
 #include "msg/Message.h"
