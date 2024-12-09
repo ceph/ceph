@@ -99,7 +99,8 @@ def datalog_autotrim(zone):
 
 def bilog_list(zone, bucket, args = None):
     cmd = ['bilog', 'list', '--bucket', bucket] + (args or [])
-    cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
+    cmd += ['--tenant', config.tenant] if config.tenant else []
+    cmd += zone.zone_args()
     bilog, _ = zone.cluster.admin(cmd, read_only=True)
     return json.loads(bilog)
 
@@ -1321,7 +1322,7 @@ def test_zg_master_zone_delete():
     assert(len(master_zg.zones) >= 1)
     master_cluster = master_zg.zones[0].cluster
 
-    rm_zg = ZoneGroup('remove_zg')
+    rm_zg = ZoneGroup('remove_zg', realm.current_period)
     rm_zg.create(master_cluster)
 
     rm_zone = Zone('remove', rm_zg, master_cluster)
@@ -1684,10 +1685,12 @@ def test_bucket_reshard_incremental():
 
     # reshard in each zone
     for z in zonegroup_conns.rw_zones:
-        z.zone.cluster.admin(['bucket', 'reshard',
+        args = ['bucket', 'reshard',
             '--bucket', bucket.name,
             '--num-shards', '3',
-            '--yes-i-really-mean-it'])
+            '--yes-i-really-mean-it']
+        args += z.zone.zone_args()
+        z.zone.cluster.admin(args)
 
     # upload more objects
     for objname in ('e', 'f', 'g', 'h'):
@@ -1718,10 +1721,12 @@ def test_bucket_reshard_full():
             k.set_contents_from_string('foo')
 
         # reshard on first zone
-        zone.zone.cluster.admin(['bucket', 'reshard',
+        args = ['bucket', 'reshard',
             '--bucket', bucket.name,
             '--num-shards', '3',
             '--yes-i-really-mean-it'])
+        args += z.zone.zone_args()
+        z.zone.cluster.admin(args)
 
         # upload more objects
         for objname in ('e', 'f', 'g', 'h'):
