@@ -14,6 +14,11 @@
 
 #pragma once
 
+#include <map>
+
+#include <boost/intrusive_ptr.hpp>
+
+#include "auth/Crypto.h" // for CryptoKey
 #include "messages/PaxosServiceMessage.h"
 
 class MMonUsedPendingKeys final : public PaxosServiceMessage {

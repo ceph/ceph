@@ -17,9 +17,12 @@
 #define CEPH_MOSDOP_H
 
 #include <atomic>
+#include <cstdint>
+#include <vector>
 
 #include "MOSDFastDispatchOp.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs.h" // for CEPH_MSG_OSD_OP
 #include "common/hobject.h"
 
 /*

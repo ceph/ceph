@@ -15,6 +15,14 @@
 #ifndef CEPH_MTIMECHECK_H
 #define CEPH_MTIMECHECK_H
 
+#include <cstdint>
+#include <map>
+
+#include "include/encoding.h"
+#include "include/utime.h"
+#include "include/types.h" // for version_t
+#include "msg/Message.h"
+
 class MTimeCheck final : public Message {
 public:
   static constexpr int HEAD_VERSION = 1;
@@ -30,8 +38,8 @@ public:
   version_t round = 0;
 
   utime_t timestamp;
-  map<entity_inst_t, double> skews;
-  map<entity_inst_t, double> latencies;
+  std::map<entity_inst_t, double> skews;
+  std::map<entity_inst_t, double> latencies;
 
   MTimeCheck() : Message{MSG_TIMECHECK, HEAD_VERSION} {}
   MTimeCheck(int op) :

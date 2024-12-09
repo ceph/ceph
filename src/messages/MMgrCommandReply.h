@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <string_view>
+#include <ostream>
+#include <string>
 
 #include "msg/Message.h"
 #include "MMgrCommand.h"
