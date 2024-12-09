@@ -3569,18 +3569,20 @@ bid_t BlueStore::ExtentMap::allocate_spanning_blob_id()
 
 void BlueStore::ExtentMap::reshard(
   KeyValueDB *db,
-  KeyValueDB::Transaction t)
+  KeyValueDB::Transaction t,
+  uint32_t segment_size)
 {
   auto cct = onode->c->store->cct; // used by dout
 
   dout(10) << __func__ << " 0x[" << std::hex << needs_reshard_begin << ","
-	   << needs_reshard_end << ")" << std::dec
+	   << needs_reshard_end << ") segment 0x" << segment_size << std::dec
 	   << " of " << onode->onode.extent_map_shards.size()
 	   << " shards on " << onode->oid << dendl;
   for (auto& p : spanning_blob_map) {
     dout(20) << __func__ << "   spanning blob " << p.first << " " << *p.second
 	     << dendl;
   }
+  uint64_t data_reshard_end;
   // determine shard index range
   unsigned shard_index_begin = 0, shard_index_end = 0;
   if (!shards.empty()) {
@@ -3610,7 +3612,11 @@ void BlueStore::ExtentMap::reshard(
   }
 
   fault_range(db, needs_reshard_begin, (needs_reshard_end - needs_reshard_begin));
-
+  if (needs_reshard_end == OBJECT_MAX_SIZE) {
+    data_reshard_end = (extent_map.empty() ? needs_reshard_end : extent_map.rbegin()->blob_end());
+  } else {
+    data_reshard_end = needs_reshard_end;
+  }
   // we may need to fault in a larger interval later must have all
   // referring extents for spanning blobs loaded in order to have
   // accurate use_tracker values.
@@ -3647,6 +3653,10 @@ void BlueStore::ExtentMap::reshard(
   dout(20) << __func__ << "  extent_avg " << extent_avg << ", target " << target
 	   << ", slop " << slop << dendl;
 
+  uint32_t next_boundary = segment_size;
+  uint32_t encoded_segment_estimate = bytes * segment_size / (data_reshard_end - needs_reshard_begin);
+
+  bool onode_data_has_boundaries = (segment_size != 0);
   // reshard
   unsigned estimate = 0;
   unsigned offset = needs_reshard_begin;
@@ -3661,10 +3671,28 @@ void BlueStore::ExtentMap::reshard(
     }
     dout(30) << " extent " << *extent << dendl;
 
-    // disfavor shard boundaries that span a blob
-    bool would_span = (extent->logical_offset < max_blob_end) || extent->blob_offset;
-    if (estimate &&
-	estimate + extent_avg > target + (would_span ? slop : 0)) {
+    bool make_shard_here = false;
+    if (onode_data_has_boundaries) {
+      if (extent->blob_start() >= next_boundary) {
+        // beginning of the extent is a place that might be a shard boundary
+        // we want to decide whether to continue streaming to the current shard
+        // or move to the next one
+	if ((estimate >= target /*we have enough already*/) ||
+	    (estimate + encoded_segment_estimate >= (target * 3 / 2))
+	    /*we will be too large if we wait for next segment*/) {
+	  make_shard_here = true;
+	}
+	next_boundary = p2roundup(extent->blob_end(), segment_size);
+      }
+    } else {
+      // disfavor shard boundaries that span a blob
+      bool would_span = (extent->logical_offset < max_blob_end) || (extent->blob_offset != 0);
+      if ((estimate > 0)
+          && (estimate + extent_avg > target + (would_span ? slop : 0))) {
+	make_shard_here = true;
+      }
+    }
+    if (make_shard_here) {
       // new shard
       if (offset == needs_reshard_begin) {
 	new_shard_info.emplace_back(bluestore_onode_t::shard_info());
@@ -4761,6 +4789,8 @@ void BlueStore::Onode::decode_raw(
 
   // initialize extent_map
   edecoder.decode_spanning_blobs(p, on->c);
+  on->prev_spanning_cnt = on->extent_map.spanning_blob_map.size();
+  on->c->store->logger->inc(l_bluestore_spanning_blobs, on->prev_spanning_cnt);
   if (on->onode.extent_map_shards.empty()) {
     denc(on->extent_map.inline_bl, p);
     edecoder.decode_some(on->extent_map.inline_bl, on->c);
@@ -4775,7 +4805,7 @@ BlueStore::Onode* BlueStore::Onode::create_decode(
   bool allow_empty)
 {
   ceph_assert(v.length() || allow_empty);
-  Onode* on = new Onode(c.get(), oid, key);
+  Onode* on = new Onode(c.get(), oid, (const mempool::bluestore_cache_meta::string)(key));
 
   if (v.length()) {
     ExtentMap::ExtentDecoderFull edecoder(on->extent_map);
@@ -4792,6 +4822,17 @@ BlueStore::Onode* BlueStore::Onode::create_decode(
     } else {
       on->extent_map.init_shards(false, false);
     }
+  } else {
+    // init segment_size
+    uint32_t segment_size = c->store->segment_size.load();
+    int64_t val;
+    if (c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
+      // "compression_max_blob_size" set
+      if (segment_size < val) {
+        segment_size = val; // compression larger than global segment_size, use it
+      }
+    }
+    on->onode.segment_size = segment_size;
   }
   return on;
 }
@@ -5768,6 +5809,7 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_warn_on_no_per_pool_omap",
     "bluestore_warn_on_no_per_pg_omap",
     "bluestore_max_defer_interval",
+    "bluestore_onode_segment_size",
     NULL
   };
   return KEYS;
@@ -5790,7 +5832,8 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("bluestore_compression_mode") ||
       changed.count("bluestore_compression_algorithm") ||
       changed.count("bluestore_compression_min_blob_size") ||
-      changed.count("bluestore_compression_max_blob_size")) {
+      changed.count("bluestore_compression_max_blob_size") ||
+      changed.count("bluestore_onode_segment_size")) {
     if (bdev) {
       _set_compression();
     }
@@ -5890,11 +5933,14 @@ void BlueStore::_set_compression()
       _set_compression_alert(false, alg_name.c_str());
     }
   }
- 
+
+  segment_size = (cct->_conf.get_val<Option::size_t>("bluestore_onode_segment_size"));
+
   dout(10) << __func__ << " mode " << Compressor::get_comp_mode_name(comp_mode)
 	   << " alg " << (compressor ? compressor->get_type_name() : "(none)")
 	   << " min_blob " << comp_min_blob_size
 	   << " max_blob " << comp_max_blob_size
+           << " segment_size " << segment_size
 	   << dendl;
 }
 
@@ -6374,6 +6420,8 @@ void BlueStore::_init_logger()
 	    "Number of extents in cache");
   b.add_u64(l_bluestore_blobs, "onode_blobs",
 	    "Number of blobs in cache");
+  b.add_u64(l_bluestore_spanning_blobs, "onode_spanning_blobs",
+            "Number of spanning blobs in loaded onodes");
   //****************************************
 
   // buffer cache stats
@@ -14211,6 +14259,12 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   // finalize onodes
   for (auto o : txc->onodes) {
     _record_onode(o, t);
+    int16_t spanning_change =
+      o->extent_map.spanning_blob_map.size() - o->prev_spanning_cnt;
+    if (spanning_change != 0) {
+      o->prev_spanning_cnt = o->extent_map.spanning_blob_map.size();
+      logger->inc(l_bluestore_spanning_blobs, spanning_change);
+    }
     o->flushing_count++;
   }
 
@@ -17117,8 +17171,20 @@ void BlueStore::_do_write_data(
     if (head_length) {
       _do_write_small(txc, c, o, head_offset, head_length, p, wctx);
     }
-
-    _do_write_big(txc, c, o, middle_offset, middle_length, p, wctx);
+    uint32_t segment_size = o->onode.segment_size;
+    if (segment_size) {
+      // split data to chunks
+      uint64_t write_offset = middle_offset;
+      while (write_offset < middle_offset + middle_length) {
+	uint64_t segment_end = std::min(
+	  p2roundup<uint64_t>(write_offset + 1, segment_size),
+	  middle_offset + middle_length);
+	_do_write_big(txc, c, o, write_offset, segment_end - write_offset, p, wctx);
+	write_offset = segment_end;
+      }
+    } else {
+      _do_write_big(txc, c, o, middle_offset, middle_length, p, wctx);
+    }
 
     if (tail_length) {
       _do_write_small(txc, c, o, tail_offset, tail_length, p, wctx);
@@ -17428,6 +17494,9 @@ int BlueStore::_do_write_v2(
   if (wctx.compress) {
     // if we have compression, skip to write_v1
     return _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+  }
+  if (o->onode.segment_size != 0 && wctx.target_blob_size > o->onode.segment_size) {
+    wctx.target_blob_size = o->onode.segment_size;
   }
   if (bl.length() != length) {
     bl.splice(length, bl.length() - length);
@@ -18895,7 +18964,7 @@ void BlueStore::_record_onode(OnodeRef& o, KeyValueDB::Transaction &txn)
   // finalize extent_map shards
   o->extent_map.update(txn, false);
   if (o->extent_map.needs_reshard()) {
-    o->extent_map.reshard(db, txn);
+    o->extent_map.reshard(db, txn, o->onode.segment_size);
     o->extent_map.update(txn, true);
     if (o->extent_map.needs_reshard()) {
       dout(20) << __func__ << " warning: still wants reshard, check options?"
