@@ -462,6 +462,9 @@ ClientRequest::do_process(
       co_return;
     }
   }
+
+  co_await maybe_inject_delay();
+
   if (m->get_oid().name.size()
     > crimson::common::local_conf()->osd_max_object_name_len) {
     co_await reply_op_error(pg, -ENAMETOOLONG);
