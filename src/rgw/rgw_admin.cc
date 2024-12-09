@@ -23,7 +23,7 @@ extern "C" {
 #include "common/ceph_json.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
-#include "common/Formatter.h"
+#include "common/XMLFormatter.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/fault_injector.h"
@@ -78,6 +78,8 @@ extern "C" {
 
 #include "driver/rados/rgw_bucket.h"
 #include "driver/rados/rgw_sal_rados.h"
+
+#include <iomanip>
 
 #define dout_context g_ceph_context
 

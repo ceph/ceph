@@ -52,13 +52,14 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/lexical_cast.hpp>
 
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 #include "common/Preforker.h"
 #include "common/SubProcess.h"
 #include "common/TextTable.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/event_socket.h"
 #include "common/module.h"

@@ -6,6 +6,7 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "common/bit_vector.hpp"
+#include "include/encoding_set.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
@@ -14,6 +15,8 @@
 #include "librbd/operation/SnapshotRemoveRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+
+#include <shared_mutex> // for std::shared_lock
 
 namespace librbd {
 namespace image {

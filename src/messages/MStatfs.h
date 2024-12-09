@@ -19,6 +19,7 @@
 #include <optional>
 #include <sys/statvfs.h>    /* or <sys/statfs.h> */
 #include "messages/PaxosServiceMessage.h"
+#include "include/encoding_optional.h"
 
 class MStatfs final : public PaxosServiceMessage {
 private:

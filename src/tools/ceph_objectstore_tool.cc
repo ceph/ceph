@@ -17,6 +17,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <boost/optional.hpp>
+#include <iomanip>
 #include <fstream>
 
 #include <stdlib.h>
@@ -45,6 +46,12 @@
 #include "ceph_objectstore_tool.h"
 #include "include/compat.h"
 #include "include/util.h"
+
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 using namespace std;
 namespace po = boost::program_options;

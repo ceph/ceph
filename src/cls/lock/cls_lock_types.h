@@ -5,6 +5,7 @@
 #define CEPH_CLS_LOCK_TYPES_H
 
 #include "include/encoding.h"
+#include "include/encoding_map.h"
 #include "include/types.h"
 #include "include/utime.h"
 #include "msg/msg_types.h"

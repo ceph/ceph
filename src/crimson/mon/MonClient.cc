@@ -13,6 +13,7 @@
 #include "auth/AuthClientHandler.h"
 #include "auth/RotatingKeyRing.h"
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/hostname.h"
 #include "include/utime_fmt.h"
 

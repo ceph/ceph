@@ -16,6 +16,10 @@
 #define CEPH_MMONCOMMANDACK_H
 
 #include "messages/PaxosServiceMessage.h"
+#include "include/encoding_vector.h"
+
+#include <sstream>
+#include <string>
 
 using ceph::common::cmdmap_from_json;
 using ceph::common::cmd_getval;

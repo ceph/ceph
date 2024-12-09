@@ -3,6 +3,7 @@
 
 #include <iostream> // for std::cout
 
+#include "include/container_ios.h"
 #include "include/types.h"
 #include "common/Thread.h"
 #include "common/debug.h"
@@ -10,6 +11,7 @@
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "log/Log.h"
 
 #define dout_context g_ceph_context
 

@@ -15,6 +15,7 @@
 #include <initializer_list>
 #include <memory>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 
 #include <boost/asio/use_awaitable.hpp>
@@ -27,6 +28,7 @@
 #include <xxHash/xxhash.h>
 
 #include "include/neorados/RADOS.hpp"
+#include "include/rbd/features.h" // for RBD_FEATURES_ALL
 
 #include "osd/error_code.h"
 
