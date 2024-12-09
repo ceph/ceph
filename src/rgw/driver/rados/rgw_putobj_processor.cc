@@ -35,9 +35,11 @@ namespace rgw::putobj {
  * cloudtier config info read from the attrs.
  * Since these attrs are used internally for only replication, do not store them
  * in the head object.
+ * 
+ * Update versioned epoch incase the object is being restored.
  */
 void read_cloudtier_info_from_attrs(rgw::sal::Attrs& attrs, RGWObjCategory& category,
-                          RGWObjManifest& manifest) {
+                          std::optional<uint64_t>& olh_epoch, RGWObjManifest& manifest) {
   auto attr_iter = attrs.find(RGW_ATTR_CLOUD_TIER_TYPE);
   if (attr_iter != attrs.end()) {
     auto i = attr_iter->second;
@@ -62,6 +64,29 @@ void read_cloudtier_info_from_attrs(rgw::sal::Attrs& attrs, RGWObjCategory& cate
       }
     }
     attrs.erase(attr_iter);
+  }
+  attr_iter = attrs.find(RGW_ATTR_RESTORE_VERSIONED_EPOCH);
+  if (attr_iter != attrs.end()) {
+    try {
+      using ceph::decode;
+      uint64_t v_epoch = 0;
+      decode(v_epoch, attr_iter->second);
+      olh_epoch = v_epoch;
+      /*
+       * Keep this attr only for Temp restored copies as its needed while
+       * resetting head object post expiry.
+       */
+      auto r_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+      if (r_iter != attrs.end()) {
+        rgw::sal::RGWRestoreType restore_type;
+        using ceph::decode;
+        decode(restore_type, r_iter->second);
+        if (restore_type != rgw::sal::RGWRestoreType::Temporary) {
+	        attrs.erase(attr_iter);
+        }
+      }
+    } catch (buffer::error& err) {
+    }
   }
 }
 
@@ -390,7 +415,7 @@ int AtomicObjectProcessor::complete(
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
 
-  read_cloudtier_info_from_attrs(attrs, obj_op.meta.category, manifest);
+  read_cloudtier_info_from_attrs(attrs, obj_op.meta.category, obj_op.meta.olh_epoch, manifest);
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
                         writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
