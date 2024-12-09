@@ -17,6 +17,10 @@
 #include "common/Formatter.h"
 #include "include/types.h"
 
+#include <list>
+#include <map>
+#include <string>
+
 std::string bytes2str(uint64_t count);
 
 struct ceph_data_stats
