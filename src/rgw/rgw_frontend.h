@@ -45,7 +45,7 @@ public:
 
   void set_default_config(RGWFrontendConfig& def_conf);
 
-  std::optional<std::string> get_val(const std::string& key);
+  std::optional<std::string> get_val(const std::string& key) const;
 
   bool get_val(const std::string& key,
                const std::string& def_val,
@@ -64,6 +64,9 @@ public:
   }
 
   std::multimap<std::string, std::string>& get_config_map() {
+    return config_map;
+  }
+  const std::multimap<std::string, std::string>& get_config_map() const {
     return config_map;
   }
 
