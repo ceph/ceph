@@ -90,6 +90,7 @@ set(librgw_common_srcs
   rgw_notify_event_type.cc
   rgw_period_history.cc
   rgw_period_puller.cc
+  rgw_s3_filter.cc
   rgw_pubsub.cc
   rgw_coroutine.cc
   rgw_cr_rest.cc
@@ -151,6 +152,8 @@ set(librgw_common_srcs
   rgw_data_access.cc
   driver/rados/account.cc
   driver/rados/buckets.cc
+  rgw_bucket_logging.cc
+  rgw_rest_bucket_logging.cc
   driver/rados/cls_fifo_legacy.cc
   driver/rados/group.cc
   driver/rados/groups.cc

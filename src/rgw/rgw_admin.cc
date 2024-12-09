@@ -68,6 +68,7 @@ extern "C" {
 #include "rgw_sal_config.h"
 #include "rgw_data_access.h"
 #include "rgw_account.h"
+#include "rgw_bucket_logging.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -177,6 +178,7 @@ void usage()
   cout << "  bucket sync disable              disable bucket sync\n";
   cout << "  bucket sync enable               enable bucket sync\n";
   cout << "  bucket radoslist                 list rados objects backing bucket's objects\n";
+  cout << "  bucket logging flush             flush pending log records object of source bucket to the log bucket to bucket\n";
   cout << "  bi get                           retrieve bucket index object entries\n";
   cout << "  bi put                           store bucket index object entries\n";
   cout << "  bi list                          list raw bucket index entries\n";
@@ -704,6 +706,7 @@ enum class OPT {
   BUCKET_SHARD_OBJECTS,
   BUCKET_OBJECT_SHARD,
   BUCKET_RESYNC_ENCRYPTED_MULTIPART,
+  BUCKET_LOGGING_FLUSH,
   POLICY,
   LOG_LIST,
   LOG_SHOW,
@@ -942,6 +945,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket shard object", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
   { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
+  { "bucket logging flush", OPT::BUCKET_LOGGING_FLUSH },
   { "policy", OPT::POLICY },
   { "log list", OPT::LOG_LIST },
   { "log show", OPT::LOG_SHOW },
@@ -7550,6 +7554,54 @@ int main(int argc, const char **argv)
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
     }
+  }
+
+  if (opt_cmd == OPT::BUCKET_LOGGING_FLUSH) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    const auto& bucket_attrs = bucket->get_attrs();
+    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
+    if (iter == bucket_attrs.end()) {
+      cerr << "WARNING: no logging configured on bucket" << std::endl;
+      return 0;
+    }
+    rgw::bucketlogging::configuration configuration;
+    try {
+      configuration.enabled = true;
+      decode(configuration, iter->second);
+    } catch (buffer::error& err) {
+      cerr << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+        << "'. error: " << err.what() << std::endl;
+      return  EINVAL;
+    }
+    std::unique_ptr<rgw::sal::Bucket> target_bucket;
+    ret = init_bucket(tenant, configuration.target_bucket, "", &target_bucket);
+    if (ret < 0) {
+      cerr << "ERROR: failed to get target logging bucket '" << configuration.target_bucket << "'" << std::endl;
+      return -ret;
+    }
+    std::string obj_name;
+    RGWObjVersionTracker objv_tracker;
+    ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp(), &objv_tracker);
+    if (ret < 0) {
+      cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket << "'" << std::endl;
+      return -ret;
+    }
+    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), null_yield, true, &objv_tracker);
+    if (ret < 0) {
+      cerr << "ERROR: failed to flush pending logging object '" << obj_name
+        << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
+      return -ret;
+    }
+    cerr << "flushed pending logging object '" << obj_name
+      << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
+    return 0;
   }
 
   if (opt_cmd == OPT::LOG_LIST) {
