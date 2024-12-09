@@ -105,7 +105,7 @@ describe('RbdMirroringService', () => {
     expect(req.request.body).toEqual({ site_name: 'site-a' });
   });
 
-  it('should create bootstrap token', () => {
+  it('should Setup Replication', () => {
     service.createBootstrapToken('poolName').subscribe();
 
     const req = httpTesting.expectOne('api/block/mirroring/pool/poolName/bootstrap/token');
