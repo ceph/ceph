@@ -136,7 +136,17 @@ class SMBCluster(RESTController):
                 json.dumps(cluster_resource)).to_simplified()
         except RuntimeError as e:
             raise DashboardException(e, component='smb')
-
+    
+    @DeletePermission
+    @EndpointDoc("Remove smb cluster",
+                 parameters={
+                     'cluster_id': (str, 'Unique identifier for the cluster')},
+                  responses={204: None})
+    def delete(self,cluster_id: str): 
+      """
+        Remove an smb cluster 
+      """
+      return mgr.remote('smb', 'cluster_rm', cluster_id).to_simplified()
 
 @APIRouter('/smb/share', Scope.SMB)
 @APIDoc("SMB Share Management API", "SMB")
