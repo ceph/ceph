@@ -462,8 +462,10 @@ def ceph_log(ctx, config):
             """
             args = [
                 'sudo',
-                'egrep', pattern,
-                '/var/log/ceph/{fsid}/ceph.log'.format(
+                'egrep', '-r',
+                '--include=ceph-mon.*.log',
+                pattern,
+                '/var/log/ceph/{fsid}/'.format(
                     fsid=fsid),
             ]
             if only_match:
@@ -475,12 +477,16 @@ def ceph_log(ctx, config):
                 run.Raw('|'), 'head', '-n', '1',
             ])
             r = ctx.ceph[cluster_name].bootstrap_remote.run(
-                stdout=StringIO(),
+                stdout=BytesIO(),
                 args=args,
+                stderr=StringIO(),
             )
-            stdout = r.stdout.getvalue()
+            stdout = r.stdout.getvalue().decode()
             if stdout != '':
                 return stdout
+            stderr = r.stderr.getvalue()
+            if stderr != '':
+                return stderr
             return None
 
         # NOTE: technically the first and third arg to first_in_ceph_log
