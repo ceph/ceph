@@ -16,6 +16,8 @@
 #ifndef CEPH_MWATCHNOTIFY_H
 #define CEPH_MWATCHNOTIFY_H
 
+#include <ostream>
+
 #include "msg/Message.h"
 
 
