@@ -675,7 +675,8 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   if (r < 0) {
     derr << ": failed to create remote file path=" << epath << ": "
          << cpp_strerror(r) << dendl;
-    goto close_local_fd;
+    ceph_close(m_local_mount, l_fd);
+    return r;
   }
 
   r_fd = r;
@@ -683,7 +684,9 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   if (!ptr) {
     r = -ENOMEM;
     derr << ": failed to allocate memory" << dendl;
-    goto close_remote_fd;
+    ceph_close(m_remote_mount, r_fd);
+    ceph_close(m_local_mount, l_fd);
+    return r;
   }
 
   while (true) {
@@ -732,21 +735,18 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
 
   free(ptr);
 
-close_remote_fd:
-  if (ceph_close(m_remote_mount, r_fd) < 0) {
-    derr << ": failed to close remote fd path=" << epath << ": " << cpp_strerror(r)
+  int rc = 0;
+  if (0 > (rc = ceph_close(m_remote_mount, r_fd))) {
+    derr << ": failed to close remote fd path=" << epath << ": " << cpp_strerror(rc)
          << dendl;
-    return -EINVAL;
   }
 
-close_local_fd:
-  if (ceph_close(m_local_mount, l_fd) < 0) {
-    derr << ": failed to close local fd path=" << epath << ": " << cpp_strerror(r)
+  if (0 > (rc = ceph_close(m_local_mount, l_fd))) {
+    derr << ": failed to close local fd path=" << epath << ": " << cpp_strerror(rc)
          << dendl;
-    return -EINVAL;
   }
 
-  return r == 0 ? 0 : r;
+  return r;
 }
 
 int PeerReplayer::remote_file_op(const std::string &dir_root, const std::string &epath,
