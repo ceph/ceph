@@ -54,6 +54,7 @@ public:
 
   const std::set<snapid_t>& get_snaps() const;
   const SnapContext& get_snap_context() const;
+  const SnapContext& get_snap_context(std::vector<SnapRealm*>& related_realms) const;
   void invalidate_cached_snaps() {
     cached_seq = 0;
   }

@@ -2462,7 +2462,7 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
       }
     }
     reply->snapbl = get_snap_trace(session, realm, related_realms);
-    dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
+    dout(10) << "set_trace_dist inode " << *in << " snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
   }
 
   // dir + dentry?
@@ -7562,6 +7562,7 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   //TODO layout, rstat accounting for referent inode ?
 
   // TODO - snapshot related inode updates - snaprealm on referent inode
+
   bool adjust_realm = false;
 
   // log + wait

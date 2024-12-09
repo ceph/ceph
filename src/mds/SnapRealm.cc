@@ -219,6 +219,45 @@ const SnapContext& SnapRealm::get_snap_context() const
   return cached_snap_context;
 }
 
+const SnapContext& SnapRealm::get_snap_context(std::vector<SnapRealm*>& related_realms) const
+{
+  check_cache();
+
+  unsigned i = 0;
+  if (!cached_snap_context.seq) {
+    cached_snap_context.seq = cached_seq;
+    cached_snap_context.snaps.resize(cached_snaps.size());
+    for (set<snapid_t>::reverse_iterator p = cached_snaps.rbegin();
+	 p != cached_snaps.rend();
+	 ++p)
+      cached_snap_context.snaps[i++] = *p;
+  }
+
+  if (!related_realms.empty()) {
+    uint64_t snaps_size = cached_snaps.size();
+    snapid_t rr_max_seq = cached_snap_context.seq;
+
+    for (const auto& r_realm : related_realms) {
+      r_realm->check_cache();
+      snaps_size+= r_realm->srnode.snaps.size();
+      if (rr_max_seq < r_realm->srnode.seq)
+        rr_max_seq = r_realm->srnode.seq;
+      dout(20) << "get_snap_context related_realm " << r_realm << " snap size " << snaps_size  << " max seq " << rr_max_seq << dendl;
+    }
+
+    cached_snap_context.seq = rr_max_seq;
+    cached_snap_context.snaps.resize(snaps_size);
+    for (const auto& r_realm : related_realms) {
+      for (set<snapid_t>::reverse_iterator p = r_realm->cached_snaps.rbegin();
+           p != r_realm->cached_snaps.rend();
+           ++p)
+        cached_snap_context.snaps[i++] = *p;
+    }
+  }
+
+  return cached_snap_context;
+}
+
 void SnapRealm::get_snap_info(map<snapid_t, const SnapInfo*>& infomap, snapid_t first, snapid_t last)
 {
   const set<snapid_t>& snaps = get_snaps();
