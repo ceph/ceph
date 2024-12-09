@@ -3786,7 +3786,7 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
   if (offset > fnode.size) {
     ceph_abort_msg("truncate up not supported");
   }
-  ceph_assert(offset <= fnode.size);
+
   _flush_bdev(h);
   {
     std::lock_guard ll(log.lock);
@@ -3795,43 +3795,41 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
     vselector->sub_usage(h->file->vselector_hint, fnode);
     uint64_t x_off = 0;
     auto p = fnode.seek(offset, &x_off);
-    uint64_t cut_off =
-      (p == fnode.extents.end()) ? 0 : p2roundup(x_off, alloc_size[p->bdev]);
-    uint64_t new_allocated;
-    if (0 == cut_off) {
-      // whole pextent to remove
-      changed_extents = true;
-      new_allocated = offset;
-    } else if (cut_off < p->length) {
-      dirty.pending_release[p->bdev].insert(p->offset + cut_off, p->length - cut_off);
-      new_allocated = (offset - x_off) + cut_off;
-      p->length = cut_off;
-      changed_extents = true;
-      ++p;
-    } else {
-      ceph_assert(cut_off >= p->length);
-      new_allocated  = (offset - x_off) + p->length;
-      // just leave it here
-      ++p;
-    }
-    while (p != fnode.extents.end()) {
-      dirty.pending_release[p->bdev].insert(p->offset, p->length);
-      p = fnode.extents.erase(p);
-      changed_extents = true;
+    if (p != fnode.extents.end()) {
+      uint64_t cut_off = p2roundup(x_off, alloc_size[p->bdev]);
+      if (0 == cut_off) {
+        // whole pextent to remove
+        fnode.allocated = offset;
+        changed_extents = true;
+      } else if (cut_off < p->length) {
+        dirty.pending_release[p->bdev].insert(p->offset + cut_off,
+                                              p->length - cut_off);
+        fnode.allocated = (offset - x_off) + cut_off;
+        p->length = cut_off;
+        changed_extents = true;
+        ++p;
+      } else {
+        // cut_off > p->length means that we misaligned the extent
+        ceph_assert(cut_off == p->length);
+        fnode.allocated = (offset - x_off) + p->length;
+        ++p; // leave extent untouched
+      }
+      while (p != fnode.extents.end()) {
+        dirty.pending_release[p->bdev].insert(p->offset, p->length);
+        p = fnode.extents.erase(p);
+        changed_extents = true;
+      }
     }
     if (changed_extents) {
       fnode.size = offset;
-      fnode.allocated = new_allocated;
       fnode.reset_delta();
       log.t.op_file_update(fnode);
       // sad, but is_dirty must be set to signal flushing of the log
       h->file->is_dirty = true;
-    } else {
-      if (offset != fnode.size) {
-        fnode.size = offset;
-        //skipping log.t.op_file_update_inc, it will be done by flush()
-        h->file->is_dirty = true;
-      }
+    } else if (offset != fnode.size) {
+      fnode.size = offset;
+      // skipping log.t.op_file_update_inc, it will be done by flush()
+      h->file->is_dirty = true;
     }
     vselector->add_usage(h->file->vselector_hint, fnode);
   }
