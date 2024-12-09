@@ -155,7 +155,7 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
 int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                         const rgw_pool& pool, const std::string& key,
                         RGWObjVersionTracker *objv_tracker,
-			real_time *pmtime, optional_yield y,
+			real_time *pmtime, uint64_t *psize, optional_yield y,
 			std::map<std::string, bufferlist> *pattrs)
 {
   rgw_raw_obj obj(pool, key);
@@ -163,6 +163,7 @@ int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
   return sysobj.rop()
                .set_attrs(pattrs)
                .set_last_mod(pmtime)
+               .set_obj_size(psize)
                .stat(y, dpp);
 }
 
@@ -185,7 +186,7 @@ int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool, const str
             .read(dpp, &bl, y);
 }
 
-int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
+int rgw_delete_system_obj(const DoutPrefixProvider *dpp,
                           RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
