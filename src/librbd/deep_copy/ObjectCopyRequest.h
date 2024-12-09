@@ -125,6 +125,7 @@ private:
   std::map<librados::snap_t, bool> m_dst_object_may_exist;
 
   io::AsyncOperation* m_src_async_op = nullptr;
+  bool m_check_older_snaps = false;
 
   void send_list_snaps();
   void handle_list_snaps(int r);
@@ -146,6 +147,8 @@ private:
   void compute_zero_ops();
 
   void compute_dst_object_may_exist();
+
+  void check_for_clone_mirroring();
 
   void finish(int r);
 };
