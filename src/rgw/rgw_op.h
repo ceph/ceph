@@ -71,7 +71,7 @@ namespace rgw::auth::registry { class StrategyRegistry; }
 
 int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
-                                  const rgw_owner& effective_owner,
+                                  const std::optional<rgw_owner>& effective_owner,
                                   bufferlist* indata, JSONParser* jp,
                                   req_info& req, optional_yield y);
 
