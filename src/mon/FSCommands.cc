@@ -336,12 +336,25 @@ public:
       ss << "Invalid variable";
       return -EINVAL;
     }
+
     string val;
-    string interr;
-    int64_t n = 0;
     if (!cmd_getval(cmdmap, "val", val)) {
       return -EINVAL;
     }
+
+    bool confirm = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+    if (var == "max_mds" && !confirm && mon->mdsmon()->has_any_health_warning()) {
+      ss << "One or more file system health warnings are present. Modifying "
+	 << "the file system setting variable \"max_mds\" may not help "
+	 << "troubleshoot or recover from these warnings and may further "
+	 << "destabilize the system. If you really wish to proceed, run "
+	 << "again with --yes-i-really-mean-it";
+      return -EPERM;
+    }
+
+    string interr;
+    int64_t n = 0;
     // we got a string.  see if it contains an int.
     n = strict_strtoll(val.c_str(), 10, &interr);
     if (var == "max_mds") {
