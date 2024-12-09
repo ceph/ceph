@@ -118,7 +118,7 @@ TYPE(bluestore_blob_use_tracker_t)
 // approach.
 // TYPE_FEATUREFUL(bluestore_blob_t)
 TYPE(bluestore_shared_blob_t)
-TYPE(bluestore_onode_t)
+TYPE_FEATUREFUL(bluestore_onode_t)
 TYPE(bluestore_onode_t::shard_info)
 using shard_info = bluestore_onode_t::shard_info;
 TYPE(shard_info)
