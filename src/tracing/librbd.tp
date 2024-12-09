@@ -2108,6 +2108,32 @@ TRACEPOINT_EVENT(librbd, diff_iterate_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, diff_iterate_from_parent_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        const char*, snap_name,
+        char, read_only,
+        uint64_t, offset,
+        uint64_t, length),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, diff_iterate_from_parent_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, get_parent_info_enter,
     TP_ARGS(
         void*, imagectx,
