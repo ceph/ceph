@@ -26,10 +26,10 @@ from https://docs.ceph.com/en/latest/install/get-packages/#rhel, the ceph.repo f
 point to https://download.ceph.com/rpm-17.2.7/el8 instead of https://download.ceph.com/rpm-quincy/el8
 
 These CERN packages come with no warranty and have not been tested. The software in them has been
-tested by Ceph according to https://docs.ceph.com/en/latest/start/os-recommendations/#platforms
-The repository for el8 builds is hosted by CERN on Linux@CERN: https://linuxsoft.cern.ch/repos/ceph-ext-quincy8el-stable/
-The public part of the GPG key ('RPM-GPG-KEY-Ceph-Community') used to sign the
-packages is available at https://linuxsoft.cern.ch/repos/RPM-GPG-KEY-Ceph-Community
+tested by Ceph according to `platforms <https://docs.ceph.com/en/latest/start/os-recommendations/#platforms>`_ .
+The repository for el8 builds is hosted by CERN on `Linux@CERN <https://linuxsoft.cern.ch/repos/ceph-ext-quincy8el-stable/>`_ .
+The public part of the GPG key used to sign the
+packages is available at `RPM-GPG-KEY-Ceph-Community <https://linuxsoft.cern.ch/repos/RPM-GPG-KEY-Ceph-Community>`_ .
 
 Notable Changes
 ---------------
