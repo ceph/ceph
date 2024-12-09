@@ -82,6 +82,9 @@ struct PGFacade final : BackfillState::PGFacade {
   }
 
   PGFacade(PG& pg) : pg(pg) {}
+  std::ostream &print(std::ostream &out) const override {
+    return out << pg;
+  }
 };
 
 } // namespace crimson::osd
