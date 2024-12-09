@@ -19,6 +19,7 @@
 #include "test/objectstore/ObjectStoreImitator.h"
 #include <fstream>
 #include <boost/random/uniform_int.hpp>
+#include <boost/random/mersenne_twister.hpp>
 #include <fmt/core.h>
 #include <mutex>
 #include <string>

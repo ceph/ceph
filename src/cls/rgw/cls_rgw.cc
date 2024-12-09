@@ -132,27 +132,23 @@ BIIndexType bi_type(const string& s, const string& prefix ="")
   return (BIIndexType)ret;
 }
 
-static void get_time_key(real_time& ut, string *key)
+static void get_time_key(real_time ut, string *key)
 {
-  char buf[32];
   ceph_timespec ts = ceph::real_clock::to_ceph_timespec(ut);
-  snprintf(buf, 32, "%011llu.%09u", (unsigned long long)ts.tv_sec, (unsigned int)ts.tv_nsec);
-  *key = buf;
+  *key = fmt::format("{:011}.{:09}", static_cast<uint64_t>(ts.tv_sec),
+		     static_cast<unsigned int>(ts.tv_nsec));
 }
 
 static void get_index_ver_key(cls_method_context_t hctx, uint64_t index_ver, string *key)
 {
-  char buf[48];
-  snprintf(buf, sizeof(buf), "%011llu.%llu.%d", (unsigned long long)index_ver,
-           (unsigned long long)cls_current_version(hctx),
-           cls_current_subop_num(hctx));
-  *key = buf;
+  *key = fmt::format("{:011}.%llu.%d", index_ver, uint64_t(cls_current_version(hctx)),
+		     int(cls_current_subop_num(hctx)));
 }
 
 static void bi_reshard_log_prefix(string& key)
 {
-  key = BI_PREFIX_CHAR;
-  key.append(bucket_index_prefixes[BI_BUCKET_RESHARD_LOG_INDEX]);
+  key = fmt::format("{}{}", BI_PREFIX_CHAR,
+		    bucket_index_prefixes[BI_BUCKET_RESHARD_LOG_INDEX]);
 }
 
 // 0x802001_idx
@@ -185,8 +181,8 @@ static int reshard_log_index_operation(cls_method_context_t hctx, const string& 
 
 static void bi_log_prefix(string& key)
 {
-  key = BI_PREFIX_CHAR;
-  key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+  key = fmt::format("{}{}", BI_PREFIX_CHAR,
+		    bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
 }
 
 static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id, uint64_t index_ver)
@@ -321,22 +317,19 @@ static int get_obj_vals(cls_method_context_t hctx,
  */
 static void decreasing_str(uint64_t num, string *str)
 {
-  char buf[32];
   if (num < 0x10) { /* 16 */
-    snprintf(buf, sizeof(buf), "9%02lld", 15 - (long long)num);
+    *str = fmt::format("9{:02}", 15 - int64_t(num));
   } else if (num < 0x100) { /* 256 */
-    snprintf(buf, sizeof(buf), "8%03lld", 255 - (long long)num);
+    *str = fmt::format("8{:03}", 255 - int64_t(num));
   } else if (num < 0x1000) /* 4096 */ {
-    snprintf(buf, sizeof(buf), "7%04lld", 4095 - (long long)num);
+    *str = fmt::format("7{:04}", 4095 - int64_t(num));
   } else if (num < 0x10000) /* 65536 */ {
-    snprintf(buf, sizeof(buf), "6%05lld", 65535 - (long long)num);
+    *str = fmt::format("6{:05}", int64_t(65535 - num));
   } else if (num < 0x100000000) /* 4G */ {
-    snprintf(buf, sizeof(buf), "5%010lld", 0xFFFFFFFF - (long long)num);
+    *str = fmt::format("5{:010}", 0xFFFFFFFF - int64_t(num));
   } else {
-    snprintf(buf, sizeof(buf), "4%020lld",  (long long)-num);
+    *str = fmt::format("4{:020}",  int64_t(-num));
   }
-
-  *str = buf;
 }
 
 /*
@@ -3929,30 +3922,22 @@ static int rgw_reshard_log_trim_op(cls_method_context_t hctx, bufferlist *in, bu
 
 static void usage_record_prefix_by_time(uint64_t epoch, string& key)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%011llu", (long long unsigned)epoch);
-  key = buf;
+  key = fmt::format("{:011}", uint64_t(epoch));
 }
 
 static void usage_record_prefix_by_user(const string& user, uint64_t epoch, string& key)
 {
-  char buf[user.size() + 32];
-  snprintf(buf, sizeof(buf), "%s_%011llu_", user.c_str(), (long long unsigned)epoch);
-  key = buf;
+  key = fmt::format("{}_{:011}_", user, epoch);
 }
 
 static void usage_record_name_by_time(uint64_t epoch, const string& user, const string& bucket, string& key)
 {
-  char buf[32 + user.size() + bucket.size()];
-  snprintf(buf, sizeof(buf), "%011llu_%s_%s", (long long unsigned)epoch, user.c_str(), bucket.c_str());
-  key = buf;
+  key = fmt::format("{:011}_{}_{}", epoch, user, bucket);
 }
 
 static void usage_record_name_by_user(const string& user, uint64_t epoch, const string& bucket, string& key)
 {
-  char buf[32 + user.size() + bucket.size()];
-  snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
-  key = buf;
+  key = fmt::format("{}_{:011}_{}", user, epoch, bucket);
 }
 
 static int usage_record_decode(bufferlist& record_bl, rgw_usage_log_entry& e)

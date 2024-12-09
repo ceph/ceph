@@ -715,7 +715,7 @@ TEST_F(CRUSHTest, straw_zero) {
   const int OSD_TYPE = 0;
   c->set_type_name(OSD_TYPE, "osd");
 
-  int n = 5;
+  static constexpr int n = 5;
   int items[n], weights[n];
   for (int i=0; i <n; ++i) {
     items[i] = i;
@@ -780,7 +780,7 @@ TEST_F(CRUSHTest, straw_same) {
   const int OSD_TYPE = 0;
   c->set_type_name(OSD_TYPE, "osd");
 
-  int n = 10;
+  static constexpr int n = 10;
   int items[n], weights[n];
   for (int i=0; i <n; ++i) {
     items[i] = i;
@@ -880,7 +880,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   const int OSD_TYPE = 0;
   c->set_type_name(OSD_TYPE, "osd");
 
-  int items[n];
+  std::vector<int> items(n);
   for (int i=0; i <n; ++i) {
     items[i] = i;
   }
@@ -891,7 +891,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   int root0;
   crush_bucket *b0 = crush_make_bucket(c->get_crush_map(),
 				       CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
-				       ROOT_TYPE, n, items, weights);
+				       ROOT_TYPE, n, items.data(), weights);
   crush_add_bucket(c->get_crush_map(), 0, b0, &root0);
   c->set_item_name(root0, root_name0);
 
@@ -899,7 +899,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
 
-  int sum[n];
+  std::vector<int> sum(n);
   double totalweight = 0;
   vector<unsigned> reweight(n);
   for (int i=0; i<n; ++i) {
@@ -956,7 +956,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
 
 TEST_F(CRUSHTest, straw2_stddev)
 {
-  int n = 15;
+  static constexpr int n = 15;
   int weights[n];
   cout << "maxskew\tstddev\n";
   for (double step = 1.0; step < 2; step += .25) {
@@ -994,7 +994,7 @@ TEST_F(CRUSHTest, straw2_reweight) {
     0x10000,
     0x20000
   };
-  int n = 15;
+  static constexpr int n = 15;
 
   std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   const int ROOT_TYPE = 2;

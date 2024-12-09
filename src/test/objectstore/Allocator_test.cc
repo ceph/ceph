@@ -6,6 +6,7 @@
  */
 #include <iostream>
 #include <boost/scoped_ptr.hpp>
+#include <boost/random/mersenne_twister.hpp>
 #include <gtest/gtest.h>
 
 #include "common/Cond.h"

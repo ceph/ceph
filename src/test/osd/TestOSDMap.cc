@@ -426,7 +426,7 @@ public:
         cout << "<<<<<PGs distribution:" << std::endl;
       }
       int high_load_after = 0;
-      for (auto i = 0 ; i < weights.size() ; i++) {
+      for (auto i = 0 ; std::cmp_less(i, weights.size()) ; i++) {
         int pgs = pgs_by_osd[i].size();
         int prims = prim_pgs_by_osd[i].size();
         int cur_load = prims * 100 + (pgs - prims) * (100 - rr);
