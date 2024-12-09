@@ -21,6 +21,7 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <format>
 
 #include <fmt/format.h>
 
@@ -44,7 +45,7 @@ auto clamp_or_throw(auto min, auto max)
 {
  return [=](auto& x) { 
 		if(std::less<>{}(x, min) or std::greater<>{}(x, max)) {
-		 throw out_of_range(fmt::format("value expected between {} and {}, but got {}", min, max, x));
+		 throw std::out_of_range(fmt::format("value expected between {} and {}, but got {}", min, max, x));
 		}
 
 		return x;	
