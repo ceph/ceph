@@ -3,6 +3,7 @@
 
 #include "common/ceph_context.h"
 #include "rgw_sync_counters.h"
+#include "common/perf_counters_key.h"
 
 namespace sync_counters {
 
@@ -26,3 +27,31 @@ PerfCountersRef build(CephContext *cct, const std::string& name)
 }
 
 } // namespace sync_counters
+
+namespace sync_deltas {
+
+void add_rgw_sync_delta_counters(PerfCountersBuilder *lpcb) {
+  lpcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  lpcb->add_time(l_rgw_datalog_sync_delta, "sync_delta", "Sync delta between data log shard in seconds");
+}
+
+SyncDeltaCountersManager::SyncDeltaCountersManager(const std::string& name, CephContext *cct)
+    : cct(cct)
+{
+  std::string_view key = ceph::perf_counters::key_name(name);
+  ceph_assert(rgw_sync_delta_counters_key == key);
+  PerfCountersBuilder pcb(cct, name, l_rgw_sync_delta_first, l_rgw_sync_delta_last);
+  add_rgw_sync_delta_counters(&pcb);
+  sync_delta_counters = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
+  cct->get_perfcounters_collection()->add(sync_delta_counters.get());
+}
+
+void SyncDeltaCountersManager::tset(int idx, ceph::timespan  v) {
+  sync_delta_counters->tset(idx, v);
+}
+
+SyncDeltaCountersManager::~SyncDeltaCountersManager() {
+  cct->get_perfcounters_collection()->remove(sync_delta_counters.get());
+}
+
+} // namespace sync_deltas
