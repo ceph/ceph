@@ -4860,6 +4860,13 @@ BlueStore::Onode* BlueStore::Onode::create_decode(
     } else {
       on->extent_map.init_shards(false, false);
     }
+  } else {
+    // init segment_size
+    uint32_t segment_size = c->store->segment_size.load();
+    if (c->comp_max_blob_size.has_value() && segment_size < c->comp_max_blob_size.value()) {
+      segment_size = c->comp_max_blob_size.value(); // compression larger than global segment_size, use it
+    }
+    on->onode.segment_size = segment_size;
   }
   return on;
 }
@@ -17418,7 +17425,7 @@ void BlueStore::_do_write_data(
     if (head_length) {
       _do_write_small(txc, c, o, head_offset, head_length, p, wctx);
     }
-    uint32_t segment_size = this->segment_size.load();
+    uint32_t segment_size = o->onode.segment_size;
     if (segment_size) {
       // split data to chunks
       uint64_t write_offset = middle_offset;
@@ -17708,8 +17715,8 @@ int BlueStore::_do_write_v2(
     // if we have compression, skip to write_v1
     return _do_write(txc, c, o, offset, length, bl, fadvise_flags);
   }
-  if (segment_size != 0 && wctx.target_blob_size > segment_size) {
-    wctx.target_blob_size = segment_size;
+  if (o->onode.segment_size != 0 && wctx.target_blob_size > o->onode.segment_size) {
+    wctx.target_blob_size = o->onode.segment_size;
   }
   if (bl.length() != length) {
     bl.splice(length, bl.length() - length);
@@ -19185,7 +19192,7 @@ void BlueStore::_record_onode(OnodeRef& o, KeyValueDB::Transaction &txn)
   // finalize extent_map shards
   o->extent_map.update(txn, false);
   if (o->extent_map.needs_reshard()) {
-    o->extent_map.reshard(db, txn, segment_size);
+    o->extent_map.reshard(db, txn, o->onode.segment_size);
     o->extent_map.update(txn, true);
     if (o->extent_map.needs_reshard()) {
       dout(20) << __func__ << " warning: still wants reshard, check options?"
