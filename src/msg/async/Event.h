@@ -53,6 +53,7 @@
 #define EVENT_READABLE 1
 #define EVENT_WRITABLE 2
 
+class UringManager;
 class EventCenter;
 
 class EventCallback {
@@ -176,6 +177,10 @@ class EventCenter {
   unsigned center_id;
   AssociatedCenters *global_centers = nullptr;
 
+#ifdef WITH_URING
+  std::unique_ptr<UringManager> uring;
+#endif
+
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
     ceph_assert(fd < nevent);
@@ -198,6 +203,11 @@ class EventCenter {
   unsigned get_id() const { return center_id; }
 
   EventDriver *get_driver() { return driver; }
+
+#ifdef WITH_URING
+  [[gnu::pure]]
+  UringManager *get_uring() noexcept;
+#endif
 
   // Used by internal thread
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
