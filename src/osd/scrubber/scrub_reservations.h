@@ -157,12 +157,12 @@ class ReplicaReservations {
   // note: 'public', as accessed via the 'standard' dout_prefix() macro
   std::ostream& gen_prefix(std::ostream& out, std::string fn) const;
 
+  /// The number of requests that have been sent (and not rejected) so far.
+  size_t active_requests_cnt() const;
+
  private:
   /// send 'release' messages to all replicas we have managed to reserve
   void release_all();
-
-  /// The number of requests that have been sent (and not rejected) so far.
-  size_t active_requests_cnt() const;
 
   /**
    * Send a reservation request to the next replica.
