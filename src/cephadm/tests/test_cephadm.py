@@ -23,9 +23,10 @@ from .fixtures import (
 
 from pyfakefs import fake_filesystem
 from pyfakefs import fake_filesystem_unittest
+from cephadmlib.daemons.daemon_utils import ContainerInfo
+
 
 from cephadmlib.constants import DEFAULT_REGISTRY
-
 _cephadm = import_cephadm()
 
 
@@ -605,16 +606,18 @@ class TestCephAdm(object):
         ctx.container_engine = mock_podman()
 
         # make sure the right image is selected when container is found
-        cinfo = _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
-                                 'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
-                                 '514e6a882f6e74806a5856468489eeff8d7106095557578da96935e4d0ba4d9d',
-                                 '2022-04-19 13:45:20.97146228 +0000 UTC',
-                                 '')
+        cinfo = ContainerInfo(
+            '935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+            'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
+            '514e6a882f6e74806a5856468489eeff8d7106095557578da96935e4d0ba4d9d',
+            '2022-04-19 13:45:20.97146228 +0000 UTC',
+            '',
+        )
         out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|main|2022-03-23 16:29:19 +0000 UTC
         quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
         quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
         with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
-            with mock.patch('cephadm.get_container_info', return_value=cinfo):
+            with mock.patch('cephadmlib.daemons.daemon_utils.get_container_info', return_value=cinfo):
                 image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
                 assert image == 'quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e'
 
@@ -623,7 +626,7 @@ class TestCephAdm(object):
         quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
         quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
         with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
-            with mock.patch('cephadm.get_container_info', return_value=None):
+            with mock.patch('cephadmlib.daemons.daemon_utils.get_container_info', return_value=None):
                 image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
                 assert image == 'quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185'
 
@@ -632,7 +635,7 @@ class TestCephAdm(object):
         quay.io/ceph/ceph@|||
         quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
         with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
-            with mock.patch('cephadm.get_container_info', return_value=None):
+            with mock.patch('cephadmlib.daemons.daemon_utils.get_container_info', return_value=None):
                 image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
                 assert image == 'quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508'
 
@@ -651,11 +654,13 @@ class TestCephAdm(object):
                 ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
                  "",
                  0),
-                _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
-                                 'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
-                                 '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
-                                 '2022-04-19 13:45:20.97146228 +0000 UTC',
-                                 '')
+                ContainerInfo(
+                    '935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                    'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
+                    '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
+                    "2022-04-19 13:45:20.97146228 +0000 UTC",
+                    '',
+                )
             ),
             # get container info by name ('mon.ceph-node-0')
             (
@@ -668,11 +673,13 @@ class TestCephAdm(object):
                 ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
                  "",
                  0),
-                _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
-                                 'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
-                                 '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
-                                 '2022-04-19 13:45:20.97146228 +0000 UTC',
-                                 '')
+                ContainerInfo(
+                    '935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                    'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
+                    '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
+                    '2022-04-19 13:45:20.97146228 +0000 UTC',
+                    '',
+                )
             ),
             # get container info by name (same daemon but two different fsids)
             (
@@ -685,11 +692,13 @@ class TestCephAdm(object):
                 ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
                  "",
                  0),
-                _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
-                                 'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
-                                 '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
-                                 '2022-04-19 13:45:20.97146228 +0000 UTC',
-                                 '')
+                ContainerInfo(
+                    '935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                    'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
+                    '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
+                    '2022-04-19 13:45:20.97146228 +0000 UTC',
+                    '',
+                )
             ),
             # get container info by type (bad container stats: 127 code)
             (
@@ -791,13 +800,13 @@ class TestCephAdm(object):
         ctx = _cephadm.CephadmContext()
         ctx.fsid = '00000000-0000-0000-0000-0000deadbeef'
         ctx.container_engine = mock_podman()
-        with mock.patch('cephadm.list_daemons', return_value=daemon_list):
-            with mock.patch('cephadm.get_container_stats', return_value=container_stats):
+        with mock.patch('cephadmlib.daemons.daemon_utils.list_daemons', return_value=daemon_list):
+            with mock.patch('cephadmlib.daemons.daemon_utils.get_container_stats', return_value=container_stats):
                 assert _cephadm.get_container_info(ctx, daemon_filter, by_name) == output
 
-    @mock.patch('cephadm.list_daemons')
-    @mock.patch('cephadm.get_container_stats')
-    @mock.patch('cephadm.get_container_stats_by_image_name')
+    @mock.patch('cephadmlib.daemons.daemon_utils.list_daemons')
+    @mock.patch('cephadmlib.daemons.daemon_utils.get_container_stats')
+    @mock.patch('cephadmlib.daemons.daemon_utils.get_container_stats_by_image_name')
     def test_get_container_info_daemon_down(self, _get_stats_by_name, _get_stats, _list_daemons):
         ctx = _cephadm.CephadmContext()
         ctx.fsid = '5e39c134-dfc5-11ee-a344-5254000ee071'
@@ -841,7 +850,7 @@ class TestCephAdm(object):
                                    '2023-11-28 21:34:38.045413692 +0000 UTC,'),
                                    '', 0)
 
-        expected_container_info = _cephadm.ContainerInfo(
+        expected_container_info = ContainerInfo(
             container_id='',
             image_name='quay.io/adk3798/ceph@sha256:7da0af22ce45aac97dff00125af590506d8e36ab97d78e5175149643562bfb0b',
             image_id='a03c201ff4080204949932f367545cd381c4acee0d48dbc15f2eac1e35f22318',
@@ -860,7 +869,7 @@ class TestCephAdm(object):
         _get_stats.return_value = (('container_id,image_name,image_id,the_past,'), '', 0)
         _list_daemons.return_value = [down_osd_json, up_osd_json]
 
-        expected_container_info = _cephadm.ContainerInfo(
+        expected_container_info = ContainerInfo(
             container_id='container_id',
             image_name='image_name',
             image_id='image_id',
@@ -988,7 +997,7 @@ class TestCephAdm(object):
             ctx.config = f.path
 
         # test
-        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+        with mock.patch('cephadmlib.daemons.daemon_utils.list_daemons', return_value=list_daemons):
             if err:
                 with pytest.raises(_cephadm.Error, match=err):
                     infer_fsid(ctx)
@@ -1063,7 +1072,7 @@ class TestCephAdm(object):
             cephadm_fs.create_file(f)
 
         # test
-        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+        with mock.patch('cephadmlib.daemons.daemon_utils.list_daemons', return_value=list_daemons):
             infer_config(ctx)
             assert ctx.config == result
 
@@ -1165,7 +1174,7 @@ class TestCephAdm(object):
         cephadm_fs.create_file(result)
 
         # test
-        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+        with mock.patch('cephadm.daemons.daemon_utils.list_daemons', return_value=list_daemons):
             infer_config(ctx)
             assert ctx.config == result
 
