@@ -2,7 +2,6 @@ import errno
 import json
 import logging
 import uuid
-import concurrent.futures
 from io import StringIO
 from os.path import join as os_path_join
 import re
