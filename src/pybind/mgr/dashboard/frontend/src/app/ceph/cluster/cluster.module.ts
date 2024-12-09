@@ -12,9 +12,13 @@ import {
   ProgressIndicatorModule,
   InputModule,
   ModalModule,
+  IconModule,
+  IconService,
   TreeviewModule
 } from 'carbon-components-angular';
-
+import Analytics from '@carbon/icons/es/analytics/16';
+import CloseFilled from '@carbon/icons/es/close--filled/16';
+import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import {
   NgbActiveModal,
   NgbDatepickerModule,
@@ -106,7 +110,8 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ProgressIndicatorModule,
     ButtonModule,
     InputModule,
-    ModalModule
+    ModalModule,
+    IconModule,
   ],
   declarations: [
     HostsComponent,
@@ -157,4 +162,8 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
   ],
   providers: [NgbActiveModal]
 })
-export class ClusterModule {}
+export class ClusterModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([Analytics, CloseFilled, ProgressBarRoundIcon]);
+  }
+}
