@@ -1506,6 +1506,24 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
   unsigned struct_end = bl.get_off() + struct_len;			\
   do {
 
+#define DECODE_UNKNOWN(payload, bl)					\
+  do {                                                                  \
+    __u8 struct_v, struct_compat;					\
+    using ::ceph::decode;						\
+    decode(struct_v, bl);						\
+    decode(struct_compat, bl);						\
+    __u32 struct_len;							\
+    decode(struct_len, bl);						\
+    if (struct_len > bl.get_remaining())				\
+      throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+    payload.clear();                                                    \
+    using ::ceph::encode;						\
+    encode(struct_v, payload);                                          \
+    encode(struct_compat, payload);                                     \
+    encode(struct_len, payload);                                        \
+    bl.copy(struct_len, payload);                                       \
+  } while (0)
+
 /* BEWARE: any change to this macro MUST be also reflected in the duplicative
  * DECODE_START_LEGACY_COMPAT_LEN! */
 #define __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, skip_v, bl)	\
