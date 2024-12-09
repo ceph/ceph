@@ -107,8 +107,9 @@ TEST(BlueFS, mkfs_mount) {
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
-  ASSERT_EQ(fs.get_total(BlueFS::BDEV_DB), size - SUPER_RESERVED);
-  ASSERT_LT(fs.get_free(BlueFS::BDEV_DB), size - SUPER_RESERVED);
+  uint64_t reserved = p2roundup(SUPER_RESERVED, g_ceph_context->_conf->bluefs_shared_alloc_size);
+  ASSERT_EQ(fs.get_total(BlueFS::BDEV_DB), size - reserved);
+  ASSERT_LT(fs.get_free(BlueFS::BDEV_DB), size - reserved);
   fs.umount();
 }
 
