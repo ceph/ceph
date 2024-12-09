@@ -230,6 +230,10 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return owner;
     }
 
+    std::string get_aclowner_tenant() const override {
+      return account ? account->tenant : id.tenant;
+    }
+
     uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
       return rgw_perms_from_aclspec_default_strategy(id.to_str(), aclspec, dpp);
     }
@@ -581,6 +585,11 @@ ACLOwner rgw::auth::WebIdentityApplier::get_aclowner() const
   return owner;
 }
 
+std::string rgw::auth::WebIdentityApplier::get_aclowner_tenant() const
+{
+  return account ? account->tenant : role_tenant;
+}
+
 bool rgw::auth::WebIdentityApplier::is_owner_of(const rgw_owner& o) const
 {
   return match_owner(o, rgw_user{role_tenant, sub, "oidc"}, account);
@@ -777,6 +786,11 @@ ACLOwner rgw::auth::RemoteApplier::get_aclowner() const
     owner.display_name = info.acct_name;
   }
   return owner;
+}
+
+std::string rgw::auth::RemoteApplier::get_aclowner_tenant() const
+{
+  return account ? account->tenant : owner_acct_user.tenant;
 }
 
 uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
@@ -1026,6 +1040,11 @@ ACLOwner rgw::auth::LocalApplier::get_aclowner() const
   return owner;
 }
 
+std::string rgw::auth::LocalApplier::get_aclowner_tenant() const
+{
+  return account ? account->tenant : user_info.user_id.tenant;
+}
+
 uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
   // match acl grants to the specific user id
@@ -1132,6 +1151,11 @@ ACLOwner rgw::auth::RoleApplier::get_aclowner() const
     owner.display_name = role.name;
   }
   return owner;
+}
+
+std::string rgw::auth::RoleApplier::get_aclowner_tenant() const
+{
+  return role.account ? role.account->tenant : token_attrs.user_id.tenant;
 }
 
 bool rgw::auth::RoleApplier::is_owner_of(const rgw_owner& o) const
