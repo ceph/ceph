@@ -25,7 +25,8 @@ export class DateTimePickerComponent implements OnInit {
 
   @Input()
   helperText = '';
-
+  @Input()
+  placeHolder = '';
   @Input()
   disabled = false;
 
@@ -39,9 +40,8 @@ export class DateTimePickerComponent implements OnInit {
   date: { [key: number]: string }[] = [];
   time: string;
   ampm: string;
-
   sub: Subscription;
-
+  @Input() defaultDate: boolean = false;
   constructor(private calendar: NgbCalendar) {}
 
   ngOnInit() {
@@ -59,8 +59,12 @@ export class DateTimePickerComponent implements OnInit {
     if (!mom.isValid() || mom.isBefore(moment())) {
       mom = moment();
     }
+    if (this.defaultDate) {
+      this.date.push([]);
+    } else {
+      this.date.push(mom.format('YYYY-MM-DD'));
+    }
 
-    this.date.push(mom.format('YYYY-MM-DD'));
     const time = mom.format('HH:mm:ss');
     this.time = mom.format('hh:mm');
     this.ampm = mom.hour() >= 12 ? 'PM' : 'AM';
@@ -76,7 +80,9 @@ export class DateTimePickerComponent implements OnInit {
 
   onModelChange(event?: any) {
     if (event) {
-      if (Array.isArray(event)) {
+      if (event.length === 0) {
+        this.datetime.date = { date: null, time: null, ampm: null };
+      } else if (Array.isArray(event)) {
         this.datetime.date = moment(event[0]).format('YYYY-MM-DD');
       } else if (event && ['AM', 'PM'].includes(event)) {
         const initialMoment = moment(this.datetime.time, 'hh:mm:ss A');
