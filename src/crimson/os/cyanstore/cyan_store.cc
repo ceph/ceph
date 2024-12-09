@@ -256,6 +256,8 @@ CyanStore::get_default_device_class()
 
 CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 {
+  using ceph::decode;
+
   if (!store_active) {
     return mount_ertr::now();
   }
@@ -270,7 +272,7 @@ CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 
   std::set<coll_t> collections;
   auto p = bl.cbegin();
-  ceph::decode(collections, p);
+  decode(collections, p);
 
   for (auto& coll : collections) {
     std::string fn = fmt::format("{}/{}{}", path, coll,
