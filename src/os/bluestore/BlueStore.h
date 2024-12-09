@@ -1457,6 +1457,7 @@ public:
     }
 
     void rewrite_omap_key(const std::string& old, std::string *out);
+    size_t get_userkey_offset_in_omap_key() const;
     void decode_omap_key(const std::string& key, std::string *user_key);
 
     void finish_write(TransContext* txc, uint32_t offset, uint32_t length);
@@ -1732,34 +1733,6 @@ public:
     void flush_all_but_last();
 
     Collection(BlueStore *ns, OnodeCacheShard *oc, BufferCacheShard *bc, coll_t c);
-  };
-
-  class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
-
-    PerfCounters* logger = nullptr;
-    CollectionRef c;
-    OnodeRef o;
-    KeyValueDB::Iterator it;
-    std::string head, tail;
-
-    std::string _stringify() const;
-  public:
-    OmapIteratorImpl(PerfCounters* l, CollectionRef c, OnodeRef& o, KeyValueDB::Iterator it);
-    virtual ~OmapIteratorImpl();
-    int seek_to_first() override;
-    int upper_bound(const std::string &after) override;
-    int lower_bound(const std::string &to) override;
-    bool valid() override;
-    int next() override;
-    std::string key() override;
-    ceph::buffer::list value() override;
-    std::string tail_key() override {
-      return tail;
-    }
-
-    int status() override {
-      return 0;
-    }
   };
 
   struct volatile_statfs{
@@ -3416,15 +3389,6 @@ public:
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
 
-#ifdef WITH_SEASTAR
-  int omap_get_values(
-    CollectionHandle &c,         ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const std::optional<std::string> &start_after,     ///< [in] Keys to get
-    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
-    ) override;
-#endif
-
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
     CollectionHandle &c,                ///< [in] Collection containing oid
@@ -3433,10 +3397,12 @@ public:
     std::set<std::string> *out         ///< [out] Subset of keys defined on oid
     ) override;
 
-  ObjectMap::ObjectMapIterator get_omap_iterator(
+  int omap_iterate(
     CollectionHandle &c,   ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
-    ) override;
+    const ghobject_t &oid, ///< [in] object
+    omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+    std::function<omap_iter_ret_t(std::string_view, std::string_view)> f
+  ) override;
 
   void set_fsid(uuid_d u) override {
     fsid = u;

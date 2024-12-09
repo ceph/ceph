@@ -166,25 +166,6 @@ public:
   };
   using CollectionRef = ceph::ref_t<Collection>;
 
-  class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
-    CollectionRef c;
-    OnodeRef o;
-    KeyValueDB::Iterator it;
-    std::string head, tail;
-  public:
-    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
-    int seek_to_first() override;
-    int upper_bound(const std::string &after) override;
-    int lower_bound(const std::string &to) override;
-    bool valid() override;
-    int next() override;
-    std::string key() override;
-    ceph::buffer::list value() override;
-    int status() override {
-      return 0;
-    }
-  };
-
   struct TransContext {
     typedef enum {
       STATE_PREPARE,
@@ -547,11 +528,12 @@ public:
     std::set<std::string> *out         ///< [out] Subset of keys defined on oid
     ) override;
 
-  using ObjectStore::get_omap_iterator;
-  ObjectMap::ObjectMapIterator get_omap_iterator(
-    CollectionHandle& c,              ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
-    ) override;
+  int omap_iterate(
+    CollectionHandle &c,   ///< [in] collection
+    const ghobject_t &oid, ///< [in] object
+    omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+    std::function<omap_iter_ret_t(std::string_view, std::string_view)> f
+  ) override;
 
   void set_fsid(uuid_d u) override {
     fsid = u;
