@@ -3,7 +3,7 @@
 ----------
 
 We introduced the following utilities to help analysing the Performance impact of two strategies for
-allocation of CPU cores to Seastar reactor threads.
+allocation of CPU cores to Seastar reactor threads. This is limited to a single host deployment at the moment.
 
 - OSD-based: this consists on allocating CPU cores from the same NUMA socket to the same OSD.
   for simplicity, if the OSD id is even, all its reactor threads are allocated to NUMA socket 0, and 
@@ -13,6 +13,12 @@ allocation of CPU cores to Seastar reactor threads.
   all the OSD end up with reactor on both NUMA sockets.
 
 A new option `--crimson-balance-cpu <osd|socket>` has been implemented in `vstart.sh` to support these strategies.
+
+Worth pointing out, there are *three* CPU allocation strategies:
+
+- when the new flag is not specified (default), Seastar reactors to use CPUs in ascending contiguous order (unbalanced across sockets),
+- osd: distribute across sockets uniformly, don't split within an OSD,
+- socket: distribute across sockets uniformly, split within an OSD.
 
 The utilities introduced are:
 
