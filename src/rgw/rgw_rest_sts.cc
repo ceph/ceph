@@ -436,6 +436,9 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
                               .allow_algorithm(jwt::algorithm::ps512{cert});
 
                 verifier.verify(decoded);
+              } else {
+                ldpp_dout(dpp, 0) << "Unsupported algorithm: " << algorithm << dendl;
+                throw -EINVAL;
               }
             } catch (std::runtime_error& e) {
               ldpp_dout(dpp, 0) << "Signature validation failed: " << e.what() << dendl;
