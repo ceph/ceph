@@ -440,7 +440,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
       this.nfsForm.patchValue({
         subvolume_group: this.selectedSubvolGroup
       });
-      this.getSubVol();
+      (this.selectedSubvolGroup === this.defaultSubVolGroup
+        ? this.subvolService.get(this.selectedFsName)
+        : this.subvolService.get(this.selectedFsName, this.selectedSubvolGroup)
+      ).subscribe((data: any) => {
+        this.allsubvols = data;
+      });
     }
     if (!_.isEmpty(this.selectedSubvol)) {
       this.nfsForm.patchValue({
