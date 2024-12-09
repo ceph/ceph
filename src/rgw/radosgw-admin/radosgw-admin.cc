@@ -9910,7 +9910,7 @@ next:
 
     RGWSyncModuleInstanceRef sync_module;
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager()->create_instance(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone().tier_type,
-        static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_params().tier_config, &sync_module);
+        static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_params().tier_config, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup(), &sync_module);
     if (ret < 0) {
       ldpp_dout(dpp(), -1) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
       return ret;

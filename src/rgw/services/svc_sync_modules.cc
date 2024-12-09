@@ -20,7 +20,7 @@ int RGWSI_SyncModules::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   auto& zone_public_config = svc.zone->get_zone();
 
-  int ret = sync_modules_manager->create_instance(dpp, cct, zone_public_config.tier_type, svc.zone->get_zone_params().tier_config, &sync_module);
+  int ret = sync_modules_manager->create_instance(dpp, cct, zone_public_config.tier_type, svc.zone->get_zone_params().tier_config, svc.zone->get_zonegroup(), &sync_module);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to start sync module instance, ret=" << ret << dendl;
     if (ret == -ENOENT) {
