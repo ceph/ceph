@@ -40,6 +40,7 @@ import { PathPipe } from './path.pipe';
 import { PluralizePipe } from './pluralize.pipe';
 import { XmlPipe } from './xml.pipe';
 import { MbpersecondPipe } from './mbpersecond.pipe';
+import { HostSummaryPipe } from './host-summary.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -82,7 +83,8 @@ import { MbpersecondPipe } from './mbpersecond.pipe';
     PathPipe,
     PluralizePipe,
     XmlPipe,
-    MbpersecondPipe
+    MbpersecondPipe,
+    HostSummaryPipe
   ],
   exports: [
     ArrayPipe,
@@ -119,6 +121,7 @@ import { MbpersecondPipe } from './mbpersecond.pipe';
     MgrSummaryPipe,
     MdsSummaryPipe,
     OsdSummaryPipe,
+    HostSummaryPipe,
     OctalToHumanReadablePipe,
     PathPipe,
     PluralizePipe,
@@ -155,6 +158,7 @@ import { MbpersecondPipe } from './mbpersecond.pipe';
     MgrSummaryPipe,
     MdsSummaryPipe,
     OsdSummaryPipe,
+    HostSummaryPipe,
     OctalToHumanReadablePipe,
     MbpersecondPipe
   ]
