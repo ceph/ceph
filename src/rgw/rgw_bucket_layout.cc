@@ -376,9 +376,9 @@ void encode_json_impl(const char *name, const BucketLayout& l, ceph::Formatter *
   for (const auto& log : l.logs) {
     encode_json("log", log, f);
   }
+  f->close_section(); // logs[]
   utime_t jt(l.judge_reshard_lock_time);
   encode_json("judge_reshard_lock_time", jt, f);
-  f->close_section(); // logs[]
   f->close_section();
 }
 void decode_json_obj(BucketLayout& l, JSONObj *obj)
