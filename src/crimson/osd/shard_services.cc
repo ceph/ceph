@@ -21,6 +21,7 @@
 #include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
+#include "crimson/osd/osd_operations/pg_splitting.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
 
@@ -93,13 +94,70 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
   return seastar::parallel_for_each(
     pgs.begin(), pgs.end(),
     [=, &shard_services](auto& pg) {
+      auto old_map = pg.second->get_osdmap();
       return shard_services.start_operation<PGAdvanceMap>(
 	pg.second,
 	shard_services,
 	epoch,
-	PeeringCtx{}, false).second;
+	PeeringCtx{}, false, false).second.then(
+     [this, old_map, epoch, &shard_services, &pg] {
+      return identify_splits(
+	shard_services,
+	pg.second,
+	old_map,
+	epoch).then(
+	  [this, old_map, epoch, &shard_services, &pg] (auto&& children) {
+	  if (!children.empty()) {
+	    return shard_services.get_map(epoch).then(
+	      [this, &shard_services, &pg, children] (cached_map_t&& new_map) {
+		return shard_services.start_operation<PGSplitting>(
+		  pg.second,
+		  shard_services,
+		  new_map,
+		  std::move(children),
+		  PeeringCtx{}).second;
+	    });
+	  } else {
+	    return seastar::now();
+	  }
+        });
+      return seastar::now();
     });
+    return seastar::now();
+  });
 }
+
+seastar::future<std::set<spg_t>> PerShardState::identify_splits(
+  ShardServices &shard_services,
+  Ref<PG> pg,
+  cached_map_t cur_map,
+  epoch_t epoch)
+{
+  LOG_PREFIX(PerShardState::identify_splits);
+  unsigned old_pg_num;
+  if (cur_map->have_pg_pool(pg->get_pgid().pool())) {
+    old_pg_num = cur_map->get_pg_num(pg->get_pgid().pool());
+  } else {
+    DEBUG("{} pool doesn't exist in epoch {}", pg->get_pgid(), cur_map->get_epoch());
+    return seastar::make_ready_future<std::set<spg_t>>(
+	std::move(std::set<spg_t>()));
+  }
+
+  return shard_services.get_map(epoch).then(
+    [this, old_pg_num, pg] (cached_map_t&& new_map) {
+    unsigned new_pg_num = new_map->get_pg_num(pg->get_pgid().pool());
+    if (new_pg_num && new_pg_num > old_pg_num) {
+      std::set<spg_t> children;
+      if (pg->get_pgid().is_split(old_pg_num, new_pg_num, &children)) {
+        return seastar::make_ready_future<std::set<spg_t>>(
+	  std::move(children));
+      }
+    }
+    return seastar::make_ready_future<std::set<spg_t>>(
+	std::move(std::set<spg_t>()));
+  });
+}
+
 
 Ref<PG> PerShardState::get_pg(spg_t pgid)
 {
@@ -121,6 +179,13 @@ seastar::future<> PerShardState::update_shard_superblock(OSDSuperblock superbloc
 {
   assert_core();
   per_shard_superblock = std::move(superblock);
+  return seastar::now();
+}
+
+seastar::future<> PerShardState::update_shard_pg_num_history(pool_pg_num_history_t pg_num_history)
+{
+  assert_core();
+  per_shard_pg_num_history = std::move(pg_num_history);
   return seastar::now();
 }
 
@@ -466,7 +531,8 @@ seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
   });
 }
 
-seastar::future<> OSDSingletonState::store_maps(
+seastar::future<std::map<epoch_t, OSDMapService::local_cached_map_t>>
+OSDSingletonState::store_maps(
   ceph::os::Transaction& t,
   epoch_t start, Ref<MOSDMap> m)
 {
@@ -519,7 +585,7 @@ seastar::future<> OSDSingletonState::store_maps(
 	     added_maps.begin()->first,
 	     added_maps.rbegin()->first);
 	meta_coll->store_final_pool_info(t, lastmap, added_maps);
-	return seastar::now();
+	return seastar::make_ready_future<std::map<epoch_t, local_cached_map_t>>(std::move(added_maps));
       });
     });
   });
@@ -700,7 +766,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	    rctx->transaction
 	  ).then([this, pg=pg, rctx=std::move(rctx)] {
 	    return start_operation<PGAdvanceMap>(
-	      pg, *this, get_map()->get_epoch(), std::move(*rctx), true
+	      pg, *this, get_map()->get_epoch(), std::move(*rctx), true, false
 	    ).second.then([pg=pg] {
 	      return seastar::make_ready_future<Ref<PG>>(pg);
 	    });
