@@ -392,16 +392,25 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
     }
   } while (!all_emptied(primary_bi, backfill_state().peer_backfill_info));
 
-  if (backfill_state().progress_tracker->tracked_objects_completed()
-      && Enqueuing::all_enqueued(peering_state(),
-				 backfill_state().backfill_info,
-				 backfill_state().peer_backfill_info)) {
-    backfill_state().last_backfill_started = hobject_t::get_max();
-    backfill_listener().update_peers_last_backfill(hobject_t::get_max());
+  if (should_rescan_primary(backfill_state().peer_backfill_info,
+				   primary_bi)) {
+    // need to grab one another chunk of the object namespace and restart
+    // the queueing.
+    logger().debug("reached end for current local chunk", __func__);
+    post_event(RequestPrimaryScanning{});
+    return;
+  } else {
+    if (backfill_state().progress_tracker->tracked_objects_completed()
+	&& Enqueuing::all_enqueued(peering_state(),
+				   backfill_state().backfill_info,
+				   backfill_state().peer_backfill_info)) {
+      backfill_state().last_backfill_started = hobject_t::get_max();
+      backfill_listener().update_peers_last_backfill(hobject_t::get_max());
+    }
+    logger().debug("{}: reached end for both local and all peers "
+		   "but still has in-flight operations", __func__);
+    post_event(RequestWaiting{});
   }
-  logger().debug("{}: reached end for both local and all peers "
-		 "but still has in-flight operations", __func__);
-  post_event(RequestWaiting{});
 }
 
 // -- PrimaryScanning
