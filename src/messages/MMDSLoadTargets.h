@@ -23,9 +23,6 @@
 #include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
 
-#include <map>
-using std::map;
-
 class MMDSLoadTargets final : public PaxosServiceMessage {
 public:
   mds_gid_t global_id;
