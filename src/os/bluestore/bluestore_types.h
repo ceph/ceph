@@ -1135,6 +1135,7 @@ struct bluestore_onode_t {
   uint32_t expected_object_size = 0;
   uint32_t expected_write_size = 0;
   uint32_t alloc_hint_flags = 0;
+  uint32_t segment_size = 0; ///< mandatory segment lines to never cross; helps with sharding
 
   uint8_t flags = 0;
 
@@ -1214,7 +1215,7 @@ struct bluestore_onode_t {
   }
 
   DENC(bluestore_onode_t, v, p) {
-    DENC_START(2, 1, p);
+    DENC_START(3, 1, p);
     denc_varint(v.nid, p);
     denc_varint(v.size, p);
     denc(v.attrs, p);
@@ -1225,6 +1226,9 @@ struct bluestore_onode_t {
     denc_varint(v.alloc_hint_flags, p);
     if (struct_v >= 2) {
       denc(v.zone_offset_refs, p);
+    }
+    if (struct_v >= 3) {
+      denc(v.segment_size, p);
     }
     DENC_FINISH(p);
   }
