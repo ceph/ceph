@@ -33,10 +33,16 @@
  *  
  */
 
+#include <list>
+#include <map>
+#include <ostream>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
+#include "common/Formatter.h"
 #include "include/ceph_features.h"
 #include "mds/cephfs_features.h"
 #include "messages/MMDSOp.h"
