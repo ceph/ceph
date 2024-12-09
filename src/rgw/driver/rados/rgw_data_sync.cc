@@ -3764,7 +3764,10 @@ public:
         return set_cr_error(retcode);
       }
 
-      status.state = BucketSyncState::Init;
+      // if the state is full, don't overwrite it as it was requested by radosgw-admin
+      if (status.state != BucketSyncState::Full) {
+        status.state = BucketSyncState::Init;
+      }
 
       if (info.oldest_gen == 0) {
 	if (check_compat) {
@@ -3815,7 +3818,7 @@ public:
 
         if (sync_env->sync_module->should_full_sync()) {
           status.state = BucketSyncState::Full;
-        } else {
+        } else if (status.state != BucketSyncState::Full) { // if not already set by radosgw-admin
           status.state = BucketSyncState::Incremental;
         }
       }
@@ -6209,7 +6212,8 @@ RGWBucketPipeSyncStatusManager::construct(
 }
 
 int RGWBucketPipeSyncStatusManager::init_sync_status(
-  const DoutPrefixProvider *dpp)
+  const DoutPrefixProvider *dpp,
+  BucketSyncState state)
 {
   // Just running one at a time saves us from buildup/teardown and in
   // practice we only do one zone at a time.
@@ -6224,7 +6228,7 @@ int RGWBucketPipeSyncStatusManager::init_sync_status(
                    full_status_oid(source.sc.source_zone,
 				   source.info.bucket,
 				   source.dest)},
-		  rgw_bucket_sync_status{}));
+		  rgw_bucket_sync_status{.state = state}));
     stacks.push_back(stack);
     auto r = cr_mgr.run(dpp, stacks);
     if (r < 0) {
@@ -6855,10 +6859,8 @@ void encode_json(const char *name, BucketSyncState state, Formatter *f)
   }
 }
 
-void decode_json_obj(BucketSyncState& state, JSONObj *obj)
+int bucket_sync_state_from_str(const std::string& s, BucketSyncState& state)
 {
-  std::string s;
-  decode_json_obj(s, obj);
   if (s == "full-sync") {
     state = BucketSyncState::Full;
   } else if (s == "incremental-sync") {
@@ -6866,6 +6868,18 @@ void decode_json_obj(BucketSyncState& state, JSONObj *obj)
   } else if (s == "stopped") {
     state = BucketSyncState::Stopped;
   } else {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+void decode_json_obj(BucketSyncState& state, JSONObj *obj)
+{
+  std::string s;
+  decode_json_obj(s, obj);
+  int r = bucket_sync_state_from_str(s, state);
+  if (r < 0) {
     state = BucketSyncState::Init;
   }
 }
