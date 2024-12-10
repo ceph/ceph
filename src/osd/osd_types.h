@@ -1294,6 +1294,7 @@ struct pg_pool_t {
     // Pool features are restricted to those supported by crimson-osd.
     // Note, does not prohibit being created on classic osd.
     FLAG_CRIMSON = 1<<18,
+    FLAG_EC_OPTIMIZATIONS = 1<<19, // enable optimizations, once enabled, cannot be disabled
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1317,6 +1318,7 @@ struct pg_pool_t {
     case FLAG_EIO: return "eio";
     case FLAG_BULK: return "bulk";
     case FLAG_CRIMSON: return "crimson";
+    case FLAG_EC_OPTIMIZATIONS: return "ec_optimizations";
     default: return "???";
     }
   }
@@ -1373,6 +1375,8 @@ struct pg_pool_t {
       return FLAG_BULK;
     if (name == "crimson")
       return FLAG_CRIMSON;
+    if (name == "ec_optimizations")
+      return FLAG_EC_OPTIMIZATIONS;
     return 0;
   }
 
@@ -1773,6 +1777,10 @@ public:
 
   bool allows_ecoverwrites() const {
     return has_flag(FLAG_EC_OVERWRITES);
+  }
+
+  bool allows_ecoptimizations() const {
+    return has_flag(FLAG_EC_OPTIMIZATIONS);
   }
 
   bool is_crimson() const {
@@ -3994,7 +4002,8 @@ public:
     virtual void update_snaps(const std::set<snapid_t> &old_snaps) {}
     virtual void rollback_extents(
       version_t gen,
-      const std::vector<std::pair<uint64_t, uint64_t> > &extents) {}
+      const std::vector<std::pair<uint64_t, uint64_t> > &extents,
+      uint64_t object_size) {}
     virtual ~Visitor() {}
   };
   void visit(Visitor *visitor) const;
@@ -4092,15 +4101,18 @@ public:
     ENCODE_FINISH(bl);
   }
   void rollback_extents(
-    version_t gen, const std::vector<std::pair<uint64_t, uint64_t> > &extents) {
+   version_t gen,
+   const std::vector<std::pair<uint64_t, uint64_t> > &extents,
+   uint64_t object_size) {
     ceph_assert(can_local_rollback);
     ceph_assert(!rollback_info_completed);
     if (max_required_version < 2)
       max_required_version = 2;
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     append_id(ROLLBACK_EXTENTS);
     encode(gen, bl);
     encode(extents, bl);
+    encode(object_size, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -4403,6 +4415,8 @@ struct pg_log_entry_t {
   bool invalid_hash; // only when decoding sobject_t based entries
   bool invalid_pool; // only when decoding pool-less hobject based entries
   ObjectCleanRegions clean_regions;
+
+  std::set<int> written_shards; // EC partial writes do not update every shard
 
   pg_log_entry_t()
    : user_version(0), return_code(0), op(0),
