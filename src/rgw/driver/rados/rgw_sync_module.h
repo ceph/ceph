@@ -73,7 +73,7 @@ public:
   // indication whether the sync module start with full sync (default behavior)
   // incremental sync would follow anyway
   virtual bool should_full_sync() const {
-      return true;
+    return true;
   }
 };
 

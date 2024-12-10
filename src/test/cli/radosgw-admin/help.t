@@ -42,6 +42,7 @@
     bucket sync checkpoint           poll a bucket's sync status until it catches up to its remote
     bucket sync disable              disable bucket sync
     bucket sync enable               enable bucket sync
+    bucket sync init                 initialize bucket sync indicated by --state flag
     bucket radoslist                 list rados objects backing bucket's objects
     bi get                           retrieve bucket index object entries
     bi put                           store bucket index object entries
