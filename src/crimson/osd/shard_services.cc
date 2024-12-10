@@ -127,7 +127,7 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
   });
 }
 
-seastar::future<std::set<spg_t>> PerShardState::identify_splits(
+seastar::future<std::set<std::pair<spg_t, epoch_t>>> PerShardState::identify_splits(
   ShardServices &shard_services,
   Ref<PG> pg,
   cached_map_t cur_map,
@@ -139,22 +139,57 @@ seastar::future<std::set<spg_t>> PerShardState::identify_splits(
     old_pg_num = cur_map->get_pg_num(pg->get_pgid().pool());
   } else {
     DEBUG("{} pool doesn't exist in epoch {}", pg->get_pgid(), cur_map->get_epoch());
-    return seastar::make_ready_future<std::set<spg_t>>(
-	std::move(std::set<spg_t>()));
+    return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
+	std::move(std::set<std::pair<spg_t, epoch_t>>()));
   }
 
   return shard_services.get_map(epoch).then(
-    [this, old_pg_num, pg] (cached_map_t&& new_map) {
-    unsigned new_pg_num = new_map->get_pg_num(pg->get_pgid().pool());
-    if (new_pg_num && new_pg_num > old_pg_num) {
-      std::set<spg_t> children;
-      if (pg->get_pgid().is_split(old_pg_num, new_pg_num, &children)) {
-        return seastar::make_ready_future<std::set<spg_t>>(
-	  std::move(children));
+    [this, FNAME, old_pg_num, old_map=cur_map, pg] (cached_map_t&& new_map) {
+    auto pgid = pg->get_pgid();
+    const auto& pool_pg_num_history_map = per_shard_pg_num_history.pg_nums[pgid.pool()];
+    std::set<std::pair<spg_t, epoch_t>> split_children;
+    std::deque<spg_t> check_for_split_queue;
+    check_for_split_queue.push_back(pgid);
+    std::set<spg_t> check_done;
+    while(!check_for_split_queue.empty()) {
+      auto cur_pg = check_for_split_queue.front();
+      check_for_split_queue.pop_front();
+      check_done.insert(cur_pg);
+      unsigned pg_num = old_pg_num;
+      for (auto map_iter = pool_pg_num_history_map.lower_bound(old_map->get_epoch());
+	   map_iter != pool_pg_num_history_map.end();
+	   ++map_iter) {
+	const auto& [new_epoch, new_pg_num] = *map_iter;
+	if (new_epoch > new_map->get_epoch()) {
+	  // don't handle any changes recorded later than new_map's epoch
+	  break;
+	}
+	if (pg_num < new_pg_num) {
+	  if(cur_pg.ps() < pg_num) {
+	    std::set<spg_t> children;
+	    if (cur_pg.is_split(pg_num, new_pg_num, &children)) {
+	      DEBUG("{} e{} pg_num {} -> {} children {}", cur_pg,
+	      new_epoch, pg_num, new_pg_num, children);
+	      for (auto child : children) {
+		split_children.insert(std::make_pair(child, new_epoch));
+		if (!check_done.count(child))
+		  check_for_split_queue.push_back(child);
+	      }
+	    }
+	  } else if (cur_pg.ps() < new_pg_num) {
+	    DEBUG("{} e{} pg_num {} -> {} is a child", cur_pg,
+		new_epoch, pg_num, new_pg_num);
+	    split_children.insert(std::make_pair(cur_pg, new_epoch));
+	  } else {
+	    DEBUG("{} e{} pg_num {} -> {} is post-split, skipping", cur_pg,
+		  new_epoch, pg_num, new_pg_num);
+	  }
+        }
+	pg_num = new_pg_num;
       }
     }
-    return seastar::make_ready_future<std::set<spg_t>>(
-	std::move(std::set<spg_t>()));
+    return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
+	std::move(split_children));
   });
 }
 

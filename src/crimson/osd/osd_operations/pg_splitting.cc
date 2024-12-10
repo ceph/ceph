@@ -19,7 +19,7 @@ SET_SUBSYS(osd);
 namespace crimson::osd {
 
 PGSplitting::PGSplitting(
-  Ref<PG> pg, ShardServices &shard_services, OSDMapRef new_map, std::set<spg_t> children,
+  Ref<PG> pg, ShardServices &shard_services, OSDMapRef new_map, std::set<std::pair<spg_t, epoch_t>> children,
   PeeringCtx &&rctx)
   : pg(pg), shard_services(shard_services), new_map(new_map), children(children),
     rctx(std::move(rctx))
@@ -48,15 +48,20 @@ seastar::future<> PGSplitting::start()
 {
   LOG_PREFIX(PGSplitting::start);
   DEBUG("start");
-  return seastar::do_for_each(children, [this, FNAME] (auto& child_pg) {
-    return shard_services.get_or_create_pg(child_pg).then([FNAME, child_pg]
+  return seastar::do_for_each(children, [this, FNAME] (auto& child_pg_info) {
+    auto child_pg = child_pg_info.first;
+    auto pg_epoch = child_pg_info.second;
+    children_pgids.insert(child_pg);
+    return shard_services.get_or_create_pg(child_pg).then([FNAME, child_pg, pg_epoch]
       (auto core) {
       DEBUG(" PG {} mapped to {}", child_pg.pgid, core);
       return seastar::now();
-    }).then([this, FNAME, child_pg] {
-      DEBUG(" {} map epoch: {}", child_pg.pgid, new_map->get_epoch());
-      auto map = new_map;
-      return shard_services.make_pg(std::move(map), child_pg, true);
+    }).then([this, FNAME, child_pg, pg_epoch] {
+      DEBUG(" {} map epoch: {}", child_pg.pgid, pg_epoch);
+      return shard_services.get_map(pg_epoch).then(
+	[this, child_pg] (auto&& map) {
+	  return shard_services.make_pg(std::move(map), child_pg, true);
+        });
     }).then([this, FNAME] (Ref<PG> child_pg) {
       DEBUG(" Parent PG: {}", pg->get_pgid());
       DEBUG(" Child PG ID: {}", child_pg->get_pgid());
@@ -71,12 +76,13 @@ seastar::future<> PGSplitting::start()
           DEBUG(" {} split collection done", child_pg->get_pgid());
 	  pg->split_into(child_pg->get_pgid().pgid, child_pg, split_bits);
 	  split_pgs.insert(child_pg);
-	  });
+	});
       });
   }).then([this, FNAME] {
-    split_stats(split_pgs, children);
+    split_stats(split_pgs, children_pgids);
     return seastar::do_for_each(split_pgs, [this, FNAME] (auto& child_pg) {
-      DEBUG(" {} advance map for {}", child_pg->get_pgid(), shard_services.get_map()->get_epoch());
+      DEBUG(" {} advance map from {} to {}", child_pg->get_pgid(), child_pg->get_osdmap_epoch(),
+	  shard_services.get_map()->get_epoch());
       return shard_services.start_operation<PGAdvanceMap>(
         child_pg, shard_services, shard_services.get_map()->get_epoch(),
 	std::move(rctx), true, true).second.then([this] {
