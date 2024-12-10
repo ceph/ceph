@@ -2285,17 +2285,18 @@ SeaStore::Shard::_zero(
   });
 }
 
-SeaStore::Shard::omap_set_kvs_ret
-SeaStore::Shard::_omap_set_kvs(
-  const OnodeRef &onode,
-  const omap_root_le_t& omap_root,
-  Transaction& t,
-  std::map<std::string, ceph::bufferlist>&& kvs)
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_omap_set_values(
+  internal_context_t &ctx,
+  OnodeRef &onode,
+  std::map<std::string, ceph::bufferlist> &&kvs,
+  const omap_root_le_t &omap_root)
 {
+  Transaction& t = *ctx.transaction;
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
     omap_root.get(onode->get_metadata_hint(device->get_block_size())),
-    [&t, &onode, kvs=std::move(kvs)]
+    [this, &t, &onode, kvs=std::move(kvs)]
     (auto &omap_manager, auto &root) mutable
   {
     assert(root.get_type() < omap_type_t::NONE);
@@ -2315,30 +2316,15 @@ SeaStore::Shard::_omap_set_kvs(
     }).si_then([&root] {
       return tm_iertr::make_ready_future<omap_root_t>(std::move(root));
     });
-  });
-}
-
-SeaStore::Shard::tm_ret
-SeaStore::Shard::_omap_set_values(
-  internal_context_t &ctx,
-  OnodeRef &onode,
-  std::map<std::string, ceph::bufferlist> &&aset,
-  const omap_root_le_t &omap_root)
-{
-  return _omap_set_kvs(
-    onode,
-    omap_root,
-    *ctx.transaction,
-    std::move(aset)
-  ).si_then([onode, &ctx](auto root) {
+  }).si_then([&onode, &t](auto root) {
     if (root.must_update()) {
       if (root.get_type() == omap_type_t::OMAP) {
-	onode->update_omap_root(*ctx.transaction, root);
+	onode->update_omap_root(t, root);
       } else if (root.get_type() == omap_type_t::XATTR) {
-	onode->update_xattr_root(*ctx.transaction, root);
+	onode->update_xattr_root(t, root);
       } else {
 	ceph_assert(root.get_type() == omap_type_t::LOG);
-	onode->update_log_root(*ctx.transaction, root);
+	onode->update_log_root(t, root);
       }
     }
   });
