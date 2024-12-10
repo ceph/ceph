@@ -512,6 +512,7 @@ private:
   SocketHook* asok_hook = nullptr;
   // used to trigger zeros into read (debug / verify)
   std::atomic<uint64_t> inject_read_zeros{0};
+  uint32_t debug_stop_async_compat_at = 0;
 
   void _init_logger();
   void _shutdown_logger();
@@ -776,6 +777,9 @@ public:
   }
   uint64_t debug_get_dirty_seq(FileWriter *h);
   bool debug_get_is_dev_dirty(FileWriter *h, uint8_t dev);
+  void debug_interrupt_async_compact(uint32_t stop_at) {
+    debug_stop_async_compat_at = stop_at;
+  };
   void trim_free_space(const std::string& type, std::ostream& outss);
 
 private:

@@ -98,6 +98,13 @@ if(WITH_BLUESTORE)
   add_ceph_unittest(unittest_bluefs)
   target_link_libraries(unittest_bluefs os global)
 
+  # unittest_bluefs_ex
+  add_executable(unittest_bluefs_ex
+    test_bluefs_ex.cc
+    )
+  add_ceph_unittest(unittest_bluefs_ex)
+  target_link_libraries(unittest_bluefs_ex os global)
+
   # unittest_bluestore_types
   add_executable(unittest_bluestore_types
     test_bluestore_types.cc
