@@ -2393,7 +2393,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     };
 
   r = image::snapshot::iterate(hctx, pre_check_lambda);
-  if (r < 0) {
+  if (r < 0 && r != -EEXIST) {
     return r;
   }
 
@@ -4625,6 +4625,10 @@ static const std::string REMOTE_STATUS_GLOBAL_KEY_PREFIX("remote_status_global_"
 static const std::string INSTANCE_KEY_PREFIX("instance_");
 static const std::string MIRROR_IMAGE_MAP_KEY_PREFIX("image_map_");
 static const std::string REMOTE_NAMESPACE("remote_namespace");
+static const std::string GROUP_KEY_PREFIX("group_");
+static const std::string GROUP_GLOBAL_KEY_PREFIX("gglobal_");
+static const std::string GROUP_STATUS_GLOBAL_KEY_PREFIX("gstatus_global_");
+static const std::string GROUP_REMOTE_STATUS_GLOBAL_KEY_PREFIX("gremote_status_global_");
 
 std::string peer_key(const std::string &uuid) {
   return PEER_KEY_PREFIX + uuid;
@@ -4658,6 +4662,33 @@ std::string instance_key(const string &instance_id) {
 
 std::string mirror_image_map_key(const string& global_image_id) {
   return MIRROR_IMAGE_MAP_KEY_PREFIX + global_image_id;
+}
+
+std::string group_key(const string &group_id) {
+  return GROUP_KEY_PREFIX + group_id;
+}
+
+std::string group_global_key(const string &global_id) {
+  return GROUP_GLOBAL_KEY_PREFIX + global_id;
+}
+
+std::string group_resync_key(const std::string& global_group_id,
+                             const std::string& group_name) {
+  return group_name + "_" + global_group_id;
+}
+
+std::string group_remote_status_global_key(const std::string& global_id,
+                                           const std::string& mirror_uuid) {
+  return GROUP_REMOTE_STATUS_GLOBAL_KEY_PREFIX + global_id + "_" + mirror_uuid;
+}
+
+std::string group_status_global_key(const std::string& global_id,
+                                    const std::string& mirror_uuid) {
+  if (mirror_uuid == cls::rbd::MirrorGroupSiteStatus::LOCAL_MIRROR_UUID) {
+    return GROUP_STATUS_GLOBAL_KEY_PREFIX + global_id;
+  } else {
+    return group_remote_status_global_key(global_id, mirror_uuid);
+  }
 }
 
 int uuid_get(cls_method_context_t hctx, std::string *mirror_uuid) {
@@ -5768,6 +5799,772 @@ int image_snapshot_set_copy_progress(cls_method_context_t hctx,
   return 0;
 }
 
+int group_list(cls_method_context_t hctx,
+               const std::string &start_after, uint64_t max_return,
+               map<std::string, cls::rbd::MirrorGroup> *groups) {
+  std::string last_read = group_key(start_after);
+  int max_read = RBD_MAX_KEYS_READ;
+  bool more = true;
+
+  while (more && groups->size() < max_return) {
+    std::map<std::string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    int r = cls_cxx_map_get_vals(hctx, last_read, GROUP_KEY_PREFIX, max_read,
+                                 &vals, &more);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        CLS_ERR("error reading mirror group directory: %s",
+                cpp_strerror(r).c_str());
+      }
+      return r;
+    }
+
+    for (auto &[key, bl] : vals) {
+      const std::string &group_id = key.substr(GROUP_KEY_PREFIX.size());
+      cls::rbd::MirrorGroup group;
+      auto iter = bl.cbegin();
+      try {
+	decode(group, iter);
+      } catch (const ceph::buffer::error &err) {
+	CLS_ERR("could not decode mirror group payload of group '%s'",
+                group_id.c_str());
+	return -EIO;
+      }
+
+      (*groups)[group_id] = group;
+
+      if (groups->size() >= max_return) {
+        break;
+      }
+    }
+    if (!vals.empty()) {
+      last_read = group_key(groups->rbegin()->first);
+    }
+  }
+
+  return 0;
+}
+
+int group_get_group_id(cls_method_context_t hctx, const string &global_id,
+                       std::string *group_id) {
+  int r = read_key(hctx, group_global_key(global_id), group_id);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error retrieving group id for global id '%s': %s",
+              global_id.c_str(), cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  return 0;
+}
+
+int group_get(cls_method_context_t hctx, const string &group_id,
+	      cls::rbd::MirrorGroup *group) {
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, group_key(group_id), &bl);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading mirrored group '%s': '%s'", group_id.c_str(),
+	      cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  try {
+    auto it = bl.cbegin();
+    decode(*group, it);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("could not decode mirrored group '%s'", group_id.c_str());
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int group_set(cls_method_context_t hctx, const string &group_id,
+	      const cls::rbd::MirrorGroup &group) {
+  bufferlist bl;
+  encode(group, bl);
+
+  cls::rbd::MirrorGroup existing_group;
+  int r = group_get(hctx, group_id, &existing_group);
+  if (r == -ENOENT) {
+    // make sure global id doesn't already exist
+    std::string global_id_key = group_global_key(group.global_group_id);
+    std::string group_id;
+    r = read_key(hctx, global_id_key, &group_id);
+    if (r >= 0) {
+      return -EEXIST;
+    } else if (r != -ENOENT) {
+      CLS_ERR("error reading global group id: '%s': '%s'", group_id.c_str(),
+              cpp_strerror(r).c_str());
+      return r;
+    }
+
+    // make sure this was not a race for disabling
+    if (group.state == cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
+      CLS_ERR("group '%s' is already disabled", group_id.c_str());
+      return r;
+    }
+  } else if (r < 0) {
+    CLS_ERR("error reading mirrored group '%s': '%s'", group_id.c_str(),
+	    cpp_strerror(r).c_str());
+    return r;
+  } else if (existing_group.global_group_id !=
+                group.global_group_id) {
+    // cannot change the global id
+    return -EINVAL;
+  }
+
+  r = cls_cxx_map_set_val(hctx, group_key(group_id), &bl);
+  if (r < 0) {
+    CLS_ERR("error adding mirrored group '%s': %s", group_id.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  bufferlist group_id_bl;
+  encode(group_id, group_id_bl);
+  r = cls_cxx_map_set_val(hctx, group_global_key(group.global_group_id),
+                          &group_id_bl);
+  if (r < 0) {
+    CLS_ERR("error adding global id for group '%s': %s", group_id.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+int mirror_remote_namespace_get(cls_method_context_t hctx, bufferlist *in,
+                                bufferlist *out) {
+  std::string mirror_ns_decode;
+  int r = read_key(hctx, mirror::REMOTE_NAMESPACE, &mirror_ns_decode);
+  if (r < 0) {
+    CLS_ERR("error getting mirror remote namespace: %s",
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  encode(mirror_ns_decode, *out);
+  return 0;
+}
+
+int mirror_remote_namespace_set(cls_method_context_t hctx, bufferlist *in,
+                                bufferlist *out) {
+  std::string mirror_namespace;
+  try {
+    auto bl_it = in->cbegin();
+    decode(mirror_namespace, bl_it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  uint32_t mirror_mode;
+  int r = read_key(hctx, mirror::MODE, &mirror_mode);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  } else if (r == 0 && mirror_mode != cls::rbd::MIRROR_MODE_DISABLED) {
+    CLS_ERR("cannot set mirror remote namespace while mirroring enabled");
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  encode(mirror_namespace, bl);
+
+  r = cls_cxx_map_set_val(hctx, mirror::REMOTE_NAMESPACE, &bl);
+  if (r < 0) {
+    CLS_ERR("error setting mirror remote namespace: %s",
+            cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+int group_status_remove(cls_method_context_t hctx,
+			const string &global_group_id);
+
+int group_remove(cls_method_context_t hctx, const string &group_id) {
+  bufferlist bl;
+  cls::rbd::MirrorGroup group;
+  int r = group_get(hctx, group_id, &group);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading mirrored group '%s': '%s'", group_id.c_str(),
+	      cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  /* disable_group/group_remove at the time of force promote while the remote is alive
+   * will hit below, hence commenting for now. */
+  /*
+  if (group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
+    return -EBUSY;
+  }
+  */
+
+  r = cls_cxx_map_remove_key(hctx, group_key(group_id));
+  if (r < 0) {
+    CLS_ERR("error removing mirrored group '%s': %s", group_id.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, group_global_key(group.global_group_id));
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error removing global id for group '%s': %s", group_id.c_str(),
+           cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = group_status_remove(hctx, group.global_group_id);
+  if (r < 0) {
+    CLS_ERR("group status remove error for group '%s': '%s'", group_id.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+int group_status_set(cls_method_context_t hctx, const string &global_group_id,
+		     const cls::rbd::MirrorGroupSiteStatus &status) {
+  cls::rbd::MirrorGroupSiteStatusOnDisk ondisk_status(status);
+  ondisk_status.mirror_uuid = ""; // mirror_uuid stored in key
+  ondisk_status.up = false;
+  ondisk_status.last_update = ceph_clock_now();
+
+  int r = cls_get_request_origin(hctx, &ondisk_status.origin);
+  ceph_assert(r == 0);
+
+  bufferlist bl;
+  encode(ondisk_status, bl, cls_get_features(hctx));
+
+  r = cls_cxx_map_set_val(hctx,
+                          group_status_global_key(global_group_id,
+                                                  status.mirror_uuid),
+                          &bl);
+  if (r < 0) {
+    CLS_ERR("error setting status for mirrored group, global id '%s', "
+            "site '%s': %s", global_group_id.c_str(),
+            status.mirror_uuid.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+int get_remote_group_status_mirror_uuids(cls_method_context_t hctx,
+                                         const std::string& global_group_id,
+                                         std::set<std::string>* mirror_uuids) {
+  std::string filter = group_remote_status_global_key(global_group_id, "");
+  std::string last_read = filter;
+  int max_read = 4; // we don't expect lots of peers
+  bool more = true;
+
+  do {
+    std::set<std::string> keys;
+    int r = cls_cxx_map_get_keys(hctx, last_read, max_read, &keys, &more);
+    if (r < 0) {
+      return r;
+    }
+
+    for (auto& key : keys) {
+      if (!boost::starts_with(key, filter)) {
+        more = false;
+        break;
+      }
+
+      mirror_uuids->insert(key.substr(filter.length()));
+    }
+
+    if (!keys.empty()) {
+      last_read = *keys.rbegin();
+    }
+  } while (more);
+
+  return 0;
+}
+
+int group_status_remove(cls_method_context_t hctx,
+			const string &global_group_id) {
+  // remove all local/remote group statuses
+  std::set<std::string> mirror_uuids;
+  int r = get_remote_group_status_mirror_uuids(hctx, global_group_id,
+                                               &mirror_uuids);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  mirror_uuids.insert(cls::rbd::MirrorGroupSiteStatus::LOCAL_MIRROR_UUID);
+  for (auto& mirror_uuid : mirror_uuids) {
+    CLS_LOG(20, "removing status object for mirror_uuid %s",
+            mirror_uuid.c_str());
+    auto key = group_status_global_key(global_group_id, mirror_uuid);
+    r = cls_cxx_map_remove_key(hctx, key);
+    if (r < 0 && r != -ENOENT) {
+      CLS_ERR("error removing stale status for key '%s': %s",
+              key.c_str(), cpp_strerror(r).c_str());
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+int group_status_get(cls_method_context_t hctx, const string &global_group_id,
+                     const std::string& mirror_uuid, const bufferlist& bl,
+                     const std::set<entity_inst_t> &watchers,
+                     cls::rbd::MirrorGroupStatus* status) {
+  cls::rbd::MirrorGroupSiteStatusOnDisk ondisk_status;
+  try {
+    auto it = bl.cbegin();
+    decode(ondisk_status, it);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("could not decode status for mirrored group, global id '%s', "
+            "site '%s'",
+            global_group_id.c_str(), mirror_uuid.c_str());
+    return -EIO;
+  }
+
+  auto site_status = static_cast<cls::rbd::MirrorGroupSiteStatus>(
+    ondisk_status);
+  bool up = (watchers.find(ondisk_status.origin) != watchers.end());
+  site_status.up = up;
+  for (auto &[_, image_status] : site_status.mirror_images) {
+    image_status.up = up;
+  }
+  site_status.mirror_uuid = mirror_uuid;
+  status->mirror_group_site_statuses.push_back(site_status);
+  return 0;
+}
+
+int group_status_get_local(cls_method_context_t hctx,
+                           const string &global_group_id,
+                           const std::set<entity_inst_t> &watchers,
+                           cls::rbd::MirrorGroupStatus *status) {
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(
+    hctx,
+    group_status_global_key(global_group_id,
+                            cls::rbd::MirrorGroupSiteStatus::LOCAL_MIRROR_UUID),
+    &bl);
+  if (r == -ENOENT) {
+    return 0;
+  } else if (r < 0) {
+    CLS_ERR("error reading status for mirrored group, global id '%s', "
+            "site '%s': '%s'",
+            global_group_id.c_str(),
+            cls::rbd::MirrorGroupSiteStatus::LOCAL_MIRROR_UUID.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return group_status_get(hctx, global_group_id,
+                          cls::rbd::MirrorGroupSiteStatus::LOCAL_MIRROR_UUID,
+                          bl, watchers, status);
+}
+
+int group_status_get_remote(cls_method_context_t hctx,
+                            const string &global_group_id,
+                            const std::set<entity_inst_t> &watchers,
+                            cls::rbd::MirrorGroupStatus *status) {
+  std::string filter = group_remote_status_global_key(global_group_id, "");
+  std::string last_read = filter;
+  int max_read = RBD_MAX_KEYS_READ;
+  bool more = true;
+
+  do {
+    std::map<std::string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    int r = cls_cxx_map_get_vals(hctx, last_read, filter, max_read, &vals,
+                                 &more);
+    if (r == -ENOENT) {
+      return 0;
+    } else if (r < 0) {
+      return r;
+    }
+
+    for (auto& it : vals) {
+      auto mirror_uuid = it.first.substr(filter.length());
+      CLS_LOG(20, "mirror_uuid = '%s'", mirror_uuid.c_str());
+      r = group_status_get(hctx, global_group_id, mirror_uuid, it.second,
+                           watchers, status);
+      if (r < 0) {
+        return r;
+      }
+    }
+
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
+  } while (more);
+
+  return 0;
+}
+
+int group_status_get(cls_method_context_t hctx, const string &global_group_id,
+                     const std::set<entity_inst_t> &watchers,
+                     cls::rbd::MirrorGroupStatus *status) {
+  status->mirror_group_site_statuses.clear();
+
+  // collect local site status
+  int r = group_status_get_local(hctx, global_group_id, watchers, status);
+  if (r < 0) {
+    return r;
+  }
+
+  // collect remote site status (TX to peer)
+  r = group_status_get_remote(hctx, global_group_id, watchers, status);
+  if (r < 0) {
+    return r;
+  }
+
+  if (status->mirror_group_site_statuses.empty()) {
+    return -ENOENT;
+  }
+
+  return 0;
+}
+
+int group_status_list(cls_method_context_t hctx,
+	const std::string &start_after, uint64_t max_return,
+	map<std::string, cls::rbd::MirrorGroup> *mirror_groups,
+        map<std::string, cls::rbd::MirrorGroupStatus> *mirror_statuses) {
+  std::string last_read = group_key(start_after);
+  int max_read = RBD_MAX_KEYS_READ;
+  bool more = true;
+
+  std::set<entity_inst_t> watchers;
+  int r = list_watchers(hctx, &watchers);
+  if (r < 0) {
+    return r;
+  }
+
+  while (more && mirror_groups->size() < max_return) {
+    std::map<std::string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    r = cls_cxx_map_get_vals(hctx, last_read, GROUP_KEY_PREFIX, max_read, &vals,
+                             &more);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        CLS_ERR("error reading mirror group directory by name: %s",
+                cpp_strerror(r).c_str());
+      }
+      return r;
+    }
+
+    for (auto it = vals.begin(); it != vals.end() &&
+	   mirror_groups->size() < max_return; ++it) {
+      const std::string &group_id = it->first.substr(GROUP_KEY_PREFIX.size());
+      cls::rbd::MirrorGroup mirror_group;
+      auto iter = it->second.cbegin();
+      try {
+	decode(mirror_group, iter);
+      } catch (const ceph::buffer::error &err) {
+	CLS_ERR("could not decode mirror group payload of group '%s'",
+                group_id.c_str());
+	return -EIO;
+      }
+
+      (*mirror_groups)[group_id] = mirror_group;
+
+      cls::rbd::MirrorGroupStatus status;
+      int r1 = group_status_get(hctx, mirror_group.global_group_id, watchers,
+                                &status);
+      if (r1 < 0) {
+	continue;
+      }
+
+      (*mirror_statuses)[group_id] = status;
+    }
+    if (!vals.empty()) {
+      last_read = group_key(mirror_groups->rbegin()->first);
+    }
+  }
+
+  return 0;
+}
+
+cls::rbd::MirrorGroupStatusState compute_group_status_summary_state(
+    cls::rbd::MirrorPeerDirection mirror_peer_direction,
+    const std::set<std::string>& tx_peer_mirror_uuids,
+    const cls::rbd::MirrorGroupStatus& status) {
+  std::optional<cls::rbd::MirrorGroupStatusState> state = {};
+
+  cls::rbd::MirrorGroupSiteStatus local_status;
+  status.get_local_mirror_group_site_status(&local_status);
+
+  uint64_t unmatched_tx_peers = 0;
+  switch (mirror_peer_direction) {
+  case cls::rbd::MIRROR_PEER_DIRECTION_RX:
+    // if we are RX-only, summary is based on our local status
+    if (local_status.up) {
+      state = local_status.state;
+    }
+    break;
+  case cls::rbd::MIRROR_PEER_DIRECTION_RX_TX:
+    // if we are RX/TX, combine all statuses
+    if (local_status.up) {
+      state = local_status.state;
+    }
+    [[fallthrough]];
+  case cls::rbd::MIRROR_PEER_DIRECTION_TX:
+    // if we are TX-only, summary is based on remote status
+    unmatched_tx_peers = tx_peer_mirror_uuids.size();
+    for (auto& remote_status : status.mirror_group_site_statuses) {
+      if (remote_status.mirror_uuid ==
+            cls::rbd::MirrorGroupSiteStatus::LOCAL_MIRROR_UUID) {
+        continue;
+      }
+
+      if (unmatched_tx_peers > 0 &&
+          tx_peer_mirror_uuids.count(remote_status.mirror_uuid) > 0) {
+        --unmatched_tx_peers;
+      }
+
+      auto remote_state = (remote_status.up ?
+        remote_status.state : cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN);
+      if (remote_status.state == cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR) {
+        state = remote_status.state;
+      } else if (!state) {
+        state = remote_state;
+      } else if (*state != cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR) {
+        state = std::min(*state, remote_state);
+      }
+    }
+    break;
+  default:
+    break;
+  }
+
+  if (!state || unmatched_tx_peers > 0) {
+    state = cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN;
+  }
+  return *state;
+}
+
+int group_status_get_summary(
+    cls_method_context_t hctx,
+    cls::rbd::MirrorPeerDirection mirror_peer_direction,
+    const std::set<std::string>& tx_peer_mirror_uuids,
+    std::map<cls::rbd::MirrorGroupStatusState, int32_t> *states) {
+  std::set<entity_inst_t> watchers;
+  int r = list_watchers(hctx, &watchers);
+  if (r < 0) {
+    return r;
+  }
+
+  states->clear();
+
+  string last_read = GROUP_KEY_PREFIX;
+  int max_read = RBD_MAX_KEYS_READ;
+  bool more = true;
+  while (more) {
+    map<string, bufferlist> vals;
+    r = cls_cxx_map_get_vals(hctx, last_read, GROUP_KEY_PREFIX,
+			     max_read, &vals, &more);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        CLS_ERR("error reading mirrored groups: %s", cpp_strerror(r).c_str());
+      }
+      return r;
+    }
+
+    for (auto &list_it : vals) {
+      const string &key = list_it.first;
+
+      if (0 != key.compare(0, GROUP_KEY_PREFIX.size(), GROUP_KEY_PREFIX)) {
+	break;
+      }
+
+      cls::rbd::MirrorGroup mirror_group;
+      auto iter = list_it.second.cbegin();
+      try {
+	decode(mirror_group, iter);
+      } catch (const ceph::buffer::error &err) {
+	CLS_ERR("could not decode mirror group payload for key '%s'",
+                key.c_str());
+	return -EIO;
+      }
+
+      cls::rbd::MirrorGroupStatus status;
+      r = group_status_get(hctx, mirror_group.global_group_id, watchers,
+                           &status);
+      if (r < 0 && r != -ENOENT) {
+        return r;
+      }
+
+      auto state = compute_group_status_summary_state(
+        mirror_peer_direction, tx_peer_mirror_uuids, status);
+      (*states)[state]++;
+    }
+
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
+  }
+
+  return 0;
+}
+
+int group_status_remove_down(cls_method_context_t hctx) {
+  std::set<entity_inst_t> watchers;
+  int r = list_watchers(hctx, &watchers);
+  if (r < 0) {
+    return r;
+  }
+
+  std::vector<std::string> prefixes = {
+    GROUP_STATUS_GLOBAL_KEY_PREFIX, GROUP_REMOTE_STATUS_GLOBAL_KEY_PREFIX};
+  for (auto& prefix : prefixes) {
+    std::string last_read = prefix;
+    int max_read = RBD_MAX_KEYS_READ;
+    bool more = true;
+    while (more) {
+      std::map<std::string, bufferlist> vals;
+      r = cls_cxx_map_get_vals(hctx, last_read, prefix, max_read, &vals, &more);
+      if (r < 0) {
+        if (r != -ENOENT) {
+          CLS_ERR("error reading mirrored groups: %s", cpp_strerror(r).c_str());
+        }
+        return r;
+      }
+
+      for (auto &list_it : vals) {
+        const std::string &key = list_it.first;
+
+        if (0 != key.compare(0, prefix.size(), prefix)) {
+          break;
+        }
+
+        cls::rbd::MirrorGroupSiteStatusOnDisk status;
+        try {
+          auto it = list_it.second.cbegin();
+          status.decode_meta(it);
+        } catch (const ceph::buffer::error &err) {
+          CLS_ERR("could not decode status metadata for mirrored group '%s'",
+                  key.c_str());
+          return -EIO;
+        }
+
+        if (watchers.find(status.origin) == watchers.end()) {
+          CLS_LOG(20, "removing stale status object for key %s",
+                  key.c_str());
+          int r1 = cls_cxx_map_remove_key(hctx, key);
+          if (r1 < 0) {
+            CLS_ERR("error removing stale status for key '%s': %s",
+                    key.c_str(), cpp_strerror(r1).c_str());
+            return r1;
+          }
+        }
+      }
+
+      if (!vals.empty()) {
+        last_read = vals.rbegin()->first;
+      }
+    }
+  }
+
+  return 0;
+}
+
+int group_instance_get(cls_method_context_t hctx,
+                       const string &global_group_id,
+                       const std::set<entity_inst_t> &watchers,
+                       entity_inst_t *instance) {
+  // instance details only available for local site
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(
+    hctx,
+    group_status_global_key(global_group_id,
+                            cls::rbd::MirrorGroupSiteStatus::LOCAL_MIRROR_UUID),
+    &bl);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading status for mirrored group, global id '%s': '%s'",
+              global_group_id.c_str(), cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  cls::rbd::MirrorGroupSiteStatusOnDisk ondisk_status;
+  try {
+    auto it = bl.cbegin();
+    decode(ondisk_status, it);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("could not decode status for mirrored group, global id '%s'",
+            global_group_id.c_str());
+    return -EIO;
+  }
+
+  if (watchers.find(ondisk_status.origin) == watchers.end()) {
+    return -ESTALE;
+  }
+
+  *instance = ondisk_status.origin;
+  return 0;
+}
+
+int group_instance_list(cls_method_context_t hctx,
+                        const std::string &start_after,
+                        uint64_t max_return,
+                        map<std::string, entity_inst_t> *instances) {
+  std::string last_read = group_key(start_after);
+  int max_read = RBD_MAX_KEYS_READ;
+  bool more = true;
+
+  std::set<entity_inst_t> watchers;
+  int r = list_watchers(hctx, &watchers);
+  if (r < 0) {
+    return r;
+  }
+
+  while (more && instances->size() < max_return) {
+    std::map<std::string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    r = cls_cxx_map_get_vals(hctx, last_read, GROUP_KEY_PREFIX, max_read, &vals,
+                             &more);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        CLS_ERR("error reading mirror group directory by name: %s",
+                cpp_strerror(r).c_str());
+      }
+      return r;
+    }
+
+    for (auto it = vals.begin(); it != vals.end() &&
+           instances->size() < max_return; ++it) {
+      const std::string &group_id = it->first.substr(GROUP_KEY_PREFIX.size());
+      cls::rbd::MirrorGroup mirror_group;
+      auto iter = it->second.cbegin();
+      try {
+        decode(mirror_group, iter);
+      } catch (const ceph::buffer::error &err) {
+        CLS_ERR("could not decode mirror group payload of group '%s'",
+                group_id.c_str());
+        return -EIO;
+      }
+
+      entity_inst_t instance;
+      r = group_instance_get(hctx, mirror_group.global_group_id, watchers,
+                             &instance);
+      if (r < 0) {
+        continue;
+      }
+
+      (*instances)[group_id] = instance;
+    }
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
+  }
+
+  return 0;
+}
+
 } // namespace mirror
 
 /**
@@ -5921,56 +6718,6 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
     if (r < 0) {
       return r;
     }
-
-    r = remove_key(hctx, mirror::REMOTE_NAMESPACE);
-    if (r < 0) {
-      return r;
-    }
-  }
-  return 0;
-}
-
-int mirror_remote_namespace_get(cls_method_context_t hctx, bufferlist *in,
-                                bufferlist *out) {
-  std::string mirror_ns_decode;
-  int r = read_key(hctx, mirror::REMOTE_NAMESPACE, &mirror_ns_decode);
-  if (r < 0) {
-    CLS_ERR("error getting mirror remote namespace: %s",
-            cpp_strerror(r).c_str());
-    return r;
-  }
-
-  encode(mirror_ns_decode, *out);
-  return 0;
-}
-
-int mirror_remote_namespace_set(cls_method_context_t hctx, bufferlist *in,
-                                bufferlist *out) {
-  std::string mirror_namespace;
-  try {
-    auto bl_it = in->cbegin();
-    decode(mirror_namespace, bl_it);
-  } catch (const ceph::buffer::error &err) {
-    return -EINVAL;
-  }
-
-  uint32_t mirror_mode;
-  int r = read_key(hctx, mirror::MODE, &mirror_mode);
-  if (r < 0 && r != -ENOENT) {
-    return r;
-  } else if (r == 0 && mirror_mode != cls::rbd::MIRROR_MODE_DISABLED) {
-    CLS_ERR("cannot set mirror remote namespace while mirroring enabled");
-    return -EINVAL;
-  }
-
-  bufferlist bl;
-  encode(mirror_namespace, bl);
-
-  r = cls_cxx_map_set_val(hctx, mirror::REMOTE_NAMESPACE, &bl);
-  if (r < 0) {
-    CLS_ERR("error setting mirror remote namespace: %s",
-            cpp_strerror(r).c_str());
-    return r;
   }
   return 0;
 }
@@ -6206,19 +6953,24 @@ int mirror_peer_set_direction(cls_method_context_t hctx, bufferlist *in,
  * @param start_after which name to begin listing after
  *        (use the empty string to start at the beginning)
  * @param max_return the maximum number of names to list
+ * @param all true if listing should include group images
  *
  * Output:
  * @param std::map<std::string, std::string>: local id to global id map
  * @returns 0 on success, negative error code on failure
  */
 int mirror_image_list(cls_method_context_t hctx, bufferlist *in,
-		     bufferlist *out) {
+                      bufferlist *out) {
   std::string start_after;
   uint64_t max_return;
+  bool all = false;
   try {
     auto iter = in->cbegin();
     decode(start_after, iter);
     decode(max_return, iter);
+    if (!iter.end()) {
+      decode(all, iter);
+    }
   } catch (const ceph::buffer::error &err) {
     return -EINVAL;
   }
@@ -6254,13 +7006,16 @@ int mirror_image_list(cls_method_context_t hctx, bufferlist *in,
 	return -EIO;
       }
 
+      if (mirror_image.group_spec.is_valid() && !all) {
+        continue;
+      }
       mirror_images[image_id] = mirror_image.global_image_id;
       if (mirror_images.size() >= max_return) {
 	break;
       }
     }
     if (!vals.empty()) {
-      last_read = mirror::image_key(mirror_images.rbegin()->first);
+      last_read = vals.rbegin()->first;
     }
   }
 
@@ -6414,6 +7169,7 @@ int mirror_image_status_set(cls_method_context_t hctx, bufferlist *in,
  * Output:
  * @returns 0 on success, negative error code on failure
  *
+ * NOTE: deprecated - remove this method after Octopus is unsupported
  */
 int mirror_image_status_remove(cls_method_context_t hctx, bufferlist *in,
 			       bufferlist *out) {
@@ -6833,7 +7589,7 @@ int mirror_image_snapshot_unlink_peer(cls_method_context_t hctx, bufferlist *in,
 /**
  * Input:
  * @param snap_id: snapshot id
- * @param complete: true if snapshot fully copied/complete
+ * @param complete: true if shapshot fully copied/complete
  * @param last_copied_object_number: last copied object number
  *
  * Output:
@@ -6863,6 +7619,491 @@ int mirror_image_snapshot_set_copy_progress(cls_method_context_t hctx,
   if (r < 0) {
     return r;
   }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to list
+ *
+ * Output:
+ * @param std::map<std::string, cls::rbd::MirrorGroup>: local id to mirror group map
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_list(cls_method_context_t hctx, bufferlist *in,
+                      bufferlist *out) {
+  std::string start_after;
+  uint64_t max_return;
+  try {
+    auto iter = in->cbegin();
+    decode(start_after, iter);
+    decode(max_return, iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::map<std::string, cls::rbd::MirrorGroup> groups;
+  int r = mirror::group_list(hctx, start_after, max_return, &groups);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(groups, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param global_group_id (std::string)
+ * @param global_name (std::string)
+ *
+ * Output:
+ * @param group_id (std::string)
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_resync_get(cls_method_context_t hctx, bufferlist *in,
+                            bufferlist *out) {
+  std::string global_group_id;
+  std::string group_name;
+  try {
+    auto it = in->cbegin();
+    decode(global_group_id, it);
+    decode(group_name, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::string search = mirror::group_resync_key(global_group_id, group_name);
+  std::string last_read = group_name;
+  int max_read = 5;
+  bool more = true;
+  do {
+    std::set<std::string> keys;
+    int r = cls_cxx_map_get_keys(hctx, last_read, max_read, &keys, &more);
+    if (r < 0) {
+      CLS_ERR("error reading group resync keys, global_id '%s': '%s'",
+          global_group_id.c_str(), cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (auto& key : keys) {
+      if (key == search) {
+        r = cls_cxx_map_get_val(hctx, key, out);
+        if (r < 0) {
+          CLS_ERR("error reading group_id for group resync, global_id '%s': '%s'",
+              global_group_id.c_str(), cpp_strerror(r).c_str());
+          return r;
+        }
+        return 0;
+      }
+    }
+
+    if (!keys.empty()) {
+      last_read = *keys.rbegin();
+    }
+  } while (more);
+
+  // shouldn't reach here
+  return -EINVAL;
+}
+
+/**
+ * Input:
+ * @param global_group_id (std::string)
+ * @param global_name (std::string)
+ * @param group_id (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_resync_set(cls_method_context_t hctx, bufferlist *in,
+		            bufferlist *out) {
+  std::string global_group_id;
+  std::string group_name;
+  std::string group_id;
+  try {
+    auto it = in->cbegin();
+    decode(global_group_id, it);
+    decode(group_name, it);
+    decode(group_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+  std::string key = mirror::group_resync_key(global_group_id, group_name);
+  bufferlist val_bl;
+  encode(group_id, val_bl);
+  int r = cls_cxx_map_set_val(hctx, key, &val_bl);
+  if (r < 0) {
+    CLS_ERR("error setting key %s on mirror group resync object: %s",
+            key.c_str(), cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Input:
+ * @param global_id (std::string)
+ *
+ * Output:
+ * @param std::string - image id
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_get_group_id(cls_method_context_t hctx, bufferlist *in,
+                              bufferlist *out) {
+  std::string global_id;
+  try {
+    auto it = in->cbegin();
+    decode(global_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::string group_id;
+  int r = mirror::group_get_group_id(hctx, global_id, &group_id);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(group_id, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param group_id (std::string)
+ *
+ * Output:
+ * @param cls::rbd::MirrorGroup - metadata associated with the group_id
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_get(cls_method_context_t hctx, bufferlist *in,
+		     bufferlist *out) {
+  string group_id;
+  try {
+    auto it = in->cbegin();
+    decode(group_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  cls::rbd::MirrorGroup group;
+  int r = mirror::group_get(hctx, group_id, &group);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(group, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param group_id (std::string)
+ * @param group (cls::rbd::MirrorGroup)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ * @returns -EEXIST if there's an existing group_id with a different global_group_id
+ */
+int mirror_group_set(cls_method_context_t hctx, bufferlist *in,
+		     bufferlist *out) {
+  string group_id;
+  cls::rbd::MirrorGroup group;
+  try {
+    auto it = in->cbegin();
+    decode(group_id, it);
+    decode(group, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = mirror::group_set(hctx, group_id, group);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param group_id (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_remove(cls_method_context_t hctx, bufferlist *in,
+			bufferlist *out) {
+  string group_id;
+  try {
+    auto it = in->cbegin();
+    decode(group_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = mirror::group_remove(hctx, group_id);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param global_group_id (std::string)
+ * @param status (cls::rbd::MirrorGroupSiteStatus)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_status_set(cls_method_context_t hctx, bufferlist *in,
+			    bufferlist *out) {
+  string global_group_id;
+  cls::rbd::MirrorGroupSiteStatus status;
+  try {
+    auto it = in->cbegin();
+    decode(global_group_id, it);
+    decode(status, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = mirror::group_status_set(hctx, global_group_id, status);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param global_group_id (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ *
+ * NOTE: deprecated - remove this method after Octopus is unsupported
+ */
+int mirror_group_status_remove(cls_method_context_t hctx, bufferlist *in,
+			       bufferlist *out) {
+  string global_group_id;
+  try {
+    auto it = in->cbegin();
+    decode(global_group_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = mirror::group_status_remove(hctx, global_group_id);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param global_group_id (std::string)
+ *
+ * Output:
+ * @param cls::rbd::MirrorGroupStatus - metadata associated with the global_group_id
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_status_get(cls_method_context_t hctx, bufferlist *in,
+			    bufferlist *out) {
+  string global_group_id;
+  try {
+    auto it = in->cbegin();
+    decode(global_group_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::set<entity_inst_t> watchers;
+  int r = mirror::list_watchers(hctx, &watchers);
+  if (r < 0) {
+    return r;
+  }
+
+  cls::rbd::MirrorGroupStatus status;
+  r = mirror::group_status_get(hctx, global_group_id, watchers, &status);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(status, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to list
+ *
+ * Output:
+ * @param std::map<std::string, cls::rbd::MirrorGroup>: group id to group map
+ * @param std::map<std::string, cls::rbd::MirrorGroupStatus>: group it to status map
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_status_list(cls_method_context_t hctx, bufferlist *in,
+			     bufferlist *out) {
+  std::string start_after;
+  uint64_t max_return;
+  try {
+    auto iter = in->cbegin();
+    decode(start_after, iter);
+    decode(max_return, iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  map<std::string, cls::rbd::MirrorGroup> groups;
+  map<std::string, cls::rbd::MirrorGroupStatus> statuses;
+  int r = mirror::group_status_list(hctx, start_after, max_return, &groups,
+				    &statuses);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(groups, *out);
+  encode(statuses, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param std::vector<cls::rbd::MirrorPeer> - optional peers (backwards compatibility)
+ *
+ * Output:
+ * @param std::map<cls::rbd::MirrorGroupStatusState, int32_t>: states counts
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_status_get_summary(cls_method_context_t hctx, bufferlist *in,
+				    bufferlist *out) {
+  std::vector<cls::rbd::MirrorPeer> peers;
+  try {
+    auto iter = in->cbegin();
+    if (!iter.end()) {
+      decode(peers, iter);
+    }
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  auto mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_RX;
+  if (!peers.empty()) {
+    mirror_peer_direction = peers.begin()->mirror_peer_direction;
+  }
+
+  std::set<std::string> tx_peer_mirror_uuids;
+  for (auto& peer : peers) {
+    if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
+      continue;
+    }
+
+    tx_peer_mirror_uuids.insert(peer.mirror_uuid);
+    if (mirror_peer_direction != cls::rbd::MIRROR_PEER_DIRECTION_RX_TX &&
+        mirror_peer_direction != peer.mirror_peer_direction) {
+      mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_RX_TX;
+    }
+  }
+
+  std::map<cls::rbd::MirrorGroupStatusState, int32_t> states;
+  int r = mirror::group_status_get_summary(hctx, mirror_peer_direction,
+                                           tx_peer_mirror_uuids, &states);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(states, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * none
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_status_remove_down(cls_method_context_t hctx, bufferlist *in,
+				    bufferlist *out) {
+  int r = mirror::group_status_remove_down(hctx);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param global_group_id (std::string)
+ *
+ * Output:
+ * @param entity_inst_t - instance
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_instance_get(cls_method_context_t hctx, bufferlist *in,
+                              bufferlist *out) {
+  string global_group_id;
+  try {
+    auto it = in->cbegin();
+    decode(global_group_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::set<entity_inst_t> watchers;
+  int r = mirror::list_watchers(hctx, &watchers);
+  if (r < 0) {
+    return r;
+  }
+
+  entity_inst_t instance;
+  r = mirror::group_instance_get(hctx, global_group_id, watchers, &instance);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(instance, *out, cls_get_features(hctx));
+  return 0;
+}
+
+/**
+ * Input:
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to list
+ *
+ * Output:
+ * @param std::map<std::string, entity_inst_t>: group id to instance map
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_instance_list(cls_method_context_t hctx, bufferlist *in,
+                               bufferlist *out) {
+  std::string start_after;
+  uint64_t max_return;
+  try {
+    auto iter = in->cbegin();
+    decode(start_after, iter);
+    decode(max_return, iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  map<std::string, entity_inst_t> instances;
+  int r = mirror::group_instance_list(hctx, start_after, max_return,
+                                      &instances);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(instances, *out, cls_get_features(hctx));
   return 0;
 }
 
@@ -7608,6 +8849,66 @@ int group_snap_remove(cls_method_context_t hctx,
   }
 
   return 0;
+}
+
+/**
+ * Unlink image snapshot from group snapshot.
+ *
+ * Input:
+ * @param id Snapshot id
+ * @param image_snap ImageSnapshotSpec
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int group_snap_unlink(cls_method_context_t hctx,
+		      bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "group_snap_unlink");
+  std::string group_snap_id;
+  cls::rbd::ImageSnapshotSpec image_snap;
+  try {
+    auto iter = in->cbegin();
+    decode(group_snap_id, iter);
+    decode(image_snap, iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::string group_snap_key = group::snap_key(group_snap_id);
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, group_snap_key, &bl);
+  if (r < 0) {
+    return r;
+  }
+  cls::rbd::GroupSnapshot group_snap;
+  auto iter = bl.cbegin();
+  try {
+    decode(group_snap, iter);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("error decoding snapshot: %s", group_snap_id.c_str());
+    return -EIO;
+  }
+  if (group_snap.state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+    CLS_LOG(20, "snap %s not complete", group_snap_id.c_str());
+    return -ENOENT;
+  }
+
+  auto &snaps = group_snap.snaps;
+  snaps.erase(std::remove(snaps.begin(), snaps.end(), image_snap), snaps.end());
+
+  if (snaps.empty()) {
+    CLS_LOG(20, "group_snap_unlink: removing snapshot with key %s",
+            group_snap_key.c_str());
+    r = cls_cxx_map_remove_key(hctx, group_snap_key);
+  } else {
+    CLS_LOG(20, "group_snap_unlink: updating snapshot with key %s",
+            group_snap_key.c_str());
+    bl.clear();
+    encode(group_snap, bl);
+    r = cls_cxx_map_set_val(hctx, group_snap_key, &bl);
+  }
+  return r;
 }
 
 /**
@@ -8359,6 +9660,21 @@ CLS_INIT(rbd)
   cls_method_handle_t h_mirror_image_map_remove;
   cls_method_handle_t h_mirror_image_snapshot_unlink_peer;
   cls_method_handle_t h_mirror_image_snapshot_set_copy_progress;
+  cls_method_handle_t h_mirror_group_list;
+  cls_method_handle_t h_mirror_group_resync_get;
+  cls_method_handle_t h_mirror_group_resync_set;
+  cls_method_handle_t h_mirror_group_get_group_id;
+  cls_method_handle_t h_mirror_group_get;
+  cls_method_handle_t h_mirror_group_set;
+  cls_method_handle_t h_mirror_group_remove;
+  cls_method_handle_t h_mirror_group_status_set;
+  cls_method_handle_t h_mirror_group_status_remove;
+  cls_method_handle_t h_mirror_group_status_get;
+  cls_method_handle_t h_mirror_group_status_list;
+  cls_method_handle_t h_mirror_group_status_get_summary;
+  cls_method_handle_t h_mirror_group_status_remove_down;
+  cls_method_handle_t h_mirror_group_instance_get;
+  cls_method_handle_t h_mirror_group_instance_list;
   cls_method_handle_t h_group_dir_list;
   cls_method_handle_t h_group_dir_add;
   cls_method_handle_t h_group_dir_remove;
@@ -8371,6 +9687,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_image_group_get;
   cls_method_handle_t h_group_snap_set;
   cls_method_handle_t h_group_snap_remove;
+  cls_method_handle_t h_group_snap_unlink;
   cls_method_handle_t h_group_snap_get_by_id;
   cls_method_handle_t h_group_snap_list;
   cls_method_handle_t h_group_snap_list_order;
@@ -8629,11 +9946,11 @@ CLS_INIT(rbd)
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           mirror_mode_set, &h_mirror_mode_set);
   cls_register_cxx_method(h_class, "mirror_remote_namespace_get",
-                          CLS_METHOD_RD, mirror_remote_namespace_get,
+                          CLS_METHOD_RD, mirror::mirror_remote_namespace_get,
                           &h_mirror_remote_namespace_get);
   cls_register_cxx_method(h_class, "mirror_remote_namespace_set",
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_remote_namespace_set,
+                          mirror::mirror_remote_namespace_set,
                           &h_mirror_remote_namespace_set);
   cls_register_cxx_method(h_class, "mirror_peer_ping",
                           CLS_METHOD_RD | CLS_METHOD_WR,
@@ -8720,6 +10037,50 @@ CLS_INIT(rbd)
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           mirror_image_snapshot_set_copy_progress,
                           &h_mirror_image_snapshot_set_copy_progress);
+  cls_register_cxx_method(h_class, "mirror_group_list", CLS_METHOD_RD,
+                          mirror_group_list, &h_mirror_group_list);
+  cls_register_cxx_method(h_class, "mirror_group_resync_get", CLS_METHOD_RD,
+                          mirror_group_resync_get,
+                          &h_mirror_group_resync_get);
+  cls_register_cxx_method(h_class, "mirror_group_resync_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_group_resync_set, &h_mirror_group_resync_set);
+  cls_register_cxx_method(h_class, "mirror_group_get_group_id", CLS_METHOD_RD,
+                          mirror_group_get_group_id,
+                          &h_mirror_group_get_group_id);
+  cls_register_cxx_method(h_class, "mirror_group_get", CLS_METHOD_RD,
+                          mirror_group_get, &h_mirror_group_get);
+  cls_register_cxx_method(h_class, "mirror_group_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_group_set, &h_mirror_group_set);
+  cls_register_cxx_method(h_class, "mirror_group_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_group_remove, &h_mirror_group_remove);
+  cls_register_cxx_method(h_class, "mirror_group_status_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
+                          mirror_group_status_set, &h_mirror_group_status_set);
+  cls_register_cxx_method(h_class, "mirror_group_status_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_group_status_remove,
+			  &h_mirror_group_status_remove);
+  cls_register_cxx_method(h_class, "mirror_group_status_get", CLS_METHOD_RD,
+                          mirror_group_status_get, &h_mirror_group_status_get);
+  cls_register_cxx_method(h_class, "mirror_group_status_list", CLS_METHOD_RD,
+                          mirror_group_status_list,
+			  &h_mirror_group_status_list);
+  cls_register_cxx_method(h_class, "mirror_group_status_get_summary",
+			  CLS_METHOD_RD, mirror_group_status_get_summary,
+			  &h_mirror_group_status_get_summary);
+  cls_register_cxx_method(h_class, "mirror_group_status_remove_down",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_group_status_remove_down,
+			  &h_mirror_group_status_remove_down);
+  cls_register_cxx_method(h_class, "mirror_group_instance_get", CLS_METHOD_RD,
+                          mirror_group_instance_get,
+                          &h_mirror_group_instance_get);
+  cls_register_cxx_method(h_class, "mirror_group_instance_list", CLS_METHOD_RD,
+                          mirror_group_instance_list,
+                          &h_mirror_group_instance_list);
 
   /* methods for the groups feature */
   cls_register_cxx_method(h_class, "group_dir_list",
@@ -8758,6 +10119,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "group_snap_remove",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  group_snap_remove, &h_group_snap_remove);
+  cls_register_cxx_method(h_class, "group_snap_unlink",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  group_snap_unlink, &h_group_snap_unlink);
   cls_register_cxx_method(h_class, "group_snap_get_by_id",
 			  CLS_METHOD_RD,
 			  group_snap_get_by_id, &h_group_snap_get_by_id);
