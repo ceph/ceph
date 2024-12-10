@@ -9,6 +9,7 @@
 #include "test/librbd/mock/io/MockObjectDispatch.h"
 #include "common/Cond.h"
 #include "common/ceph_mutex.h"
+#include "common/debug.h"
 #include "common/WorkQueue.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Journaler.h"
@@ -28,6 +29,7 @@
 #include "gtest/gtest.h"
 #include <functional>
 #include <list>
+#include <shared_mutex> // for std::shared_lock
 #include <boost/scope_exit.hpp>
 
 #define dout_context g_ceph_context

@@ -8,6 +8,8 @@
 #include "librbd/Utils.h"
 #include "gmock/gmock.h"
 
+#include <boost/optional/optional_io.hpp>
+
 namespace librbd {
 
 struct MockObjectMap {

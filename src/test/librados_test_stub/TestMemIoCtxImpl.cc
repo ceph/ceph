@@ -6,6 +6,7 @@
 #include "common/Clock.h"
 #include "include/err.h"
 #include <functional>
+#include <shared_mutex> // for std::shared_lock
 #include <boost/algorithm/string/predicate.hpp>
 #include <errno.h>
 #include <include/compat.h>
