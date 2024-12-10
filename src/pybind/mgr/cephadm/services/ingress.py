@@ -155,7 +155,7 @@ class IngressService(CephService):
                         'port': 0,
                     })
         else:
-            mode = 'http'
+            mode = 'tcp' if spec.use_tcp_mode_over_rgw else 'http'
             servers = [
                 {
                     'name': d.name(),
