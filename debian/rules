@@ -121,6 +121,8 @@ override_dh_strip:
 	dh_strip -plibradosstriper1 --dbg-package=libradosstriper1-dbg
 	dh_strip -plibrbd1 --dbg-package=librbd1-dbg
 	dh_strip -plibcephfs2 --dbg-package=libcephfs2-dbg
+	dh_strip -plibcephfs-proxy2 --dbg-package=libcephfs-proxy2-dbg
+	dh_strip -plibcephfs-daemon --dbg-package=libcephfs-daemon-dbg
 	dh_strip -plibrgw2 --dbg-package=librgw2-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
