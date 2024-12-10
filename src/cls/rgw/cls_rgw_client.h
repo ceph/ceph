@@ -384,17 +384,20 @@ void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const ceph::real_time
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const std::string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,
                    rgw_cls_bi_entry *entry);
-int cls_rgw_bi_put(librados::IoCtx& io_ctx, const std::string oid, const rgw_cls_bi_entry& entry);
-void cls_rgw_bi_put(librados::ObjectWriteOperation& op, const std::string oid, const rgw_cls_bi_entry& entry);
+int cls_rgw_bi_put(librados::IoCtx& io_ctx, const std::string& oid, rgw_cls_bi_entry entry);
+void cls_rgw_bi_put(librados::ObjectWriteOperation& op, rgw_cls_bi_entry entry);
 // Write the given array of index entries and update bucket stats accordingly.
 // If existing entries may be overwritten, pass check_existing=true to decrement
 // their stats first.
 void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
                             std::vector<rgw_cls_bi_entry> entries,
                             bool check_existing);
-int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
-                   const std::string& name, const std::string& marker, uint32_t max,
-                   std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
+void cls_rgw_bi_list(librados::ObjectReadOperation& op,
+                     std::string name, std::string marker,
+                     uint32_t max, bool reshardlog, bufferlist& bl);
+int cls_rgw_bi_list_decode(const bufferlist& bl,
+                           std::list<rgw_cls_bi_entry>& entries,
+                           bool& is_truncated);
 
 void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
                             const cls_rgw_obj_key& key, const ceph::buffer::list& olh_tag,
