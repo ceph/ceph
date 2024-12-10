@@ -11740,8 +11740,12 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       cond_iofinish = new C_SaferCond();
       filer_iofinish.reset(cond_iofinish);
     } else {
-      //Register a wrapper callback for the C_Write_Finisher which takes 'client_lock'
-      filer_iofinish.reset(new C_Lock_Client_Finisher(this, iofinish.get()));
+      //Register a wrapper callback C_Lock_Client_Finisher for the C_Write_Finisher which takes 'client_lock'.
+      //Use C_OnFinisher for callbacks. The op_cancel_writes has to be called without 'client_lock' held because
+      //the callback registered here needs to take it. This would cause incorrect lock order i.e., objecter->rwlock
+      //taken by objecter's op_cancel and then 'client_lock' taken by callback. To fix the lock order, queue
+      //the callback using the finisher
+      filer_iofinish.reset(new C_OnFinisher(new C_Lock_Client_Finisher(this, iofinish.get()), &objecter_finisher));
     }
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
