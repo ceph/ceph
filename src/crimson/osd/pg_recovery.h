@@ -101,6 +101,7 @@ private:
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
   std::map<pg_shard_t,
            MURef<MOSDPGBackfillRemove>> backfill_drop_requests;
+  uint64_t ongoing_pushes = 0;
 
   template <class EventT>
   void start_backfill_recovery(
