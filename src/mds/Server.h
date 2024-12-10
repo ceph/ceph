@@ -544,6 +544,7 @@ private:
   feature_bitset_t supported_metric_spec;
   feature_bitset_t required_client_features;
 
+  bool mds_allow_async_dirops = true;
   bool forward_all_requests_to_auth = false;
   bool replay_unsafe_with_closed_session = false;
   double cap_revoke_eviction_timeout = 0;
