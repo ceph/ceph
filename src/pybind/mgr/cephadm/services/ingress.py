@@ -111,7 +111,6 @@ class IngressService(CephService):
                 f'{spec.service_name()} backend service {spec.backend_service} does not exist')
         backend_spec = self.mgr.spec_store[spec.backend_service].spec
         daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
-        deps = [d.name() for d in daemons]
 
         # generate password?
         pw_key = f'{spec.service_name()}/monitor_password'
@@ -226,7 +225,7 @@ class IngressService(CephService):
                 ssl_cert = '\n'.join(ssl_cert)
             config_files['files']['haproxy.pem'] = ssl_cert
 
-        return config_files, sorted(deps)
+        return config_files, self.get_haproxy_dependencies(self.mgr, spec)
 
     def keepalived_prepare_create(
             self,

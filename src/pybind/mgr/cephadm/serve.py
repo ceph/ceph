@@ -1130,8 +1130,8 @@ class CephadmServe:
                 action = 'reconfig'
             elif last_deps != deps:
                 sym_diff = set(deps).symmetric_difference(last_deps)
-                self.log.debug(f'Reconfiguring {dd.name()} deps changed {last_deps} -> {deps} diff is {sym_diff}')
-                self.log.info(f'Reconfiguring {dd.name()} because dependencies have changed: diff {sym_diff}')
+                self.log.debug(f'{dd.name()} deps {last_deps} -> {deps} (diff {sym_diff})')
+                self.log.info(f'Reconfiguring {dd.name()} (dependencies changed)...')
                 action = 'reconfig'
                 # we need only redeploy if secure_monitoring_stack or mgmt-gateway value has changed:
                 # TODO(redo): check if we should just go always with redeploy (it's fast enough)

@@ -41,7 +41,6 @@ from ceph.deployment.service_spec import \
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.services.services_map import ServiceMap
 from cephadm.http_server import CephadmHttpServer
 from cephadm.agent import CephadmAgentHelpers
 
@@ -3020,7 +3019,7 @@ Then run the following:
                           spec: Optional[ServiceSpec],
                           daemon_type: str,
                           daemon_id: str) -> List[str]:
-        svc_cls = ServiceMap.get(daemon_type, None)
+        svc_cls = self.cephadm_services.get(daemon_type, None)
         deps = svc_cls.get_dependencies(self, spec, daemon_type) if svc_cls else []
         return sorted(deps)
 

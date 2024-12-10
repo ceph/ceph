@@ -306,7 +306,7 @@ class AlertmanagerService(CephadmService):
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
         deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
-        deps = deps + utils.get_daemon_names(mgr, ['alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy'])
+        deps = deps + mgr.cache.get_daemons_by_types(['alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy'])
         security_enabled, mgmt_gw_enabled, _ = mgr._get_security_config()
         if security_enabled:
             alertmanager_user, alertmanager_password = mgr._get_alertmanager_credentials()
@@ -315,7 +315,7 @@ class AlertmanagerService(CephadmService):
                 deps.append(alertmgr_cred_hash)
 
         if not mgmt_gw_enabled:
-            deps += utils.get_daemon_names(mgr, ['mgr'])
+            deps += mgr.cache.get_daemons_by_types(['mgr'])
 
         return sorted(deps)
 
@@ -730,7 +730,7 @@ class NodeExporterService(CephadmService):
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
         deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
-        deps = deps + utils.get_daemon_names(mgr, ['mgmt-gateway'])
+        deps = deps + mgr.cache.get_daemons_by_types(['mgmt-gateway'])
         return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -806,7 +806,7 @@ class PromtailService(CephadmService):
     def get_dependencies(mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
-        return sorted(utils.get_daemon_names(mgr, ['loki']))
+        return sorted(mgr.cache.get_daemons_by_types(['loki']))
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type

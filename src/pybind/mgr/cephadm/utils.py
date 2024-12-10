@@ -20,14 +20,6 @@ class CephadmNoImage(Enum):
     token = 1
 
 
-def get_daemon_names(mgr: "CephadmOrchestrator", daemons: List[str]) -> List[str]:
-    daemon_names = []
-    for daemon_type in daemons:
-        for dd in mgr.cache.get_daemons_by_type(daemon_type):
-            daemon_names.append(dd.name())
-    return daemon_names
-
-
 # ceph daemon types that use the ceph container image.
 # NOTE: order important here as these are used for upgrade order
 CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw',

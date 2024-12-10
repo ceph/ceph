@@ -1306,7 +1306,7 @@ class CephExporterService(CephService):
                          daemon_type: Optional[str] = None) -> List[str]:
 
         deps = [f'secure_monitoring_stack:{mgr.secure_monitoring_stack}']
-        deps += utils.get_daemon_names(mgr, ['mgmt-gateway'])
+        deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
         return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
