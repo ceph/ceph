@@ -1393,23 +1393,6 @@ const omap_root_le_t& SeaStore::Shard::select_log_omap_root(Onode& onode)
   }
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::omap_values_t>
-SeaStore::Shard::do_omap_get_values(
-  Transaction& t,
-  Onode& onode,
-  const omap_keys_t& keys)
-{
-  LOG_PREFIX(SeaStoreS::do_omap_get_values);
-  DEBUGT("{} keys ...", t, keys.size());
-  laddr_t hint = onode.get_metadata_hint(device->get_block_size());
-  auto r = select_log_omap_root(onode);
-  omap_root_t root = r.get(hint);
-  return _omap_get_values(
-    t,
-    std::move(root),
-    keys);
-}
-
 SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_t>
 SeaStore::Shard::omap_get_values(
   CollectionRef ch,
@@ -1427,8 +1410,11 @@ SeaStore::Shard::omap_get_values(
     "omap_get_values",
     op_type_t::OMAP_GET_VALUES,
     op_flags,
-    [this, keys](auto &t, auto &onode) {
-    return do_omap_get_values(t, onode, keys);
+    [this, keys](auto &t, auto &onode)
+  {
+    auto r = select_log_omap_root(onode);
+    omap_root_t root = r.get(onode.get_metadata_hint(device->get_block_size()));
+    return _omap_get_values(t, std::move(root), keys);
   }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
