@@ -30,13 +30,13 @@
  * flat_map and btree_map).
  */
 
-template<typename T, template<typename, typename, typename ...> class C = std::map>
+template<typename T, typename L = T, template<typename, typename, typename ...> class C = std::map>
 class interval_set {
  public:
-  using Map = C<T, T>;
+  using Map = C<T, L>;
   using value_type = typename Map::value_type;
   using offset_type = T;
-  using length_type = T;
+  using length_type = L;
   using reference = value_type&;
   using const_reference = const value_type&;
   using size_type = typename Map::size_type;
@@ -419,7 +419,7 @@ class interval_set {
     _size = 0;
   }
 
-  bool contains(T i, T *pstart=0, T *plen=0) const {
+  bool contains(T i, T *pstart=0, L *plen=0) const {
     auto p = find_inc(i);
     if (p == m.end()) return false;
     if (p->first > i) return false;
@@ -431,7 +431,7 @@ class interval_set {
       *plen = p->second;
     return true;
   }
-  bool contains(T start, T len) const {
+  bool contains(T start, L len) const {
     auto p = find_inc(start);
     if (p == m.end()) return false;
     if (p->first > start) return false;
@@ -440,7 +440,7 @@ class interval_set {
     if (p->first+p->second < start+len) return false;
     return true;
   }
-  bool intersects(T start, T len) const {
+  bool intersects(T start, L len) const {
     interval_set a;
     a.insert(start, len);
     interval_set i;
@@ -488,7 +488,7 @@ class interval_set {
     insert(val, 1);
   }
 
-  void insert(T start, T len, T *pstart=0, T *plen=0) {
+  void insert(T start, L len, T *pstart=0, L *plen=0) {
     //cout << "insert " << start << "~" << len << endl;
     ceph_assert(len > 0);
     _size += len;
@@ -529,7 +529,7 @@ class interval_set {
 	    *pstart = start;
 	  if (plen)
 	    *plen = len + p->second;
-	  T psecond = p->second;
+	  L psecond = p->second;
           m.erase(p);
           m[start] = len + psecond;  // append to front
         } else {
@@ -558,8 +558,8 @@ class interval_set {
     erase(val, 1);
   }
 
-  void erase(T start, T len, 
-    std::function<bool(T, T)> claim = {}) {
+  void erase(T start, L len,
+    std::function<bool(T, L)> claim = {}) {
     auto p = find_inc_m(start);
 
     _size -= len;
@@ -567,9 +567,9 @@ class interval_set {
     ceph_assert(p != m.end());
     ceph_assert(p->first <= start);
 
-    T before = start - p->first;
+    L before = start - p->first;
     ceph_assert(p->second >= before+len);
-    T after = p->second - before - len;
+    L after = p->second - before - len;
     if (before) {
       if (claim && claim(p->first, before)) {
 	_size -= before;
@@ -693,7 +693,7 @@ class interval_set {
     swap(a);    
     union_of(a, b);
   }
-  void union_insert(T off, T len) {
+  void union_insert(T off, L len) {
     interval_set a;
     a.insert(off, len);
     union_of(a);
@@ -726,7 +726,7 @@ class interval_set {
    * @len worth of values, skipping holes.  e.g.,
    *  span_of([5~10,20~5], 8, 5) -> [8~2,20~3]
    */
-  void span_of(const interval_set &other, T start, T len) {
+  void span_of(const interval_set &other, T start, L len) {
     clear();
     auto p = other.find_inc(start);
     if (p == other.m.end())
@@ -735,7 +735,7 @@ class interval_set {
       if (p->first + p->second < start)
 	return;
       if (p->first + p->second < start + len) {
-	T howmuch = p->second - (start - p->first);
+	L howmuch = p->second - (start - p->first);
 	insert(start, howmuch);
 	len -= howmuch;
 	p++;
@@ -773,9 +773,9 @@ private:
 // declare traits explicitly because (1) it's templatized, and (2) we
 // want to include _nohead variants.
 template<typename T, template<typename, typename, typename ...> class C>
-struct denc_traits<interval_set<T, C>> {
+struct denc_traits<interval_set<T, T, C>> {
 private:
-  using container_t = interval_set<T, C>;
+  using container_t = interval_set<T, T, C>;
 public:
   static constexpr bool supported = true;
   static constexpr bool bounded = false;
@@ -807,8 +807,8 @@ public:
 };
 
 
-template<typename T, template<typename, typename, typename ...> class C>
-inline std::ostream& operator<<(std::ostream& out, const interval_set<T,C> &s) {
+template<typename T, typename L, template<typename, typename, typename ...> class C>
+inline std::ostream& operator<<(std::ostream& out, const interval_set<T,L,C> &s) {
   out << "[";
   bool first = true;
   for (const auto& [start, len] : s) {
