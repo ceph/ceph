@@ -242,17 +242,21 @@ def admin(args, cluster='noname', **kwargs):
     cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', cluster] + args
     return bash(cmd, **kwargs)
 
-def delete_all_topics(conn, tenant, cluster):
+def delete_all_topics(conn, tenant, cluster, version = None):
     """ delete all topics """
     if tenant == '':
         topics_result = admin(['topic', 'list'], cluster)
         topics_json = json.loads(topics_result[0])
+        if(version == 'v1'):
+            topics_json = topics_json['result']
         for topic in topics_json['topics']:
             rm_result = admin(['topic', 'rm', '--topic', topic['name']], cluster)
             print(rm_result)
     else:
         topics_result = admin(['topic', 'list', '--tenant', tenant], cluster)
         topics_json = json.loads(topics_result[0])
+        if(version == 'v1'):
+            topics_json = topics_json['result']
         for topic in topics_json['topics']:
             rm_result = admin(['topic', 'rm', '--tenant', tenant, '--topic', topic['name']], cluster)
             print(rm_result)
