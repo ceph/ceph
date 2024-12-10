@@ -6285,7 +6285,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
 
   if (r == -ENOENT) {
     s->exists = false;
-    s->has_attrs = true;
+    s->has_attrs = false;
     tombstone_entry entry;
     if (obj_tombstone_cache && obj_tombstone_cache->find(obj, entry)) {
       s->mtime = entry.mtime;
