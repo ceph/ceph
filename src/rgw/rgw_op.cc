@@ -64,6 +64,7 @@
 #include "rgw_lua.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_bucket_sync.h"
+#include "rgw_bucket_logging.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -757,7 +758,7 @@ static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s, r
   return 0;
 }
 
-static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s) {
+int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s) {
   return rgw_iam_add_buckettags(dpp, s, s->bucket.get());
 }
 
@@ -830,7 +831,7 @@ static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvide
   return make_tuple(has_existing_obj_tag, has_resource_tag);
 }
 
-static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp, req_state* s, bool check_obj_exist_tag=true) {
+std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp, req_state* s, bool check_obj_exist_tag) {
   return rgw_check_policy_condition(dpp, s->iam_policy, s->iam_identity_policies, s->session_policies, check_obj_exist_tag);
 }
 
@@ -2354,6 +2355,7 @@ void RGWGetObj::execute(optional_yield y)
   rgw::op_counters::inc(counters, l_rgw_op_get_obj, 1);
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op());
+  std::string etag;
 
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -3234,19 +3236,6 @@ void RGWListBucket::execute(optional_yield y)
   auto counters = rgw::op_counters::get(s);
   rgw::op_counters::inc(counters, l_rgw_op_list_obj, 1);
   rgw::op_counters::tinc(counters, l_rgw_op_list_obj_lat, s->time_elapsed());
-}
-
-int RGWGetBucketLogging::verify_permission(optional_yield y)
-{
-  auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
-  if (has_s3_resource_tag)
-    rgw_iam_add_buckettags(this, s);
-
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketLogging)) {
-    return -EACCES;
-  }
-
-  return 0;
 }
 
 int RGWGetBucketLocation::verify_permission(optional_yield y)
@@ -4693,6 +4682,13 @@ void RGWPutObj::execute(optional_yield y)
     obj_retention->encode(obj_retention_bl);
     emplace_attr(RGW_ATTR_OBJECT_RETENTION, std::move(obj_retention_bl));
   }
+ 
+  if (!multipart) {
+    op_ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Journal, s->object.get(), s, canonical_name(), etag, s->object->get_size(), this, y, false, false);
+    if (op_ret  < 0) {
+      return;
+   }
+  }
 
   // don't track the individual parts of multipart uploads. they replicate in
   // full after CompleteMultipart
@@ -5536,6 +5532,13 @@ void RGWDeleteObj::execute(optional_yield y)
       }
     }
 
+    if (op_ret == 0) {
+      if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Journal, s->object.get(), s, canonical_name(), etag, obj_size, this, y, false, false); ret < 0) {
+          // don't reply with an error in case of failed delete logging
+          ldpp_dout(this, 5) << "WARNING: DELETE operation ignores bucket logging failure: " << ret << dendl;
+      }
+    }
+
     if (op_ret == -ECANCELED) {
       op_ret = 0;
     }
@@ -5880,6 +5883,12 @@ void RGWCopyObj::execute(optional_yield y)
     return;
   }
 
+  etag = s->src_object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Journal, s->object.get(), s, canonical_name(), etag, obj_size, this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
+
   op_ret = s->src_object->copy_object(s->owner,
 	   s->user->get_id(),
 	   &s->info,
@@ -5908,12 +5917,17 @@ void RGWCopyObj::execute(optional_yield y)
 	   this,
 	   s->yield);
 
+  int ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Standard, s->src_object.get(), s, "REST.COPY.OBJECT_GET", etag, obj_size, this, y, true, true);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "WARNING: COPY operation ignores bucket logging failure of the GET part: " << ret << dendl;
+  }
+
   if (op_ret < 0) {
     return;
   }
 
   // send request to notification manager
-  int ret = res->publish_commit(this, obj_size, mtime, etag, s->object->get_instance());
+  ret = res->publish_commit(this, obj_size, mtime, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -6873,7 +6887,13 @@ void RGWCompleteMultipart::execute(optional_yield y)
   RGWObjVersionTracker& objv_tracker = meta_obj->get_version_tracker();
 
   using prefix_map_t = rgw::sal::MultipartUpload::prefix_map_t;
-  prefix_map_t processed_prefixes;
+  prefix_map_t processed_prefixes; 
+
+  // no etag and size before completion
+  op_ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Journal, s->object.get(), s, canonical_name(), "", 0, this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
 
   op_ret =
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
@@ -7289,6 +7309,12 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
+      
+  if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
+    // don't reply with an error in case of failed delete logging
+    ldpp_dout(this, 5) << "WARNING: multi DELETE operation ignores bucket logging failure: " << ret << dendl;
+  }
+
   if (op_ret == 0) {
     // send request to notification manager
     int ret = res->publish_commit(dpp, obj_size, ceph::real_clock::now(), etag, version_id);
