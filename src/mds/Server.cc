@@ -4727,6 +4727,23 @@ bool Server::is_valid_layout(file_layout_t *layout)
   return true;
 }
 
+bool Server::can_handle_case_sensitivity(const MDRequestRef& mdr, CDentry* dn)
+{
+  CDir *dir = dn->get_dir();
+  CInode *diri = dir->get_inode();
+  if (auto* csp = diri->get_casesensitivity()) {
+    dout(20) << __func__ << ": with " << *csp << dendl;
+    auto& client_metadata = mdr->session->info.client_metadata;
+    bool allowed  = client_metadata.features.test(CEPHFS_FEATURE_CASE_SENSITIVITY);
+    if (!allowed && csp->is_insensitive()) {
+      dout(5) << " client cannot handle case sensitivity" << dendl;
+      respond_to_request(mdr, -CEPHFS_EPERM);
+      return false;
+    }
+  }
+  return true;
+}
+
 void Server::handle_client_openc(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -4755,6 +4772,10 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
   }
 
   ceph_assert(dnl->is_null());
+
+  if (!can_handle_case_sensitivity(mdr, dn)) {
+    return;
+  }
 
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
@@ -5703,12 +5724,11 @@ void Server::handle_client_setlayout(const MDRequestRef& mdr)
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
-bool Server::xlock_policylock(const MDRequestRef& mdr, CInode *in, bool want_layout, bool xlock_snaplock)
+bool Server::xlock_policylock(const MDRequestRef& mdr, CInode *in, bool want_layout, bool xlock_snaplock, MutationImpl::LockOpVec lov)
 {
   if (mdr->locking_state & MutationImpl::ALL_LOCKED)
     return true;
 
-  MutationImpl::LockOpVec lov;
   lov.add_xlock(&in->policylock);
   if (xlock_snaplock)
     lov.add_xlock(&in->snaplock);
@@ -6498,6 +6518,98 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     auto pi = cur->project_inode(mdr);
     cur->setxattr_ephemeral_dist(val);
     pip = pi.inode.get();
+  } else if (name == "ceph.dir.casesensitivity"sv) {
+    // FIXME: unit tests for vxattr
+    // inheritance / InodeStat
+    if (!cur->is_dir() || cur->is_root()) {
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+
+    dout(25) << "not root, is dir" << dendl;
+
+    MutationImpl::LockOpVec lov;
+    lov.add_rdlock(&cur->filelock);   // to verify it's empty
+    if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
+      return;
+
+    if (_dir_is_nonempty(mdr, cur)) {
+      respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+      return;
+    }
+    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+      respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+      return;
+    }
+
+    bool val;
+    try {
+      if (is_rmxattr) {
+	if (!cur->get_projected_inode()->has_casesensitivity()) {
+          respond_to_request(mdr, 0);
+          return;
+	}
+        value = "0";
+      } else {
+        val = boost::lexical_cast<bool>(value);
+      }
+    } catch (boost::bad_lexical_cast const&) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+
+    auto pi = cur->project_inode(mdr);
+    pip = pi.inode.get();
+    if (is_rmxattr) {
+      dout(20) << "deleting case sensitivity metadata" << dendl;
+      pip->del_casesensitivity();
+    } else {
+      auto& c = pip->set_casesensitivity();
+      if (val) {
+        c.mark_insensitive();
+        c.set_casefolder(c.get_default_casefolder());
+        dout(20) << "enabling case insensitive: " << c << dendl;
+      } else {
+        c.mark_sensitive();
+        dout(20) << "disabling case insensitive:" << c << dendl;
+      }
+    }
+  } else if (name == "ceph.dir.casesensitivity.casefolder"sv) {
+    if (is_rmxattr) {
+      respond_to_request(mdr, -CEPHFS_ENODATA);
+      return;
+    }
+
+    // FIXME: unit tests for vxattr
+    MutationImpl::LockOpVec lov;
+    lov.add_rdlock(&cur->filelock);   // to verify it's empty
+    if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
+      return;
+
+    if (_dir_is_nonempty(mdr, cur)) {
+      respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+      return;
+    }
+    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+      respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+      return;
+    }
+
+    if (!cur->get_projected_inode()->has_casesensitivity()) {
+      respond_to_request(mdr, -CEPHFS_ENODATA);
+      return;
+    }
+
+    auto pi = cur->project_inode(mdr);
+    pip = pi.inode.get();
+    auto& c = pip->get_casesensitivity();
+    if (value.size() > 0) {
+      c.set_casefolder(value);
+    } else {
+      c.set_casefolder(c.get_default_casefolder());
+    }
+    dout(20) << "set case folder: " << c << dendl;
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -CEPHFS_EINVAL);
@@ -7001,6 +7113,19 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
     }
   } else if (xattr_name == "ceph.quiesce.block"sv) {
     *css << cur->get_projected_inode()->get_quiesce_block();
+  } else if (xattr_name == "ceph.dir.casesensitivity"sv) {
+    // FIXME holds policylock?
+    // FIXME check inherited value
+    auto&& pip = cur->get_projected_inode();
+    if (!pip->has_casesensitivity()) {
+      r = -CEPHFS_ENODATA;
+    } else {
+      auto& c = pip->get_casesensitivity();
+      Formatter* f = new JSONFormatter;
+      f->dump_object("casesensitivity", c);
+      f->flush(*css);
+      delete f;
+    }
   } else if (xattr_name.substr(0, 12) == "ceph.dir.pin"sv) {
     if (xattr_name == "ceph.dir.pin"sv) {
       *css << cur->get_projected_inode()->export_pin;
@@ -7215,6 +7340,11 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
     return;
 
   ceph_assert(dn->get_projected_linkage()->is_null());
+
+  if (!can_handle_case_sensitivity(mdr, dn)) {
+    return;
+  }
+
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
     respond_to_request(mdr, -CEPHFS_ENAMETOOLONG);
@@ -7232,11 +7362,16 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
   // it's a directory.
   dn->push_projected_linkage(newi);
 
-  auto _inode = newi->_get_inode();
+  auto* _inode = newi->_get_inode();
   _inode->version = dn->pre_dirty();
   _inode->rstat.rsubdirs = 1;
   _inode->accounted_rstat = _inode->rstat;
   _inode->update_backtrace();
+  if (auto* csp = diri->get_casesensitivity()) {
+    dout(20) << " with " << *csp << dendl;
+    auto& c = _inode->set_casesensitivity();
+    c = *csp;
+  }
 
   snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
@@ -7307,6 +7442,11 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
     return;
 
   ceph_assert(dn->get_projected_linkage()->is_null());
+
+  if (!can_handle_case_sensitivity(mdr, dn)) {
+    return;
+  }
+
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
     respond_to_request(mdr, -CEPHFS_ENAMETOOLONG);
@@ -7407,6 +7547,11 @@ void Server::handle_client_link(const MDRequestRef& mdr)
   }
 
   ceph_assert(destdn->get_projected_linkage()->is_null());
+
+  if (!can_handle_case_sensitivity(mdr, destdn)) {
+    return;
+  }
+
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
     respond_to_request(mdr, -CEPHFS_ENAMETOOLONG);
@@ -8823,6 +8968,10 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   CInode *srci = srcdnl->get_inode();
   dout(10) << " srci " << *srci << dendl;
+
+  if (!can_handle_case_sensitivity(mdr, destdn)) {
+    return;
+  }
 
   // -- some sanity checks --
   if (destdn == srcdn) {
