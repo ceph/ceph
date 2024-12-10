@@ -24,7 +24,6 @@
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
-#include "ObjectMap.h"
 #include "os/Transaction.h"
 
 #include <errno.h>
