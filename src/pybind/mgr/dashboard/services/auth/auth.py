@@ -41,9 +41,9 @@ class BaseAuth(abc.ABC):
     LOGOUT_URL: str
     sso: bool
 
-    @staticmethod
-    def from_protocol(protocol: AuthType) -> Type["BaseAuth"]:
-        for subclass in BaseAuth.__subclasses__():
+    @classmethod
+    def from_protocol(cls, protocol: AuthType) -> Type["BaseAuth"]:
+        for subclass in cls.__subclasses__():
             if subclass.__name__.lower() == protocol:
                 return subclass
             for subsubclass in subclass.__subclasses__():
@@ -72,7 +72,7 @@ class BaseAuth(abc.ABC):
         pass
 
     @classmethod
-    def get_auth_name(cls):
+    def name(cls):
         return cls.__name__.lower()
 
 
@@ -81,20 +81,15 @@ class Local(BaseAuth):
     LOGOUT_URL = '#/login'
     sso = False
 
-    @classmethod
-    def get_auth_name(cls):
-        return cls.__name__.lower()
-
     def to_dict(self) -> 'BaseAuth.Config':
-        return BaseAuth.Config()
+        return self.Config()
 
     @classmethod
     def from_dict(cls, s_dict: BaseAuth.Config) -> 'Local':
-        # pylint: disable=unused-argument
-        return cls()
+        raise NotImplementedError
 
 
-class SSOAuth(BaseAuth):
+class SSOAuthMixin:
     sso = True
 
 
@@ -165,7 +160,10 @@ class JwtManager(object):
 
         decoded_message = decode_jwt_segment(base64_message)
         if oauth2_sso_protocol:
-            decoded_message['username'] = decoded_message['sub']
+            try:
+                decoded_message['username'] = decoded_message['sub']
+            except:
+                pass
         now = int(time.time())
         if decoded_message['exp'] < now:
             raise ExpiredSignatureError()
@@ -202,7 +200,7 @@ class JwtManager(object):
         if mgr.SSO_DB.protocol == AuthType.OAUTH2:
             # Avoids circular import
             from .oauth2 import OAuth2
-            return OAuth2.get_token(request)
+            return OAuth2.token(request)
         auth_cookie_name = 'token'
         try:
             # use cookie

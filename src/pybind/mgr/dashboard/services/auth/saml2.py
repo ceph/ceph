@@ -1,12 +1,11 @@
 from typing import Any
 
-from .auth import BaseAuth, SSOAuth
+from .auth import BaseAuth, SSOAuthMixin
 
 
-class Saml2(SSOAuth):
+class Saml2(BaseAuth, SSOAuthMixin):
     LOGIN_URL = 'auth/saml2/login'
     LOGOUT_URL = 'auth/saml2/slo'
-    sso = True
 
     class Saml2Config(BaseAuth.Config):
         onelogin_settings: Any
@@ -19,17 +18,10 @@ class Saml2(SSOAuth):
             'name']
 
     def to_dict(self) -> 'Saml2Config':
-        return {
-            'onelogin_settings': self.onelogin_settings
-        }
+        return self.Saml2Config(onelogin_settings = self.onelogin_settings)
 
     @classmethod
     def from_dict(cls, s_dict: Saml2Config) -> 'Saml2':
-        try:
-            return Saml2(s_dict['onelogin_settings'])
-        except KeyError:
-            return Saml2({})
+        config = s_dict.get('onelogin_settings', {})
+        return Saml2(config)
 
-    @classmethod
-    def get_auth_name(cls):
-        return cls.__name__.lower()
