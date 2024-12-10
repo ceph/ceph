@@ -1,9 +1,8 @@
 set(osdc_files
   Filer.cc
   ObjectCacher.cc
-  Objecter.cc
-  error_code.cc
-  Striper.cc)
+  error_code.cc)
+# Objecter.cc and Striper.cc are part of libcommon
 add_library(osdc STATIC ${osdc_files})
 target_link_libraries(osdc ceph-common)
 if(WITH_EVENTTRACE)
