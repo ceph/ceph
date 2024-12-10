@@ -20,6 +20,7 @@ using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
 using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
 using SingleAppendOp = ceph::io_exerciser::SingleAppendOp;
+using TruncateOp = ceph::io_exerciser::TruncateOp;
 
 namespace {
 std::string value_to_string(uint64_t v) {
@@ -213,6 +214,17 @@ SingleAppendOp::SingleAppendOp(uint64_t length)
 
 std::unique_ptr<SingleAppendOp> SingleAppendOp::generate(uint64_t length) {
   return std::make_unique<SingleAppendOp>(length);
+}
+
+TruncateOp::TruncateOp(uint64_t size)
+    : TestOp<OpType::Truncate>(), size(size) {}
+
+std::unique_ptr<TruncateOp> TruncateOp::generate(uint64_t size) {
+  return std::make_unique<TruncateOp>(size);
+}
+
+std::string TruncateOp::to_string(uint64_t block_size) const {
+  return "Truncate (size=" + value_to_string(size * block_size) + ")";
 }
 
 SingleFailedWriteOp::SingleFailedWriteOp(uint64_t offset, uint64_t length)
