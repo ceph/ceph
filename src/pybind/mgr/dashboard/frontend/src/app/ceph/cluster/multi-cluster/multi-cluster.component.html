@@ -292,3 +292,65 @@
                 [used]="row.used_capacity">
   </cd-usage-bar>
 </ng-template>
+
+<ng-template #connectionPopoverTpl
+             let-row="data.row">
+  <div class="clickable">
+    <span *ngIf="[row.cluster_connection_status, row.cluster_federate_status].includes(2); else showStatus"
+          class="badge badge-info"
+          [ngbPopover]="popoverContent"
+          i18n>
+      {{'checking...' | uppercase}}
+    </span>
+    <ng-template #showStatus>
+      <span [ngClass]="(row.cluster_connection_status == '0' && row.cluster_federate_status == '1') ? 'badge badge-success' : 'badge badge-danger'"
+            [ngbPopover]="popoverContent"
+            i18n>
+        {{ row.cluster_connection_status == '0' && row.cluster_federate_status == '1' ? ('connected' | uppercase) : ('disconnected' | uppercase) }}
+      </span>
+    </ng-template>
+  </div>
+  <ng-template #popoverContent>
+    <div [ngSwitch]="row.cluster_connection_status"
+         class="mb-2">
+      <span *ngSwitchDefault>
+        <i [ngClass]="[icons.spinner, icons.spin, icons.large]"
+           i18n-title
+           title="Checking..."></i>
+      </span>
+      <span *ngSwitchCase="'1'">
+        <i [ngClass]="[healthIcons.HEALTH_ERR, icons.large]"
+           [ngStyle]="'HEALTH_ERR' | healthColor"
+           i18n-title
+           title="Disconnected"></i>
+      </span>
+      <span *ngSwitchCase="'0'">
+        <i [ngClass]="[healthIcons.HEALTH_OK, icons.large]"
+           [ngStyle]="'HEALTH_OK' | healthColor"
+           i18n-title
+           title="Connected"></i>
+      </span>
+      <span i18n>Ceph</span>
+    </div>
+    <div [ngSwitch]="row.cluster_federate_status">
+      <span *ngSwitchDefault>
+        <i [ngClass]="[icons.spinner, icons.spin, icons.large]"
+           i18n-title
+           title="Checking..."></i>
+      </span>
+      <span *ngSwitchCase="'1'">
+        <i [ngClass]="[healthIcons.HEALTH_OK, icons.large]"
+           [ngStyle]="'HEALTH_OK' | healthColor"
+           i18n-title
+           title="Connected"></i>
+      </span>
+      <span *ngSwitchCase="'0'">
+        <i [ngClass]="[healthIcons.HEALTH_ERR, icons.large]"
+           [ngStyle]="'HEALTH_ERR' | healthColor"
+           title="Disconnected"
+           i18n-title></i>
+      </span>
+      <span i18n>Prometheus</span>
+    </div>
+  </ng-template>
+</ng-template>
