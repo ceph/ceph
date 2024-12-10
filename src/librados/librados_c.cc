@@ -25,6 +25,7 @@
 #include "librados/RadosXattrIter.h"
 #include "librados/ListObjectImpl.h"
 #include "librados/librados_util.h"
+#include "osdc/QosProfileMgr.h"
 #include <cls/lock/cls_lock_client.h>
 
 #include <string>
@@ -118,6 +119,8 @@ static TracepointProvider::Traits tracepoint_traits("librados_tp.so", "rados_tra
  */
 
 ///////////////////////////// C API //////////////////////////////
+
+static osdc::QosProfileMgr qos_profile_mgr;
 
 static CephContext *rados_create_cct(
   const char * const clustername,
@@ -4652,6 +4655,55 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_cache_unpin)(
   return retval;
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_cache_unpin);
+
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_qos_profile_create)(
+  uint64_t reservation,
+  uint64_t weight,
+  uint64_t limit,
+  rados_qos_profile_t* profile)
+{
+  *profile =
+    (rados_qos_profile_t) qos_profile_mgr.create(reservation, weight, limit);
+  return 0;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_qos_profile_create);
+
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_ioctx_set_qos_profile)(
+  rados_ioctx_t ioctx,
+  rados_qos_profile_t qos_profile)
+{
+  auto ctx = (librados::IoCtxImpl*) ioctx;
+  if (nullptr == qos_profile) {
+    ctx->set_qos_profile(osdc::get_default_qos_profile());
+  } else {
+    auto profile = (osdc::qos_profile_ref) qos_profile;
+    ctx->set_qos_profile(*profile);
+  }
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_ioctx_set_qos_profile);
+
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_set_qos_profile)(
+  rados_write_op_t op,
+  rados_qos_profile_t qp)
+{
+  auto profile = (osdc::qos_profile_ref) qp;
+  to_object_operation(op)->set_qos_profile(*profile);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_set_qos_profile);
+
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_qos_profile_release)(
+  rados_qos_profile_t qp)
+{
+  return qos_profile_mgr.release((osdc::qos_profile_ref) qp);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_qos_profile_release);
+
+extern "C" uint64_t LIBRADOS_C_API_DEFAULT_F(rados_qos_profile_get_id)(
+  rados_qos_profile_t qp)
+{
+  return osdc::QosProfileMgr::get_profile_id((osdc::qos_profile_ref) qp);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_qos_profile_get_id);
 
 extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_object_list_slice)(
   rados_ioctx_t io,

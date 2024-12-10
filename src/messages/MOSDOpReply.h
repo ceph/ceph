@@ -20,6 +20,7 @@
 
 #include "MOSDOp.h"
 #include "common/errno.h"
+#include "common/mClockCommon.h"
 
 /*
  * OSD op reply
@@ -31,7 +32,7 @@
 
 class MOSDOpReply final : public Message {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -47,6 +48,8 @@ private:
   int32_t retry_attempt = -1;
   bool do_redirect;
   request_redirect_t redirect;
+  dmc::PhaseType qos_phase;
+  uint64_t qos_cost = 1u;
 
 public:
   const object_t& get_oid() const { return oid; }
@@ -93,6 +96,10 @@ public:
   void set_redirect(const request_redirect_t& redir) { redirect = redir; }
   const request_redirect_t& get_redirect() const { return redirect; }
   bool is_redirect_reply() const { return do_redirect; }
+  void set_qos_resp(const dmc::PhaseType phase) { qos_phase = phase; }
+  dmc::PhaseType get_qos_resp() const { return qos_phase; }
+  void set_qos_cost(uint64_t cost) { qos_cost = cost; }
+  uint64_t get_qos_cost() const { return qos_cost; }
 
   void add_flags(int f) { flags |= f; }
 
@@ -141,10 +148,11 @@ public:
     do_redirect = false;
   }
   MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype,
-	      bool ignore_out_data)
+	      bool ignore_out_data,
+              uint64_t _qos_cost, dmc::PhaseType _qos_phase)
     : Message{CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION},
       oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops),
-      bdata_encode(false) {
+      bdata_encode(false), qos_phase(_qos_phase), qos_cost(_qos_cost) {
 
     set_tid(req->get_tid());
     result = r;
@@ -216,10 +224,21 @@ public:
         header.version = 6;
         encode(redirect, payload);
       } else {
+        // header.version is at least 8 at this point
         do_redirect = !redirect.empty();
         encode(do_redirect, payload);
         if (do_redirect) {
           encode(redirect, payload);
+        }
+
+        // With header.version == 8, we end here.
+        // With header.version == 9, we encode features at this point so we can
+        // then add features individually.
+        encode(features, payload);
+
+        if (HAVE_FEATURE(features, QOS_DMC)) {
+          encode(qos_phase, payload);
+          encode(qos_cost, payload);
         }
       }
       encode_trace(payload, features);
@@ -255,6 +274,17 @@ public:
       decode(do_redirect, p);
       if (do_redirect)
 	decode(redirect, p);
+
+      if (header.version >= 9) {
+        uint64_t features;
+        decode(features, p);
+        if (HAVE_FEATURE(features, QOS_DMC)) {
+          decode(qos_phase, p);
+          decode(qos_cost, p);
+        }
+      }
+
+      // header.version >= 8
       decode_trace(p);
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
@@ -316,6 +346,16 @@ public:
         }
       }
       if (header.version >= 8) {
+        if (header.version >= 9) {
+          uint64_t features;
+          decode(features, p);
+
+          if (HAVE_FEATURE(features, QOS_DMC)) {
+            decode(qos_phase, p);
+            decode(qos_cost, p);
+          }
+        }
+
         decode_trace(p);
       }
     }
