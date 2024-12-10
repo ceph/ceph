@@ -136,7 +136,8 @@ void DemoteRequest<I>::demote() {
     Journal<I>::demote(&m_image_ctx, ctx);
   } else if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
     auto req = mirror::snapshot::DemoteRequest<I>::create(
-      &m_image_ctx, m_mirror_image.global_image_id, ctx);
+      &m_image_ctx, m_mirror_image.global_image_id, m_group_pool_id, m_group_id,
+      m_group_snap_id, m_snap_id, ctx);
     req->send();
   } else {
     lderr(cct) << "unknown image mirror mode: " << m_mirror_image.mode << dendl;
