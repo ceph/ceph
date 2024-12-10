@@ -159,6 +159,7 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token
     level,
     rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY,
     rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
+    token.get_user_name(),
     TYPE_KEYSTONE
 };
 }
@@ -665,6 +666,7 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
     level,
     access_key_id,
     rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
+    token.get_user_name(),
     TYPE_KEYSTONE
   };
 }
