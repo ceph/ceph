@@ -24,6 +24,7 @@ enum class OpType {
   Write2,                // Two writes in a single op
   Write3,                // Three writes in a single op
   Append,                // Append
+  Truncate,              // Truncate
   FailedWrite,           // A write which should fail
   FailedWrite2,          // Two writes in one op which should fail
   FailedWrite3,          // Three writes in one op which should fail
@@ -72,6 +73,8 @@ struct fmt::formatter<ceph::io_exerciser::OpType> {
         return fmt::format_to(ctx.out(), "Write3");
       case ceph::io_exerciser::OpType::Append:
         return fmt::format_to(ctx.out(), "Append");
+      case ceph::io_exerciser::OpType::Truncate:
+        return fmt::format_to(ctx.out(), "Truncate");
       case ceph::io_exerciser::OpType::FailedWrite:
         return fmt::format_to(ctx.out(), "FailedWrite");
       case ceph::io_exerciser::OpType::FailedWrite2:
