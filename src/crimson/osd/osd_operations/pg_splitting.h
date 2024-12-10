@@ -34,13 +34,14 @@ protected:
   PipelineHandle handle;
 
   OSDMapRef new_map;
-  std::set<spg_t> children;
+  std::set<std::pair<spg_t, epoch_t>> children;
+  std::set<spg_t> children_pgids;
   PeeringCtx rctx;
   std::set<Ref<PG>> split_pgs;
 
 public:
   PGSplitting(
-    Ref<PG> pg, ShardServices &shard_services, OSDMapRef new_map, std::set<spg_t> children,
+    Ref<PG> pg, ShardServices &shard_services, OSDMapRef new_map, std::set<std::pair<spg_t, epoch_t>> children,
     PeeringCtx &&rctx);
   ~PGSplitting();
 

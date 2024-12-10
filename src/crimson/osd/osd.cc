@@ -452,7 +452,7 @@ seastar::future<> OSD::start()
       crimson::ct_error::enoent::handle([this, FNAME] {
 	DEBUG("No PG History to load");
 	pool_pg_num_history_t pg_num_history;
-	return seastar::make_ready_future<pool_pg_num_history_t>(std::move(pg_num_history));
+	return seastar::make_ready_future<pool_pg_num_history_t>(pool_pg_num_history_t{});
       }),
       crimson::ct_error::assert_all("open_meta_coll error")
     );
@@ -1152,25 +1152,38 @@ seastar::future<> OSD::track_pools_and_pg_num_changes(
   if (superblock.maps.empty()) {
     DEBUG(" no maps stored, this is probably the first start of this osd");
     lastmap = added_maps.at(first);
+    for (auto& [current_added_map_epoch, current_added_map] : added_maps) {
+      _track_pools_and_pg_num_changes(t, lastmap,
+				    current_added_map,
+				    current_added_map_epoch);
+      lastmap = current_added_map;
+    }
+    pg_num_history.epoch = last;
+    return seastar::now();
   } else {
     if (first > superblock.get_newest_map() + 1) {
       ceph_assert(first == superblock.cluster_osdmap_trim_lower_bound);
       DEBUG(" can't get previous map {} first start of this osd after a map gap",
 	  superblock.get_newest_map());
     }
+
+    return pg_shard_manager.get_local_map(superblock.get_newest_map()).then(
+      [this, first, last, added_maps, t] (auto map) mutable {
+      if (!map) {
+	// This is unexpected
+	ceph_abort();
+      }
+      OSDMapService::local_cached_map_t lastmap = map;
+      for (auto& [current_added_map_epoch, current_added_map] : added_maps) {
+	_track_pools_and_pg_num_changes(t, lastmap,
+				      current_added_map,
+				      current_added_map_epoch);
+	lastmap = current_added_map;
+      }
+      pg_num_history.epoch = last;
+      return seastar::now();
+    });
   }
-  return pg_shard_manager.get_local_map(
-    superblock.get_newest_map()
-  ).then([this, FNAME, &t, added_maps, last](auto lastmap) {
-    for (auto& [current_added_map_epoch, current_added_map] : added_maps) {
-      _track_pools_and_pg_num_changes(t, lastmap,
-                                    current_added_map,
-                                    current_added_map_epoch);
-      lastmap = current_added_map;
-    }
-    pg_num_history.epoch = last;
-    return seastar::now();
-  });
 }
 
 void OSD::_track_pools_and_pg_num_changes(
@@ -1184,7 +1197,10 @@ void OSD::_track_pools_and_pg_num_changes(
   for (auto& [pool_id, pg_pool] : lastmap->get_pools()) {
     if (!current_added_map->have_pg_pool(pool_id)) {
       pg_num_history.log_pool_delete(current_added_map_epoch, pool_id);
-
+      DEBUG(" recording final pg_pool_t for pool {}", pool_id);
+      std::map<epoch_t, LocalOSDMapRef> added_map;
+      added_map.emplace(current_added_map_epoch, current_added_map);
+      pg_shard_manager.get_meta_coll().store_final_pool_info(t, lastmap, added_map);
     // 2) For existing pools, check if pg_num was changed
     } else if (unsigned new_pg_num = current_added_map->get_pg_num(pool_id);
                new_pg_num != pg_pool.get_pg_num()) {
