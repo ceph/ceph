@@ -1194,8 +1194,11 @@ void AsioFrontend::pause()
     l.signal.emit(boost::asio::cancellation_type::terminal);
   }
 
-  // close all connections so outstanding requests fail quickly
-  connections.close(ec);
+  const bool graceful_stop{ g_ceph_context->_conf->rgw_graceful_stop };
+  if (!graceful_stop) {
+    // close all connections so outstanding requests fail quickly
+    connections.close(ec);
+  }
 
   // pause and wait until outstanding requests complete
   pause_mutex.lock(ec);
