@@ -423,6 +423,20 @@ class AlertmanagerService(CephadmService):
                 service_url
             )
 
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called before Alertmanager is removed
+        """
+        if daemon.hostname is not None:
+            try:
+                self.mgr.check_mon_command({"prefix": "dashboard reset-alertmanager-api-host"})
+                self.mgr.check_mon_command(
+                    {"prefix": "dashboard reset-alertmanager-api-ssl-verify"}
+                )
+                logger.info("Reset dashboard Prometheus API settings as part of Prometheus daemon removal.")
+            except Exception as e:
+                logger.info(str(e))
+
     def ok_to_stop(self,
                    daemon_ids: List[str],
                    force: bool = False,
@@ -692,6 +706,18 @@ class PrometheusService(CephadmService):
                 'dashboard set-prometheus-api-host',
                 service_url
             )
+
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called before Prometheus is removed
+        """
+        if daemon.hostname is not None:
+            try:
+                self.mgr.check_mon_command({'prefix': 'dashboard reset-prometheus-api-host'})
+                self.mgr.check_mon_command({'prefix': 'dashboard reset-prometheus-api-ssl-verify'})
+                logger.info("Reset dashboard Alertmanager API settings as part of Alertmanager daemon removal.")
+            except Exception as e:
+                logger.info(str(e))
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
