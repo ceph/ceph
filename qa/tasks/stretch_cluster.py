@@ -693,3 +693,27 @@ class TestStretchCluster(MgrTestCase):
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
+
+        # Fail over randomly 2 OSDs
+        # from DC3, 1 OSD from DC2,
+        # 1 OSD from DC1 and expects
+        # PGs to be 100% active
+        self._fail_over_one_osd_from_dc('dc3')
+        self._fail_over_one_osd_from_dc('dc3')
+        self._fail_over_one_osd_from_dc('dc2')
+        self._fail_over_one_osd_from_dc('dc1')
+
+        self.wait_until_true_and_hold(
+            lambda: self._pg_all_active(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
+        )
+        # Bring back all osds and expects PGs to be 100% active+clean
+        self._bring_back_all_osds_in_dc('dc1')
+        self._bring_back_all_osds_in_dc('dc2')
+        self._bring_back_all_osds_in_dc('dc3')
+        self.wait_until_true_and_hold(
+            lambda: self._pg_all_active_clean(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
+        )
