@@ -191,6 +191,10 @@ Options
 
    specify which pool the read balancer should adjust
 
+.. option:: --osd-size-aware
+
+   account for devices of different sizes, applicable to read mode only
+
 .. option:: --vstart
 
    prefix upmap and read output with './bin/'
