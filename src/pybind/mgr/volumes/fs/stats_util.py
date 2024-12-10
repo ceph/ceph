@@ -8,6 +8,7 @@ conveniently.
 from os.path import join as os_path_join
 from typing import Optional
 from logging import getLogger
+from threading import Event
 
 from .operations.volume import open_volume_lockless, list_volumes
 from .operations.subvolume import open_clone_subvol_pair_in_vol, open_subvol_in_vol
@@ -111,10 +112,21 @@ class CloneProgressReporter:
         # progress event ID for ongoing+pending clone jobs
         self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clones'
 
+        # Make RTimer thread wait for new clones for a minute before initiating
+        # the finish procedure. If a new clone is launched during this period
+        # (which will cause initiate_reporting() to be called), set the
+        # internal flag in this Event. Then, finish procedure won't be invoked
+        # so that the RTimer thread can continue reporting the progress made by
+        # the clone jobs.
+        self.has_new_clone_arrived = Event()
+        self.has_new_clone_arrived.clear()
+
     def initiate_reporting(self):
         if self.update_task.is_alive():
             log.info('progress reporting thread is already alive, not '
                      'initiating it again')
+            if not self.has_new_clone_arrived.is_set():
+                self.has_new_clone_arrived.set()
             return
 
         log.info('initiating progress reporting for clones...')
@@ -300,8 +312,18 @@ class CloneProgressReporter:
 
     def finish(self):
         '''
-        All cloning jobs have been completed. Terminate this RTimer thread.
+        All cloning jobs have been completed. Wait for a small period for a new
+        clone job to appear. If it doesn't, proceed to terminate this RTimer
+        thread and release the related resources.
         '''
+        log.debug('waiting for 60 sec before finishing')
+        self.has_new_clone_arrived.clear()
+        self.has_new_clone_arrived.wait(timeout=60)
+        if self.has_new_clone_arrived.is_set():
+            log.debug('new clone has been launched, aborting finish')
+            return
+
+        log.debug('proceeding to finish clone progress bar')
         self._finish_progress_events()
 
         log.info(f'marking this RTimer thread as finished; thread object ID - {self}')
