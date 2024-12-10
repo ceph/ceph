@@ -15,14 +15,6 @@ import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from .controllers.multi_cluster import MultiCluster
-
-if TYPE_CHECKING:
-    if sys.version_info >= (3, 8):
-        from typing import Literal
-    else:
-        from typing_extensions import Literal
-
 from mgr_module import CLIReadCommand, CLIWriteCommand, HandleCommandResult, \
     MgrModule, MgrStandbyModule, NotifyType, Option, _get_localized_key
 from mgr_util import ServerConfigException, build_url, \
@@ -30,15 +22,23 @@ from mgr_util import ServerConfigException, build_url, \
 
 from . import mgr
 from .controllers import Router, json_error_page
+from .controllers.multi_cluster import MultiCluster
 from .grafana import push_local_dashboards
 from .services import nvmeof_cli  # noqa # pylint: disable=unused-import
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
 from .services.service import RgwServiceManager
-from .services.sso import SSO_COMMANDS, handle_sso_command
+from .services.sso import SSO_COMMANDS, handle_sso_command, load_sso_db
 from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
     configure_cors, prepare_url_prefix, str_to_bool
+
+if TYPE_CHECKING:
+    if sys.version_info >= (3, 8):
+        from typing import Literal
+    else:
+        from typing_extensions import Literal
+
 
 try:
     import cherrypy
@@ -47,7 +47,6 @@ except ImportError:
     # To be picked up and reported by .can_run()
     cherrypy = None
 
-from .services.sso import load_sso_db
 
 # pylint: disable=wrong-import-position
 from .plugins import PLUGIN_MANAGER, debug, feature_toggles, motd  # isort:skip # noqa E501 # pylint: disable=unused-import
@@ -323,7 +322,7 @@ class Module(MgrModule, CherryPyConfig):
     def serve(self):
 
         if 'COVERAGE_ENABLED' in os.environ:
-            import coverage
+            import coverage  # pylint: disable=import-error
             __cov = coverage.Coverage(config_file="{}/.coveragerc"
                                       .format(os.path.dirname(__file__)),
                                       data_suffix=True)
