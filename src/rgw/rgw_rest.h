@@ -220,6 +220,7 @@ public:
   ~RGWStatBucket_ObjStore() override {}
 
   virtual std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET_STATUS", s->info.method); }
+  int get_params(optional_yield y) override;
 };
 
 class RGWCreateBucket_ObjStore : public RGWCreateBucket {
