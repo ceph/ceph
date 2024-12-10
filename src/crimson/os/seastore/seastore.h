@@ -395,7 +395,7 @@ public:
       Transaction& t,
       Onode& onode,
       const std::optional<std::string>& start,
-      const omap_root_le_t& omap_root);
+      const omap_root_le_t& omap_root) const;
 
     base_iertr::future<fiemap_ret_t> _fiemap(
       Transaction &t,
@@ -413,7 +413,6 @@ public:
 
     tm_ret _remove_omaps(
       internal_context_t &ctx,
-      OnodeRef &onode,
       omap_root_t &&omap_root);
     tm_ret _remove(
       internal_context_t &ctx,
@@ -514,7 +513,7 @@ public:
       seastar::metrics::histogram& lat = get_latency(op_type);
       lat.sample_count++;
       lat.sample_sum += std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-     }
+    }
 
   private:
     std::string root;
