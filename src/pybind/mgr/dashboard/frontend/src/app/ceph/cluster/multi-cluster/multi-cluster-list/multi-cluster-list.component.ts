@@ -115,6 +115,7 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
                 cluster['ttl']
               );
               cluster['remainingDays'] = this.getRemainingDays(cluster['ttl']);
+              cluster['expiryDate'] = new Date(Date.now() + cluster['ttl']).toLocaleString();
             }
           });
         }

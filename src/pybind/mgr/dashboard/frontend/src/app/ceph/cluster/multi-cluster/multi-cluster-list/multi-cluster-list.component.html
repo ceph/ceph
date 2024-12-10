@@ -77,7 +77,7 @@
        [class.icon-danger-color]="row.remainingDays < 2"
        [class.icon-warning-color]="row.remainingDays < 8"
        class="{{ icons.warning }}"></i>
-    <span title="{{ value | cdDate }}">{{ row.remainingTimeWithoutSeconds / 1000 | duration }}</span>
+    <span title="{{ row.expiryDate }}">{{ row.remainingTimeWithoutSeconds / 1000 | duration }}</span>
   </span>
   <span *ngIf="row.remainingTimeWithoutSeconds <= 0 && row.remainingDays <=0 && row.cluster_alias !== 'local-cluster'">
     <i i18n-title
