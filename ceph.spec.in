@@ -1570,6 +1570,7 @@ popd
 %if 0%{with seastar}
 # package crimson-osd with the name of ceph-osd
 install -m 0755 %{buildroot}%{_bindir}/crimson-osd %{buildroot}%{_bindir}/ceph-osd
+install -m 0644 -D etc/sysctl/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph-osd.conf
 %endif
 
 install -m 0644 -D src/etc-rbdmap %{buildroot}%{_sysconfdir}/ceph/rbdmap
@@ -2347,6 +2348,14 @@ fi
 %if 0%{with seastar}
 %files crimson-osd
 %{_bindir}/crimson-osd
+%config(noreplace) %{_sysctldir}/90-ceph-osd.conf
+
+%post crimson-osd
+%if 0%{?sysctl_apply}
+    %sysctl_apply 90-ceph-osd.conf
+%else
+    /usr/lib/systemd/systemd-sysctl %{_sysctldir}/90-ceph-osd.conf > /dev/null 2>&1 || :
+%endif
 %endif
 
 %files volume
