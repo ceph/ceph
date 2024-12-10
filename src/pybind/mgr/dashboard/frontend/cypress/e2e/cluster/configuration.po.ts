@@ -12,7 +12,6 @@ export class ConfigurationPageHelper extends PageHelper {
   configClear(name: string) {
     this.navigateTo();
     const valList = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']; // Editable values
-
     this.getFirstTableCell(name).click();
     cy.contains('button', 'Edit').click();
     // Waits for the data to load
@@ -25,6 +24,8 @@ export class ConfigurationPageHelper extends PageHelper {
     cy.get('[data-cy=submitBtn]').click();
 
     cy.wait(3 * 1000);
+
+    this.clearFilter();
 
     // Enter config setting name into filter box
     this.searchTable(name, 100);
@@ -49,6 +50,7 @@ export class ConfigurationPageHelper extends PageHelper {
    * Ex: [global, '2'] is the global value with an input of 2
    */
   edit(name: string, ...values: [string, string][]) {
+    this.clearFilter();
     this.getFirstTableCell(name).click();
     cy.contains('button', 'Edit').click();
 
@@ -77,5 +79,13 @@ export class ConfigurationPageHelper extends PageHelper {
       // checks if the value appears in details with the correct number attatched
       cy.contains('[data-testid=config-details-table]', `${value[0]}\: ${value[1]}`);
     });
+  }
+
+  clearFilter() {
+    cy.get('div.filter-tags') // Find the div with class filter-tags
+      .find('button.cds--btn.cds--btn--ghost') // Find the button with specific classes
+      .contains('Clear filters') // Ensure the button contains the text "Clear filters"
+      .should('be.visible') // Assert that the button is visible
+      .click();
   }
 }
