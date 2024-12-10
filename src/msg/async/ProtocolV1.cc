@@ -1281,11 +1281,11 @@ void ProtocolV1::reset_recv_state()
   // `write_message()`. `submit_to()` here is NOT blocking.
   if (!connection->center->in_thread()) {
     connection->center->submit_to(connection->center->get_id(), [this] {
-      ldout(cct, 5) << "reset_recv_state (warped) reseting security handlers"
-                    << dendl;
       // Possibly unnecessary. See the comment in `deactivate_existing`.
       std::lock_guard<std::mutex> l(connection->lock);
       std::lock_guard<std::mutex> wl(connection->write_lock);
+      ldout(cct, 5) << "reset_recv_state (warped) reseting security handlers"
+                    << dendl;
       reset_security();
     }, /* always_async = */true);
   } else {
