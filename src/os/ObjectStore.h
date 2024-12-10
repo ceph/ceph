@@ -29,6 +29,7 @@
 
 #include <errno.h>
 #include <sys/stat.h>
+#include <functional>
 #include <map>
 #include <memory>
 #include <vector>
@@ -735,15 +736,6 @@ public:
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) = 0;
 
-#ifdef WITH_SEASTAR
-  virtual int omap_get_values(
-    CollectionHandle &c,         ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const std::optional<std::string> &start_after,     ///< [in] Keys to get
-    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
-    ) = 0;
-#endif
-
   /// Filters keys into out which are defined on oid
   virtual int omap_check_keys(
     CollectionHandle &c,     ///< [in] Collection containing oid
@@ -765,6 +757,34 @@ public:
     CollectionHandle &c,   ///< [in] collection
     const ghobject_t &oid  ///< [in] object
     ) = 0;
+
+  /**
+   * Iterate object map with user-provided callable
+   *
+   * Warning!  The callable is executed under lock on filestore
+   * operations in c.  Do not use filestore methods on c while
+   * when iterating.  (Filling in a transaction is no problem).
+   *
+   * @return error code, zero on success
+   */
+  struct omap_iter_seek_t {
+    std::string seek_position;
+    enum {
+      LOWER_BOUND,
+      UPPER_BOUND
+    } seek_type = LOWER_BOUND;
+    static omap_iter_seek_t min_lower_bound() { return {}; }
+  };
+  enum class omap_iter_ret_t {
+    STOP,
+    NEXT
+  };
+  virtual int omap_iterate(
+    CollectionHandle &c,   ///< [in] collection
+    const ghobject_t &oid, ///< [in] object
+    omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+    std::function<omap_iter_ret_t(std::string_view, std::string_view)> f
+  ) = 0;
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
 
