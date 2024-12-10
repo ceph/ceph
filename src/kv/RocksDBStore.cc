@@ -497,10 +497,12 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
 
     // Parse each key-value pair in kv_options
     for (const auto& [key, val] : kv_options) {
-        if (tryInterpret(key, val, opt) != 0) {
+        if (key == "rocksdb.statistics.enable"){
+          if (tryInterpret(key, val, opt) != 0) {
             dout(1) << "Failed to interpret RocksDB option: " << key << dendl;
             return -EINVAL;
-        }
+          }
+      }
     }
 
     // Initialize dbstats if rocksdb_perf is enabled
