@@ -11,6 +11,7 @@
 
 #include "librados/librados_asio.h"
 
+#include <boost/asio/io_context.hpp>
 #include <boost/program_options.hpp>
 
 /* Overview
