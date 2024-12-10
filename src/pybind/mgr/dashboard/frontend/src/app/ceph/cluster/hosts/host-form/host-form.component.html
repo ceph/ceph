@@ -14,12 +14,18 @@
     <div cdsModalContent>
       <!-- Hostname -->
       <div class="form-item">
-        <cds-text-label label="Hostname"
-                        for="hostname"
-                        cdRequiredField="Hostname"
+        <cds-text-label for="hostname"
                         [invalid]="!hostForm.controls.hostname.valid && hostForm.controls.hostname.dirty"
                         [invalidText]="hostnameError"
-                        i18n>Hostname
+                        i18n>Hostname (required)
+          <cd-helper>
+            To add multiple hosts at once, you can enter:
+            <ul>
+              <li>a comma-separated list of hostnames <samp>(e.g.: example-01,example-02,example-03)</samp>,</li>
+              <li>a range expression <samp>(e.g.: example-[01-03].ceph)</samp>,</li>
+              <li>a comma separated range expression <samp>(e.g.: example-[01-05].lab.com,example2-[1-4].lab.com,example3-[001-006].lab.com)</samp></li>
+            </ul>
+          </cd-helper>
           <input cdsText
                  type="text"
                  placeholder="mon-123"
@@ -39,14 +45,6 @@
             <ng-container i18n> The chosen hostname is already in use. </ng-container>
           </span>
         </ng-template>
-        <cd-help-text>
-          To add multiple hosts at once, you can enter:
-          <ul>
-            <li>a comma-separated list of hostnames <samp>(e.g.: example-01,example-02,example-03)</samp>,</li>
-            <li>a range expression <samp>(e.g.: example-[01-03].ceph)</samp>,</li>
-            <li>a comma separated range expression <samp>(e.g.: example-[01-05].lab.com,example2-[1-4].lab.com,example3-[001-006].lab.com)</samp></li>
-          </ul>
-        </cd-help-text>
       </div>
       <!-- Address -->
       <div class="form-item"
