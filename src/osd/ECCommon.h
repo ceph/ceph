@@ -460,7 +460,6 @@ struct ECCommon {
       const uint64_t offset,
       const uint64_t length,
       const ECUtil::stripe_info_t& sinfo,
-      const std::vector<int>& chunk_mapping,
       std::set<int> *want_to_read);
 
     int get_remaining_shards(
