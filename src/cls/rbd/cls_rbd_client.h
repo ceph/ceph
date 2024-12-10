@@ -388,7 +388,10 @@ int mirror_mode_get(librados::IoCtx *ioctx,
                     cls::rbd::MirrorMode *mirror_mode);
 int mirror_mode_set(librados::IoCtx *ioctx,
                     cls::rbd::MirrorMode mirror_mode);
-
+int mirror_disable_default_namespace_get(librados::IoCtx *ioctx,
+				         bool *disabled);
+int mirror_disable_default_namespace_set(librados::IoCtx *ioctx,
+				         const bool &disabled);
 int mirror_remote_namespace_get(librados::IoCtx *ioctx,
 				std::string *mirror_namespace);
 int mirror_remote_namespace_set(librados::IoCtx *ioctx,
