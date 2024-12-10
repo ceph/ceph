@@ -95,7 +95,7 @@ information see :ref:`governance`.
 Members
 -------
 
-* Anjaneya "Reddy" Chagam (Intel)
+* Tushar Gohad (Intel)
 * Carlos Maltzahn (UCSC) - Associate member representative
 * Dan van der Ster (CERN) - Ceph Council representative
 * Haomai Wang (XSKY)
