@@ -100,6 +100,11 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
         prop: 'object_usage',
         cellTemplate: this.bucketObjectTpl,
         flexGrow: 0.8
+      },
+      {
+        name: $localize`Number of Shards`,
+        prop: 'num_shards',
+        flexGrow: 0.8
       }
     ];
     const getBucketUri = () =>
