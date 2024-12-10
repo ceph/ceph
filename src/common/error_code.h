@@ -16,8 +16,29 @@
 #ifndef COMMON_CEPH_ERROR_CODE
 #define COMMON_CEPH_ERROR_CODE
 
+#include <cerrno>
+#ifdef __has_include
+#  if __has_include(<format>)
+#    include <format>
+#  endif
+#endif
+#include <functional>
+#include <new>
+#include <optional>
+#include <regex>
+#include <stdexcept>
+#include <system_error>
+#include <variant>
+
+#include <boost/system/error_category.hpp>
 #include <boost/system/error_code.hpp>
+#include <boost/system/error_condition.hpp>
+#include <boost/system/generic_category.hpp>
 #include <boost/system/system_error.hpp>
+
+#include <fmt/format.h>
+
+#include <netdb.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
@@ -25,7 +46,6 @@
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 
 namespace ceph {
-
 // This is for error categories we define, so we can specify the
 // equivalent integral value at the point of definition.
 class converting_category : public boost::system::error_category {
@@ -71,9 +91,73 @@ inline boost::system::error_condition make_error_condition(errc e) noexcept {
 
 [[nodiscard]] boost::system::error_code to_error_code(int ret) noexcept;
 [[nodiscard]] int from_error_code(boost::system::error_code e) noexcept;
-}
 #pragma GCC diagnostic pop
 #pragma clang diagnostic pop
+
+inline int from_exception(std::exception_ptr eptr) {
+  if (!eptr) [[likely]] {
+    return 0;
+  }
+  try {
+    std::rethrow_exception(eptr);
+  } catch (const boost::system::system_error& e) {
+    return from_error_code(e.code());
+  } catch (const std::system_error& e) {
+    return from_error_code(e.code());
+  } catch (const std::invalid_argument&) {
+    return -EINVAL;
+  } catch (const std::domain_error&) {
+    return -EDOM;
+  } catch (const std::length_error&) {
+    return -ERANGE;
+  } catch (const std::out_of_range&) {
+    return -ERANGE;
+  } catch (const std::range_error&) {
+    return -ERANGE;
+  } catch (const std::overflow_error&) {
+    return -EOVERFLOW;
+  } catch (const std::underflow_error&) {
+    return -EOVERFLOW;
+  } catch (const std::bad_alloc&) {
+    return -ENOMEM;
+  } catch (const std::regex_error& e) {
+    using namespace std::regex_constants;
+    switch (e.code()) {
+    case error_space:
+    case error_stack:
+      return -ENOMEM;
+    case error_complexity:
+      return -ENOTSUP;
+    default:
+      return -EINVAL;
+    }
+#ifdef __has_include
+#  if __has_include(<format>)
+  } catch (const std::format_error& e) {
+    return -EINVAL;
+#  endif
+#endif
+  } catch (const fmt::format_error& e) {
+    return -EINVAL;
+  } catch (const std::bad_typeid&) {
+    return -EFAULT;
+  } catch (const std::bad_cast&) {
+    return -EFAULT;
+  } catch (const std::bad_optional_access&) {
+    return -EFAULT;
+  } catch (const std::bad_weak_ptr&) {
+    return -EFAULT;
+  } catch (const std::bad_function_call&) {
+    return -EFAULT;
+  } catch (const std::bad_exception&) {
+    return -EFAULT;
+  } catch (const std::bad_variant_access&) {
+    return -EFAULT;
+  } catch (...) {
+    return -EIO;
+  }
+}
+}
 
 // Moved here from buffer.h so librados doesn't gain a dependency on
 // Boost.System
@@ -137,11 +221,11 @@ struct malformed_input : public error {
     : error(errc::malformed_input, what_arg) {}
 };
 struct error_code : public error {
-  error_code(int r) : error(-r, boost::system::system_category()) {}
+  error_code(int r) : error(-r, boost::system::generic_category()) {}
   error_code(int r, const char* what_arg)
-    : error(-r, boost::system::system_category(), what_arg) {}
+    : error(-r, boost::system::generic_category(), what_arg) {}
   error_code(int r, const std::string& what_arg)
-    : error(-r, boost::system::system_category(), what_arg) {}
+    : error(-r, boost::system::generic_category(), what_arg) {}
 };
 }
 }
