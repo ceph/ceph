@@ -751,26 +751,12 @@ Parameters are XML encoded in the body of the request, in the following format:
       <TargetPrefix>string</TargetPrefix>
       <LoggingType>Standard|Journal</LoggingType>
       <ObjectRollTime>integer</ObjectRollTime>
-      <Filter>
-        <S3Key>
-          <FilterRule>
-            <Name>suffix/prefix/regex</Name>
-            <Value></Value>
-          </FilterRule>
-        </S3Key>
-        <S3Metadata>
-          <FilterRule>
-            <Name></Name>
-            <Value></Value>
-          </FilterRule>
-        </S3Metadata>
-        <S3Tags>
-          <FilterRule>
-            <Name></Name>
-            <Value></Value>
-          </FilterRule>
-        </S3Tags>
-      </Filter>
+      <S3Key>
+        <FilterRule>
+          <Name>suffix/prefix/regex</Name>
+          <Value></Value>
+        </FilterRule>
+      </S3Key>
     </LoggingEnabled>
   </BucketLoggingStatus>
 
@@ -901,26 +887,12 @@ Response is XML encoded in the body of the request, in the following format:
       <TargetPrefix>string</TargetPrefix>
       <LoggingType>Standard|Journal</LoggingType>
       <ObjectRollTime>integer</ObjectRollTime>
-      <Filter>
-        <S3Key>
-          <FilterRule>
-            <Name>suffix/prefix/regex</Name>
-            <Value></Value>
-          </FilterRule>
-        </S3Key>
-        <S3Metadata>
-          <FilterRule>
-            <Name></Name>
-            <Value></Value>
-          </FilterRule>
-        </S3Metadata>
-        <S3Tags>
-          <FilterRule>
-            <Name></Name>
-            <Value></Value>
-          </FilterRule>
-        </S3Tags>
-      </Filter>
+      <S3Key>
+        <FilterRule>
+          <Name>suffix/prefix/regex</Name>
+          <Value></Value>
+        </FilterRule>
+      </S3Key>
     </LoggingEnabled>
   </BucketLoggingStatus>
 

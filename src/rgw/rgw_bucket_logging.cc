@@ -31,7 +31,7 @@ bool configuration::decode_xml(XMLObj* obj) {
       logging_type = LoggingType::Standard;
     } else if (type == "Journal") {
       logging_type = LoggingType::Journal;
-      RGWXMLDecoder::decode_xml("Filter", s3_filter, o);
+      RGWXMLDecoder::decode_xml("S3Key", key_filter, o);
     } else {
       // we don't allow for type "Any" in the configuration
       throw RGWXMLDecoder::err("invalid bucket logging record type: '" + type + "'");
@@ -74,8 +74,8 @@ void configuration::dump_xml(Formatter *f) const {
       break;
     case LoggingType::Journal:
       ::encode_xml("LoggingType", "Journal", f);
-      if (s3_filter.has_content()) {
-        ::encode_xml("Filter", s3_filter, f);
+      if (key_filter.has_content()) {
+        ::encode_xml("S3Key", key_filter, f);
       }
       break;
     case LoggingType::Any:
@@ -122,8 +122,8 @@ void configuration::dump(Formatter *f) const {
         break;
       case LoggingType::Journal:
         encode_json("loggingType", "Journal", f);
-        if (s3_filter.has_content()) {
-          encode_json("Filter", s3_filter, f);
+        if (key_filter.has_content()) {
+          encode_json("S3Key", key_filter, f);
         }
         break;
       case LoggingType::Any:
@@ -533,8 +533,8 @@ int log_record(rgw::sal::Driver* driver,
     if (type != LoggingType::Any && configuration.logging_type != type) {
       return 0;
     }
-    if (configuration.s3_filter.has_content()) {
-      if (!match(configuration.s3_filter, obj)) {
+    if (configuration.key_filter.has_content()) {
+      if (!match(configuration.key_filter, obj->get_name())) {
         return 0;
       }
     }
