@@ -1,0 +1,20 @@
+<legend i18n>
+  Tiering Configuration
+  <cd-help-text>
+    Configure a bucket tiering rule to automatically transition objects between storage classes after a specified number of days. Define the scope of the rule by applying it globally or to objects with specific prefixes and tags.
+  </cd-help-text>
+</legend>
+<cd-table #table
+          [data]="filteredLifecycleRules$ | async"
+          [columns]="columns"
+          columnMode="flex"
+          selectionType="multiClick"
+          (updateSelection)="updateSelection($event)"
+          identifier="ID"
+          (fetchData)="loadLifecyclePolicies($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+</cd-table>
