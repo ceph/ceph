@@ -284,8 +284,9 @@ class S3tests_java(Task):
             args = ['cd',
                     '{tdir}/s3-tests-java'.format(tdir=testdir),
                     run.Raw('&&'),
+                    run.Raw('JAVA_HOME=$(alternatives --list | grep jre_1.8.0 | head -n 1 | awk \'{print $3}\')'),
                     '/opt/gradle/gradle/bin/gradle', 'clean', 'test',
-                    '--rerun-tasks', '--no-build-cache',
+                    '--rerun-tasks', '--no-build-cache', '--debug', '--scan'
                     ]
             extra_args = []
             suppress_groups = False
@@ -310,6 +311,16 @@ class S3tests_java(Task):
                 test_groups = ['AWS4Test', 'BucketTest', 'ObjectTest']
             else:
                 test_groups = ['All']
+
+            self.ctx.cluster.only(client).run(
+                args=['java', '--version'],
+                stdout=BytesIO()
+            )
+
+            self.ctx.cluster.only(client).run(
+                args=['/opt/gradle/gradle/bin/gradle', '--version'],
+                stdout=BytesIO()
+            )
 
             for gr in test_groups:
                 for i in range(2):
