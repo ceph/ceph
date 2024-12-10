@@ -105,7 +105,16 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
         if (!payer.empty() && payer != owner) {
           formatter->dump_string("payer", payer);
         }
+
         dump_usage_categories_info(formatter, entry, categories);
+
+        formatter->open_object_section("s3select");
+        if (!categories || categories->empty() || categories->count("s3select")) {
+          formatter->dump_unsigned("bytes_processed", entry.s3select_usage.bytes_processed);
+          formatter->dump_unsigned("bytes_returned", entry.s3select_usage.bytes_returned);
+        }
+        formatter->close_section(); // s3select
+
         formatter->close_section(); // bucket
         flusher.flush();
       }
@@ -136,6 +145,8 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
       encode_json("bytes_received", total_usage.bytes_received, formatter);
       encode_json("ops", total_usage.ops, formatter);
       encode_json("successful_ops", total_usage.successful_ops, formatter);
+      encode_json("bytes_processed", entry.s3select_usage.bytes_processed, formatter);
+      encode_json("bytes_returned", entry.s3select_usage.bytes_returned, formatter);
       formatter->close_section(); // total
 
       formatter->close_section(); // user
