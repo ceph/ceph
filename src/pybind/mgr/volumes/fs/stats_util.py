@@ -9,6 +9,7 @@ import errno
 from os.path import join as os_path_join
 from typing import Optional
 from logging import getLogger
+from threading import Event
 
 from .operations.volume import open_volume_lockless, list_volumes
 from .operations.subvolume import open_clone_subvol_pair_in_vol, open_subvol_in_vol
@@ -141,8 +142,21 @@ class CloneProgressReporter:
 
         # progress event ID for ongoing clone jobs
         self.on_pev_id: Optional[str] = 'mgr-vol-ongoing-clones'
-        # progress event ID for ongoing+pending clone jobs
-        self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clones'
+        # progress event ID for ongoing+pending clone jobs, it won't be defined
+        # until onpen (ongoing + pending) progress bar needs to be printed.
+        #self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clones'
+        self.onpen_pev_id: Optional[str] = None
+
+        # Make RTimer thread wait for new clones for a minute before initiating
+        # the finish procedure. If a new clone is launched during this period
+        # (which will cause initiate_reporting() to be called), set the
+        # internal flag in this Event. Then, finish procedure won't be invoked
+        # so that the RTimer thread can continue reporting the progress made by
+        # the clone jobs.
+        self.has_new_clone_arrived = Event()
+        # don't set this event by default, since it is meant to be set by
+        # launching of a new clone job after the launching of first clone job.
+        self.has_new_clone_arrived.clear()
 
         self.ongoing_clones_count = 0
 
@@ -150,6 +164,7 @@ class CloneProgressReporter:
         if self.update_task.is_alive():
             log.info('progress reporting thread is already alive, not '
                      'initiating it again')
+            self.has_new_clone_arrived.set()
             return
 
         log.info('initiating progress reporting for clones...')
@@ -299,7 +314,8 @@ class CloneProgressReporter:
         total_ongoing_clones = min(len(clones), self.ongoing_clones_count)
 
         if show_onpen_bar:
-            assert self.onpen_pev_id is not None
+            if not self.onpen_pev_id:
+                self.onpen_pev_id = 'mgr-vol-total-clones'
             sum_percent_onpen = 0.0
             avg_percent_onpen = 0.0
             total_onpen_clones = len(clones)
@@ -344,18 +360,43 @@ class CloneProgressReporter:
         log.info('removing progress bars from "ceph status" output')
 
         assert self.on_pev_id is not None
-        assert self.onpen_pev_id is not None
-
         self.volclient.mgr.remote('progress', 'complete', self.on_pev_id)
-        self.volclient.mgr.remote('progress', 'complete', self.onpen_pev_id)
+
+        if self.onpen_pev_id:
+            self.volclient.mgr.remote('progress', 'complete', self.onpen_pev_id)
 
         log.info('finished removing progress bars from "ceph status" output')
 
+    def _set_finished_msg(self):
+        msg = 'No ongoing clones left'
+        self._update_progress_bar_event(self.on_pev_id, msg, 1)
+
+        if self.onpen_pev_id:
+            msg = 'No ongoing or pending clones left'
+            self._update_progress_bar_event(self.onpen_pev_id, msg, 1)
+
     def finish(self):
         '''
-        All cloning jobs have been completed. Terminate this RTimer thread.
+        All cloning jobs have been completed. Wait for a small period for a new
+        clone job to appear. If it doesn't, proceed to terminate this RTimer
+        thread and release the related resources.
         '''
+        log.debug('waiting for 60 sec before finishing')
+        # clear this event flag so that the ".wait()" below can abort if this
+        # event flag is set while ".wait()" is running.
+        self.has_new_clone_arrived.clear()
+        self._set_finished_msg()
+        self.has_new_clone_arrived.wait(timeout=60)
+        if self.has_new_clone_arrived.is_set():
+            log.debug('new clone has been launched, aborting finish')
+            return
+
+        log.debug('proceeding to finish clone progress bar')
         self._finish_progress_events()
+        # set this progress bar ID to none so that _finish_progress_events() and
+        #_set_finished_msg() don't operate on this progress bar when it doesn't
+        # exist.
+        self.onpen_pev_id = None
 
         log.info(f'marking this RTimer thread as finished; thread object ID - {self}')
         self.update_task.finished.set()
