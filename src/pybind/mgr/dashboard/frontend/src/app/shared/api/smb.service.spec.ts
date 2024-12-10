@@ -28,4 +28,10 @@ describe('SmbService', () => {
     const req = httpTesting.expectOne('api/smb/cluster');
     expect(req.request.method).toBe('GET');
   });
+
+  it('should call create', () => {
+    service.create('test').subscribe();
+    const req = httpTesting.expectOne('api/smb/cluster');
+    expect(req.request.method).toBe('POST');
+  });
 });
