@@ -1037,14 +1037,26 @@ class TestMonitoring:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
 
                   - job_name: 'nvmeof'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
 
                   - job_name: 'nfs'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=nfs
 
                   - job_name: 'smb'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=smb
 
@@ -1239,6 +1251,10 @@ class TestMonitoring:
                         ca_file: root_cert.pem
 
                   - job_name: 'nvmeof'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     honor_labels: true
                     scheme: https
                     tls_config:
@@ -1252,6 +1268,10 @@ class TestMonitoring:
                         ca_file: root_cert.pem
 
                   - job_name: 'nfs'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     honor_labels: true
                     scheme: https
                     tls_config:
@@ -1265,6 +1285,10 @@ class TestMonitoring:
                         ca_file: root_cert.pem
 
                   - job_name: 'smb'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     honor_labels: true
                     scheme: https
                     tls_config:
