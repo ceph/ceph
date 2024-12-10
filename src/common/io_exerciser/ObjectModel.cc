@@ -118,6 +118,13 @@ void ObjectModel::applyIoOp(IoOp& op) {
                     generate_random);
       break;
 
+    case OpType::Truncate:
+      ceph_assert(created);
+      ceph_assert(reads.empty());
+      ceph_assert(writes.empty());
+      contents.resize(static_cast<TruncateOp&>(op).size);
+      break;
+
     case OpType::Remove:
       ceph_assert(created);
       ceph_assert(reads.empty());
