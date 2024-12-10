@@ -2295,24 +2295,27 @@ SeaStore::Shard::_omap_set_kvs(
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
     omap_root.get(onode->get_metadata_hint(device->get_block_size())),
-    [&, keys=std::move(kvs)](auto &omap_manager, auto &root) {
-      tm_iertr::future<> maybe_create_root =
-        !root.is_null() ?
-        tm_iertr::now() :
-        omap_manager.initialize_omap(
-          t, onode->get_metadata_hint(device->get_block_size()),
-	  root.get_type()
-        ).si_then([&root](auto new_root) {
-          root = new_root;
-        });
-      return maybe_create_root.si_then(
-        [&, keys=std::move(keys)]() mutable {
-          return omap_manager.omap_set_keys(root, t, std::move(keys));
-      }).si_then([&] {
-        return tm_iertr::make_ready_future<omap_root_t>(std::move(root));
+    [&t, &onode, kvs=std::move(kvs)]
+    (auto &omap_manager, auto &root) mutable
+  {
+    assert(root.get_type() < omap_type_t::NONE);
+    tm_iertr::future<> maybe_create_root = tm_iertr::now();
+    if (root.is_null()) {
+      maybe_create_root = omap_manager.initialize_omap(t,
+        onode->get_metadata_hint(device->get_block_size()),
+        root.get_type()
+      ).si_then([&root](auto new_root) {
+        assert(new_root.get_type() == root.get_type());
+        root = new_root;
       });
     }
-  );
+    return std::move(maybe_create_root
+    ).si_then([&t, &root, &omap_manager, kvs=std::move(kvs)]() mutable {
+      return omap_manager.omap_set_keys(root, t, std::move(kvs));
+    }).si_then([&root] {
+      return tm_iertr::make_ready_future<omap_root_t>(std::move(root));
+    });
+  });
 }
 
 SeaStore::Shard::tm_ret
