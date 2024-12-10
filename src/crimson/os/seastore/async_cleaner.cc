@@ -609,6 +609,7 @@ JournalTrimmerImpl::trim_alloc()
     return extent_callback->with_transaction_intr(
       Transaction::src_t::TRIM_ALLOC,
       "trim_alloc",
+      0,
       [this, FNAME](auto &t)
     {
       auto target = get_alloc_tail_target();
@@ -653,6 +654,7 @@ JournalTrimmerImpl::trim_dirty()
     return extent_callback->with_transaction_intr(
       Transaction::src_t::TRIM_DIRTY,
       "trim_dirty",
+      0,
       [this, FNAME](auto &t)
     {
       auto target = get_dirty_tail_target();
@@ -1125,6 +1127,7 @@ SegmentCleaner::do_reclaim_space(
     return extent_callback->with_transaction_intr(
       src,
       "clean_reclaim_space",
+      0,
       [this, &backref_extents, &pin_list, &reclaimed](auto &t)
     {
       return seastar::do_with(
@@ -1241,6 +1244,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
       return extent_callback->with_transaction_intr(
 	  Transaction::src_t::READ,
 	  "retrieve_from_backref_tree",
+	  0,
 	  [this, &weak_read_ret](auto &t) {
 	return backref_manager.get_mappings(
 	  t,
@@ -1507,6 +1511,7 @@ bool SegmentCleaner::check_usage()
   SpaceTrackerIRef tracker(space_tracker->make_empty());
   extent_callback->with_transaction_weak(
       "check_usage",
+      0,
       [this, &tracker](auto &t) {
     return backref_manager.scan_mapped_space(
       t,
@@ -1813,6 +1818,7 @@ bool RBMCleaner::check_usage()
   RBMSpaceTracker tracker(rbms);
   extent_callback->with_transaction_weak(
       "check_usage",
+      0,
       [this, &tracker, &rbms](auto &t) {
     return backref_manager.scan_mapped_space(
       t,
