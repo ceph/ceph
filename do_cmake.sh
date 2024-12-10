@@ -41,7 +41,10 @@ if [ -r /etc/os-release ]; then
           ;;
       ubuntu)
           MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
-          if [ "$MAJOR_VER" -ge "22" ] ; then
+          # (JJM) is this pinning of python versions really needed?
+          if [ "$MAJOR_VER" -ge "24" ] ; then
+              PYBUILD="3.12"
+          elif [ "$MAJOR_VER" -ge "22" ] ; then
               PYBUILD="3.10"
           fi
           ;;
