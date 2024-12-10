@@ -1,8 +1,8 @@
 import logging
-from typing import List, Any, Tuple, Dict, cast, TYPE_CHECKING
+from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec
+from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
 
 if TYPE_CHECKING:
@@ -84,7 +84,9 @@ class MgmtGatewayService(CephadmService):
         return sd_endpoints
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
         # url_prefix for the following services depends on the presence of mgmt-gateway
         deps = [
             f'{d.name()}:{d.ports[0]}' if d.ports else d.name()
