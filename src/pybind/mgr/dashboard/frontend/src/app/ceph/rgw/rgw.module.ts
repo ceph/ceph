@@ -73,7 +73,8 @@ import {
   CodeSnippetModule,
   InputModule,
   CheckboxModule,
-  TreeviewModule
+  TreeviewModule,
+  TagModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 
@@ -103,7 +104,8 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     IconModule,
     NgbProgressbar,
     InputModule,
-    CheckboxModule
+    CheckboxModule,
+    TagModule
   ],
   exports: [
     RgwDaemonListComponent,
