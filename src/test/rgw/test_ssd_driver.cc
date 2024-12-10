@@ -51,6 +51,15 @@ int drain(const DoutPrefixProvider* dpp, rgw::Aio* aio) {
   return flush(dpp, std::move(c));
 }
 
+int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results, optional_yield y) {
+  int r = rgw::check_for_errors(results);
+
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
 class Environment* env;
 
 class Environment : public ::testing::Environment {
@@ -120,10 +129,10 @@ TEST_F(SSDDriverFixture, PutAndGet)
 {
     boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
         rgw::sal::Attrs attrs = {};
-        ASSERT_EQ(0, cacheDriver->put(env->dpp, "testPutGet", bl, bl.length(), attrs, yield));
+        ASSERT_EQ(0, cacheDriver->put(env->dpp, "bucketid#version#objName#0#4096", bl, bl.length(), attrs, yield));
         bufferlist ret;
         rgw::sal::Attrs get_attrs;
-        ASSERT_EQ(0, cacheDriver->get(env->dpp, "testPutGet", 0, bl.length(), ret, get_attrs, yield));
+        ASSERT_EQ(0, cacheDriver->get(env->dpp, "bucketid#version#objName#0#4096", 0, bl.length(), ret, get_attrs, yield));
         EXPECT_EQ(ret, bl);
         EXPECT_EQ(get_attrs.size(), 0);
     }, rethrow);
@@ -135,16 +144,16 @@ TEST_F(SSDDriverFixture, AppendData)
 {
     boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
         rgw::sal::Attrs attrs = {};
-        ASSERT_EQ(0, cacheDriver->put(env->dpp, "testAppend", bl, bl.length(), attrs, yield));
+        ASSERT_EQ(0, cacheDriver->put(env->dpp, "bucketid#version#testAppend#0#4096", bl, bl.length(), attrs, yield));
     
         bufferlist bl_append;
         bl_append.append(" xyz");
-        ASSERT_EQ(0, cacheDriver->append_data(env->dpp, "testAppend", bl_append, yield));
+        ASSERT_EQ(0, cacheDriver->append_data(env->dpp, "bucketid#version#testAppend#0#4096", bl_append, yield));
     
         bufferlist ret;
         bl.append(bl_append);
         rgw::sal::Attrs get_attrs;
-        ASSERT_EQ(0, cacheDriver->get(env->dpp, "testAppend", 0, bl.length(), ret, get_attrs, yield));
+        ASSERT_EQ(0, cacheDriver->get(env->dpp, "bucketid#version#testAppend#0#4096", 0, bl.length(), ret, get_attrs, yield));
         EXPECT_EQ(ret, bl);
         EXPECT_EQ(get_attrs.size(), 0);
     }, rethrow);
@@ -155,10 +164,10 @@ TEST_F(SSDDriverFixture, AppendData)
 TEST_F(SSDDriverFixture, SetGetAttrs)
 {
     boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-        ASSERT_EQ(0, cacheDriver->put(env->dpp, "testSetGetAttrs", bl, bl.length(), attrs, yield));
+        ASSERT_EQ(0, cacheDriver->put(env->dpp, "bucketid#version#testSetGetAttrs", bl, bl.length(), attrs, yield));
         bufferlist ret;
         rgw::sal::Attrs ret_attrs;
-        ASSERT_EQ(0, cacheDriver->get(env->dpp, "testSetGetAttrs", 0, bl.length(), ret, ret_attrs, yield));
+        ASSERT_EQ(0, cacheDriver->get(env->dpp, "bucketid#version#testSetGetAttrs", 0, bl.length(), ret, ret_attrs, yield));
         EXPECT_EQ(ret, bl);
         EXPECT_EQ(ret_attrs.size(), 1);
         for (auto& it : ret_attrs) {
@@ -173,10 +182,10 @@ TEST_F(SSDDriverFixture, SetGetAttrs)
 TEST_F(SSDDriverFixture, UpdateAttrs)
 {
     boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-        ASSERT_EQ(0, cacheDriver->put(env->dpp, "testUpdateAttrs", bl, bl.length(), attrs, yield));
-        ASSERT_EQ(0, cacheDriver->update_attrs(env->dpp, "testUpdateAttrs", update_attrs, yield));
+        ASSERT_EQ(0, cacheDriver->put(env->dpp, "bucketid#version#testUpdateAttrs", bl, bl.length(), attrs, yield));
+        ASSERT_EQ(0, cacheDriver->update_attrs(env->dpp, "bucketid#version#testUpdateAttrs", update_attrs, yield));
         rgw::sal::Attrs get_attrs;
-        ASSERT_EQ(0, cacheDriver->get_attrs(env->dpp, "testUpdateAttrs", get_attrs, yield));
+        ASSERT_EQ(0, cacheDriver->get_attrs(env->dpp, "bucketid#version#testUpdateAttrs", get_attrs, yield));
         EXPECT_EQ(get_attrs.size(), 2);
         EXPECT_EQ(get_attrs["user.rgw.attrName"], updateAttrVal1);
         EXPECT_EQ(get_attrs["user.rgw.testAttr"], updateAttrVal2);
@@ -189,12 +198,12 @@ TEST_F(SSDDriverFixture, SetGetAttr)
 {
     boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
       rgw::sal::Attrs attrs = {};
-      ASSERT_EQ(0, cacheDriver->put(env->dpp, "testSetGetAttr", bl, bl.length(), attrs, yield));
+      ASSERT_EQ(0, cacheDriver->put(env->dpp, "bucketid#version#testSetGetAttr", bl, bl.length(), attrs, yield));
       std::string attr_name = "user.ssd.testattr";
       std::string attr_val = "testattrVal";
-      ASSERT_EQ(0, cacheDriver->set_attr(env->dpp, "testSetGetAttr", attr_name, attr_val, yield));
+      ASSERT_EQ(0, cacheDriver->set_attr(env->dpp, "bucketid#version#testSetGetAttr", attr_name, attr_val, yield));
       std::string attr_val_ret;
-      ASSERT_EQ(0, cacheDriver->get_attr(env->dpp, "testSetGetAttr", attr_name, attr_val_ret, yield));
+      ASSERT_EQ(0, cacheDriver->get_attr(env->dpp, "bucketid#version#testSetGetAttr", attr_name, attr_val_ret, yield));
       ASSERT_EQ(attr_val, attr_val_ret);
     }, rethrow);
 
@@ -205,17 +214,17 @@ TEST_F(SSDDriverFixture, DeleteAttr)
 {
     boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
       rgw::sal::Attrs attrs = {};
-      ASSERT_EQ(0, cacheDriver->put(env->dpp, "testDeleteAttr", bl, bl.length(), attrs, yield));
+      ASSERT_EQ(0, cacheDriver->put(env->dpp, "bucketid#version#testDeleteAttr", bl, bl.length(), attrs, yield));
       std::string attr_name = "user.ssd.testattr";
       std::string attr_val = "testattrVal";
-      ASSERT_EQ(0, cacheDriver->set_attr(env->dpp, "testDeleteAttr", attr_name, attr_val, yield));
+      ASSERT_EQ(0, cacheDriver->set_attr(env->dpp, "bucketid#version#testDeleteAttr", attr_name, attr_val, yield));
       std::string attr_val_ret;
-      ASSERT_EQ(0, cacheDriver->get_attr(env->dpp, "testDeleteAttr", attr_name, attr_val_ret, yield));
+      ASSERT_EQ(0, cacheDriver->get_attr(env->dpp, "bucketid#version#testDeleteAttr", attr_name, attr_val_ret, yield));
       ASSERT_EQ(attr_val, attr_val_ret);
 
       attr_val_ret.clear();
-      ASSERT_EQ(0, cacheDriver->delete_attr(env->dpp, "testDeleteAttr", attr_name));
-      ASSERT_EQ(ENODATA, cacheDriver->get_attr(env->dpp, "testDeleteAttr", attr_name, attr_val_ret, yield));
+      ASSERT_EQ(0, cacheDriver->delete_attr(env->dpp, "bucketid#version#testDeleteAttr", attr_name));
+      ASSERT_EQ(ENODATA, cacheDriver->get_attr(env->dpp, "bucketid#version#testDeleteAttr", attr_name, attr_val_ret, yield));
       ASSERT_EQ("", attr_val_ret);
     }, rethrow);
 
@@ -225,18 +234,18 @@ TEST_F(SSDDriverFixture, DeleteAttr)
 TEST_F(SSDDriverFixture, DeleteAttrs)
 {
     boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-      ASSERT_EQ(0, cacheDriver->put(env->dpp, "testDeleteAttr", bl, bl.length(), attrs, yield));
+      ASSERT_EQ(0, cacheDriver->put(env->dpp, "bucketid#version#testDeleteAttr", bl, bl.length(), attrs, yield));
       rgw::sal::Attrs ret_attrs;
-      ASSERT_EQ(0, cacheDriver->get_attrs(env->dpp, "testDeleteAttr", ret_attrs, yield));
+      ASSERT_EQ(0, cacheDriver->get_attrs(env->dpp, "bucketid#version#testDeleteAttr", ret_attrs, yield));
       EXPECT_EQ(ret_attrs.size(), 1);
       for (auto& it : ret_attrs) {
         EXPECT_EQ(it.first, "user.rgw.attrName");
         EXPECT_EQ(it.second, attrVal);
       }
 
-      ASSERT_EQ(0, cacheDriver->delete_attrs(env->dpp, "testDeleteAttr", del_attrs, yield));
+      ASSERT_EQ(0, cacheDriver->delete_attrs(env->dpp, "bucketid#version#testDeleteAttr", del_attrs, yield));
       ret_attrs.clear();
-      ASSERT_EQ(0, cacheDriver->get_attrs(env->dpp, "testDeleteAttr", del_attrs, yield));
+      ASSERT_EQ(0, cacheDriver->get_attrs(env->dpp, "bucketid#version#testDeleteAttr", del_attrs, yield));
       EXPECT_EQ(ret_attrs.size(), 0);
     }, rethrow);
 
@@ -247,14 +256,14 @@ TEST_F(SSDDriverFixture, DeleteData)
 {
     boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
         rgw::sal::Attrs attrs = {};
-        ASSERT_EQ(0, cacheDriver->put(env->dpp, "testDeleteData", bl, bl.length(), attrs, yield));
+        ASSERT_EQ(0, cacheDriver->put(env->dpp, "bucketid#version#testDeleteData", bl, bl.length(), attrs, yield));
         bufferlist ret;
         rgw::sal::Attrs get_attrs;
-        ASSERT_EQ(0, cacheDriver->get(env->dpp, "testDeleteData", 0, bl.length(), ret, get_attrs, yield));
+        ASSERT_EQ(0, cacheDriver->get(env->dpp, "bucketid#version#testDeleteData", 0, bl.length(), ret, get_attrs, yield));
         EXPECT_EQ(ret, bl);
         EXPECT_EQ(get_attrs.size(), 0);
-        ASSERT_EQ(0, cacheDriver->delete_data(env->dpp, "testDeleteData", yield));
-        ASSERT_EQ(-ENOENT, cacheDriver->get(env->dpp, "testDeleteData", 0, bl.length(), ret, get_attrs, yield));
+        ASSERT_EQ(0, cacheDriver->delete_data(env->dpp, "bucketid#version#testDeleteData", yield));
+        ASSERT_EQ(-ENOENT, cacheDriver->get(env->dpp, "bucketid#version#testDeleteData", 0, bl.length(), ret, get_attrs, yield));
     }, rethrow);
 
     io.run();
@@ -266,8 +275,10 @@ TEST_F(SSDDriverFixture, PutAsync)
         rgw::sal::Attrs attrs = {};
         const uint64_t window_size = env->cct->_conf->rgw_put_obj_min_window_size;
         std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(window_size, yield);
-        auto results = cacheDriver->put_async(env->dpp, yield, aio.get(), "testPutAsync", bl, bl.length(), attrs, bl.length(), 0);
+        auto results = cacheDriver->put_async(env->dpp, yield, aio.get(), "bucketid#version#testPutAsync", bl, bl.length(), attrs, bl.length(), 0);
+        auto r = flush(env->dpp, std::move(results), yield);
         drain(env->dpp, aio.get());
+        EXPECT_EQ(r, 0);
     }, rethrow);
 
     io.run();
