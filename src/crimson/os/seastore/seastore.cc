@@ -1812,10 +1812,10 @@ SeaStore::Shard::_do_transaction_step(
     }
   }
   return fut.si_then([&, op, this, FNAME](auto get_onode) {
-    OnodeRef &o = onodes[op->oid];
-    if (!o) {
+    OnodeRef& onode = onodes[op->oid];
+    if (!onode) {
       assert(get_onode);
-      o = get_onode;
+      onode = get_onode;
     }
     OnodeRef& d_onode = onodes[op->dest_oid];
     if ((op->op == Transaction::OP_CLONE
@@ -1838,21 +1838,23 @@ SeaStore::Shard::_do_transaction_step(
     }
   }).si_then([&ctx, &i, &onodes, op, this, FNAME]() -> tm_ret {
     const ghobject_t& oid = i.get_oid(op->oid);
+    OnodeRef& onode = onodes[op->oid];
+    assert(onode);
     try {
       switch (op->op) {
       case Transaction::OP_REMOVE:
       {
         DEBUGT("op REMOVE, oid={} ...", *ctx.transaction, oid);
-        return _remove(ctx, onodes[op->oid]
-	).si_then([&onodes, op] {
-	  onodes[op->oid].reset();
+        return _remove(ctx, onode
+	).si_then([&onode] {
+	  onode.reset();
 	});
       }
       case Transaction::OP_CREATE:
       case Transaction::OP_TOUCH:
       {
         DEBUGT("op CREATE/TOUCH, oid={} ...", *ctx.transaction, oid);
-        return _touch(ctx, onodes[op->oid]);
+        return _touch(ctx, onode);
       }
       case Transaction::OP_WRITE:
       {
@@ -1864,14 +1866,14 @@ SeaStore::Shard::_do_transaction_step(
         DEBUGT("op WRITE, oid={}, 0x{:x}~0x{:x}, flags=0x{:x} ...",
                *ctx.transaction, oid, off, len, fadvise_flags);
         return _write(
-	  ctx, onodes[op->oid], off, len, std::move(bl),
+	  ctx, onode, off, len, std::move(bl),
 	  fadvise_flags);
       }
       case Transaction::OP_TRUNCATE:
       {
         uint64_t off = op->off;
         DEBUGT("op TRUNCATE, oid={}, 0x{:x} ...", *ctx.transaction, oid, off);
-        return _truncate(ctx, onodes[op->oid], off);
+        return _truncate(ctx, onode, off);
       }
       case Transaction::OP_SETATTR:
       {
@@ -1881,7 +1883,7 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_bl(bl);
         DEBUGT("op SETATTR, oid={}, attr name={}, value length=0x{:x} ...",
                *ctx.transaction, oid, name, bl.length());
-        return _setattrs(ctx, onodes[op->oid], std::move(to_set));
+        return _setattrs(ctx, onode, std::move(to_set));
       }
       case Transaction::OP_SETATTRS:
       {
@@ -1889,19 +1891,19 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_attrset(to_set);
         DEBUGT("op SETATTRS, oid={}, attrs size={} ...",
                *ctx.transaction, oid, to_set.size());
-        return _setattrs(ctx, onodes[op->oid], std::move(to_set));
+        return _setattrs(ctx, onode, std::move(to_set));
       }
       case Transaction::OP_RMATTR:
       {
         std::string name = i.decode_string();
         DEBUGT("op RMATTR, oid={}, attr name={} ...",
                *ctx.transaction, oid, name);
-        return _rmattr(ctx, onodes[op->oid], name);
+        return _rmattr(ctx, onode, name);
       }
       case Transaction::OP_RMATTRS:
       {
         DEBUGT("op RMATTRS, oid={} ...", *ctx.transaction, oid);
-        return _rmattrs(ctx, onodes[op->oid]);
+        return _rmattrs(ctx, onode);
       }
       case Transaction::OP_OMAP_SETKEYS:
       {
@@ -1915,9 +1917,12 @@ SeaStore::Shard::_do_transaction_step(
 	if (!log_root.is_null()) {
 	  o_type = omap_type_t::LOG;
 	}
-        return _omap_set_values(ctx, onodes[op->oid], std::move(aset),
-	  o_type == omap_type_t::OMAP ? onodes[op->oid]->get_layout().omap_root :
-	  onodes[op->oid]->get_layout().log_root);
+        return _omap_set_values(
+          ctx,
+          onode,
+          std::move(aset),
+	  o_type == omap_type_t::OMAP ? onode->get_layout().omap_root :
+	  onode->get_layout().log_root);
       }
       case Transaction::OP_OMAP_SETHEADER:
       {
@@ -1925,7 +1930,7 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_bl(bl);
         DEBUGT("op OMAP_SETHEADER, oid={}, length=0x{:x} ...",
                *ctx.transaction, oid, bl.length());
-        return _omap_set_header(ctx, onodes[op->oid], std::move(bl));
+        return _omap_set_header(ctx, onode, std::move(bl));
       }
       case Transaction::OP_OMAP_RMKEYS:
       {
@@ -1939,9 +1944,12 @@ SeaStore::Shard::_do_transaction_step(
 	if (!log_root.is_null()) {
 	  o_type = omap_type_t::LOG;
 	}
-        return _omap_rmkeys(ctx, onodes[op->oid], std::move(keys),
-	  o_type == omap_type_t::OMAP ? onodes[op->oid]->get_layout().omap_root :
-	  onodes[op->oid]->get_layout().log_root);
+        return _omap_rmkeys(
+          ctx,
+          onode,
+          std::move(keys),
+	  o_type == omap_type_t::OMAP ? onode->get_layout().omap_root :
+	  onode->get_layout().log_root);
       }
       case Transaction::OP_OMAP_RMKEYRANGE:
       {
@@ -1957,15 +1965,16 @@ SeaStore::Shard::_do_transaction_step(
 	  o_type = omap_type_t::LOG;
 	}
         return _omap_rmkeyrange(
-	  ctx, onodes[op->oid],
-	  std::move(first), std::move(last),
-	  o_type == omap_type_t::OMAP ? onodes[op->oid]->get_layout().omap_root :
-	  onodes[op->oid]->get_layout().log_root);
+          ctx,
+          onode,
+          std::move(first), std::move(last),
+	  o_type == omap_type_t::OMAP ? onode->get_layout().omap_root :
+	  onode->get_layout().log_root);
       }
       case Transaction::OP_OMAP_CLEAR:
       {
         DEBUGT("op OMAP_CLEAR, oid={} ...", *ctx.transaction, oid);
-        return _omap_clear(ctx, onodes[op->oid]);
+        return _omap_clear(ctx, onode);
       }
       case Transaction::OP_ZERO:
       {
@@ -1973,7 +1982,7 @@ SeaStore::Shard::_do_transaction_step(
         extent_len_t len = op->len;
         DEBUGT("op ZERO, oid={}, 0x{:x}~0x{:x} ...",
                *ctx.transaction, oid, off, len);
-        return _zero(ctx, onodes[op->oid], off, len);
+        return _zero(ctx, onode, off, len);
       }
       case Transaction::OP_SETALLOCHINT:
       {
@@ -2000,7 +2009,7 @@ SeaStore::Shard::_do_transaction_step(
       {
         DEBUGT("op CLONE, oid={}, dest oid={} ...",
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
-	return _clone(ctx, onodes[op->oid], onodes[op->dest_oid]);
+	return _clone(ctx, onode, onodes[op->dest_oid]);
       }
       case Transaction::OP_COLL_MOVE_RENAME:
       {
@@ -2008,9 +2017,9 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
 	ceph_assert(op->cid == op->dest_cid);
 	return _rename(
-	  ctx, onodes[op->oid], onodes[op->dest_oid]
-	).si_then([&onodes, op] {
-	  onodes[op->oid].reset();
+	  ctx, onode, onodes[op->dest_oid]
+	).si_then([&onode] {
+	  onode.reset();
 	});
       }
       default:
