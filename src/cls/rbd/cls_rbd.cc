@@ -4625,6 +4625,7 @@ static const std::string REMOTE_STATUS_GLOBAL_KEY_PREFIX("remote_status_global_"
 static const std::string INSTANCE_KEY_PREFIX("instance_");
 static const std::string MIRROR_IMAGE_MAP_KEY_PREFIX("image_map_");
 static const std::string REMOTE_NAMESPACE("remote_namespace");
+static const std::string DISABLE_DEFAULT_NAMESPACE("disable_default_namespace");
 
 std::string peer_key(const std::string &uuid) {
   return PEER_KEY_PREFIX + uuid;
@@ -5926,6 +5927,53 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
     if (r < 0) {
       return r;
     }
+  }
+  return 0;
+}
+
+int mirror_disable_default_namespace_get(cls_method_context_t hctx,
+                                         bufferlist *in,
+                                         bufferlist *out) {
+  bool disabled = false;
+  int r = read_key(hctx, mirror::DISABLE_DEFAULT_NAMESPACE, &disabled);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error getting disable default namespace: %s",
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  encode(disabled, *out);
+  return 0;
+}
+
+int mirror_disable_default_namespace_set(cls_method_context_t hctx,
+                                         bufferlist *in,
+                                         bufferlist *out) {
+  bool default_disabled;
+  try {
+    auto bl_it = in->cbegin();
+    decode(default_disabled, bl_it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  uint32_t mirror_mode;
+  int r = read_key(hctx, mirror::MODE, &mirror_mode);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  } else if (r == 0 && mirror_mode != cls::rbd::MIRROR_MODE_DISABLED) {
+    CLS_ERR("cannot set disable default namespace while mirroring enabled");
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  encode(default_disabled, bl);
+
+  r = cls_cxx_map_set_val(hctx, mirror::DISABLE_DEFAULT_NAMESPACE, &bl);
+  if (r < 0) {
+    CLS_ERR("error setting disbale default namespace: %s",
+            cpp_strerror(r).c_str());
+    return r;
   }
   return 0;
 }
@@ -8329,6 +8377,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_mirror_uuid_set;
   cls_method_handle_t h_mirror_mode_get;
   cls_method_handle_t h_mirror_mode_set;
+  cls_method_handle_t h_mirror_default_namespace_get;
+  cls_method_handle_t h_mirror_default_namespace_set;
   cls_method_handle_t h_mirror_remote_namespace_get;
   cls_method_handle_t h_mirror_remote_namespace_set;
   cls_method_handle_t h_mirror_peer_ping;
@@ -8628,6 +8678,13 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "mirror_mode_set",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           mirror_mode_set, &h_mirror_mode_set);
+  cls_register_cxx_method(h_class, "mirror_default_namespace_get",
+                          CLS_METHOD_RD, mirror_disable_default_namespace_get,
+                          &h_mirror_default_namespace_get);
+  cls_register_cxx_method(h_class, "mirror_disable_default_namespace_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_disable_default_namespace_set,
+                          &h_mirror_default_namespace_set);
   cls_register_cxx_method(h_class, "mirror_remote_namespace_get",
                           CLS_METHOD_RD, mirror_remote_namespace_get,
                           &h_mirror_remote_namespace_get);

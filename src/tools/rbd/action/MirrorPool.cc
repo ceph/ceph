@@ -42,6 +42,7 @@ namespace po = boost::program_options;
 static const std::string ALL_NAME("all");
 static const std::string SITE_NAME("site-name");
 static const std::string REMOTE_NAMESPACE_NAME("remote-namespace");
+static const std::string CONFIGURE_ONLY("configure-only");
 
 namespace {
 
@@ -1247,6 +1248,9 @@ void get_enable_arguments(po::options_description *positional,
   options->add_options()
     (REMOTE_NAMESPACE_NAME.c_str(), po::value<std::string>(),
      "remote namespace name");
+  options->add_options()
+    (CONFIGURE_ONLY.c_str(), po::bool_switch(),
+     "configure only");
 }
 
 int execute_enable_disable(librados::IoCtx& io_ctx,
@@ -1316,7 +1320,9 @@ int execute_enable(const po::variables_map &vm,
   std::string pool_name;
   std::string namespace_name;
   std::string remote_namespace;
+  bool configure_only = false;
   size_t arg_index = 0;
+
   int r = utils::get_pool_and_namespace_names(vm, true, &pool_name,
                                               &namespace_name, &arg_index);
   if (r < 0) {
@@ -1341,28 +1347,47 @@ int execute_enable(const po::variables_map &vm,
   if (r < 0) {
     return r;
   }
+  
+  if (vm.count(CONFIGURE_ONLY) && vm[CONFIGURE_ONLY].as<bool>()) {
+    if (namespace_name.empty()) {
+      configure_only = true;
+    } else {
+      std::cerr << "rbd: configure-only can not be specified for a namespace." << std::endl;
+      return -EINVAL;
+    }
+  }
 
   if (vm.count(REMOTE_NAMESPACE_NAME)) {
+    if (configure_only) {
+      std::cerr << "rbd: cannot specify remote namespace with configure-only option."
+                << std::endl;
+      return -EINVAL;
+    }
     remote_namespace = vm[REMOTE_NAMESPACE_NAME].as<std::string>();
   } else {
     remote_namespace = namespace_name;
   }
 
-  std::string original_remote_namespace;
   librbd::RBD rbd;
-  r = rbd.mirror_remote_namespace_get(io_ctx, &original_remote_namespace);
-  if (r < 0) {
-    std::cerr << "rbd: failed to get the current remote namespace."
-              << std::endl;
-    return r;
-  }
 
-  if (original_remote_namespace != remote_namespace) {
-    r = rbd.mirror_remote_namespace_set(io_ctx, remote_namespace);
+  if (configure_only) {
+    // Set the key.
+  } else {
+    std::string original_remote_namespace;
+    r = rbd.mirror_remote_namespace_get(io_ctx, &original_remote_namespace);
     if (r < 0) {
-      std::cerr << "rbd: failed to set the remote namespace."
-                << std::endl;
+      std::cerr << "rbd: failed to get the current remote namespace."
+	        << std::endl;
       return r;
+    }
+
+    if (original_remote_namespace != remote_namespace) {
+      r = rbd.mirror_remote_namespace_set(io_ctx, remote_namespace);
+      if (r < 0) {
+        std::cerr << "rbd: failed to set the remote namespace."
+                  << std::endl;
+	return r;
+      }
     }
   }
 
