@@ -918,6 +918,8 @@ private:
   void open_foreign_mdsdir(inodeno_t ino, MDSContext *c);
   CDir *get_stray_dir(CInode *in);
 
+  int check_fscrypt_access(const MDRequestRef& mdr, CInode *in, bool acquire_lock=false);
+
   /**
    * Find the given dentry (and whether it exists or not), its ancestors,
    * and get them all into memory and usable on this MDS. This function
