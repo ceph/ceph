@@ -22,6 +22,25 @@
  */
 class KeyValueDB {
 public:
+  struct BackupCleanupStats {
+    bool error;
+    utime_t timestamp;
+    uint32_t corrupted;
+    uint32_t deleted;
+    uint32_t kept;
+    uint64_t size;
+    uint64_t freed;
+  };
+
+  struct BackupStats {
+    bool error;
+    uint64_t id;
+    utime_t timestamp;
+    std::string msg;
+    uint64_t size;
+    uint64_t number_files;
+  };
+
   class TransactionImpl {
   public:
     // amount of ops included
@@ -110,8 +129,8 @@ public:
     }
 
     /// Remove Single Key which exists and was not overwritten.
-    /// This API is only related to performance optimization, and should only be 
-    /// re-implemented by log-insert-merge tree based keyvalue stores(such as RocksDB). 
+    /// This API is only related to performance optimization, and should only be
+    /// re-implemented by log-insert-merge tree based keyvalue stores(such as RocksDB).
     /// If a key is overwritten (by calling set multiple times), then the result
     /// of calling rm_single_key on this key is undefined.
     virtual void rm_single_key(
@@ -387,6 +406,17 @@ public:
 				       const std::string& key_prefix) {
     return 0;
   }
+
+  /// creates a kv database backup in directory path. Returns true on success
+  virtual BackupStats backup(const std::string& path, bool full) { return BackupStats{}; }
+  
+  /// cleanup old backups. Returns true on success
+  virtual BackupCleanupStats backup_cleanup(const std::string& path, uint64_t keep_last, uint64_t keep_hourly, uint64_t keep_daily) { return BackupCleanupStats{}; }
+
+  /// restore from backup the specified backup version
+  static bool restore_backup(CephContext *cct, const std::string &type, const std::string &path, const std::string &backup_location, const std::string& version);
+
+  static std::vector<BackupStats> list_backups(CephContext *cct, const std::string &type, const std::string &backup_location);
 
   /// compact the underlying store
   virtual void compact() {}
