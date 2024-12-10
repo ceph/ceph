@@ -14,7 +14,7 @@ from io import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.contextutil import safe_while
-from teuthology.exceptions import CommandFailedError
+from teuthology.exceptions import CommandFailedError, MaxWhileTries
 
 log = logging.getLogger(__name__)
 
@@ -8584,6 +8584,56 @@ class TestCloneProgressReporter(TestVolumesHelper):
             else:
                 raise
 
+    def test_wait(self):
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(1)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        self.wait_till_rbytes_is_right(v, sv, size)
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        time.sleep(3)
+
+        # ensure that the clone progress bar was printed for roughly a minute
+        # after cloning has finished.
+        try:
+            with safe_while(tries=10, sleep=5) as proceed:
+                while proceed():
+                    pevs = self.get_pevs_from_ceph_status(c)
+                    self.assertEqual(len(pevs), 1)
+        except MaxWhileTries:
+            pass
+
+    def test_finish(self):
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(1)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        self.wait_till_rbytes_is_right(v, sv, size)
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+
+        # ensure that the clone progress bar has been removed from "ceph status"
+        # output after waiting period is complete.
+        time.sleep(90)
+        pevs = self.get_pevs_from_ceph_status(c)
+        self.assertEqual(len(pevs), 0)
 
 class TestMisc(TestVolumesHelper):
     """Miscellaneous tests related to FS volume, subvolume group, and subvolume operations."""
