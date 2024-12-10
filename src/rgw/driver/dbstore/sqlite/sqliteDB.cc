@@ -339,6 +339,7 @@ enum GetObjectData {
   ObjDataBucketName,
   ObjDataID,
   MultipartPartStr,
+  UploadID,
   PartNum,
   Offset,
   ObjDataSize,
@@ -550,6 +551,7 @@ static int get_objectdata(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_s
   op.obj_data.offset = sqlite3_column_int(stmt, Offset);
   op.obj_data.size = sqlite3_column_int(stmt, ObjDataSize);
   op.obj_data.multipart_part_str = (const char*)sqlite3_column_text(stmt, MultipartPartStr);
+  op.obj_data.upload_id = (const char*)sqlite3_column_text(stmt, UploadID);
   SQL_DECODE_BLOB_PARAM(dpp, stmt, ObjDataMtime, op.obj.state.mtime, sdb);
   SQL_DECODE_BLOB_PARAM(dpp, stmt, ObjData, op.obj_data.data, sdb);
 
@@ -2416,6 +2418,7 @@ int SQLPutObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
+  // XXXX obj_instance is always NULL in objectdata_table, even when versioning is enabled?
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance, sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
@@ -2435,6 +2438,10 @@ int SQLPutObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
 
   SQL_BIND_INT(dpp, stmt, index, params->op.obj_data.part_num, sdb);
 
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.stripe_num, sdb);
+
+  SQL_BIND_INT(dpp, stmt, index, params->op.obj_data.stripe_num, sdb);
+
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.offset, sdb);
 
   SQL_BIND_INT(dpp, stmt, index, params->op.obj_data.offset, sdb);
@@ -2449,6 +2456,10 @@ int SQLPutObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.multipart_part_str, sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj_data.multipart_part_str.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.upload_id, sdb);
+
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj_data.upload_id.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mtime, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.state.mtime, sdb);

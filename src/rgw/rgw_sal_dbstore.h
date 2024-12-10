@@ -434,6 +434,7 @@ protected:
     ACLOwner owner;
     ceph::real_time mtime;
     rgw_placement_rule placement;
+    multipart_upload_info upload_information;
 
   public:
     DBMultipartUpload(DBStore* _store, Bucket* _bucket, const std::string& oid, std::optional<std::string> upload_id, ACLOwner _owner, ceph::real_time _mtime) : StoreMultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), owner(_owner), mtime(_mtime) {}
@@ -535,6 +536,7 @@ protected:
 
       DBObject(DBObject& _o) = default;
 
+      virtual unsigned get_subsys() { return ceph_subsys_rgw_dbstore; };
       virtual int delete_object(const DoutPrefixProvider* dpp,
           optional_yield y,
           uint32_t flags,
@@ -560,6 +562,13 @@ protected:
       virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
 
       virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) override;
+
+      /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
+      virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			   int max_parts, int marker, int* next_marker,
+			   bool* truncated, list_parts_each_t each_func,
+			   optional_yield y) override;
+
       virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
       virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
       virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) override;
@@ -663,9 +672,10 @@ protected:
   class DBMultipartWriter : public StoreWriter {
   protected:
     rgw::sal::DBStore* store;
+    DBMultipartUpload* upload;
     const ACLOwner& owner;
-	const rgw_placement_rule *ptail_placement_rule;
-	uint64_t olh_epoch;
+    const rgw_placement_rule *ptail_placement_rule;
+    uint64_t olh_epoch;
     rgw::sal::Object* head_obj;
     std::string upload_id;
     int part_num;
