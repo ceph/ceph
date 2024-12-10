@@ -6230,28 +6230,24 @@ void Server::handle_client_setvxattr(MDRequestRef& mdr, CInode *cur)
      * rdlock.
      */
     if (!mdr->more()->rdonly_checks) {
-      if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
-        lov.add_rdlock(&cur->snaplock);
-        if (!mds->locker->acquire_locks(mdr, lov))
-          return;
-        mdr->locking_state |= MutationImpl::ALL_LOCKED;
-      }
+      lov.add_rdlock(&cur->snaplock);
+      if (!mds->locker->acquire_locks(mdr, lov))
+        return;
+
       const auto srnode = cur->get_projected_srnode();
       if (val == (srnode && srnode->is_subvolume())) {
         dout(20) << "already marked subvolume" << dendl;
         respond_to_request(mdr, 0);
         return;
       }
-      mdr->more()->rdonly_checks = true;
-    }
 
-    if ((mdr->locking_state & MutationImpl::ALL_LOCKED) && !mdr->is_xlocked(&cur->snaplock)) {
-      /* drop the rdlock and acquire xlocks */
+      mdr->more()->rdonly_checks = true;
       dout(20) << "dropping rdlocks" << dendl;
       mds->locker->drop_locks(mdr.get());
-      if (!xlock_policylock(mdr, cur, false, true))
-        return;
     }
+
+    if (!xlock_policylock(mdr, cur, false, true))
+      return;
 
     /* repeat rdonly checks in case changed between rdlock -> xlock */
     SnapRealm *realm = cur->find_snaprealm();

@@ -527,6 +527,8 @@ class MDCache {
 			       std::map<dirfrag_t,std::vector<dirfrag_t> >& subtrees);
   ESubtreeMap *create_subtree_map();
 
+  MDRequestRef lock_path(filepath p, std::vector<std::string> locks);
+
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
   bool dump_inode(Formatter *f, uint64_t number);
@@ -1350,6 +1352,8 @@ class MDCache {
 				LogSegment *ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
+
+  void dispatch_lock_path(MDRequestRef& mdr);
 
   void upkeep_main(void);
 
