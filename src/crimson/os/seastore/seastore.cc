@@ -2043,6 +2043,8 @@ SeaStore::Shard::_rename(
     d_onode->get_metadata_hint(device->get_block_size()));
   auto xattr_root = olayout.xattr_root.get(
     d_onode->get_metadata_hint(device->get_block_size()));
+  auto log_root = olayout.log_root.get(
+    d_onode->get_metadata_hint(device->get_block_size()));
   auto object_data = olayout.object_data.get();
   auto oi_bl = ceph::bufferlist::static_from_mem(
     &olayout.oi[0],
@@ -2054,6 +2056,7 @@ SeaStore::Shard::_rename(
   d_onode->update_onode_size(*ctx.transaction, size);
   d_onode->update_omap_root(*ctx.transaction, omap_root);
   d_onode->update_xattr_root(*ctx.transaction, xattr_root);
+  d_onode->update_log_root(*ctx.transaction, log_root);
   d_onode->update_object_data(*ctx.transaction, object_data);
   d_onode->update_object_info(*ctx.transaction, oi_bl);
   d_onode->update_snapset(*ctx.transaction, ss_bl);
