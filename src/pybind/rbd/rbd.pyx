@@ -645,7 +645,7 @@ class RBD(object):
         :param p_name: the parent image name
         :type name: str
         :param p_snapshot: the parent image snapshot name or id
-        :type name: str
+        :type name: str or int
         :param c_ioctx: the child context that represents the new clone
         :type ioctx: :class:`rados.Ioctx`
         :param c_name: the clone (child) name
