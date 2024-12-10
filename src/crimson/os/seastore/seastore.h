@@ -414,7 +414,6 @@ public:
       internal_context_t &ctx,
       CollectionRef &col,
       std::vector<OnodeRef> &onodes,
-      std::vector<OnodeRef> &d_onodes,
       ceph::os::Transaction::iterator &i);
 
     tm_ret _remove_omaps(

@@ -1687,24 +1687,24 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 #endif
         return seastar::do_with(
 	  std::vector<OnodeRef>(ctx.iter.objects.size()),
-          std::vector<OnodeRef>(ctx.iter.objects.size()),
-          [this, &ctx](auto& onodes, auto& d_onodes) mutable {
+          [this, &ctx](auto& onodes)
+        {
           return trans_intr::repeat(
-            [this, &ctx, &onodes, &d_onodes]() mutable
+            [this, &ctx, &onodes]()
             -> tm_iertr::future<seastar::stop_iteration>
-            {
-              if (ctx.iter.have_op()) {
-                return _do_transaction_step(
-                  ctx, ctx.ch, onodes, d_onodes, ctx.iter
-                ).si_then([] {
-                  return seastar::make_ready_future<seastar::stop_iteration>(
-                    seastar::stop_iteration::no);
-                });
-              } else {
+          {
+            if (ctx.iter.have_op()) {
+              return _do_transaction_step(
+                ctx, ctx.ch, onodes, ctx.iter
+              ).si_then([] {
                 return seastar::make_ready_future<seastar::stop_iteration>(
-                  seastar::stop_iteration::yes);
-              };
-            });
+                  seastar::stop_iteration::no);
+              });
+            } else {
+              return seastar::make_ready_future<seastar::stop_iteration>(
+                seastar::stop_iteration::yes);
+            };
+          });
         }).si_then([this, &ctx] {
           return transaction_manager->submit_transaction(*ctx.transaction);
         });
@@ -1746,7 +1746,6 @@ SeaStore::Shard::_do_transaction_step(
   internal_context_t &ctx,
   CollectionRef &col,
   std::vector<OnodeRef> &onodes,
-  std::vector<OnodeRef> &d_onodes,
   ceph::os::Transaction::iterator &i)
 {
   LOG_PREFIX(SeaStoreS::_do_transaction_step);
@@ -1807,30 +1806,27 @@ SeaStore::Shard::_do_transaction_step(
     if (!o) {
       assert(get_onode);
       o = get_onode;
-      d_onodes[op->oid] = get_onode;
     }
+    OnodeRef& d_onode = onodes[op->dest_oid];
     if ((op->op == Transaction::OP_CLONE
 	  || op->op == Transaction::OP_COLL_MOVE_RENAME)
-	&& !d_onodes[op->dest_oid]) {
+	&& !d_onode) {
       const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
       DEBUGT("op {}, get_or_create dest oid={} ...",
              *ctx.transaction, (uint32_t)op->op, dest_oid);
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
       return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
-      ).si_then([&onodes, &d_onodes, op](auto dest_onode) {
+      ).si_then([&d_onode](auto dest_onode) {
 	assert(dest_onode);
-	auto &d_o = onodes[op->dest_oid];
-	assert(!d_o);
-	assert(!d_onodes[op->dest_oid]);
-	d_o = dest_onode;
-	d_onodes[op->dest_oid] = dest_onode;
+	assert(!d_onode);
+	d_onode = dest_onode;
 	return seastar::now();
       });
     } else {
       return OnodeManager::get_or_create_onode_iertr::now();
     }
-  }).si_then([&ctx, &i, &onodes, &d_onodes, op, this, FNAME]() -> tm_ret {
+  }).si_then([&ctx, &i, &onodes, op, this, FNAME]() -> tm_ret {
     const ghobject_t& oid = i.get_oid(op->oid);
     try {
       switch (op->op) {
@@ -1838,9 +1834,8 @@ SeaStore::Shard::_do_transaction_step(
       {
         DEBUGT("op REMOVE, oid={} ...", *ctx.transaction, oid);
         return _remove(ctx, onodes[op->oid]
-	).si_then([&onodes, &d_onodes, op] {
+	).si_then([&onodes, op] {
 	  onodes[op->oid].reset();
-	  d_onodes[op->oid].reset();
 	});
       }
       case Transaction::OP_CREATE:
@@ -1990,7 +1985,7 @@ SeaStore::Shard::_do_transaction_step(
       {
         DEBUGT("op CLONE, oid={}, dest oid={} ...",
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
-	return _clone(ctx, onodes[op->oid], d_onodes[op->dest_oid]);
+	return _clone(ctx, onodes[op->oid], onodes[op->dest_oid]);
       }
       case Transaction::OP_COLL_MOVE_RENAME:
       {
@@ -1998,10 +1993,9 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
 	ceph_assert(op->cid == op->dest_cid);
 	return _rename(
-	  ctx, onodes[op->oid], d_onodes[op->dest_oid]
-	).si_then([&onodes, &d_onodes, op] {
+	  ctx, onodes[op->oid], onodes[op->dest_oid]
+	).si_then([&onodes, op] {
 	  onodes[op->oid].reset();
-	  d_onodes[op->oid].reset();
 	});
       }
       default:
