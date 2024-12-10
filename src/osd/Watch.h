@@ -16,6 +16,7 @@
 
 #include <set>
 #include "msg/Connection.h"
+#include "include/container_ios.h"
 #include "include/Context.h"
 
 enum WatcherState {

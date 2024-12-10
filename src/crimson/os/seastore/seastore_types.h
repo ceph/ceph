@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <deque>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -14,6 +15,10 @@
 
 #include "include/byteorder.h"
 #include "include/denc.h"
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "include/buffer.h"
 #include "include/intarith.h"
 #include "include/interval_set.h"

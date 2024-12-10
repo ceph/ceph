@@ -23,21 +23,22 @@
 #include <string>
 #include <string_view>
 
-#include "common/bloom_filter.hpp"
 #include "common/config.h"
 #include "include/buffer_fwd.h"
 #include "include/counter.h"
 #include "include/types.h"
 
+#include "snap.h" // for struct sr_t
 #include "CInode.h"
 #include "MDSCacheObject.h"
-#include "MDSContext.h"
-#include "cephfs_features.h"
-#include "SessionMap.h"
-#include "messages/MClientReply.h"
+#include "Mutation.h" // for struct MDLockCache
 
+struct DirStat;
+struct session_info_t;
+class bloom_filter;
 class CDentry;
 class MDCache;
+class MDSContext;
 
 std::ostream& operator<<(std::ostream& out, const class CDir& dir);
 
@@ -203,6 +204,7 @@ public:
   static const int DUMP_DEFAULT          = DUMP_ALL & (~DUMP_ITEMS);
 
   CDir(CInode *in, frag_t fg, MDCache *mdc, bool auth);
+  ~CDir() noexcept;
 
   std::string_view pin_name(int p) const override {
     switch (p) {
@@ -393,15 +395,13 @@ public:
   void add_to_bloom(CDentry *dn);
   bool is_in_bloom(std::string_view name);
   bool has_bloom() { return (bloom ? true : false); }
-  void remove_bloom() {
-    bloom.reset();
-  }
+  void remove_bloom();
 
   void try_remove_dentries_for_stray();
   bool try_trim_snap_dentry(CDentry *dn, const std::set<snapid_t>& snaps);
 
-  void split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, bool replay);
-  void merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool replay);
+  void split(int bits, std::vector<CDir*>* subs, std::vector<MDSContext*>& waiters, bool replay);
+  void merge(const std::vector<CDir*>& subs, std::vector<MDSContext*>& waiters, bool replay);
 
   bool should_split() const;
   bool should_split_fast() const;
@@ -505,10 +505,10 @@ public:
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
   void add_dentry_waiter(std::string_view dentry, snapid_t snap, MDSContext *c);
-  void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, MDSContext::vec& ls);
+  void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, std::vector<MDSContext*>& ls);
 
   void add_waiter(uint64_t mask, MDSContext *c) override;
-  void take_waiting(uint64_t mask, MDSContext::vec& ls) override;  // may include dentry waiters
+  void take_waiting(uint64_t mask, std::vector<MDSContext*>& ls) override;  // may include dentry waiters
   void finish_waiting(uint64_t mask, int result = 0);    // ditto
 
   // -- import/export --
@@ -752,10 +752,10 @@ protected:
   /* If you set up the bloom filter, you must keep it accurate!
    * It's deleted when you mark_complete() and is deliberately not serialized.*/
 
-  mempool::mds_co::compact_map<version_t, MDSContext::vec_alloc<mempool::mds_co::pool_allocator> > waiting_for_commit;
+  mempool::mds_co::compact_map<version_t, std::vector<MDSContext*, mempool::mds_co::pool_allocator<MDSContext*>>> waiting_for_commit;
 
   // -- waiters --
-  mempool::mds_co::map< string_snap_t, MDSContext::vec_alloc<mempool::mds_co::pool_allocator> > waiting_on_dentry; // FIXME string_snap_t not in mempool
+  mempool::mds_co::map< string_snap_t, std::vector<MDSContext*, mempool::mds_co::pool_allocator<MDSContext*>>> waiting_on_dentry; // FIXME string_snap_t not in mempool
 
 private:
   friend std::ostream& operator<<(std::ostream& out, const class CDir& dir);
@@ -776,9 +776,9 @@ private:
   void remove_null_dentries();
 
   void prepare_new_fragment(bool replay);
-  void prepare_old_fragment(std::map<string_snap_t, MDSContext::vec >& dentry_waiters, bool replay);
+  void prepare_old_fragment(std::map<string_snap_t, std::vector<MDSContext*> >& dentry_waiters, bool replay);
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
-  void finish_old_fragment(MDSContext::vec& waiters, bool replay);
+  void finish_old_fragment(std::vector<MDSContext*>& waiters, bool replay);
   void init_fragment_pins();
   std::string get_path() const;
 

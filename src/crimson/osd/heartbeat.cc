@@ -9,6 +9,7 @@
 
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
+#include "msg/msg_types.h"
 
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/formatter.h"

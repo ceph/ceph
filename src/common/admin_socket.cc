@@ -11,6 +11,9 @@
  * Foundation.  See file COPYING.
  *
  */
+
+#include "common/admin_socket.h"
+
 #include <poll.h>
 #include <signal.h>
 #include <sys/un.h>
@@ -19,14 +22,16 @@
 #include <sys/wait.h>
 #endif
 
+#include <iomanip>
 #include <optional>
+#include <sstream>
 
 #include <stdlib.h>
 
-#include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/JSONFormatterFile.h"
 #include "common/safe_io.h"
 #include "common/Thread.h"
 #include "common/version.h"
@@ -41,11 +46,16 @@
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 
+#include "include/buffer.h"
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
 #include "include/compat.h"
 #include "include/sock_compat.h"
 #include "fmt/format.h"
+
+#ifdef _WIN32
+#include "include/util.h" // for get_windows_version()
+#endif
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
@@ -112,6 +122,19 @@ static void add_cleanup_file(std::string file) {
     atexit(remove_all_cleanup_files);
     cleanup_atexit = true;
   }
+}
+
+void AdminSocketHook::call_async(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    ceph::Formatter *f,
+    const ceph::buffer::list& inbl,
+    asok_finisher on_finish) {
+  // by default, call the synchronous handler and then finish
+  ceph::buffer::list out;
+  std::ostringstream errss;
+  int r = call(command, cmdmap, inbl, f, errss, out);
+  on_finish(r, errss.str(), out);
 }
 
 AdminSocket::AdminSocket(CephContext *cct)

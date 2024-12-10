@@ -32,6 +32,7 @@
 #endif
 
 // ceph
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "include/types.h"
