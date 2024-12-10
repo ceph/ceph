@@ -642,17 +642,24 @@ int get_iface_numa_node(
 bool is_addr_in_subnet(
   CephContext *cct,
   const std::string &networks,
-  const std::string &addr)
+  const entity_addr_t &addr)
 {
   const auto nets = get_str_list(networks);
   ceph_assert(!nets.empty());
-
   unsigned ipv = CEPH_PICK_ADDRESS_IPV4;
-  struct sockaddr_in public_addr;
-  public_addr.sin_family = AF_INET;
+  struct sockaddr_in6 public_addr6;
+  struct sockaddr_in public_addr4;
 
-  if(inet_pton(AF_INET, addr.c_str(), &public_addr.sin_addr) != 1) {
-    lderr(cct) << "unable to convert chosen address to string: " << addr << dendl;
+  if (addr.is_ipv4() &&
+      inet_pton(AF_INET, addr.ip_only_to_str().c_str(), &public_addr4.sin_addr) == 1) {
+    public_addr4.sin_family = AF_INET;
+  } else if (addr.is_ipv6() &&
+      inet_pton(AF_INET6, addr.ip_only_to_str().c_str(), &public_addr6.sin6_addr) == 1) {
+    public_addr6.sin6_family = AF_INET6;
+    ipv = CEPH_PICK_ADDRESS_IPV6;
+  } else {
+    std::string_view addr_type = addr.is_ipv4() ? "IPv4" : "IPv6";
+    lderr(cct) << "IP address " << addr << " is not parseable as " << addr_type << dendl;
     return false;
   }
 
@@ -660,10 +667,16 @@ bool is_addr_in_subnet(
     struct ifaddrs ifa;
     memset(&ifa, 0, sizeof(ifa));
     ifa.ifa_next = nullptr;
-    ifa.ifa_addr = (struct sockaddr*)&public_addr;
+    if (addr.is_ipv4()) {
+      ifa.ifa_addr = (struct sockaddr*)&public_addr4;
+    } else if (addr.is_ipv6()) {
+      ifa.ifa_addr = (struct sockaddr*)&public_addr6;
+    }
+
     if(matches_with_net(cct, ifa, net, ipv)) {
       return true;
     }
   }
+  lderr(cct) << "address " << addr << " is not in networks '" << networks << "'" << dendl;
   return false;
 }
