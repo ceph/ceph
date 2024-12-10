@@ -1371,22 +1371,6 @@ SeaStore::Shard::omap_get_header(
   return get_attr(ch, oid, OMAP_HEADER_XATTR_KEY);
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::omap_values_t>
-SeaStore::Shard::do_omap_get_values(
-  Transaction& t,
-  Onode& onode,
-  const omap_keys_t& keys)
-{
-  LOG_PREFIX(SeaStoreS::do_omap_get_values);
-  DEBUGT("{} keys ...", t, keys.size());
-  omap_root_t omap_root = onode.get_layout().omap_root.get(
-    onode.get_metadata_hint(device->get_block_size()));
-  return _omap_get_values(
-    t,
-    std::move(omap_root),
-    keys);
-}
-
 SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_t>
 SeaStore::Shard::omap_get_values(
   CollectionRef ch,
@@ -1402,8 +1386,11 @@ SeaStore::Shard::omap_get_values(
     Transaction::src_t::READ,
     "omap_get_values",
     op_type_t::OMAP_GET_VALUES,
-    [this, keys](auto &t, auto &onode) {
-    return do_omap_get_values(t, onode, keys);
+    [this, keys](auto &t, auto &onode)
+  {
+    omap_root_t omap_root = onode.get_layout().omap_root.get(
+      onode.get_metadata_hint(device->get_block_size()));
+    return _omap_get_values(t, std::move(omap_root), keys);
   }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);

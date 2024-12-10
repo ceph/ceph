@@ -391,11 +391,6 @@ public:
       Onode& onode,
       const ghobject_t& oid);
 
-    base_iertr::future<omap_values_t> do_omap_get_values(
-      Transaction& t,
-      Onode& onode,
-      const omap_keys_t& keys);
-
     base_iertr::future<omap_values_paged_t> do_omap_get_values(
       Transaction& t,
       Onode& onode,
