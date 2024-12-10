@@ -6600,6 +6600,23 @@ options:
   desc: How long cleaner should sleep before re-checking utilization
   default: 5
   with_legacy: true
+- name: bluestore_onode_segment_size
+  type: size
+  level: advanced
+  desc: Size of segment for onode.
+  long_desc: When objects size grows too large BlueStore splits allocation metadata into
+    smaller RocksDB keys (shards). When multiple blobs overlap each other
+    some of them might belong to more than one shard. The encoding for such case
+    is inefficient (spanning blobs). Segmentation of data prevents blobs from crossing
+    specific separation lines, preventing spanning blobs altogether.
+    The smaller values give better split on onode shards.
+    The larger values minimize space loss for padding in compression.
+    Recommended values 256K, 512K, 1024K.
+  default: 0
+  see_also:
+  - bluestore_extent_map_shard_max_size
+  - bluestore_extent_map_shard_target_size
+  with_legacy: false
 - name: jaeger_tracing_enable
   type: bool
   level: advanced
