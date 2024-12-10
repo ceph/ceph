@@ -12,6 +12,8 @@
  *
  */
 
+#include "common/admin_socket_client.h"
+
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -21,10 +23,11 @@
 #include "common/admin_socket.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "common/admin_socket_client.h"
 
 #include "include/compat.h"
 #include "include/sock_compat.h"
+
+#include <sstream>
 
 using std::ostringstream;
 
