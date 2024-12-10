@@ -80,8 +80,11 @@ struct Page {
   Page(char *data, uint64_t offset) : data(data), offset(offset), nrefs(1) {}
 
   static void operator delete(void *p) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
     delete[] reinterpret_cast<Page*>(p)->data;
   }
+#pragma GCC diagnostic pop
 };
 
 class PageSet {

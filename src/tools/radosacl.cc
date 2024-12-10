@@ -176,8 +176,8 @@ int main(int argc, const char **argv)
        << " len=" << bl2.length() << std::endl;
 
   const unsigned char *md5 = (const unsigned char *)bl2.c_str();
-  char md5_str[bl2.length()*2 + 1];
-  buf_to_hex(md5, bl2.length(), md5_str);
+  std::vector<char> md5_str(bl2.length()*2 + 1);
+  buf_to_hex(md5, bl2.length(), md5_str.data());
   cout << "md5 result=" << md5_str << std::endl;
 
   int size = io_ctx.read(oid, bl2, 128, 0);

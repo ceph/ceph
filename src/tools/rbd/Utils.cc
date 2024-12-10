@@ -96,11 +96,12 @@ int read_string(int fd, unsigned max, std::string *out) {
   if (len > max)
     return -EINVAL;
 
-  char sbuf[len];
-  r = safe_read_exact(fd, sbuf, len);
-  if (r < 0)
+  out->resize(len);
+  r = safe_read_exact(fd, out->data(), len);
+  if (r < 0) {
+    out->clear();
     return r;
-  out->assign(sbuf, len);
+  }
   return len;
 }
 
