@@ -13,6 +13,7 @@ if(WIN32)
 endif()
 
 add_subdirectory(io_exerciser)
+add_subdirectory(json)
 add_subdirectory(options)
 
 set(common_srcs
