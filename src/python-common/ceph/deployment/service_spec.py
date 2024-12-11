@@ -1336,11 +1336,16 @@ class NvmeofServiceSpec(ServiceSpec):
                  enable_spdk_discovery_controller: Optional[bool] = False,
                  enable_key_encryption: Optional[bool] = True,
                  encryption_key: Optional[str] = None,
+                 rebalance_period_sec: Optional[int] = 7,
+                 max_gws_in_grp: Optional[int] = 16,
+                 max_ns_to_change_lb_grp: Optional[int] = 8,
                  omap_file_lock_duration: Optional[int] = 20,
                  omap_file_lock_retries: Optional[int] = 30,
                  omap_file_lock_retry_sleep_interval: Optional[float] = 1.0,
                  omap_file_update_reloads: Optional[int] = 10,
                  enable_prometheus_exporter: Optional[bool] = True,
+                 prometheus_port: Optional[int] = 10008,
+                 prometheus_stats_interval: Optional[int] = 10,
                  bdevs_per_cluster: Optional[int] = 32,
                  verify_nqns: Optional[bool] = True,
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
@@ -1425,8 +1430,18 @@ class NvmeofServiceSpec(ServiceSpec):
         self.enable_key_encryption = enable_key_encryption
         #: ``encryption_key`` gateway encryption key
         self.encryption_key = encryption_key
+        #: ``rebalance_period_sec`` number of seconds between cycles of auto namesapce rebalancing
+        self.rebalance_period_sec = rebalance_period_sec
+        #: ``max_gws_in_grp`` max number of gateways in one group
+        self.max_gws_in_grp = max_gws_in_grp
+        #: ``max_ns_to_change_lb_grp`` max number of namespaces before switching to a new lb group
+        self.max_ns_to_change_lb_grp = max_ns_to_change_lb_grp
         #: ``enable_prometheus_exporter`` enables Prometheus exporter
         self.enable_prometheus_exporter = enable_prometheus_exporter
+        #: ``prometheus_port`` Prometheus port
+        self.prometheus_port = prometheus_port or 10008
+        #: ``prometheus_stats_interval`` Prometheus get stats interval
+        self.prometheus_stats_interval = prometheus_stats_interval
         #: ``verify_nqns`` enables verification of subsystem and host NQNs for validity
         self.verify_nqns = verify_nqns
         #: ``omap_file_lock_duration`` number of seconds before automatically unlock OMAP file lock
