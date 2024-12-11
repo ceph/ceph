@@ -482,6 +482,7 @@ public:
       OnodeRef &onode);
     tm_ret _xattr_rmattr(
       internal_context_t &ctx,
+      omap_root_t&& root,
       OnodeRef &onode,
       std::string &&name);
     tm_ret _create_collection(
@@ -515,6 +516,10 @@ public:
     /*
      * omaptree interfaces
      */
+
+    omap_root_t get_omap_root(omap_type_t type, Onode& onode) const {
+      return onode.get_root(type, device->get_block_size());
+    }
 
     base_iertr::future<omap_root_t> omaptree_do_clear(
       Transaction& t,
