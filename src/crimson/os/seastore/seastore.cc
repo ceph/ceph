@@ -2111,6 +2111,22 @@ SeaStore::Shard::omaptree_clear_no_onode(
   });
 }
 
+void omaptree_update_root(
+  Transaction& t,
+  omap_root_t& root,
+  Onode& onode)
+{
+  assert(root.must_update());
+  if (root.get_type() == omap_type_t::OMAP) {
+    onode.update_omap_root(t, root);
+  } else if (root.get_type() == omap_type_t::XATTR) {
+    onode.update_xattr_root(t, root);
+  } else {
+    assert(root.get_type() == omap_type_t::LOG);
+    onode.update_log_root(t, root);
+  }
+}
+
 SeaStore::base_iertr::future<>
 SeaStore::Shard::omaptree_clear(
   Transaction& t,
@@ -2126,12 +2142,7 @@ SeaStore::Shard::omaptree_clear(
   return omaptree_do_clear(t, std::move(root)
   ).si_then([&t, &onode, FNAME](auto root) {
     assert(root.must_update());
-    if (root.get_type() == omap_type_t::XATTR) {
-      onode.update_xattr_root(t, root);
-    } else {
-      assert(root.get_type() == omap_type_t::OMAP);
-      onode.update_omap_root(t, root);
-    }
+    omaptree_update_root(t, root, onode);
     DEBUGT("{} done", t, root.get_type());
   });
 }
@@ -2360,14 +2371,7 @@ SeaStore::Shard::_omap_set_values(
     });
   }).si_then([&onode, &t](auto root) {
     if (root.must_update()) {
-      if (root.get_type() == omap_type_t::OMAP) {
-	onode->update_omap_root(t, root);
-      } else if (root.get_type() == omap_type_t::XATTR) {
-	onode->update_xattr_root(t, root);
-      } else {
-	ceph_assert(root.get_type() == omap_type_t::LOG);
-	onode->update_log_root(t, root);
-      }
+      omaptree_update_root(t, root, *onode);
     }
   });
 }
@@ -2429,12 +2433,7 @@ SeaStore::Shard::_omap_rmkeys(
       return omap_manager.omap_rm_key(root, *ctx.transaction, p);
     }).si_then([&ctx, &root, &onode] {
       if (root.must_update()) {
-        if (root.get_type() == omap_type_t::OMAP) {
-          onode->update_omap_root(*ctx.transaction, root);
-        } else {
-          ceph_assert(root.get_type() == omap_type_t::LOG);
-          onode->update_log_root(*ctx.transaction, root);
-        }
+        omaptree_update_root(*ctx.transaction, root, *onode);
       }
     });
   });
@@ -2473,12 +2472,7 @@ SeaStore::Shard::_omap_rmkeyrange(
       root, *ctx.transaction, first, last, config
     ).si_then([&ctx, &root, &onode] {
       if (root.must_update()) {
-        if (root.get_type() == omap_type_t::OMAP) {
-          onode->update_omap_root(*ctx.transaction, root);
-        } else {
-          ceph_assert(root.get_type() == omap_type_t::LOG);
-          onode->update_log_root(*ctx.transaction, root);
-        }
+        omaptree_update_root(*ctx.transaction, root, *onode);
       }
     });
   });
@@ -2610,7 +2604,7 @@ SeaStore::Shard::_xattr_rmattr(
     return omap_manager.omap_rm_key(root, *ctx.transaction, name
     ).si_then([&ctx, &root, &onode] {
       if (root.must_update()) {
-        onode->update_xattr_root(*ctx.transaction, root);
+        omaptree_update_root(*ctx.transaction, root, *onode);
       }
     });
   });
