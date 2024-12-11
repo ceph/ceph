@@ -40,9 +40,6 @@ struct onode_layout_t {
   char oi[MAX_OI_LENGTH] = {0};
   char ss[MAX_SS_LENGTH] = {0};
 
-  onode_layout_t() : omap_root(omap_type_t::OMAP), log_root(omap_type_t::LOG),
-    xattr_root(omap_type_t::XATTR) {}
-
   const omap_root_le_t& get_root(omap_type_t type) const {
     if (type == omap_type_t::XATTR) {
       return xattr_root;
@@ -107,7 +104,7 @@ public:
   }
   omap_root_t get_root(omap_type_t type, extent_len_t block_size) const {
     return get_layout().get_root(type).get(
-      get_metadata_hint(block_size));
+      get_metadata_hint(block_size), type);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };

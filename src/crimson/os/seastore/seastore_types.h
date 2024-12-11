@@ -1803,15 +1803,12 @@ std::ostream &operator<<(std::ostream &out, const omap_root_t &root);
 class __attribute__((packed)) omap_root_le_t {
   laddr_le_t addr = laddr_le_t(L_ADDR_NULL);
   depth_le_t depth = init_depth_le(0);
-  omap_type_t type = omap_type_t::NONE;
 
 public: 
   omap_root_le_t() = default;
   
-  omap_root_le_t(laddr_t addr, depth_t depth, omap_type_t type)
-    : addr(addr), depth(init_depth_le(depth)), type(type) {}
-
-  omap_root_le_t(omap_type_t type) : type(type) {}
+  omap_root_le_t(laddr_t addr, depth_t depth)
+    : addr(addr), depth(init_depth_le(depth)) {}
 
   omap_root_le_t(const omap_root_le_t &o) = default;
   omap_root_le_t(omap_root_le_t &&o) = default;
@@ -1821,15 +1818,10 @@ public:
   void update(const omap_root_t &nroot) {
     addr = nroot.get_location();
     depth = init_depth_le(nroot.get_depth());
-    type = nroot.get_type();
   }
   
-  omap_root_t get(laddr_t hint) const {
+  omap_root_t get(laddr_t hint, omap_type_t type) const {
     return omap_root_t(addr, depth, hint, type);
-  }
-  
-  omap_type_t get_type() const {
-    return type;
   }
 };
 
