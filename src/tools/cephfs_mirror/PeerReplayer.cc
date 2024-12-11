@@ -318,7 +318,6 @@ void PeerReplayer::shutdown() {
   m_replayers.clear();
   ceph_unmount(m_remote_mount);
   ceph_release(m_remote_mount);
-  m_remote_mount = nullptr;
   m_remote_cluster.reset();
 }
 
