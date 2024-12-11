@@ -86,6 +86,7 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
               secondary_button_name: config.secondary_button_name,
               secondary_button_route: config.secondary_button_route,
               secondary_button_title: config.secondary_button_title,
+              button_enable: config.button_enable,
               uiConfig: config.uiConfig,
               uiApiPath: config.uiApiPath,
               icon: Icons.wrench,
