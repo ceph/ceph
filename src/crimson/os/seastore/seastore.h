@@ -348,7 +348,6 @@ public:
     using omap_list_bare_ret = OMapManager::omap_list_bare_ret;
     using omap_list_ret = OMapManager::omap_list_ret;
     omap_list_ret omap_list(
-      Onode& onode,
       omap_root_t&& omap_root,
       Transaction& t,
       const std::optional<std::string>& start,
@@ -393,7 +392,6 @@ public:
 
     base_iertr::future<omap_values_paged_t> do_omap_get_values(
       Transaction& t,
-      Onode& onode,
       const std::optional<std::string>& start,
       omap_root_t&& omap_root) const;
 
@@ -416,70 +414,70 @@ public:
       OnodeRef &onode);
     tm_ret _touch(
       internal_context_t &ctx,
-      OnodeRef &onode);
+      Onode &onode);
     tm_ret _write(
       internal_context_t &ctx,
-      OnodeRef &onode,
+      Onode &onode,
       uint64_t offset, size_t len,
       ceph::bufferlist &&bl,
       uint32_t fadvise_flags);
     tm_ret _clone_omaps(
       Transaction &t,
-      OnodeRef &onode,
-      OnodeRef &d_onode,
+      Onode &onode,
+      Onode &d_onode,
       const omap_type_t otype);
     tm_ret _clone(
       internal_context_t &ctx,
-      OnodeRef &onode,
-      OnodeRef &d_onode);
+      Onode &onode,
+      Onode &d_onode);
     tm_ret _rename(
       internal_context_t &ctx,
       OnodeRef &onode,
       OnodeRef &d_onode);
     tm_ret _zero(
       internal_context_t &ctx,
-      OnodeRef &onode,
+      Onode &onode,
       objaddr_t offset, extent_len_t len);
     tm_ret _omap_set_values(
       Transaction &t,
-      OnodeRef &onode,
+      Onode &onode,
       std::map<std::string, ceph::bufferlist> &&aset,
       omap_root_t&& omap_root);
     tm_ret _omap_set_header(
       internal_context_t &ctx,
-      OnodeRef &onode,
+      Onode &onode,
       ceph::bufferlist &&header);
     tm_ret _omap_clear(
       internal_context_t &ctx,
-      OnodeRef &onode);
+      Onode &onode);
     tm_ret _omap_rmkeys(
       Transaction &t,
-      OnodeRef &onode,
+      Onode &onode,
       omap_keys_t &&aset,
       omap_root_t &&_omap_root);
     tm_ret _omap_rmkeyrange(
       Transaction &t,
-      OnodeRef &onode,
+      Onode &onode,
       std::string first,
       std::string last,
       omap_root_t &_omap_root);
     tm_ret _truncate(
       internal_context_t &ctx,
-      OnodeRef &onode, uint64_t size);
+      Onode &onode, uint64_t size);
     tm_ret _setattrs(
       internal_context_t &ctx,
-      OnodeRef &onode,
+      Onode &onode,
       std::map<std::string,bufferlist>&& aset);
     tm_ret _rmattr(
       internal_context_t &ctx,
-      OnodeRef &onode,
+      Onode &onode,
       std::string name);
     tm_ret _rmattrs(
       internal_context_t &ctx,
-      OnodeRef &onode);
+      Onode &onode);
     tm_ret _xattr_rmattr(
       Transaction &t,
-      OnodeRef &onode,
+      Onode &onode,
       std::string &&name);
     tm_ret _create_collection(
       internal_context_t &ctx,
