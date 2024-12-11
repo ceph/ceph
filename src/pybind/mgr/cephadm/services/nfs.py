@@ -13,7 +13,7 @@ from mgr_module import NFS_POOL_NAME as POOL_NAME
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 
-from orchestrator import DaemonDescription
+from orchestrator import DaemonDescription, OrchestratorError
 
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
 
@@ -317,12 +317,27 @@ class NFSService(CephService):
             '--namespace', cast(str, spec.service_id),
             'rm', 'grace',
         ]
-        subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=10
-        )
+        try:
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10
+            )
+        except Exception as ex:
+            err_msg = (
+                f'Command {cmd} failed while trying to remove grace file for nfs '
+                f'service nfs.{spec.service_id}: {str(ex)}'
+            )
+            logger.warning(err_msg)
+            raise OrchestratorError(err_msg)
+        if result.returncode:
+            err_msg = (
+                f'Command {cmd} got nonzero rc {result.returncode} while trying to '
+                f'remove grace file for nfs service nfs.{spec.service_id}'
+            )
+            logger.warning(err_msg)
+            raise OrchestratorError(err_msg)
 
     def _haproxy_hosts(self) -> List[str]:
         # NB: Ideally, we would limit the list to IPs on hosts running
