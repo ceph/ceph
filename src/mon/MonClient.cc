@@ -1249,7 +1249,7 @@ void MonClient::_send_command(MonCommand *r)
   }
 
   // normal CLI command
-  r->sent_name = monmap.get_name(active_con ? (active_con->get_con()->get_peer_addr()) : "");
+  r->sent_name = active_con ? monmap.get_name(active_con->get_con()->get_peer_addr()) : "";
   ldout(cct, 10) << __func__ << " " << r->tid << " " << r->cmd << dendl;
   auto m = ceph::make_message<MMonCommand>(monmap.fsid);
   m->set_tid(r->tid);
