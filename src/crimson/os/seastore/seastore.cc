@@ -2259,7 +2259,7 @@ SeaStore::Shard::_clone_omaps(
 	  ctx,
 	  d_onode,
 	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end()),
-	  onode->get_layout().get_root(type)
+	  d_onode->get_layout().get_root(type)
 	).si_then([complete, nstart=std::move(nstart), &start]() mutable {
 	  if (complete) {
 	    return seastar::make_ready_future<
