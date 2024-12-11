@@ -411,9 +411,6 @@ public:
       std::vector<OnodeRef> &onodes,
       ceph::os::Transaction::iterator &i);
 
-    tm_ret _remove_omaps(
-      internal_context_t &ctx,
-      omap_root_t &&omap_root);
     tm_ret _remove(
       internal_context_t &ctx,
       OnodeRef &onode);
@@ -511,6 +508,23 @@ public:
       lat.sample_count++;
       lat.sample_sum += std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
     }
+
+    /*
+     * omaptree interfaces
+     */
+
+    base_iertr::future<omap_root_t> omaptree_do_clear(
+      Transaction& t,
+      omap_root_t&& root);
+
+    base_iertr::future<> omaptree_clear_no_onode(
+      Transaction& t,
+      omap_root_t&& root);
+
+    base_iertr::future<> omaptree_clear(
+      Transaction& t,
+      omap_root_t&& root,
+      Onode& onode);
 
   private:
     std::string root;
