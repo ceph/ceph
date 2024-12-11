@@ -1275,8 +1275,10 @@ SeaStore::Shard::_get_attrs(
   LOG_PREFIX(SeaStoreS::_get_attrs);
   DEBUGT("...", t);
   auto& layout = onode.get_layout();
-  return do_omap_get_values(t, onode, std::nullopt,
-    onode.get_layout().xattr_root
+  auto root = onode.get_layout().xattr_root.get(
+    onode.get_metadata_hint(device->get_block_size()));
+  return do_omap_get_values(
+    t, onode, std::nullopt, std::move(root)
   ).si_then([&layout, &t, FNAME](auto p) {
     auto& attrs = std::get<1>(p);
     DEBUGT("got {} attrs, OI length=0x{:x}, SS length=0x{:x}",
@@ -1472,13 +1474,11 @@ SeaStore::Shard::_omap_get_values(
 SeaStore::Shard::omap_list_ret
 SeaStore::Shard::omap_list(
   Onode &onode,
-  const omap_root_le_t& _root,
+  omap_root_t&& root,
   Transaction& t,
   const std::optional<std::string>& start,
   OMapManager::omap_list_config_t config) const
 {
-  auto root = _root.get(
-    onode.get_metadata_hint(device->get_block_size()));
   if (root.is_null()) {
     return seastar::make_ready_future<omap_list_bare_ret>(
       true, omap_values_t{}
@@ -1500,7 +1500,7 @@ SeaStore::Shard::do_omap_get_values(
   Transaction& t,
   Onode& onode,
   const std::optional<std::string>& start,
-  const omap_root_le_t& root) const
+  omap_root_t&& root) const
 {
   LOG_PREFIX(SeaStoreS::do_omap_get_values);
   DEBUGT("start={} type={} ...", t, start.has_value() ? *start : "",
@@ -1508,7 +1508,7 @@ SeaStore::Shard::do_omap_get_values(
   auto config = OMapManager::omap_list_config_t()
     .with_inclusive(false, false)
     .without_max();
-  return omap_list(onode, root, t, start, config
+  return omap_list(onode, std::move(root), t, start, config
   ).si_then([FNAME, &t](omap_values_paged_t ret) {
     DEBUGT("got {} values, complete={}",
            t, std::get<1>(ret).size(), std::get<0>(ret));
@@ -1533,8 +1533,10 @@ SeaStore::Shard::omap_get_values(
     op_type_t::OMAP_GET_VALUES2,
     [this, start](auto &t, auto &onode)
   {
+    auto root = onode.get_layout().omap_root.get(
+      onode.get_metadata_hint(device->get_block_size()));
     return do_omap_get_values(
-      t, onode, start, onode.get_layout().omap_root);
+      t, onode, start, std::move(root));
   }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
@@ -1558,8 +1560,10 @@ SeaStore::Shard::log_get_values(
     op_type_t::LOG_GET_VALUES,
     [this, start](auto &t, auto &onode)
   {
+    auto root = onode.get_layout().log_root.get(
+      onode.get_metadata_hint(device->get_block_size()));
     return do_omap_get_values(
-      t, onode, start, onode.get_layout().log_root);
+      t, onode, start, std::move(root));
   }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
@@ -1890,11 +1894,13 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_attrset(aset);
         DEBUGT("op OMAP_SETKEYS, oid={}, omap size={} ...",
                *ctx.transaction, oid, aset.size());
+        auto root = onode->get_layout().omap_root.get(
+          onode->get_metadata_hint(device->get_block_size()));
         return _omap_set_values(
           ctx,
           onode,
           std::move(aset),
-          onode->get_layout().omap_root);
+          std::move(root));
       }
       case Transaction::OP_LOG_SETKEYS:
       {
@@ -1902,11 +1908,13 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_attrset(aset);
         DEBUGT("op LOG_SETKEYS, oid={}, omap size={} ...",
                *ctx.transaction, oid, aset.size());
+        auto root = onode->get_layout().log_root.get(
+          onode->get_metadata_hint(device->get_block_size()));
         return _omap_set_values(
           ctx,
           onode,
           std::move(aset),
-          onode->get_layout().log_root);
+          std::move(root));
       }
       case Transaction::OP_OMAP_SETHEADER:
       {
@@ -1922,11 +1930,13 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_keyset(keys);
         DEBUGT("op OMAP_RMKEYS, oid={}, omap size={} ...",
                *ctx.transaction, oid, keys.size());
+        auto root = onode->get_layout().omap_root.get(
+          onode->get_metadata_hint(device->get_block_size()));
         return _omap_rmkeys(
           ctx,
           onode,
           std::move(keys),
-          onode->get_layout().omap_root);
+          std::move(root));
       }
       case Transaction::OP_LOG_RMKEYS:
       {
@@ -1934,11 +1944,13 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_keyset(keys);
         DEBUGT("op LOG_RMKEYS, oid={}, omap size={} ...",
                *ctx.transaction, oid, keys.size());
+        auto root = onode->get_layout().log_root.get(
+          onode->get_metadata_hint(device->get_block_size()));
         return _omap_rmkeys(
           ctx,
           onode,
           std::move(keys),
-          onode->get_layout().log_root);
+          std::move(root));
       }
       case Transaction::OP_OMAP_RMKEYRANGE:
       {
@@ -1947,11 +1959,13 @@ SeaStore::Shard::_do_transaction_step(
         last = i.decode_string();
         DEBUGT("op OMAP_RMKEYRANGE, oid={}, first={}, last={} ...",
                *ctx.transaction, oid, first, last);
+        auto root = onode->get_layout().omap_root.get(
+          onode->get_metadata_hint(device->get_block_size()));
         return _omap_rmkeyrange(
           ctx,
           onode,
           std::move(first), std::move(last),
-          onode->get_layout().omap_root);
+          std::move(root));
       }
       case Transaction::OP_LOG_RMKEYRANGE:
       {
@@ -1960,11 +1974,13 @@ SeaStore::Shard::_do_transaction_step(
         last = i.decode_string();
         DEBUGT("op LOG_RMKEYRANGE, oid={}, first={}, last={} ...",
                *ctx.transaction, oid, first, last);
+        auto root = onode->get_layout().log_root.get(
+          onode->get_metadata_hint(device->get_block_size()));
         return _omap_rmkeyrange(
           ctx,
           onode,
 	  std::move(first), std::move(last),
-	  onode->get_layout().log_root);
+	  std::move(root));
       }
       case Transaction::OP_OMAP_CLEAR:
       {
@@ -2239,9 +2255,11 @@ SeaStore::Shard::_clone_omaps(
     {
       auto config = OMapManager::omap_list_config_t()
         .with_inclusive(false, false);
+      auto root = onode->get_layout().get_root(type).get(
+        onode->get_metadata_hint(device->get_block_size()));
       return omap_list(
 	*onode,
-	onode->get_layout().get_root(type),
+	std::move(root),
 	*ctx.transaction,
 	start,
 	config
@@ -2255,11 +2273,13 @@ SeaStore::Shard::_clone_omaps(
 	      seastar::stop_iteration::yes);
 	}
 	std::string nstart = attrs.rbegin()->first;
+	auto root = d_onode->get_layout().get_root(type).get(
+	  d_onode->get_metadata_hint(device->get_block_size()));
 	return _omap_set_values(
 	  ctx,
 	  d_onode,
 	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end()),
-	  d_onode->get_layout().get_root(type)
+	  std::move(root)
 	).si_then([complete, nstart=std::move(nstart), &start]() mutable {
 	  if (complete) {
 	    return seastar::make_ready_future<
@@ -2343,12 +2363,12 @@ SeaStore::Shard::_omap_set_values(
   internal_context_t &ctx,
   OnodeRef &onode,
   std::map<std::string, ceph::bufferlist> &&kvs,
-  const omap_root_le_t &_root)
+  omap_root_t&& root)
 {
   Transaction& t = *ctx.transaction;
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
-    _root.get(onode->get_metadata_hint(device->get_block_size())),
+    std::move(root),
     [this, &t, &onode, kvs=std::move(kvs)]
     (auto &omap_manager, auto &root) mutable
   {
@@ -2411,10 +2431,8 @@ SeaStore::Shard::_omap_rmkeys(
   internal_context_t &ctx,
   OnodeRef &onode,
   omap_keys_t &&keys,
-  const omap_root_le_t &_root)
+  omap_root_t&& root)
 {
-  auto root = _root.get(
-    onode->get_metadata_hint(device->get_block_size()));
   if (root.is_null()) {
     return seastar::now();
   }
@@ -2445,15 +2463,13 @@ SeaStore::Shard::_omap_rmkeyrange(
   OnodeRef &onode,
   std::string first,
   std::string last,
-  const omap_root_le_t &_root)
+  omap_root_t &&root)
 {
   if (first > last) {
     LOG_PREFIX(SeaStoreS::_omap_rmkeyrange);
     ERRORT("range error, first:{} > last:{}", *ctx.transaction, first, last);
     ceph_abort();
   }
-  auto root = _root.get(
-    onode->get_metadata_hint(device->get_block_size()));
   if (root.is_null()) {
     return seastar::now();
   }
@@ -2553,11 +2569,13 @@ SeaStore::Shard::_setattrs(
   DEBUGT("set attrs in omap", *ctx.transaction);
   return std::move(fut
   ).si_then([this, onode, &ctx, aset=std::move(aset)]() mutable {
+    auto root = onode->get_layout().xattr_root.get(
+      onode->get_metadata_hint(device->get_block_size()));
     return _omap_set_values(
       ctx,
       onode,
       std::move(aset),
-      onode->get_layout().xattr_root);
+      std::move(root));
   });
 }
 

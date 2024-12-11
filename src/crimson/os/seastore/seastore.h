@@ -349,7 +349,7 @@ public:
     using omap_list_ret = OMapManager::omap_list_ret;
     omap_list_ret omap_list(
       Onode& onode,
-      const omap_root_le_t& omap_root,
+      omap_root_t&& omap_root,
       Transaction& t,
       const std::optional<std::string>& start,
       OMapManager::omap_list_config_t config) const;
@@ -395,7 +395,7 @@ public:
       Transaction& t,
       Onode& onode,
       const std::optional<std::string>& start,
-      const omap_root_le_t& omap_root) const;
+      omap_root_t&& omap_root) const;
 
     base_iertr::future<fiemap_ret_t> _fiemap(
       Transaction &t,
@@ -444,7 +444,7 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       std::map<std::string, ceph::bufferlist> &&aset,
-      const omap_root_le_t &omap_root);
+      omap_root_t&& omap_root);
     tm_ret _omap_set_header(
       internal_context_t &ctx,
       OnodeRef &onode,
@@ -456,13 +456,13 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       omap_keys_t &&aset,
-      const omap_root_le_t &_omap_root);
+      omap_root_t &&_omap_root);
     tm_ret _omap_rmkeyrange(
       internal_context_t &ctx,
       OnodeRef &onode,
       std::string first,
       std::string last,
-      const omap_root_le_t &_omap_root);
+      omap_root_t &_omap_root);
     tm_ret _truncate(
       internal_context_t &ctx,
       OnodeRef &onode, uint64_t size);
