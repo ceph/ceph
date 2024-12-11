@@ -433,7 +433,15 @@ const routes: Routes = [
           },
           {
             path: 'smb',
+            canActivateChild: [ModuleStatusGuardService],
             data: {
+              moduleStatusGuardConfig: {
+                uiApiPath: 'smb',
+                redirectTo: 'error',
+                header: 'SMB module is not enabled',
+                button_to_enable_module: 'smb',
+                navigate_to: 'cephfs/smb'
+              },
               breadcrumbs: 'File/SMB'
             },
             children: [{ path: '', component: SmbClusterListComponent }]

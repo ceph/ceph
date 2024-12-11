@@ -1,7 +1,11 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
+import { BlockUI, NgBlockUI } from 'ng-block-ui';
 
-import { Observable } from 'rxjs';
+import { Observable, timer as observableTimer } from 'rxjs';
+import { NotificationService } from '../services/notification.service';
+import { TableComponent } from '../datatable/table/table.component';
+import { Router } from '@angular/router';
 
 @Injectable({
   providedIn: 'root'
@@ -9,7 +13,16 @@ import { Observable } from 'rxjs';
 export class MgrModuleService {
   private url = 'api/mgr/module';
 
-  constructor(private http: HttpClient) {}
+  @BlockUI()
+  blockUI: NgBlockUI;
+
+  readonly REFRESH_INTERVAL = 2000;
+
+  constructor(
+    private http: HttpClient,
+    private notificationService: NotificationService,
+    private router: Router
+  ) {}
 
   /**
    * Get the list of Ceph Mgr modules and their state (enabled/disabled).
@@ -61,5 +74,60 @@ export class MgrModuleService {
    */
   getOptions(module: string): Observable<Object> {
     return this.http.get(`${this.url}/${module}/options`);
+  }
+
+  /**
+   * Update the Ceph Mgr module state to enabled or disabled.
+   */
+  updateModuleState(
+    module: string,
+    enabled: boolean = false,
+    table: TableComponent = null,
+    navigateTo: string = ''
+  ): void {
+    let $obs;
+    const fnWaitUntilReconnected = () => {
+      observableTimer(this.REFRESH_INTERVAL).subscribe(() => {
+        // Trigger an API request to check if the connection is
+        // re-established.
+        this.list().subscribe(
+          () => {
+            // Resume showing the notification toasties.
+            this.notificationService.suspendToasties(false);
+            // Unblock the whole UI.
+            this.blockUI.stop();
+            // Reload the data table content.
+            if (table) {
+              table.refreshBtn();
+            }
+            if (navigateTo) {
+              this.router.navigate([navigateTo]);
+            }
+          },
+          () => {
+            fnWaitUntilReconnected();
+          }
+        );
+      });
+    };
+
+    // Note, the Ceph Mgr is always restarted when a module
+    // is enabled/disabled.
+    if (enabled) {
+      $obs = this.disable(module);
+    } else {
+      $obs = this.enable(module);
+    }
+    $obs.subscribe(
+      () => undefined,
+      () => {
+        // Suspend showing the notification toasties.
+        this.notificationService.suspendToasties(true);
+        // Block the whole UI to prevent user interactions until
+        // the connection to the backend is reestablished
+        this.blockUI.start($localize`Reconnecting, please wait ...`);
+        fnWaitUntilReconnected();
+      }
+    );
   }
 }

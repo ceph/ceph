@@ -15,7 +15,7 @@ from dashboard.exceptions import DashboardException
 
 from .. import mgr
 from ..security import Scope
-from . import APIDoc, APIRouter, ReadPermission, RESTController
+from . import APIDoc, APIRouter, Endpoint, ReadPermission, RESTController, UIRouter
 
 logger = logging.getLogger('controllers.smb')
 
@@ -184,3 +184,18 @@ class SMBShare(RESTController):
         resource['share_id'] = share_id
         resource['intent'] = Intent.REMOVED
         return mgr.remote('smb', 'apply_resources', json.dumps(resource)).one().to_simplified()
+
+
+@UIRouter('/smb')
+class SMBStatus(RESTController):
+    @EndpointDoc("Get SMB feature status")
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        status = {'available': False, 'message': None}
+        try:
+            mgr.remote('smb', 'show', ['ceph.smb.cluster'])
+            status['available'] = True
+        except (ImportError, RuntimeError):
+            status['message'] = 'SMB module is not enabled'
+        return status

@@ -57,7 +57,7 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
 
     this.smbClusters$ = this.subject$.pipe(
       switchMap(() =>
-        this.smbService.listClusters().pipe(
+        this.smbService.listClusters()?.pipe(
           catchError(() => {
             this.context.error();
             return of(null);
