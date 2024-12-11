@@ -1000,14 +1000,14 @@ TEST(pick_address, is_addr_in_subnet) {
   boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
   cct->_conf._clear_safe_to_start_threads();
 
-  ASSERT_TRUE(is_addr_in_subnet(cct, "10.1.2.0/24", "10.1.2.42"));
-  ASSERT_FALSE(is_addr_in_subnet(cct, "10.1.3.0/24", "10.1.2.42"));
-  ASSERT_TRUE(is_addr_in_subnet(cct, "10.1.2.0/24,10.1.3.0/24", "10.1.2.10"));
-  ASSERT_TRUE(is_addr_in_subnet(cct, "10.1.2.0/24,10.1.3.0/24", "10.1.3.10"));
-  ASSERT_FALSE(is_addr_in_subnet(cct, "10.1.2.0/24,10.1.3.0/24", "10.1.4.10"));
-  ASSERT_TRUE(is_addr_in_subnet(cct, "2001:12:34:56::/64", "2001:12:34:56::90ab:cdef"));
-  ASSERT_FALSE(is_addr_in_subnet(cct, "2001:12:34:56::/64", "2001:12:34:6::90ab:cdef"));
-  ASSERT_TRUE(is_addr_in_subnet(cct, "2001:12:34:56::/64,2001:12:34:78::/64", "2001:12:34:56::90ab:cdef"));
-  ASSERT_TRUE(is_addr_in_subnet(cct, "2001:12:34:56::/64,2001:12:34:78::/64", "2001:12:34:78::90ab:cdef"));
-  ASSERT_FALSE(is_addr_in_subnet(cct, "2001:12:34:56::/64,2001:12:34:78::/64", "2001:12:34:9a::90ab:cdef"));
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), "10.1.2.0/24", "10.1.2.42"));
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), "10.1.3.0/24", "10.1.2.42"));
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), "10.1.2.0/24,10.1.3.0/24", "10.1.2.10"));
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), "10.1.2.0/24,10.1.3.0/24", "10.1.3.10"));
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), "10.1.2.0/24,10.1.3.0/24", "10.1.4.10"));
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), "2001:12:34:56::/64", "2001:12:34:56::90ab:cdef"));
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), "2001:12:34:56::/64", "2001:12:34:6::90ab:cdef"));
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), "2001:12:34:56::/64,2001:12:34:78::/64", "2001:12:34:56::90ab:cdef"));
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), "2001:12:34:56::/64,2001:12:34:78::/64", "2001:12:34:78::90ab:cdef"));
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), "2001:12:34:56::/64,2001:12:34:78::/64", "2001:12:34:9a::90ab:cdef"));
 }
