@@ -60,12 +60,10 @@ std::string snapshot_path(const std::string &snap_dir, const std::string &snap_n
   return snap_dir + "/" + snap_name;
 }
 
+auto entry_path = snapshot_path;
+
 std::string snapshot_path(CephContext *cct, const std::string &path, const std::string &snap_name) {
   return path + "/" + cct->_conf->client_snapdir + "/" + snap_name;
-}
-
-std::string entry_path(const std::string &dir, const std::string &name) {
-  return dir + "/" + name;
 }
 
 std::string entry_diff_path(const std::string &dir, const std::string &name) {
