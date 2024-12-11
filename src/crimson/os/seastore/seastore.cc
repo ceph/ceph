@@ -1212,7 +1212,7 @@ SeaStore::Shard::readv(
 
 using crimson::os::seastore::omap_manager::BtreeOMapManager;
 
-SeaStore::Shard::_omap_get_value_ret
+SeaStore::Shard::omaptree_get_value_ret
 SeaStore::Shard::_get_attr(
   Transaction& t,
   Onode& onode,
@@ -1233,7 +1233,7 @@ SeaStore::Shard::_get_attr(
     return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
   }
   DEBUGT("name={} ...", t, name);
-  return _omap_get_value(t, get_omap_root(omap_type_t::XATTR, onode), name);
+  return omaptree_get_value(t, get_omap_root(omap_type_t::XATTR, onode), name);
 }
 
 SeaStore::Shard::get_attr_errorator::future<ceph::bufferlist>
@@ -1271,8 +1271,8 @@ SeaStore::Shard::_get_attrs(
   LOG_PREFIX(SeaStoreS::_get_attrs);
   DEBUGT("...", t);
   auto& layout = onode.get_layout();
-  return do_omap_get_values(
-    t, std::nullopt, get_omap_root(omap_type_t::XATTR, onode)
+  return omaptree_get_values(
+    t, get_omap_root(omap_type_t::XATTR, onode), std::nullopt
   ).si_then([&layout, &t, FNAME](auto p) {
     auto& attrs = std::get<1>(p);
     DEBUGT("got {} attrs, OI length=0x{:x}, SS length=0x{:x}",
@@ -1384,7 +1384,7 @@ SeaStore::Shard::omap_get_values(
     op_type_t::OMAP_GET_VALUES,
     [this, keys](auto &t, auto &onode)
   {
-    return _omap_get_values(
+    return omaptree_get_values(
       t, get_omap_root(omap_type_t::OMAP, onode), keys);
   }).finally([this] {
     assert(shard_stats.pending_read_num);
@@ -1392,8 +1392,8 @@ SeaStore::Shard::omap_get_values(
   });
 }
 
-SeaStore::Shard::_omap_get_value_ret
-SeaStore::Shard::_omap_get_value(
+SeaStore::Shard::omaptree_get_value_ret
+SeaStore::Shard::omaptree_get_value(
   Transaction& t,
   omap_root_t&& root,
   std::string_view key) const
@@ -1402,15 +1402,15 @@ SeaStore::Shard::_omap_get_value(
     BtreeOMapManager(*transaction_manager),
     std::move(root),
     std::string(key),
-    [&t](auto &manager, auto& root, auto& key) -> _omap_get_value_ret
+    [&t](auto &manager, auto& root, auto& key) -> omaptree_get_value_ret
   {
-    LOG_PREFIX(SeaStoreS::_omap_get_value);
+    LOG_PREFIX(SeaStoreS::omaptree_get_value);
     if (root.is_null()) {
       DEBUGT("key={} is absent because of null root", t, key);
       return crimson::ct_error::enodata::make();
     }
     return manager.omap_get_value(root, t, key
-    ).si_then([&key, &t, FNAME](auto opt) -> _omap_get_value_ret {
+    ).si_then([&key, &t, FNAME](auto opt) -> omaptree_get_value_ret {
       if (!opt) {
         DEBUGT("key={} is absent", t, key);
         return crimson::ct_error::enodata::make();
@@ -1422,12 +1422,12 @@ SeaStore::Shard::_omap_get_value(
 }
 
 SeaStore::base_iertr::future<SeaStore::Shard::omap_values_t>
-SeaStore::Shard::_omap_get_values(
+SeaStore::Shard::omaptree_get_values(
   Transaction& t,
   omap_root_t&& root,
   const omap_keys_t& keys) const
 {
-  LOG_PREFIX(SeaStoreS::_omap_get_values);
+  LOG_PREFIX(SeaStoreS::omaptree_get_values);
   if (root.is_null()) {
     DEBUGT("{} keys are absent because of null root", t, keys.size());
     return seastar::make_ready_future<omap_values_t>();
@@ -1464,15 +1464,15 @@ SeaStore::Shard::_omap_get_values(
   });
 }
 
-SeaStore::Shard::omap_list_ret
-SeaStore::Shard::omap_list(
-  omap_root_t&& root,
+SeaStore::Shard::omaptree_list_ret
+SeaStore::Shard::omaptree_list(
   Transaction& t,
+  omap_root_t&& root,
   const std::optional<std::string>& start,
   OMapManager::omap_list_config_t config) const
 {
   if (root.is_null()) {
-    return seastar::make_ready_future<omap_list_bare_ret>(
+    return seastar::make_ready_future<omaptree_list_bare_ret>(
       true, omap_values_t{}
     );
   }
@@ -1488,18 +1488,18 @@ SeaStore::Shard::omap_list(
 }
 
 SeaStore::base_iertr::future<SeaStore::Shard::omap_values_paged_t>
-SeaStore::Shard::do_omap_get_values(
+SeaStore::Shard::omaptree_get_values(
   Transaction& t,
-  const std::optional<std::string>& start,
-  omap_root_t&& root) const
+  omap_root_t&& root,
+  const std::optional<std::string>& start) const
 {
-  LOG_PREFIX(SeaStoreS::do_omap_get_values);
+  LOG_PREFIX(SeaStoreS::omaptree_get_values);
   DEBUGT("start={} type={} ...", t, start.has_value() ? *start : "",
     root.get_type());
   auto config = OMapManager::omap_list_config_t()
     .with_inclusive(false, false)
     .without_max();
-  return omap_list(std::move(root), t, start, config
+  return omaptree_list(t, std::move(root), start, config
   ).si_then([FNAME, &t](omap_values_paged_t ret) {
     DEBUGT("got {} values, complete={}",
            t, std::get<1>(ret).size(), std::get<0>(ret));
@@ -1524,7 +1524,7 @@ SeaStore::Shard::omap_get_values(
     op_type_t::OMAP_GET_VALUES2,
     [this, start](auto &t, auto &onode)
   {
-    return do_omap_get_values(
+    return omaptree_get_values(
       t, start, get_omap_root(omap_type_t::OMAP, onode));
   }).finally([this] {
     assert(shard_stats.pending_read_num);
@@ -1549,8 +1549,8 @@ SeaStore::Shard::log_get_values(
     op_type_t::LOG_GET_VALUES,
     [this, start](auto &t, auto &onode)
   {
-    return do_omap_get_values(
-      t, start, get_omap_root(omap_type_t::LOG, onode));
+    return omaptree_get_values(
+      t, get_omap_root(omap_type_t::LOG, onode), start);
   }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
@@ -1881,11 +1881,11 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_attrset(aset);
         DEBUGT("op OMAP_SETKEYS, oid={}, omap size={} ...",
                *ctx.transaction, oid, aset.size());
-        return _omap_set_values(
+        return omaptree_set_keys(
           *ctx.transaction,
+          get_omap_root(omap_type_t::OMAP, *onode),
           *onode,
-          std::move(aset),
-          get_omap_root(omap_type_t::OMAP, *onode));
+          std::move(aset));
       }
       case Transaction::OP_LOG_SETKEYS:
       {
@@ -1893,11 +1893,11 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_attrset(aset);
         DEBUGT("op LOG_SETKEYS, oid={}, omap size={} ...",
                *ctx.transaction, oid, aset.size());
-        return _omap_set_values(
+        return omaptree_set_keys(
           *ctx.transaction,
+          get_omap_root(omap_type_t::LOG, *onode),
           *onode,
-          std::move(aset),
-          get_omap_root(omap_type_t::LOG, *onode));
+          std::move(aset));
       }
       case Transaction::OP_OMAP_SETHEADER:
       {
@@ -1913,11 +1913,11 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_keyset(keys);
         DEBUGT("op OMAP_RMKEYS, oid={}, omap size={} ...",
                *ctx.transaction, oid, keys.size());
-        return _omap_rmkeys(
+        return omaptree_rm_keys(
           *ctx.transaction,
+          get_omap_root(omap_type_t::OMAP, *onode),
           *onode,
-          std::move(keys),
-          get_omap_root(omap_type_t::OMAP, *onode));
+          std::move(keys));
       }
       case Transaction::OP_LOG_RMKEYS:
       {
@@ -1925,11 +1925,11 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_keyset(keys);
         DEBUGT("op LOG_RMKEYS, oid={}, omap size={} ...",
                *ctx.transaction, oid, keys.size());
-        return _omap_rmkeys(
+        return omaptree_rm_keys(
           *ctx.transaction,
+          get_omap_root(omap_type_t::LOG, *onode),
           *onode,
-          std::move(keys),
-          get_omap_root(omap_type_t::LOG, *onode));
+          std::move(keys));
       }
       case Transaction::OP_OMAP_RMKEYRANGE:
       {
@@ -1938,11 +1938,11 @@ SeaStore::Shard::_do_transaction_step(
         last = i.decode_string();
         DEBUGT("op OMAP_RMKEYRANGE, oid={}, first={}, last={} ...",
                *ctx.transaction, oid, first, last);
-        return _omap_rmkeyrange(
+        return omaptree_rm_keyrange(
           *ctx.transaction,
+          get_omap_root(omap_type_t::OMAP, *onode),
           *onode,
-          std::move(first), std::move(last),
-          get_omap_root(omap_type_t::OMAP, *onode));
+          std::move(first), std::move(last));
       }
       case Transaction::OP_LOG_RMKEYRANGE:
       {
@@ -1951,11 +1951,11 @@ SeaStore::Shard::_do_transaction_step(
         last = i.decode_string();
         DEBUGT("op LOG_RMKEYRANGE, oid={}, first={}, last={} ...",
                *ctx.transaction, oid, first, last);
-        return _omap_rmkeyrange(
+        return omaptree_rm_keyrange(
           *ctx.transaction,
+          get_omap_root(omap_type_t::LOG, *onode),
           *onode,
-	  std::move(first), std::move(last),
-	  get_omap_root(omap_type_t::LOG, *onode));
+          std::move(first), std::move(last));
       }
       case Transaction::OP_OMAP_CLEAR:
       {
@@ -2210,12 +2210,12 @@ SeaStore::Shard::_write(
     });
 }
 
-SeaStore::Shard::tm_ret
-SeaStore::Shard::_clone_omaps(
+SeaStore::base_iertr::future<>
+SeaStore::Shard::omaptree_clone(
   Transaction& t,
+  omap_type_t type,
   Onode& onode,
-  Onode& d_onode,
-  const omap_type_t type)
+  Onode& d_onode)
 {
   return trans_intr::repeat([&t, &onode, &d_onode, this, type] {
     return seastar::do_with(
@@ -2224,22 +2224,22 @@ SeaStore::Shard::_clone_omaps(
     {
       auto config = OMapManager::omap_list_config_t()
         .with_inclusive(false, false);
-      return omap_list(get_omap_root(type, onode), t, start, config
+      return omaptree_list(t, get_omap_root(type, onode), start, config
       ).si_then([&t, &d_onode, this, type, &start](auto p) {
 	auto complete = std::get<0>(p);
 	auto &attrs = std::get<1>(p);
 	if (attrs.empty()) {
 	  assert(complete);
-	  return tm_iertr::make_ready_future<
+	  return base_iertr::make_ready_future<
 	    seastar::stop_iteration>(
 	      seastar::stop_iteration::yes);
 	}
 	std::string nstart = attrs.rbegin()->first;
-	return _omap_set_values(
+	return omaptree_set_keys(
 	  t,
+	  get_omap_root(type, d_onode),
 	  d_onode,
-	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end()),
-	  get_omap_root(type, d_onode)
+	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end())
 	).si_then([complete, nstart=std::move(nstart), &start]() mutable {
 	  if (complete) {
 	    return seastar::make_ready_future<
@@ -2276,14 +2276,14 @@ SeaStore::Shard::_clone(
 	onode,
 	&d_onode});
   }).si_then([&ctx, &onode, &d_onode, this] {
-    return _clone_omaps(
-      *ctx.transaction, onode, d_onode, omap_type_t::XATTR);
+    return omaptree_clone(
+      *ctx.transaction, omap_type_t::XATTR, onode, d_onode);
   }).si_then([&ctx, &onode, &d_onode, this] {
-    return _clone_omaps(
-      *ctx.transaction, onode, d_onode, omap_type_t::OMAP);
+    return omaptree_clone(
+      *ctx.transaction, omap_type_t::OMAP, onode, d_onode);
   }).si_then([&ctx, &onode, &d_onode, this] {
-    return _clone_omaps(
-      *ctx.transaction, onode, d_onode, omap_type_t::LOG);
+    return omaptree_clone(
+      *ctx.transaction, omap_type_t::LOG, onode, d_onode);
   });
 }
 
@@ -2318,12 +2318,12 @@ SeaStore::Shard::_zero(
   });
 }
 
-SeaStore::Shard::tm_ret
-SeaStore::Shard::_omap_set_values(
+SeaStore::base_iertr::future<>
+SeaStore::Shard::omaptree_set_keys(
   Transaction& t,
+  omap_root_t&& root,
   Onode& onode,
-  std::map<std::string, ceph::bufferlist> &&kvs,
-  omap_root_t&& root)
+  std::map<std::string, ceph::bufferlist>&& kvs)
 {
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
@@ -2332,7 +2332,7 @@ SeaStore::Shard::_omap_set_values(
     (auto &omap_manager, auto &root) mutable
   {
     assert(root.get_type() < omap_type_t::NONE);
-    tm_iertr::future<> maybe_create_root = tm_iertr::now();
+    base_iertr::future<> maybe_create_root = base_iertr::now();
     if (root.is_null()) {
       maybe_create_root = omap_manager.initialize_omap(t,
         onode.get_metadata_hint(device->get_block_size()),
@@ -2346,7 +2346,7 @@ SeaStore::Shard::_omap_set_values(
     ).si_then([&t, &root, &omap_manager, kvs=std::move(kvs)]() mutable {
       return omap_manager.omap_set_keys(root, t, std::move(kvs));
     }).si_then([&root] {
-      return tm_iertr::make_ready_future<omap_root_t>(std::move(root));
+      return base_iertr::make_ready_future<omap_root_t>(std::move(root));
     });
   }).si_then([&onode, &t](auto root) {
     if (root.must_update()) {
@@ -2371,7 +2371,7 @@ SeaStore::Shard::_omap_clear(
   internal_context_t &ctx,
   Onode &onode)
 {
-  return _xattr_rmattr(
+  return omaptree_rm_key(
     *ctx.transaction,
     get_omap_root(omap_type_t::XATTR, onode),
     onode,
@@ -2384,12 +2384,12 @@ SeaStore::Shard::_omap_clear(
   });
 }
 
-SeaStore::Shard::tm_ret
-SeaStore::Shard::_omap_rmkeys(
-  Transaction &t,
+SeaStore::base_iertr::future<>
+SeaStore::Shard::omaptree_rm_keys(
+  Transaction& t,
+  omap_root_t&& root,
   Onode& onode,
-  omap_keys_t &&keys,
-  omap_root_t&& root)
+  omap_keys_t&& keys)
 {
   if (root.is_null()) {
     return seastar::now();
@@ -2415,13 +2415,13 @@ SeaStore::Shard::_omap_rmkeys(
   });
 }
 
-SeaStore::Shard::tm_ret
-SeaStore::Shard::_omap_rmkeyrange(
+SeaStore::base_iertr::future<>
+SeaStore::Shard::omaptree_rm_keyrange(
   Transaction& t,
+  omap_root_t&& root,
   Onode& onode,
   std::string first,
-  std::string last,
-  omap_root_t &&root)
+  std::string last)
 {
   if (first > last) {
     LOG_PREFIX(SeaStoreS::_omap_rmkeyrange);
@@ -2488,7 +2488,7 @@ SeaStore::Shard::_setattrs(
       if (!layout.oi_size) {
 	// if oi was not in the layout, it probably exists in the omap,
 	// need to remove it first
-	fut = _xattr_rmattr(
+	fut = omaptree_rm_key(
           *ctx.transaction,
           get_omap_root(omap_type_t::XATTR, onode),
           onode,
@@ -2507,7 +2507,7 @@ SeaStore::Shard::_setattrs(
     if (likely(val.length() <= onode_layout_t::MAX_SS_LENGTH)) {
 
       if (!layout.ss_size) {
-	fut = _xattr_rmattr(
+	fut = omaptree_rm_key(
           *ctx.transaction,
           get_omap_root(omap_type_t::XATTR, onode),
           onode,
@@ -2528,12 +2528,12 @@ SeaStore::Shard::_setattrs(
 
   DEBUGT("set attrs in omap", *ctx.transaction);
   return std::move(fut
-  ).si_then([this, onode, &ctx, aset=std::move(aset)]() mutable {
-    return _omap_set_values(
-      ctx,
+  ).si_then([this, &onode, &ctx, aset=std::move(aset)]() mutable {
+    return omaptree_set_keys(
+      *ctx.transaction,
+      get_omap_root(omap_type_t::XATTR, onode),
       onode,
-      std::move(aset),
-      get_omap_root(omap_type_t::XATTR, onode));
+      std::move(aset));
   });
 }
 
@@ -2551,7 +2551,7 @@ SeaStore::Shard::_rmattr(
     onode.clear_snapset(*ctx.transaction);
     return tm_iertr::now();
   } else {
-    return _xattr_rmattr(
+    return omaptree_rm_key(
       *ctx.transaction,
       get_omap_root(omap_type_t::XATTR, onode),
       onode,
@@ -2559,12 +2559,12 @@ SeaStore::Shard::_rmattr(
   }
 }
 
-SeaStore::Shard::tm_ret
-SeaStore::Shard::_xattr_rmattr(
+SeaStore::base_iertr::future<>
+SeaStore::Shard::omaptree_rm_key(
   Transaction& t,
   omap_root_t&& root,
   Onode& onode,
-  std::string &&name)
+  std::string&& name)
 {
   if (root.is_null()) {
     return base_iertr::now();

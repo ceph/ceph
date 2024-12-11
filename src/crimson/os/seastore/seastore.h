@@ -345,28 +345,6 @@ public:
       });
     }
 
-    using omap_list_bare_ret = OMapManager::omap_list_bare_ret;
-    using omap_list_ret = OMapManager::omap_list_ret;
-    omap_list_ret omap_list(
-      omap_root_t&& omap_root,
-      Transaction& t,
-      const std::optional<std::string>& start,
-      OMapManager::omap_list_config_t config) const;
-
-    using _omap_get_value_iertr = base_iertr::extend<
-      crimson::ct_error::enodata
-      >;
-    using _omap_get_value_ret = _omap_get_value_iertr::future<ceph::bufferlist>;
-    _omap_get_value_ret _omap_get_value(
-      Transaction &t,
-      omap_root_t &&root,
-      std::string_view key) const;
-
-    base_iertr::future<omap_values_t> _omap_get_values(
-      Transaction &t,
-      omap_root_t &&root,
-      const omap_keys_t &keys) const;
-
     friend class SeaStoreOmapIterator;
 
     base_iertr::future<ceph::bufferlist> _read( 
@@ -376,7 +354,11 @@ public:
       std::size_t len,
       uint32_t op_flags);
 
-    _omap_get_value_ret _get_attr(
+    using omaptree_get_value_iertr = base_iertr::extend<
+      crimson::ct_error::enodata
+      >;
+    using omaptree_get_value_ret = omaptree_get_value_iertr::future<ceph::bufferlist>;
+    omaptree_get_value_ret _get_attr(
       Transaction& t,
       Onode& onode,
       std::string_view name) const;
@@ -389,11 +371,6 @@ public:
       Transaction& t,
       Onode& onode,
       const ghobject_t& oid);
-
-    base_iertr::future<omap_values_paged_t> do_omap_get_values(
-      Transaction& t,
-      const std::optional<std::string>& start,
-      omap_root_t&& omap_root) const;
 
     base_iertr::future<fiemap_ret_t> _fiemap(
       Transaction &t,
@@ -421,11 +398,6 @@ public:
       uint64_t offset, size_t len,
       ceph::bufferlist &&bl,
       uint32_t fadvise_flags);
-    tm_ret _clone_omaps(
-      Transaction &t,
-      Onode &onode,
-      Onode &d_onode,
-      const omap_type_t otype);
     tm_ret _clone(
       internal_context_t &ctx,
       Onode &onode,
@@ -438,11 +410,6 @@ public:
       internal_context_t &ctx,
       Onode &onode,
       objaddr_t offset, extent_len_t len);
-    tm_ret _omap_set_values(
-      Transaction &t,
-      Onode &onode,
-      std::map<std::string, ceph::bufferlist> &&aset,
-      omap_root_t&& omap_root);
     tm_ret _omap_set_header(
       internal_context_t &ctx,
       Onode &onode,
@@ -450,17 +417,6 @@ public:
     tm_ret _omap_clear(
       internal_context_t &ctx,
       Onode &onode);
-    tm_ret _omap_rmkeys(
-      Transaction &t,
-      Onode &onode,
-      omap_keys_t &&aset,
-      omap_root_t &&_omap_root);
-    tm_ret _omap_rmkeyrange(
-      Transaction &t,
-      Onode &onode,
-      std::string first,
-      std::string last,
-      omap_root_t &_omap_root);
     tm_ret _truncate(
       internal_context_t &ctx,
       Onode &onode, uint64_t size);
@@ -475,10 +431,6 @@ public:
     tm_ret _rmattrs(
       internal_context_t &ctx,
       Onode &onode);
-    tm_ret _xattr_rmattr(
-      Transaction &t,
-      Onode &onode,
-      std::string &&name);
     tm_ret _create_collection(
       internal_context_t &ctx,
       const coll_t& cid, int bits);
@@ -514,6 +466,60 @@ public:
     omap_root_t get_omap_root(omap_type_t type, Onode& onode) const {
       return onode.get_root(type, device->get_block_size());
     }
+
+    omaptree_get_value_ret omaptree_get_value(
+      Transaction& t,
+      omap_root_t&& root,
+      std::string_view key) const;
+
+    using omaptree_list_bare_ret = OMapManager::omap_list_bare_ret;
+    using omaptree_list_ret = OMapManager::omap_list_ret;
+    omaptree_list_ret omaptree_list(
+      Transaction& t,
+      omap_root_t&& root,
+      const std::optional<std::string>& start,
+      OMapManager::omap_list_config_t config) const;
+
+    base_iertr::future<omap_values_t> omaptree_get_values(
+      Transaction& t,
+      omap_root_t&& root,
+      const omap_keys_t& keys) const;
+
+    base_iertr::future<omap_values_paged_t> omaptree_get_values(
+      Transaction& t,
+      omap_root_t&& root,
+      const std::optional<std::string>& start) const;
+
+    base_iertr::future<> omaptree_set_keys(
+      Transaction& t,
+      omap_root_t&& root,
+      Onode& onode,
+      std::map<std::string, ceph::bufferlist>&& aset);
+
+    base_iertr::future<> omaptree_rm_key(
+      Transaction& t,
+      omap_root_t&& root,
+      Onode& onode,
+      std::string&& name);
+
+    base_iertr::future<> omaptree_rm_keys(
+      Transaction& t,
+      omap_root_t&& root,
+      Onode& onode,
+      omap_keys_t&& aset);
+
+    base_iertr::future<> omaptree_rm_keyrange(
+      Transaction& t,
+      omap_root_t&& root,
+      Onode& onode,
+      std::string first,
+      std::string last);
+
+    base_iertr::future<> omaptree_clone(
+      Transaction& t,
+      omap_type_t type,
+      Onode& onode,
+      Onode& d_onode);
 
     base_iertr::future<omap_root_t> omaptree_do_clear(
       Transaction& t,
