@@ -677,6 +677,10 @@ std::string ceph::io_sequence::tester::TestRunner::get_token(bool allow_eof) {
       }
       throw std::runtime_error("End of input");
     }
+    if (line.starts_with('#')) {
+      dout(0) << line << dendl;
+      continue;
+    }
     split = ceph::split(line);
     tokens = split.begin();
   }
@@ -767,6 +771,10 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
     const std::string op = get_token(true);
     if (op == "done" || op == "q" || op == "quit") {
       ioop = ceph::io_exerciser::DoneOp::generate();
+    } else if (op == "sleep") {
+      uint64_t duration = get_numeric_token();
+      dout(0) << "Sleep " << duration << dendl;
+      sleep(duration);
     } else if (op == "create") {
       ioop = ceph::io_exerciser::CreateOp::generate(get_numeric_token());
     } else if (op == "remove" || op == "delete") {
