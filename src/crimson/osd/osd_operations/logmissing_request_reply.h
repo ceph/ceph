@@ -82,8 +82,6 @@ public:
   > tracking_events;
 
 private:
-  ClientRequest::PGPipeline &client_pp(PG &pg);
-
   crimson::net::ConnectionRef l_conn;
   crimson::net::ConnectionXcoreRef r_conn;
 

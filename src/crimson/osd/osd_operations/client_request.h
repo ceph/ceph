@@ -11,6 +11,7 @@
 #include "osd/osd_op_util.h"
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/object_context_loader.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/client_request_common.h"
@@ -41,22 +42,6 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
   unsigned instance_id = 0;
 
 public:
-  class PGPipeline : public CommonPGPipeline {
-    public:
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name = "ClientRequest::PGPipeline::await_map";
-    } await_map;
-    struct SendReply : OrderedExclusivePhaseT<SendReply> {
-      static constexpr auto type_name = "ClientRequest::PGPipeline::send_reply";
-    } send_reply;
-    friend class ClientRequest;
-    friend class LttngBackend;
-    friend class HistoricBackend;
-    friend class ReqRequest;
-    friend class LogMissingRequest;
-    friend class LogMissingRequestReply;
-  };
-
   /**
    * instance_handle_t
    *
@@ -93,20 +78,18 @@ public:
     // don't leave any references on the source core, so we just bypass it by using
     // intrusive_ptr instead.
     using ref_t = boost::intrusive_ptr<instance_handle_t>;
+    std::optional<ObjectContextLoader::Orderer> obc_orderer;
     PipelineHandle handle;
 
     std::tuple<
-      PGPipeline::AwaitMap::BlockingEvent,
+      CommonPGPipeline::WaitPGReady::BlockingEvent,
       PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
-      PGPipeline::WaitForActive::BlockingEvent,
       PGActivationBlocker::BlockingEvent,
-      PGPipeline::RecoverMissing::BlockingEvent,
+      CommonPGPipeline::GetOBC::BlockingEvent,
+      CommonOBCPipeline::Process::BlockingEvent,
       scrub::PGScrubber::BlockingEvent,
-      PGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent,
-      PGPipeline::LockOBC::BlockingEvent,
-      PGPipeline::Process::BlockingEvent,
-      PGPipeline::WaitRepop::BlockingEvent,
-      PGPipeline::SendReply::BlockingEvent,
+      CommonOBCPipeline::WaitRepop::BlockingEvent,
+      CommonOBCPipeline::SendReply::BlockingEvent,
       CompletionEvent
       > pg_tracking_events;
 
@@ -293,7 +276,7 @@ private:
       unsigned this_instance_id);
   bool is_pg_op() const;
 
-  PGPipeline &client_pp(PG &pg);
+  CommonPGPipeline &client_pp(PG &pg);
 
   template <typename Errorator>
   using interruptible_errorator =

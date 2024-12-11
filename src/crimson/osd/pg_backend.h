@@ -308,11 +308,6 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
-  void clone(
-    /* const */object_info_t& snap_oi,
-    const ObjectState& os,
-    const ObjectState& d_os,
-    ceph::os::Transaction& trans);
   interruptible_future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
@@ -411,6 +406,20 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
+
+  /// sets oi and (for head) ss attrs
+  void set_metadata(
+    const hobject_t &obj,
+    object_info_t &oi,
+    const SnapSet *ss /* non-null iff head */,
+    ceph::os::Transaction& trans);
+
+  /// clone from->to and clear ss attribute on to
+  void clone_for_write(
+    const hobject_t &from,
+    const hobject_t &to,
+    ceph::os::Transaction& trans);
+
   virtual rep_op_fut_t
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
 		     const hobject_t& hoid,
