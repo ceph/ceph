@@ -1212,7 +1212,10 @@ class CephadmServe:
 
             logger.info(f'Purge service {service_name}')
 
-            self.mgr.cephadm_services[spec.service_type].purge(service_name)
+            try:
+                self.mgr.cephadm_services[spec.service_type].purge(service_name)
+            except Exception as ex:
+                raise OrchestratorError(str(ex))
             self.mgr.spec_store.finally_rm(service_name)
 
     def convert_tags_to_repo_digest(self) -> None:
