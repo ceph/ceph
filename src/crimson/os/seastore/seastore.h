@@ -484,9 +484,6 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       std::string &&name);
-    tm_ret _xattr_clear(
-      internal_context_t &ctx,
-      OnodeRef &onode);
     tm_ret _create_collection(
       internal_context_t &ctx,
       const coll_t& cid, int bits);

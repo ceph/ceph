@@ -2590,18 +2590,10 @@ SeaStore::Shard::_rmattrs(
   internal_context_t &ctx,
   OnodeRef &onode)
 {
+  LOG_PREFIX(SeaStoreS::_rmattrs);
+  DEBUGT("onode={}", *ctx.transaction, *onode);
   onode->clear_object_info(*ctx.transaction);
   onode->clear_snapset(*ctx.transaction);
-  return _xattr_clear(ctx, onode);
-}
-
-SeaStore::Shard::tm_ret
-SeaStore::Shard::_xattr_clear(
-  internal_context_t &ctx,
-  OnodeRef &onode)
-{
-  LOG_PREFIX(SeaStoreS::_xattr_clear);
-  DEBUGT("onode={}", *ctx.transaction, *onode);
   auto root = onode->get_layout().xattr_root.get(
     onode->get_metadata_hint(device->get_block_size()));
   if (root.is_null()) {
