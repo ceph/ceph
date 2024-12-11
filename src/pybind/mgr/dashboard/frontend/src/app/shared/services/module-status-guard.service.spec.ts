@@ -9,6 +9,8 @@ import { of as observableOf, throwError } from 'rxjs';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { MgrModuleService } from '../api/mgr-module.service';
 import { ModuleStatusGuardService } from './module-status-guard.service';
+import { ToastrModule } from 'ngx-toastr';
+import { CdDatePipe } from '../pipes/cd-date.pipe';
 
 describe('ModuleStatusGuardService', () => {
   let service: ModuleStatusGuardService;
@@ -53,8 +55,12 @@ describe('ModuleStatusGuardService', () => {
   };
 
   configureTestBed({
-    imports: [RouterTestingModule.withRoutes(routes)],
-    providers: [ModuleStatusGuardService, { provide: HttpClient, useValue: fakeService }],
+    imports: [RouterTestingModule.withRoutes(routes), ToastrModule.forRoot()],
+    providers: [
+      ModuleStatusGuardService,
+      { provide: HttpClient, useValue: fakeService },
+      CdDatePipe
+    ],
     declarations: [FooComponent]
   });
 
