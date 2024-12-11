@@ -4,32 +4,32 @@
  Mount CephFS using Kernel Driver
 =================================
 
-The CephFS kernel driver is part of the Linux kernel. It allows mounting
-CephFS as a regular file system with native kernel performance. It is the
-client of choice for most use-cases.
+The CephFS kernel driver is part of the Linux kernel. It makes possible the
+mounting of CephFS as a regular file system with native kernel performance. It
+is the client of choice for most use-cases.
 
-.. note:: CephFS mount device string now uses a new (v2) syntax. The mount
-          helper (and the kernel) is backward compatible with the old syntax.
-          This means that the old syntax can still be used for mounting with
-          newer mount helpers and kernel. However, it is recommended to use
-          the new syntax whenever possible.
+.. note:: The CephFS mount device string now uses a new syntax ("v2"). The
+   mount helper is backward compatible with the old syntax. The kernel is
+   backward-compatible with the old syntax. This means that the old syntax can
+   still be used for mounting with newer mount helpers and with the kernel.
 
 Prerequisites
 =============
 
 Complete General Prerequisites
 ------------------------------
-Go through the prerequisites required by both, kernel as well as FUSE mounts,
-in `Mount CephFS: Prerequisites`_ page.
+Go through the prerequisites required by both kernel and FUSE mounts,
+as described on the `Mount CephFS: Prerequisites`_ page.
 
 Is mount helper present?
 ------------------------
-``mount.ceph`` helper is installed by Ceph packages. The helper passes the
+The ``mount.ceph`` helper is installed by Ceph packages. The helper passes the
 monitor address(es) and CephX user keyrings, saving the Ceph admin the effort
 of passing these details explicitly while mounting CephFS. If the helper is not
 present on the client machine, CephFS can still be mounted using the kernel
-driver, but only by passing these details explicitly to the ``mount`` command.
-To check whether ``mount.ceph`` is present on your system, run the following command:
+driver but only by passing these details explicitly to the ``mount`` command.
+To check whether ``mount.ceph`` is present on your system, run the following
+command:
 
 .. prompt:: bash #
 
@@ -38,23 +38,23 @@ To check whether ``mount.ceph`` is present on your system, run the following com
 Which Kernel Version?
 ---------------------
 
-Because the kernel client is distributed as part of the linux kernel (not
-as part of packaged ceph releases), you will need to consider which kernel
+Because the kernel client is distributed as part of the Linux kernel (and not
+as part of the packaged Ceph releases), you will need to consider which kernel
 version to use on your client nodes. Older kernels are known to include buggy
-ceph clients, and may not support features that more recent Ceph clusters
+Ceph clients and may not support features that more recent Ceph clusters
 support.
 
-Remember that the "latest" kernel in a stable linux distribution is likely
-to be years behind the latest upstream linux kernel where Ceph development
+Remember that the "latest" kernel in a stable Linux distribution is likely
+to be years behind the latest upstream Linux kernel where Ceph development
 takes place (including bug fixes).
 
 As a rough guide, as of Ceph 10.x (Jewel), you should be using a least a 4.x
 kernel. If you absolutely have to use an older kernel, you should use the
 fuse client instead of the kernel client.
 
-This advice does not apply if you are using a linux distribution that
-includes CephFS support, as in this case the distributor will be responsible
-for backporting fixes to their stable kernel: check with your vendor.
+This advice does not apply if you are using a Linux distribution that includes
+CephFS support. In that case, the distributor is responsible for backporting
+fixes to their stable kernel. Check with your vendor.
 
 Synopsis
 ========
