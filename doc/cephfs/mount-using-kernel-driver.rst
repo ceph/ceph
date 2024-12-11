@@ -58,50 +58,68 @@ for backporting fixes to their stable kernel: check with your vendor.
 
 Synopsis
 ========
-In general, the command to mount CephFS via kernel driver looks like this::
+This is the general form of the command for mounting CephFS via the kernel driver:
 
-  mount -t ceph {device-string}={path-to-mounted} {mount-point} -o {key-value-args} {other-args}
+.. prompt:: bash #
+
+   mount -t ceph {device-string}={path-to-mounted} {mount-point} -o {key-value-args} {other-args}
 
 Mounting CephFS
 ===============
-On Ceph clusters, CephX is enabled by default. Use ``mount`` command to
-mount CephFS with the kernel driver::
+CephX authentication is enabled by default in Ceph clusters. Use the ``mount``
+command to use the kernel driver to mount CephFS:
 
-  mkdir /mnt/mycephfs
-  mount -t ceph <name>@<fsid>.<fs_name>=/ /mnt/mycephfs
+.. prompt:: bash #
 
-``name`` is the username of the CephX user we are using to mount CephFS.
-``fsid`` is the FSID of the ceph cluster which can be found using
-``ceph fsid`` command. ``fs_name`` is the file system to mount. The kernel
-driver requires MON's socket and the secret key for the CephX user, e.g.::
+   mkdir /mnt/mycephfs
+   mount -t ceph <name>@<fsid>.<fs_name>=/ /mnt/mycephfs
 
-  mount -t ceph cephuser@b3acfc0d-575f-41d3-9c91-0e7ed3dbb3fa.cephfs=/ -o mon_addr=192.168.0.1:6789,secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
+#. ``name`` is the username of the CephX user we are using to mount CephFS.
+#. ``fsid`` is the FSID of the Ceph cluster, which can be found using the
+   ``ceph fsid`` command. ``fs_name`` is the file system to mount. The kernel
+   driver requires a ceph Monitor's address and the secret key of the CephX
+   user. For example:
 
-When using the mount helper, monitor hosts and FSID are optional. ``mount.ceph``
-helper figures out these details automatically by finding and reading ceph conf
-file, .e.g::
+   .. prompt:: bash #
 
-  mount -t ceph cephuser@.cephfs=/ -o secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
+      mount -t ceph cephuser@b3acfc0d-575f-41d3-9c91-0e7ed3dbb3fa.cephfs=/ -o mon_addr=192.168.0.1:6789,secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
 
-.. note:: Note that the dot (``.``) still needs to be a part of the device string.
+When using the mount helper, monitor hosts and FSID are optional. The
+``mount.ceph`` helper discovers these details by finding and reading the ceph
+conf file. For example:
 
-A potential problem with the above command is that the secret key is left in your
-shell's command history. To prevent that you can copy the secret key inside a file
-and pass the file by using the option ``secretfile`` instead of ``secret``::
+.. prompt:: bash #
 
-  mount -t ceph cephuser@.cephfs=/ /mnt/mycephfs -o secretfile=/etc/ceph/cephuser.secret
+   mount -t ceph cephuser@.cephfs=/ -o secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
 
-Ensure the permissions on the secret key file are appropriate (preferably, ``600``).
+.. note:: Note that the dot (``.`` in the string ``cephuser@.cephfs``) must  be
+   a part of the device string.
 
-Multiple monitor hosts can be passed by separating each address with a ``/``::
+A weakness of this method is that it will leave the secret key in your shell's
+command history. To avoid this, copy the secret key inside a file and pass the
+file by using the option ``secretfile`` instead of ``secret``. For example:
 
-  mount -t ceph cephuser@.cephfs=/ /mnt/mycephfs -o mon_addr=192.168.0.1:6789/192.168.0.2:6789,secretfile=/etc/ceph/cephuser.secret
+.. prompt:: bash #
 
-In case CephX is disabled, you can omit any credential related options::
+   mount -t ceph cephuser@.cephfs=/ /mnt/mycephfs -o secretfile=/etc/ceph/cephuser.secret
 
-  mount -t ceph cephuser@.cephfs=/ /mnt/mycephfs
+Ensure that the permissions on the secret key file are appropriate (preferably,
+``600``).
 
-.. note:: The ceph user name still needs to be passed as part of the device string.
+Multiple monitor hosts can be passed by separating addresses with a ``/``:
+
+.. prompt:: bash #
+
+   mount -t ceph cephuser@.cephfs=/ /mnt/mycephfs -o
+   mon_addr=192.168.0.1:6789/192.168.0.2:6789,secretfile=/etc/ceph/cephuser.secret
+
+If CephX is disabled, omit any credential-related options. For example:
+
+.. prompt:: bash #
+
+   mount -t ceph cephuser@.cephfs=/ /mnt/mycephfs
+
+.. note:: The Ceph user name must be passed as part of the device string.
 
 To mount a subtree of the CephFS root, append the path to the device string::
 
