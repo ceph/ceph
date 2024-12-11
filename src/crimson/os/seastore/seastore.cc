@@ -1277,7 +1277,7 @@ SeaStore::Shard::_get_attrs(
   DEBUGT("...", t);
   auto& layout = onode.get_layout();
   return do_omap_get_values(
-    t, onode, std::nullopt, get_omap_root(omap_type_t::XATTR, onode)
+    t, std::nullopt, get_omap_root(omap_type_t::XATTR, onode)
   ).si_then([&layout, &t, FNAME](auto p) {
     auto& attrs = std::get<1>(p);
     DEBUGT("got {} attrs, OI length=0x{:x}, SS length=0x{:x}",
@@ -1491,7 +1491,6 @@ SeaStore::Shard::_omap_get_values(
 
 SeaStore::Shard::omap_list_ret
 SeaStore::Shard::omap_list(
-  Onode &onode,
   omap_root_t&& root,
   Transaction& t,
   const std::optional<std::string>& start,
@@ -1516,7 +1515,6 @@ SeaStore::Shard::omap_list(
 SeaStore::base_iertr::future<SeaStore::Shard::omap_values_paged_t>
 SeaStore::Shard::do_omap_get_values(
   Transaction& t,
-  Onode& onode,
   const std::optional<std::string>& start,
   omap_root_t&& root) const
 {
@@ -1526,7 +1524,7 @@ SeaStore::Shard::do_omap_get_values(
   auto config = OMapManager::omap_list_config_t()
     .with_inclusive(false, false)
     .without_max();
-  return omap_list(onode, std::move(root), t, start, config
+  return omap_list(std::move(root), t, start, config
   ).si_then([FNAME, &t](omap_values_paged_t ret) {
     DEBUGT("got {} values, complete={}",
            t, std::get<1>(ret).size(), std::get<0>(ret));
@@ -1556,7 +1554,7 @@ SeaStore::Shard::omap_get_values(
     auto root = select_log_omap_root(onode).get(
       onode.get_metadata_hint(device->get_block_size()));
     return do_omap_get_values(
-      t, onode, start, std::move(root));
+      t, start, std::move(root));
   }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
@@ -1832,7 +1830,7 @@ SeaStore::Shard::_do_transaction_step(
       case Transaction::OP_TOUCH:
       {
         DEBUGT("op CREATE/TOUCH, oid={} ...", *ctx.transaction, oid);
-        return _touch(ctx, onode);
+        return _touch(ctx, *onode);
       }
       case Transaction::OP_WRITE:
       {
@@ -1844,14 +1842,14 @@ SeaStore::Shard::_do_transaction_step(
         DEBUGT("op WRITE, oid={}, 0x{:x}~0x{:x}, flags=0x{:x} ...",
                *ctx.transaction, oid, off, len, fadvise_flags);
         return _write(
-	  ctx, onode, off, len, std::move(bl),
+	  ctx, *onode, off, len, std::move(bl),
 	  fadvise_flags);
       }
       case Transaction::OP_TRUNCATE:
       {
         uint64_t off = op->off;
         DEBUGT("op TRUNCATE, oid={}, 0x{:x} ...", *ctx.transaction, oid, off);
-        return _truncate(ctx, onode, off);
+        return _truncate(ctx, *onode, off);
       }
       case Transaction::OP_SETATTR:
       {
@@ -1861,7 +1859,7 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_bl(bl);
         DEBUGT("op SETATTR, oid={}, attr name={}, value length=0x{:x} ...",
                *ctx.transaction, oid, name, bl.length());
-        return _setattrs(ctx, onode, std::move(to_set));
+        return _setattrs(ctx, *onode, std::move(to_set));
       }
       case Transaction::OP_SETATTRS:
       {
@@ -1869,19 +1867,19 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_attrset(to_set);
         DEBUGT("op SETATTRS, oid={}, attrs size={} ...",
                *ctx.transaction, oid, to_set.size());
-        return _setattrs(ctx, onode, std::move(to_set));
+        return _setattrs(ctx, *onode, std::move(to_set));
       }
       case Transaction::OP_RMATTR:
       {
         std::string name = i.decode_string();
         DEBUGT("op RMATTR, oid={}, attr name={} ...",
                *ctx.transaction, oid, name);
-        return _rmattr(ctx, onode, name);
+        return _rmattr(ctx, *onode, name);
       }
       case Transaction::OP_RMATTRS:
       {
         DEBUGT("op RMATTRS, oid={} ...", *ctx.transaction, oid);
-        return _rmattrs(ctx, onode);
+        return _rmattrs(ctx, *onode);
       }
       case Transaction::OP_OMAP_SETKEYS:
       {
@@ -1893,7 +1891,7 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid, aset.size(), root.get_type());
         return _omap_set_values(
           *ctx.transaction,
-          onode,
+          *onode,
           std::move(aset),
           std::move(root));
       }
@@ -1903,7 +1901,7 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_bl(bl);
         DEBUGT("op OMAP_SETHEADER, oid={}, length=0x{:x} ...",
                *ctx.transaction, oid, bl.length());
-        return _omap_set_header(ctx, onode, std::move(bl));
+        return _omap_set_header(ctx, *onode, std::move(bl));
       }
       case Transaction::OP_OMAP_RMKEYS:
       {
@@ -1915,7 +1913,7 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid, keys.size(), root.get_type());
         return _omap_rmkeys(
           *ctx.transaction,
-          onode,
+          *onode,
           std::move(keys),
           std::move(root));
       }
@@ -1930,14 +1928,14 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid, first, last, root.get_type());
         return _omap_rmkeyrange(
           *ctx.transaction,
-          onode,
+          *onode,
           std::move(first), std::move(last),
           std::move(root));
       }
       case Transaction::OP_OMAP_CLEAR:
       {
         DEBUGT("op OMAP_CLEAR, oid={} ...", *ctx.transaction, oid);
-        return _omap_clear(ctx, onode);
+        return _omap_clear(ctx, *onode);
       }
       case Transaction::OP_ZERO:
       {
@@ -1945,7 +1943,7 @@ SeaStore::Shard::_do_transaction_step(
         extent_len_t len = op->len;
         DEBUGT("op ZERO, oid={}, 0x{:x}~0x{:x} ...",
                *ctx.transaction, oid, off, len);
-        return _zero(ctx, onode, off, len);
+        return _zero(ctx, *onode, off, len);
       }
       case Transaction::OP_SETALLOCHINT:
       {
@@ -1974,7 +1972,7 @@ SeaStore::Shard::_do_transaction_step(
       {
         DEBUGT("op CLONE, oid={}, dest oid={} ...",
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
-	return _clone(ctx, onode, onodes[op->dest_oid]);
+	return _clone(ctx, *onode, *onodes[op->dest_oid]);
       }
       case Transaction::OP_COLL_MOVE_RENAME:
       {
@@ -2170,7 +2168,7 @@ SeaStore::Shard::_remove(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_touch(
   internal_context_t &ctx,
-  OnodeRef &onode)
+  Onode &onode)
 {
   return tm_iertr::now();
 }
@@ -2178,14 +2176,14 @@ SeaStore::Shard::_touch(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_write(
   internal_context_t &ctx,
-  OnodeRef &onode,
+  Onode &onode,
   uint64_t offset, size_t len,
   ceph::bufferlist &&_bl,
   uint32_t fadvise_flags)
 {
-  const auto &object_size = onode->get_layout().size;
+  const auto &object_size = onode.get_layout().size;
   if (offset + len > object_size) {
-    onode->update_onode_size(
+    onode.update_onode_size(
       *ctx.transaction,
       std::max<uint64_t>(offset + len, object_size));
   }
@@ -2197,7 +2195,7 @@ SeaStore::Shard::_write(
         ObjectDataHandler::context_t{
           *transaction_manager,
           *ctx.transaction,
-          *onode,
+          onode,
         },
         offset,
         bl);
@@ -2207,8 +2205,8 @@ SeaStore::Shard::_write(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_clone_omaps(
   Transaction& t,
-  OnodeRef &onode,
-  OnodeRef &d_onode,
+  Onode& onode,
+  Onode& d_onode,
   const omap_type_t type)
 {
   return trans_intr::repeat([&t, &onode, &d_onode, this, type] {
@@ -2218,8 +2216,8 @@ SeaStore::Shard::_clone_omaps(
     {
       auto config = OMapManager::omap_list_config_t()
         .with_inclusive(false, false);
-      return omap_list(*onode, get_omap_root(type, *onode), t, start, config
-      ).si_then([&t, &onode, &d_onode, this, type, &start](auto p) {
+      return omap_list(get_omap_root(type, onode), t, start, config
+      ).si_then([&t, &d_onode, this, type, &start](auto p) {
 	auto complete = std::get<0>(p);
 	auto &attrs = std::get<1>(p);
 	if (attrs.empty()) {
@@ -2233,7 +2231,7 @@ SeaStore::Shard::_clone_omaps(
 	  t,
 	  d_onode,
 	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end()),
-	  get_omap_root(type, *d_onode)
+	  get_omap_root(type, d_onode)
 	).si_then([complete, nstart=std::move(nstart), &start]() mutable {
 	  if (complete) {
 	    return seastar::make_ready_future<
@@ -2254,21 +2252,21 @@ SeaStore::Shard::_clone_omaps(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_clone(
   internal_context_t &ctx,
-  OnodeRef &onode,
-  OnodeRef &d_onode)
+  Onode &onode,
+  Onode &d_onode)
 {
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [this, &ctx, &onode, &d_onode](auto &objHandler)
   {
-    auto &object_size = onode->get_layout().size;
-    d_onode->update_onode_size(*ctx.transaction, object_size);
+    auto &object_size = onode.get_layout().size;
+    d_onode.update_onode_size(*ctx.transaction, object_size);
     return objHandler.clone(
       ObjectDataHandler::context_t{
 	*transaction_manager,
 	*ctx.transaction,
-	*onode,
-	d_onode.get()});
+	onode,
+	&d_onode});
   }).si_then([&ctx, &onode, &d_onode, this] {
     return _clone_omaps(
       *ctx.transaction, onode, d_onode, omap_type_t::XATTR);
@@ -2284,7 +2282,7 @@ SeaStore::Shard::_clone(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_zero(
   internal_context_t &ctx,
-  OnodeRef &onode,
+  Onode &onode,
   objaddr_t offset,
   extent_len_t len)
 {
@@ -2294,8 +2292,8 @@ SeaStore::Shard::_zero(
            *ctx.transaction, offset, len, max_object_size);
     return crimson::ct_error::input_output_error::make();
   }
-  const auto &object_size = onode->get_layout().size;
-  onode->update_onode_size(
+  const auto &object_size = onode.get_layout().size;
+  onode.update_onode_size(
     *ctx.transaction,
     std::max<uint64_t>(offset + len, object_size));
   return seastar::do_with(
@@ -2305,7 +2303,7 @@ SeaStore::Shard::_zero(
         ObjectDataHandler::context_t{
           *transaction_manager,
           *ctx.transaction,
-          *onode,
+          onode,
         },
         offset,
         len);
@@ -2315,7 +2313,7 @@ SeaStore::Shard::_zero(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_omap_set_values(
   Transaction& t,
-  OnodeRef &onode,
+  Onode& onode,
   std::map<std::string, ceph::bufferlist> &&kvs,
   omap_root_t&& root)
 {
@@ -2329,7 +2327,7 @@ SeaStore::Shard::_omap_set_values(
     tm_iertr::future<> maybe_create_root = tm_iertr::now();
     if (root.is_null()) {
       maybe_create_root = omap_manager.initialize_omap(t,
-        onode->get_metadata_hint(device->get_block_size()),
+        onode.get_metadata_hint(device->get_block_size()),
         root.get_type()
       ).si_then([&root](auto new_root) {
         assert(new_root.get_type() == root.get_type());
@@ -2344,7 +2342,7 @@ SeaStore::Shard::_omap_set_values(
     });
   }).si_then([&onode, &t](auto root) {
     if (root.must_update()) {
-      omaptree_update_root(t, root, *onode);
+      omaptree_update_root(t, root, onode);
     }
   });
 }
@@ -2352,7 +2350,7 @@ SeaStore::Shard::_omap_set_values(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_omap_set_header(
   internal_context_t &ctx,
-  OnodeRef &onode,
+  Onode &onode,
   ceph::bufferlist &&header)
 {
   std::map<std::string, bufferlist> to_set;
@@ -2363,25 +2361,25 @@ SeaStore::Shard::_omap_set_header(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_omap_clear(
   internal_context_t &ctx,
-  OnodeRef &onode)
+  Onode &onode)
 {
   return _xattr_rmattr(
     *ctx.transaction,
-    get_omap_root(omap_type_t::XATTR, *onode),
+    get_omap_root(omap_type_t::XATTR, onode),
     onode,
     std::string(OMAP_HEADER_XATTR_KEY)
   ).si_then([this, &ctx, &onode] {
     return omaptree_clear(
       *ctx.transaction,
-      get_omap_root(omap_type_t::OMAP, *onode),
-      *onode);
+      get_omap_root(omap_type_t::OMAP, onode),
+      onode);
   });
 }
 
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_omap_rmkeys(
   Transaction &t,
-  OnodeRef &onode,
+  Onode& onode,
   omap_keys_t &&keys,
   omap_root_t&& root)
 {
@@ -2403,7 +2401,7 @@ SeaStore::Shard::_omap_rmkeys(
       return omap_manager.omap_rm_key(root, t, p);
     }).si_then([&t, &root, &onode] {
       if (root.must_update()) {
-        omaptree_update_root(t, root, *onode);
+        omaptree_update_root(t, root, onode);
       }
     });
   });
@@ -2412,7 +2410,7 @@ SeaStore::Shard::_omap_rmkeys(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_omap_rmkeyrange(
   Transaction& t,
-  OnodeRef &onode,
+  Onode& onode,
   std::string first,
   std::string last,
   omap_root_t &&root)
@@ -2440,7 +2438,7 @@ SeaStore::Shard::_omap_rmkeyrange(
       root, t, first, last, config
     ).si_then([&t, &root, &onode] {
       if (root.must_update()) {
-        omaptree_update_root(t, root, *onode);
+        omaptree_update_root(t, root, onode);
       }
     });
   });
@@ -2449,10 +2447,10 @@ SeaStore::Shard::_omap_rmkeyrange(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_truncate(
   internal_context_t &ctx,
-  OnodeRef &onode,
+  Onode &onode,
   uint64_t size)
 {
-  onode->update_onode_size(*ctx.transaction, size);
+  onode.update_onode_size(*ctx.transaction, size);
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &objhandler) {
@@ -2460,7 +2458,7 @@ SeaStore::Shard::_truncate(
       ObjectDataHandler::context_t{
         *transaction_manager,
         *ctx.transaction,
-        *onode
+        onode
       },
       size);
   });
@@ -2469,12 +2467,12 @@ SeaStore::Shard::_truncate(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_setattrs(
   internal_context_t &ctx,
-  OnodeRef &onode,
+  Onode &onode,
   std::map<std::string, bufferlist>&& aset)
 {
   LOG_PREFIX(SeaStoreS::_setattrs);
   auto fut = tm_iertr::now();
-  auto& layout = onode->get_layout();
+  auto& layout = onode.get_layout();
   if (auto it = aset.find(OI_ATTR); it != aset.end()) {
     auto& val = it->second;
     if (likely(val.length() <= onode_layout_t::MAX_OI_LENGTH)) {
@@ -2484,15 +2482,15 @@ SeaStore::Shard::_setattrs(
 	// need to remove it first
 	fut = _xattr_rmattr(
           *ctx.transaction,
-          get_omap_root(omap_type_t::XATTR, *onode),
+          get_omap_root(omap_type_t::XATTR, onode),
           onode,
           OI_ATTR);
       }
-      onode->update_object_info(*ctx.transaction, val);
+      onode.update_object_info(*ctx.transaction, val);
       aset.erase(it);
       DEBUGT("set oi in onode layout", *ctx.transaction);
     } else {
-      onode->clear_object_info(*ctx.transaction);
+      onode.clear_object_info(*ctx.transaction);
     }
   }
 
@@ -2503,15 +2501,15 @@ SeaStore::Shard::_setattrs(
       if (!layout.ss_size) {
 	fut = _xattr_rmattr(
           *ctx.transaction,
-          get_omap_root(omap_type_t::XATTR, *onode),
+          get_omap_root(omap_type_t::XATTR, onode),
           onode,
           SS_ATTR);
       }
-      onode->update_snapset(*ctx.transaction, val);
+      onode.update_snapset(*ctx.transaction, val);
       aset.erase(it);
       DEBUGT("set ss in onode layout", *ctx.transaction);
     } else {
-      onode->clear_snapset(*ctx.transaction);
+      onode.clear_snapset(*ctx.transaction);
     }
   }
 
@@ -2522,32 +2520,32 @@ SeaStore::Shard::_setattrs(
 
   DEBUGT("set attrs in omap", *ctx.transaction);
   return std::move(fut
-  ).si_then([this, onode, &ctx, aset=std::move(aset)]() mutable {
+  ).si_then([this, &onode, &ctx, aset=std::move(aset)]() mutable {
     return _omap_set_values(
       *ctx.transaction,
       onode,
       std::move(aset),
-      get_omap_root(omap_type_t::XATTR, *onode));
+      get_omap_root(omap_type_t::XATTR, onode));
   });
 }
 
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_rmattr(
   internal_context_t &ctx,
-  OnodeRef &onode,
+  Onode &onode,
   std::string name)
 {
-  auto& layout = onode->get_layout();
+  auto& layout = onode.get_layout();
   if ((name == OI_ATTR) && (layout.oi_size > 0)) {
-    onode->clear_object_info(*ctx.transaction);
+    onode.clear_object_info(*ctx.transaction);
     return tm_iertr::now();
   } else if ((name == SS_ATTR) && (layout.ss_size > 0)) {
-    onode->clear_snapset(*ctx.transaction);
+    onode.clear_snapset(*ctx.transaction);
     return tm_iertr::now();
   } else {
     return _xattr_rmattr(
       *ctx.transaction,
-      get_omap_root(omap_type_t::XATTR, *onode),
+      get_omap_root(omap_type_t::XATTR, onode),
       onode,
       std::move(name));
   }
@@ -2557,11 +2555,9 @@ SeaStore::Shard::tm_ret
 SeaStore::Shard::_xattr_rmattr(
   Transaction& t,
   omap_root_t&& root,
-  OnodeRef &onode,
+  Onode& onode,
   std::string &&name)
 {
-  LOG_PREFIX(SeaStoreS::_xattr_rmattr);
-  DEBUGT("onode={}", t, *onode);
   if (root.is_null()) {
     return base_iertr::now();
   }
@@ -2574,7 +2570,7 @@ SeaStore::Shard::_xattr_rmattr(
     return omap_manager.omap_rm_key(root, t, name
     ).si_then([&t, &root, &onode] {
       if (root.must_update()) {
-        omaptree_update_root(t, root, *onode);
+        omaptree_update_root(t, root, onode);
       }
     });
   });
@@ -2583,14 +2579,14 @@ SeaStore::Shard::_xattr_rmattr(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_rmattrs(
   internal_context_t &ctx,
-  OnodeRef &onode)
+  Onode &onode)
 {
-  onode->clear_object_info(*ctx.transaction);
-  onode->clear_snapset(*ctx.transaction);
+  onode.clear_object_info(*ctx.transaction);
+  onode.clear_snapset(*ctx.transaction);
   return omaptree_clear(
     *ctx.transaction,
-    get_omap_root(omap_type_t::XATTR, *onode),
-    *onode);
+    get_omap_root(omap_type_t::XATTR, onode),
+    onode);
 }
 
 SeaStore::Shard::tm_ret
