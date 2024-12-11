@@ -513,6 +513,10 @@ public:
      * omaptree interfaces
      */
 
+    omap_root_t get_omap_root(omap_type_t type, Onode& onode) const {
+      return onode.get_root(type, device->get_block_size());
+    }
+
     base_iertr::future<omap_root_t> omaptree_do_clear(
       Transaction& t,
       omap_root_t&& root);
