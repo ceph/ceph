@@ -424,7 +424,7 @@ public:
       ceph::bufferlist &&bl,
       uint32_t fadvise_flags);
     tm_ret _clone_omaps(
-      internal_context_t &ctx,
+      Transaction &t,
       OnodeRef &onode,
       OnodeRef &d_onode,
       const omap_type_t otype);
@@ -441,7 +441,7 @@ public:
       OnodeRef &onode,
       objaddr_t offset, extent_len_t len);
     tm_ret _omap_set_values(
-      internal_context_t &ctx,
+      Transaction &t,
       OnodeRef &onode,
       std::map<std::string, ceph::bufferlist> &&aset,
       omap_root_t&& omap_root);
@@ -453,12 +453,12 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode);
     tm_ret _omap_rmkeys(
-      internal_context_t &ctx,
+      Transaction &t,
       OnodeRef &onode,
       omap_keys_t &&aset,
       omap_root_t &&_omap_root);
     tm_ret _omap_rmkeyrange(
-      internal_context_t &ctx,
+      Transaction &t,
       OnodeRef &onode,
       std::string first,
       std::string last,
@@ -478,7 +478,7 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode);
     tm_ret _xattr_rmattr(
-      internal_context_t &ctx,
+      Transaction &t,
       OnodeRef &onode,
       std::string &&name);
     tm_ret _create_collection(
