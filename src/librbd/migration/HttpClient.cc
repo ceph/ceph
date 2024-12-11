@@ -63,14 +63,13 @@ public:
     m_on_shutdown = on_finish;
 
     auto current_state = m_state;
+    m_state = STATE_SHUTTING_DOWN;
+
     if (current_state == STATE_UNINITIALIZED) {
       // never initialized or resolve/connect failed
       on_finish->complete(0);
       return;
-    }
-
-    m_state = STATE_SHUTTING_DOWN;
-    if (current_state != STATE_READY) {
+    } else if (current_state != STATE_READY) {
       // delay shutdown until current state transition completes
       return;
     }
@@ -501,7 +500,10 @@ private:
                    << "next_state=" << next_state << ", "
                    << "r=" << r << dendl;
 
-    m_state = next_state;
+    if (current_state != STATE_SHUTTING_DOWN) {
+      m_state = next_state;
+    }
+
     if (current_state == STATE_CONNECTING) {
       if (next_state == STATE_UNINITIALIZED) {
         shutdown_socket();
