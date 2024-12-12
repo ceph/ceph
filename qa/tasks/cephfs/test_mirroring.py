@@ -1148,7 +1148,8 @@ class TestMirroring(CephFSTestCase):
                 f'http://github.com/ceph/{repo}', repo_path])
 
         def exec_git_cmd(cmd_list):
-            self.mount_a.run_shell(['git', '--git-dir', f'{self.mount_a.mountpoint}/{repo_path}/.git', *cmd_list])
+            return self.mount_a.run_shell(['git', '--git-dir',
+                                           f'{self.mount_a.mountpoint}/{repo_path}/.git', *cmd_list]).stdout.getvalue().strip()
 
         self.mount_a.run_shell(["mkdir", repo_dir])
         clone_repo()
@@ -1176,6 +1177,9 @@ class TestMirroring(CephFSTestCase):
         vsecond = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         self.assertGreater(vsecond["counters"]["snaps_synced"], vfirst["counters"]["snaps_synced"])
 
+        # save the commit sha
+        sha = exec_git_cmd(['rev-parse', '--short', 'HEAD'])
+
         # create some diff
         num = random.randint(5, 20)
         log.debug(f'resetting to HEAD~{num}')
@@ -1196,7 +1200,7 @@ class TestMirroring(CephFSTestCase):
 
         # diff again, this time back to HEAD
         log.debug('resetting to HEAD')
-        exec_git_cmd(["pull"])
+        exec_git_cmd(["reset", "--hard", sha])
 
         # delete the git directory before taking snapshot, we don't need it anymore.
         self.mount_a.run_shell(['rm', '-rf', f'{repo_path}/.git'])
