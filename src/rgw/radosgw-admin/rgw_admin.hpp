@@ -4,12 +4,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <errno.h>
-#include <iostream>
-#include <sstream>
+#include <cerrno>
 #include <string>
-
+#include <sstream>
 #include <optional>
+#include <iostream>
 
 extern "C" {
 #include <liboath/oath.h>

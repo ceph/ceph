@@ -3,11 +3,6 @@
 
 #define dout_context g_ceph_context
 
-#define SECRET_KEY_LEN 40
-#define PUBLIC_ID_LEN 20
-
-using namespace std;
-
 static rgw::sal::Driver* driver = NULL;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
 
@@ -38,19 +33,12 @@ static const DoutPrefixProvider* dpp() {
     } \
   } while (0)
 
+using namespace std;
 
-static inline int posix_errortrans(int r)
+inline int posix_errortrans(int r)
 {
-  switch(r) {
-  case ERR_NO_SUCH_BUCKET:
-    r = ENOENT;
-    break;
-  default:
-    break;
-  }
-  return r;
+ return ERR_NO_SUCH_BUCKET == r ? ENOENT : r;
 }
-
 
 static const std::string LUA_CONTEXT_LIST("prerequest, postrequest, background, getdata, putdata");
 
@@ -1194,7 +1182,7 @@ static int read_input(const string& infile, bufferlist& bl)
     }
   }
 
-#define READ_CHUNK 8196
+  constexpr auto READ_CHUNK=8196;
   int r;
   int err;
 
