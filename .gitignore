@@ -97,3 +97,7 @@ src/pybind/rbd/rbd.egg-info/
 src/pybind/rgw/build/
 src/pybind/rgw/rgw.c
 src/pybind/rgw/rgw.egg-info/
+
+# GRPC protobuff file generation #PR 61089
+src/pybind/mgr/dashboard/services/proto/gateway_pb2.py
+src/pybind/mgr/dashboard/services/proto/gateway_pb2_grpc.py
