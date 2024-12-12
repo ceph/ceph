@@ -7813,6 +7813,50 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._wait_for_trash_empty()
 
 
+class CloneProgressBarsUtils:
+
+    def filter_in_only_clone_pevs(self, progress_events):
+        '''
+        Progress events dictionary in output of "ceph status --format json"
+        has the progress bars and message associated with each progress bar.
+        Sometimes during testing of clone progress bars, and sometimes
+        otherwise too, an extra progress bar is seen with message "Global
+        Recovery Event". This extra progress bar interferes with testing of
+        progress bars for cloning.
+
+        This helper methods goes through this dictionary and picks only
+        (filters in) clone events.
+        '''
+        clone_pevs = {}
+
+        for k, v in progress_events.items():
+            if 'mgr-vol-ongoing-clones' in k or 'mgr-vol-total-clones' in k:
+                clone_pevs[k] = v
+
+        return clone_pevs
+
+    def get_pevs_from_ceph_status(self, clones=None, check=True):
+        o = self.get_ceph_cmd_stdout('status --format json-pretty')
+        o = json.loads(o)
+
+        try:
+            pevs = o['progress_events'] # pevs = progress events
+        except KeyError as e:
+            try:
+                if check and clones:
+                    self.__check_clone_state('completed', clone=clones, timo=1)
+            except:
+                msg = ('Didn\'t find expected entries in dictionary '
+                       '"progress_events" which is obtained from the '
+                       'output of command "ceph status".\n'
+                       f'Exception - {e}\npev -\n{pevs}')
+                raise Exception(msg)
+
+        pevs = self.filter_in_only_clone_pevs(pevs)
+
+        return pevs
+
+
 # NOTE: these tests consumes considerable amount of CPU and RAM due generation
 # random of files and due to multiple cloning jobs that are run simultaneously.
 #
@@ -7970,47 +8014,6 @@ class TestCloneProgressReporter(TestVolumesHelper):
                     break
 
         self._wait_for_clone_to_complete(c)
-
-    def filter_in_only_clone_pevs(self, progress_events):
-        '''
-        Progress events dictionary in output of "ceph status --format json"
-        has the progress bars and message associated with each progress bar.
-        Sometimes during testing of clone progress bars, and sometimes
-        otherwise too, an extra progress bar is seen with message "Global
-        Recovery Event". This extra progress bar interferes with testing of
-        progress bars for cloning.
-
-        This helper methods goes through this dictionary and picks only
-        (filters in) clone events.
-        '''
-        clone_pevs = {}
-
-        for k, v in progress_events.items():
-            if 'mgr-vol-ongoing-clones' in k or 'mgr-vol-total-clones' in k:
-                clone_pevs[k] = v
-
-        return clone_pevs
-
-    def get_pevs_from_ceph_status(self, clones=None, check=True):
-        o = self.get_ceph_cmd_stdout('status --format json-pretty')
-        o = json.loads(o)
-
-        try:
-            pevs = o['progress_events'] # pevs = progress events
-        except KeyError as e:
-            try:
-                if check and clones:
-                    self.__check_clone_state('completed', clone=clones, timo=1)
-            except:
-                msg = ('Didn\'t find expected entries in dictionary '
-                       '"progress_events" which is obtained from the '
-                       'output of command "ceph status".\n'
-                       f'Exception - {e}\npev -\n{pevs}')
-                raise Exception(msg)
-
-        pevs = self.filter_in_only_clone_pevs(pevs)
-
-        return pevs
 
     def test_clones_less_than_cloner_threads(self):
         '''
