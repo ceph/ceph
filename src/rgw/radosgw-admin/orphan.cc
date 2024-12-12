@@ -1,6 +1,12 @@
+
+/*
+ * Copyright (C) 2024 IBM 
+*/
+
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include "radosgw-admin/orphan.h"
 #include <string>
 
 
@@ -10,7 +16,6 @@
 
 #include "rgw_op.h"
 #include "rgw_multi.h"
-#include "rgw_orphan.h"
 #include "rgw_zone.h"
 #include "rgw_bucket.h"
 #include "rgw_sal_rados.h"

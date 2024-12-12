@@ -1,12 +1,15 @@
+/*
+ * Copyright (C) 2025 IBM 
+*/
+
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <errno.h>
-#include <iostream>
-#include <sstream>
+#include <cerrno>
 #include <string>
-
-#include <boost/optional.hpp>
+#include <sstream>
+#include <optional>
+#include <iostream>
 
 extern "C" {
 #include <liboath/oath.h>
@@ -38,6 +41,9 @@ extern "C" {
 #include "include/utime.h"
 #include "include/str_list.h"
 
+#include "radosgw-admin/orphan.h"
+#include "radosgw-admin/sync_checkpoint.h"
+
 #include "rgw_user.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
@@ -48,7 +54,6 @@ extern "C" {
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
-#include "rgw_orphan.h"
 #include "rgw_sync.h"
 #include "rgw_trim_bilog.h"
 #include "rgw_trim_datalog.h"
@@ -62,7 +67,6 @@ extern "C" {
 #include "rgw_zone.h"
 #include "rgw_pubsub.h"
 #include "rgw_bucket_sync.h"
-#include "rgw_sync_checkpoint.h"
 #include "rgw_lua.h"
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"
@@ -81,11 +85,6 @@ extern "C" {
 #include "driver/rados/rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
-
-#define SECRET_KEY_LEN 40
-#define PUBLIC_ID_LEN 20
-
-using namespace std;
 
 static rgw::sal::Driver* driver = NULL;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
@@ -117,18 +116,12 @@ static const DoutPrefixProvider* dpp() {
     } \
   } while (0)
 
-static inline int posix_errortrans(int r)
-{
-  switch(r) {
-  case ERR_NO_SUCH_BUCKET:
-    r = ENOENT;
-    break;
-  default:
-    break;
-  }
-  return r;
-}
+using namespace std;
 
+inline int posix_errortrans(int r)
+{
+ return ERR_NO_SUCH_BUCKET == r ? ENOENT : r;
+}
 
 static const std::string LUA_CONTEXT_LIST("prerequest, postrequest, background, getdata, putdata");
 
@@ -1272,7 +1265,7 @@ static int read_input(const string& infile, bufferlist& bl)
     }
   }
 
-#define READ_CHUNK 8196
+  constexpr auto READ_CHUNK=8196;
   int r;
   int err;
 

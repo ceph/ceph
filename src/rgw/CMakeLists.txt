@@ -487,9 +487,9 @@ target_link_libraries(radosgw PRIVATE
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
-  rgw_admin.cc
-  rgw_sync_checkpoint.cc
-  rgw_orphan.cc)
+  radosgw-admin/radosgw-admin.cc
+  radosgw-admin/sync_checkpoint.cc
+  radosgw-admin/orphan.cc)
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
