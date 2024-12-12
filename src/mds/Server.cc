@@ -2460,9 +2460,11 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
         SnapRealm *cur_realm = cur->find_snaprealm();
         related_realms.push_back(cur_realm);
       }
+    } else {
+      dout(10) << "set_trace_dist inode not passed. Used parent snaprealm " << *realm << dendl;
     }
     reply->snapbl = get_snap_trace(session, realm, related_realms);
-    dout(10) << "set_trace_dist inode " << *in << " snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
+    dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
   }
 
   // dir + dentry?
