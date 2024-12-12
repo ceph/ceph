@@ -1157,6 +1157,10 @@ class TestMirroring(CephFSTestCase):
         self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
 
         self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{repo_path}')
+
+        # clear git logs before taking snapshot
+        self.mount_a.run_shell(['rm', '-rf', f'{repo_path}/.git/logs'])
+
         # dump perf counters
         res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
         vfirst = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
@@ -1177,6 +1181,9 @@ class TestMirroring(CephFSTestCase):
         log.debug(f'resetting to HEAD~{num}')
         exec_git_cmd(["reset", "--hard", f'HEAD~{num}'])
 
+        # clear git logs before taking snapshot
+        self.mount_a.run_shell(['rm', '-rf', f'{repo_path}/.git/logs'])
+
         self.mount_a.run_shell(['mkdir', f'{repo_path}/.snap/snap_b'])
         # incremental copy, should be fast
         time.sleep(180)
@@ -1190,6 +1197,9 @@ class TestMirroring(CephFSTestCase):
         # diff again, this time back to HEAD
         log.debug('resetting to HEAD')
         exec_git_cmd(["pull"])
+
+        # delete the git directory before taking snapshot, we don't need it anymore.
+        self.mount_a.run_shell(['rm', '-rf', f'{repo_path}/.git'])
 
         self.mount_a.run_shell(['mkdir', f'{repo_path}/.snap/snap_c'])
         # incremental copy, should be fast
@@ -1328,6 +1338,10 @@ class TestMirroring(CephFSTestCase):
         self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
 
         self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{repo_path}')
+
+        # clear git logs before taking snapshot
+        self.mount_a.run_shell(['rm', '-rf', f'{repo_path}/.git/logs'])
+
         # dump perf counters
         res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
         vfirst = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
@@ -1346,6 +1360,9 @@ class TestMirroring(CephFSTestCase):
         num = random.randint(60, 100)
         log.debug(f'resetting to HEAD~{num}')
         exec_git_cmd(["reset", "--hard", f'HEAD~{num}'])
+
+        # delete the git directory before taking snapshot, we don't need it anymore.
+        self.mount_a.run_shell(['rm', '-rf', f'{repo_path}/.git'])
 
         self.mount_a.run_shell(['mkdir', f'{repo_path}/.snap/snap_b'])
 
