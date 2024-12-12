@@ -243,6 +243,10 @@ differences:
 * All commits are cherry-picked with ``git cherry-pick -x`` to
   reference the original commit
 
+.. note: If a backport is appropriate, the submitter is responsible for
+   determining appropriate target stable branches to which backports must be
+   made.
+
 See `the backporter manual
 <http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO>`_ for more
 information.
