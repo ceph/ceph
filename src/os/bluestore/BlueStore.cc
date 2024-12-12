@@ -15667,6 +15667,35 @@ int BlueStore::queue_transactions(
     txc->bytes += (*p).get_num_bytes();
     _txc_add_transaction(txc, &(*p));
   }
+  _txc_exec(txc, handle);
+
+  // we're immediately readable (unlike FileStore)
+  for (auto c : on_applied_sync) {
+    c->complete(0);
+  }
+  if (!on_applied.empty()) {
+    if (c->commit_queue) {
+      c->commit_queue->queue(on_applied);
+    } else {
+      finisher.queue(on_applied);
+    }
+  }
+
+#ifdef WITH_BLKIN
+  if (txc->trace) {
+    txc->trace.event("txc applied");
+  }
+#endif
+
+  log_latency("submit_transact",
+    l_bluestore_submit_lat,
+    mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age);
+  return 0;
+}
+
+void BlueStore::_txc_exec(TransContext* txc, ThreadPool::TPHandle* handle)
+{
   _txc_calc_cost(txc);
 
   _txc_write_nodes(txc, txc->t);
@@ -15720,37 +15749,13 @@ int BlueStore::queue_transactions(
     handle->reset_tp_timeout();
 
   logger->inc(l_bluestore_txc);
-
-  // execute (start)
-  _txc_state_proc(txc);
-
-  // we're immediately readable (unlike FileStore)
-  for (auto c : on_applied_sync) {
-    c->complete(0);
-  }
-  if (!on_applied.empty()) {
-    if (c->commit_queue) {
-      c->commit_queue->queue(on_applied);
-    } else {
-      finisher.queue(on_applied);
-    }
-  }
-
-#ifdef WITH_BLKIN
-  if (txc->trace) {
-    txc->trace.event("txc applied");
-  }
-#endif
-
-  log_latency("submit_transact",
-    l_bluestore_submit_lat,
-    mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age);
   log_latency("throttle_transact",
     l_bluestore_throttle_lat,
     tend - tstart,
     cct->_conf->bluestore_log_op_age);
-  return 0;
+
+  // execute (start)
+  _txc_state_proc(txc);
 }
 
 void BlueStore::_txc_aio_submit(TransContext *txc)
