@@ -2911,6 +2911,7 @@ private:
   TransContext *_txc_create(Collection *c, OpSequencer *osr,
 			    std::list<Context*> *on_commits,
 			    TrackedOpRef osd_op=TrackedOpRef());
+  void _txc_exec(TransContext* txc, ThreadPool::TPHandle* handle);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_calc_cost(TransContext *txc);
