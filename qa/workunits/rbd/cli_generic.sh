@@ -1599,6 +1599,7 @@ test_mirror_snapshot_schedule() {
     done
     rbd mirror snapshot schedule status | grep 'rbd2/ns1/test1'
 
+    # set a global level mirror image snapshot schedule
     rbd mirror snapshot schedule add 1h 2020-01-14T04:30+05:30
     test "$(rbd mirror snapshot schedule ls)" = 'every 1h starting at 2020-01-13 23:00:00'
     rbd mirror snapshot schedule ls -R | grep 'every 1h starting at 2020-01-13 23:00:00'
@@ -1629,6 +1630,30 @@ test_mirror_snapshot_schedule() {
     expect_fail rbd mirror snapshot schedule add 30m 2020-01-14T04:30+24:00
     test "$(rbd mirror snapshot schedule ls)" = 'every 1h starting at 2020-01-13 23:00:00'
     test "$(rbd mirror snapshot schedule ls -p rbd2/ns1 --image test1)" = 'every 1m'
+
+    rbd create $RBD_CREATE_ARGS -s 1 rbd2/ns1/img1
+    rbd create $RBD_CREATE_ARGS -s 1 rbd2/ns1/img2
+    rbd group create rbd2/ns1/gp1
+    rbd group image add rbd2/ns1/gp1 rbd2/ns1/img1
+    # enabling snapshot on the group sets the snapshot mirror mode of the
+    # group's member image 'img1'
+    rbd mirror group enable rbd2/ns1/gp1 snapshot
+    rbd mirror image enable rbd2/ns1/img2 snapshot
+    # can't schedule mirror-snapshot on image 'img1' that is part of a group
+    expect_fail rbd mirror snapshot schedule add -p rbd2/ns1 --image img1 1m
+    # global level snapshot schedule does not create a schedule for the image
+    # 'img1' that is part of a group, but creates a schedule for the standalone
+    # image 'img2'
+    for i in `seq 12`; do
+        rbd mirror snapshot schedule status | grep 'rbd2/ns1/img1' || break
+        sleep 10
+    done
+    rbd mirror snapshot schedule status | expect_fail grep 'rbd2/ns1/img1'
+    for i in `seq 12`; do
+        rbd mirror snapshot schedule status | grep 'rbd2/ns1/img2' && break
+        sleep 10
+    done
+    rbd mirror snapshot schedule status | grep 'rbd2/ns1/img2'
 
     rbd rm rbd2/ns1/test1
     for i in `seq 12`; do
