@@ -155,14 +155,14 @@ function(do_build_boost root_dir version)
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
       SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
-  elseif(version VERSION_GREATER 1.85)
+  elseif(version VERSION_GREATER 1.87)
     message(FATAL_ERROR "Unknown BOOST_REQUESTED_VERSION: ${version}")
   else()
     message(STATUS "boost will be downloaded...")
     # NOTE: If you change this version number make sure the package is available
     # at the three URLs below (may involve uploading to download.ceph.com)
-    set(boost_version 1.85.0)
-    set(boost_sha256 7009fe1faa1697476bdc7027703a2badb84e849b7b0baad5086b087b971f8617)
+    set(boost_version 1.87.0)
+    set(boost_sha256 af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
     list(APPEND boost_url
       https://download.ceph.com/qa/boost_${boost_version_underscore}.tar.bz2
