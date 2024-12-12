@@ -37,8 +37,7 @@ void Graylog::set_destination(const std::string& host, int port)
 {
   try {
     boost::asio::ip::udp::resolver resolver(m_io_service);
-    boost::asio::ip::udp::resolver::query query(host, std::to_string(port));
-    m_endpoint = *resolver.resolve(query);
+    m_endpoint = *resolver.resolve(host, std::to_string(port)).cbegin();
     m_log_dst_valid = true;
   } catch (boost::system::system_error const& e) {
     cerr << "Error resolving graylog destination: " << e.what() << std::endl;
