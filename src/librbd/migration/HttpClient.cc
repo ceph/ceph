@@ -514,14 +514,17 @@ private:
         return;
       }
     } else if (current_state == STATE_SHUTTING_DOWN) {
+      ceph_assert(m_on_shutdown != nullptr);
       if (next_state == STATE_READY) {
         // shut down requested while connecting/resetting
         disconnect(new LambdaContext([this](int r) { handle_shut_down(r); }));
         return;
       } else if (next_state == STATE_UNINITIALIZED ||
-                 next_state == STATE_SHUTDOWN ||
                  next_state == STATE_RESET_CONNECTING) {
-        ceph_assert(m_on_shutdown != nullptr);
+        shutdown_socket();
+        m_on_shutdown->complete(r);
+        return;
+      } else if (next_state == STATE_SHUTDOWN) {
         m_on_shutdown->complete(r);
         return;
       }
