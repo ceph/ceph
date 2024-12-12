@@ -193,7 +193,6 @@ options:
   desc: Maximum concurrent scrubs on a single OSD
   fmt_desc: The maximum number of simultaneous scrub operations for
     a Ceph OSD Daemon.
-  note: This setting is ignored when the mClock scheduler is used.
   default: 3
   with_legacy: true
 - name: osd_scrub_during_recovery
