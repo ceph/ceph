@@ -199,6 +199,29 @@ const set<snapid_t>& SnapRealm::get_snaps() const
   return cached_snaps;
 }
 
+bool SnapRealm::has_snaps_in_range(CInode *in, snapid_t last) {
+  check_cache();
+  const auto& s = get_snaps();
+  std::set<snapid_t> snaps_set;
+  snaps_set.insert(s.begin(), s.end());
+
+  const std::vector<uint64_t>& referent_inodes = in->get_inode()->referent_inodes;
+  dout(20) << "has_snaps_in_range snaprealms of referent inodes to be sent to client " << std::hex << referent_inodes << dendl;
+  for (const auto& ri : referent_inodes) {
+    CInode *cur = mdcache->get_inode(ri);
+    if (!cur) {
+      dout(3) << "has_snaps_in_range error: referent inode not loaded " << std::hex << ri << dendl;
+      ceph_abort("has_snaps_in_range: referent inode not loaded");
+    }
+    SnapRealm *cur_realm = cur->find_snaprealm();
+    const auto& s1 = cur_realm->get_snaps();
+    snaps_set.insert(s1.begin(), s1.end());
+  }
+
+  auto p = snaps_set.lower_bound(in->first);
+  return (p != snaps_set.end() && *p <= last);
+}
+
 /*
  * build vector in reverse sorted order
  */

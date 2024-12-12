@@ -1698,7 +1698,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       return;
     }
 
-    if (!realm->has_snaps_in_range(in->first, follows)) {
+    if (!realm->has_snaps_in_range(in, follows)) {
       dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *in << dendl;
       in->first = follows + 1;
       return;

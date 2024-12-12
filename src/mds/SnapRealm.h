@@ -87,6 +87,7 @@ public:
     return CEPH_NOSNAP;
   }
 
+  bool has_snaps_in_range(CInode *in, snapid_t last);
   bool has_snaps_in_range(snapid_t first, snapid_t last) {
     check_cache();
     const auto& s = get_snaps();
