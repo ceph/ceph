@@ -217,7 +217,7 @@ class TestPG(TestArgparse):
     def test_pg_missing_args_output(self):
         ret, _, stderr = self._capture_output(['pg'], stderr=True)
         self.assertEqual({}, ret)
-        self.assertRegexpMatches(stderr, re.compile('no valid command found.* closest matches'))
+        self.assertRegex(stderr, re.compile('no valid command found.* closest matches'))
 
     def test_pg_wrong_arg_output(self):
         ret, _, stderr = self._capture_output(['pg', 'map', 'bad-pgid'],
