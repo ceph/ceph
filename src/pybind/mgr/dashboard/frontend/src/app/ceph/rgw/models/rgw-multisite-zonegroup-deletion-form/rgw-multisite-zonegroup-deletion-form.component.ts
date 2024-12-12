@@ -56,7 +56,7 @@ export class RgwMultisiteZonegroupDeletionFormComponent implements OnInit, After
       .subscribe(() => {
         this.notificationService.show(
           NotificationType.success,
-          $localize`Zone: '${this.zonegroup.name}' deleted successfully`
+          $localize`Zonegroup: '${this.zonegroup.name}' deleted successfully`
         );
         this.activeModal.close();
       });
