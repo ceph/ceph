@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-
+import { AbstractControl, ValidationErrors } from '@angular/forms';
 import _ from 'lodash';
+import { isEmptyInputValue } from '../forms/cd-validators';
 
 @Injectable({
   providedIn: 'root'
@@ -85,13 +86,16 @@ export class FormatterService {
   toBytes(value: string, error_value: number = null): number | null {
     const base = 1024;
     const units = ['b', 'k', 'm', 'g', 't', 'p', 'e', 'z', 'y'];
-    const m = RegExp('^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s)?)?$', 'i').exec(value);
-    if (m === null) {
+    const bytesRegexMatch = RegExp(
+      '^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s|B/m|iB/m)?)?$',
+      'i'
+    ).exec(value);
+    if (bytesRegexMatch === null) {
       return error_value;
     }
-    let bytes = parseFloat(m[1]);
-    if (_.isString(m[3])) {
-      bytes = bytes * Math.pow(base, units.indexOf(m[3].toLowerCase()[0]));
+    let bytes = parseFloat(bytesRegexMatch[1]);
+    if (_.isString(bytesRegexMatch[3])) {
+      bytes = bytes * Math.pow(base, units.indexOf(bytesRegexMatch[3].toLowerCase()[0]));
     }
     return Math.round(bytes);
   }
@@ -140,5 +144,39 @@ export class FormatterService {
       octalMode += scopeValue.toString();
     }
     return octalMode;
+  }
+  /**
+   * Validate the input maximum size as per regrex passed.
+   */
+  performValidation(
+    control: AbstractControl,
+    regex: string,
+    errorObject: object,
+    type?: string
+  ): ValidationErrors | null {
+    if (isEmptyInputValue(control.value)) {
+      return null;
+    }
+    const matchResult = RegExp(regex, 'i').exec(control.value);
+    if (matchResult === null) {
+      return errorObject;
+    }
+    if (type == 'quota') {
+      const bytes = new FormatterService().toBytes(control.value);
+      return bytes < 1024 ? errorObject : null;
+    }
+    return null;
+  }
+
+  iopmMaxSizeValidator(control: AbstractControl): ValidationErrors | null {
+    const pattern = /^\s*(\d+)$/i;
+    const testResult = pattern.exec(control.value);
+    if (isEmptyInputValue(control.value)) {
+      return null;
+    }
+    if (testResult == null) {
+      return { rateOpsMaxSize: true };
+    }
+    return control.value.toString()?.length > 18 ? { rateOpsMaxSize: true } : null;
   }
 }

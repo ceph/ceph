@@ -18,6 +18,7 @@ import { TrimDirective } from './trim.directive';
 import { RequiredFieldDirective } from './required-field.directive';
 import { ReactiveFormsModule } from '@angular/forms';
 import { OptionalFieldDirective } from './optional-field.directive';
+import { DimlessBinaryPerMinuteDirective } from './dimless-binary-per-minute.directive';
 
 @NgModule({
   imports: [ReactiveFormsModule],
@@ -38,7 +39,8 @@ import { OptionalFieldDirective } from './optional-field.directive';
     CdFormValidationDirective,
     AuthStorageDirective,
     RequiredFieldDirective,
-    OptionalFieldDirective
+    OptionalFieldDirective,
+    DimlessBinaryPerMinuteDirective
   ],
   exports: [
     AutofocusDirective,
@@ -57,7 +59,8 @@ import { OptionalFieldDirective } from './optional-field.directive';
     CdFormValidationDirective,
     AuthStorageDirective,
     RequiredFieldDirective,
-    OptionalFieldDirective
+    OptionalFieldDirective,
+    DimlessBinaryPerMinuteDirective
   ]
 })
 export class DirectivesModule {}

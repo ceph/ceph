@@ -87,6 +87,8 @@ import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-
 import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw-user-accounts-details.component';
 import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw-storage-class-details.component';
 import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-storage-class-form.component';
+import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
+import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 
 @NgModule({
   imports: [
@@ -133,6 +135,7 @@ import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-stora
     RgwStorageClassListComponent
   ],
   declarations: [
+    RgwRateLimitComponent,
     RgwDaemonListComponent,
     RgwDaemonDetailsComponent,
     RgwBucketFormComponent,
@@ -178,7 +181,8 @@ import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-stora
     RgwUserAccountsDetailsComponent,
     RgwStorageClassListComponent,
     RgwStorageClassDetailsComponent,
-    RgwStorageClassFormComponent
+    RgwStorageClassFormComponent,
+    RgwRateLimitDetailsComponent
   ],
   providers: [TitleCasePipe]
 })
