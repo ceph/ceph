@@ -5,6 +5,7 @@
 
 #include "common/Formatter.h"
 
+#include "crimson/common/coroutine.h"
 #include "crimson/osd/osd.h"
 #include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
@@ -68,17 +69,14 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
 {
   LOG_PREFIX(RepRequest::with_pg_interruptible);
   DEBUGI("{}", *this);
-  return this->template enter_stage<interruptor>(repop_pipeline(*pg).process
-  ).then_interruptible([this, pg] {
-    return this->template with_blocking_event<
-      PG_OSDMapGate::OSDMapBlocker::BlockingEvent
-      >([this, pg](auto &&trigger) {
-        return pg->osdmap_gate.wait_for_map(
-          std::move(trigger), req->min_epoch);
-      });
-  }).then_interruptible([this, pg] (auto) {
-    return pg->handle_rep_op(req);
-  });
+  co_await this->template enter_stage<interruptor>(repop_pipeline(*pg).process);
+  co_await interruptor::make_interruptible(this->template with_blocking_event<
+    PG_OSDMapGate::OSDMapBlocker::BlockingEvent
+    >([this, pg](auto &&trigger) {
+      return pg->osdmap_gate.wait_for_map(
+	std::move(trigger), req->min_epoch);
+    }));
+  co_await pg->handle_rep_op(req);
 }
 
 seastar::future<> RepRequest::with_pg(
