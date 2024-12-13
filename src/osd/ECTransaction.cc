@@ -204,9 +204,6 @@ void ECTransaction::generate_transactions(
       xattr_rollback[ECUtil::get_hinfo_key()] = old_hinfo;
 
       if (op.is_none() && op.truncate && op.truncate->first == 0) {
-	ceph_assert(op.truncate->first == 0);
-	ceph_assert(op.truncate->first ==
-	       op.truncate->second);
 	ceph_assert(entry);
 	ceph_assert(obc);
 
