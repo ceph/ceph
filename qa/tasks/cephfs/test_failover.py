@@ -3,9 +3,11 @@ import signal
 import logging
 import operator
 from random import randint, choice
+from json import loads as json_loads
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
+from teuthology.contextutil import safe_while
 from tasks.cephfs.fuse_mount import FuseMount
 
 log = logging.getLogger(__name__)
@@ -489,7 +491,8 @@ class TestFailover(CephFSTestCase):
 
 
 class TestStandbyReplay(CephFSTestCase):
-    CLIENTS_REQUIRED = 0
+
+    CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 4
 
     def _confirm_no_replay(self):
@@ -677,6 +680,72 @@ class TestStandbyReplay(CephFSTestCase):
 
         status = self._confirm_single_replay()
         self.assertTrue(standby_count, len(list(status.get_standbys())))
+
+    def test_health_warn_oversize_cache_has_no_counters(self):
+        '''
+        Test that when MDS cache size crosses the limit, health warning
+        printed for standy-replay MDS doesn't include inode and stray
+        counters.
+
+        Tests: https://tracker.ceph.com/issues/63514
+        '''
+        # reduce MDS cache limit, default MDS cache limit is too high which
+        # will unnecessarily consume too many resources and too much time.
+        self.config_set('mds', 'mds_cache_memory_limit', '1K')
+        # health warning for crossing MDS cache size limit won't be raised
+        # until a threshold. default threshold is too high. it will
+        # unnecessarily consume so much time and resources.
+        self.config_set('mds', 'mds_health_cache_threshold', '1.000001')
+        # so that there is only active MDS and only 1 health warning is
+        # produced. presence of 2 warning should cause this test to fail
+        self.fs.set_max_mds(1)
+        self.fs.set_allow_standby_replay(True)
+        self._confirm_single_replay()
+        self.fs.wait_for_daemons()
+        # The call above (to self.fs.wait_for_daemons()) should ensure we have
+        # only 1 active MDS on cluster
+        active_mds_id = self.fs.get_active_names()[0]
+        sr_mds_id = self.fs.get_standby_replay_names()[0]
+
+        # this should generate more than enough MDS cache to trigger health
+        # warning MDS_CACHE_OVERSIZED.
+        self.mount_a.open_n_background(".", 400)
+
+        # actual test begins now...
+        with safe_while(sleep=3, tries=10) as proceed:
+            while proceed():
+                # logging cache generated so far for th sake of easy
+                # debugging in future.
+                self.get_ceph_cmd_stdout(f'tell mds.{active_mds_id} cache '
+                                          'status')
+
+                health_report = self.get_ceph_cmd_stdout('health detail '
+                                                         '--format json')
+                health_report = json_loads(health_report)
+                if 'MDS_CACHE_OVERSIZED' not in health_report['checks']:
+                    log.debug('warning hasn\'t appeared in health report yet.'
+                             'trying again after some sleep...')
+                    continue
+
+                cache_warn = health_report['checks']['MDS_CACHE_OVERSIZED']\
+                        ['detail']
+                log.debug(f'cache_warn - {cache_warn}')
+                # sanity check: "ceph health detail" output should've 2
+                # warnings -- one for active MDS and other for standby-replay
+                # MDS.
+                if len(cache_warn) != 2:
+                    log.debug('expected 2 warnings but instead found '
+                              f'{len(cache_warn)} warnings; trying again '
+                               'after some sleep...')
+                    continue
+
+                for cw in cache_warn:
+                    msg = cw['message']
+                    if f'mds.{sr_mds_id}' not in cw['message']:
+                        continue
+                    self.assertNotIn('inodes in use by clients', msg)
+                    self.assertNotIn('stray files', msg)
+                    return
 
 
 class TestMultiFilesystems(CephFSTestCase):
