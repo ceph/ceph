@@ -734,32 +734,16 @@ set(Boost_USE_MULTITHREADED ON)
 CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
   "NOT WITH_SYSTEM_BOOST" OFF)
 # require minimally the bundled version
-if(WITH_SYSTEM_BOOST)
-  if(ENABLE_SHARED)
-    set(Boost_USE_STATIC_LIBS OFF)
-  else()
-    set(Boost_USE_STATIC_LIBS ON)
-  endif()
-  if(BOOST_ROOT AND CMAKE_LIBRARY_ARCHITECTURE)
-    set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
-  endif()
-  find_package(Boost 1.87 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
-  if(NOT ENABLE_SHARED)
-    set_property(TARGET Boost::iostreams APPEND PROPERTY
-      INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
-  endif()
-else()
-  include(ProcessorCount)
-  ProcessorCount(DEFAULT_BOOST_J)
-  if(DEFAULT_BOOST_J EQUAL 0)
-    set(DEFAULT_BOOST_J 1)
-  endif()
-  set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
-  set(Boost_USE_STATIC_LIBS ON)
-  include(BuildBoost)
-  build_boost(1.87
-    COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
+include(ProcessorCount)
+ProcessorCount(DEFAULT_BOOST_J)
+if(DEFAULT_BOOST_J EQUAL 0)
+  set(DEFAULT_BOOST_J 1)
 endif()
+set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
+set(Boost_USE_STATIC_LIBS ON)
+include(BuildBoost)
+build_boost(1.87
+  COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 
 # dashboard angular2 frontend
