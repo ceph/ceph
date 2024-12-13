@@ -322,9 +322,10 @@ class Cloner(AsyncJobs):
     this relies on a simple state machine (which mimics states from SubvolumeOpSm class) as
     the driver. file types supported are directories, symbolic links and regular files.
     """
-    def __init__(self, volume_client, tp_size, snapshot_clone_delay):
+    def __init__(self, volume_client, tp_size, snapshot_clone_delay, clone_no_wait):
         self.vc = volume_client
         self.snapshot_clone_delay = snapshot_clone_delay
+        self.snapshot_clone_no_wait = clone_no_wait
         self.state_table = {
             SubvolumeStates.STATE_PENDING      : handle_clone_pending,
             SubvolumeStates.STATE_INPROGRESS   : handle_clone_in_progress,
@@ -339,6 +340,9 @@ class Cloner(AsyncJobs):
 
     def reconfigure_snapshot_clone_delay(self, timeout):
         self.snapshot_clone_delay = timeout
+
+    def reconfigure_reject_clones(self, clone_no_wait):
+        self.snapshot_clone_no_wait = clone_no_wait
 
     def is_clone_cancelable(self, clone_state):
         return not (SubvolumeOpSm.is_complete_state(clone_state) or SubvolumeOpSm.is_failed_state(clone_state))
