@@ -11008,6 +11008,109 @@ paths:
       - jwt: []
       tags:
       - RgwBucket
+  /api/rgw/bucket/ratelimit:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get the bucket global rate limit
+      tags:
+      - RgwBucket
+    post:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                enabled:
+                  type: string
+                max_read_bytes:
+                  type: string
+                max_read_ops:
+                  type: string
+                max_write_bytes:
+                  type: string
+                max_write_ops:
+                  type: string
+                name:
+                  type: string
+              required:
+              - enabled
+              - name
+              - max_read_ops
+              - max_write_ops
+              - max_read_bytes
+              - max_write_bytes
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Update the bucket rate limit
+      tags:
+      - RgwBucket
+  /api/rgw/bucket/ratelimit/{name}:
+    get:
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get the bucket rate limit
+      tags:
+      - RgwBucket
   /api/rgw/bucket/setEncryptionConfig:
     put:
       parameters: []
@@ -12331,6 +12434,109 @@ paths:
             trace.
       security:
       - jwt: []
+      tags:
+      - RgwUser
+  /api/rgw/user/ratelimit:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get the user global rate limit
+      tags:
+      - RgwUser
+    post:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                enabled:
+                  type: string
+                max_read_bytes:
+                  type: string
+                max_read_ops:
+                  type: string
+                max_write_bytes:
+                  type: string
+                max_write_ops:
+                  type: string
+                name:
+                  type: string
+              required:
+              - enabled
+              - name
+              - max_read_ops
+              - max_write_ops
+              - max_read_bytes
+              - max_write_bytes
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Update the user rate limit
+      tags:
+      - RgwUser
+  /api/rgw/user/ratelimit/{name}:
+    get:
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get the user rate limit
       tags:
       - RgwUser
   /api/rgw/user/{uid}:

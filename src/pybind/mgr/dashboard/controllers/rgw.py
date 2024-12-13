@@ -15,7 +15,7 @@ from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, \
-    RgwClient, RgwMultisite, RgwMultisiteAutomation
+    RgwClient, RgwMultisite, RgwMultisiteAutomation, RgwRateLimit
 from ..services.rgw_iam import RgwAccounts
 from ..services.service import RgwServiceManager, wait_for_daemon_to_start
 from ..tools import json_str_to_object, str_to_bool
@@ -706,6 +706,28 @@ class RgwBucket(RgwRESTController):
     def get_encryption_config(self, daemon_name=None, owner=None):
         return CephService.get_encryption_config(daemon_name)
 
+    @Endpoint(method='GET', path='/ratelimit')
+    @EndpointDoc("Get the bucket global rate limit")
+    @ReadPermission 
+    def get_global_rate_limit(self):
+        rgwBucketRateLimit_instance = RgwRateLimit()
+        return rgwBucketRateLimit_instance.get_global_rateLimit()
+
+    @Endpoint(method='GET', path='/ratelimit')
+    @EndpointDoc("Get the bucket rate limit")
+    @ReadPermission 
+    def get_rate_limit(self, name: str ):
+        rgwBucketRateLimit_instance = RgwRateLimit()
+        return rgwBucketRateLimit_instance.get_rateLimit('bucket', name)
+    
+    @Endpoint(method='POST', path='/ratelimit')
+    @UpdatePermission
+    @allow_empty_body
+    @EndpointDoc("Update the bucket rate limit")
+    def set_rate_limit(self,enabled,name, max_read_ops, max_write_ops,max_read_bytes,max_write_bytes):
+        rgwBucketRateLimit_instance = RgwRateLimit()
+        return rgwBucketRateLimit_instance.set_rateLimit('bucket', enabled, name, max_read_ops, max_write_ops,max_read_bytes,max_write_bytes)
+
 
 @UIRouter('/rgw/bucket', Scope.RGW)
 class RgwBucketUi(RgwBucket):
@@ -945,7 +967,29 @@ class RgwUser(RgwRESTController):
             'purge-keys': purge_keys
         }, json_response=False)
 
+    @Endpoint(method='GET', path='/ratelimit')
+    @EndpointDoc("Get the user global rate limit")
+    @ReadPermission 
+    def get_global_rate_limit(self):
+        rgwUserRateLimit_instance = RgwRateLimit()
+        return rgwUserRateLimit_instance.get_global_rateLimit()
 
+    @Endpoint(method='GET', path='/ratelimit')
+    @EndpointDoc("Get the user rate limit")
+    @ReadPermission 
+    def get_rate_limit(self,  name: str ):
+        rgwUserRateLimit_instance = RgwRateLimit()
+        return rgwUserRateLimit_instance.get_rateLimit('user', name)
+    
+    @Endpoint(method='POST', path='/ratelimit')
+    @UpdatePermission
+    @allow_empty_body
+    @EndpointDoc("Update the user rate limit")
+    def set_rate_limit(self, enabled,name, max_read_ops, max_write_ops,max_read_bytes,max_write_bytes):
+        rgwUserRateLimit_instance = RgwRateLimit()
+        return rgwUserRateLimit_instance.set_rateLimit('user', enabled, name, max_read_ops, max_write_ops,max_read_bytes,max_write_bytes)
+
+    
 class RGWRoleEndpoints:
     @staticmethod
     def role_list(_):
