@@ -85,7 +85,10 @@ export class FormatterService {
   toBytes(value: string, error_value: number = null): number | null {
     const base = 1024;
     const units = ['b', 'k', 'm', 'g', 't', 'p', 'e', 'z', 'y'];
-    const m = RegExp('^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s)?)?$', 'i').exec(value);
+    const m = RegExp(
+      '^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s|B/m|iB/m)?)?$',
+      'i'
+    ).exec(value);
     if (m === null) {
       return error_value;
     }
@@ -115,6 +118,20 @@ export class FormatterService {
    */
   toIops(value: string): number {
     const pattern = /^\s*(\d+)\s*(IOPS)?\s*$/i;
+    const testResult = pattern.exec(value);
+
+    if (testResult !== null) {
+      return +testResult[1];
+    }
+
+    return 0;
+  }
+
+  /**
+   * Converts `x IOPM` to `x` (currently) or `0` if the conversion fails
+   */
+  toIopm(value: string): number {
+    const pattern = /^\s*(\d+)\s*(IOPM)?\s*$/i;
     const testResult = pattern.exec(value);
 
     if (testResult !== null) {

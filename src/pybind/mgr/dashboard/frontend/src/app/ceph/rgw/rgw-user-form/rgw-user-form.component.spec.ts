@@ -19,13 +19,14 @@ import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserFormComponent } from './rgw-user-form.component';
 import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
   let fixture: ComponentFixture<RgwUserFormComponent>;
   let rgwUserService: RgwUserService;
   let formHelper: FormHelper;
-
+  let modalRef: any;
   configureTestBed({
     declarations: [RgwUserFormComponent],
     imports: [
@@ -39,12 +40,12 @@ describe('RgwUserFormComponent', () => {
     ]
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     fixture = TestBed.createComponent(RgwUserFormComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
     rgwUserService = TestBed.inject(RgwUserService);
     formHelper = new FormHelper(component.userForm);
+    await fixture.whenStable();
   });
 
   it('should create', () => {
@@ -342,6 +343,384 @@ describe('RgwUserFormComponent', () => {
 
       const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
       expect(capabilityButton.disabled).toBeFalsy();
+    });
+  });
+  it('should not modify max_buckets if mode is not "1"', () => {
+    formHelper.setValue('max_buckets', '', false);
+    component.onMaxBucketsModeChange('2');
+    const s = spyOn(component.userForm, 'patchValue');
+    expect(s).not.toHaveBeenCalled();
+  });
+
+  it('should call _setRateLimitProperty when value is equal to 0 ', () => {
+    const mockrateLimitKey = 'user_rate_limit_max_readBytes';
+    const mockunlimitedKey = 'user_rate_limit_max_readBytes_unlimited';
+    const mockproperty = 0;
+
+    component['_setRateLimitProperty'](
+      formHelper,
+      mockrateLimitKey,
+      mockunlimitedKey,
+      mockproperty
+    );
+    expect(component.userForm.getValue('user_rate_limit_max_readBytes_unlimited')).toEqual(true);
+    expect(component.userForm.getValue('user_rate_limit_max_readBytes')).toEqual(null);
+  });
+
+  describe('updateFieldsWhenTenanted()', () => {
+    it('should reset the form when showTenant is falsy', () => {
+      component.showTenant = false;
+
+      component.previousTenant = 'true';
+
+      component.userForm.get('tenant').setValue('test1');
+      component.userForm.get('user_id').setValue('user-123');
+
+      component.updateFieldsWhenTenanted();
+      expect(formHelper.getControl('user_id').untouched).toBeTruthy(); // user_id should be untouched
+      expect(formHelper.getControl('tenant').value).toBe('true'); // tenant should be reset to
+    });
+  });
+
+  it('should call deletecapab', () => {
+    component.capabilities = [{ type: 'users', perm: 'read' }];
+    component.deleteCapability(0);
+    expect(component.capabilities.length).toBe(0);
+    expect(component.userForm.dirty).toBeTruthy();
+  });
+  it('should call deleteS3Key', () => {
+    component.s3Keys = [
+      { user: 'test5$test11', access_key: 'A009', secret_key: 'ABCKEY', generate_key: true }
+    ];
+    component.deleteS3Key(0);
+    expect(component.userForm.dirty).toBeTruthy();
+  });
+
+  it('should call showCapabilityModal', () => {
+    const s = spyOn(component['modalService'], 'show').and.callFake(() => {
+      modalRef = {
+        componentInstance: {
+          setEditing: jest.fn(),
+          setValues: jest.fn(),
+          setCapabilities: jest.fn(),
+          submitAction: { subscribe: jest.fn() }
+        }
+      };
+      return modalRef;
+    });
+    component.capabilities = [{ type: 'users', perm: 'read' }];
+    component.showCapabilityModal(0);
+    expect(s).toHaveBeenCalled();
+  });
+  it('should call showSwiftKeyModal', () => {
+    const s = spyOn(component['modalService'], 'show').and.callFake(() => {
+      modalRef = {
+        componentInstance: {
+          setValues: jest.fn()
+        }
+      };
+      return modalRef;
+    });
+    component.swiftKeys = [
+      { user: 'user1', secret_key: 'secret1' },
+      { user: 'user2', secret_key: 'secret2' }
+    ];
+    component.showSwiftKeyModal(0);
+    expect(s).toHaveBeenCalled();
+  });
+  it('should call showS3KeyModal', () => {
+    const s = spyOn(component['modalService'], 'show').and.callFake(() => {
+      modalRef = {
+        componentInstance: {
+          setValues: jest.fn(),
+          setViewing: jest.fn(),
+          setUserCandidates: jest.fn(),
+          submitAction: { subscribe: jest.fn() }
+        }
+      };
+      return modalRef;
+    });
+    component.s3Keys = [
+      { user: 'test5$test11', access_key: 'A009', secret_key: 'ABCKEY', generate_key: true }
+    ];
+    component.showS3KeyModal(0);
+    expect(s).toHaveBeenCalled();
+  });
+
+  it('should call _getS3KeyUserCandidates', () => {
+    spyOn(component, 'getUID').and.returnValue('mockUID');
+    component.s3Keys = [
+      { user: 'mockUID', access_key: 'test', secret_key: 'TestKey', generate_key: true }
+    ];
+    const s = component['_getS3KeyUserCandidates']();
+    const result = ['mockUID'];
+    expect(s).toEqual(result);
+  });
+  it('should return expected result when all rate limits are specified', () => {
+    // Using patchValue to set form values
+    component.userForm.patchValue({
+      user_rate_limit_enabled: true,
+      user_id: 'user123',
+      user_rate_limit_max_readOps: '100 IOPM',
+      user_rate_limit_max_writeOps: '200',
+      user_rate_limit_max_readBytes: '10Mb',
+      user_rate_limit_max_writeBytes: '10Mb',
+      user_rate_limit_max_readOps_unlimited: false,
+      user_rate_limit_max_writeOps_unlimited: false,
+      user_rate_limit_max_readBytes_unlimited: false,
+      user_rate_limit_max_writeBytes_unlimited: false
+    });
+    jest.spyOn(FormatterService.prototype, 'toIopm');
+    jest.spyOn(FormatterService.prototype, 'toBytes').mockReturnValue(10485760); // 10MB in bytes
+
+    const result = component['_getUserRateLimitArgs']();
+
+    expect(result).toEqual({
+      enabled: 'true',
+      max_read_ops: '100', // Formatted by FormatterService.toIopm
+      max_write_ops: '200',
+      max_read_bytes: '10485760', // Converted by FormatterService.toBytes
+      max_write_bytes: '10485760' // Converted by FormatterService.toBytes
+    });
+  });
+  it('should return default values for unlimited options', () => {
+    // Using patchValue to set unlimited flags
+    component.userForm.patchValue({
+      user_rate_limit_enabled: true,
+      user_id: 'user123',
+      user_rate_limit_max_readOps: 100,
+      user_rate_limit_max_writeOps: 200,
+      user_rate_limit_max_readBytes: '10MB',
+      user_rate_limit_max_writeBytes: '20MB',
+      user_rate_limit_max_readOps_unlimited: true, // Unlimited
+      user_rate_limit_max_writeOps_unlimited: true, // Unlimited
+      user_rate_limit_max_readBytes_unlimited: true, // Unlimited
+      user_rate_limit_max_writeBytes_unlimited: true // Unlimited
+    });
+
+    // Set return values for the spied methods (not used for unlimited cases)
+    jest.spyOn(FormatterService.prototype, 'toIopm').mockReturnValue(150);
+    jest.spyOn(FormatterService.prototype, 'toBytes').mockReturnValue(10485760); // 10MB in bytes
+
+    const result = component['_getUserRateLimitArgs']();
+
+    expect(result).toEqual({
+      enabled: 'true',
+      max_read_ops: '0', // Default value when unlimited
+      max_write_ops: '0', // Default value when unlimited
+      max_read_bytes: '0', // Default value when unlimited
+      max_write_bytes: '0' // Default value when unlimited
+    });
+  });
+  describe('test case for _getBucketQuotaArgs', () => {
+    it('should return correct result when quota values are specified', () => {
+      // Using patchValue to set form values
+      component.userForm.patchValue({
+        bucket_quota_enabled: true,
+        bucket_quota_max_size: 2048, // 2MB
+        bucket_quota_max_objects: 10000,
+        bucket_quota_max_size_unlimited: false, // Not unlimited
+        bucket_quota_max_objects_unlimited: false // Not unlimited
+      });
+      const formatterServiceSpy = jest.spyOn(FormatterService.prototype, 'toBytes');
+      // Mock the toBytes function to return 2048 (bytes)
+      formatterServiceSpy.mockReturnValue(2048); // Convert 2MB to bytes (2048 KB)
+
+      const result = component['_getBucketQuotaArgs']();
+
+      expect(result).toEqual({
+        quota_type: 'bucket',
+        enabled: true,
+        max_size_kb: '2', // 2048 bytes = 2KB
+        max_objects: 10000
+      });
+    });
+    it('should return correct result when quota values are specified', () => {
+      // Using patchValue to set form values
+      component.userForm.patchValue({
+        bucket_quota_enabled: true,
+        bucket_quota_max_size: 2048, // 2MB
+        bucket_quota_max_objects: 10000,
+        bucket_quota_max_size_unlimited: false, // Not unlimited
+        bucket_quota_max_objects_unlimited: false // Not unlimited
+      });
+
+      const formatterServiceSpy = jest.spyOn(FormatterService.prototype, 'toBytes');
+      // Mock the toBytes function to return 2048 (bytes)
+      formatterServiceSpy.mockReturnValue(2048); // Convert 2MB to bytes (2048 KB)
+
+      const result = component['_getBucketQuotaArgs']();
+
+      expect(result).toEqual({
+        quota_type: 'bucket',
+        enabled: true,
+        max_size_kb: '2', // 2048 bytes = 2KB
+        max_objects: 10000
+      });
+    });
+    it('should return default values for unlimited size and objects', () => {
+      component.userForm.patchValue({
+        bucket_quota_enabled: true,
+        bucket_quota_max_size: 2048, // 2MB
+        bucket_quota_max_objects: 10000,
+        bucket_quota_max_size_unlimited: true, // Unlimited
+        bucket_quota_max_objects_unlimited: true // Unlimited
+      });
+
+      const formatterServiceSpy = jest.spyOn(FormatterService.prototype, 'toBytes');
+      formatterServiceSpy.mockReturnValue(2048); // Convert 2MB to bytes (2048 KB)
+
+      const result = component['_getBucketQuotaArgs']();
+
+      expect(result).toEqual({
+        quota_type: 'bucket',
+        enabled: true,
+        max_size_kb: -1, // Default value when unlimited
+        max_objects: -1 // Default value when unlimited
+      });
+    });
+  });
+  describe('test case for _getUserQuotaArgs', () => {
+    it('should return quota info with default values when no quota is set', () => {
+      // Use patchValue to set form values
+      component.userForm.patchValue({
+        user_quota_enabled: true,
+        user_quota_max_size_unlimited: true,
+        user_quota_max_objects_unlimited: true,
+        user_quota_max_size: null,
+        user_quota_max_objects: null
+      });
+
+      // Call the method
+      const result = component._getUserQuotaArgs();
+
+      // Assertions
+      expect(result).toEqual({
+        quota_type: 'user',
+        enabled: true,
+        max_size_kb: -1,
+        max_objects: -1
+      });
+    });
+
+    it('should calculate max_size_kb when quota size is specified and not unlimited', () => {
+      // Use patchValue to set form values
+      component.userForm.patchValue({
+        user_quota_enabled: true,
+        user_quota_max_size_unlimited: false,
+        user_quota_max_objects_unlimited: true,
+        user_quota_max_size: 2048, // Example quota size in KB
+        user_quota_max_objects: null
+      });
+
+      const toBytesSpy = jest
+        .spyOn(FormatterService.prototype, 'toBytes')
+        .mockReturnValue(2048 * 1024);
+
+      const result = component._getUserQuotaArgs();
+      expect(toBytesSpy).toHaveBeenCalledWith(2048);
+      expect(result).toEqual({
+        quota_type: 'user',
+        enabled: true,
+        max_size_kb: '2048', // Expect the converted KB value
+        max_objects: -1
+      });
+    });
+
+    it('should set max_objects when quota is specified and not unlimited', () => {
+      // Use patchValue to set form values
+      component.userForm.patchValue({
+        user_quota_enabled: true,
+        user_quota_max_size_unlimited: true,
+        user_quota_max_objects_unlimited: false,
+        user_quota_max_size: null,
+        user_quota_max_objects: 1000 // Example quota size
+      });
+
+      const result = component._getUserQuotaArgs();
+
+      expect(result).toEqual({
+        quota_type: 'user',
+        enabled: true,
+        max_size_kb: -1,
+        max_objects: 1000
+      });
+    });
+  });
+
+  it('should call showSubuserModal', () => {
+    const s = spyOn(component['modalService'], 'show').and.callFake(() => {
+      modalRef = {
+        componentInstance: {
+          setValues: jest.fn(),
+          setViewing: jest.fn(),
+          setEditing: jest.fn(),
+          setUserCandidates: jest.fn(),
+          submitAction: { subscribe: jest.fn() }
+        }
+      };
+      return modalRef;
+    });
+    component.subusers = [
+      { id: 'test', permissions: 'true', generate_secret: true, secret_key: '' }
+    ];
+    //  component.s3Keys= [{user: 'test5$test11', access_key: 'A009', secret_key: 'ABCKEY', generate_key: true}];
+    component.showSubuserModal(0);
+    expect(s).toHaveBeenCalled();
+  });
+  describe('test case for showSubuserModal', () => {
+    it('should handle "Edit" scenario when index is provided', () => {
+      let index = 0;
+      component.subusers = [
+        { id: 'test', permissions: 'true', generate_secret: true, secret_key: '' }
+      ];
+      let spy = spyOn(component['modalService'], 'show').and.callFake(() => {
+        return (modalRef = {
+          componentInstance: {
+            setEditing: jest.fn(),
+            setValues: jest.fn(),
+            setCapabilities: jest.fn(),
+            setSubusers: jest.fn(),
+            setUserCandidates: jest.fn(),
+            submitAction: { subscribe: jest.fn() }
+          }
+        });
+      });
+      spyOn(component, 'getUID').and.returnValue('dashboard');
+      component.showSubuserModal(index);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(modalRef.componentInstance.setEditing).toHaveBeenCalledTimes(1);
+      expect(modalRef.componentInstance.setValues).toHaveBeenCalledWith(
+        'dashboard',
+        component.subusers[index].id,
+        component.subusers[index].permissions
+      );
+      expect(modalRef.componentInstance.submitAction.subscribe).toHaveBeenCalled();
+    });
+
+    it('should handle "Add" scenario when index is not provided', () => {
+      let spy = spyOn(component['modalService'], 'show').and.callFake(() => {
+        return (modalRef = {
+          componentInstance: {
+            setEditing: jest.fn(),
+            setValues: jest.fn(),
+            setCapabilities: jest.fn(),
+            setSubusers: jest.fn(),
+            setUserCandidates: jest.fn(),
+            submitAction: { subscribe: jest.fn() }
+          }
+        });
+      });
+      component.subusers = [
+        { id: 'test', permissions: 'true', generate_secret: true, secret_key: '' }
+      ];
+      spyOn(component, 'getUID').and.returnValue('dashboard');
+      component.showSubuserModal();
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(modalRef.componentInstance.setEditing).toHaveBeenCalledWith(false);
+      expect(modalRef.componentInstance.setValues).toHaveBeenCalledWith('dashboard');
+      expect(modalRef.componentInstance.setSubusers).toHaveBeenCalledWith(component.subusers);
+      expect(modalRef.componentInstance.submitAction.subscribe).toHaveBeenCalled();
     });
   });
 });
