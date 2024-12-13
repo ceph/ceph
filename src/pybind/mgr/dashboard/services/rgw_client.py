@@ -1105,6 +1105,59 @@ class RgwClient(RestClient):
                     return None
             raise e
 
+    @RestClient.api_post('?Action=CreateTopic&Name={name}')
+    def create_topic(self, request=None, name: str = '',
+                     push_endpoint: Optional[str] = '', opaque_data: Optional[str] = '',
+                     persistent: Optional[bool] = False, time_to_live: Optional[str] = '',
+                     max_retries: Optional[str] = '', retry_sleep_duration: Optional[str] = '',
+                     policy: Optional[str] = '',
+                     verify_ssl: Optional[bool] = False, cloud_events: Optional[bool] = False,
+                     ca_location: Optional[str] = None, amqp_exchange: Optional[str] = None,
+                     amqp_ack_level: Optional[str] = None,
+                     use_ssl: Optional[bool] = False, kafka_ack_level: Optional[str] = None,
+                     kafka_brokers: Optional[str] = None, mechanism: Optional[str] = None,
+                     ):
+        params = {'Name': name}
+
+        if push_endpoint:
+            params['push-endpoint'] = push_endpoint
+        if opaque_data:
+            params['OpaqueData'] = opaque_data
+        if persistent:
+            params['persistent'] = 'true' if persistent else 'false'
+        if time_to_live:
+            params['time_to_live'] = time_to_live
+        if max_retries:
+            params['max_retries'] = max_retries
+        if retry_sleep_duration:
+            params['retry_sleep_duration'] = retry_sleep_duration
+        if policy:
+            params['Policy'] = policy
+        if verify_ssl:
+            params['verify_ssl'] = 'true' if verify_ssl else 'false'
+        if cloud_events:
+            params['cloud_events'] = 'true' if cloud_events else 'false'
+        if ca_location:
+            params['ca_location'] = ca_location
+        if amqp_exchange:
+            params['amqp_exchange'] = amqp_exchange
+        if amqp_ack_level:
+            params['amqp_ack_level'] = amqp_ack_level
+        if use_ssl:
+            params['use_ssl'] = 'true' if use_ssl else 'false'
+        if kafka_ack_level:
+            params['kafka_ack_level'] = kafka_ack_level
+        if kafka_brokers:
+            params['kafka_brokers'] = kafka_brokers
+        if mechanism:
+            params['mechanism'] = mechanism
+        try:
+            result = request(params=params)
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+
+        return result
+
 
 class SyncStatus(Enum):
     enabled = 'enabled'
@@ -2605,3 +2658,61 @@ class RgwMultisite:
             return True
         except DashboardException:
             return False
+
+
+class RgwTopicmanagement:
+    def list_topics(self, uid: Optional[str], tenant: Optional[str]):
+        rgw_topics_list = {}
+        rgw_topic_list_cmd = ['topic', 'list']
+        try:
+            if uid:
+                rgw_topic_list_cmd.append('--uid')
+                rgw_topic_list_cmd.append(uid)
+
+            if tenant:
+                rgw_topic_list_cmd.append('--tenant')
+                rgw_topic_list_cmd.append(tenant)
+
+            exit_code, rgw_topics_list, _ = mgr.send_rgwadmin_command(rgw_topic_list_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to fetch topic list',
+                                         http_status_code=500, component='rgw')
+            return rgw_topics_list
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def get_topic(self, name: str, tenant: Optional[str]):
+        rgw_topic_info_cmd = ['topic', 'get']
+        try:
+            if tenant:
+                rgw_topic_info_cmd.append('--tenant')
+                rgw_topic_info_cmd.append(tenant)
+
+            if name:
+                rgw_topic_info_cmd.append('--topic')
+                rgw_topic_info_cmd.append(name)
+
+            exit_code, topic_info, _ = mgr.send_rgwadmin_command(rgw_topic_info_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get topic info',
+                                         http_status_code=500, component='rgw')
+            return topic_info
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def delete_topic(self, name: str, tenant: Optional[str] = None):
+        rgw_delete_topic_cmd = ['topic', 'rm']
+        try:
+            if tenant:
+                rgw_delete_topic_cmd.extend(['--tenant', tenant])
+
+            if name:
+                rgw_delete_topic_cmd.extend(['--topic', name])
+
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_topic_cmd)
+
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to delete topic',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
