@@ -5,6 +5,7 @@ import _ from 'lodash';
 import { BehaviorSubject, of as observableOf } from 'rxjs';
 import { catchError, map, mapTo } from 'rxjs/operators';
 import { Bucket } from '~/app/ceph/rgw/models/rgw-bucket';
+import { RgwRateLimitConfig } from '~/app/ceph/rgw/models/rgw-rate-limit';
 
 import { ApiClient } from '~/app/shared/api/api-client';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
@@ -292,5 +293,14 @@ export class RgwBucketService extends ApiClient {
       });
       return this.http.get(`${this.url}/lifecycle`, { params: params });
     });
+  }
+  updateBucketRateLimit(bid: string, bucketRateLimitArgs: RgwRateLimitConfig) {
+    return this.http.put(`${this.url}/${bid}/ratelimit`, bucketRateLimitArgs);
+  }
+  getBucketRateLimit(uid: string) {
+    return this.http.get(`${this.url}/${uid}/ratelimit`);
+  }
+  getGlobalBucketRateLimit() {
+    return this.http.get(`${this.url}/ratelimit`);
   }
 }

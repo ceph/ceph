@@ -3,6 +3,7 @@ import { Component, Input, OnChanges } from '@angular/core';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 
 import * as xml2js from 'xml2js';
+import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 
 @Component({
   selector: 'cd-rgw-bucket-details',
@@ -21,6 +22,7 @@ export class RgwBucketDetailsComponent implements OnChanges {
   lifecycleFormat: 'json' | 'xml' = 'json';
   aclPermissions: Record<string, string[]> = {};
   replicationStatus = $localize`Disabled`;
+  bucketRateLimit: RgwRateLimitConfig;
 
   constructor(private rgwBucketService: RgwBucketService) {}
 
@@ -44,6 +46,11 @@ export class RgwBucketDetailsComponent implements OnChanges {
               }
             }
           );
+        }
+      });
+      this.rgwBucketService.getBucketRateLimit(this.selection.bid).subscribe((resp: any) => {
+        if (resp && resp.bucket_ratelimit !== undefined) {
+          this.bucketRateLimit = resp.bucket_ratelimit;
         }
       });
     }
