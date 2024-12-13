@@ -487,7 +487,7 @@ target_link_libraries(radosgw PRIVATE
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
-  radosgw-admin/rgw_admin.cc
+  radosgw-admin/radosgw-admin.cc
   radosgw-admin/rgw_sync_checkpoint.cc
   radosgw-admin/rgw_orphan.cc)
 

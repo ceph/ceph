@@ -1,5 +1,9 @@
-#ifndef RGW_ADMIN_HPP
- #define RGW_ADMIN_HPP
+#ifndef RADOSGW_ADMIN_HPP 
+ #define RADOSGW_ADMIN_HPP 1
+
+/*
+ * Copyright (C) 2024 IBM
+*/
 
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
