@@ -129,29 +129,40 @@ Backward Compatibility
 ======================
 The old syntax is supported for backward compatibility.
 
-To mount CephFS with the kernel driver::
+To mount CephFS with the kernel driver, run the following commands:
 
-    mkdir /mnt/mycephfs
-    mount -t ceph :/ /mnt/mycephfs -o name=admin
+.. prompt:: bash #
 
-The key-value argument right after option ``-o`` is CephX credential;
-``name`` is the username of the CephX user we are using to mount CephFS.
+   mkdir /mnt/mycephfs
+   mount -t ceph :/ /mnt/mycephfs -o name=admin
 
-To mount a non-default FS ``cephfs2``, in case the cluster has multiple FSs::
+The key-value argument right after the option ``-o`` is the CephX credential.
+``name`` is the username of the CephX user that is mounting CephFS.
 
-    mount -t ceph :/ /mnt/mycephfs -o name=admin,fs=cephfs2
+To mount a non-default FS (in this example, ``cephfs2``), run commands of the following form. These commands are to be used in cases in which the cluster
+has multiple file systems:
 
-    or
+.. prompt:: bash #
 
-    mount -t ceph :/ /mnt/mycephfs -o name=admin,mds_namespace=cephfs2
+   mount -t ceph :/ /mnt/mycephfs -o name=admin,fs=cephfs2
 
-.. note:: The option ``mds_namespace`` is deprecated. Use ``fs=`` instead when using the old syntax for mounting.
+or
+
+.. prompt:: bash #
+
+   mount -t ceph :/ /mnt/mycephfs -o name=admin,mds_namespace=cephfs2
+
+.. note:: The option ``mds_namespace`` is deprecated. Use ``fs=`` instead when
+   using the old syntax for mounting.
 
 Unmounting CephFS
 =================
-To unmount the Ceph file system, use the ``umount`` command as usual::
+To unmount the Ceph file system, use the ``umount`` command, as in this
+example:
 
-    umount /mnt/mycephfs
+.. prompt:: bash #
+
+   umount /mnt/mycephfs
 
 .. tip:: Ensure that you are not within the file system directories before
    executing this command.
@@ -168,11 +179,12 @@ For example::
 
   cephuser@.cephfs=/     /mnt/ceph    ceph    mon_addr=192.168.0.1:6789,noatime,_netdev    0       0
 
-If the ``secret`` or ``secretfile`` options are not specified then the mount helper
-will attempt to find a secret for the given ``name`` in one of the configured keyrings.
+If the ``secret`` or ``secretfile`` options are not specified, the mount
+helper will attempt to find a secret for the given ``name`` in one of the
+configured keyrings.
 
-See `User Management`_ for details on CephX user management and mount.ceph_
-manual for more options it can take. For troubleshooting, see
+See `User Management`_ for details on CephX user management and the mount.ceph_
+manual for a list of the options it recognizes. For troubleshooting, see
 :ref:`kernel_mount_debugging`.
 
 .. _fstab: ../fstab/#kernel-driver
