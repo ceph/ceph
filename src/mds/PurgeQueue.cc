@@ -138,6 +138,8 @@ void PurgeQueue::create_logger()
 {
   PerfCountersBuilder pcb(g_ceph_context, "purge_queue", l_pq_first, l_pq_last);
 
+  pcb.add_u64_counter(l_pq_executed_ops, "pq_executed_ops", "Purge queue ops executed",
+                      "puro", PerfCountersBuilder::PRIO_INTERESTING);
   pcb.add_u64_counter(l_pq_executed, "pq_executed", "Purge queue tasks executed",
                       "purg", PerfCountersBuilder::PRIO_INTERESTING);
 
@@ -710,7 +712,8 @@ void PurgeQueue::_execute_item_complete(
     pending_expire.insert(expire_to);
   }
 
-  ops_in_flight -= _calculate_ops(iter->second);
+  auto executed_ops = _calculate_ops(iter->second);
+  ops_in_flight -= executed_ops;
   logger->set(l_pq_executing_ops, ops_in_flight);
   ops_high_water = std::max(ops_high_water, ops_in_flight);
   logger->set(l_pq_executing_ops_high_water, ops_high_water);
@@ -735,6 +738,7 @@ void PurgeQueue::_execute_item_complete(
     << "/" << expire_pos << ")" << dendl;
 
   logger->set(l_pq_item_in_journal, item_num);
+  logger->inc(l_pq_executed_ops, executed_ops);
   logger->inc(l_pq_executed);
 }
 
