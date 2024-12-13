@@ -535,6 +535,7 @@ def create_bucket_per_zone_in_realm():
         b, z = create_bucket_per_zone(zg_conn)
         buckets.extend(b)
         zone_bucket.extend(z)
+    realm_meta_checkpoint(realm)
     return buckets, zone_bucket
 
 def test_bucket_create():
