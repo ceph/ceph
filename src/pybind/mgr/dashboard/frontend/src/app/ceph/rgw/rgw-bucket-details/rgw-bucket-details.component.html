@@ -109,20 +109,26 @@
           </tbody>
         </table>
 
-      <!-- Tags -->
-      <ng-container *ngIf="(selection.tagset | keyvalue)?.length">
-        <legend i18n>Tags</legend>
-        <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
-          <tbody>
-            <tr *ngFor="let tag of selection.tagset | keyvalue">
-              <td i18n
-                  class="bold w-25">{{tag.key}}</td>
-              <td class="w-75">{{ tag.value }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </ng-container>
+        <!-- Tags -->
+        <ng-container *ngIf="(selection.tagset | keyvalue)?.length">
+          <legend i18n>Tags</legend>
+          <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
+            <tbody>
+              <tr *ngFor="let tag of selection.tagset | keyvalue">
+                <td i18n
+                    class="bold w-25">{{tag.key}}</td>
+                <td class="w-75">{{ tag.value }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </ng-container>
 
+
+        <!-- Bucket Rate Limit -->
+        <ng-container *ngIf="!!bucketRateLimit">
+          <cd-rgw-rate-limit-details [rateLimitConfig]="bucketRateLimit"
+                                     [type]="'bucket'"></cd-rgw-rate-limit-details>
+        </ng-container>
       </ng-template>
     </ng-container>
 

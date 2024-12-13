@@ -1,0 +1,278 @@
+<fieldset *ngIf="type">
+  <legend i18n>
+    Rate Limit
+    <cd-help-text *ngIf="type === 'user'">
+      The User Rate Limit controls the max read/write operations and data per minute for each user.
+    </cd-help-text>
+    <cd-help-text *ngIf="type === 'bucket'">
+      The Bucket Rate Limit controls the max read/write operations and data per minute for each
+      bucket.
+    </cd-help-text>
+  </legend>
+  <form name="form"
+        #frm="ngForm"
+        [formGroup]="form"
+        novalidate>
+    <div class="row"
+         *ngIf="!!globalRateLimit && globalRateLimit.enabled">
+      <div class="col-3"></div>
+      <div class="col-9">
+        <div>
+          <cd-alert-panel type="info"
+                          class="me-1"
+                          id="global-ratelimit-info"
+                          i18n>
+            <div>
+              <span class="bold">Global Rate Limit</span> <br />Max. read bytes :
+              {{ globalRateLimit.max_read_bytes | dimlessBinaryPerMinute }} <br />Max. read ops :
+              {{ globalRateLimit.max_read_ops }} <br />Max. write bytes :
+              {{ globalRateLimit.max_write_bytes | dimlessBinaryPerMinute }} <br />Max. write ops :
+              {{ globalRateLimit.max_write_ops }}
+            </div>
+          </cd-alert-panel>
+        </div>
+      </div>
+    </div>
+    <!-- Enabled -->
+    <div class="form-group row">
+      <div class="cd-col-form-offset">
+        <div class="custom-control custom-checkbox">
+          <input
+            class="custom-control-input"
+            id="rate_limit_enabled"
+            type="checkbox"
+            formControlName="rate_limit_enabled"
+          />
+          <label class="custom-control-label"
+                 for="rate_limit_enabled"
+                 i18n>Enabled</label>
+          <cd-help-text i18n>Toggle to enable or disable the rate limit settings.</cd-help-text>
+        </div>
+      </div>
+    </div>
+    <!-- Unlimited size -->
+    <div class="form-group row"
+         *ngIf="form.controls.rate_limit_enabled.value">
+      <div class="cd-col-form-offset">
+        <div class="custom-control custom-checkbox">
+          <input
+            class="custom-control-input"
+            id="rate_limit_max_readOps_unlimited"
+            type="checkbox"
+            formControlName="rate_limit_max_readOps_unlimited"
+          />
+          <label class="custom-control-label"
+                 for="rate_limit_max_readOps_unlimited"
+                 i18n>Unlimited read ops
+          </label>
+          <cd-help-text i18n>Select this box to allow unlimited read operations.</cd-help-text>
+        </div>
+      </div>
+    </div>
+
+    <!-- Maximum size -->
+    <div
+      class="form-group row"
+      *ngIf="
+        form.controls.rate_limit_enabled.value && !form.getValue('rate_limit_max_readOps_unlimited')
+      "
+    >
+      <label class="cd-col-form-label required"
+             for="rate_limit_max_readOps"
+             i18n>Max. read ops</label>
+      <div class="cd-col-form-input">
+        <input
+          id="rate_limit_max_readOps"
+          class="form-control"
+          type="number"
+          formControlName="rate_limit_max_readOps"
+        />
+        <cd-help-text>Limits the number of read operations per minute for a user.</cd-help-text>
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_readOps', frm, 'required')"
+          i18n
+          >This field is required.</span
+        >
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_readOps', frm, 'rateOpsMaxSize')"
+          i18n
+          >The value is not valid.</span
+        >
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_readOps', frm, 'min')"
+          i18n
+          >Enter a positive number.</span
+        >
+      </div>
+    </div>
+    <!-- Unlimited Write Ops -->
+    <div class="form-group row"
+         *ngIf="form.controls.rate_limit_enabled.value">
+      <div class="cd-col-form-offset">
+        <div class="custom-control custom-checkbox">
+          <input
+            class="custom-control-input"
+            id="rate_limit_max_writeOps_unlimited"
+            type="checkbox"
+            formControlName="rate_limit_max_writeOps_unlimited"
+          />
+          <label class="custom-control-label"
+                 for="rate_limit_max_writeOps_unlimited"
+                 i18n>Unlimited write ops
+          </label>
+          <cd-help-text i18n>Select this box to allow unlimited write operations.</cd-help-text>
+        </div>
+      </div>
+    </div>
+    <!-- Maximum Write Ops -->
+    <div
+      class="form-group row"
+      *ngIf="
+        form.controls.rate_limit_enabled.value &&
+        !form.getValue('rate_limit_max_writeOps_unlimited')
+      "
+    >
+      <label class="cd-col-form-label required"
+             for="rate_limit_max_writeOps"
+             i18n>Max. write ops</label>
+      <div class="cd-col-form-input">
+        <input
+          id="rate_limit_max_writeOps"
+          class="form-control"
+          type="number"
+          formControlName="rate_limit_max_writeOps"
+        />
+        <cd-help-text>Limits the number of write operations per minute for a user.</cd-help-text>
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_writeOps', frm, 'required')"
+          i18n
+          >This field is required.</span
+        >
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_writeOps', frm, 'rateOpsMaxSize')"
+          i18n
+          >The value is not valid.</span
+        >
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_writeOps', frm, 'min')"
+          i18n
+          >Enter a positive number.</span
+        >
+      </div>
+    </div>
+    <!-- Unlimited Read Bytes -->
+    <div class="form-group row"
+         *ngIf="form.controls.rate_limit_enabled.value">
+      <div class="cd-col-form-offset">
+        <div class="custom-control custom-checkbox">
+          <input
+            class="custom-control-input"
+            id="rate_limit_max_readBytes_unlimited"
+            type="checkbox"
+            formControlName="rate_limit_max_readBytes_unlimited"
+          />
+          <label class="custom-control-label"
+                 for="rate_limit_max_readBytes_unlimited"
+                 i18n>Unlimited read bytes
+          </label>
+          <cd-help-text i18n>Select this box to allow unlimited read bytes.</cd-help-text>
+        </div>
+      </div>
+    </div>
+    <!-- Maximum Read Bytes -->
+    <div
+      class="form-group row"
+      *ngIf="
+        form.controls.rate_limit_enabled.value &&
+        !form.getValue('rate_limit_max_readBytes_unlimited')
+      "
+    >
+      <label class="cd-col-form-label required"
+             for="rate_limit_max_readBytes"
+             i18n>Max. read bytes</label
+      >
+      <div class="cd-col-form-input">
+        <input
+          id="rate_limit_max_readBytes"
+          class="form-control"
+          type="text"
+          defaultUnit="b"
+          formControlName="rate_limit_max_readBytes"
+          cdDimlessBinaryPerMinute
+        />
+        <cd-help-text>Limits the number of read bytes per minute for a user.</cd-help-text>
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_readBytes', frm, 'required')"
+          i18n>This field is required.</span>
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_readBytes', frm, 'rateByteMaxSize')"
+          i18n>The value is not valid.</span>
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_readBytes', frm, 'min')"
+          i18n>Enter a positive number.</span>
+      </div>
+    </div>
+    <!-- Unlimited Write Bytes -->
+    <div class="form-group row"
+         *ngIf="form.controls.rate_limit_enabled.value">
+      <div class="cd-col-form-offset">
+        <div class="custom-control custom-checkbox">
+          <input
+            class="custom-control-input"
+            id="rate_limit_max_writeBytes_unlimited"
+            type="checkbox"
+            formControlName="rate_limit_max_writeBytes_unlimited"
+          />
+          <label class="custom-control-label"
+                 for="rate_limit_max_writeBytes_unlimited"
+                 i18n>Unlimited write bytes
+          </label>
+          <cd-help-text i18n>Select this box to allow unlimited write bytes.</cd-help-text>
+        </div>
+      </div>
+    </div>
+    <!-- Maximum Write Bytes -->
+    <div
+      class="form-group row"
+      *ngIf="
+        form.controls.rate_limit_enabled.value &&
+        !form.getValue('rate_limit_max_writeBytes_unlimited')
+      ">
+      <label class="cd-col-form-label required"
+             for="rate_limit_max_writeBytes"
+             i18n>Max. write bytes</label>
+      <div class="cd-col-form-input">
+        <input
+          id="rate_limit_max_writeBytes"
+          class="form-control"
+          type="text"
+          defaultUnit="b"
+          formControlName="rate_limit_max_writeBytes"
+          cdDimlessBinaryPerMinute
+        />
+        <cd-help-text>Limits the number of write bytes per minute for a user.</cd-help-text>
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_writeBytes', frm, 'required')"
+          i18n>This field is required.</span>
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_writeBytes', frm, 'rateByteMaxSize')"
+          i18n>The value is not valid.</span>
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('rate_limit_max_writeBytes', frm, 'min')"
+          i18n>Enter a positive number.</span>
+      </div>
+    </div>
+  </form>
+</fieldset>
