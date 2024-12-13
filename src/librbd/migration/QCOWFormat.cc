@@ -57,7 +57,7 @@ typedef std::vector<ClusterExtent> ClusterExtents;
 
 void LookupTable::init() {
   if (cluster_offsets == nullptr) {
-    cluster_offsets = reinterpret_cast<const uint64_t*>(bl.c_str());
+    cluster_offsets = reinterpret_cast<uint64_t*>(bl.data());
   }
 }
 
@@ -72,7 +72,7 @@ void LookupTable::decode() {
 
   // translate the lookup table (big-endian -> CPU endianness)
   for (auto idx = 0UL; idx < size; ++idx) {
-    //cluster_offsets[idx] = big_to_native(cluster_offsets[idx]);
+    cluster_offsets[idx] = big_to_native(cluster_offsets[idx]);
   }
 
   decoded = true;

@@ -36,7 +36,7 @@ struct LookupTable {
   LookupTable(uint32_t size) : size(size) {}
 
   bufferlist bl;
-  const uint64_t* cluster_offsets = nullptr;
+  uint64_t* cluster_offsets = nullptr;
   uint32_t size = 0;
   bool decoded = false;
 
