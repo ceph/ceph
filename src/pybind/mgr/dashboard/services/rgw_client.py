@@ -1107,6 +1107,7 @@ class RgwClient(RestClient):
 
     @RestClient.api_post('?Action=CreateTopic&Name={name}')
     def create_topic(self, request=None, name: str = '',
+                     daemon_name: str = '',
                      push_endpoint: Optional[str] = '', opaque_data: Optional[str] = '',
                      persistent: Optional[bool] = False, time_to_live: Optional[str] = '',
                      max_retries: Optional[str] = '', retry_sleep_duration: Optional[str] = '',
@@ -1151,6 +1152,13 @@ class RgwClient(RestClient):
             params['kafka_brokers'] = kafka_brokers
         if mechanism:
             params['mechanism'] = mechanism
+
+        full_daemon_name = 'rgw.' + daemon_name
+        key = 'rgw_allow_notification_secrets_in_cleartext'
+        value = 'true'
+        CephService.send_command('mon', 'config set',
+                                 who=name_to_config_section(full_daemon_name),
+                                 name=key, value=value)
         try:
             result = request(params=params)
         except RequestException as e:
