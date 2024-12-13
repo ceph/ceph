@@ -10,6 +10,7 @@
 
 #include "include/common_fwd.h"
 #include "osd_operation.h"
+#include "osd/osd_types_fmt.h"
 #include "msg/MessageRef.h"
 #include "crimson/common/exception.h"
 #include "crimson/common/shared_lru.h"
