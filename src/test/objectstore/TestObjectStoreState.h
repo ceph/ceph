@@ -61,7 +61,7 @@ public:
   };
 
  protected:
-  boost::shared_ptr<ObjectStore> m_store;
+  std::shared_ptr<ObjectStore> m_store;
   std::map<coll_t, coll_entry_t*> m_collections;
   std::vector<coll_t> m_collections_ids;
   int m_next_coll_nr;
