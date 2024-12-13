@@ -1604,6 +1604,18 @@ static ceph::spinlock debug_lock;
     return _carriage->c_str();
   }
 
+  char *buffer::list_rw::data()
+  {
+    if (const auto len = length(); len == 0) {
+      return nullptr;                         // no non-empty buffers
+    } else if (_buffers.front().length() != len) {
+      rebuild();
+    }
+    return _buffers.front().c_str();
+  }
+
+
+
   /*
    * return a contiguous ptr to whole bufferlist contents.
    */
