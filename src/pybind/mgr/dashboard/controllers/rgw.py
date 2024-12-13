@@ -16,7 +16,7 @@ from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, \
-    RgwClient, RgwMultisite, RgwMultisiteAutomation, RgwRateLimit
+     RgwClient, RgwMultisite, RgwMultisiteAutomation, RgwRateLimit, RgwTopicmanagement
 from ..services.rgw_iam import RgwAccounts
 from ..services.service import RgwServiceManager, wait_for_daemon_to_start
 from ..tools import json_str_to_object, str_to_bool
@@ -1404,4 +1404,76 @@ class RgwZone(RESTController):
     def get_user_list(self, zoneName=None, realmName=None):
         multisite_instance = RgwMultisite()
         result = multisite_instance.get_user_list(zoneName, realmName)
+        return result
+
+
+@APIRouter('/rgw/topic', Scope.RGW)
+@APIDoc("RGW Topic Management API", "RGW Topic Management")
+class RgwTopic(RESTController):
+
+    @EndpointDoc(
+        "Create a new RGW Topic",
+        parameters={
+            "name": (str, "Name of the topic"),
+            "push_endpoint": (str, "Push Endpoint"),
+            "opaqueData": (str, "opaqueData"),
+            "persistent": (bool, "persistent"),
+            "time_to_live": (str, "Time to live"),
+            "max_retries": (str, "max retries"),
+            "retry_sleep_duration": (str, "retry sleep duration"),
+            "Policy": (str, "policy"),
+        },
+    )
+    def create(
+        self,
+        name: str,
+        daemon_name=None,
+        owner=None,
+        push_endpoint: Optional[str] = None,
+        opaqueData: Optional[str] = None,
+        persistent: Optional[bool] = None,
+        time_to_live: Optional[str] = None,
+        max_retries: Optional[str] = None,
+        retry_sleep_duration: Optional[str] = None,
+        Policy: Optional[str] = None
+    ):
+        rgw_topic_instance = RgwClient.instance(owner, daemon_name=daemon_name)
+        return rgw_topic_instance.create_topic(
+            name=name,
+            push_endpoint=push_endpoint,
+            opaqueData=opaqueData,
+            persistent=persistent,
+            time_to_live=time_to_live,
+            max_retries=max_retries,
+            retry_sleep_duration=retry_sleep_duration,
+            Policy=Policy
+        )
+
+    @EndpointDoc(
+        "Get List RGW Topic",
+        parameters={
+            "uid": (str, "Name of the user"),
+            "tenant": (str, "Name of the tenant"),
+        },
+    )
+    def list(self, uid: Optional[str] = None, tenant: Optional[str] = None):
+        rgw_topic_instance = RgwTopicmanagement()
+        result = rgw_topic_instance.list_topics(uid, tenant)
+        return result
+
+    def get(self, name: str, tenant: Optional[str] = None):
+        rgw_topic_instance = RgwTopicmanagement()
+        result = rgw_topic_instance.get_topic(name, tenant)
+        return result
+
+    @EndpointDoc(
+        "Delete RGW Topic",
+        parameters={
+            "name": (str, "Name of the user"),
+            "tenant": (str, "Name of the tenant"),
+        },
+    )
+    def delete(self, name: str, tenant: Optional[str] = None):
+        rgw_topic_instance = RgwTopicmanagement()
+        result = rgw_topic_instance.delete_topic(name=name, tenant=tenant)
         return result

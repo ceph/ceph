@@ -1092,6 +1092,39 @@ class RgwClient(RestClient):
                     return None
             raise e
 
+    @RestClient.api_post('?Action=CreateTopic&Name={name}')
+    def create_topic(self, request=None, name: str = '',
+                     push_endpoint: Optional[str] = '', opaqueData: Optional[str] = '',
+                     persistent: Optional[bool] = None, time_to_live: Optional[str] = '',
+                     max_retries: Optional[str] = '', retry_sleep_duration: Optional[str] = '',
+                     Policy: Optional[str] = ''):
+
+        # Prepare the parameters to send with the request
+        params = {'Name': name}
+
+        if push_endpoint:
+            params['push-endpoint'] = push_endpoint
+        if opaqueData:
+            params['opaqueData'] = opaqueData
+        if persistent is not None:
+            params['persistent'] = 'true' if persistent else 'false'
+        if time_to_live:
+            params['time_to_live'] = time_to_live
+        if max_retries:
+            params['max_retries'] = max_retries
+        if retry_sleep_duration:
+            params['retry_sleep_duration'] = retry_sleep_duration
+        if Policy:
+            params['Policy'] = Policy
+
+        # Now make the request with the parameters included
+        try:
+            result = request(params=params)  # Pass the params as part of the request
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+
+        return result
+
 
 class SyncStatus(Enum):
     enabled = 'enabled'
@@ -2592,3 +2625,66 @@ class RgwMultisite:
             return True
         except DashboardException:
             return False
+
+
+class RgwTopicmanagement:
+
+    def list_topics(self, uid: Optional[str], tenant: Optional[str]):
+        rgw_topics_list = {}
+        rgw_topic_list_cmd = ['topic', 'list']
+        try:
+            if uid:
+                rgw_topic_list_cmd.append('--uid')
+                rgw_topic_list_cmd.append(uid)
+
+            if tenant:
+                rgw_topic_list_cmd.append('--tenant')
+                rgw_topic_list_cmd.append(tenant)
+
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_topic_list_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to fetch topic list',
+                                         http_status_code=500, component='rgw')
+            rgw_topics_list = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return rgw_topics_list
+
+    def get_topic(self, name: str, tenant: Optional[str]):
+        rgw_topic_info_cmd = ['topic', 'get']
+        try:
+            if tenant:
+                rgw_topic_info_cmd.append('--tenant')
+                rgw_topic_info_cmd.append(tenant)
+
+            if name:
+                rgw_topic_info_cmd.append('--topic')
+                rgw_topic_info_cmd.append(name)
+
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_topic_info_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get topic info',
+                                         http_status_code=500, component='rgw')
+            topic_info = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return topic_info
+
+    def delete_topic(self, name: str, tenant: Optional[str] = None):
+        rgw_delete_topic_cmd = ['topic', 'rm']
+        try:
+            if tenant:
+                rgw_delete_topic_cmd.append('--tenant')
+                rgw_delete_topic_cmd.append(tenant)
+
+            if name:
+                rgw_delete_topic_cmd.append('--topic')
+                rgw_delete_topic_cmd.append(name)
+
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_topic_cmd)
+
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to delete topic',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
