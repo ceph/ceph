@@ -254,6 +254,7 @@ describe('NavigationComponent', () => {
         '.tc_submenuitem_rgw_multi-site': 'Multi-site',
         '.tc_submenuitem_rgw_daemons': 'Gateways',
         '.tc_submenuitem_rgw_nfs': 'NFS',
+        '.tc_submenuitem_rgw_topics': 'Topics',
         '.tc_submenuitem_rgw_configuration': 'Configuration',
         '.tc_submenuitem_file_cephfs': 'File Systems',
         '.tc_submenuitem_file_nfs': 'NFS'

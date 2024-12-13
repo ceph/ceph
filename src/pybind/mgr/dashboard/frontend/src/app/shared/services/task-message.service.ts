@@ -513,29 +513,11 @@ export class TaskMessageService {
       this.commonOperations.delete,
       (metadata: Record<'share_id', string>) => this.smbShare(metadata)
     ),
-    'cephfs/smb/active-directory/create': this.newTaskMessage(
-      this.commonOperations.create,
-      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
+    'smb/cluster/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.smbCluster(metadata)
     ),
-    'cephfs/smb/active-directory/edit': this.newTaskMessage(
-      this.commonOperations.update,
-      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-    ),
-    'cephfs/smb/active-directory/delete': this.newTaskMessage(
-      this.commonOperations.delete,
-      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-    ),
-    'cephfs/smb/standalone/create': this.newTaskMessage(
-      this.commonOperations.create,
-      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-    ),
-    'cephfs/smb/standalone/edit': this.newTaskMessage(
-      this.commonOperations.update,
-      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-    ),
-    'cephfs/smb/standalone/delete': this.newTaskMessage(
-      this.commonOperations.delete,
-      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
+    'rgw/topic/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.topic(metadata)
     )
   };
 
@@ -615,6 +597,9 @@ export class TaskMessageService {
     return $localize`SMB users and groups access resource '${metadata.usersGroupsId}'`;
   }
 
+  topic(metadata: any) {
+    return $localize`Topic  '${metadata.name}'`;
+  }
   service(metadata: any) {
     return $localize`service '${metadata.service_name}'`;
   }

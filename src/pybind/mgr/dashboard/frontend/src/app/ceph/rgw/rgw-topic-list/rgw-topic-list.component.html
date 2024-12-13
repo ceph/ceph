@@ -1,4 +1,4 @@
-  <ng-container *ngIf="topic$ | async as topics">
+  <ng-container *ngIf="topics$ | async as topics"
   <cd-table #table
             [autoReload]="false"
             [data]="topics"
@@ -8,7 +8,13 @@
             [hasDetails]="true"
             (setExpandedRow)="setExpandedRow($event)"
             (updateSelection)="updateSelection($event)"
-            (fetchData)="fetchData($event)">
+            identifier="name"
+            (fetchData)="loadTopics($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
   <cd-rgw-topic-details *cdTableDetail
                         [selection]="expandedRow"></cd-rgw-topic-details>
   </cd-table>
