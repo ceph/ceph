@@ -204,19 +204,10 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
     return ret;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(s->owner.get_id());
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = store->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
-  if (ret < 0) {
-    ldpp_dout(this, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
-    return ret;
+  if (!verify_bucket_permission(this, s,  rgw::IAM::s3PutBucketNotification)) {
+    return -EACCES;
   }
-  bucket_info = bucket->get_info();
 
-  if (bucket_info.owner != s->owner.get_id()) {
-    ldpp_dout(this, 1) << "user doesn't own bucket, not allowed to create notification" << dendl;
-    return -EPERM;
-  }
   return 0;
 }
 
@@ -226,18 +217,10 @@ int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
     return ret;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(s->owner.get_id());
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = store->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
-  if (ret < 0) {
-    return ret;
+  if (!verify_bucket_permission(this, s,  rgw::IAM::s3PutBucketNotification)) {
+    return -EACCES;
   }
-  bucket_info = bucket->get_info();
 
-  if (bucket_info.owner != s->owner.get_id()) {
-    ldpp_dout(this, 1) << "user doesn't own bucket, cannot remove notification" << dendl;
-    return -EPERM;
-  }
   return 0;
 }
 
@@ -247,17 +230,8 @@ int RGWPSListNotifsOp::verify_permission(optional_yield y) {
     return ret;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(s->owner.get_id());
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = store->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
-  if (ret < 0) {
-    return ret;
-  }
-  bucket_info = bucket->get_info();
-
-  if (bucket_info.owner != s->owner.get_id()) {
-    ldpp_dout(this, 1) << "user doesn't own bucket, cannot get notification list" << dendl;
-    return -EPERM;
+  if (!verify_bucket_permission(this, s,  rgw::IAM::s3GetBucketNotification)) {
+    return -EACCES;
   }
 
   return 0;
