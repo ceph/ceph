@@ -67,7 +67,7 @@ seastar::future<> RepRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
   LOG_PREFIX(RepRequest::with_pg);
-  DEBUGI("{}: RepRequest::with_pg", *this);
+  DEBUGI("{}", *this);
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
     LOG_PREFIX(RepRequest::with_pg);
