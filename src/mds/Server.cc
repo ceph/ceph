@@ -3994,6 +3994,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
 void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
+  client_t client = mdr->get_client();
 
   if (req->get_filepath().depth() == 0 && is_lookup) {
     // refpath can't be empty for lookup but it can for
@@ -4014,6 +4015,17 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 				   &mdr->dn[0], &mdr->in[0]);
     if (r > 0)
       return; // delayed
+
+    // Do not batch if any xlock is held
+    if (!r) {
+      CInode *in = mdr->in[0];
+      if (((mask & CEPH_CAP_LINK_SHARED) && (in->linklock.is_xlocked_by_client(client))) ||
+          ((mask & CEPH_CAP_AUTH_SHARED) && (in->authlock.is_xlocked_by_client(client))) ||
+          ((mask & CEPH_CAP_XATTR_SHARED) && (in->xattrlock.is_xlocked_by_client(client))) ||
+          ((mask & CEPH_CAP_FILE_SHARED) && (in->filelock.is_xlocked_by_client(client)))) {
+	r = -1;
+      }
+    }
 
     if (r < 0) {
       // fall-thru. let rdlock_path_pin_ref() check again.
@@ -4058,7 +4070,6 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
    * handling this case here is easier than weakening rdlock
    * semantics... that would cause problems elsewhere.
    */
-  client_t client = mdr->get_client();
   int issued = 0;
   Capability *cap = ref->get_client_cap(client);
   if (cap && (mdr->snapid == CEPH_NOSNAP ||
