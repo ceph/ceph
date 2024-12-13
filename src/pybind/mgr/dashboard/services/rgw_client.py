@@ -1357,12 +1357,12 @@ class RgwRateLimit:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
-    
     def get_rateLimit(self, scope: str, name: str ):
+        rate_limit_cmd = ['ratelimit', 'get', '--ratelimit-scope', scope]
         if scope=='user':
-            rate_limit_cmd = ['ratelimit', 'get', '--ratelimit-scope', scope, '--uid', name]
+            rate_limit_cmd.extend(['--uid', name])
         if scope=='bucket':
-            rate_limit_cmd = ['ratelimit', 'get', '--ratelimit-scope', scope, '--bucket', name]
+             rate_limit_cmd.extend(['--bucket', name])
         try:
             exit_code, out, err = mgr.send_rgwadmin_command(rate_limit_cmd)
             if exit_code > 0:
