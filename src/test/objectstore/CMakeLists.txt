@@ -48,6 +48,18 @@ add_executable(unittest_rocksdb_option
 add_ceph_unittest(unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
 
+# ceph_test_bluefs (a clone of unittest_bluefs)
+add_executable(ceph_test_bluefs
+  test_bluefs.cc
+  )
+target_link_libraries(ceph_test_bluefs
+  os
+  global
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS ceph_test_bluefs
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 if(WITH_EVENTTRACE)
   add_dependencies(os eventtrace_tp)
 endif()
