@@ -48,8 +48,85 @@ describe('RgwTopicListComponent', () => {
     expect(rgwTopicServiceListSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('should call listTopic on ngOnInit', () => {
-    component.ngOnInit();
-    expect(rgwTopicServiceListSpy).toHaveBeenCalled();
+  it('should test all TableActions combinations', () => {
+    const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
+    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+      component.tableActions
+    );
+
+    expect(tableActions).toEqual({
+      'create,update,delete': {
+        actions: ['Create', 'Edit', 'Delete'],
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
+      },
+      'create,update': {
+        actions: ['Create', 'Edit'],
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
+      },
+      'create,delete': {
+        actions: ['Create', 'Delete'],
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
+      },
+      create: {
+        actions: ['Create'],
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
+      },
+      'update,delete': {
+        actions: ['Edit', 'Delete'],
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
+      },
+      update: {
+        actions: ['Edit'],
+        primary: {
+          multiple: 'Edit',
+          executing: 'Edit',
+          single: 'Edit',
+          no: 'Edit'
+        }
+      },
+      delete: {
+        actions: ['Delete'],
+        primary: {
+          multiple: 'Delete',
+          executing: 'Delete',
+          single: 'Delete',
+          no: 'Delete'
+        }
+      },
+      'no-permissions': {
+        actions: [],
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
+      }
+    });
   });
 });
