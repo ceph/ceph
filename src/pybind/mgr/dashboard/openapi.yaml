@@ -13790,7 +13790,11 @@ paths:
           application/json:
             schema:
               properties:
+<<<<<<< HEAD
                 ack_level:
+=======
+                amqp_ack_level:
+>>>>>>> fac004c0532 (mgr/dashboard: Add RGW topics endpoint creation for create ,delete and list in dashboard)
                   description: Amqp ack level
                   type: string
                 amqp_exchange:
@@ -13805,6 +13809,12 @@ paths:
                   type: string
                 daemon_name:
                   description: Name of the daemon
+<<<<<<< HEAD
+=======
+                  type: string
+                kafka_ack_level:
+                  description: Kafka ack level
+>>>>>>> fac004c0532 (mgr/dashboard: Add RGW topics endpoint creation for create ,delete and list in dashboard)
                   type: string
                 kafka_brokers:
                   description: Kafka brokers

@@ -1,0 +1,7 @@
+@use '@carbon/layout';
+
+.policy {
+  max-height: layout.$spacing-06;
+  overflow: auto;
+  width: 100%;
+}

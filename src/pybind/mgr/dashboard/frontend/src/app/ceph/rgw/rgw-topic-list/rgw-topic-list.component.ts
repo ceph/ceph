@@ -42,6 +42,7 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
   topicsSubject = new BehaviorSubject<Topic[]>([]);
   topics$ = this.topicsSubject.asObservable();
   name: string;
+  topics: Topic[];
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,

@@ -111,8 +111,12 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+<<<<<<< HEAD
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
 import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
+=======
+import { RgwCreateTopicFormComponent } from './rgw-create-topic-form/rgw-create-topic-form.component';
+>>>>>>> fac004c0532 (mgr/dashboard: Add RGW topics endpoint creation for create ,delete and list in dashboard)
 
 @NgModule({
   imports: [
@@ -437,12 +441,20 @@ const routes: Routes = [
       { path: '', component: RgwTopicListComponent },
       {
         path: URLVerbs.CREATE,
+<<<<<<< HEAD
         component: RgwTopicFormComponent,
+=======
+        component: RgwCreateTopicFormComponent,
+>>>>>>> fac004c0532 (mgr/dashboard: Add RGW topics endpoint creation for create ,delete and list in dashboard)
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
         path: `${URLVerbs.EDIT}/:name`,
+<<<<<<< HEAD
         component: RgwTopicFormComponent,
+=======
+        component: RgwCreateTopicFormComponent,
+>>>>>>> fac004c0532 (mgr/dashboard: Add RGW topics endpoint creation for create ,delete and list in dashboard)
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
