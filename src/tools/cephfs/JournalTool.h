@@ -78,7 +78,6 @@ class JournalTool : public MDSUtility
     // Backing store helpers
     void encode_fullbit_as_inode(
         const EMetaBlob::fullbit &fb,
-        const bool bare,
         bufferlist *out_bl);
     int consume_inos(const std::set<inodeno_t> &inos);
 
