@@ -83,6 +83,10 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
       this.rgwUserService.getQuota(this.user.uid).subscribe((resp: object) => {
         _.extend(this.user, resp);
       });
+       // Load the user rate limit of the selected user.
+       this.rgwUserService.getUserRateLimit(this.user.uid).subscribe((resp: object) => {
+        _.extend(this.user, resp);
+      });
 
       // Process the keys.
       this.keys = [];
