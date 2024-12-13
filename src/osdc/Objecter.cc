@@ -3519,7 +3519,14 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		    << dendl;
       cb::list t;
       t = std::move(*op->outbl);
-      t.invalidate_crc();  // we're overwriting the raw buffers via c_str()
+      const char* const t_ref_data = t.c_str();
+      t.invalidate_crc();  // we're overwriting the raw rw buffer via data()
+      char* const t_data = t.data();
+      // ensure the buffer, if any, has been exposed to the bufferlist as
+      // read-write. This is definitely the case of the libradosstripper's
+      // C API but we want to fail explicitly if somebody added as readonly
+      // using the C++ API.
+      ceph_assert(t_data == t_ref_data);
       bl.begin().copy(bl.length(), t.data());
       op->outbl->substr_of(t, 0, bl.length());
     } else {
