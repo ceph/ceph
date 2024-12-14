@@ -76,7 +76,19 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
       return pg->osdmap_gate.wait_for_map(
 	std::move(trigger), req->min_epoch);
     }));
-  co_await pg->handle_rep_op(req);
+
+  if (pg->can_discard_replica_op(*req)) {
+    co_return;
+  }
+
+  auto [commit_fut, reply] = co_await pg->handle_rep_op(req);
+
+  co_await std::move(commit_fut);
+
+  co_await interruptor::make_interruptible(
+    pg->shard_services.send_to_osd(
+      req->from.osd, std::move(reply), pg->get_osdmap_epoch())
+  );
 }
 
 seastar::future<> RepRequest::with_pg(

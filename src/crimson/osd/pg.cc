@@ -1215,13 +1215,10 @@ void PG::update_stats(const pg_stat_t &stat) {
   );
 }
 
-PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
+PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
 {
   LOG_PREFIX(PG::handle_rep_op);
   DEBUGDPP("{}", *this, *req);
-  if (can_discard_replica_op(*req)) {
-    co_return;
-  }
 
   ceph::os::Transaction txn;
   auto encoded_txn = req->get_data().cbegin();
@@ -1243,7 +1240,8 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
                 txn,
                 false);
   DEBUGDPP("{} do_transaction", *this, *req);
-  co_await interruptor::make_interruptible(
+
+  auto commit_fut = interruptor::make_interruptible(
     shard_services.get_store().do_transaction(coll_ref, std::move(txn))
   );
 
@@ -1254,10 +1252,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
     req.get(), pg_whoami, 0,
     map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
   reply->set_last_complete_ondisk(lcod);
-  co_await interruptor::make_interruptible(
-    shard_services.send_to_osd(req->from.osd, std::move(reply), map_epoch)
-  );
-  co_return;
+  co_return handle_rep_op_ret(std::move(commit_fut), std::move(reply));
 }
 
 PG::interruptible_future<> PG::update_snap_map(
