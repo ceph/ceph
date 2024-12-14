@@ -124,6 +124,7 @@ public:
   TransactionRef create_transaction(
       Transaction::src_t src,
       const char* name,
+      cache_hint_t cache_hint,
       bool is_weak) {
     LOG_PREFIX(Cache::create_transaction);
 
@@ -137,7 +138,8 @@ public:
       [this](Transaction& t) {
         return on_transaction_destruct(t);
       },
-      ++next_id
+      ++next_id,
+      cache_hint
     );
     SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
               *ret, name, src, is_weak);
@@ -284,7 +286,7 @@ public:
     SUBDEBUGT(seastore_cache, "{} {} is present in cache -- {}",
               t, type, offset, *ret);
     t.add_to_read_set(ret);
-    touch_extent(*ret, &t_src);
+    touch_extent(*ret, &t_src, t.get_cache_hint());
     return ret->wait_io().then([ret] {
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>(ret);
@@ -341,7 +343,7 @@ public:
                 t, T::TYPE, offset, length);
       auto f = [&t, this, t_src](CachedExtent &ext) {
         t.add_to_read_set(CachedExtentRef(&ext));
-        touch_extent(ext, &t_src);
+        touch_extent(ext, &t_src, t.get_cache_hint());
       };
       return trans_intr::make_interruptible(
         do_get_caching_extent<T>(
@@ -389,7 +391,7 @@ public:
       ++stats.access.s.load_absent;
 
       t.add_to_read_set(CachedExtentRef(&ext));
-      touch_extent(ext, &t_src);
+      touch_extent(ext, &t_src, t.get_cache_hint());
     };
     return trans_intr::make_interruptible(
       do_get_caching_extent<T>(
@@ -487,7 +489,7 @@ public:
             ++access_stats.cache_lru;
             ++stats.access.s.cache_lru;
           }
-          touch_extent(*p_extent, &t_src);
+          touch_extent(*p_extent, &t_src, t.get_cache_hint());
         } else {
           if (p_extent->is_dirty()) {
             ++access_stats.trans_dirty;
@@ -834,7 +836,7 @@ private:
                 t, type, offset, length, laddr);
       auto f = [&t, this, t_src](CachedExtent &ext) {
 	t.add_to_read_set(CachedExtentRef(&ext));
-	touch_extent(ext, &t_src);
+	touch_extent(ext, &t_src, t.get_cache_hint());
       };
       return trans_intr::make_interruptible(
 	do_get_caching_extent_by_type(
@@ -876,7 +878,7 @@ private:
       ++stats.access.s.load_absent;
 
       t.add_to_read_set(CachedExtentRef(&ext));
-      touch_extent(ext, &t_src);
+      touch_extent(ext, &t_src, t.get_cache_hint());
     };
     return trans_intr::make_interruptible(
       do_get_caching_extent_by_type(
@@ -1472,11 +1474,10 @@ private:
   /// Update lru for access to ref
   void touch_extent(
       CachedExtent &ext,
-      const Transaction::src_t* p_src)
+      const Transaction::src_t* p_src,
+      cache_hint_t hint)
   {
-    if (p_src &&
-	is_background_transaction(*p_src) &&
-	is_logical_type(ext.get_type())) {
+    if (hint == CACHE_HINT_NOCACHE && is_logical_type(ext.get_type())) {
       return;
     }
     if (ext.is_stable_clean() && !ext.is_placeholder()) {

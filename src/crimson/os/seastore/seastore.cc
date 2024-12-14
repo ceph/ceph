@@ -408,6 +408,7 @@ SeaStore::Shard::mkfs_managers()
       return transaction_manager->with_transaction_intr(
 	Transaction::src_t::MUTATE,
 	"mkfs_seastore",
+	CACHE_HINT_TOUCH,
 	[this](auto& t)
       {
         LOG_PREFIX(SeaStoreS::mkfs_managers);
@@ -917,6 +918,7 @@ SeaStore::Shard::list_objects(CollectionRef ch,
       return transaction_manager->with_transaction_intr(
         Transaction::src_t::READ,
         "list_objects",
+	CACHE_HINT_TOUCH,
         [this, ch, start, end, &limit, &ret](auto &t)
       {
         LOG_PREFIX(SeaStoreS::list_objects);
@@ -1054,6 +1056,7 @@ SeaStore::Shard::list_collections()
         return transaction_manager->with_transaction_intr(
           Transaction::src_t::READ,
           "list_collections",
+	  CACHE_HINT_TOUCH,
           [this, &ret](auto& t)
         {
           LOG_PREFIX(SeaStoreS::list_collections);
@@ -1138,8 +1141,10 @@ SeaStore::Shard::read(
     "read",
     op_type_t::READ,
     [this, offset, len, op_flags](auto &t, auto &onode) {
-    return _read(t, onode, offset, len, op_flags);
-  }).finally([this] {
+      return _read(t, onode, offset, len, op_flags);
+    },
+    op_flags
+  ).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
@@ -2677,6 +2682,7 @@ seastar::future<> SeaStore::Shard::write_meta(
     return transaction_manager->with_transaction_intr(
       Transaction::src_t::MUTATE,
       "write_meta",
+      CACHE_HINT_NOCACHE,
       [this, &key, &value](auto& t)
     {
       LOG_PREFIX(SeaStoreS::write_meta);

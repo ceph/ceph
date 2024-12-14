@@ -87,7 +87,10 @@ struct cache_test_t : public seastar_test_suite_t {
 
   auto get_transaction() {
     return cache->create_transaction(
-        Transaction::src_t::MUTATE, "test_cache", false);
+      Transaction::src_t::MUTATE,
+      "test_cache",
+      CACHE_HINT_TOUCH,
+      false);
   }
 
   template <typename T, typename... Args>

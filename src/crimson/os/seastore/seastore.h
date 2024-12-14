@@ -251,7 +251,8 @@ public:
       return seastar::do_with(
         internal_context_t(
           ch, std::move(t),
-          transaction_manager->create_transaction(src, tname)),
+          transaction_manager->create_transaction(
+	    src, tname, t.get_fadvise_flags())),
         std::forward<F>(f),
         [this, op_type](auto &ctx, auto &f) {
         assert(shard_stats.starting_io_num);
@@ -298,20 +299,22 @@ public:
       Transaction::src_t src,
       const char* tname,
       op_type_t op_type,
-      F &&f) const {
+      F &&f,
+      cache_hint_t cache_hint_flags = CACHE_HINT_TOUCH) const {
       auto begin_time = std::chrono::steady_clock::now();
       return seastar::do_with(
         oid, Ret{}, std::forward<F>(f),
-        [this, ch, src, op_type, begin_time, tname
+        [this, ch, src, op_type, begin_time, tname, cache_hint_flags
         ](auto &oid, auto &ret, auto &f)
       {
-        return repeat_eagain([&, this, ch, src, tname] {
+        return repeat_eagain([&, this, ch, src, tname, cache_hint_flags] {
           assert(src == Transaction::src_t::READ);
           ++(shard_stats.repeat_read_num);
 
           return transaction_manager->with_transaction_intr(
             src,
             tname,
+	    cache_hint_flags,
             [&, this, ch, tname](auto& t)
           {
             LOG_PREFIX(SeaStoreS::repeat_with_onode);
