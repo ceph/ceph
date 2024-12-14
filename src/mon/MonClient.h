@@ -39,13 +39,14 @@
 
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
+#include "auth/AuthClientHandler.h"
 
 class MMonMap;
+class MMonQuorum;
 class MConfig;
 class MMonGetVersionReply;
 class MMonCommandAck;
 class LogClient;
-class AuthClientHandler;
 class AuthRegistry;
 class KeyRing;
 class RotatingKeyRing;
@@ -55,7 +56,8 @@ public:
   MonConnection(CephContext *cct,
 		ConnectionRef conn,
 		uint64_t global_id,
-		AuthRegistry *auth_registry);
+		AuthRegistry *auth_registry,
+                std::string mon_name);
   ~MonConnection();
   MonConnection(MonConnection&& rhs) = default;
   MonConnection& operator=(MonConnection&&) = default;
@@ -77,6 +79,10 @@ public:
   }
   std::unique_ptr<AuthClientHandler>& get_auth() {
     return auth;
+  }
+
+  std::string get_mon_name() const {
+    return mon_name;
   }
 
   int get_auth_request(
@@ -139,8 +145,62 @@ private:
   MessageRef pending_tell_command;
 
   AuthRegistry *auth_registry;
+  std::string mon_name;
 };
 
+struct MonClientQuorum {
+private:
+  CephContext *cct;
+public:
+  std::map<entity_addrvec_t, std::pair<version_t, std::set<int>>> quorums;
+  std::set<int> agreed_quorum;
+  mutable ceph::mutex quorum_l = ceph::make_mutex("MonClientQuorum");
+
+  MonClientQuorum(CephContext *cct_ = nullptr) : cct(cct_) {}
+  void set_cct(CephContext *cct_) {
+    cct = cct_;
+  }
+  bool in_quorum(const int rank) const {
+    std::lock_guard l{quorum_l};
+    // first time connection
+    if (quorums.empty() && agreed_quorum.empty()) {
+      return true;
+    }
+    return agreed_quorum.count(rank) > 0;
+  }
+  void recalc_agreed_quorum();
+  void add_quorum(const entity_addrvec_t& addrs,
+      const version_t epoch,
+      const std::set<int>& quorum) {
+    {
+      std::lock_guard l{quorum_l};
+      quorums[addrs] = std::make_pair(epoch, quorum);
+    }
+    recalc_agreed_quorum();
+  }
+};
+
+class AuxConnections {
+public:
+  AuxConnections(std::shared_ptr<MonConnection> conn_)
+    : conn(std::move(conn_))
+  { sub.want("quorum_change", 0, 0);}
+
+  std::shared_ptr<MonConnection> get_con() {
+    return conn;
+  }
+
+  void start_conn(epoch_t epoch, const EntityName& entity_name) {
+    sub.got("quorum", 0);
+    conn->start(epoch, entity_name);
+  }
+
+  void send_subscribe();
+
+private:
+  std::shared_ptr<MonConnection> conn;
+  MonSub sub;
+};
 
 struct MonClientPinger : public Dispatcher,
 			 public AuthClient {
@@ -242,6 +302,123 @@ struct MonClientPinger : public Dispatcher,
   }
 };
 
+enum class ConnectionStatus {
+  UNKNOWN,          // Initial state
+  HEALTHY,          // Responding and in quorum
+  OUT_OF_QUORUM,    // Responding but not in quorum
+  UNRESPONSIVE      // Not responding
+};
+
+// Class for individual auxiliary connections
+class AuxConnection {
+public:
+  AuxConnection(const std::string& name, std::unique_ptr<MonConnection> connection_ptr)
+    : mon_name(name), conn_ptr(std::move(connection_ptr)), status(ConnectionStatus::UNKNOWN) {}
+
+  AuxConnection(AuxConnection&&) = default;
+  AuxConnection& operator=(AuxConnection&&) = default;
+  AuxConnection(const AuxConnection&) = delete;
+  AuxConnection& operator=(const AuxConnection&) = delete;
+
+  std::string get_mon_name() const { return mon_name; }
+  ConnectionStatus get_status() const { return status; }
+  MonConnection* get_connection_ptr() const { return conn_ptr.get(); }
+  void set_status(ConnectionStatus new_status) { status = new_status; }
+
+  bool is_con(Connection *c) const {
+    return conn_ptr->is_con(c);
+  }
+
+  int handle_auth_done(
+    AuthConnectionMeta *auth_meta,
+    uint64_t global_id,
+    const ceph::buffer::list& bl,
+    CryptoKey *session_key,
+    std::string *connection_secret) {
+    return conn_ptr->handle_auth_done(auth_meta, global_id, bl, session_key, connection_secret);
+  }
+
+  bool empty() const {
+    return !conn_ptr;
+  }
+
+private:
+  std::string mon_name;
+  std::unique_ptr<MonConnection> conn_ptr;
+  ConnectionStatus status;            // Status of the connection
+};
+
+// Manager for auxiliary connections
+class AuxConnectionManager {
+public:
+  std::map<entity_addrvec_t, AuxConnection>& get_aux_list() {
+    return aux_list;
+  }
+  const std::map<entity_addrvec_t, AuxConnection>& get_aux_list() const {
+    return aux_list;
+  }
+
+  void add_connection(const entity_addrvec_t addr, std::unique_ptr<MonConnection> mc) {
+    if (aux_list.find(addr) == aux_list.end()) {
+      aux_list.emplace(addr, AuxConnection(mc->get_mon_name(), std::move(mc)));
+    }
+  }
+
+  void update_status(const entity_addrvec_t addr, ConnectionStatus new_status) {
+    auto it = aux_list.find(addr);
+    if (it != aux_list.end()) {
+      it->second.set_status(new_status);
+    }
+  }
+
+  // TODO: Implement a better selection algorithm
+  // by rank ?
+  MonConnection* get_best_candidate() {
+    for (const auto& [_, aux_conn] : aux_list) {
+      if (aux_conn.get_status() == ConnectionStatus::HEALTHY) {
+        return aux_conn.get_connection_ptr();
+      }
+    }
+    return nullptr; // No healthy candidate found
+  }
+
+  // Cleanup unresponsive auxiliary connections
+  void cleanup_unresponsive() {
+    for (auto it = aux_list.begin(); it != aux_list.end();) {
+      if (it->second.get_status() == ConnectionStatus::UNRESPONSIVE) {
+        it = aux_list.erase(it);
+      } else { ++it; }
+    }
+  }
+
+  void clear() {
+    aux_list.clear();
+  }
+
+  bool empty() const {
+    return aux_list.empty();
+  }
+
+  void erase(const entity_addrvec_t& addr) {
+    aux_list.erase(addr);
+  }
+
+  size_t size() const {
+    return aux_list.size();
+  }
+  
+  void splice(std::map<entity_addrvec_t, MonConnection>& other) {
+    for (auto& [addr, conn] : other) {
+      aux_list.emplace(
+          addr,
+          AuxConnection(conn.get_mon_name(), std::make_unique<MonConnection>(std::move(conn))));
+    }
+  }
+
+private:
+  std::map<entity_addrvec_t, AuxConnection> aux_list;
+};
+
 const boost::system::error_category& monc_category() noexcept;
 
 enum class monc_errc {
@@ -290,11 +467,13 @@ public:
   std::map<std::string,std::string> config_mgr;
 
 private:
+  MonClientQuorum quorum;
   Messenger *messenger;
 
   std::unique_ptr<MonConnection> active_con;
   std::map<entity_addrvec_t, MonConnection> pending_cons;
   std::set<unsigned> tried;
+  AuxConnectionManager aux_list;
 
   EntityName entity_name;
 
@@ -318,6 +497,7 @@ private:
   bool ms_handle_refused(Connection *con) override { return false; }
 
   void handle_monmap(MMonMap *m);
+  void handle_mon_quorum(MMonQuorum *m);
   void handle_config(MConfig *m);
 
   void handle_auth(MAuthReply *m);
@@ -513,6 +693,7 @@ public:
    *             expired (default: conf->client_mount_timeout).
    */
   int ping_monitor(const std::string &mon_id, std::string *result_reply);
+  int quorum_send_subscribe();
 
   void send_mon_message(Message *m) {
     send_mon_message(MessageRef{m, false});
