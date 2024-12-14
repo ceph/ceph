@@ -139,6 +139,8 @@ extern const char *ceph_con_mode_name(int con_mode);
 #define CEPH_MSG_MON_GET_MAP            5
 #define CEPH_MSG_MON_GET_OSDMAP         6
 #define CEPH_MSG_MON_METADATA           7
+#define CEPH_MSG_MON_QUORUM             8
+#define CEPH_MSG_MON_GET_QUORUM         9
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
 #define CEPH_MSG_MON_SUBSCRIBE          15
