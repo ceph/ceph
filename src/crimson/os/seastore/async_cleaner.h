@@ -299,24 +299,29 @@ public:
   /// Creates empty transaction
   /// weak transaction should be type READ
   virtual TransactionRef create_transaction(
-      Transaction::src_t, const char *name, bool is_weak=false) = 0;
+    Transaction::src_t,
+    const char *name,
+    cache_hint_t cache_hint = CACHE_HINT_TOUCH,
+    bool is_weak=false) = 0;
 
   /// Creates empty transaction with interruptible context
   template <typename Func>
   auto with_transaction_intr(
       Transaction::src_t src,
       const char* name,
+      cache_hint_t cache_hint,
       Func &&f) {
     return do_with_transaction_intr<Func, false>(
-        src, name, std::forward<Func>(f));
+        src, name, cache_hint, std::forward<Func>(f));
   }
 
   template <typename Func>
   auto with_transaction_weak(
       const char* name,
+      cache_hint_t cache_hint,
       Func &&f) {
     return do_with_transaction_intr<Func, true>(
-        Transaction::src_t::READ, name, std::forward<Func>(f)
+        Transaction::src_t::READ, name, cache_hint, std::forward<Func>(f)
     ).handle_error(
       crimson::ct_error::eagain::assert_failure{"unexpected eagain"},
       crimson::ct_error::pass_further_all{}
@@ -385,9 +390,10 @@ private:
   auto do_with_transaction_intr(
       Transaction::src_t src,
       const char* name,
+      cache_hint_t cache_hint,
       Func &&f) {
     return seastar::do_with(
-      create_transaction(src, name, IsWeak),
+      create_transaction(src, name, cache_hint, IsWeak),
       [f=std::forward<Func>(f)](auto &ref_t) mutable {
         return with_trans_intr(
           *ref_t,
