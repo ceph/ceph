@@ -529,6 +529,8 @@ Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
     case MSG_CONFIG:
       return handle_config(
 	boost::static_pointer_cast<MConfig>(m));
+    case MSG_CEPH_MSG_MON_QUORUM:
+      // TODO: handle_mon_quorum
     default:
       dispatched = false;
       return seastar::now();
