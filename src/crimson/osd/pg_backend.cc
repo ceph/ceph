@@ -1325,9 +1325,10 @@ maybe_get_omap_vals(
 PGBackend::ll_read_ierrorator::future<ceph::bufferlist>
 PGBackend::omap_get_header(
   const crimson::os::CollectionRef& c,
-  const ghobject_t& oid) const
+  const ghobject_t& oid,
+  uint32_t op_flags) const
 {
-  return store->omap_get_header(c, oid)
+  return store->omap_get_header(c, oid, op_flags)
     .handle_error(
       crimson::ct_error::enodata::handle([] {
 	return seastar::make_ready_future<bufferlist>();
@@ -1340,10 +1341,13 @@ PGBackend::ll_read_ierrorator::future<>
 PGBackend::omap_get_header(
   const ObjectState& os,
   OSDOp& osd_op,
-  object_stat_sum_t& delta_stats) const
+  object_stat_sum_t& delta_stats,
+  uint32_t op_flags) const
 {
   if (os.oi.is_omap()) {
-    return omap_get_header(coll, ghobject_t{os.oi.soid}).safe_then_interruptible(
+    return omap_get_header(
+      coll, ghobject_t{os.oi.soid}, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED
+    ).safe_then_interruptible(
       [&delta_stats, &osd_op] (ceph::bufferlist&& header) {
         osd_op.outdata = std::move(header);
         delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
@@ -1707,7 +1711,8 @@ PGBackend::fiemap(
   CollectionRef c,
   const ghobject_t& oid,
   uint64_t off,
-  uint64_t len)
+  uint64_t len,
+  uint32_t op_flags)
 {
   return store->fiemap(c, oid, off, len);
 }
