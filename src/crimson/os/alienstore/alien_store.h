@@ -36,7 +36,8 @@ public:
 
   base_errorator::future<bool> exists(
     CollectionRef c,
-    const ghobject_t& oid) final;
+    const ghobject_t& oid,
+    uint32_t op_flags = 0) final;
   mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
   read_errorator::future<ceph::bufferlist> read(CollectionRef c,
                                    const ghobject_t& oid,
@@ -49,29 +50,36 @@ public:
 						 uint32_t op_flags = 0) final;
 					      
 
-  get_attr_errorator::future<ceph::bufferlist> get_attr(CollectionRef c,
-                                            const ghobject_t& oid,
-                                            std::string_view name) const final;
-  get_attrs_ertr::future<attrs_t> get_attrs(CollectionRef c,
-                                     const ghobject_t& oid) final;
+  get_attr_errorator::future<ceph::bufferlist> get_attr(
+    CollectionRef c,
+    const ghobject_t& oid,
+    std::string_view name,
+    uint32_t op_flags = 0) const final;
+  get_attrs_ertr::future<attrs_t> get_attrs(
+    CollectionRef c,
+    const ghobject_t& oid,
+    uint32_t op_flags = 0) final;
 
   read_errorator::future<omap_values_t> omap_get_values(
     CollectionRef c,
     const ghobject_t& oid,
-    const omap_keys_t& keys) final;
+    const omap_keys_t& keys,
+    uint32_t op_flags = 0) final;
 
   /// Retrieves paged set of values > start (if present)
   read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
     CollectionRef c,           ///< [in] collection
     const ghobject_t &oid,     ///< [in] oid
-    const std::optional<std::string> &start ///< [in] start, empty for begin
+    const std::optional<std::string> &start, ///< [in] start, empty for begin
+    uint32_t op_flags = 0
     ) final; ///< @return <done, values> values.empty() iff done
 
   seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
     CollectionRef c,
     const ghobject_t& start,
     const ghobject_t& end,
-    uint64_t limit) const final;
+    uint64_t limit,
+    uint32_t op_flags = 0) const final;
 
   seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
@@ -97,16 +105,19 @@ public:
   unsigned get_max_attr_name_length() const final;
   seastar::future<struct stat> stat(
     CollectionRef,
-    const ghobject_t&) final;
+    const ghobject_t&,
+    uint32_t op_flags = 0) final;
   seastar::future<std::string> get_default_device_class() final;
   get_attr_errorator::future<ceph::bufferlist> omap_get_header(
     CollectionRef,
-    const ghobject_t&) final;
+    const ghobject_t&,
+    uint32_t) final;
   read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef,
     const ghobject_t&,
     uint64_t off,
-    uint64_t len) final;
+    uint64_t len,
+    uint32_t op_flags) final;
 
   FuturizedStore::Shard& get_sharded_store() final {
     return *this;
