@@ -85,9 +85,6 @@ public:
   std::map<NvmeGroupKey, std::map<NvmeGwId, utime_t>> gws_deleting_time;
 
 private:
-  // used for calculate pool & group GW responsible for rebalance
-  uint32_t global_rebalance_index = 1;
-  uint8_t  tick_ratio = 0;
   void synchronize_last_beacon();
   void process_gw_down(const NvmeGwId &gw_id,
      const NvmeGroupKey& group_key, bool &propose_pending,
