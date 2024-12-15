@@ -167,7 +167,7 @@ Dump stray folder content
 =====================================
 - In order to dump stray folder content on specific MDS, use the following command::
 
-   ceph tell mds.cephfs:0 dump stray
+   ceph tell mds.<fsname>:0 dump stray
    [
     "stray_inode": {
         "ino": "0x100000001f7",
@@ -186,5 +186,4 @@ Dump stray folder content
         "mds_caps_wanted": [],
         "is_subvolume": false
     }
-    ...
 ]
