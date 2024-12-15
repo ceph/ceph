@@ -101,7 +101,8 @@ public:
 
     seastar::future<struct stat> stat(
       CollectionRef c,
-      const ghobject_t& oid) final;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) final;
 
     read_errorator::future<ceph::bufferlist> read(
       CollectionRef c,
@@ -118,32 +119,38 @@ public:
 
     base_errorator::future<bool> exists(
       CollectionRef c,
-      const ghobject_t& oid) final;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) final;
 
     get_attr_errorator::future<ceph::bufferlist> get_attr(
       CollectionRef c,
       const ghobject_t& oid,
-      std::string_view name) const final;
+      std::string_view name,
+      uint32_t op_flags = 0) const final;
 
     get_attrs_ertr::future<attrs_t> get_attrs(
       CollectionRef c,
-      const ghobject_t& oid) final;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) final;
 
     read_errorator::future<omap_values_t> omap_get_values(
       CollectionRef c,
       const ghobject_t& oid,
-      const omap_keys_t& keys) final;
+      const omap_keys_t& keys,
+      uint32_t op_flags = 0) final;
 
     /// Retrieves paged set of values > start (if present)
     read_errorator::future<omap_values_paged_t> omap_get_values(
       CollectionRef c,           ///< [in] collection
       const ghobject_t &oid,     ///< [in] oid
-      const std::optional<std::string> &start ///< [in] start, empty for begin
+      const std::optional<std::string> &start, ///< [in] start, empty for begin
+      uint32_t op_flags = 0
       ) final; ///< @return <done, values> values.empty() iff done
 
     get_attr_errorator::future<bufferlist> omap_get_header(
       CollectionRef c,
-      const ghobject_t& oid) final;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) final;
 
     /// std::get<1>(ret) returns end if and only if the listing has listed all
     /// the items within the range, otherwise it returns the next key to be listed.
@@ -151,7 +158,8 @@ public:
       CollectionRef c,
       const ghobject_t& start,
       const ghobject_t& end,
-      uint64_t limit) const final;
+      uint64_t limit,
+      uint32_t op_flags = 0) const final;
 
     seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
     seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
@@ -170,7 +178,8 @@ public:
       CollectionRef ch,
       const ghobject_t& oid,
       uint64_t off,
-      uint64_t len) final;
+      uint64_t len,
+      uint32_t op_flags = 0) final;
 
     unsigned get_max_attr_name_length() const final {
       return 256;
@@ -299,8 +308,8 @@ public:
       Transaction::src_t src,
       const char* tname,
       op_type_t op_type,
-      F &&f,
-      cache_hint_t cache_hint_flags = CACHE_HINT_TOUCH) const {
+      cache_hint_t cache_hint_flags,
+      F &&f) const {
       auto begin_time = std::chrono::steady_clock::now();
       return seastar::do_with(
         oid, Ret{}, std::forward<F>(f),
