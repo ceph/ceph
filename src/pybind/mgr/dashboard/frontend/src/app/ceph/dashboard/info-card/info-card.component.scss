@@ -1,0 +1,44 @@
+@use './src/styles/vendor/variables' as vv;
+@use './src/styles/defaults/mixins';
+
+$card-font-min-width: 320px;
+$card-font-max-width: 2048px;
+$card-font-min-size: 12px;
+$card-font-max-size: 21px;
+
+.card {
+  @include mixins.fluid-font-size(
+    $card-font-min-width,
+    $card-font-max-width,
+    $card-font-min-size,
+    $card-font-max-size
+  );
+  border: 0.5px solid vv.$gray-300;
+  border-radius: 3px;
+  height: 100%;
+
+  .card-body {
+    padding-top: 40px !important;
+
+    .card-title {
+      left: -0.6rem;
+      position: absolute;
+      top: -0.3rem;
+    }
+
+    .card-title > a {
+      color: vv.$primary;
+    }
+  }
+}
+
+.no-center {
+  left: unset;
+  position: unset;
+  top: unset;
+  transform: unset;
+}
+
+.content-highlight {
+  font-weight: bold;
+}
