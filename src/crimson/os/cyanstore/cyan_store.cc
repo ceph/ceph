@@ -207,7 +207,8 @@ CyanStore::Shard::list_objects(
   CollectionRef ch,
   const ghobject_t& start,
   const ghobject_t& end,
-  uint64_t limit) const
+  uint64_t limit,
+  uint32_t op_flags) const
 {
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {} {} {}",
@@ -256,7 +257,8 @@ CyanStore::Shard::list_collections()
 CyanStore::Shard::base_errorator::future<bool>
 CyanStore::Shard::exists(
   CollectionRef ch,
-  const ghobject_t &oid)
+  const ghobject_t &oid,
+  uint32_t op_flags)
 {
   auto c = static_cast<Collection*>(ch.get());
   if (!c->exists) {
@@ -332,7 +334,8 @@ CyanStore::Shard::get_attr_errorator::future<ceph::bufferlist>
 CyanStore::Shard::get_attr(
   CollectionRef ch,
   const ghobject_t& oid,
-  std::string_view name) const
+  std::string_view name,
+  uint32_t op_flags) const
 {
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
@@ -351,7 +354,8 @@ CyanStore::Shard::get_attr(
 CyanStore::Shard::get_attrs_ertr::future<CyanStore::Shard::attrs_t>
 CyanStore::Shard::get_attrs(
   CollectionRef ch,
-  const ghobject_t& oid)
+  const ghobject_t& oid,
+  uint32_t op_flags)
 {
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
@@ -366,7 +370,8 @@ CyanStore::Shard::get_attrs(
 auto CyanStore::Shard::omap_get_values(
   CollectionRef ch,
   const ghobject_t& oid,
-  const omap_keys_t& keys)
+  const omap_keys_t& keys,
+  uint32_t op_flags)
   -> read_errorator::future<omap_values_t>
 {
   auto c = static_cast<Collection*>(ch.get());
@@ -387,7 +392,8 @@ auto CyanStore::Shard::omap_get_values(
 auto CyanStore::Shard::omap_get_values(
   CollectionRef ch,
   const ghobject_t &oid,
-  const std::optional<string> &start)
+  const std::optional<string> &start,
+  uint32_t op_flags)
   -> CyanStore::Shard::read_errorator::future<std::tuple<bool, omap_values_t>>
 {
   auto c = static_cast<Collection*>(ch.get());
@@ -408,7 +414,8 @@ auto CyanStore::Shard::omap_get_values(
 
 auto CyanStore::Shard::omap_get_header(
   CollectionRef ch,
-  const ghobject_t& oid)
+  const ghobject_t& oid,
+  uint32_t op_flags)
   -> CyanStore::Shard::get_attr_errorator::future<ceph::bufferlist>
 {
   auto c = static_cast<Collection*>(ch.get());
@@ -976,7 +983,8 @@ CyanStore::Shard::fiemap(
   CollectionRef ch,
   const ghobject_t& oid,
   uint64_t off,
-  uint64_t len)
+  uint64_t len,
+  uint32_t op_flags)
 {
   auto c = static_cast<Collection*>(ch.get());
 
@@ -991,7 +999,8 @@ CyanStore::Shard::fiemap(
 seastar::future<struct stat>
 CyanStore::Shard::stat(
   CollectionRef ch,
-  const ghobject_t& oid)
+  const ghobject_t& oid,
+  uint32_t op_flags)
 {
   auto c = static_cast<Collection*>(ch.get());
   auto o = c->get_object(oid);
