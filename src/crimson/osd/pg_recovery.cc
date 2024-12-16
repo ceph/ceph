@@ -630,13 +630,13 @@ void PGRecovery::backfilled()
     PeeringState::Backfilled{});
 }
 
-void PGRecovery::backfill_cancelled()
+void PGRecovery::backfill_suspended()
 {
   // We are not creating a new BackfillRecovery request here, as we
   // need to cancel the backfill synchronously (before this method returns).
   using BackfillState = crimson::osd::BackfillState;
   backfill_state->process_event(
-    BackfillState::CancelBackfill{}.intrusive_from_this());
+    BackfillState::SuspendBackfill{}.intrusive_from_this());
 }
 
 void PGRecovery::dispatch_backfill_event(

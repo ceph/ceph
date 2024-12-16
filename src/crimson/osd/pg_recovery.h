@@ -105,7 +105,7 @@ private:
   template <class EventT>
   void start_backfill_recovery(
     const EventT& evt);
-  void backfill_cancelled();
+  void backfill_suspended();
   void request_replica_scan(
     const pg_shard_t& target,
     const hobject_t& begin,

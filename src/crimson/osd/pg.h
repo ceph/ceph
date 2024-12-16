@@ -432,8 +432,8 @@ public:
   void on_backfill_reserved() final {
     recovery_handler->on_backfill_reserved();
   }
-  void on_backfill_canceled() final {
-    recovery_handler->backfill_cancelled();
+  void on_backfill_suspended() final {
+    recovery_handler->backfill_suspended();
   }
 
   void on_recovery_cancelled() final {

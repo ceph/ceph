@@ -4485,7 +4485,7 @@ void PrimaryLogPG::do_scan(
     {
       auto dpp = get_dpp();
       if (osd->check_backfill_full(dpp)) {
-	dout(1) << __func__ << ": Canceling backfill: Full." << dendl;
+	dout(1) << __func__ << ": Suspending backfill: Full." << dendl;
 	queue_peering_event(
 	  PGPeeringEventRef(
 	    std::make_shared<PGPeeringEvent>(
@@ -4542,7 +4542,7 @@ void PrimaryLogPG::do_scan(
       } else {
 	// we canceled backfill for a while due to a too full, and this
 	// is an extra response from a non-too-full peer
-	dout(20) << __func__ << " canceled backfill (too full?)" << dendl;
+	dout(20) << __func__ << " suspended backfill (too full?)" << dendl;
       }
     }
     break;

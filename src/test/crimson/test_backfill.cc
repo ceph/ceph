@@ -193,7 +193,7 @@ public:
   struct PGFacade;
 
   void cancel() {
-    schedule_event_immediate(crimson::osd::BackfillState::CancelBackfill{});
+    schedule_event_immediate(crimson::osd::BackfillState::SuspendBackfill{});
   }
 
   void resume() {
@@ -476,7 +476,7 @@ TEST(backfill, cancel_resume_middle_of_primaryscan)
 
   EXPECT_CALL(cluster_fixture, backfilled);
   cluster_fixture.cancel();
-  cluster_fixture.next_round2<crimson::osd::BackfillState::CancelBackfill>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::SuspendBackfill>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::PrimaryScanned>();
   cluster_fixture.resume();
   cluster_fixture.next_round2<crimson::osd::BackfillState::Triggered>();
@@ -508,7 +508,7 @@ TEST(backfill, cancel_resume_middle_of_replicascan1)
   EXPECT_CALL(cluster_fixture, backfilled);
   cluster_fixture.next_round2<crimson::osd::BackfillState::PrimaryScanned>();
   cluster_fixture.cancel();
-  cluster_fixture.next_round2<crimson::osd::BackfillState::CancelBackfill>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::SuspendBackfill>();
   cluster_fixture.resume();
   cluster_fixture.next_round2<crimson::osd::BackfillState::Triggered>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
@@ -540,7 +540,7 @@ TEST(backfill, cancel_resume_middle_of_replicascan2)
   cluster_fixture.next_round2<crimson::osd::BackfillState::PrimaryScanned>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
   cluster_fixture.cancel();
-  cluster_fixture.next_round2<crimson::osd::BackfillState::CancelBackfill>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::SuspendBackfill>();
   cluster_fixture.resume();
   cluster_fixture.next_round2<crimson::osd::BackfillState::Triggered>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
@@ -572,7 +572,7 @@ TEST(backfill, cancel_resume_middle_of_push1)
   cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
   cluster_fixture.cancel();
-  cluster_fixture.next_round2<crimson::osd::BackfillState::CancelBackfill>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::SuspendBackfill>();
   cluster_fixture.resume();
   cluster_fixture.next_round2<crimson::osd::BackfillState::Triggered>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
@@ -604,7 +604,7 @@ TEST(backfill, cancel_resume_middle_of_push2)
   cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
   cluster_fixture.cancel();
-  cluster_fixture.next_round2<crimson::osd::BackfillState::CancelBackfill>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::SuspendBackfill>();
   cluster_fixture.resume();
   cluster_fixture.next_round2<crimson::osd::BackfillState::Triggered>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
@@ -635,7 +635,7 @@ TEST(backfill, cancel_resume_middle_of_push3)
   cluster_fixture.next_round2<crimson::osd::BackfillState::ReplicaScanned>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
   cluster_fixture.cancel();
-  cluster_fixture.next_round2<crimson::osd::BackfillState::CancelBackfill>();
+  cluster_fixture.next_round2<crimson::osd::BackfillState::SuspendBackfill>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
   cluster_fixture.next_round2<crimson::osd::BackfillState::ObjectPushed>();
   cluster_fixture.resume();
