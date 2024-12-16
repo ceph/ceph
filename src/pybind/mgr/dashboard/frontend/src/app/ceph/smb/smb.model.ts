@@ -1,7 +1,7 @@
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
 
 export interface SMBCluster {
-  resource_type: string;
+  //resource_type: typeof RESOURCE_TYPE;
   cluster_id: string;
   auth_mode: typeof AUTHMODE;
   domain_settings?: DomainSettings;
@@ -31,6 +31,44 @@ export interface PublicAddress {
   destination: string;
 }
 
+export interface SMBShare {
+  cluster_id: string;
+  share_id: string;
+  intent: string;
+  name?: string;
+  readonly?: boolean;
+  browseable?: boolean;
+  cephfs: SMBCephfs;
+  restrict_access?: boolean;
+  login_control?: SMBShareLoginControl;
+}
+
+export interface SMBShare {
+  cluster_id: string;
+  share_id: string;
+  intent: string;
+  name?: string;
+  readonly?: boolean;
+  browseable?: boolean;
+  cephfs: SMBCephfs;
+  restrict_access?: boolean;
+  login_control?: SMBShareLoginControl;
+}
+
+interface SMBCephfs {
+  volume: string;
+  path: string;
+  subvolumegroup?: string;
+  subvolume?: string;
+  provider?: string;
+}
+
+interface SMBShareLoginControl {
+  name: string;
+  category?: 'user' | 'group';
+  access: 'read' | 'read-write' | 'none' | 'admin';
+}
+
 export const CLUSTERING = {
   Default: 'default',
   Always: 'always',
@@ -52,4 +90,9 @@ export const PLACEMENT = {
   label: 'label'
 };
 
-export const RESOURCE_TYPE = 'ceph.smb.cluster';
+export const RESOURCE_TYPE = {
+  cluster: 'ceph.smb.cluster',
+  share: 'ceph.smb.share'
+};
+
+export const PROVIDER = 'samba-vfs';

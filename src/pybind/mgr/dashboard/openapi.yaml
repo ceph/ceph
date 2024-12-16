@@ -14897,6 +14897,120 @@ paths:
       summary: List smb shares
       tags:
       - SMB
+    post:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                share_resource:
+                  type: string
+              required:
+              - share_resource
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties:
+                  results:
+                    description: List of results with resource details
+                    items:
+                      properties:
+                        resource:
+                          description: Resource details
+                          properties:
+                            browseable:
+                              description: Indicates if the share is browseable
+                              type: boolean
+                            cephfs:
+                              description: Configuration for the CephFS share
+                              properties:
+                                path:
+                                  description: Path within the CephFS file system
+                                  type: string
+                                provider:
+                                  description: Provider of the CephFS share, e.g.,
+                                    'samba-vfs'
+                                  type: string
+                                volume:
+                                  description: Name of the CephFS file system
+                                  type: string
+                              required:
+                              - volume
+                              - path
+                              - provider
+                              type: object
+                            cluster_id:
+                              description: Unique identifier for the cluster
+                              type: string
+                            intent:
+                              description: Desired state of the resource, e.g., 'present'
+                                or 'removed'
+                              type: string
+                            name:
+                              description: Name of the share
+                              type: string
+                            readonly:
+                              description: Indicates if the share is read-only
+                              type: boolean
+                            resource_type:
+                              description: ceph.smb.share
+                              type: string
+                            share_id:
+                              description: Unique identifier for the share
+                              type: string
+                          required:
+                          - resource_type
+                          - cluster_id
+                          - share_id
+                          - intent
+                          - name
+                          - readonly
+                          - browseable
+                          - cephfs
+                          type: object
+                        state:
+                          description: State of the resource
+                          type: string
+                        success:
+                          description: Indicates whether the operation was successful
+                          type: boolean
+                      required:
+                      - resource
+                      - state
+                      - success
+                      type: object
+                    type: array
+                  success:
+                    description: Overall success status of the operation
+                    type: boolean
+                required:
+                - results
+                - success
+                type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Create SMB Share
+      tags:
+      - SMB
   /api/smb/share/{cluster_id}/{share_id}:
     delete:
       description: "\n        Remove an smb share from a given cluster\n\n       \

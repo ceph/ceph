@@ -1,5 +1,3 @@
-import Close from '@carbon/icons/es/close/32';
-import { SmbClusterListComponent } from './smb-cluster-list/smb-cluster-list.component';
 import { SmbClusterFormComponent } from './smb-cluster-form/smb-cluster-form.component';
 import { AppRoutingModule } from '~/app/app-routing.module';
 import { NgChartsModule } from 'ng2-charts';
@@ -26,6 +24,11 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { RouterModule } from '@angular/router';
 import { NgModule } from '@angular/core';
 
+import Close from '@carbon/icons/es/close/32';
+import { SmbClusterListComponent } from './smb-cluster-list/smb-cluster-list.component';
+import { SmbShareListComponent } from './smb-share-list/smb-share-list.component';
+import { SmbShareFormComponent } from './smb-share-form/smb-share-form.component';
+
 @NgModule({
   imports: [
     ReactiveFormsModule,
@@ -50,10 +53,18 @@ import { NgModule } from '@angular/core';
     NumberModule,
     LayoutModule,
     ComboBoxModule,
-    IconModule
+    IconModule,
+    CheckboxModule
   ],
   exports: [SmbClusterListComponent, SmbClusterFormComponent],
-  declarations: [SmbClusterListComponent, SmbClusterFormComponent, SmbDomainSettingModalComponent]
+  declarations: [
+    SmbClusterListComponent,
+    SmbDomainSettingModalComponent,
+    SmbClusterFormComponent,
+    SmbShareListComponent,
+    SmbShareFormComponent,
+
+  ]
 })
 export class SmbModule {
   constructor(private iconService: IconService) {

@@ -84,10 +84,12 @@ SHARE_SCHEMA = {
     "cephfs": ({
         "volume": (str, "Name of the CephFS file system"),
         "path": (str, "Path within the CephFS file system"),
+        "subvolumegroup": (str, "Subvolume Group in CephFS file system"),
+        "subvolume": (str, "Subvolume within the CephFS file system"),
         "provider": (str, "Provider of the CephFS share, e.g., 'samba-vfs'")
     }, "Configuration for the CephFS share")
 }
-
+z
 
 def raise_on_failure(func):
     @wraps(func)
@@ -109,6 +111,29 @@ def raise_on_failure(func):
     return wrapper
 
 
+SHARE_SCHEMA_RESULTS = {
+     "results": ([{
+        "resource": ({
+            "resource_type": (str, "ceph.smb.share"),
+    "cluster_id": (str, "Unique identifier for the cluster"),
+    "share_id": (str, "Unique identifier for the share"),
+    "intent": (str, "Desired state of the resource, e.g., 'present' or 'removed'"),
+    "name": (str, "Name of the share"),
+    "readonly": (bool, "Indicates if the share is read-only"),
+    "browseable": (bool, "Indicates if the share is browseable"),
+    "cephfs": ({
+        "volume": (str, "Name of the CephFS file system"),
+        "path": (str, "Path within the CephFS file system"),
+        "subvolumegroup": (str, "Subvolume Group in CephFS file system"),
+        "subvolume": (str, "Subvolume within the CephFS file system"),
+        "provider": (str, "Provider of the CephFS share, e.g., 'samba-vfs'")
+    }, "Configuration for the CephFS share")
+          }, "Resource details"),
+          "state": (str, "State of the resource"),
+        "success": (bool, "Indicates whether the operation was successful")
+    }], "List of results with resource details"),
+    "success": (bool, "Overall success status of the operation")
+}
 @APIRouter('/smb/cluster', Scope.SMB)
 @APIDoc("SMB Cluster Management API", "SMB")
 class SMBCluster(RESTController):

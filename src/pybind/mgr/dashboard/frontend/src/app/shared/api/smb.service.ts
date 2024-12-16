@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 
-import { DomainSettings, SMBCluster } from '~/app/ceph/smb/smb.model';
+import { DomainSettings, SMBCluster, SMBShare } from '~/app/ceph/smb/smb.model';
 
 @Injectable({
   providedIn: 'root'
@@ -30,5 +30,17 @@ export class SmbService {
     return this.http.delete(`${this.baseURL}/cluster/${clusterId}`, {
       observe: 'response'
     });
+  }
+
+  listShares(clusterId: string): Observable<SMBShare[]> {
+    return this.http.get<SMBShare[]>(`${this.baseURL}/share?cluster_id=${clusterId}`);
+  }
+
+  create(requestModel: any) {
+    return this.http.post(`${this.baseURL}/cluster`, requestModel);
+  }
+
+  createShare(requestModel: any) {
+    return this.http.post(`${this.baseURL}/share`, requestModel);
   }
 }

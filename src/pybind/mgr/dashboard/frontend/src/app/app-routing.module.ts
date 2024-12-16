@@ -53,6 +53,7 @@ import { MultiClusterListComponent } from './ceph/cluster/multi-cluster/multi-cl
 import { MultiClusterDetailsComponent } from './ceph/cluster/multi-cluster/multi-cluster-details/multi-cluster-details.component';
 import { SmbClusterListComponent } from './ceph/smb/smb-cluster-list/smb-cluster-list.component';
 import { SmbClusterFormComponent } from './ceph/smb/smb-cluster-form/smb-cluster-form.component';
+import { SmbShareFormComponent } from './ceph/smb/smb-share-form/smb-share-form.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -450,6 +451,11 @@ const routes: Routes = [
               {
                 path: `${URLVerbs.CREATE}`,
                 component: SmbClusterFormComponent,
+                data: { breadcrumbs: ActionLabels.CREATE }
+              },
+              {
+                path: `share/${URLVerbs.CREATE}/:clusterId`,
+                component: SmbShareFormComponent,
                 data: { breadcrumbs: ActionLabels.CREATE }
               }
             ]

@@ -9,7 +9,6 @@ import {
   CLUSTERING,
   PLACEMENT,
   RequestModel,
-  RESOURCE_TYPE,
   RESOURCE,
   DomainSettings,
   JoinSource
@@ -213,7 +212,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
     const requestModel: RequestModel = {
       cluster_resource: {
-        resource_type: RESOURCE_TYPE,
+       // resource_type: 'smb-cluster',
         cluster_id: rawFormValue.cluster_id,
         auth_mode: rawFormValue.auth_mode
       }

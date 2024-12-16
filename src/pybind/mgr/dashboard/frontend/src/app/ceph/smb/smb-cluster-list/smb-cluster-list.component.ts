@@ -79,7 +79,7 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
     ];
     this.tableActions = [
       {
-        name: `${this.actionLabels.CREATE}`,
+        name: `${this.actionLabels.CREATE} Cluster`,
         permission: 'create',
         icon: Icons.add,
         routerLink: () => this.urlBuilder.getCreate(),

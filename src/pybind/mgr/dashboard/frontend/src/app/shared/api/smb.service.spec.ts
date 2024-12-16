@@ -39,5 +39,12 @@ describe('SmbService', () => {
     service.removeCluster('cluster_1').subscribe();
     const req = httpTesting.expectOne('api/smb/cluster/cluster_1');
     expect(req.request.method).toBe('DELETE');
+
+  });
+
+  it('should call list shares for a given cluster', () => {
+    service.listShares('tango').subscribe();
+    const req = httpTesting.expectOne('api/smb/share?cluster_id=tango');
+    expect(req.request.method).toBe('GET');
   });
 });

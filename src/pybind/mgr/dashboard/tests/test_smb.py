@@ -146,33 +146,41 @@ class SMBClusterTest(ControllerTestCase):
 class SMBShareTest(ControllerTestCase):
     _endpoint = '/api/smb/share'
 
-    _shares = [{
-        "resource_type": "ceph.smb.share",
-        "cluster_id": "clusterUserTest",
-        "share_id": "share1",
-                    "intent": "present",
-                    "name": "share1name",
-                    "readonly": "false",
-                    "browseable": "true",
-                    "cephfs": {
-                        "volume": "fs1",
-                        "path": "/",
-                        "provider": "samba-vfs"
-                    }
-    },
-        {
-        "resource_type": "ceph.smb.share",
-        "cluster_id": "clusterADTest",
-        "share_id": "share2",
-                    "intent": "present",
-                    "name": "share2name",
-                    "readonly": "false",
-                    "browseable": "true",
-                    "cephfs": {
-                        "volume": "fs2",
-                        "path": "/",
-                        "provider": "samba-vfs"
-                    }
+    _shares = {
+        "resources": [
+            {
+                "resource_type": "ceph.smb.share",
+                "cluster_id": "clusterUserTest",
+                "share_id": "share1",
+                "intent": "present",
+                "name": "share1name",
+                "readonly": "false",
+                "browseable": "true",
+                "cephfs": {
+                    "volume": "fs1",
+                    "path": "/",
+                    "subvolumegroup": "smb1",
+                    "subvolume": "cache",
+                    "provider": "samba-vfs",
+                },
+            },
+            {
+                "resource_type": "ceph.smb.share",
+                "cluster_id": "clusterADTest",
+                "share_id": "share2",
+                "intent": "present",
+                "name": "share2name",
+                "readonly": "false",
+                "browseable": "true",
+                "cephfs": {
+                    "volume": "fs2",
+                    "path": "/",
+                    "subvolumegroup": "smb1",
+                    "subvolume": "cache",
+                    "provider": "samba-vfs",
+                },
+            },
+        ]
     }
     ]
 
