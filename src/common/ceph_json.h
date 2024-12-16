@@ -7,6 +7,8 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
+#include <boost/json.hpp>
+
 #include <include/types.h>
 #include <include/ceph_fs.h>
 
