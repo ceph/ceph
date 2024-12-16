@@ -31,34 +31,30 @@ ReplicatedRecoveryBackend::recover_object(
   // always add_recovering(soid) before recover_object(soid)
   assert(is_recovering(soid));
   // start tracking the recovery of soid
-  return maybe_pull_missing_obj(
-    soid, need
-  ).then_interruptible([FNAME, this, soid, need] {
+  return maybe_pull_missing_obj(soid, need).then_interruptible([FNAME, this, soid, need] {
     DEBUGDPP("loading obc: {}", pg, soid);
-    return pg.obc_loader.with_obc<RWState::RWREAD>(
-      soid,
+    return pg.obc_loader.with_obc<RWState::RWREAD>(soid,
       [FNAME, this, soid, need](auto head, auto obc) {
-	if (!obc->obs.exists) {
-	  // XXX: this recovery must be triggered by backfills and the corresponding
-	  //      object must have been deleted by some client request after the object
-	  //      is enqueued for push but before the lock is acquired by the recovery.
-	  //
-	  //      Abort the recovery in this case, a "recover_delete" must have been
-	  //      added for this object by the client request that deleted it.
-	  return interruptor::now();
-	}
-	DEBUGDPP("loaded obc: {}", pg, obc->obs.oi.soid);
-	auto& recovery_waiter = get_recovering(soid);
-	recovery_waiter.obc = obc;
-	return maybe_push_shards(head, soid, need);
-      }, false).handle_error_interruptible(
-	crimson::osd::PG::load_obc_ertr::all_same_way(
-	  [FNAME, this, soid](auto& code) {
-	    // TODO: may need eio handling?
-	    ERRORDPP("saw error code {}, ignoring object {}",
-		     pg, code, soid);
-	    return seastar::now();
-	  }));
+      if (!obc->obs.exists) {
+        // XXX: this recovery must be triggered by backfills and the corresponding
+        //      object must have been deleted by some client request after the object
+        //      is enqueued for push but before the lock is acquired by the recovery.
+        //
+        //      Abort the recovery in this case, a "recover_delete" must have been
+        //      added for this object by the client request that deleted it.
+        return interruptor::now();
+      }
+      DEBUGDPP("loaded obc: {}", pg, obc->obs.oi.soid);
+      auto& recovery_waiter = get_recovering(soid);
+      recovery_waiter.obc = obc;
+      recovery_waiter.obc->wait_recovery_read();
+      return maybe_push_shards(head, soid, need);
+    }, false).handle_error_interruptible(
+      crimson::osd::PG::load_obc_ertr::all_same_way([FNAME, this, soid](auto& code) {
+      // TODO: may need eio handling?
+      ERRORDPP("saw error code {}, ignoring object {}", pg, code, soid);
+      return seastar::now();
+    }));
   });
 }
 
@@ -111,6 +107,10 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     }
     return seastar::make_ready_future<>();
   }).handle_exception_interruptible([this, soid](auto e) {
+    auto &recovery = get_recovering(soid);
+    if (recovery.obc) {
+      recovery.obc->drop_recovery_read();
+    }
     recovering.erase(soid);
     return seastar::make_exception_future<>(e);
   });
