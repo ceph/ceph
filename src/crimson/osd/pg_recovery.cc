@@ -628,8 +628,6 @@ void PGRecovery::backfilled()
 
 void PGRecovery::backfill_cancelled()
 {
-  // We are not creating a new BackfillRecovery request here, as we
-  // need to cancel the backfill synchronously (before this method returns).
   using BackfillState = crimson::osd::BackfillState;
   backfill_state->process_event(
     BackfillState::CancelBackfill{}.intrusive_from_this());

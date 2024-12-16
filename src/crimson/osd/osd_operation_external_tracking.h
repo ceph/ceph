@@ -344,13 +344,6 @@ struct EventBackendRegistry<osd::RecoverySubRequest> {
 };
 
 template <>
-struct EventBackendRegistry<osd::BackfillRecovery> {
-  static std::tuple<> get_backends() {
-    return {};
-  }
-};
-
-template <>
 struct EventBackendRegistry<osd::PGAdvanceMap> {
   static std::tuple<> get_backends() {
     return {};

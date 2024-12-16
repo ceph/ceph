@@ -63,7 +63,6 @@ namespace crimson::os {
 
 namespace crimson::osd {
 class OpsExecuter;
-class BackfillRecovery;
 class SnapTrimEvent;
 class PglogBasedRecovery;
 
@@ -879,7 +878,6 @@ private:
   friend class RepRequest;
   friend class LogMissingRequest;
   friend class LogMissingRequestReply;
-  friend class BackfillRecovery;
   friend struct PGFacade;
   friend class InternalClientRequest;
   friend class WatchTimeoutRequest;
