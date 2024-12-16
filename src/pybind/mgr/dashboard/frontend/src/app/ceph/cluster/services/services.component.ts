@@ -29,6 +29,7 @@ import { PlacementPipe } from './placement.pipe';
 import { ServiceFormComponent } from './service-form/service-form.component';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 
 const BASE_URL = 'services';
 
@@ -176,6 +177,16 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         prop: 'status.last_refresh',
         pipe: this.relativeDatePipe,
         flexGrow: 1
+      },
+      {
+        name: $localize`Ports`,
+        prop: 'status.ports',
+        flexGrow: 1,
+        cellTransformation: CellTemplate.map,
+        customTemplateConfig: {
+          undefined: '-',
+          '': '-'
+        }
       }
     ];
 
