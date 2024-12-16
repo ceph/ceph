@@ -190,7 +190,7 @@ public:
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDentry *prepare_stray_dentry(const MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
-			    const file_layout_t *layout=nullptr);
+			    const file_layout_t *layout=nullptr, bool referent_inode=false);
   void journal_allocated_inos(const MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(const MDRequestRef& mdr, Session *session);
 

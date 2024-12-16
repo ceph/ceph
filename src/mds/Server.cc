@@ -3530,7 +3530,7 @@ CDentry* Server::prepare_stray_dentry(const MDRequestRef& mdr, CInode *in)
  * create a new inode.  set c/m/atime.  hit dir pop.
  */
 CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
-				  const file_layout_t *layout)
+				  const file_layout_t *layout, bool referent_inode)
 {
   CInode *in = new CInode(mdcache);
   auto _inode = in->_get_inode();
@@ -3622,12 +3622,21 @@ CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t 
       _inode->mode |= S_ISGID;
     }
   } else {
-    _inode->gid = mdr->client_request->get_owner_gid();
-    ceph_assert(_inode->gid != (unsigned)-1);
+    if (!referent_inode) {
+      _inode->gid = mdr->client_request->get_owner_gid();
+      ceph_assert(_inode->gid != (unsigned)-1);
+    }
   }
 
-  _inode->uid = mdr->client_request->get_owner_uid();
-  ceph_assert(_inode->uid != (unsigned)-1);
+  if (!referent_inode) {
+    _inode->uid = mdr->client_request->get_owner_uid();
+    ceph_assert(_inode->uid != (unsigned)-1);
+  }
+
+  if (referent_inode) {
+    _inode->gid = 0;
+    _inode->uid = 0;
+  }
 
   _inode->btime = _inode->ctime = _inode->mtime = _inode->atime =
     mdr->get_op_stamp();
@@ -7549,7 +7558,7 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   // create referent inode. Don't re-create on retry
   CInode *newi = nullptr;
   if (!mdr->alloc_ino && !mdr->used_prealloc_ino)
-    newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(0), pi.inode->mode);
+    newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(0), pi.inode->mode, nullptr, true);
   else
     newi = mdcache->get_inode(mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino);
   ceph_assert(newi);
@@ -7659,7 +7668,7 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
   // create referent inode. Don't re-create on retry
   if (inc) {
     if (!mdr->alloc_ino && !mdr->used_prealloc_ino)
-      newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(0), targeti->inode->mode);
+      newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(0), targeti->inode->mode, nullptr, true);
     else
       newi = mdcache->get_inode(mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino);
     ceph_assert(newi);
