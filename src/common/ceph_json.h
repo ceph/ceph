@@ -1,15 +1,18 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
+#include <iostream>
 #include <stdexcept>
 #include <typeindex>
+
 #include <include/types.h>
+#include <boost/json.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <include/ceph_fs.h>
 #include "common/ceph_time.h"
 
-#include "json_spirit/json_spirit.h"
+//JFW: #include "json_spirit/json_spirit.h"
 
 #include "Formatter.h"
 
@@ -50,12 +53,12 @@ public:
   };
 protected:
   std::string name; // corresponds to obj_type in XMLObj
-  json_spirit::Value data;
+  boost::json::value data;
   struct data_val val;
   bool data_quoted{false};
   std::multimap<std::string, JSONObj *> children;
   std::map<std::string, data_val> attr_map;
-  void handle_value(json_spirit::Value v);
+  void handle_value(boost::json::value v);
 
 public:
 
@@ -63,7 +66,7 @@ public:
 
   virtual ~JSONObj();
 
-  void init(JSONObj *p, json_spirit::Value v, std::string n);
+  void init(JSONObj *p, boost::json::value v, std::string n);
 
   std::string& get_name() { return name; }
   data_val& get_data_val() { return val; }

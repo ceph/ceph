@@ -20,6 +20,8 @@
 #include "common/Cond.h"
 #include "mon/MonClient.h"
 
+#include <boost/json.hpp>
+
 class Command
 {
 protected:
@@ -50,21 +52,30 @@ public:
 };
 
 
+//JFW: is this even used?
 class JSONCommand : public Command
 {
 public:
-  json_spirit::mValue json_result;
+//JFW: looks like this is just discarded??  json_spirit::mValue json_result;
 
   void wait() override
   {
     Command::wait();
 
     if (r == 0) {
+      boost::system::error_code ec;
+      auto json_result = boost::json::parse(outbl.to_str(), ec);
+
+      if(ec)
+       r = -EINVAL;
+
+/*JFW:
       bool read_ok = json_spirit::read(
           outbl.to_str(), json_result);
       if (!read_ok) {
         r = -EINVAL;
       }
+*/
     }
   }
 };
