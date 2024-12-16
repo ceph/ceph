@@ -15,6 +15,7 @@
 
 #include "osdc/Objecter.h"
 #include "common/errno.h"
+#include "common/ceph_json.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"
 #include "global/global_context.h"
@@ -84,21 +85,23 @@ void MetadataUpdate::finish(int r)
   if (r == 0) {
     if (key.type == "mds" || key.type == "osd" ||
         key.type == "mgr" || key.type == "mon") {
-      json_spirit::mValue json_result;
-      bool read_ok = json_spirit::read(
-          outbl.to_str(), json_result);
-      if (!read_ok) {
+
+      std::error_code ec;
+      auto json_result = boost::json::parse(outbl.to_str(), ec, boost::json::storage_ptr(), 
+				            { .allow_invalid_utf8 = true });
+     
+      if (ec) {
         dout(1) << "mon returned invalid JSON for " << key << dendl;
         return;
       }
-      if (json_result.type() != json_spirit::obj_type) {
+      if (!json_result.is_object()) {
         dout(1) << "mon returned valid JSON " << key
 		<< " but not an object: '" << outbl.to_str() << "'" << dendl;
         return;
       }
       dout(4) << "mon returned valid metadata JSON for " << key << dendl;
 
-      json_spirit::mObject daemon_meta = json_result.get_obj();
+      boost::json::object daemon_meta = json_result.get_object();
 
       // Skip daemon who doesn't have hostname yet
       if (daemon_meta.count("hostname") == 0) {
@@ -118,7 +121,7 @@ void MetadataUpdate::finish(int r)
 	std::map<string,string> m;
 	{
 	  std::lock_guard l(state->lock);
-	  state->hostname = daemon_meta.at("hostname").get_str();
+	  state->hostname = daemon_meta.at("hostname").get_string();
 
 	  if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
 	    daemon_meta.erase("name");
@@ -127,14 +130,14 @@ void MetadataUpdate::finish(int r)
 	  }
 	  daemon_meta.erase("hostname");
 	  for (const auto &[key, val] : daemon_meta) {
-	    m.emplace(key, val.get_str());
+	    m.emplace(key, val.get_string());
 	  }
 	}
 	daemon_state.update_metadata(state, m);
       } else {
         auto state = std::make_shared<DaemonState>(daemon_state.types);
         state->key = key;
-        state->hostname = daemon_meta.at("hostname").get_str();
+        state->hostname = daemon_meta.at("hostname").get_string();
 
         if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
           daemon_meta.erase("name");
@@ -145,7 +148,7 @@ void MetadataUpdate::finish(int r)
 
 	std::map<string,string> m;
         for (const auto &[key, val] : daemon_meta) {
-          m.emplace(key, val.get_str());
+          m.emplace(key, val.get_string());
         }
 	state->set_metadata(m);
 
@@ -190,7 +193,7 @@ std::map<std::string, std::string> Mgr::load_store()
   std::map<std::string, std::string> loaded;
   
   for (auto &key_str : cmd.json_result.get_array()) {
-    std::string const key = key_str.get_str();
+    boost::json::string_view key = key_str.get_string();
     
     dout(20) << "saw key '" << key << "'" << dendl;
 
@@ -415,45 +418,44 @@ void Mgr::load_all_metadata()
   ceph_assert(osd_cmd.r == 0);
 
   for (auto &metadata_val : mds_cmd.json_result.get_array()) {
-    json_spirit::mObject daemon_meta = metadata_val.get_obj();
+    boost::json::object daemon_meta = metadata_val.get_object();
     if (daemon_meta.count("hostname") == 0) {
       dout(1) << "Skipping incomplete metadata entry" << dendl;
       continue;
     }
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-    dm->key = DaemonKey{"mds",
-                        daemon_meta.at("name").get_str()};
-    dm->hostname = daemon_meta.at("hostname").get_str();
 
+    dm->key = DaemonKey{"mds", boost::json::value_to<std::string>(daemon_meta.at("name")) }; 
+    dm->hostname = boost::json::value_to<std::string>(daemon_meta.at("hostname")); 
+   
     daemon_meta.erase("name");
     daemon_meta.erase("hostname");
 
     for (const auto &[key, val] : daemon_meta) {
-      dm->metadata.emplace(key, val.get_str());
+      dm->metadata.emplace(key, boost::json::value_to<std::string>(val)); 
     }
 
     daemon_state.insert(dm);
   }
 
   for (auto &metadata_val : mon_cmd.json_result.get_array()) {
-    json_spirit::mObject daemon_meta = metadata_val.get_obj();
+    boost::json::object daemon_meta = metadata_val.get_object();
     if (daemon_meta.count("hostname") == 0) {
       dout(1) << "Skipping incomplete metadata entry" << dendl;
       continue;
     }
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-    dm->key = DaemonKey{"mon",
-                        daemon_meta.at("name").get_str()};
-    dm->hostname = daemon_meta.at("hostname").get_str();
+    dm->key = DaemonKey{"mon", boost::json::value_to<std::string>(daemon_meta.at("name")) };
+    dm->hostname = daemon_meta.at("hostname").get_string();
 
     daemon_meta.erase("name");
     daemon_meta.erase("hostname");
 
     std::map<string,string> m;
     for (const auto &[key, val] : daemon_meta) {
-      m.emplace(key, val.get_str());
+      m.emplace(key, val.get_string());
     }
     dm->set_metadata(m);
 
@@ -461,24 +463,24 @@ void Mgr::load_all_metadata()
   }
 
   for (auto &osd_metadata_val : osd_cmd.json_result.get_array()) {
-    json_spirit::mObject osd_metadata = osd_metadata_val.get_obj();
+    boost::json::object osd_metadata = osd_metadata_val.get_object();
     if (osd_metadata.count("hostname") == 0) {
       dout(1) << "Skipping incomplete metadata entry" << dendl;
       continue;
     }
-    dout(4) << osd_metadata.at("hostname").get_str() << dendl;
+    dout(4) << osd_metadata.at("hostname").get_string() << dendl;
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
     dm->key = DaemonKey{"osd",
-                        stringify(osd_metadata.at("id").get_int())};
-    dm->hostname = osd_metadata.at("hostname").get_str();
+                        stringify(osd_metadata.at("id").get_int64())};
+    dm->hostname = osd_metadata.at("hostname").get_string();
 
     osd_metadata.erase("id");
     osd_metadata.erase("hostname");
 
-    std::map<string,string> m;
-    for (const auto &i : osd_metadata) {
-      m[i.first] = i.second.get_str();
+    map<string,string> m;
+    for (const auto &[k, v] : osd_metadata) {
+      m[k] = v.get_string();
     }
     dm->set_metadata(m);
 
