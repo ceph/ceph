@@ -458,6 +458,7 @@ class RGWReadRemoteStatusShardsCR : public RGWCoroutine {
   rgw::sal::RadosStore* const store;
   CephContext *cct;
   RGWHTTPManager *http;
+  const RGWBucketInfo* bucket_info;
   std::string bucket_instance;
   const rgw_zone_id zid;
   const std::string& zone_id;
@@ -468,12 +469,13 @@ public:
 				    rgw::sal::RadosStore* const store,
             CephContext *cct,
             RGWHTTPManager *http,
+            const RGWBucketInfo* bucket_info,
 				    std::string bucket_instance,
             const rgw_zone_id zid,
             const std::string& zone_id,
             StatusShards *p)
     : RGWCoroutine(cct), dpp(dpp), store(store),
-      cct(cct), http(http), bucket_instance(bucket_instance),
+      cct(cct), http(http), bucket_info(bucket_info), bucket_instance(bucket_instance),
       zid(zid), zone_id(zone_id), p(p) {}
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -503,7 +505,7 @@ public:
 
       if (retcode < 0 && retcode != -ENOENT) {
         return set_cr_error(retcode);
-      } else if (retcode == -ENOENT) {
+      } else if (retcode == -ENOENT && bucket_info->layout.logs.front().layout.type == rgw::BucketLogType::Deleted) {
         p->generation = UINT64_MAX;
         ldpp_dout(dpp, 10) << "INFO: could not read shard status for bucket:" << bucket_instance
         << " from zone: " << zid.id << dendl;
@@ -584,12 +586,14 @@ class BucketTrimInstanceCR : public RGWCoroutine {
     if (clean_info)
       return 0;
 
-    if (pbucket_info->layout.logs.front().gen < totrim.gen) {
+    bool deleted_type = (pbucket_info->layout.logs.back().layout.type == rgw::BucketLogType::Deleted);
+    if (pbucket_info->layout.logs.front().gen < totrim.gen ||
+      (pbucket_info->layout.logs.front().gen <= totrim.gen && deleted_type)) {
       clean_info = {*pbucket_info, {}};
       auto log = clean_info->first.layout.logs.cbegin();
       clean_info->second = *log;
 
-      if (clean_info->first.layout.logs.size() == 1) {
+      if (clean_info->first.layout.logs.size() == 1 && !deleted_type) {
 	ldpp_dout(dpp, -1)
 	  << "Critical error! Attempt to remove only log generation! "
 	  << "log.gen=" << log->gen << ", totrim.gen=" << totrim.gen
@@ -635,7 +639,7 @@ int take_min_status(
     if (peer->shards.size() != status->size()) {
     ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":"
     << "ERROR: shards don't match. peer shard:" << peer->shards.size() << " my shards:" << status->size()
-    << "for generation:" << peer->generation << dendl; 
+    << "for generation:" << peer->generation << dendl;
       // all peers must agree on the number of shards
       return -EINVAL;
     }
@@ -732,7 +736,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
       auto p = peer_status.begin();
       for (auto& zid : zids) {
-        spawn(new RGWReadRemoteStatusShardsCR(dpp, store, cct, http, bucket_instance, zid, zone_id, &*p), false);
+        spawn(new RGWReadRemoteStatusShardsCR(dpp, store, cct, http, pbucket_info, bucket_instance, zid, zone_id, &*p), false);
         ++p;
       }
     }
