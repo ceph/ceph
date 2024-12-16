@@ -5744,6 +5744,7 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_max_defer_interval"s,
     "bluestore_onode_segment_size"s,
     "bluestore_allocator_lookup_policy"s
+    ,"bluestore_debug_idemreform_chance"s
   };
 }
 
@@ -5817,6 +5818,9 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("bluestore_allocator_lookup_policy")) {
     _update_allocator_lookup_policy();
+  }
+  if (changed.count("bluestore_debug_idemreform_chance")) {
+    _set_debug_options();
   }
 }
 
@@ -5968,6 +5972,14 @@ void BlueStore::_update_allocator_lookup_policy()
   dout(5) << __func__
           << " use_last_lookup_position " << use_last_allocator_lookup_position
           << dendl;
+}
+
+void BlueStore::_set_debug_options()
+{
+  debug_idemreform_chance = cct->_conf.get_val<double>("bluestore_debug_idemreform_chance");
+  dout(10) << __func__
+           << " bluestore_debug_idemreform_chance " << debug_idemreform_chance
+           << dendl;
 }
 
 int BlueStore::_set_cache_sizes()
@@ -12485,10 +12497,11 @@ int BlueStore::read(
 
   bl.clear();
   int r;
+  OnodeRef o;
   {
     std::shared_lock l(c->lock);
     auto start1 = mono_clock::now();
-    OnodeRef o = c->get_onode(oid, false);
+    o = c->get_onode(oid, false);
     log_latency("get_onode@read",
       l_bluestore_read_onode_meta_lat,
       mono_clock::now() - start1,
@@ -12512,6 +12525,9 @@ int BlueStore::read(
   if (r >= 0 && _debug_data_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
+  } else if (r >= 0 && _debug_maybe_idemreform()) {
+    CollectionRef cr = &(*c);
+    _debug_idemreform_write(cr, o, offset, bl);
   } else if (oid.hobj.pool > 0 &&  /* FIXME, see #23029 */
 	     cct->_conf->bluestore_debug_random_read_err &&
 	     (rand() % (int)(cct->_conf->bluestore_debug_random_read_err *
@@ -14110,6 +14126,7 @@ int BlueStore::_open_super_meta()
   _set_compression();
   _set_blob_size();
   _update_allocator_lookup_policy();
+  _set_debug_options();
 
   _validate_bdev();
   return 0;
@@ -15733,6 +15750,27 @@ void BlueStore::_txc_exec(TransContext* txc, ThreadPool::TPHandle* handle)
 
   // execute (start)
   _txc_state_proc(txc);
+}
+
+inline bool BlueStore::_debug_maybe_idemreform() {
+  if (debug_idemreform_chance == 0) {
+    return false;
+  }
+  return debug_idemreform_chance * (float)RAND_MAX <= rand();
+}
+
+void BlueStore::_debug_idemreform_write(
+  CollectionRef& c,
+  OnodeRef& o,
+  uint64_t offset,
+  ceph::buffer::list& bl)
+{
+  WriteContext wctx;
+  _choose_write_options(c, o, 0, &wctx);
+  wctx.buffered = rand() % 2;
+  TransContext* txc = _txc_create(c.get(), c->osr.get(), nullptr);
+  BlueStore::_write(txc, c, o, offset, bl.length(), bl, 0);
+  _txc_exec(txc, nullptr);
 }
 
 void BlueStore::_txc_aio_submit(TransContext *txc)
