@@ -204,6 +204,7 @@ def run_s3atest(client, maven_version, testdir, test_options):
             run.Raw('&&'),
             run.Raw(rm_test),
             run.Raw('&&'),
+            run.Raw('JAVA_HOME=$(alternatives --list | grep jre_1.8.0 | head -n 1 | awk \'{print $3}\')'),
             run.Raw(run_test),
             run.Raw(test_options)
         ]
