@@ -1,17 +1,16 @@
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
-// for testing DELETE ME
-#include <fstream>
-#include <include/types.h>
-
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 #include <boost/lexical_cast.hpp>
+#include <include/types.h>
 
-#include "json_spirit/json_spirit_writer_template.h"
+// Enable boost.json's header-only mode ("https://github.com/boostorg/json?tab=readme-ov-file#header-only"):
+#include <boost/json/src.hpp>
 
-using namespace json_spirit;
+#include <memory>
+#include <fstream>
 
 using std::ifstream;
 using std::pair;
@@ -35,14 +34,6 @@ void encode_json(const char *name, const JSONObj::data_val& v, Formatter *f)
   }
 }
 
-JSONObjIter::JSONObjIter()
-{
-}
-
-JSONObjIter::~JSONObjIter()
-{
-}
-
 void JSONObjIter::set(const JSONObjIter::map_iter_t &_cur, const JSONObjIter::map_iter_t &_last)
 {
   cur = _cur;
@@ -55,9 +46,10 @@ void JSONObjIter::operator++()
     ++cur;
 }
 
+// IMPORTANT: The returned pointer is intended as NON-OWNING (i.e. the JSONObjIter is responsible for it):
 JSONObj *JSONObjIter::operator*()
 {
-  return cur->second;
+  return cur->second.get();
 }
 
 // does not work, FIXME
@@ -66,18 +58,11 @@ ostream& operator<<(ostream &out, const JSONObj &obj) {
    return out;
 }
 
-JSONObj::~JSONObj()
-{
-  for (auto iter = children.begin(); iter != children.end(); ++iter) {
-    JSONObj *obj = iter->second;
-    delete obj;
-  }
-}
-
-
 void JSONObj::add_child(string el, JSONObj *obj)
 {
-  children.insert(pair<string, JSONObj *>(el, obj));
+  auto p = std::unique_ptr<JSONObj>(obj);
+
+  children.insert({el, std::move(p)});
 }
 
 bool JSONObj::get_attr(string name, data_val& attr)
@@ -136,49 +121,53 @@ bool JSONObj::get_data(const string& key, data_val *dest)
 }
 
 /* accepts a JSON Array or JSON Object contained in
- * a JSON Spirit Value, v,  and creates a JSONObj for each
+ * a Boost.JSON value, v, and creates a Ceph JSONObj for each
  * child contained in v
  */
-void JSONObj::handle_value(Value v)
+void JSONObj::handle_value(boost::json::value v)
 {
-  if (v.type() == obj_type) {
-    Object temp_obj = v.get_obj();
-    for (Object::size_type i = 0; i < temp_obj.size(); i++) {
-      Pair temp_pair = temp_obj[i];
-      string temp_name = temp_pair.name_;
-      Value temp_value = temp_pair.value_;
-      JSONObj *child = new JSONObj;
-      child->init(this, temp_value, temp_name);
-      add_child(temp_name, child);
-    }
-  } else if (v.type() == array_type) {
-    Array temp_array = v.get_array();
-    Value value;
+  if (auto op = v.if_object()) {
 
-    for (unsigned j = 0; j < temp_array.size(); j++) {
-      Value cur = temp_array[j];
-      string temp_name;
+	for (const auto& kvp : *op)
+	 {
+		JSONObj *child = new JSONObj;
 
-      JSONObj *child = new JSONObj;
-      child->init(this, cur, temp_name);
-      add_child(child->get_name(), child);
-    }
+		child->init(this, kvp.value(), kvp.key());
+
+		add_child(kvp.key(), child);
+	 }
+
+	return;
   }
+
+ if (auto ap = v.if_array()) {
+	for (const auto& kvp : *ap)
+	 {
+		JSONObj *child = new JSONObj;
+		child->init(this, kvp, ""); 
+
+		add_child(child->get_name(), child);
+	 }
+ }
+
+ // unknown type is not-an-error
 }
 
-void JSONObj::init(JSONObj *p, Value v, string n)
+void JSONObj::init(JSONObj *parent_node, boost::json::value data_in, std::string name_in)
 {
-  name = n;
-  parent = p;
-  data = v;
+  parent = parent_node;
+  data = data_in;
+  name = name_in;
 
-  handle_value(v);
-  if (v.type() == str_type) {
-    val.set(v.get_str(), true);
-  } else {
-    val.set(json_spirit::write_string(v), false);
+  handle_value(data_in);
+
+  if (auto vp = data_in.if_string())
+   val.set(*vp, true); 
+  else {
+   val.set(boost::json::serialize(data_in), false);
   }
-  attr_map.insert(pair<string,data_val>(name, val));
+
+  attr_map.insert({name, val});
 }
 
 JSONObj *JSONObj::get_parent()
@@ -188,43 +177,36 @@ JSONObj *JSONObj::get_parent()
 
 bool JSONObj::is_object()
 {
-  return (data.type() == obj_type);
+  return data.is_object();
 }
 
 bool JSONObj::is_array()
 {
-  return (data.type() == array_type);
+  return data.is_array();
 }
 
 vector<string> JSONObj::get_array_elements()
 {
-  vector<string> elements;
-  Array temp_array;
+ vector<string> elements;
 
-  if (data.type() == array_type)
-    temp_array = data.get_array();
+ boost::json::array temp_array;
 
-  int array_size = temp_array.size();
-  if (array_size > 0)
-    for (int i = 0; i < array_size; i++) {
-      Value temp_value = temp_array[i];
-      string temp_string;
-      temp_string = write(temp_value, raw_utf8);
-      elements.push_back(temp_string);
-    }
+ if (auto ap = data.if_array())
+  temp_array = *ap;
+
+ auto array_size = temp_array.size();
+
+ if (array_size > 0) {
+	for (boost::json::array::size_type i = 0; i < array_size; i++) {
+	      boost::json::value temp_value = temp_array[i];
+	      string temp_string;
+	      temp_string = boost::json::serialize(temp_value);
+	      elements.push_back(temp_string);
+	}
+  }
 
   return elements;
 }
-
-JSONParser::JSONParser() : buf_len(0), success(true)
-{
-}
-
-JSONParser::~JSONParser()
-{
-}
-
-
 
 void JSONParser::handle_data(const char *s, int len)
 {
@@ -235,71 +217,84 @@ void JSONParser::handle_data(const char *s, int len)
 // parse a supplied JSON fragment
 bool JSONParser::parse(const char *buf_, int len)
 {
-  if (!buf_) {
-    set_failure();
+  if (!buf_ || 0 >= len) {
     return false;
   }
 
-  string json_string(buf_, len);
-  success = read(json_string, data);
-  if (success) {
-    handle_value(data);
-    if (data.type() != obj_type &&
-        data.type() != array_type) {
-      if (data.type() == str_type) {
-        val.set(data.get_str(), true);
-      } else {
-        const std::string& s = json_spirit::write_string(data);
-        if (s.size() == (uint64_t)len) { /* Check if entire string is read */
-          val.set(s, false);
-        } else {
-          set_failure();
-        }
-      }
-    }
-  } else {
-    set_failure();
-  }
+  std::string_view json_string_view(buf_, len);
 
-  return success;
+  std::error_code ec; 
+  data = boost::json::parse(json_string_view, ec);
+  
+  if(ec)
+   return false;
+
+  // recursively evaluate the result:
+  handle_value(data);
+
+  if (data.is_object() or data.is_array()) 
+   return true;
+
+  if (data.is_string()) {
+   val.set(data.as_string(), true);
+   return true;
+  } 
+
+  // For any other kind of value:
+  std::string s = boost::json::serialize(data);
+
+  if (s.size() == static_cast<uint64_t>(len)) { // entire string was read
+    val.set(s, false);
+    return true;
+   }
+
+  // Could not parse and convert:
+  return false; 
 }
 
 // parse the internal json_buffer up to len
 bool JSONParser::parse(int len)
 {
-  string json_string = json_buffer.substr(0, len);
-  success = read(json_string, data);
-  if (success)
-    handle_value(data);
-  else
-    set_failure();
+  std::string_view json_string(std::begin(json_buffer), len + std::begin(json_buffer));
 
-  return success;
+  std::error_code ec;
+  if(data = boost::json::parse(json_string, ec); ec)
+   return false;
+
+  handle_value(data);
+
+  return true;
 }
 
 // parse the complete internal json_buffer
 bool JSONParser::parse()
 {
-  success = read(json_buffer, data);
-  if (success)
-    handle_value(data);
-  else
-    set_failure();
+  std::error_code ec;
+ 
+  data = boost::json::parse(json_buffer, ec);
 
-  return success;
+  if(ec)
+   return false;
+
+  handle_value(data);
+
+  return true;
 }
 
-// parse a supplied ifstream, for testing. DELETE ME
+// parse a supplied ifstream:
 bool JSONParser::parse(const char *file_name)
 {
-  ifstream is(file_name);
-  success = read(is, data);
-  if (success)
-    handle_value(data);
-  else
-    set_failure();
+ ifstream is(file_name);
 
-  return success;
+ std::error_code ec;
+ data = boost::json::parse(is, ec);
+
+ if(ec)
+  return false;
+
+ handle_value(data);
+
+ return true;
 }
 
 
