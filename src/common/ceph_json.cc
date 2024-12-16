@@ -9,9 +9,14 @@
 #include <boost/tokenizer.hpp>
 #include <boost/lexical_cast.hpp>
 
+// Enable boost.json's header-only mode ("https://github.com/boostorg/json?tab=readme-ov-file#header-only"):
+#include <boost/json/src.hpp>
+
+/*JFW
 #include "json_spirit/json_spirit_writer_template.h"
 
 using namespace json_spirit;
+*/
 
 using std::ifstream;
 using std::pair;
@@ -136,11 +141,38 @@ bool JSONObj::get_data(const string& key, data_val *dest)
 }
 
 /* accepts a JSON Array or JSON Object contained in
- * a JSON Spirit Value, v,  and creates a JSONObj for each
+ * a Boost.JSON value, v, and creates a Ceph JSONObj for each
  * child contained in v
  */
-void JSONObj::handle_value(Value v)
+void JSONObj::handle_value(boost::json::value v)
 {
+// JFW:
+  if (auto op = v.if_object()) {
+
+	for (const auto& kvp : *op)
+	 {
+		JSONObj *child = new JSONObj;
+
+		child->init(this, kvp.value(), kvp.key());
+
+		add_child(kvp.key(), child);
+	 }
+
+	return;
+  }
+
+ if (auto ap = v.if_array()) {
+	for (const auto& kvp : *ap)
+	 {
+		JSONObj *child = new JSONObj;
+		child->init(this, kvp, ""); 
+
+		add_child(child->get_name(), child);
+	 }
+ }
+
+ // unknown type is not-an-error
+/*JFW:
   if (v.type() == obj_type) {
     Object temp_obj = v.get_obj();
     for (Object::size_type i = 0; i < temp_obj.size(); i++) {
@@ -164,20 +196,29 @@ void JSONObj::handle_value(Value v)
       add_child(child->get_name(), child);
     }
   }
+*/
 }
 
-void JSONObj::init(JSONObj *p, Value v, string n)
+void JSONObj::init(JSONObj *p, boost::json::value v, string n)
 {
   name = n;
   parent = p;
   data = v;
 
   handle_value(v);
+
+  if (auto vp = v.if_string())
+   val.set(*vp, true); 
+  else
+   val.set(boost::json::serialize(*vp), false);
+
+/*JFW
   if (v.type() == str_type) {
     val.set(v.get_str(), true);
   } else {
     val.set(json_spirit::write_string(v), false);
-  }
+  }*/
+
   attr_map.insert(pair<string,data_val>(name, val));
 }
 
@@ -188,16 +229,35 @@ JSONObj *JSONObj::get_parent()
 
 bool JSONObj::is_object()
 {
-  return (data.type() == obj_type);
+  return data.is_object();
 }
 
 bool JSONObj::is_array()
 {
-  return (data.type() == array_type);
+  return data.is_array();
 }
 
 vector<string> JSONObj::get_array_elements()
 {
+ vector<string> elements;
+
+ boost::json::array temp_array;
+
+ if (data.is_array())
+  temp_array = data.get_array();
+
+ auto array_size = temp_array.size();
+
+ if (array_size > 0) {
+	for (boost::json::array::size_type i = 0; i < array_size; i++) {
+	      boost::json::value temp_value = temp_array[i];
+	      string temp_string;
+	      temp_string = temp_value.as_string();
+	      elements.push_back(temp_string);
+	}
+  }
+
+/* JFW:
   vector<string> elements;
   Array temp_array;
 
@@ -212,6 +272,7 @@ vector<string> JSONObj::get_array_elements()
       temp_string = write(temp_value, raw_utf8);
       elements.push_back(temp_string);
     }
+*/
 
   return elements;
 }
@@ -241,15 +302,27 @@ bool JSONParser::parse(const char *buf_, int len)
   }
 
   string json_string(buf_, len);
-  success = read(json_string, data);
+
+  std::error_code ec; 
+  data = boost::json::parse(json_string, ec);
+  
+  if(ec)
+   set_failure();
+
   if (success) {
+
     handle_value(data);
-    if (data.type() != obj_type &&
-        data.type() != array_type) {
-      if (data.type() == str_type) {
-        val.set(data.get_str(), true);
+
+    if (!data.is_object() &&
+        !data.is_array()) {
+
+      if (data.is_string()) {
+        val.set(data.as_string(), true);
       } else {
-        const std::string& s = json_spirit::write_string(data);
+//JFW: does this ever get called..?	
+//JFW: boost::json::serialize() may be the right idea here?
+	std::string s(data.get_string()); // JFW: I'm not 100% sure what they're trying to do...
+
         if (s.size() == (uint64_t)len) { /* Check if entire string is read */
           val.set(s, false);
         } else {
@@ -261,6 +334,34 @@ bool JSONParser::parse(const char *buf_, int len)
     set_failure();
   }
 
+
+/*JFW:
+  if (!buf_) {
+    set_failure();
+    return false;
+  }
+
+  string json_string(buf_, len);
+  success = read(json_string, data);
+  if (success) {
+    handle_value(data);
+    if (data.type() != obj_type &&
+        data.type() != array_type) {
+      if (data.type() == str_type) {
+        val.set(data.get_str(), true);
+      } else {
+        const std::string& s = json_spirit::write_string(data);
+        if (s.size() == (uint64_t)len) { // Check if entire string is read 
+          val.set(s, false);
+        } else {
+          set_failure();
+        }
+      }
+    }
+  } else {
+    set_failure();
+  }
+*/
   return success;
 }
 
@@ -268,18 +369,42 @@ bool JSONParser::parse(const char *buf_, int len)
 bool JSONParser::parse(int len)
 {
   string json_string = json_buffer.substr(0, len);
+
+  set_failure();
+  data = json_string;
+
+  success = true;
+
+  handle_value(data);
+
+/*JFW:
   success = read(json_string, data);
   if (success)
     handle_value(data);
   else
     set_failure();
-
+*/
   return success;
 }
 
 // parse the complete internal json_buffer
 bool JSONParser::parse()
 {
+  std::error_code ec;
+ 
+  data = boost::json::parse(json_buffer, ec);
+
+  if(ec)
+   set_failure(); // JFW: i.e. success = false
+
+  if (success)
+    handle_value(data);
+  else
+    set_failure();
+
+  return success;
+
+/*
   success = read(json_buffer, data);
   if (success)
     handle_value(data);
@@ -287,11 +412,27 @@ bool JSONParser::parse()
     set_failure();
 
   return success;
+*/
 }
 
 // parse a supplied ifstream, for testing. DELETE ME
 bool JSONParser::parse(const char *file_name)
 {
+ ifstream is(file_name);
+
+ std::error_code ec;
+ data = boost::json::parse(is, ec);
+
+ if(ec)
+  set_failure();
+
+ if(success)
+  handle_value(data);
+ else
+ set_failure();
+
+ return success;
+/*
   ifstream is(file_name);
   success = read(is, data);
   if (success)
@@ -300,6 +441,7 @@ bool JSONParser::parse(const char *file_name)
     set_failure();
 
   return success;
+*/
 }
 
 
