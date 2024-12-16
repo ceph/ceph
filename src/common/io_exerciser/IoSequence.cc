@@ -1,5 +1,7 @@
 #include "IoSequence.h"
 
+#include <iostream>
+
 using Sequence = ceph::io_exerciser::Sequence;
 using IoSequence = ceph::io_exerciser::IoSequence;
 

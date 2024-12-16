@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <iosfwd>
 #include <type_traits>
 #include "common/config.h"
 #include "common/config_obs.h"

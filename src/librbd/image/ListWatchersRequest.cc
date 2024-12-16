@@ -5,12 +5,14 @@
 #include "common/RWLock.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "include/container_ios.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Utils.h"
 
 #include <algorithm>
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

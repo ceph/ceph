@@ -16,6 +16,10 @@
 #ifndef CEPH_MGETPOOLSTATSREPLY_H
 #define CEPH_MGETPOOLSTATSREPLY_H
 
+#include "include/encoding_flat_map.h"
+#include "include/encoding_string.h"
+#include "osd/osd_types.h" // for pool_stat_t
+
 class MGetPoolStatsReply final : public PaxosServiceMessage {
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;

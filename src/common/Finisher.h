@@ -16,10 +16,10 @@
 #define CEPH_FINISHER_H
 
 #include "include/Context.h"
-#include "include/common_fwd.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
+#include "common/perf_counters.h" // for class PerfCounters
 
 /// Finisher queue length performance counter ID.
 enum {

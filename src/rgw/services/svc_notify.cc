@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "include/random.h"
+#include "include/container_ios.h"
 #include "include/Context.h"
 #include "common/errno.h"
 
@@ -11,6 +12,8 @@
 #include "svc_zone.h"
 
 #include "rgw_zone.h"
+
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -356,7 +359,7 @@ int RGWSI_Notify::watch_cb(const DoutPrefixProvider *dpp,
                            uint64_t notifier_id,
                            bufferlist& bl)
 {
-  std::shared_lock l{watchers_lock};
+  std::shared_lock{watchers_lock};
   if (cb) {
     return cb->watch_cb(dpp, notify_id, cookie, notifier_id, bl);
   }
