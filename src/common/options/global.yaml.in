@@ -6594,6 +6594,18 @@ options:
   desc: A configurable number for stalled read warning to be appeared if number of stalled read occurence pass `bdev_stalled_read_warn_threshold` in `bdev_stalled_read_warn_lifetime` seconds
   default: 1
   with_legacy: true
+- name: bdev_discard_queue_threshold
+  type: uint
+  level: advanced
+  desc: A threshold to warn if the discard queue size exceeds bdev_discard_queue_threshold
+  default: 100000
+  with_legacy: true
+- name: bdev_debug_discard_sleep
+  type: uint
+  level: dev
+  desc: A debugging tool to simulate slow discard operations by introducing a delay of `bdev_debug_discard_sleep` milliseconds
+  default: 0
+  with_legacy: true
 - name: bluestore_cleaner_sleep_interval
   type: float
   level: advanced

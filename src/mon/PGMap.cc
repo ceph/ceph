@@ -3242,6 +3242,12 @@ void PGMap::get_health_checks(
         summary += " experiencing stalled read in wal device of BlueFS";
       } else if (asum.first == "DB_DEVICE_STALLED_READ_ALERT") {
         summary += " experiencing stalled read in db device of BlueFS";
+      } else if (asum.first == "BLOCK_DEVICE_DISCARD_QUEUE_OVERFLOW_ALERT") {
+	summary += " encountering discard queue overflow in block device";
+      } else if (asum.first == "WAL_DEVICE_DISCARD_QUEUE_OVERFLOW_ALERT") {
+	summary += " encountering discard queue overflow in wal device";
+      } else if (asum.first == "DB_DEVICE_DISCARD_QUEUE_OVERFLOW_ALERT") {
+	summary += " encountering discard queue overflow in db device";
       }
 
       auto& d = checks->add(asum.first, HEALTH_WARN, summary, asum.second.first);
