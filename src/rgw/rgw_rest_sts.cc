@@ -326,7 +326,7 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
   ldpp_dout(dpp, 20) << "JSON Response is: " << openidc_resp.c_str() << dendl;
 
   JSONParser parser;
-  if (parser.parse(openidc_resp.c_str(), openidc_resp.length())) {
+  if (parser.parse(openidc_resp)) {
     JSONObj::data_val val;
     if (parser.get_data("jwks_uri", &val)) {
       cert_url = val.str.c_str();
@@ -601,13 +601,27 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
     ldpp_dout(dpp, 20) << "HTTP status: " << cert_req.get_http_status() << dendl;
     ldpp_dout(dpp, 20) << "JSON Response is: " << cert_resp.c_str() << dendl;
 
-    JSONParser parser;
+/* JFW:
+<<<<<<< HEAD
     if (parser.parse(cert_resp.c_str(), cert_resp.length())) {
       JSONObj* val = parser.find_obj("keys");
       if (val && val->is_array()) {
         vector<string> keys = val->get_array_elements();
         for (auto &key : keys) {
           JSONParser k_parser;
+=======
+*/
+    JSONParser parser;
+    if (parser.parse(cert_resp)) {
+      JSONObj::data_val val;
+      if (parser.get_data("keys", &val)) {
+        if (val.str[0] == '[') {
+          val.str.erase(0, 1);
+        }
+        if (val.str[val.str.size() - 1] == ']') {
+          val.str = val.str.erase(val.str.size() - 1, 1);
+        }
+        if (parser.parse(val.str.c_str(), val.str.size())) {
           vector<string> x5c;
           std::string use;
           bool skip{false};
