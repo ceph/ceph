@@ -1562,8 +1562,12 @@ void PG::on_backfill_reserved()
   queue_recovery();
 }
 
-void PG::on_backfill_canceled()
+void PG::on_backfill_suspended()
 {
+  // Scan replies asked before suspending this backfill should be ignored.
+  // See PrimaryLogPG::do_scan -  case MOSDPGScan::OP_SCAN_DIGEST.
+  // `waiting_on_backfill` will be re-refilled after the suspended backfill
+  // is resumed/restarted.
   if (!waiting_on_backfill.empty()) {
     waiting_on_backfill.clear();
     finish_recovery_op(hobject_t::get_max());
