@@ -4,17 +4,25 @@
 #ifndef CEPH_CLS_VERSION_TYPES_H
 #define CEPH_CLS_VERSION_TYPES_H
 
+#include <cstdint>
+#include <iostream>
+#include <list>
+#include <string>
+
 #include "include/encoding.h"
 #include "include/types.h"
+
 
 class JSONObj;
 
 
 struct obj_version {
-  uint64_t ver;
+  uint64_t ver = 0;
   std::string tag;
 
-  obj_version() : ver(0) {}
+  obj_version() = default;
+  obj_version(uint64_t ver, std::string tag)
+    : ver(ver), tag(std::move(tag)) {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -62,6 +70,10 @@ struct obj_version {
   static void generate_test_instances(std::list<obj_version*>& o);
 };
 WRITE_CLASS_ENCODER(obj_version)
+
+inline std::ostream& operator <<(std::ostream& m, const obj_version& v) {
+  return m << v.tag << ":" << v.ver;
+}
 
 enum VersionCond {
   VER_COND_NONE =      0,

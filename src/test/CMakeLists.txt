@@ -57,6 +57,8 @@ if(NOT WIN32)
   add_subdirectory(cls_queue)
   add_subdirectory(cls_2pc_queue)
   add_subdirectory(cls_cmpomap)
+  add_subdirectory(cls_fifo)
+  add_subdirectory(cls_sem_set)
   add_subdirectory(journal)
 
   add_subdirectory(erasure-code)
@@ -978,6 +980,7 @@ target_link_libraries(unittest_texttable ceph-common)
 # unittest_not_before_queue
 add_executable(unittest_not_before_queue
   test_not_before_queue.cc)
+target_link_libraries(unittest_not_before_queue ceph-common)
 add_ceph_unittest(unittest_not_before_queue)
 
 if(NOT WIN32)
