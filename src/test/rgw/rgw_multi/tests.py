@@ -111,8 +111,8 @@ def bilog_list(zone, bucket, args = None):
     return json.loads(bilog)
 
 def bilog_autotrim(zone, args = None):
-    cmd = ['bilog', 'autotrim'] + zone.zone_args()
-    zone.cluster.admin(cmd, read_only=True)
+    cmd = ['bilog', 'autotrim'] + (args or []) + zone.zone_args()
+    zone.cluster.admin(cmd, debug_rgw=20)
 
 def bucket_layout(zone, bucket, args = None):
     (bl_output,_) = zone.cluster.admin(['bucket', 'layout', '--bucket', bucket] + (args or []))
@@ -1626,6 +1626,7 @@ def test_encrypted_object_sync():
     key = bucket2.get_key('testobj-sse-kms')
     eq(data, key.get_contents_as_string(encoding='ascii'))
 
+@attr('bucket_trim')
 def test_bucket_index_log_trim():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1810,10 +1811,10 @@ def test_bucket_log_trim_after_delete_bucket_primary_reshard():
     primary.conn.delete_bucket(test_bucket.name)
     zonegroup_data_checkpoint(zonegroup_conns)
 
-    bilog_autotrim(primary.zone)
+    bilog_autotrim(primary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
     time.sleep(config.checkpoint_delay)
 
-    bilog_autotrim(primary.zone)
+    bilog_autotrim(primary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
 
     for zonegroup in realm.current_period.zonegroups:
         zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1821,11 +1822,11 @@ def test_bucket_log_trim_after_delete_bucket_primary_reshard():
 
         for zone in zonegroup_conns.zones:
             log.info('trimming on zone=%s', zone.name)
-            bilog_autotrim(zone.zone)
+            bilog_autotrim(zone.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
             time.sleep(config.checkpoint_delay)
 
     # run bilog trim twice on primary zone where the bucket was resharded
-    bilog_autotrim(primary.zone)
+    bilog_autotrim(primary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
     
     for zonegroup in realm.current_period.zonegroups:
         for zone in zonegroup_conns.zones:
@@ -1872,10 +1873,10 @@ def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
     primary.conn.delete_bucket(test_bucket.name)
     zonegroup_data_checkpoint(zonegroup_conns)
 
-    bilog_autotrim(secondary.zone)
+    bilog_autotrim(secondary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
     time.sleep(config.checkpoint_delay)
 
-    bilog_autotrim(secondary.zone)
+    bilog_autotrim(secondary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
 
     for zonegroup in realm.current_period.zonegroups:
         zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1883,11 +1884,11 @@ def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
 
         for zone in zonegroup_conns.zones:
             log.info('trimming on zone=%s', zone.name)
-            bilog_autotrim(zone.zone)
+            bilog_autotrim(zone.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
             time.sleep(config.checkpoint_delay)
 
     # run bilog trim twice on primary zone where the bucket was resharded
-    bilog_autotrim(secondary.zone)
+    bilog_autotrim(secondary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
     time.sleep(config.checkpoint_delay)
 
     for zonegroup in realm.current_period.zonegroups:
