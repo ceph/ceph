@@ -6742,6 +6742,9 @@ void RGWAbortMultipart::execute(optional_yield y)
   auto serializer = meta_obj->get_serializer(this, "RGWCompleteMultipart");
   op_ret = serializer->try_lock(this, dur, y);
   if (op_ret < 0) {
+    if (op_ret == -ENOENT) {
+      op_ret = -ERR_NO_SUCH_UPLOAD;
+    }
     return;
   }
   op_ret = upload->abort(this, s->cct);
