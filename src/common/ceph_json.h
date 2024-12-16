@@ -1,38 +1,42 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
-#include <deque>
 #include <map>
 #include <set>
-#include <stdexcept>
+#include <deque>
 #include <string>
+#include <iostream>
+#include <stdexcept>
 #include <typeindex>
-#include <include/types.h>
+
+#include <boost/json.hpp>
+#include <boost/optional.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
-#include <boost/optional.hpp>
+
+#include <include/types.h>
 #include <include/ceph_fs.h>
+
 #include "common/ceph_time.h"
 
-#include "json_spirit/json_spirit.h"
-
 #include "Formatter.h"
-
-
 
 class JSONObj;
 
 class JSONObjIter {
-  typedef std::map<std::string, JSONObj *>::iterator map_iter_t;
+
+  using map_iter_t = std::map<std::string, std::unique_ptr<JSONObj>>::iterator;
+
   map_iter_t cur;
   map_iter_t last;
 
 public:
-  JSONObjIter();
-  ~JSONObjIter();
   void set(const JSONObjIter::map_iter_t &_cur, const JSONObjIter::map_iter_t &_end);
 
   void operator++();
+
+  // IMPORTANT: The returned pointer is intended as NON-OWNING (i.e. JSONObjIter 
+  // is responsible for it):
   JSONObj *operator*();
 
   bool end() const {
@@ -40,9 +44,13 @@ public:
   }
 };
 
-class JSONObj
+class JSONObj 
 {
-  JSONObj *parent;
+  using children_multimap_t = std::multimap<std::string, std::unique_ptr<JSONObj>>;
+  using children_multimap_value_type = typename children_multimap_t::value_type;
+
+  JSONObj *parent = nullptr;
+
 public:
   struct data_val {
     std::string str;
@@ -53,30 +61,41 @@ public:
       quoted = q;
     }
   };
+
 protected:
   std::string name; // corresponds to obj_type in XMLObj
-  json_spirit::Value data;
-  struct data_val val;
+
+  boost::json::value data;
+
+  data_val val;
+
   bool data_quoted{false};
-  std::multimap<std::string, JSONObj *> children;
+
+  std::multimap<std::string, std::unique_ptr<JSONObj>> children;
+
   std::map<std::string, data_val> attr_map;
-  void handle_value(json_spirit::Value v);
+
+  void handle_value(boost::json::value v);
 
 public:
+  virtual ~JSONObj() = default;
 
-  JSONObj() : parent(NULL){}
-
-  virtual ~JSONObj();
-
-  void init(JSONObj *p, json_spirit::Value v, std::string n);
+public:
+  void init(JSONObj *parent_node, boost::json::value data_in, std::string name_in);
 
   std::string& get_name() { return name; }
   data_val& get_data_val() { return val; }
+
   const std::string& get_data() { return val.str; }
   bool get_data(const std::string& key, data_val *dest);
+
   JSONObj *get_parent();
+
+  // Note: takes ownership of child:
   void add_child(std::string el, JSONObj *child);
+
   bool get_attr(std::string name, data_val& attr);
+
   JSONObjIter find(const std::string& name);
   JSONObjIter find_first();
   JSONObjIter find_first(const std::string& name);
@@ -87,6 +106,7 @@ public:
 
   bool is_array();
   bool is_object();
+
   std::vector<std::string> get_array_elements();
 };
 
@@ -98,12 +118,10 @@ inline std::ostream& operator<<(std::ostream &out, const JSONObj::data_val& dv) 
 
 class JSONParser : public JSONObj
 {
-  int buf_len;
+  int buf_len = 0;
   std::string json_buffer;
-  bool success;
+
 public:
-  JSONParser();
-  ~JSONParser() override;
   void handle_data(const char *s, int len);
 
   bool parse(const char *buf_, int len);
@@ -112,7 +130,6 @@ public:
   bool parse(const char *file_name);
 
   const char *get_json() { return json_buffer.c_str(); }
-  void set_failure() { success = false; }
 };
 
 void encode_json(const char *name, const JSONObj::data_val& v, ceph::Formatter *f);
@@ -127,7 +144,7 @@ public:
 
   JSONDecoder(ceph::buffer::list& bl) {
     if (!parser.parse(bl.c_str(), bl.length())) {
-      std::cout << "JSONDecoder::err()" << std::endl;
+      std::cout << "JSONDecoder::err()" << std::endl;	// JFW: do we still want this here?
       throw JSONDecoder::err("failed to parse JSON input");
     }
   }
