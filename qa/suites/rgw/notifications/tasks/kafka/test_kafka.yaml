@@ -1,7 +1,7 @@
 tasks:
 - kafka:
     client.0:
-      kafka_version: 2.6.0
+      kafka_version: 3.8.1
 - notification-tests:
     client.0:
       extra_attr: ["kafka_test", "data_path_v2_kafka_test"]
