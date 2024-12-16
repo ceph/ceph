@@ -25,8 +25,10 @@
              [ngbPopover]="healthChecks"
              popoverClass="info-card-popover-cluster-status">
           {{ healthData.health.status | healthLabel | uppercase }}
-          <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
-             class="fa fa-exclamation-triangle"></i>
+            <span *ngIf="healthData.health?.status !== 'HEALTH_OK'"
+              [cdsIcon]="icons.warning"
+              [size]=[icons.size20]
+              ></span>
         </div>
       </ng-container>
       <ng-container *ngIf="!healthData.health?.checks?.length">

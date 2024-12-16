@@ -12,7 +12,8 @@ import {
   ProgressIndicatorModule,
   InputModule,
   ModalModule,
-  TreeviewModule
+  TreeviewModule,
+  IconModule
 } from 'carbon-components-angular';
 
 import {
@@ -106,7 +107,8 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ProgressIndicatorModule,
     ButtonModule,
     InputModule,
-    ModalModule
+    ModalModule,
+    IconModule
   ],
   declarations: [
     HostsComponent,
