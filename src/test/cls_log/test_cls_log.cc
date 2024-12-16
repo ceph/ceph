@@ -332,7 +332,6 @@ TEST_F(cls_log, trim_by_marker)
   utime_t start_time = ceph_clock_now();
   generate_log(ioctx, oid, 10, start_time, true);
 
-  utime_t zero_time;
   std::vector<cls_log_entry> log1;
   {
     list<cls_log_entry> entries;
