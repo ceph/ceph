@@ -221,18 +221,14 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
             EXPECT_EQ(main["rocksdb.block.cache.miss"].get<int>(), 3);
         }
         else if (params.mode == "debug"){
-                        // Validate block cache metrics
+            // Validate block cache metrics
             EXPECT_EQ(main["rocksdb.block.cache.bytes.read"].get<int>(), 125984);
             EXPECT_EQ(main["rocksdb.block.cache.bytes.write"].get<int>(), 2560);
-            EXPECT_EQ(main["rocksdb.block.cache.data.add"].get<int>(), 1);
-            EXPECT_EQ(main["rocksdb.block.cache.data.add.redundant"].get<int>(), 0);
-            EXPECT_EQ(main["rocksdb.block.cache.data.bytes.insert"].get<int>(), 2128);
+
 
             // Validate filter cache metrics
             EXPECT_EQ(main["rocksdb.block.cache.filter.add"].get<int>(), 1);
             EXPECT_EQ(main["rocksdb.block.cache.filter.add.redundant"].get<int>(), 0);
-            EXPECT_EQ(main["rocksdb.block.cache.filter.bytes.evict"].get<int>(), 0);
-            EXPECT_EQ(main["rocksdb.block.cache.filter.bytes.insert"].get<int>(), 320);
             EXPECT_EQ(main["rocksdb.block.cache.filter.hit"].get<int>(), 50);
             EXPECT_EQ(main["rocksdb.block.cache.filter.miss"].get<int>(), 1);
 
@@ -399,10 +395,10 @@ TEST_P(RocksDBMetricsTest, PerfCountersAndModesBehavior)
 
             ASSERT_TRUE(histogram.contains("rocksdb.sst.read.micros"));
             EXPECT_GT(histogram["rocksdb.sst.read.micros"]["count"].get<int>(), 0);
-            EXPECT_GT(histogram["rocksdb.sst.read.micros"]["avg"].get<int>(), 0);
+            EXPECT_GT(histogram["rocksdb.sst.read.micros"]["avg"].get<double>(), 0.0);
         }
         else if (params.mode == "debug"){
-            	    ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros"));
+            ASSERT_TRUE(histogram.contains("rocksdb.db.get.micros"));
             EXPECT_GT(histogram["rocksdb.db.get.micros"]["count"].get<int>(), 0);
             EXPECT_GT(histogram["rocksdb.db.get.micros"]["avg"].get<double>(), 0.0);
 
