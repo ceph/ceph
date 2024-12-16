@@ -9,6 +9,7 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/shared_ptr.hh>
 
+#include "common/fmt_common.h"
 #include "common/intrusive_lru.h"
 #include "osd/object_state.h"
 #include "crimson/common/exception.h"
@@ -73,6 +74,8 @@ public:
   using watch_key_t = std::pair<uint64_t, entity_name_t>;
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
 
+  CommonOBCPipeline obc_pipeline;
+
   ObjectContext(hobject_t hoid) : lock(hoid),
                                   obs(std::move(hoid)) {}
 
@@ -128,14 +131,49 @@ public:
   }
 
   bool is_valid() const {
-    return !invalidated_by_interval_change;
+    return !invalidated;
   }
 
 private:
   boost::intrusive::list_member_hook<> obc_accessing_hook;
   uint64_t list_link_cnt = 0;
+
+  /**
+   * loading_started
+   *
+   * ObjectContext instances may be used for pipeline stages
+   * prior to actually being loaded.
+   *
+   * ObjectContextLoader::load_and_lock* use loading_started
+   * to determine whether to initiate loading or simply take
+   * the desired lock directly.
+   *
+   * If loading_started is not set, the task must set it and
+   * (syncronously) take an exclusive lock.  That exclusive lock
+   * must be held until the loading completes, at which point the
+   * lock may be relaxed or released.
+   *
+   * If loading_started is set, it is safe to directly take
+   * the desired lock, once the lock is obtained loading may
+   * be assumed to be complete.
+   *
+   * loading_started, once set, remains set for the lifetime
+   * of the object.
+   */
+  bool loading_started = false;
+
+  /// true once set_*_state has been called, used for debugging
   bool fully_loaded = false;
-  bool invalidated_by_interval_change = false;
+
+  /**
+   * invalidated
+   *
+   * Set to true upon eviction from cache.  This happens to all
+   * cached obc's upon interval change and to the target of
+   * a repop received on a replica to ensure that the cached
+   * state is refreshed upon subsequent replica read.
+   */
+  bool invalidated = false;
 
   friend class ObjectContextRegistry;
   friend class ObjectContextLoader;
@@ -154,6 +192,15 @@ public:
     if (--list_link_cnt == 0) {
       list.erase(std::decay_t<ListType>::s_iterator_to(*this));
     }
+  }
+
+  template <typename FormatContext>
+  auto fmt_print_ctx(FormatContext & ctx) const {
+    return fmt::format_to(
+      ctx.out(), "ObjectContext({}, oid={}, refcount={})",
+      (void*)this,
+      get_oid(),
+      get_use_count());
   }
 
   using obc_accessing_option_t = boost::intrusive::member_hook<
@@ -186,12 +233,14 @@ public:
 
   void clear_range(const hobject_t &from,
                    const hobject_t &to) {
-    obc_lru.clear_range(from, to);
+    obc_lru.clear_range(from, to, [](auto &obc) {
+      obc.invalidated = true;
+    });
   }
 
   void invalidate_on_interval_change() {
     obc_lru.clear([](auto &obc) {
-      obc.invalidated_by_interval_change = true;
+      obc.invalidated = true;
     });
   }
 

@@ -101,7 +101,7 @@ PerShardPipeline &ClientRequest::get_pershard_pipeline(
   return shard_services.get_client_request_pipeline();
 }
 
-ClientRequest::PGPipeline &ClientRequest::client_pp(PG &pg)
+CommonPGPipeline &ClientRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
 }
@@ -140,6 +140,15 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 
   DEBUGDPP("{} start", *pgref, *this);
   PG &pg = *pgref;
+
+  DEBUGDPP("{}.{}: entering wait_pg_ready stage",
+	   *pgref, *this, this_instance_id);
+  // The prior stage is OrderedExclusive (PerShardPipeline::create_or_wait_pg)
+  // and wait_pg_ready is OrderedConcurrent.  This transition, therefore, cannot
+  // block and using enter_stage_sync is legal and more efficient than
+  // enter_stage.
+  ihref.enter_stage_sync(client_pp(pg).wait_pg_ready, *this);
+
   if (!m->get_hobj().get_key().empty()) {
     // There are no users of locator. It was used to ensure that multipart-upload
     // parts would end up in the same PG so that they could be clone_range'd into
@@ -156,27 +165,21 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
     DEBUGDPP("{}: discarding {}", *pgref, *this, this_instance_id);
     co_return;
   }
-  DEBUGDPP("{}.{}: entering await_map stage",
-	   *pgref, *this, this_instance_id);
-  co_await ihref.enter_stage<interruptor>(client_pp(pg).await_map, *this);
-  DEBUGDPP("{}.{}: entered await_map stage, waiting for map",
-	   pg, *this, this_instance_id);
+
   auto map_epoch = co_await interruptor::make_interruptible(
     ihref.enter_blocker(
       *this, pg.osdmap_gate, &decltype(pg.osdmap_gate)::wait_for_map,
       m->get_min_epoch(), nullptr));
 
-  DEBUGDPP("{}.{}: map epoch got {}, entering wait_for_active",
+  DEBUGDPP("{}.{}: waited for epoch {}, waiting for active",
 	   pg, *this, this_instance_id, map_epoch);
-  co_await ihref.enter_stage<interruptor>(client_pp(pg).wait_for_active, *this);
-
-  DEBUGDPP("{}.{}: entered wait_for_active stage, waiting for active",
-	   pg, *this, this_instance_id);
   co_await interruptor::make_interruptible(
     ihref.enter_blocker(
       *this,
       pg.wait_for_active_blocker,
       &decltype(pg.wait_for_active_blocker)::wait));
+
+  co_await ihref.enter_stage<interruptor>(client_pp(pg).get_obc, *this);
 
   if (int res = op_info.set_from_op(&*m, *pg.get_osdmap());
       res != 0) {
@@ -238,10 +241,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{}.{}: process[_pg]_op complete, completing handle",
 	   *pgref, *this, this_instance_id);
   co_await interruptor::make_interruptible(ihref.handle.complete());
-
-  DEBUGDPP("{}.{}: process[_pg]_op complete,"
-	   "removing request from orderer",
-	   *pgref, *this, this_instance_id);
 }
 
 seastar::future<> ClientRequest::with_pg_process(
@@ -257,10 +256,13 @@ seastar::future<> ClientRequest::with_pg_process(
   auto instance_handle = get_instance_handle();
   auto &ihref = *instance_handle;
   return interruptor::with_interruption(
-    [this, pgref, this_instance_id, &ihref]() mutable {
+    [FNAME, this, pgref, this_instance_id, &ihref]() mutable {
       return with_pg_process_interruptible(
 	pgref, this_instance_id, ihref
-      ).then_interruptible([this, pgref] {
+      ).then_interruptible([FNAME, this, this_instance_id, pgref] {
+	DEBUGDPP("{}.{}: with_pg_process_interruptible complete,"
+		 " completing request",
+		 *pgref, *this, this_instance_id);
 	complete_request(*pgref);
       });
     }, [FNAME, this, this_instance_id, pgref](std::exception_ptr eptr) {
@@ -268,9 +270,10 @@ seastar::future<> ClientRequest::with_pg_process(
 	       *pgref, *this, this_instance_id, eptr);
     }, pgref, pgref->get_osdmap_epoch()).finally(
       [this, FNAME, opref=std::move(opref), pgref,
-       this_instance_id, instance_handle=std::move(instance_handle), &ihref] {
+       this_instance_id, instance_handle=std::move(instance_handle), &ihref]() mutable {
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
-	ihref.handle.exit();
+	return ihref.handle.complete(
+	).finally([instance_handle=std::move(instance_handle)] {});
     });
 }
 
@@ -345,7 +348,13 @@ ClientRequest::process_op(
   instance_handle_t &ihref, Ref<PG> pg, unsigned this_instance_id)
 {
   LOG_PREFIX(ClientRequest::process_op);
-  ihref.enter_stage_sync(client_pp(*pg).recover_missing, *this);
+  ihref.obc_orderer = pg->obc_loader.get_obc_orderer(m->get_hobj());
+  auto obc_manager = pg->obc_loader.get_obc_manager(
+    *(ihref.obc_orderer),
+    m->get_hobj());
+  co_await ihref.enter_stage<interruptor>(
+    ihref.obc_orderer->obc_pp().process, *this);
+
   if (!pg->is_primary()) {
     DEBUGDPP(
       "Skipping recover_missings on non primary pg for soid {}",
@@ -365,16 +374,6 @@ ClientRequest::process_op(
     }
   }
 
-  /**
-   * The previous stage of recover_missing is a concurrent phase.
-   * Checking for already_complete requests must done exclusively.
-   * Since get_obc is also an exclusive stage, we can merge both stages into
-   * a single stage and avoid stage switching overhead.
-   */
-  DEBUGDPP("{}.{}: entering check_already_complete_get_obc",
-	   *pg, *this, this_instance_id);
-  co_await ihref.enter_stage<interruptor>(
-    client_pp(*pg).check_already_complete_get_obc, *this);
   DEBUGDPP("{}.{}: checking already_complete",
 	   *pg, *this, this_instance_id);
   auto completed = co_await pg->already_complete(m->get_reqid());
@@ -402,12 +401,6 @@ ClientRequest::process_op(
   DEBUGDPP("{}.{}: past scrub blocker, getting obc",
 	   *pg, *this, this_instance_id);
 
-  auto obc_manager = pg->obc_loader.get_obc_manager(m->get_hobj());
-
-  // initiate load_and_lock in order, but wait concurrently
-  ihref.enter_stage_sync(
-      client_pp(*pg).lock_obc, *this);
-
   int load_err = co_await pg->obc_loader.load_and_lock(
     obc_manager, pg->get_lock_type(op_info)
   ).si_then([]() -> int {
@@ -425,13 +418,8 @@ ClientRequest::process_op(
     co_return;
   }
 
-  DEBUGDPP("{}.{}: got obc {}, entering process stage",
+  DEBUGDPP("{}.{}: obc {} loaded and locked, calling do_process",
 	   *pg, *this, this_instance_id, obc_manager.get_obc()->obs);
-  co_await ihref.enter_stage<interruptor>(
-    client_pp(*pg).process, *this);
-
-  DEBUGDPP("{}.{}: in process stage, calling do_process",
-	   *pg, *this, this_instance_id);
   co_await do_process(
     ihref, pg, obc_manager.get_obc(), this_instance_id
   );
@@ -553,12 +541,14 @@ ClientRequest::do_process(
 	std::move(ox), m->ops);
       co_await std::move(submitted);
     }
-    co_await ihref.enter_stage<interruptor>(client_pp(*pg).wait_repop, *this);
+    co_await ihref.enter_stage<interruptor>(
+      ihref.obc_orderer->obc_pp().wait_repop, *this);
 
     co_await std::move(all_completed);
   }
 
-  co_await ihref.enter_stage<interruptor>(client_pp(*pg).send_reply, *this);
+  co_await ihref.enter_stage<interruptor>(
+    ihref.obc_orderer->obc_pp().send_reply, *this);
 
   if (ret) {
     int err = -ret->value();

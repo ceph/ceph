@@ -177,9 +177,9 @@ TEST(LRU, clear_range) {
   auto [live_ref2, existed2] = cache.add(5, 4);
   ASSERT_FALSE(existed2);
 
-  cache.clear_range(0,4);
+  cache.clear_range(0, 4, [](auto&){});
 
-  // Should not exists (Unreferenced):
+  // Should not exist
   {
     auto [ref, existed] = cache.add(1, 4);
     ASSERT_FALSE(existed);
@@ -192,21 +192,27 @@ TEST(LRU, clear_range) {
     auto [ref, existed] = cache.add(3, 4);
     ASSERT_FALSE(existed);
   }
-  // Should exist (Still being referenced):
   {
     auto [ref, existed] = cache.add(4, 4);
-    ASSERT_TRUE(existed);
+    ASSERT_FALSE(existed);
   }
-  // Should exists (Still being referenced and wasn't removed)
+  ASSERT_TRUE(live_ref1->is_invalidated());
+  // Should exist, wasn't removed)
   {
     auto [ref, existed] = cache.add(5, 4);
     ASSERT_TRUE(existed);
   }
-  // Test out of bound deletion:
+  ASSERT_FALSE(live_ref2->is_invalidated());
+  // Test clear_range with right bound past last entry
+  cache.clear_range(3, 8, [](auto&){});
+  ASSERT_TRUE(live_ref2->is_invalidated());
   {
-    cache.clear_range(3,8);
     auto [ref, existed] = cache.add(4, 4);
-    ASSERT_TRUE(existed);
+    ASSERT_FALSE(existed);
+  }
+  {
+    auto [ref, existed] = cache.add(5, 4);
+    ASSERT_FALSE(existed);
   }
   {
     auto [ref, existed] = cache.add(3, 4);
