@@ -3135,17 +3135,19 @@ static int load_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y,
 
 void RGWStatBucket::execute(optional_yield y)
 {
+  op_ret = get_params(y);
+  if (op_ret < 0) {
+    return;
+  }
+
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
 
-  op_ret = driver->load_bucket(this, s->bucket->get_key(), &bucket, y);
-  if (op_ret) {
-    return;
+  if (report_stats) {
+    op_ret = load_bucket_stats(this, y, *s->bucket, stats);
   }
-
-  op_ret = load_bucket_stats(this, y, *s->bucket, stats);
 }
 
 int RGWListBucket::verify_permission(optional_yield y)
