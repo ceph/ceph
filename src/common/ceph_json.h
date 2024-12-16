@@ -1,19 +1,18 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
-#include <stdexcept>
 #include <typeindex>
-#include <include/types.h>
+#include <stdexcept>
+
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
+
+#include <include/types.h>
 #include <include/ceph_fs.h>
+
 #include "common/ceph_time.h"
 
-#include "json_spirit/json_spirit.h"
-
 #include "Formatter.h"
-
-
 
 class JSONObj;
 
