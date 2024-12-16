@@ -212,7 +212,7 @@ namespace file::listing {
 
     void signal_shutdown() {
       uint64_t msg{sig_shutdown};
-      (void) write(efd, &msg, sizeof(uint64_t));
+      std::ignore = write(efd, &msg, sizeof(uint64_t));
     }
 
     friend class Notify;
