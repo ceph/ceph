@@ -1,4 +1,5 @@
 #include "IoSequence.h"
+#include <algorithm>
 
 using IoOp = ceph::io_exerciser::IoOp;
 using Sequence = ceph::io_exerciser::Sequence;
@@ -49,6 +50,9 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os,
     case Sequence::SEQUENCE_SEQ13:
       os << "SEQUENCE_SEQ13";
       break;
+    case Sequence::SEQUENCE_SEQ14:
+      os << "SEQUENCE_SEQ14";
+      break;
     case Sequence::SEQUENCE_END:
       os << "SEQUENCE_END";
       break;
@@ -94,6 +98,8 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(
       return std::make_unique<Seq12>(obj_size_range, seed);
     case Sequence::SEQUENCE_SEQ13:
       return std::make_unique<Seq13>(obj_size_range, seed);
+    case Sequence::SEQUENCE_SEQ14:
+      return std::make_unique<Seq14>(obj_size_range, seed);
     default:
       break;
   }
@@ -635,4 +641,70 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq13::_next() {
   count++;
   barrier = true;
   return SingleWriteOp::generate((count * obj_size) + gap, obj_size - gap);
+}
+
+ceph::io_exerciser::Seq14::Seq14(std::pair<int, int> obj_size_range, int seed)
+    : IoSequence(std::make_pair(0, obj_size_range.second), seed),
+      offset(0),
+      step(1) {
+  startrng = std::default_random_engine(seed);
+  target_obj_size = std::max(obj_size_range.first, 3);
+  if (target_obj_size > max_obj_size) {
+    done = true;
+  }
+  setup_starts();
+}
+
+void ceph::io_exerciser::Seq14::setup_starts() {
+  starts.resize(step);
+  for (size_t i = 0; i < step; i++) {
+    starts[i] = i;
+  }
+  std::shuffle(std::begin(starts), std::end(starts), startrng);
+  startidx = 0;
+  offset = starts[0];
+}
+
+Sequence ceph::io_exerciser::Seq14::get_id() const {
+  return Sequence::SEQUENCE_SEQ14;
+}
+
+std::string ceph::io_exerciser::Seq14::get_name() const {
+  return "Permutations of gap stepped write I/Os";
+}
+
+std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq14::_next() {
+  if (offset >= target_obj_size) {
+    if (!doneread) {
+      doneread = true;
+      return SingleReadOp::generate(0, current_size);
+    }
+    doneread = false;
+    startidx++;
+    if (startidx >= starts.size()) {
+      step++;
+      current_size = 0;
+      create = true;
+      barrier = true;
+      remove = true;
+      if (step >= target_obj_size) {
+        step = 1;
+        target_obj_size++;
+        if (target_obj_size > max_obj_size) {
+          done = true;
+        }
+      }
+      setup_starts();
+    } else {
+      offset = starts[startidx];
+    }
+    return BarrierOp::generate();
+  }
+  std::unique_ptr<IoOp> r = SingleWriteOp::generate(offset, 1);
+  current_size = std::max(current_size, offset + 1);
+  offset += step;
+  if (offset >= target_obj_size) {
+    barrier = true;
+  }
+  return r;
 }
