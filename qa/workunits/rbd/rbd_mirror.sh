@@ -29,9 +29,45 @@ fi
 . $(dirname $0)/rbd_mirror_helpers.sh
 setup
 
-testlog "TEST: add image and test replay"
+testlog "TEST: mirror from default namespace to non-default namespace"
 start_mirrors ${CLUSTER1}
 image=test
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} init-only
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} init-only
+rbd --cluster ${CLUSTER1} mirror pool disable ${POOL}/${NS1}
+rbd --cluster ${CLUSTER2} mirror pool disable ${POOL}/${NS1}
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} ${MIRROR_POOL_MODE} --remote-namespace ${NS1}
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL}/${NS1} ${MIRROR_POOL_MODE} --remote-namespace ""
+create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${RBD_MIRROR_MODE}
+wait_for_image_replay_started ${CLUSTER1} ${POOL}/${NS1} ${image}
+write_image ${CLUSTER2} ${POOL} ${image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${POOL} ${image}
+wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS1} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${POOL} ${image}
+remove_image_retry ${CLUSTER2} ${POOL} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL}/${NS1} ${image} 'deleted'
+rbd --cluster ${CLUSTER1} mirror pool disable ${POOL}/${NS1}
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} init-only
+
+testlog "TEST: mirror from non-default namespace to default namespace"
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL}/${NS1} ${MIRROR_POOL_MODE} --remote-namespace ""
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} ${MIRROR_POOL_MODE} --remote-namespace ${NS1}
+create_image_and_enable_mirror ${CLUSTER2} ${POOL}/${NS1} ${image} ${RBD_MIRROR_MODE}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+write_image ${CLUSTER2} ${POOL}/${NS1} ${image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL}/${NS1} ${image}
+wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL}/${NS1} ${image}
+remove_image_retry ${CLUSTER2} ${POOL}/${NS1} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} init-only
+rbd --cluster ${CLUSTER2} mirror pool disable ${POOL}/${NS1}
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} ${MIRROR_POOL_MODE}
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} ${MIRROR_POOL_MODE}
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL}/${NS1} ${MIRROR_POOL_MODE}
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL}/${NS1} ${MIRROR_POOL_MODE}
+
+testlog "TEST: add image and test replay"
 create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${RBD_MIRROR_MODE}
 set_image_meta ${CLUSTER2} ${POOL} ${image} "key1" "value1"
 set_image_meta ${CLUSTER2} ${POOL} ${image} "key2" "value2"

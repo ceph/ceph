@@ -109,6 +109,9 @@ std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode) {
   case MIRROR_MODE_POOL:
     os << "pool";
     break;
+  case MIRROR_MODE_INIT_ONLY:
+    os << "init-only";
+    break;
   default:
     os << "unknown (" << static_cast<uint32_t>(mirror_mode) << ")";
     break;
