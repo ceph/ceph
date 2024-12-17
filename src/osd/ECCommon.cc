@@ -585,7 +585,7 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
       // the configurable serves only the preservation of old behavior
       // which will be dropped. ReadPipeline is actually able to handle
       // reads aligned to chunk size.
-      const auto aligned = g_conf()->osd_ec_partial_reads \
+      const auto aligned = cct->_conf->osd_ec_partial_reads \
         ? read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds)
         : read_pipeline.sinfo.offset_len_to_stripe_bounds(bounds);
       ceph_assert(res.returned.front().get<0>() == aligned.first);
