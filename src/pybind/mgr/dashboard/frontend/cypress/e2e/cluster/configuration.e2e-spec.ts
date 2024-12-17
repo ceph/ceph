@@ -30,7 +30,6 @@ describe('Configuration page', () => {
 
     beforeEach(() => {
       configuration.clearTableSearchInput();
-      configuration.getTableCount('found').as('configFound');
     });
 
     after(() => {
@@ -50,6 +49,8 @@ describe('Configuration page', () => {
     });
 
     it('should verify modified filter is applied properly', () => {
+      configuration.clearFilter();
+      configuration.getTableCount('found').as('configFound');
       configuration.filterTable('Modified', 'no');
       configuration.getTableCount('found').as('unmodifiedConfigs');
 
