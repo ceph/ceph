@@ -478,7 +478,9 @@ public:
                 const UserPerm& perms);
   int flock(int fd, int operation, uint64_t owner);
   int truncate(const char *path, loff_t size, const UserPerm& perms);
-
+  int getlk(int fd, struct flock *fl, uint64_t owner);
+  int setlk(int fd, struct flock *fl, uint64_t owner, int sleep);
+  
   // file ops
   int mknod(const char *path, mode_t mode, const UserPerm& perms, dev_t rdev=0);
 
