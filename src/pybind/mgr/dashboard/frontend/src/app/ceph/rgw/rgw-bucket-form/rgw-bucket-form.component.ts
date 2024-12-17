@@ -165,7 +165,61 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       lifecycle: ['{}', CdValidators.jsonOrXml()],
       grantee: [Grantee.Owner, [Validators.required]],
       aclPermission: [[aclPermission.FullControl], [Validators.required]],
-      replication: [false]
+      replication: [false],
+      // bucket rate limit
+      bucket_rate_limit_enabled: [false],
+      bucket_rate_limit_max_readOps_unlimited: [true],
+      bucket_rate_limit_max_readOps: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              bucket_rate_limit_enabled: true,
+              bucket_rate_limit_max_readOps_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      bucket_rate_limit_max_writeOps_unlimited: [true],
+      bucket_rate_limit_max_writeOps: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              bucket_rate_limit_enabled: true,
+              bucket_rate_limit_max_writeOps_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      bucket_rate_limit_max_readBytes_unlimited: [true],
+      bucket_rate_limit_max_readBytes: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              bucket_rate_limit_enabled: true,
+              bucket_rate_limit_max_readBytes_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      bucket_rate_limit_max_writeBytes_unlimited: [true],
+      bucket_rate_limit_max_writeBytes: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              bucket_rate_limit_enabled: true,
+              bucket_rate_limit_max_writeBytes_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ]
     });
   }
 
