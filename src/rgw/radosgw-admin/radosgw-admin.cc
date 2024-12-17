@@ -2,7 +2,7 @@
  * Copyright (C) 2024 IBM 
 */
 
-#include "radosgw-admin.hpp"
+#include "radosgw-admin.h"
 
 #define dout_context g_ceph_context
 
