@@ -596,7 +596,6 @@ bool FSCryptDenc::do_setup_cipher(int enc_mode)
     init_cipher(EVP_CIPHER_fetch(NULL, opts.str, NULL), {} );
   }
 
-  padding = 4 << (ctx->flags & FSCRYPT_POLICY_FLAGS_PAD_MASK);
   key_size = opts.key_size;
   iv_size = opts.iv_size;
 
@@ -726,20 +725,27 @@ FSCryptDenc::~FSCryptDenc()
   EVP_CIPHER_CTX_free(cipher_ctx);
 }
 
+int FSCryptFNameDenc::get_encrypted_name_length(const int& plain_size) const
+{
+   int padding_size = ctx->get_filename_padding_bytes();
+   int padded_size = (plain_size + padding_size - 1) & ~ (padding_size - 1);
+   if (padded_size > NAME_MAX) {
+    padded_size = NAME_MAX;
+  }
+  return padded_size;
+}
+
 int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string *encrypted, std::string *alt_name)
 {
   auto plain_size = plain.size();
-  int dec_size = (plain.size() + padding - 1) & ~(padding - 1); // FIXME, need to be based on policy
-  if (dec_size > NAME_MAX) {
-    dec_size = NAME_MAX;
-  }
+  auto filename_padded_size = get_encrypted_name_length(plain_size);
 
-  char orig[dec_size];
+  char orig[filename_padded_size];
   memcpy(orig, plain.c_str(), plain_size);
-  memset(orig + plain_size, 0, dec_size - plain_size);
+  memset(orig + plain_size, 0, filename_padded_size - plain_size);
 
   char enc_name[NAME_MAX + 64]; /* some extra just in case */
-  int r = encrypt(orig, dec_size,
+  int r = encrypt(orig, filename_padded_size,
                   enc_name, sizeof(enc_name));
 
   if (r < 0) {
@@ -805,14 +811,14 @@ struct fscrypt_slink_data {
 int FSCryptFNameDenc::get_encrypted_symlink(const std::string& plain, std::string *encrypted)
 {
   auto plain_size = plain.size();
-  int dec_size = (plain.size() + 31) & ~31; // FIXME, need to be based on policy
+  auto symlink_padded_size = get_encrypted_name_length(plain_size);
 
-  char orig[dec_size];
+  char orig[symlink_padded_size];
   memcpy(orig, plain.c_str(), plain_size);
-  memset(orig + plain_size, 0, dec_size - plain_size);
+  memset(orig + plain_size, 0, symlink_padded_size - plain_size);
 
   fscrypt_slink_data slink_data;
-  int r = encrypt(orig, dec_size,
+  int r = encrypt(orig, symlink_padded_size,
                   slink_data.enc, sizeof(slink_data.enc));
 
   if (r < 0) {

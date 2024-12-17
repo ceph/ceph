@@ -950,6 +950,56 @@ TEST(FSCrypt, RemoveBusyCreate) {
   ceph_shutdown(cmount);
 }
 
+// this test verifies that fuse client doesn't support falloate ops
+// FALLOC_FL_COLLAPSE_RANGE, FALLOC_FL_COLLAPSE_RANGE, FALLOC_FL_INSERT_RANGE
+// if this test fails, it means that these ops has been impleneted AND we must reject these ops for encrypted files
+// see https://www.kernel.org/doc/html/v4.18/filesystems/fscrypt.html Access Semantics section
+TEST(FSCrypt, FallocateNotImplemented) {
+  struct ceph_fscrypt_key_identifier kid;
+  struct ceph_mount_info *cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  // init fscrypt on dir
+  string dir_path = "dir1";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  struct fscrypt_policy_v2 policy;
+  policy.version = 2;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+  ceph_close(cmount, fd);
+
+  //add file to fscrypt enabled directory and write some data to the file
+  string file_name = "file1";
+  string file_path = "";
+  file_path.append(dir_path);
+  file_path.append("/");
+  file_path.append(file_name);
+  fd = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_write(cmount, fd, fscrypt_key, sizeof(fscrypt_key), 0);
+  ASSERT_EQ(32, r);
+
+  // try to fallocate opened file with non supported flags
+  r = ceph_fallocate(cmount, fd, FALLOC_FL_COLLAPSE_RANGE, 0, 64);
+  ASSERT_EQ(-EOPNOTSUPP, r);
+  r = ceph_fallocate(cmount, fd, FALLOC_FL_ZERO_RANGE, 0, 64);
+  ASSERT_EQ(-EOPNOTSUPP, r);
+  r = ceph_fallocate(cmount, fd, FALLOC_FL_INSERT_RANGE, 0, 64);
+  ASSERT_EQ(-EOPNOTSUPP, r);
+
+  // cleanup
+  ceph_close(cmount, fd);
+  ceph_unlink(cmount, file_path.c_str());
+  ceph_rmdir(cmount, dir_path.c_str());
+
+  ceph_shutdown(cmount);
+}
+
 int main(int argc, char **argv)
 {
   int r = update_root_mode();
