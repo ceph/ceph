@@ -208,11 +208,6 @@ template <typename I>
 void ServiceDaemon<I>::add_or_update_namespace_attribute(
     int64_t pool_id, const std::string& namespace_name, const std::string& key,
     const AttributeValue& value) {
-  if (namespace_name.empty()) {
-    add_or_update_attribute(pool_id, key, value);
-    return;
-  }
-
   dout(20) << "pool_id=" << pool_id << ", "
            << "namespace=" << namespace_name << ", "
            << "key=" << key << ", "
@@ -295,18 +290,17 @@ void ServiceDaemon<I>::update_status() {
         boost::apply_visitor(attribute_dump_visitor, attribute.second);
       }
 
-      if (!pool_pair.second.ns_attributes.empty()) {
-        f.open_object_section("namespaces");
-        for (auto& [ns, attributes] : pool_pair.second.ns_attributes) {
-          f.open_object_section(ns.c_str());
-          for (auto& [key, value] : attributes) {
-            AttributeDumpVisitor attribute_dump_visitor(&f, key);
-            boost::apply_visitor(attribute_dump_visitor, value);
-          }
-          f.close_section(); // namespace
+      f.open_object_section("namespaces");
+      for (auto& [ns, attributes] : pool_pair.second.ns_attributes) {
+        f.open_object_section(ns.c_str());
+        for (auto& [key, value] : attributes) {
+          AttributeDumpVisitor attribute_dump_visitor(&f, key);
+          boost::apply_visitor(attribute_dump_visitor, value);
         }
-        f.close_section(); // namespaces
+        f.close_section(); // namespace
       }
+      f.close_section(); // namespaces
+
       f.close_section(); // pool
     }
     f.close_section(); // pools

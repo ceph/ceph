@@ -1757,7 +1757,8 @@ int Migration<I>::enable_mirroring(
     return r;
   }
 
-  if (mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+  if (mirror_mode == cls::rbd::MIRROR_MODE_DISABLED ||
+      mirror_mode == cls::rbd::MIRROR_MODE_INIT_ONLY) {
     ldout(m_cct, 10) << "mirroring is not enabled for destination pool"
                      << dendl;
     return 0;
