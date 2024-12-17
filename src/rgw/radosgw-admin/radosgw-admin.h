@@ -1,5 +1,5 @@
-#ifndef RADOSGW_ADMIN_HPP 
- #define RADOSGW_ADMIN_HPP 1
+#ifndef RADOSGW_ADMIN_H 
+ #define RADOSGW_ADMIN_H 1
 
 /*
  * Copyright (C) 2024 IBM
