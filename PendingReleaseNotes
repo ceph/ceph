@@ -61,6 +61,9 @@
   `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get` and
   `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
 
+* RADOS: A performance botteneck in the balancer mgr module has been fixed.
+  Related Tracker: https://tracker.ceph.com/issues/68657
+
 >=19.0.0
 
 * cephx: key rotation is now possible using `ceph auth rotate`. Previously,
