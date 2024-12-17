@@ -914,6 +914,11 @@ test_namespace() {
 
     rbd group create rbd/test1/group1
     rbd group image add rbd/test1/group1 rbd/test1/image1
+    rbd group image add --group-pool rbd --group-namespace test1 --group group1 \
+        --image-pool rbd --image-namespace test1 --image image2
+    rbd group image rm --group-pool rbd --group-namespace test1 --group group1 \
+        --image-pool rbd --image-namespace test1 --image image1
+    rbd group image rm rbd/test1/group1 rbd/test1/image2
     rbd group rm rbd/test1/group1
 
     rbd trash move rbd/test1/image1
