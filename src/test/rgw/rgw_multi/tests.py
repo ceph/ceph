@@ -3642,9 +3642,8 @@ def test_bucket_location_constraint():
     primary = zonegroup_conns.rw_zones[0]
     secondary = zonegroup_conns.rw_zones[1]
 
-    bucket_name = secondary.create_bucket(gen_bucket_name(), location=zonegroup)
-    log.debug('created bucket=%s', bucket.name)
-    
+    bucket_name = secondary.create_bucket(gen_bucket_name(), location=zonegroup.name)
+    log.debug('created bucket=%s', bucket_name)
+
     assert primary.get_bucket(bucket_name)
 
-    
