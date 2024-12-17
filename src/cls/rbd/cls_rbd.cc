@@ -5875,6 +5875,7 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
     break;
   case cls::rbd::MIRROR_MODE_IMAGE:
   case cls::rbd::MIRROR_MODE_POOL:
+  case cls::rbd::MIRROR_MODE_CONFIG:
     enabled = true;
     break;
   default:
@@ -5926,6 +5927,7 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
     if (r < 0) {
       return r;
     }
+
   }
   return 0;
 }
@@ -5958,7 +5960,8 @@ int mirror_remote_namespace_set(cls_method_context_t hctx, bufferlist *in,
   int r = read_key(hctx, mirror::MODE, &mirror_mode);
   if (r < 0 && r != -ENOENT) {
     return r;
-  } else if (r == 0 && mirror_mode != cls::rbd::MIRROR_MODE_DISABLED) {
+  } else if (r == 0 && (mirror_mode != cls::rbd::MIRROR_MODE_DISABLED &&
+                        mirror_mode != cls::rbd::MIRROR_MODE_CONFIG)) {
     CLS_ERR("cannot set mirror remote namespace while mirroring enabled");
     return -EINVAL;
   }
