@@ -40,8 +40,8 @@ Journal
 If logging type is set to "Journal", the records are written to the log bucket before the bucket operation is completed. 
 This means that if the logging action fails, the operation will not be executed, and an error will be returned to the client.
 An exception to the above are "multi/delete" log records: if writing these log records fail, the operation continues and may still be successful.
-Note that it may happen that the log records were successfully written, but the bucket operation failed, since the logs are written
-before such a failure, there will be no indication for that in the log records. 
+Journal mode supports filtering out records based on matches of the prefixes and suffixes of the logged object keys. Regular-expression matching can also be used on these to create filters.
+Note that it may happen that the log records were successfully written, but the bucket operation failed, since the logs are written.
 
 
 Bucket Logging REST API
