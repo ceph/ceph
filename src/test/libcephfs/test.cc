@@ -2706,6 +2706,19 @@ TEST(LibCephFS, Statxat) {
   ASSERT_EQ(stx.stx_mode & S_IFMT, S_IFDIR);
   ASSERT_EQ(ceph_statxat(cmount, fd, rel_file_name_2, &stx, 0, 0), 0);
   ASSERT_EQ(stx.stx_mode & S_IFMT, S_IFREG);
+  // test relative to root with empty relpath
+#if defined(__linux__) && defined(AT_EMPTY_PATH)
+  int dir_fd = ceph_openat(cmount, fd, dir_name, O_DIRECTORY | O_RDONLY, 0);
+  ASSERT_LE(0, dir_fd);
+  ASSERT_EQ(ceph_statxat(cmount, dir_fd, "", &stx, 0, AT_EMPTY_PATH), 0);
+  ASSERT_EQ(stx.stx_mode & S_IFMT, S_IFDIR);
+  ASSERT_EQ(0, ceph_close(cmount, dir_fd));
+  int file_fd = ceph_openat(cmount, fd, rel_file_name_2, O_RDONLY, 0);
+  ASSERT_LE(0, file_fd);
+  ASSERT_EQ(ceph_statxat(cmount, file_fd, "", &stx, 0, AT_EMPTY_PATH), 0);
+  ASSERT_EQ(stx.stx_mode & S_IFMT, S_IFREG);
+  ASSERT_EQ(0, ceph_close(cmount, file_fd));
+#endif
   ASSERT_EQ(0, ceph_close(cmount, fd));
 
   // test relative to dir
@@ -2713,6 +2726,14 @@ TEST(LibCephFS, Statxat) {
   ASSERT_LE(0, fd);
   ASSERT_EQ(ceph_statxat(cmount, fd, rel_file_name_1, &stx, 0, 0), 0);
   ASSERT_EQ(stx.stx_mode & S_IFMT, S_IFREG);
+  // test relative to dir with empty relpath
+#if defined(__linux__) && defined(AT_EMPTY_PATH)
+  int rel_file_fd = ceph_openat(cmount, fd, rel_file_name_1, O_RDONLY, 0);
+  ASSERT_LE(0, rel_file_fd);
+  ASSERT_EQ(ceph_statxat(cmount, rel_file_fd, "", &stx, 0, AT_EMPTY_PATH), 0);
+  ASSERT_EQ(stx.stx_mode & S_IFMT, S_IFREG);
+  ASSERT_EQ(0, ceph_close(cmount, rel_file_fd));
+#endif
 
   // delete the dirtree, recreate and verify
   ASSERT_EQ(0, ceph_unlink(cmount, file_path));
@@ -3265,6 +3286,13 @@ TEST(LibCephFS, Chownat) {
   // change ownership to nobody -- we assume nobody exists and id is always 65534
   ASSERT_EQ(ceph_conf_set(cmount, "client_permissions", "0"), 0);
   ASSERT_EQ(ceph_chownat(cmount, fd, rel_file_path, 65534, 65534, 0), 0);
+  // change relative fd ownership with AT_EMPTY_PATH
+#if defined(__linux__) && defined(AT_EMPTY_PATH)
+  int file_fd = ceph_openat(cmount, fd, rel_file_path, O_RDONLY, 0);
+  ASSERT_LE(0, file_fd);
+  ASSERT_EQ(ceph_chownat(cmount, file_fd, "", 65534, 65534, AT_EMPTY_PATH), 0);
+  ceph_close(cmount, file_fd);
+#endif
   ASSERT_EQ(ceph_conf_set(cmount, "client_permissions", "1"), 0);
   ceph_close(cmount, fd);
 
