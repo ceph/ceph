@@ -190,6 +190,12 @@ public:
     memset(dest->__reserved, 0, sizeof(dest->__reserved));
     memcpy(dest->master_key_identifier, master_key_identifier.raw, sizeof(master_key_identifier.raw));
   }
+
+  uint8_t get_filename_padding_bytes() const {
+      uint8_t padding_bits = flags & FSCRYPT_POLICY_FLAGS_PAD_MASK;
+      uint8_t padding_bytes = 4 << padding_bits;
+      return padding_bytes;
+  }
 };
 
 using FSCryptPolicyRef = std::shared_ptr<FSCryptPolicy>;
@@ -225,7 +231,6 @@ protected:
   std::vector<char> key;
   FSCryptIV iv;
 
-  int padding = 1;
   int key_size = 0;
   int iv_size = 0;
 
@@ -276,6 +281,8 @@ public:
 
   int get_encrypted_symlink(const std::string& plain, std::string *encrypted);
   int get_decrypted_symlink(const std::string& b64enc, std::string *decrypted);
+private:
+  int get_encrypted_name_length(const int& plain_size) const;
 };
 
 using FSCryptFNameDencRef = std::shared_ptr<FSCryptFNameDenc>;
