@@ -27,6 +27,8 @@ This time (in seconds) could be set per source bucket via a Ceph extension to th
 or globally via the `rgw_bucket_logging_obj_roll_time` configuration option. If not set, the default time is 5 minutes.
 Adding a log object to the log bucket is done "lazily", meaning, that if no more records are written to the object, it may
 remain outside of the log bucket even after the configured time has passed.
+To counter that, you can flush all logging objects on a given source bucket to log them,
+regardless if enough time passed or if no more records are written to the object.
 
 Standard
 ````````
