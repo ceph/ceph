@@ -5833,7 +5833,7 @@ function TEST_periodic_scrub_replicated() {
 
     flush_pg_stats
     # Request a regular scrub and it will be done
-    pg_schedule_scrub $pg
+    pg_scrub $pg
     grep -q "Regular scrub request, deep-scrub details will be lost" $dir/osd.${primary}.log || return 1
 
     # deep-scrub error is no longer present
