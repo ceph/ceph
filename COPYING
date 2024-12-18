@@ -29,10 +29,6 @@ Files: src/mount/canonicalize.c
 Copyright: Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
 License: LGPL-2 or later
 
-Files: src/os/btrfs_ioctl.h
-Copyright: Copyright (C) 2007 Oracle.  All rights reserved.
-License: GPL2 (see COPYING-GPL2)
-
 Files: src/include/ceph_hash.cc
 Copyright: None
 License: Public domain
