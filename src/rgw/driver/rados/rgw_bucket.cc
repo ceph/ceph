@@ -2887,8 +2887,7 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
       ldpp_dout(dpp, 10) << "store log layout type: " <<  bci.info.layout.logs.back().layout.type << dendl;
       for (int i = 0; i < shards_num; ++i) {
         ldpp_dout(dpp, 10) << "adding to data_log shard_id: " << i << " of gen:" << index_log.gen << dendl;
-        int ret = svc_datalog->add_entry(dpp, bci.info, index_log, i,
-                                                    null_yield);
+        int ret = svc_datalog->add_entry(dpp, bci.info, index_log, i, y);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "WARNING: failed writing data log for bucket="
           << bci.info.bucket << ", shard_id=" << i << "of generation="
@@ -2975,7 +2974,21 @@ int RGWBucketInstanceMetadataHandler::put_post(
 int RGWBucketInstanceMetadataHandler::remove(std::string& entry, RGWObjVersionTracker& objv_tracker,
                                              optional_yield y, const DoutPrefixProvider *dpp)
 {
-  return 0; // skip bucket instance removal. each zone will handle it independently during trimming
+  RGWBucketCompleteInfo bci;
+  int ret = svc_bucket->read_bucket_instance_info(entry, &bci.info, nullptr,
+                                                  &bci.attrs, y, dpp);
+  if (ret == -ENOENT) {
+    return 0;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+
+  // skip bucket instance removal. each zone will handle it independently during trimming
+
+  std::ignore = update_bucket_topic_mappings(dpp, &bci, /*current_bci=*/nullptr,
+                                             driver);
+  return 0;
 }
 
 int RGWBucketInstanceMetadataHandler::mutate(const std::string& entry, const ceph::real_time& mtime,
