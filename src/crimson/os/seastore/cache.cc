@@ -1339,6 +1339,7 @@ record_t Cache::prepare_record(
   io_stat_t retire_stat;
   std::vector<alloc_delta_t> alloc_deltas;
   alloc_delta_t rel_delta;
+  backref_entry_refs_t backref_entries;
   rel_delta.op = alloc_delta_t::op_types_t::CLEAR;
   for (auto &i: t.retired_set) {
     auto &extent = i.extent;
@@ -1354,6 +1355,25 @@ record_t Cache::prepare_record(
 	  extent->get_paddr(),
 	  extent->get_length(),
 	  extent->get_type()));
+    }
+
+    // Note: commit extents and backref allocations in the same place
+    if (is_backref_mapped_type(extent->get_type()) ||
+	is_retired_placeholder_type(extent->get_type())) {
+      DEBUGT("backref_entry free {} len 0x{:x}",
+	     t,
+	     extent->get_paddr(),
+	     extent->get_length());
+      backref_entries.emplace_back(
+	backref_entry_t::create_retire(
+	  extent->get_paddr(),
+	  extent->get_length(),
+	  extent->get_type()));
+    } else if (is_backref_node(extent->get_type())) {
+      remove_backref_extent(extent->get_paddr());
+    } else {
+      ERRORT("Got unexpected extent type: {}", t, *extent);
+      ceph_abort("imposible");
     }
   }
   alloc_deltas.emplace_back(std::move(rel_delta));
@@ -1529,6 +1549,9 @@ record_t Cache::prepare_record(
     record.push_back(std::move(delta));
   }
 
+  apply_backref_mset(backref_entries);
+  t.set_backref_entries(std::move(backref_entries));
+
   ceph_assert(t.get_fresh_block_stats().num ==
               t.inline_block_list.size() +
               t.ool_block_list.size() +
@@ -1628,19 +1651,16 @@ record_t Cache::prepare_record(
   return record;
 }
 
-void Cache::commit_backref_entries(
+void Cache::apply_backref_byseq(
   backref_entry_refs_t&& backref_entries,
   const journal_seq_t& seq)
 {
-  LOG_PREFIX(Cache::commit_backref_entries);
+  LOG_PREFIX(Cache::apply_backref_byseq);
   DEBUG("backref_entry apply {} entries at {}",
 	backref_entries.size(), seq);
   assert(seq != JOURNAL_SEQ_NULL);
   if (backref_entries.empty()) {
     return;
-  }
-  for (auto &entry : backref_entries) {
-    backref_entry_mset.insert(*entry);
   }
   if (backref_entryrefs_by_seq.empty()) {
     backref_entryrefs_by_seq.insert(
@@ -1703,6 +1723,8 @@ void Cache::complete_commit(
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src);
     epm.commit_space_used(i->get_paddr(), i->get_length());
+
+    // Note: commit extents and backref allocations in the same place
     if (is_backref_mapped_type(i->get_type())) {
       DEBUGT("backref_entry alloc {} len 0x{:x}",
 	     t,
@@ -1775,23 +1797,6 @@ void Cache::complete_commit(
   for (auto &i: t.retired_set) {
     auto &extent = i.extent;
     extent->dirty_from_or_retired_at = start_seq;
-    if (is_backref_mapped_type(extent->get_type()) ||
-        is_retired_placeholder_type(extent->get_type())) {
-      DEBUGT("backref_entry free {} len 0x{:x}",
-	     t,
-	     extent->get_paddr(),
-	     extent->get_length());
-      backref_entries.emplace_back(
-	backref_entry_t::create_retire(
-	  extent->get_paddr(),
-	  extent->get_length(),
-	  extent->get_type()));
-    } else if (is_backref_node(extent->get_type())) {
-      remove_backref_extent(extent->get_paddr());
-    } else {
-      ERRORT("Got unexpected extent type: {}", t, *extent);
-      ceph_abort("impossible");
-    }
   }
 
   auto existing_stats = t.get_existing_block_stats();
@@ -1808,6 +1813,9 @@ void Cache::complete_commit(
       } else {
 	assert(i->state == CachedExtent::extent_state_t::DIRTY);
       }
+      add_extent(i);
+
+      // Note: commit extents and backref allocations in the same place
       DEBUGT("backref_entry alloc existing {} len 0x{:x}",
 	     t,
 	     i->get_paddr(),
@@ -1818,7 +1826,6 @@ void Cache::complete_commit(
 	  i->cast<LogicalCachedExtent>()->get_laddr(),
 	  i->get_length(),
 	  i->get_type()));
-      add_extent(i);
       const auto t_src = t.get_src();
       if (i->is_dirty()) {
         add_to_dirty(i, &t_src);
@@ -1827,6 +1834,8 @@ void Cache::complete_commit(
       }
     }
   }
+
+  apply_backref_byseq(t.move_backref_entries(), start_seq);
   commit_backref_entries(std::move(backref_entries), start_seq);
 
   for (auto &i: t.pre_alloc_list) {
