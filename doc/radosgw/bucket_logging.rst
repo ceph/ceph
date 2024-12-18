@@ -72,7 +72,7 @@ has the following format:
 
 ::
 
-  <prefix><bucket owner>/<source region>/<bucket name>/<year>/<month>/<day>/<year-month-day-hour-minute-second>-<16 bytes unique-id>
+  <prefix><bucket owner>/<source region>/[tenant:]<bucket name>/<year>/<month>/<day>/<year-month-day-hour-minute-second>-<16 bytes unique-id>
 
 For example:
 
@@ -90,7 +90,7 @@ Journal
 minimum amount of data used for journaling bucket changes (this is a Ceph extension).
 
   - bucket owner (or dash if empty)
-  - bucket name (or dash if empty)
+  - bucket name (or dash if empty). in the format: ``[tenant:]<bucket name>``
   - time in the following format: ``[day/month/year:hour:minute:second timezone]``
   - object key (or dash if empty)
   - operation in the following format: ``WEBSITE/REST.<HTTP method>.<resource>``
@@ -111,7 +111,7 @@ Standard
 based on `AWS Logging Record Format`_.
   
   - bucket owner (or dash if empty)
-  - bucket name (or dash if empty)
+  - bucket name (or dash if empty). in the format: ``[tenant:]<bucket name>``
   - time
   - remote IP (not supported, always a dash)
   - user or account (or dash if empty)
