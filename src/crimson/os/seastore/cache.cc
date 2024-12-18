@@ -1421,7 +1421,7 @@ record_t Cache::prepare_record(
 	alloc_laddr = i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin;
       } else {
 	assert(i->get_type() == extent_types_t::TEST_BLOCK_PHYSICAL);
-	alloc_laddr = L_ADDR_NULL;
+	alloc_laddr = L_ADDR_MIN;
       }
       alloc_delta.alloc_blk_ranges.emplace_back(
 	i->get_paddr(),
@@ -1708,7 +1708,7 @@ void Cache::complete_commit(
 	alloc_laddr = i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin;
       } else {
 	assert(i->get_type() == extent_types_t::TEST_BLOCK_PHYSICAL);
-	alloc_laddr = L_ADDR_NULL;
+	alloc_laddr = L_ADDR_MIN;
       }
       backref_entries.emplace_back(
 	std::make_unique<backref_entry_t>(
