@@ -32,8 +32,7 @@ std::ostream &operator<<(std::ostream &out, const backref_entry_t &ent) {
   return out << "backref_entry_t{"
 	     << ent.paddr << "~0x" << std::hex << ent.len << std::dec << ", "
 	     << "laddr: " << ent.laddr << ", "
-	     << "type: " << ent.type << ", "
-	     << "seq: " << ent.seq << ", "
+	     << "type: " << ent.type
 	     << "}";
 }
 
@@ -1697,8 +1696,7 @@ void Cache::complete_commit(
 	    ? i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin
 	    : L_ADDR_NULL),
 	  i->get_length(),
-	  i->get_type(),
-	  start_seq));
+	  i->get_type()));
     } else if (is_backref_node(i->get_type())) {
 	add_backref_extent(
 	  i->get_paddr(),
@@ -1762,8 +1760,7 @@ void Cache::complete_commit(
 	  extent->get_paddr(),
 	  L_ADDR_NULL,
 	  extent->get_length(),
-	  extent->get_type(),
-	  start_seq));
+	  extent->get_type()));
     } else if (is_backref_node(extent->get_type())) {
       remove_backref_extent(extent->get_paddr());
     } else {
@@ -1795,8 +1792,7 @@ void Cache::complete_commit(
 	  i->get_paddr(),
 	  i->cast<LogicalCachedExtent>()->get_laddr(),
 	  i->get_length(),
-	  i->get_type(),
-	  start_seq));
+	  i->get_type()));
       add_extent(i);
       const auto t_src = t.get_src();
       if (i->is_dirty()) {
@@ -1944,8 +1940,7 @@ Cache::replay_delta(
 	  alloc_blk.paddr,
 	  alloc_blk.laddr,
 	  alloc_blk.len,
-	  alloc_blk.type,
-	  journal_seq));
+	  alloc_blk.type));
     }
     if (!backref_list.empty()) {
       backref_batch_update(std::move(backref_list), journal_seq);
