@@ -494,7 +494,7 @@ set(radosgw_admin_srcs
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
 if(WITH_RADOSGW_ARROW_FLIGHT)
-  list(APPEND radosgw_admin_srcs radosgw-admin/rgw_flight.cc)
+  list(APPEND radosgw_admin_srcs rgw_flight.cc)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
 add_executable(radosgw-admin ${radosgw_admin_srcs})
