@@ -141,6 +141,7 @@ void RGWOp_Bucket_Link::execute(optional_yield y)
   RGWBucketAdminOpState op_state;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  RESTArgs::get_string(s, "account-id", op_state.account_id, &op_state.account_id);
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
   RESTArgs::get_string(s, "bucket-id", bucket_id, &bucket_id);
   RESTArgs::get_string(s, "new-bucket-name", new_bucket_name, &new_bucket_name);
@@ -184,6 +185,7 @@ void RGWOp_Bucket_Unlink::execute(optional_yield y)
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
 
+  RESTArgs::get_string(s, "account-id", op_state.account_id, &op_state.account_id);
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
 
   op_state.set_user_id(uid);
