@@ -884,6 +884,7 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const
 {
   list<string> singleGatewayDetail;
   list<string> gatewayDownDetail;
+  list<string> gatewayInDeletingDetail;
   for (const auto& created_map_pair: created_gws) {
     const auto& group_key = created_map_pair.first;
     auto& group = group_key.second;
@@ -900,6 +901,10 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const
         ostringstream ss;
         ss << "NVMeoF Gateway '" << gw_id << "' is unavailable." ;
         gatewayDownDetail.push_back(ss.str());
+      } else if (gw_created.availability == gw_availability_t::GW_DELETING) {
+        ostringstream ss;
+        ss << "NVMeoF Gateway '" << gw_id << "' is in deleting state." ;
+        gatewayInDeletingDetail.push_back(ss.str());
       }
     }
   }
@@ -918,6 +923,15 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const
     auto& d = checks->add("NVMEOF_GATEWAY_DOWN", HEALTH_WARN,
         ss.str(), gatewayDownDetail.size());
     d.detail.swap(gatewayDownDetail);
+  }
+  if (!gatewayInDeletingDetail.empty()) {
+    ostringstream ss;
+    ss << gatewayInDeletingDetail.size() << " gateway(s) are in deleting state"
+      << "; namespaces are automatically balanced across remaining gateways, "
+      << "this should take a few minutes.";
+    auto& d = checks->add("NVMEOF_GATEWAY_DELETING", HEALTH_WARN,
+        ss.str(), gatewayInDeletingDetail.size());
+    d.detail.swap(gatewayInDeletingDetail);
   }
 }
 
