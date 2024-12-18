@@ -1355,8 +1355,8 @@ record_t Cache::prepare_record(
     retire_stat.increment(extent->get_length());
     DEBUGT("retired and remove extent -- {}", t, *extent);
     commit_retire_extent(t, extent);
-    if (is_backref_mapped_extent_node(extent) ||
-        is_retired_placeholder_type(extent->get_type())) {
+    if (is_backref_mapped_type(extent->get_type()) ||
+	is_retired_placeholder_type(extent->get_type())) {
       rel_delta.alloc_blk_ranges.emplace_back(
 	extent->get_paddr(),
 	L_ADDR_NULL,
@@ -1413,7 +1413,7 @@ record_t Cache::prepare_record(
       },
       modify_time);
     if (i->is_valid() &&
-	is_backref_mapped_extent_node(i)) {
+	is_backref_mapped_type(i->get_type())) {
       laddr_t alloc_laddr;
       if (i->is_logical()) {
 	alloc_laddr = i->cast<LogicalCachedExtent>()->get_laddr();
@@ -1438,7 +1438,7 @@ record_t Cache::prepare_record(
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
     i->prepare_commit();
-    if (is_backref_mapped_extent_node(i)) {
+    if (is_backref_mapped_type(i->get_type())) {
       laddr_t alloc_laddr;
       if (i->is_logical()) {
         alloc_laddr = i->cast<LogicalCachedExtent>()->get_laddr();
@@ -1696,7 +1696,7 @@ void Cache::complete_commit(
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src);
     epm.commit_space_used(i->get_paddr(), i->get_length());
-    if (is_backref_mapped_extent_node(i)) {
+    if (is_backref_mapped_type(i->get_type())) {
       DEBUGT("backref_entry alloc {} len 0x{:x}",
 	     t,
 	     i->get_paddr(),
@@ -1768,7 +1768,7 @@ void Cache::complete_commit(
   for (auto &i: t.retired_set) {
     auto &extent = i.extent;
     extent->dirty_from_or_retired_at = start_seq;
-    if (is_backref_mapped_extent_node(extent) ||
+    if (is_backref_mapped_type(extent->get_type()) ||
         is_retired_placeholder_type(extent->get_type())) {
       DEBUGT("backref_entry free {} len 0x{:x}",
 	     t,

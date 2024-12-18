@@ -1097,8 +1097,6 @@ protected:
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
 std::ostream &operator<<(std::ostream &, const CachedExtent&);
 
-bool is_backref_mapped_extent_node(const CachedExtentRef &extent);
-
 /// Compare extents by paddr
 struct paddr_cmp {
   bool operator()(paddr_t lhs, const CachedExtent &rhs) const {

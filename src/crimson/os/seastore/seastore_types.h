@@ -1468,6 +1468,23 @@ constexpr bool is_physical_type(extent_types_t type) {
   }
 }
 
+constexpr bool is_backref_mapped_type(extent_types_t type) {
+  if ((type >= extent_types_t::LADDR_INTERNAL &&
+       type <= extent_types_t::OBJECT_DATA_BLOCK) ||
+      type == extent_types_t::TEST_BLOCK ||
+      type == extent_types_t::TEST_BLOCK_PHYSICAL) {
+    assert(is_logical_type(type) ||
+	   is_lba_node(type) ||
+	   type == extent_types_t::TEST_BLOCK_PHYSICAL);
+    return true;
+  } else {
+    assert(!is_logical_type(type) &&
+	   !is_lba_node(type) &&
+	   type != extent_types_t::TEST_BLOCK_PHYSICAL);
+    return false;
+  }
+}
+
 constexpr bool is_real_type(extent_types_t type) {
   if (type <= extent_types_t::OBJECT_DATA_BLOCK ||
       (type >= extent_types_t::TEST_BLOCK &&
