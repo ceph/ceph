@@ -40,26 +40,18 @@ class SegmentProvider;
 
 struct backref_entry_t {
   backref_entry_t(
-    const paddr_t paddr,
-    const laddr_t laddr,
-    const extent_len_t len,
-    const extent_types_t type)
+    const paddr_t& paddr,
+    const laddr_t& laddr,
+    extent_len_t len,
+    extent_types_t type)
     : paddr(paddr),
       laddr(laddr),
       len(len),
-      type(type)
-  {}
-  backref_entry_t(alloc_blk_t alloc_blk)
-    : paddr(alloc_blk.paddr),
-      laddr(alloc_blk.laddr),
-      len(alloc_blk.len),
-      type(alloc_blk.type)
-  {}
+      type(type) {}
   paddr_t paddr = P_ADDR_NULL;
   laddr_t laddr = L_ADDR_NULL;
   extent_len_t len = 0;
-  extent_types_t type =
-    extent_types_t::ROOT;
+  extent_types_t type = extent_types_t::NONE;
   friend bool operator< (
     const backref_entry_t &l,
     const backref_entry_t &r) {
@@ -112,8 +104,7 @@ using backref_entry_ref = std::unique_ptr<backref_entry_t>;
 using backref_entry_mset_t = backref_entry_t::multiset_t;
 using backref_entry_refs_t = std::vector<backref_entry_ref>;
 using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_entry_refs_t>;
-using backref_entry_query_set_t = std::set<
-    backref_entry_t, backref_entry_t::cmp_t>;
+using backref_entry_query_set_t = std::set<backref_entry_t, backref_entry_t::cmp_t>;
 
 /**
  * Cache
@@ -1905,7 +1896,7 @@ private:
   void register_metrics();
 
   void backref_batch_update(
-    std::vector<backref_entry_ref> &&,
+    backref_entry_refs_t &&,
     const journal_seq_t &);
 
   /// Add extent to extents handling dirty and refcounting

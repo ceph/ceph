@@ -1228,7 +1228,6 @@ constexpr laddr_t L_ADDR_MAX = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX);
 constexpr laddr_t L_ADDR_MIN = laddr_t::from_raw_uint(0);
 constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
 constexpr laddr_t L_ADDR_ROOT = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX - 1);
-constexpr laddr_t L_ADDR_LBAT = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX - 2);
 
 struct __attribute__((packed)) laddr_le_t {
   ceph_le64 laddr;
@@ -1945,12 +1944,11 @@ struct __attribute__((packed)) root_t {
 
 struct alloc_blk_t {
   alloc_blk_t(
-    paddr_t paddr,
-    laddr_t laddr,
+    const paddr_t& paddr,
+    const laddr_t& laddr,
     extent_len_t len,
     extent_types_t type)
-    : paddr(paddr), laddr(laddr), len(len), type(type)
-  {}
+    : paddr(paddr), laddr(laddr), len(len), type(type) {}
 
   explicit alloc_blk_t() = default;
 
