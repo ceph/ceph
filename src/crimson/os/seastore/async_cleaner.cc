@@ -1142,8 +1142,7 @@ SegmentCleaner::do_reclaim_space(
             pin->get_key(),
             pin->get_val(),
             pin->get_length(),
-            pin->get_type(),
-            JOURNAL_SEQ_NULL);
+            pin->get_type());
         }
         for (auto &cached_backref : cached_backref_entries) {
           if (cached_backref.laddr == L_ADDR_NULL) {

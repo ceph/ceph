@@ -43,13 +43,11 @@ struct backref_entry_t {
     const paddr_t paddr,
     const laddr_t laddr,
     const extent_len_t len,
-    const extent_types_t type,
-    const journal_seq_t seq)
+    const extent_types_t type)
     : paddr(paddr),
       laddr(laddr),
       len(len),
-      type(type),
-      seq(seq)
+      type(type)
   {}
   backref_entry_t(alloc_blk_t alloc_blk)
     : paddr(alloc_blk.paddr),
@@ -62,7 +60,6 @@ struct backref_entry_t {
   extent_len_t len = 0;
   extent_types_t type =
     extent_types_t::ROOT;
-  journal_seq_t seq;
   friend bool operator< (
     const backref_entry_t &l,
     const backref_entry_t &r) {
@@ -984,7 +981,7 @@ private:
     for (auto it = start_iter;
 	 it != end_iter;
 	 it++) {
-      res.emplace(it->paddr, it->laddr, it->len, it->type, it->seq);
+      res.emplace(it->paddr, it->laddr, it->len, it->type);
     }
     return res;
   }
