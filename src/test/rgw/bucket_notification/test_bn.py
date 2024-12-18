@@ -538,6 +538,17 @@ def another_user(user=None, tenant=None, account=None):
     return conn, arn
 
 
+def list_topics(assert_len=None, tenant=''):
+    if tenant == '':
+        result = admin(['topic', 'list'], get_config_cluster())
+    else:
+        result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
+    parsed_result = json.loads(result[0])
+    if assert_len:
+        assert_equal(len(parsed_result['topics']), assert_len)
+    return parsed_result
+
+
 def get_stats_persistent_topic(topic_name, assert_entries_number=None):
     result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
     assert_equal(result[1], 0)
