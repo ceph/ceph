@@ -12123,12 +12123,14 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
 
   // extend file?
   if (request_size + request_offset > in->effective_size()) {
+    size = request_size + request_offset;
     if (encrypted) {
-      in->set_effective_size(request_size + request_offset);
+      in->set_effective_size(size);
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      size = fscrypt_next_block_start(offset + size);
     }
     ldout(cct, 7) << "in->effective_size()=" << in->effective_size() << dendl;
-    in->size = offset + size;
+    in->size = size;
     in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
     if (is_quota_bytes_approaching(in, f->actor_perms)) {
@@ -17536,7 +17538,11 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
     }
   } else if (!(mode & FALLOC_FL_KEEP_SIZE)) {
     uint64_t size = offset + length;
-    if (size > in->size) {
+    if (size > in->effective_size()) {
+      if (in->is_fscrypt_enabled()) {
+        in->set_effective_size(size);
+        size = fscrypt_next_block_start(size);
+      }
       in->size = size;
       in->mtime = in->ctime = ceph_clock_now();
       in->change_attr++;
