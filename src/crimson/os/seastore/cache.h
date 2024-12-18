@@ -1826,9 +1826,23 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
+  void apply_backref_mset(
+      backref_entry_refs_t& backref_entries) {
+    for (auto& entry : backref_entries) {
+      backref_entry_mset.insert(*entry);
+    }
+  }
+
+  void apply_backref_byseq(
+      backref_entry_refs_t&& backref_entries,
+      const journal_seq_t& seq);
+
   void commit_backref_entries(
-    backref_entry_refs_t&& backref_entries,
-    const journal_seq_t& seq);
+      backref_entry_refs_t&& backref_entries,
+      const journal_seq_t& seq) {
+    apply_backref_mset(backref_entries);
+    apply_backref_byseq(std::move(backref_entries), seq);
+  }
 
   /// Add extent to extents handling dirty and refcounting
   ///
