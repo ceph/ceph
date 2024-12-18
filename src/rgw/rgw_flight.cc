@@ -4,7 +4,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright 2023-2024 IBM
+ * Copyright 2023 IBM
  *
  * See file COPYING for licensing information.
  */
