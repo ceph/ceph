@@ -206,6 +206,13 @@ ceph::coarse_real_time time_from_name(const std::string& obj_name, const DoutPre
   return extracted_time;
 }
 
+std::string full_bucket_name(const std::unique_ptr<rgw::sal::Bucket>& bucket) {
+  if (bucket->get_tenant().empty()) {
+    return bucket->get_name();
+  }
+  return fmt::format("{}:{}", bucket->get_tenant(), bucket->get_name());
+}
+
 int new_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& bucket,
     std::string& obj_name,
@@ -235,7 +242,7 @@ int new_logging_object(const configuration& conf,
           conf.target_prefix,
           to_string(bucket->get_owner()),
           source_region,
-          bucket->get_name(),
+          full_bucket_name(bucket),
           t,
           t,
           unique);
@@ -270,8 +277,11 @@ int rollover_logging_object(const configuration& conf,
     optional_yield y,
     bool must_commit,
     RGWObjVersionTracker* objv_tracker) {
-  if (conf.target_bucket != bucket->get_name()) {
-    ldpp_dout(dpp, 1) << "ERROR: bucket name mismatch: '" << conf.target_bucket << "' != '" << bucket->get_name() << "'" << dendl;
+  std::string target_bucket_name;
+  std::string target_tenant_name;
+  std::ignore = rgw_parse_url_bucket(conf.target_bucket, bucket->get_tenant(), target_tenant_name, target_bucket_name);
+  if (target_bucket_name != bucket->get_name() || target_tenant_name != bucket->get_tenant()) {
+    ldpp_dout(dpp, 1) << "ERROR: bucket name mismatch: '" << conf.target_bucket << "' != '" << full_bucket_name(bucket) << "'" << dendl;
     return -EINVAL;
   }
   const auto old_obj = obj_name;
@@ -357,11 +367,19 @@ int log_record(rgw::sal::Driver* driver,
     ldpp_dout(dpp, 1) << "ERROR: only bucket operations are logged" << dendl;
     return -EINVAL;
   }
+  std::string target_bucket_name;
+  std::string target_tenant_name;
+  auto ret = rgw_parse_url_bucket(conf.target_bucket, s->bucket_tenant, target_tenant_name, target_bucket_name);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to parse target bucket '" << conf.target_bucket << "', ret = " << ret << dendl;
+    return ret;
+  }
+  const rgw_bucket target_bucket_id(target_tenant_name, target_bucket_name);
   std::unique_ptr<rgw::sal::Bucket> target_bucket;
-  auto ret = driver->load_bucket(dpp, rgw_bucket(s->bucket_tenant, conf.target_bucket),
+  ret = driver->load_bucket(dpp, target_bucket_id,
                                &target_bucket, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get target logging bucket '" << conf.target_bucket << "'. ret = " << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to get target logging bucket '" << target_bucket_id << "'. ret = " << ret << dendl;
     return ret;
   }
   std::string obj_name;
@@ -420,7 +438,7 @@ int log_record(rgw::sal::Driver* driver,
     bucket_name = s->src_bucket_name;
   } else {
     bucket_owner = to_string( s->bucket->get_owner());
-    bucket_name = s->bucket->get_name();
+    bucket_name = full_bucket_name(s->bucket);
   }
 
   switch (conf.logging_type) {
@@ -459,7 +477,7 @@ int log_record(rgw::sal::Driver* driver,
     case LoggingType::Journal:
       record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} {} {}",
         dash_if_empty(to_string(s->bucket->get_owner())),
-        dash_if_empty(s->bucket->get_name()),
+        dash_if_empty(full_bucket_name(s->bucket)),
         t,
         op_name,
         dash_if_empty_or_null(obj, obj->get_name()),
@@ -543,10 +561,10 @@ int log_record(rgw::sal::Driver* driver,
         return 0;
       }
     }
-    ldpp_dout(dpp, 20) << "INFO: found matching logging configuration of bucket '" << s->bucket->get_name() << 
+    ldpp_dout(dpp, 20) << "INFO: found matching logging configuration of bucket '" << full_bucket_name(s->bucket) << 
       "' configuration: " << configuration.to_json_str() << dendl;
     if (auto ret = log_record(driver, obj, s, op_name, etag, size, configuration, dpp, y, async_completion, log_source_bucket); ret < 0) { 
-      ldpp_dout(dpp, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_name() << 
+      ldpp_dout(dpp, 1) << "ERROR: failed to perform logging for bucket '" << full_bucket_name(s->bucket) << 
         "'. ret=" << ret << dendl;
       return ret;
     }
