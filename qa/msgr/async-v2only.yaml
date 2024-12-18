@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms type: async
+        ms bind msgr2: true
+        ms bind msgr1: false
