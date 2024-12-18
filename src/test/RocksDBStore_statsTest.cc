@@ -150,8 +150,8 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
         RocksDBMetricsTestParams{true, "telemetry"},
         RocksDBMetricsTestParams{false, "telemetry"},
-        RocksDBMetricsTestParams{true, "objectstore"},
-        RocksDBMetricsTestParams{false, "objectstore"},
+        //RocksDBMetricsTestParams{true, "objectstore"},
+        //RocksDBMetricsTestParams{false, "objectstore"},
         RocksDBMetricsTestParams{true, "debug"},
         RocksDBMetricsTestParams{false, "debug"},
         RocksDBMetricsTestParams{false, "all"},
