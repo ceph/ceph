@@ -2593,3 +2593,60 @@ class TestMDSFail(TestAdminCommands):
                               errmsgs=health_warn)
         self.run_ceph_cmd(f'mds fail {mds1_id} --yes-i-really-mean-it')
         self.run_ceph_cmd(f'mds fail {mds2_id} --yes-i-really-mean-it')
+
+
+class TestFSSetMaxMDS(TestAdminCommands):
+
+    def test_when_unhealthy_without_confirm(self):
+        '''
+        Test that command "ceph fs set <fsname> max_mds <num>" without the
+        confirmation flag (--yes-i-really-mean-it) fails when cluster is
+        unhealthy.
+        '''
+        self.gen_health_warn_mds_cache_oversized()
+
+        with self.assertRaises(CommandFailedError) as cfe:
+            self.fs.set_max_mds(2, confirm=False)
+        self.assertEqual(cfe.exception.exitstatus, errno.EPERM)
+
+    def test_when_unhealthy_with_confirm(self):
+        '''
+        Test that command "ceph fs set <fsname> max_mds <num>
+        --yes-i-really-mean-it" runs successfully when cluster is unhealthy.
+        '''
+        self.gen_health_warn_mds_cache_oversized()
+
+        self.fs.set_max_mds(2, confirm=True)
+        self.assertEqual(self.fs.get_var('max_mds'), 2)
+
+    def test_when_mds_trim_without_confirm(self):
+        '''
+        Test that command "ceph fs set <fsname> max_mds <num>" without the
+        confirmation flag (--yes-i-really-mean-it) fails when cluster has
+        MDS_TRIM health warning.
+        '''
+        self.gen_health_warn_mds_trim()
+
+        with self.assertRaises(CommandFailedError) as cfe:
+            self.fs.set_max_mds(2, confirm=False)
+        self.assertEqual(cfe.exception.exitstatus, errno.EPERM)
+
+    def test_when_mds_trim_when_with_confirm(self):
+        '''
+        Test that command "ceph fs set <fsname> max_mds <num>
+        --yes-i-really-mean-it" runs successfully when cluster has MDS_TRIM
+        health warning.
+        '''
+        self.gen_health_warn_mds_trim()
+
+        self.fs.set_max_mds(2, confirm=True)
+        self.assertEqual(self.fs.get_var('max_mds'), 2)
+
+    def test_when_healthy_with_confirm(self):
+        '''
+        Test that command "ceph fs set <fsname> max_mds <num>
+        --yes-i-really-mean-it" runs successfully also when cluster is
+        healthy.
+        '''
+        self.fs.set_max_mds(2, confirm=True)
+        self.assertEqual(self.fs.get_var('max_mds'), 2)

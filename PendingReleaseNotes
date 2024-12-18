@@ -1,3 +1,26 @@
+>=20.0.0
+
+* RBD: All Python APIs that produce timestamps now return "aware" `datetime`
+  objects instead of "naive" ones (i.e. those including time zone information
+  instead of those not including it).  All timestamps remain to be in UTC but
+  including `timezone.utc` makes it explicit and avoids the potential of the
+  returned timestamp getting misinterpreted -- in Python 3, many `datetime`
+  methods treat "naive" `datetime` objects as local times.
+* RBD: `rbd group info` and `rbd group snap info` commands are introduced to
+  show information about a group and a group snapshot respectively.
+* RBD: `rbd group snap ls` output now includes the group snap IDs. The header
+  of the column showing the state of a group snapshot in the unformatted CLI
+  output is changed from 'STATUS' to 'STATE'. The state of a group snapshot
+  that was shown as 'ok' is now shown as 'complete', which is more descriptive.
+
+* CephFS: Modifying the FS setting variable "max_mds" when a cluster is
+  unhealthy now requires users to pass the confirmation flag
+  (--yes-i-really-mean-it). This has been added as a precaution to tell the
+  users that modifying "max_mds" may not help with troubleshooting or recovery
+  effort. Instead, it might further destabilize the cluster.
+
+
+
 >=19.0.0
 
 * RGW: GetObject and HeadObject requests now return a x-rgw-replicated-at
