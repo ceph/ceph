@@ -3793,7 +3793,10 @@ void RGWCreateBucket::execute(optional_yield y)
       s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
 
       /* This will also set the quota on the bucket. */
-      op_ret = s->bucket->merge_and_store_attrs(this, createparams.attrs, y);
+      s->bucket->set_attrs(std::move(createparams.attrs));
+      constexpr bool exclusive = false; // overwrite
+      constexpr ceph::real_time no_set_mtime{};
+      op_ret = s->bucket->put_info(this, exclusive, no_set_mtime, y);
     } while (op_ret == -ECANCELED && tries++ < 20);
 
     /* Restore the proper return code. */
@@ -5194,7 +5197,10 @@ void RGWPutMetadataBucket::execute(optional_yield y)
       /* Setting attributes also stores the provided bucket info. Due
        * to this fact, the new quota settings can be serialized with
        * the same call. */
-      op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
+      s->bucket->set_attrs(attrs);
+      constexpr bool exclusive = false; // overwrite
+      constexpr ceph::real_time no_set_mtime{};
+      op_ret = s->bucket->put_info(this, exclusive, no_set_mtime, s->yield);
       return op_ret;
     }, y);
 }
