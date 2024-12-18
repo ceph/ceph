@@ -1636,26 +1636,38 @@ record_t Cache::prepare_record(
   return record;
 }
 
-void Cache::backref_batch_update(
+void Cache::commit_backref_entries(
   backref_entry_refs_t&& backref_entries,
   const journal_seq_t& seq)
 {
-  LOG_PREFIX(Cache::backref_batch_update);
-  DEBUG("inserting {} entries at {}", backref_entries.size(), seq);
-  ceph_assert(seq != JOURNAL_SEQ_NULL);
-
+  LOG_PREFIX(Cache::commit_backref_entries);
+  DEBUG("backref_entry apply {} entries at {}",
+	backref_entries.size(), seq);
+  assert(seq != JOURNAL_SEQ_NULL);
+  if (backref_entries.empty()) {
+    return;
+  }
   for (auto &entry : backref_entries) {
     backref_entry_mset.insert(*entry);
   }
-
-  auto iter = backref_entryrefs_by_seq.find(seq);
-  if (iter == backref_entryrefs_by_seq.end()) {
-    backref_entryrefs_by_seq.emplace(seq, std::move(backref_entries));
-  } else {
-    iter->second.insert(
-      iter->second.end(),
+  if (backref_entryrefs_by_seq.empty()) {
+    backref_entryrefs_by_seq.insert(
+      backref_entryrefs_by_seq.end(),
+      {seq, std::move(backref_entries)});
+    return;
+  }
+  auto last = backref_entryrefs_by_seq.rbegin();
+  assert(last->first <= seq);
+  if (last->first == seq) {
+    last->second.insert(
+      last->second.end(),
       std::make_move_iterator(backref_entries.begin()),
       std::make_move_iterator(backref_entries.end()));
+  } else {
+    assert(last->first < seq);
+    backref_entryrefs_by_seq.insert(
+      backref_entryrefs_by_seq.end(),
+      {seq, std::move(backref_entries)});
   }
 }
 
@@ -1823,9 +1835,7 @@ void Cache::complete_commit(
       }
     }
   }
-  if (!backref_entries.empty()) {
-    backref_batch_update(std::move(backref_entries), start_seq);
-  }
+  commit_backref_entries(std::move(backref_entries), start_seq);
 
   for (auto &i: t.pre_alloc_list) {
     if (!i->is_valid()) {
@@ -1959,9 +1969,7 @@ Cache::replay_delta(
       backref_entries.emplace_back(
 	backref_entry_t::create(alloc_blk));
     }
-    if (!backref_entries.empty()) {
-      backref_batch_update(std::move(backref_entries), journal_seq);
-    }
+    commit_backref_entries(std::move(backref_entries), journal_seq);
     return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
       std::make_pair(true, nullptr));
   }

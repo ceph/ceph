@@ -1925,9 +1925,9 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
-  void backref_batch_update(
-    backref_entry_refs_t &&,
-    const journal_seq_t &);
+  void commit_backref_entries(
+    backref_entry_refs_t&& backref_entries,
+    const journal_seq_t& seq);
 
   /// Add extent to extents handling dirty and refcounting
   ///
