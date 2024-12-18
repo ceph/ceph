@@ -1287,6 +1287,7 @@ public:
                         std::map<std::string, bufferlist>& attrs,
                         std::map<std::string, bufferlist>* rmattrs,
                         optional_yield y,
+                        bool log_op,
                         ceph::real_time set_mtime = ceph::real_clock::zero());
 
   int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
