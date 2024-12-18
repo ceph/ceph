@@ -5,6 +5,7 @@ import socket
 from typing import List, Any, Tuple, Dict, Optional, cast, TYPE_CHECKING
 
 from mgr_module import HandleCommandResult
+from .service_registry import service_registry_decorator
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, \
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@service_registry_decorator
 class GrafanaService(CephadmService):
     TYPE = 'grafana'
     DEFAULT_SERVICE_PORT = 3000
@@ -283,6 +285,7 @@ class GrafanaService(CephadmService):
         return HandleCommandResult(0, warn_message, '')
 
 
+@service_registry_decorator
 class AlertmanagerService(CephadmService):
     TYPE = 'alertmanager'
     DEFAULT_SERVICE_PORT = 9093
@@ -440,6 +443,7 @@ class AlertmanagerService(CephadmService):
         return HandleCommandResult(0, warn_message, '')
 
 
+@service_registry_decorator
 class PrometheusService(CephadmService):
     TYPE = 'prometheus'
     DEFAULT_SERVICE_PORT = 9095
@@ -720,6 +724,7 @@ class PrometheusService(CephadmService):
         return '/prometheus/federate'
 
 
+@service_registry_decorator
 class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
     DEFAULT_SERVICE_PORT = 9100
@@ -777,6 +782,7 @@ class NodeExporterService(CephadmService):
         return HandleCommandResult(0, out, '')
 
 
+@service_registry_decorator
 class LokiService(CephadmService):
     TYPE = 'loki'
     DEFAULT_SERVICE_PORT = 3100
@@ -798,6 +804,7 @@ class LokiService(CephadmService):
         }, sorted(deps)
 
 
+@service_registry_decorator
 class PromtailService(CephadmService):
     TYPE = 'promtail'
     DEFAULT_SERVICE_PORT = 9080
@@ -835,6 +842,7 @@ class PromtailService(CephadmService):
         }, deps
 
 
+@service_registry_decorator
 class SNMPGatewayService(CephadmService):
     TYPE = 'snmp-gateway'
 

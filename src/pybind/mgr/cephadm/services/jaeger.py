@@ -1,12 +1,14 @@
 from typing import List, cast, Optional, TYPE_CHECKING
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from ceph.deployment.service_spec import TracingSpec, ServiceSpec
+from .service_registry import service_registry_decorator
 from mgr_util import build_url
 
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
 
 
+@service_registry_decorator
 class ElasticSearchService(CephadmService):
     TYPE = 'elasticsearch'
     DEFAULT_SERVICE_PORT = 9200
@@ -16,6 +18,7 @@ class ElasticSearchService(CephadmService):
         return daemon_spec
 
 
+@service_registry_decorator
 class JaegerAgentService(CephadmService):
     TYPE = 'jaeger-agent'
     DEFAULT_SERVICE_PORT = 6799
@@ -47,6 +50,7 @@ class JaegerAgentService(CephadmService):
         return daemon_spec
 
 
+@service_registry_decorator
 class JaegerCollectorService(CephadmService):
     TYPE = 'jaeger-collector'
     DEFAULT_SERVICE_PORT = 14250
@@ -58,6 +62,7 @@ class JaegerCollectorService(CephadmService):
         return daemon_spec
 
 
+@service_registry_decorator
 class JaegerQueryService(CephadmService):
     TYPE = 'jaeger-query'
     DEFAULT_SERVICE_PORT = 16686

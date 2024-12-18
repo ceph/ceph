@@ -5,6 +5,7 @@ import base64
 from urllib.error import HTTPError, URLError
 from typing import List, Any, Dict, Tuple, Optional, MutableMapping, TYPE_CHECKING
 
+from .service_registry import service_registry_decorator
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from ceph.utils import http_req
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
 
 
+@service_registry_decorator
 class NodeProxy(CephService):
     TYPE = 'node-proxy'
 
