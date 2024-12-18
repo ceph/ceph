@@ -1775,7 +1775,6 @@ struct bucket_unordered_list_result {
   std::string prefix;
   int max_keys;
   bool is_truncated;
-  bool allow_unordered;
   std::list<bucket_list_entry> entries;
 
   bucket_unordered_list_result() : max_keys(0), is_truncated(false) {}
@@ -1785,7 +1784,6 @@ struct bucket_unordered_list_result {
     JSONDecoder::decode_json("Prefix", prefix, obj);
     JSONDecoder::decode_json("MaxKeys", max_keys, obj);
     JSONDecoder::decode_json("IsTruncated", is_truncated, obj);
-    JSONDecoder::decode_json("allow-unordered", allow_unordered, obj);
     JSONDecoder::decode_json("Entries", entries, obj);
   }
 };

@@ -1733,6 +1733,7 @@ def test_bucket_log_trim_after_delete_bucket_primary_reshard():
     bilog_autotrim(primary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
     
     for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
         for zone in zonegroup_conns.zones:
             assert check_bucket_instance_metadata(zone.zone, test_bucket.name)
 
@@ -1796,6 +1797,7 @@ def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
     time.sleep(config.checkpoint_delay)
 
     for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
         for zone in zonegroup_conns.zones:
             assert check_bucket_instance_metadata(zone.zone, test_bucket.name)
 
