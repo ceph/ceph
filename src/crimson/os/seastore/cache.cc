@@ -28,14 +28,6 @@ SET_SUBSYS(seastore_cache);
 
 namespace crimson::os::seastore {
 
-std::ostream &operator<<(std::ostream &out, const backref_entry_t &ent) {
-  return out << "backref_entry_t{"
-	     << ent.paddr << "~0x" << std::hex << ent.len << std::dec << ", "
-	     << "laddr: " << ent.laddr << ", "
-	     << "type: " << ent.type
-	     << "}";
-}
-
 Cache::Cache(
   ExtentPlacementManager &epm)
   : epm(epm),
