@@ -39,6 +39,8 @@ class BackrefManager;
 class SegmentProvider;
 
 struct backref_entry_t {
+  using ref_t = std::unique_ptr<backref_entry_t>;
+
   backref_entry_t(
     const paddr_t& paddr,
     const laddr_t& laddr,
@@ -47,7 +49,9 @@ struct backref_entry_t {
     : paddr(paddr),
       laddr(laddr),
       len(len),
-      type(type) {}
+      type(type) {
+    assert(len > 0);
+  }
   paddr_t paddr = P_ADDR_NULL;
   laddr_t laddr = L_ADDR_NULL;
   extent_len_t len = 0;
@@ -96,11 +100,37 @@ struct backref_entry_t {
       return l.paddr < r;
     }
   };
+
+  static ref_t create_alloc(
+      const paddr_t& paddr,
+      const laddr_t& laddr,
+      extent_len_t len,
+      extent_types_t type) {
+    assert(is_backref_mapped_type(type));
+    assert(laddr != L_ADDR_NULL);
+    return std::make_unique<backref_entry_t>(
+      paddr, laddr, len, type);
+  }
+
+  static ref_t create_retire(
+      const paddr_t& paddr,
+      extent_len_t len,
+      extent_types_t type) {
+    assert(is_backref_mapped_type(type) ||
+	   is_retired_placeholder_type(type));
+    return std::make_unique<backref_entry_t>(
+      paddr, L_ADDR_NULL, len, type);
+  }
+
+  static ref_t create(const alloc_blk_t& delta) {
+    return std::make_unique<backref_entry_t>(
+      delta.paddr, delta.laddr, delta.len, delta.type);
+  }
 };
 
 std::ostream &operator<<(std::ostream &out, const backref_entry_t &ent);
 
-using backref_entry_ref = std::unique_ptr<backref_entry_t>;
+using backref_entry_ref = backref_entry_t::ref_t;
 using backref_entry_mset_t = backref_entry_t::multiset_t;
 using backref_entry_refs_t = std::vector<backref_entry_ref>;
 using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_entry_refs_t>;
