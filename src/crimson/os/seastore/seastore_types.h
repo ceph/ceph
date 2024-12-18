@@ -1965,7 +1965,9 @@ struct alloc_blk_t {
     const laddr_t& laddr,
     extent_len_t len,
     extent_types_t type)
-    : paddr(paddr), laddr(laddr), len(len), type(type) {}
+    : paddr(paddr), laddr(laddr), len(len), type(type) {
+    assert(len > 0);
+  }
 
   explicit alloc_blk_t() = default;
 
@@ -1980,6 +1982,25 @@ struct alloc_blk_t {
     denc(v.len, p);
     denc(v.type, p);
     DENC_FINISH(p);
+  }
+
+  static alloc_blk_t create_alloc(
+      const paddr_t& paddr,
+      const laddr_t& laddr,
+      extent_len_t len,
+      extent_types_t type) {
+    assert(is_backref_mapped_type(type));
+    assert(laddr != L_ADDR_NULL);
+    return alloc_blk_t(paddr, laddr, len, type);
+  }
+
+  static alloc_blk_t create_retire(
+      const paddr_t& paddr,
+      extent_len_t len,
+      extent_types_t type) {
+    assert(is_backref_mapped_type(type) ||
+	   is_retired_placeholder_type(type));
+    return alloc_blk_t(paddr, L_ADDR_NULL, len, type);
   }
 };
 

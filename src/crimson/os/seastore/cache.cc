@@ -1358,10 +1358,10 @@ record_t Cache::prepare_record(
     if (is_backref_mapped_type(extent->get_type()) ||
 	is_retired_placeholder_type(extent->get_type())) {
       rel_delta.alloc_blk_ranges.emplace_back(
-	extent->get_paddr(),
-	L_ADDR_NULL,
-	extent->get_length(),
-	extent->get_type());
+	alloc_blk_t::create_retire(
+	  extent->get_paddr(),
+	  extent->get_length(),
+	  extent->get_type()));
     }
   }
   alloc_deltas.emplace_back(std::move(rel_delta));
@@ -1424,10 +1424,11 @@ record_t Cache::prepare_record(
 	alloc_laddr = L_ADDR_MIN;
       }
       alloc_delta.alloc_blk_ranges.emplace_back(
-	i->get_paddr(),
-	alloc_laddr,
-	i->get_length(),
-	i->get_type());
+	alloc_blk_t::create_alloc(
+	  i->get_paddr(),
+	  alloc_laddr,
+	  i->get_length(),
+	  i->get_type()));
     }
   }
 
@@ -1447,10 +1448,11 @@ record_t Cache::prepare_record(
         alloc_laddr = i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin;
       }
       alloc_delta.alloc_blk_ranges.emplace_back(
-	i->get_paddr(),
-	alloc_laddr,
-	i->get_length(),
-	i->get_type());
+	alloc_blk_t::create_alloc(
+	  i->get_paddr(),
+	  alloc_laddr,
+	  i->get_length(),
+	  i->get_type()));
     }
   }
 
@@ -1475,10 +1477,11 @@ record_t Cache::prepare_record(
   for (auto &i: t.existing_block_list) {
     if (i->is_valid()) {
       alloc_delta.alloc_blk_ranges.emplace_back(
-        i->get_paddr(),
-	i->cast<LogicalCachedExtent>()->get_laddr(),
-	i->get_length(),
-	i->get_type());
+	alloc_blk_t::create_alloc(
+	  i->get_paddr(),
+	  i->cast<LogicalCachedExtent>()->get_laddr(),
+	  i->get_length(),
+	  i->get_type()));
     }
   }
   alloc_deltas.emplace_back(std::move(alloc_delta));
@@ -1711,7 +1714,7 @@ void Cache::complete_commit(
 	alloc_laddr = L_ADDR_MIN;
       }
       backref_entries.emplace_back(
-	std::make_unique<backref_entry_t>(
+	backref_entry_t::create_alloc(
 	  i->get_paddr(),
 	  alloc_laddr,
 	  i->get_length(),
@@ -1775,9 +1778,8 @@ void Cache::complete_commit(
 	     extent->get_paddr(),
 	     extent->get_length());
       backref_entries.emplace_back(
-	std::make_unique<backref_entry_t>(
+	backref_entry_t::create_retire(
 	  extent->get_paddr(),
-	  L_ADDR_NULL,
 	  extent->get_length(),
 	  extent->get_type()));
     } else if (is_backref_node(extent->get_type())) {
@@ -1807,7 +1809,7 @@ void Cache::complete_commit(
 	     i->get_paddr(),
 	     i->get_length());
       backref_entries.emplace_back(
-        std::make_unique<backref_entry_t>(
+	backref_entry_t::create_alloc(
 	  i->get_paddr(),
 	  i->cast<LogicalCachedExtent>()->get_laddr(),
 	  i->get_length(),
@@ -1955,11 +1957,7 @@ Cache::replay_delta(
       DEBUG("replay alloc_blk {}~0x{:x} {}, journal_seq: {}",
 	alloc_blk.paddr, alloc_blk.len, alloc_blk.laddr, journal_seq);
       backref_entries.emplace_back(
-	std::make_unique<backref_entry_t>(
-	  alloc_blk.paddr,
-	  alloc_blk.laddr,
-	  alloc_blk.len,
-	  alloc_blk.type));
+	backref_entry_t::create(alloc_blk));
     }
     if (!backref_entries.empty()) {
       backref_batch_update(std::move(backref_entries), journal_seq);
