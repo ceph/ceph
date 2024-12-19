@@ -35,6 +35,7 @@
 #include "osd/OSDMap.h"
 
 #include "MonitorDBStore.h"
+#include "MonitorBackup.h"
 
 #include "messages/PaxosServiceMessage.h"
 #include "messages/MMonMap.h"
@@ -479,7 +480,12 @@ int Monitor::do_admin_command(
 	    << duration << " seconds" << dendl;
     out << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb")
 	<< " in " << duration << " seconds";
- } else {
+  } else if (command == "backup") {
+    // externally requested backups are always full ones
+    r = backup(true);
+  } else if (command == "backup_cleanup") {
+    r = backup_cleanup();
+  } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
   (read_only ? audit_clog->debug() : audit_clog->info())
@@ -496,6 +502,51 @@ abort:
     << "cmd=" << command << " "
     << "args=" << args << ": aborted";
   return r;
+}
+
+int Monitor::backup(bool full)
+{
+  if (!backup_manager) {
+    dout(1) << "backup manager not started" << dendl;
+    return -EIO;
+  }
+  std::string backup_path = g_conf().get_val<string>("mon_backup_path");
+  full |= g_conf().get_val<bool>("mon_backup_always_full");
+  dout(1) << "triggering backup full=" << full << dendl;
+  if (backup_path.empty()) {
+    logger->inc(l_mon_backup_failed);
+    dout(1) << "backup failed: no backup_path configured" << dendl;
+    return -ENOTDIR;
+  }
+  uint64_t jobid = backup_manager->backup(full);
+  if (jobid > 0) {
+    dout(1) << "queues backup job id"
+              << jobid << dendl;
+    return 0;
+  } else {
+    dout(1) << "failed to queue job job" << dendl;
+    return -EIO;
+  }
+}
+
+int Monitor::backup_cleanup()
+{
+  if (!backup_manager) {
+    dout(1) << "backup manager not started" << dendl;
+    return -EIO;
+  }
+  dout(1) << "triggering backup_cleanup" << dendl;
+  logger->inc(l_mon_backup_cleanup_started);
+  std::string backup_path = g_conf().get_val<string>("mon_backup_path");
+  if (backup_path.empty()) {
+    dout(1) << "backup_cleanup failed: no backup_path configured" << dendl;
+    logger->inc(l_mon_backup_cleanup_failed);
+    return -ENOTDIR;
+  }
+  uint32_t jobid = backup_manager->cleanup();
+  dout(1) << "queues backup cleanup job "
+            << jobid << dendl;
+  return jobid > 0 ? 0 : -EIO;
 }
 
 void Monitor::handle_signal(int signum)
@@ -747,6 +798,44 @@ int Monitor::preinit()
         "ewon", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64_counter(l_mon_election_lose, "election_lose", "Elections lost",
         "elst", PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_running, "backup_running", "Mon backup process is running",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_started, "backup_started", "Mon backups started",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_success, "backup_success", "Mon backups finished successfully",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_failed, "backup_failed", "Mon backups failed",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_time_avg(l_mon_backup_duration, "backup_duration", "Mon backup duration",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_time(l_mon_backup_last_success, "backup_last_success", "Last successfull mon backup",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_backup_last_success_id, "backup_last_success_id", "Last successfull mon backup id",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_time(l_mon_backup_last_failed, "backup_last_failed", "Last failed mon backup",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_last_size, "backup_last_size", "Last backup size",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_last_files, "backup_last_files", "Last backup file numbers",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_started, "backup_cleanup_started", "Mon backup cleanup started",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_running, "backup_cleanup_running", "Mon backup cleanup is running",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_cleanup_success, "backup_cleanup_success", "Mon backup cleanup finished successfully",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_cleanup_failed, "backup_cleanup_failed", "Mon backup cleanup failed",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_backup_cleanup_size, "backup_cleanup_size", "Size of backups removed",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_kept, "backup_cleanup_kept", "Number of backups kept after cleanup",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_time_avg(l_mon_backup_cleanup_duration, "backup_cleanup_duration", "Mon backup cleanup duration",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_freed, "backup_cleanup_freed", "Mon backup cleanup freed size in bytes",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_deleted, "backup_cleanup_deleted", "Mon backup cleanup deleted backups",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
@@ -953,6 +1042,9 @@ int Monitor::init()
 
   // add features of myself into feature_map
   session_map.feature_map.add_mon(con_self->get_features());
+  
+  backup_manager = new MonitorBackupManager(cct, this);
+
   return 0;
 }
 
@@ -1048,6 +1140,8 @@ void Monitor::shutdown()
     delete admin_hook;
     admin_hook = NULL;
   }
+  backup_manager->stop();
+  delete backup_manager;
 
   elector.shutdown();
 
@@ -5981,6 +6075,12 @@ void Monitor::tick()
     prepare_new_fingerprint(t);
     paxos->trigger_propose();
   }
+  // trigger backup if required
+  if (mon_backup_requested && g_conf()->mon_auto_backup) {
+      backup();
+      mon_backup_requested = false;
+  }
+  backup_manager->tick();
 
   mgr_client.update_daemon_health(get_health_metrics());
   new_tick();
