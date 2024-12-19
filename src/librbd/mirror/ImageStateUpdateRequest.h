@@ -54,7 +54,7 @@ private:
    * SET_MIRROR_IMAGE
    *    |
    *    v
-   * NOTIFY_MIRRORING_WATCHER
+   * NOTIFY_MIRRORING_WATCHER (skip if not needed)
    *    |
    *    v
    * <finish>
