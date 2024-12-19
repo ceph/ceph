@@ -151,6 +151,11 @@ public:
     return {};
   }
 
+  std::string get_aclowner_tenant() const override {
+    ceph_abort();
+    return {};
+  }
+
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     ceph_abort();
     return 0;
