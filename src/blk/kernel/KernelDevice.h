@@ -58,6 +58,7 @@ private:
   aio_callback_t discard_callback;
   void *discard_callback_priv;
   bool aio_stop;
+  bool need_notify = false;
   std::unique_ptr<PerfCounters> logger;
 
   ceph::mutex discard_lock = ceph::make_mutex("KernelDevice::discard_lock");
