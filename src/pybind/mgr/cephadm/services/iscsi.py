@@ -2,19 +2,35 @@ import errno
 import json
 import logging
 import subprocess
-from typing import List, cast, Optional
+from typing import List, cast, Optional, TYPE_CHECKING
 from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
-from ceph.deployment.service_spec import IscsiServiceSpec
+from ceph.deployment.service_spec import IscsiServiceSpec, ServiceSpec
 
 from orchestrator import DaemonDescription, DaemonDescriptionStatus
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
+from .service_registry import register_cephadm_service
 from .. import utils
+
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
 
+def get_trusted_ips(mgr: "CephadmOrchestrator", spec: IscsiServiceSpec) -> str:
+    # add active mgr ip address to trusted list so dashboard can access
+    trusted_ip_list = spec.trusted_ip_list if spec.trusted_ip_list else ''
+    mgr_ip = mgr.get_mgr_ip()
+    if mgr_ip not in [s.strip() for s in trusted_ip_list.split(',')]:
+        if trusted_ip_list:
+            trusted_ip_list += ','
+        trusted_ip_list += mgr_ip
+    return trusted_ip_list
+
+
+@register_cephadm_service
 class IscsiService(CephService):
     TYPE = 'iscsi'
 
@@ -23,15 +39,15 @@ class IscsiService(CephService):
         assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
-    def get_trusted_ips(self, spec: IscsiServiceSpec) -> str:
-        # add active mgr ip address to trusted list so dashboard can access
-        trusted_ip_list = spec.trusted_ip_list if spec.trusted_ip_list else ''
-        mgr_ip = self.mgr.get_mgr_ip()
-        if mgr_ip not in [s.strip() for s in trusted_ip_list.split(',')]:
-            if trusted_ip_list:
-                trusted_ip_list += ','
-            trusted_ip_list += mgr_ip
-        return trusted_ip_list
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        if spec:
+            iscsi_spec = cast(IscsiServiceSpec, spec)
+            return [get_trusted_ips(mgr, iscsi_spec)]
+        else:
+            return [mgr.get_mgr_ip()]
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -68,8 +84,7 @@ class IscsiService(CephService):
                 'val': key_data,
             })
 
-        trusted_ip_list = self.get_trusted_ips(spec)
-
+        trusted_ip_list = get_trusted_ips(self.mgr, spec)
         context = {
             'client_name': '{}.{}'.format(utils.name_to_config_section('iscsi'), igw_id),
             'trusted_ip_list': trusted_ip_list,
@@ -80,7 +95,7 @@ class IscsiService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'iscsi-gateway.cfg': igw_conf}
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        daemon_spec.deps = [trusted_ip_list]
+        daemon_spec.deps = self.get_dependencies(self.mgr, spec)
         return daemon_spec
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
