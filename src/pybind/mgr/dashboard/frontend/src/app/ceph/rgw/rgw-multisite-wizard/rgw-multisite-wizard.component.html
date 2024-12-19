@@ -55,6 +55,16 @@
                   <span class="invalid-feedback"
                         *ngIf="multisiteSetupForm.showError('realmName', formDir, 'uniqueName')"
                         i18n>The chosen realm name is already in use.</span>
+                  <div class="custom-control custom-checkbox">
+                    <input class="form-check-input"
+                           id="default_realm"
+                           name="default_realm"
+                           formControlName="default_realm"
+                           type="checkbox">
+                    <label class="form-check-label"
+                           for="default_realm"
+                           i18n>Default</label>
+                  </div>
                 </div>
               </div>
               <div class="form-group row">
