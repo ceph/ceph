@@ -1126,12 +1126,12 @@ struct perm_state_from_req_state : public perm_state_base {
 };
 
 Effect eval_or_pass(const DoutPrefixProvider* dpp,
-		    const boost::optional<Policy>& policy,
-		    const rgw::IAM::Environment& env,
-		    boost::optional<const rgw::auth::Identity&> id,
-		    const uint64_t op,
-		    const ARN& resource,
-				boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
+                    const boost::optional<Policy>& policy,
+                    const rgw::IAM::Environment& env,
+                    boost::optional<const rgw::auth::Identity&> id,
+                    const uint64_t op,
+                    const ARN& resource,
+                    boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
   if (!policy)
     return Effect::Pass;
   else
@@ -1321,7 +1321,7 @@ bool verify_requester_payer_permission(struct perm_state_base *s)
 
   if (s->identity->is_owner_of(s->bucket_info.owner))
     return true;
-  
+
   if (s->identity->is_anonymous()) {
     return false;
   }
@@ -1352,6 +1352,15 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 16) << __func__ << ": policy: " << bucket_policy.get()
 		       << " resource: " << arn << dendl;
   }
+
+  // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
+  // deny the request if the requester is not in the bucket owner account
+  const bool restrict_public_buckets = s->bucket_access_conf && s->bucket_access_conf->restrict_public_buckets();
+  if (restrict_public_buckets && bucket_policy && rgw::IAM::is_public(*bucket_policy) && !s->identity->is_owner_of(s->bucket_info.owner)) {
+    ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
+    return false;
+  }
+
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->identity, account_root, op, arn,
       bucket_policy, identity_policies, session_policies);
@@ -1494,6 +1503,14 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
 {
   if (!verify_requester_payer_permission(s))
     return false;
+
+  // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
+  // deny the request if the requester is not in the bucket owner account
+  const bool restrict_public_buckets = s->bucket_access_conf && s->bucket_access_conf->restrict_public_buckets();
+  if (restrict_public_buckets && bucket_policy && rgw::IAM::is_public(*bucket_policy) && !s->identity->is_owner_of(s->bucket_info.owner)) {
+    ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
+    return false;
+  }
 
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->identity, account_root, op, ARN(obj),
