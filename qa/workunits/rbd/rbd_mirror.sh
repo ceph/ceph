@@ -370,6 +370,38 @@ remove_image_retry ${CLUSTER1} ${POOL} ${clone_image}_v2
 wait_for_snap_removed_from_trash ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap}
 remove_image_retry ${CLUSTER2} ${PARENT_POOL} ${parent_image}
 
+if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
+  testlog "check parent snap synced"
+  parent_image=large_parent
+  parent_snap=snap1
+  create_image ${CLUSTER2} ${PARENT_POOL} ${parent_image} 8G
+  rbd --cluster ${CLUSTER2} bench ${PARENT_POOL}/${parent_image} --io-type write \
+        --io-size 4M --io-threads 4 --io-total 8G
+  rbd --cluster ${CLUSTER2} du ${PARENT_POOL}/${parent_image}
+  create_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+  protect_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+
+  clone_image=test_clone1
+  clone_image ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} ${clone_image}
+
+ # Enable both parent and clone images. Test that the clone image data is correct
+ # once the image is present.
+  enable_mirror ${CLUSTER2} ${PARENT_POOL} ${parent_image} snapshot
+  enable_mirror ${CLUSTER2} ${POOL} ${clone_image} snapshot
+  for i in `seq 1 90`; do
+    rbd --cluster ${CLUSTER1} info ${POOL}/${clone_image} &>/dev/null && break
+    sleep 1
+  done
+  rbd --cluster ${CLUSTER1} info ${POOL}/${clone_image}
+  stop_mirror ${CLUSTER1}
+  compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${clone_image}
+  start_mirror ${CLUSTER1}
+  remove_image_retry ${CLUSTER2} ${POOL} ${clone_image}
+  unprotect_snapshot_retry ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+  remove_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+  remove_image_retry ${CLUSTER2} ${PARENT_POOL} ${parent_image}
+fi
+
 testlog "TEST: data pool"
 dp_image=test_data_pool
 create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${dp_image} \
