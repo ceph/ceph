@@ -261,11 +261,10 @@ RecoveryBackend::scan_for_backfill(
 	  }, PGBackend::load_metadata_ertr::assert_all{});
 	}
       });
-    }).then_interruptible([version_map, start=std::move(start), next=std::move(next), this] {
+    }).then_interruptible([version_map, start=std::move(start), next=std::move(next)] {
       BackfillInterval bi;
       bi.begin = std::move(start);
       bi.end = std::move(next);
-      bi.version = pg.get_info().last_update;
       bi.objects = std::move(*version_map);
       logger().debug("{} BackfillInterval filled, leaving, {}",
                      "scan_for_backfill",
