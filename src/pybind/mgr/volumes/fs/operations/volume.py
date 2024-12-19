@@ -12,7 +12,7 @@ from .lock import GlobalLock
 from ..exception import VolumeException, IndexException
 from ..fs_util import create_pool, remove_pool, rename_pool, create_filesystem, \
     remove_filesystem, rename_filesystem, create_mds, volume_exists, listdir
-from .trash import Trash
+from .trash import Trash, open_trashcan
 from mgr_util import open_filesystem, CephfsConnectionException
 from .clone_index import open_clone_index
 
@@ -318,3 +318,12 @@ def open_volume_lockless(vc, volname):
             yield fs_handle
     except CephfsConnectionException as ce:
         raise VolumeException(ce.errno, ce.error_str)
+
+
+@contextmanager
+def open_trashcan_in_vol(volclient, volname, volspec, lock=False):
+        open_vol = open_volume if lock else open_volume_lockless
+
+        with open_vol(volclient, volname) as fs_handle:
+            with open_trashcan(fs_handle, volspec) as trashcan:
+                yield fs_handle, trashcan
