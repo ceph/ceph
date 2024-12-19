@@ -105,7 +105,8 @@ inline std::ostream& operator<<(std::ostream& out,
 auto transform_old_authinfo(const DoutPrefixProvider* dpp,
                             optional_yield y,
                             sal::Driver* driver,
-                            sal::User* user)
+                            sal::User* user,
+                            std::vector<IAM::Policy>* policies_ = nullptr)
   -> tl::expected<std::unique_ptr<Identity>, int>;
 
 // Load the user account and all user/group policies. May throw
