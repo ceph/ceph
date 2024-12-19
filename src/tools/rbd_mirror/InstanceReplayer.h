@@ -19,6 +19,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
+template <typename> class GroupReplayer;
 template <typename> class ImageReplayer;
 template <typename> class InstanceWatcher;
 template <typename> class MirrorStatusUpdater;
@@ -69,6 +70,13 @@ public:
                          const std::string &peer_mirror_uuid,
                          Context *on_finish);
 
+  void acquire_group(InstanceWatcher<ImageCtxT> *instance_watcher,
+                     const std::string &global_group_id, Context *on_finish);
+  void release_group(const std::string &global_group_id, Context *on_finish);
+  void remove_peer_group(const std::string &global_group_id,
+                         const std::string &peer_mirror_uuid,
+                         Context *on_finish);
+
   void release_all(Context *on_finish);
 
   void print_status(Formatter *f);
@@ -85,8 +93,13 @@ private:
    *
    * <uninitialized> <-------------------\
    *    | (init)                         |                    (repeat for each
-   *    v                             STOP_IMAGE_REPLAYER ---\ image replayer)
-   * SCHEDULE_IMAGE_STATE_CHECK_TASK     ^         ^         |
+   *    v                             STOP_GROUP_REPLAYER ---\ group replayer)
+   * SCHEDULE_GROUP_STATE_CHECK_TASK     ^         ^         |
+   *    |                                |         |         |
+   *    v                                |         \---------/
+   * SCHEDULE_IMAGE_STATE_CHECK_TASK     |                    (repeat for each
+   *    |                             STOP_IMAGE_REPLAYER ---\ image replayer)
+   *    |                                ^         ^         |
    *    |                                |         |         |
    *    v          (shut_down)           |         \---------/
    * <initialized> -----------------> WAIT_FOR_OPS
@@ -107,8 +120,10 @@ private:
   mutable ceph::mutex m_lock;
   AsyncOpTracker m_async_op_tracker;
   std::map<std::string, ImageReplayer<ImageCtxT> *> m_image_replayers;
+  std::map<std::string, GroupReplayer<ImageCtxT> *> m_group_replayers;
   Peers m_peers;
   Context *m_image_state_check_task = nullptr;
+  Context *m_group_state_check_task = nullptr;
   Context *m_on_shut_down = nullptr;
   bool m_manual_stop = false;
   bool m_blocklisted = false;
@@ -128,6 +143,19 @@ private:
 
   void schedule_image_state_check_task();
   void cancel_image_state_check_task();
+
+  void start_group_replayer(GroupReplayer<ImageCtxT> *group_replayer);
+  void queue_start_group_replayers();
+  void start_group_replayers(int r);
+
+  void stop_group_replayer(GroupReplayer<ImageCtxT> *group_replayer,
+                           Context *on_finish);
+
+  void stop_group_replayers();
+  void handle_stop_group_replayers(int r);
+
+  void schedule_group_state_check_task();
+  void cancel_group_state_check_task();
 };
 
 } // namespace mirror
