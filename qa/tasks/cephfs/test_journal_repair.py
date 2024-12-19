@@ -7,6 +7,7 @@ import json
 import logging
 from textwrap import dedent
 import time
+import tempfile
 
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
 from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
@@ -403,3 +404,25 @@ class TestJournalRepair(CephFSTestCase):
             "timeout": "1h"
         })
 
+    def test_import_from_empty_file(self):
+        """
+        That the 'journal import' recognizes empty file read and errors out.
+        """
+        fname = tempfile.NamedTemporaryFile(delete=False).name
+        self.mount_a.run_shell(["sudo", "touch", fname])
+        self.fs.fail()
+        import_output = self.fs.journal_tool(["journal", "import", fname], 0)
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        try:
+            self.assertEqual(import_output,
+                             dedent(
+                                 f"""
+                                 undump {fname}
+                                 No-op since empty journal dump file {fname}
+                                 """
+                             ).strip())
+        except AssertionError:
+            raise RuntimeError(f"Unexpected journal-tool result: '{import_output}'")
+        finally:
+            self.mount_a.run_shell(["sudo", "rm", fname])
