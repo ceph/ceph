@@ -717,8 +717,8 @@ TEST_F(BlockDirectoryFixture, MultiExecuteYield)
       }
       {
         request req;
-        //string as response here as the command is only getting queued, not executed
-        //if response type is changed to int then the operation fails
+        /* string as response here as the command is only getting queued, not executed
+           if response type is changed to int then the operation fails */
         response<std::string> resp;
         req.push("DEL", "key3");                  // Command 4
         conn->async_exec(req, resp, yield[ec]);
