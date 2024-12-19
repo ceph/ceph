@@ -7,6 +7,7 @@
 #include "rgw_common.h"
 #define FORTEST_VIRTUAL virtual
 #include "rgw_kms.cc"
+#include "rgw_perf_counters.h"
 
 using ::testing::_;
 using ::testing::Action;
@@ -294,3 +295,81 @@ TEST_F(TestSSEKMS, test_transit_backend_empty_response)
   ASSERT_EQ(res, -EINVAL);
   ASSERT_EQ(actual_key, from_base64(""));
 }
+
+class TestSSEKMSWithTestingKMS : public ::testing::Test {
+ protected:
+  const std::unique_ptr<CephContext> cct;
+  const NoDoutPrefix no_dpp{cct.get(), 1};
+  std::map<std::string, bufferlist> attrs = {
+      {RGW_ATTR_CRYPT_KEYID,
+       []() {
+         bufferlist bl;
+         bl.append("foo");
+         return bl;
+       }()},
+      {RGW_ATTR_CRYPT_KEYSEL, []() {
+         // AES_ECB(32*"#").decrypt(32*"*")
+         bufferlist bl;
+         bl.append(
+             "\xc6\xb1/\x12\xdc\xf7"
+             "e"
+             "\xe3;\xea\x14\xa4x\x1f"
+             "bX"
+             "\xc6\xb1/\x12\xdc\xf7"
+             "e"
+             "\xe3;\xea\x14\xa4x\x1f"
+             "bX");
+         return bl;
+       }()}};
+  TestSSEKMSWithTestingKMS() : cct(new CephContext(CEPH_ENTITY_TYPE_ANY)) {
+    cct->_log->start();
+    cct->_conf.set_val("rgw_crypt_s3_kms_backend", RGW_SSE_KMS_BACKEND_TESTING);
+    cct->_conf.set_val(
+        "rgw_crypt_s3_kms_encryption_keys",
+        "foo=IyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyM=");
+    rgw_perf_start(cct.get());
+  }
+};
+
+TEST_F(
+    TestSSEKMSWithTestingKMS,
+    test_reconstitute_actual_key_from_kms_basics_no_cache) {
+  std::string actual_key;
+  const int ret =
+      reconstitute_actual_key_from_kms(&no_dpp, attrs, null_yield, actual_key);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(actual_key, "********************************");
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_hit), 0);
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_miss), 0);
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_size), 0);
+}
+
+TEST_F(
+    TestSSEKMSWithTestingKMS,
+    test_reconstitute_actual_key_from_kms_basics_cache) {
+  cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "true");
+    
+  auto do_reconstitue = [&]() {
+    std::string actual_key;
+    const int ret =
+	reconstitute_actual_key_from_kms(&no_dpp, attrs, null_yield, actual_key);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(actual_key, "********************************");
+  };
+    
+  do_reconstitue();
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_hit), 0);
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_miss), 1);
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_size), 1);
+
+  do_reconstitue();
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_hit), 1);
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_miss), 1);
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_size), 1);
+
+  do_reconstitue();
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_hit), 2);
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_miss), 1);
+  ASSERT_EQ(perfcounter->get(l_rgw_kms_cache_size), 1);
+}
+

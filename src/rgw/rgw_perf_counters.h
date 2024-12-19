@@ -49,6 +49,10 @@ enum {
   l_rgw_lua_script_ok,
   l_rgw_lua_script_fail,
 
+  l_rgw_kms_cache_hit,
+  l_rgw_kms_cache_miss,
+  l_rgw_kms_cache_size,
+
   l_rgw_last,
 };
 
