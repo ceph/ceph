@@ -80,18 +80,20 @@ void NVMeofGwMonitorClient::init_gw_ssl_opts()
 std::shared_ptr<grpc::ChannelCredentials> NVMeofGwMonitorClient::gw_creds()
 {
   // use insecure channel if no keys/certs defined
-  if (server_cert.empty() && client_key.empty() && client_cert.empty())
+  if (server_cert.empty() && client_key.empty() && client_cert.empty()){
     return grpc::InsecureChannelCredentials();
-  else
+  }
+  else{
     return grpc::SslCredentials(gw_ssl_opts);
+  }
 }
 
 int NVMeofGwMonitorClient::init()
 {
-  dout(10) << dendl;
+  dout(1) << dendl;
   std::string val;
   auto args = argv_to_vec(orig_argc, orig_argv);
-
+  first_beacon = true;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -116,7 +118,7 @@ int NVMeofGwMonitorClient::init()
     }
   }
 
-  dout(10) << "gateway name: " << name <<
+  dout(1) << "gateway name: " << name <<
     " pool:" << pool <<
     " group:" << group <<
     " address: " << gateway_address << dendl;
@@ -155,14 +157,14 @@ int NVMeofGwMonitorClient::init()
   // that we see the initial configuration message
   monc.register_config_callback([this](const std::string &k, const std::string &v){
       // leaving this for debugging purposes
-      dout(10) << "nvmeof config_callback: " << k << " : " << v << dendl;
+      dout(1) << "nvmeof config_callback: " << k << " : " << v << dendl;
       
       return false;
     });
   monc.register_config_notify_callback([this]() {
-      dout(4) << "nvmeof monc config notify callback" << dendl;
+      dout(1) << "nvmeof monc config notify callback" << dendl;
     });
-  dout(4) << "nvmeof Registered monc callback" << dendl;
+  dout(1) << "nvmeof Registered monc callback" << dendl;
 
   int r = monc.init();
   if (r < 0) {
@@ -171,8 +173,8 @@ int NVMeofGwMonitorClient::init()
     client_messenger->wait();
     return r;
   }
-  dout(10) << "nvmeof Registered monc callback" << dendl;
-
+  dout(1) << "nvmeof Registered monc callback" << dendl;
+  client.init();
   r = monc.authenticate();
   if (r < 0) {
     derr << "Authentication failed, did you specify an ID with a valid keyring?" << dendl;
@@ -181,7 +183,7 @@ int NVMeofGwMonitorClient::init()
     client_messenger->wait();
     return r;
   }
-  dout(10) << "monc.authentication done" << dendl;
+  dout(1) << "monc.authentication done" << dendl;
   monc.set_passthrough_monmap();
 
   client_t whoami = monc.get_global_id();
@@ -190,7 +192,7 @@ int NVMeofGwMonitorClient::init()
   objecter.init();
   objecter.enable_blocklist_events();
   objecter.start();
-  client.init();
+  //client.init();
   timer.init();
 
   {
@@ -198,7 +200,7 @@ int NVMeofGwMonitorClient::init()
     tick();
   }
 
-  dout(10) << "Complete." << dendl;
+  dout(1) << "Complete." << dendl;
   return 0;
 }
 
@@ -245,11 +247,10 @@ void NVMeofGwMonitorClient::send_beacon()
       subs.push_back(bsub);
     }
   }
-
   auto group_key = std::make_pair(pool, group);
   NvmeGwClientState old_gw_state;
   // if already got gateway state in the map
-  if (get_gw_state("old map", map, group_key, name, old_gw_state))
+  if (first_beacon == false && get_gw_state("old map", map, group_key, name, old_gw_state))
     gw_availability = ok ? gw_availability_t::GW_AVAILABLE : gw_availability_t::GW_UNAVAILABLE;
   dout(10) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
     " osdmap_epoch " << osdmap_epoch << " gwmap_epoch " << gwmap_epoch << dendl;
@@ -270,18 +271,18 @@ void NVMeofGwMonitorClient::disconnect_panic()
   auto now = std::chrono::steady_clock::now();
   auto elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(now - last_map_time).count();
   if (elapsed_seconds > disconnect_panic_duration) {
-    dout(4) << "Triggering a panic upon disconnection from the monitor, elapsed " << elapsed_seconds << ", configured disconnect panic duration " << disconnect_panic_duration << dendl;
+    dout(1) << "Triggering a panic upon disconnection from the monitor, elapsed " << elapsed_seconds << ", configured disconnect panic duration " << disconnect_panic_duration << dendl;
     throw std::runtime_error("Lost connection to the monitor (beacon timeout).");
   }
 }
 
+
 void NVMeofGwMonitorClient::tick()
 {
   dout(10) << dendl;
-
   disconnect_panic();
   send_beacon();
-
+  first_beacon = false;
   timer.add_event_after(
       g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period").count(),
       new LambdaContext([this](int r){
@@ -294,7 +295,7 @@ void NVMeofGwMonitorClient::shutdown()
 {
   std::lock_guard l(lock);
 
-  dout(4) << "nvmeof Shutting down" << dendl;
+  dout(1) << "nvmeof Shutting down" << dendl;
 
 
   // stop sending beacon first, I use monc to talk with monitors
@@ -342,10 +343,10 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     while (!set_group_id) {
       NVMeofGwMonitorGroupClient monitor_group_client(
           grpc::CreateChannel(monitor_address, gw_creds()));
-      dout(10) << "GRPC set_group_id: " <<  new_gw_state.group_id << dendl;
+      dout(1) << "GRPC set_group_id: " <<  new_gw_state.group_id << dendl;
       set_group_id = monitor_group_client.set_group_id( new_gw_state.group_id);
       if (!set_group_id) {
-	      dout(10) << "GRPC set_group_id failed" << dendl;
+	      dout(1) << "GRPC set_group_id failed" << dendl;
 	      auto retry_timeout = g_conf().get_val<uint64_t>("mon_nvmeofgw_set_group_id_retry");
 	      usleep(retry_timeout);
       }
@@ -362,7 +363,7 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     // to the monitor.
     if (old_gw_state.availability == gw_availability_t::GW_AVAILABLE &&
 	new_gw_state.availability == gw_availability_t::GW_UNAVAILABLE) {
-      dout(4) << "Triggering a panic upon disconnection from the monitor, gw state - unavailable" << dendl;
+      dout(1) << "Triggering a panic upon disconnection from the monitor, gw state - unavailable" << dendl;
       throw std::runtime_error("Lost connection to the monitor (gw map unavailable).");
     }
   }
