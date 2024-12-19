@@ -1,19 +1,22 @@
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
+/* JFW:
 // for testing DELETE ME
 #include <fstream>
 #include <include/types.h>
+*/
 
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 #include <boost/lexical_cast.hpp>
 
-#include "json_spirit/json_spirit_writer_template.h"
+// JFW: we'll be getting rid of this...
+//JFW: #include "json_spirit/json_spirit_writer_template.h"
 
-using namespace json_spirit;
+//JFW: this should expose where we're using this... using namespace json_spirit;
 
-using std::ifstream;
+// JFW: claim is this is undeeded? using std::ifstream;
 using std::pair;
 using std::ostream;
 using std::string;
@@ -35,6 +38,7 @@ void encode_json(const char *name, const JSONObj::data_val& v, Formatter *f)
   }
 }
 
+/* JFW: WHY??
 JSONObjIter::JSONObjIter()
 {
 }
@@ -42,6 +46,7 @@ JSONObjIter::JSONObjIter()
 JSONObjIter::~JSONObjIter()
 {
 }
+*/
 
 void JSONObjIter::set(const JSONObjIter::map_iter_t &_cur, const JSONObjIter::map_iter_t &_last)
 {
@@ -55,9 +60,12 @@ void JSONObjIter::operator++()
     ++cur;
 }
 
-JSONObj *JSONObjIter::operator*()
+// JFW: this is potentially dangerous... we should just use references and hold the
+// values! On another pass, check to see where this is even done, the objects are probably treated
+// as const most of the time, anyway... maybe we can get rid of this completely...
+JSONObj* JSONObjIter::operator*()
 {
-  return cur->second;
+  return cur->second.get();
 }
 
 // does not work, FIXME
@@ -66,13 +74,14 @@ ostream& operator<<(ostream &out, const JSONObj &obj) {
    return out;
 }
 
+/* JFW: it seems clear that we're supposed to be OWNING these pointers...
 JSONObj::~JSONObj()
 {
   for (auto iter = children.begin(); iter != children.end(); ++iter) {
     JSONObj *obj = iter->second;
     delete obj;
   }
-}
+}*/
 
 
 void JSONObj::add_child(string el, JSONObj *obj)
@@ -119,7 +128,7 @@ JSONObj *JSONObj::find_obj(const string& name)
 {
   JSONObjIter iter = find(name);
   if (iter.end())
-    return NULL;
+    return nullptr;
 
   return *iter;
 }
@@ -139,24 +148,27 @@ bool JSONObj::get_data(const string& key, data_val *dest)
  * a JSON Spirit Value, v,  and creates a JSONObj for each
  * child contained in v
  */
-void JSONObj::handle_value(Value v)
+//JFW: void JSONObj::handle_value(json_spirit::Value v)
+void JSONObj::handle_value(boost::json::value& v)
 {
-  if (v.type() == obj_type) {
-    Object temp_obj = v.get_obj();
-    for (Object::size_type i = 0; i < temp_obj.size(); i++) {
-      Pair temp_pair = temp_obj[i];
+// JFW: re-implement in terms of boost::json
+/*
+  if (v.type() == json_spirit::obj_type) {
+    json_spirit::Object temp_obj = v.get_obj();
+    for (json_spirit::Object::size_type i = 0; i < temp_obj.size(); i++) {
+      json_spirit::Pair temp_pair = temp_obj[i];
       string temp_name = temp_pair.name_;
-      Value temp_value = temp_pair.value_;
+      json_spirit::Value temp_value = temp_pair.value_;
       JSONObj *child = new JSONObj;
       child->init(this, temp_value, temp_name);
       add_child(temp_name, child);
     }
-  } else if (v.type() == array_type) {
-    Array temp_array = v.get_array();
-    Value value;
+  } else if (v.type() == json_spirit::array_type) {
+    json_spirit::Array temp_array = v.get_array();
+    json_spirit::Value value;
 
     for (unsigned j = 0; j < temp_array.size(); j++) {
-      Value cur = temp_array[j];
+      json_spirit::Value cur = temp_array[j];
       string temp_name;
 
       JSONObj *child = new JSONObj;
@@ -164,65 +176,79 @@ void JSONObj::handle_value(Value v)
       add_child(child->get_name(), child);
     }
   }
+*/
 }
 
-void JSONObj::init(JSONObj *p, Value v, string n)
+//JFW: void JSONObj::init(JSONObj *p, json_spirit::Value v, string n)
+//JFW: why the extra copy of 'n'??
+void JSONObj::init(JSONObj *p, boost::json::value v, string n)
 {
+// JFW: re-implement in terms of boost::json
+/* JFW:
   name = n;
   parent = p;
   data = v;
 
   handle_value(v);
-  if (v.type() == str_type) {
+  if (v.type() == json_spirit::str_type) {
     val.set(v.get_str(), true);
   } else {
     val.set(json_spirit::write_string(v), false);
   }
   attr_map.insert(pair<string,data_val>(name, val));
+*/
 }
 
+/* JFW:
 JSONObj *JSONObj::get_parent()
 {
   return parent;
 }
+*/
 
+/* JFW:
 bool JSONObj::is_object()
 {
-  return (data.type() == obj_type);
+  return (data.type() == json_spirit::obj_type);
 }
 
 bool JSONObj::is_array()
 {
-  return (data.type() == array_type);
+  return (data.type() == json_spirit::array_type);
 }
+*/
 
 vector<string> JSONObj::get_array_elements()
 {
   vector<string> elements;
-  Array temp_array;
 
-  if (data.type() == array_type)
+// JFW: re-implement in terms of boost.json:
+/*
+  json_spirit::Array temp_array;
+
+  if (data.type() == json_spirit::array_type)
     temp_array = data.get_array();
 
   int array_size = temp_array.size();
   if (array_size > 0)
     for (int i = 0; i < array_size; i++) {
-      Value temp_value = temp_array[i];
+      json_spirit::Value temp_value = temp_array[i];
       string temp_string;
-      temp_string = write(temp_value, raw_utf8);
+      temp_string = write(temp_value, json_spirit::raw_utf8);
       elements.push_back(temp_string);
     }
-
+*/
   return elements;
 }
 
+/* JFW:
 JSONParser::JSONParser() : buf_len(0), success(true)
 {
 }
 
 JSONParser::~JSONParser()
 {
-}
+}*/
 
 
 
@@ -232,36 +258,42 @@ void JSONParser::handle_data(const char *s, int len)
   buf_len += len;
 }
 
+// JFW: why even allow a nullptr buf??  (no check to see if len is valid...)
+// 
 // parse a supplied JSON fragment
 bool JSONParser::parse(const char *buf_, int len)
 {
+ set_failure(); // JFW: i.e. success = false, get rid of this if we can!
+
   if (!buf_) {
-    set_failure();
     return false;
   }
 
   string json_string(buf_, len);
-  success = read(json_string, data);
-  if (success) {
-    handle_value(data);
-    if (data.type() != obj_type &&
-        data.type() != array_type) {
-      if (data.type() == str_type) {
+
+  if(!read(json_string, data)) {
+	return false;
+  }
+
+  handle_value(data);
+
+    if (data.type() != json_spirit::obj_type &&
+        data.type() != json_spirit::array_type) {
+      if (data.type() == json_spirit::str_type) {
         val.set(data.get_str(), true);
       } else {
         const std::string& s = json_spirit::write_string(data);
         if (s.size() == (uint64_t)len) { /* Check if entire string is read */
           val.set(s, false);
         } else {
-          set_failure();
+	  return false;
         }
       }
     }
-  } else {
-    set_failure();
   }
 
-  return success;
+  success = true;
+  return true;
 }
 
 // parse the internal json_buffer up to len
@@ -289,6 +321,7 @@ bool JSONParser::parse()
   return success;
 }
 
+/* JFW:
 // parse a supplied ifstream, for testing. DELETE ME
 bool JSONParser::parse(const char *file_name)
 {
@@ -300,7 +333,7 @@ bool JSONParser::parse(const char *file_name)
     set_failure();
 
   return success;
-}
+}*/
 
 
 void decode_json_obj(long& val, JSONObj *obj)
@@ -503,11 +536,12 @@ void decode_json_obj(ceph::coarse_real_time& val, JSONObj *obj)
   uint64_t epoch;
   uint64_t nsec;
   int r = utime_t::parse_date(s, &epoch, &nsec);
+  if (!r)
+    throw JSONDecoder::err("failed to decode coarse_real_time");
   if (r == 0) {
     using namespace std::chrono;
     val = coarse_real_time{seconds(epoch) + nanoseconds(nsec)};
   } else {
-    throw JSONDecoder::err("failed to decode coarse_real_time");
   }
 }
 
@@ -893,6 +927,7 @@ int JSONFormattable::erase(const string& name)
     }
   }
 
+// JFW: carefully examine this, will it leak?:
   if (!parent) {
     *this = JSONFormattable(); /* erase everything */
   } else {
@@ -945,6 +980,8 @@ void JSONFormattable::encode_json(const char *name, Formatter *f) const
   }
 }
 
+// JFW: why does this always return false..? Ah, false means "continue processing"... recommend
+// replacing with enumeration in future project
 bool JSONFormattable::handle_value(std::string_view name, std::string_view s, bool quoted) {
   JSONFormattable *new_val;
   if (cur_enc->is_array()) {
