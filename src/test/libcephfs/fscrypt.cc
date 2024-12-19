@@ -306,7 +306,6 @@ TEST(FSCrypt, UnlockKeyUserDNE) {
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
   ASSERT_EQ(2, arg.removal_status_flags);
-
   ceph_shutdown(cmount);
 }
 
@@ -330,7 +329,6 @@ TEST(FSCrypt, UnlockKeyDNE) {
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(-ENOKEY, r);
   ASSERT_EQ(0, arg.removal_status_flags);
-
   ceph_shutdown(cmount);
 }
 
@@ -352,7 +350,6 @@ TEST(FSCrypt, SetPolicyEmptyDir) {
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, arg.removal_status_flags);
-
   ceph_shutdown(cmount);
 }
 
@@ -468,7 +465,6 @@ TEST(FSCrypt, SetPolicyNonDir) {
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(-ENOTDIR, r);
   ceph_close(cmount, fd);
-
   ceph_shutdown(cmount);
 }
 
@@ -947,6 +943,79 @@ TEST(FSCrypt, RemoveBusyCreate) {
 
   ceph_unlink(cmount, src_path.c_str());
   ceph_rmdir(cmount, dir_path.c_str());
+  ceph_unmount(cmount);
+  ceph_shutdown(cmount);
+}
+
+TEST(FSCrypt, QuerySEncryptFlag) {
+  struct ceph_fscrypt_key_identifier kid;
+
+  struct ceph_mount_info *cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  //add dir
+  string dir_path = "sencrypt_test_dir1";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  int fd1 = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+
+  //query S_ENCRYPTED flag with statx on non encrypted directory
+  struct ceph_statx stx;
+  r = ceph_statx(cmount, dir_path.c_str(), &stx,
+                     CEPH_STATX_ALL_STATS,
+                     0);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, stx.stx_attributes & STATX_ATTR_ENCRYPTED);
+
+  //query S_ENCRYPTED flag with ioctl on non encr directory
+  int file_attr_out;
+  r = get_inode_flags(cmount, fd1, &file_attr_out);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, file_attr_out & FS_ENCRYPT_FL);
+
+  // enable fscrypt
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  ASSERT_EQ(0, r);
+  struct fscrypt_policy_v2 policy;
+  policy.version = 2;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+  r = ceph_set_fscrypt_policy_v2(cmount, fd1, &policy);
+  ASSERT_EQ(0, r);
+
+  //add file to encrypted directory
+  string file_path = "sencrypt_test_file";
+  string path = "";
+  path.append(dir_path);
+  path.append("/");
+  path.append(file_path);
+  int fd2 = ceph_open(cmount, path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_write(cmount, fd2, fscrypt_key, sizeof(fscrypt_key), 0);
+  ASSERT_EQ(32, r);
+  ceph_close(cmount, fd1);
+
+  //query S_ENCRYPTED flag with statx on encrypted file
+  r = ceph_statx(cmount, path.c_str(), &stx,
+                     CEPH_STATX_ALL_STATS,
+                     0);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(STATX_ATTR_ENCRYPTED, stx.stx_attributes & STATX_ATTR_ENCRYPTED);
+
+  //query S_ENCRYPTED flag with ioctl on encrypted file
+  r = get_inode_flags(cmount, fd2, &file_attr_out);
+  ASSERT_EQ(FS_ENCRYPT_FL, file_attr_out & FS_ENCRYPT_FL);
+
+  // cleanup
+  ceph_close(cmount, fd2);
+  ceph_unlink(cmount, file_path.c_str());
+  ceph_rmdir(cmount, dir_path.c_str());
+  fscrypt_remove_key_arg arg;
+  generate_remove_key_arg(kid, &arg);
+  r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, arg.removal_status_flags);
   ceph_shutdown(cmount);
 }
 
