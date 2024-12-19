@@ -3,14 +3,13 @@
 
 #pragma once
 
-#include <iostream>
-
 #include "seastar/core/shared_future.hh"
 
 #include "include/buffer.h"
 
 #include "crimson/common/errorator.h"
 #include "crimson/common/errorator-loop.h"
+#include "crimson/os/seastore/backref_entry.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/logging.h"
@@ -37,86 +36,6 @@ template <
 class FixedKVBtree;
 class BackrefManager;
 class SegmentProvider;
-
-struct backref_entry_t {
-  backref_entry_t(
-    const paddr_t paddr,
-    const laddr_t laddr,
-    const extent_len_t len,
-    const extent_types_t type,
-    const journal_seq_t seq)
-    : paddr(paddr),
-      laddr(laddr),
-      len(len),
-      type(type),
-      seq(seq)
-  {}
-  backref_entry_t(alloc_blk_t alloc_blk)
-    : paddr(alloc_blk.paddr),
-      laddr(alloc_blk.laddr),
-      len(alloc_blk.len),
-      type(alloc_blk.type)
-  {}
-  paddr_t paddr = P_ADDR_NULL;
-  laddr_t laddr = L_ADDR_NULL;
-  extent_len_t len = 0;
-  extent_types_t type =
-    extent_types_t::ROOT;
-  journal_seq_t seq;
-  friend bool operator< (
-    const backref_entry_t &l,
-    const backref_entry_t &r) {
-    return l.paddr < r.paddr;
-  }
-  friend bool operator> (
-    const backref_entry_t &l,
-    const backref_entry_t &r) {
-    return l.paddr > r.paddr;
-  }
-  friend bool operator== (
-    const backref_entry_t &l,
-    const backref_entry_t &r) {
-    return l.paddr == r.paddr;
-  }
-
-  using set_hook_t =
-    boost::intrusive::set_member_hook<
-      boost::intrusive::link_mode<
-	boost::intrusive::auto_unlink>>;
-  set_hook_t backref_set_hook;
-  using backref_set_member_options = boost::intrusive::member_hook<
-    backref_entry_t,
-    set_hook_t,
-    &backref_entry_t::backref_set_hook>;
-  using multiset_t = boost::intrusive::multiset<
-    backref_entry_t,
-    backref_set_member_options,
-    boost::intrusive::constant_time_size<false>>;
-
-  struct cmp_t {
-    using is_transparent = paddr_t;
-    bool operator()(
-      const backref_entry_t &l,
-      const backref_entry_t &r) const {
-      return l.paddr < r.paddr;
-    }
-    bool operator()(const paddr_t l, const backref_entry_t &r) const {
-      return l < r.paddr;
-    }
-    bool operator()(const backref_entry_t &l, const paddr_t r) const {
-      return l.paddr < r;
-    }
-  };
-};
-
-std::ostream &operator<<(std::ostream &out, const backref_entry_t &ent);
-
-using backref_entry_ref = std::unique_ptr<backref_entry_t>;
-using backref_entry_mset_t = backref_entry_t::multiset_t;
-using backref_entry_refs_t = std::vector<backref_entry_ref>;
-using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_entry_refs_t>;
-using backref_entry_query_set_t = std::set<
-    backref_entry_t, backref_entry_t::cmp_t>;
 
 /**
  * Cache
@@ -984,7 +903,7 @@ private:
     for (auto it = start_iter;
 	 it != end_iter;
 	 it++) {
-      res.emplace(it->paddr, it->laddr, it->len, it->type, it->seq);
+      res.emplace(it->paddr, it->laddr, it->len, it->type);
     }
     return res;
   }
@@ -1907,9 +1826,23 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
-  void backref_batch_update(
-    std::vector<backref_entry_ref> &&,
-    const journal_seq_t &);
+  void apply_backref_mset(
+      backref_entry_refs_t& backref_entries) {
+    for (auto& entry : backref_entries) {
+      backref_entry_mset.insert(*entry);
+    }
+  }
+
+  void apply_backref_byseq(
+      backref_entry_refs_t&& backref_entries,
+      const journal_seq_t& seq);
+
+  void commit_backref_entries(
+      backref_entry_refs_t&& backref_entries,
+      const journal_seq_t& seq) {
+    apply_backref_mset(backref_entries);
+    apply_backref_byseq(std::move(backref_entries), seq);
+  }
 
   /// Add extent to extents handling dirty and refcounting
   ///
