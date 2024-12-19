@@ -8,6 +8,7 @@ conveniently.
 from os.path import join as os_path_join
 from typing import Optional
 from logging import getLogger
+from threading import Event
 
 from .operations.volume import open_volume_lockless, list_volumes
 from .operations.subvolume import open_clone_subvol_pair_in_vol, open_subvol_in_vol
@@ -111,10 +112,22 @@ class CloneProgressReporter:
         # progress event ID for ongoing+pending clone jobs
         self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clones'
 
+        # Make RTimer thread wait for new clones for a minute before initiating
+        # the finish procedure. If a new clone is launched during that period
+        # (which will cause initiate_reporting() to be called), set the
+        # internal flag in this Event. Then, finish procedure won't be invoked
+        # so that RTimer thread can continue reporting progress of cloning.
+        self.wait_before_finish = Event()
+        self.wait_before_finish.clear()
+
     def initiate_reporting(self):
         if self.update_task.is_alive():
             log.info('progress reporting thread is already alive, not '
                      'initiating it again')
+
+            if not self.wait_before_finish.is_set():
+                self.wait_before_finish.set()
+
             return
 
         log.info('initiating progress reporting for clones...')
@@ -302,6 +315,14 @@ class CloneProgressReporter:
         '''
         All cloning jobs have been completed. Terminate this RTimer thread.
         '''
+        log.debug('waiting for 60 sec before finishing')
+        self.wait_before_finish.clear()
+        self.wait_before_finish.wait(timeout=60)
+        if self.wait_before_finish.is_set():
+            log.debug('new clone has been launched, aborting finish')
+            return
+
+        log.debug('proceeding to finish clone progress bar')
         self._finish_progress_events()
 
         log.info(f'marking this RTimer thread as finished; thread object ID - {self}')
