@@ -299,6 +299,7 @@ target_link_libraries(rgw_common
     cls_version_client
     librados
     libneorados
+    keyring
     rt
     ICU::uc
     OATH::OATH
