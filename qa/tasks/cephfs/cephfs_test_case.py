@@ -120,6 +120,8 @@ class CephFSTestCase(CephTestCase):
 
     def setUp(self):
         super(CephFSTestCase, self).setUp()
+        log.info('Running CephFSTestCase.setUp() now.')
+        self._log_monmap_and_fsmap()
 
         self.config_set('mon', 'mon_allow_pool_delete', True)
 
@@ -188,7 +190,7 @@ class CephFSTestCase(CephTestCase):
 
             # Mount the requested number of clients
             for i in range(0, self.CLIENTS_REQUIRED):
-                self.mounts[i].mount_wait()
+                self.mounts[i].mount_wait(cephfs_name=self.fs.name)
 
         if self.REQUIRE_BACKUP_FILESYSTEM:
             if not self.REQUIRE_FILESYSTEM:
@@ -206,7 +208,13 @@ class CephFSTestCase(CephTestCase):
 
         self.configs_set = set()
 
+        log.info('Finished running CephFSTestCase.setUp().')
+        self._log_monmap_and_fsmap()
+
     def tearDown(self):
+        log.info('Running CephFSTestCase.tearDown() now.')
+        self._log_monmap_and_fsmap()
+
         self.mds_cluster.clear_firewall()
         for m in self.mounts:
             m.teardown()
@@ -220,7 +228,13 @@ class CephFSTestCase(CephTestCase):
         for subsys, key in self.configs_set:
             self.mds_cluster.clear_ceph_conf(subsys, key)
 
+        log.info('Finished running CephFSTestCase.tearDown().')
+        self._log_monmap_and_fsmap()
         return super(CephFSTestCase, self).tearDown()
+
+    def _log_monmap_and_fsmap(self):
+        self.run_ceph_cmd('mon dump --format json-pretty')
+        self.run_ceph_cmd('fs dump --format json-pretty')
 
     def set_conf(self, subsys, key, value):
         self.configs_set.add((subsys, key))
