@@ -146,7 +146,7 @@ public:
   bool need_to_log_data() const;
   bool need_to_log_metadata() const;
   bool can_reshard() const;
-  bool is_syncing_bucket_meta(const rgw_bucket& bucket);
+  bool is_syncing_bucket_meta() const;
 
   int list_zonegroups(const DoutPrefixProvider *dpp, std::list<std::string>& zonegroups);
   int list_regions(const DoutPrefixProvider *dpp, std::list<std::string>& regions);
