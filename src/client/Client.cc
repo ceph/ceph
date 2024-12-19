@@ -1012,60 +1012,119 @@ void Client::_fragmap_remove_stopped_mds(Inode *in, mds_rank_t mds)
       ++p;
 }
 
-Inode * Client::add_update_inode(InodeStat *st, utime_t from,
-				 MetaSession *session,
-				 const UserPerm& request_perms)
+Inode* Client::add_update_inode(InodeStat* st, utime_t from, MetaSession* session, const UserPerm& request_perms)
 {
-  Inode *in;
-  bool was_new = false;
-  auto [it, b] = inode_map.try_emplace(st->vino);
-  if (!b) {
-    in = it->second;
-    ldout(cct, 12) << __func__ << " had " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
-  } else {
-    in = new Inode(this, st->vino, &st->layout);
-    it->second = in;
+    Inode* in;
+    bool was_new = false;
+    auto b = inode_map.try_emplace(st->vino, nullptr).second;
 
-    if (use_faked_inos())
-      _assign_faked_ino(in);
-
-    if (!root) {
-      root = in;
-      if (use_faked_inos())
-        _assign_faked_root(root.get());
-      root_ancestor = in;
-      cwd = root;
-    } else if (is_mounting()) {
-      root_parents[root_ancestor] = in;
-      root_ancestor = in;
+    if (!b) {
+        in = inode_map[st->vino];
+        ldout(cct, 12) << __func__ << " had " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
+    } else {
+        in = create_new_inode(st);
+        was_new = true;
     }
 
-    // immutable bits
+    // Update common inode attributes
+    update_inode_common_attributes(in, st);
+
+    // Determine version update and prepare for snapdir attribute refresh
+    bool need_snapdir_attr_refresh = false;
+    int issued, new_issued;
+    bool new_version = should_update_inode_version(in, st, issued, new_issued, need_snapdir_attr_refresh);
+
+    // Update inode attributes
+    update_inode_attributes(in, st, new_version, issued, new_issued, need_snapdir_attr_refresh);
+
+    // Update xattr and inline data
+    update_xattr_and_inline_data(in, st, need_snapdir_attr_refresh, issued);
+
+    // Update change attributes
+    update_change_attr(in, st);
+
+    // Update inode version
+    if (st->version > in->version) {
+        in->version = st->version;
+    }
+
+    // Log new inode
+    if (was_new) {
+        ldout(cct, 12) << __func__ << " adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
+    }
+
+    // Handle caps if present
+    if (st->cap.caps) {
+        handle_snap_and_caps(in, st, session, request_perms, issued);
+    }
+
+    // Refresh snapdir attributes if needed
+    if (need_snapdir_attr_refresh && in->is_dir() && in->snapid == CEPH_NOSNAP) {
+        refresh_snapdir_attrs_for_directory(in);
+    }
+
+    return in;
+}
+
+Inode* Client::create_new_inode(InodeStat* st)
+{
+    Inode* in = new Inode(this, st->vino, &st->layout);
+    inode_map[st->vino] = in;
+
+    if (use_faked_inos()) {
+        _assign_faked_ino(in);
+    }
+
+    if (!root) {
+        root = in;
+        if (use_faked_inos()) {
+            _assign_faked_root(root.get());
+        }
+        root_ancestor = in;
+        cwd = root;
+    } else if (is_mounting()) {
+        root_parents[root_ancestor] = in;
+        root_ancestor = in;
+    }
+
     in->ino = st->vino.ino;
     in->snapid = st->vino.snapid;
     in->mode = st->mode & S_IFMT;
-    was_new = true;
-  }
+    return in;
+}
 
-  in->rdev = st->rdev;
-  if (in->is_symlink())
-    in->symlink = st->symlink;
+void Client::update_inode_common_attributes(Inode* in, InodeStat* st)
+{
+    in->rdev = st->rdev;
 
-  // only update inode if mds info is strictly newer, or it is the same and projected (odd).
-  bool new_version = false;
-  if (in->version == 0 ||
-      ((st->cap.flags & CEPH_CAP_FLAG_AUTH) &&
-       (in->version & ~1) < st->version))
-    new_version = true;
+    if (in->is_symlink()) {
+        in->symlink = st->symlink;
+    }
+}
 
-  int issued;
-  in->caps_issued(&issued);
-  issued |= in->caps_dirty();
-  int new_issued = ~issued & (int)st->cap.caps;
+bool Client::should_update_inode_version(Inode* in, InodeStat* st, int& issued, int& new_issued, bool& need_snapdir_attr_refresh)
+{
+    bool new_version = (in->version == 0) || 
+        ((st->cap.flags & CEPH_CAP_FLAG_AUTH) && (in->version & ~1) < st->version);
 
-  bool need_snapdir_attr_refresh = false;
-  if ((new_version || (new_issued & CEPH_CAP_AUTH_SHARED)) &&
-      !(issued & CEPH_CAP_AUTH_EXCL)) {
+    in->caps_issued(&issued);
+    issued |= in->caps_dirty();
+    new_issued = ~issued & static_cast<int>(st->cap.caps);
+
+    if ((new_version || (new_issued & CEPH_CAP_AUTH_SHARED)) && !(issued & CEPH_CAP_AUTH_EXCL)) {
+        update_inode_auth_attributes(in, st);
+        need_snapdir_attr_refresh = true;
+    }
+
+    if ((new_version || (new_issued & CEPH_CAP_LINK_SHARED)) && !(issued & CEPH_CAP_LINK_EXCL)) {
+        in->nlink = st->nlink;
+    }
+
+    return new_version;
+}
+
+void Client::update_inode_auth_attributes(Inode* in, InodeStat* st)
+{
     in->mode = st->mode;
     in->uid = st->uid;
     in->gid = st->gid;
@@ -1073,118 +1132,103 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->snap_btime = st->snap_btime;
     in->snap_metadata = st->snap_metadata;
     in->fscrypt_auth = st->fscrypt_auth;
-    need_snapdir_attr_refresh = true;
-  }
-
-  if ((new_version || (new_issued & CEPH_CAP_LINK_SHARED)) &&
-      !(issued & CEPH_CAP_LINK_EXCL)) {
-    in->nlink = st->nlink;
-  }
-
-  if (new_version || (new_issued & CEPH_CAP_ANY_RD)) {
-    need_snapdir_attr_refresh = true;
-    update_inode_file_time(in, issued, st->time_warp_seq,
-			   st->ctime, st->mtime, st->atime);
-  }
-
-  if (new_version ||
-      (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
-    in->layout = st->layout;
-    in->fscrypt_file = st->fscrypt_file;
-    update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
-  }
-
-  if (in->is_dir()) {
-    if (new_version || (new_issued & CEPH_CAP_FILE_SHARED)) {
-      in->dirstat = st->dirstat;
-    }
-    // dir_layout/rstat/quota are not tracked by capability, update them only if
-    // the inode stat is from auth mds
-    if (new_version || (st->cap.flags & CEPH_CAP_FLAG_AUTH)) {
-      in->dir_layout = st->dir_layout;
-      ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
-      in->rstat = st->rstat;
-      in->quota = st->quota;
-      in->dir_pin = st->dir_pin;
-    }
-    // move me if/when version reflects fragtree changes.
-    if (in->dirfragtree != st->dirfragtree) {
-      in->dirfragtree = st->dirfragtree;
-      _fragmap_remove_non_leaves(in);
-    }
-  }
-
-  if ((in->xattr_version  == 0 || !(issued & CEPH_CAP_XATTR_EXCL)) &&
-      st->xattrbl.length() &&
-      st->xattr_version > in->xattr_version) {
-    auto p = st->xattrbl.cbegin();
-    decode(in->xattrs, p);
-    in->xattr_version = st->xattr_version;
-    need_snapdir_attr_refresh = true;
-  }
-
-  if (st->inline_version > in->inline_version) {
-    in->inline_data = st->inline_data;
-    in->inline_version = st->inline_version;
-  }
-
-  /* always take a newer change attr */
-  ldout(cct, 12) << __func__ << " client inode change_attr: " << in->change_attr << " , mds inodestat change_attr:  " << st->change_attr << dendl;
-  if (st->change_attr > in->change_attr)
-    in->change_attr = st->change_attr;
-
-  if (st->version > in->version)
-    in->version = st->version;
-
-  if (was_new)
-    ldout(cct, 12) << __func__ << " adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
-
-  if (!st->cap.caps)
-    return in;   // as with readdir returning indoes in different snaprealms (no caps!)
-
-  if (in->snapid == CEPH_NOSNAP) {
-    add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.wanted,
-		   st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm),
-		   st->cap.flags, request_perms);
-    if (in->auth_cap && in->auth_cap->session == session) {
-      in->max_size = st->max_size;
-      in->rstat = st->rstat;
-    }
-
-    // setting I_COMPLETE needs to happen after adding the cap
-    if (in->is_dir() &&
-	(st->cap.caps & CEPH_CAP_FILE_SHARED) &&
-	(issued & CEPH_CAP_FILE_EXCL) == 0 &&
-	in->dirstat.nfiles == 0 &&
-	in->dirstat.nsubdirs == 0) {
-      ldout(cct, 10) << " marking (I_COMPLETE|I_DIR_ORDERED) on empty dir " << *in << dendl;
-      in->flags |= I_COMPLETE | I_DIR_ORDERED;
-      if (in->dir) {
-	ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
-		       << in->dir->dentries.size() << " entries, marking all dentries null" << dendl;
-	in->dir->readdir_cache.clear();
-	for (const auto& p : in->dir->dentries) {
-	  unlink(p.second, true, true);  // keep dir, keep dentry
-	}
-	if (in->dir->dentries.empty())
-	  close_dir(in->dir);
-      }
-    }
-  } else {
-    in->snap_caps |= st->cap.caps;
-  }
-
-  if (need_snapdir_attr_refresh && in->is_dir() && in->snapid == CEPH_NOSNAP) {
-    vinodeno_t vino(in->ino, CEPH_SNAPDIR);
-    auto it = inode_map.find(vino);
-    if (it != inode_map.end()) {
-      refresh_snapdir_attrs(it->second, in);
-    }
-  }
-
-  return in;
 }
 
+void Client::update_inode_attributes(Inode* in, InodeStat* st, bool new_version, int issued, int new_issued, bool& need_snapdir_attr_refresh)
+{
+    if (new_version || (new_issued & CEPH_CAP_ANY_RD)) {
+        need_snapdir_attr_refresh = true;
+        update_inode_file_time(in, issued, st->time_warp_seq, st->ctime, st->mtime, st->atime);
+    }
+
+    if (new_version || (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
+        in->layout = st->layout;
+        in->fscrypt_file = st->fscrypt_file;
+        update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
+    }
+
+    if (in->is_dir()) {
+        if (new_version || (new_issued & CEPH_CAP_FILE_SHARED)) {
+            in->dirstat = st->dirstat;
+        }
+
+        if (new_version || (st->cap.flags & CEPH_CAP_FLAG_AUTH)) {
+            update_inode_directory_attributes(in, st);
+        }
+
+        if (in->dirfragtree != st->dirfragtree) {
+            in->dirfragtree = st->dirfragtree;
+            _fragmap_remove_non_leaves(in);
+        }
+    }
+}
+
+void Client::update_inode_directory_attributes(Inode* in, InodeStat* st)
+{
+    in->dir_layout = st->dir_layout;
+    ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
+    in->rstat = st->rstat;
+    in->quota = st->quota;
+    in->dir_pin = st->dir_pin;
+}
+
+void Client::update_xattr_and_inline_data(Inode* in, InodeStat* st, bool& need_snapdir_attr_refresh, int issued)
+{
+    if ((in->xattr_version == 0 || !(issued & CEPH_CAP_XATTR_EXCL)) &&
+        st->xattrbl.length() && st->xattr_version > in->xattr_version) {
+        auto p = st->xattrbl.cbegin();
+        decode(in->xattrs, p);
+        in->xattr_version = st->xattr_version;
+        need_snapdir_attr_refresh = true;
+    }
+
+    if (st->inline_version > in->inline_version) {
+        in->inline_data = st->inline_data;
+        in->inline_version = st->inline_version;
+    }
+}
+
+void Client::update_change_attr(Inode* in, InodeStat* st)
+{
+    ldout(cct, 12) << __func__ << " client inode change_attr: " << in->change_attr << " , mds inodestat change_attr:  " << st->change_attr << dendl;
+    if (st->change_attr > in->change_attr) {
+        in->change_attr = st->change_attr;
+    }
+}
+
+void Client::handle_snap_and_caps(Inode* in, InodeStat* st, MetaSession* session, const UserPerm& request_perms, int issued)
+{
+    if (in->snapid == CEPH_NOSNAP) {
+        add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.wanted,
+                       st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm),
+                       st->cap.flags, request_perms);
+        if (in->auth_cap && in->auth_cap->session == session) {
+            in->max_size = st->max_size;
+            in->rstat = st->rstat;
+        }
+
+        if (in->is_dir() && (st->cap.caps & CEPH_CAP_FILE_SHARED) &&
+            (issued & CEPH_CAP_FILE_EXCL) == 0 && in->dirstat.nfiles == 0 &&
+            in->dirstat.nsubdirs == 0) {
+            ldout(cct, 10) << " marking (I_COMPLETE|I_DIR_ORDERED) on empty dir " << *in << dendl;
+            in->flags |= I_COMPLETE | I_DIR_ORDERED;
+            if (in->dir) {
+                ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
+                               << in->dir->dentries.size() << " entries, marking all dentries null" << dendl;
+                in->dir->readdir_cache.clear();
+            }
+        }
+    }
+}
+
+void Client::refresh_snapdir_attrs_for_directory(Inode* in)
+{
+  vinodeno_t vino(in->ino, CEPH_SNAPDIR);
+  auto it = inode_map.find(vino);
+  if (it != inode_map.end()) {
+      refresh_snapdir_attrs(it->second, in);
+  }
+}
 
 /*
  * insert_dentry_inode - insert + link a single dentry + inode into the metadata cache.
