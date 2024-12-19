@@ -117,8 +117,8 @@ public:
     return get_decoratee().get_account();
   }
 
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override {  /* out */
-    return get_decoratee().load_acct_info(dpp, user_info);
+  auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override {  /* out */
+    return get_decoratee().load_acct_info(dpp);
   }
 
   void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override {     /* in/out */
@@ -152,7 +152,7 @@ public:
   }
 
   void to_str(std::ostream& out) const override;
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override;   /* out */
+  auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override;   /* out */
 };
 
 /* static declaration: UNKNOWN_ACCT will be an empty rgw_user that is a result
@@ -169,23 +169,25 @@ void ThirdPartyAccountApplier<T>::to_str(std::ostream& out) const
 }
 
 template <typename T>
-void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const
+auto ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User>
 {
+  std::unique_ptr<rgw::sal::User> luser;
   if (UNKNOWN_ACCT == acct_user_override) {
     /* There is no override specified by the upper layer. This means that we'll
      * load the account owned by the authenticated identity (aka auth_user). */
-    DecoratedApplier<T>::load_acct_info(dpp, user_info);
+    luser = DecoratedApplier<T>::load_acct_info(dpp);
   } else if (DecoratedApplier<T>::is_owner_of(acct_user_override)) {
     /* The override has been specified but the account belongs to the authenticated
      * identity. We may safely forward the call to a next stage. */
-    DecoratedApplier<T>::load_acct_info(dpp, user_info);
+    luser = DecoratedApplier<T>::load_acct_info(dpp);
   } else if (this->is_anonymous()) {
     /* If the user was authed by the anonymous engine then scope the ANON user
      * to the correct tenant */
+    luser = driver->get_user(rgw_user(RGW_USER_ANON_ID));
     if (acct_user_override.tenant.empty())
-      user_info.user_id = rgw_user(acct_user_override.id, RGW_USER_ANON_ID);
+      luser->get_info().user_id = rgw_user(acct_user_override.id, RGW_USER_ANON_ID);
     else
-      user_info.user_id = rgw_user(acct_user_override.tenant, RGW_USER_ANON_ID);
+      luser->get_info().user_id = rgw_user(acct_user_override.tenant, RGW_USER_ANON_ID);
   } else {
     /* Compatibility mechanism for multi-tenancy. For more details refer to
      * load_acct_info method of rgw::auth::RemoteApplier. */
@@ -196,9 +198,10 @@ void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, 
       user = driver->get_user(tenanted_uid);
 
       if (user->load_user(dpp, null_yield) >= 0) {
-	user_info = user->get_info();
+        // the user_info in luser is initialized by user->load_user(...)
+        luser = user->clone();
         /* Succeeded. */
-        return;
+        return luser;
       }
     }
 
@@ -213,8 +216,10 @@ void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, 
         throw ret;
       }
     }
-    user_info = user->get_info();
+    // the user_info in luser is initialized by user->load_user(...)
+    luser = user->clone();
   }
+  return luser;
 }
 
 template <typename T> static inline
@@ -248,7 +253,7 @@ public:
   }
 
   void to_str(std::ostream& out) const override;
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override;   /* out */
+  auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override;   /* out */
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;       /* in/out */
 
   ACLOwner get_aclowner() const override {
@@ -271,10 +276,10 @@ void SysReqApplier<T>::to_str(std::ostream& out) const
 }
 
 template <typename T>
-void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const
+auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User>
 {
-  DecoratedApplier<T>::load_acct_info(dpp, user_info);
-  is_system = user_info.system;
+  std::unique_ptr<rgw::sal::User> user = DecoratedApplier<T>::load_acct_info(dpp);
+  is_system = user->get_info().system;
 
   if (is_system) {
     //ldpp_dout(dpp, 20) << "system request" << dendl;
@@ -285,7 +290,7 @@ void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo
       effective_owner->id = parse_owner(str);
 
       if (const auto* uid = std::get_if<rgw_user>(&effective_owner->id); uid) {
-        std::unique_ptr<rgw::sal::User> user = driver->get_user(*uid);
+        user = driver->get_user(*uid);
         if (user->load_user(dpp, null_yield) < 0) {
           //ldpp_dout(dpp, 0) << "User lookup failed!" << dendl;
           throw -EACCES;
@@ -294,14 +299,14 @@ void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo
       }
     }
   }
+  return user;
 }
 
 template <typename T>
 void SysReqApplier<T>::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s) const
 {
   if (boost::logic::indeterminate(is_system)) {
-    RGWUserInfo unused_info;
-    load_acct_info(dpp, unused_info);
+    std::unique_ptr<rgw::sal::User> unused_user{ load_acct_info(dpp) };
   }
 
   if (is_system) {
