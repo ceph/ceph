@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -26,8 +27,11 @@ from ..file_utils import (
 from ..data_utils import dict_get
 from ..host_facts import HostFacts
 from ..logging import Highlight
-from ..net_utils import get_hostname, get_ip_addresses
 
+from ..net_utils import get_hostname, get_ip_addresses
+from ..constants import DEFAULT_PYTHON_VERSION
+from cephadmlib.container_engines import check_container_engine
+from .daemon_utils import get_container_info
 
 logger = logging.getLogger()
 
@@ -415,6 +419,49 @@ class CephExporter(ContainerDaemonForm):
         populate_files(ssl_dir, cert_files, uid, gid)
 
 
+def retrieve_python_version_from_container(
+    container_id: str, container_command: str
+) -> str:
+    try:
+        exec_command = [
+            container_command,
+            'exec',
+            container_id,
+            'python3',
+            '-c',
+            "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+        ]
+        exec_result = subprocess.run(
+            exec_command, capture_output=True, text=True, check=True
+        )
+        return exec_result.stdout.strip()
+    except Exception as e:
+        logger.error(
+            f'Failed to retrieve the python version from container, failed with: {str(e)}'
+        )
+    return ''
+
+
+def get_python_version(ctx: CephadmContext) -> str:
+    """
+    Retrieves the Python version from a specified daemon's container.
+    """
+    daemon_types = ['mon', 'mgr', 'osd']
+    engine = check_container_engine(ctx)
+    container_command = engine.EXE
+    for daemon in daemon_types:
+        container_info = get_container_info(ctx, daemon, by_name=False)
+        if container_info and container_info.container_id:
+            python_version = retrieve_python_version_from_container(
+                container_id=container_info.container_id,
+                container_command=container_command,
+            )
+            if python_version:
+                logger.debug(f'Detected python version {python_version}')
+                return f'python{python_version}'
+    return DEFAULT_PYTHON_VERSION
+
+
 def get_ceph_mounts_for_type(
     ctx: CephadmContext, fsid: str, daemon_type: str
 ) -> Dict[str, str]:
@@ -472,6 +519,7 @@ def get_ceph_mounts_for_type(
         mounts['/'] = '/rootfs'
     elif daemon_type == 'ceph-volume':
         mounts['/'] = '/rootfs:rslave'
+    python_version = get_python_version(ctx)
 
     try:
         if (
@@ -487,13 +535,13 @@ def get_ceph_mounts_for_type(
                 mounts[cephadm_binary] = '/usr/sbin/cephadm'
                 mounts[
                     ceph_folder + '/src/ceph-volume/ceph_volume'
-                ] = '/usr/lib/python3.9/site-packages/ceph_volume'
+                ] = f'/usr/lib/{python_version}/site-packages/ceph_volume'
                 mounts[
                     ceph_folder + '/src/pybind/mgr'
                 ] = '/usr/share/ceph/mgr'
                 mounts[
                     ceph_folder + '/src/python-common/ceph'
-                ] = '/usr/lib/python3.9/site-packages/ceph'
+                ] = f'/usr/lib/{python_version}/site-packages/ceph'
                 mounts[
                     ceph_folder + '/monitoring/ceph-mixin/dashboards_out'
                 ] = '/etc/grafana/dashboards/ceph-dashboard'
@@ -512,7 +560,8 @@ def get_ceph_mounts_for_type(
 
 
 def ceph_daemons() -> List[str]:
-    """A legacy method that returns a list of all daemon types considered ceph
+    """
+    A legacy method that returns a list of all daemon types considered ceph
     daemons.
     """
     cds = list(Ceph._daemons)
