@@ -2394,10 +2394,11 @@ class TestMirroring(object):
 
     def test_mirror_remote_namespace(self):
         remote_namespace = "remote-ns"
-        # cannot set remote namespace for the default namespace
-        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
-                      ioctx, remote_namespace)
         eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
+        # set remote namespace for the default namespace
+        self.rbd.mirror_remote_namespace_set(ioctx, remote_namespace)
+        self.rbd.mirror_remote_namespace_set(ioctx, "")
         self.rbd.namespace_create(ioctx, "ns1")
         ioctx.set_namespace("ns1")
         self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
@@ -2405,9 +2406,8 @@ class TestMirroring(object):
         assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
                       ioctx, remote_namespace)
         self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
-        # cannot set remote namespace to the default namespace
-        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
-                      ioctx, "")
+        # set remote namespace to the default namespace
+        self.rbd.mirror_remote_namespace_set(ioctx, "")
         self.rbd.mirror_remote_namespace_set(ioctx, remote_namespace)
         eq(remote_namespace, self.rbd.mirror_remote_namespace_get(ioctx))
         ioctx.set_namespace("")

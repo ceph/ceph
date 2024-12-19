@@ -46,7 +46,8 @@ inline void decode(DirectoryState &state, ceph::buffer::list::const_iterator& it
 enum MirrorMode {
   MIRROR_MODE_DISABLED = 0,
   MIRROR_MODE_IMAGE    = 1,
-  MIRROR_MODE_POOL     = 2
+  MIRROR_MODE_POOL     = 2,
+  MIRROR_MODE_CONFIG   = 3
 };
 
 enum GroupImageLinkState {

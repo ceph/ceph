@@ -1241,7 +1241,8 @@ void get_enable_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_pool_options(positional, options, true);
   positional->add_options()
-    ("mode", "mirror mode [image or pool]");
+    ("mode", po::value<std::string>()->default_value(""),
+     "mirror mode [image or pool]");
   add_site_name_optional(options);
 
   options->add_options()
@@ -1316,24 +1317,30 @@ int execute_enable(const po::variables_map &vm,
   std::string pool_name;
   std::string namespace_name;
   std::string remote_namespace;
+  //bool configure_only = false;
   size_t arg_index = 0;
+
   int r = utils::get_pool_and_namespace_names(vm, true, &pool_name,
                                               &namespace_name, &arg_index);
   if (r < 0) {
     return r;
   }
 
-  rbd_mirror_mode_t mirror_mode;
+  rbd_mirror_mode_t mirror_mode = RBD_MIRROR_MODE_CONFIG;
   std::string mode = utils::get_positional_argument(vm, arg_index++);
-  if (mode == "image") {
-    mirror_mode = RBD_MIRROR_MODE_IMAGE;
-  } else if (mode == "pool") {
-    mirror_mode = RBD_MIRROR_MODE_POOL;
-  } else {
-    std::cerr << "rbd: must specify 'image' or 'pool' mode." << std::endl;
-    return -EINVAL;
-  }
 
+  if (!mode.empty()) {
+    if (mode == "image") {
+      mirror_mode = RBD_MIRROR_MODE_IMAGE;
+    } else if (mode == "pool") {
+      mirror_mode = RBD_MIRROR_MODE_POOL;
+    } else {
+      std::cerr << "rbd: must specify 'image' or 'pool' mode." << std::endl;
+      return -EINVAL;
+    }
+  } else {
+    mode ="config-only";
+  }
   librados::Rados rados;
   librados::IoCtx io_ctx;
 
@@ -1341,28 +1348,46 @@ int execute_enable(const po::variables_map &vm,
   if (r < 0) {
     return r;
   }
-
+  
+/*
+  if (vm.count(CONFIGURE_ONLY) && vm[CONFIGURE_ONLY].as<bool>()) {
+    if (namespace_name.empty()) {
+      configure_only = true;
+    } else {
+      std::cerr << "rbd: configure-only can not be specified for a namespace." << std::endl;
+      return -EINVAL;
+    }
+  }
+*/
   if (vm.count(REMOTE_NAMESPACE_NAME)) {
+    if (mirror_mode == RBD_MIRROR_MODE_CONFIG) {
+      std::cerr << "rbd: cannot specify remote namespace in config mode."
+                << std::endl;
+      return -EINVAL;
+    }
     remote_namespace = vm[REMOTE_NAMESPACE_NAME].as<std::string>();
   } else {
     remote_namespace = namespace_name;
   }
 
-  std::string original_remote_namespace;
   librbd::RBD rbd;
-  r = rbd.mirror_remote_namespace_get(io_ctx, &original_remote_namespace);
-  if (r < 0) {
-    std::cerr << "rbd: failed to get the current remote namespace."
-              << std::endl;
-    return r;
-  }
 
-  if (original_remote_namespace != remote_namespace) {
-    r = rbd.mirror_remote_namespace_set(io_ctx, remote_namespace);
+  if (mirror_mode != RBD_MIRROR_MODE_CONFIG) {
+    std::string original_remote_namespace;
+    r = rbd.mirror_remote_namespace_get(io_ctx, &original_remote_namespace);
     if (r < 0) {
-      std::cerr << "rbd: failed to set the remote namespace."
-                << std::endl;
+      std::cerr << "rbd: failed to get the current remote namespace."
+	        << std::endl;
       return r;
+    }
+
+    if (original_remote_namespace != remote_namespace) {
+      r = rbd.mirror_remote_namespace_set(io_ctx, remote_namespace);
+      if (r < 0) {
+        std::cerr << "rbd: failed to set the remote namespace."
+                  << std::endl;
+	return r;
+      }
     }
   }
 
@@ -1457,6 +1482,9 @@ int execute_info(const po::variables_map &vm,
     break;
   case RBD_MIRROR_MODE_POOL:
     mirror_mode_desc = "pool";
+    break;
+  case RBD_MIRROR_MODE_CONFIG:
+    mirror_mode_desc = "config";
     break;
   default:
     mirror_mode_desc = "unknown";
