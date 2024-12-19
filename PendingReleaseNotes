@@ -61,6 +61,12 @@
   `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get` and
   `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
 
+* RADOS: Occasionally, after a ceph-mgr restart (i.e., after running `ceph mgr fail`
+  or during upgrades), some mgr modules may become temporarily unavailable, causing
+  the commands to fail. To work around this, disable the balancer module with `ceph
+  balancer off` to speed up module loading, then retry the commands.
+  Related Tracker: https://tracker.ceph.com/issues/69012
+
 >=19.0.0
 
 * cephx: key rotation is now possible using `ceph auth rotate`. Previously,
