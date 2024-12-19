@@ -10,6 +10,7 @@ if(WITH_LIBCEPHFS)
     main.cc
     deleg.cc
     monconfig.cc
+    client_cache.cc
   )
   target_link_libraries(ceph_test_libcephfs
     ceph-common
