@@ -4,7 +4,7 @@
            (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
     <h3 cdsModalHeaderHeading
-        i18n>Create Bootstrap Token</h3>
+        i18n>Setup Replication</h3>
   </cds-modal-header>
 
   <section cdsModalContent>
@@ -62,7 +62,7 @@
               i18n>At least one pool is required.</span>
       </div>
 
-      <cd-submit-button i18n
+      <cd-submit-button i18n [disabled] = 'generateBtnDisable'
                         [form]="createBootstrapForm"
                         (submitAction)="generate()">Generate</cd-submit-button>
 
