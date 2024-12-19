@@ -186,8 +186,7 @@ class TestAdminCommands(CephFSTestCase):
         self.mount_a.open_n_background('.', 400)
 
         self.wait_for_health(health_warn, 30)
-
-
+    
 class TestMdsLastSeen(CephFSTestCase):
     """
     Tests for `mds last-seen` command.
