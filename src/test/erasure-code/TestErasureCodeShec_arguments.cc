@@ -86,12 +86,12 @@ void create_table_shec432() {
           continue;
         }
         if (std::popcount(avails) == 4) {
-	  auto a = to_array<std::initializer_list<int>>({
+          std::initializer_list<std::initializer_list<int>> a {
 	      {0,1,2,3}, {0,1,2,4}, {0,1,2,6}, {0,1,3,4}, {0,1,3,6}, {0,1,4,6},
 	      {0,2,3,4}, {0,2,3,5}, {0,2,4,5}, {0,2,4,6}, {0,2,5,6}, {0,3,4,5},
 	      {0,3,4,6}, {0,3,5,6}, {0,4,5,6}, {1,2,3,4}, {1,2,3,5}, {1,2,4,5},
 	      {1,2,4,6}, {1,2,5,6}, {1,3,4,5}, {1,3,4,6}, {1,3,5,6}, {1,4,5,6},
-	      {2,3,4,5}, {2,4,5,6}, {3,4,5,6}});
+	      {2,3,4,5}, {2,4,5,6}, {3,4,5,6}};
           if (ranges::any_of(a, std::bind_front(cmp_equal<uint, int>, avails),
 			     getint)) {
 	    vec.push_back(avails);
