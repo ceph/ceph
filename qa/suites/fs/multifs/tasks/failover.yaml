@@ -8,6 +8,7 @@ overrides:
       - \(MDS_DAMAGE\)
       - \(FS_DEGRADED\)
       - \(MDS_CACHE_OVERSIZED\)
+      - \(MDS_ESTIMATED_REPLAY_TIME\)
   ceph-fuse:
     disabled: true
 tasks:
