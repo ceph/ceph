@@ -1114,7 +1114,7 @@ options:
   type: size
   level: advanced
   desc: Maximum amount of data to prefetch out of the socket receive buffer
-  default: 4_K
+  default: 64_K
   with_legacy: true
 - name: ms_initial_backoff
   type: float
