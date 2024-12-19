@@ -978,6 +978,12 @@ following command.
     
    ceph config get mgr mgr/volumes/snapshot_clone_no_wait
 
+Configure whether or not progress bars for clone jobs should be printed:
+
+.. prompt:: bash #
+
+    ceph config set mgr/volumes/disable_clone_progress_bars true
+
 
 .. _subvol-pinning:
 
