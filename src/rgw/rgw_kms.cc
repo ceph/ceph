@@ -13,6 +13,9 @@
 #include "rgw/rgw_b64.h"
 #include "rgw/rgw_kms.h"
 #include "rgw/rgw_kmip_client.h"
+#include "rgw/rgw_perf_counters.h"
+#include "rgw_kms_cache.h"
+#include "rgw_string.h"
 #include <rapidjson/allocators.h>
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
@@ -1179,41 +1182,70 @@ public:
   };
 };
 
-int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
-                                     map<string, bufferlist>& attrs,
-                                     optional_yield y,
-                                     std::string& actual_key)
-{
-  std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
-  KMSContext kctx { dpp->get_cct() };
-  const std::string &kms_backend { kctx.backend() };
+static int maybe_cache_kms_fetch(
+    const DoutPrefixProvider* dpp, const std::string& cache_prefix,
+    const std::string& key_id, rgw::kms::KMSCache* kms_cache,
+    const kms::KMSCache::FetchFn& fetch, std::string& actual_key,
+    optional_yield y) {
+  if (kms_cache == nullptr ||
+      !dpp->get_cct()->_conf->rgw_crypt_s3_kms_cache_enabled) {
+    const auto ret = fetch(actual_key);
+    if (ret == -ENOENT) {
+      perfcounter->inc(l_rgw_kms_error_permanent);
+    } else if (ret < 0) {
+      perfcounter->inc(l_rgw_kms_error_transient);
+    }
+    return ret;
+  }
+  return kms_cache->do_cache(dpp, cache_prefix, key_id, fetch, actual_key, y);
+}
 
-  ldpp_dout(dpp, 20) << "Getting KMS encryption key for key " << key_id << dendl;
+int reconstitute_actual_key_from_kms(
+    const DoutPrefixProvider* dpp, map<string, bufferlist>& attrs,
+    rgw::kms::KMSCache* kms_cache, optional_yield y, std::string& actual_key) {
+  std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
+  KMSContext kctx{dpp->get_cct()};
+  const std::string& kms_backend{kctx.backend()};
+
+  ldpp_dout(dpp, 20) << "Getting KMS encryption key for key " << key_id
+                     << dendl;
   ldpp_dout(dpp, 20) << "SSE-KMS backend is " << kms_backend << dendl;
 
-  if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
-    return get_actual_key_from_barbican(dpp, key_id, y, actual_key);
-  }
+  const auto fetch = [&](std::string& out_secret) -> int {
+    PerfGuard perf(perfcounter, l_rgw_kms_fetch_lat);
+    if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
+      return get_actual_key_from_barbican(dpp, key_id, y, out_secret);
+    }
 
-  if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
-    return reconstitute_actual_key_from_vault(dpp, kctx, attrs, y, actual_key);
-  }
+    if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
+      return reconstitute_actual_key_from_vault(
+          dpp, kctx, attrs, y, out_secret);
+    }
 
-  if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
-    return get_actual_key_from_kmip(dpp, key_id, y, actual_key);
-  }
+    if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
+      return get_actual_key_from_kmip(dpp, key_id, y, out_secret);
+    }
 
-  if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
-    std::string key_selector = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
-    return get_actual_key_from_conf(dpp, key_id, key_selector, actual_key);
-  }
-
-  ldpp_dout(dpp, 0) << "ERROR: Invalid rgw_crypt_s3_kms_backend: " << kms_backend << dendl;
-  return -EINVAL;
+    if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
+      std::string key_selector =
+          get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
+      std::this_thread::sleep_for(
+          std::chrono::milliseconds(
+              dpp->get_cct()->_conf->rgw_crypt_s3_kms_testing_delay));
+      return get_actual_key_from_conf(dpp, key_id, key_selector, out_secret);
+    }
+    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw_crypt_s3_kms_backend: "
+                      << kms_backend << dendl;
+    return -EINVAL;
+  };
+  const std::string cache_prefix = string_cat_reserve("kms_", kms_backend);
+  return maybe_cache_kms_fetch(
+      dpp, cache_prefix, key_id, kms_cache, fetch, actual_key, y);
 }
 
 int make_actual_key_from_kms(const DoutPrefixProvider *dpp,
                              map<string, bufferlist>& attrs,
+                             rgw::kms::KMSCache* kms_cache,
                              optional_yield y,
                              std::string& actual_key)
 {
@@ -1221,7 +1253,7 @@ int make_actual_key_from_kms(const DoutPrefixProvider *dpp,
   const std::string &kms_backend { kctx.backend() };
   if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend)
     return make_actual_key_from_vault(dpp, kctx, attrs, y, actual_key);
-  return reconstitute_actual_key_from_kms(dpp, attrs, y, actual_key);
+  return reconstitute_actual_key_from_kms(dpp, attrs, kms_cache, y, actual_key);
 }
 
 int reconstitute_actual_key_from_sse_s3(const DoutPrefixProvider *dpp,
