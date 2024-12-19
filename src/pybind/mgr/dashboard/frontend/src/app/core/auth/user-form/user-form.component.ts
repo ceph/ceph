@@ -55,7 +55,8 @@ export class UserFormComponent extends CdForm implements OnInit {
   icons = Icons;
   pwdExpirationSettings: CdPwdExpirationSettings;
   pwdExpirationFormat = 'YYYY-MM-DD';
-
+  selectedRole: string[];
+  passwordexp: boolean = false;
   constructor(
     private authService: AuthService,
     private authStorageService: AuthStorageService,
@@ -91,6 +92,7 @@ export class UserFormComponent extends CdForm implements OnInit {
         password: [
           '',
           [],
+
           [
             CdValidators.passwordPolicy(
               this.userService,
@@ -105,7 +107,7 @@ export class UserFormComponent extends CdForm implements OnInit {
           ]
         ],
         confirmpassword: [''],
-        pwdExpirationDate: [undefined],
+        pwdExpirationDate: [''],
         email: ['', [CdValidators.email]],
         roles: [[]],
         enabled: [true, [Validators.required]],
@@ -121,8 +123,10 @@ export class UserFormComponent extends CdForm implements OnInit {
     if (this.router.url.startsWith('/user-management/users/edit')) {
       this.mode = this.userFormMode.editing;
       this.action = this.actionLabels.EDIT;
+      this.passwordexp = false;
     } else {
       this.action = this.actionLabels.CREATE;
+      this.passwordexp = true;
     }
 
     const observables = [this.roleService.list(), this.settingsService.getStandardSettings()];
@@ -130,6 +134,7 @@ export class UserFormComponent extends CdForm implements OnInit {
       (result: [UserFormRoleModel[], CdPwdExpirationSettings]) => {
         this.allRoles = _.map(result[0], (role) => {
           role.enabled = true;
+          role.content = `${role.name}, ${role.description}`;
           return role;
         });
         this.pwdExpirationSettings = new CdPwdExpirationSettings(result[1]);
@@ -158,7 +163,6 @@ export class UserFormComponent extends CdForm implements OnInit {
       this.userService.get(username).subscribe((userFormModel: UserFormModel) => {
         this.response = _.cloneDeep(userFormModel);
         this.setResponse(userFormModel);
-
         this.loadingReady();
       });
     });
@@ -173,20 +177,28 @@ export class UserFormComponent extends CdForm implements OnInit {
       this.userForm.get(key).setValue(response[key])
     );
     const expirationDate = response['pwdExpirationDate'];
+
     if (expirationDate) {
+      this.passwordexp = false;
       this.userForm
         .get('pwdExpirationDate')
         .setValue(moment(expirationDate * 1000).format(this.pwdExpirationFormat));
+    } else {
+      this.passwordexp = true;
     }
   }
 
   getRequest(): UserFormModel {
     const userFormModel = new UserFormModel();
+
     ['username', 'password', 'name', 'email', 'roles', 'enabled', 'pwdUpdateRequired'].forEach(
-      (key) => (userFormModel[key] = this.userForm.get(key).value)
+      (key) => {
+        userFormModel[key] = this.userForm.get(key).value;
+      }
     );
     const expirationDate = this.userForm.get('pwdExpirationDate').value;
     if (expirationDate) {
+      this.passwordexp = false;
       const mom = moment(expirationDate, this.pwdExpirationFormat);
       if (
         this.mode !== this.userFormMode.editing ||
