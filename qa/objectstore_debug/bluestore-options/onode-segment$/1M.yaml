@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        bluestore onode segment size: 1024K
