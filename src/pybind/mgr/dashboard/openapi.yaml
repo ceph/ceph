@@ -217,6 +217,12 @@ paths:
         name: sort
         schema:
           type: string
+      - default: false
+        description: When true, usage information is not returned
+        in: query
+        name: omit_usage
+        schema:
+          type: boolean
       responses:
         '200':
           content:
