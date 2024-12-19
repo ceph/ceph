@@ -95,6 +95,11 @@ unsigned int ErasureCodeClay::get_chunk_size(unsigned int stripe_width) const
   return round_up_to(stripe_width, alignment) / k;
 }
 
+unsigned int ErasureCodeClay::get_minimum_granularity()
+{
+  return mds.erasure_code->get_minimum_granularity();
+}
+
 int ErasureCodeClay::minimum_to_decode(const set<int> &want_to_read,
 				       const set<int> &available,
 				       map<int, vector<pair<int, int>>> *minimum)
@@ -183,6 +188,19 @@ int ErasureCodeClay::decode_chunks(const set<int> &want_to_read,
     coded_chunks[i].clear();
   }
   return res;
+}
+
+void ErasureCodeClay::encode_delta(const bufferptr &old_data,
+                                   const bufferptr &new_data,
+                                   bufferptr *delta)
+{
+  ceph_abort("Not yet supported by this plugin");
+}
+
+void ErasureCodeClay::apply_delta(const std::map<int, bufferptr> &in,
+                                  std::map <int, bufferptr> &out)
+{
+  ceph_abort("Not yet supported by this plugin");
 }
 
 int ErasureCodeClay::parse(ErasureCodeProfile &profile,
