@@ -203,6 +203,7 @@ class QuiesceDbManager {
     std::queue<QuiesceDbPeerListing> pending_db_updates;
     std::deque<QuiesceDbPeerAck> pending_acks;
     std::deque<RequestContext*> pending_requests;
+    std::optional<QuiesceTimeInterval> bootstrap_delay;
     bool db_thread_should_exit = false;
     bool db_thread_should_clear_db = true;
 
@@ -281,7 +282,7 @@ class QuiesceDbManager {
     std::unordered_map<RequestContext*, int> done_requests;
 
     void* quiesce_db_thread_main();
-    virtual bool db_thread_has_work() const;
+    virtual bool db_thread_has_work(bool leader_bootstrapping = false) const;
 
     using IsMemberBool = bool;
     using ShouldExitBool = bool;
@@ -289,7 +290,7 @@ class QuiesceDbManager {
 
     QuiesceTimeInterval replica_upkeep(decltype(pending_db_updates)&& db_updates);
     // returns zero interval if bootstrapped, otherwise the time to sleep while we wait for peer responses
-    QuiesceTimeInterval leader_bootstrap(decltype(pending_db_updates)&& db_updates);
+    std::optional<QuiesceTimeInterval> leader_bootstrap(decltype(pending_db_updates)&& db_updates);
     QuiesceTimeInterval leader_upkeep(decltype(pending_acks)&& acks, decltype(pending_requests)&& requests);
     
 
