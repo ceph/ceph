@@ -1,13 +1,13 @@
 overrides:
   ceph:
-    fs: xfs
     conf:
       osd:
-        osd objectstore: seastore
+        # crimson's osd objectstore option
+        crimson osd objectstore: seastore
         debug seastore: 20
         debug seastore onode: 20
         debug seastore odata: 20
-        debug seastore ompap: 20
+        debug seastore omap: 20
         debug seastore tm: 20
         debug seastore t: 20
         debug seastore cleaner: 20
