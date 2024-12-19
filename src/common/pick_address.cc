@@ -647,20 +647,26 @@ bool is_addr_in_subnet(
   const auto nets = get_str_list(networks);
   ceph_assert(!nets.empty());
 
-  unsigned ipv = CEPH_PICK_ADDRESS_IPV4;
-  struct sockaddr_in public_addr;
-  public_addr.sin_family = AF_INET;
+  unsigned ipv;
+  struct ifaddrs ifa;
+  memset(&ifa, 0, sizeof(ifa));
+  ifa.ifa_next = nullptr;
+  struct sockaddr_storage public_addr;
 
-  if(inet_pton(AF_INET, addr.c_str(), &public_addr.sin_addr) != 1) {
+  if (inet_pton(AF_INET, addr.c_str(), &((struct sockaddr_in*)&public_addr)->sin_addr) == 1) {
+    ipv = CEPH_PICK_ADDRESS_IPV4;
+    public_addr.ss_family = AF_INET;
+    ifa.ifa_addr = (struct sockaddr*)&public_addr;
+  } else if (inet_pton(AF_INET6, addr.c_str(), &((struct sockaddr_in6*)&public_addr)->sin6_addr) == 1) {
+    ipv = CEPH_PICK_ADDRESS_IPV6;
+    public_addr.ss_family = AF_INET6;
+    ifa.ifa_addr = (struct sockaddr*)&public_addr;
+  } else {
     lderr(cct) << "unable to convert chosen address to string: " << addr << dendl;
     return false;
   }
 
   for (const auto &net : nets) {
-    struct ifaddrs ifa;
-    memset(&ifa, 0, sizeof(ifa));
-    ifa.ifa_next = nullptr;
-    ifa.ifa_addr = (struct sockaddr*)&public_addr;
     if(matches_with_net(cct, ifa, net, ipv)) {
       return true;
     }
