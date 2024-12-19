@@ -1218,6 +1218,9 @@ def validate(args: List[str],
                                 kwarg_desc = None
 
                 if kwarg_desc:
+                    # did we already get this argument
+                    if kwarg_desc.name in d:
+                        raise ArgumentError(f"Duplicate argument '{kwarg_desc.name}' found.")
                     args = validate_one(kwarg_v, kwarg_desc, True)
                     matchcnt += 1
                     store_arg(kwarg_desc, args, d)
