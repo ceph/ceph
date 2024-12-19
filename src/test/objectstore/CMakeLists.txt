@@ -24,6 +24,21 @@ target_link_libraries(ceph_test_objectstore
 install(TARGETS ceph_test_objectstore
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+  add_executable(omap_bench
+  omap_bench.cc
+  $<TARGET_OBJECTS:store_test_fixture>)
+target_link_libraries(omap_bench
+  os
+  ceph-common
+  ${UNITTEST_LIBS}
+  global
+  ${EXTRALIBS}
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  )
+install(TARGETS omap_bench
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 add_subdirectory(allocsim)
 
 add_executable(ceph_test_keyvaluedb
