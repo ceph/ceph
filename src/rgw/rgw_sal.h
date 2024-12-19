@@ -1237,10 +1237,9 @@ class Object {
 			   rgw_placement_rule& placement_rule,
 			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
-         		   RGWObjTier& tier_config,
-			   real_time& mtime,
+         RGWObjTier& tier_config,
 			   uint64_t olh_epoch,
-		           std::optional<uint64_t> days,
+		     std::optional<uint64_t> days,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y,
 			   uint32_t flags) = 0;
