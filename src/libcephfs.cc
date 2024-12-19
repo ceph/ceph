@@ -2316,6 +2316,46 @@ extern "C" void ceph_finish_reclaim(class ceph_mount_info *cmount)
   cmount->get_client()->finish_reclaim();
 }
 
+extern "C" int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
+                                    const char *key_data, int key_len,
+				    struct ceph_fscrypt_key_identifier *kid,
+				    int user)
+{
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+
+  return cmount->get_client()->add_fscrypt_key(key_data, key_len, kid, user);
+}
+
+extern "C" int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
+                                       struct fscrypt_remove_key_arg *kid,
+				       int user)
+{
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+
+  return cmount->get_client()->remove_fscrypt_key(kid, user);
+}
+
+extern "C" int ceph_get_fscrypt_key_status(struct ceph_mount_info *cmount,
+                                       struct fscrypt_get_key_status_arg *arg)
+{
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+
+  return cmount->get_client()->get_fscrypt_key_status(arg);
+}
+
+extern "C" int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                                          int fd, const struct fscrypt_policy_v2 *policy)
+{
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+
+  return cmount->get_client()->set_fscrypt_policy_v2(fd, *policy);
+}
+
+
 // This is deprecated, use ceph_ll_register_callbacks2 instead.
 extern "C" void ceph_ll_register_callbacks(class ceph_mount_info *cmount,
 					   struct ceph_client_callback_args *args)
@@ -2383,4 +2423,11 @@ extern "C" void ceph_free_snap_info_buffer(struct snap_info *snap_info) {
     free((void *)snap_info->snap_metadata[i].key); // malloc'd memory is key+value composite
   }
   free(snap_info->snap_metadata);
+}
+
+extern "C" int get_inode_flags(struct ceph_mount_info *cmount, int fd, int* file_attr_out) {
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+
+  return cmount->get_client()->get_inode_flags(fd, file_attr_out);
 }
