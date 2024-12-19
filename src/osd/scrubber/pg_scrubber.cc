@@ -588,6 +588,10 @@ scrub_level_t PgScrubber::scrub_requested(
     return scrub_level_t::shallow;
   }
 
+  // abort an ongoing scrub, if it's of the lowest priority
+  // and stuck in replica reservations.
+  m_fsm->process_event(AbortIfReserving{});
+
   // update the relevant SchedTarget (either shallow or deep). Set its urgency
   // to either operator_requested or must_repair. Push it into the queue
   auto& trgt = m_scrub_job->get_target(scrub_level);
