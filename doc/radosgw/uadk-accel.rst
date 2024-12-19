@@ -99,12 +99,16 @@ Make sure all these above kernel configurations are selected.
 
 #. UADK enablement
 If the architecture is ``aarch64``, it will automatically download the UADK
-source code to build the static library. If it runs on other architecture, user
-can enable it with build parameters `-DWITH_UADK=true`
+source code to build the static library. When building on other CPU
+architectures, the user may enable UADK by adding ``-DWITH_UADK=true`` to the
+compilation command line options. Note that UADK may not be compatible with all
+architectures.
 
-#. Manual Build UADK
-As the above paragraph shows, the UADK is enabled automatically, no need to build manually.
-For developer who is interested in UADK, you can refer to the below steps for building.
+#. Manually Building UADK
+As implied in the above paragraph, if the architecture is ``aarch64``, the UADK
+is enabled automatically and there is no need to build it manually. However,
+below we provide the procedure for manually building UADK so that developers
+can study how it is built. 
 
    .. prompt:: bash $ 
 
@@ -116,9 +120,9 @@ For developer who is interested in UADK, you can refer to the below steps for bu
       make
       make install
 
-   .. note:: Without --prefix, UADK will be installed under ``/usr/local/lib``
-             by default. If you get the error: ``cannot find -lnuma``, 
-             install the ``libnuma-dev`` package.
+   .. note:: Without ``--prefix``, UADK will be installed under
+             ``/usr/local/lib`` by default. If you get the error: 
+             ``cannot find -lnuma``, install the ``libnuma-dev`` package.
 
 #. Configure
 
