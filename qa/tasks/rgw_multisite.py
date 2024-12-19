@@ -361,6 +361,8 @@ def create_zonegroup(cluster, gateways, period, config):
     if endpoints:
         # replace client names with their gateway endpoints
         config['endpoints'] = extract_gateway_endpoints(gateways, endpoints)
+    if not config.get('api_name'): # otherwise it will be set to an empty string
+        config['api_name'] = config['name']
     zonegroup = multisite.ZoneGroup(config['name'], period)
     # `zonegroup set` needs --default on command line, and 'is_master' in json
     args = is_default_arg(config)
