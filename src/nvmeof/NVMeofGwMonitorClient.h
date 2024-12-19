@@ -21,7 +21,6 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 
-#include "client/Client.h"
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
 #include "messages/MNVMeofGwMap.h"
@@ -58,7 +57,6 @@ protected:
   MonClient monc;
   std::unique_ptr<Messenger> client_messenger;
   Objecter objecter;
-  Client client;
   std::map<NvmeGroupKey, NvmeGwMonClientStates> map;
   ceph::mutex lock = ceph::make_mutex("NVMeofGw::lock");
   // allow beacons to be sent independently of handle_nvmeof_gw_map
