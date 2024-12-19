@@ -1083,7 +1083,15 @@ class RgwClient(RestClient):
                 if content.get('Code') == 'ReplicationConfigurationNotFoundError':
                     return None
             raise e
-
+    
+    @RestClient.api_post('?Action=CreateTopic&Name={topic_name}')
+    def create_topic(self,request=None,topic_name:str =None,push_endpoint: Optional[str]=None,opaqueData: Optional[str]=None, persistent: Optional[str]=None,time_to_live: Optional[str]=None,max_retries: Optional[str]=None,retry_sleep_duration: Optional[str]=None,policy: Optional[str]=None):
+        try:
+            result = request()  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+    
 
 class SyncStatus(Enum):
     enabled = 'enabled'
@@ -2376,3 +2384,43 @@ class RgwMultisite:
             return True
         except DashboardException:
             return False
+class RgwTopicmanagement:
+
+    def list_topics(self,uid:Optional[str],tenant:Optional[str]):
+        rgw_topics_list = {}
+        rgw_topic_list_cmd = ['topic', 'list']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_topic_list_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to fetch topic list',
+                                         http_status_code=500, component='rgw')
+            rgw_topics_list = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return rgw_topics_list
+    
+
+    def get_topic(self, topic_name: str,tenant:Optional[str]):
+        topic_info = {}
+        rgw_topic_info_cmd = ['topic', 'get', '--topic', topic_name]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_topic_info_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get topic info',
+                                         http_status_code=500, component='rgw')
+            topic_info = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return topic_info
+    
+     
+    def delete_topic(self, topic_name: str=None,tenant:Optional[str] = None):
+        rgw_delete_topic_cmd = ['topic', 'rm', '--topic', topic_name]
+        try:
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_topic_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to delete topic',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
