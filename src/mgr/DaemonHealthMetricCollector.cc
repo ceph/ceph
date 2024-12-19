@@ -65,8 +65,11 @@ class PendingPGs final : public DaemonHealthMetricCollector {
   }
   bool _update(const DaemonKey& osd,
                const DaemonHealthMetric& metric) override {
-    value.n += metric.get_n();
-    if (metric.get_n()) {
+    auto num_pgs = metric.get_n1();
+    auto is_max_pgs_per_osd = metric.get_n2();
+    value.n1 = num_pgs;
+    value.n2 = is_max_pgs_per_osd;
+    if (num_pgs) {
       osds.push_back(osd);
       return true;
     } else {
@@ -77,12 +80,23 @@ class PendingPGs final : public DaemonHealthMetricCollector {
     if (osds.empty()) {
       return;
     }
-    check.summary = fmt::format("{} PGs pending on creation", value.n);
+    auto is_max_pgs_per_osd = value.n2;
+    const std::string pg_creation_warn_msg = \
+           "(PG creation pending, " \
+           "temporarily increase 'osd_max_pg_per_osd_hard_ratio')";
+    check.summary =
+        fmt::format("{} PGs pending on creation {}",
+           value.n1,
+           (is_max_pgs_per_osd ? pg_creation_warn_msg : ""));
     ostringstream ss;
     if (osds.size() > 1) {
-      ss << "osds " << osds << " have pending PGs.";
+      ss << "osds " << osds << " have pending PGs"
+         << (is_max_pgs_per_osd ? " " + pg_creation_warn_msg : "")
+         << ".";
     } else {
-      ss << osds.front() << " has pending PGs";
+      ss << osds.front() << " has pending PGs"
+         << (is_max_pgs_per_osd ? " " + pg_creation_warn_msg : "")
+         << ".";
     }
     check.detail.push_back(ss.str());
   }
