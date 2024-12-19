@@ -460,7 +460,7 @@ void AbstractObjectWriteRequest<I>::pre_write_object_map_update() {
         AbstractObjectWriteRequest<I>,
         &AbstractObjectWriteRequest<I>::handle_pre_write_object_map_update>(
           CEPH_NOSNAP, this->m_object_no, new_state, {}, this->m_trace, false,
-          this)) {
+          false, this)) {
     image_ctx->image_lock.unlock_shared();
     return;
   }
@@ -625,7 +625,7 @@ void AbstractObjectWriteRequest<I>::post_write_object_map_update() {
         AbstractObjectWriteRequest<I>,
         &AbstractObjectWriteRequest<I>::handle_post_write_object_map_update>(
           CEPH_NOSNAP, this->m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING,
-          this->m_trace, false, this)) {
+          this->m_trace, false, false, this)) {
     image_ctx->image_lock.unlock_shared();
     return;
   }
