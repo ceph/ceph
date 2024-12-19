@@ -13,6 +13,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>
 #include <boost/lockfree/queue.hpp>
 #include "common/dout.h"
@@ -595,7 +596,8 @@ public:
                boost::optional<const std::string&> ca_location,
                boost::optional<const std::string&> mechanism,
                boost::optional<const std::string&> topic_user_name,
-               boost::optional<const std::string&> topic_password) {
+               boost::optional<const std::string&> topic_password,
+               boost::optional<const std::string&> brokers) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
@@ -632,6 +634,25 @@ public:
       ldout(cct, 1) << "Kafka connect: user/password are only allowed over secure connection" << dendl;
       return false;
     }
+    
+    if (brokers.has_value()) {
+      broker = brokers.get();
+      std::vector<std::string> kafka_brokers;
+      boost::split(kafka_brokers, broker, boost::is_any_of(":"));
+      for (const auto& kafka_broker: kafka_brokers) {
+        std::string tmp_user;
+        std::string tmp_password;
+        std::string tmp_host;
+        if (!parse_url_authority("kafka://" + kafka_broker, tmp_host, tmp_user, tmp_password)){
+          ldout(cct, 5) << "Kafka connect: skip invalid extra host: " << kafka_broker << dendl;
+          continue;
+        }
+        if (broker.find(kafka_broker) == std::string::npos){
+          broker += ":" + kafka_broker;
+        }
+      }
+    }
+    
     connection_id_t tmp_id(broker, user, password, ca_location, mechanism,
                            use_ssl);
     std::lock_guard lock(connections_lock);
@@ -770,11 +791,12 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> ca_location,
              boost::optional<const std::string&> mechanism,
              boost::optional<const std::string&> user_name,
-             boost::optional<const std::string&> password) {
+             boost::optional<const std::string&> password,
+             boost::optional<const std::string&> brokers) {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
   return s_manager->connect(conn_id, url, use_ssl, verify_ssl, ca_location,
-                            mechanism, user_name, password);
+                            mechanism, user_name, password, brokers);
 }
 
 int publish(const connection_id_t& conn_id,
@@ -837,4 +859,3 @@ size_t get_max_queue() {
 }
 
 } // namespace kafka
-
