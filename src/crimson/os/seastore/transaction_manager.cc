@@ -291,6 +291,430 @@ TransactionManager::refs_ret TransactionManager::remove(
   });
 }
 
+TransactionManager::base_iertr::future<CachedExtentRef>
+TransactionManager::retire_mapping(
+  Transaction &t, LBAMapping &mapping)
+{
+  LOG_PREFIX(TransactionManager::retire_mapping);
+  TRACET("retire {}", t, mapping);
+  auto v = mapping.get_logical_extent(t);
+  if (v.has_child()) {
+    return trans_intr::make_interruptible(
+      std::move(v.get_child_fut())
+    ).si_then([this, &t](auto extent) {
+      cache->retire_extent(t, extent);
+      return base_iertr::make_ready_future<
+	CachedExtentRef>(extent);
+    });
+  } else {
+    auto ext = cache->retire_absent_extent_addr(
+      t, mapping.get_val(), mapping.get_length());
+    return base_iertr::make_ready_future<
+      CachedExtentRef>(std::move(ext));
+  }
+}
+
+TransactionManager::move_mappings_ret
+TransactionManager::move_mappings(
+  Transaction &t,
+  laddr_t src_base,
+  laddr_t dst_base,
+  extent_len_t length,
+  lba_pin_list_t src_mappings,
+  lba_pin_list_t dst_mappings)
+{
+  LOG_PREFIX(TransactionManager::move_mappings);
+  DEBUGT("move {}~{} to {}", t, src_base, length, dst_base);
+
+  return seastar::do_with(
+    move_mappings_state_t(
+      src_base, dst_base, length,
+      std::move(src_mappings),
+      std::move(dst_mappings)),
+    [this, &t](auto &state) {
+      state.validate();
+      return remap_src_mappings(
+        t, state, remap_mode_t::move
+      ).si_then([this, &t, &state]() {
+	assert(!state.entries.empty());
+	assert(state.copy_src.empty());
+	assert(!state.dst_mappings.empty());
+	return lba_manager->make_iterator(t, *state.dst_mappings.front());
+      }).si_then([this, &t, &state](auto iter) {
+	state.lba_iter.emplace(std::move(iter));
+	if (state.dst_mapping_is_reserved()) {
+	  return replace_reserved_mapping(t, state);
+	} else {
+	  return merge_mappings(t, state);
+	}
+      });
+    });
+}
+
+namespace {
+void rebase_laddr(laddr_t &addr, laddr_t src, laddr_t dst) {
+  auto offset = addr.get_byte_distance<loffset_t>(src);
+  addr = (dst + offset).checked_to_laddr();
+}
+}
+
+TransactionManager::move_mappings_ret
+TransactionManager::copy_indirect_mappings(
+  Transaction &t,
+  laddr_t src_base,
+  laddr_t dst_base,
+  extent_len_t length,
+  lba_pin_list_t src_mappings,
+  LBAMappingRef dst_mapping)
+{
+  return seastar::do_with(
+    move_mappings_state_t(
+      src_base, dst_base, length,
+      std::move(src_mappings),
+      std::move(dst_mapping)),
+    [this, &t](move_mappings_state_t &state) {
+      state.validate();
+      return trans_intr::do_for_each(
+        state.src_mappings,
+	[this, &t, &state](LBAMappingRef &mapping) {
+	  assert(mapping->is_indirect() || mapping->is_zero_reserved());
+	  return lba_manager->make_iterator(t, *mapping
+	  ).si_then([&state](auto iter) {
+	    state.copy_src.push_back(
+	      state.make_lba_entry_from_iter(iter, nullptr));
+	    state.copy_src.back().update_refcount = true;
+	  });
+	}).si_then([this, &t, &state] {
+	  return copy_indirect_mappings_impl(t, state);
+	});
+    });
+}
+
+TransactionManager::move_mappings_ret
+TransactionManager::clone_mappings(
+  Transaction &t,
+  laddr_t src_base,
+  laddr_t dst_base,
+  extent_len_t length,
+  lba_pin_list_t src_mappings,
+  LBAMappingRef dst_mapping,
+  LBAMappingRef copy_dst_mapping)
+{
+  LOG_PREFIX(TransactionManager::clone_mappings);
+  DEBUGT("clone {}~{} to {} copy_dst: {}",
+	 t, src_base, length, dst_base, *copy_dst_mapping);
+
+  assert(dst_mapping->is_zero_reserved());
+  assert(dst_mapping->get_key() == dst_base);
+  assert(dst_mapping->get_length() == length);
+  assert(copy_dst_mapping->is_zero_reserved());
+  assert(copy_dst_mapping->get_length() == length);
+
+  return seastar::do_with(
+    move_mappings_state_t(
+      src_base, dst_base, length, std::move(src_mappings),
+      std::move(dst_mapping)),
+    std::move(copy_dst_mapping),
+    [this, &t](move_mappings_state_t &state, auto &copy_dst_mapping) {
+      return remap_src_mappings(t, state, remap_mode_t::clone
+      ).si_then([this, &t, &state, &copy_dst_mapping]() {
+	state.dst = copy_dst_mapping->get_key();
+	std::swap(state.dst_mapping, copy_dst_mapping);
+	return replace_reserved_mapping(t, state);
+      });
+    });
+}
+
+std::ostream &operator<<(
+  std::ostream &out,
+  const TransactionManager::move_mappings_state_t::lba_entry_t &e) {
+  lba_manager::btree::lba_map_val_t v{
+    e.length, e.pladdr, e.refcount, e.checksum
+  };
+  return out << "lba_entry{" << e.laddr << ' ' << v << ' ' << (void*)e.nextent
+	     << " update_refcount: " << e.update_refcount << "}";
+}
+
+TransactionManager::move_mappings_ret
+TransactionManager::remap_src_mappings(
+  Transaction &t,
+  move_mappings_state_t &state,
+  remap_mode_t mode)
+{
+  LOG_PREFIX(TransactionManager::remap_src_mappings);
+  TRACET("remap mode: {}", t, mode == remap_mode_t::clone ? "clone" : "move");
+  using FuncRetType = move_mappings_iertr::future<LBAManager::Iterator>;
+  return process_src_mappings(
+    t,
+    state,
+    /*remove_mapping_after_process=*/ mode == remap_mode_t::move,
+    [this, &t, &state, mode, FNAME](LBAMapping &mapping) -> FuncRetType {
+      TRACET("remapping {}", t, mapping);
+      assert(state.lba_iter->laddr == mapping.get_key());
+      assert(state.lba_iter->pladdr.is_laddr() == mapping.is_indirect());
+      if (state.lba_iter->pladdr.is_laddr()) {
+	assert(mapping.is_indirect());
+	assert(state.lba_iter->pladdr.get_laddr() == mapping.get_intermediate_key());
+      } else {
+	assert(!mapping.is_indirect());
+	assert(state.lba_iter->pladdr.get_paddr() == mapping.get_val());
+      }
+      assert(state.lba_iter->length == mapping.get_length());
+
+      return seastar::futurize_invoke([this, &t, &mapping] {
+	if (!mapping.is_indirect() && mapping.get_val() != P_ADDR_ZERO) {
+	  return retire_mapping(t, mapping);
+	} else {
+	  return move_mappings_iertr::make_ready_future<CachedExtentRef>();
+	}
+      }).si_then([this, &t, &state, &mapping, mode, FNAME](auto extent) {
+	auto dst_laddr = mapping.get_key();
+	rebase_laddr(dst_laddr, state.src, state.dst);
+
+	LogicalCachedExtent *nextent = nullptr;
+	if (extent) { // direct non-zero mapping
+	  auto type = extent->get_type();
+	  bool is_place_holder = is_retired_placeholder_type(type);
+	  assert(is_logical_type(type) || is_place_holder);
+	  if (is_place_holder) {
+	    auto ext = cache->alloc_remapped_placeholder(
+	      t,
+	      dst_laddr,
+	      mapping.get_val(),
+	      mapping.get_length()
+	    )->template cast<LogicalCachedExtent>();
+	    nextent = ext.get();
+	  } else {
+	    auto ext = cache->alloc_remapped_extent_by_type(
+	      t,
+	      type,
+	      dst_laddr,
+	      mapping.get_val(),
+	      mapping.get_length(),
+	      dst_laddr,
+	      std::nullopt
+	    )->template cast<LogicalCachedExtent>();
+	    nextent = ext.get();
+	  }
+	}
+
+	auto cur_entry = state.make_lba_entry_from_iter(
+	  *state.lba_iter, nextent);
+	if (mode == remap_mode_t::move) {
+	  state.entries.push_back(cur_entry);
+	  state.entries.back().laddr = dst_laddr;
+	  TRACET("move mapping {} to {}", t, cur_entry, state.entries.back());
+	  return move_mappings_iertr::make_ready_future<
+	    LBAManager::Iterator>(std::move(*state.lba_iter));
+	} else { // clone mode
+	  if (mapping.is_indirect() || mapping.is_zero_reserved()) {
+	    state.copy_src.push_back(cur_entry);
+	    auto &e = state.copy_src.back();
+	    e.update_refcount = mapping.is_indirect();
+	    TRACET("put mapping {} to copy source", t, e);
+	    return move_mappings_iertr::make_ready_future<
+	      LBAManager::Iterator>(std::move(*state.lba_iter));
+	  } else {
+	    state.entries.push_back(cur_entry);
+	    auto &e = state.entries.back();
+	    e.laddr = dst_laddr;
+	    e.refcount++;
+	    TRACET("remap mapping {} to {}", t, cur_entry, e);
+	    // change mapping, push copy src
+	    return lba_manager->change_mapping(
+	      t, std::move(*state.lba_iter), cur_entry.laddr,
+	      pladdr_t(dst_laddr), cur_entry.length,
+	      EXTENT_DEFAULT_REF_COUNT, 0, nullptr
+	    ).si_then([&t, &state, FNAME](auto iter) {
+	      state.copy_src.push_back(
+		state.make_lba_entry_from_iter(iter, nullptr));
+	      TRACET("update to indirect mapping: {}", t, state.copy_src.back());
+	      return move_mappings_iertr::make_ready_future<
+		LBAManager::Iterator>(std::move(iter));
+	    });
+	  }
+	}
+      });
+    }
+  ).si_then([this, &t, &state, mode] {
+    if (mode == remap_mode_t::move) {
+      assert(!state.entries.empty());
+      assert(state.copy_src.empty());
+      assert(!state.dst_mappings.empty());
+      if (state.dst_mapping_is_reserved()) {
+	std::swap(state.dst_mapping, state.dst_mappings.front());
+	state.dst_mappings.clear();
+	return replace_reserved_mapping(t, state);
+      } else {
+	return merge_mappings(t, state);
+      }
+    } else {
+      return replace_reserved_mapping(t, state);
+    }
+  });
+}
+
+TransactionManager::move_mappings_ret
+TransactionManager::process_src_mappings(
+  Transaction &t,
+  move_mappings_state_t &state,
+  bool remove_mapping_after_process,
+  std::function<ProcessFunc> func)
+{
+  return lba_manager->make_iterator(
+    t, *state.src_mappings.front()
+  ).si_then([this, &t, &state, fn=std::move(func),
+	     remove_mapping_after_process](auto iter) mutable {
+    state.lba_iter.emplace(std::move(iter));
+    return seastar::do_with(
+      std::move(fn),
+      [this, &t, &state, remove_mapping_after_process](auto &fn) {
+	return trans_intr::do_for_each(
+	  state.src_mappings,
+	  [this, &t, &state, &fn, remove_mapping_after_process](auto &mapping) {
+	    return seastar::futurize_invoke([&fn, &mapping] {
+	      if (mapping->is_parent_viewable()) {
+		return fn(*mapping);
+	      } else {
+		return seastar::do_with(
+		  mapping->refresh_with_pending_parent(),
+		  [&fn](auto &mapping) {
+		    return fn(*mapping);
+		  });
+	      }
+	    }).si_then([this, &t, remove_mapping_after_process](auto iter) {
+	      LOG_PREFIX(TransactionManager::process_src_mappings);
+	      if (remove_mapping_after_process) {
+		TRACET("remove: {}", t, iter);
+		return lba_manager->remove_mapping(t, std::move(iter));
+	      } else {
+		TRACET("next iter: {}", t, iter);
+		return lba_manager->next_iterator(t, std::move(iter));
+	      }
+	    }).si_then([&t, &state](auto iter) {
+	      LOG_PREFIX(TransactionManager::process_src_mappings);
+	      TRACET("returned iter: {}", t, iter);
+	      state.lba_iter.emplace(std::move(iter));
+	    });
+	  });
+      });
+  });
+}
+
+TransactionManager::move_mappings_ret
+TransactionManager::replace_reserved_mapping(
+  Transaction &t,
+  move_mappings_state_t &state)
+{
+  LOG_PREFIX(TransactionManager::replace_reserved_mapping);
+  TRACET("remove reserved mapping {}", t, *state.lba_iter);
+  ceph_assert(state.lba_iter->pladdr.get_paddr() == P_ADDR_ZERO);
+  return lba_manager->make_iterator(t, *state.dst_mapping
+  ).si_then([this, &t](auto iter) {
+    return lba_manager->remove_mapping(t, std::move(iter));
+  }).si_then([this, &t, &state](auto iter) {
+    state.lba_iter.emplace(std::move(iter));
+    // The iterator returned by insert_mapping() points to the newly
+    // inserted mapping, so we need to insert mappings from back to
+    // front.
+    return trans_intr::do_for_each(
+      state.entries.rbegin(), state.entries.rend(),
+      [this, &t, &state](auto &e) {
+	rebase_laddr(e.laddr, state.src, state.dst);
+	return lba_manager->insert_mapping(
+	  t, std::move(*state.lba_iter), e.laddr, e.pladdr,
+	  e.length, e.refcount, e.checksum, e.nextent
+	).si_then([&e, &state](auto iter) {
+	  assert(iter.laddr == e.laddr);
+	  assert(iter.pladdr == e.pladdr);
+	  assert(iter.length == e.length);
+	  assert(iter.checksum == e.checksum);
+	  assert(iter.refcount == e.refcount);
+	  state.lba_iter.emplace(std::move(iter));
+	});
+      });
+  });
+}
+
+TransactionManager::move_mappings_ret
+TransactionManager::merge_mappings(
+  Transaction &t,
+  move_mappings_state_t &state)
+{
+  state.lba_iter.reset();
+  return seastar::do_with(
+    state.entries.begin(),
+    state.dst_mappings.begin(),
+    [this, &t, &state](auto &entry_iter, auto &dst_iter) {
+      return trans_intr::repeat([this, &t, &state, &entry_iter, &dst_iter] {
+	if (entry_iter == state.entries.end()) {
+	  return move_mappings_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::yes);
+	}
+
+	// state.lba_iter should always points to the correct insert position
+	// at start of each repeat cycle.
+
+	laddr_t entry_laddr = entry_iter->laddr;
+	auto offset = entry_laddr.get_byte_distance<loffset_t>(state.src);
+	auto target_laddr = (state.dst + offset).checked_to_laddr();
+	auto &e = *entry_iter;
+
+	if (dst_iter != state.dst_mappings.end()) {
+	  auto &dst_mapping = *dst_iter++;
+	  ceph_assert(state.lba_iter->laddr == dst_mapping->get_key());
+	  auto dst_laddr = dst_mapping->get_key();
+	  auto dst_end = dst_laddr + dst_mapping->get_length();
+	  
+	  ceph_assert((target_laddr >= dst_end) ||
+		      (target_laddr + e.length <= dst_laddr));
+	  if (dst_laddr < target_laddr) {
+	    return lba_manager->make_mapping(t, *state.lba_iter
+	    ).si_then([this, &t, &state](auto mapping) {
+	      return lba_manager->next_iterator(t, std::move(*state.lba_iter)
+	      ).si_then([&state](auto iter) {
+		state.lba_iter.emplace(std::move(iter));
+		return move_mappings_iertr::make_ready_future<
+		  seastar::stop_iteration>(seastar::stop_iteration::no);
+	      });
+	    });
+	  } else {
+	    return lba_manager->make_iterator(t, *dst_mapping
+	    ).si_then([this, &t, &e, target_laddr](auto iter) {
+	      ceph_assert(target_laddr + e.length <= iter.laddr);
+	      return lba_manager->insert_mapping(
+		t, std::move(iter), target_laddr, e.pladdr,
+		e.length, e.refcount, e.checksum, e.nextent);
+	    }).si_then([this, &t, &state, &entry_iter](auto iter) {
+	      entry_iter++;
+	      state.lba_iter.emplace(std::move(iter));
+	      return lba_manager->make_mapping(t, *state.lba_iter);
+	    }).si_then([](auto mapping) {
+	      return move_mappings_iertr::make_ready_future<
+		seastar::stop_iteration>(seastar::stop_iteration::no);
+	    });
+	  }
+	} else {
+	  ceph_assert(state.lba_iter);
+	  return lba_manager->next_iterator(t, std::move(*state.lba_iter)
+	  ).si_then([this, &t, &state, &e, target_laddr](auto iter) {
+	    ceph_assert(state.dst + state.len <= iter.laddr);
+	    return lba_manager->insert_mapping(
+	      t, std::move(iter), target_laddr, e.pladdr,
+	      e.length, e.refcount, e.checksum, e.nextent);
+	  }).si_then([this, &t, &state, &entry_iter](auto iter) {
+	    entry_iter++;
+	    state.lba_iter.emplace(std::move(iter));
+	    return lba_manager->make_mapping(t, *state.lba_iter);
+	  }).si_then([](auto mapping) {
+	    return move_mappings_iertr::make_ready_future<
+	      seastar::stop_iteration>(seastar::stop_iteration::no);
+	  });
+	}
+      });
+    });
+}
+
 TransactionManager::submit_transaction_iertr::future<>
 TransactionManager::submit_transaction(
   Transaction &t)
