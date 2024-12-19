@@ -149,6 +149,7 @@ enum {
   LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT      = 1UL << 0,
   LIST_SNAPS_FLAG_WHOLE_OBJECT                  = 1UL << 1,
   LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS         = 1UL << 2,
+  LIST_SNAPS_FLAG_CALC_DIFF_FROM_PARENT         = 1UL << 3,
 };
 
 enum SparseExtentState {

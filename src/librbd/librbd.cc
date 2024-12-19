@@ -2712,6 +2712,16 @@ namespace librbd {
     return r;
   }
 
+  int Image::diff_iterate_from_parent(uint64_t ofs, uint64_t len,
+                           int (*cb)(uint64_t, size_t, int, void *), void *arg)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, diff_iterate_from_parent_enter, ictx, ictx->name.c_str(),
+              ictx->snap_name.c_str(), ictx->read_only, ofs, len);
+    int r = librbd::api::DiffIterate<>::diff_iterate_from_parent(ictx, ofs, len, cb, arg);
+    tracepoint(librbd, diff_iterate_from_parent_exit, r);
+    return r;
+  }
   ssize_t Image::write(uint64_t ofs, size_t len, bufferlist& bl)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -6205,6 +6215,19 @@ extern "C" int rbd_diff_iterate2(rbd_image_t image, const char *fromsnapname,
                                                    include_parent, whole_object,
                                                    cb, arg);
   tracepoint(librbd, diff_iterate_exit, r);
+  return r;
+}
+
+extern "C" int rbd_diff_iterate_from_parent(rbd_image_t image,
+                                uint64_t ofs, uint64_t len,
+                                int (*cb)(uint64_t, size_t, int, void *),
+                                void *arg)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, diff_iterate_from_parent_enter, ictx, ictx->name.c_str(),
+            ictx->snap_name.c_str(), ictx->read_only, ofs, len);
+  int r = librbd::api::DiffIterate<>::diff_iterate_from_parent(ictx, ofs, len, cb, arg);
+  tracepoint(librbd, diff_iterate_from_parent_exit, r);
   return r;
 }
 
