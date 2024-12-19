@@ -2254,6 +2254,10 @@ Then run the following:
         tgt_host['status'] = ""
         self.inventory._inventory[hostname] = tgt_host
         self.inventory.save()
+        # make sure we refresh state for this host now that it's out
+        # of maintenance mode. Maintenance mode is a time where users
+        # could have theoretically made a lot of changes to the host.
+        self._invalidate_all_host_metadata_and_kick_serve(hostname)
 
         self.set_maintenance_healthcheck()
 
@@ -2334,6 +2338,15 @@ Then run the following:
             for h in self.cache.get_hosts():
                 # Also discover daemons deployed manually
                 self.cache.invalidate_host_daemons(h)
+
+        self._kick_serve_loop()
+
+    def _invalidate_all_host_metadata_and_kick_serve(self, filter_host: Optional[str] = None) -> None:
+        if filter_host:
+            self.cache.refresh_all_host_info(filter_host)
+        else:
+            for h in self.cache.get_hosts():
+                self.cache.refresh_all_host_info(h)
 
         self._kick_serve_loop()
 
