@@ -1741,16 +1741,23 @@ class TestCephadm(object):
         nvmeof_client_cert = 'fake-nvmeof-client-cert'
         nvmeof_server_cert = 'fake-nvmeof-server-cert'
         nvmeof_root_ca_cert = 'fake-nvmeof-root-ca-cert'
+        grafana_cert_host_1 = 'grafana-cert-host-1'
+        grafana_cert_host_2 = 'grafana-cert-host-2'
         cephadm_module.cert_key_store.save_cert('rgw_frontend_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
         cephadm_module.cert_key_store.save_cert('nvmeof_server_cert', nvmeof_server_cert, service_name='nvmeof.foo', user_made=True)
         cephadm_module.cert_key_store.save_cert('nvmeof_client_cert', nvmeof_client_cert, service_name='nvmeof.foo', user_made=True)
         cephadm_module.cert_key_store.save_cert('nvmeof_root_ca_cert', nvmeof_root_ca_cert, service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_key_store.save_cert('grafana_cert', grafana_cert_host_1, host='host-1', user_made=True)
+        cephadm_module.cert_key_store.save_cert('grafana_cert', grafana_cert_host_2, host='host-2', user_made=True)
 
         expected_calls = [
             mock.call(f'{CERT_STORE_CERT_PREFIX}rgw_frontend_ssl_cert', json.dumps({'rgw.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()})),
             mock.call(f'{CERT_STORE_CERT_PREFIX}nvmeof_server_cert', json.dumps({'nvmeof.foo': Cert(nvmeof_server_cert, True).to_json()})),
             mock.call(f'{CERT_STORE_CERT_PREFIX}nvmeof_client_cert', json.dumps({'nvmeof.foo': Cert(nvmeof_client_cert, True).to_json()})),
             mock.call(f'{CERT_STORE_CERT_PREFIX}nvmeof_root_ca_cert', json.dumps({'nvmeof.foo': Cert(nvmeof_root_ca_cert, True).to_json()})),
+            mock.call(f'{CERT_STORE_CERT_PREFIX}grafana_cert', json.dumps({'host-1': Cert(grafana_cert_host_1, True).to_json()})),
+            mock.call(f'{CERT_STORE_CERT_PREFIX}grafana_cert', json.dumps({'host-1': Cert(grafana_cert_host_1, True).to_json(),
+                                                                           'host-2': Cert(grafana_cert_host_2, True).to_json()}))
         ]
         _set_store.assert_has_calls(expected_calls)
 
@@ -1795,17 +1802,20 @@ class TestCephadm(object):
         cephadm_module.cert_key_store._init_known_cert_key_dicts()
 
         grafana_host1_key = 'fake-grafana-host1-key'
+        grafana_host2_key = 'fake-grafana-host2-key'
         nvmeof_client_key = 'nvmeof-client-key'
         nvmeof_server_key = 'nvmeof-server-key'
         nvmeof_encryption_key = 'nvmeof-encryption-key'
-        grafana_host1_key = 'fake-grafana-host1-cert'
         cephadm_module.cert_key_store.save_key('grafana_key', grafana_host1_key, host='host1')
+        cephadm_module.cert_key_store.save_key('grafana_key', grafana_host2_key, host='host2')
         cephadm_module.cert_key_store.save_key('nvmeof_client_key', nvmeof_client_key, service_name='nvmeof.foo')
         cephadm_module.cert_key_store.save_key('nvmeof_server_key', nvmeof_server_key, service_name='nvmeof.foo')
         cephadm_module.cert_key_store.save_key('nvmeof_encryption_key', nvmeof_encryption_key, service_name='nvmeof.foo')
 
         expected_calls = [
             mock.call(f'{CERT_STORE_KEY_PREFIX}grafana_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json()})),
+            mock.call(f'{CERT_STORE_KEY_PREFIX}grafana_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json(),
+                                                                         'host2': PrivKey(grafana_host2_key).to_json()})),
             mock.call(f'{CERT_STORE_KEY_PREFIX}nvmeof_client_key', json.dumps({'nvmeof.foo': PrivKey(nvmeof_client_key).to_json()})),
             mock.call(f'{CERT_STORE_KEY_PREFIX}nvmeof_server_key', json.dumps({'nvmeof.foo': PrivKey(nvmeof_server_key).to_json()})),
             mock.call(f'{CERT_STORE_KEY_PREFIX}nvmeof_encryption_key', json.dumps({'nvmeof.foo': PrivKey(nvmeof_encryption_key).to_json()})),
