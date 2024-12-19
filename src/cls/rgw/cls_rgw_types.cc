@@ -730,7 +730,9 @@ void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
 void rgw_bucket_dir::dump(Formatter *f) const
 {
   f->open_object_section("header");
-  header.dump(f);
+  if (header) {
+    header->dump(f);
+  }
   f->close_section();
   auto iter = m.cbegin();
   f->open_array_section("map");
