@@ -6,8 +6,8 @@ tasks:
       pool_name: mypool
       image_name_prefix: myimage
     gateway_config:
-      subsystems_count: 3
-      namespaces_count: 20 # each subsystem
+      subsystems_count: 120
+      namespaces_count: 8 # each subsystem
       cli_image: quay.io/ceph/nvmeof-cli:latest
 
 - cephadm.wait_for_service:

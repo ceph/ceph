@@ -1,7 +1,8 @@
+# runs on default nvmeof image (i.e. DEFAULT_NVMEOF_IMAGE)
 tasks:
 - nvmeof:
     installer: host.a
-    gw_image: quay.io/ceph/nvmeof:latest # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
+    gw_image: default # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
     rbd:
       pool_name: mypool
       image_name_prefix: myimage
