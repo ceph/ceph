@@ -63,6 +63,8 @@ static void init_sqe(struct ioring_data *d, struct io_uring_sqe *sqe,
   else if (io->iocb.aio_lio_opcode == IO_CMD_PREADV)
     io_uring_prep_readv(sqe, fixed_fd, &io->iov[0],
 			io->iov.size(), io->offset);
+  else if (io->iocb.aio_lio_opcode == IO_CMD_NOOP)
+    io_uring_prep_nop(sqe);
   else
     ceph_assert(0);
 
