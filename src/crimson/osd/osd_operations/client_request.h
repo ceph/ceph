@@ -42,6 +42,10 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
   unsigned instance_id = 0;
 
 public:
+  epoch_t get_epoch_sent_at() const {
+    return m->get_map_epoch();
+  }
+
   /**
    * instance_handle_t
    *
