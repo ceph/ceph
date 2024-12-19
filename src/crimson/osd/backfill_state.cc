@@ -619,4 +619,15 @@ void BackfillState::enqueue_standalone_push(
   backfill_machine.backfill_listener.enqueue_push(obj, v, peers);
 }
 
+void BackfillState::enqueue_standalone_delete(
+  const hobject_t &obj,
+  const eversion_t &v,
+  const std::vector<pg_shard_t> &peers)
+{
+  progress_tracker->enqueue_drop(obj);
+  for (auto bt : peers) {
+    backfill_machine.backfill_listener.enqueue_drop(bt, obj, v);
+  }
+}
+
 } // namespace crimson::osd
