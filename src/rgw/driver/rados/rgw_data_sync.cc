@@ -1055,6 +1055,14 @@ public:
 			      << key << dendl;
 	    return set_cr_error(retcode);
 	  }
+
+          if (meta_info.data.get_bucket_info().zonegroup != driver->get_zone()->get_zonegroup().get_id()) {
+            // as per destination bucket existence check before sync policy creation,
+            // we can assure that there are no policies poining to my zonegroup from other zonegroups
+            // so we can safely skip this bucket instance if it's not in my zonegroup for full sync
+            continue;
+          }
+
 	  // Now that bucket full sync is bucket-wide instead of
 	  // per-shard, we only need to register a single shard of
 	  // each bucket to guarantee that sync will see everything
