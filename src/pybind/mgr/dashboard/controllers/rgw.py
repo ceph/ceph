@@ -15,7 +15,7 @@ from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, \
-    RgwClient, RgwMultisite, RgwMultisiteAutomation
+    RgwClient, RgwMultisite, RgwMultisiteAutomation, RgwRateLimit
 from ..services.rgw_iam import RgwAccounts
 from ..services.service import RgwServiceManager, wait_for_daemon_to_start
 from ..tools import json_str_to_object, str_to_bool
@@ -889,7 +889,7 @@ class RgwUser(RgwRESTController):
             params['access-key'] = access_key
         return self.proxy(daemon_name, 'DELETE', 'user?key', params, json_response=False)
 
-    @RESTController.Resource(method='GET', path='/quota')
+    @RESTController.Resource(method='GET', path='/quota') 
     def get_quota(self, uid, daemon_name=None):
         return self.proxy(daemon_name, 'GET', 'user?quota', {'uid': uid})
 
@@ -948,7 +948,22 @@ class RgwUser(RgwRESTController):
             'purge-keys': purge_keys
         }, json_response=False)
 
+    @Endpoint(path='/ratelimit')
+    @EndpointDoc("Get the rate limit")
+    @ReadPermission 
+    def get_rate_limit(self, scope:str, name: str ):
+        rgwRateLimit_instance = RgwRateLimit()
+        return rgwRateLimit_instance.get_rateLimit(scope, name)
+    
+    @Endpoint(method='PUT', path='/ratelimit')
+    @UpdatePermission
+    @allow_empty_body
+    @EndpointDoc("Update the rate limit")
+    def set_rate_limit(self, scope,enabled,name, max_read_ops, max_write_ops,max_read_bytes,max_write_bytes):
+        rgwRateLimit_instance = RgwRateLimit()
+        return rgwRateLimit_instance.set_rateLimit(scope, enabled, name, max_read_ops, max_write_ops,max_read_bytes,max_write_bytes)
 
+    
 class RGWRoleEndpoints:
     @staticmethod
     def role_list(_):
