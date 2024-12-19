@@ -4501,7 +4501,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   //erase the append attr
   cb.get_attrs().erase(RGW_ATTR_APPEND_PART_NUM);
 
-  { // add x-amz-replication-status=REPLICA
+  if (data_sync) { // add x-amz-replication-status=REPLICA only if it's data sync
     auto& bl = cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_STATUS];
     bl.clear(); // overwrite source's status
     bl.append("REPLICA");
