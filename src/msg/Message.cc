@@ -105,6 +105,7 @@
 #include "messages/MRemoveSnaps.h"
 
 #include "messages/MMonMap.h"
+#include "messages/MMonQuorum.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
@@ -484,6 +485,9 @@ Message *decode_message(CephContext *cct,
   case CEPH_MSG_MON_MAP:
     m = make_message<MMonMap>();
     break;
+  case CEPH_MSG_MON_QUORUM:
+    m = make_message<MMonQuorum>();
+    break;
   case CEPH_MSG_MON_GET_MAP:
     m = make_message<MMonGetMap>();
     break;
@@ -502,7 +506,6 @@ Message *decode_message(CephContext *cct,
   case CEPH_MSG_MON_GET_VERSION_REPLY:
     m = make_message<MMonGetVersionReply>();
     break;
-
   case MSG_OSD_BOOT:
     m = make_message<MOSDBoot>();
     break;
