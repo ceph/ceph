@@ -88,6 +88,7 @@ std::ostream& operator<<(std::ostream& os, const aio_t& aio);
 
 typedef boost::intrusive::list<
   aio_t,
+  boost::intrusive::constant_time_size<false>,
   boost::intrusive::member_hook<
     aio_t,
     boost::intrusive::list_member_hook<>,
