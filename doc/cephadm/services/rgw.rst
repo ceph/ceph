@@ -173,6 +173,32 @@ Then apply this yaml document:
 Note the value of ``rgw_frontend_ssl_certificate`` is a literal string as
 indicated by a ``|`` character preserving newline characters.
 
+Disabling multisite sync traffic
+--------------------------------
+
+There is an RGW config option called ``rgw_run_sync_thread`` that tells the
+RGW daemon to not transmit multisite replication data. This is useful if you want
+that RGW daemon to be dedicated to I/O rather than multisite sync operations.
+The RGW spec file includes a setting ``disable_multisite_sync_traffic`` that when
+set to "True" will tell cephadm to set ``rgw_run_sync_thread`` to false for all
+RGW daemons deployed for that RGW service. For example
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: foo
+    placement:
+      label: rgw
+    spec:
+      rgw_realm: myrealm
+      rgw_zone: myzone
+      rgw_zonegroup: myzg
+      disable_multisite_sync_traffic: True
+
+.. note:: This will only stop the RGW daemon(s) from sending replication data.
+    The daemon can still receive replication data unless it has been removed
+    from the zonegroup and zone replication endpoints.
+
 Service specification
 ---------------------
 
