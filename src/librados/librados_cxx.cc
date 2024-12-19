@@ -1270,6 +1270,11 @@ int librados::IoCtx::read(const std::string& oid, bufferlist& bl, size_t len, ui
   return io_ctx_impl->read(obj, bl, len, off);
 }
 
+int librados::IoCtx::get_object_osd_position(const std::string& oid, int *acting_primary)
+{
+  return io_ctx_impl->get_object_osd_position(oid, acting_primary);
+}
+
 int librados::IoCtx::checksum(const std::string& oid,
 			      rados_checksum_type_t type,
 			      const bufferlist &init_value_bl, size_t len,
