@@ -200,7 +200,12 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
         op_ret = -EINVAL;
         return;
       }
-      // TODO: verify target bucket does not have encryption
+      // verify target bucket does not have encryption
+      if (target_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY) != target_attrs.end()) {
+        ldpp_dout(this, 1) << "ERROR: logging target bucket '" << target_bucket_id << "', is configured with encryption" << dendl;
+        op_ret = -EINVAL;
+        return;
+      }
       bufferlist conf_bl;
       encode(configuration, conf_bl);
       attrs[RGW_ATTR_BUCKET_LOGGING] = conf_bl;
