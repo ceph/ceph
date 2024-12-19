@@ -267,7 +267,7 @@ class CloudZone(Zone):
         def get_bucket(self, bucket_name):
             return CloudZoneBucket(self, self.zone.target_path, bucket_name)
 
-        def create_bucket(self, name):
+        def create_bucket(self, name, **kwargs):
             # should not be here, a bug in the test suite
             log.critical('Conn.create_bucket() should not be called in cloud zone')
             assert False

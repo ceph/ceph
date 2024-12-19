@@ -52,8 +52,8 @@ class RadosZone(Zone):
         def get_bucket(self, name):
             return self.conn.get_bucket(name)
 
-        def create_bucket(self, name):
-            return self.conn.create_bucket(name)
+        def create_bucket(self, name, **kwargs):
+            return self.conn.create_bucket(name, **kwargs)
 
         def delete_bucket(self, name):
             return self.conn.delete_bucket(name)
