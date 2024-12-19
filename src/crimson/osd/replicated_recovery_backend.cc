@@ -306,7 +306,10 @@ ReplicatedRecoveryBackend::recover_delete(
       }
       return seastar::make_ready_future<>();
     }).then_interruptible([this, soid, &stat_diff] {
-      pg.get_recovery_handler()->on_global_recover(soid, stat_diff, true);
+      const auto &missing = pg.get_peering_state().get_pg_log().get_missing();
+      if (!missing.is_missing(soid)) {
+        pg.get_recovery_handler()->on_global_recover(soid, stat_diff, true);
+      }
       return seastar::make_ready_future<>();
     });
   });
