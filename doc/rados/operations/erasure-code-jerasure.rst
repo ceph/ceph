@@ -2,8 +2,10 @@
 Jerasure erasure code plugin
 ============================
 
-The *jerasure* plugin is the most generic and flexible plugin, it is
-also the default for Ceph erasure coded pools. 
+The *jerasure* plugin is a generic and flexible plugin. However,
+the *jerasure* library is no longer maintained and has not been
+updated to support modern CPU instructions that can improve
+performance when encoding and decoding data.
 
 The *jerasure* plugin encapsulates the `Jerasure
 <https://github.com/ceph/jerasure>`_ library. It is
