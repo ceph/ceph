@@ -519,6 +519,11 @@ bufferlist DBObjectMap::DBObjectMapIteratorImpl::value()
   return cur_iter->value();
 }
 
+std::string_view DBObjectMap::DBObjectMapIteratorImpl::value_as_sv()
+{
+  return cur_iter->value_as_sv();
+}
+
 int DBObjectMap::DBObjectMapIteratorImpl::status()
 {
   return r;
