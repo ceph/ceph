@@ -182,13 +182,28 @@ int ErasureCodeBench::encode()
   for (int i = 0; i < k + m; i++) {
     want_to_encode.insert(i);
   }
+  std::map<int,bufferlist> encoded;
+
   utime_t begin_time = ceph_clock_now();
-  for (int i = 0; i < max_iterations; i++) {
-    std::map<int,bufferlist> encoded;
+
+  if (plugin == "lrc") {
+    for (int i = 0; i < max_iterations; i++) {
+      code = erasure_code->encode(want_to_encode, in, &encoded);
+      if (code)
+        return code;
+    }
+  }
+  else {
     code = erasure_code->encode(want_to_encode, in, &encoded);
     if (code)
       return code;
+    for (int i = 1; i < max_iterations; i++) {
+      code = erasure_code->encode_chunks(want_to_encode, &encoded);
+      if (code)
+        return code;
+    }
   }
+
   utime_t end_time = ceph_clock_now();
   cout << (end_time - begin_time) << "\t" << (max_iterations * (in_size / 1024)) << endl;
   return 0;
@@ -295,31 +310,50 @@ int ErasureCodeBench::decode()
   }
 
   utime_t begin_time = ceph_clock_now();
-  for (int i = 0; i < max_iterations; i++) {
-    if (exhaustive_erasures) {
+  // Decode benchmark type 1 - exhaustive test of all combinations of chunk erasures
+  // for the specified number of erasures
+  if (exhaustive_erasures) {
+    for (int i = 0; i < max_iterations; i++) {
       code = decode_erasures(encoded, encoded, 0, erasures, erasure_code);
       if (code)
-	return code;
-    } else if (erased.size() > 0) {
-      map<int,bufferlist> decoded;
-      code = erasure_code->decode(want_to_read, encoded, &decoded, 0);
-      if (code)
-	return code;
-    } else {
-      map<int,bufferlist> chunks = encoded;
-      for (int j = 0; j < erasures; j++) {
-	int erasure;
-	do {
-	  erasure = rand() % ( k + m );
-	} while(chunks.count(erasure) == 0);
-	chunks.erase(erasure);
-      }
-      map<int,bufferlist> decoded;
-      code = erasure_code->decode(want_to_read, chunks, &decoded, 0);
+        return code;
+    }
+  }
+  // Decode benchmark type 2 - the specific chunks to erase are specified
+  else if (erased.size() > 0) {
+    map<int,bufferlist> decoded;
+    code = erasure_code->decode(want_to_read, encoded, &decoded, 0);
+    if (code)
+      return code;
+    for (int i = 1; i < max_iterations; i++) {
+      code = erasure_code->decode_chunks(want_to_read, encoded, &decoded);
       if (code)
 	return code;
     }
   }
+  // Decode benchmark type 3 - the number of chunks to erase is specified. The chunks
+  // are chosen at random
+  else {
+    map<int,bufferlist> chunks = encoded;
+    for (int j = 0; j < erasures; j++) {
+      int erasure;
+      do {
+        erasure = rand() % ( k + m );
+	 } while(chunks.count(erasure) == 0);
+	 chunks.erase(erasure);
+    }
+    map<int,bufferlist> decoded;
+
+    code = erasure_code->decode(want_to_read, chunks, &decoded, 0);
+    if (code)
+      return code;
+    for (int i = 1; i < max_iterations; i++) {
+      code = erasure_code->decode_chunks(want_to_read, chunks, &decoded);
+      if (code)
+	return code;
+    }
+  }
+
   utime_t end_time = ceph_clock_now();
   cout << (end_time - begin_time) << "\t" << (max_iterations * (in_size / 1024)) << endl;
   return 0;
