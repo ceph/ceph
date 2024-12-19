@@ -167,61 +167,72 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       return;
     }
 
-    auto& attrs = src_bucket->get_attrs();
     if (!configuration.enabled) {
-      if (auto iter = attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != attrs.end()) {
-        attrs.erase(iter);
-      }
-    } else {
-      std::string target_bucket_name;
-      std::string target_tenant_name;
-      op_ret = rgw_parse_url_bucket(configuration.target_bucket, s->bucket_tenant, target_tenant_name, target_bucket_name);
+      // remove logging configuration
+      op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, &src_bucket, y] {
+        auto& attrs = src_bucket->get_attrs();
+        if (auto iter = attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != attrs.end()) {
+          attrs.erase(iter);
+        }
+        return src_bucket->merge_and_store_attrs(this, attrs, y);
+      }, y);
       if (op_ret < 0) {
-        ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << op_ret << dendl;
+        ldpp_dout(this, 1) << "ERROR: failed to remove logging attribute '" << RGW_ATTR_BUCKET_LOGGING << "' from bucket '" << 
+          src_bucket_id << "', ret = " << op_ret << dendl;
         return;
       }
-      const rgw_bucket target_bucket_id(target_tenant_name, target_bucket_name);
-      if (target_bucket_id == src_bucket_id) {
-        ldpp_dout(this, 1) << "ERROR: target bucket '" << target_bucket_id << "' must be different from source bucket" << dendl;
-        op_ret = -EINVAL;
-        return;
-      }
-      std::unique_ptr<rgw::sal::Bucket> target_bucket;
-      op_ret = driver->load_bucket(this, target_bucket_id,
-                                   &target_bucket, y);
-      if (op_ret < 0) {
-        ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << op_ret << dendl;
-        return;
-      }
-      const auto& target_attrs = target_bucket->get_attrs();
-      if (target_attrs.find(RGW_ATTR_BUCKET_LOGGING) != target_attrs.end()) {
-        // target bucket must not have logging set on it
-        ldpp_dout(this, 1) << "ERROR: logging target bucket '" << target_bucket_id << "', is configured with bucket logging" << dendl;
-        op_ret = -EINVAL;
-        return;
-      }
-      // verify target bucket does not have encryption
-      if (target_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY) != target_attrs.end()) {
-        ldpp_dout(this, 1) << "ERROR: logging target bucket '" << target_bucket_id << "', is configured with encryption" << dendl;
-        op_ret = -EINVAL;
-        return;
-      }
-      bufferlist conf_bl;
-      encode(configuration, conf_bl);
-      attrs[RGW_ATTR_BUCKET_LOGGING] = conf_bl;
-      // TODO: should we add attribute to target bucket indicating it is target to bucket logging?
-      // if we do, how do we maintain it when bucket logging changes?
-    }
-    // TODO: use retry_raced_bucket_write from rgw_op.cc
-    op_ret = src_bucket->merge_and_store_attrs(this, attrs, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to set logging attribute '" << RGW_ATTR_BUCKET_LOGGING << "' to bucket '" << 
-        src_bucket->get_name() << "', ret = " << op_ret << dendl;
+      ldpp_dout(this, 20) << "INFO: removed logging configuration from bucket '" << src_bucket_id << "'" << dendl;
       return;
     }
 
-    ldpp_dout(this, 20) << "INFO: " << (configuration.enabled ? "wrote" : "removed")
-      << " logging configuration. bucket '" << src_bucket_id << "'. configuration: " <<
+    // set logging configuration
+    std::string target_bucket_name;
+    std::string target_tenant_name;
+    op_ret = rgw_parse_url_bucket(configuration.target_bucket, s->bucket_tenant, target_tenant_name, target_bucket_name);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << op_ret << dendl;
+      return;
+    }
+    const rgw_bucket target_bucket_id(target_tenant_name, target_bucket_name);
+    if (target_bucket_id == src_bucket_id) {
+      ldpp_dout(this, 1) << "ERROR: target bucket '" << target_bucket_id << "' must be different from source bucket" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+    std::unique_ptr<rgw::sal::Bucket> target_bucket;
+    op_ret = driver->load_bucket(this, target_bucket_id,
+                                 &target_bucket, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << op_ret << dendl;
+      return;
+    }
+    const auto& target_attrs = target_bucket->get_attrs();
+    if (target_attrs.find(RGW_ATTR_BUCKET_LOGGING) != target_attrs.end()) {
+      // target bucket must not have logging set on it
+      ldpp_dout(this, 1) << "ERROR: logging target bucket '" << target_bucket_id << "', is configured with bucket logging" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+    // verify target bucket does not have encryption
+    if (target_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY) != target_attrs.end()) {
+      ldpp_dout(this, 1) << "ERROR: logging target bucket '" << target_bucket_id << "', is configured with encryption" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+    bufferlist conf_bl;
+    encode(configuration, conf_bl);
+    op_ret = retry_raced_bucket_write(this, src_bucket.get(), [this, &conf_bl, &src_bucket, y] {
+      auto& attrs = src_bucket->get_attrs();
+      attrs[RGW_ATTR_BUCKET_LOGGING] = conf_bl;
+      return src_bucket->merge_and_store_attrs(this, attrs, y);
+    }, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to set logging attribute '" << RGW_ATTR_BUCKET_LOGGING << "' to bucket '" << 
+        src_bucket_id << "', ret = " << op_ret << dendl;
+      return;
+    }
+
+    ldpp_dout(this, 20) << "INFO: wrote logging configuration to bucket '" << src_bucket_id << "'. configuration: " <<
       configuration.to_json_str() << dendl;
   }
 };
