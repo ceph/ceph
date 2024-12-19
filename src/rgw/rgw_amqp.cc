@@ -20,7 +20,7 @@
 #include "common/dout.h"
 #include <openssl/ssl.h>
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_notification
 
 // TODO investigation, not necessarily issues:
 // (1) in case of single threaded writer context use spsc_queue
