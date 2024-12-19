@@ -32,12 +32,24 @@ struct onode_layout_t {
   ceph_le32 oi_size{0};
   ceph_le32 ss_size{0};
   omap_root_le_t omap_root;
+  omap_root_le_t log_root;
   omap_root_le_t xattr_root;
 
   object_data_le_t object_data;
 
   char oi[MAX_OI_LENGTH] = {0};
   char ss[MAX_SS_LENGTH] = {0};
+
+  const omap_root_le_t& get_root(omap_type_t type) const {
+    if (type == omap_type_t::XATTR) {
+      return xattr_root;
+    } else if (type == omap_type_t::OMAP) {
+      return omap_root;
+    } else {
+      assert(type == omap_type_t::LOG);
+      return log_root;
+    }
+  }
 } __attribute__((packed));
 
 class Transaction;
@@ -71,6 +83,7 @@ public:
 
   virtual void update_onode_size(Transaction&, uint32_t) = 0;
   virtual void update_omap_root(Transaction&, omap_root_t&) = 0;
+  virtual void update_log_root(Transaction&, omap_root_t&) = 0;
   virtual void update_xattr_root(Transaction&, omap_root_t&) = 0;
   virtual void update_object_data(Transaction&, object_data_t&) = 0;
   virtual void update_object_info(Transaction&, ceph::bufferlist&) = 0;
@@ -88,6 +101,10 @@ public:
   }
   laddr_t get_data_hint() const {
     return get_hint();
+  }
+  omap_root_t get_root(omap_type_t type, extent_len_t block_size) const {
+    return get_layout().get_root(type).get(
+      get_metadata_hint(block_size), type);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };

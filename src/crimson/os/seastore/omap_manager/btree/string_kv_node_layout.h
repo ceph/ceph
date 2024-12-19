@@ -915,6 +915,7 @@ private:
  */
 class StringKVLeafNodeLayout {
   char *buf = nullptr;
+  extent_len_t len;
 
   using L = absl::container_internal::Layout<ceph_le32, omap_node_meta_le_t, omap_leaf_key_le_t>;
   static constexpr L layout{1, 1, 1}; // = L::Partial(1, 1, 1);
@@ -1014,7 +1015,7 @@ public:
       return get_node_key().key_off;
     }
     auto get_node_val_ptr() const {
-      auto tail = node->buf + OMAP_LEAF_BLOCK_SIZE;
+      auto tail = node->buf + node->len;
       if (*this == node->iter_end())
         return tail;
       else {
@@ -1029,7 +1030,7 @@ public:
         return (*this - 1)->get_node_val_offset();
     }
     auto get_right_ptr_end() const {
-      return node->buf + OMAP_LEAF_BLOCK_SIZE - get_right_offset_end();
+      return node->buf + node->len - get_right_offset_end();
     }
 
     void update_offset(int offset) {
@@ -1127,10 +1128,11 @@ public:
 
   StringKVLeafNodeLayout() : buf(nullptr) {}
 
-  void set_layout_buf(char *_buf) {
+  void set_layout_buf(char *_buf, extent_len_t _len) {
     assert(buf == nullptr);
     assert(_buf != nullptr);
     buf = _buf;
+    len = _len;
   }
 
   const_iterator iter_begin() const {
@@ -1274,9 +1276,13 @@ public:
   }
 
   uint32_t capacity() const {
-    return OMAP_LEAF_BLOCK_SIZE
+    return len
       - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))
       - reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
+  }
+
+  auto get_len() const {
+    return len;
   }
 
   bool is_overflow(size_t ksize, size_t vsize) const {
