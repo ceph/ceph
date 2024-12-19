@@ -27,11 +27,70 @@ namespace ECUtil {
 class stripe_info_t {
   const uint64_t stripe_width;
   const uint64_t chunk_size;
+  const unsigned int k; // Can be calculated with a division from above. Better to cache.
+  const unsigned int m;
+  const std::vector<int> chunk_mapping;
+  const std::vector<unsigned int> chunk_mapping_reverse;
+private:
+  static std::vector<int> complete_chunk_mapping(
+    std::vector<int> _chunk_mapping, unsigned int n)
+  {
+    unsigned int size = _chunk_mapping.size();
+    std::vector<int> chunk_mapping(n);
+    for (unsigned int i = 0; i < n; i++) {
+      if (size > i) {
+        chunk_mapping.at(i) = _chunk_mapping.at(i);
+      } else {
+        chunk_mapping.at(i) = static_cast<int>(i);
+      }
+    }
+    return chunk_mapping;
+  }
+  static std::vector<unsigned int> reverse_chunk_mapping(
+    std::vector<int> chunk_mapping)
+  {
+    unsigned int size = chunk_mapping.size();
+    std::vector<unsigned int> reverse(size);
+    std::vector<bool> used(size,false);
+    for (unsigned int i = 0; i < size; i++) {
+      int index = chunk_mapping.at(i);
+      // Mapping must be a bijection and a permutation
+      ceph_assert(!used.at(index));
+      used.at(index) = true;
+      reverse.at(index) = i;
+    }
+    return reverse;
+  }
 public:
-  stripe_info_t(uint64_t stripe_size, uint64_t stripe_width)
+  stripe_info_t(ErasureCodeInterfaceRef ec_impl, uint64_t stripe_width)
     : stripe_width(stripe_width),
-      chunk_size(stripe_width / stripe_size) {
-    ceph_assert(stripe_width % stripe_size == 0);
+      chunk_size(stripe_width / ec_impl->get_data_chunk_count()),
+      k(ec_impl->get_data_chunk_count()),
+      m(ec_impl->get_coding_chunk_count()),
+      chunk_mapping(complete_chunk_mapping(ec_impl->get_chunk_mapping(),
+					   k + m)),
+      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)) {
+    ceph_assert(stripe_width % k == 0);
+  }
+  // Simpler constructors for unit tests
+  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width)
+    : stripe_width(stripe_width),
+      chunk_size(stripe_width / k),
+      k(k),
+      m(m),
+      chunk_mapping(complete_chunk_mapping(std::vector<int>(), k + m)),
+      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)) {
+    ceph_assert(stripe_width % k == 0);
+  }
+  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
+		std::vector<int> _chunk_mapping)
+    : stripe_width(stripe_width),
+      chunk_size(stripe_width / k),
+      k(k),
+      m(m),
+      chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
+      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)) {
+    ceph_assert(stripe_width % k == 0);
   }
   bool logical_offset_is_stripe_aligned(uint64_t logical) const {
     return (logical % stripe_width) == 0;
@@ -42,8 +101,20 @@ public:
   uint64_t get_chunk_size() const {
     return chunk_size;
   }
-  uint64_t get_data_chunk_count() const {
-    return get_stripe_width() / get_chunk_size();
+  unsigned int get_m() const {
+    return m;
+  }
+  unsigned int get_k() const {
+    return k;
+  }
+  unsigned int get_k_plus_m() const {
+    return k + m;
+  }
+  int get_shard(unsigned int raw_shard) const {
+    return chunk_mapping[raw_shard];
+  }
+  unsigned int get_raw_shard(int shard) const {
+    return chunk_mapping_reverse[shard];
   }
   uint64_t logical_to_prev_chunk_offset(uint64_t offset) const {
     return (offset / stripe_width) * chunk_size;
