@@ -91,16 +91,15 @@ void ZeroGetOp::send_response()
   std::vector<char> zeroes;
   zeroes.resize(std::min(remaining, chunk_size), '\0');
 
-  try {
-    while (remaining) {
-      const size_t count = std::min(zeroes.size(), remaining);
-      const int bytes = dump_body(s, zeroes.data(), count);
-      remaining -= bytes;
+  while (remaining) {
+    const size_t count = std::min(zeroes.size(), remaining);
+    const int bytes = dump_body(s, zeroes.data(), count);
+    if (bytes < 0) {
+      op_ret = bytes;
+      ldpp_dout(this, 0) << "dump_body failed with " << op_ret << dendl;
+      return;
     }
-  } catch (const std::exception& e) {
-    ldpp_dout(this, 0) << "recv_body failed with " << e.what() << dendl;
-    op_ret = -EIO;
-    return;
+    remaining -= bytes;
   }
 }
 
@@ -151,16 +150,15 @@ void ZeroPutOp::execute(optional_yield y)
   std::vector<char> buffer;
   buffer.resize(std::min(remaining, chunk_size));
 
-  try {
-    while (remaining) {
-      const size_t count = std::min(buffer.size(), remaining);
-      const int bytes = recv_body(s, buffer.data(), count);
-      remaining -= bytes;
+  while (remaining) {
+    const size_t count = std::min(buffer.size(), remaining);
+    const int bytes = recv_body(s, buffer.data(), count);
+    if (bytes < 0) {
+      op_ret = bytes;
+      ldpp_dout(this, 0) << "recv_body failed with " << op_ret << dendl;
+      return;
     }
-  } catch (const std::exception& e) {
-    ldpp_dout(this, 0) << "recv_body failed with " << e.what() << dendl;
-    op_ret = -EIO;
-    return;
+    remaining -= bytes;
   }
 
   // on success, update the resource size
@@ -173,6 +171,15 @@ class ZeroHandler : public RGWHandler_REST {
   ZeroResource* const resource;
  public:
   explicit ZeroHandler(ZeroResource* resource) : resource(resource) {}
+
+  int init(sal::Driver* driver, req_state* s, io::BasicClient* cio) override
+  {
+    int r = RGWHandler_REST::init(driver, s, cio);
+    if (r < 0) {
+      return r;
+    }
+    return allocate_formatter(s, RGWFormat::XML, true);
+  }
 
   int init_permissions(RGWOp*, optional_yield) override { return 0; }
   int read_permissions(RGWOp*, optional_yield) override { return 0; }
