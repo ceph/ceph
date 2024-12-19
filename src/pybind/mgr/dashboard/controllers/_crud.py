@@ -407,12 +407,13 @@ class CRUDEndpoint:
             funcs[extra_endpoint[0]] = extra_endpoint[1].doc(extra_endpoint[1].func)
 
         class_name = self.router.path.replace('/', '')
-        crud_class = type(f'{class_name}_CRUDClass',
-                          (RESTController,),
-                          {
-                              **funcs,
-                              'outer_self': self,
-                          })
+        crud_class = type(
+            f'{class_name}_CRUDClass',
+            (RESTController,),
+            {
+                **funcs,
+                'outer_self': self,
+            })
         self.router(self.doc(crud_class))
         cls.CRUDClass = crud_class
 
@@ -482,18 +483,19 @@ class CRUDEndpoint:
                 self.outer_self.meta.resource = self.__class__.outer_self.resource
 
         class_name = self.router.path.replace('/', '')
-        meta_class = type(f'{class_name}_CRUDClassMetadata',
-                          (RESTController,),
-                          {
-                              'list': _list,
-                              'update_columns': update_columns,
-                              'generate_actions': generate_actions,
-                              'generate_forms': generate_forms,
-                              'set_permissions': set_permissions,
-                              'set_column_key': set_column_key,
-                              'set_table_resource': set_table_resource,
-                              'get_detail_columns': get_detail_columns,
-                              'outer_self': self,
-                          })
+        meta_class = type(
+            f'{class_name}_CRUDClassMetadata',
+            (RESTController,),
+            {
+                'list': _list,
+                'update_columns': update_columns,
+                'generate_actions': generate_actions,
+                'generate_forms': generate_forms,
+                'set_permissions': set_permissions,
+                'set_column_key': set_column_key,
+                'set_table_resource': set_table_resource,
+                'get_detail_columns': get_detail_columns,
+                'outer_self': self,
+            })
         UIRouter(self.router.path, self.router.security_scope)(meta_class)
         cls.CRUDClassMetadata = meta_class

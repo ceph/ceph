@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from enum import Enum
-from typing import Dict, List, Optional, Set, no_type_check
+from typing import Dict, List, Optional, Set, no_type_check  # noqa: F401
 
 import cherrypy
 from mgr_module import CLICommand, Option
