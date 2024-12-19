@@ -67,7 +67,7 @@
     <ng-container ngbNavItem="clients">
       <a ngbNavLink>
         <ng-container i18n>Clients</ng-container>
-        <span class="badge badge-pill badge-tab ms-1">{{ clients.data.length }}</span>
+        <cds-tag class="ms-1">{{ clients.data.length }}</cds-tag>
       </a>
       <ng-template ngbNavContent>
         <cd-cephfs-clients

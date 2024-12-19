@@ -46,8 +46,8 @@ export class RulesListComponent extends PrometheusListHelper implements OnInit {
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            critical: { class: 'badge-danger' },
-            warning: { class: 'badge-warning' }
+            critical: { class: 'tags-danger' },
+            warning: { class: 'tags-warning' }
           }
         }
       },
