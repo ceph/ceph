@@ -12,9 +12,9 @@ See `Compressor UADK Support`_.
 UADK in the Software Stack
 ==========================
 
-UADK is a general-purpose user space accelerator framework that uses shared
-virtual addressing (SVA) to provide a unified programming interface for hardware
-acceleration of cryptographic and compression algorithms.
+UADK is a general-purpose user space accelerator framework that uses Shared
+Virtual Addressing (SVA) to provide a unified programming interface for
+hardware acceleration of cryptographic and compression algorithms.
 
 UADK includes Unified/User-space-access-intended Accelerator Framework (UACCE),
 which enables hardware accelerators that support SVA to adapt to UADK.
@@ -77,11 +77,12 @@ Configuration
 
 #. Kernel Requirement
 
-Users need to ensure that UACCE is supported by the Linux kernel release in
-use, which should be 5.9 or later with SVA (Shared Virtual Addressing) enabled.
+Users must ensure that UACCE is supported by the Linux kernel release in use,
+which should be 5.9 or later with SVA (Shared Virtual Addressing) enabled.
 
-UACCE may be built as a module or built into the kernel. Here's an example to
-build UACCE with hardware accelerators for the HiSilicon Kunpeng platform.
+UACCE may be built as a loadable module or built into the kernel. Here's an
+example to build UACCE with hardware accelerators for the HiSilicon Kunpeng
+platform.
 
     .. prompt:: bash $
 
@@ -97,9 +98,9 @@ build UACCE with hardware accelerators for the HiSilicon Kunpeng platform.
 Make sure all these above kernel configurations are selected.
 
 #. UADK enablement
-If the architecture is aarch64, it will automatically download the UADK source
-code to build the static library. If it runs on other architecture, user can
-enable it with build parameters `-DWITH_UADK=true`
+If the architecture is ``aarch64``, it will automatically download the UADK
+source code to build the static library. If it runs on other architecture, user
+can enable it with build parameters `-DWITH_UADK=true`
 
 #. Manual Build UADK
 As the above paragraph shows, the UADK is enabled automatically, no need to build manually.
@@ -115,9 +116,9 @@ For developer who is interested in UADK, you can refer to the below steps for bu
       make
       make install
 
-   .. note:: Without –prefix, UADK will be installed to ``/usr/local/lib`` by
-      default. If you get the error: ``cannot find -lnuma``, install the
-      ``libnuma-dev`` package.
+   .. note:: Without --prefix, UADK will be installed under ``/usr/local/lib``
+             by default. If you get the error: ``cannot find -lnuma``, 
+             install the ``libnuma-dev`` package.
 
 #. Configure
 
