@@ -1,9 +1,11 @@
 """
 Cephadm Service Registry
 
-This module provides a centralized service registry for managing and initializing
-Cephadm services. It dynamically discovers, imports, and registers all service
-classes located in the same directory, ensuring modularity and ease of extension.
+This module provides a centralized service registry for managing and initializing Cephadm services.
+It dynamically discovers, imports, and registers service classes in the services directory, ensuring
+modularity and scalability. The `@register_cephadm_service` decorator relies on an automatic discovery
+mechanism based on `pkgutil` and `importlib` which dynamically import modules, triggering the decorator
+for service registration and eliminating the need for manual imports.
 
 Key Features:
 - Automatically discovers and imports all service modules during initialization.
@@ -12,9 +14,10 @@ Key Features:
 - Provides a singleton `service_registry` for global access.
 
 Usage:
-1. Define a service class with a `TYPE` attribute and use `@service_registry_decorator`.
-2. Call `service_registry.init_services(mgr)` to initialize all registered services.
-3. Access services using `service_registry.get_service(service_type)`.
+1. Define a service class by deriving from the CephadmService base class.
+2. Place @register_cephadm_service decorator above your class to register it automatically.
+3. Call `service_registry.init_services(mgr)` to initialize all registered services.
+4. Access services using `service_registry.get_service(service_type)`.
 """
 
 import os
@@ -64,7 +67,7 @@ class CephadmServiceRegistry:
         return self._services[service_type]
 
 
-def service_registry_decorator(cls: Type["CephadmService"]) -> Type["CephadmService"]:
+def register_cephadm_service(cls: Type["CephadmService"]) -> Type["CephadmService"]:
     """
     Decorator to register a service class with the global service registry.
     """

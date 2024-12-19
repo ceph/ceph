@@ -9,7 +9,7 @@ from mgr_util import build_url
 from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
-from .service_registry import service_registry_decorator
+from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@service_registry_decorator
+@register_cephadm_service
 class IngressService(CephService):
     TYPE = 'ingress'
     MAX_KEEPALIVED_PASS_LEN = 8

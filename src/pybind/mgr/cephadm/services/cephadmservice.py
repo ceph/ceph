@@ -26,7 +26,7 @@ from mgr_util import build_url, merge_dicts
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
 from cephadm import utils
-from .service_registry import service_registry_decorator
+from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -646,7 +646,7 @@ class CephService(CephadmService):
         })
 
 
-@service_registry_decorator
+@register_cephadm_service
 class MonService(CephService):
     TYPE = 'mon'
 
@@ -810,7 +810,7 @@ class MonService(CephService):
                     logger.error(f'Failed setting crush location for mon {dd.daemon_id}: {e}')
 
 
-@service_registry_decorator
+@register_cephadm_service
 class MgrService(CephService):
     TYPE = 'mgr'
 
@@ -932,7 +932,7 @@ class MgrService(CephService):
         return HandleCommandResult(0, warn_message, '')
 
 
-@service_registry_decorator
+@register_cephadm_service
 class MdsService(CephService):
     TYPE = 'mds'
 
@@ -989,7 +989,7 @@ class MdsService(CephService):
         })
 
 
-@service_registry_decorator
+@register_cephadm_service
 class RgwService(CephService):
     TYPE = 'rgw'
 
@@ -1249,7 +1249,7 @@ class RgwService(CephService):
         self.mgr.trigger_connect_dashboard_rgw()
 
 
-@service_registry_decorator
+@register_cephadm_service
 class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
 
@@ -1284,7 +1284,7 @@ class RbdMirrorService(CephService):
         return HandleCommandResult(0, warn_message, '')
 
 
-@service_registry_decorator
+@register_cephadm_service
 class CrashService(CephService):
     TYPE = 'crash'
 
@@ -1303,7 +1303,7 @@ class CrashService(CephService):
         return daemon_spec
 
 
-@service_registry_decorator
+@register_cephadm_service
 class CephExporterService(CephService):
     TYPE = 'ceph-exporter'
     DEFAULT_SERVICE_PORT = 9926
@@ -1356,7 +1356,7 @@ class CephExporterService(CephService):
         return self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
 
 
-@service_registry_decorator
+@register_cephadm_service
 class CephfsMirrorService(CephService):
     TYPE = 'cephfs-mirror'
 
@@ -1389,7 +1389,7 @@ class CephfsMirrorService(CephService):
         return daemon_spec
 
 
-@service_registry_decorator
+@register_cephadm_service
 class CephadmAgent(CephService):
     TYPE = 'agent'
 
