@@ -15,6 +15,12 @@ The log bucket can accumulate logs from multiple buckets. It is recommended to c
 a different "prefix" for each bucket, so that the logs of different buckets will be stored
 in different objects in the log bucket.
 
+.. note::
+
+    - The log bucket must be created before enabling logging on a bucket
+    - The log bucket cannot be the same as the bucket being logged
+    - The log bucket cannot have logging enabled on it
+
 
 .. toctree::
    :maxdepth: 1
