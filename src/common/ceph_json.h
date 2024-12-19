@@ -4,85 +4,110 @@
 #include <stdexcept>
 #include <typeindex>
 #include <include/types.h>
+#include <boost/json/value.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <include/ceph_fs.h>
 #include "common/ceph_time.h"
 
-#include "json_spirit/json_spirit.h"
+//JFW: #include "json_spirit/json_spirit.h"
 
 #include "Formatter.h"
 
-
-
+// JFW: where is this at..?
 class JSONObj;
 
 class JSONObjIter {
-  typedef std::map<std::string, JSONObj *>::iterator map_iter_t;
+  typedef std::map<std::string, std::unique_ptr<JSONObj>>::iterator map_iter_t;
   map_iter_t cur;
   map_iter_t last;
 
 public:
+/* JFW
   JSONObjIter();
   ~JSONObjIter();
+*/
   void set(const JSONObjIter::map_iter_t &_cur, const JSONObjIter::map_iter_t &_end);
 
   void operator++();
-  JSONObj *operator*();
+  JSONObj *operator*(); // JFW: TODO: const-itfy to catch callsites, see if this can be eliminated (to ref or nothing)
 
+//JFW: suspicious:
   bool end() const {
     return (cur == last);
   }
 };
 
-class JSONObj
+class JSONObj 
 {
-  JSONObj *parent;
+  JSONObj *parent = nullptr;
+
 public:
   struct data_val {
     std::string str;
     bool quoted{false};
 
+// JFW: it's already a struct, why??
     void set(std::string_view s, bool q) {
       str = s;
       quoted = q;
     }
   };
+
 protected:
   std::string name; // corresponds to obj_type in XMLObj
-  json_spirit::Value data;
-  struct data_val val;
+//JFW:  json_spirit::Value data;
+  boost::json::value data;
+  data_val val;
   bool data_quoted{false};
-  std::multimap<std::string, JSONObj *> children;
+
+  std::multimap<std::string, std::unique_ptr<JSONObj>> children;
   std::map<std::string, data_val> attr_map;
-  void handle_value(json_spirit::Value v);
+
+//JFW:  void handle_value(json_spirit::Value v);
+  void handle_value(boost::json::value& v);
 
 public:
 
+/*JFW
   JSONObj() : parent(NULL){}
+*/
 
-  virtual ~JSONObj();
+  virtual ~JSONObj() = default;
 
-  void init(JSONObj *p, json_spirit::Value v, std::string n);
+//JFW:  void init(JSONObj *p, json_spirit::Value v, std::string n);
+  void init(JSONObj *p, boost::json::value& v, std::string n);
 
+// JFW: pointless accessor!
   std::string& get_name() { return name; }
+
+// JFW: pointless accessor!
   data_val& get_data_val() { return val; }
+
   const std::string& get_data() { return val.str; }
+
   bool get_data(const std::string& key, data_val *dest);
-  JSONObj *get_parent();
+
+  JSONObj *get_parent() { return parent; }
+
   void add_child(std::string el, JSONObj *child);
+
   bool get_attr(std::string name, data_val& attr);
+
   JSONObjIter find(const std::string& name);
+
   JSONObjIter find_first();
   JSONObjIter find_first(const std::string& name);
+
   JSONObj *find_obj(const std::string& name);
+
+  bool is_array()  { return data.is_array(); }
+  bool is_object() { return data.is_object(); }
+
+  std::vector<std::string> get_array_elements();
 
   friend std::ostream& operator<<(std::ostream &out,
                                   const JSONObj &obj); // does not work, FIXME
-
-  bool is_array();
-  bool is_object();
-  std::vector<std::string> get_array_elements();
 };
 
 inline std::ostream& operator<<(std::ostream &out, const JSONObj::data_val& dv) {
@@ -93,12 +118,13 @@ inline std::ostream& operator<<(std::ostream &out, const JSONObj::data_val& dv) 
 
 class JSONParser : public JSONObj
 {
-  int buf_len;
+  int buf_len = 0;
   std::string json_buffer;
-  bool success;
+  bool success = true;
+
 public:
-  JSONParser();
-  ~JSONParser() override;
+  ~JSONParser() override = default;;
+
   void handle_data(const char *s, int len);
 
   bool parse(const char *buf_, int len);
@@ -694,14 +720,14 @@ void encode_json_map(const char *name, const char *index_name,
                      const char *object_name, const char *value_name,
                      const std::map<K, V>& m, ceph::Formatter *f)
 {
-  encode_json_map<K, V>(name, index_name, object_name, value_name, NULL, NULL, m, f);
+  encode_json_map<K, V>(name, index_name, object_name, value_name, nullptr, nullptr, m, f);
 }
 
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name, const char *value_name,
                      const std::map<K, V>& m, ceph::Formatter *f)
 {
-  encode_json_map<K, V>(name, index_name, NULL, value_name, NULL, NULL, m, f);
+  encode_json_map<K, V>(name, index_name, nullptr, value_name, nullptr, nullptr, m, f);
 }
 
 template <class T>
@@ -763,14 +789,14 @@ void encode_json_map(const char *name, const char *index_name,
                      const char *object_name, const char *value_name,
                      const boost::container::flat_map<K, V>& m, ceph::Formatter *f)
 {
-  encode_json_map<K, V>(name, index_name, object_name, value_name, NULL, NULL, m, f);
+  encode_json_map<K, V>(name, index_name, object_name, value_name, nullptr, nullptr, m, f);
 }
 
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name, const char *value_name,
                      const boost::container::flat_map<K, V>& m, ceph::Formatter *f)
 {
-  encode_json_map<K, V>(name, index_name, NULL, value_name, NULL, NULL, m, f);
+  encode_json_map<K, V>(name, index_name, nullptr, value_name, nullptr, nullptr, m, f);
 }
 
 
