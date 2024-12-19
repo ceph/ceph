@@ -46,7 +46,8 @@
                   i18n>This field is required.</span>
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'bucketNameInvalid')"
-                  i18n>Bucket names can only contain lowercase letters, numbers, periods and hyphens.</span>
+                  i18n>Bucket
+              names can only contain lowercase letters, numbers, periods and hyphens.</span>
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'bucketNameNotAllowed')"
                   i18n>The chosen name is already in use.</span>
@@ -90,14 +91,12 @@
             </select>
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('owner', frm, 'required')"
-                  i18n>This field is required.</span>
-            <cd-alert-panel
-              type="info"
-              *ngIf="bucketForm.get('owner').disabled"
-              spacingClass="me-1 mt-1"
-              i18n>
-                The bucket is owned by an account. UI does not support changing
-                the ownership of bucket owned by an account.
+                  i18n>This field is
+              required.</span>
+            <cd-alert-panel type="info"
+                            *ngIf="bucketForm.get('owner').disabled"
+                            spacingClass="me-1 mt-1"
+                            i18n>The bucket is owned by an account. UI does not support changing the ownership of bucket owned by an account.
             </cd-alert-panel>
           </div>
         </div>
@@ -116,7 +115,7 @@
                        name="versioning"
                        formControlName="versioning"
                        (change)="setMfaDeleteValidators()">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="versioning"
                        i18n>Enabled</label>
                 <cd-helper>
@@ -188,11 +187,11 @@
         <!-- Object Locking -->
         <fieldset *ngIf="!editing || (editing && bucketForm.getValue('lock_enabled'))">
           <legend class="cd-header"
-                  i18n>
-            Object Locking
+                  i18n>Object Locking
             <cd-help-text>
-                Store objects using a write-once-read-many (WORM) model to prevent objects from being deleted or overwritten for a fixed amount of time or indefinitely.
-                Object Locking works only in versioned buckets.
+              Store objects using a write-once-read-many (WORM) model to prevent objects from being deleted or
+              overwritten for a fixed amount of time or indefinitely.
+              Object Locking works only in versioned buckets.
             </cd-help-text>
           </legend>
           <!-- Object Locking enable -->
@@ -200,13 +199,13 @@
             <label class="cd-col-form-label pt-0"
                    for="lock_enabled"
                    i18n>
-                    Enable
+              Enable
             </label>
             <div class="cd-col-form-input">
               <input class="form-check-input"
                      id="lock_enabled"
                      formControlName="lock_enabled"
-                     type="checkbox"/>
+                     type="checkbox" />
               <cd-help-text>
                 <span i18n>Enables locking for the objects in the bucket. Locking can only be enabled while creating a bucket.</span>
               </cd-help-text>
@@ -224,7 +223,7 @@
                       name="lock_mode"
                       id="lock_mode">
                 <option i18n
-                        value="COMPLIANCE" >
+                        value="COMPLIANCE">
                   Compliance
                 </option>
                 <option i18n
@@ -234,12 +233,10 @@
               </select>
               <cd-help-text>
                 <span *ngIf="bucketForm.getValue('lock_mode') === 'COMPLIANCE'"
-                      i18n>
-                  In COMPLIANCE an object version cannot be overwritten or deleted for the duration of the period.
+                      i18n>In COMPLIANCE an object version cannot be overwritten or deleted for the duration of the period.
                 </span>
                 <span *ngIf="bucketForm.getValue('lock_mode') === 'GOVERNANCE'"
-                      i18n>
-                  In GOVERNANCE mode, users cannot overwrite or delete an object version or alter its lock settings unless they have special permissions.
+                      i18n>In GOVERNANCE mode, users cannot overwrite or delete an object version or alter its lock settings unless they have special permissions.
                 </span>
               </cd-help-text>
             </div>
@@ -258,7 +255,8 @@
                      formControlName="lock_retention_period_days"
                      min="1">
               <cd-help-text>
-                <span i18n>The number of days that you want to specify for the default retention period that will be applied to new objects placed in this bucket.</span>
+                <span i18n>The number of days that you want to specify for the default retention period that will be
+                  applied to new objects placed in this bucket.</span>
               </cd-help-text>
               <span class="invalid-feedback"
                     *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'pattern')"
@@ -272,52 +270,50 @@
           <div class="form-group row">
             <div class="cd-col-form-label"></div>
             <div class="cd-col-form-input">
-              <cd-alert-panel
-                type="info"
-                *ngIf="bucketForm.getValue('lock_enabled')"
-                class="me-1"
-                i18n-title>
-                  Bucket Versioning can't be disabled when Object Locking is enabled.
+              <cd-alert-panel type="info"
+                              *ngIf="bucketForm.getValue('lock_enabled')"
+                              class="me-1"
+                              i18n-title>
+                Bucket Versioning can't be disabled when Object Locking is enabled.
               </cd-alert-panel>
-              <cd-alert-panel
-                type="warning"
-                *ngIf="bucketForm.getValue('lock_enabled')">
-                  Enabling Object Locking will allow the configuration of GOVERNANCE or COMPLIANCE modes, which will help ensure that an object version cannot be overwritten or deleted for the specified period.
+              <cd-alert-panel type="warning"
+                              *ngIf="bucketForm.getValue('lock_enabled')">
+                Enabling Object Locking will allow the configuration of GOVERNANCE or COMPLIANCE modes, which will help
+                ensure that an object version cannot be overwritten or deleted for the specified period.
               </cd-alert-panel>
             </div>
           </div>
         </fieldset>
 
-        <!-- Encryption -->
-        <fieldset>
-          <legend class="cd-header"
-                  i18n>Encryption</legend>
-          <div class="form-group row">
-            <label class="cd-col-form-label pt-0"
-                   for="encryption_enabled"
-                   i18n>
-                    Enable
-            </label>
-            <div class="cd-col-form-input">
-              <input class="form-check-input"
-                     id="encryption_enabled"
-                     name="encryption_enabled"
-                     formControlName="encryption_enabled"
-                     type="checkbox"
-                     [attr.disabled]="!kmsConfigured && !s3Configured ? true : null"/>
-              <cd-help-text aria-label="encryption helper">
-                <span i18n>Enables encryption for the objects in the bucket.
-                    To enable encryption on a bucket you need to set the configuration values for SSE-S3 or SSE-KMS.
-                    To set the configuration values <a href="#/rgw/configuration"
-                                                       aria-label="click here">Click here</a></span>
-              </cd-help-text>
-            </div>
-          </div>
-
-          <div *ngIf="bucketForm.getValue('encryption_enabled')">
-            <div class="form-group row">
-              <div class="cd-col-form-offset">
-                <div class="custom-control custom-radio custom-control-inline ps-5">
+          <!-- Encryption -->
+            <fieldset>
+              <legend class="cd-header"
+                      i18n>Encryption</legend>
+              <div class="form-group row">
+                <label class="cd-col-form-label pt-0"
+                       for="encryption_enabled"
+                       i18n>Enable
+                </label>
+                <div class="cd-col-form-input">
+                <input  class="form-check-input"
+                        id="encryption_enabled"
+                        name="encryption_enabled"
+                        formControlName="encryption_enabled"
+                        type="checkbox"
+                        [attr.disabled]="!kmsConfigured && !s3Configured ? true : null" />
+                  <cd-help-text aria-label="encryption helper">
+                  <span i18n>Enables encryption for the objects in the bucket.
+                        To enable encryption on a bucket you need to set the configuration values for SSE-S3 or SSE-KMS.
+                          To set the configuration values
+                  <a href="#/rgw/configuration"
+                     aria-label="click here">Click here</a></span>
+                  </cd-help-text>
+                </div>
+              </div>
+            <div *ngIf="bucketForm.getValue('encryption_enabled')">
+              <div class="form-group row">
+                <div class="cd-col-form-offset">
+                  <div class="custom-control custom-radio custom-control-inline ps-5">
                   <input class="form-check-input"
                          formControlName="encryption_type"
                          id="sse_S3_enabled"
@@ -329,9 +325,9 @@
                          [ngClass]="{'text-muted': !s3Configured}"
                          for="sse_S3_enabled"
                          i18n>SSE-S3</label>
+                  </div>
                 </div>
               </div>
-            </div>
 
             <div class="form-group row">
               <div class="cd-col-form-offset">
@@ -389,7 +385,8 @@
                          formControlName="keyId">
                   <span class="invalid-feedback"
                         *ngIf="bucketForm.showError('keyId', frm, 'required')"
-                        i18n>This field is required.</span>
+                        i18n>This field
+                    is required.</span>
                 </div>
               </div>
             </div>
@@ -404,7 +401,7 @@
             <label class="cd-col-form-label pt-0"
                    for="replication"
                    i18n>
-                    Enable
+              Enable
             </label>
             <div class="cd-col-form-input"
                  *ngIf="{status: multisiteStatus$, isDefaultZg: isDefaultZoneGroup$ | async} as multisiteStatus; else loadingTpl">
@@ -444,8 +441,8 @@
           <div class="row">
             <div class="col-12">
               <strong *ngIf="tags.length > 19"
-                      class="text-warning"
-                      i18n>Maximum of 20 tags reached</strong>
+                       class="text-warning"
+                       i18n>Maximum of 20 tags reached</strong>
               <button type="button"
                       id="add-tag"
                       class="btn btn-light float-end my-3"
@@ -515,11 +512,11 @@
               <!-- Lifecycle -->
               <div *ngIf="editing"
                    class="form-group row">
-              <label i18n
-                     class="cd-col-form-label"
-                     for="id">Lifecycle
-                <cd-helper>JSON or XML formatted document</cd-helper>
-              </label>
+                <label i18n
+                       class="cd-col-form-label"
+                       for="id">Lifecycle
+                  <cd-helper>JSON or XML formatted document</cd-helper>
+                </label>
                 <div class="cd-col-form-input">
                   <textarea #lifecycleTextArea
                             class="form-control resize-vertical"
@@ -587,16 +584,17 @@
                           for="aclPermission"
                           i18n>Permissions
                       <cd-helper>Select the permision to give to the selected grantee.
-                          Regardless, the owner of the bucket will always have
-                            FULL CONTROL access</cd-helper>
-                      </span>
+                        Regardless, the owner of the bucket will always have
+                        FULL CONTROL access</cd-helper>
+                    </span>
                     <select id="aclPermission"
                             name="aclPermission"
                             class="form-input form-select"
                             formControlName="aclPermission">
                       <option *ngFor="let permission of aclPermissions"
                               [value]="permission"
-                              i18n>{{ permission }}</option>
+                              i18n>{{ permission }}
+                      </option>
                     </select>
                     <span class="invalid-feedback"
                           *ngIf="bucketForm.showError('aclPermission', frm, 'required')"
@@ -609,9 +607,9 @@
         </fieldset>
 
         <!--Advanced-->
-        <cd-form-advanced-fieldset *ngIf="!editing">
+        <cd-form-advanced-fieldset>
           <!-- Placement target -->
-          <div class="form-group row">
+          <div class="form-group row"  *ngIf="!editing">
             <label class="cd-col-form-label"
                    for="placement-target"
                    i18n>Placement target</label>
@@ -627,15 +625,192 @@
                         *ngIf="placementTargets !== null"
                         [ngValue]="null">-- Select a placement target --</option>
                 <option *ngFor="let placementTarget of placementTargets"
-                        [value]="placementTarget.name">{{ placementTarget.description }}</option>
+                        [value]="placementTarget.name">{{placementTarget.description }}</option>
               </select>
               <cd-help-text>
                 <span i18n>
-                  When creating a bucket, a placement target can be provided as part of the LocationConstraint to override the default placement targets from the user and zonegroup.
+                  When creating a bucket, a placement target can be provided as part of the LocationConstraint to
+                  override the default placement targets from the user and zonegroup.
                 </span>
               </cd-help-text>
             </div>
           </div>
+
+          <!-- Bucket Rate Limit -->
+          <fieldset>
+            <legend i18n
+                    class="cd-header">Bucket Rate Limit</legend>
+
+            <!-- Enabled -->
+            <div class="form-group row">
+              <div class="cd-col-form-offset">
+                <div class="custom-control custom-checkbox">
+                  <input class="custom-control-input"
+                         id="bucket_rate_limit_enabled"
+                         type="checkbox"
+                         formControlName="bucket_rate_limit_enabled">
+                  <label class="custom-control-label spacing-03 $body-compact-02"
+                         for="bucket_rate_limit_enabled"
+                         i18n>Enabled</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Unlimited size -->
+            <div class="form-group row"
+                 *ngIf="bucketForm.controls.bucket_rate_limit_enabled.value">
+              <div class="cd-col-form-offset">
+                <div class="custom-control custom-checkbox">
+                  <input class="custom-control-input"
+                         id="bucket_rate_limit_max_readOps_unlimited"
+                         type="checkbox"
+                         formControlName="bucket_rate_limit_max_readOps_unlimited">
+                  <label class="custom-control-label spacing-03"
+                         for="bucket_rate_limit_max_readOps_unlimited"
+                         i18n>Unlimited Read Ops</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Maximum size -->
+            <div class="form-group row"
+                 *ngIf="bucketForm.controls.bucket_rate_limit_enabled.value && !bucketForm.getValue('bucket_rate_limit_max_readOps_unlimited')">
+              <label class="cd-col-form-label required"
+                     for="bucket_rate_limit_max_readOps"
+                     i18n>Max. Read Ops</label>
+              <div class="cd-col-form-input">
+                <input id="bucket_rate_limit_max_readOps"
+                       class="form-control"
+                       type="text"
+                       formControlName="bucket_rate_limit_max_readOps"
+                       cdDimlessBinary>
+                <span class="invalid-feedback"
+                      *ngIf="bucketForm.showError('bucket_rate_limit_max_readOps', frm, 'required')"
+                      i18n>This field is
+                  required.</span>
+                <span class="invalid-feedback"
+                      *ngIf="bucketForm.showError('bucket_rate_limit_max_readOps', frm, 'quotaMaxSize')"
+                      i18n>The value is not valid.</span>
+                <span *ngIf="bucketForm.showError('bucket_rate_limit_max_readOps', formDir, 'pattern')"
+                      class="invalid-feedback"
+                      i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
+              </div>
+            </div>
+
+            <!-- Unlimited Write Ops -->
+            <div class="form-group row"
+                 *ngIf="bucketForm.controls.bucket_rate_limit_enabled.value">
+              <div class="cd-col-form-offset">
+                <div class="custom-control custom-checkbox">
+                  <input class="custom-control-input"
+                         id="bucket_rate_limit_max_writeOps_unlimited"
+                         type="checkbox"
+                         formControlName="bucket_rate_limit_max_writeOps_unlimited">
+                  <label class="custom-control-label spacing-03"
+                         for="bucket_rate_limit_max_writeOps_unlimited"
+                         i18n>Unlimited
+                    Write Ops</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Maximum Write Ops -->
+            <div class="form-group row"
+                 *ngIf="bucketForm.controls.bucket_rate_limit_enabled.value && !bucketForm.getValue('bucket_rate_limit_max_writeOps_unlimited')">
+              <label class="cd-col-form-label required"
+                     for="bucket_rate_limit_max_writeOps"
+                     i18n>Max. Write Ops</label>
+              <div class="cd-col-form-input">
+                <input id="bucket_rate_limit_max_writeOps"
+                       class="form-control"
+                       type="number"
+                       formControlName="bucket_rate_limit_max_writeOps"
+                       min="0">
+                <span class="invalid-feedback"
+                      *ngIf="bucketForm.showError('bucket_rate_limit_max_writeOps', frm, 'required')"
+                      i18n>This field is required.</span>
+                <span class="invalid-feedback"
+                      *ngIf="bucketForm.showError('bucket_rate_limit_max_writeOps', frm, 'min')"
+                      i18n>The entered value must be >= 0.</span>
+              </div>
+            </div>
+
+
+            <!-- Unlimited Read Bytes -->
+            <div class="form-group row"
+                 *ngIf="bucketForm.controls.bucket_rate_limit_enabled.value">
+              <div class="cd-col-form-offset">
+                <div class="custom-control custom-checkbox">
+                  <input class="custom-control-input"
+                         id="bucket_rate_limit_max_readBytes_unlimited"
+                         type="checkbox"
+                         formControlName="bucket_rate_limit_max_readBytes_unlimited">
+                  <label class="custom-control-label spacing-03"
+                         for="bucket_rate_limit_max_readBytes_unlimited"
+                         i18n>Unlimited Read Bytes</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Maximum Read Bytes -->
+            <div class="form-group row"
+                 *ngIf="bucketForm.controls.bucket_rate_limit_enabled.value && !bucketForm.getValue('bucket_rate_limit_max_readBytes_unlimited')">
+              <label class="cd-col-form-label required"
+                     for="bucket_rate_limit_max_readBytes"
+                     i18n>Max. Read Bytes</label>
+              <div class="cd-col-form-input">
+                <input id="bucket_rate_limit_max_readBytes"
+                       class="form-control"
+                       type="number"
+                       formControlName="bucket_rate_limit_max_readBytes"
+                       min="0">
+                <span class="invalid-feedback"
+                      *ngIf="bucketForm.showError('bucket_rate_limit_max_readBytes', frm, 'required')"
+                      i18n>This field is required.</span>
+                <span class="invalid-feedback"
+                      *ngIf="bucketForm.showError('bucket_rate_limit_max_readBytes', frm, 'min')"
+                      i18n>The entered value must be >= 0.</span>
+              </div>
+            </div>
+
+
+            <!-- Unlimited Write Bytes -->
+            <div class="form-group row"
+                 *ngIf="bucketForm.controls.bucket_rate_limit_enabled.value">
+              <div class="cd-col-form-offset">
+                <div class="custom-control custom-checkbox">
+                  <input class="custom-control-input"
+                         id="bucket_rate_limit_max_writeBytes_unlimited"
+                         type="checkbox"
+                         formControlName="bucket_rate_limit_max_writeBytes_unlimited">
+                  <label class="custom-control-label spacing-03"
+                         for="bucket_rate_limit_max_writeBytes_unlimited"
+                         i18n>Unlimited Write Bytes</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Maximum Write Bytes -->
+            <div class="form-group row"
+                 *ngIf="bucketForm.controls.bucket_rate_limit_enabled.value && !bucketForm.getValue('bucket_rate_limit_max_writeBytes_unlimited')">
+              <label class="cd-col-form-label required"
+                     for="bucket_rate_limit_max_writeBytes"
+                     i18n>Max. Write Bytes</label>
+              <div class="cd-col-form-input">
+                <input id="bucket_rate_limit_max_writeBytes"
+                       class="form-control"
+                       type="number"
+                       formControlName="bucket_rate_limit_max_writeBytes"
+                       min="0">
+                <span class="invalid-feedback"
+                      *ngIf="bucketForm.showError('bucket_rate_limit_max_writeBytes', frm, 'required')"
+                      i18n>This field is required.</span>
+                <span class="invalid-feedback"
+                      *ngIf="bucketForm.showError('bucket_rate_limit_max_writeBytes', frm, 'min')"
+                      i18n>The entered value must be >= 0.</span>
+              </div>
+            </div>
+          </fieldset>
         </cd-form-advanced-fieldset>
       </div>
 
@@ -688,3 +863,4 @@
     <cd-loading-panel i18n>Checking multi-site status...</cd-loading-panel>
   </div>
 </ng-template>
+
