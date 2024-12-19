@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Check Pull Request
-      uses: JJ/github-pr-contains-action@526dfe784d8604ea1c39b6c26609074de95b1ffd  # releases/v14.1
+      uses: JJ/github-pr-contains-action@bdece3f70a1f1d147ca756552ff357f4755f0755  # releases/v14.1
       with:
         github-token: ${{github.token}}
         diffDoesNotContain: "GNU General Public License"
