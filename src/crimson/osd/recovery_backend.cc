@@ -238,18 +238,17 @@ RecoveryBackend::scan_for_backfill(
 	if (pg.is_primary()) {
 	  obc = pg.obc_registry.maybe_get_cached_obc(object);
 	}
-	if (obc) {
-	  if (obc->obs.exists) {
-	    logger().debug("scan_for_backfill found (primary): {}  {}",
-			   object, obc->obs.oi.version);
-	    version_map->emplace(object, obc->obs.oi.version);
-	  } else {
-	    // if the object does not exist here, it must have been removed
-	    // between the collection_list_partial and here.  This can happen
-	    // for the first item in the range, which is usually last_backfill.
-	  }
+	if (obc && obc->obs.exists) {
+	  logger().debug("scan_for_backfill found (primary): {}  {}",
+			 object, obc->obs.oi.version);
+	  version_map->emplace(object, obc->obs.oi.version);
 	  return seastar::now();
 	} else {
+	  // In cases where the obc is already in the cache and its "existed" is
+	  // false, we need to exclude the possbility that there's an ongoing obc
+	  // load which creates the non-existed obc and is still loading the metadata.
+	  //
+	  // So here we also try to load the metadata, this might be redundant though.
 	  return backend->load_metadata(object).safe_then_interruptible(
 	    [version_map, object] (auto md) {
 	    if (md->os.exists) {
