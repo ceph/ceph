@@ -21,7 +21,6 @@ namespace crimson::osd {
 class OSD;
 class ShardServices;
 class PG;
-class BackfillRecovery;
 
 template <class T>
 class PeeringEvent : public PhasedOperationT<T> {
