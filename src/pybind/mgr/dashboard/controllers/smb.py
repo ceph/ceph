@@ -3,6 +3,7 @@
 
 import json
 import logging
+from functools import wraps
 from typing import List
 
 from smb.enums import Intent
@@ -87,6 +88,19 @@ SHARE_SCHEMA = {
     }, "Configuration for the CephFS share")
 }
 
+def raise_unsuccess(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+
+        if isinstance(result, dict) and 'success' in result and result['success'] is False:
+            if not 'msg' in result:
+                result["msg"] = 'Operation was unsuccessful'
+            raise DashboardException(msg=result['msg'], component='smb')
+
+        return result
+
+    return wrapper
 
 @APIRouter('/smb/cluster', Scope.SMB)
 @APIDoc("SMB Cluster Management API", "SMB")
@@ -163,8 +177,9 @@ class SMBShare(RESTController):
             [f'{self._resource}.{cluster_id}' if cluster_id else self._resource])
         return res['resources'] if 'resources' in res else res
 
+    @raise_unsuccess
     @DeletePermission
-    @EndpointDoc("Remove smb shares",
+    @EndpointDoc("Remove an smb share",
                  parameters={
                      'cluster_id': (str, 'Unique identifier for the cluster'),
                      'share_id': (str, 'Unique identifier for the share')
