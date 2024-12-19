@@ -4264,6 +4264,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                bool stat_follow_olh,
                const rgw_obj& stat_dest_obj,
                const rgw_zone_set_entry& source_trace_entry,
+               bool data_sync,
                rgw_zone_set *zones_trace,
                std::optional<uint64_t>* bytes_transferred)
 {
@@ -4276,6 +4277,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
+  bool log_op = !data_sync || !driver->svc()->zone->get_zonegroup().supports(rgw::zone_features::data_sync_disable_chain_replication);
 
   // use an empty owner until we decode RGW_ATTR_ACL
   ACLOwner owner;
@@ -4571,7 +4573,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     ret = processor.complete(accounted_size, etag, mtime, set_mtime,
                              attrs, rgw::cksum::no_cksum, delete_at, nullptr, nullptr,
 			     nullptr, zones_trace, &canceled, rctx,
-			     rgw::sal::FLAG_LOG_OP);
+			     log_op ? rgw::sal::FLAG_LOG_OP : 0);
     if (ret < 0) {
       goto set_err_state;
     }
@@ -4756,7 +4758,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
                olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, rctx,
-               nullptr /* filter */, stat_follow_olh, stat_dest_obj, source_trace_entry);
+               nullptr /* filter */, stat_follow_olh, stat_dest_obj, source_trace_entry, false);
   }
 
   map<string, bufferlist> src_attrs;

@@ -829,6 +829,7 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        stat_follow_olh,
                        stat_dest_obj,
                        source_trace_entry,
+                       true,
                        &zones_trace,
                        &bytes_transferred);
 
@@ -946,7 +947,9 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   del_op->params.zones_trace = &zones_trace;
   del_op->params.null_verid = false;
 
-  ret = del_op->delete_obj(dpp, null_yield, true);
+  // this is a chain replication, check whether the zonegroup has it disabled before asking for logging
+  bool log_op = !store->svc()->zone->get_zonegroup().supports(rgw::zone_features::data_sync_disable_chain_replication);
+  ret = del_op->delete_obj(dpp, null_yield, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
   } else {

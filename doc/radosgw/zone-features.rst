@@ -9,15 +9,17 @@ On creation of new zones and zonegroups, all known features are supported and so
 Supported Features
 ------------------
 
-+-----------------------------------+---------+----------+
-| Feature                           | Release | Default  |
-+===================================+=========+==========+
-| :ref:`feature_resharding`         | Reef    | Enabled  |
-+-----------------------------------+---------+----------+
-| :ref:`feature_compress_encrypted` | Reef    | Disabled |
-+-----------------------------------+---------+----------+
-| :ref:`feature_notification_v2`    | Squid   | Enabled  |
-+-----------------------------------+---------+----------+
++----------------------------------------------------+-----------+----------+
+| Feature                                            | Release   | Default  |
++====================================================+===========+==========+
+| :ref:`feature_resharding`                          | Reef      | Enabled  |
++----------------------------------------------------+-----------+----------+
+| :ref:`feature_compress_encrypted`                  | Reef      | Disabled |
++----------------------------------------------------+-----------+----------+
+| :ref:`feature_notification_v2`                     | Squid     | Enabled  |
++----------------------------------------------------+-----------+----------+
+| :ref:`feature_data_sync_disable_chain_replication` | Tentacle  | Enabled  |
++----------------------------------------------------+-----------+----------+
 
 .. _feature_resharding:
 
@@ -63,6 +65,23 @@ scale to many topics.
 
 Once this feature is enabled on all zonegroups in the realm, a background process
 will convert existing v1 topics and bucket notifications into their v2 format.
+
+
+.. _feature_data_sync_disable_chain_replication:
+
+data-sync-disable-chain-replication
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This feature controls whether the replication of already replicated objects (chain replication)
+is permitted. When disabled, objects replicated to a destination zone can be further replicated
+to other zones.
+Enabling this option prevents chain replication, mitigating potential performance issues and
+redundant logging caused by circular replication between zones. This feature is particularly
+useful in scenarios where chain replication is unnecessary or undesirable, helping to optimize
+synchronization operations and reduce overhead.
+
+Since AWS does not support chain replication, this feature is enabled by default for new
+deployments but requires existing deployments to opt-in manually.
 
 
 Commands
