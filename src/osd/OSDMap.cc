@@ -2118,7 +2118,8 @@ bool OSDMap::check_pg_upmaps(
     map<int, float> weight_map;
     auto it = rule_weight_map.find(crush_rule);
     if (it == rule_weight_map.end()) {
-      auto r = crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+      unsigned size = pi->get_size();
+      auto r = crush->get_rule_weight_osd_map(crush_rule, &weight_map, size);
       if (r < 0) {
         lderr(cct) << __func__ << " unable to get crush weight_map for "
                    << "crush_rule " << crush_rule
@@ -5900,7 +5901,8 @@ float OSDMap::get_osds_weight(
   map<int,float> pmap;
   ceph_assert(pools.count(pid));
   int ruleno = pools.at(pid).get_crush_rule();
-  tmp_osd_map.crush->get_rule_weight_osd_map(ruleno, &pmap);
+  unsigned size = pools.at(pid).get_size();
+  tmp_osd_map.crush->get_rule_weight_osd_map(ruleno, &pmap, size);
     ldout(cct,20) << __func__ << " pool " << pid
                   << " ruleno " << ruleno
                   << " weight-map " << pmap
@@ -6481,7 +6483,8 @@ int OSDMap::calc_rbs_fair(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id
   map<int,float> osds_crush_weight;
   // Set up the OSDMap
   int ruleno = tmp_osd_map.pools.at(pool_id).get_crush_rule();
-  tmp_osd_map.crush->get_rule_weight_osd_map(ruleno, &osds_crush_weight);
+  unsigned size = tmp_osd_map.pools.at(pool_id).get_size();
+  tmp_osd_map.crush->get_rule_weight_osd_map(ruleno, &osds_crush_weight, size);
 
   if (cct != nullptr) {
     ldout(cct,20) << __func__ << " pool " << pool_id
