@@ -1,0 +1,24 @@
+<cd-rgw-user-tabs></cd-rgw-user-tabs>
+<legend i18n>
+  User Accounts
+  <cd-help-text>
+    This feature allows administrators to assign unique credentials to individual users or applications,
+    ensuring granular access control and improved security across the cluster.
+  </cd-help-text>
+</legend>
+<cd-table #table
+          [autoReload]="false"
+          [data]="accounts"
+          [columns]="columns"
+          columnMode="flex"
+          selectionType="multiClick"
+          [hasDetails]="false"
+          (updateSelection)="updateSelection($event)"
+          identifier="id"
+          (fetchData)="getAccountsList($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+</cd-table>
