@@ -49,7 +49,7 @@ TEST(ContextGather, ManySubs) {
   bool finish_called = false;
   int result = 0;
   C_GatherBuilder gather(g_ceph_context, new C_Checker(&finish_called, &result));
-  int sub_count = 8;
+  static constexpr int sub_count = 8;
   Context* subs[sub_count];
   //create subs and test
   for (int i = 0; i < sub_count; ++i) {
@@ -73,7 +73,7 @@ TEST(ContextGather, ManySubs) {
 
 TEST(ContextGather, AlternatingSubCreateFinish) {
   C_GatherBuilder gather(g_ceph_context);
-  int sub_count = 8;
+  static constexpr int sub_count = 8;
   bool finish_called = false;
   int result = 0;
   C_Checker *checker = new C_Checker(&finish_called, &result);
