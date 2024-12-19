@@ -691,6 +691,12 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
   op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
     datalog_rados->list_entries(this, shard_id, max_entries, entries,
 				marker, &last_marker, &truncated, y);
+
+  RGWDataChangesLogInfo info;
+  op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
+    datalog_rados->get_info(this, shard_id, &info, y);
+
+  last_update = info.last_update;
 }
 
 void RGWOp_DATALog_List::send_response() {
@@ -703,6 +709,8 @@ void RGWOp_DATALog_List::send_response() {
 
   s->formatter->open_object_section("log_entries");
   s->formatter->dump_string("marker", last_marker);
+  utime_t lu(last_update);
+  encode_json("last_update", lu, s->formatter);
   s->formatter->dump_bool("truncated", truncated);
   {
     s->formatter->open_array_section("entries");
