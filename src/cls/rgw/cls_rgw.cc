@@ -1811,28 +1811,6 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
-  BIOLHEntry olh(hctx, op.key);
-  bool olh_read_attempt = false;
-  bool olh_found = false;
-  if (!existed && op.delete_marker) {
-    /* read olh */
-    ret = olh.init(&olh_found);
-    if (ret < 0) {
-      return ret;
-    }
-    olh_read_attempt = true;
-
-    // if we're deleting (i.e., adding a delete marker, and the OLH
-    // indicates it already refers to a delete marker, error out)
-    if (olh_found && olh.get_entry().delete_marker) {
-      CLS_LOG(10,
-	      "%s: delete marker received for \"%s\" although OLH"
-	      " already refers to a delete marker",
-	      __func__, escape_str(op.key.to_string()).c_str());
-      return -ENOENT;
-    }
-  }
-
   if (existed && !real_clock::is_zero(op.unmod_since)) {
     timespec mtime = ceph::real_clock::to_timespec(obj.mtime());
     timespec unmod = ceph::real_clock::to_timespec(op.unmod_since);
@@ -1885,12 +1863,11 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   /* read olh */
-  if (!olh_read_attempt) { // only read if we didn't attempt earlier
-    ret = olh.init(&olh_found);
-    if (ret < 0) {
-      return ret;
-    }
-    olh_read_attempt = true;
+  BIOLHEntry olh(hctx, op.key);
+  bool olh_found = false;
+  ret = olh.init(&olh_found);
+  if (ret < 0) {
+    return ret;
   }
 
   const uint64_t prev_epoch = olh.get_epoch();
