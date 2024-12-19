@@ -471,14 +471,10 @@ int Monitor::do_admin_command(
     ceph_heap_profiler_handle_command(cmd_vec, out);
   } else if (command == "compact") {
     dout(1) << "triggering manual compaction" << dendl;
-    auto start = ceph::coarse_mono_clock::now();
     store->compact_async();
-    auto end = ceph::coarse_mono_clock::now();
-    auto duration = ceph::to_seconds<double>(end - start);
-    dout(1) << "finished manual compaction in "
-	    << duration << " seconds" << dendl;
-    out << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb")
-	<< " in " << duration << " seconds";
+    auto output = "initiated async compaction of " + g_conf().get_val<std::string>("mon_keyvaluedb");
+    dout(1) << output << dendl;
+    out << output;
  } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
