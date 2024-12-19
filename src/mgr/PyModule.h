@@ -18,7 +18,9 @@
 #include <string>
 #include <vector>
 #include <boost/optional.hpp>
+#include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
+#include "common/perf_counters.h"
 #include "Python.h"
 #include "Gil.h"
 #include "mon/MgrMap.h"
@@ -31,6 +33,12 @@ std::string handle_pyerror(bool generate_crash_dump = false,
 			   std::string caller = {});
 
 std::string peek_pyerror();
+enum {
+  l_pym_first = 10000,
+  l_pym_cpu,
+  l_pym_mem,
+  l_pym_last
+};
 
 /**
  * A Ceph CLI command description provided from a Python module
@@ -96,10 +104,7 @@ public:
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
 
-  explicit PyModule(const std::string &module_name_)
-    : module_name(module_name_)
-  {
-  }
+  explicit PyModule(const std::string &module_name_);
 
   ~PyModule();
 
@@ -169,6 +174,42 @@ public:
   bool get_can_run() const {
     std::lock_guard l(lock) ; return can_run;
   }
+
+  // perf counters for python modules
+  std::unique_ptr<PerfCounters> perfcounter;
+  std::shared_ptr<PyObject*> process_obj;
+  pid_t tid = 0;
+
+  void set_thread_tid(pid_t tid_) {
+    tid = tid_;
+  }
+  void set_process_obj(std::shared_ptr<PyObject*> process_obj_) {
+    process_obj = process_obj_;
+  }
+
+  PyObject* get_process_obj() {
+    return *process_obj;
+  }
+
+  int pymodule_perf_counters_start(CephContext *cct) {
+    PerfCountersBuilder pcb(cct, module_name, l_pym_first, l_pym_last);
+    pcb.add_u64_counter(l_pym_cpu, "cpu", "CPU time", "cpu", 0);
+    pcb.add_u64_counter(l_pym_mem, "mem", "Memory usage", "mem", 0);
+    perfcounter = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
+    cct->get_perfcounters_collection()->add(perfcounter.get());
+
+    return 0;
+  }
+
+  void update_perf_counters();
+  void _update_cpu_perf_counter();
+  void _update_memory_perf_counter();
+
+  std::pair<uint64_t, uint64_t> get_perf_counters() {
+    ceph_assert(perfcounter);
+    return std::make_pair(perfcounter->get(l_pym_cpu), perfcounter->get(l_pym_mem));
+  }
+
 };
 
 typedef std::shared_ptr<PyModule> PyModuleRef;
