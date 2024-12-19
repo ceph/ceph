@@ -1643,8 +1643,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._kick_serve_loop()
         return HandleCommandResult()
 
-    def _get_container_image(self, daemon_name: str, use_current_daemon_image: bool = False) -> Optional[str]:
-        daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
+    def get_container_image(
+        self,
+        daemon_name: str,
+        use_current_daemon_image: bool = False,
+        force_ceph_image: bool = False,
+    ) -> Optional[str]:
+        """Return an image for the given daemon_name.
+        If `use_current_daemon_image` is set the function will try to re-use
+        the image for an existing service.
+        If force_ceph_image is true the daemon_name will be ignored and the
+        main ceph container image will be returned.
+        """
+        daemon_type = daemon_name.split('.', 1)[0]
         image: Optional[str] = None
         # Try to use current image if specified. This is necessary
         # because, if we're reconfiguring the daemon, we can
@@ -1664,7 +1675,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             except OrchestratorError:
                 self.log.debug(f'Could not find daemon {daemon_name} in cache '
                                'while searching for its image')
-        if daemon_type in CEPH_IMAGE_TYPES:
+        if daemon_type in CEPH_IMAGE_TYPES or force_ceph_image:
             # get container image
             image = str(self.get_foreign_ceph_option(
                 utils.name_to_config_section(daemon_name),
