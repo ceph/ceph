@@ -1064,6 +1064,32 @@ std::string mirror_image_global_status_state(
   return mirror_image_site_status_state(local_status);
 }
 
+std::string mirror_group_status_state(
+    librbd::mirror_group_status_state_t state) {
+  switch (state) {
+  case MIRROR_GROUP_STATUS_STATE_UNKNOWN:
+    return "unknown";
+  case MIRROR_GROUP_STATUS_STATE_ERROR:
+    return "error";
+  case MIRROR_GROUP_STATUS_STATE_STARTING_REPLAY:
+    return "starting_replay";
+  case MIRROR_GROUP_STATUS_STATE_REPLAYING:
+    return "replaying";
+  case MIRROR_GROUP_STATUS_STATE_STOPPING_REPLAY:
+    return "stopping_replay";
+  case MIRROR_GROUP_STATUS_STATE_STOPPED:
+    return "stopped";
+  default:
+    return "unknown (" + stringify(static_cast<uint32_t>(state)) + ")";
+  }
+}
+
+std::string mirror_group_site_status_state(
+    const librbd::mirror_group_site_status_t& status) {
+  return (status.up ? "up+" : "down+") +
+    mirror_group_status_state(status.state);
+}
+
 int get_local_mirror_image_status(
     const librbd::mirror_image_global_status_t& status,
     librbd::mirror_image_site_status_t* local_status) {
@@ -1072,6 +1098,23 @@ int get_local_mirror_image_status(
                          [](auto& site_status) {
       return (site_status.mirror_uuid ==
                 RBD_MIRROR_IMAGE_STATUS_LOCAL_MIRROR_UUID);
+    });
+  if (it == status.site_statuses.end()) {
+    return -ENOENT;
+  }
+
+  *local_status = *it;
+  return 0;
+}
+
+int get_local_mirror_group_status(
+    const librbd::mirror_group_global_status_t& status,
+    librbd::mirror_group_site_status_t* local_status) {
+  auto it = std::find_if(status.site_statuses.begin(),
+                         status.site_statuses.end(),
+                         [](auto& site_status) {
+      return (site_status.mirror_uuid ==
+                RBD_MIRROR_GROUP_STATUS_LOCAL_MIRROR_UUID);
     });
   if (it == status.site_statuses.end()) {
     return -ENOENT;
@@ -1179,6 +1222,48 @@ void populate_unknown_mirror_image_site_statuses(
   }
 
   std::swap(global_status->site_statuses, site_statuses);
+}
+
+void populate_unknown_mirror_group_site_statuses(
+    const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
+    librbd::mirror_group_global_status_t* status) {
+  std::set<std::string> missing_mirror_uuids;
+  librbd::mirror_peer_direction_t mirror_peer_direction =
+    RBD_MIRROR_PEER_DIRECTION_RX_TX;
+  for (auto& peer : mirror_peers) {
+    if (peer.uuid == mirror_peers.begin()->uuid) {
+      mirror_peer_direction = peer.direction;
+    } else if (mirror_peer_direction != RBD_MIRROR_PEER_DIRECTION_RX_TX &&
+               mirror_peer_direction != peer.direction) {
+      mirror_peer_direction = RBD_MIRROR_PEER_DIRECTION_RX_TX;
+    }
+
+    if (!peer.mirror_uuid.empty() &&
+        peer.direction != RBD_MIRROR_PEER_DIRECTION_TX) {
+      missing_mirror_uuids.insert(peer.mirror_uuid);
+    }
+  }
+
+  if (mirror_peer_direction != RBD_MIRROR_PEER_DIRECTION_TX) {
+    missing_mirror_uuids.insert(RBD_MIRROR_GROUP_STATUS_LOCAL_MIRROR_UUID);
+  }
+
+  std::vector<librbd::mirror_group_site_status_t> site_statuses;
+  site_statuses.reserve(missing_mirror_uuids.size());
+
+  for (auto& site_status : status->site_statuses) {
+    if (missing_mirror_uuids.count(site_status.mirror_uuid) > 0) {
+      missing_mirror_uuids.erase(site_status.mirror_uuid);
+      site_statuses.push_back(site_status);
+    }
+  }
+
+  for (auto& mirror_uuid : missing_mirror_uuids) {
+    site_statuses.push_back({mirror_uuid, MIRROR_GROUP_STATUS_STATE_UNKNOWN,
+                             "status not found", {}, 0, false});
+  }
+
+  std::swap(status->site_statuses, site_statuses);
 }
 
 int mgr_command(librados::Rados& rados, const std::string& cmd,
