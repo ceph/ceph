@@ -181,6 +181,11 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
         return;
       }
       const rgw_bucket target_bucket_id(target_tenant_name, target_bucket_name);
+      if (target_bucket_id == src_bucket_id) {
+        ldpp_dout(this, 1) << "ERROR: target bucket '" << target_bucket_id << "' must be different from source bucket" << dendl;
+        op_ret = -EINVAL;
+        return;
+      }
       std::unique_ptr<rgw::sal::Bucket> target_bucket;
       op_ret = driver->load_bucket(this, target_bucket_id,
                                    &target_bucket, y);
