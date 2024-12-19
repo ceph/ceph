@@ -63,16 +63,42 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     }
   }
 
-  ssize_t read(char *buf, size_t len) override {
-    #ifdef _WIN32
-    ssize_t r = ::recv(_fd, buf, len, 0);
-    #else
-    ssize_t r = ::read(_fd, buf, len);
-    #endif
+  ssize_t read(const std::span<char> dest) override {
+    ssize_t r = ::recv(_fd, dest.data(), dest.size(), 0);
     if (r < 0)
       r = -ceph_sock_errno();
     return r;
   }
+
+#ifndef _WIN32
+  ssize_t readv(std::span<const std::span<char>> dest) override {
+#ifndef IOV_MAX
+    static constexpr std::size_t IOV_MAX = 1024;
+#endif
+
+    std::array<struct iovec, IOV_MAX> iov;
+
+    if (dest.size() > iov.size())
+      dest = dest.first(iov.size());
+
+    std::transform(dest.begin(), dest.end(), iov.begin(), [](auto i) -> struct iovec {
+      return {
+	.iov_base = i.data(),
+	.iov_len = i.size(),
+      };
+    });
+
+    struct msghdr msg{
+      .msg_iov = iov.data(),
+      .msg_iovlen = dest.size(),
+    };
+
+    ssize_t nbytes = recvmsg(_fd, &msg, 0);
+    if (nbytes < 0)
+      nbytes = -ceph_sock_errno();
+    return nbytes;
+  }
+#endif
 
   // return the sent length
   // < 0 means error occurred
@@ -262,8 +288,7 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
   out->set_sockaddr((sockaddr*)&ss);
   handler.set_priority(sd, opt.priority, out->get_family());
 
-  std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, *out, sd, true));
-  *sock = ConnectedSocket(std::move(csi));
+  *sock = ConnectedSocket(std::make_unique<PosixConnectedSocketImpl>(handler, *out, sd, true));
   return 0;
 }
 
@@ -311,8 +336,7 @@ int PosixWorker::listen(entity_addr_t &sa,
   }
 
   *sock = ServerSocket(
-          std::unique_ptr<PosixServerSocketImpl>(
-	    new PosixServerSocketImpl(net, listen_sd, sa, addr_slot)));
+          std::make_unique<PosixServerSocketImpl>(net, listen_sd, sa, addr_slot));
   return 0;
 }
 
@@ -331,7 +355,7 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
 
   net.set_priority(sd, opts.priority, addr.get_family());
   *socket = ConnectedSocket(
-      std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(net, addr, sd, !opts.nonblock)));
+      std::make_unique<PosixConnectedSocketImpl>(net, addr, sd, !opts.nonblock));
   return 0;
 }
 
