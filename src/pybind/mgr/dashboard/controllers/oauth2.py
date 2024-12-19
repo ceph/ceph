@@ -14,19 +14,19 @@ class Oauth2(RESTController):
         if not OAuth2.enabled():
             raise DashboardException(500, msg='Failed to login: SSO OAuth2 is not enabled')
 
-        token = OAuth2.get_token(cherrypy.request)
+        token = OAuth2.token(cherrypy.request)
         if not token:
             raise cherrypy.HTTPError()
 
-        raise cherrypy.HTTPRedirect(OAuth2.get_login_redirect_url(token))
+        raise cherrypy.HTTPRedirect(OAuth2.login_redirect_url(token))
 
     @Endpoint(json_response=False, version=None)
     def logout(self):
         if not OAuth2.enabled():
             raise DashboardException(500, msg='Failed to logout: SSO OAuth2 is not enabled')
 
-        token = OAuth2.get_token(cherrypy.request)
+        token = OAuth2.token(cherrypy.request)
         if not token:
             raise cherrypy.HTTPError()
 
-        raise cherrypy.HTTPRedirect(OAuth2.get_logout_redirect_url(token))
+        raise cherrypy.HTTPRedirect(OAuth2.logout_redirect_url(token))
