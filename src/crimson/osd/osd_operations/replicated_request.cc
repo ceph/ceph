@@ -5,6 +5,7 @@
 
 #include "common/Formatter.h"
 
+#include "crimson/common/coroutine.h"
 #include "crimson/osd/osd.h"
 #include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
@@ -63,34 +64,52 @@ PGRepopPipeline &RepRequest::repop_pipeline(PG &pg)
   return pg.repop_pipeline;
 }
 
+RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
+  Ref<PG> pg)
+{
+  LOG_PREFIX(RepRequest::with_pg_interruptible);
+  DEBUGI("{}", *this);
+  co_await this->template enter_stage<interruptor>(repop_pipeline(*pg).process);
+  co_await interruptor::make_interruptible(this->template with_blocking_event<
+    PG_OSDMapGate::OSDMapBlocker::BlockingEvent
+    >([this, pg](auto &&trigger) {
+      return pg->osdmap_gate.wait_for_map(
+	std::move(trigger), req->min_epoch);
+    }));
+
+  if (pg->can_discard_replica_op(*req)) {
+    co_return;
+  }
+
+  auto [commit_fut, reply] = co_await pg->handle_rep_op(req);
+
+  // Transitions from OrderedExclusive->OrderedConcurrent cannot block
+  this->template enter_stage_sync(repop_pipeline(*pg).wait_commit);
+
+  co_await std::move(commit_fut);
+
+  co_await this->template enter_stage<interruptor>(
+    repop_pipeline(*pg).send_reply);
+
+  co_await interruptor::make_interruptible(
+    pg->shard_services.send_to_osd(
+      req->from.osd, std::move(reply), pg->get_osdmap_epoch())
+  );
+}
+
 seastar::future<> RepRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
   LOG_PREFIX(RepRequest::with_pg);
-  DEBUGI("{}: RepRequest::with_pg", *this);
+  DEBUGI("{}", *this);
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    LOG_PREFIX(RepRequest::with_pg);
-    DEBUGI("{}: pg present", *this);
-    return this->template enter_stage<interruptor>(repop_pipeline(*pg).process
-    ).then_interruptible([this, pg] {
-      return this->template with_blocking_event<
-        PG_OSDMapGate::OSDMapBlocker::BlockingEvent
-      >([this, pg](auto &&trigger) {
-        return pg->osdmap_gate.wait_for_map(
-          std::move(trigger), req->min_epoch);
-      });
-    }).then_interruptible([this, pg] (auto) {
-      return pg->handle_rep_op(req);
-    }).then_interruptible([this] {
-      logger().debug("{}: complete", *this);
-      return handle.complete();
-    });
+    return with_pg_interruptible(pg);
   }, [](std::exception_ptr) {
     return seastar::now();
   }, pg, pg->get_osdmap_epoch()).finally([this, ref=std::move(ref)] {
     logger().debug("{}: exit", *this);
-    handle.exit();
+    return handle.complete();
   });
 }
 

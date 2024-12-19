@@ -68,6 +68,9 @@ public:
     r_conn = make_local_shared_foreign(std::move(conn));
   }
 
+  interruptible_future<> with_pg_interruptible(
+    Ref<PG> pg);
+
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
@@ -78,6 +81,8 @@ public:
     ConnectionPipeline::GetPGMapping::BlockingEvent,
     PerShardPipeline::CreateOrWaitPG::BlockingEvent,
     PGRepopPipeline::Process::BlockingEvent,
+    PGRepopPipeline::WaitCommit::BlockingEvent,
+    PGRepopPipeline::SendReply::BlockingEvent,
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGMap::PGCreationBlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent
