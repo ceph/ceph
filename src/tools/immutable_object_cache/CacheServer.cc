@@ -35,10 +35,10 @@ int CacheServer::run() {
     return ret;
   }
 
-  boost::system::error_code ec;
-  ret = m_io_service.run(ec);
-  if (ec) {
-    ldout(cct, 1) << "m_io_service run fails: " << ec.message() << dendl;
+  try {
+    ret = m_io_service.run();
+  } catch (const std::exception& e) {
+    ldout(cct, 1) << "m_io_service run fails: " << e.what() << dendl;
     return -1;
   }
   return 0;
@@ -66,7 +66,7 @@ int CacheServer::start_accept() {
     return -ec.value();
   }
 
-  m_acceptor.listen(boost::asio::socket_base::max_connections, ec);
+  m_acceptor.listen(boost::asio::socket_base::max_listen_connections, ec);
   if (ec) {
     lderr(cct) << "failed to listen on domain socket: " << ec.message()
                << dendl;
