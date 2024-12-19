@@ -11,7 +11,8 @@ import {
   ThemeModule,
   DialogModule,
   GridModule,
-  BreadcrumbModule
+  BreadcrumbModule,
+  TagModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -58,7 +59,8 @@ import LogoutIcon from '@carbon/icons/es/logout/16';
     ThemeModule,
     DialogModule,
     GridModule,
-    BreadcrumbModule
+    BreadcrumbModule,
+    TagModule
   ],
   declarations: [
     AboutComponent,
