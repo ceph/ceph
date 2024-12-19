@@ -983,10 +983,13 @@ int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
   return avail / osd_map.pool_raw_used_rate(poolid);
 }
 
-int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
+/*
+ *  size: pool size
+ */
+int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno, unsigned size) const
 {
   map<int,float> wm;
-  int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
+  int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm, size);
   if (r < 0) {
     return r;
   }
@@ -1037,8 +1040,10 @@ void PGMap::get_rules_avail(const OSDMap& osdmap,
       continue;
     const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
     int ruleno = pool->get_crush_rule();
-    if (avail_map->count(ruleno) == 0)
-      (*avail_map)[ruleno] = get_rule_avail(osdmap, ruleno);
+    if (avail_map->count(ruleno) == 0){
+      unsigned size = pool->get_size();
+      (*avail_map)[ruleno] = get_rule_avail(osdmap, ruleno, size);
+    }
   }
 }
 
