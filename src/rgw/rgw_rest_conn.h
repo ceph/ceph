@@ -130,7 +130,7 @@ public:
   virtual void populate_params(param_vec_t& params, const rgw_owner* uid, const std::string& zonegroup);
 
   /* sync request */
-  int forward(const DoutPrefixProvider *dpp, const rgw_owner& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
+  int forward(const DoutPrefixProvider *dpp, const std::optional<rgw_owner>& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
 
   /* sync request */
   int forward_iam_request(const DoutPrefixProvider *dpp, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
