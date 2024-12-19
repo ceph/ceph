@@ -339,6 +339,9 @@ public:
   int remove_fscrypt_key(fscrypt_remove_key_arg* kid, int user = 0);
   int get_fscrypt_key_status(fscrypt_get_key_status_arg* arg);
 
+  int get_inode_flags(const Inode* in, int* file_attr_out);
+  int get_inode_flags(int fd, int* file_attr_out);
+
   int set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy);
 
   int mds_command(

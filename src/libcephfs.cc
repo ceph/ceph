@@ -2424,3 +2424,10 @@ extern "C" void ceph_free_snap_info_buffer(struct snap_info *snap_info) {
   }
   free(snap_info->snap_metadata);
 }
+
+extern "C" int get_inode_flags(struct ceph_mount_info *cmount, int fd, int* file_attr_out) {
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+
+  return cmount->get_client()->get_inode_flags(fd, file_attr_out);
+}

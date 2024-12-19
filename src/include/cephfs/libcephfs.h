@@ -1935,6 +1935,15 @@ int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
 int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
                                int fd, const struct fscrypt_policy_v2 *policy);
 
+/**
+ * Fill file_attr_out with content of i_flags
+ * @param cmount the ceph mount handle to use.
+ * @param fd open directory file descriptor
+ * @param file_attr_out will have result bits set
+ * @returns zero on success, other returns a negative error code.
+ */
+int get_inode_flags(struct ceph_mount_info *cmount, int fd, int* file_attr_out);
+
 /* Low Level */
 struct Inode *ceph_ll_get_inode(struct ceph_mount_info *cmount,
 				vinodeno_t vino);
