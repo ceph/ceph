@@ -17,13 +17,48 @@ import { UserFormComponent } from './user-form/user-form.component';
 import { UserListComponent } from './user-list/user-list.component';
 import { UserPasswordFormComponent } from './user-password-form/user-password-form.component';
 import { UserTabsComponent } from './user-tabs/user-tabs.component';
-import { ButtonModule, GridModule, IconModule, InputModule } from 'carbon-components-angular';
+
+import {
+  ButtonModule,
+  CheckboxModule,
+  DatePickerModule,
+  GridModule,
+  IconModule,
+  IconService,
+  InputModule,
+  ModalModule,
+  NumberModule,
+  RadioModule,
+  SelectModule,
+  UIShellModule,
+  TimePickerModule,
+  ComboBoxModule
+} from 'carbon-components-angular';
+// Icons
+import ChevronDown from '@carbon/icons/es/chevron--down/16';
+import Close from '@carbon/icons/es/close/32';
+import AddFilled from '@carbon/icons/es/add--filled/32';
+import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
+import Reset from '@carbon/icons/es/reset/32';
+import EyeIcon from '@carbon/icons/es/view/16';
 @NgModule({
   imports: [
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
     SharedModule,
+    UIShellModule,
+    InputModule,
+    GridModule,
+    ButtonModule,
+    IconModule,
+    CheckboxModule,
+    RadioModule,
+    SelectModule,
+    NumberModule,
+    ModalModule,
+    DatePickerModule,
+    TimePickerModule,
     NgbNavModule,
     NgbPopoverModule,
     NgxPipeFunctionModule,
@@ -31,8 +66,8 @@ import { ButtonModule, GridModule, IconModule, InputModule } from 'carbon-compon
     NgbModule,
     IconModule,
     GridModule,
-    ButtonModule,
-    InputModule
+    InputModule,
+    ComboBoxModule
   ],
   declarations: [
     LoginComponent,
@@ -46,7 +81,11 @@ import { ButtonModule, GridModule, IconModule, InputModule } from 'carbon-compon
     UserPasswordFormComponent
   ]
 })
-export class AuthModule {}
+export class AuthModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([ChevronDown, Close, AddFilled, SubtractFilled, Reset, EyeIcon]);
+  }
+}
 
 const routes: Routes = [
   { path: '', redirectTo: 'users', pathMatch: 'full' },
