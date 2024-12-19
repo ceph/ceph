@@ -28,6 +28,9 @@ namespace rgw::sal {
   class Driver;
   class LuaManager;
 }
+namespace rgw::kms {
+  class KMSCache;
+}
 
 #ifdef WITH_ARROW_FLIGHT
 namespace rgw::flight {
@@ -50,6 +53,7 @@ struct RGWProcessEnv {
   std::unique_ptr<OpsLogSink> olog;
   std::unique_ptr<rgw::auth::StrategyRegistry> auth_registry;
   ActiveRateLimiter* ratelimiting = nullptr;
+  std::unique_ptr<rgw::kms::KMSCache> kms_cache;
 
 #ifdef WITH_ARROW_FLIGHT
   // managed by rgw:flight::FlightFrontend in rgw_flight_frontend.cc

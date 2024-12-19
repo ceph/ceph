@@ -1305,7 +1305,6 @@ public:
     : driver(_s), pool(pool) {}
   ~StoreDestructor() {
     driver->shutdown();
-    rgw_kms_cleanup(g_ceph_context);
     pool->finish();
     DriverManager::close_storage(driver);
     rgw_http_client_cleanup();

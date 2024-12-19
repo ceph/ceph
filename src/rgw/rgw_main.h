@@ -125,6 +125,7 @@ public:
   int init_frontends2(RGWLib* rgwlib = nullptr);
   void init_tracepoints();
   void init_lua();
+  void init_kms_cache();
 #ifdef WITH_RADOSGW_RADOS
   void init_dedup();
 #endif
