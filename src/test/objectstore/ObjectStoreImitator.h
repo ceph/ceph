@@ -341,12 +341,16 @@ public:
       ) override {
     return 0;
   }
-  ObjectMap::ObjectMapIterator
-  get_omap_iterator(CollectionHandle &c,  ///< [in] collection
-                    const ghobject_t &oid ///< [in] object
-                    ) override {
-    return {};
+
+  int omap_iterate(CollectionHandle &c,   ///< [in] collection
+                   const ghobject_t &oid, ///< [in] object
+                   /// [in] where the iterator should point to at the beginning
+                   omap_iter_seek_t start_from,
+                   std::function<omap_iter_ret_t(std::string_view, std::string_view)> f
+                   ) override {
+    return 0;
   }
+
   void set_fsid(uuid_d u) override {}
   uuid_d get_fsid() override { return {}; }
   uint64_t estimate_objects_overhead(uint64_t num_objects) override {
