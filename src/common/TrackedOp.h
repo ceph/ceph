@@ -18,10 +18,17 @@
 #include "common/StackStringStream.h"
 #include "common/ceph_mutex.h"
 #include "common/histogram.h"
+#include "common/perf_counters.h" // for class PerfCountersBuilder
 #include "common/Thread.h"
 #include "common/Clock.h"
 #include "include/spinlock.h"
 #include "msg/Message.h"
+
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define OPTRACKER_PREALLOC_EVENTS 20
 
