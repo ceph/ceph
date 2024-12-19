@@ -14,7 +14,7 @@ from typing import List, Optional, Sequence
 
 import bcrypt
 from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
-from mgr_util import password_hash
+from mgr_util import password_hash, is_valid_hash_format
 
 from .. import mgr
 from ..exceptions import PasswordPolicyException, PermissionNotValid, \
@@ -915,6 +915,7 @@ def ac_user_set_password_hash(_, username: str, inbuf: str):
     hashed_password = inbuf
     try:
         # make sure the hashed_password is actually a bcrypt hash
+        is_valid_hash_format(hashed_password)
         bcrypt.checkpw(b'', hashed_password.encode('utf-8'))
         user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.set_password_hash(hashed_password)
