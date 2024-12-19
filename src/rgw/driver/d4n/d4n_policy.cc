@@ -865,11 +865,6 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	block.blockID = 0;
 	//non-versioned case
 	if (!c_obj->have_instance()) {
-	  //add watch on latest entry, as it can be modified by a put or a del
-	  ret = blockDir->watch(dpp, &block, y);
-	  if (ret < 0) {
-	    ldpp_dout(dpp, 0) << __func__ << "(): Failed to add a watch on: " << block.cacheObj.objName << ", ret=" << ret << dendl;
-	  }
 	  // hash entry for latest version
 	  op_ret = blockDir->get(dpp, &block, y);
 	  if (op_ret < 0) {
@@ -888,20 +883,10 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 		if (null_block.version == e->version) {
 		  block.cacheObj.dirty = false;
 		  null_block.cacheObj.dirty = false;
-		  //start redis transaction using MULTI
-		  blockDir->multi(dpp, y);
 		  auto blk_op_ret = blockDir->set(dpp, &block, y);
 		  auto null_op_ret = blockDir->set(dpp, &null_block, y);
 		  if (blk_op_ret < 0 || null_op_ret < 0) {
-		    blockDir->discard(dpp, y);
 		    ldpp_dout(dpp, 0) << __func__ << "(): Failed to Queue update dirty flag for latest entry/null entry in block directory" << dendl;
-		  } else {
-		    std::vector<std::string> responses;
-		    ret = blockDir->exec(dpp, responses, y);
-		    if (responses.empty()) {
-		      //transaction failed, which means latest hash entry has been modified by a put/del so ignore and do not update the entries
-		      ldpp_dout(dpp, 0) << __func__ << "(): Execute responses are empty which means transaction failed!" << dendl;
-		    }
 		  }
 		}
 	      }
@@ -937,11 +922,6 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  //the next steps remove the entry from the ordered set and if needed the latest hash entry also in case of versioned buckets
 	  rgw::d4n::CacheBlock latest_block = block;
 	  latest_block.cacheObj.objName = c_obj->get_name();
-	  //add watch on latest entry, as it can be modified by a put or a del
-	  ret = blockDir->watch(dpp, &latest_block, y);
-	  if (ret < 0) {
-	    ldpp_dout(dpp, 0) << __func__ << "(): Failed to add a watch on: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
-	  }
 	  int retry = 3;
 	  while(retry) {
 	    retry--;
@@ -950,14 +930,11 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    if (ret < 0) {
 	      ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
 	    }
-	    //start redis transaction using MULTI
-	    blockDir->multi(dpp, y);
 	    if (latest_block.version == e->version) {
 	      //remove object entry from ordered set
 	      if (c_obj->have_instance()) {
-		blockDir->del(dpp, &latest_block, y, true);
+		blockDir->del(dpp, &latest_block, y);
 		if (ret < 0) {
-		  blockDir->discard(dpp, y);
 		  ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue del for latest hash entry: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
 		  continue;
 		}
@@ -970,14 +947,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    };
 	    ret = objDir->zremrangebyscore(dpp, &dir_obj, e->creationTime, e->creationTime, y, true);
 	    if (ret < 0) {
-	      blockDir->discard(dpp, y);
 	      ldpp_dout(dpp, 0) << __func__ << "(): Failed to remove object from ordered set with error: " << ret << dendl;
-	      continue;
-	    }
-	    std::vector<std::string> responses;
-	    ret = blockDir->exec(dpp, responses, y);
-	    if (responses.empty()) {
-	      ldpp_dout(dpp, 0) << __func__ << "(): Execute responses are empty hence continuing!" << dendl;
 	      continue;
 	    }
 	    break;
