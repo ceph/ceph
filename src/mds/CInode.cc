@@ -921,14 +921,14 @@ void CInode::put_stickydirs()
 void CInode::first_get()
 {
   // pin my dentry?
-  if (parent) 
+  if (parent)
     parent->get(CDentry::PIN_INODEPIN);
 }
 
 void CInode::last_put() 
 {
   // unpin my dentry?
-  if (parent) 
+  if (parent)
     parent->put(CDentry::PIN_INODEPIN);
 }
 
@@ -1747,6 +1747,7 @@ void CInode::encode_lock_ilink(bufferlist& bl)
   encode(get_inode()->version, bl);
   encode(get_inode()->ctime, bl);
   encode(get_inode()->nlink, bl);
+  encode(get_inode()->referent_inodes, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1760,6 +1761,7 @@ void CInode::decode_lock_ilink(bufferlist::const_iterator& p)
   decode(tm, p);
   if (_inode->ctime < tm) _inode->ctime = tm;
   decode(_inode->nlink, p);
+  decode(_inode->referent_inodes, p);
   DECODE_FINISH(p);
   reset_inode(std::move(_inode));
 }
