@@ -109,7 +109,10 @@
       </ng-template>
       <span *ngIf="loading"
             class="d-flex justify-content-center">
-        <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
+        <svg *ngIf="loadingIndicator"
+          [cdsIcon]="icons.spinner"
+          [size]="icons.size32"
+          class="loader cds--btn__icon spin "></svg>
       </span>
       <div class="row"
            *ngIf="multisiteSyncStatus$ | async">
@@ -121,7 +124,10 @@
                    [justifyContentCenter]="true">
             <span *ngIf="loading"
                   class="d-flex justify-content-center">
-              <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
+              <svg *ngIf="loadingIndicator"
+                  [cdsIcon]="icons.spinner"
+                  [size]="icons.size32"
+                  class="loader cds--btn__icon spin "></svg>
             </span>
             <span *ngIf="!loading"
                   class="d-flex justify-content-center">
@@ -136,7 +142,10 @@
                      class="d-flex h-100">
               <span *ngIf="loading"
                     class="d-flex justify-content-center">
-                <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
+                <svg *ngIf="loadingIndicator"
+                [cdsIcon]="icons.spinner"
+                [size]="icons.size32"
+                class="loader cds--btn__icon spin "></svg>
               </span>
               <div class="row"
                    *ngIf="!loading">
