@@ -260,7 +260,7 @@ public:
   std::pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
   const std::string& get_name() const;
-  void set_name(std::string s) {
+  void set_name(std::string_view s) {
     m_name = s;
   }
 
