@@ -2270,6 +2270,54 @@ tests:
           summary: "wah subsystem has reached its maximum number of namespaces on cluster mycluster"
           description: "Subsystems have a max namespace limit defined at creation time. This alert means that no more namespaces can be added to wah"
 
+# NVMeoFMultipleNamespacesOfRBDImage
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_bdev_metadata{bdev_name="bdev1", instance="ceph-nvme-vm1", pool_name="mypool", rbd_name="myimage1"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_bdev_metadata{bdev_name="bdev1", instance="ceph-nvme-vm2", pool_name="mypool", rbd_name="myimage1"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_bdev_metadata{bdev_name="bdev2", instance="ceph-nvme-vm1", pool_name="mypool", rbd_name="myimage2"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_bdev_metadata{bdev_name="bdev2", instance="ceph-nvme-vm2", pool_name="mypool", rbd_name="myimage2"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_bdev_metadata{bdev_name="bdev3", instance="ceph-nvme-vm1", pool_name="mypool", rbd_name="myimage1"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_bdev_metadata{bdev_name="bdev3", instance="ceph-nvme-vm2", pool_name="mypool", rbd_name="myimage1"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_bdev_metadata{bdev_name="bdev4", instance="ceph-nvme-vm1", pool_name="mypool", rbd_name="myimage1"}' # bdev with no ns
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="nqn1", nsid="1", bdev_name="bdev1", instance="ceph-nvme-vm1", cluster="mycluster"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="nqn1", nsid="1", bdev_name="bdev1", instance="ceph-nvme-vm2", cluster="mycluster"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="nqn1", nsid="2", bdev_name="bdev2", instance="ceph-nvme-vm1", cluster="mycluster"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="nqn1", nsid="2", bdev_name="bdev2", instance="ceph-nvme-vm2", cluster="mycluster"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="nqn2", nsid="1", bdev_name="bdev3", instance="ceph-nvme-vm1", cluster="mycluster"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="nqn2", nsid="1", bdev_name="bdev3", instance="ceph-nvme-vm2", cluster="mycluster"}'
+      values: '1x10'
+   promql_expr_test:
+     - expr: count by(pool_name, rbd_name) (count by(bdev_name, pool_name, rbd_name) (ceph_nvmeof_bdev_metadata and on (bdev_name) ceph_nvmeof_subsystem_namespace_metadata)) > 1
+       eval_time: 1m
+       exp_samples:
+         - labels: '{pool_name="mypool", rbd_name="myimage1"}'
+           value: 2
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: NVMeoFMultipleNamespacesOfRBDImage
+      exp_alerts:
+      - exp_labels:
+          pool_name: mypool
+          rbd_name: myimage1 
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "RBD image mypool/myimage1 cannot be reused for multiple NVMeoF namespace "
+          description: "Each NVMeoF namespace must have a unique RBD pool and image, across all different gateway groups."
+
  # NVMeoFTooManyGateways
  - interval: 1m
    input_series:
