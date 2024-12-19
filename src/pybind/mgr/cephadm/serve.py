@@ -1563,6 +1563,7 @@ class CephadmServe:
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
             dd = self.mgr.cache.get_daemon(daemon.daemon_name)
+            daemon._service_name = dd.service_name()
             if dd.ports:
                 args = ['--name', name, '--force', '--tcp-ports', ' '.join(map(str, dd.ports))]
             else:
