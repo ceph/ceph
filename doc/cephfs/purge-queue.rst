@@ -44,7 +44,8 @@ queue processing:
 Examining purge queue perf counters
 ===================================
 
-When analysing MDS perf dumps, the purge queue statistics look like:
+When analysing MDS perf dumps, the purge queue statistics look like::
+
     "purge_queue": {
         "pq_executing_ops": 56655,
         "pq_executing_ops_high_water": 65350,
@@ -55,6 +56,7 @@ When analysing MDS perf dumps, the purge queue statistics look like:
     }
 
 Let us understand what each of these means:
+
 - pq_executing_ops: Purge queue operations in flight
 - pq_executing_ops_high_water: Maximum number of executing purge operations
                                recorded
