@@ -5361,6 +5361,29 @@ options:
   desc: Enable health indication when spurious read errors are observed by OSD
   default: true
   with_legacy: true
+- name: bluestore_warn_on_free_fragmentation
+  type: float
+  level: basic
+  desc: Level at which disk free fragmentation causes health warning. Set "1" to disable.
+    This is same value as admin command "bluestore allocator score block".
+  default: 0.8
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bluestore_fragmentation_check_period
+- name: bluestore_fragmentation_check_period
+  type: uint
+  level: basic
+  desc: The period to perform bluestore free fragmentation check.
+    Checking fragmentation is usually almost immediate. For highly fragmented storage,
+    it can take several miliseconds. It can cause a stall to a write operation.
+  default: 3600
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bluestore_warn_on_free_fragmentation
 - name: bluestore_slow_ops_warn_lifetime
   type: uint
   level: advanced
