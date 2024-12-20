@@ -80,9 +80,11 @@ public:
     return backend_type_t::RANDOM_BLOCK;
   }
 
-  submit_record_ret submit_record(
+  submit_record_ertr::future<> submit_record(
     record_t &&record,
-    OrderingHandle &handle
+    OrderingHandle &handle,
+    transaction_type_t t_src,
+    on_submission_func_t &&on_submission
   ) final;
 
   seastar::future<> flush(
@@ -148,8 +150,6 @@ public:
     return cjs.get_records_start();
   }
 
-  seastar::future<> finish_commit(transaction_type_t type) final;
-
   using cbj_delta_handler_t = std::function<
   replay_ertr::future<bool>(
     const record_locator_t&,
@@ -160,7 +160,10 @@ public:
     cbj_delta_handler_t &&delta_handler,
     journal_seq_t tail);
 
-  submit_record_ret do_submit_record(record_t &&record, OrderingHandle &handle);
+  submit_record_ertr::future<> do_submit_record(
+    record_t &&record,
+    OrderingHandle &handle,
+    on_submission_func_t &&on_submission);
 
   void try_read_rolled_header(scan_valid_records_cursor &cursor) {
     paddr_t addr = convert_abs_addr_to_paddr(

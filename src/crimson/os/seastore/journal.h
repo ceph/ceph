@@ -59,13 +59,13 @@ public:
     crimson::ct_error::erange,
     crimson::ct_error::input_output_error
     >;
-  using submit_record_ret = submit_record_ertr::future<
-    record_locator_t
-    >;
-  virtual submit_record_ret submit_record(
+  using on_submission_func_t = std::function<
+    void(record_locator_t)>;
+  virtual submit_record_ertr::future<> submit_record(
     record_t &&record,
-    OrderingHandle &handle
-  ) = 0;
+    OrderingHandle &handle,
+    transaction_type_t t_src,
+    on_submission_func_t &&on_submission) = 0;
 
   /**
    * flush
@@ -100,9 +100,6 @@ public:
       sea_time_point modify_time)>;
   virtual replay_ret replay(
     delta_handler_t &&delta_handler) = 0;
-
-  virtual seastar::future<> finish_commit(
-    transaction_type_t type) = 0;
 
   virtual ~Journal() {}
 

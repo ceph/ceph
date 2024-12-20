@@ -181,15 +181,20 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 
   auto submit_record(record_t&& record) {
     entries.push_back(record);
+    entry_validator_t& back = entries.back();
     OrderingHandle handle = get_dummy_ordering_handle();
-    auto [addr, w_result] = cbj->submit_record(
-	  std::move(record),
-	  handle).unsafe_get();
-    entries.back().seq = w_result.start_seq;
-    entries.back().entries = 1;
-    entries.back().magic = cbj->get_cjs().get_cbj_header().magic;
-    logger().debug("submit entry to addr {}", entries.back().seq);
-    return convert_paddr_to_abs_addr(entries.back().seq.offset);
+    cbj->submit_record(
+      std::move(record),
+      handle,
+      transaction_type_t::MUTATE,
+      [this, &back](auto locator) {
+        back.seq = locator.write_result.start_seq;
+        back.entries = 1;
+        back.magic = cbj->get_cjs().get_cbj_header().magic;
+        logger().debug("submit entry to addr {}", back.seq);
+      }
+    ).unsafe_get();
+    return convert_paddr_to_abs_addr(back.seq.offset);
   }
 
   seastar::future<> tear_down_fut() final {
