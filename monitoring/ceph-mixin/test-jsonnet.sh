@@ -23,8 +23,7 @@ jsonnet -J vendor -S alerts.jsonnet -o "${TEMPDIR}"/prometheus_alerts.yml
 jdiff --indent 2 --format yaml "prometheus_alerts.yml" "${TEMPDIR}/prometheus_alerts.yml" \
     | tee -a "${TEMPDIR}"/json_difference.log
 
-err=0
-if [ "$(wc -l < "${TEMPDIR}"/json_difference.log)" -eq 0 ]
+if [ "$(grep -v {} -c "${TEMPDIR}"/json_difference.log)" -eq 0 ]
 then
     rm -rf "${TEMPDIR}"
     echo "Congratulations! Grafonnet Check Passed"
