@@ -556,7 +556,7 @@ int RGWSI_Bucket_SObj::read_bucket_stats(const rgw_bucket& bucket,
                                          const DoutPrefixProvider *dpp)
 {
   RGWBucketInfo bucket_info;
-  int ret = read_bucket_info(bucket, &bucket_info, nullptr, nullptr, boost::none, y, dpp);
+  int ret = read_bucket_info(bucket, &bucket_info, &ent->modification_time, nullptr, boost::none, y, dpp);
   if (ret < 0) {
     return ret;
   }
