@@ -2,9 +2,9 @@
 UADK Acceleration for Compression
 ===============================================
 
-UADK is a framework for applications to access hardware accelerators in a
-unified, secure, and efficient way. UADK is comprised of UACCE, libwd and many
-other algorithm libraries.
+UADK is a framework that makes it possible for applications to access hardware
+accelerators in a unified, secure, and efficient way. UADK is comprised of
+UACCE, libwd, and many other algorithm libraries.
 
 See `Compressor UADK Support`_.
 
@@ -21,13 +21,13 @@ which enables hardware accelerators that support SVA to adapt to UADK.
 
 Currently, HiSilicon Kunpeng hardware accelerators have been registered with
 UACCE. Through the UADK framework, users can run cryptographic and compression
-algorithms using hardware accelerators instead of CPUs, freeing up CPU computing
-power and improving computing performance.
+algorithms using hardware accelerators instead of CPUs, which frees up CPU
+computing power and improves computing performance.
 
-A user can access the hardware accelerators by performing user-mode operations on
-the character devices, or the use of UADK can be done via frameworks that have
-been enabled by others including UADK support (for example, OpenSSL* libcrypto*,
-DPDK, and the Linux* Kernel Crypto Framework).
+Users can access the hardware accelerators by performing user-mode operations
+on the character devices, or the use of UADK can be achieved via frameworks
+that have been enabled by others including UADK support (for example, OpenSSL*
+libcrypto*, DPDK, and the Linux* Kernel Crypto Framework).
 
 See `OpenSSL UADK Engine`_.
 
