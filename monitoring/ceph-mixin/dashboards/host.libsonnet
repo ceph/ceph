@@ -59,7 +59,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                           true,
                           1,
                           null,
-                          'mon.(.*)')
+                          '')
     )
     .addTemplate(
       $.addTemplateSchema('mds_hosts',
