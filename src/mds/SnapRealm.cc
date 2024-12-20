@@ -473,6 +473,7 @@ void SnapRealm::split_at(SnapRealm *child)
   for (auto p = inodes_with_caps.begin(); !p.end(); ) {
     CInode *in = *p;
     ++p;
+    dout(25) << __func__ << " HRK inodes_with_caps traverse parent = " << *inode << " child = " << *child->inode << "cap_inode = " << *in << dendl;
     // does inode fall within the child realm?
     if (child->inode->is_ancestor_of(in, &visited)) {
       dout(25) << " child gets " << *in << dendl;

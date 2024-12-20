@@ -977,6 +977,23 @@ CInode *CInode::get_parent_inode()
 bool CInode::is_ancestor_of(const CInode *other, std::unordered_map<CInode const*,bool>* visited) const
 {
   std::vector<CInode const*> my_visited = {};
+  dout(3) << "HRK is_ancestor_of this=" << *this << "  other=" << *other << dendl;
+  for (const auto& ri : other->get_inode()->referent_inodes) {
+    CInode *cur = mdcache->get_inode(ri);
+    if (!cur) {
+      dout(3) << "is_ancestor_of error: referent inode not loaded " << std::hex << ri << dendl;
+      ceph_abort("is_ancestor_of: referent inode not loaded");
+    }
+    const CDentry *pdn = cur->get_oldest_parent_dn();
+    if (!pdn) {
+      dout(3) << "is_ancestor_of error: referent inode parent is not set - ref_inode= " << *cur << dendl;
+      ceph_abort("is_ancestor_of: referent inode parent not set");
+    }
+    dout(3) << "HRK is_ancestor_of pdn=" << *pdn << "  refi=" << *cur << dendl;
+    if (this == pdn->get_dir()->get_inode())
+      return true;
+  }
+
   while (other) {
     if (visited && other->is_dir()) {
       if (auto it = visited->find(other); it != visited->end()) {
