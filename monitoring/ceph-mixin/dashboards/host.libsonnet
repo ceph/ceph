@@ -74,12 +74,12 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addTemplate(
       $.addTemplateSchema('rgw_hosts',
                           '$datasource',
-                          'label_values(ceph_rgw_metadata{hostname, %(matchers)s})' % $.matchers(),
+                          'label_values(ceph_rgw_metadata{%(matchers)s}, hostname)' % $.matchers(),
                           1,
                           true,
                           1,
                           null,
-                          'rgw.(.*)')
+                          '')
     )
     .addPanels([
       $.simpleSingleStatPanel(
