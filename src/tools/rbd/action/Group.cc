@@ -799,9 +799,6 @@ void get_add_arguments(po::options_description *positional,
   add_prefixed_pool_option(options, "image");
   add_prefixed_namespace_option(options, "image");
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
-
-  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE,
-	       " unless overridden");
 }
 
 void get_remove_image_arguments(po::options_description *positional,
@@ -824,8 +821,6 @@ void get_remove_image_arguments(po::options_description *positional,
   add_prefixed_namespace_option(options, "image");
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
 
-  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE,
-	       " unless overridden");
   at::add_image_id_option(options);
 }
 
