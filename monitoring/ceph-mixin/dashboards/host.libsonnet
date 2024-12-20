@@ -64,12 +64,12 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addTemplate(
       $.addTemplateSchema('mds_hosts',
                           '$datasource',
-                          'label_values(ceph_mds_inodes{hostname, %(matchers)s})' % $.matchers(),
+                          'label_values(ceph_mds_metadata{hostname, %(matchers)s})' % $.matchers(),
                           1,
                           true,
                           1,
                           null,
-                          'mds.(.*)')
+                          '')
     )
     .addTemplate(
       $.addTemplateSchema('rgw_hosts',
