@@ -5270,7 +5270,7 @@ void BlueStore::Collection::split_cache(
 // MempoolThread
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.MempoolThread(" << this << ") "
+#define dout_prefix *_dout << "bluestore.MempoolThread "
 #undef dout_context
 #define dout_context store->cct
 
@@ -5397,6 +5397,23 @@ void *BlueStore::MempoolThread::entry()
     interval_stats_trim = false;
 
     store->refresh_perf_counters();
+    uint64_t period = store->cct->_conf.get_val<uint64_t>("bluestore_fragmentation_check_period");
+    if (period != 0 && store->alloc) {
+      auto now = mono_clock::now();
+      timespan elapsed = now - last_fragmentation_check;
+      if (elapsed > make_timespan(period)) {
+        last_fragmentation_check = now;
+        double score;
+        score = store->alloc->get_fragmentation_score();
+        store->logger->set(l_bluestore_fragmentation, score * 1e6);
+        now = mono_clock::now();
+        elapsed = now - last_fragmentation_check;
+        auto seconds = elapsed.count() * 1e-9;
+        dout(0) << std::fixed << std::setprecision(6)
+          << "fragmentation_score=" << score << " took=" << seconds << "s" << dendl;
+      }
+    }
+
     auto wait = ceph::make_timespan(
       store->cct->_conf->bluestore_cache_trim_interval);
     cond.wait_for(l, wait);
@@ -15024,9 +15041,6 @@ void BlueStore::_kv_finalize_thread()
 
       // this is as good a place as any ...
       _reap_collections();
-      logger->set(l_bluestore_fragmentation,
-	(uint64_t)(alloc ? alloc->get_fragmentation() * 1000 : 0));
-
       log_latency("kv_final",
 	l_bluestore_kv_final_lat,
 	mono_clock::now() - start,
@@ -19015,6 +19029,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     alerts.emplace(
       "BLUESTORE_NO_COMPRESSION",
       s0);
+  }
+  if (logger->get(l_bluestore_fragmentation) >
+    cct->_conf.get_val<double>("bluestore_warn_on_free_fragmentation") * 1e6) {
+    alerts.emplace("BLUESTORE_FREE_FRAGMENTATION",
+      fmt::format("{0:.6f}", logger->get(l_bluestore_fragmentation) * 1e-6));
   }
 }
 
