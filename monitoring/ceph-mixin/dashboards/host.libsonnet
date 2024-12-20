@@ -64,7 +64,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addTemplate(
       $.addTemplateSchema('mds_hosts',
                           '$datasource',
-                          'label_values(ceph_mds_metadata{hostname, %(matchers)s})' % $.matchers(),
+                          'label_values(ceph_mds_metadata{%(matchers)s}, hostname)' % $.matchers(),
                           1,
                           true,
                           1,
