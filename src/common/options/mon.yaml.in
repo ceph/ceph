@@ -72,6 +72,25 @@ options:
   default: 30
   services:
   - mon
+- name: mon_nvmeofgw_beacon_grace
+  type: secs
+  level: advanced
+  desc: Period in seconds from last beacon to monitor marking a  NVMeoF gateway as
+    failed
+  default: 10
+  services:
+  - mon
+- name: mon_nvmeofgw_set_group_id_retry
+  type: uint
+  level: advanced
+  desc: Retry wait time in microsecond for set group id between the monitor client
+    and gateway
+  long_desc: The monitor server determines the gateway's group ID. If the monitor client
+    receives a monitor group ID assignment before the gateway is fully up during
+    initialization, a retry is required.
+  default: 1000
+  services:
+  - mon
 - name: mon_mgr_inactive_grace
   type: int
   level: advanced
@@ -1359,3 +1378,18 @@ options:
   with_legacy: true
   see_also:
   - osd_heartbeat_use_min_delay_socket
+- name: nvmeof_mon_client_disconnect_panic
+  type: secs
+  level: advanced
+  desc: The duration, expressed in seconds, after which the nvmeof gateway
+    should trigger a panic if it loses connection to the monitor
+  default: 100
+  services:
+  - mon
+- name: nvmeof_mon_client_tick_period
+  type: secs
+  level: advanced
+  desc: Period in seconds of nvmeof gateway beacon messages to monitor
+  default: 2
+  services:
+  - mon

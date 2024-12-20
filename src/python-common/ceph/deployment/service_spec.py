@@ -1353,7 +1353,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_log_directory_backups: Optional[int] = 10,
                  log_directory: Optional[str] = '/var/log/ceph/',
                  monitor_timeout: Optional[float] = 1.0,
-                 enable_monitor_client: bool = False,
+                 enable_monitor_client: bool = True,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -1470,6 +1470,9 @@ class NvmeofServiceSpec(ServiceSpec):
 
         if not self.pool:
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
+
+        if not self.group:
+            raise SpecValidationError('Cannot add NVMEOF: No group specified')
 
         if self.enable_auth:
             if not all([self.server_key, self.server_cert, self.client_key,
