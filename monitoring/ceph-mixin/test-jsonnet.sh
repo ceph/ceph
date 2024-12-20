@@ -12,7 +12,7 @@ do
     for generated_file in "${TEMPDIR}"/*.json
     do
         generated_file_name="$(basename "$generated_file")"
-        if [ "$file_name" == "$generated_file_name" ]; then
+        if [ "$file_name" = "$generated_file_name" ]; then
             jsondiff --indent 2 "${generated_file}" "${file}" \
                 | tee -a "${TEMPDIR}"/json_difference.log
         fi
