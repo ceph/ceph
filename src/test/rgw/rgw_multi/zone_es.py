@@ -203,8 +203,8 @@ class ESZone(Zone):
         return False
 
     class Conn(ZoneConn):
-        def __init__(self, zone, credentials):
-            super(ESZone.Conn, self).__init__(zone, credentials)
+        def __init__(self, zone, credentials, alt_user_credentials):
+            super(ESZone.Conn, self).__init__(zone, credentials, alt_user_credentials)
 
         def get_bucket(self, bucket_name):
             return ESZoneBucket(self, bucket_name, self.conn)
@@ -252,6 +252,9 @@ class ESZone(Zone):
         def has_role(self, role_name):
             assert False
 
+        def put_role_policy(self, rolename, policyname, policy_document):
+            assert False
+
         def create_topic(self, topicname, attributes):
             assert False
 
@@ -273,8 +276,11 @@ class ESZone(Zone):
         def list_notifications(self, bucket_name):
             assert False
 
-    def get_conn(self, credentials):
-        return self.Conn(self, credentials)
+        def assume_role(self, role_arn, session_name, policy, duration_seconds):
+            assert False
+
+    def get_conn(self, credentials, alt_user_credentials):
+        return self.Conn(self, credentials, alt_user_credentials)
 
 
 class ESZoneConfig:
