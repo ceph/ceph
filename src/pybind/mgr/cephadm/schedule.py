@@ -385,6 +385,8 @@ class HostAssignment(object):
 
     def find_ip_on_host(self, hostname: str, subnets: List[str]) -> Optional[str]:
         for subnet in subnets:
+            # to normalize subnet
+            subnet = str(ipaddress.ip_network(subnet))
             ips: List[str] = []
             # following is to allow loopback interfaces for both ipv4 and ipv6. Since we
             # only have the subnet (and no IP) we assume default loopback IP address.
