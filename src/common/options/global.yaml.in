@@ -1365,6 +1365,12 @@ options:
   desc: Hexdump message to debug log on message send
   default: false
   with_legacy: true
+- name: ms_inject_drop_mon_forward_msgs
+  type: int
+  level: dev
+  desc: Inject drop of mon forward messages every Nth message if negative, drop all messages
+  default: 0
+  with_legacy: true
 - name: ms_dump_corrupt_message_level
   type: int
   level: advanced
