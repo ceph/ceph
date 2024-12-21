@@ -786,6 +786,50 @@ public:
     return is_pending() && pending_for_transaction == id;
   }
 
+  enum class viewable_state_t {
+    stable,              // viewable
+    pending,             // viewable
+    invalid,             // unviewable
+    stable_retired,      // unviewable
+    stable_with_pending, // unviewable
+  };
+  friend std::ostream &operator<<(std::ostream &out, const viewable_state_t &state) {
+    switch(state) {
+    case viewable_state_t::stable:
+      return out << "stable";
+    case viewable_state_t::pending:
+      return out << "pending";
+    case viewable_state_t::invalid:
+      return out << "invalid";
+    case viewable_state_t::stable_retired:
+      return out << "stable_retired";
+    case viewable_state_t::stable_with_pending:
+      return out << "stable_with_pending";
+    default:
+      __builtin_unreachable();
+    }
+  }
+  std::pair<bool, viewable_state_t>
+  is_viewable_by_trans(transaction_id_t id) const {
+    if (!is_valid()) {
+      return std::make_pair(false, viewable_state_t::invalid);
+    }
+    if (is_pending()) {
+      assert(is_pending_in_trans(id));
+      return std::make_pair(true, viewable_state_t::pending);
+    }
+    // shared by multiple transactions
+    assert(is_stable_written());
+    auto cmp = trans_spec_view_t::cmp_t();
+    if (mutation_pendings.find(id, cmp) != mutation_pendings.end()) {
+      return std::make_pair(false, viewable_state_t::stable_with_pending);
+    }
+    if (retired_transactions.find(id, cmp) != retired_transactions.end()) {
+      return std::make_pair(false, viewable_state_t::stable_retired);
+    }
+    return std::make_pair(true, viewable_state_t::stable);
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -1330,6 +1374,8 @@ struct get_child_ret_t {
   }
 };
 
+using iter_version_t = uint32_t;
+
 template <typename key_t, typename>
 class PhysicalNodeMapping;
 
@@ -1391,6 +1437,8 @@ public:
   virtual void maybe_fix_pos() {
     ceph_abort("impossible");
   }
+
+  virtual iter_version_t get_iter_ver() const = 0;
 
   virtual ~PhysicalNodeMapping() {}
 protected:
@@ -1628,6 +1676,41 @@ struct ref_laddr_cmp {
   }
 };
 
+/**
+ * RemappedExtentPlaceholder
+ *
+ * This placeholder represents a slice remapped from a logical cached extent
+ * that is stable but not resident in memory. These extents are transaction-local,
+ * so they should not be added to the cache. It is used by the backref manager
+ * to update the extent type of remapped backref entries correctly. See
+ * BtreeBackrefManager::merge_cached_backrefs() for more details.
+ */
+struct RemappedExtentPlaceholder : LogicalCachedExtent {
+  explicit RemappedExtentPlaceholder(extent_len_t length)
+      : LogicalCachedExtent(length) {}
+
+  CachedExtentRef duplicate_for_write(Transaction&) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return CachedExtentRef();
+  }
+
+  ceph::bufferlist get_delta() final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return ceph::bufferlist();
+  }
+
+  void apply_delta(const ceph::bufferlist &) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+  }
+
+  static constexpr extent_types_t TYPE = extent_types_t::REMAPPED_PLACEHOLDER;
+  extent_types_t get_type() const final {
+    return TYPE;
+  }
+};
+using RemappedExtentPlaceholderRef =
+    TCachedExtentRef<RemappedExtentPlaceholder>;
+
 template <typename T>
 read_set_item_t<T>::read_set_item_t(T *t, CachedExtentRef ref)
   : t(t), ref(ref)
@@ -1664,6 +1747,7 @@ using lextent_list_t = addr_extent_list_base_t<
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::lba_pin_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::CachedExtent::viewable_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LBAMapping> : fmt::ostream_formatter {};
 #endif

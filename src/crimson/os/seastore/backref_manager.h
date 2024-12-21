@@ -115,6 +115,7 @@ public:
     paddr_t offset = P_ADDR_NULL;
     extent_len_t len = 0;
     laddr_t laddr = L_ADDR_NULL;
+    extent_types_t type = extent_types_t::NONE;
   };
 
   /**
