@@ -1303,12 +1303,19 @@ struct ReplicationConfiguration {
         return -EINVAL;
       }
 
+      if (std::holds_alternative<rgw_account_id>(s->owner.id)) {
+        // replication configuration is not supported for accounts
+        // only uid is supported
+        ldpp_dout(s, 1) << "NOTICE: replication configuration is not supported for accounts" << dendl;
+        return -ERR_NOT_IMPLEMENTED;
+      }
+
       pipe->id = id;
       pipe->params.priority = priority;
 
-      const auto& user_id = s->user->get_id();
+      const auto& tenant_owner = s->auth.identity->get_aclowner_tenant();
 
-      rgw_bucket_key dest_bk(user_id.tenant,
+      rgw_bucket_key dest_bk(tenant_owner,
                              destination.bucket);
 
       if (source && !source->zone_names.empty()) {
@@ -1331,7 +1338,7 @@ struct ReplicationConfiguration {
       }
       if (destination.acl_translation) {
         rgw_user u;
-        u.tenant = user_id.tenant;
+        u.tenant = tenant_owner;
         u.from_str(destination.acl_translation->owner); /* explicit tenant will override tenant,
                                                            otherwise will inherit it from s->user */
         pipe->params.dest.acl_translation.emplace();
@@ -1342,7 +1349,7 @@ struct ReplicationConfiguration {
       *enabled = (status == "Enabled");
 
       pipe->params.mode = rgw_sync_pipe_params::Mode::MODE_USER;
-      pipe->params.user = user_id.to_str();
+      pipe->params.user = to_string(s->owner.id);
 
       return 0;
     }
