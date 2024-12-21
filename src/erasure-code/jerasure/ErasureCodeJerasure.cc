@@ -105,7 +105,7 @@ unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int stripe_width) cons
 int ErasureCodeJerasure::encode_chunks(const set<int> &want_to_encode,
 				       map<int, bufferlist> *encoded)
 {
-  char *chunks[k + m];
+  std::vector<char*> chunks(k + m);
   for (int i = 0; i < k + m; i++)
     chunks[i] = (*encoded)[i].c_str();
   jerasure_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
@@ -117,10 +117,10 @@ int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
 				       map<int, bufferlist> *decoded)
 {
   unsigned blocksize = (*chunks.begin()).second.length();
-  int erasures[k + m + 1];
+  std::vector<int> erasures(k + m + 1);
   int erasures_count = 0;
-  char *data[k];
-  char *coding[m];
+  std::vector<char*> data(k);
+  std::vector<char*> coding(m);
   for (int i =  0; i < k + m; i++) {
     if (chunks.find(i) == chunks.end()) {
       erasures[erasures_count] = i;
@@ -134,7 +134,8 @@ int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
   erasures[erasures_count] = -1;
 
   ceph_assert(erasures_count > 0);
-  return jerasure_decode(erasures, data, coding, blocksize);
+  return jerasure_decode(erasures.data(), data.data(), coding.data(),
+			 blocksize);
 }
 
 bool ErasureCodeJerasure::is_prime(int value)

@@ -115,6 +115,10 @@ endif()
 
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-ftemplate-depth-1024>)
 
+CHECK_CXX_COMPILER_FLAG("-Wvla" COMPILER_SUPPORTS_VLA)
+if(COMPILER_SUPPORTS_VLA)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wvla>)
+endif()
 CHECK_CXX_COMPILER_FLAG("-Wpessimizing-move" COMPILER_SUPPORTS_PESSIMIZING_MOVE)
 if(COMPILER_SUPPORTS_PESSIMIZING_MOVE)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wpessimizing-move>)

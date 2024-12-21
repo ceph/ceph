@@ -172,8 +172,8 @@ int main(int argc, const char **argv)
   r = io_ctx.exec(oid, "crypto", "md5", bl, bl2);
   cout << "exec returned " << r <<  " buf size=" << bl2.length() << std::endl;
   const unsigned char *md5 = (const unsigned char *)bl2.c_str();
-  char md5_str[bl2.length()*2 + 1];
-  buf_to_hex(md5, bl2.length(), md5_str);
+  std::vector<char> md5_str(bl2.length()*2 + 1);
+  buf_to_hex(md5, bl2.length(), md5_str.data());
   cout << "md5 result=" << md5_str << std::endl;
 
   // test assert_version
@@ -195,8 +195,8 @@ int main(int argc, const char **argv)
   r = io_ctx.exec(oid, "crypto", "sha1", bl, bl2);
   cout << "exec returned " << r << std::endl;
   const unsigned char *sha1 = (const unsigned char *)bl2.c_str();
-  char sha1_str[bl2.length()*2 + 1];
-  buf_to_hex(sha1, bl2.length(), sha1_str);
+  std::vector<char> sha1_str(bl2.length()*2 + 1);
+  buf_to_hex(sha1, bl2.length(), sha1_str.data());
   cout << "sha1 result=" << sha1_str << std::endl;
 
   r = io_ctx.exec(oid, "acl", "set", bl, bl2);
@@ -216,8 +216,8 @@ int main(int argc, const char **argv)
     cout << "read too many bytes from oid " << oid << "." << std::endl;
     exit(1);
   }
-  char rbuf[size + 1];
-  memcpy(rbuf, bl2.c_str(), size);
+  std::vector<char> rbuf(size + 1);
+  memcpy(rbuf.data(), bl2.c_str(), size);
   rbuf[size] = '\0';
   cout << "read result='" << rbuf << "'" << std::endl;
   cout << "size=" << size << std::endl;
