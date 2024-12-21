@@ -4570,7 +4570,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         tests the 'fs subvolume snapshot info' command
         """
 
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot, snap_missing = self._gen_subvol_snap_name(2)
@@ -4897,7 +4897,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         """
         ensure a retained subvolume can be recreated and further snapshotted
         """
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot1, snapshot2 = self._gen_subvol_snap_name(2)
@@ -4960,7 +4960,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         ensure retain snapshots based delete of a subvolume with snapshots retains the subvolume
         also test allowed and dis-allowed operations on a retained subvolume
         """
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot = self._gen_subvol_snap_name()
@@ -8764,7 +8764,7 @@ class TestMisc(TestVolumesHelper):
         subvol_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
                      "data_pool", "gid", "mode", "mon_addrs", "mtime", "path", "pool_namespace",
                      "type", "uid", "features", "state"]
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot = self._gen_subvol_snap_name()
