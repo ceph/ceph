@@ -67,8 +67,6 @@ PGRecovery::start_recovery_ops(
   if (max_to_start > 0) {
     max_to_start -= start_replica_recovery_ops(trigger, max_to_start, &started);
   }
-  using interruptor =
-    crimson::interruptible::interruptor<crimson::osd::IOInterruptCondition>;
   return interruptor::parallel_for_each(started,
 					[] (auto&& ifut) {
     return std::move(ifut);
@@ -609,8 +607,21 @@ void PGRecovery::update_peers_last_backfill(
 
 bool PGRecovery::budget_available() const
 {
-  // TODO: the limits!
-  return true;
+  crimson::osd::scheduler::params_t params =
+    {1, 0, crimson::osd::scheduler::scheduler_class_t::background_best_effort};
+  auto &ss = pg->get_shard_services();
+  auto futopt = ss.try_acquire_throttle_now(std::move(params));
+  if (!futopt) {
+    return true;
+  }
+  std::ignore = interruptor::make_interruptible(std::move(*futopt)
+  ).then_interruptible([this] {
+    assert(!backfill_state->is_triggered());
+    using BackfillState = crimson::osd::BackfillState;
+    backfill_state->process_event(
+      BackfillState::ThrottleAcquired{}.intrusive_from_this());
+  });
+  return false;
 }
 
 void PGRecovery::on_pg_clean()
