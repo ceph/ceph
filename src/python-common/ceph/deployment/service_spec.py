@@ -3006,7 +3006,7 @@ class SMBClusterPublicIPSpec:
 
 class SMBSpec(ServiceSpec):
     service_type = 'smb'
-    _valid_features = {'domain', 'clustered'}
+    _valid_features = {'domain', 'clustered', 'cephfs-proxy'}
     _default_cluster_meta_obj = 'cluster.meta.json'
     _default_cluster_lock_obj = 'cluster.meta.lock'
 
