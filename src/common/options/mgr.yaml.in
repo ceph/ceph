@@ -177,6 +177,22 @@ options:
   services:
   - mgr
   with_legacy: true
+- name: mgr_module_load_delay
+  type: uint
+  level: dev
+  default: 0
+  desc: Amount of seconds a mgr module delays loading. For testing purposes only.
+  services:
+  - mgr
+- name: mgr_module_load_delay_name
+  type: str
+  level: dev
+  desc: Choose which mgr module to inject a load delay. For testing purposes only.
+  flags:
+  - runtime
+  with_legacy: true
+  services:
+  - mgr
 - name: cephadm_path
   type: str
   level: advanced
