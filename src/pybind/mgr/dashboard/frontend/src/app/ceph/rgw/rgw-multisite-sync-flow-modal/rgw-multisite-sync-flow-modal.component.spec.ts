@@ -8,6 +8,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { of } from 'rxjs';
+import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
 
 enum FlowType {
   symmetrical = 'symmetrical',
@@ -33,6 +34,7 @@ describe('RgwMultisiteSyncFlowModalComponent', () => {
         ReactiveFormsModule,
         CommonModule
       ],
+      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
       providers: [NgbActiveModal, { provide: RgwMultisiteService, useClass: MultisiteServiceMock }]
     }).compileComponents();
 

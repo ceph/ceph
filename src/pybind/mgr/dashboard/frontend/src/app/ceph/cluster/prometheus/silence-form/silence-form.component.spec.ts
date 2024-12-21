@@ -86,7 +86,7 @@ describe('SilenceFormComponent', () => {
     });
 
   const changeAction = (action: string) => {
-    const modes = {
+    const modes: Record<string, string> = {
       add: '/monitoring/silences/add',
       alertAdd: '/monitoring/silences/add/alert0',
       recreate: '/monitoring/silences/recreate/someExpiredId',
@@ -180,7 +180,7 @@ describe('SilenceFormComponent', () => {
     let navigateSpy: jasmine.Spy;
 
     const expectError = (action: string, redirected: boolean) => {
-      Object.defineProperty(router, 'url', { value: action });
+      Object.defineProperty(router, 'url', { value: action, configurable: true });
       if (redirected) {
         expect(() => callInit()).toThrowError(DashboardNotFoundError);
       } else {
