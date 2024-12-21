@@ -368,25 +368,30 @@ seastar::future<> SegmentedJournal::flush(OrderingHandle &handle)
   });
 }
 
-SegmentedJournal::submit_record_ret
+SegmentedJournal::submit_record_ertr::future<>
 SegmentedJournal::do_submit_record(
   record_t &&record,
-  OrderingHandle &handle)
+  OrderingHandle &handle,
+  on_submission_func_t &&on_submission)
 {
   LOG_PREFIX(SegmentedJournal::do_submit_record);
   if (!record_submitter.is_available()) {
     DEBUG("H{} wait ...", (void*)&handle);
     return record_submitter.wait_available(
-    ).safe_then([this, record=std::move(record), &handle]() mutable {
-      return do_submit_record(std::move(record), handle);
+    ).safe_then([this, record=std::move(record), &handle,
+		 on_submission=std::move(on_submission)]() mutable {
+      return do_submit_record(
+	std::move(record), handle, std::move(on_submission));
     });
   }
   auto action = record_submitter.check_action(record.size);
   if (action == RecordSubmitter::action_t::ROLL) {
     DEBUG("H{} roll, unavailable ...", (void*)&handle);
     return record_submitter.roll_segment(
-    ).safe_then([this, record=std::move(record), &handle]() mutable {
-      return do_submit_record(std::move(record), handle);
+    ).safe_then([this, record=std::move(record), &handle,
+		 on_submission=std::move(on_submission)]() mutable {
+      return do_submit_record(
+	std::move(record), handle, std::move(on_submission));
     });
   } else { // SUBMIT_FULL/NOT_FULL
     DEBUG("H{} submit {} ...",
@@ -398,22 +403,27 @@ SegmentedJournal::do_submit_record(
     return handle.enter(write_pipeline->device_submission
     ).then([submit_fut=std::move(submit_ret.future)]() mutable {
       return std::move(submit_fut);
-    }).safe_then([FNAME, this, &handle](record_locator_t result) {
+    }).safe_then([FNAME, this, &handle, on_submission=std::move(on_submission)
+		 ](record_locator_t result) mutable {
       return handle.enter(write_pipeline->finalize
-      ).then([FNAME, this, result, &handle] {
+      ).then([FNAME, this, result, &handle,
+	      on_submission=std::move(on_submission)] {
         DEBUG("H{} finish with {}", (void*)&handle, result);
         auto new_committed_to = result.write_result.get_end_seq();
         record_submitter.update_committed_to(new_committed_to);
-        return result;
+        std::invoke(on_submission, result);
+	return seastar::now();
       });
     });
   }
 }
 
-SegmentedJournal::submit_record_ret
+SegmentedJournal::submit_record_ertr::future<>
 SegmentedJournal::submit_record(
     record_t &&record,
-    OrderingHandle &handle)
+    OrderingHandle &handle,
+    transaction_type_t t_src,
+    on_submission_func_t &&on_submission)
 {
   LOG_PREFIX(SegmentedJournal::submit_record);
   DEBUG("H{} {} start ...", (void*)&handle, record);
@@ -429,7 +439,8 @@ SegmentedJournal::submit_record(
     return crimson::ct_error::erange::make();
   }
 
-  return do_submit_record(std::move(record), handle);
+  return do_submit_record(
+    std::move(record), handle, std::move(on_submission));
 }
 
 }

@@ -58,35 +58,52 @@ CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
   return record_submitter.close();
 }
 
-CircularBoundedJournal::submit_record_ret
+CircularBoundedJournal::submit_record_ertr::future<>
 CircularBoundedJournal::submit_record(
     record_t &&record,
-    OrderingHandle &handle)
+    OrderingHandle &handle,
+    transaction_type_t t_src,
+    on_submission_func_t &&on_submission)
 {
   LOG_PREFIX(CircularBoundedJournal::submit_record);
   DEBUG("H{} {} start ...", (void*)&handle, record);
   assert(write_pipeline);
-  return do_submit_record(std::move(record), handle);
+  return do_submit_record(
+    std::move(record), handle, std::move(on_submission)
+  ).safe_then([this, t_src] {
+    if (is_trim_transaction(t_src)) {
+      return update_journal_tail(
+	trimmer.get_dirty_tail(),
+	trimmer.get_alloc_tail());
+    } else {
+      return seastar::now();
+    }
+  });
 }
 
-CircularBoundedJournal::submit_record_ret
+CircularBoundedJournal::submit_record_ertr::future<>
 CircularBoundedJournal::do_submit_record(
   record_t &&record,
-  OrderingHandle &handle)
+  OrderingHandle &handle,
+  on_submission_func_t &&on_submission)
 {
   LOG_PREFIX(CircularBoundedJournal::do_submit_record);
   if (!record_submitter.is_available()) {
     DEBUG("H{} wait ...", (void*)&handle);
     return record_submitter.wait_available(
-    ).safe_then([this, record=std::move(record), &handle]() mutable {
-      return do_submit_record(std::move(record), handle);
+    ).safe_then([this, record=std::move(record), &handle,
+		 on_submission=std::move(on_submission)]() mutable {
+      return do_submit_record(
+	std::move(record), handle, std::move(on_submission));
     });
   }
   auto action = record_submitter.check_action(record.size);
   if (action == RecordSubmitter::action_t::ROLL) {
     return record_submitter.roll_segment(
-    ).safe_then([this, record=std::move(record), &handle]() mutable {
-      return do_submit_record(std::move(record), handle);
+    ).safe_then([this, record=std::move(record), &handle,
+		 on_submission=std::move(on_submission)]() mutable {
+      return do_submit_record(
+	std::move(record), handle, std::move(on_submission));
     });
   }
 
@@ -99,13 +116,16 @@ CircularBoundedJournal::do_submit_record(
   return handle.enter(write_pipeline->device_submission
   ).then([submit_fut=std::move(submit_ret.future)]() mutable {
     return std::move(submit_fut);
-  }).safe_then([FNAME, this, &handle](record_locator_t result) {
+  }).safe_then([FNAME, this, &handle, on_submission=std::move(on_submission)
+	       ](record_locator_t result) mutable {
     return handle.enter(write_pipeline->finalize
-    ).then([FNAME, this, result, &handle] {
+    ).then([FNAME, this, result, &handle,
+	    on_submission=std::move(on_submission)] {
       DEBUG("H{} finish with {}", (void*)&handle, result);
       auto new_committed_to = result.write_result.get_end_seq();
       record_submitter.update_committed_to(new_committed_to);
-      return result;
+      std::invoke(on_submission, result);
+      return seastar::now();
     });
   });
 }
@@ -390,15 +410,6 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	get_alloc_tail());
     });
   });
-}
-
-seastar::future<> CircularBoundedJournal::finish_commit(transaction_type_t type) {
-  if (is_trim_transaction(type)) {
-    return update_journal_tail(
-      trimmer.get_dirty_tail(),
-      trimmer.get_alloc_tail());
-  }
-  return seastar::now();
 }
 
 }

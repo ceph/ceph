@@ -44,9 +44,11 @@ public:
 
   close_ertr::future<> close() final;
 
-  submit_record_ret submit_record(
+  submit_record_ertr::future<> submit_record(
     record_t &&record,
-    OrderingHandle &handle) final;
+    OrderingHandle &handle,
+    transaction_type_t t_src,
+    on_submission_func_t &&on_submission) final;
 
   seastar::future<> flush(OrderingHandle &handle) final;
 
@@ -59,9 +61,6 @@ public:
   backend_type_t get_type() final {
     return backend_type_t::SEGMENTED;
   }
-  seastar::future<> finish_commit(transaction_type_t type) {
-    return seastar::now();
-  }
 
   bool is_checksum_needed() final {
     // segmented journal always requires checksum
@@ -69,10 +68,10 @@ public:
   }
 
 private:
-  submit_record_ret do_submit_record(
+  submit_record_ertr::future<> do_submit_record(
     record_t &&record,
-    OrderingHandle &handle
-  );
+    OrderingHandle &handle,
+    on_submission_func_t &&on_submission);
 
   SegmentSeqAllocatorRef segment_seq_allocator;
   SegmentAllocator journal_segment_allocator;
