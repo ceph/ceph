@@ -363,7 +363,7 @@ private:
       extent,
       boost::intrusive::list_member_hook<>,
       &extent::pin_list_member>;
-    using list = boost::intrusive::list<extent, list_member_options>;
+    using list = boost::intrusive::list<extent, boost::intrusive::constant_time_size<false>, list_member_options>;
     list pin_list;
     ~pin_state() {
       ceph_assert(pin_list.empty());
