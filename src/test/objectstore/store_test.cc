@@ -10107,6 +10107,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     bstore->mount();
     ghobject_t hoid4 = make_object("Object 4", pool);
     auto ch = store->open_collection(cid);
+    C_SaferCond c;
     {
       bufferlist bl;
       string s(0x1000, 'a');
@@ -10115,10 +10116,11 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
       for(size_t i = 0; i < 0x10; i++) {
               t.write(cid, hoid4, i * bl.length(), bl.length(), bl);
       }
-      r = queue_transaction(store, ch, std::move(t));
+      t.register_on_commit(&c);
+      queue_transaction(store, ch, std::move(t));
       ASSERT_EQ(r, 0);
     }
-    sleep(5);
+    c.wait();
     {
       bstore->inject_zombie_spanning_blob(cid, hoid4, 12345);
       bstore->inject_zombie_spanning_blob(cid, hoid4, 23456);
@@ -10223,21 +10225,23 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenZombieRepairTest) {
       ASSERT_EQ(r, 0);
     }
     cerr << "onode preparing" << std::endl;
+    C_SaferCond c[col_count];
     bufferlist bl;
     string s(0x1000, 'a');
     bl.append(s);
-
     for (size_t i = 0; i < col_count; i++) {
+      ObjectStore::Transaction t;
       for (size_t j = 0; j < obj_count; j++) {
-	ObjectStore::Transaction t;
 	t.write(*cid[i], hoid[i][j], bl.length(), bl.length(), bl);
-	r = queue_transaction(store, ch[i], std::move(t));
-	ASSERT_EQ(r, 0);
       }
+      t.register_on_commit(&c[i]);
+      r = queue_transaction(store, ch[i], std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    for (size_t i = 0; i < col_count; i++) {
+      c[i].wait();
     }
     cerr << "Zombie spanning blob injection" << std::endl;
-
-    sleep(5);
 
     for (size_t i = 0; i < col_count; i++) {
       for (size_t j = 0; j < obj_count; j++) {
@@ -10387,15 +10391,17 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
       ASSERT_EQ(r, 0);
     }
     {
+     C_SaferCond c;
       ObjectStore::Transaction t;
       t.clone(cid, hoid, hoid_cloned);
-      r = queue_transaction(store, ch, std::move(t));
+      t.register_on_commit(&c);
+      queue_transaction(store, ch, std::move(t));
       ASSERT_EQ(r, 0);
+      c.wait();
     }
   }
   // injecting an error and checking
   cerr << "injecting" << std::endl;
-  sleep(3); // need some time for the previous write to land
   bstore->inject_no_shared_blob_key();
   bstore->inject_stray_shared_blob_key(12345678);
 
