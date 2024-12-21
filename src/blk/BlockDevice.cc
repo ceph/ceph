@@ -216,6 +216,14 @@ void BlockDevice::add_stalled_read_event() {
   trim_stalled_read_event_queue(cur_time);
 }
 
+bool BlockDevice::check_discard_queue_overload() {
+  if (support_discard && cct->_conf->bdev_enable_discard) {
+    uint64_t current_discarded_bytes = discarded_bytes.load();
+    return current_discarded_bytes > cct->_conf->bdev_discard_queue_threshold;
+  }
+  return false;
+}
+
 void BlockDevice::collect_alerts(osd_alert_list_t& alerts, const std::string& device_name) {
   if (cct->_conf->bdev_stalled_read_warn_threshold) {
     size_t qsize = trim_stalled_read_event_queue(mono_clock::now());
@@ -225,6 +233,11 @@ void BlockDevice::collect_alerts(osd_alert_list_t& alerts, const std::string& de
         << device_name << " device";
       alerts.emplace(device_name + "_DEVICE_STALLED_READ_ALERT", ss.str());
     }
+  }
+  if (cct->_conf->bdev_enable_discard && check_discard_queue_overload()) {
+    std::ostringstream ss;
+    ss << "observed discard queue overload in " << device_name << " device";
+    alerts.emplace(device_name + "_DEVICE_DISCARD_QUEUE_OVERFLOW_ALERT", ss.str());
   }
 }
 
