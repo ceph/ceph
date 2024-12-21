@@ -9,15 +9,17 @@ On creation of new zones and zonegroups, all known features are supported and so
 Supported Features
 ------------------
 
-+-----------------------------------+---------+----------+
-| Feature                           | Release | Default  |
-+===================================+=========+==========+
-| :ref:`feature_resharding`         | Reef    | Enabled  |
-+-----------------------------------+---------+----------+
-| :ref:`feature_compress_encrypted` | Reef    | Disabled |
-+-----------------------------------+---------+----------+
-| :ref:`feature_notification_v2`    | Squid   | Enabled  |
-+-----------------------------------+---------+----------+
++--------------------------------------------------------+----------+----------+
+| Feature                                                | Release  | Default  |
++========================================================+==========+==========+
+| :ref:`feature_resharding`                              | Reef     | Enabled  |
++--------------------------------------------------------+----------+----------+
+| :ref:`feature_compress_encrypted`                      | Reef     | Disabled |
++--------------------------------------------------------+----------+----------+
+| :ref:`feature_notification_v2`                         | Squid    | Enabled  |
++--------------------------------------------------------+----------+----------+
+| :ref:`feature_skip_existing_object_replication_policy` | Tentacle | Enabled  |
++--------------------------------------------------------+----------+----------+
 
 .. _feature_resharding:
 
@@ -63,6 +65,25 @@ scale to many topics.
 
 Once this feature is enabled on all zonegroups in the realm, a background process
 will convert existing v1 topics and bucket notifications into their v2 format.
+
+
+.. _feature_skip_existing_object_replication_policy:
+
+skip-existing-object-replication-policy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This feature enables bucket replication to start incrementally, applying only to
+changes and new objects created after replication is enabled, rather than performing
+a full sync of existing objects. This behavior applies to bucket replication policies
+in general, whether they operate within the same zonegroup or across different zonegroups.
+
+AWS has set this as the default behavior for bucket replication policies following the
+deprecation of their ExistingObjectReplication feature. As a result, this feature is enabled
+by default for new deployments but requires existing deployments to opt-in manually.
+
+In cases where the source and destination buckets are the same, symmetry is enforced, and the
+zonegroup feature is ignored, relying instead on whether a full sync is needed. If the source
+and destination buckets differ, the zonegroup feature and full sync logic come into play.
 
 
 Commands
