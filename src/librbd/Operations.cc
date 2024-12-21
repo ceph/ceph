@@ -1046,10 +1046,10 @@ void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespac
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
 
-  if (m_image_ctx.read_only) {
-    on_finish->complete(-EROFS);
-    return;
-  }
+  //if (m_image_ctx.read_only) {
+  //  on_finish->complete(-EROFS);
+  //  return;
+  //}
 
   // quickly filter out duplicate ops
   m_image_ctx.image_lock.lock_shared();
