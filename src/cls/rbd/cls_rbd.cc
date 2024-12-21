@@ -29,13 +29,17 @@
 
 #include <algorithm>
 #include <errno.h>
+#include <iomanip>
 #include <sstream>
 
 #include "include/uuid.h"
 #include "common/bit_vector.hpp"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
+#include "include/encoding_boost_optional.h"
+#include "include/encoding_set.h"
 #include "include/rbd_types.h"
 #include "include/rbd/object_map_types.h"
 

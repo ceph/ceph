@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/ConfigWatcher.h"
+#include "include/container_ios.h"
 #include "common/config_obs.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -12,6 +13,8 @@
 #include <string>
 #include <vector>
 #include <boost/algorithm/string/predicate.hpp>
+
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

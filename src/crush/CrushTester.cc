@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 
 #include <boost/lexical_cast.hpp>
@@ -12,6 +13,7 @@
 #include "common/SubProcess.h"
 #include "common/fork_function.h"
 
+#include "include/container_ios.h"
 #include "include/stringify.h"
 #include "CrushTester.h"
 #include "CrushTreeDumper.h"

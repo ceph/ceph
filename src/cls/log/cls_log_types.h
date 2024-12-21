@@ -4,6 +4,7 @@
 #define CEPH_CLS_LOG_TYPES_H
 
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "include/types.h"
 
 #include "include/utime.h"
@@ -62,6 +63,8 @@ struct cls_log_entry {
   }
 
   static void generate_test_instances(std::list<cls_log_entry *>& l) {
+    using ceph::encode;
+
     l.push_back(new cls_log_entry{});
     l.push_back(new cls_log_entry);
     l.back()->id = "test_id";
@@ -69,7 +72,7 @@ struct cls_log_entry {
     l.back()->name = "test_name";
     l.back()->timestamp = utime_t();
     ceph::buffer::list bl;
-    ceph::encode(std::string("Test"), bl, 0);
+    encode(std::string("Test"), bl, 0);
     l.back()->data = bl;
   }
 };

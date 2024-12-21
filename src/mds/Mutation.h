@@ -20,23 +20,23 @@
 #include "include/interval_set.h"
 #include "include/elist.h"
 #include "include/filepath.h"
-
-#include "MDSCacheObject.h"
-#include "MDSContext.h"
+#include "include/unordered_map.h"
 
 #include "SimpleLock.h"
 #include "Capability.h"
-#include "BatchOp.h"
 
+#include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
 #include "messages/MClientRequest.h"
 #include "messages/MMDSPeerRequest.h"
-#include "messages/MClientReply.h"
 
 class LogSegment;
+class BatchOp;
 class CInode;
 class CDir;
 class CDentry;
+class MDSCacheObject;
+class MDSContext;
 class Session;
 class ScatterLock;
 struct sr_t;
@@ -347,7 +347,7 @@ struct MDRequestImpl : public MutationImpl {
     Context *peer_commit = nullptr;
     ceph::buffer::list rollback_bl;
 
-    MDSContext::vec waiting_for_finish;
+    std::vector<MDSContext*> waiting_for_finish;
 
     std::map<inodeno_t, metareqid_t> quiesce_ops;
 

@@ -5,6 +5,7 @@
 #define CEPH_CLS_LOG_OPS_H
 
 #include "common/ceph_json.h"
+#include "include/encoding_list.h"
 #include "cls_log_types.h"
 
 struct cls_log_add_op {

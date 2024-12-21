@@ -12,6 +12,8 @@
 #include "include/cephfs/libcephfs.h"
 #include "mds/mdstypes.h"
 
+#include <boost/variant/variant.hpp>
+
 namespace cephfs {
 namespace mirror {
 
