@@ -4050,6 +4050,14 @@ struct obj_time_weight {
     mtime = state->mtime;
     zone_short_id = state->zone_short_id;
     pg_ver = state->pg_ver;
+    bufferlist bl;
+    if (state->get_attr(RGW_ATTR_INTERNAL_MTIME, bl)) {
+      try {
+        auto iter = bl.cbegin();
+        decode(mtime, iter);
+      } catch (buffer::error& err) {
+      }
+    }
   }
 };
 
@@ -4154,7 +4162,7 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
 
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
-    int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
+    int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr, NULL,
                         dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                         prepend_meta, get_op, rgwx_stat,
                         sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
@@ -4356,7 +4364,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                     });
 
   string etag;
-  real_time set_mtime;
+  real_time set_mtime, src_obj_internal_mtime;
   uint64_t accounted_size = 0;
 
   RGWObjState *dest_state = NULL;
@@ -4389,8 +4397,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
     ret = conn->get_obj(rctx.dpp, user_id, info, src_obj, pmod, unmod_ptr,
-                        dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                        prepend_meta, get_op, rgwx_stat,
+                        real_clock::is_zero(dest_mtime_weight.mtime) ? NULL : &dest_mtime_weight.mtime,
+                        dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver, prepend_meta, get_op, rgwx_stat,
                         sync_manifest, skip_decrypt, &dst_zone_trace,
                         sync_cloudtiered, true,
                         &cb, &in_stream_req);
@@ -5306,7 +5314,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   {
     bufferlist bl;
     encode(restore_time, bl);
-    attrs[RGW_ATTR_RESTORE_TIME] = std::move(bl);
+    attrs[RGW_ATTR_RESTORE_TIME] = attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
   }
 
   real_time delete_at = real_time();
@@ -5355,6 +5363,9 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
       attrs[RGW_ATTR_CLOUD_TIER_CONFIG] = t_tier;
     }
 
+    // TODO : check whether log_op need to passed to this function
+    log_op = false;
+
   } else { // permanent restore
     {
       bufferlist bl;
@@ -5366,6 +5377,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     }
     //set mtime to now()
     set_mtime = real_clock::now();
+    log_op = true;
   }
 
   {
@@ -5385,6 +5397,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     return ret;
   }
 
+  attrs.erase(RGW_ATTR_TRANSITION_TIME);
   // XXX: handle olh_epoch for versioned objects like in fetch_remote_obj
   return ret; 
 }
@@ -7160,13 +7173,21 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
   }
 
   /* Convert all times go GMT to make them compatible */
-  if (conds.mod_ptr || conds.unmod_ptr) {
+  if (conds.mod_ptr || conds.unmod_ptr || conds.internal_mtime_ptr) {
     obj_time_weight src_weight;
     src_weight.init(astate);
     src_weight.high_precision = conds.high_precision_time;
 
     obj_time_weight dest_weight;
     dest_weight.high_precision = conds.high_precision_time;
+
+    if (conds.internal_mtime_ptr) {
+      dest_weight.init(*conds.internal_mtime_ptr, conds.mod_zone_id, conds.mod_pg_ver);
+      ldpp_dout(dpp, 10) << "If-Modified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
+      if (dest_weight < src_weight) {
+        goto out;
+      }
+    }
 
     if (conds.mod_ptr && !conds.if_nomatch) {
       dest_weight.init(*conds.mod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
@@ -7184,6 +7205,8 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       }
     }
   }
+
+out:
   if (conds.if_match || conds.if_nomatch) {
     r = get_attr(dpp, RGW_ATTR_ETAG, etag, y);
     if (r < 0)
