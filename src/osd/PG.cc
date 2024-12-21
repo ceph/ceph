@@ -1561,7 +1561,7 @@ void PG::on_backfill_reserved()
   queue_recovery();
 }
 
-void PG::on_backfill_canceled()
+void PG::on_backfill_suspended()
 {
   if (!waiting_on_backfill.empty()) {
     waiting_on_backfill.clear();
