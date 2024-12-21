@@ -1039,7 +1039,6 @@ static int get_actual_key_from_vault(const DoutPrefixProvider *dpp,
   }
   else if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine){
     TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
-    std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     return make_it
 	? engine.make_actual_key(dpp, attrs, y, actual_key)
 	: engine.reconstitute_actual_key(dpp, attrs, y, actual_key);
