@@ -1738,7 +1738,8 @@ int ECBackend::be_deep_scrub(
 
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | 
-                           CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE;
+                           CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE |
+                           CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING;
 
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
