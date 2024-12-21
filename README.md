@@ -135,10 +135,9 @@ To build Ceph, follow this procedure:
     >While debugging builds are helpful for development, they can slow down performance.
     >
     >Use `-DCMAKE_BUILD_TYPE=Release` when debugging isn't necessary.
-    >
-    >Enable Selective Daemons if you're testing specific components, don't start unnecessary daemons.
-    >
-    >Preserve Existing Data skip cluster reinitialization between tests by using the `-n` flag
+    
+    Enable Selective Daemons if you're testing specific components, don't start unnecessary daemons.
+    Preserve Existing Data skip cluster reinitialization between tests by using the `-n` flag
 
     > [TROUBLESHOOTING]
     >
@@ -146,7 +145,7 @@ To build Ceph, follow this procedure:
     >
     >OSD Crashes: Check the OSD logs for errors.
     >
-    >Cluster in a Health Error State: Run ceph status to identify the issue.
+    >Cluster in a Health Error State: Run `ceph status` to identify the issue.
     >
     >RocksDB Errors: Look for RocksDB-related errors in OSD logs.
     
