@@ -209,7 +209,7 @@ class ESZone(Zone):
         def get_bucket(self, bucket_name):
             return ESZoneBucket(self, bucket_name, self.conn)
 
-        def create_bucket(self, name):
+        def create_bucket(self, name, **kwargs):
             # should not be here, a bug in the test suite
             log.critical('Conn.create_bucket() should not be called in ES zone')
             assert False
