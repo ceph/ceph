@@ -13,31 +13,73 @@
  * Represents the objects in a range [begin, end)
  *
  * Possible states:
- * 1) begin == end == hobject_t() indicates the the interval is unpopulated
- * 2) Else, objects contains all objects in [begin, end)
+ * 1) Unpopulated - only interval's range is set
+ * 2) Populatd - objects contains all objects in [begin, end)
  */
+
 struct BackfillInterval {
+private:
   // info about a backfill interval on a peer
   eversion_t version; /// version at which the scan occurred
   std::map<hobject_t,eversion_t> objects;
-  hobject_t begin;
-  hobject_t end;
+  hobject_t begin; /// object to start populating the interval from
+  hobject_t end;   /// object to start populating the interval to
+  bool populated = false;
 
-  /// clear content
-  void clear() {
-    *this = BackfillInterval();
+public:
+  BackfillInterval(hobject_t begin);
+
+  BackfillInterval(hobject_t begin,
+                   hobject_t end);
+
+  BackfillInterval() = delete;
+
+  // populate the objects in the interval and update version
+  void populate(const ceph::buffer::list& data,
+                eversion_t _version) {
+    ceph_assert(objects.empty() && !populated);
+    auto p = data.cbegin();
+    decode_noclear(objects, p);
+    version = _version;
+    populated = true;
   }
 
-  /// clear objects std::list only
-  void clear_objects() {
-    objects.clear();
+  // populate the objects in the interval and update version
+  void populate(const std::map<hobject_t,eversion_t>&& _objects,
+                eversion_t _version) {
+    ceph_assert(objects.empty() && !populated);
+    objects = std::move(_objects);
+    version = _version;
+    populated = true;
   }
 
-  /// reinstantiate with a new start+end position and sort order
-  void reset(hobject_t start) {
-    clear();
-    begin = end = start;
+  const std::map<hobject_t,eversion_t>& get_objects() const {
+    return objects;
   }
+
+  const hobject_t& get_begin() const {
+    return begin;
+  }
+
+  const hobject_t& get_end() const {
+    return begin;
+  }
+
+  const eversion_t& get_begin_version() const {
+    return objects.begin()->second;
+  }
+
+  const eversion_t& get_interval_version() const {
+    return version;
+  }
+
+  /// true if interval is populated
+  bool is_populated() {
+    return populated;
+  }
+
+  /// update interval based on pg log entries
+  void update(const pg_log_entry_t &e);
 
   /// true if there are no objects in this interval
   bool empty() const {
@@ -89,9 +131,9 @@ struct BackfillInterval {
     }
     f->close_section();
   }
-};
 
-std::ostream &operator<<(std::ostream &out, const BackfillInterval &bi);
+  friend std::ostream &operator<<(std::ostream &out, const BackfillInterval &bi);
+};
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<BackfillInterval> : fmt::ostream_formatter {};
