@@ -2458,22 +2458,26 @@ Then run the following:
                 result.append(dd)
         return result
 
-    @handle_orch_error
-    def service_action(self, action: str, service_name: str) -> List[str]:
-        if service_name not in self.spec_store.all_specs.keys():
-            raise OrchestratorError(f'Invalid service name "{service_name}".'
-                                    + ' View currently running services using "ceph orch ls"')
+    def perform_service_action(self, action: str, service_name: str) -> List[str]:
         dds: List[DaemonDescription] = self.cache.get_daemons_by_service(service_name)
         if not dds:
             raise OrchestratorError(f'No daemons exist under service name "{service_name}".'
                                     + ' View currently running services using "ceph orch ls"')
-        if action == 'stop' and service_name.split('.')[0].lower() in ['mgr', 'mon', 'osd']:
-            return [f'Stopping entire {service_name} service is prohibited.']
         self.log.info('%s service %s' % (action.capitalize(), service_name))
         return [
             self._schedule_daemon_action(dd.name(), action)
             for dd in dds
         ]
+
+    @handle_orch_error
+    def service_action(self, action: str, service_name: str) -> List[str]:
+        if service_name not in self.spec_store.all_specs.keys():
+            raise OrchestratorError(f'Invalid service name "{service_name}".'
+                                    + ' View currently running services using "ceph orch ls"')
+        if action == 'stop' and service_name.split('.')[0].lower() in ['mgr', 'mon', 'osd']:
+            return [f'Stopping entire {service_name} service is prohibited.']
+
+        return self.perform_service_action(action, service_name)
 
     def _rotate_daemon_key(self, daemon_spec: CephadmDaemonDeploySpec) -> str:
         self.log.info(f'Rotating authentication key for {daemon_spec.name()}')
@@ -3809,6 +3813,10 @@ Then run the following:
     @handle_orch_error
     def upgrade_stop(self) -> str:
         return self.upgrade.upgrade_stop()
+
+    @handle_orch_error
+    def update_service(self, service_type: str, service_image: str, image: str) -> List[str]:
+        return self.upgrade.update_service(service_type, service_image, image)
 
     @handle_orch_error
     def replace_device(self,
