@@ -547,12 +547,17 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   rgw_cls_list_ret ret;
   rgw_bucket_dir& new_dir = ret.dir;
-  auto& name_entry_map = new_dir.m; // map of keys to entries
+  // map of keys to marshalled entries
+  std::map<std::string, ceph::bufferlist> name_entry_map;
 
-  int rc = read_bucket_header(hctx, &new_dir.header);
-  if (rc < 0) {
-    CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
-    return rc;
+  int rc = 0;
+  if (op.want_header) {
+    new_dir.header.emplace();
+    rc = read_bucket_header(hctx, &(*new_dir.header));
+    if (rc < 0) {
+      CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
+      return rc;
+    }
   }
 
   // some calls just want the header and request 0 entries
@@ -583,7 +588,9 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   bool done = false;   // whether we need to keep calling get_obj_vals
   bool more = true;    // output parameter of get_obj_vals
-  bool has_delimiter = !op.delimiter.empty();
+  const bool has_delimiter = !op.delimiter.empty();
+  const bool rgw_do_osd_side_checks =
+    cls_get_config(hctx)->rgw_do_osd_side_bucket_list_checks;
 
   if (has_delimiter &&
       start_after_omap_key > op.filter_prefix &&
@@ -616,22 +623,6 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     done = keys.empty();
 
     for (auto kiter = keys.cbegin(); kiter != keys.cend(); ++kiter) {
-      rgw_bucket_dir_entry entry;
-      try {
-	const bufferlist& entrybl = kiter->second;
-	auto eiter = entrybl.cbegin();
-        decode(entry, eiter);
-      } catch (ceph::buffer::error& err) {
-        CLS_LOG(1, "ERROR: %s: failed to decode entry, key=%s",
-		__func__, kiter->first.c_str());
-        return -EINVAL;
-      }
-
-      start_after_omap_key = kiter->first;
-      start_after_entry_key = entry.key;
-      CLS_LOG(20, "%s: working on key=%s len=%zu",
-	      __func__, kiter->first.c_str(), kiter->first.size());
-
       cls_rgw_obj_key key;
       uint64_t ver;
       int ret = decode_list_index_key(kiter->first, &key, &ver);
@@ -640,19 +631,41 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 		__func__, escape_str(kiter->first).c_str());
         continue;
       }
+      CLS_LOG(20, "%s: working on key=%s len=%zu",
+	      __func__, kiter->first.c_str(), kiter->first.size());
+      start_after_omap_key = kiter->first;
 
-      if (!entry.is_valid()) {
-        CLS_LOG(20, "%s: entry %s[%s] is not valid",
-		__func__, key.name.c_str(), key.instance.c_str());
-        continue;
-      }
+      // these checks are performed also by RGW
+      if (rgw_do_osd_side_checks) {
+        rgw_bucket_dir_entry entry;
+        try {
+          const bufferlist& entrybl = kiter->second;
+          auto eiter = entrybl.cbegin();
+          decode(entry, eiter);
+        } catch (ceph::buffer::error& err) {
+          CLS_LOG(1, "ERROR: %s: failed to decode entry, key=%s",
+                  __func__, kiter->first.c_str());
+          return -EINVAL;
+        }
 
-      // filter out noncurrent versions, delete markers, and initial marker
-      if (!op.list_versions &&
-	  (!entry.is_visible() || op.start_obj.name == key.name)) {
-        CLS_LOG(20, "%s: entry %s[%s] is not visible",
-		__func__, key.name.c_str(), key.instance.c_str());
-        continue;
+        start_after_entry_key = entry.key;
+
+        if (!entry.is_valid()) {
+          CLS_LOG(20, "%s: entry %s[%s] is not valid",
+                  __func__, key.name.c_str(), key.instance.c_str());
+          continue;
+        }
+
+        // filter out noncurrent versions, delete markers, and initial marker
+        if (!op.list_versions &&
+            (!entry.is_visible() || op.start_obj.name == key.name)) {
+          CLS_LOG(20, "%s: entry %s[%s] is not visible",
+                  __func__, key.name.c_str(), key.instance.c_str());
+          continue;
+        }
+      } else if (!start_after_entry_key.empty()) {
+	// this will be filled from decoding the very last entry
+        start_after_entry_key = cls_rgw_obj_key{};
       }
 
       if (has_delimiter) {
@@ -674,7 +687,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 	    cls_rgw_obj_key proxy_key(prefix_key);
 	    proxy_entry.key = cls_rgw_obj_key(proxy_key);
 	    proxy_entry.flags = rgw_bucket_dir_entry::FLAG_COMMON_PREFIX;
-	    name_entry_map[prefix_key] = proxy_entry;
+	    encode(proxy_entry, name_entry_map[prefix_key]);
 
 	    CLS_LOG(20, "%s: got common prefix entry %s[%s] num entries=%lu",
 		    __func__, proxy_key.name.c_str(), proxy_key.instance.c_str(),
@@ -701,7 +714,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
       if (name_entry_map.size() < op.num_entries &&
 	  kiter->first != prev_omap_key) {
-        name_entry_map[kiter->first] = entry;
+        name_entry_map[kiter->first] = kiter->second;
 	prev_omap_key = kiter->first;
 	CLS_LOG(20, "%s: got object entry %s[%s] num entries=%d",
 		__func__, key.name.c_str(), key.instance.c_str(),
@@ -710,15 +723,30 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     } // for (auto kiter...
   } // for (int attempt...
 
+  const auto num_name_entries = name_entry_map.size();
   ret.is_truncated = more && !done;
   if (ret.is_truncated) {
+    if (start_after_entry_key.empty() && num_name_entries > 0) {
+      rgw_bucket_dir_entry entry;
+      auto kiter = name_entry_map.rbegin();
+      try {
+        const bufferlist& entrybl = kiter->second;
+        auto eiter = entrybl.cbegin();
+        decode(entry, eiter);
+      } catch (ceph::buffer::error& err) {
+        CLS_LOG(1, "ERROR: %s: failed to decode entry, key=%s",
+                __func__, kiter->first.c_str());
+        return -EINVAL;
+      }
+      start_after_entry_key = entry.key;
+    }
     ret.marker = start_after_entry_key;
   }
   CLS_LOG(20, "%s: normal exit returning %ld entries, is_truncated=%d",
 	  __func__, ret.dir.m.size(), ret.is_truncated);
-  encode(ret, *out);
+  ret.encode_reusing_encoded_dir_entries(std::move(name_entry_map), *out);
 
-  if (ret.is_truncated && name_entry_map.size() == 0) {
+  if (ret.is_truncated && num_name_entries == 0) {
     CLS_LOG(5, "%s: returning value RGWBIAdvanceAndRetryError", __func__);
     return RGWBIAdvanceAndRetryError;
   } else {
@@ -837,9 +865,8 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return -EINVAL;
   }
 
-  rgw_bucket_dir dir;
-
-  return write_bucket_header(hctx, &dir.header);
+  rgw_bucket_dir_header header;
+  return write_bucket_header(hctx, &header);
 }
 
 int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
