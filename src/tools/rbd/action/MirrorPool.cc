@@ -355,6 +355,10 @@ protected:
   virtual ~ImageRequestBase() {
   }
 
+  virtual bool open_read_only() const {
+    return false;
+  }
+
   virtual bool skip_get_info() const {
     return false;
   }
@@ -429,8 +433,13 @@ private:
     librbd::RBD rbd;
     auto aio_completion = utils::create_aio_completion<
       ImageRequestBase, &ImageRequestBase::handle_open_image>(this);
-    rbd.aio_open(m_io_ctx, m_image, m_image_name.c_str(), nullptr,
-                 aio_completion);
+    if (open_read_only()) {
+      rbd.aio_open_read_only(m_io_ctx, m_image, m_image_name.c_str(), nullptr,
+                             aio_completion);
+    } else {
+      rbd.aio_open(m_io_ctx, m_image, m_image_name.c_str(), nullptr,
+                   aio_completion);
+    }
   }
 
   void handle_open_image(int r) {
@@ -604,6 +613,10 @@ public:
   }
 
 protected:
+  bool open_read_only() const override {
+    return true;
+  }
+
   bool skip_get_info() const override {
     return true;
   }
