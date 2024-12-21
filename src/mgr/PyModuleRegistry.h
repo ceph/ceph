@@ -62,6 +62,7 @@ private:
   std::vector<std::string> probe_modules(const std::string &path) const;
 
   PyModuleConfig module_config;
+  PyObject* process_obj = nullptr;
 
 public:
   void handle_config(const std::string &k, const std::string &v);
@@ -237,5 +238,7 @@ public:
     return active_modules->get_module_finisher(name);
   }
 
+  std::shared_ptr<PyObject*> initialize_perf_counters();
+  void cleanup_perf_counters();
   // <<< (end of ActivePyModules cheeky call-throughs)
 };
