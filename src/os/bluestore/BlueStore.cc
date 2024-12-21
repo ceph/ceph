@@ -5519,7 +5519,6 @@ BlueStore::OmapIteratorImpl::OmapIteratorImpl(
   if (o->onode.has_omap()) {
     o->get_omap_key(string(), &head);
     o->get_omap_tail(&tail);
-    it->lower_bound(head);
   }
 }
 BlueStore::OmapIteratorImpl::~OmapIteratorImpl()
@@ -5544,6 +5543,7 @@ int BlueStore::OmapIteratorImpl::seek_to_first()
   } else {
     it = KeyValueDB::Iterator();
   }
+  seeked = true;
   c->store->log_latency(
     __func__,
     l_bluestore_omap_seek_to_first_lat,
@@ -5566,6 +5566,7 @@ int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
   } else {
     it = KeyValueDB::Iterator();
   }
+  seeked = true;
   c->store->log_latency_fn(
     __func__,
     l_bluestore_omap_upper_bound_lat,
@@ -5592,6 +5593,7 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
   } else {
     it = KeyValueDB::Iterator();
   }
+  seeked = true;
   c->store->log_latency_fn(
     __func__,
     l_bluestore_omap_lower_bound_lat,
@@ -5607,6 +5609,7 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
 
 bool BlueStore::OmapIteratorImpl::valid()
 {
+  ceph_assert(seeked);
   std::shared_lock l(c->lock);
   bool r = o->onode.has_omap() && it && it->valid() &&
     it->raw_key().second < tail;
@@ -5620,6 +5623,7 @@ bool BlueStore::OmapIteratorImpl::valid()
 
 int BlueStore::OmapIteratorImpl::next()
 {
+  ceph_assert(seeked);
   int r = -1;
   std::shared_lock l(c->lock);
   auto start1 = mono_clock::now();
@@ -5638,6 +5642,7 @@ int BlueStore::OmapIteratorImpl::next()
 
 string BlueStore::OmapIteratorImpl::key()
 {
+  ceph_assert(seeked);
   std::shared_lock l(c->lock);
   ceph_assert(it->valid());
   string db_key = it->raw_key().second;
@@ -5649,6 +5654,7 @@ string BlueStore::OmapIteratorImpl::key()
 
 bufferlist BlueStore::OmapIteratorImpl::value()
 {
+  ceph_assert(seeked);
   std::shared_lock l(c->lock);
   ceph_assert(it->valid());
   return it->value();
