@@ -131,6 +131,9 @@ struct ceph_ll_io_info {
   bool syncdataonly;
 };
 
+struct ceph_fscrypt_key_identifier;
+struct fscrypt_policy_v2;
+
 /* setattr mask bits (up to an int in size) */
 #ifndef CEPH_SETATTR_MODE
 #define CEPH_SETATTR_MODE		(1 << 0)
@@ -1893,6 +1896,53 @@ int ceph_debug_get_fd_caps(struct ceph_mount_info *cmount, int fd);
  *       for the file
  */
 int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const char *path);
+
+/**
+ * Add fscrypt encryption key to the in-memory key manager
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param key_data key data
+ * @param key_len key data length
+ * @param kid to hold the returned key identifier
+ * @param user user id
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
+                         const char *key_data, int key_len,
+			 struct ceph_fscrypt_key_identifier *kid,
+			 int user);
+
+/**
+ * Remove fscrypt encryption key from the in-memory key manager
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param kid pointer to the key identifier
+ * @param user user id
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
+                            struct fscrypt_remove_key_arg *kid,
+			    int user);
+
+/**
+ * Set encryption policy on a directory.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fd open directory file descriptor
+ * @param policy pointer to to the fscrypt v2 policy
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               int fd, const struct fscrypt_policy_v2 *policy);
+
+/**
+ * Fill file_attr_out with content of i_flags
+ * @param cmount the ceph mount handle to use.
+ * @param fd open directory file descriptor
+ * @param file_attr_out will have result bits set
+ * @returns zero on success, other returns a negative error code.
+ */
+int get_inode_flags(struct ceph_mount_info *cmount, int fd, int* file_attr_out);
 
 /* Low Level */
 struct Inode *ceph_ll_get_inode(struct ceph_mount_info *cmount,
