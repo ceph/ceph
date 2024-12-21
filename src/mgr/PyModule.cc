@@ -36,6 +36,11 @@ std::string PyModule::mgr_store_prefix = "mgr/";
 
 // Courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
+// Fix instances of "'BOOST_PP_ITERATION_02' was not declared in this scope; did you mean 'BOOST_PP_ITERATION_05'"
+// and related macro error bullshit that spans 300 lines of errors
+//
+// Apparently you can't include boost/python stuff _and_ have this header defined
+#undef BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
 // Boost apparently can't be bothered to fix its own usage of its own
 // deprecated features.
 #include <boost/python/extract.hpp>
