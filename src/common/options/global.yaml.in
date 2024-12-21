@@ -5448,6 +5448,14 @@ options:
   desc: inject crc verification errors into bluestore device reads
   default: 0
   with_legacy: true
+- name: bluestore_debug_idemreform_chance
+  type: float
+  level: dev
+  desc: Test debug option. Makes reads sometimes emit idempotent writes.
+    Idempotent write does not produce externally observable result.
+    It is used to allow object metadata optimization. Range [0..1], probability.
+  default: 0
+  with_legacy: false
 - name: bluestore_debug_legacy_omap
   type: bool
   level: dev
