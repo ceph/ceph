@@ -6,7 +6,7 @@
 import json
 import re
 from copy import deepcopy
-from typing import Any, Dict, List, no_type_check
+from typing import Any, Dict, List, no_type_check  # noqa: F401
 
 import cherrypy
 import rados

@@ -21,7 +21,7 @@ from .settings import Settings
 
 try:
     from typing import Any, AnyStr, Callable, DefaultDict, Deque, Dict, List, \
-        Optional, Set, Tuple, Union
+        Optional, Set, Tuple, Union  # noqa: F401
 except ImportError:
     pass  # For typing only
 
