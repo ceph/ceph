@@ -25,6 +25,7 @@ import {
   TableActionHelper
 } from '~/testing/unit-test-helper';
 import { HostsComponent } from './hosts.component';
+import { TagModule } from 'carbon-components-angular';
 
 class MockShowForceMaintenanceModal {
   showModal = false;
@@ -63,7 +64,8 @@ describe('HostsComponent', () => {
       RouterTestingModule,
       ToastrModule.forRoot(),
       CephModule,
-      CoreModule
+      CoreModule,
+      TagModule
     ],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
@@ -155,7 +157,7 @@ describe('HostsComponent', () => {
     fixture.detectChanges();
 
     const spans = fixture.debugElement.nativeElement.querySelectorAll(
-      '[cdstabledata] span span.badge.badge-background-primary'
+      '[cdstabledata] span cd-label cds-tag.tags-background-primary'
     );
     expect(spans[0].textContent).toContain('mgr: 2');
     expect(spans[1].textContent).toContain('osd: 3');

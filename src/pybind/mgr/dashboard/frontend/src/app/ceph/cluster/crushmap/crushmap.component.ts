@@ -134,4 +134,14 @@ export class CrushmapComponent implements OnDestroy, OnInit {
       delete this.metadataTitle;
     }
   }
+  getClassBasedOnStatus(status: string): string {
+    let classes = '';
+    if (['in', 'up'].includes(status)) {
+      classes += 'tags-success ';
+    }
+    if (['down', 'out', 'destroyed'].includes(status)) {
+      classes += 'tags-danger ';
+    }
+    return classes.trim();
+  }
 }
