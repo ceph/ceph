@@ -479,6 +479,8 @@ int Monitor::do_admin_command(
 	    << duration << " seconds" << dendl;
     out << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb")
 	<< " in " << duration << " seconds";
+ } else if (command == "subs") {
+   get_mon_subs(f);
  } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
@@ -2743,6 +2745,21 @@ void Monitor::get_mon_status(Formatter *f)
   f->close_section(); // mon_status
 }
 
+void Monitor::get_mon_subs(Formatter *f)
+{
+  f->open_object_section("subscription");
+  for (auto& p : session_map.subs) {
+    if (p.second->empty()) {
+      continue;
+    }
+    f->open_array_section(p.first);
+    for (auto q : *p.second) {
+      f->dump_object("sub", *q);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
 
 // health status to clog
 
