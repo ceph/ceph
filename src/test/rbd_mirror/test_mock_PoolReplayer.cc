@@ -618,13 +618,13 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   auto mock_remote_pool_poller = new MockRemotePoolPoller();
   expect_remote_pool_poller_init(*mock_remote_pool_poller,
                                  {"remote mirror uuid", ""}, 0);
-  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
   MockServiceDaemon mock_service_daemon;
   std::string instance_id = stringify(mock_local_io_ctx->get_instance_id());
   expect_service_daemon_add_or_update_instance_id_attribute(
     mock_service_daemon, instance_id);
+  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
 
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
                                  &m_pool_meta_cache,

@@ -443,7 +443,8 @@ int Mirror<I>::image_enable(I *ictx, mirror_image_mode_t mode,
     return r;
   }
 
-  if (mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+  if (mirror_mode == cls::rbd::MIRROR_MODE_DISABLED ||
+      mirror_mode == cls::rbd::MIRROR_MODE_CONFIG) {
     lderr(cct) << "cannot enable mirroring: mirroring is not enabled on a "
                << pool_or_namespace(ictx) << dendl;
     return -EINVAL;
@@ -1064,6 +1065,7 @@ int Mirror<I>::mode_get(librados::IoCtx& io_ctx,
   case cls::rbd::MIRROR_MODE_DISABLED:
   case cls::rbd::MIRROR_MODE_IMAGE:
   case cls::rbd::MIRROR_MODE_POOL:
+  case cls::rbd::MIRROR_MODE_CONFIG:
     *mirror_mode = static_cast<rbd_mirror_mode_t>(mirror_mode_internal);
     break;
   default:
@@ -1086,12 +1088,19 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
   case RBD_MIRROR_MODE_DISABLED:
   case RBD_MIRROR_MODE_IMAGE:
   case RBD_MIRROR_MODE_POOL:
+  case RBD_MIRROR_MODE_CONFIG:
     next_mirror_mode = static_cast<cls::rbd::MirrorMode>(mirror_mode);
     break;
   default:
     lderr(cct) << "unknown mirror mode ("
                << static_cast<uint32_t>(mirror_mode) << ")" << dendl;
     return -EINVAL;
+  }
+
+  if (next_mirror_mode == cls::rbd::MIRROR_MODE_CONFIG &&
+      !io_ctx.get_namespace().empty()) {
+      lderr(cct) << "config mode cannot be set on a namespace" << dendl;
+      return -EINVAL;
   }
 
   int r;
@@ -1191,7 +1200,8 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
         }
       }
     }
-  } else if (next_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+  } else if (next_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED ||
+             next_mirror_mode == cls::rbd::MIRROR_MODE_CONFIG) {
     while (true) {
       bool retry_busy = false;
       bool pending_busy = false;
@@ -1298,6 +1308,7 @@ int Mirror<I>::remote_namespace_set(librados::IoCtx& io_ctx,
   
   std::string local_namespace = io_ctx.get_namespace();
 
+/*
   if (local_namespace.empty() && !remote_namespace.empty()) {
     lderr(cct) << "cannot mirror the default namespace to a "
                << "non-default namespace." << dendl;
@@ -1309,7 +1320,7 @@ int Mirror<I>::remote_namespace_set(librados::IoCtx& io_ctx,
                << "namespace." << dendl;
     return -EINVAL;
   }
-
+*/
   int r = cls_client::mirror_remote_namespace_set(&io_ctx, remote_namespace);
   if (r < 0) {
     lderr(cct) << "failed to set remote mirror namespace: "
