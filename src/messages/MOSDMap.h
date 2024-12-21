@@ -18,6 +18,7 @@
 
 #include "msg/Message.h"
 #include "osd/OSDMap.h"
+#include "crush/CrushWrapper.h"
 #include "include/ceph_features.h"
 
 class MOSDMap final : public Message {
