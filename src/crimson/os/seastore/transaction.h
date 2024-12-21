@@ -408,12 +408,14 @@ public:
     src_t src,
     journal_seq_t initiated_after,
     on_destruct_func_t&& f,
-    transaction_id_t trans_id
+    transaction_id_t trans_id,
+    cache_hint_t fadv_flags
   ) : weak(weak),
       handle(std::move(handle)),
       on_destruct(std::move(f)),
       src(src),
-      trans_id(trans_id)
+      trans_id(trans_id),
+      fadv_flags(fadv_flags)
   {}
 
   void invalidate_clear_write_set() {
@@ -571,6 +573,10 @@ public:
     return pre_alloc_list;
   }
 
+  cache_hint_t get_fadv_flags() const {
+    return fadv_flags;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -669,6 +675,8 @@ private:
   transaction_id_t trans_id = TRANS_ID_NULL;
 
   seastar::lw_shared_ptr<rbm_pending_ool_t> pending_ool;
+
+  cache_hint_t fadv_flags = CACHE_HINT_NONE;
 };
 using TransactionRef = Transaction::Ref;
 
@@ -681,7 +689,8 @@ inline TransactionRef make_test_transaction() {
     Transaction::src_t::MUTATE,
     JOURNAL_SEQ_NULL,
     [](Transaction&) {},
-    ++next_id
+    ++next_id,
+    CACHE_HINT_NONE
   );
 }
 
