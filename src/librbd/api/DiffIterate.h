@@ -28,6 +28,19 @@ public:
 		          int (*cb)(uint64_t, size_t, int, void *),
 		          void *arg);
 
+  static int diff_iterate_from_parent(ImageCtxT *ictx,
+                          uint64_t off, uint64_t len,
+		          int (*cb)(uint64_t, size_t, int, void *),
+		          void *arg);
+
+  static int diff_iterate_base(ImageCtxT *ictx,
+			  const cls::rbd::SnapshotNamespace& from_snap_namespace,
+			  const char *fromsnapname,
+                          uint64_t off, uint64_t len, bool include_parent,
+                          bool whole_object, bool from_parent,
+		          int (*cb)(uint64_t, size_t, int, void *),
+		          void *arg);
+
 private:
   ImageCtxT &m_image_ctx;
   cls::rbd::SnapshotNamespace m_from_snap_namespace;
@@ -36,19 +49,20 @@ private:
   uint64_t m_length;
   bool m_include_parent;
   bool m_whole_object;
+  bool m_from_parent;
   Callback m_callback;
   void *m_callback_arg;
 
   DiffIterate(ImageCtxT &image_ctx, 
 	      const cls::rbd::SnapshotNamespace& from_snap_namespace,
 	      const char *from_snap_name, uint64_t off, uint64_t len,
-	      bool include_parent, bool whole_object, Callback callback,
-	      void *callback_arg)
+	      bool include_parent, bool whole_object, bool from_parent,
+	      Callback callback, void *callback_arg)
     : m_image_ctx(image_ctx), m_from_snap_namespace(from_snap_namespace),
       m_from_snap_name(from_snap_name), m_offset(off),
       m_length(len), m_include_parent(include_parent),
-      m_whole_object(whole_object), m_callback(callback),
-      m_callback_arg(callback_arg)
+      m_whole_object(whole_object), m_from_parent(from_parent),
+      m_callback(callback), m_callback_arg(callback_arg)
   {
   }
 
