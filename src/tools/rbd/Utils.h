@@ -163,10 +163,11 @@ int get_pool_generic_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,
     const std::string& pool_key, std::string *pool_name,
-    std::string *namespace_name, const std::string& generic_key,
-    const std::string& generic_key_desc, std::string *generic_name,
-    std::string *snap_name, bool generic_name_required,
-    SnapshotPresence snapshot_presence, SpecValidation spec_validation);
+    const std::string& namespace_key, std::string *namespace_name,
+    const std::string& generic_key, const std::string& generic_key_desc,
+    std::string *generic_name, std::string *snap_name,
+    bool generic_name_required, SnapshotPresence snapshot_presence,
+    SpecValidation spec_validation);
 
 int get_pool_image_id(const boost::program_options::variables_map &vm,
                       size_t *spec_arg_index,
