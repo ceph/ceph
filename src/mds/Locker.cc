@@ -3482,7 +3482,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     }
 
     SnapRealm *realm = head_in->find_snaprealm();
-    snapid_t snap = realm->get_snap_following(follows);
+    snapid_t snap = realm->get_snap_following(head_in, follows);
     dout(10) << "  flushsnap follows " << follows << " -> snap " << snap << dendl;
 
     auto p = head_in->client_need_snapflush.begin();

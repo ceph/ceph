@@ -199,6 +199,32 @@ const set<snapid_t>& SnapRealm::get_snaps() const
   return cached_snaps;
 }
 
+snapid_t SnapRealm::get_snap_following(CInode *in, snapid_t follows) {
+  check_cache();
+  const std::set<snapid_t>& s = get_snaps();
+  std::set<snapid_t> snaps_set;
+  snaps_set.insert(s.begin(), s.end());
+
+  //TODO - Make below code as a helper function for has_snaps_in_range and this function.
+  const std::vector<uint64_t>& referent_inodes = in->get_inode()->referent_inodes;
+  dout(20) << "get_snap_following snaprealms of referent inodes to be sent to client " << std::hex << referent_inodes << dendl;
+  for (const auto& ri : referent_inodes) {
+    CInode *cur = mdcache->get_inode(ri);
+    if (!cur) {
+      dout(3) << "get_snap_following error: referent inode not loaded " << std::hex << ri << dendl;
+      ceph_abort("get_snap_following: referent inode not loaded");
+    }
+    SnapRealm *cur_realm = cur->find_snaprealm();
+    const auto& s1 = cur_realm->get_snaps();
+    snaps_set.insert(s1.begin(), s1.end());
+  }
+
+  auto p = snaps_set.upper_bound(follows);
+  if (p != snaps_set.end())
+    return *p;
+  return CEPH_NOSNAP;
+}
+
 bool SnapRealm::has_snaps_in_range(CInode *in, snapid_t last) {
   check_cache();
   const auto& s = get_snaps();

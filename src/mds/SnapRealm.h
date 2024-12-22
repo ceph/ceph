@@ -78,6 +78,7 @@ public:
     return cached_seq;
   }
 
+  snapid_t get_snap_following(CInode *in, snapid_t follows);
   snapid_t get_snap_following(snapid_t follows) {
     check_cache();
     const std::set<snapid_t>& s = get_snaps();
