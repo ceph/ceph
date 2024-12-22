@@ -2542,7 +2542,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	    if (i->get_locator().size()) {
 	      *outstream << "\t" << i->get_locator();
 	    }
-	    if (ret == 0) {
+	    if (long_display && ret == 0) {
 	      *outstream << "::" << size << std::endl;
 	    }
 	    else {

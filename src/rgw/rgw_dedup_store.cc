@@ -13,7 +13,7 @@
 #include "rgw_dedup_utils.h"
 #include "rgw_dedup.h"
 #include "rgw_dedup_store.h"
-static constexpr auto dout_subsys = ceph_subsys_rgw;
+ static constexpr auto dout_subsys = ceph_subsys_rgw;
 
 namespace rgw::dedup {
 
@@ -24,7 +24,6 @@ namespace rgw::dedup {
     disk_record_t *p_rec = (disk_record_t*)buff;
     ceph_assert(p_rec->s.pad8  == 0);
     ceph_assert(p_rec->s.pad16 == 0);
-    //this->s.flags           = CEPHTOH_16((uint16_t)p_rec->s.flags);
     this->s.flags           = p_rec->s.flags;
     this->s.pad8            = 0;
     this->s.num_parts       = CEPHTOH_16(p_rec->s.num_parts);
@@ -33,16 +32,12 @@ namespace rgw::dedup {
     this->s.md5_high        = CEPHTOH_64(p_rec->s.md5_high);
     this->s.md5_low         = CEPHTOH_64(p_rec->s.md5_low);
     this->s.version         = CEPHTOH_64(p_rec->s.version);
-    this->s.shared_manifest = CEPHTOH_64(p_rec->s.shared_manifest);
-    for (int i = 0; i < 4; i++) {
-      this->s.sha256[i] = CEPHTOH_64(p_rec->s.sha256[i]);
-    }
 
-    this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
     this->s.obj_name_len    = CEPHTOH_16(p_rec->s.obj_name_len);
     this->s.bucket_name_len = CEPHTOH_16(p_rec->s.bucket_name_len);
-    this->s.ref_tag_len     = CEPHTOH_16(p_rec->s.ref_tag_len);
     this->s.pad16           = 0;
+    this->s.ref_tag_len     = CEPHTOH_16(p_rec->s.ref_tag_len);
+    this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
 
     const char *p = buff + sizeof(this->s);
     this->obj_name = std::string(p, this->s.obj_name_len);
@@ -51,10 +46,21 @@ namespace rgw::dedup {
     this->bucket_name = std::string(p, this->s.bucket_name_len);
     p += p_rec->s.bucket_name_len;
 
-    this->ref_tag = std::string(p, this->s.ref_tag_len);
-    p += p_rec->s.ref_tag_len;
+    if (p_rec->s.flags.is_fastlane()) {
+      // TBD:: remove asserts
+      ceph_assert(this->s.ref_tag_len == 0);
+      ceph_assert(this->s.manifest_len == 0);
+    }
+    else {
+      this->s.shared_manifest = CEPHTOH_64(p_rec->s.shared_manifest);
+      for (int i = 0; i < 4; i++) {
+	this->s.sha256[i] = CEPHTOH_64(p_rec->s.sha256[i]);
+      }
+      this->ref_tag = std::string(p, this->s.ref_tag_len);
+      p += p_rec->s.ref_tag_len;
 
-    manifest_bl.append(p, this->s.manifest_len);
+      manifest_bl.append(p, this->s.manifest_len);
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -64,7 +70,6 @@ namespace rgw::dedup {
     ceph_assert(this->s.pad16 == 0);
 
     disk_record_t *p_rec = (disk_record_t*)buff;
-    //p_rec->s.flags         = HTOCEPH_16((uint16_t)this->s.flags);
     p_rec->s.flags           = this->s.flags;
     p_rec->s.pad8            = 0;
 
@@ -94,14 +99,21 @@ namespace rgw::dedup {
     std::memcpy(p, this->bucket_name.data(), len);
     p += len;
 
-    len = this->ref_tag.length();
-    std::memcpy(p, this->ref_tag.data(), len);
-    p += len;
+    if (this->s.flags.is_fastlane()) {
+      // TBD:: remove asserts
+      ceph_assert(this->s.ref_tag_len == 0);
+      ceph_assert(this->s.manifest_len == 0);
+    }
+    else {
+      len = this->ref_tag.length();
+      std::memcpy(p, this->ref_tag.data(), len);
+      p += len;
 
-    const std::string & manifest = this->manifest_bl.to_str();
-    len = manifest.length();
-    std::memcpy(p, manifest.data(), len);
-    p += len;
+      const std::string & manifest = this->manifest_bl.to_str();
+      len = manifest.length();
+      std::memcpy(p, manifest.data(), len);
+      p += len;
+    }
     return (p - buff);
   }
 
@@ -188,23 +200,25 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_t::add_record(const disk_record_t *p_rec, const DoutPrefixProvider *dpp)
+  record_id_t disk_block_t::add_record(const disk_record_t *p_rec, const DoutPrefixProvider *dpp)
   {
     disk_block_header_t *p_header = get_header();
     if (unlikely(p_header->rec_count >= MAX_REC_IN_BLOCK)) {
-      //ldpp_dout(dpp, 1)  << __func__ << "::rec_count=" << p_header->rec_count << ", MAX_REC_IN_BLOCK=" << MAX_REC_IN_BLOCK << dendl;
-      return -1;
+      ldpp_dout(dpp, 1)  << __func__ << "::rec_count=" << p_header->rec_count
+			 << ", MAX_REC_IN_BLOCK=" << MAX_REC_IN_BLOCK << dendl;
+      return MAX_REC_IN_BLOCK;
     }
 
     if ((DISK_BLOCK_SIZE - p_header->offset) >= p_rec->length()) {
       p_header->rec_offsets[p_header->rec_count] = p_header->offset;
+      unsigned rec_id = p_header->rec_count;
       p_header->rec_count ++;
       p_rec->serialize(data+p_header->offset);
       p_header->offset += p_rec->length();
-      return 0;
+      return rec_id;
     }
     else {
-      return -1;
+      return MAX_REC_IN_BLOCK;
     }
   }
 
@@ -247,13 +261,14 @@ namespace rgw::dedup {
 					   const rgw::sal::Bucket *p_bucket,
 					   const rgw::sal::Object *p_obj,
 					   const parsed_etag_t    *p_parsed_etag,
+					   const std::string      &obj_name,
 					   uint64_t                obj_size)
   {
     p_rec->s.flags           = 0;
     p_rec->s.pad8            = 0;
     p_rec->s.version         = 0;
     p_rec->s.size_4k_units   = uint32_t(obj_size/(4*1024));
-    p_rec->obj_name          = p_obj->get_name();
+    p_rec->obj_name          = obj_name;
     p_rec->s.obj_name_len    = p_rec->obj_name.length();
     p_rec->bucket_name       = p_bucket->get_name();
     p_rec->s.bucket_name_len = p_rec->bucket_name.length();
@@ -262,11 +277,22 @@ namespace rgw::dedup {
     p_rec->s.md5_low         = p_parsed_etag->md5_low;
     p_rec->s.num_parts       = p_parsed_etag->num_parts;
 
-    // clear bufferlist first
-    p_rec->manifest_bl.clear();
-    ceph_assert(p_rec->manifest_bl.length() == 0);
+    if (p_obj == nullptr) {
+      // First pass using only ETAG and size taken from bucket-index
+      p_rec->s.flags.set_fastlane();
+      p_rec->ref_tag = "";
+      p_rec->s.ref_tag_len  = 0;
+      p_rec->manifest_bl.clear();
+      p_rec->s.manifest_len = 0;
+      //p_rec->s.flags.clear_valid_sha256();
+      memset(p_rec->s.sha256, 0, sizeof(p_rec->s.sha256));
+      //p_rec->s.flags.clear_shared_manifest();
+      memset(&p_rec->s.shared_manifest, 0, sizeof(p_rec->s.shared_manifest));
+      return 0;
+    }
 
     const rgw::sal::Attrs& attrs = p_obj->get_attrs();
+
     // if TAIL_TAG exists -> use it as ref-tag, eitherwise take ID_TAG
     auto itr = attrs.find(RGW_ATTR_TAIL_TAG);
     if (itr != attrs.end()) {
@@ -283,6 +309,10 @@ namespace rgw::dedup {
       }
     }
     p_rec->s.ref_tag_len = p_rec->ref_tag.length();
+
+    // clear bufferlist first
+    p_rec->manifest_bl.clear();
+    ceph_assert(p_rec->manifest_bl.length() == 0);
 
     itr = attrs.find(RGW_ATTR_MANIFEST);
     if (itr != attrs.end()) {
@@ -468,73 +498,6 @@ namespace rgw::dedup {
     return oid;
   }
 
-#if 0
-  //---------------------------------------------------------------------------
-  int load_record(rgw::sal::RadosStore       *store,
-		  disk_record_t              *p_rec, /* OUT */
-		  disk_block_id_t             block_id,
-		  record_id_t                 rec_id,
-		  md5_shard_t                 md5_shard,
-		  const struct key_t         *p_key,
-		  const DoutPrefixProvider   *dpp)
-  {
-    rgw_rados_ref obj;
-    std::string oid(block_id.get_slab_name(md5_shard));
-    librados::Rados* rados_handle = store->getRados()->get_rados_handle();
-    //auto& pool = store->svc()->zone->get_zone_params().log_pool;
-    rgw_raw_obj raw_obj(pool, oid);	// TBD: what about loc ???
-    int ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::failed to open rados context for " << oid << dendl;
-      return -1;
-    }
-
-    librados::IoCtx &ioctx = obj.ioctx;
-    //p_obj_ioctx->set_namespace(itr->get_nspace());
-    //p_obj_ioctx->locator_set_key(itr->get_locator());
-    //ldpp_dout(dpp, 1) << __func__ << "::Reading OID=" << oid << ", block_id=" << block_id << dendl;
-    int read_len = DISK_BLOCK_SIZE;
-    int byte_offset = block_id.get_block_offset() * DISK_BLOCK_SIZE;
-    bufferlist bl;
-    ret = ioctx.read(oid, bl, read_len, byte_offset);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << "ERR: failed to read log obj " << oid << ", error is " << cpp_strerror(ret) << dendl;
-      return ret;
-    }
-
-    const char *p = nullptr;
-    auto bl_itr = bl.cbegin();
-    size_t n = bl_itr.get_ptr_and_advance(sizeof(disk_block_t), &p);
-    if (n == sizeof(disk_block_t)) {
-      disk_block_t *p_disk_block = (disk_block_t*)p;
-      disk_block_header_t *p_header = p_disk_block->get_header();
-      p_header->deserialize();
-      if (p_header->verify(block_id, dpp) != 0) {
-	return -1;
-      }
-
-      unsigned offset = p_header->rec_offsets[rec_id];
-      // We deserialize the record inside the CTOR
-      disk_record_t rec(p + offset);
-      struct key_t key(rec.s.md5_high, rec.s.md5_low, rec.s.size_4k_units, rec.s.num_parts);
-      if (key == *p_key) {
-	*p_rec = rec;
-	return 0;
-      }
-      else {
-	ldpp_dout(dpp, 1) << __func__ << "::Bad record in block=" << block_id
-			  << ", rec_id=" << rec_id << dendl;
-	return -1;
-      }
-    }
-    else {
-      ldpp_dout(dpp, 1) << __func__ << "::unexpected short read n=" << n << dendl;
-      return -1;
-    }
-
-    return 0;
-  }
-#else
   //---------------------------------------------------------------------------
   int load_record(librados::IoCtx          *p_ioctx,
 		  disk_record_t            *p_rec, /* OUT */
@@ -588,7 +551,7 @@ namespace rgw::dedup {
 
     return 0;
   }
-#endif
+
   //---------------------------------------------------------------------------
   int load_slab(librados::IoCtx *p_ioctx,
 		bufferlist &bl,
@@ -672,19 +635,25 @@ namespace rgw::dedup {
 				     const rgw::sal::Bucket *p_bucket,
 				     const rgw::sal::Object *p_obj,
 				     const parsed_etag_t    *p_parsed_etag,
-				     uint64_t                obj_size)
+				     const std::string      &obj_name,
+				     uint64_t                obj_size,
+				     record_info_t          *p_rec_info) // OUT-PARAM
   {
     ldpp_dout(dpp, 20) << __func__  << "::worker_id=" << (uint32_t)d_worker_id
 		       << ", md5_shard=" << (uint32_t)d_md5_shard
-		       << "::" << p_bucket->get_name() << "/" << p_obj->get_name() << dendl;
+		       << "::" << p_bucket->get_name() << "/" << obj_name << dendl;
     disk_record_t rec;
-    int ret = fill_disk_record(&rec, p_bucket, p_obj, p_parsed_etag, obj_size);
+    int ret = fill_disk_record(&rec, p_bucket, p_obj, p_parsed_etag, obj_name, obj_size);
     if (unlikely(ret != 0)) {
       return ret;
     }
+    p_rec_info->has_shared_manifest = rec.has_shared_manifest();
+    p_rec_info->has_valid_sha256    = rec.has_valid_sha256();
     p_stats->egress_records ++;
     // first, try and add the record to the current open block
-    if (p_curr_block->add_record(&rec, dpp) == 0) {
+    p_rec_info->rec_id = p_curr_block->add_record(&rec, dpp);
+    if (p_rec_info->rec_id < MAX_REC_IN_BLOCK) {
+      p_rec_info->block_id = p_curr_block->get_block_id();
       return 0;
     }
     else {
@@ -699,70 +668,16 @@ namespace rgw::dedup {
       p_curr_block ++;
       d_seq_number ++;
       p_curr_block->init(d_worker_id, d_seq_number);
-      p_curr_block->add_record(&rec, dpp);
-      return 0;
+      p_rec_info->rec_id = p_curr_block->add_record(&rec, dpp);
     }
     else {
       ldpp_dout(dpp, 20)  << __func__ << "::calling flush()" << dendl;
       ret = flush(p_ioctx);
-      p_curr_block->add_record(&rec, dpp);
-
-      return ret;
+      p_rec_info->rec_id = p_curr_block->add_record(&rec, dpp);
     }
+
+    p_rec_info->block_id = p_curr_block->get_block_id();
+    return ret;
   }
 
 } // namespace rgw::dedup
-
-
-
-
-#if 0
-//---------------------------------------------------------------------------
-static int calculate_fp_fbc(FP_BUFFER *fp_buffer,
-			    bufferlist &bl,
-			    const ObjectCursor &cursor,
-			    uint32_t offset_in_obj,
-			    const dedup_params_t &params)
-{
-  unsigned chunk_size = params.chunk_size;
-  //bool verbose = params.verbose;
-  unsigned fp_count = 0;
-  uint8_t temp[chunk_size];
-  auto bl_itr = bl.cbegin();
-  for (unsigned i = 0; i < bl.length() / chunk_size; i++, offset_in_obj+=chunk_size) {
-    const char *p_src = nullptr;
-    size_t n = bl_itr.get_ptr_and_advance(chunk_size, &p_src);
-    if (n == chunk_size) {
-      calc_and_write_fp(fp_buffer, (uint8_t*)p_src, chunk_size, cursor, offset_in_obj);
-      fp_count++;
-    }
-    else {
-      // TBD - How to test this path?
-      // It requires that rados.read() will allocate bufferlist in small chunks
-      cout << __func__ << "::***************************************::" << std::endl;
-
-      memcpy(temp, p_src, n);
-      uint32_t count  = chunk_size - n;
-      uint8_t *p_dest = temp + n;
-      do {
-	n = bl_itr.get_ptr_and_advance(count, &p_src);
-	memcpy(p_dest, p_src, n);
-	count  -= n;
-	p_dest += n;
-      } while (count > 0);
-      calc_and_write_fp(fp_buffer, temp, chunk_size, cursor, offset_in_obj);
-      fp_count++;
-    }
-  }
-
-  return fp_count;
-}
-
-auto& pool = store->svc()->zone->get_zone_params().oidc_pool;
-auto& pool = store->svc()->zone->get_zone_params().roles_pool;
-
-crc = ceph_crc32c(crc, buffer, offset);
-bufferlist bl = bufferlist::static_from_mem((char*)buffer, offset);
-obj_ioctx.set_namespace(REDUCED_FP_NSPACE);
-obj_ioctx.write_full(oid, bl);
-#endif

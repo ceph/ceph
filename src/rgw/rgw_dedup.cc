@@ -300,34 +300,23 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::add_disk_record(const rgw::sal::Bucket *p_bucket,
-				  const rgw::sal::Object *p_obj,
-				  uint64_t                obj_size)
+  int Background::add_disk_rec_from_bucket_idx(const rgw::sal::Bucket *p_bucket,
+					       const parsed_etag_t    *p_parsed_etag,
+					       const std::string      &obj_name,
+					       uint64_t                obj_size)
   {
-    parsed_etag_t parsed_etag;
-    const rgw::sal::Attrs& attrs = p_obj->get_attrs();
-    auto itr = attrs.find(RGW_ATTR_ETAG);
-    if (itr != attrs.end()) {
-      parse_etag_string(itr->second.to_str(), &parsed_etag);
-      ldpp_dout(dpp, 20) << __func__ << "::(1)::" << p_bucket->get_name()
-			 << "/" << p_obj->get_name()
-			 << "::num_parts=" << parsed_etag.num_parts
-			 << "::ETAG=" << std::hex << parsed_etag.md5_high
-			 << parsed_etag.md5_low << std::dec << dendl;
-    }
-    else {
-      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: no etag" << dendl;
-      return -1;
-    }
-
-    md5_shard_t md5_shard = parsed_etag.md5_low % MAX_MD5_SHARD;
+    md5_shard_t md5_shard = p_parsed_etag->md5_low % MAX_MD5_SHARD;
     auto p_disk = p_disk_arr[md5_shard];
     if (p_disk) {
-      int ret = p_disk->add_record(p_dedup_cluster_ioctx, p_bucket, p_obj, &parsed_etag, obj_size);
+      disk_block_array_t::record_info_t rec_info;
+      int ret = p_disk->add_record(p_dedup_cluster_ioctx, p_bucket, nullptr,
+				   p_parsed_etag, obj_name, obj_size, &rec_info);
       if (unlikely(ret != 0)) {
 	return ret;
       }
-
+      ldpp_dout(dpp, 20) << __func__ << "::" << p_bucket->get_name() << "/"
+			 << obj_name << " was written to block_idx="
+			 << rec_info.block_id << " rec_id=" << rec_info.rec_id << dendl;
       return 0;
     }
     else {
@@ -606,17 +595,127 @@ namespace rgw::dedup {
 				      record_id_t          rec_id,
 				      md5_shard_t          md5_shard)
   {
-    ldpp_dout(dpp, 20) << __func__ << "::bucket=" << p_tgt_rec->bucket_name
-		       << ", obj=" << p_tgt_rec->obj_name
-		       << ", block_id=" << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
-		       << ", md5_shard=" << (int)md5_shard << dendl;
+    ldpp_dout(dpp, 1) << __func__ << "::bucket=" << p_tgt_rec->bucket_name
+		      << ", obj=" << p_tgt_rec->obj_name
+		      << ", block_id=" << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
+		      << ", md5_shard=" << (int)md5_shard << dendl;
 
-    ldpp_dout(dpp, 20) << __func__ << "::(3)::md5_shard=" << (int)md5_shard
-		       << "::"<< p_tgt_rec->bucket_name
-		       << "/" << p_tgt_rec->obj_name
-		       << "::num_parts=" << p_tgt_rec->s.num_parts
-		       << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
-		       << p_tgt_rec->s.md5_low << std::dec << dendl;
+    ldpp_dout(dpp, 1) << __func__ << "::(3)::md5_shard=" << (int)md5_shard
+		      << "::"<< p_tgt_rec->bucket_name
+		      << "/" << p_tgt_rec->obj_name
+		      << "::num_parts=" << p_tgt_rec->s.num_parts
+		      << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
+		      << p_tgt_rec->s.md5_low << std::dec << dendl;
+  }
+
+  //---------------------------------------------------------------------------
+  // We purged all entries not marked for-dedup (i.e. singleton bit is set) from the table
+  //   so all entries left are sources of dedup with multiple copies.
+  // Need to read attributes from the Head-Object and output them to a new SLAB
+  int Background::read_object_attribute(const disk_record_t *p_rec,
+					disk_block_id_t      old_block_id,
+					record_id_t          old_rec_id,
+					md5_shard_t          md5_shard,
+					md5_stats_t         *p_stats /* IN-OUT */,
+					disk_block_array_t  *p_disk)
+  {
+    bool should_print_debug = cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>();
+    if (unlikely(should_print_debug)) {
+      try_deduping_record_dbg(dpp, p_rec, old_block_id, old_rec_id, md5_shard);
+    }
+    p_stats->processed_objects ++;
+    key_t key_from_bucket_index(p_rec->s.md5_high, p_rec->s.md5_low, p_rec->s.size_4k_units, p_rec->s.num_parts);
+    dedup_table_t::value_t src_val;
+    int ret = d_table.get_val(&key_from_bucket_index, &src_val);
+    if (ret != 0) {
+      // record has no valid entry in table because it is a singleton
+      p_stats->skipped_singleton++;
+      ldpp_dout(dpp, 20) << __func__ << "::skipped singleton::" << p_rec->bucket_name
+			 << "/" << p_rec->obj_name << std::dec << dendl;
+      return 0;
+    }
+
+    // TBD: should we cache bucket objects ??
+    // Need to measure load_bucket() time
+    unique_ptr<rgw::sal::Bucket> bucket;
+    const string empty_tenant_name, empty_bucket_id;
+    rgw_bucket b{empty_tenant_name, p_rec->bucket_name, empty_bucket_id};
+    ret = driver->load_bucket(dpp, b, &bucket, null_yield);
+    if (unlikely(ret != 0)) {
+      // could happen when the bucket is removed between passes
+      ldpp_dout(dpp, 10) << "::Failed driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
+      return -ret;
+    }
+
+    unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(p_rec->obj_name);
+    if (unlikely(!p_obj)) {
+      // could happen when the object is removed between passes
+      ldpp_dout(dpp, 10) << "::Failed bucket->get_object(" << p_rec->obj_name << ")" << dendl;
+      p_stats->ingress_failed_get_object++;
+      return 0;
+    }
+
+    ret = p_obj->get_obj_attrs(null_yield, dpp);
+    if (unlikely(ret < 0)) {
+      derr << "::ERROR: failed to stat object(" << p_rec->obj_name << "), returned error: "
+	   << cpp_strerror(-ret) << dendl;
+      p_stats->ingress_failed_get_obj_attrs++;
+      return 1;
+    }
+
+    const rgw::sal::Attrs& attrs = p_obj->get_attrs();
+    if (attrs.find(RGW_ATTR_CRYPT_MODE) != attrs.end()) {
+      ldpp_dout(dpp, 10) <<__func__ << "::Skipping encrypted object " << p_rec->obj_name << dendl;
+      p_stats->ingress_skip_encrypted++;
+      return 0;
+    }
+
+    // TBD: We should be able to support RGW_ATTR_COMPRESSION when all copies are compressed
+    if (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end()) {
+      ldpp_dout(dpp, 10) <<__func__ << "::Skipping compressed object " << p_rec->obj_name << dendl;
+      p_stats->ingress_skip_compressed++;
+      return 0;
+    }
+
+    // extract ETAG and Size and compare with values taken from the bucket-index
+    parsed_etag_t parsed_etag;
+    auto itr = attrs.find(RGW_ATTR_ETAG);
+    if (itr != attrs.end()) {
+      parse_etag_string(itr->second.to_str(), &parsed_etag);
+    }
+    else {
+      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: no etag" << dendl;
+      return -1;
+    }
+
+    uint64_t obj_size = p_obj->get_size();
+    uint32_t size_4k_units = uint32_t(obj_size/(4*1024));
+    key_t key_from_obj(parsed_etag.md5_high, parsed_etag.md5_low, size_4k_units, parsed_etag.num_parts);
+
+    if (key_from_obj == key_from_bucket_index) {
+      disk_block_array_t::record_info_t rec_info;
+      ret = p_disk->add_record(p_dedup_cluster_ioctx, bucket.get(), p_obj.get(), &parsed_etag,
+			       p_rec->obj_name, obj_size, &rec_info);
+      if (ret == 0) {
+	// set the disk_block_id_t to this unless the existing disk_block_id is marked as shared-manifest
+	ceph_assert(rec_info.rec_id < MAX_REC_IN_BLOCK);
+	ldpp_dout(dpp, 20) << __func__ << "::" << p_rec->bucket_name << "/"
+			   << p_rec->obj_name << " was written to block_idx="
+			   << rec_info.block_id << " rec_id=" << rec_info.rec_id
+			   << ", shared_manifest=" << rec_info.has_shared_manifest << dendl;
+	return d_table.update_entry(&key_from_bucket_index, rec_info.block_id, rec_info.rec_id,
+				    rec_info.has_shared_manifest, rec_info.has_valid_sha256);
+      }
+      else {
+	ldpp_dout(dpp, 1)  << __func__ << "::ERROR: Failed p_disk->add_record()" << dendl;
+	return -1;
+      }
+    }
+    else {
+      ldpp_dout(dpp, 10) <<__func__ << "::Skipping changed object " << p_rec->obj_name << dendl;
+      p_stats->ingress_skip_changed_objs++;
+      return 0;
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -640,7 +739,7 @@ namespace rgw::dedup {
     if (unlikely(should_print_debug)) {
       try_deduping_record_dbg(dpp, p_tgt_rec, block_id, rec_id, md5_shard);
     }
-    p_stats->processed_objects ++;
+    //p_stats->processed_objects ++;
     if (p_tgt_rec->s.flags.has_shared_manifest()) {
       // record holds a shared_manifest object so can't be a dedup target
       p_stats->skipped_shared_manifest++;
@@ -728,6 +827,11 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 20) << __func__ << "::SRC object already marked as shared_manifest" << dendl;
       }
     }
+    else {
+      derr << __func__ << "::Failed dedup for " << src_rec.bucket_name
+	   << "/" << src_rec.obj_name << dendl;
+      p_stats->failed_dedup++;
+    }
 
     return 0;
   }
@@ -767,12 +871,30 @@ namespace rgw::dedup {
     }
   }
 #endif
+
+  //---------------------------------------------------------------------------
+  const char* Background::dedup_step_name(dedup_step_t step)
+  {
+    static const char* names[] = {"STEP_NONE",
+				  "STEP_BUILD_TABLE",
+				  "STEP_READ_ATTRIBUTES",
+				  "STEP_REMOVE_DUPLICATES"};
+    static const char* undefined_step = "UNDEFINED_STEP";
+    if (step >= STEP_NONE && step <= STEP_REMOVE_DUPLICATES) {
+      return names[step];
+    }
+    else {
+      return undefined_step;
+    }
+  }
+
   //---------------------------------------------------------------------------
   int Background::run_dedup_step(dedup_step_t step,
 				 md5_shard_t md5_shard,
 				 work_shard_t worker_id,
 				 uint32_t slab_count_arr[],
-				 md5_stats_t *p_stats /* IN-OUT */)
+				 md5_stats_t *p_stats, /* IN-OUT */
+				 disk_block_array_t *p_disk_block_arr)
   {
     const int MAX_OBJ_LOAD_FAILURE = 3;
     const int MAX_BAD_BLOCKS = 3;
@@ -780,9 +902,8 @@ namespace rgw::dedup {
     uint32_t  seq_number = 0;
     int       failure_count = 0;
     ldpp_dout(dpp, 10) << __func__
-		       << ((step==STEP_BUILD_TABLE) ? "::Build Table" : "::REMOVE_DUPS")
-		       << "::worker_id=" << (uint32_t)worker_id
-		       << ", md5_shard=" << (uint32_t)md5_shard << dendl;
+		       << dedup_step_name(step) << "::worker_id=" << (int)worker_id
+		       << ", md5_shard=" << (int)md5_shard << dendl;
     slab_count_arr[worker_id] = 0;
     while (has_more) {
       bufferlist bl;
@@ -842,6 +963,10 @@ namespace rgw::dedup {
 	      p_stats->loaded_objects ++;
 	      slab_rec_count++;
 	    }
+	    else if (step == STEP_READ_ATTRIBUTES) {
+	      read_object_attribute(&rec, disk_block_id, rec_id, md5_shard, p_stats, p_disk_block_arr);
+	      slab_rec_count++;
+	    }
 	    else if (step == STEP_REMOVE_DUPLICATES) {
 	      try_deduping_record(&rec, disk_block_id, rec_id, md5_shard, p_stats);
 	      slab_rec_count++;
@@ -879,53 +1004,40 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::ingress_single_object(rgw::sal::Bucket           *bucket,
-					const rgw_bucket_dir_entry &entry,
-					work_shard_t                worker_id,
-					worker_stats_t             *p_worker_stats /*IN-OUT*/)
+  int Background::ingress_bucket_idx_single_object(rgw::sal::Bucket           *p_bucket,
+						   const rgw_bucket_dir_entry &entry,
+						   worker_stats_t             *p_worker_stats /*IN-OUT*/)
   {
-    ldpp_dout(dpp, 20) << __func__ << ": got " << entry.key << dendl;
-    unique_ptr<rgw::sal::Object> obj = bucket->get_object(entry.key);
-    if (unlikely(!obj)) {
-      derr << "ERROR: failed bucket->get_object(" << entry.key << ")" << dendl;
-      p_worker_stats->ingress_failed_get_object++;
-      return 1;
+    ldpp_dout(dpp, 20) << __func__ << ":: got " << entry.key.name << dendl;
+    parsed_etag_t parsed_etag;
+    parse_etag_string(entry.meta.etag, &parsed_etag);
+    if (parsed_etag.num_parts > 0) {
+      p_worker_stats->multipart_objs++;
     }
-    int ret = obj->get_obj_attrs(null_yield, dpp);
-    if (unlikely(ret < 0)) {
-      derr << "ERROR: failed to stat object(" << entry.key << "), returned error: "
-	   << cpp_strerror(-ret) << dendl;
-      p_worker_stats->ingress_failed_get_obj_attrs++;
-      return 1;
+    else {
+      p_worker_stats->single_part_objs++;
     }
-    uint64_t size = obj->get_size();
-#if 1
+    ldpp_dout(dpp, 20) << __func__ << "::(1)::" << p_bucket->get_name()
+		       << "/" << entry.key.name
+		       << "::num_parts=" << parsed_etag.num_parts
+		       << "::ETAG=" << std::hex << parsed_etag.md5_high
+		       << parsed_etag.md5_low << std::dec << dendl;
+
+
+    uint64_t size = entry.meta.size;
     if (size <= d_min_obj_size_for_dedup) {
-      p_worker_stats->ingress_skip_too_small++;
-      // dedup only useful for objects bigger than 4MB
-      return 0;
+      if (parsed_etag.num_parts == 0) {
+	p_worker_stats->ingress_skip_too_small++;
+	// dedup only useful for objects bigger than 4MB
+	return 0;
+      }
+      else {
+	// multipart objects are always good candidates for dedup
+	// the head object is empty and data is stored only in tail objs
+	p_worker_stats->small_multipart_obj++;
+      }
     }
-#endif
-#if 0
-    ceph::real_time mtime = obj->get_mtime();
-    if (mtime < last_scan_time) {
-      return 0;
-    }
-#endif
-    if (obj->get_attrs().find(RGW_ATTR_CRYPT_MODE) != obj->get_attrs().end()) {
-      ldpp_dout(dpp, 10) <<__func__ << "::Skipping encrypted object " << entry.key << dendl;
-      p_worker_stats->ingress_skip_encrypted++;
-      return 0;
-    }
-
-    // TBD: We should be able to support RGW_ATTR_COMPRESSION when all copies are compressed
-    if (obj->get_attrs().find(RGW_ATTR_COMPRESSION) != obj->get_attrs().end()) {
-      ldpp_dout(dpp, 10) <<__func__ << "::Skipping compressed object " << entry.key << dendl;
-      p_worker_stats->ingress_skip_compressed++;
-      return 0;
-    }
-
-    return add_disk_record(bucket, obj.get(), size);
+    return add_disk_rec_from_bucket_idx(p_bucket, &parsed_etag, entry.key.name, size);
   }
 
   //---------------------------------------------------------------------------
@@ -1045,7 +1157,7 @@ namespace rgw::dedup {
 	}
 	marker = dirent.key;
 	p_worker_stats->ingress_obj++;
-	ret = ingress_single_object(bucket, dirent, worker_id, p_worker_stats);
+	ret = ingress_bucket_idx_single_object(bucket, dirent, p_worker_stats);
       }
       // TBD: advance marker only once here!
       if (result.is_truncated) {
@@ -1105,32 +1217,20 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::objects_dedup_single_md5_shard(md5_shard_t md5_shard,
-						 md5_stats_t *p_stats)
+  static void display_table_stat_counters(const DoutPrefixProvider* dpp,
+					  uint64_t obj_count_in_shard,
+					  const md5_stats_t *p_stats)
   {
-    uint32_t slab_count_arr[MAX_WORK_SHARD];
-    memset(slab_count_arr, 0, sizeof(slab_count_arr));
-
-    for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-      run_dedup_step(STEP_BUILD_TABLE, md5_shard, worker_id, slab_count_arr, p_stats);
-      if (unlikely(should_stop())) {
-	ldpp_dout(dpp, 1) << __func__ << "::STEP_BUILD_TABLE::STOPPED\n" << dendl;
-	return -1;
-      }
-    }
-
-    d_table.count_duplicates(&(p_stats->singleton_count), &(p_stats->unique_count),
-			     &(p_stats->duplicate_count));
-    uint64_t obj_count_in_shard = (p_stats->singleton_count +
-				   p_stats->unique_count +
-				   p_stats->duplicate_count);
     ldpp_dout(dpp, 1) << "\n>>>>>" << __func__ << "::FINISHED STEP_BUILD_TABLE"
 		      << "::total_count="      << obj_count_in_shard
 		      << "::singleton_count="  << p_stats->singleton_count
 		      << "::unique_count="     << p_stats->unique_count
 		      << "::duplicate_count="  << p_stats->duplicate_count << dendl;
+  }
 
-    d_table.remove_singletons_and_redistribute_keys();
+  //---------------------------------------------------------------------------
+  void Background::reduce_md5_collision_chances(uint64_t obj_count_in_shard)
+  {
     uint64_t max_protected_objects_per_shard = d_max_protected_objects / MAX_MD5_SHARD;
 #if 1
     if (obj_count_in_shard > max_protected_objects_per_shard) {
@@ -1141,8 +1241,7 @@ namespace rgw::dedup {
     // with less than 6 billion instances (round down to 2^32 for extra safety)
     ldpp_dout(dpp, 0) <<__func__
 		      << "::all_buckets_obj_count=" << d_all_buckets_obj_count
-		      << "::all_buckets_obj_size=" << d_all_buckets_obj_size
-		      << dendl;
+		      << "::all_buckets_obj_size=" << d_all_buckets_obj_size << dendl;
 
     // when we fail bucket stat collection d_all_buckets_obj_count is set to zero
     if (!d_all_buckets_obj_count || d_all_buckets_obj_count > d_max_protected_objects) {
@@ -1155,15 +1254,63 @@ namespace rgw::dedup {
       }
     }
 #endif
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::objects_dedup_single_md5_shard(md5_shard_t md5_shard,
+						 md5_stats_t *p_stats)
+  {
+    uint32_t slab_count_arr[MAX_WORK_SHARD];
+    // first load all etags to hashtable to find dedups
+    // the entries come from bucket-index and got minimal info (etag, size)
     for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-      run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, worker_id, slab_count_arr, p_stats);
+      run_dedup_step(STEP_BUILD_TABLE, md5_shard, worker_id, slab_count_arr, p_stats, nullptr);
       if (unlikely(should_stop())) {
-	ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::STOPPED\n" << dendl;
+	ldpp_dout(dpp, 1) << __func__ << "::STEP_BUILD_TABLE::STOPPED\n" << dendl;
 	return -1;
       }
     }
 
-    remove_slabs(md5_shard, slab_count_arr);
+    d_table.count_duplicates(&(p_stats->singleton_count), &(p_stats->unique_count),
+			     &(p_stats->duplicate_count));
+    uint64_t obj_count_in_shard = (p_stats->singleton_count + p_stats->unique_count +
+				   p_stats->duplicate_count);
+    display_table_stat_counters(dpp, obj_count_in_shard, p_stats);
+    d_table.remove_singletons_and_redistribute_keys();
+#if 0
+    reduce_md5_collision_chances(obj_count_in_shard);
+#endif
+
+    // The SLABs holds minimal data set brought from the bucket-index
+    // Objects participating in DEDUP need to read attributes from the Head-Object
+    // TBD  - find a better name than NULL_WORK_SHARD for the combined output
+    // TBD2 - worker_stats needs to be reflected, maybe move tham to MD5 stats??
+    // (egress_slabs, egress_blocks, egress_records)
+    {
+      disk_block_array_t disk_block_arr(dpp, md5_shard);
+      worker_stats_t worker_stats;
+      disk_block_arr.set_worker_id(NULL_WORK_SHARD, &worker_stats);
+      for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
+	run_dedup_step(STEP_READ_ATTRIBUTES, md5_shard, worker_id, slab_count_arr, p_stats, &disk_block_arr);
+	if (unlikely(should_stop())) {
+	  ldpp_dout(dpp, 1) << __func__ << "::STEP_READ_ATTRIBUTES::STOPPED\n" << dendl;
+	  return -1;
+	}
+	// we finished processing output SLAB from @worker_id -> remove them
+	remove_slabs(worker_id, md5_shard, slab_count_arr);
+      }
+      disk_block_arr.flush_disk_records(p_dedup_cluster_ioctx);
+      p_stats->valid_sha256_attrs   = worker_stats.valid_sha256;
+      p_stats->invalid_sha256_attrs = worker_stats.invalid_sha256;
+    }
+
+    run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, NULL_WORK_SHARD, slab_count_arr, p_stats, nullptr);
+    if (unlikely(should_stop())) {
+      ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::STOPPED\n" << dendl;
+      return -1;
+    }
+
+    remove_slabs(NULL_WORK_SHARD, md5_shard, slab_count_arr);
     return 0;
   }
 
@@ -1299,22 +1446,22 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::remove_slabs(unsigned md5_shard, uint32_t slab_count_arr[])
+  int Background::remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count_arr[])
   {
     unsigned failure_count = 0;
-    for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-      for (uint32_t slab_id = 0; slab_id < slab_count_arr[worker_id]; slab_id++) {
-	uint32_t seq_number = disk_block_id_t::slab_id_to_seq_num(slab_id);
-	disk_block_id_t block_id(worker_id, seq_number);
-	std::string oid(block_id.get_slab_name(md5_shard));
-	ldpp_dout(dpp, 10) << __func__ << "::calling ioctx->remove(" << oid << ")" << dendl;
-	int ret = p_dedup_cluster_ioctx->remove(oid);
-	if (ret != 0) {
-	  ldpp_dout(dpp, 0) << __func__ << "::Failed ioctx->remove(" << oid << ")" << dendl;
-	  failure_count++;
-	}
+
+    for (uint32_t slab_id = 0; slab_id < slab_count_arr[worker_id]; slab_id++) {
+      uint32_t seq_number = disk_block_id_t::slab_id_to_seq_num(slab_id);
+      disk_block_id_t block_id(worker_id, seq_number);
+      std::string oid(block_id.get_slab_name(md5_shard));
+      ldpp_dout(dpp, 10) << __func__ << "::calling ioctx->remove(" << oid << ")" << dendl;
+      int ret = p_dedup_cluster_ioctx->remove(oid);
+      if (ret != 0) {
+	ldpp_dout(dpp, 0) << __func__ << "::Failed ioctx->remove(" << oid << ")" << dendl;
+	failure_count++;
       }
     }
+
     return failure_count;
   }
 

@@ -26,16 +26,15 @@ namespace rgw::dedup {
   static inline constexpr unsigned DISK_BLOCK_SIZE  = 8*1024;
   // we use 16 bit offset
   static_assert(DISK_BLOCK_SIZE < 64*1024);
-  //static inline constexpr unsigned DISK_BLOCK_COUNT = std::min(((2*1024*1024)/DISK_BLOCK_SIZE), 256);
-  static inline constexpr unsigned DISK_BLOCK_COUNT = 256;
-
+  static constexpr unsigned DISK_BLOCK_COUNT = 256;
+  static_assert(DISK_BLOCK_COUNT <= (4*1024*1024/DISK_BLOCK_SIZE));
+  static constexpr unsigned MAX_REC_IN_BLOCK = 32;
+  // we use 8bit record indices
+  static_assert(MAX_REC_IN_BLOCK < 0xFF);
   using slab_id_t      = uint16_t;
   using block_offset_t = uint8_t;
   using record_id_t    = uint8_t;
 
-  static constexpr work_shard_t NULL_WORK_SHARD = 0xFF;
-  static constexpr md5_shard_t  NULL_MD5_SHARD  = 0xFF;
-  static constexpr unsigned     NULL_SHARD      = 0xFF;
   struct __attribute__ ((packed)) disk_block_id_t
   {
   public:
@@ -43,7 +42,7 @@ namespace rgw::dedup {
       block_id = 0;
     }
 
-    disk_block_id_t(work_shard_t work_shard_id, uint32_t seq_number/*, record_id_t rec_id = 0*/) {
+    disk_block_id_t(work_shard_t work_shard_id, uint32_t seq_number) {
       ceph_assert((SEQ_NUMBER_MASK & seq_number) == seq_number);
       block_id = (uint32_t)work_shard_id << OBJ_SHARD_SHIFT | seq_number;
     }
@@ -82,11 +81,11 @@ namespace rgw::dedup {
       return get_block_offset(get_seq_num());
     }
 
-  private:
     inline work_shard_t get_work_shard_id() const {
       return (block_id & OBJ_SHARD_MASK) >> OBJ_SHARD_SHIFT;
     }
 
+  private:
     inline uint32_t get_seq_num() const {
       return (block_id & SEQ_NUMBER_MASK);
     }
@@ -157,9 +156,6 @@ namespace rgw::dedup {
 
   static constexpr unsigned BLOCK_MAGIC = 0xFACE;
   static constexpr unsigned LAST_BLOCK_MAGIC = 0xCAD7;
-  static constexpr unsigned AVG_REC_SIZE = 400;
-  //static constexpr unsigned MAX_REC_IN_BLOCK = DISK_BLOCK_SIZE / AVG_REC_SIZE;
-  static constexpr unsigned MAX_REC_IN_BLOCK = 32;
   struct  __attribute__ ((packed)) disk_block_header_t {
     void deserialize();
     int verify(disk_block_id_t block_id, const DoutPrefixProvider* dpp);
@@ -176,8 +172,12 @@ namespace rgw::dedup {
     bool is_empty() const { return (get_header()->rec_count == 0); }
 
     void init(work_shard_t worker_id, uint32_t seq_number);
-    int add_record(const disk_record_t *p_rec, const DoutPrefixProvider *dpp);
+    record_id_t add_record(const disk_record_t *p_rec, const DoutPrefixProvider *dpp);
     void close_block(const DoutPrefixProvider* dpp, bool has_more);
+    disk_block_id_t get_block_id() {
+      disk_block_header_t *p_header = get_header();
+      return p_header->block_id;
+    }
     char data[DISK_BLOCK_SIZE];
   };
 
@@ -225,26 +225,38 @@ namespace rgw::dedup {
       return d_md5_shard;
     }
 
+    struct record_info_t {
+      disk_block_id_t block_id;
+      record_id_t     rec_id;
+      bool            has_shared_manifest;
+      bool            has_valid_sha256;
+    };
+
     int add_record(librados::IoCtx        *p_ioctx,
 		   const rgw::sal::Bucket *p_bucket,
+		   // @p_obj is nullptr when call with info from bucket index
 		   const rgw::sal::Object *p_obj,
 		   const parsed_etag_t    *p_parsed_etag,
-		   uint64_t                obj_size);
-    int flush_disk_records(librados::IoCtx *p_ioctx);
+		   const std::string      &obj_name,
+		   uint64_t                obj_size,
+		   record_info_t          *p_rec_info); // OUT-PARAM
 
+    int flush_disk_records(librados::IoCtx *p_ioctx);
   private:
     inline const disk_block_t* last_block() { return &d_arr[DISK_BLOCK_COUNT-1]; }
     int flush(librados::IoCtx *p_ioctx);
     int fill_disk_record(disk_record_t          *p_rec,
 			 const rgw::sal::Bucket *p_bucket,
+			 // @p_obj is nullptr when call with info from bucket index
 			 const rgw::sal::Object *p_obj,
 			 const parsed_etag_t    *p_parsed_etag,
+			 const std::string      &obj_name,
 			 uint64_t                obj_size);
     void slab_reset() {
       p_curr_block = d_arr;
       p_curr_block->init(d_worker_id, d_seq_number);
     }
-
+    // 256 Blocks of 8KB each = 2MB array!!
     disk_block_t    d_arr[DISK_BLOCK_COUNT];
     disk_block_t   *p_curr_block = nullptr;
     work_shard_t    d_md5_shard = 0;

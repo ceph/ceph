@@ -100,6 +100,9 @@ namespace rgw::dedup {
     uint32_t find_entry(const key_t *p_key);
     int add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
 		  bool shared_manifest, bool has_sha256);
+    int update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
+		     bool shared_manifest, bool valid_sha256);
+
     int  get_val(const key_t *p_key, struct value_t *p_val /*OUT*/);
 
     int set_shared_manifest_mode(const key_t *p_key,
@@ -164,7 +167,6 @@ namespace rgw::dedup {
     uint32_t       entries_count = 0;
     uint32_t       occupied_count = 0;
     table_entry_t *hash_tab = nullptr;
-    std::mutex  table_mtx;
 
     // stat counters
     uint64_t redistributed_count = 0;

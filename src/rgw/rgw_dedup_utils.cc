@@ -65,7 +65,8 @@ namespace rgw::dedup {
   {
     // 16Bytes MD5 takes 32 chars
     if (etag.length() <= 32) {
-      return 1;
+      // i.e. no multipart
+      return 0;
     }
     // Amazon S3 multipart upload Maximum number = 10,000 (5 decimal digits)
     // We need 1 extra byte for the '-' delimiter and 1 extra byte for '"' at the end
@@ -106,7 +107,7 @@ namespace rgw::dedup {
   {
     char buff[64];
     int n = snprintf(buff, sizeof(buff), "%016lx%016lx", md5_high, md5_low);
-    if (num_parts > 1) {
+    if (num_parts >= 1) {
       n += snprintf(buff + n, sizeof(buff) - n, "-%u", num_parts);
     }
     bl->append(buff, n);
@@ -143,12 +144,18 @@ namespace rgw::dedup {
     out << "Egress  Blocks count           = " << s.egress_blocks << "\n";
     out << "Egress  Slabs count            = " << s.egress_slabs << "\n";
 
+    out << "Single part obj count          = " << s.single_part_objs << "\n";
+    out << "Multipart obj count            = " << s.multipart_objs << "\n";
+    if (s.small_multipart_obj) {
+      out << "Small Multipart obj count      = " << s.small_multipart_obj << "\n";
+    }
+#if 0
     out << "Valid   SHA256 count           = " << s.valid_sha256 << "\n";
     if(s.invalid_sha256) {
       out << "Invalid SHA256 count           = "
 	  << s.invalid_sha256 << "\n";
     }
-
+#endif
     if(s.ingress_failed_get_object) {
       out << "Ingress failed get_object()    = "
 	  << s.ingress_failed_get_object << "\n";
@@ -178,10 +185,31 @@ namespace rgw::dedup {
   {
     out << "Total processed objects  = " << s.processed_objects << "\n";
     out << "Loaded objects           = " << s.loaded_objects << "\n";
+    out << "Valid SHA256 attrs       = " << s.valid_sha256_attrs << "\n";
+    out << "inValid SHA256 attrs     = " << s.invalid_sha256_attrs << "\n";
 
     out << "Skipped shared_manifest  = " << s.skipped_shared_manifest << "\n";
     out << "Skipped singleton        = " << s.skipped_singleton << "\n";
     out << "Skipped source record    = " << s.skipped_source_record << "\n";
+
+    if(s.ingress_skip_encrypted) {
+      out << "Skipped Encrypted      = " << s.ingress_skip_encrypted << "\n";
+    }
+    if(s.ingress_skip_compressed) {
+      out << "Skipped Compressed     = " << s.ingress_skip_compressed << "\n";
+    }
+    if(s.ingress_skip_changed_objs) {
+      out << "Skipped Changed Object = " << s.ingress_skip_changed_objs << "\n";
+    }
+
+    if(s.ingress_failed_get_object) {
+      out << "Failed Get Object      = " << s.ingress_failed_get_object << "\n";
+    }
+
+    if(s.ingress_failed_get_obj_attrs) {
+      out << "Failed Get Object ATTR = " << s.ingress_failed_get_obj_attrs << "\n";
+    }
+
     if (s.skipped_duplicate) {
       out << "\n***ERR:Skipped duplicate = " << s.skipped_duplicate << "***\n";
     }
@@ -198,6 +226,10 @@ namespace rgw::dedup {
     if (s.skip_sha256_cmp) {
       out << "Can't run SHA256 compare = " << s.skip_sha256_cmp << "\n";
     }
+    if (s.failed_dedup) {
+      out << "\nFailed Dedup count     = " << s.failed_dedup << "\n";
+    }
+
     out << "Set Shared-Manifest      = " << s.set_shared_manifest << "\n";
     out << "Deduped Obj (this cycle) = " << s.deduped_objects << "\n";
     out << "Singleton Obj            = " << s.singleton_count << "\n";

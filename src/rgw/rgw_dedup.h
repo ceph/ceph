@@ -39,8 +39,10 @@ namespace rgw::dedup {
     enum dedup_step_t {
       STEP_NONE,
       STEP_BUILD_TABLE,
+      STEP_READ_ATTRIBUTES,
       STEP_REMOVE_DUPLICATES
     };
+    const char* dedup_step_name(dedup_step_t step);
     int  read_buckets();
     bool need_to_update_heartbeat();
     int  check_and_update_heartbeat(unsigned shard_id, uint64_t count_a, uint64_t count_b,
@@ -50,10 +52,9 @@ namespace rgw::dedup {
     inline int  check_and_update_md5_heartbeat(md5_shard_t md5_id,
 					       uint64_t load_count,
 					       uint64_t dedup_count);
-    int  ingress_single_object(rgw::sal::Bucket           *bucket,
-			       const rgw_bucket_dir_entry &entry,
-			       work_shard_t                worker_id,
-			       worker_stats_t             *p_worker_stats /*IN-OUT*/);
+    int  ingress_bucket_idx_single_object(rgw::sal::Bucket           *bucket,
+					  const rgw_bucket_dir_entry &entry,
+					  worker_stats_t             *p_worker_stats /*IN-OUT*/);
     int  process_bucket_shards(rgw::sal::Bucket     *bucket,
 			       std::map<int, string> &oids,
 			       librados::IoCtx       &ioctx,
@@ -75,18 +76,24 @@ namespace rgw::dedup {
 			md5_shard_t md5_shard,
 			work_shard_t work_shard,
 			uint32_t seq_count_arr[],
-			md5_stats_t *p_stats /* IN-OUT */);
+			md5_stats_t *p_stats /* IN-OUT */,
+			disk_block_array_t *p_disk_block_arr);
 
     int calc_object_sha256(const disk_record_t *p_rec, unsigned char *p_sha256);
-#if 0
-    void calc_missing_sha256_for_all_src_objects(md5_shard_t md5_shard);
-#endif
+    void reduce_md5_collision_chances(uint64_t obj_count_in_shard);
     int objects_dedup_single_md5_shard(md5_shard_t md5_shard,
 				       md5_stats_t *p_stats);
-    int add_disk_record(const rgw::sal::Bucket *p_bucket,
-			const rgw::sal::Object *p_obj,
-			uint64_t                obj_size);
+    int add_disk_rec_from_bucket_idx(const rgw::sal::Bucket *p_bucket,
+				     const parsed_etag_t    *p_parsed_etag,
+				     const string           &obj_name,
+				     uint64_t                obj_size);
 
+    int read_object_attribute(const disk_record_t *p_rec,
+			      disk_block_id_t      block_id,
+			      record_id_t          rec_id,
+			      md5_shard_t          md5_shard,
+			      md5_stats_t         *p_stats /* IN-OUT */,
+			      disk_block_array_t  *p_disk);
     int try_deduping_record(const disk_record_t *p_rec,
 			    disk_block_id_t      block_id,
 			    record_id_t          rec_id,
@@ -109,7 +116,7 @@ namespace rgw::dedup {
 		     bool                 is_shared_manifest_src,
 		     bool                 src_has_sha256);
 
-    int  remove_slabs(unsigned md5_shard, uint32_t seq_count_arr[]);
+    int  remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count_arr[]);
     void init_rados_access_handles();
 
     // private data members

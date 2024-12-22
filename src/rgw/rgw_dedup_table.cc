@@ -101,7 +101,6 @@ namespace rgw::dedup {
   uint32_t dedup_table_t::find_entry(const key_t *p_key)
   {
     uint64_t count = 1;
-    //const std::lock_guard<std::mutex> lock(table_mtx);
     uint32_t idx = p_key->hash() % entries_count;
 
     // search until we either find the key, or find an empty slot.
@@ -126,7 +125,6 @@ namespace rgw::dedup {
       return -1;
     }
     value_t val(block_id, rec_id, shared_manifest, valid_sha256);
-    const std::lock_guard<std::mutex> lock(table_mtx);
     uint32_t idx = find_entry(p_key);
     if (!hash_tab[idx].val.is_occupied()) {
       hash_tab[idx].key = *p_key;
@@ -156,11 +154,32 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  int dedup_table_t::update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
+				  bool shared_manifest, bool valid_sha256)
+  {
+    uint32_t idx = find_entry(p_key);
+    ceph_assert(hash_tab[idx].key == *p_key);
+    ceph_assert(hash_tab[idx].val.is_occupied());
+    ceph_assert(hash_tab[idx].val.count > 1);
+
+    // need to overwrite the block_idx/rec_id from the first pass
+    // unless already set with shared_manifest
+    if (!hash_tab[idx].val.has_shared_manifest()) {
+      // replace value!
+      value_t val(block_id, rec_id, shared_manifest, valid_sha256);
+      val.count = hash_tab[idx].val.count;
+      val.clear_singleton();
+      hash_tab[idx].val = val;
+    }
+
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
   int dedup_table_t::set_shared_manifest_mode(const key_t *p_key,
 					      disk_block_id_t block_id,
 					      record_id_t rec_id)
   {
-    const std::lock_guard<std::mutex> lock(table_mtx);
     uint32_t idx = find_entry(p_key);
     value_t &val = hash_tab[idx].val;
     if (val.is_occupied()) {
@@ -176,7 +195,6 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int dedup_table_t::get_val(const key_t *p_key, struct value_t *p_val /*OUT*/)
   {
-    const std::lock_guard<std::mutex> lock(table_mtx);
     uint32_t idx = find_entry(p_key);
     const value_t &val = hash_tab[idx].val;
     if (!val.is_occupied()) {

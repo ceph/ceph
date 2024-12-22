@@ -8,9 +8,25 @@
 namespace rgw::dedup {
   using work_shard_t   = uint8_t;
   using md5_shard_t    = uint8_t;
-  const work_shard_t MAX_WORK_SHARD = 12;
-  const md5_shard_t  MAX_MD5_SHARD  = 12;
+#if 1
+  // REMOVE-ME
+  // temporary settings to help debug small systems
+  const work_shard_t MAX_WORK_SHARD = 16;
+  const md5_shard_t  MAX_MD5_SHARD  = 16;
+#else
+  // Those are the correct values for production system
+  // can go as high as 0xFF-1
+  const work_shard_t MAX_WORK_SHARD = 128;
+  const md5_shard_t  MAX_MD5_SHARD  = 128;
+#endif
+  const work_shard_t NULL_WORK_SHARD = 0xFF;
+  const md5_shard_t  NULL_MD5_SHARD  = 0xFF;
+  const unsigned     NULL_SHARD      = 0xFF;
 
+  // we use a single byte to store shard-id (work/MD5) so max must be no higher than 0xFF
+  // We reseve the value 0xFF for NULL_WORK_SHARD/NULL_MD5_SHARD so MAX must be lower than 0xFF
+  static_assert(MAX_WORK_SHARD < NULL_SHARD);
+  static_assert(MAX_MD5_SHARD  < NULL_SHARD);
   struct __attribute__ ((packed)) dedup_flags_t {
   private:
     static constexpr uint8_t RGW_DEDUP_FLAG_SHA256          = 0x01;
@@ -18,6 +34,7 @@ namespace rgw::dedup {
     static constexpr uint8_t RGW_DEDUP_FLAG_SINGLETON       = 0x04;
     static constexpr uint8_t RGW_DEDUP_FLAG_OCCUPIED        = 0x08;
     static constexpr uint8_t RGW_DEDUP_FLAG_PG_VER          = 0x10;
+    static constexpr uint8_t RGW_DEDUP_FLAG_FASTLANE        = 0x20;
 
   public:
     dedup_flags_t() : flags(0) {}
@@ -27,6 +44,8 @@ namespace rgw::dedup {
     inline bool has_valid_sha256() const { return ((flags & RGW_DEDUP_FLAG_SHA256) != 0); }
     inline void set_shared_manifest() { flags |= RGW_DEDUP_FLAG_SHARED_MANIFEST; }
     inline void set_valid_sha256()  { flags |= RGW_DEDUP_FLAG_SHA256; }
+    inline void set_fastlane()  { flags |= RGW_DEDUP_FLAG_FASTLANE; }
+    inline bool is_fastlane()  const { return ((flags & RGW_DEDUP_FLAG_FASTLANE) != 0); }
     inline bool is_singleton() const { return ((flags & RGW_DEDUP_FLAG_SINGLETON) != 0); }
     inline void clear_singleton() { this->flags &= ~RGW_DEDUP_FLAG_SINGLETON; }
     inline bool is_occupied() const {return ((this->flags & RGW_DEDUP_FLAG_OCCUPIED) != 0); }
@@ -41,19 +60,6 @@ namespace rgw::dedup {
   struct worker_stats_t {
     void reset() {
       memset(&this->ingress_obj, 0, offsetof(worker_stats_t, duration));
-#if 1
-      ingress_obj = 0;
-      egress_records = 0;
-      egress_blocks = 0;
-      egress_slabs = 0;
-      valid_sha256 = 0;
-      invalid_sha256 = 0;
-      ingress_failed_get_object = 0;
-      ingress_failed_get_obj_attrs = 0;
-      ingress_skip_too_small = 0;
-      ingress_skip_encrypted = 0;
-      ingress_skip_compressed = 0;
-#endif
       duration.tv.tv_sec = 0;
       duration.tv.tv_nsec = 0;
     }
@@ -62,6 +68,9 @@ namespace rgw::dedup {
       this->egress_records += other.egress_records;
       this->egress_blocks += other.egress_blocks;
       this->egress_slabs += other.egress_slabs;
+      this->single_part_objs += other.single_part_objs;
+      this->multipart_objs += other.multipart_objs;
+      this->small_multipart_obj += other.small_multipart_obj;
       this->valid_sha256 += other.valid_sha256;
       this->invalid_sha256 += other.invalid_sha256;
       this->ingress_failed_get_object += other.ingress_failed_get_object;
@@ -76,6 +85,10 @@ namespace rgw::dedup {
     uint64_t egress_records = 0;
     uint64_t egress_blocks = 0;
     uint64_t egress_slabs = 0;
+
+    uint64_t single_part_objs = 0;
+    uint64_t multipart_objs = 0;
+    uint64_t small_multipart_obj = 0;
 
     uint64_t valid_sha256 = 0;
     uint64_t invalid_sha256 = 0;
@@ -97,8 +110,13 @@ namespace rgw::dedup {
     encode(w.egress_blocks, bl);
     encode(w.egress_slabs, bl);
 
+    encode(w.single_part_objs, bl);
+    encode(w.multipart_objs, bl);
+    encode(w.small_multipart_obj, bl);
+
     encode(w.valid_sha256, bl);
     encode(w.invalid_sha256, bl);
+
     encode(w.ingress_failed_get_object, bl);
     encode(w.ingress_failed_get_obj_attrs, bl);
 
@@ -117,6 +135,9 @@ namespace rgw::dedup {
     decode(w.egress_records, bl);
     decode(w.egress_blocks, bl);
     decode(w.egress_slabs, bl);
+    decode(w.single_part_objs, bl);
+    decode(w.multipart_objs, bl);
+    decode(w.small_multipart_obj, bl);
     decode(w.valid_sha256, bl);
     decode(w.invalid_sha256, bl);
     decode(w.ingress_failed_get_object, bl);
@@ -132,30 +153,20 @@ namespace rgw::dedup {
   struct md5_stats_t {
     void reset() {
       memset(&this->skipped_shared_manifest, 0, offsetof(md5_stats_t, duration));
-#if 1
-      this->skipped_shared_manifest = 0;
-      this->skipped_singleton       = 0;
-      this->skipped_source_record   = 0;
-      this->skipped_duplicate       = 0;
-      this->skipped_bad_sha256      = 0;
-      this->skipped_failed_src_load = 0;
-
-      this->skip_sha256_cmp         = 0;
-      this->set_shared_manifest     = 0;
-      this->loaded_objects          = 0;
-      this->processed_objects       = 0;
-      this->singleton_count         = 0;
-      this->duplicate_count         = 0;
-      this->unique_count            = 0;
-      this->deduped_objects         = 0;
-#endif
       duration.tv.tv_sec = 0, duration.tv.tv_nsec = 0;
     }
     uint64_t get_skipped_total() const {
       return (skipped_source_record + skipped_singleton + skipped_shared_manifest +
+	      ingress_skip_encrypted + ingress_skip_compressed + ingress_skip_changed_objs +
 	      skipped_duplicate + skipped_bad_sha256 + skipped_failed_src_load);
     }
     md5_stats_t& operator +=(const md5_stats_t& other) {
+      this->ingress_failed_get_object    += other.ingress_failed_get_object;
+      this->ingress_failed_get_obj_attrs += other.ingress_failed_get_obj_attrs;
+      this->ingress_skip_encrypted       += other.ingress_skip_encrypted;
+      this->ingress_skip_compressed      += other.ingress_skip_compressed;
+      this->ingress_skip_changed_objs    += other.ingress_skip_changed_objs;
+
       this->skipped_shared_manifest += other.skipped_shared_manifest;
       this->skipped_singleton       += other.skipped_singleton;
       this->skipped_source_record   += other.skipped_source_record;
@@ -163,16 +174,29 @@ namespace rgw::dedup {
       this->skipped_bad_sha256      += other.skipped_bad_sha256;
       this->skipped_failed_src_load += other.skipped_failed_src_load;
 
-      this->set_shared_manifest     += other.set_shared_manifest;
+      this->valid_sha256_attrs      += other.valid_sha256_attrs;
+      this->invalid_sha256_attrs    += other.invalid_sha256_attrs;
       this->skip_sha256_cmp         += other.skip_sha256_cmp;
+
+      this->set_shared_manifest     += other.set_shared_manifest;
       this->loaded_objects          += other.loaded_objects;
       this->processed_objects       += other.processed_objects;
       this->singleton_count         += other.singleton_count;
       this->duplicate_count         += other.duplicate_count;
       this->unique_count            += other.unique_count;
       this->deduped_objects         += other.deduped_objects;
+
+      this->failed_dedup            += other.failed_dedup;
       return *this;
     }
+
+    uint64_t ingress_failed_get_object = 0;
+    uint64_t ingress_failed_get_obj_attrs = 0;
+
+    uint64_t ingress_skip_encrypted = 0;
+    uint64_t ingress_skip_compressed = 0;
+    uint64_t ingress_skip_changed_objs = 0;
+
     uint64_t skipped_shared_manifest = 0;
     uint64_t skipped_singleton = 0;
     uint64_t skipped_source_record = 0;
@@ -180,6 +204,8 @@ namespace rgw::dedup {
     uint64_t skipped_bad_sha256 = 0;
     uint64_t skipped_failed_src_load = 0;
 
+    uint64_t valid_sha256_attrs = 0;
+    uint64_t invalid_sha256_attrs = 0;
     uint64_t skip_sha256_cmp = 0;
 
     uint64_t set_shared_manifest = 0;
@@ -189,6 +215,7 @@ namespace rgw::dedup {
     uint64_t duplicate_count = 0;
     uint64_t unique_count = 0;
     uint64_t deduped_objects = 0;
+    uint64_t failed_dedup = 0;
 
     utime_t  duration = {0, 0};
   };
@@ -196,6 +223,13 @@ namespace rgw::dedup {
   inline void encode(const md5_stats_t& m, ceph::bufferlist& bl)
   {
     ENCODE_START(1, 1, bl);
+
+    encode(m.ingress_failed_get_object, bl);
+    encode(m.ingress_failed_get_obj_attrs, bl);
+    encode(m.ingress_skip_encrypted, bl);
+    encode(m.ingress_skip_compressed, bl);
+    encode(m.ingress_skip_changed_objs, bl);
+
     encode(m.skipped_shared_manifest, bl);
     encode(m.skipped_singleton, bl);
     encode(m.skipped_source_record, bl);
@@ -203,6 +237,8 @@ namespace rgw::dedup {
     encode(m.skipped_bad_sha256, bl);
     encode(m.skipped_failed_src_load, bl);
 
+    encode(m.valid_sha256_attrs, bl);
+    encode(m.invalid_sha256_attrs, bl);
     encode(m.skip_sha256_cmp, bl);
     encode(m.set_shared_manifest, bl);
 
@@ -212,6 +248,8 @@ namespace rgw::dedup {
     encode(m.duplicate_count, bl);
     encode(m.unique_count, bl);
     encode(m.deduped_objects, bl);
+    encode(m.failed_dedup, bl);
+
     encode(m.duration, bl);
     ENCODE_FINISH(bl);
   }
@@ -219,6 +257,12 @@ namespace rgw::dedup {
   inline void decode(md5_stats_t& m, ceph::bufferlist::const_iterator& bl)
   {
     DECODE_START(1, bl);
+    decode(m.ingress_failed_get_object, bl);
+    decode(m.ingress_failed_get_obj_attrs, bl);
+    decode(m.ingress_skip_encrypted, bl);
+    decode(m.ingress_skip_compressed, bl);
+    decode(m.ingress_skip_changed_objs, bl);
+
     decode(m.skipped_shared_manifest, bl);
     decode(m.skipped_singleton, bl);
     decode(m.skipped_source_record, bl);
@@ -226,6 +270,8 @@ namespace rgw::dedup {
     decode(m.skipped_bad_sha256, bl);
     decode(m.skipped_failed_src_load, bl);
 
+    decode(m.valid_sha256_attrs, bl);
+    decode(m.invalid_sha256_attrs, bl);
     decode(m.skip_sha256_cmp, bl);
     decode(m.set_shared_manifest, bl);
 
@@ -235,6 +281,8 @@ namespace rgw::dedup {
     decode(m.duplicate_count, bl);
     decode(m.unique_count, bl);
     decode(m.deduped_objects, bl);
+    decode(m.failed_dedup, bl);
+
     decode(m.duration, bl);
     DECODE_FINISH(bl);
   }
@@ -243,6 +291,7 @@ namespace rgw::dedup {
     uint64_t md5_high;  // High Bytes of the Object Data MD5
     uint64_t md5_low;   // Low  Bytes of the Object Data MD5
     uint16_t num_parts; // How many parts were used in multipart upload
+			// Setting num_parts to zero when multipart is not used
   };
 
   uint64_t hex2int(const char *p, const char* p_end);
