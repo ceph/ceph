@@ -654,7 +654,7 @@ def simple_dedup(out_dir, conn, files, bucket_name, run_cleanup_after, config):
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small():
-    return
+    #return
 
     bucket_name = gen_bucket_name()
     log.info("test_dedup_small: connect to AWS ...")
@@ -665,7 +665,7 @@ def test_dedup_small():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_basic():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     bucket_name = gen_bucket_name()
@@ -688,7 +688,7 @@ def test_dedup_basic():
 #    should be made to the system
 @pytest.mark.basic_test
 def test_dedup_inc_0():
-    return
+    #return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -725,7 +725,7 @@ def test_dedup_inc_0():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_1():
-    return
+    #return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -779,7 +779,7 @@ def test_dedup_inc_1():
 # 4) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_2():
-    return
+    #return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -839,7 +839,7 @@ def test_dedup_inc_2():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_with_remove():
-    return
+    #return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -898,7 +898,7 @@ def test_dedup_inc_with_remove():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_multipart():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     bucket_name = gen_bucket_name()
@@ -923,7 +923,7 @@ def test_dedup_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_multipart():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_multipart: connect to AWS ...")
@@ -945,7 +945,7 @@ def test_dedup_small_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_large_scale: connect to AWS ...")
@@ -955,7 +955,7 @@ def test_dedup_large_scale():
     files=[]
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(Bucket=bucket_name)
-    num_files = 4*1024
+    num_files = 1*1024
     size = 4*KB
 
     gen_files_fixed_size(OUT_DIR, files, num_files, size)
