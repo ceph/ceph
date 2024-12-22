@@ -651,7 +651,7 @@ protected:
           local_status));
         m_formatter->dump_string("description", local_status.description);
         if (mirror_service != nullptr) {
-          mirror_service->dump_image(m_formatter);
+          mirror_service->dump(m_formatter);
         }
         m_formatter->dump_string("last_update", utils::timestr(
           local_status.last_update));
@@ -688,7 +688,7 @@ protected:
                   << "  description: " << local_status.description << std::endl;
         if (mirror_service != nullptr) {
           std::cout << "  service:     " <<
-            mirror_service->get_image_description() << std::endl;
+            mirror_service->get_description() << std::endl;
         }
         std::cout << "  last_update: " << utils::timestr(
           local_status.last_update) << std::endl;
