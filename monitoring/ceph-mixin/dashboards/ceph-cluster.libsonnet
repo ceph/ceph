@@ -231,6 +231,15 @@ local g = import 'grafonnet/grafana.libsonnet';
             ]}
           }]
         },
+        { matcher: {'id': 'byName', options: 'Down'}, properties: [
+          {id: 'thresholds', value: {'mode': 'absolute', 'steps':
+            [
+              {'color': 'green', 'value': null},
+              {'color': 'yellow', 'value': 1},
+              {'color': 'red', 'value': 1}
+            ]}
+          }]
+        },
       ])
       .addTargets([
         $.addTargetSchema(
@@ -398,7 +407,6 @@ local g = import 'grafonnet/grafana.libsonnet';
       )
       .addThresholds([
         { color: 'green', value: null },
-        { color: 'red', value: 1 },
       ])
       .addOverrides([
         { matcher: { id: 'byName', options: 'Critical' }, properties: [
