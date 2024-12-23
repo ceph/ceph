@@ -202,7 +202,7 @@ int main(int argc, const char* argv[])
                                                    true);
           }
           auto store = crimson::os::FuturizedStore::create(
-            local_conf().get_val<std::string>("osd_objectstore"),
+            local_conf().get_val<std::string>("crimson_osd_objectstore"),
             local_conf().get_val<std::string>("osd_data"),
             local_conf().get_config_values());
 
