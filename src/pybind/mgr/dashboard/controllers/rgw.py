@@ -948,7 +948,14 @@ class RgwUser(RgwRESTController):
             'purge-keys': purge_keys
         }, json_response=False)
 
-    @Endpoint(path='/ratelimit')
+    @Endpoint(method='GET', path='/ratelimit')
+    @EndpointDoc("Get the global rate limit")
+    @ReadPermission 
+    def get_global_rate_limit(self):
+        rgwRateLimit_instance = RgwRateLimit()
+        return rgwRateLimit_instance.get_global_rateLimit()
+
+    @Endpoint(method='GET', path='/ratelimit')
     @EndpointDoc("Get the rate limit")
     @ReadPermission 
     def get_rate_limit(self, scope:str, name: str ):

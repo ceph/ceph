@@ -405,6 +405,41 @@ class TestDictToXML(TestCase):
 
 class RgwRateLimitTest(TestCase):
 
+    @patch.object(RgwRateLimit, 'get_global_rateLimit')
+    def test_get_global_rateLimit(self, mock_get_global_rateLimit):
+        mock_return_value = {
+            "bucket_ratelimit": {
+                "max_read_ops": 2024,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": 'true'
+            },
+            "user_ratelimit": {
+                "max_read_ops": 1024,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": 'true'
+            },
+            "anonymous_ratelimit": {
+                "max_read_ops": 0,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": 'false'
+            }
+        }
+
+        mock_get_global_rateLimit.return_value = mock_return_value
+       
+        controller = RgwUser()
+        result = controller.get_global_rate_limit()
+
+        mock_get_global_rateLimit.assert_called_with()
+
+        self.assertEqual(result, mock_return_value)
+
     @patch.object(RgwRateLimit, 'get_rateLimit')
     def test_get_rateLimit(self, mock_get_rateLimit):
         mock_return_value = {
