@@ -6664,7 +6664,19 @@ void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
   const SnapContext *snapc;
   if (realm) {
     dout(10) << " realm " << *realm << dendl;
-    snapc = &realm->get_snap_context();
+    vector<SnapRealm*> related_realms;
+    const std::vector<uint64_t>& referent_inodes = in->get_inode()->referent_inodes;
+    dout(20) << "truncate_inode_write_finish referent_inodes " << std::hex << referent_inodes << dendl;
+    for (const auto& ri : referent_inodes) {
+      CInode *cur = get_inode(ri);
+      if (!cur) {
+        dout(3) << "truncate_inode_write_finish error: referent inode not loaded " << std::hex << ri << dendl;
+        ceph_abort("truncate_inode_write_finish: referent inode not loaded");
+      }
+      SnapRealm *cur_realm = cur->find_snaprealm();
+      related_realms.push_back(cur_realm);
+    }
+    snapc = &realm->get_snap_context(related_realms);
   } else {
     dout(10) << " NO realm, using null context" << dendl;
     snapc = &nullsnap;
