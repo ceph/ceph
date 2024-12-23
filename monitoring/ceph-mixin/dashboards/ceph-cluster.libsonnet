@@ -220,7 +220,17 @@ local g = import 'grafonnet/grafana.libsonnet';
       )
       .addThresholds([
         { color: 'green', value: null },
-        { color: 'red', value: 80 },
+      ])
+      .addOverrides([
+        { matcher: { id: 'byName', options: 'Out' }, properties: [
+          { id: 'thresholds', value: { 'mode': 'absolute', 'steps':
+            [
+              {'color': 'green', 'value': null},
+              {'color': 'yellow', 'value': 1},
+              {'color': 'red', 'value': 1}
+            ]}
+          }]
+        },
       ])
       .addTargets([
         $.addTargetSchema(
