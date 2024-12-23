@@ -410,11 +410,21 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addOverrides([
         { matcher: { id: 'byName', options: 'Critical' }, properties: [
-          { id: 'color', value: { fixedColor: 'red', mode: 'fixed' } },
-        ] },
-        { matcher: { id: 'byName', options: 'Warning' }, properties: [
-          { id: 'color', value: { fixedColor: '#987d24', mode: 'fixed' } },
-        ] },
+          { id: 'thresholds', value: { mode: 'absolute', steps:
+            [
+              {color: 'green', value: null},
+              {color: 'red', value: 1}
+            ]}
+          }]
+        },
+        { matcher: {id: 'byName', options: 'Warning'}, properties: [
+          {id: 'thresholds', value: {mode: 'absolute', steps:
+            [
+              {color: 'green', value: null},
+              {color: 'yellow', value: 1}
+            ]}
+          }]
+        }
       ])
       .addTargets([
         $.addTargetSchema(
