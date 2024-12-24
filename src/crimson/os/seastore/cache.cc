@@ -1487,16 +1487,53 @@ record_t Cache::prepare_record(
     DEBUGT("inplace rewrite ool block is commmitted -- {}", t, *i);
   }
 
+  auto existing_stats = t.get_existing_block_stats();
+  DEBUGT("total existing blocks num: {}, exist clean num: {}, "
+	 "exist mutation pending num: {}",
+	 t,
+	 existing_stats.valid_num,
+	 existing_stats.clean_num,
+	 existing_stats.mutated_num);
   for (auto &i: t.existing_block_list) {
-    if (i->is_valid()) {
-      alloc_delta.alloc_blk_ranges.emplace_back(
-	alloc_blk_t::create_alloc(
-	  i->get_paddr(),
-	  i->cast<LogicalCachedExtent>()->get_laddr(),
-	  i->get_length(),
-	  i->get_type()));
+    assert(is_logical_type(i->get_type()));
+    if (!i->is_valid()) {
+      continue;
     }
+
+    if (i->is_exist_clean()) {
+      i->state = CachedExtent::extent_state_t::CLEAN;
+    } else {
+      assert(i->is_exist_mutation_pending());
+      // i->state must become DIRTY in complete_commit()
+    }
+
+    // exist mutation pending extents must be in t.mutated_block_list
+    add_extent(i);
+    const auto t_src = t.get_src();
+    if (i->is_dirty()) {
+      add_to_dirty(i, &t_src);
+    } else {
+      touch_extent(*i, &t_src);
+    }
+
+    alloc_delta.alloc_blk_ranges.emplace_back(
+      alloc_blk_t::create_alloc(
+	i->get_paddr(),
+	i->cast<LogicalCachedExtent>()->get_laddr(),
+	i->get_length(),
+	i->get_type()));
+
+    // Note: commit extents and backref allocations in the same place
+    // Note: remapping is split into 2 steps, retire and alloc, they must be
+    //       committed atomically together
+    backref_entries.emplace_back(
+      backref_entry_t::create_alloc(
+	i->get_paddr(),
+	i->cast<LogicalCachedExtent>()->get_laddr(),
+	i->get_length(),
+	i->get_type()));
   }
+
   alloc_deltas.emplace_back(std::move(alloc_delta));
 
   for (auto b : alloc_deltas) {
@@ -1799,43 +1836,6 @@ void Cache::complete_commit(
   for (auto &i: t.retired_set) {
     auto &extent = i.extent;
     extent->dirty_from_or_retired_at = start_seq;
-  }
-
-  auto existing_stats = t.get_existing_block_stats();
-  DEBUGT("total existing blocks num: {}, exist clean num: {}, "
-	 "exist mutation pending num: {}",
-	 t,
-	 existing_stats.valid_num,
-	 existing_stats.clean_num,
-	 existing_stats.mutated_num);
-  for (auto &i: t.existing_block_list) {
-    if (!i->is_valid()) {
-      continue;
-    }
-    if (i->is_exist_clean()) {
-      i->state = CachedExtent::extent_state_t::CLEAN;
-    } else {
-      assert(i->state == CachedExtent::extent_state_t::DIRTY);
-    }
-    add_extent(i);
-
-    // Note: commit extents and backref allocations in the same place
-    DEBUGT("backref_entry alloc existing {} len 0x{:x}",
-	   t,
-	   i->get_paddr(),
-	   i->get_length());
-    backref_entries.emplace_back(
-      backref_entry_t::create_alloc(
-	i->get_paddr(),
-	i->cast<LogicalCachedExtent>()->get_laddr(),
-	i->get_length(),
-	i->get_type()));
-    const auto t_src = t.get_src();
-    if (i->is_dirty()) {
-      add_to_dirty(i, &t_src);
-    } else {
-      touch_extent(*i, &t_src);
-    }
   }
 
   apply_backref_byseq(t.move_backref_entries(), start_seq);
