@@ -9,6 +9,7 @@
 class XMLObj;
 
 struct rgw_s3_key_filter {
+  bool operator==(const rgw_s3_key_filter& rhs) const = default;
   std::string prefix_rule;
   std::string suffix_rule;
   std::string regex_rule;

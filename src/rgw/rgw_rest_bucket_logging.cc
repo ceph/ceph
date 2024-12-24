@@ -71,8 +71,8 @@ public:
         configuration.enabled = true;
         decode(configuration, iter->second);
       } catch (buffer::error& err) {
-        ldpp_dout(this, 1) << "ERROR: failed to decode attribute '" << RGW_ATTR_BUCKET_LOGGING 
-          << "'. error: " << err.what() << dendl;
+        ldpp_dout(this, 1) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+          << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
         op_ret = -EIO;
         return;
       }
@@ -168,32 +168,17 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
     }
 
     if (!configuration.enabled) {
-      // remove logging configuration
-      op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, &src_bucket, y] {
-        auto& attrs = src_bucket->get_attrs();
-        if (auto iter = attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != attrs.end()) {
-          attrs.erase(iter);
-        }
-        return src_bucket->merge_and_store_attrs(this, attrs, y);
-      }, y);
-      if (op_ret < 0) {
-        ldpp_dout(this, 1) << "ERROR: failed to remove logging attribute '" << RGW_ATTR_BUCKET_LOGGING << "' from bucket '" << 
-          src_bucket_id << "', ret = " << op_ret << dendl;
-        return;
-      }
-      ldpp_dout(this, 20) << "INFO: removed logging configuration from bucket '" << src_bucket_id << "'" << dendl;
+      op_ret = rgw::bucketlogging::source_bucket_cleanup(this, driver, src_bucket.get(), true, y);
       return;
     }
 
     // set logging configuration
-    std::string target_bucket_name;
-    std::string target_tenant_name;
-    op_ret = rgw_parse_url_bucket(configuration.target_bucket, s->bucket_tenant, target_tenant_name, target_bucket_name);
-    if (op_ret < 0) {
+    rgw_bucket target_bucket_id;
+    if (op_ret = rgw::bucketlogging::get_bucket_id(configuration.target_bucket, s->bucket_tenant, target_bucket_id); op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << op_ret << dendl;
       return;
     }
-    const rgw_bucket target_bucket_id(target_tenant_name, target_bucket_name);
+
     if (target_bucket_id == src_bucket_id) {
       ldpp_dout(this, 1) << "ERROR: target bucket '" << target_bucket_id << "' must be different from source bucket" << dendl;
       op_ret = -EINVAL;
@@ -206,7 +191,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << op_ret << dendl;
       return;
     }
-    const auto& target_attrs = target_bucket->get_attrs();
+    auto& target_attrs = target_bucket->get_attrs();
     if (target_attrs.find(RGW_ATTR_BUCKET_LOGGING) != target_attrs.end()) {
       // target bucket must not have logging set on it
       ldpp_dout(this, 1) << "ERROR: logging target bucket '" << target_bucket_id << "', is configured with bucket logging" << dendl;
@@ -219,11 +204,32 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       op_ret = -EINVAL;
       return;
     }
+    std::optional<rgw::bucketlogging::configuration> old_conf;
     bufferlist conf_bl;
     encode(configuration, conf_bl);
-    op_ret = retry_raced_bucket_write(this, src_bucket.get(), [this, &conf_bl, &src_bucket, y] {
+    op_ret = retry_raced_bucket_write(this, src_bucket.get(), [this, &conf_bl, &src_bucket, &old_conf, &configuration, y] {
       auto& attrs = src_bucket->get_attrs();
-      attrs[RGW_ATTR_BUCKET_LOGGING] = conf_bl;
+      auto it = attrs.find(RGW_ATTR_BUCKET_LOGGING);
+      if (it != attrs.end()) {
+        try {
+          rgw::bucketlogging::configuration tmp_conf;
+          tmp_conf.enabled = true;
+          decode(tmp_conf, it->second);
+          old_conf = std::move(tmp_conf);
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 1) << "WARNING: failed to decode existing logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+              << "' for bucket '" << src_bucket->get_info().bucket << "', error: " << err.what() << dendl;
+        }
+        if (!old_conf || (old_conf && *old_conf != configuration)) {
+          // conf changed (or was unknown) - update
+          it->second = conf_bl;
+          return src_bucket->merge_and_store_attrs(this, attrs, y);
+        }
+        // nothing to update
+        return 0;
+      }
+      // conf was added
+      attrs.insert(std::make_pair(RGW_ATTR_BUCKET_LOGGING, conf_bl));
       return src_bucket->merge_and_store_attrs(this, attrs, y);
     }, y);
     if (op_ret < 0) {
@@ -231,9 +237,42 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
         src_bucket_id << "', ret = " << op_ret << dendl;
       return;
     }
-
-    ldpp_dout(this, 20) << "INFO: wrote logging configuration to bucket '" << src_bucket_id << "'. configuration: " <<
-      configuration.to_json_str() << dendl;
+    if (!old_conf) {
+      ldpp_dout(this, 20) << "INFO: new logging configuration added to bucket '" << src_bucket_id << "'. configuration: " <<
+        configuration.to_json_str() << dendl;
+      if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, target_bucket, src_bucket_id, true, y); ret < 0) {
+        ldpp_dout(this, 1) << "WARNING: failed to add source bucket '" << src_bucket_id << "' to logging sources of target bucket '" <<
+          target_bucket_id << "', ret = " << ret << dendl;
+      }
+    } else if (*old_conf != configuration) {
+      // conf changed - do cleanup
+      if (const auto ret = commit_logging_object(*old_conf, target_bucket, this, y); ret < 0) {
+        ldpp_dout(this, 1) << "WARNING: could not commit pending logging object when updating logging configuration of bucket '" << 
+          src_bucket->get_info().bucket << "', ret = " << ret << dendl;
+      } else {
+        ldpp_dout(this, 20) << "INFO: committed pending logging object when updating logging configuration of bucket '" << 
+          src_bucket->get_info().bucket << "'" << dendl;
+      }
+      if (old_conf->target_bucket != configuration.target_bucket) {
+        rgw_bucket old_target_bucket_id;
+        if (const auto ret = rgw::bucketlogging::get_bucket_id(old_conf->target_bucket, s->bucket_tenant, old_target_bucket_id); ret < 0) {
+          ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << old_conf->target_bucket << "', ret = " << ret << dendl;
+          return;
+        }
+        if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, driver, old_target_bucket_id, src_bucket_id, false, y); ret < 0) {
+          ldpp_dout(this, 1) << "WARNING: failed to remove source bucket '" << src_bucket_id << "' from logging sources of original target bucket '" <<
+            old_target_bucket_id << "', ret = " << ret << dendl;
+        }
+        if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, target_bucket, src_bucket_id, true, y); ret < 0) {
+          ldpp_dout(this, 1) << "WARNING: failed to add source bucket '" << src_bucket_id << "' to logging sources of target bucket '" <<
+            target_bucket_id << "', ret = " << ret << dendl;
+        }
+      }
+      ldpp_dout(this, 20) << "INFO: wrote logging configuration to bucket '" << src_bucket_id << "'. configuration: " <<
+        configuration.to_json_str() << dendl;
+    } else {
+      ldpp_dout(this, 20) << "INFO: logging configuration of bucket '" << src_bucket_id << "' did not change" << dendl;
+    }
   }
 };
 
@@ -280,20 +319,17 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
       configuration.enabled = true;
       decode(configuration, iter->second);
     } catch (buffer::error& err) {
-      ldpp_dout(this, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-                         << "'. error: " << err.what() << dendl;
+      ldpp_dout(this, 1) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+        << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
       op_ret = -EINVAL;
       return;
     }
 
-    std::string target_bucket_name;
-    std::string target_tenant_name;
-    op_ret = rgw_parse_url_bucket(configuration.target_bucket, s->bucket_tenant, target_tenant_name, target_bucket_name);
-    if (op_ret < 0) {
+    rgw_bucket target_bucket_id;
+    if (op_ret = rgw::bucketlogging::get_bucket_id(configuration.target_bucket, s->bucket_tenant, target_bucket_id); op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << op_ret << dendl;
       return;
     }
-    const rgw_bucket target_bucket_id(target_tenant_name, target_bucket_name);
     std::unique_ptr<rgw::sal::Bucket> target_bucket;
     op_ret = driver->load_bucket(this, target_bucket_id,
                                  &target_bucket, y);
@@ -314,7 +350,7 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
                << "' to target bucket '" << target_bucket_id << "'" << dendl;
       return;
     }
-    ldpp_dout(this, 20) << "flushed pending logging object '" << obj_name
+    ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << obj_name
                 << "' to target bucket '" << configuration.target_bucket << "'" << dendl;
   }
 };
