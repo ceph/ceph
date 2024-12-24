@@ -25,11 +25,16 @@ class SharedLRU {
   SimpleLRU<K, shared_ptr_t, false> cache;
   std::map<K, std::pair<weak_ptr_t, V*>> weak_refs;
 
+  // Once all of the shared pointers are destoryed,
+  // erase the tracked object from the weak_ref map
+  // before actually destorying it
   struct Deleter {
     SharedLRU<K,V>* cache;
     const K key;
     void operator()(V* ptr) {
-      cache->_erase_weak(key);
+      if (cache) {
+        cache->_erase_weak(key);
+      }
       delete ptr;
     }
   };
@@ -42,9 +47,19 @@ public:
   {}
   ~SharedLRU() {
     cache.clear();
+
     // initially, we were assuming that no pointer obtained from SharedLRU
     // can outlive the lru itself. However, since going with the interruption
     // concept for handling shutdowns, this is no longer valid.
+    // Moreover, before clearing weak_refs, invalidate each deleter
+    // cache pointer as this SharedLRU is being destoryed.
+    for (const auto& [key, value] : weak_refs) {
+      shared_ptr_t val;
+      val = value.first.lock();
+      auto this_deleter = get_deleter<Deleter>(val);
+      this_deleter->cache = nullptr;
+    }
+
     weak_refs.clear();
   }
   /**
