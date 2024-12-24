@@ -165,6 +165,7 @@ protected:
   std::map<std::string, ScrubHeaderRef> scrubbing_map;
 
   friend class C_RetryScrub;
+  friend class C_RepairRemoteDentry;
 private:
   // scrub abort is _not_ a state, rather it's an operation that's
   // performed after in-progress scrubs are finished.
@@ -213,6 +214,19 @@ private:
    * @param in The inode to scrub
    */
   void scrub_file_inode(CInode *in);
+
+  /**
+   * Scrub a file inode.
+   * @param dn The remote dentry to scrub
+   * @param header The header of the directory which contains this dentry
+   */
+  void scrub_remote_link(CDentry *dn, ScrubHeaderRef &header);
+
+  /**
+   * Scrub a file inode.
+   * @param dn The remote orphan dentry to clean
+   */
+  void cleanup_remote_orphan_link(CDentry *dn);
 
   /**
    * Callback from completion of CInode::validate_disk_state
