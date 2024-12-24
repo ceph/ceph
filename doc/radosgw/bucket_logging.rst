@@ -35,6 +35,7 @@ Adding a log object to the log bucket is done "lazily", meaning, that if no more
 remain outside of the log bucket even after the configured time has passed.
 To counter that, you can flush all logging objects on a given source bucket to log them,
 regardless if enough time passed or if no more records are written to the object.
+Flushing will happen automatically when logging is disabled on a bucket, its logging configuration is changed, or the bucket is deleted.
 
 Standard
 ````````
