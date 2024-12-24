@@ -4455,7 +4455,7 @@ void PrimaryLogPG::log_op_stats(const OpRequest& op,
 	   << " lat " << latency << dendl;
 
   if (m_dynamic_perf_stats.is_enabled()) {
-    m_dynamic_perf_stats.add(osd, info, op, inb, outb, latency);
+    m_dynamic_perf_stats.add(osd->get_nodeid(), info, op, inb, outb, latency);
   }
 }
 
