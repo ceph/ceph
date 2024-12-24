@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include <boost/statechart/custom_reaction.hpp>
@@ -289,8 +290,11 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   [[nodiscard]] bool is_accepting_updates() const;
   [[nodiscard]] bool is_primary_idle() const;
 
-  // elapsed time for the currently active scrub.session
+  /// elapsed time for the currently active scrub.session
   ceph::timespan get_time_scrubbing() const;
+
+  /// replica reservation process status
+  std::optional<pg_scrubbing_status_t> get_reservation_status() const;
 
 // ///////////////// aux declarations & functions //////////////////////// //
 
@@ -555,6 +559,9 @@ struct Session : sc::state<Session, PrimaryActive, ReservingReplicas>,
   /// abort reason - if known. Determines the delay time imposed on the
   /// failed scrub target.
   std::optional<Scrub::delay_cause_t> m_abort_reason{std::nullopt};
+
+  /// when reserving replicas: fetch the reservation status
+  std::optional<pg_scrubbing_status_t> get_reservation_status() const;
 };
 
 struct ReservingReplicas : sc::state<ReservingReplicas, Session>, NamedSimply {
