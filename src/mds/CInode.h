@@ -66,8 +66,8 @@ public:
   CInodeCommitOperation(int prio, int64_t po)
     : pool(po), priority(prio) {
   }
-  CInodeCommitOperation(int prio, int64_t po, file_layout_t l, uint64_t f, std::string_view s)
-    : pool(po), priority(prio), _layout(l), _features(f), _symlink(s) {
+  CInodeCommitOperation(int prio, int64_t po, file_layout_t l, uint64_t f, std::string_view s, inodeno_t ri)
+    : pool(po), priority(prio), _layout(l), _features(f), _symlink(s), remote_inode(ri) {
       update_layout_symlink = true;
   }
 
@@ -81,6 +81,7 @@ private:
   file_layout_t _layout;
   uint64_t _features;
   std::string_view _symlink;
+  inodeno_t remote_inode;     // real inode of the referent inode
 };
 
 struct CInodeCommitOperations {
@@ -654,6 +655,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   inodeno_t get_remote_ino() const { return get_inode()->remote_ino; }
   vinodeno_t vino() const { return vinodeno_t(ino(), last); }
   int d_type() const { return IFTODT(get_inode()->mode); }
+  bool is_referent() const { return get_remote_ino() != 0; }
   bool is_root() const { return ino() == CEPH_INO_ROOT; }
   bool is_stray() const { return MDS_INO_IS_STRAY(ino()); }
   mds_rank_t get_stray_owner() const {
