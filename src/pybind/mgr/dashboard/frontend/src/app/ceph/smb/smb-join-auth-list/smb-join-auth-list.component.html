@@ -1,0 +1,9 @@
+<cd-table
+  [data]="joinAuth$ | async"
+  columnMode="flex"
+  [columns]="columns"
+  selectionType="single"
+  [hasDetails]="false"
+  (fetchData)="loadJoinAuth()"
+>
+</cd-table>
