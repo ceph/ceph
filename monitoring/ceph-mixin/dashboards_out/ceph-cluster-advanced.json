@@ -853,6 +853,10 @@
                               {
                                  "color": "yellow",
                                  "value": 1
+                              },
+                              {
+                                 "color": "red",
+                                 "value": 60
                               }
                            ]
                         }
