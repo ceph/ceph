@@ -1,8 +1,8 @@
 <cd-smb-tabs></cd-smb-tabs>
-<ng-container *ngIf="smbClusters$ | async as smbClusters">
+<ng-container *ngIf="usersGroups$ | async as usersGroups">
   <cd-table
     #table
-    [data]="smbClusters"
+    [data]="usersGroups"
     columnMode="flex"
     [columns]="columns"
     identifier="id"
@@ -10,7 +10,7 @@
     selectionType="single"
     [hasDetails]="false"
     (setExpandedRow)="setExpandedRow($event)"
-    (fetchData)="loadSMBCluster($event)"
+    (fetchData)="loadUsersGroups($event)"
   >
   </cd-table>
-</ng-container>
+  </ng-container>
