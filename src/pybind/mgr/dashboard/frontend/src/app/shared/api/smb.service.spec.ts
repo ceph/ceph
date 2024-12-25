@@ -28,4 +28,16 @@ describe('SmbService', () => {
     const req = httpTesting.expectOne('api/smb/cluster');
     expect(req.request.method).toBe('GET');
   });
+
+  it('should call list join auth', () => {
+    service.listJoinAuths().subscribe();
+    const req = httpTesting.expectOne('api/smb/joinauth');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call list usersgroups', () => {
+    service.listUsersGroups().subscribe();
+    const req = httpTesting.expectOne('api/smb/usersgroups');
+    expect(req.request.method).toBe('GET');
+  });
 });
