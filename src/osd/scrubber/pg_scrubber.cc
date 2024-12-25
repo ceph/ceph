@@ -2417,6 +2417,16 @@ void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
   } else {
     f->dump_string("schedule", "scrubbing");
   }
+  const auto maybe_register = m_fsm->get_reservation_status();
+  if (maybe_register && maybe_register->m_num_to_reserve != 0) {
+    f->dump_bool("is_reserving_replicas", true);
+    f->dump_int("osd_to_respond", maybe_register->m_osd_to_respond);
+    f->dump_int("duration_seconds", maybe_register->m_duration_seconds);
+    f->dump_int("requested_in_order", maybe_register->m_ordinal_of_requested_replica);
+    f->dump_int("num_to_reserve", maybe_register->m_num_to_reserve);
+  } else {
+    f->dump_bool("is_reserving_replicas", false);
+  }
 }
 
 pg_scrubbing_status_t PgScrubber::get_schedule() const
