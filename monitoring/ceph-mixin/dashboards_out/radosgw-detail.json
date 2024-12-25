@@ -599,7 +599,7 @@
             "datasource": "$datasource",
             "hide": 0,
             "includeAll": true,
-            "label": "",
+            "label": "rgw_servers",
             "multi": false,
             "name": "rgw_servers",
             "options": [ ],
