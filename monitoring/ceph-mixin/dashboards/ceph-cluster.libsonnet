@@ -421,7 +421,8 @@ local g = import 'grafonnet/grafana.libsonnet';
           {id: 'thresholds', value: {mode: 'absolute', steps:
             [
               {color: 'green', value: null},
-              {color: 'yellow', value: 1}
+              {color: 'yellow', value: 1},
+              {color: 'red', value: 60}
             ]}
           }]
         }
