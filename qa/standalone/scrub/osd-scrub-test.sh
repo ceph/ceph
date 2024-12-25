@@ -544,6 +544,9 @@ function TEST_dump_scrub_schedule() {
             --osd_op_queue=wpq \
             --osd_stats_update_period_not_scrubbing=1 \
             --osd_stats_update_period_scrubbing=1 \
+            --osd_scrub_retry_after_noscrub=1 \
+            --osd_scrub_retry_pg_state=2 \
+            --osd_scrub_retry_delay=2 \
             --osd_scrub_sleep=0.2"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
@@ -682,6 +685,234 @@ function TEST_pg_dump_objects_scrubbed() {
 
     teardown $dir || return 1
 }
+
+function wait_initial_scrubs() {
+    local -n pg_to_prim_dict=$1
+    local extr_dbg=1 # note: 3 and above leave some temp files around
+
+    # set a long schedule for the periodic scrubs. Wait for the
+    # initial 'no previous scrub is known' scrubs to finish for all PGs.
+    bin/ceph tell osd.* config set osd_scrub_min_interval 7200
+    bin/ceph tell osd.* config set osd_deep_scrub_interval 14400
+    bin/ceph tell osd.* config set osd_max_scrubs 32
+    bin/ceph tell osd.* config set osd_scrub_sleep 0
+    bin/ceph tell osd.* config set osd_shallow_scrub_chunk_max 10
+    bin/ceph tell osd.* config set osd_scrub_chunk_max 10
+
+    for pg in "${!pg_to_prim_dict[@]}"; do
+      (( extr_dbg >= 1 )) && echo "Scheduling initial scrub for $pg"
+      bin/ceph tell $pg scrub || return 1
+    done
+
+    sleep 1
+    (( extr_dbg >= 1 )) && bin/ceph pg dump pgs --format=json-pretty | \
+      jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})'
+
+    tout=20
+    while [ $tout -gt 0 ] ; do
+      sleep 0.5
+      (( extr_dbg >= 2 )) && bin/ceph pg dump pgs --format=json-pretty | \
+        jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})'
+      not_done=$(bin/ceph pg dump pgs --format=json-pretty | \
+        jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})' | wc -l )
+      # note that we should ignore a header line
+      if [ "$not_done" -le 1 ]; then
+        break
+      fi
+      not_done=$(( (not_done - 2) / 4 ))
+      echo "Still waiting for $not_done PGs to finish initial scrubs (timeout $tout)"
+      tout=$((tout - 1))
+    done
+    (( tout == 0 )) && return 1
+    return 0
+}
+
+
+# Whenever a PG is being scrubbed at a regular, periodic, urgency, and is queued
+# for its replicas:
+# if the operator is requesting a scrub of the same PG, the operator's request
+# should trigger an abort of the ongoing scrub.
+#
+# The test process:
+# - a periodic scrub is initiated of a PG. That scrub is set to be a very slow one.
+# - a second PG, which shares some of its replicas, is intrcuted to be scrubbed. That one
+#   should be stuck in replica reservation. We will verify that.
+# - now - the operator is requesting that second PG to be scrubbed. The original (pending)
+#   scrub should be aborted. We would check for:
+#   - the new, operator's scrub to be scheduled
+#   - the replicas' reservers to be released
+function TEST_abort_periodic_for_operator() {
+    local dir=$1
+    local -A cluster_conf=(
+        ['osds_num']="5"
+        ['pgs_in_pool']="16"
+        ['pool_name']="test"
+    )
+    local extr_dbg=1 # note: 3 and above leave some temp files around
+
+    standard_scrub_wpq_cluster "$dir" cluster_conf 3 || return 1
+    local poolid=${cluster_conf['pool_id']}
+    local poolname=${cluster_conf['pool_name']}
+    echo "Pool: $poolname : $poolid"
+
+    #turn off '-x' (but remember previous state)
+    local saved_echo_flag=${-//[^x]/}
+    set +x
+
+    # fill the pool with some data
+    TESTDATA="testdata.$$"
+    dd if=/dev/urandom of=$TESTDATA bs=320 count=1
+    for i in $( seq 1 256 )
+    do
+        rados -p "$poolname" put "obj${i}" $TESTDATA 2>/dev/null 1>/dev/null
+    done
+    rm -f $TESTDATA
+    if [[ -n "$saved_echo_flag" ]]; then set -x; fi
+
+    # create the dictionary of the PGs in the pool
+    declare -A pg_pr
+    declare -A pg_ac
+    declare -A pg_po
+    build_pg_dicts "$dir" pg_pr pg_ac pg_po "-"
+    (( extr_dbg >= 2 )) && echo "PGs table:"
+    for pg in "${!pg_pr[@]}"; do
+      (( extr_dbg >= 2 )) && echo "Got: $pg: ${pg_pr[$pg]} ( ${pg_ac[$pg]} ) ${pg_po[$pg]}"
+    done
+
+    wait_initial_scrubs pg_pr || return 1
+
+    # limit all OSDs to one scrub at a time
+    bin/ceph tell osd.* config set osd_max_scrubs 1
+    bin/ceph tell osd.* config set osd_stats_update_period_not_scrubbing 1
+
+    # configure for slow scrubs
+    bin/ceph tell osd.* config set osd_scrub_sleep 3
+    bin/ceph tell osd.* config set osd_shallow_scrub_chunk_max 2
+    bin/ceph tell osd.* config set osd_scrub_chunk_max 2
+    (( extr_dbg >= 2 )) && bin/ceph tell osd.2 dump_scrub_reservations --format=json-pretty
+
+    # the first PG to work with:
+    local pg1="1.0"
+    # and another one, that shares its primary, and at least one more active set member
+    local pg2=""
+     for pg in "${!pg_pr[@]}"; do
+      if [[ "${pg_pr[$pg]}" == "${pg_pr[$pg1]}" ]]; then
+        local -i common=0
+        count_common_active $pg $pg1 pg_ac common
+        if [[ $common -gt 1 ]]; then
+          pg2=$pg
+          break
+        fi
+      fi
+    done
+    if [[ -z "$pg2" ]]; then
+      # \todo handle the case when no such PG is found
+      echo "No PG found with the same primary as $pg1"
+      return 1
+    fi
+
+    # the common primary is allowed two concurrent scrubs
+    bin/ceph tell osd."${pg_pr[$pg1]}" config set osd_max_scrubs 2
+    echo "The two PGs to manipulate are $pg1 and $pg2"
+
+    set_query_debug "$pg1"
+    # wait till the information published by pg1 is updated to show it as
+    # not being scrubbed
+    local is_act
+    for i in $( seq 1 3 )
+    do
+      is_act=$(bin/ceph pg "$pg1" query | jq '.scrubber.active')
+      if [[ "$is_act" = "false" ]]; then
+          break
+      fi
+      echo "Still waiting for pg $pg1 to finish scrubbing"
+      sleep 0.7
+    done
+    bin/ceph pg dump pgs
+    if [[ "$is_act" != "false" ]]; then
+      bin/ceph pg "$pg1" query
+      echo "PG $pg1 appears to be still scrubbing"
+      return 1
+    fi
+    sleep 0.5
+
+    echo "Initiating a periodic scrub of $pg1"
+    (( extr_dbg >= 2 )) && bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+    bin/ceph tell $pg1 schedule-deep-scrub || return 1
+    sleep 1
+    (( extr_dbg >= 2 )) && bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+
+    for i in $( seq 1 14 )
+    do
+      sleep 0.5
+      stt=$(bin/ceph pg "$pg1" query | jq '.scrubber')
+      is_active=$(echo $stt | jq '.active')
+      is_reserving_replicas=$(echo $stt | jq '.is_reserving_replicas')
+      if [[ "$is_active" = "true" && "$is_reserving_replicas" = "false" ]]; then
+          break
+      fi
+      echo "Still waiting for pg $pg1 to start scrubbing: $stt"
+    done
+    if [[ "$is_active" != "true" || "$is_reserving_replicas" != "false" ]]; then
+      bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+      echo "The scrub is not active or is reserving replicas"
+      return 1
+    fi
+    (( extr_dbg >= 2 )) && bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+
+
+    # PG 1 is scrubbing, and has reserved the replicas - soem of which are shared
+    # by PG 2. As the max-scrubs was set to 1, that should prevent PG 2 from
+    # reserving its replicas.
+
+    (( extr_dbg >= 1 )) && bin/ceph tell osd.* dump_scrub_reservations --format=json-pretty
+
+    # now - the 2'nd scrub - which should be blocked on reserving
+    set_query_debug "$pg2"
+    bin/ceph tell "$pg2" schedule-deep-scrub
+    sleep 0.5
+    (( extr_dbg >= 2 )) && echo "===================================================================================="
+    (( extr_dbg >= 2 )) && bin/ceph pg "$pg2" query -f json-pretty | jq '.scrubber'
+    (( extr_dbg >= 2 )) && bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+    sleep 1
+    (( extr_dbg >= 2 )) && echo "===================================================================================="
+    (( extr_dbg >= 2 )) && bin/ceph pg "$pg2" query -f json-pretty | jq '.scrubber'
+    (( extr_dbg >= 2 )) && bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+
+    # make sure pg2 scrub is stuck in the reserving state
+    local stt2=$(bin/ceph pg "$pg2" query | jq '.scrubber')
+    local pg2_is_reserving
+    pg2_is_reserving=$(echo $stt2 | jq '.is_reserving_replicas')
+    if [[ "$pg2_is_reserving" != "true" ]]; then
+      echo "The scheduled scrub for $pg2 should have been stuck"
+      bin/ceph pg dump pgs
+      return 1
+    fi
+
+    # now - issue an operator-initiated scrub on pg2.
+    # The periodic scrub should be aborted, and the operator-initiated scrub should start.
+    echo "Instructing $pg2 to perform a high-priority scrub"
+    bin/ceph tell "$pg2" scrub
+    for i in $( seq 1 10 )
+    do
+      sleep 0.5
+      stt2=$(bin/ceph pg "$pg2" query | jq '.scrubber')
+      pg2_is_active=$(echo $stt2 | jq '.active')
+      pg2_is_reserving=$(echo $stt2 | jq '.is_reserving_replicas')
+      if [[ "$pg2_is_active" = "true" && "$pg2_is_reserving" != "true" ]]; then
+            break
+      fi
+      echo "Still waiting: $stt2"
+    done
+
+    if [[ "$pg2_is_active" != "true" || "$pg2_is_reserving" = "true" ]]; then
+      echo "The high-priority scrub for $pg2 is not active or is reserving replicas"
+      return 1
+    fi
+    echo "Done"
+}
+
+
 
 main osd-scrub-test "$@"
 
