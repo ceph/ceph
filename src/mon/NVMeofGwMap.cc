@@ -899,6 +899,7 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const
 {
   list<string> singleGatewayDetail;
   list<string> gatewayDownDetail;
+  list<string> gatewayCreatedWrnDetail;
   for (const auto& created_map_pair: created_gws) {
     const auto& group_key = created_map_pair.first;
     auto& group = group_key.second;
@@ -915,6 +916,19 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const
         ostringstream ss;
         ss << "NVMeoF Gateway '" << gw_id << "' is unavailable." ;
         gatewayDownDetail.push_back(ss.str());
+      } else if (gw_created.availability == gw_availability_t::GW_CREATED) {
+        const BeaconSubsystems& subsystems = gw_created.subsystems;
+        if (subsystems.size() != 0) {
+          for (auto &subsys: subsystems) {
+            if (subsys.listeners.size()) {
+              // subsystems and listener exists 
+              ostringstream ss;
+              ss << "NVMeoF Gateway '" << gw_id << "' is in unexpected CREATED state." ;
+              gatewayCreatedWrnDetail.push_back(ss.str());
+              break;
+            }
+          }
+        }
       }
     }
   }
@@ -933,6 +947,14 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const
     auto& d = checks->add("NVMEOF_GATEWAY_DOWN", HEALTH_WARN,
         ss.str(), gatewayDownDetail.size());
     d.detail.swap(gatewayDownDetail);
+  }
+  if (!gatewayCreatedWrnDetail.empty()) {
+    ostringstream ss;
+    ss << gatewayCreatedWrnDetail.size() << " gateway(s) are in unexpected CREATED state"
+      << "; no beacons from gateway, indicates hardware issue.";
+    auto& d = checks->add("NVMEOF_BAD_CREATED_STATE", HEALTH_WARN,
+        ss.str(), gatewayCreatedWrnDetail.size());
+    d.detail.swap(gatewayCreatedWrnDetail);
   }
 }
 
