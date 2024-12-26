@@ -17,4 +17,16 @@ export class RgwUserAccountsService {
     }
     return this.http.get(this.url, { params });
   }
+
+  get(account_id: string): Observable<any> {
+    let params = new HttpParams();
+    if (account_id) {
+      params = params.append('account_id', account_id);
+    }
+    return this.http.get(this.url, { params });
+  }
+
+  create(payload: { account_id: string; account_name: string; email: string }): Observable<any> {
+    return this.http.post(this.url, payload);
+  }
 }

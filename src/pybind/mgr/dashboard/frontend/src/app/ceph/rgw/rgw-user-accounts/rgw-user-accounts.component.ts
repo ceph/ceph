@@ -1,6 +1,6 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -8,26 +8,35 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { Accounts } from '../models/rgw-user-accounts';
+import { Account } from '../models/rgw-user-accounts';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { Subscription } from 'rxjs';
+import { Router } from '@angular/router';
+
+const BASE_URL = 'rgw/accounts';
 
 @Component({
   selector: 'cd-rgw-user-accounts',
   templateUrl: './rgw-user-accounts.component.html',
-  styleUrls: ['./rgw-user-accounts.component.scss']
+  styleUrls: ['./rgw-user-accounts.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class RgwUserAccountsComponent implements OnInit {
+export class RgwUserAccountsComponent implements OnInit, OnDestroy {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
   permission: Permission;
   tableActions: CdTableAction[] = [];
   columns: CdTableColumn[] = [];
-  accounts: Accounts[] = [];
+  accounts: Account[] = [];
   selection: CdTableSelection = new CdTableSelection();
+  private routerSubscription: Subscription = new Subscription();
 
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
+    private router: Router,
     private rgwUserAccountsService: RgwUserAccountsService
   ) {}
 
@@ -80,11 +89,19 @@ export class RgwUserAccountsComponent implements OnInit {
         flexGrow: 1
       }
     ];
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: Icons.add,
+      click: () => this.router.navigate([BASE_URL, { outlets: { modal: URLVerbs.CREATE } }]),
+      name: this.actionLabels.CREATE,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+    };
+    this.tableActions = [addAction];
   }
 
-  getAccountsList(context: CdTableFetchDataContext) {
+  getAccountsList(context?: CdTableFetchDataContext) {
     this.rgwUserAccountsService.list(true).subscribe({
-      next: (accounts) => {
+      next: (accounts: Account[]) => {
         this.accounts = accounts;
       },
       error: () => {
@@ -97,5 +114,11 @@ export class RgwUserAccountsComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  ngOnDestroy() {
+    if (this.routerSubscription) {
+      this.routerSubscription.unsubscribe();
+    }
   }
 }

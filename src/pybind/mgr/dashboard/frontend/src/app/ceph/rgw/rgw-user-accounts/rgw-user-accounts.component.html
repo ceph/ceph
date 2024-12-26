@@ -22,3 +22,5 @@
                     [tableActions]="tableActions">
   </cd-table-actions>
 </cd-table>
+<router-outlet name="modal"
+               (deactivate)="getAccountsList()"></router-outlet>

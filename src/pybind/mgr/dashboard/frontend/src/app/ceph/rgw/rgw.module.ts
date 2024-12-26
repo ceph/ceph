@@ -77,6 +77,7 @@ import {
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
+import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
 
 @NgModule({
   imports: [
@@ -156,7 +157,8 @@ import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.
     RgwMultisiteSyncFlowModalComponent,
     RgwMultisiteSyncPipeModalComponent,
     RgwMultisiteTabsComponent,
-    RgwUserAccountsComponent
+    RgwUserAccountsComponent,
+    RgwUserAccountsFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -189,7 +191,15 @@ const routes: Routes = [
   {
     path: 'accounts',
     data: { breadcrumbs: 'Accounts' },
-    children: [{ path: '', component: RgwUserAccountsComponent }]
+    component: RgwUserAccountsComponent,
+    children: [
+      {
+        path: URLVerbs.CREATE,
+        component: RgwUserAccountsFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE },
+        outlet: 'modal'
+      }
+    ]
   },
   {
     path: 'roles',

@@ -1,0 +1,78 @@
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+  </cds-modal-header>
+  <ng-container *cdFormLoading="loading">
+  <form name="accountForm"
+        #formDir="ngForm"
+        [formGroup]="accountForm"
+        novalidate>
+    <div cdsModalContent>
+      <!-- account_id -->
+      <div class="form-item">
+        <cds-text-label label="account_id"
+                        for="account_id"
+                        [invalid]="!accountForm.controls.account_id.valid && accountForm.controls.account_id.dirty"
+                        [invalidText]="accountIdError"
+                        i18n>Account Id
+          <input cdsText
+                 type="text"
+                 placeholder="Enter account Id starting with RGW followed by 17 digits"
+                 id="account_id"
+                 name="account_id"
+                 formControlName="account_id"
+                 autofocus>
+        </cds-text-label>
+        <ng-template #accountIdError>
+          <span *ngIf="accountForm.showError('account_id', formDir, 'pattern')"
+                class="invalid-feedback">
+            <ng-container i18n> Account id should start with 'RGW' followed by 17 digits </ng-container>
+          </span>
+        </ng-template>
+      </div>
+      <!-- Account Name -->
+      <div class="form-item">
+        <cds-text-label label="Account Name"
+                        for="acc_name"
+                        i18n>Account Name
+          <input cdsText
+                 type="text"
+                 placeholder="Enter account name"
+                 id="acc_name"
+                 name="acc_name"
+                 formControlName="account_name"/>
+        </cds-text-label>
+      </div>
+      <!-- Email -->
+      <div class="form-item">
+        <cds-text-label label="email"
+                        for="acc_name"
+                        [invalid]="!accountForm.controls.email.valid && accountForm.controls.email.dirty"
+                        [invalidText]="emailError"
+                        i18n>Email
+          <input cdsText
+                 type="text"
+                 placeholder="Enter email"
+                 id="email"
+                 name="email"
+                 formControlName="email"/>
+        </cds-text-label>
+        <ng-template #emailError>
+          <span *ngIf="accountForm.showError('email', formDir, 'email')">
+            <ng-container i18n> Please enter a valid email </ng-container>
+          </span>
+        </ng-template>
+      </div>
+    </div>
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="accountForm"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                          [modalForm]="true">
+    </cd-form-button-panel>
+  </form>
+</ng-container>
+</cds-modal>
