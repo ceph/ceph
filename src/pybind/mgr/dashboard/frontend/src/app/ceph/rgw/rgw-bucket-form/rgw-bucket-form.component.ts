@@ -50,7 +50,6 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   public bucketPolicyTextArea: ElementRef<any>;
   @ViewChild('lifecycleTextArea')
   public lifecycleTextArea: ElementRef<any>;
-
   bucketForm: CdFormGroup;
   editing = false;
   owners: string[] = null;
@@ -257,6 +256,11 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         this.bucketForm.get('encryption_type').setValue('');
       }
     });
+    // const s=this.bucketForm.get('bid');
+    // console.log("this.bucketForm.getValue('bid')", s);
+    // this.rgwUserService.getRateLimit(this.bucketForm.getValue('bid')).subscribe((data)=>{
+    //   console.log("data",data);
+    // })
 
     if (!this.editing) {
       promises['getPlacementTargets'] = this.rgwSiteService.get('placement-targets');
@@ -267,8 +271,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       if (params.hasOwnProperty('bid')) {
         const bid = decodeURIComponent(params.bid);
         promises['getBid'] = this.rgwBucketService.get(bid);
-      }
-
+      } 
       forkJoin(promises).subscribe((data: any) => {
         // Get the list of possible owners.
         this.owners = (<string[]>data.owners).sort();
@@ -385,6 +388,13 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     const bucketPolicy = this.getBucketPolicy();
     const cannedAcl = this.permissionToCannedAcl();
 
+     // Check if user ratelimit has been modified.
+     if (this._isBucketRateLimitDirty()) {
+      const bucketRateLimitArgs = this._getBucketRateLimitArgs();
+      // console.log('bucketRateLimitArgs',bucketRateLimitArgs);
+      this.rgwBucketService.updateBucketRateLimit(bucketRateLimitArgs).subscribe();
+     }
+  
     if (this.editing) {
       // Edit
       const versioning = this.getVersioningStatus();
@@ -655,4 +665,54 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         return 'private';
     }
   }
+
+   /**
+   * Check if the bucket rate limit has been modified.
+   * @return {Boolean} Returns TRUE if the bucket rate limit has been modified.
+   */
+   private _isBucketRateLimitDirty(): boolean {
+    return [
+      'bucket_rate_limit_enabled',
+      'bucket_rate_limit_max_readOps_unlimited',
+      'bucket_rate_limit_max_readOps',
+      'bucket_rate_limit_max_writeOps_unlimited',
+      'bucket_rate_limit_max_writeOps',
+      'bucket_rate_limit_max_readBytes_unlimited',
+      'bucket_rate_limit_max_readBytes',
+      'bucket_rate_limit_max_writeBytes_unlimited',
+      'bucket_rate_limit_max_writeBytes'
+    ].some((path) => {
+      return this.bucketForm.get(path).dirty;
+    });
+  }
+   /**
+   * Helper function to get the arguments for the API request when the bucket
+   * rate limit configuration has been modified.
+   */
+  private _getBucketRateLimitArgs(): Record<string, any> {
+
+    const result = {
+      "enabled": this.bucketForm.getValue('bucket_rate_limit_enabled')  + '',
+      "name": this.bucketForm.getValue('bid'),
+      "max_read_ops": '0',
+      "max_write_ops": '0',
+      "max_read_bytes": '0',
+      "max_write_bytes": '0'
+    }
+
+    if (!this.bucketForm.getValue('bucket_rate_limit_max_readOps_unlimited')) { 
+      result['max_read_ops'] =(this.bucketForm.getValue('bucket_rate_limit_max_readOps'))+'';
+    }
+    if (!this.bucketForm.getValue('bucket_rate_limit_max_writeOps_unlimited')) {
+      result['max_write_ops'] =(this.bucketForm.getValue('bucket_rate_limit_max_writeOps'))+'';
+    }
+    if (!this.bucketForm.getValue('bucket_rate_limit_max_readBytes_unlimited')) {
+      result['max_read_bytes'] =(this.bucketForm.getValue('bucket_rate_limit_max_readBytes'))+'';
+    }
+    if (!this.bucketForm.getValue('bucket_rate_limit_max_writeBytes_unlimited')) {
+      result['max_write_bytes'] =(this.bucketForm.getValue('bucket_rate_limit_max_writeBytes'))+'';
+    }
+    return result;
+  }
+
 }

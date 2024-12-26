@@ -683,7 +683,7 @@
                        class="form-control"
                        type="text"
                        formControlName="bucket_rate_limit_max_readOps"
-                       cdDimlessBinary>
+                       cdIopm>
                 <span class="invalid-feedback"
                       *ngIf="bucketForm.showError('bucket_rate_limit_max_readOps', frm, 'required')"
                       i18n>This field is
@@ -723,9 +723,9 @@
               <div class="cd-col-form-input">
                 <input id="bucket_rate_limit_max_writeOps"
                        class="form-control"
-                       type="number"
+                       type="text"
                        formControlName="bucket_rate_limit_max_writeOps"
-                       min="0">
+                       cdIopm>
                 <span class="invalid-feedback"
                       *ngIf="bucketForm.showError('bucket_rate_limit_max_writeOps', frm, 'required')"
                       i18n>This field is required.</span>
@@ -761,9 +761,9 @@
               <div class="cd-col-form-input">
                 <input id="bucket_rate_limit_max_readBytes"
                        class="form-control"
-                       type="number"
+                       type="text"
                        formControlName="bucket_rate_limit_max_readBytes"
-                       min="0">
+                       cdDimlessBinaryPerMinute>
                 <span class="invalid-feedback"
                       *ngIf="bucketForm.showError('bucket_rate_limit_max_readBytes', frm, 'required')"
                       i18n>This field is required.</span>
@@ -799,9 +799,9 @@
               <div class="cd-col-form-input">
                 <input id="bucket_rate_limit_max_writeBytes"
                        class="form-control"
-                       type="number"
+                       type="text"
                        formControlName="bucket_rate_limit_max_writeBytes"
-                       min="0">
+                       cdDimlessBinaryPerMinute>
                 <span class="invalid-feedback"
                       *ngIf="bucketForm.showError('bucket_rate_limit_max_writeBytes', frm, 'required')"
                       i18n>This field is required.</span>

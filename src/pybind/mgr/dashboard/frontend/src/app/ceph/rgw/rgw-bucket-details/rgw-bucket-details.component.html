@@ -125,64 +125,54 @@
 
 
         <!-- Bucket Rate Limit -->
-        <ng-container>
+        <ng-container *ngIf="selection.bucket_ratelimit">
           <legend i18n>Bucket Rate Limit</legend>
           <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
             <tbody>
               <tr>
                 <td i18n
                     class="bold w-25">Enabled</td>
-                <td class="w-75">No</td>
-                <!--TODO-->
-                <!-- <td class="w-75">{{ selection.bucket_rate_limit_enabled | booleanText }}</td> -->
+                <td class="w-75">{{ selection.bucket_ratelimit.enabled | booleanText }}</td>
               </tr>
               <tr>
                 <td i18n
                     class="bold">Maximum Read Ops</td>
-                <td i18n>-</td>
-                <!--TODO-->
-                <!-- <td *ngIf="!selection.bucket_rate_limit_enabled">-</td> -->
-                <!-- <td *ngIf="selection.bucket_rate_limit_enabled && selection.rate_limit.bucket_rate_limit_max_readOps <= -1"
-                         i18n>Unlimited</td> -->
-                <!-- <td *ngIf="selection.bucket_rate_limit_enabled && selection.rate_limit.bucket_rate_limit_max_readOps > -1">
-                  {{ selection.rate_limit.bucket_rate_limit_max_readOps | dimlessBinary}}
-                </td> -->
+                <td *ngIf="!selection.bucket_ratelimit.enabled">-</td>
+                <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_read_ops <= -1"
+                         i18n>Unlimited</td>
+                <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_read_ops > -1">
+                  {{ selection.bucket_ratelimit.max_read_ops}}
+                </td>
               </tr>
               <tr>
                 <td i18n
                     class="bold">Maximum Write Ops</td>
-                <td i18n>-</td>
-                <!--TODO-->
-                <!-- <td *ngIf="!selection.bucket_rate_limit_enabled">-</td> -->
-                <!-- <td *ngIf="selection.bucket_rate_limit_enabled && selection.rate_limit.bucket_rate_limit_max_writeOps <= -1"
+                <td *ngIf="!selection.bucket_ratelimit.enabled">-</td>
+                <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_write_ops <= -1"
                          i18n>Unlimited</td>
-                <td *ngIf="selection.bucket_rate_limit_enabled && selection.rate_limit.bucket_rate_limit_max_writeOps > -1">
-                  {{ selection.rate_limit.bucket_rate_limit_max_writeOps | dimlessBinary}}
-                </td> -->
+                <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_write_ops > -1">
+                  {{ selection.bucket_ratelimit.max_write_ops}}
+                </td>
               </tr>
               <tr>
                 <td i18n
                     class="bold">Maximum Read Bytes</td>
-                <td i18n>-</td>
-                <!--TODO-->
-                <!-- <td *ngIf="!selection.bucket_rate_limit_enabled">-</td> -->
-                <!-- <td *ngIf="selection.bucket_rate_limit_enabled && selection.rate_limit.bucket_rate_limit_max_readBytes <= -1"
+                <td *ngIf="!selection.bucket_ratelimit.enabled">-</td>
+                <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_read_bytes <= -1"
                          i18n>Unlimited</td>
-                <td *ngIf="selection.bucket_rate_limit_enabled && selection.rate_limit.bucket_rate_limit_max_readBytes > -1">
-                  {{ selection.rate_limit.bucket_rate_limit_max_readBytes | dimlessBinary}}
-                </td> -->
+                <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_read_bytes > -1">
+                  {{ selection.bucket_ratelimit.max_read_bytes | dimlessBinary}}
+                </td>
               </tr>
               <tr>
                 <td i18n
                     class="bold">Maximum Write Bytes</td>
-                <td i18n>-</td>
-                <!--TODO-->
-                <!-- <td *ngIf="!selection.bucket_rate_limit_enabled">-</td> -->
-                <!-- <td *ngIf="selection.bucket_rate_limit_enabled && selection.rate_limit.bucket_rate_limit_max_writeBytes <= -1"
+                <td *ngIf="!selection.bucket_ratelimit.enabled">-</td>
+                <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_write_bytes <= -1"
                          i18n>Unlimited</td>
-                <td *ngIf="selection.bucket_rate_limit_enabled && selection.rate_limit.bucket_rate_limit_max_writeBytes > -1">
-                  {{ selection.rate_limit.bucket_rate_limit_max_writeBytes | dimlessBinary}}
-                </td> -->
+                <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_write_bytes > -1">
+                  {{ selection.bucket_ratelimit.max_write_bytes | dimlessBinary}}
+                </td>
               </tr>
             </tbody>
           </table>

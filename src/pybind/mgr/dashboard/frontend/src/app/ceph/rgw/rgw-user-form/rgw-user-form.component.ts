@@ -40,7 +40,6 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   s3Keys: RgwUserS3Key[] = [];
   swiftKeys: RgwUserSwiftKey[] = [];
   capabilities: RgwUserCapability[] = [];
-
   action: string;
   resource: string;
   subuserLabel: string;
@@ -237,12 +236,14 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       const observables = [];
       observables.push(this.rgwUserService.get(uid));
       observables.push(this.rgwUserService.getQuota(uid));
+      observables.push(this.rgwUserService.getUserRateLimit(uid));
       observableForkJoin(observables).subscribe(
         (resp: any[]) => {
           // Get the default values.
           const defaults = _.clone(this.userForm.value);
           // Extract the values displayed in the form.
           let value = _.pick(resp[0], _.keys(this.userForm.value));
+          console.log("resp", resp);
           // Map the max. buckets values.
           switch (value['max_buckets']) {
             case -1:
@@ -257,6 +258,15 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
               value['max_buckets_mode'] = 1;
               break;
           }
+         
+
+          //Map Rate Limit Values
+          value['user_rate_limit_enabled']= resp[2].user_ratelimit.enabled;
+          this._setRateLimitProperty(value, 'user_rate_limit_max_readBytes', 'user_rate_limit_max_readBytes_unlimited', resp[2].user_ratelimit.max_read_bytes);
+          this._setRateLimitProperty(value, 'user_rate_limit_max_writeBytes', 'user_rate_limit_max_writeBytes_unlimited', resp[2].user_ratelimit.max_write_bytes);
+          this._setRateLimitProperty(value, 'user_rate_limit_max_readOps', 'user_rate_limit_max_readOps_unlimited', resp[2].user_ratelimit.max_read_ops);
+          this._setRateLimitProperty(value, 'user_rate_limit_max_writeOps', 'user_rate_limit_max_writeOps_unlimited', resp[2].user_ratelimit.max_write_ops);
+
           // Map the quota values.
           ['user', 'bucket'].forEach((type) => {
             const quota = resp[1][type + '_quota'];
@@ -335,6 +345,12 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (this._isUserQuotaDirty()) {
       const userQuotaArgs = this._getUserQuotaArgs();
       this.submitObservables.push(this.rgwUserService.updateQuota(uid, userQuotaArgs));
+    }
+
+     // Check if user ratelimit has been modified.
+     if (this._isUserRateLimitDirty()) {
+      const userRateLimitArgs = this._getUserRateLimitArgs();
+      this.submitObservables.push(this.rgwUserService.updateUserRateLimit(userRateLimitArgs));
     }
     // Check if bucket quota has been modified.
     if (this._isBucketQuotaDirty()) {
@@ -752,6 +768,68 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     }
     return result;
   }
+
+
+   /**
+   * Check if the user rate limit has been modified.
+   * @return {Boolean} Returns TRUE if the user rate limit has been modified.
+   */
+   private _isUserRateLimitDirty(): boolean {
+    return [
+      'user_rate_limit_enabled',
+      'user_rate_limit_max_readOps_unlimited',
+      'user_rate_limit_max_readOps',
+      'user_rate_limit_max_writeOps_unlimited',
+      'user_rate_limit_max_writeOps',
+      'user_rate_limit_max_readBytes_unlimited',
+      'user_rate_limit_max_readBytes',
+      'user_rate_limit_max_writeBytes_unlimited',
+      'user_rate_limit_max_writeBytes'
+    ].some((path) => {
+      return this.userForm.get(path).dirty;
+    });
+  }
+   /**
+   * Helper function to get the arguments for the API request when the user
+   * rate limit configuration has been modified.
+   */
+  private _getUserRateLimitArgs(): Record<string, any> {
+
+    const result = {
+      "enabled": this.userForm.getValue('user_rate_limit_enabled') + '',
+      "name": this.userForm.getValue('user_id'),
+      "max_read_ops": '0',
+      "max_write_ops": '0',
+      "max_read_bytes": '0',
+      "max_write_bytes": '0'
+    }
+    if (!this.userForm.getValue('user_rate_limit_max_readOps_unlimited')) {
+      result['max_read_ops'] = new FormatterService().toIopm(this.userForm.getValue('user_rate_limit_max_readOps'))+'';
+    }
+    if (!this.userForm.getValue('user_rate_limit_max_writeOps_unlimited')) {
+      result['max_write_ops'] = new FormatterService().toIopm(this.userForm.getValue('user_rate_limit_max_writeOps'))+'';
+    }
+    if (!this.userForm.getValue('user_rate_limit_max_readBytes_unlimited')) {
+       // Convert the given value to bytes.
+      
+       result['max_read_bytes']  = (this.userForm.getValue('user_rate_limit_max_readBytes')) + '';
+    }
+    if (!this.userForm.getValue('user_rate_limit_max_writeBytes_unlimited')) {
+      result['max_write_bytes'] = (this.userForm.getValue('user_rate_limit_max_writeBytes'))+'';
+    }
+    return result;
+  }
+
+  private _setRateLimitProperty(value: Pick<any, string>, rateLimitKey:string, unlimitedKey:string, property:any) {
+    if (property < 0) {
+      value[unlimitedKey] = true;
+      value[rateLimitKey] = null;
+    } else {
+      value[unlimitedKey] = false;
+      value[rateLimitKey] = property; //TODO-set unit
+    }
+  }
+
 
   /**
    * Helper function to get the arguments for the API request when the bucket

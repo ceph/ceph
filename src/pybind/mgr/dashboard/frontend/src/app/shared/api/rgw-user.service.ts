@@ -176,4 +176,12 @@ export class RgwUserService {
       })
     );
   }
+
+  updateUserRateLimit(rateLimitArgs:Record<string, any>) {
+    return this.http.post(`${this.url}/ratelimit`,rateLimitArgs);
+  }
+
+  getUserRateLimit(name:string) {
+    return this.http.get(`${this.url}/ratelimit/${name}`);
+  }
 }

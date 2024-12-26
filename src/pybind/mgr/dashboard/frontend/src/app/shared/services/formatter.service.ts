@@ -124,6 +124,20 @@ export class FormatterService {
     return 0;
   }
 
+   /**
+   * Converts `x IOPM` to `x` (currently) or `0` if the conversion fails
+   */
+   toIopm(value: string): number {
+    const pattern = /^\s*(\d+)\s*(IOPM)?\s*$/i;
+    const testResult = pattern.exec(value);
+
+    if (testResult !== null) {
+      return +testResult[1];
+    }
+
+    return 0;
+  }
+
   toOctalPermission(modes: any) {
     const scopes = ['owner', 'group', 'others'];
     let octalMode = '';

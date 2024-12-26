@@ -717,7 +717,7 @@
                      class="form-control"
                      type="text"
                      formControlName="user_rate_limit_max_readOps"
-                     cdDimlessBinary>
+                     cdIopm>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('user_rate_limit_max_readOps', frm, 'required')"
                     i18n>This field is required.</span>
@@ -755,9 +755,9 @@
             <div class="cd-col-form-input">
               <input id="user_rate_limit_max_writeOps"
                      class="form-control"
-                     type="number"
+                     type="text"
                      formControlName="user_rate_limit_max_writeOps"
-                     min="0">
+                     cdIopm>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('user_rate_limit_max_writeOps', frm, 'required')"
                     i18n>This field is required.</span>
@@ -793,9 +793,9 @@
             <div class="cd-col-form-input">
               <input id="user_rate_limit_max_readBytes"
                      class="form-control"
-                     type="number"
+                     type="text"
                      formControlName="user_rate_limit_max_readBytes"
-                     min="0">
+                     cdDimlessBinaryPerMinute>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('user_rate_limit_max_readBytes', frm, 'required')"
                     i18n>This field is required.</span>
@@ -823,7 +823,7 @@
           </div>
 
           <!-- Maximum Write Bytes -->
-            <div class="form-group row"
+            <div class="form-group row" 
                  *ngIf="userForm.controls.user_rate_limit_enabled.value && !userForm.getValue('user_rate_limit_max_writeBytes_unlimited')">
               <label class="cd-col-form-label required"
                      for="user_rate_limit_max_writeBytes"
@@ -831,9 +831,9 @@
               <div class="cd-col-form-input">
               <input id="user_rate_limit_max_writeBytes"
                      class="form-control"
-                     type="number"
+                     type="text"
                      formControlName="user_rate_limit_max_writeBytes"
-                     min="0">
+                     cdDimlessBinaryPerMinute>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('user_rate_limit_max_writeBytes', frm, 'required')"
                     i18n>This field is required.</span>
