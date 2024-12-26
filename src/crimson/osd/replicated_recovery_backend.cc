@@ -568,14 +568,17 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     return seastar::make_ready_future<eversion_t>(ver);
   }
   return interruptor::make_interruptible(interruptor::when_all_succeed(
-      backend->omap_get_header(coll, ghobject_t(oid)).handle_error_interruptible<false>(
+      backend->omap_get_header(
+        coll, ghobject_t(oid), CEPH_OSD_OP_FLAG_FADVISE_DONTNEED
+      ).handle_error_interruptible<false>(
 	crimson::os::FuturizedStore::Shard::read_errorator::all_same_way(
 	  [oid] (const std::error_code& e) {
 	  logger().debug("read_metadata_for_push_op, error {} when getting omap header: {}", e, oid);
 	  return seastar::make_ready_future<bufferlist>();
 	})),
-      interruptor::make_interruptible(store->get_attrs(coll, ghobject_t(oid)))
-      .handle_error_interruptible<false>(
+      interruptor::make_interruptible(
+        store->get_attrs(coll, ghobject_t(oid), CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)
+      ).handle_error_interruptible<false>(
 	crimson::os::FuturizedStore::Shard::get_attrs_ertr::all_same_way(
 	  [oid] (const std::error_code& e) {
 	  logger().debug("read_metadata_for_push_op, error {} when getting attrs: {}", e, oid);
@@ -613,8 +616,14 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
     return seastar::make_ready_future<uint64_t>(offset);
   }
   // 1. get the extents in the interested range
-  return interruptor::make_interruptible(backend->fiemap(coll, ghobject_t{oid},
-    0, copy_subset.range_end())).safe_then_interruptible(
+  return interruptor::make_interruptible(
+    backend->fiemap(
+      coll,
+      ghobject_t{oid},
+      0,
+      copy_subset.range_end(),
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)
+  ).safe_then_interruptible(
     [=, this](auto&& fiemap_included) mutable {
     interval_set<uint64_t> extents;
     try {
@@ -630,8 +639,12 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
     push_op->data_included.span_of(extents, offset, max_len);
     // 3. read the truncated extents
     // TODO: check if the returned extents are pruned
-    return interruptor::make_interruptible(store->readv(coll, ghobject_t{oid},
-      push_op->data_included, 0));
+    return interruptor::make_interruptible(
+      store->readv(
+        coll,
+        ghobject_t{oid},
+        push_op->data_included,
+        CEPH_OSD_OP_FLAG_FADVISE_DONTNEED));
   }).safe_then_interruptible([push_op, range_end=copy_subset.range_end()](auto &&bl) {
     push_op->data.claim_append(std::move(bl));
     uint64_t recovered_to = 0;
