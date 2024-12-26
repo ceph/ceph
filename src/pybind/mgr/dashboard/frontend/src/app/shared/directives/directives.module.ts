@@ -17,6 +17,8 @@ import { StatefulTabDirective } from './stateful-tab.directive';
 import { TrimDirective } from './trim.directive';
 import { RequiredFieldDirective } from './required-field.directive';
 import { ReactiveFormsModule } from '@angular/forms';
+import { DimlessBinaryPerMinuteDirective } from './dimless-binary-per-minute.directive';
+import { IopmDirective } from './iopm.directive';
 
 @NgModule({
   imports: [ReactiveFormsModule],
@@ -24,10 +26,12 @@ import { ReactiveFormsModule } from '@angular/forms';
     AutofocusDirective,
     DimlessBinaryDirective,
     DimlessBinaryPerSecondDirective,
+    DimlessBinaryPerMinuteDirective,
     PasswordButtonDirective,
     TrimDirective,
     MillisecondsDirective,
     IopsDirective,
+    IopmDirective,
     FormLoadingDirective,
     StatefulTabDirective,
     FormInputDisableDirective,
@@ -42,10 +46,12 @@ import { ReactiveFormsModule } from '@angular/forms';
     AutofocusDirective,
     DimlessBinaryDirective,
     DimlessBinaryPerSecondDirective,
+    DimlessBinaryPerMinuteDirective,
     PasswordButtonDirective,
     TrimDirective,
     MillisecondsDirective,
     IopsDirective,
+    IopmDirective,
     FormLoadingDirective,
     StatefulTabDirective,
     FormInputDisableDirective,

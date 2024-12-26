@@ -6,3 +6,7 @@
 .custom-control-label {
   @include type.type-scale(3);
 }
+.global-rate-limit-align{
+  display: flex;
+  flex-direction: column;
+}

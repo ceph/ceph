@@ -272,4 +272,13 @@ export class RgwBucketService extends ApiClient {
       return this.http.get(`${this.url}/getEncryptionConfig`, { params: params });
     });
   }
+  updateBucketRateLimit(bucketRateLimitArgs:Record<string, any>) {
+    return this.http.post(`${this.url}/ratelimit`, bucketRateLimitArgs);
+  }
+  getBucketRateLimit(name:string) {
+    return this.http.get(`${this.url}/ratelimit/${name}`);
+  }
+  getGlobalBucketRateLimit(){
+    return this.http.get(`${this.url}/ratelimit`);
+  }
 }

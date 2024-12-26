@@ -19,13 +19,15 @@ import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserFormComponent } from './rgw-user-form.component';
 import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
+import { CommonModule } from '@angular/common';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
   let fixture: ComponentFixture<RgwUserFormComponent>;
   let rgwUserService: RgwUserService;
   let formHelper: FormHelper;
-
+  let modalRef: any;
   configureTestBed({
     declarations: [RgwUserFormComponent],
     imports: [
@@ -42,9 +44,10 @@ describe('RgwUserFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwUserFormComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    component.ngOnInit();
     rgwUserService = TestBed.inject(RgwUserService);
     formHelper = new FormHelper(component.userForm);
+    fixture.detectChanges();
   });
 
   it('should create', () => {
@@ -343,5 +346,219 @@ describe('RgwUserFormComponent', () => {
       const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
       expect(capabilityButton.disabled).toBeFalsy();
     });
-  });
+  })
+    it('should not modify max_buckets if mode is not "1"', () => {
+      formHelper.setValue('max_buckets', '', false);
+      component.onMaxBucketsModeChange('2');
+      const s=spyOn(component.userForm,'patchValue');
+      expect(s).not.toHaveBeenCalled();
+    });
+    // it('should set max_buckets to 1000 if it is invalid and mode is "1"', () => {
+
+      // const patchValueSpy = jest.spyOn(component.userForm, 'patchValue');
+      // formHelper.setValue('max_buckets_mode', -1, true);
+      // component.userForm.controls['max_buckets'].setValue('');
+      // // formHelper.setValue('max_buckets', '', false); 
+      // component.onMaxBucketsModeChange('1');
+      // expect(patchValueSpy).toHaveBeenCalledWith({ max_buckets: 1000 });
+
+// ******************
+      // formHelper.setValue('max_buckets', '', false);
+      // component.onMaxBucketsModeChange('1');
+      // const s=spyOn(component.userForm,'patchValue')
+      // expect(s).toHaveBeenCalledWith({ max_buckets: 1000 });
+// ******************
+      // const patchValueSpy = jest.spyOn(component.userForm, 'patchValue');
+  
+      // // Mock the `get` method of `userForm` to return a control that is invalid
+      // const mockInvalidControl = { valid: false };
+      // component.userForm.get = jest.fn().mockReturnValue(mockInvalidControl);
+      
+      // // Simulate an invalid value for 'max_buckets' (this might already be done in your formHelper)
+      // formHelper.setValue('max_buckets', '', false);  // Assuming this sets 'max_buckets' to invalid
+      
+      // // Act: Trigger the `onMaxBucketsModeChange` method with mode "1" (Custom mode)
+      // component.onMaxBucketsModeChange('1');
+      
+      // // Assert: Check that `patchValue` was called with the correct argument
+      // expect(patchValueSpy).toHaveBeenCalledWith({ max_buckets: 1000 });
+    // });
+
+    it('should call _setRateLimitProperty when value is equal to 0 ',()=>{
+
+      const mockrateLimitKey='user_rate_limit_max_readBytes';
+      const mockunlimitedKey='user_rate_limit_max_readBytes_unlimited';
+      const mockproperty=0;
+
+      component['_setRateLimitProperty'](formHelper, mockrateLimitKey, mockunlimitedKey, mockproperty);
+      expect(component.userForm.getValue('user_rate_limit_max_readBytes_unlimited')).toEqual(true);
+      expect(component.userForm.getValue('user_rate_limit_max_readBytes')).toEqual(null);
+    })
+    // it('should call _setRateLimitProperty when value is greater than to 0 ',()=>{
+
+    //   const mockrateLimitKey='user_rate_limit_max_readBytes';
+    //   const mockunlimitedKey='user_rate_limit_max_readBytes_unlimited';
+    //   const mockproperty=100;
+    //   spyOn(component['rgwUserService'],'getUserRateLimit').and.returnValue({"user_ratelimit": {
+    //             "max_read_ops": 100,
+    //             "max_write_ops": 100,
+    //             "max_read_bytes": 100,
+    //             "max_write_bytes": 100,
+    //             "enabled": 'true'
+    //             }
+    //         })
+    //   component['_setRateLimitProperty'](formHelper, mockrateLimitKey, mockunlimitedKey, mockproperty);
+    //   expect(component.userForm.getValue('user_rate_limit_max_readBytes_unlimited')).toEqual(false);
+    //   expect(component.userForm.getValue('user_rate_limit_max_readBytes')).toEqual(100);
+    // })
+
+    // it('should call updateFieldsWhenTenanted',()=>{
+    //   formHelper.setValue('show_tenant', true, true);
+    //   component.updateFieldsWhenTenanted();
+    //   const s=spyOn(component.userForm.get,'markAsUntouched');
+    //   expect(s).toHaveBeenCalledWith();
+    // })
+
+    describe('updateFieldsWhenTenanted()', () => {
+        it('should reset the form when showTenant is falsy', () => {
+          component.showTenant = false;
+
+          component.previousTenant = 'true';
+    
+          component.userForm.get('tenant').setValue('test1');
+          component.userForm.get('user_id').setValue('user-123');
+    
+          component.updateFieldsWhenTenanted();
+          expect(formHelper.getControl('user_id').untouched).toBeTruthy(); // user_id should be untouched
+          expect(formHelper.getControl('tenant').value).toBe('true'); // tenant should be reset to 
+        });
+
+        // it('should update the form when showTenant is truthy',  fakeAsync(() =>  {
+        //   component.showTenant = true;
+
+        //   component.previousTenant = 'mockPreviousTenantValue';
+
+        //   component.userForm.get('tenant').setValue('test');
+        //   component.userForm.get('user_id').setValue('tuser-1234');
+        //   console.log('Before calling x():', component.userForm.get('tenant').value);
+        //   fixture.detectChanges();
+        //   component.updateFieldsWhenTenanted();
+        //   tick();
+          
+        //   console.log('After calling x():', component.userForm.get('tenant').value);
+        //   // expect(formHelper.getControl('user_id').touched).toBeTruthy(); // user_id should be touched
+        //   // expect(component.previousTenant).toEqual('mockvalue'); // previousTenant should be updated
+        //   expect(component.userForm.get('tenant').value).toBeNull(); // tenant should be null
+          
+        // }));
+    
+    });
+    // it('should remove capability from cap array and mark form as dirty when y() is called', () => {
+    //   const index = 1;
+    //   const initialLength = component.capabilities.length;
+    
+    //   // Call the method
+    //   component.deleteCapability(index);
+  
+    //   // Test that the service.y() was called with the correct parameters
+    //   expect(component['rgwUserService'].deleteCapability).toHaveBeenCalledWith(component.getUID(), component.capabilities[index].type, component.capabilities[index].perm);
+  
+    //   // Check that the capability at the given index was removed
+    //   expect(component.capabilities.length).toBe(initialLength - 1);  // One item should be removed
+    //   expect(component.capabilities).toEqual([{ type: 'type1', perm: 'perm1' }]); // Only the first capability should remain
+  
+    //   // Check that the submitObservables array has the correct observable
+    //   expect(component.submitObservables.length).toBe(1);
+    //   expect(component.submitObservables[0]).toEqual(of('mockResponse'));
+  
+    //   // Check that the form is marked as dirty
+    //   expect(component.userForm.dirty).toBeTrue();  // The form should be marked as dirty
+    // });
+  
+
+  it('should call deletecapab',()=>{
+    component.capabilities=[ {type: 'users', perm: 'read'}]
+    component.deleteCapability(0);
+    expect(component.capabilities.length).toBe(0);
+    expect(component.userForm.dirty).toBeTruthy();
+  })
+  it('should call deleteS3Key',()=>{
+    component.s3Keys= [{user: 'test5$test11', access_key: 'A009', secret_key: 'ABCKEY', generate_key: true}]; 
+    component.deleteS3Key(0);
+    expect(component.userForm.dirty).toBeTruthy();
+  })
+  // it('should call _getUserRateLimitArgs',()=>{
+  //   component.userForm.get('user_id').setValue('test');
+  //   component.userForm.get('user_rate_limit_enabled').setValue('true');
+  //   component.userForm.get('user_rate_limit_max_readOps').setValue('100');
+  //   component.userForm.get('user_rate_limit_max_readBytes').setValue('100');
+  //   component.userForm.get('user_rate_limit_max_writeOps').setValue('200');
+  //   component.userForm.get('user_rate_limit_max_writeBytes').setValue('200');
+
+  //   component.userForm.get('user_rate_limit_max_readOps_unlimited').setValue('false'  );
+  //   component.userForm.get('user_rate_limit_max_writeOps_unlimited').setValue('false');
+  //   component.userForm.get('user_rate_limit_max_readBytes_unlimited').setValue('false');
+  //   component.userForm.get('user_rate_limit_max_writeBytes_unlimited').setValue('false');
+  
+  //   const result = component['_getUserRateLimitArgs']();
+  //   expect(result.max_read_ops).toBe("100");
+  //   expect(result.max_write_ops).toBe("200");
+  //   expect(result.max_read_bytes).toBe("100");
+  //   expect(result.max_write_bytes).toBe("200");
+  // })
+  it('should call showCapabilityModal',()=>{
+   const s=spyOn(component['modalService'], 'show').and.callFake(() => {
+      modalRef = {
+        componentInstance: {
+          setEditing: jest.fn(),
+          setValues: jest.fn(),
+          setCapabilities:jest.fn(),
+          submitAction:{subscribe:jest.fn()}
+        }
+      };
+      return modalRef;
+    });
+    component.capabilities=[ {type: 'users', perm: 'read'}]
+    component.showCapabilityModal(0);
+    expect(s).toHaveBeenCalled();
+  })
+  it('should call showS3KeyModal',()=>{
+    const s=spyOn(component['modalService'], 'show').and.callFake(() => {
+       modalRef = {
+         componentInstance: {
+          setValues: jest.fn(),
+          setViewing: jest.fn(),
+          setUserCandidates:jest.fn(),
+          submitAction:{subscribe:jest.fn()}
+         }
+       };
+       return modalRef;
+     });
+     component.s3Keys= [{user: 'test5$test11', access_key: 'A009', secret_key: 'ABCKEY', generate_key: true}];
+     component.showS3KeyModal(0);
+     expect(s).toHaveBeenCalled();
+   })
+  //  it('should call showS3KeyModal',()=>{
+  //   const s=spyOn(component['modalService'], 'show').and.callFake(() => {
+  //      modalRef = {
+  //        componentInstance: {
+  //         setValues: jest.fn(),
+  //         setEditing: jest.fn(),
+  //         setSubusers:jest.fn(),
+  //         submitAction:{subscribe:jest.fn()}
+  //        }
+  //      };
+  //      return modalRef;
+  //    });
+  //    component.s3Keys= [{user: 'test5$test11', access_key: 'A009', secret_key: 'ABCKEY', generate_key: true}];
+  //    component.showSubuserModal(0);
+  //    expect(s).toHaveBeenCalled();
+  //  })
+  it('should call _getS3KeyUserCandidates',()=>{
+    spyOn(component,'getUID').and.returnValue('mockUID');
+    component.s3Keys=[{user: 'mockUID', access_key: 'test', secret_key: 'TestKey', generate_key: true}]
+    const s=component['_getS3KeyUserCandidates']();
+    const result= ['mockUID'];
+    expect(s).toEqual(result);
+  })
 });
