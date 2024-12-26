@@ -42,8 +42,11 @@ class RgwAccounts:
         return cls.send_rgw_cmd(get_account_cmd)
 
     @classmethod
-    def create_account(cls, account_name: Optional[str] = None,
-                       account_id: Optional[str] = None, email: Optional[str] = None):
+    def create_account(cls, account_name: Optional[str] = None, tenant: str = None,
+                       account_id: Optional[str] = None, email: Optional[str] = None,
+                       max_buckets: str = None, max_users: str = None,
+                       max_roles: str = None, max_group: str = None,
+                       max_access_keys: str = None):
         create_accounts_cmd = ['account', 'create']
 
         if account_name:
@@ -54,6 +57,24 @@ class RgwAccounts:
 
         if email:
             create_accounts_cmd += ['--email', email]
+
+        if tenant:
+            create_accounts_cmd += ['--tenant', tenant]
+
+        if max_buckets:
+            create_accounts_cmd += ['--max_buckets', str(max_buckets)]
+
+        if max_users:
+            create_accounts_cmd += ['--max_users', str(max_users)]
+
+        if max_roles:
+            create_accounts_cmd += ['--max_roles', str(max_roles)]
+
+        if max_group:
+            create_accounts_cmd += ['--max_groups', str(max_group)]
+
+        if max_access_keys:
+            create_accounts_cmd += ['--max_access_keys', str(max_access_keys)]
 
         return cls.send_rgw_cmd(create_accounts_cmd)
 
@@ -83,10 +104,14 @@ class RgwAccounts:
         return cls.send_rgw_cmd(account_stats_cmd)
 
     @classmethod
-    def set_quota(cls, quota_type: str, account_id: str, max_size: str, max_objects: str):
+    def set_quota(cls, quota_type: str, account_id: str, max_size: str, max_objects: str,
+                  enabled: bool):
         set_quota_cmd = ['quota', 'set', '--quota-scope', quota_type, '--account-id', account_id,
                          '--max-size', max_size, '--max-objects', max_objects]
-
+        if enabled:
+            cls.set_quota_status(quota_type, account_id, 'enable')
+        else:
+            cls.set_quota_status(quota_type, account_id, 'disable')
         return cls.send_rgw_cmd(set_quota_cmd)
 
     @classmethod

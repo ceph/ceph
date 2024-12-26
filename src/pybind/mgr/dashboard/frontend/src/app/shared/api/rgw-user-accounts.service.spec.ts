@@ -2,9 +2,9 @@ import { TestBed } from '@angular/core/testing';
 
 import { RgwUserAccountsService } from './rgw-user-accounts.service';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { Accounts } from '~/app/ceph/rgw/models/rgw-user-accounts';
+import { Account } from '~/app/ceph/rgw/models/rgw-user-accounts';
 
-const mockAccountData: Accounts[] = [
+const mockAccountData: Account[] = [
   {
     id: 'RGW80617806988089685',
     tenant: '',
