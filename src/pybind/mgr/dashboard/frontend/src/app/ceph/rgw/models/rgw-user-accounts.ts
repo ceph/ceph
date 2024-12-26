@@ -1,4 +1,4 @@
-export interface Accounts {
+export interface Account {
   id: string;
   tenant: string;
   name: string;

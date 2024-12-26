@@ -10848,6 +10848,18 @@ paths:
                   type: integer
                 email:
                   type: string
+                max_access_keys:
+                  type: string
+                max_buckets:
+                  type: string
+                max_group:
+                  type: string
+                max_roles:
+                  type: string
+                max_users:
+                  type: string
+                tenant:
+                  type: string
               type: object
       responses:
         '201':
