@@ -96,6 +96,55 @@ public:
     return cache->reset_transaction_preserve_handle(t);
   }
 
+  /**
+   * relocate_logical_extent
+   *
+   * Make a new logical extent to update its laddr. The caller is
+   * responsible to update the corresponding lba mapping.
+   */
+  base_iertr::future<LogicalCachedExtentRef> relocate_logical_extent(
+    Transaction &t,
+    LBAMappingRef mapping)
+  {
+    LOG_PREFIX(TransactionManager::relocate_logical_extent);
+    SUBDEBUGT(seastore_tm, "relocate {}", t, *mapping);
+    assert(mapping);
+    assert(!mapping->is_indirect());
+    assert(!mapping->is_zero_reserved());
+    assert(mapping->is_parent_viewable());
+    auto laddr = mapping->get_key();
+    return seastar::do_with(
+      std::move(mapping),
+      [this, &t](LBAMappingRef &mapping) {
+	auto v = mapping->get_logical_extent(t);
+	if (v.has_child()) {
+	  return v.get_child_fut().si_then([this, &t](auto extent) {
+	    cache->retire_extent(t, extent);
+	    return base_iertr::make_ready_future<
+	      CachedExtentRef>(extent);
+	  });
+	} else {
+	  auto ext = cache->retire_absent_extent_addr(
+	    t, mapping->get_val(), mapping->get_length());
+	  return base_iertr::make_ready_future<
+	    CachedExtentRef>(std::move(ext));
+	}
+      }).si_then([this, &t, laddr](CachedExtentRef extent) {
+	auto type = extent->get_type();
+	auto ext = is_retired_placeholder_type(type)
+	    ? cache->alloc_remapped_placeholder(
+	      t, laddr, extent->get_paddr(), extent->get_length())
+	    ->template cast<LogicalCachedExtent>()
+	    : cache->alloc_remapped_extent_by_type(
+	      t, type, laddr, extent->get_paddr(),
+	      extent->get_length(), laddr, std::nullopt)
+	    ->template cast<LogicalCachedExtent>();
+	return base_iertr::make_ready_future<
+	  LogicalCachedExtentRef>(std::move(ext));
+      });
+  }
+
+
   using make_mapping_ret = LBAManager::make_mapping_ret;
   make_mapping_ret make_mapping(
     Transaction &t,

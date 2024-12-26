@@ -95,7 +95,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   return retire_extent_iertr::now();
 }
 
-void Cache::retire_absent_extent_addr(
+CachedExtentRef Cache::retire_absent_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
   CachedExtentRef ext;
@@ -119,6 +119,7 @@ void Cache::retire_absent_extent_addr(
   add_extent(ext);
   t.add_to_read_set(ext);
   t.add_to_retired_set(ext);
+  return ext;
 }
 
 void Cache::dump_contents()
