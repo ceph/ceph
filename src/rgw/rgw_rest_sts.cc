@@ -339,6 +339,38 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
 }
 
 void
+WebTokenEngine::validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const
+{
+  try {
+    if (algorithm == "RS256") {
+      auto verifier = jwt::verify()
+                  .allow_algorithm(jwt::algorithm::rs256().setModulusAndExponent(n,e));
+      verifier.verify(decoded);
+    } else if (algorithm == "RS384") {
+      auto verifier = jwt::verify()
+                  .allow_algorithm(jwt::algorithm::rs384().setModulusAndExponent(n,e));
+      verifier.verify(decoded);
+    } else if (algorithm == "RS512") {
+      auto verifier = jwt::verify()
+                  .allow_algorithm(jwt::algorithm::rs512().setModulusAndExponent(n,e));
+      verifier.verify(decoded);
+    } else {
+      ldpp_dout(dpp, 0) << "Invalid algorithm: " << algorithm << dendl;
+      throw std::runtime_error("Invalid algorithm: " + algorithm);
+    }
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "Signature validation using n, e failed: " << e.what() << dendl;
+    throw;
+  }
+  catch (...) {
+    ldpp_dout(dpp, 0) << "Signature validation n, e failed" << dendl;
+    throw;
+  }
+  ldpp_dout(dpp, 10) << "Verified signature using n and e"<< dendl;
+  return;
+}
+
+void
 WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
@@ -449,8 +481,15 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
               throw;
             }
           } else {
-            ldpp_dout(dpp, 0) << "x5c not present" << dendl;
-            throw -EINVAL;
+            if (algorithm == "RS256" || algorithm == "RS384" || algorithm == "RS512") {
+              string n, e; //modulus and exponent
+              if (JSONDecoder::decode_json("n", n, &parser) && JSONDecoder::decode_json("e", e, &parser)) {
+                validate_signature_using_n_e(dpp, decoded, algorithm, n, e);
+                return;
+              }
+              ldpp_dout(dpp, 0) << "x5c not present or n, e not present" << dendl;
+              throw -EINVAL;
+            }
           }
         } else {
           ldpp_dout(dpp, 0) << "Malformed JSON object for keys" << dendl;
