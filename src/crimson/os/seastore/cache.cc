@@ -1559,6 +1559,9 @@ record_t Cache::prepare_record(
       } else {
 	touch_extent(*i, &t_src);
       }
+    } else {
+      auto e = i->template cast<RemappedExtentPlaceholder>();
+      e->unlink_parent();
     }
 
     alloc_delta.alloc_blk_ranges.emplace_back(

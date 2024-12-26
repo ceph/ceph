@@ -1544,9 +1544,9 @@ public:
     assert(parent_tracker);
     return parent_tracker->template get_parent<T>();
   }
-  void take_prior_parent_tracker() {
-    auto &prior = (ChildableCachedExtent&)(*get_prior_instance());
-    parent_tracker = prior.parent_tracker;
+  void take_prior_parent_tracker(
+    TCachedExtentRef<ChildableCachedExtent> prior) {
+    parent_tracker = prior->parent_tracker;
   }
   std::ostream &print_detail(std::ostream &out) const final;
 private:
@@ -1555,6 +1555,15 @@ private:
     return out;
   }
 };
+
+bool is_valid_child_ptr(ChildableCachedExtent* child);
+
+bool is_reserved_ptr(ChildableCachedExtent* child);
+
+inline ChildableCachedExtent* get_reserved_ptr() {
+  return (ChildableCachedExtent*)0x1;
+}
+
 /**
  * LogicalCachedExtent
  *
@@ -1616,6 +1625,8 @@ public:
   }
 
   virtual void clear_modified_region() {}
+
+  void replace(TCachedExtentRef<LogicalCachedExtent> prior);
 
   virtual ~LogicalCachedExtent();
 
@@ -1690,6 +1701,8 @@ struct RemappedExtentPlaceholder : LogicalCachedExtent {
   extent_types_t get_type() const final {
     return TYPE;
   }
+
+  void unlink_parent();
 };
 using RemappedExtentPlaceholderRef =
     TCachedExtentRef<RemappedExtentPlaceholder>;

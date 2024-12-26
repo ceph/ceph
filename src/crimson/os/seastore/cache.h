@@ -350,6 +350,26 @@ public:
     }
   }
 
+  template <typename T>
+  TCachedExtentRef<T> replace_remapped_placeholder(
+    Transaction &t,
+    LogicalCachedExtentRef placeholder)
+  {
+    ceph_assert(is_remapped_placeholder_type(placeholder->get_type()));
+    ceph_assert(placeholder->get_parent_node<CachedExtent>()->is_pending());
+    ceph_assert(placeholder->transactions.empty());
+    retire_extent(t, placeholder);
+    auto extent = alloc_remapped_extent<T>(
+      t,
+      placeholder->get_laddr(),
+      placeholder->get_paddr(),
+      placeholder->get_length(),
+      placeholder->get_laddr(),
+      std::nullopt);
+    extent->replace(placeholder);
+    return extent;
+  }
+
   /*
    * get_absent_extent
    *
@@ -1505,6 +1525,7 @@ private:
       CachedExtent &ext,
       const Transaction::src_t* p_src)
   {
+    assert(!is_remapped_placeholder_type(ext.get_type()));
     if (p_src &&
 	is_background_transaction(*p_src) &&
 	is_logical_type(ext.get_type())) {
@@ -1602,14 +1623,16 @@ private:
       assert(current_size >= extent_loaded_length);
 
       lru.erase(lru.s_iterator_to(extent));
-      current_size -= extent_loaded_length;
-      get_by_ext(sizes_by_ext, extent.get_type()).account_out(extent_loaded_length);
-      overall_io.out_sizes.account_in(extent_loaded_length);
-      if (p_src) {
-        get_by_ext(
-          get_by_src(trans_io_by_src_ext, *p_src),
-          extent.get_type()
-        ).out_sizes.account_in(extent_loaded_length);
+      if (extent_loaded_length != 0) {
+	current_size -= extent_loaded_length;
+	get_by_ext(sizes_by_ext, extent.get_type()).account_out(extent_loaded_length);
+	overall_io.out_sizes.account_in(extent_loaded_length);
+	if (p_src) {
+	  get_by_ext(
+	    get_by_src(trans_io_by_src_ext, *p_src),
+	    extent.get_type()
+	  ).out_sizes.account_in(extent_loaded_length);
+	}
       }
       intrusive_ptr_release(&extent);
     }

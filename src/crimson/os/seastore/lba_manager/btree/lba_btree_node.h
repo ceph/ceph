@@ -154,13 +154,17 @@ struct LBALeafNode
       SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, {}",
 	this->pending_for_transaction,
 	iter.get_offset(),
-	*nextent);
+	(void*)nextent);
       // child-ptr may already be correct, see LBAManager::update_mappings()
-      if (!nextent->has_parent_tracker()) {
+      if (is_reserved_ptr(nextent)) {
+	children[iter.get_offset()] = nextent;
+      } else if (!nextent->has_parent_tracker()) {
 	this->update_child_ptr(iter, nextent);
       }
-      assert(nextent->has_parent_tracker()
-	&& nextent->get_parent_node<LBALeafNode>().get() == this);
+      assert(
+	is_reserved_ptr(nextent) ||
+	(nextent->has_parent_tracker() &&
+	 nextent->get_parent_node<LBALeafNode>().get() == this));
     }
     this->on_modify();
     if (val.pladdr.is_paddr()) {
