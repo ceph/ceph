@@ -21,6 +21,7 @@
 #include "crimson/osd/object_context.h"
 #include "osd/PeeringState.h"
 #include "osd/SnapMapper.h"
+#include "osd/DynamicPerfStats.h"
 
 #include "crimson/common/interruptible_future.h"
 #include "crimson/common/log.h"
@@ -765,8 +766,16 @@ public:
 
 private:
   std::optional<pg_stat_t> pg_stats;
+  DynamicPerfStats dp_stats;
 
 public:
+  void add_client_request_lat(
+    const ClientRequest& req,
+    size_t inb,
+    size_t outb,
+    const utime_t &lat) {
+    dp_stats.add(pg_whoami.osd, get_info(), req, inb, outb, lat);
+  }
   OSDriver &get_osdriver() final {
     return osdriver;
   }
