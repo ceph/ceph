@@ -1922,7 +1922,7 @@ CDentry *CDir::_load_dentry(
         dout(12) << "_fetched  got remote link " << ino << " (don't have it)" << dendl;
       }
     }
-  } else if (type == 'r') {
+  } else if (type == 'R' || type == 'r') {
     // hard link with referent inode
     InodeStore inode_data;
     inodeno_t remote_ino;
@@ -1931,12 +1931,16 @@ CDentry *CDir::_load_dentry(
     mempool::mds_co::string alternate_name;
 
     //Load referent inode and get remote inode details
-    DECODE_START(2, q);
-    if (struct_v >= 2) {
-      decode(alternate_name, q);
+    if (type == 'r') {
+      DECODE_START(2, q);
+      if (struct_v >= 2) {
+        decode(alternate_name, q);
+      }
+      inode_data.decode(q);
+      DECODE_FINISH(q);
+    } else {
+      inode_data.decode_bare(q);
     }
-    inode_data.decode(q);
-    DECODE_FINISH(q);
 
     //Fill in remote inode details
     remote_ino = inode_data.inode->remote_ino;
@@ -1981,21 +1985,18 @@ CDentry *CDir::_load_dentry(
 
       ref_in->reset_inode(std::move(inode_data.inode));
       ref_in->reset_xattrs(std::move(inode_data.xattrs));
-      //Ignore snap related stuff for referent inode
-      /*
-      in->dirfragtree.swap(inode_data.dirfragtree);
-      in->reset_old_inodes(std::move(inode_data.old_inodes));
-      if (in->is_any_old_inodes()) {
-        snapid_t min_first = in->get_old_inodes()->rbegin()->first + 1;
-        if (min_first > in->first)
-          in->first = min_first;
+      ref_in->dirfragtree.swap(inode_data.dirfragtree);
+      ref_in->reset_old_inodes(std::move(inode_data.old_inodes));
+      if (ref_in->is_any_old_inodes()) {
+        snapid_t min_first = ref_in->get_old_inodes()->rbegin()->first + 1;
+        if (min_first > ref_in->first)
+          ref_in->first = min_first;
       }
 
-      in->oldest_snap = inode_data.oldest_snap;
-      in->decode_snap_blob(inode_data.snap_blob);
-      if (snaps && !in->snaprealm)
-        in->purge_stale_snap_data(*snaps);
-      */
+      ref_in->oldest_snap = inode_data.oldest_snap;
+      ref_in->decode_snap_blob(inode_data.snap_blob);
+      if (snaps && !ref_in->snaprealm)
+        ref_in->purge_stale_snap_data(*snaps);
       if (!ref_in_found) {
         mdcache->add_inode(ref_in); // add
         ref_in->set_primary_parent(dn);
