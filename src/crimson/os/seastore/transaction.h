@@ -8,11 +8,12 @@
 #include <boost/intrusive/list.hpp>
 
 #include "crimson/common/log.h"
+#include "crimson/os/seastore/backref_entry.h"
+#include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/ordering_handle.h"
-#include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/root_block.h"
+#include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction_interruptor.h"
 
 namespace crimson::os::seastore {
@@ -460,6 +461,7 @@ public:
     ool_write_stats = {};
     rewrite_stats = {};
     conflicted = false;
+    assert(backref_entries.empty());
     if (!has_reset) {
       has_reset = true;
     }
@@ -575,6 +577,15 @@ private:
   friend class Cache;
   friend Ref make_test_transaction();
 
+  void set_backref_entries(backref_entry_refs_t&& entries) {
+    assert(backref_entries.empty());
+    backref_entries = std::move(entries);
+  }
+
+  backref_entry_refs_t move_backref_entries() {
+    return std::move(backref_entries);
+  }
+
   /**
    * If set, *this may not be used to perform writes and will not provide
    * consistentency allowing operations using to avoid maintaining a read_set.
@@ -669,6 +680,8 @@ private:
   transaction_id_t trans_id = TRANS_ID_NULL;
 
   seastar::lw_shared_ptr<rbm_pending_ool_t> pending_ool;
+
+  backref_entry_refs_t backref_entries;
 };
 using TransactionRef = Transaction::Ref;
 

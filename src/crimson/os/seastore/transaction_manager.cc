@@ -461,8 +461,12 @@ TransactionManager::do_submit_transaction(
     }
 
     SUBTRACET(seastore_t, "submitting record", tref);
-    return journal->submit_record(std::move(record), tref.get_handle()
-    ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
+    return journal->submit_record(
+      std::move(record),
+      tref.get_handle(),
+      tref.get_src(),
+      [this, FNAME, &tref](record_locator_t submit_result)
+    {
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
       journal->get_trimmer().set_journal_head(start_seq);
@@ -473,10 +477,8 @@ TransactionManager::do_submit_transaction(
       journal->get_trimmer().update_journal_tails(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
-      return journal->finish_commit(tref.get_src()
-      ).then([&tref] {
-	return tref.get_handle().complete();
-      });
+    }).safe_then([&tref] {
+      return tref.get_handle().complete();
     }).handle_error(
       submit_transaction_iertr::pass_further{},
       crimson::ct_error::assert_all{"Hit error submitting to journal"}
