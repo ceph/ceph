@@ -252,6 +252,224 @@ public:
     laddr_t laddr,
     extent_len_t len) = 0;
 
+  /// ==========================================================================
+  ///                       New iterator based interface
+  /// ==========================================================================
+
+  /**
+   * begin
+   *
+   * Returns the iterator at the beginning of the LBABtree.
+   */
+  virtual base_iertr::future<LBAIter> begin(Transaction &t) = 0;
+
+  /**
+   * end
+   *
+   * Returns the iterator at the end of the LBABtree.
+   */
+  virtual base_iertr::future<LBAIter> end(Transaction &t) = 0;
+
+  /**
+   * is_begin
+   *
+   * Checks if the specified iterator is at the beginning of the LBABtree.
+   */
+  virtual base_iertr::future<bool> is_begin(Transaction &t, const LBAIter &iter) = 0;
+
+  /**
+   * is_end
+   *
+   * Checks if the specified iterator is at the end of the LBABtree.
+   */
+  virtual base_iertr::future<bool> is_end(Transaction &t, const LBAIter &iter) = 0;
+
+  /**
+   * make_mapping
+   *
+   * Returns the LBAMapping associated with the provided LBAIter or starts
+   * a fresh search and returns a new LBAMapping if the iterator is invalid.
+   */
+  using make_mapping_iertr = base_iertr;
+  using make_mapping_ret = make_mapping_iertr::future<LBAMappingRef>;
+  virtual make_mapping_ret make_mapping(
+    Transaction &t,
+    const LBAIter &iter) = 0;
+
+  /**
+   * make_iterator
+   *
+   * Make an ErasedBtreeIter using the parent and laddr of provided logical
+   * cached extent, no additional lookup.
+   */
+  using make_iterator_iertr = base_iertr;
+  using make_iterator_ret = make_iterator_iertr::future<LBAIter>;
+  virtual make_iterator_ret make_iterator(
+    Transaction &t,
+    LogicalCachedExtentRef extent) = 0;
+
+  /**
+   * make_direct_iterator
+   *
+   * Make an ErasedBtreeIter using the parent and laddr of provided LBAMapping.
+   * When the mapping is indirect, the return LBAIter will point to the direct
+   * mapping which holds the real paddr. It will start a search when the parent
+   * of lba mapping is invalid.
+   */
+  virtual make_iterator_ret make_direct_iterator(
+    Transaction &t,
+    const LBAMapping & mapping) = 0;
+
+  /**
+   * refresh_iterator
+   *
+   * Ensures the iterator is valid. It's possible to start a new search internally.
+   */
+  virtual make_iterator_ret refresh_iterator(
+    Transaction &t,
+    const LBAIter &iter) = 0;
+
+  /**
+   * prev_iterator
+   *
+   * The wrapper of underlying fixed kv btree, return the previous iterator of
+   * provided iterator.
+   */
+  virtual make_iterator_ret prev_iterator(
+    Transaction &t,
+    const LBAIter &iter) = 0;
+
+  /**
+   * next_iterator
+   *
+   * The wrapper of underlying fixed kv btree, return the next iterator of
+   * provided iterator.
+   */
+  virtual make_iterator_ret next_iterator(
+    Transaction &t,
+    const LBAIter &iter) = 0;
+
+  /**
+   * lower_bound
+   *
+   * The wrapper of underlying FixedKVBtree, return the least iterator whose
+   * key >= laddr
+   */
+  virtual make_iterator_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
+  /**
+   * upper_bound
+   *
+   * The wrapper of underlying FixedKVBtree, return the least iterator whose
+   * key > laddr
+   */
+  virtual make_iterator_ret upper_bound(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
+  /**
+   * upper_bound_right
+   *
+   * The wrapper of underlying FixedKVBtree, return the least iterator whose
+   * key + val.length > laddr
+   */
+  virtual make_iterator_ret upper_bound_right(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
+  /**
+   * find_region
+   *
+   * Search for a free region which can hold the specified length
+   * of lba mappings.
+   * Returns the starting laddr of the found region and an iterator
+   * that can be used to insert mappings.
+   */
+  struct find_region_result_t {
+    find_region_result_t()
+	: laddr(L_ADDR_NULL), iter() {}
+    find_region_result_t(laddr_t laddr, LBAIter &&iter)
+	: laddr(laddr), iter(iter) {}
+    laddr_t laddr;
+    LBAIter iter;
+  };
+  using find_region_iertr = base_iertr;
+  using find_region_ret = find_region_iertr::future<
+    find_region_result_t>;
+  virtual find_region_ret find_region(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t length) = 0;
+
+  /**
+   * get_iterator
+   *
+   * Retrieves the iterator for the laddr. If the lba mapping is indirect,
+   * the returned iterator will not resolve the direct mapping.
+   */
+  using get_iterator_ret = get_mapping_iertr::future<LBAIter>;
+  virtual get_iterator_ret get_iterator(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
+  /**
+   * get_iterators
+   *
+   * retrieves the iterators in range [laddr, laddr + length). The indirect
+   * mappings are not resolved.
+   */
+  using get_iterators_ret = get_mappings_iertr::future<std::vector<LBAIter>>;
+  virtual get_iterators_ret get_iterators(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t length) = 0;
+
+  /**
+   * insert_mapping
+   *
+   * Insert a new pair of key value before the specified LBAIter.
+   * Return the iterator points to the inserted mapping.
+   */
+  using insert_mapping_iertr = base_iertr;
+  using insert_mapping_ret = insert_mapping_iertr::future<LBAIter>;
+  virtual insert_mapping_ret insert_mapping(
+    Transaction &t,
+    const LBAIter &iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent) = 0;
+
+  /**
+   * change_mapping
+   *
+   * Change the mapping at the provided LBAIter to the new key value pair.
+   * nextent should be reserved ptr if the original extent is retired.
+   * Return the iterator points to the updated mapping.
+   *
+   * The laddr~value.length must be the valid sub-range of original mapping.
+   */
+  using change_mapping_ret = update_mapping_iertr::future<LBAIter>;
+  virtual change_mapping_ret change_mapping(
+    Transaction &t,
+    const LBAIter &iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent) = 0;
+
+  /**
+   * remove_mapping
+   *
+   * Remove the lba mapping at the provided LBAIter.
+   * Return the iterator of mapping at the removed position.
+   */
+  using remove_mapping_iertr = base_iertr;
+  using remove_mapping_ret = remove_mapping_iertr::future<LBAIter>;
+  virtual remove_mapping_ret remove_mapping(
+    Transaction &t,
+    const LBAIter &iter) = 0;
+
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;

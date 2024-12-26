@@ -96,6 +96,112 @@ public:
     return cache->reset_transaction_preserve_handle(t);
   }
 
+  using make_mapping_ret = LBAManager::make_mapping_ret;
+  make_mapping_ret make_mapping(
+    Transaction &t,
+    const LBAIter &iter) {
+    return lba_manager->make_mapping(t, iter);
+  }
+
+  using make_iterator_ret = LBAManager::make_iterator_ret;
+  make_iterator_ret make_iterator(
+    Transaction &t,
+    LogicalCachedExtentRef ext) {
+    return lba_manager->make_iterator(t, ext);
+  }
+
+  make_iterator_ret make_iterator(
+    Transaction &t,
+    const LBAMapping &mapping) {
+    return lba_manager->make_direct_iterator(t, mapping);
+  }
+
+  make_iterator_ret refresh_iterator(
+    Transaction &t,
+    const LBAIter &iter) {
+    return lba_manager->refresh_iterator(t, iter);
+  }
+
+  make_iterator_ret prev_iterator(
+    Transaction &t,
+    const LBAIter &iter) {
+    return lba_manager->prev_iterator(t, iter);
+  }
+
+  make_iterator_ret next_iterator(
+    Transaction &t,
+    const LBAIter &iter) {
+    return lba_manager->next_iterator(t, iter);
+  }
+
+  make_iterator_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) {
+    return lba_manager->lower_bound(t, laddr);
+  }
+
+  make_iterator_ret upper_bound(
+    Transaction &t,
+    laddr_t laddr) {
+    return lba_manager->upper_bound(t, laddr);
+  }
+
+  make_iterator_ret upper_bound_right(
+    Transaction &t,
+    laddr_t laddr) {
+    return lba_manager->upper_bound_right(t, laddr);
+  }
+
+  using find_region_ret = LBAManager::find_region_ret;
+  find_region_ret find_region(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t length) {
+    return lba_manager->find_region(t, hint, length);
+  }
+
+  using get_iterator_ret = LBAManager::get_iterator_ret;
+  get_iterator_ret get_iterator(
+    Transaction &t,
+    laddr_t laddr) {
+    return lba_manager->get_iterator(t, laddr);
+  }
+
+  using get_iterators_ret = LBAManager::get_iterators_ret;
+  get_iterators_ret get_iterators(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t length) {
+    return lba_manager->get_iterators(t, laddr, length);
+  }
+
+  using insert_mapping_ret = LBAManager::insert_mapping_ret;
+  insert_mapping_ret insert_mapping(
+    Transaction &t,
+    const LBAIter &iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent) {
+    return lba_manager->insert_mapping(t, iter, laddr, value, nextent);
+  }
+
+  using change_mapping_ret = LBAManager::change_mapping_ret;
+  change_mapping_ret change_mapping(
+    Transaction &t,
+    const LBAIter &iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent) {
+    return lba_manager->change_mapping(t, iter, laddr, value, nextent);
+  }
+
+  using remove_mapping_ret = LBAManager::remove_mapping_ret;
+  remove_mapping_ret remove_mapping(
+    Transaction &t,
+    const LBAIter &iter) {
+    return lba_manager->remove_mapping(t, iter);
+  }
+
   /**
    * get_pin
    *

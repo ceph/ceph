@@ -588,9 +588,127 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) final;
+
+  /// ==========================================================================
+  ///                       New iterator based interface
+  /// ==========================================================================
+
+  base_iertr::future<LBAIter> begin(Transaction &t) final;
+
+  base_iertr::future<LBAIter> end(Transaction &t) final;
+
+  base_iertr::future<bool> is_begin(Transaction &t, const LBAIter &iter) final;
+
+  base_iertr::future<bool> is_end(Transaction &t, const LBAIter &iter) final;
+
+  make_mapping_ret make_mapping(
+    Transaction &t,
+    const LBAIter &iter) final;
+
+  make_iterator_ret make_iterator(
+    Transaction &t,
+    LogicalCachedExtentRef extent) final;
+
+  make_iterator_ret make_direct_iterator(
+    Transaction &t,
+    const LBAMapping & mapping) final;
+
+  make_iterator_ret refresh_iterator(
+    Transaction &t,
+    const LBAIter &iter) final;
+
+  make_iterator_ret prev_iterator(
+    Transaction &t,
+    const LBAIter &iter) final;
+
+  make_iterator_ret next_iterator(
+    Transaction &t,
+    const LBAIter &iter) final;
+
+  make_iterator_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) final;
+
+  make_iterator_ret upper_bound(
+    Transaction &t,
+    laddr_t laddr) final;
+
+  make_iterator_ret upper_bound_right(
+    Transaction &t,
+    laddr_t laddr) final;
+
+  find_region_ret find_region(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t length) final;
+
+  get_iterator_ret get_iterator(
+    Transaction &t,
+    laddr_t laddr) final;
+
+  get_iterators_ret get_iterators(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t length) final;
+
+  insert_mapping_ret insert_mapping(
+    Transaction &t,
+    const LBAIter &iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent) final;
+
+  change_mapping_ret change_mapping(
+    Transaction &t,
+    const LBAIter &iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent) final;
+
+  remove_mapping_ret remove_mapping(
+    Transaction &t,
+    const LBAIter &iter) final;
+
 private:
   Cache &cache;
 
+  change_mapping_ret change_mapping_value(
+    Transaction &t,
+    const LBAIter &iter,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent);
+
+  change_mapping_ret change_mapping_key_and_value(
+    Transaction &t,
+    const LBAIter &iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent);
+
+  using make_btree_iter_ret = make_iterator_iertr::future<
+    LBABtree::iterator>;
+  make_btree_iter_ret make_btree_iter(
+    op_context_t<laddr_t> c,
+    LBABtree &btree,
+    CachedExtentRef parent,
+    laddr_t laddr,
+    std::optional<btree_iter_version_t> ver = std::nullopt,
+    std::optional<uint16_t> pos = std::nullopt);
+
+  struct search_insert_pos_result_t {
+    search_insert_pos_result_t(laddr_t laddr, LBABtree::iterator &&iter)
+	: laddr(laddr), iter(iter) {}
+    laddr_t laddr;
+    LBABtree::iterator iter;
+  };
+  using search_insert_pos_iertr = base_iertr;
+  using search_insert_pos_ret = search_insert_pos_iertr::future<
+    search_insert_pos_result_t>;
+  search_insert_pos_ret search_insert_pos(
+    Transaction &t,
+    LBABtree &btree,
+    laddr_t hint,
+    extent_len_t length);
 
   struct {
     uint64_t num_alloc_extents = 0;
