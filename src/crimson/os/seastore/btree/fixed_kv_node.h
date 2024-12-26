@@ -518,7 +518,8 @@ struct FixedKVNode : ChildableCachedExtent {
       return;
     }
     ceph_assert(!root_block);
-    take_prior_parent_tracker();
+    take_prior_parent_tracker(
+      get_prior_instance()->template cast<ChildableCachedExtent>());
     assert(is_parent_valid());
     auto parent = get_parent_node<FixedKVNode>();
     //TODO: can this search be avoided?

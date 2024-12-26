@@ -1120,7 +1120,7 @@ private:
     auto v = pin->get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut(
-      ).si_then([pin=std::move(pin)](auto extent) {
+      ).si_then([this, &t, pin=std::move(pin)](auto extent) {
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalCachedExtent>();
         auto pin_laddr = pin->get_key();
@@ -1129,7 +1129,12 @@ private:
         }
         assert(lextent->get_laddr() == pin_laddr);
 #endif
-	return extent->template cast<T>();
+	if (is_remapped_placeholder_type(extent->get_type())) {
+	  return cache->template replace_remapped_placeholder<T>(
+	    t, extent->template cast<LogicalCachedExtent>());
+	} else {
+	  return extent->template cast<T>();
+	}
       });
     } else {
       return pin;

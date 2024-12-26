@@ -17,14 +17,6 @@
 
 namespace crimson::os::seastore {
 
-bool is_valid_child_ptr(ChildableCachedExtent* child);
-
-bool is_reserved_ptr(ChildableCachedExtent* child);
-
-inline ChildableCachedExtent* get_reserved_ptr() {
-  return (ChildableCachedExtent*)0x1;
-}
-
 template <typename T>
 phy_tree_root_t& get_phy_tree_root(root_t& r);
 

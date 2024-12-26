@@ -16,6 +16,14 @@ namespace {
 
 namespace crimson::os::seastore {
 
+bool is_valid_child_ptr(ChildableCachedExtent* child) {
+  return child != nullptr && child != get_reserved_ptr();
+}
+
+bool is_reserved_ptr(ChildableCachedExtent* child) {
+  return child == get_reserved_ptr();
+}
+
 #ifdef DEBUG_CACHED_EXTENT_REF
 
 void intrusive_ptr_add_ref(CachedExtent *ptr)
@@ -131,15 +139,34 @@ LogicalCachedExtent::~LogicalCachedExtent() {
   }
 }
 
-void LogicalCachedExtent::on_replace_prior() {
-  assert(is_mutation_pending());
-  take_prior_parent_tracker();
+void RemappedExtentPlaceholder::unlink_parent() {
+  if (has_parent_tracker()) {
+    assert(get_parent_node());
+    auto parent = get_parent_node<FixedKVNode<laddr_t>>();
+    auto off = parent->lower_bound_offset(get_laddr());
+    assert(parent->get_key_from_idx(off) == get_laddr());
+    assert(parent->children[off] == this);
+    parent->children[off] = nullptr;
+    reset_parent_tracker();
+  }
+}
+
+void LogicalCachedExtent::replace(
+  TCachedExtentRef<LogicalCachedExtent> prior)
+{
+  assert(prior->has_parent_tracker());
+  take_prior_parent_tracker(prior);
   assert(get_parent_node());
   auto parent = get_parent_node<FixedKVNode<laddr_t>>();
   //TODO: can this search be avoided?
   auto off = parent->lower_bound_offset(laddr);
   assert(parent->get_key_from_idx(off) == laddr);
   parent->children[off] = this;
+}
+
+void LogicalCachedExtent::on_replace_prior() {
+  assert(is_mutation_pending());
+  replace(get_prior_instance()->cast<LogicalCachedExtent>());
 }
 
 parent_tracker_t::~parent_tracker_t() {
