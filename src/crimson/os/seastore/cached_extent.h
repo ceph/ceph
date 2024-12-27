@@ -6,6 +6,7 @@
 #include <iostream>
 
 #include <boost/intrusive/list.hpp>
+#include <boost/intrusive/set.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
@@ -1095,8 +1096,6 @@ protected:
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
 std::ostream &operator<<(std::ostream &, const CachedExtent&);
-
-bool is_backref_mapped_extent_node(const CachedExtentRef &extent);
 
 /// Compare extents by paddr
 struct paddr_cmp {

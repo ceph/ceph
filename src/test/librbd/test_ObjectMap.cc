@@ -17,6 +17,8 @@
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/rolling_sum.hpp>
 
+#include <shared_mutex> // for std::shared_lock
+
 void register_test_object_map() {
 }
 

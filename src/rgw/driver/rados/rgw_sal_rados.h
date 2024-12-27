@@ -775,6 +775,19 @@ class RadosBucket : public StoreBucket {
         optional_yield y, const DoutPrefixProvider *dpp) override;
     int remove_topics(RGWObjVersionTracker* objv_tracker, 
         optional_yield y, const DoutPrefixProvider *dpp) override;
+    int get_logging_object_name(std::string& obj_name, 
+        const std::string& prefix, 
+        optional_yield y, 
+        const DoutPrefixProvider *dpp, 
+        RGWObjVersionTracker* objv_tracker) override;
+    int set_logging_object_name(const std::string& obj_name, 
+        const std::string& prefix, 
+        optional_yield y, 
+        const DoutPrefixProvider *dpp, 
+        bool new_obj, 
+        RGWObjVersionTracker* objv_tracker) override;
+    int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override;
+    int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override;
 
   private:
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);

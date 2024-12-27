@@ -13,8 +13,11 @@
  *
  */
 
+#include <asm-generic/errno-base.h>
 #include <errno.h>
+#include <fmt/core.h>
 #include <stdlib.h>
+#include <string>
 #include <system_error>
 #include <filesystem>
 #include <unistd.h>
@@ -26,9 +29,12 @@
 #include "include/function2.hpp"
 
 #include "common/Clock.h"
+#include "common/ceph_time.h"
 #include "common/errno.h"
 
 #include "role.h"
+#include "rgw_obj_types.h"
+#include "rgw_rados.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #include "rgw_bucket.h"
@@ -56,6 +62,7 @@
 #include "rgw_rest_realm.h"
 #include "rgw_rest_user.h"
 #include "rgw_lc_tier.h"
+#include "rgw_bucket_logging.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_cls.h"
@@ -716,7 +723,7 @@ int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new
 	  attrs[it.first] = it.second;
   }
   return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
-				new_attrs, &get_info().objv_tracker, y, dpp);
+				attrs, &get_info().objv_tracker, y, dpp);
 }
 
 int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
@@ -1015,6 +1022,242 @@ int RadosBucket::remove_topics(RGWObjVersionTracker* objv_tracker,
       store->svc()->zone->get_zone_params().log_pool,
       topics_oid(),
       objv_tracker, y);
+}
+
+int RadosBucket::get_logging_object_name(std::string& obj_name, 
+    const std::string& prefix, 
+    optional_yield y, 
+    const DoutPrefixProvider *dpp,
+    RGWObjVersionTracker* objv_tracker) {
+  rgw_pool data_pool;
+  const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
+  if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
+    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
+      "' when getting logging object name" << dendl;
+    return -EIO;
+  }
+  bufferlist bl;
+  const int ret = rgw_get_system_obj(store->svc()->sysobj,
+                               data_pool,
+                               obj_name_oid,
+                               bl,
+                               objv_tracker,
+                               nullptr,
+                               y,
+                               dpp,
+                               nullptr,
+                               nullptr);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "failed to get logging object name from '" << obj_name_oid << "'. ret = " << ret << dendl;
+    return ret;
+  }
+  obj_name = bl.to_str();
+  return 0;
+}
+
+int RadosBucket::set_logging_object_name(const std::string& obj_name, 
+    const std::string& prefix, 
+    optional_yield y, 
+    const DoutPrefixProvider *dpp, 
+    bool new_obj,
+    RGWObjVersionTracker* objv_tracker) {
+  rgw_pool data_pool;
+  const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
+  if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
+    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
+      "' when setting logging object name"  << dendl;
+    return -EIO;
+  }
+  bufferlist bl;
+  bl.append(obj_name);
+  const int ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
+                               data_pool,
+                               obj_name_oid,
+                               bl,
+                               new_obj,
+                               objv_tracker,
+                               ceph::real_time::clock::now(),
+                               y,
+                               nullptr);
+  if (ret == -EEXIST) {
+    ldpp_dout(dpp, 20) << "race detected in initializing '" << obj_name_oid << "' with logging object name:'" << obj_name  << "'. ret = " << ret << dendl;
+  } else if (ret == -ECANCELED) {
+    ldpp_dout(dpp, 20) << "race detected in updating logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
+  } else if (ret < 0) {
+    ldpp_dout(dpp, 1) << "failed to set logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
+  }
+  return ret;
+}
+
+std::string to_temp_object_name(const rgw::sal::Bucket* bucket, const std::string& obj_name) {
+  return fmt::format("{}__shadow_{}0",
+      bucket->get_bucket_id(),
+      obj_name);
+}
+
+int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) {
+  rgw_pool data_pool;
+  const rgw_obj head_obj{get_key(), obj_name};
+  const auto placement_rule = get_placement_rule();
+
+  if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &data_pool)) {
+    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
+      "' when comitting logging object"  << dendl;
+    return -EIO;
+  }
+
+  const auto temp_obj_name = to_temp_object_name(this, obj_name);
+  std::map<string, bufferlist> obj_attrs;
+  ceph::real_time mtime;
+  bufferlist bl_data;
+  // TODO: this is needed only for etag calculation
+  if (const auto ret = rgw_get_system_obj(store->svc()->sysobj,
+                     data_pool,
+                     temp_obj_name,
+                     bl_data,
+                     nullptr,
+                     &mtime,
+                     y,
+                     dpp,
+                     &obj_attrs,
+                     nullptr); ret < 0) {
+    ldpp_dout(dpp, 1) << "faild to read logging data when comitting to object '" << temp_obj_name
+      << ". error: " << ret << dendl;
+    return ret;
+  }
+
+  uint64_t size = bl_data.length();
+  const uint64_t max_obj_size = store->ctx()->_conf->osd_max_object_size;
+  RGWObjManifest manifest;
+  manifest.set_prefix(obj_name);
+  manifest.set_trivial_rule(0, max_obj_size);
+  RGWObjManifest::generator manifest_gen;
+  if (const auto ret = manifest_gen.create_begin(store->ctx(), &manifest,
+                                placement_rule,
+                                nullptr, // no special placment for tail
+                                get_key(),
+                                head_obj); ret < 0) {
+    ldpp_dout(dpp, 1) << "failed to create manifest when comitting logging object. error: " <<
+      ret << dendl;
+    return ret;
+  }
+
+  if (const auto ret = manifest_gen.create_next(size); ret < 0) {
+    ldpp_dout(dpp, 1) << "failed to add object to manifest when comitting logging object. error: " <<
+      ret << dendl;
+    return ret;
+  }
+
+  if (const auto expected_temp_obj = manifest_gen.get_cur_obj(store->getRados());
+      temp_obj_name != expected_temp_obj.oid) {
+    // TODO: cleanup temporary object, commit would never succeed
+    ldpp_dout(dpp, 1) << "temporary logging object name mismatch: '" <<
+      temp_obj_name << "' != '" << expected_temp_obj.oid << "'" << dendl;
+    return -EINVAL;
+  }
+
+  RGWObjectCtx obj_ctx(store);
+  obj_ctx.set_atomic(head_obj);
+  const auto& bucket_info = get_info();
+  RGWRados::Object rgw_head_obj(store->getRados(),
+      bucket_info,
+      obj_ctx,
+      head_obj);
+  // disable versioning on the logging objects
+  rgw_head_obj.set_versioning_disabled(true);
+  RGWRados::Object::Write head_obj_wop(&rgw_head_obj);
+  head_obj_wop.meta.manifest = &manifest;
+  head_obj_wop.meta.bucket_owner = bucket_info.owner;
+  head_obj_wop.meta.flags = PUT_OBJ_CREATE;
+  head_obj_wop.meta.mtime = &mtime;
+  // TODO: head_obj_wop.meta.ptag
+  // the owner of the logging object is the bucket owner
+  // not the user that wrote the log that triggered the commit
+  const ACLOwner owner{bucket_info.owner, ""}; // TODO: missing display name
+  head_obj_wop.meta.owner = owner;
+  const auto etag = TOPNSPC::crypto::digest<TOPNSPC::crypto::MD5>(bl_data).to_str();
+  bufferlist bl_etag;
+  bl_etag.append(etag.c_str());
+  obj_attrs.emplace(RGW_ATTR_ETAG, std::move(bl_etag));
+  const req_context rctx{dpp, y, nullptr};
+  jspan_context trace{false, false};
+  if (const auto ret = head_obj_wop.write_meta(0, size, obj_attrs, rctx, trace); ret < 0) {
+  ldpp_dout(dpp, 1) << "failed to commit logging object '" << temp_obj_name <<
+    "' to bucket id '" << get_bucket_id() <<"'. error: " << ret << dendl;
+    return ret;
+  }
+  ldpp_dout(dpp, 20) << "committed logging object '" << temp_obj_name <<
+    "' with size of " << size << " bytes, to bucket '" << get_key() << "' as '" <<
+    obj_name << "'" << dendl;
+  return 0;
+}
+
+struct BucketLoggingCompleteArg {
+    BucketLoggingCompleteArg(const std::string& _obj_name, size_t _size, CephContext* _cct)
+            : obj_name{_obj_name}, size{_size}, cct{_cct} {}
+    const std::string obj_name;
+    const size_t size;
+    CephContext* cct;
+};
+
+void bucket_logging_completion(rados_completion_t completion, void* args) {
+  auto* aio_comp = reinterpret_cast<librados::AioCompletionImpl*>(completion);
+  std::unique_ptr<BucketLoggingCompleteArg> logging_args(reinterpret_cast<BucketLoggingCompleteArg*>(args));
+  if (aio_comp->get_return_value() < 0) {
+    ldout(logging_args->cct, 1) << "failed to complete append to logging object '" << logging_args->obj_name <<
+      "'. ret = " << aio_comp->get_return_value() << dendl;
+  } else {
+    ldout(logging_args->cct, 20) << "wrote " << logging_args->size << " bytes to logging object '" <<
+      logging_args->obj_name << "'" << dendl;
+  }
+}
+
+int RadosBucket::write_logging_object(const std::string& obj_name, 
+    const std::string& record, 
+    optional_yield y, 
+    const DoutPrefixProvider *dpp,
+    bool async_completion) {
+  const auto temp_obj_name = to_temp_object_name(this, obj_name);
+  rgw_pool data_pool;
+  rgw_obj obj{get_key(), obj_name};
+  if (!store->getRados()->get_obj_data_pool(get_placement_rule(), obj, &data_pool)) {
+    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
+      "' when writing logging object" << dendl;
+    return -EIO;
+  }
+  librados::IoCtx io_ctx;
+  if (const auto ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx); ret < 0) {
+    ldpp_dout(dpp, 1) << "failed to get IO context for logging object from data pool:" << data_pool.to_str() << dendl;
+    return -EIO;
+  }
+  bufferlist bl;
+  bl.append(record);
+  bl.append("\n");
+  // append the record to the temporary object
+  // if this is the first record, the object will be created
+  librados::ObjectWriteOperation op;
+  op.append(bl);
+  if (async_completion) {
+    aio_completion_ptr completion{librados::Rados::aio_create_completion()};
+    auto arg = std::make_unique<BucketLoggingCompleteArg>(temp_obj_name, record.length(), store->ctx());
+    completion->set_complete_callback(arg.get(), bucket_logging_completion);
+    if (const auto ret = io_ctx.aio_operate(temp_obj_name, completion.get(), &op); ret < 0) {
+      ldpp_dout(dpp, 1) << "failed to append to logging object '" << temp_obj_name <<
+        "'. ret = " << ret << dendl;
+      return ret;
+    }
+    std::ignore = arg.release();
+    std::ignore = completion.release();
+    return 0;
+  }
+  if (const auto ret = rgw_rados_operate(dpp, io_ctx, temp_obj_name, &op, y); ret < 0) {
+    ldpp_dout(dpp, 1) << "failed to append to logging object '" << temp_obj_name <<
+      "'. ret = " << ret << dendl;
+    return ret;
+  }
+  ldpp_dout(dpp, 20) << "wrote " << record.length() << " bytes to logging object '" <<
+    temp_obj_name << "'" << dendl;
+  return 0;
 }
 
 std::unique_ptr<User> RadosStore::get_user(const rgw_user &u)
@@ -1652,7 +1895,7 @@ int RadosStore::read_topics(const std::string& tenant, rgw_pubsub_topics& topics
 }
 
 int RadosStore::stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) {
-  return rgw_stat_system_obj(dpp, svc()->sysobj, svc()->zone->get_zone_params().log_pool, topics_oid(tenant), nullptr, nullptr, y, nullptr);
+  return rgw_stat_system_obj(dpp, svc()->sysobj, svc()->zone->get_zone_params().log_pool, topics_oid(tenant), nullptr, nullptr, nullptr, y, nullptr);
 }
 
 int RadosStore::write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
@@ -3412,7 +3655,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     multipart_upload_info upload_info;
     upload_info.dest_placement = dest_placement;
     upload_info.cksum_type = cksum_type;
-    
+
     if (obj_legal_hold) {
       upload_info.obj_legal_hold_exist = true;
       upload_info.obj_legal_hold = (*obj_legal_hold);
@@ -4508,8 +4751,8 @@ void RadosLuaManager::handle_reload_notify(const DoutPrefixProvider* dpp, option
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
   std::string install_dir;
-  auto r = rgw::lua::install_packages(dpp, store, 
-      y, store->ctx()->_conf.get_val<std::string>("rgw_luarocks_location"), 
+  auto r = rgw::lua::install_packages(dpp, store,
+      y, store->ctx()->_conf.get_val<std::string>("rgw_luarocks_location"),
       failed_packages, install_dir);
   if (r < 0) {
     ldpp_dout(dpp, 1) << "WARNING: failed to install Lua packages from allowlist. error code: " << r
@@ -4520,9 +4763,9 @@ void RadosLuaManager::handle_reload_notify(const DoutPrefixProvider* dpp, option
     ldpp_dout(dpp, 5) << "WARNING: failed to install Lua package: " << p
             << " from allowlist" << dendl;
   }
-#else 
+#else
   const int r = 0;
-#endif  
+#endif
   ack_reload(dpp, notify_id, cookie, r);
 }
 
@@ -4544,7 +4787,7 @@ int RadosLuaManager::reload_packages(const DoutPrefixProvider *dpp, optional_yie
         << ". error: " << cpp_strerror(r) << dendl;
     return r;
   }
- 
+
   std::vector<librados::notify_ack_t> acks;
   std::vector<librados::notify_timeout_t> timeouts;
   ioctx.decode_notify_response(reply_bl, &acks, &timeouts);
@@ -4558,7 +4801,7 @@ int RadosLuaManager::reload_packages(const DoutPrefixProvider *dpp, optional_yie
       auto iter = ack.payload_bl.cbegin();
       ceph::decode(r, iter);
     } catch (buffer::error& err) {
-      ldpp_dout(dpp, 1) << "ERROR: couldn't decode Lua packages reload status. error: " << 
+      ldpp_dout(dpp, 1) << "ERROR: couldn't decode Lua packages reload status. error: " <<
         err.what() << dendl;
       return -EINVAL;
     }

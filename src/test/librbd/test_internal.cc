@@ -27,6 +27,7 @@
 #include <boost/scope_exit.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/assign/list_of.hpp>
+#include <shared_mutex> // for std::shared_lock
 #include <utility>
 #include <vector>
 #include "test/librados/crimson_utils.h"
@@ -1568,6 +1569,83 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   ASSERT_EQ(0, image.close());
 
   rados_ioctx_destroy(d_ioctx);
+}
+
+TEST_F(TestInternal, FlattenInconsistentObjectMap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_OBJECT_MAP);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+
+  librbd::ImageCtx* ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  librbd::NoOpProgressContext no_op;
+  ASSERT_EQ(0, ictx->operations->resize((1 << ictx->order) * 5, true, no_op));
+
+  bufferlist bl;
+  bl.append(std::string(256, '1'));
+  for (int i = 1; i < 5; i++) {
+    ASSERT_EQ(256, api::Io<>::write(*ictx, (1 << ictx->order) * i, 256,
+                                    bufferlist{bl}, 0));
+  }
+
+  ASSERT_EQ(0, snap_create(*ictx, "snap"));
+  ASSERT_EQ(0, snap_protect(*ictx, "snap"));
+
+  uint64_t features;
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+
+  std::string clone_name = get_temp_image_name();
+  int order = ictx->order;
+  ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "snap", m_ioctx,
+                             clone_name.c_str(), features, &order, 0, 0));
+
+  close_image(ictx);
+  ASSERT_EQ(0, open_image(clone_name, &ictx));
+
+  C_SaferCond lock_ctx;
+  {
+    std::shared_lock owner_locker{ictx->owner_lock};
+    ictx->exclusive_lock->try_acquire_lock(&lock_ctx);
+  }
+  ASSERT_EQ(0, lock_ctx.wait());
+  ASSERT_TRUE(ictx->exclusive_lock->is_lock_owner());
+
+  ceph::BitVector<2> inconsistent_object_map;
+  inconsistent_object_map.resize(5);
+  inconsistent_object_map[0] = OBJECT_NONEXISTENT;
+  inconsistent_object_map[1] = OBJECT_NONEXISTENT;
+  inconsistent_object_map[2] = OBJECT_EXISTS;
+  inconsistent_object_map[3] = OBJECT_EXISTS_CLEAN;
+  // OBJECT_PENDING shouldn't happen within parent overlap, but test
+  // anyway
+  inconsistent_object_map[4] = OBJECT_PENDING;
+
+  auto object_map = new librbd::ObjectMap<>(*ictx, CEPH_NOSNAP);
+  C_SaferCond save_ctx;
+  {
+    std::shared_lock owner_locker{ictx->owner_lock};
+    std::unique_lock image_locker{ictx->image_lock};
+    object_map->set_object_map(inconsistent_object_map);
+    object_map->aio_save(&save_ctx);
+  }
+  ASSERT_EQ(0, save_ctx.wait());
+  object_map->put();
+
+  close_image(ictx);
+  ASSERT_EQ(0, open_image(clone_name, &ictx));
+  ASSERT_EQ(0, ictx->operations->flatten(no_op));
+
+  bufferptr read_ptr(256);
+  bufferlist read_bl;
+  read_bl.push_back(read_ptr);
+
+  librbd::io::ReadResult read_result{&read_bl};
+  for (int i = 1; i < 5; i++) {
+    ASSERT_EQ(256, api::Io<>::read(*ictx, (1 << ictx->order) * i, 256,
+                                   librbd::io::ReadResult{read_result}, 0));
+    EXPECT_TRUE(bl.contents_equal(read_bl));
+  }
 }
 
 TEST_F(TestInternal, PoolMetadataConfApply) {

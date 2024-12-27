@@ -311,7 +311,7 @@ media cost.  Moreover, when using NVMe SSDs, you do not need *any* HBA.  This
 additionally reduces the HDD vs SSD cost gap when the system as a whole is
 considered. The initial cost of a fancy RAID HBA plus onboard cache plus
 battery backup (BBU or supercapacitor) can easily exceed more than 1000 US
-dollars even after discounts - a sum that goes a log way toward SSD cost parity.
+dollars even after discounts - a sum that goes a long way toward SSD cost parity.
 An HBA-free system may also cost hundreds of US dollars less every year if one
 purchases an annual maintenance contract or extended warranty.
 

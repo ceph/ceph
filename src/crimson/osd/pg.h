@@ -10,6 +10,7 @@
 #include <seastar/core/shared_future.hh>
 
 #include "common/dout.h"
+#include "common/ostream_temp.h"
 #include "include/interval_set.h"
 #include "crimson/net/Fwd.h"
 #include "messages/MOSDRepOpReply.h"
@@ -77,7 +78,8 @@ class PG : public boost::intrusive_ref_counter<
   using ec_profile_t = std::map<std::string,std::string>;
   using cached_map_t = OSDMapService::cached_map_t;
 
-  ClientRequest::PGPipeline request_pg_pipeline;
+  CommonPGPipeline request_pg_pipeline;
+  PGRepopPipeline repop_pipeline;
   PGPeeringPipeline peering_request_pg_pipeline;
 
   ClientRequest::Orderer client_request_orderer;
@@ -663,6 +665,7 @@ private:
     const OpInfo &op_info,
     std::vector<OSDOp>& ops);
 
+  seastar::shared_mutex submit_lock;
   using submit_executer_ret = std::tuple<
     interruptible_future<>,
     interruptible_future<>>;
@@ -675,6 +678,8 @@ private:
   struct do_osd_ops_params_t;
 
   interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
+
+public:
   interruptible_future<
     std::tuple<interruptible_future<>, interruptible_future<>>>
   submit_transaction(
@@ -683,6 +688,8 @@ private:
     ceph::os::Transaction&& txn,
     osd_op_params_t&& oop,
     std::vector<pg_log_entry_t>&& log_entries);
+
+private:
   interruptible_future<> repair_object(
     const hobject_t& oid,
     eversion_t& v);
@@ -891,10 +898,6 @@ private:
     const hobject_t &obj,
     const eversion_t &v,
     const std::vector<pg_shard_t> &peers);
-  void mutate_object(
-    ObjectContextRef& obc,
-    ceph::os::Transaction& txn,
-    osd_op_params_t& osd_op_p);
   bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;
   void context_registry_on_change();

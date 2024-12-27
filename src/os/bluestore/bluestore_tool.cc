@@ -1136,7 +1136,7 @@ int main(int argc, char **argv)
       }
       return r;
     }
-  } else  if (action == "free-dump" || action == "free-score" || action == "fragmentation") {
+  } else  if (action == "free-dump" || action == "free-score" || action == "free-fragmentation") {
     AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
     ceph_assert(admin_socket);
     std::string action_name = action == "free-dump" ? "dump" :

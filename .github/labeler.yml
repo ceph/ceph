@@ -6,6 +6,7 @@ build/ops:
   - admin/**
   - ceph.spec.in
   - cmake/**
+  - container/**
   - debian/**
   - do_cmake.sh
   - do_freebsd.sh

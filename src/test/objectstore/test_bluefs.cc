@@ -23,6 +23,11 @@
 
 using namespace std;
 
+// some test should not be executed on jenkins make check
+#define SKIP_JENKINS() \
+  if (getenv("JENKINS_HOME") != nullptr) GTEST_SKIP_("test disabled on jenkins");
+
+
 std::unique_ptr<char[]> gen_buffer(uint64_t size)
 {
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size);
@@ -174,6 +179,7 @@ TEST(BlueFS, small_appends) {
 }
 
 TEST(BlueFS, very_large_write) {
+  SKIP_JENKINS();
   // we'll write a ~5G file, so allocate more than that for the whole fs
   uint64_t size = 1048576 * 1024 * 6ull;
   TempBdev bdev{size};
@@ -248,6 +254,7 @@ TEST(BlueFS, very_large_write) {
 }
 
 TEST(BlueFS, very_large_write2) {
+  SKIP_JENKINS();
   // we'll write a ~5G file, so allocate more than that for the whole fs
   uint64_t size_full = 1048576 * 1024 * 6ull;
   uint64_t size = 1048576 * 1024 * 5ull;

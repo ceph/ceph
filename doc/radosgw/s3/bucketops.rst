@@ -705,3 +705,232 @@ HTTP Response
 +---------------+-----------------------+----------------------------------------------------------+
 
 .. _S3 Notification Compatibility: ../../s3-notification-compatibility
+
+Enable Bucket Logging
+---------------------
+
+Enable logging for a bucket.
+
+Syntax
+~~~~~~
+
+::
+
+    PUT /{bucket}?logging HTTP/1.1
+
+
+Request Entities
+~~~~~~~~~~~~~~~~
+
+Parameters are XML encoded in the body of the request, in the following format:
+
+::
+
+  <BucketLoggingStatus xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <LoggingEnabled>
+      <TargetBucket>string</TargetBucket>
+      <TargetGrants>
+        <Grant>
+          <Grantee>
+            <DisplayName>string</DisplayName>
+            <EmailAddress>string</EmailAddress>
+            <ID>string</ID>
+            <xsi:type>string</xsi:type>
+            <URI>string</URI>
+          </Grantee>
+          <Permission>string</Permission>
+        </Grant>
+      </TargetGrants>
+      <TargetObjectKeyFormat>
+        <PartitionedPrefix>
+          <PartitionDateSource>DeliveryTime|EventTime</PartitionDateSource>
+        </PartitionedPrefix>
+        <SimplePrefix>
+        </SimplePrefix>
+      </TargetObjectKeyFormat>
+      <TargetPrefix>string</TargetPrefix>
+      <LoggingType>Standard|Journal</LoggingType>
+      <ObjectRollTime>integer</ObjectRollTime>
+      <Filter>
+        <S3Key>
+          <FilterRule>
+            <Name>suffix/prefix/regex</Name>
+            <Value></Value>
+          </FilterRule>
+        </S3Key>
+      </Filter>
+    </LoggingEnabled>
+  </BucketLoggingStatus>
+
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| Name                          | Type      | Description                                                                          | Required |
++===============================+===========+======================================================================================+==========+
+| ``BucketLoggingStatus``       | Container | Enabling/Disabling logging configuration for the bucket.                             | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``LoggingEnabled``            | Container | Holding the logging configuration for the bucket.                                    | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``TargetBucket``              | String    | The bucket where the logs are stored. The log bucket cannot have bucket logging      | Yes      |
+|                               |           | enabled.                                                                             |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``TargetGrants``              | Container | Not supported. The owner of the log bucket is the owner of the log objects.          | No       |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``TargetObjectKeyFormat``     | Container | The format of the log object key. Contains either ``PartitionedPrefix`` or           | No       |
+|                               |           | ``SimplePrefix`` entities.                                                           |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``PartitionedPrefix``         | Container | Indicates a partitioned  log object key format. Note that ``PartitionDateSource``    | No       |
+|                               |           | is ignored and hardcoded as ``DeliveryTime``                                         |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``SimplePrefix``              | Container | Indicates a simple log object key format (default format)                            | No       |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``TargetPrefix``              | String    | The prefix for the log objects. Used in both formats. May be used to distinguish     | No       |
+|                               |           | between different source buckets writing log records to the same log bucket.         |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``LoggingType``               | String    | The type of logging. Valid values are:                                               | No       |
+|                               |           | ``Standard`` (default) all bucket operations are logged after being perfomed.        |          |
+|                               |           | The log record will contain all fields.                                              |          |
+|                               |           | ``Journal`` only PUT, COPY, MULTI/DELETE and MPU operations are logged.              |          |
+|                               |           | Will record the minimum subset of fields in the log record that is needed            |          |
+|                               |           | for journaling.                                                                      |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``ObjectRollTime``            | Integer   | The time in seconds after which a new log object is created, and the previous log    | No       |
+|                               |           | object added to the log bucket. Default is 3600 seconds (1 hour).                    |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``400``       | MalformedXML          | The XML is not well-formed                               |
++---------------+-----------------------+----------------------------------------------------------+
+| ``400``       | InvalidArgument       | Missing mandatory value or invalid value                 |
++---------------+-----------------------+----------------------------------------------------------+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+
+
+Disable Bucket Logging
+----------------------
+
+Disable bucket logging from a bucket.
+
+Syntax
+~~~~~~
+
+::
+
+    PUT /{bucket}?logging HTTP/1.1
+
+
+Request Entities
+~~~~~~~~~~~~~~~~
+
+Parameters are XML encoded in the body of the request, in the following format:
+
+::
+
+  <BucketLoggingStatus xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  </BucketLoggingStatus>
+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+
+Get Bucket Logging
+------------------
+
+Get logging configured on a bucket.
+
+Syntax
+~~~~~~
+
+::
+
+    GET /{bucket}?logging HTTP/1.1 
+
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+Response is XML encoded in the body of the request, in the following format:
+
+::
+
+  <BucketLoggingStatus xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <LoggingEnabled>
+      <TargetBucket>string</TargetBucket>
+      <TargetGrants>
+        <Grant>
+          <Grantee>
+            <DisplayName>string</DisplayName>
+            <EmailAddress>string</EmailAddress>
+            <ID>string</ID>
+            <xsi:type>string</xsi:type>
+            <URI>string</URI>
+          </Grantee>
+          <Permission>string</Permission>
+        </Grant>
+      </TargetGrants>
+      <TargetObjectKeyFormat>
+        <PartitionedPrefix>
+          <PartitionDateSource>DeliveryTime|EventTime</PartitionDateSource>
+        </PartitionedPrefix>
+        <SimplePrefix>
+        </SimplePrefix>
+      </TargetObjectKeyFormat>
+      <TargetPrefix>string</TargetPrefix>
+      <LoggingType>Standard|Journal</LoggingType>
+      <ObjectRollTime>integer</ObjectRollTime>
+      <Filter>
+        <S3Key>
+          <FilterRule>
+            <Name>suffix/prefix/regex</Name>
+            <Value></Value>
+          </FilterRule>
+        </S3Key>
+      </Filter>
+    </LoggingEnabled>
+  </BucketLoggingStatus>
+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+
+Flush Bucket Logging
+--------------------
+
+Flushes all logging objects for a given source bucket (logging bucket are written lazily).
+
+Syntax
+~~~~~~
+
+::
+
+    POST /{bucket}?logging HTTP/1.1
+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``201``       | Created               | Flushed all logging objects successfully                 |
++---------------+-----------------------+----------------------------------------------------------+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+

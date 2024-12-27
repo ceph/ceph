@@ -39,8 +39,8 @@ struct test_block_delta_t {
 
 inline std::ostream &operator<<(
   std::ostream &lhs, const test_extent_desc_t &rhs) {
-  return lhs << "test_extent_desc_t(len=" << rhs.len
-	     << ", checksum=" << rhs.checksum << ")";
+  return lhs << "test_extent_desc_t(len=0x" << std::hex << rhs.len
+	     << ", checksum=0x" << rhs.checksum << std::dec << ")";
 }
 
 struct TestBlock : crimson::os::seastore::LogicalCachedExtent {

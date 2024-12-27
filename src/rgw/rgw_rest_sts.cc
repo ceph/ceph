@@ -454,6 +454,68 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
             } else {
               throw -EINVAL;
             }
+            try {
+              //verify method takes care of expired tokens also
+              if (algorithm == "RS256") {
+                auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::rs256{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "RS384") {
+                auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::rs384{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "RS512") {
+                auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::rs512{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "ES256") {
+                auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::es256{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "ES384") {
+                auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::es384{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "ES512") {
+                auto verifier = jwt::verify()
+                              .allow_algorithm(jwt::algorithm::es512{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "PS256") {
+                auto verifier = jwt::verify()
+                              .allow_algorithm(jwt::algorithm::ps256{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "PS384") {
+                auto verifier = jwt::verify()
+                              .allow_algorithm(jwt::algorithm::ps384{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "PS512") {
+                auto verifier = jwt::verify()
+                              .allow_algorithm(jwt::algorithm::ps512{cert});
+
+                verifier.verify(decoded);
+              } else {
+                ldpp_dout(dpp, 0) << "Unsupported algorithm: " << algorithm << dendl;
+                throw -EINVAL;
+              }
+            } catch (std::runtime_error& e) {
+              ldpp_dout(dpp, 0) << "Signature validation failed: " << e.what() << dendl;
+              throw;
+            }
+            catch (...) {
+              ldpp_dout(dpp, 0) << "Signature validation failed" << dendl;
+              throw;
+            }
+          } else {
+            ldpp_dout(dpp, 0) << "x5c not present" << dendl;
+            throw -EINVAL;
           }
         }
       }

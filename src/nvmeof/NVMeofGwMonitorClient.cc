@@ -42,7 +42,6 @@ NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
   monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(g_ceph_context, "async", entity_name_t::CLIENT(-1), "client", getpid())),
   objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
-  client{client_messenger.get(), &monc, &objecter},
   timer(g_ceph_context, beacon_lock),
   orig_argc(argc),
   orig_argv(argv)
@@ -134,7 +133,6 @@ int NVMeofGwMonitorClient::init()
   // Initialize Messenger
   client_messenger->add_dispatcher_tail(this);
   client_messenger->add_dispatcher_head(&objecter);
-  client_messenger->add_dispatcher_tail(&client);
   client_messenger->start();
 
   poolctx.start(2);
@@ -190,7 +188,6 @@ int NVMeofGwMonitorClient::init()
   objecter.init();
   objecter.enable_blocklist_events();
   objecter.start();
-  client.init();
   timer.init();
 
   {
@@ -302,8 +299,7 @@ void NVMeofGwMonitorClient::shutdown()
     std::lock_guard bl(beacon_lock);
     timer.shutdown();
   }
-  // client uses monc and objecter
-  client.shutdown();
+
   // Stop asio threads, so leftover events won't call into shut down
   // monclient/objecter.
   poolctx.finish();

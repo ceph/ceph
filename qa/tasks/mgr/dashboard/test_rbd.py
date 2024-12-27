@@ -869,7 +869,19 @@ class RbdTest(DashboardTestCase):
         self.assertEqual(clone_format_version, 2)
         self.assertStatus(200)
 
+        # if empty list is sent, then the config will remain as it is
         value = []
+        res = [{'section': "global", 'value': "2"}]
+        self._post('/api/cluster_conf', {
+            'name': config_name,
+            'value': value
+        })
+        self.wait_until_equal(
+            lambda: _get_config_by_name(config_name),
+            res,
+            timeout=60)
+
+        value = [{'section': "global", 'value': ""}]
         self._post('/api/cluster_conf', {
             'name': config_name,
             'value': value

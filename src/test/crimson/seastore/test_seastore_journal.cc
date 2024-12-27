@@ -233,12 +233,17 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
   auto submit_record(T&&... _record) {
     auto record{std::forward<T>(_record)...};
     records.push_back(record);
+    record_validator_t& back = records.back();
     OrderingHandle handle = get_dummy_ordering_handle();
-    auto [addr, _] = journal->submit_record(
+    journal->submit_record(
       std::move(record),
-      handle).unsafe_get();
-    records.back().record_final_offset = addr;
-    return addr;
+      handle,
+      transaction_type_t::MUTATE,
+      [&back](auto locator) {
+        back.record_final_offset = locator.record_block_base;
+      }
+    ).unsafe_get();
+    return back.record_final_offset;
   }
 
   extent_t generate_extent(size_t blocks) {

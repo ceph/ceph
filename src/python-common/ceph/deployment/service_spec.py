@@ -25,7 +25,9 @@ from typing import (
 import yaml
 
 from ceph.deployment.hostspec import HostSpec, SpecValidationError, assert_valid_host
-from ceph.deployment.utils import unwrap_ipv6, valid_addr
+from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_int
+from ceph.deployment.utils import verify_positive_int, verify_non_negative_number
+from ceph.deployment.utils import verify_boolean, verify_enum
 from ceph.utils import is_hex
 
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
@@ -1328,6 +1330,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  name: Optional[str] = None,
                  group: Optional[str] = None,
                  addr: Optional[str] = None,
+                 addr_map: Optional[Dict[str, str]] = None,
                  port: Optional[int] = None,
                  pool: Optional[str] = None,
                  enable_auth: bool = False,
@@ -1335,11 +1338,17 @@ class NvmeofServiceSpec(ServiceSpec):
                  state_update_interval_sec: Optional[int] = 5,
                  enable_spdk_discovery_controller: Optional[bool] = False,
                  enable_key_encryption: Optional[bool] = True,
+                 encryption_key: Optional[str] = None,
+                 rebalance_period_sec: Optional[int] = 7,
+                 max_gws_in_grp: Optional[int] = 16,
+                 max_ns_to_change_lb_grp: Optional[int] = 8,
                  omap_file_lock_duration: Optional[int] = 20,
                  omap_file_lock_retries: Optional[int] = 30,
                  omap_file_lock_retry_sleep_interval: Optional[float] = 1.0,
                  omap_file_update_reloads: Optional[int] = 10,
                  enable_prometheus_exporter: Optional[bool] = True,
+                 prometheus_port: Optional[int] = 10008,
+                 prometheus_stats_interval: Optional[int] = 10,
                  bdevs_per_cluster: Optional[int] = 32,
                  verify_nqns: Optional[bool] = True,
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
@@ -1372,6 +1381,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
                  tgt_cmd_extra_args: Optional[str] = None,
                  discovery_addr: Optional[str] = None,
+                 discovery_addr_map: Optional[Dict[str, str]] = None,
                  discovery_port: Optional[int] = None,
                  log_level: Optional[str] = 'INFO',
                  log_files_enabled: Optional[bool] = True,
@@ -1406,6 +1416,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.pool = pool
         #: ``addr`` address of the nvmeof gateway
         self.addr = addr
+        #: ``addr_map`` per node address map of the nvmeof gateways
+        self.addr_map = addr_map
         #: ``port`` port of the nvmeof gateway
         self.port = port or 5500
         #: ``name`` name of the nvmeof gateway
@@ -1422,8 +1434,20 @@ class NvmeofServiceSpec(ServiceSpec):
         self.enable_spdk_discovery_controller = enable_spdk_discovery_controller
         #: ``enable_key_encryption`` encrypt DHCHAP and PSK keys before saving in OMAP
         self.enable_key_encryption = enable_key_encryption
+        #: ``encryption_key`` gateway encryption key
+        self.encryption_key = encryption_key
+        #: ``rebalance_period_sec`` number of seconds between cycles of auto namesapce rebalancing
+        self.rebalance_period_sec = rebalance_period_sec
+        #: ``max_gws_in_grp`` max number of gateways in one group
+        self.max_gws_in_grp = max_gws_in_grp
+        #: ``max_ns_to_change_lb_grp`` max number of namespaces before switching to a new lb group
+        self.max_ns_to_change_lb_grp = max_ns_to_change_lb_grp
         #: ``enable_prometheus_exporter`` enables Prometheus exporter
         self.enable_prometheus_exporter = enable_prometheus_exporter
+        #: ``prometheus_port`` Prometheus port
+        self.prometheus_port = prometheus_port or 10008
+        #: ``prometheus_stats_interval`` Prometheus get stats interval
+        self.prometheus_stats_interval = prometheus_stats_interval
         #: ``verify_nqns`` enables verification of subsystem and host NQNs for validity
         self.verify_nqns = verify_nqns
         #: ``omap_file_lock_duration`` number of seconds before automatically unlock OMAP file lock
@@ -1492,6 +1516,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
         #: ``discovery_addr`` address of the discovery service
         self.discovery_addr = discovery_addr
+        #: ``discovery_addr_map`` per node address map of the discovery service
+        self.discovery_addr_map = discovery_addr_map
         #: ``discovery_port`` port of the discovery service
         self.discovery_port = discovery_port or 8009
         #: ``log_level`` the nvmeof gateway log level
@@ -1518,7 +1544,7 @@ class NvmeofServiceSpec(ServiceSpec):
         self.monitor_client_log_file_dir = monitor_client_log_file_dir
 
     def get_port_start(self) -> List[int]:
-        return [5500, 4420, 8009]
+        return [self.port, 4420, self.discovery_port]
 
     def validate(self) -> None:
         #  TODO: what other parameters should be validated as part of this function?
@@ -1527,6 +1553,7 @@ class NvmeofServiceSpec(ServiceSpec):
         if not self.pool:
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
 
+        verify_boolean(self.enable_auth, "Enable authentication")
         if self.enable_auth:
             if not all([self.server_key, self.server_cert, self.client_key,
                         self.client_cert, self.root_ca_cert]):
@@ -1541,142 +1568,64 @@ class NvmeofServiceSpec(ServiceSpec):
         if self.transports not in ['tcp']:
             raise SpecValidationError('Invalid transport. Valid values are tcp')
 
-        if self.log_level:
-            if self.log_level.lower() not in ['debug',
-                                              'info',
-                                              'warning',
-                                              'error',
-                                              'critical']:
-                raise SpecValidationError(
-                    'Invalid log level. Valid values are: debug, info, warning, error, critial')
+        verify_enum(self.log_level, "log level", ['debug', 'info', 'warning', 'error', 'critical'])
+        verify_enum(self.spdk_log_level, "SPDK log level",
+                    ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'NOTICE'])
+        verify_enum(self.spdk_protocol_log_level, "SPDK protocol log level",
+                    ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'NOTICE'])
+        verify_positive_int(self.bdevs_per_cluster, "Bdevs per cluster")
+        if self.bdevs_per_cluster is not None and self.bdevs_per_cluster < 1:
+            raise SpecValidationError("Bdevs per cluster should be at least 1")
 
-        if self.spdk_log_level:
-            if self.spdk_log_level.lower() not in ['debug',
-                                                   'info',
-                                                   'warning',
-                                                   'error',
-                                                   'notice']:
-                raise SpecValidationError(
-                    'Invalid SPDK log level. Valid values are: '
-                    'DEBUG, INFO, WARNING, ERROR, NOTICE')
-
-        if self.spdk_protocol_log_level:
-            if self.spdk_protocol_log_level.lower() not in ['debug',
-                                                            'info',
-                                                            'warning',
-                                                            'error',
-                                                            'notice']:
-                raise SpecValidationError(
-                    'Invalid SPDK protocol log level. Valid values are: '
-                    'DEBUG, INFO, WARNING, ERROR, NOTICE')
-
+        verify_non_negative_number(self.spdk_ping_interval_in_seconds, "SPDK ping interval")
         if (
-            self.spdk_ping_interval_in_seconds
+            self.spdk_ping_interval_in_seconds is not None
             and self.spdk_ping_interval_in_seconds < 1.0
         ):
             raise SpecValidationError("SPDK ping interval should be at least 1 second")
 
+        verify_non_negative_int(self.allowed_consecutive_spdk_ping_failures,
+                                "Allowed consecutive SPDK ping failures")
         if (
-            self.allowed_consecutive_spdk_ping_failures
+            self.allowed_consecutive_spdk_ping_failures is not None
             and self.allowed_consecutive_spdk_ping_failures < 1
         ):
             raise SpecValidationError("Allowed consecutive SPDK ping failures should be at least 1")
 
-        if (
-            self.state_update_interval_sec
-            and self.state_update_interval_sec < 0
-        ):
-            raise SpecValidationError("State update interval can't be negative")
-
-        if (
-            self.omap_file_lock_duration
-            and self.omap_file_lock_duration < 0
-        ):
-            raise SpecValidationError("OMAP file lock duration can't be negative")
-
-        if (
-            self.omap_file_lock_retries
-            and self.omap_file_lock_retries < 0
-        ):
-            raise SpecValidationError("OMAP file lock retries can't be negative")
-
-        if (
-            self.omap_file_update_reloads
-            and self.omap_file_update_reloads < 0
-        ):
-            raise SpecValidationError("OMAP file reloads can't be negative")
-
-        if (
-            self.spdk_timeout
-            and self.spdk_timeout < 0.0
-        ):
-            raise SpecValidationError("SPDK timeout can't be negative")
-
-        if (
-            self.conn_retries
-            and self.conn_retries < 0
-        ):
-            raise SpecValidationError("Connection retries can't be negative")
-
-        if (
-            self.max_log_file_size_in_mb
-            and self.max_log_file_size_in_mb < 0
-        ):
-            raise SpecValidationError("Log file size can't be negative")
-
-        if (
-            self.max_log_files_count
-            and self.max_log_files_count < 0
-        ):
-            raise SpecValidationError("Log files count can't be negative")
-
-        if (
-            self.max_log_directory_backups
-            and self.max_log_directory_backups < 0
-        ):
-            raise SpecValidationError("Log file directory backups can't be negative")
-
-        if (self.max_hosts_per_namespace and self.max_hosts_per_namespace < 0):
-            raise SpecValidationError("Max hosts per namespace can't be negative")
-
-        if (self.max_namespaces_with_netmask and self.max_namespaces_with_netmask < 0):
-            raise SpecValidationError("Max namespaces with netmask can't be negative")
-
-        if not isinstance(self.max_subsystems, int):
-            raise SpecValidationError("Max subsystems must be an integer")
-
-        if self.max_subsystems <= 0:
-            raise SpecValidationError("Max subsystems must be greater than zero")
-
-        if not isinstance(self.max_namespaces, int):
-            raise SpecValidationError("Max namespaces must be an integer")
-
-        if self.max_namespaces <= 0:
-            raise SpecValidationError("Max namespaces must be greater than zero")
-
-        if not isinstance(self.max_namespaces_per_subsystem, int):
-            raise SpecValidationError("Max namespaces per subsystem must be an integer")
-
-        if self.max_namespaces_per_subsystem <= 0:
-            raise SpecValidationError("Max namespaces per subsystem must be greater than zero")
-
-        if not isinstance(self.max_hosts_per_subsystem, int):
-            raise SpecValidationError("Max hosts per subsystem must be an integer")
-
-        if self.max_hosts_per_subsystem <= 0:
-            raise SpecValidationError("Max hosts per subsystem must be greater than zero")
-
-        if (
-            self.monitor_timeout
-            and self.monitor_timeout < 0.0
-        ):
-            raise SpecValidationError("Monitor timeout can't be negative")
-
-        if self.port and self.port < 0:
-            raise SpecValidationError("Port can't be negative")
-
-        if self.discovery_port and self.discovery_port < 0:
-            raise SpecValidationError("Discovery port can't be negative")
+        verify_non_negative_int(self.state_update_interval_sec, "State update interval")
+        verify_non_negative_int(self.rebalance_period_sec, "Rebalance period")
+        verify_non_negative_int(self.max_gws_in_grp, "Max gateways in group")
+        verify_non_negative_int(self.max_ns_to_change_lb_grp,
+                                "Max namespaces to change load balancing group")
+        verify_non_negative_int(self.omap_file_lock_duration, "OMAP file lock duration")
+        verify_non_negative_number(self.omap_file_lock_retry_sleep_interval,
+                                   "OMAP file lock sleep interval")
+        verify_non_negative_int(self.omap_file_lock_retries, "OMAP file lock retries")
+        verify_non_negative_int(self.omap_file_update_reloads, "OMAP file reloads")
+        verify_non_negative_number(self.spdk_timeout, "SPDK timeout")
+        verify_non_negative_int(self.max_log_file_size_in_mb, "Log file size")
+        verify_non_negative_int(self.max_log_files_count, "Log files count")
+        verify_non_negative_int(self.max_log_directory_backups, "Log file directory backups")
+        verify_non_negative_int(self.max_hosts_per_namespace, "Max hosts per namespace")
+        verify_non_negative_int(self.max_namespaces_with_netmask, "Max namespaces with netmask")
+        verify_positive_int(self.max_subsystems, "Max subsystems")
+        verify_positive_int(self.max_namespaces, "Max namespaces")
+        verify_positive_int(self.max_namespaces_per_subsystem, "Max namespaces per subsystem")
+        verify_positive_int(self.max_hosts_per_subsystem, "Max hosts per subsystem")
+        verify_non_negative_number(self.monitor_timeout, "Monitor timeout")
+        verify_non_negative_int(self.port, "Port")
+        verify_non_negative_int(self.discovery_port, "Discovery port")
+        verify_non_negative_int(self.prometheus_port, "Prometheus port")
+        verify_non_negative_int(self.prometheus_stats_interval, "Prometheus stats interval")
+        verify_boolean(self.state_update_notify, "State update notify")
+        verify_boolean(self.enable_spdk_discovery_controller, "Enable SPDK discovery controller")
+        verify_boolean(self.enable_key_encryption, "Enable key encryption")
+        verify_boolean(self.enable_prometheus_exporter, "Enable Prometheus exporter")
+        verify_boolean(self.verify_nqns, "Verify NQNs")
+        verify_boolean(self.log_files_enabled, "Log files enabled")
+        verify_boolean(self.log_files_rotation_enabled, "Log files rotation enabled")
+        verify_boolean(self.verbose_log_messages, "Verbose log messages")
+        verify_boolean(self.enable_monitor_client, "Enable monitor client")
 
 
 yaml.add_representer(NvmeofServiceSpec, ServiceSpec.yaml_representer)

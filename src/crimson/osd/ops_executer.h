@@ -195,26 +195,26 @@ private:
 
   SnapContext snapc; // writer snap context
   struct CloningContext {
+    /// id of new clone, populated in prepare_cloning_ctx
+    hobject_t coid;
+    /// new snapset, populated in prepare_cloning_ctx
     SnapSet new_snapset;
-    pg_log_entry_t log_entry;
+    /// populated in complete_cloning_ctx
     ObjectContextRef clone_obc;
-
-    void apply_to(
-      std::vector<pg_log_entry_t>& log_entries,
-      ObjectContext& processed_obc);
   };
   std::unique_ptr<CloningContext> cloning_ctx;
 
-
   /**
-   * execute_clone
+   * prepare_cloning_ctx
    *
    * If snapc contains a snap which occurred logically after the last write
    * seen by this object (see OpsExecuter::should_clone()), we first need
-   * make a clone of the object at its current state.  execute_clone primes
-   * txn with that clone operation and returns an
-   * OpsExecuter::CloningContext which will allow us to fill in the corresponding
-   * metadata and log_entries once the operations have been processed.
+   * make a clone of the object at its current state.  prepare_cloning_ctx
+   * primes txn with that clone operation and populates cloning_ctx with
+   * an obc for the clone and a new snapset reflecting the clone.
+   *
+   * complete_cloning_ctx later uses the information from cloning_ctx to
+   * generate a log entry and object_info versions for the clone.
    *
    * Note that this strategy differs from classic, which instead performs this
    * work at the end and reorders the transaction.  See
@@ -227,13 +227,15 @@ private:
    * @param backend [in,out] interface for generating mutations
    * @param txn [out] transaction for the operation
    */
-  std::unique_ptr<CloningContext> execute_clone(
+  void prepare_cloning_ctx(
     const SnapContext& snapc,
     const ObjectState& initial_obs,
     const SnapSet& initial_snapset,
     PGBackend& backend,
     ceph::os::Transaction& txn);
 
+  /// complete clone, populate clone_obc, return log entry
+  pg_log_entry_t complete_cloning_ctx();
 
   /**
    * should_clone
@@ -263,12 +265,6 @@ private:
   * part of the head object for each write operation.
   */
   void update_clone_overlap();
-
-  std::vector<pg_log_entry_t> flush_clone_metadata(
-    std::vector<pg_log_entry_t>&& log_entries,
-    SnapMapper& snap_mapper,
-    OSDriver& osdriver,
-    ceph::os::Transaction& txn);
 
 private:
   // this gizmo could be wrapped in std::optional for the sake of lazy
@@ -400,15 +396,22 @@ public:
     std::tuple<interruptible_future<>, interruptible_future<>>;
   using rep_op_fut_t =
     interruptible_future<rep_op_fut_tuple>;
-  template <typename MutFunc>
-  rep_op_fut_t flush_changes_n_do_ops_effects(
+  rep_op_fut_t flush_changes_and_submit(
     const std::vector<OSDOp>& ops,
     SnapMapper& snap_mapper,
-    OSDriver& osdriver,
-    MutFunc mut_func) &&;
-  std::vector<pg_log_entry_t> prepare_transaction(
-    const std::vector<OSDOp>& ops);
-  void fill_op_params(modified_by m);
+    OSDriver& osdriver);
+  pg_log_entry_t prepare_head_update(
+    const std::vector<OSDOp>& ops,
+    ceph::os::Transaction &txn);
+
+  void check_init_op_params(OpsExecuter::modified_by m) {
+    if (!osd_op_params) {
+      osd_op_params.emplace();
+      osd_op_params->req_id = msg->get_reqid();
+      osd_op_params->mtime = msg->get_mtime();
+      osd_op_params->user_modify = (m == modified_by::user);
+    }
+  }
 
   ObjectContextRef get_obc() const {
     return obc;
@@ -443,7 +446,7 @@ public:
 
   ObjectContextRef prepare_clone(
     const hobject_t& coid,
-    eversion_t version);
+    const ObjectState& initial_obs);
 
   void apply_stats();
 };
@@ -483,69 +486,6 @@ auto OpsExecuter::with_effect_on_obc(
   auto& ctx_ref = task->ctx;
   op_effects.emplace_back(std::move(task));
   return std::forward<MainFunc>(main_func)(ctx_ref);
-}
-
-template <typename MutFunc>
-OpsExecuter::rep_op_fut_t
-OpsExecuter::flush_changes_n_do_ops_effects(
-  const std::vector<OSDOp>& ops,
-  SnapMapper& snap_mapper,
-  OSDriver& osdriver,
-  MutFunc mut_func) &&
-{
-  const bool want_mutate = !txn.empty();
-  // osd_op_params are instantiated by every wr-like operation.
-  assert(osd_op_params || !want_mutate);
-  assert(obc);
-
-  auto submitted = interruptor::now();
-  auto all_completed = interruptor::now();
-
-  if (cloning_ctx) {
-    ceph_assert(want_mutate);
-  }
-
-  apply_stats();
-  if (want_mutate) {
-    auto log_entries = flush_clone_metadata(
-      prepare_transaction(ops),
-      snap_mapper,
-      osdriver,
-      txn);
-
-    if (auto log_rit = log_entries.rbegin(); log_rit != log_entries.rend()) {
-      ceph_assert(log_rit->version == osd_op_params->at_version);
-    }
-
-    auto [_submitted, _all_completed] = co_await mut_func(
-      std::move(txn),
-      std::move(obc),
-      std::move(*osd_op_params),
-      std::move(log_entries),
-      cloning_ctx
-	? std::move(cloning_ctx->clone_obc)
-	: nullptr);
-
-    submitted = std::move(_submitted);
-    all_completed = std::move(_all_completed);
-  }
-
-  if (op_effects.size()) [[unlikely]] {
-    // need extra ref pg due to apply_stats() which can be executed after
-    // informing snap mapper
-    all_completed =
-      std::move(all_completed).then_interruptible([this, pg=this->pg] {
-      // let's do the cleaning of `op_effects` in destructor
-      return interruptor::do_for_each(op_effects,
-        [pg=std::move(pg)](auto& op_effect) {
-        return op_effect->execute(pg);
-      });
-    });
-  }
-
-  co_return std::make_tuple(
-    std::move(submitted),
-    std::move(all_completed));
 }
 
 template <class Func>

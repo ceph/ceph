@@ -1186,11 +1186,33 @@ Obsoletes:	libcephfs1 < %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-libs < %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-libcephfs < %{_epoch_prefix}%{version}-%{release}
 %endif
+Recommends: libcephfs-proxy2 = %{_epoch_prefix}%{version}-%{release}
+Requires:   libcephfs-daemon
 %description -n libcephfs2
 Ceph is a distributed network file system designed to provide excellent
 performance, reliability, and scalability. This is a shared library
 allowing applications to access a Ceph distributed file system via a
 POSIX-like interface.
+
+%package -n libcephfs-proxy2
+Summary:    Proxy for libcephfs
+%if 0%{?suse_version}
+Group:      System/Libraries
+%endif
+Recommends:	libcephfs-daemon = %{_epoch_prefix}%{version}-%{release}
+%description -n libcephfs-proxy2
+This package contains the libcephfs_proxy.so library that allow applications
+to share cephfs mounts to reduce resource consumption.
+
+%package -n libcephfs-daemon
+Summary:    Deamon for the libcephfs proxy
+%if 0%{?suse_version}
+Group:      System/Filesystems
+%endif
+Requires:   libcephfs2 = %{_epoch_prefix}%{version}-%{release}
+%description -n libcephfs-daemon
+This package contains the libcephfsd daemon that allows applications to share
+cephfs mounts to reduce resource consumption.
 
 %package -n libcephfs-devel
 Summary:	Ceph distributed file system headers
@@ -1198,6 +1220,7 @@ Summary:	Ceph distributed file system headers
 Group:		Development/Libraries/C and C++
 %endif
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libcephfs-proxy2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
 Provides:	libcephfs2-devel = %{_epoch_prefix}%{version}-%{release}
@@ -2524,6 +2547,16 @@ fi
 
 %postun -n libcephfs2 -p /sbin/ldconfig
 
+%files -n libcephfs-proxy2
+%{_libdir}/libcephfs_proxy.so.*
+
+%post -n libcephfs-proxy2 -p /sbin/ldconfig
+
+%postun -n libcephfs-proxy2 -p /sbin/ldconfig
+
+%files -n libcephfs-daemon
+%{_sbindir}/libcephfsd
+
 %files -n libcephfs-devel
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
@@ -2532,6 +2565,8 @@ fi
 %dir %{_includedir}/cephfs/metrics
 %{_includedir}/cephfs/metrics/Types.h
 %{_libdir}/libcephfs.so
+%{_libdir}/libcephfs_proxy.so
+%{_libdir}/pkgconfig/cephfs.pc
 
 %files -n python%{python3_pkgversion}-cephfs
 %{python3_sitearch}/cephfs.cpython*.so

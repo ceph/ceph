@@ -66,11 +66,6 @@ void NVMeofGwMon::on_shutdown()
 
 void NVMeofGwMon::tick()
 {
-  if (++tick_ratio == 10) {
-    global_rebalance_index++;
-    dout(20) <<  "rebalance index " << global_rebalance_index << dendl;
-    tick_ratio = 0;
-  }
   if (!is_active() || !mon.is_leader()) {
     dout(10) << "NVMeofGwMon leader : " << mon.is_leader()
 	     << "active : " << is_active()  << dendl;
@@ -329,8 +324,9 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
     if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA)) {
       f->dump_string("features", "LB");
       if (map.created_gws[group_key].size()) {
-        uint32_t index = (global_rebalance_index %
-              map.created_gws[group_key].size()) + 1;
+        time_t seconds_since_1970 = time(NULL);
+        uint32_t index = ((seconds_since_1970/60) %
+             map.created_gws[group_key].size()) + 1;
         f->dump_unsigned("rebalance_ana_group", index);
       }
     }
@@ -625,15 +621,15 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     avail = gw_availability_t::GW_CREATED;
     dout(20) << "No-subsystems condition detected for GW " << gw_id <<dendl;
   } else {
-    bool listener_found = true;
+    bool listener_found = false;
     for (auto &subs: sub) {
-      if (subs.listeners.size() == 0) {
-        listener_found = false;
-        dout(10) << "No-listeners condition detected for GW " << gw_id << " for nqn " << subs.nqn << dendl;
+      if (subs.listeners.size()) {
+        listener_found = true;
         break;
       }
     }
     if (!listener_found) {
+     dout(10) << "No-listeners condition detected for GW " << gw_id << dendl;
      avail = gw_availability_t::GW_CREATED;
     }
   }// for HA no-subsystems and no-listeners are same usecases

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <deque>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -14,6 +15,7 @@
 
 #include "include/byteorder.h"
 #include "include/denc.h"
+#include "include/encoding.h"
 #include "include/buffer.h"
 #include "include/intarith.h"
 #include "include/interval_set.h"
@@ -1226,7 +1228,6 @@ constexpr laddr_t L_ADDR_MAX = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX);
 constexpr laddr_t L_ADDR_MIN = laddr_t::from_raw_uint(0);
 constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
 constexpr laddr_t L_ADDR_ROOT = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX - 1);
-constexpr laddr_t L_ADDR_LBAT = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX - 2);
 
 struct __attribute__((packed)) laddr_le_t {
   ceph_le64 laddr;
@@ -1463,6 +1464,23 @@ constexpr bool is_physical_type(extent_types_t type) {
     assert(!is_root_type(type) &&
            !is_lba_backref_node(type) &&
            type != extent_types_t::TEST_BLOCK_PHYSICAL);
+    return false;
+  }
+}
+
+constexpr bool is_backref_mapped_type(extent_types_t type) {
+  if ((type >= extent_types_t::LADDR_INTERNAL &&
+       type <= extent_types_t::OBJECT_DATA_BLOCK) ||
+      type == extent_types_t::TEST_BLOCK ||
+      type == extent_types_t::TEST_BLOCK_PHYSICAL) {
+    assert(is_logical_type(type) ||
+	   is_lba_node(type) ||
+	   type == extent_types_t::TEST_BLOCK_PHYSICAL);
+    return true;
+  } else {
+    assert(!is_logical_type(type) &&
+	   !is_lba_node(type) &&
+	   type != extent_types_t::TEST_BLOCK_PHYSICAL);
     return false;
   }
 }
@@ -1943,12 +1961,13 @@ struct __attribute__((packed)) root_t {
 
 struct alloc_blk_t {
   alloc_blk_t(
-    paddr_t paddr,
-    laddr_t laddr,
+    const paddr_t& paddr,
+    const laddr_t& laddr,
     extent_len_t len,
     extent_types_t type)
-    : paddr(paddr), laddr(laddr), len(len), type(type)
-  {}
+    : paddr(paddr), laddr(laddr), len(len), type(type) {
+    assert(len > 0);
+  }
 
   explicit alloc_blk_t() = default;
 
@@ -1963,6 +1982,25 @@ struct alloc_blk_t {
     denc(v.len, p);
     denc(v.type, p);
     DENC_FINISH(p);
+  }
+
+  static alloc_blk_t create_alloc(
+      const paddr_t& paddr,
+      const laddr_t& laddr,
+      extent_len_t len,
+      extent_types_t type) {
+    assert(is_backref_mapped_type(type));
+    assert(laddr != L_ADDR_NULL);
+    return alloc_blk_t(paddr, laddr, len, type);
+  }
+
+  static alloc_blk_t create_retire(
+      const paddr_t& paddr,
+      extent_len_t len,
+      extent_types_t type) {
+    assert(is_backref_mapped_type(type) ||
+	   is_retired_placeholder_type(type));
+    return alloc_blk_t(paddr, L_ADDR_NULL, len, type);
   }
 };
 

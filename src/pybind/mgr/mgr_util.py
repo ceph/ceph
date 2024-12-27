@@ -67,6 +67,13 @@ class PortAlreadyInUse(Exception):
     pass
 
 
+# helper function for showing a warning text in
+# the terminal
+class CLIWarning(str):
+    def __new__(cls, content: str) -> "CLIWarning":
+        return super().__new__(cls, f"WARNING: {content}")
+
+
 class CephfsConnectionException(Exception):
     def __init__(self, error_code: int, error_message: str):
         self.errno = error_code

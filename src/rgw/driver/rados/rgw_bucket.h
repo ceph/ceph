@@ -361,6 +361,7 @@ public:
   void clear_failure() { failure = false; }
 
   const RGWBucketInfo& get_bucket_info() const { return bucket->get_info(); }
+  rgw::sal::User* get_user() { return user.get(); }
 };
 
 class RGWBucketAdminOp {

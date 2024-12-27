@@ -106,13 +106,11 @@ class RgwMultisiteStatus(RESTController):
     @allow_empty_body
     # pylint: disable=W0102,W0613
     def migrate(self, daemon_name=None, realm_name=None, zonegroup_name=None, zone_name=None,
-                zonegroup_endpoints=None, zone_endpoints=None, access_key=None,
-                secret_key=None):
+                zonegroup_endpoints=None, zone_endpoints=None, username=None):
         multisite_instance = RgwMultisite()
         result = multisite_instance.migrate_to_multisite(realm_name, zonegroup_name,
                                                          zone_name, zonegroup_endpoints,
-                                                         zone_endpoints, access_key,
-                                                         secret_key)
+                                                         zone_endpoints, username)
         return result
 
     @RESTController.Collection(method='POST', path='/multisite-replications')
@@ -773,6 +771,9 @@ class RgwUser(RgwRESTController):
         return users
 
     def get(self, uid, daemon_name=None, stats=True) -> dict:
+        return self._get(uid, daemon_name=daemon_name, stats=stats)
+
+    def _get(self, uid, daemon_name=None, stats=True) -> dict:
         query_params = '?stats' if stats else ''
         result = self.proxy(daemon_name, 'GET', 'user{}'.format(query_params),
                             {'uid': uid, 'stats': stats})
@@ -788,7 +789,7 @@ class RgwUser(RgwRESTController):
         # type: (Optional[str]) -> List[str]
         emails = []
         for uid in json.loads(self.list(daemon_name)):  # type: ignore
-            user = json.loads(self.get(uid, daemon_name))  # type: ignore
+            user = self._get(uid, daemon_name)  # type: ignore
             if user["email"]:
                 emails.append(user["email"])
         return emails
@@ -910,7 +911,7 @@ class RgwUser(RgwRESTController):
                        secret_key=None, daemon_name=None):
         # pylint: disable=R1705
         subusr_array = []
-        user = json.loads(self.get(uid, daemon_name))  # type: ignore
+        user = self._get(uid, daemon_name)  # type: ignore
         subusers = user["subusers"]
         for sub_usr in subusers:
             subusr_array.append(sub_usr["id"])

@@ -14,6 +14,7 @@
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
 
+#include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 typedef boost::mt11213b gen_type;
 

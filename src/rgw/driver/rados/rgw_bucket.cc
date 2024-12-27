@@ -169,7 +169,8 @@ int RGWBucket::init(rgw::sal::Driver* _driver, RGWBucketAdminOpState& op_state,
 
   driver = _driver;
 
-  std::string bucket_name = op_state.get_bucket_name();
+  auto bucket_name = op_state.get_bucket_name();
+  auto bucket_id = op_state.get_bucket_id();
 
   if (bucket_name.empty() && op_state.get_user_id().empty())
     return -EINVAL;
@@ -184,7 +185,7 @@ int RGWBucket::init(rgw::sal::Driver* _driver, RGWBucketAdminOpState& op_state,
     bucket_name = bucket_name.substr(pos + 1);
   }
 
-  int r = driver->load_bucket(dpp, rgw_bucket(tenant, bucket_name),
+  int r = driver->load_bucket(dpp, rgw_bucket(tenant, bucket_name, bucket_id),
                               &bucket, y);
   if (r < 0) {
       set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket_name);
@@ -1140,6 +1141,16 @@ int RGWBucketAdminOp::dump_s3_policy(rgw::sal::Driver* driver, RGWBucketAdminOpS
 
 int RGWBucketAdminOp::unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, string *err)
 {
+  rgw_owner owner;
+  if (op_state.is_account_op()) {
+    owner = op_state.get_account_id();
+  } else if (op_state.is_user_op()) {
+    owner = op_state.get_user_id();
+  } else {
+    set_err_msg(err, "requires user or account id");
+    return -EINVAL;
+  }
+
   auto radosdriver = dynamic_cast<rgw::sal::RadosStore*>(driver);
   if (!radosdriver) {
     set_err_msg(err, "rados store only");
@@ -1152,13 +1163,18 @@ int RGWBucketAdminOp::unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op
     return ret;
 
   auto* rados = radosdriver->getRados()->get_rados_handle();
-  return radosdriver->ctl()->bucket->unlink_bucket(*rados, op_state.get_user_id(), op_state.get_bucket()->get_info().bucket, y, dpp, true);
+  return radosdriver->ctl()->bucket->unlink_bucket(*rados, owner, op_state.get_bucket()->get_info().bucket, y, dpp, true);
 }
 
 int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, string *err)
 {
-  if (!op_state.is_user_op()) {
-    set_err_msg(err, "empty user id");
+  rgw_owner new_owner;
+  if (op_state.is_account_op()) {
+    new_owner = op_state.get_account_id();
+  } else if (op_state.is_user_op()) {
+    new_owner = op_state.get_user_id();
+  } else {
+    set_err_msg(err, "requires user or account id");
     return -EINVAL;
   }
   auto radosdriver = dynamic_cast<rgw::sal::RadosStore*>(driver);
@@ -1172,8 +1188,26 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
   if (ret < 0)
     return ret;
 
+  std::string display_name;
+  if (op_state.is_account_op()) {
+    RGWAccountInfo info;
+    rgw::sal::Attrs attrs;
+    RGWObjVersionTracker objv;
+    ret = driver->load_account_by_id(dpp, y, op_state.get_account_id(),
+                                     info, attrs, objv);
+    if (ret < 0) {
+      set_err_msg(err, "failed to load account");
+      return ret;
+    }
+    display_name = std::move(info.name);
+  } else if (!bucket.get_user()->get_info().account_id.empty()) {
+    set_err_msg(err, "account users cannot own buckets. use --account-id instead");
+    return -EINVAL;
+  } else {
+    display_name = bucket.get_user()->get_display_name();
+  }
+
   string bucket_id = op_state.get_bucket_id();
-  std::string display_name = op_state.get_user_display_name();
   std::unique_ptr<rgw::sal::Bucket> loc_bucket;
   std::unique_ptr<rgw::sal::Bucket> old_bucket;
 
@@ -1187,7 +1221,7 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
 
   old_bucket = loc_bucket->clone();
 
-  loc_bucket->get_key().tenant = op_state.get_user_id().tenant;
+  loc_bucket->get_key().tenant = op_state.get_tenant();
 
   if (!op_state.new_bucket_name.empty()) {
     auto pos = op_state.new_bucket_name.find('/');
@@ -1236,14 +1270,14 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
   }
 
   RGWAccessControlPolicy policy_instance;
-  policy_instance.create_default(op_state.get_user_id(), display_name);
+  policy_instance.create_default(new_owner, display_name);
   owner = policy_instance.get_owner();
 
   aclbl.clear();
   policy_instance.encode(aclbl);
 
   bool exclusive = false;
-  loc_bucket->get_info().owner = op_state.get_user_id();
+  loc_bucket->get_info().owner = new_owner;
   if (*loc_bucket != *old_bucket) {
     loc_bucket->get_info().bucket = loc_bucket->get_key();
     loc_bucket->get_info().objv_tracker.version_for_read()->ver = 0;
@@ -1259,13 +1293,13 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
   /* link to user */
   RGWBucketEntryPoint ep;
   ep.bucket = loc_bucket->get_info().bucket;
-  ep.owner = op_state.get_user_id();
+  ep.owner = new_owner;
   ep.creation_time = loc_bucket->get_info().creation_time;
   ep.linked = true;
   rgw::sal::Attrs ep_attrs;
   rgw_ep_info ep_data{ep, ep_attrs};
 
-  r = radosdriver->ctl()->bucket->link_bucket(*rados, op_state.get_user_id(), loc_bucket->get_info().bucket, loc_bucket->get_info().creation_time, y, dpp, true, &ep_data);
+  r = radosdriver->ctl()->bucket->link_bucket(*rados, new_owner, loc_bucket->get_info().bucket, loc_bucket->get_info().creation_time, y, dpp, true, &ep_data);
   if (r < 0) {
     set_err_msg(err, "failed to relink bucket");
     return r;

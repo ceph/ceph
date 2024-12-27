@@ -16,6 +16,7 @@ endif()
 set(bindir ${CMAKE_INSTALL_FULL_BINDIR})
 set(sbindir ${CMAKE_INSTALL_FULL_SBINDIR})
 set(libdir ${CMAKE_INSTALL_FULL_LIBDIR})
+set(includedir ${CMAKE_INSTALL_FULL_INCLUDEDIR})
 set(sysconfdir ${CMAKE_INSTALL_FULL_SYSCONFDIR})
 set(libexecdir ${CMAKE_INSTALL_FULL_LIBEXECDIR})
 set(pkgdatadir ${CMAKE_INSTALL_FULL_DATADIR})
@@ -30,6 +31,12 @@ configure_file(ceph-post-file.in
 
 configure_file(ceph-crash.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash @ONLY)
+
+if(WITH_LIBCEPHFS)
+  configure_file(
+    ${CMAKE_SOURCE_DIR}/src/cephfs.pc.in
+    ${CMAKE_BINARY_DIR}/src/cephfs.pc @ONLY)
+endif(WITH_LIBCEPHFS)
 
 # the src/.git_version file may be written out by make-dist; otherwise
 # we pull the git version from .git
@@ -832,10 +839,12 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(cephfs PRIVATE client ceph-common
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
+    set(libcephfs_version 2.0.0)
+    set(libcephfs_soversion 2)
     set_target_properties(cephfs PROPERTIES
       OUTPUT_NAME cephfs
-      VERSION 2.0.0
-      SOVERSION 2)
+      VERSION ${libcephfs_version}
+      SOVERSION ${libcephfs_soversion})
     if(NOT APPLE AND NOT
         (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL Clang))
       foreach(name ceph-common client osdc)
@@ -848,6 +857,9 @@ if(WITH_LIBCEPHFS)
   install(DIRECTORY
     "include/cephfs"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(FILES
+    ${CMAKE_BINARY_DIR}/src/cephfs.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
   set(ceph_syn_srcs
     ceph_syn.cc
     client/SyntheticClient.cc)
@@ -857,6 +869,7 @@ if(WITH_LIBCEPHFS)
   if(LINUX)
     add_subdirectory(mount)
   endif()
+  add_subdirectory(libcephfs_proxy)
 endif(WITH_LIBCEPHFS)
 
 if(WITH_LIBCEPHSQLITE)

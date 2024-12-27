@@ -142,7 +142,7 @@ eval ${vars}
 fromtag=${CEPH_CONTAINER_FROM_IMAGE##*/}
 # translate : to -
 fromtag=${fromtag/:/-}
-builddate=$(date +%Y%m%d)
+builddate=$(date -u +%Y%m%d)
 local_tag=${fromtag}-${CEPH_CONTAINER_CEPH_REF}-${CEPH_CONTAINER_ARCH}-${builddate}
 
 repopath=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}

@@ -12,9 +12,9 @@ See `Compressor UADK Support`_.
 UADK in the Software Stack
 ==========================
 
-UADK is a general-purpose user space accelerator framework that uses shared
-virtual addressing (SVA) to provide a unified programming interface for hardware
-acceleration of cryptographic and compression algorithms.
+UADK is a general-purpose user space accelerator framework that uses Shared
+Virtual Addressing (SVA) to provide a unified programming interface for
+hardware acceleration of cryptographic and compression algorithms.
 
 UADK includes Unified/User-space-access-intended Accelerator Framework (UACCE),
 which enables hardware accelerators that support SVA to adapt to UADK.
@@ -33,10 +33,10 @@ See `OpenSSL UADK Engine`_.
 
 UADK Environment Setup
 ======================
-UADK consists of UACCE, vendors’ drivers, and an algorithm layer. UADK requires the
-hardware accelerator to support SVA, and the operating system to support IOMMU and
-SVA. Hardware accelerators from different vendors are registered as different character
-devices with UACCE by using kernel-mode drivers of the vendors.
+UADK consists of UACCE, vendor drivers, and an algorithm layer. UADK requires
+the hardware accelerator to support SVA, and the operating system to support
+IOMMU and SVA. Hardware accelerators are registered as different character
+devices with UACCE by kernel-mode drivers.
 
 ::
 
@@ -77,11 +77,12 @@ Configuration
 
 #. Kernel Requirement
 
-User needs to make sure that UACCE is already supported in Linux kernel. The kernel version
-should be at least v5.9 with SVA (Shared Virtual Addressing) enabled.
+Users must ensure that UACCE is supported by the Linux kernel release in use,
+which should be 5.9 or later with SVA (Shared Virtual Addressing) enabled.
 
-UACCE may be built as a module or built into the kernel. Here's an example to build UACCE
-with hardware accelerators for the HiSilicon Kunpeng platform.
+UACCE may be built as a loadable module or built into the kernel. Here's an
+example to build UACCE with hardware accelerators for the HiSilicon Kunpeng
+platform.
 
     .. prompt:: bash $
 
@@ -97,13 +98,17 @@ with hardware accelerators for the HiSilicon Kunpeng platform.
 Make sure all these above kernel configurations are selected.
 
 #. UADK enablement
-If the architecture is aarch64, it will automatically download the UADK source code to build
-the static library. If it runs on other architecture, user can enable it with build parameters
-`-DWITH_UADK=true`
+If the architecture is ``aarch64``, it will automatically download the UADK
+source code to build the static library. When building on other CPU
+architectures, the user may enable UADK by adding ``-DWITH_UADK=true`` to the
+compilation command line options. Note that UADK may not be compatible with all
+architectures.
 
-#. Manual Build UADK
-As the above paragraph shows, the UADK is enabled automatically, no need to build manually.
-For developer who is interested in UADK, you can refer to the below steps for building.
+#. Manually Building UADK
+As implied in the above paragraph, if the architecture is ``aarch64``, the UADK
+is enabled automatically and there is no need to build it manually. However,
+below we provide the procedure for manually building UADK so that developers
+can study how it is built. 
 
    .. prompt:: bash $ 
 
@@ -115,9 +120,9 @@ For developer who is interested in UADK, you can refer to the below steps for bu
       make
       make install
 
-   .. note:: Without –prefix, UADK will be installed to /usr/local/lib by
-             default. If get error:"cannot find -lnuma", please install 
-             the `libnuma-dev`.
+   .. note:: Without ``--prefix``, UADK will be installed under
+             ``/usr/local/lib`` by default. If you get the error: 
+             ``cannot find -lnuma``, install the ``libnuma-dev`` package.
 
 #. Configure
 
@@ -126,7 +131,8 @@ For developer who is interested in UADK, you can refer to the below steps for bu
 
          uadk_compressor_enabled=true
 
-   The default value in `global.yaml.in` for `uadk_compressor_enabled` is false.
+   The default value in `global.yaml.in` for `uadk_compressor_enabled` is
+   ``false``.
 
 .. _Compressor UADK Support: https://github.com/ceph/ceph/pull/58336
 .. _OpenSSL UADK Engine: https://github.com/Linaro/uadk_engine

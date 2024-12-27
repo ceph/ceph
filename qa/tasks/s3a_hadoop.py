@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import os
 from teuthology import misc
 from teuthology.orchestra import run
 
@@ -40,7 +41,7 @@ def task(ctx, config):
 
     # get versions
     maven_major = config.get('maven-major', 'maven-3')
-    maven_version = config.get('maven-version', '3.6.3')
+    maven_version = config.get('maven-version', '3.9.9')
     hadoop_ver = config.get('hadoop-version', '2.9.2')
     bucket_name = config.get('bucket-name', 's3atest')
     access_key = config.get('access-key', 'EGAQRD2ULOIFKFSKCT4F')
@@ -48,11 +49,19 @@ def task(ctx, config):
         'secret-key',
         'zi816w1vZKfaSM85Cl0BxXTwSLyN7zB4RbTswrGb')
 
+    # programmatically find a nearby mirror so as not to hammer archive.apache.org
+    apache_mirror_cmd="curl 'https://www.apache.org/dyn/closer.cgi' 2>/dev/null | " \
+        "grep -o '<strong>[^<]*</strong>' | sed 's/<[^>]*>//g' | head -n 1"
+    log.info("determining apache mirror by running: " + apache_mirror_cmd)
+    apache_mirror_url_front = os.popen(apache_mirror_cmd).read().rstrip() # note: includes trailing slash (/)
+    log.info("chosen apache mirror is " + apache_mirror_url_front)
+
     # set versions for cloning the repo
     apache_maven = 'apache-maven-{maven_version}-bin.tar.gz'.format(
         maven_version=maven_version)
-    maven_link = 'http://archive.apache.org/dist/maven/' + \
-        '{maven_major}/{maven_version}/binaries/'.format(maven_major=maven_major, maven_version=maven_version) + apache_maven
+    maven_link = '{apache_mirror_url_front}/maven/'.format(apache_mirror_url_front=apache_mirror_url_front) + \
+        '{maven_major}/{maven_version}/binaries/'.format(maven_major=maven_major, maven_version=maven_version) + \
+        apache_maven
     hadoop_git = 'https://github.com/apache/hadoop'
     hadoop_rel = 'hadoop-{ver} rel/release-{ver}'.format(ver=hadoop_ver)
     if hadoop_ver == 'trunk':
@@ -204,6 +213,7 @@ def run_s3atest(client, maven_version, testdir, test_options):
             run.Raw('&&'),
             run.Raw(rm_test),
             run.Raw('&&'),
+            run.Raw('JAVA_HOME=$(alternatives --list | grep jre_1.8.0 | head -n 1 | awk \'{print $3}\')'),
             run.Raw(run_test),
             run.Raw(test_options)
         ]

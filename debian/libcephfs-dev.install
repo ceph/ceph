@@ -3,3 +3,5 @@ usr/include/cephfs/libcephfs.h
 usr/include/cephfs/types.h
 usr/include/cephfs/metrics/Types.h
 usr/lib/libcephfs.so
+usr/lib/libcephfs_proxy.so
+usr/lib/pkgconfig/cephfs.pc

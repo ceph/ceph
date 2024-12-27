@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include <string>
 #include <string.h>     // for strdup
+#include <boost/container/small_vector.hpp>
+#include <utility>  // for std::cmp_greater_equal
 
 #include "common/escape.h"
 
@@ -138,17 +140,27 @@ std::ostream& HTMLFormatter::dump_stream(std::string_view name)
 
 void HTMLFormatter::dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
-  char buf[LARGE_SIZE];
-  size_t len = vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  auto buf = boost::container::small_vector<char, LARGE_SIZE>{
+      LARGE_SIZE, boost::container::default_init};
+
+  va_list ap_copy;
+  va_copy(ap_copy, ap);
+  size_t len = vsnprintf(buf.data(), buf.size(), fmt, ap);
+  va_end(ap_copy);
+
+  if(std::cmp_greater_equal(len, buf.size())){
+    buf.resize(len + 1, boost::container::default_init);
+    vsnprintf(buf.data(), buf.size(), fmt, ap_copy);
+  }
 
   std::string e(name);
   print_spaces();
   if (ns) {
     m_ss << "<li xmlns=\"" << ns << "\">" << e << ": "
-	 << xml_stream_escaper(std::string_view(buf, len)) << "</li>";
+	 << xml_stream_escaper(std::string_view(buf.data(), len)) << "</li>";
   } else {
     m_ss << "<li>" << e << ": "
-	 << xml_stream_escaper(std::string_view(buf, len)) << "</li>";
+	 << xml_stream_escaper(std::string_view(buf.data(), len)) << "</li>";
   }
 
   if (m_pretty)

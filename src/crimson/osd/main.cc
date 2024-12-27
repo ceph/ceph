@@ -24,6 +24,7 @@
 #include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/fatal_signal.h"
+#include "crimson/common/perf_counters_collection.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/osd/stop_signal.h"
@@ -201,7 +202,7 @@ int main(int argc, const char* argv[])
                                                    true);
           }
           auto store = crimson::os::FuturizedStore::create(
-            local_conf().get_val<std::string>("osd_objectstore"),
+            local_conf().get_val<std::string>("crimson_osd_objectstore"),
             local_conf().get_val<std::string>("osd_data"),
             local_conf().get_config_values());
 

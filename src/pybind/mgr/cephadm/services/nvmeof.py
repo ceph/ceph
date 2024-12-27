@@ -38,6 +38,8 @@ class NvmeofService(CephService):
         spec = cast(NvmeofServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         nvmeof_gw_id = daemon_spec.daemon_id
         host_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+        map_addr = spec.addr_map.get(daemon_spec.host) if spec.addr_map else None
+        map_discovery_addr = spec.discovery_addr_map.get(daemon_spec.host) if spec.discovery_addr_map else None
 
         keyring = self.get_keyring_with_caps(self.get_auth_entity(nvmeof_gw_id),
                                              ['mon', 'profile rbd',
@@ -47,8 +49,14 @@ class NvmeofService(CephService):
         transport_tcp_options = json.dumps(spec.transport_tcp_options) if spec.transport_tcp_options else None
         name = '{}.{}'.format(utils.name_to_config_section('nvmeof'), nvmeof_gw_id)
         rados_id = name[len('client.'):] if name.startswith('client.') else name
-        addr = spec.addr or host_ip
-        discovery_addr = spec.discovery_addr or host_ip
+
+        # The address is first searched in the per node address map,
+        # then in the spec address configuration.
+        # If neither is defined, the host IP is used as a fallback.
+        addr = map_addr or spec.addr or host_ip
+        self.mgr.log.info(f"gateway address: {addr} from {map_addr=} {spec.addr=} {host_ip=}")
+        discovery_addr = map_discovery_addr or spec.discovery_addr or host_ip
+        self.mgr.log.info(f"discovery address: {discovery_addr} from {map_discovery_addr=} {spec.discovery_addr=} {host_ip=}")
         context = {
             'spec': spec,
             'name': name,
@@ -90,6 +98,9 @@ class NvmeofService(CephService):
                 daemon_spec.extra_files['server_key'] = spec.server_key
                 daemon_spec.extra_files['client_key'] = spec.client_key
                 daemon_spec.extra_files['root_ca_cert'] = spec.root_ca_cert
+
+        if spec.encryption_key:
+            daemon_spec.extra_files['encryption_key'] = spec.encryption_key
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = []
