@@ -17,7 +17,7 @@
 
 #include <boost/shared_ptr.hpp>
 #include "include/rbd/librbd.hpp"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "rbd_replay/ActionTypes.h"
 #include "rbd_loc.hpp"
 #include <iostream>

@@ -21,7 +21,10 @@
 #include <functional>
 #include <list>
 #include <memory>
+
+#ifdef DEBUG_GATHER
 #include <set>
+#endif
 
 #include <boost/function.hpp>
 #include <boost/system/error_code.hpp>
@@ -30,6 +33,10 @@
 
 #include "include/ceph_assert.h"
 #include "common/ceph_mutex.h"
+
+#ifdef DEBUG_GATHER
+#include "include/container_ios.h"
+#endif
 
 #define mydout(cct, v) lgeneric_subdout(cct, context, v)
 

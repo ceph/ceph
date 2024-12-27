@@ -16,6 +16,7 @@
 
 #include "StandbyPyModules.h"
 #include "PyFormatter.h"
+#include "common/debug.h"
 
 
 #define dout_context g_ceph_context

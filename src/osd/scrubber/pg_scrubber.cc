@@ -8,11 +8,13 @@
 #include <cmath>
 #include <iostream>
 #include <span>
+#include <sstream>
 #include <vector>
 
 #include "debug.h"
 
 #include "common/ceph_time.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepScrub.h"

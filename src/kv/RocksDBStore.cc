@@ -23,7 +23,9 @@
 
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
+#include "common/strtol.h"
 #include "include/common_fwd.h"
+#include "include/container_ios.h"
 #include "include/scope_guard.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
@@ -32,6 +34,12 @@
 #include "RocksDBStore.h"
 
 #include "common/debug.h"
+
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_rocksdb

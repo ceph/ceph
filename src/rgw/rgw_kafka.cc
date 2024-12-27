@@ -10,13 +10,16 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include <shared_mutex> // for std::shared_lock
 #include <thread>
 #include <atomic>
 #include <mutex>
 #include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>
 #include <boost/lockfree/queue.hpp>
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
+#include "include/utime.h"
 
 #define dout_subsys ceph_subsys_rgw_notification
 

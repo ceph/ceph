@@ -6,10 +6,10 @@
 #include <string>
 #include <map>
 #include <list>
-#include <sstream>
 
 #include "include/utime.h"
 #include "include/buffer.h"
+#include "include/types.h" // for epoch_t
 #include "msg/msg_types.h"
 
 namespace ceph {

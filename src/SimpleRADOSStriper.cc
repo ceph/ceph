@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include "include/ceph_assert.h"
+#include "include/container_ios.h"
 #include "include/rados/librados.hpp"
 
 #include "cls/lock/cls_lock_client.h"
@@ -40,6 +41,7 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/strtol.h" // for strict_strtoll()
 #include "common/version.h"
 
 #include "SimpleRADOSStriper.h"

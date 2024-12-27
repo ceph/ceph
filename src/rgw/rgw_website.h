@@ -20,6 +20,7 @@
 #include <string>
 
 #include "common/ceph_json.h"
+#include "include/encoding_list.h"
 
 #include "rgw_xml.h"
 
