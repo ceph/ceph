@@ -95,7 +95,16 @@ OSD::OSD(int id, uint32_t nonce,
     hb_front_msgr{hb_front_msgr},
     hb_back_msgr{hb_back_msgr},
     monc{new crimson::mon::Client{*public_msgr, *this}},
-    mgrc{new crimson::mgr::Client{*public_msgr, *this}},
+    mgrc{new crimson::mgr::Client{
+      *public_msgr,
+      *this,
+      [this](const ConfigPayload &config_payload) {
+	return set_perf_queries(config_payload);
+      },
+      [this] {
+	return get_perf_reports();
+      }
+    }},
     store{store},
     pg_shard_manager{osd_singleton_state,
                      shard_services,
@@ -173,6 +182,70 @@ seastar::future<> OSD::open_meta_coll()
     pg_shard_manager.init_meta_coll(ch, store.get_sharded_store());
     return seastar::now();
   });
+}
+
+seastar::future<> OSD::set_perf_queries(const ConfigPayload &config_payload) {
+  LOG_PREFIX(OSD::set_perf_queries);
+  const OSDConfigPayload &osd_config_payload =
+    boost::get<OSDConfigPayload>(config_payload);
+  const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries =
+    osd_config_payload.config;
+  DEBUG("setting {} queries", queries.size());
+
+  std::list<OSDPerfMetricQuery> supported_queries;
+  for (auto &it : queries) {
+    auto &query = it.first;
+    if (!query.key_descriptor.empty()) {
+      supported_queries.push_back(query);
+    }
+  }
+  if (supported_queries.size() < queries.size()) {
+    DEBUG("{} unsupported queries", queries.size() - supported_queries.size());
+  }
+
+  return shard_services.invoke_on_all(
+    [supported_queries, queries](auto &local_service) {
+    auto &pgs = local_service.local_state.pg_map.get_pgs();
+    local_service.local_state.m_perf_queries = supported_queries;
+    local_service.local_state.m_perf_limits = queries;
+    for (auto &[id, pg] : pgs) {
+      pg->set_dynamic_perf_stats_queries(supported_queries);
+    }
+  });
+}
+
+seastar::future<MetricPayload> OSD::get_perf_reports() {
+  LOG_PREFIX(OSD::get_perf_reports);
+  OSDMetricPayload payload;
+  std::map<OSDPerfMetricQuery, OSDPerfMetricReport> &reports = payload.report;
+
+  auto dps = co_await shard_services.map_reduce0(
+    [FNAME](auto &local_service) {
+      auto &pgs = local_service.local_state.pg_map.get_pgs();
+      auto &m_perf_queries = local_service.local_state.m_perf_queries;
+      DynamicPerfStats dps;
+      for (auto &[id, pg] : pgs) {
+	// m_perf_queries can be modified only in set_perf_queries by mgr client
+	// request, and it is protected by by mgr client's lock, which is held
+	// when set_perf_queries/get_perf_reports are called, so we may not hold
+	// m_perf_queries_lock here.
+	DynamicPerfStats pg_dps(m_perf_queries);
+	pg->get_dynamic_perf_stats(&pg_dps);
+	dps.merge(pg_dps);
+	DEBUG("reporting for pg {}", pg->get_pgid());
+      }
+      return dps;
+    },
+    DynamicPerfStats(shard_services.local().local_state.m_perf_queries),
+    [](auto left, auto right) {
+      left.merge(right);
+      return left;
+    });
+
+  dps.add_to_reports(shard_services.local().local_state.m_perf_limits, &reports);
+  DEBUG("reports for {} queries", reports.size());
+
+  co_return payload;
 }
 
 seastar::future<OSDMeta> OSD::open_or_create_meta_coll(FuturizedStore &store)
