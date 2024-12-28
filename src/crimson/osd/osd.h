@@ -234,6 +234,8 @@ private:
     crimson::net::ConnectionRef conn,
     Ref<MOSDPGUpdateLogMissingReply> m);
 
+  seastar::future<> set_perf_queries(const ConfigPayload &config_payload);
+  seastar::future<MetricPayload> get_perf_reports();
 private:
   crimson::common::gate_per_shard gate;
 
