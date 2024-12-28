@@ -3162,7 +3162,7 @@ cdef class Image(object):
         return "rbd.Image(ioctx, %r)" % self.name
 
     @requires_not_closed
-    def resize(self, size, allow_shrink=True):
+    def resize(self, size, allow_shrink=False):
         """
         Change the size of the image, allow shrink.
 

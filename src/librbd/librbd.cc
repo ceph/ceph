@@ -5087,7 +5087,7 @@ extern "C" int rbd_resize(rbd_image_t image, uint64_t size)
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
   librbd::NoOpProgressContext prog_ctx;
-  int r = ictx->operations->resize(size, true, prog_ctx);
+  int r = ictx->operations->resize(size, false, prog_ctx);
   tracepoint(librbd, resize_exit, r);
   return r;
 }
