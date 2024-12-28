@@ -774,7 +774,16 @@ public:
     size_t inb,
     size_t outb,
     const utime_t &lat) {
-    dp_stats.add(pg_whoami.osd, get_info(), req, inb, outb, lat);
+    if (dp_stats.is_enabled()) {
+      dp_stats.add(pg_whoami.osd, get_info(), req, inb, outb, lat);
+    }
+  }
+  void set_dynamic_perf_stats_queries(
+    const std::list<OSDPerfMetricQuery> &queries) {
+    dp_stats.set_queries(queries);
+  }
+  void get_dynamic_perf_stats(DynamicPerfStats *stats) {
+    std::swap(dp_stats, *stats);
   }
   OSDriver &get_osdriver() final {
     return osdriver;
