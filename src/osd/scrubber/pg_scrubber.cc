@@ -2077,6 +2077,7 @@ void PgScrubber::scrub_finish()
   }
 
   cleanup_on_finish();
+  m_active_target.reset();
   if (do_auto_scrub) {
     request_rescrubbing();
   }
