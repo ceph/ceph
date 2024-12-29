@@ -95,7 +95,7 @@ To build Ceph, follow this procedure:
 
        ninja -j3
 
-   > [IMPORTANT]
+   > [!IMPORTANT]
    >
    > [Ninja](https://ninja-build.org/) is the build system used by the Ceph
    > project to build test builds.  The number of jobs used by `ninja` is 
