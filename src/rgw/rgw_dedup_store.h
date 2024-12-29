@@ -142,12 +142,16 @@ namespace rgw::dedup {
       uint16_t      manifest_len;
       uint16_t      obj_name_len;
       uint16_t      bucket_name_len;
+      uint16_t      bucket_id_len;
+      uint16_t      tenant_name_len;
       uint16_t      ref_tag_len;
       uint16_t      pad16;
     }s;
     std::string obj_name;
     // TBD: find pool name making it easier to get ioctx
     std::string bucket_name;
+    std::string bucket_id;
+    std::string tenant_name;
     std::string ref_tag;
     bufferlist  manifest_bl;
   };

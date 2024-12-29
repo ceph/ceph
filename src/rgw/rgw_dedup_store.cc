@@ -32,10 +32,11 @@ namespace rgw::dedup {
     this->s.md5_high        = CEPHTOH_64(p_rec->s.md5_high);
     this->s.md5_low         = CEPHTOH_64(p_rec->s.md5_low);
     this->s.version         = CEPHTOH_64(p_rec->s.version);
-
+    this->s.pad16           = 0;
     this->s.obj_name_len    = CEPHTOH_16(p_rec->s.obj_name_len);
     this->s.bucket_name_len = CEPHTOH_16(p_rec->s.bucket_name_len);
-    this->s.pad16           = 0;
+    this->s.bucket_id_len   = CEPHTOH_16(p_rec->s.bucket_id_len);
+    this->s.tenant_name_len = CEPHTOH_16(p_rec->s.tenant_name_len);
     this->s.ref_tag_len     = CEPHTOH_16(p_rec->s.ref_tag_len);
     this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
 
@@ -45,6 +46,12 @@ namespace rgw::dedup {
 
     this->bucket_name = std::string(p, this->s.bucket_name_len);
     p += p_rec->s.bucket_name_len;
+
+    this->bucket_id = std::string(p, this->s.bucket_id_len);
+    p += p_rec->s.bucket_id_len;
+
+    this->tenant_name = std::string(p, this->s.tenant_name_len);
+    p += p_rec->s.tenant_name_len;
 
     if (p_rec->s.flags.is_fastlane()) {
       // TBD:: remove asserts
@@ -87,6 +94,8 @@ namespace rgw::dedup {
     p_rec->s.manifest_len    = HTOCEPH_16(manifest_bl.length());
     p_rec->s.obj_name_len    = HTOCEPH_16(this->obj_name.length());
     p_rec->s.bucket_name_len = HTOCEPH_16(this->bucket_name.length());
+    p_rec->s.bucket_id_len   = HTOCEPH_16(this->bucket_id.length());
+    p_rec->s.tenant_name_len = HTOCEPH_16(this->tenant_name.length());
     p_rec->s.ref_tag_len     = HTOCEPH_16(this->ref_tag.length());
     p_rec->s.pad16           = 0;
 
@@ -97,6 +106,14 @@ namespace rgw::dedup {
 
     len = this->bucket_name.length();
     std::memcpy(p, this->bucket_name.data(), len);
+    p += len;
+
+    len = this->bucket_id.length();
+    std::memcpy(p, this->bucket_id.data(), len);
+    p += len;
+
+    len = this->tenant_name.length();
+    std::memcpy(p, this->tenant_name.data(), len);
     p += len;
 
     if (this->s.flags.is_fastlane()) {
@@ -123,6 +140,8 @@ namespace rgw::dedup {
     unsigned len = offsetof(packed_rec_t, obj_name_len);
     return (this->obj_name    == other.obj_name    &&
 	    this->bucket_name == other.bucket_name &&
+	    this->bucket_id   == other.bucket_id &&
+	    this->tenant_name == other.tenant_name &&
 	    this->ref_tag     == other.ref_tag &&
 	    this->manifest_bl == other.manifest_bl &&
 	    memcmp((char*)&this->s.flags, (char*)&other.s.flags, len) == 0);
@@ -134,6 +153,8 @@ namespace rgw::dedup {
     return (sizeof(this->s) +
 	    this->obj_name.length() +
 	    this->bucket_name.length() +
+	    this->bucket_id.length() +
+	    this->tenant_name.length() +
 	    this->ref_tag.length() +
 	    this->manifest_bl.length());
   }
@@ -143,6 +164,8 @@ namespace rgw::dedup {
   {
     stream << rec.obj_name << "::" << rec.s.obj_name_len << "\n";
     stream << rec.bucket_name << "::" << rec.s.bucket_name_len << "\n";
+    stream << rec.bucket_id << "::" << rec.s.bucket_id_len << "\n";
+    stream << rec.tenant_name << "::" << rec.s.tenant_name_len << "\n";
     stream << rec.ref_tag << "::" << rec.s.ref_tag_len << "\n";
     stream << "num_parts = " << rec.s.num_parts << "\n";
     stream << "obj_size  = " << 4*rec.s.size_4k_units <<" KiB"  << "\n";
@@ -267,11 +290,15 @@ namespace rgw::dedup {
     p_rec->s.flags           = 0;
     p_rec->s.pad8            = 0;
     p_rec->s.version         = 0;
-    p_rec->s.size_4k_units   = uint32_t(obj_size/(4*1024));
+    p_rec->s.size_4k_units   = byte_size_to_disk_blocks(obj_size);
     p_rec->obj_name          = obj_name;
     p_rec->s.obj_name_len    = p_rec->obj_name.length();
     p_rec->bucket_name       = p_bucket->get_name();
     p_rec->s.bucket_name_len = p_rec->bucket_name.length();
+    p_rec->bucket_id         = p_bucket->get_bucket_id();
+    p_rec->s.bucket_id_len   = p_rec->bucket_id.length();
+    p_rec->tenant_name       = p_bucket->get_tenant();
+    p_rec->s.tenant_name_len = p_rec->tenant_name.length();
     p_rec->s.pad16           = 0;
     p_rec->s.md5_high        = p_parsed_etag->md5_high;
     p_rec->s.md5_low         = p_parsed_etag->md5_low;

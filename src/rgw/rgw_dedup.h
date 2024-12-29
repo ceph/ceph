@@ -60,9 +60,9 @@ namespace rgw::dedup {
 			       librados::IoCtx       &ioctx,
 			       work_shard_t           shard_id,
 			       worker_stats_t        *p_worker_stats /*IN-OUT*/);
-    int  ingress_bucket_objects_single_shard(const string   &bucket_name,
-					     work_shard_t    worker_id,
-					     worker_stats_t *p_worker_stats /*IN-OUT*/);
+    int  ingress_bucket_objects_single_shard(const rgw_bucket &bucket_rec,
+					     work_shard_t      worker_id,
+					     worker_stats_t   *p_worker_stats /*IN-OUT*/);
     int  objects_ingress_single_work_shard(work_shard_t worker_id,
 					   worker_stats_t *p_worker_stats);
     int  f_ingress_work_shard(unsigned shard_id);
