@@ -717,10 +717,9 @@ void EMetaBlob::remotebit::encode(bufferlist& bl, uint64_t features) const
   encode(d_type, bl);
   encode(dirty, bl);
   encode(alternate_name, bl);
-  if (referent) {
-    encode(referent_ino, bl);
+  encode(referent_ino, bl);
+  if (referent_ino)
     encode(*referent_inode, bl, features);
-  }
   ENCODE_FINISH(bl);
 }
 
@@ -737,13 +736,13 @@ void EMetaBlob::remotebit::decode(bufferlist::const_iterator &bl)
   if (struct_v >= 3)
     decode(alternate_name, bl);
   if (struct_v >= 4) {
-    if (referent) {
-      decode(referent_ino, bl);
-      {
-        auto _inode = CInode::allocate_inode();
-        decode(*_inode, bl);
-        referent_inode = std::move(_inode);
-      }
+    decode(referent_ino, bl);
+    if (referent_ino) {
+      auto _inode = CInode::allocate_inode();
+      decode(*_inode, bl);
+      referent_inode = std::move(_inode);
+    } else {
+      referent_inode = NULL;
     }
   }
   DECODE_FINISH(bl);
@@ -1456,6 +1455,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
 
     // remote dentries
     for (auto& rb : lump.get_dremote()) {
+      dout(20) << "EMetaBlob.replay - Going over remotebit " << rb << dendl;
       CDentry *dn = dir->lookup_exact_snap(rb.dn, rb.dnlast);
       if (!dn) {
 	dn = dir->add_remote_dentry(rb.dn, rb.ino, rb.referent_ino, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);

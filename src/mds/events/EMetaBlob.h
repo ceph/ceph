@@ -149,13 +149,12 @@ public:
     unsigned char d_type = '\0';
     inodeno_t referent_ino = 0;
     CInode::inode_const_ptr referent_inode;      // if it's not XXX should not be part of mempool; wait for std::pmr to simplify
-    bool referent = false;
     bool dirty = false;
 
     remotebit(std::string_view d, std::string_view an, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) :
       dn(d), alternate_name(an), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     remotebit(std::string_view d, std::string_view an, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, inodeno_t ref_ino, const CInode::inode_const_ptr& ref_inode, bool dr) :
-      dn(d), alternate_name(an), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), referent_ino(ref_ino), referent_inode(ref_inode), dirty(dr) {referent = true; }
+      dn(d), alternate_name(an), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), referent_ino(ref_ino), referent_inode(ref_inode), dirty(dr) {}
     explicit remotebit(bufferlist::const_iterator &p) { decode(p); }
     remotebit() = default;
 
@@ -166,6 +165,7 @@ public:
       out << " remotebit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " ino " << ino
 	  << " referent ino " << referent_ino
+	  << " referent inode " << referent_inode
 	  << " dirty=" << dirty;
       if (!alternate_name.empty()) {
         out << " altn " << binstrprint(alternate_name, 8);
