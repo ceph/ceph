@@ -1310,9 +1310,9 @@ redirection on standby nodes.
     mode tcp
     option httpchk GET /
     http-check expect status 200
-    server x <HOST>:<PORT> ssl check verify none
-    server y <HOST>:<PORT> ssl check verify none
-    server z <HOST>:<PORT> ssl check verify none
+    server x <HOST>:<PORT> check check-ssl verify none
+    server y <HOST>:<PORT> check check-ssl verify none
+    server z <HOST>:<PORT> check check-ssl verify none
 
 .. _dashboard-auditing:
 
