@@ -941,7 +941,10 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     std::string version;
     ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Fetching attrs from backend store." << dendl;
     auto ret = next->get_obj_attrs(y, dpp, target_obj);
-    if (ret < 0) {
+    if (ret < 0 || !target_obj) {
+      if (!target_obj) {
+        ret = -ENOENT;
+      }
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to fetch attrs from backend store, ret=" << ret << dendl;
       return ret;
     }
