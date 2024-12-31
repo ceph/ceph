@@ -56,6 +56,14 @@ class Onode : public boost::intrusive_ref_counter<
 protected:
   virtual laddr_t get_hint() const = 0;
   const hobject_t hobj;
+
+  void validate_root_laddr(laddr_t laddr) const {
+    auto prefix = get_clone_prefix();
+    if (prefix) {
+      ceph_assert(laddr.get_clone_prefix() == prefix->get_clone_prefix());
+    }
+  }
+
 public:
   explicit Onode(const hobject_t &hobj) : hobj(hobj) {}
 
@@ -78,6 +86,56 @@ public:
   laddr_t get_data_hint() const {
     return get_hint();
   }
+
+  std::optional<laddr_t> get_clone_prefix() const {
+    std::optional<laddr_t> prefix = std::nullopt;
+
+    const auto &layout = get_layout();
+    auto omap_root = layout.omap_root.get(LADDR_HINT_NULL);
+    if (!omap_root.is_null()) {
+      prefix.emplace(omap_root.addr.get_clone_prefix());
+    }
+
+    auto xattr_root = layout.xattr_root.get(LADDR_HINT_NULL);
+    if (!xattr_root.is_null()) {
+      auto laddr = xattr_root.addr.get_clone_prefix();
+      if (prefix) {
+        ceph_assert(*prefix == laddr);
+      } else {
+        prefix.emplace(laddr);
+      }
+    }
+
+    auto obj_data = layout.object_data.get();
+    if (!obj_data.is_null()) {
+      auto laddr = obj_data.get_reserved_data_base().get_clone_prefix();
+      if (prefix) {
+        ceph_assert(*prefix == laddr);
+      } else {
+        prefix.emplace(laddr);
+      }
+    }
+
+    return prefix;
+  }
+
+  std::optional<laddr_t> get_object_prefix() const {
+    auto prefix = get_clone_prefix();
+    if (prefix) {
+      return prefix->get_object_prefix();
+    }
+    return prefix;
+  }
+
+  void validate_prefix(shard_t shard, pool_t pool, crush_hash_t crush) const {
+    auto prefix = get_object_prefix();
+    if (prefix) {
+      ceph_assert(prefix->match_shard_bits(shard));
+      ceph_assert(prefix->match_pool_bits(pool));
+      ceph_assert(prefix->get_reversed_hash() == crush);
+    }
+  }
+
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
 

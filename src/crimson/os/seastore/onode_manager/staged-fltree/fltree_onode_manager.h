@@ -114,6 +114,7 @@ struct FLTreeOnode final : Onode, Value {
   }
 
   void update_omap_root(Transaction &t, omap_root_t &oroot) final {
+    validate_root_laddr(oroot.addr);
     with_mutable_layout(
       t,
       [&oroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -128,6 +129,7 @@ struct FLTreeOnode final : Onode, Value {
   }
 
   void update_xattr_root(Transaction &t, omap_root_t &xroot) final {
+    validate_root_laddr(xroot.addr);
     with_mutable_layout(
       t,
       [&xroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -142,6 +144,7 @@ struct FLTreeOnode final : Onode, Value {
   }
 
   void update_object_data(Transaction &t, object_data_t &odata) final {
+    validate_root_laddr(odata.get_reserved_data_base());
     with_mutable_layout(
       t,
       [&odata](NodeExtentMutable &payload_mut, Recorder *recorder) {

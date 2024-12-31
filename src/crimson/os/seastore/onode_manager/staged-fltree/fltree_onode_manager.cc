@@ -151,6 +151,10 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
     auto val = OnodeRef(new FLTreeOnode(
 	hoid.hobj,
 	cursor.value()));
+    val->validate_prefix(
+      hoid.shard_id.id,
+      hoid.hobj.pool,
+      hoid.hobj.get_bitwise_key_u32());
     return get_onode_iertr::make_ready_future<OnodeRef>(
       val
     );
@@ -176,6 +180,10 @@ FLTreeOnodeManager::get_or_create_onode(
       DEBUGT("created onode for entry for {}", trans, hoid);
       onode->create_default_layout(trans);
     }
+    onode->validate_prefix(
+      hoid.shard_id.id,
+      hoid.hobj.pool,
+      hoid.hobj.get_bitwise_key_u32());
     return get_or_create_onode_iertr::make_ready_future<OnodeRef>(onode);
   });
 }
