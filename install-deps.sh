@@ -207,6 +207,7 @@ function install_boost_on_ubuntu {
         ceph-libboost-date-time${boost_ver}-dev \
         ceph-libboost-filesystem${boost_ver}-dev \
         ceph-libboost-iostreams${boost_ver}-dev \
+        ceph-libboost-locale${boost_ver}-dev \
         ceph-libboost-program-options${boost_ver}-dev \
         ceph-libboost-python${boost_ver}-dev \
         ceph-libboost-random${boost_ver}-dev \
