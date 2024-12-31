@@ -184,4 +184,7 @@ export class RgwUserService {
   getUserRateLimit(name:string) {
     return this.http.get(`${this.url}/ratelimit/${name}`);
   }
+  getGlobalUserRateLimit(){
+    return this.http.get(`${this.url}/ratelimit`);
+  }
 }

@@ -278,4 +278,7 @@ export class RgwBucketService extends ApiClient {
   getBucketRateLimit(name:string) {
     return this.http.get(`${this.url}/ratelimit/${name}`);
   }
+  getGlobalBucketRateLimit(){
+    return this.http.get(`${this.url}/ratelimit`);
+  }
 }

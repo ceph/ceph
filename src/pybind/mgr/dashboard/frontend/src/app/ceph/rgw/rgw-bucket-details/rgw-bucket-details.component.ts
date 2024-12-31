@@ -17,6 +17,7 @@ export class RgwBucketDetailsComponent implements OnChanges {
   lifecycleFormat: 'json' | 'xml' = 'json';
   aclPermissions: Record<string, string[]> = {};
   replicationStatus = $localize`Disabled`;
+  bucketRateLimit:object;
   constructor(private rgwBucketService: RgwBucketService) {}
 
   ngOnChanges() {
@@ -32,11 +33,9 @@ export class RgwBucketDetailsComponent implements OnChanges {
           this.replicationStatus = this.selection.replication?.['Rule']?.['Status'];
         }
       });
-      this.rgwBucketService.getBucketRateLimit(this.selection.bid).subscribe((resp: object) => {
-        _.extend(this.selection, resp);
-        console.log(this.selection);
+      this.rgwBucketService.getBucketRateLimit(this.selection.bid).subscribe((resp: any) => {
+        this.bucketRateLimit=resp.bucket_ratelimit;
       });
-
     }
   }
 

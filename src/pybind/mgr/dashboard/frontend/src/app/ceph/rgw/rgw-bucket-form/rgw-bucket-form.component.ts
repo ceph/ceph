@@ -40,6 +40,7 @@ import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { map, switchMap } from 'rxjs/operators';
 import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml-formatter.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { GlobalRateLimit, RgwRateLimit } from '../models/rgw-rate-limit';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -58,6 +59,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   action: string;
   resource: string;
   zonegroup: string;
+  globalBucketRateLimit:GlobalRateLimit["bucket_ratelimit"];;
   placementTargets: object[] = [];
   isVersioningAlreadyEnabled = false;
   isMfaDeleteAlreadyEnabled = false;
@@ -237,7 +239,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         )
       )
     );
-
+   
     this.kmsProviders = rgwBucketEncryptionModel.kmsProviders;
     this.rgwBucketService.getEncryptionConfig().subscribe((data) => {
       if (data['SSE_KMS']?.length > 0) {
@@ -257,9 +259,14 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         this.bucketForm.get('encryption_type').setValue('');
       }
     });
+    //get the global rate Limit
+    this.rgwBucketService.getGlobalBucketRateLimit().subscribe((data:GlobalRateLimit)=>{
+      this.globalBucketRateLimit= data.bucket_ratelimit; 
+    });
+        
 
     if (!this.editing) {
-      promises['getPlacementTargets'] = this.rgwSiteService.get('placement-targets');
+      promises['getPlacementTargets'] = this.rgwSiteService.get('placement-targets');   
     }
 
     // Process route parameters.
@@ -267,7 +274,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       if (params.hasOwnProperty('bid')) {
         const bid = decodeURIComponent(params.bid);
         promises['getBid'] = this.rgwBucketService.get(bid);
+        promises['getRateLimit']= this.rgwBucketService.getBucketRateLimit(bid); 
       } 
+      
       
       forkJoin(promises).subscribe((data: any) => {
         // Get the list of possible owners.
@@ -288,9 +297,6 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           if (this.placementTargets.length === 1) {
             this.bucketForm.get('placement-target').setValue(this.placementTargets[0]['name']);
           }
-        }
-        if(this.editing){
-          this._setBucketRateLimit(data['getBid'].bid);
         }
         if (data['getBid']) {
           const bidResp = data['getBid'];
@@ -352,6 +358,10 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
                 this.bucketForm.get('replication').setValue(false);
               }
             }
+            //map the bucket Rate Limit
+            if(data['getRateLimit']){
+              this._setBucketRateLimit(data['getRateLimit'].bucket_ratelimit);
+            }
             this.filterAclPermissions();
           }
         }
@@ -360,18 +370,22 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     });
   }
 
-  private _setBucketRateLimit(bid:string){
-    this.rgwBucketService.getBucketRateLimit(bid).subscribe((data:any)=>{
-      //Map Rate Limit Values
-      this.bucketForm.get('bucket_rate_limit_enabled').setValue(data.bucket_ratelimit.enabled);
-      this._setRateLimitProperty('bucket_rate_limit_max_readBytes', 'bucket_rate_limit_max_readBytes_unlimited', data.bucket_ratelimit.max_read_bytes);
-      this._setRateLimitProperty('bucket_rate_limit_max_writeBytes', 'bucket_rate_limit_max_writeBytes_unlimited', data.bucket_ratelimit.max_write_bytes);
-      this._setRateLimitProperty('bucket_rate_limit_max_readOps', 'bucket_rate_limit_max_readOps_unlimited', data.bucket_ratelimit.max_read_ops);
-      this._setRateLimitProperty('bucket_rate_limit_max_writeOps', 'bucket_rate_limit_max_writeOps_unlimited', data.bucket_ratelimit.max_write_ops);
-    })
+  /**
+   * Helper function to map the values for the bucket Rate Limit
+   */
+
+  private _setBucketRateLimit(data:RgwRateLimit){
+      this.bucketForm.get('bucket_rate_limit_enabled').setValue(data.enabled);
+      this._setRateLimitProperty('bucket_rate_limit_max_readBytes', 'bucket_rate_limit_max_readBytes_unlimited', data.max_read_bytes);
+      this._setRateLimitProperty('bucket_rate_limit_max_writeBytes', 'bucket_rate_limit_max_writeBytes_unlimited', data.max_write_bytes);
+      this._setRateLimitProperty('bucket_rate_limit_max_readOps', 'bucket_rate_limit_max_readOps_unlimited', data.max_read_ops);
+      this._setRateLimitProperty('bucket_rate_limit_max_writeOps', 'bucket_rate_limit_max_writeOps_unlimited', data.max_write_ops);
   }
-  private _setRateLimitProperty(rateLimitKey:string, unlimitedKey:string, property:any) {
-    console.log("property", property);
+  /**
+   * Helper function to map the values for the Rate Limit when the bucket
+   * rate limit gets loaded for first time or edited.
+   */
+  private _setRateLimitProperty(rateLimitKey:string, unlimitedKey:string, property:string | number) {
     if (property === 0) {
       this.bucketForm.get(unlimitedKey).setValue(true);
       this.bucketForm.get(rateLimitKey).setValue('');
@@ -408,10 +422,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     const bucketPolicy = this.getBucketPolicy();
     const cannedAcl = this.permissionToCannedAcl();
 
-     // Check if user ratelimit has been modified.
+     // Check if bucket ratelimit has been modified.
      if (this._isBucketRateLimitDirty()) {
       const bucketRateLimitArgs = this._getBucketRateLimitArgs();
-      // console.log('bucketRateLimitArgs',bucketRateLimitArgs);
       this.rgwBucketService.updateBucketRateLimit(bucketRateLimitArgs).subscribe();
      }
   
@@ -709,9 +722,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
    * Helper function to get the arguments for the API request when the bucket
    * rate limit configuration has been modified.
    */
-  private _getBucketRateLimitArgs(): Record<string, any> {
+  private _getBucketRateLimitArgs(): RgwRateLimit {
 
-    const result = {
+    const result: RgwRateLimit = {
       "enabled": this.bucketForm.getValue('bucket_rate_limit_enabled')  + '',
       "name": this.bucketForm.getValue('bid'),
       "max_read_ops": '0',

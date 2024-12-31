@@ -25,6 +25,7 @@ import { RgwUserCapabilityModalComponent } from '../rgw-user-capability-modal/rg
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
 import { RgwUserSubuserModalComponent } from '../rgw-user-subuser-modal/rgw-user-subuser-modal.component';
 import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
+import { GlobalRateLimit, RgwRateLimit } from '../models/rgw-rate-limit';
 
 @Component({
   selector: 'cd-rgw-user-form',
@@ -41,6 +42,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   swiftKeys: RgwUserSwiftKey[] = [];
   capabilities: RgwUserCapability[] = [];
   action: string;
+  globalUserRateLimit:GlobalRateLimit["user_ratelimit"];
   resource: string;
   subuserLabel: string;
   s3keyLabel: string;
@@ -225,6 +227,10 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
+    //get the global rate Limit
+    this.rgwUserService.getGlobalUserRateLimit().subscribe((data:GlobalRateLimit)=>{
+        this.globalUserRateLimit= data.user_ratelimit; 
+      });
     // Process route parameters.
     this.route.params.subscribe((params: { uid: string }) => {
       if (!params.hasOwnProperty('uid')) {
@@ -793,9 +799,9 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * Helper function to get the arguments for the API request when the user
    * rate limit configuration has been modified.
    */
-  private _getUserRateLimitArgs(): Record<string, any> {
+  private _getUserRateLimitArgs(): RgwRateLimit {
 
-    const result = {
+    const result: RgwRateLimit = {
       "enabled": this.userForm.getValue('user_rate_limit_enabled') + '',
       "name": this.userForm.getValue('user_id'),
       "max_read_ops": '0',
@@ -819,8 +825,12 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     return result;
   }
 
-  private _setRateLimitProperty(value: Pick<any, string>, rateLimitKey:string, unlimitedKey:string, property:any) {
-    console.log("property", property);
+  /**
+   * Helper function to map the values for the Rate Limit when the user
+   * rate limit gets loaded for first time or edited.
+   */
+
+  private _setRateLimitProperty(value: Pick<any, string>, rateLimitKey:string, unlimitedKey:string, property:string | number) {
     if (property === 0) {
       value[unlimitedKey] = true;
       value[rateLimitKey] = '';

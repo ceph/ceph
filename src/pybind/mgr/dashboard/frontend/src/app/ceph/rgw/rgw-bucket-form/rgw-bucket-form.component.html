@@ -640,7 +640,22 @@
           <fieldset>
             <legend i18n
                     class="cd-header">Bucket Rate Limit</legend>
-
+            <div class="row">
+                <div class="col-3"></div>
+                <div class="col-9" 
+                *ngIf="!!globalBucketRateLimit && globalBucketRateLimit.enabled">
+                  <div class="mt-4">
+                    <cd-alert-panel type="info" 
+                                    class="me-1"
+                                    id="global-ratelimit-info"
+                                    i18n><div class="global-rate-limit-align"><span class="bold">Global Rate Limit</span><br/> Max. Read Bytes : {{globalBucketRateLimit.max_read_bytes | dimlessBinaryPerMinute}} <br/>
+                                    Max. Read Ops : {{globalBucketRateLimit.max_read_ops}} IOPM <br/>Max. Write Bytes : {{globalBucketRateLimit.max_write_bytes | dimlessBinaryPerMinute}} <br/>Max. Write Ops : {{globalBucketRateLimit.max_write_ops}} IOPM </div>
+                    </cd-alert-panel>
+                  </div>
+                </div>
+            </div>
+           
+            
             <!-- Enabled -->
             <div class="form-group row">
               <div class="cd-col-form-offset">
@@ -652,7 +667,7 @@
                   <label class="custom-control-label spacing-03 $body-compact-02"
                          for="bucket_rate_limit_enabled"
                          i18n>Enabled</label>
-                </div>
+                </div>  
               </div>
             </div>
 
