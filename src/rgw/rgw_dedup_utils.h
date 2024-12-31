@@ -6,13 +6,14 @@
 #include "include/utime.h"
 
 namespace rgw::dedup {
+  static constexpr uint64_t HEAD_OBJ_SIZE = 4*1024*1024; // 4MB
   using work_shard_t   = uint8_t;
   using md5_shard_t    = uint8_t;
 #if 1
   // REMOVE-ME
   // temporary settings to help debug small systems
-  const work_shard_t MAX_WORK_SHARD = 16;
-  const md5_shard_t  MAX_MD5_SHARD  = 16;
+  const work_shard_t MAX_WORK_SHARD = 4;
+  const md5_shard_t  MAX_MD5_SHARD  = 4;
 #else
   // Those are the correct values for production system
   // can go as high as 0xFF-1
@@ -65,6 +66,7 @@ namespace rgw::dedup {
     }
     worker_stats_t& operator +=(const worker_stats_t& other) {
       this->ingress_obj += other.ingress_obj;
+      this->ingress_obj_bytes += other.ingress_obj_bytes;
       this->egress_records += other.egress_records;
       this->egress_blocks += other.egress_blocks;
       this->egress_slabs += other.egress_slabs;
@@ -75,13 +77,15 @@ namespace rgw::dedup {
       this->invalid_sha256 += other.invalid_sha256;
       this->ingress_failed_get_object += other.ingress_failed_get_object;
       this->ingress_failed_get_obj_attrs += other.ingress_failed_get_obj_attrs;
+      this->ingress_skip_too_small_bytes += other.ingress_skip_too_small_bytes;
       this->ingress_skip_too_small += other.ingress_skip_too_small;
-      this->ingress_skip_encrypted += other.ingress_skip_encrypted;
-      this->ingress_skip_compressed += other.ingress_skip_compressed;
+      this->ingress_skip_too_small_64KB_bytes += other.ingress_skip_too_small_64KB_bytes;
+      this->ingress_skip_too_small_64KB += other.ingress_skip_too_small_64KB;
 
       return *this;
     }
     uint64_t ingress_obj = 0;
+    uint64_t ingress_obj_bytes = 0;
     uint64_t egress_records = 0;
     uint64_t egress_blocks = 0;
     uint64_t egress_slabs = 0;
@@ -96,9 +100,12 @@ namespace rgw::dedup {
     uint64_t ingress_failed_get_object = 0;
     uint64_t ingress_failed_get_obj_attrs = 0;
 
+    uint64_t ingress_skip_too_small_bytes = 0;
     uint64_t ingress_skip_too_small = 0;
-    uint64_t ingress_skip_encrypted = 0;
-    uint64_t ingress_skip_compressed = 0;
+
+    uint64_t ingress_skip_too_small_64KB_bytes = 0;
+    uint64_t ingress_skip_too_small_64KB = 0;
+
     utime_t  duration = {0, 0};
   };
   std::ostream& operator<<(std::ostream &out, const worker_stats_t &s);
@@ -106,6 +113,7 @@ namespace rgw::dedup {
   {
     ENCODE_START(1, 1, bl);
     encode(w.ingress_obj, bl);
+    encode(w.ingress_obj_bytes, bl);
     encode(w.egress_records, bl);
     encode(w.egress_blocks, bl);
     encode(w.egress_slabs, bl);
@@ -120,9 +128,11 @@ namespace rgw::dedup {
     encode(w.ingress_failed_get_object, bl);
     encode(w.ingress_failed_get_obj_attrs, bl);
 
+    encode(w.ingress_skip_too_small_bytes, bl);
     encode(w.ingress_skip_too_small, bl);
-    encode(w.ingress_skip_encrypted, bl);
-    encode(w.ingress_skip_compressed, bl);
+
+    encode(w.ingress_skip_too_small_64KB_bytes, bl);
+    encode(w.ingress_skip_too_small_64KB, bl);
 
     encode(w.duration, bl);
     ENCODE_FINISH(bl);
@@ -132,6 +142,7 @@ namespace rgw::dedup {
   {
     DECODE_START(1, bl);
     decode(w.ingress_obj, bl);
+    decode(w.ingress_obj_bytes, bl);
     decode(w.egress_records, bl);
     decode(w.egress_blocks, bl);
     decode(w.egress_slabs, bl);
@@ -142,9 +153,10 @@ namespace rgw::dedup {
     decode(w.invalid_sha256, bl);
     decode(w.ingress_failed_get_object, bl);
     decode(w.ingress_failed_get_obj_attrs, bl);
+    decode(w.ingress_skip_too_small_bytes, bl);
     decode(w.ingress_skip_too_small, bl);
-    decode(w.ingress_skip_encrypted, bl);
-    decode(w.ingress_skip_compressed, bl);
+    decode(w.ingress_skip_too_small_64KB_bytes, bl);
+    decode(w.ingress_skip_too_small_64KB, bl);
 
     decode(w.duration, bl);
     DECODE_FINISH(bl);
@@ -164,11 +176,14 @@ namespace rgw::dedup {
       this->ingress_failed_get_object    += other.ingress_failed_get_object;
       this->ingress_failed_get_obj_attrs += other.ingress_failed_get_obj_attrs;
       this->ingress_skip_encrypted       += other.ingress_skip_encrypted;
+      this->ingress_skip_encrypted_bytes += other.ingress_skip_encrypted_bytes;
       this->ingress_skip_compressed      += other.ingress_skip_compressed;
+      this->ingress_skip_compressed_bytes+= other.ingress_skip_compressed_bytes;
       this->ingress_skip_changed_objs    += other.ingress_skip_changed_objs;
 
       this->skipped_shared_manifest += other.skipped_shared_manifest;
       this->skipped_singleton       += other.skipped_singleton;
+      this->skipped_singleton_bytes += other.skipped_singleton_bytes;
       this->skipped_source_record   += other.skipped_source_record;
       this->skipped_duplicate       += other.skipped_duplicate;
       this->skipped_bad_sha256      += other.skipped_bad_sha256;
@@ -183,8 +198,10 @@ namespace rgw::dedup {
       this->processed_objects       += other.processed_objects;
       this->singleton_count         += other.singleton_count;
       this->duplicate_count         += other.duplicate_count;
+      this->duplicated_bytes_blocks += other.duplicated_bytes_blocks;
       this->unique_count            += other.unique_count;
       this->deduped_objects         += other.deduped_objects;
+      this->deduped_objects_bytes   += other.deduped_objects_bytes;
 
       this->failed_dedup            += other.failed_dedup;
       return *this;
@@ -194,11 +211,14 @@ namespace rgw::dedup {
     uint64_t ingress_failed_get_obj_attrs = 0;
 
     uint64_t ingress_skip_encrypted = 0;
+    uint64_t ingress_skip_encrypted_bytes = 0;
     uint64_t ingress_skip_compressed = 0;
+    uint64_t ingress_skip_compressed_bytes = 0;
     uint64_t ingress_skip_changed_objs = 0;
 
     uint64_t skipped_shared_manifest = 0;
     uint64_t skipped_singleton = 0;
+    uint64_t skipped_singleton_bytes = 0;
     uint64_t skipped_source_record = 0;
     uint64_t skipped_duplicate = 0;
     uint64_t skipped_bad_sha256 = 0;
@@ -213,8 +233,10 @@ namespace rgw::dedup {
     uint64_t processed_objects = 0;
     uint64_t singleton_count = 0;
     uint64_t duplicate_count = 0;
+    uint64_t duplicated_bytes_blocks = 0;
     uint64_t unique_count = 0;
     uint64_t deduped_objects = 0;
+    uint64_t deduped_objects_bytes = 0;
     uint64_t failed_dedup = 0;
 
     utime_t  duration = {0, 0};
@@ -227,11 +249,14 @@ namespace rgw::dedup {
     encode(m.ingress_failed_get_object, bl);
     encode(m.ingress_failed_get_obj_attrs, bl);
     encode(m.ingress_skip_encrypted, bl);
+    encode(m.ingress_skip_encrypted_bytes, bl);
     encode(m.ingress_skip_compressed, bl);
+    encode(m.ingress_skip_compressed_bytes, bl);
     encode(m.ingress_skip_changed_objs, bl);
 
     encode(m.skipped_shared_manifest, bl);
     encode(m.skipped_singleton, bl);
+    encode(m.skipped_singleton_bytes, bl);
     encode(m.skipped_source_record, bl);
     encode(m.skipped_duplicate, bl);
     encode(m.skipped_bad_sha256, bl);
@@ -246,8 +271,10 @@ namespace rgw::dedup {
     encode(m.processed_objects, bl);
     encode(m.singleton_count, bl);
     encode(m.duplicate_count, bl);
+    encode(m.duplicated_bytes_blocks, bl);
     encode(m.unique_count, bl);
     encode(m.deduped_objects, bl);
+    encode(m.deduped_objects_bytes, bl);
     encode(m.failed_dedup, bl);
 
     encode(m.duration, bl);
@@ -260,11 +287,14 @@ namespace rgw::dedup {
     decode(m.ingress_failed_get_object, bl);
     decode(m.ingress_failed_get_obj_attrs, bl);
     decode(m.ingress_skip_encrypted, bl);
+    decode(m.ingress_skip_encrypted_bytes, bl);
     decode(m.ingress_skip_compressed, bl);
+    decode(m.ingress_skip_compressed_bytes, bl);
     decode(m.ingress_skip_changed_objs, bl);
 
     decode(m.skipped_shared_manifest, bl);
     decode(m.skipped_singleton, bl);
+    decode(m.skipped_singleton_bytes, bl);
     decode(m.skipped_source_record, bl);
     decode(m.skipped_duplicate, bl);
     decode(m.skipped_bad_sha256, bl);
@@ -279,8 +309,10 @@ namespace rgw::dedup {
     decode(m.processed_objects, bl);
     decode(m.singleton_count, bl);
     decode(m.duplicate_count, bl);
+    decode(m.duplicated_bytes_blocks, bl);
     decode(m.unique_count, bl);
     decode(m.deduped_objects, bl);
+    decode(m.deduped_objects_bytes, bl);
     decode(m.failed_dedup, bl);
 
     decode(m.duration, bl);
@@ -294,6 +326,22 @@ namespace rgw::dedup {
 			// Setting num_parts to zero when multipart is not used
   };
 
+#define DIV_UP(a, b) ( ((a)+(b-1)) / b)
+  // CEPH min allocation unit on disk is 4KB
+  static constexpr uint64_t DISK_ALLOC_SIZE = 4*1024;
+  // 16 bytes hexstring  -> 8 Byte uint64_t
+  static inline constexpr unsigned HEX_UNIT_SIZE = 16;
+
+  //---------------------------------------------------------------------------
+  static inline uint64_t byte_size_to_disk_blocks(uint64_t byte_size) {
+    return DIV_UP(byte_size, DISK_ALLOC_SIZE);
+  }
+
+  //---------------------------------------------------------------------------
+  static inline uint64_t disk_blocks_to_byte_size(uint64_t disk_blocks) {
+    return disk_blocks * DISK_ALLOC_SIZE;
+  }
+
   uint64_t hex2int(const char *p, const char* p_end);
   uint16_t dec2int(const char *p, const char* p_end);
   uint16_t get_num_parts(const std::string & etag);
@@ -303,7 +351,25 @@ namespace rgw::dedup {
 			    uint64_t sha256c, uint64_t sha256d,
 			    ceph::bufferlist *bl);
   std::string calc_refcount_tag_hash(const std::string &bucket_name, const std::string &obj_name);
-  // 16 bytes hexstring  -> 8 Byte uint64_t
-  static inline constexpr unsigned HEX_UNIT_SIZE = 16;
+
+  //---------------------------------------------------------------------------
+  static inline uint64_t calc_deduped_bytes(uint64_t head_obj_size,
+					    uint16_t num_parts,
+					    uint64_t size_bytes)
+  {
+    if (num_parts > 0) {
+      // multipart objects with an empty head i.e. we achive full dedup
+      return size_bytes;
+    }
+    else {
+      // reduce the head size
+      if (size_bytes > head_obj_size) {
+	return size_bytes - head_obj_size;
+      }
+      else {
+	return 0;
+      }
+    }
+  }
 
 } //namespace rgw::dedup

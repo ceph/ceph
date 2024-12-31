@@ -120,21 +120,6 @@ namespace rgw::dedup {
     delete p_dedup_cluster_ioctx;
   }
 
-#if 0
-  //---------------------------------------------------------------------------
-  void Background::calc_object_key(uint64_t object_size, bufferlist &etag_bl, struct Key *p_key)
-  {
-    //const string& etag = etag_bl.to_str();
-    parsed_etag_t parsed_etag;
-    parse_etag_string(etag_bl.to_str(), &parsed_etag);
-    const uint32_t size_4k   = uint32_t(object_size/(4*1024));
-
-    p_key->md5_high  = parsed_etag.md5_high;
-    p_key->md5_low   = parsed_etag.md5_low;
-    p_key->size_4k_units  = size_4k;
-    p_key->num_parts = parsed_etag.num_parts;
-  }
-#endif
   //---------------------------------------------------------------------------
   [[maybe_unused]]static void show_ref_tags(const DoutPrefixProvider* dpp, std::string &oid, rgw_rados_ref &obj)
   {
@@ -330,7 +315,8 @@ namespace rgw::dedup {
 					    disk_block_id_t block_id,
 					    record_id_t rec_id)
   {
-    key_t key(p_rec->s.md5_high, p_rec->s.md5_low, p_rec->s.size_4k_units,
+    uint32_t size_4k_units = byte_size_to_disk_blocks(p_rec->s.obj_bytes_size);
+    key_t key(p_rec->s.md5_high, p_rec->s.md5_low, size_4k_units,
 	      p_rec->s.num_parts);
     bool has_valid_sha256 = p_rec->has_valid_sha256();
     bool has_shared_manifest = p_rec->has_shared_manifest();
@@ -348,16 +334,15 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static int get_ioctx1(const DoutPrefixProvider* const dpp,
-			rgw::sal::Driver* driver,
-			RGWRados* rados,
-			const std::string &bucket_name,
-			const std::string& obj_name,
-			librados::IoCtx *p_ioctx,
-			std::string *oid)
+  static int get_ioctx(const DoutPrefixProvider* const dpp,
+		       rgw::sal::Driver* driver,
+		       RGWRados* rados,
+		       const disk_record_t *p_rec,
+		       librados::IoCtx *p_ioctx,
+		       std::string *oid)
   {
     unique_ptr<rgw::sal::Bucket> bucket;
-    rgw_bucket b{"", bucket_name, ""};
+    rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
     int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
     if (unlikely(ret != 0)) {
       derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
@@ -365,7 +350,7 @@ namespace rgw::dedup {
     }
 
     const std::string bucket_id = bucket->get_key().bucket_id;
-    *oid = bucket_id + "_" + obj_name;
+    *oid = bucket_id + "_" + p_rec->obj_name;
     //ldpp_dout(dpp, 0) << __func__ << "::OID=" << oid << " || bucket_id=" << bucket_id << dendl;
     rgw_pool data_pool;
     rgw_obj obj{bucket->get_key(), *oid};
@@ -383,17 +368,16 @@ namespace rgw::dedup {
 
     return 0;
   }
-
+#if 0
   //---------------------------------------------------------------------------
   [[maybe_unused]]static int get_ioctx2(const DoutPrefixProvider* const dpp,
 					rgw::sal::Driver* driver,
 					rgw::sal::RadosStore *store,
-					const std::string &bucket_name,
-					const std::string &obj_name,
+					const disk_record_t *p_rec,
 					librados::IoCtx *p_ioctx)
   {
     unique_ptr<rgw::sal::Bucket> bucket;
-    rgw_bucket b{"", bucket_name, ""};
+    rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
     int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
     if (unlikely(ret != 0)) {
       derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
@@ -410,7 +394,7 @@ namespace rgw::dedup {
       return -1;
     }
     const std::string bucket_id = bucket->get_key().bucket_id;
-    const std::string oid = bucket_id + "_" + obj_name;
+    const std::string oid = bucket_id + "_" + p_rec->obj_name;
     ldpp_dout(dpp, 20) << __func__ << "::OID=" << oid << " || bucket_id=" << bucket_id << dendl;
 
     rgw_obj obj(b, oid);
@@ -422,7 +406,7 @@ namespace rgw::dedup {
 
     return 0;
   }
-
+#endif
   //---------------------------------------------------------------------------
   static void init_cmp_pairs(const disk_record_t *p_rec,
 			     const bufferlist    &etag_bl,
@@ -485,8 +469,8 @@ namespace rgw::dedup {
 
     std::string src_oid, tgt_oid;
     librados::IoCtx src_ioctx, tgt_ioctx;
-    int ret1 = get_ioctx1(dpp, driver, rados, p_src_rec->bucket_name, p_src_rec->obj_name, &src_ioctx, &src_oid);
-    int ret2 = get_ioctx1(dpp, driver, rados, p_tgt_rec->bucket_name, p_tgt_rec->obj_name, &tgt_ioctx, &tgt_oid);
+    int ret1 = get_ioctx(dpp, driver, rados, p_src_rec, &src_ioctx, &src_oid);
+    int ret2 = get_ioctx(dpp, driver, rados, p_tgt_rec, &tgt_ioctx, &tgt_oid);
     if (unlikely(ret1 != 0 || ret2 != 0)) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx()" << dendl;
       return -1;
@@ -541,7 +525,7 @@ namespace rgw::dedup {
 
     librados::IoCtx ioctx;
     std::string oid;
-    int ret = get_ioctx1(dpp, driver, rados, p_rec->bucket_name, p_rec->obj_name, &ioctx, &oid);
+    int ret = get_ioctx(dpp, driver, rados, p_rec, &ioctx, &oid);
     if (unlikely(ret != 0)) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx()" << dendl;
       return -1;
@@ -624,12 +608,15 @@ namespace rgw::dedup {
       try_deduping_record_dbg(dpp, p_rec, old_block_id, old_rec_id, md5_shard);
     }
     p_stats->processed_objects ++;
-    key_t key_from_bucket_index(p_rec->s.md5_high, p_rec->s.md5_low, p_rec->s.size_4k_units, p_rec->s.num_parts);
+    uint32_t size_4k_units = byte_size_to_disk_blocks(p_rec->s.obj_bytes_size);
+    key_t key_from_bucket_index(p_rec->s.md5_high, p_rec->s.md5_low, size_4k_units,
+				p_rec->s.num_parts);
     dedup_table_t::value_t src_val;
     int ret = d_table.get_val(&key_from_bucket_index, &src_val);
     if (ret != 0) {
       // record has no valid entry in table because it is a singleton
       p_stats->skipped_singleton++;
+      p_stats->skipped_singleton_bytes += p_rec->s.obj_bytes_size;
       ldpp_dout(dpp, 20) << __func__ << "::skipped singleton::" << p_rec->bucket_name
 			 << "/" << p_rec->obj_name << std::dec << dendl;
       return 0;
@@ -637,20 +624,19 @@ namespace rgw::dedup {
 
     // TBD: should we cache bucket objects ??
     // Need to measure load_bucket() time
+    rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
     unique_ptr<rgw::sal::Bucket> bucket;
-    const string empty_tenant_name, empty_bucket_id;
-    rgw_bucket b{empty_tenant_name, p_rec->bucket_name, empty_bucket_id};
     ret = driver->load_bucket(dpp, b, &bucket, null_yield);
     if (unlikely(ret != 0)) {
       // could happen when the bucket is removed between passes
-      ldpp_dout(dpp, 10) << "::Failed driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::Failed driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
       return -ret;
     }
 
     unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(p_rec->obj_name);
     if (unlikely(!p_obj)) {
       // could happen when the object is removed between passes
-      ldpp_dout(dpp, 10) << "::Failed bucket->get_object(" << p_rec->obj_name << ")" << dendl;
+      ldpp_dout(dpp, 1) << "::Failed bucket->get_object(" << p_rec->obj_name << ")" << dendl;
       p_stats->ingress_failed_get_object++;
       return 0;
     }
@@ -662,11 +648,13 @@ namespace rgw::dedup {
       p_stats->ingress_failed_get_obj_attrs++;
       return 1;
     }
-
+    //uint64_t obj_size = p_obj->get_size();
+    ceph_assert(p_rec->s.obj_bytes_size == p_obj->get_size());
     const rgw::sal::Attrs& attrs = p_obj->get_attrs();
     if (attrs.find(RGW_ATTR_CRYPT_MODE) != attrs.end()) {
       ldpp_dout(dpp, 10) <<__func__ << "::Skipping encrypted object " << p_rec->obj_name << dendl;
       p_stats->ingress_skip_encrypted++;
+      p_stats->ingress_skip_encrypted_bytes += p_rec->s.obj_bytes_size;
       return 0;
     }
 
@@ -674,6 +662,7 @@ namespace rgw::dedup {
     if (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end()) {
       ldpp_dout(dpp, 10) <<__func__ << "::Skipping compressed object " << p_rec->obj_name << dendl;
       p_stats->ingress_skip_compressed++;
+      p_stats->ingress_skip_compressed_bytes += p_rec->s.obj_bytes_size;
       return 0;
     }
 
@@ -688,14 +677,11 @@ namespace rgw::dedup {
       return -1;
     }
 
-    uint64_t obj_size = p_obj->get_size();
-    uint32_t size_4k_units = uint32_t(obj_size/(4*1024));
     key_t key_from_obj(parsed_etag.md5_high, parsed_etag.md5_low, size_4k_units, parsed_etag.num_parts);
-
     if (key_from_obj == key_from_bucket_index) {
       disk_block_array_t::record_info_t rec_info;
       ret = p_disk->add_record(p_dedup_cluster_ioctx, bucket.get(), p_obj.get(), &parsed_etag,
-			       p_rec->obj_name, obj_size, &rec_info);
+			       p_rec->obj_name, p_rec->s.obj_bytes_size, &rec_info);
       if (ret == 0) {
 	// set the disk_block_id_t to this unless the existing disk_block_id is marked as shared-manifest
 	ceph_assert(rec_info.rec_id < MAX_REC_IN_BLOCK);
@@ -746,17 +732,19 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 20) << __func__ << "::skipped shared_manifest" << dendl;
       return 0;
     }
-
-    key_t key(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, p_tgt_rec->s.size_4k_units, p_tgt_rec->s.num_parts);
+    uint32_t size_4k_units = byte_size_to_disk_blocks(p_tgt_rec->s.obj_bytes_size);
+    key_t key(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, size_4k_units,
+	      p_tgt_rec->s.num_parts);
     dedup_table_t::value_t src_val;
     int ret = d_table.get_val(&key, &src_val);
     if (ret != 0) {
       // record has no valid entry in table because it is a singleton
-      p_stats->skipped_singleton++;
-      ldpp_dout(dpp, 20) << __func__ << "::skipped singleton::" << p_tgt_rec->bucket_name
-			 << "/" << p_tgt_rec->obj_name << "::num_parts=" << p_tgt_rec->s.num_parts
-			 << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
-			 << p_tgt_rec->s.md5_low << std::dec << dendl;
+      // should never happened since we purged all singletons before
+      ldpp_dout(dpp, 1) << __func__ << "::skipped singleton::" << p_tgt_rec->bucket_name
+			<< "/" << p_tgt_rec->obj_name << "::num_parts=" << p_tgt_rec->s.num_parts
+			<< "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
+			<< p_tgt_rec->s.md5_low << std::dec << dendl;
+      ceph_abort("Unexpcted singleton");
       return 0;
     }
 
@@ -809,10 +797,15 @@ namespace rgw::dedup {
     else {
       p_stats->skip_sha256_cmp++;
     }
-
+#if 0
+    // REMOVE-ME (hack to test with small objects)
+    return 0;
+#endif
     ret = dedup_object(&src_rec, p_tgt_rec, src_val.has_shared_manifest(), src_has_sha256);
     if (ret == 0) {
       p_stats->deduped_objects++;
+      p_stats->deduped_objects_bytes += calc_deduped_bytes(HEAD_OBJ_SIZE, p_tgt_rec->s.num_parts,
+							   p_tgt_rec->s.obj_bytes_size);
       if (!src_has_sha256) {
 	// TBD: calculate SHA256 for SRC and set flag in table!!
       }
@@ -1025,10 +1018,23 @@ namespace rgw::dedup {
 
 
     uint64_t size = entry.meta.size;
+    p_worker_stats->ingress_obj++;
+    p_worker_stats->ingress_obj_bytes += size;
+    // REMOVE-ME (a hack to allow small objects to pass
+#if 0
+    if (size <= d_min_obj_size_for_dedup && 0) {}
+#else
     if (size <= d_min_obj_size_for_dedup) {
+#endif
       if (parsed_etag.num_parts == 0) {
-	p_worker_stats->ingress_skip_too_small++;
 	// dedup only useful for objects bigger than 4MB
+	p_worker_stats->ingress_skip_too_small++;
+	p_worker_stats->ingress_skip_too_small_bytes += size;
+
+	if (size >= 64*1024) {
+	  p_worker_stats->ingress_skip_too_small_64KB++;
+	  p_worker_stats->ingress_skip_too_small_64KB_bytes += size;
+	}
 	return 0;
       }
       else {
@@ -1156,7 +1162,6 @@ namespace rgw::dedup {
 	  continue;
 	}
 	marker = dirent.key;
-	p_worker_stats->ingress_obj++;
 	ret = ingress_bucket_idx_single_object(bucket, dirent, p_worker_stats);
       }
       // TBD: advance marker only once here!
@@ -1177,15 +1182,12 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::ingress_bucket_objects_single_shard(const string   &bucket_name,
-						      work_shard_t    worker_id,
-						      worker_stats_t *p_worker_stats /*IN-OUT*/)
+  int Background::ingress_bucket_objects_single_shard(const rgw_bucket &bucket_rec,
+						      work_shard_t      worker_id,
+						      worker_stats_t   *p_worker_stats /*IN-OUT*/)
   {
-    //ldpp_dout(dpp, 20) << __func__ << "::bucket_name=" << bucket_name << dendl;
     unique_ptr<rgw::sal::Bucket> bucket;
-    const string tenant_name, empty_bucket_id;
-    rgw_bucket b{tenant_name, bucket_name, empty_bucket_id};
-    int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
+    int ret = driver->load_bucket(dpp, bucket_rec, &bucket, null_yield);
     if (unlikely(ret != 0)) {
       derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
       return -ret;
@@ -1210,6 +1212,7 @@ namespace rgw::dedup {
     ret = store->svc()->bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt,
 						    idx_layout, &ioctx, &oids, nullptr);
     if (ret < 0) {
+      ldpp_dout(dpp, 1) << __func__ << ":: ERROR: open_bucket_index() returned ret=" << ret << dendl;
       return ret;
     }
     // process all the shards in this bucket owned by the worker_id
@@ -1270,9 +1273,8 @@ namespace rgw::dedup {
 	return -1;
       }
     }
-
-    d_table.count_duplicates(&(p_stats->singleton_count), &(p_stats->unique_count),
-			     &(p_stats->duplicate_count));
+    d_table.count_duplicates(&p_stats->singleton_count, &p_stats->unique_count,
+			     &p_stats->duplicate_count, &p_stats->duplicated_bytes_blocks);
     uint64_t obj_count_in_shard = (p_stats->singleton_count + p_stats->unique_count +
 				   p_stats->duplicate_count);
     display_table_stat_counters(dpp, obj_count_in_shard, p_stats);
@@ -1304,12 +1306,17 @@ namespace rgw::dedup {
       p_stats->invalid_sha256_attrs = worker_stats.invalid_sha256;
     }
 
+
+#if 1
+    ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::started..." << dendl;
+    // TBD: skip this step when running in estimate mode
     run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, NULL_WORK_SHARD, slab_count_arr, p_stats, nullptr);
     if (unlikely(should_stop())) {
       ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::STOPPED\n" << dendl;
       return -1;
     }
-
+    ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::finished..." << dendl;
+#endif
     remove_slabs(NULL_WORK_SHARD, md5_shard, slab_count_arr);
     return 0;
   }
@@ -1411,21 +1418,31 @@ namespace rgw::dedup {
       p_disk_arr[md5_shard]->set_worker_id(worker_id, p_worker_stats);
     }
     int ret = 0;
-    std::string section("bucket");
+    //std::string section("bucket");
+    std::string section("bucket.instance");
     std::string marker;
     void *handle = nullptr;
     ret = driver->meta_list_keys_init(dpp, section, marker, &handle);
+    if (ret < 0) {
+      driver->meta_list_keys_complete(handle);
+      return -ret;
+    }
 
     bool has_more = true;
     while (ret == 0 && has_more) {
-      std::list<std::string> buckets;
+      std::list<std::string> entries;
       constexpr int max_keys = 1000;
-      ret = driver->meta_list_keys_next(dpp, handle, max_keys, buckets, &has_more);
+      ret = driver->meta_list_keys_next(dpp, handle, max_keys, entries, &has_more);
       if (ret == 0) {
-	ldpp_dout(dpp, 20) <<__func__ << "::listing buckets:: worker_id=" << (uint32_t)worker_id << dendl;
-	for (auto& bucket_name : buckets) {
-	  //ldpp_dout(dpp, 20) <<__func__ << "::ingress_bucket_objects_single_shard:: bucket_name=" << bucket_name << dendl;
-	  ret = ingress_bucket_objects_single_shard(bucket_name, worker_id, p_worker_stats);
+	for (auto& entry : entries) {
+	  rgw_bucket bucket;
+	  ret = rgw_bucket_parse_bucket_key(cct, entry, &bucket, nullptr);
+	  if (unlikely(ret < 0)) {
+	    // bad bucket entry, skip to the next one
+	    continue;
+	  }
+	  ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
+	  ret = ingress_bucket_objects_single_shard(bucket, worker_id, p_worker_stats);
 	  if (unlikely(ret != 0)) {
 	    return ret;
 	  }
@@ -1728,6 +1745,8 @@ namespace rgw::dedup {
 	}
 	epoch = d_cluster.get_epoch();
 	ldpp_dout(dpp, 1) << __func__ << "::Epoch=" << epoch << dendl;
+	// TBD: should we alloc/free here?
+	// Maybe pre-allocate space for table and reuse for disk-slabs???
 	process_all_shards(true, &Background::f_ingress_work_shard);
 	if (should_stop()) {
 	  goto finish_scan;

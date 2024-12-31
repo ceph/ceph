@@ -140,6 +140,7 @@ namespace rgw::dedup {
   std::ostream& operator<<(std::ostream &out, const worker_stats_t &s)
   {
     out << "Ingress Objs count             = " << s.ingress_obj << "\n";
+    out << "Accum byte size Ingress Objs   = " << s.ingress_obj_bytes << "\n";
     out << "Egress  Records count          = " << s.egress_records << "\n";
     out << "Egress  Blocks count           = " << s.egress_blocks << "\n";
     out << "Egress  Slabs count            = " << s.egress_slabs << "\n";
@@ -149,13 +150,6 @@ namespace rgw::dedup {
     if (s.small_multipart_obj) {
       out << "Small Multipart obj count      = " << s.small_multipart_obj << "\n";
     }
-#if 0
-    out << "Valid   SHA256 count           = " << s.valid_sha256 << "\n";
-    if(s.invalid_sha256) {
-      out << "Invalid SHA256 count           = "
-	  << s.invalid_sha256 << "\n";
-    }
-#endif
     if(s.ingress_failed_get_object) {
       out << "Ingress failed get_object()    = "
 	  << s.ingress_failed_get_object << "\n";
@@ -165,18 +159,18 @@ namespace rgw::dedup {
 	  << s.ingress_failed_get_obj_attrs << "\n";
     }
     if(s.ingress_skip_too_small) {
-      out << "Ingress skip: too small        = "
+      out << "Ingress skip: too small objs   = "
 	  << s.ingress_skip_too_small << "\n";
-    }
-    if(s.ingress_skip_encrypted) {
-      out << "Ingress skip: Encrypted        = "
-	  << s.ingress_skip_encrypted << "\n";
-    }
-    if(s.ingress_skip_compressed) {
-      out << "Ingress skip: Compressed       = "
-	  << s.ingress_skip_compressed << "\n";
-    }
+      out << "Ingress skip: too small bytes  = "
+	  << s.ingress_skip_too_small_bytes << "\n";
 
+      if(s.ingress_skip_too_small_64KB) {
+	out << "Ingress skip: 64KB<=size<=4MB Obj   = "
+	    << s.ingress_skip_too_small_64KB << "\n";
+	out << "Ingress skip: 64KB<=size<=4MB Bytes =  "
+	    << s.ingress_skip_too_small_64KB_bytes << "\n";
+      }
+    }
     return out;
   }
 
@@ -189,14 +183,19 @@ namespace rgw::dedup {
     out << "inValid SHA256 attrs     = " << s.invalid_sha256_attrs << "\n";
 
     out << "Skipped shared_manifest  = " << s.skipped_shared_manifest << "\n";
-    out << "Skipped singleton        = " << s.skipped_singleton << "\n";
+    out << "Skipped singleton objs   = " << s.skipped_singleton << "\n";
+    if (s.skipped_singleton) {
+      out << "Skipped singleton Bytes  = " << s.skipped_singleton_bytes << "\n";
+    }
     out << "Skipped source record    = " << s.skipped_source_record << "\n";
 
     if(s.ingress_skip_encrypted) {
-      out << "Skipped Encrypted      = " << s.ingress_skip_encrypted << "\n";
+      out << "Skipped Encrypted objs = " << s.ingress_skip_encrypted << "\n";
+      out << "Skipped Encrypted Bytes= " << s.ingress_skip_encrypted_bytes << "\n";
     }
     if(s.ingress_skip_compressed) {
-      out << "Skipped Compressed     = " << s.ingress_skip_compressed << "\n";
+      out << "Skipped Compressed objs = " << s.ingress_skip_compressed << "\n";
+      out << "Skipped Compressed Bytes= " << s.ingress_skip_compressed_bytes << "\n";
     }
     if(s.ingress_skip_changed_objs) {
       out << "Skipped Changed Object = " << s.ingress_skip_changed_objs << "\n";
@@ -232,9 +231,14 @@ namespace rgw::dedup {
 
     out << "Set Shared-Manifest      = " << s.set_shared_manifest << "\n";
     out << "Deduped Obj (this cycle) = " << s.deduped_objects << "\n";
+    out << "Deduped Bytes(this cycle)= " << s.deduped_objects_bytes << "\n";
+    if (s.deduped_objects) {
+      
+    }
     out << "Singleton Obj            = " << s.singleton_count << "\n";
     out << "Unique Obj               = " << s.unique_count << "\n";
     out << "Duplicate Obj            = " << s.duplicate_count << "\n";
+    out << "Duplicate Bytes (BLOCKS) = " << s.duplicated_bytes_blocks << "\n";
 
     return out;
   }

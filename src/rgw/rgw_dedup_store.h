@@ -127,25 +127,24 @@ namespace rgw::dedup {
 
     struct __attribute__ ((packed)) packed_rec_t
     {
-      dedup_flags_t flags;	// 1 Byte flags
-      uint8_t       pad8;
-      uint16_t      num_parts;       // For multipart upload (AWS MAX-PART is 10,000)
-      uint32_t      size_4k_units;   // 4KB units max out at 16TB (AWS MAX-SIZE is 5TB)
-
       uint64_t      md5_high;        // High Bytes of the Object Data MD5
       uint64_t      md5_low;         // Low  Bytes of the Object Data MD5
+      uint64_t      obj_bytes_size;
       uint64_t      version;
-      uint64_t      shared_manifest; // 64bit hash of the SRC object manifest
-      // all zeros for Dedicated-Manifest-Object
-      uint64_t      sha256[4];	 // 4 * 8 Bytes of SHA256
 
-      uint16_t      manifest_len;
+      dedup_flags_t flags;	     // 1 Byte flags
+      uint8_t       pad8;
+      uint16_t      num_parts;       // For multipart upload (AWS MAX-PART is 10,000)
       uint16_t      obj_name_len;
       uint16_t      bucket_name_len;
+
       uint16_t      bucket_id_len;
       uint16_t      tenant_name_len;
       uint16_t      ref_tag_len;
-      uint16_t      pad16;
+      uint16_t      manifest_len;
+
+      uint64_t      shared_manifest; // 64bit hash of the SRC object manifest
+      uint64_t      sha256[4];	     // 4 * 8 Bytes of SHA256
     }s;
     std::string obj_name;
     // TBD: find pool name making it easier to get ioctx

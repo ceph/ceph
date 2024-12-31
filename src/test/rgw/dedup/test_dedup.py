@@ -25,16 +25,18 @@ class Dedup_Stats:
     skip_too_small: int = 0
     skip_shared_manifest: int = 0
     skip_singleton: int = 0
+    skip_singleton_bytes: int = 0
     skip_src_record: int = 0
     total_processed_objects: int = 0
     size_before_dedup: int = 0
-    #duplicated_bytes: int = 0
     loaded_objects: int = 0
     set_shared_manifest : int = 0
     deduped_obj: int = 0
     singleton_obj : int = 0
     unique_obj : int = 0
+    duplicate_bytes : int = 0
     duplicate_obj : int = 0
+    deduped_obj_bytes : int = 0
 
 # configure logging for the tests module
 log = logging.getLogger(__name__)
@@ -297,7 +299,7 @@ def delete_bucket_with_all_objects(bucket_name, conn):
         else:
             break
 
-    log.info("Removing Bucket '%s', obj_count=%d", bucket_name, obj_count)
+    log.debug("Removing Bucket '%s', obj_count=%d", bucket_name, obj_count)
     conn.delete_bucket(Bucket=bucket_name)
 
 #-------------------------------------------------------------------------------
@@ -367,7 +369,7 @@ def calc_rados_obj_count(num_copies, obj_size, config):
 
 
 #-------------------------------------------------------------------------------
-def calc_dedupable_space(obj_name, obj_size, config):
+def calc_dedupable_space(obj_size, config):
     threshold = config.multipart_threshold
     # Objects with size bigger than MULTIPART_SIZE are uploaded as multi-part
     # multi-part objects got a zero size Head objects
@@ -378,16 +380,16 @@ def calc_dedupable_space(obj_name, obj_size, config):
     else:
         dedupable_space = 0
 
-    log.debug("%s::obj_size=%.2f MiB, dedupable_space=%.2f MiB",
-              obj_name, float(obj_size)/MB, float(dedupable_space)/MB)
+    log.debug("obj_size=%.2f MiB, dedupable_space=%.2f MiB",
+              float(obj_size)/MB, float(dedupable_space)/MB)
     return dedupable_space
 
-
+BLOCK_SIZE=4096
 #-------------------------------------------------------------------------------
 def calc_expected_stats(dedup_stats, obj_size, num_copies, config):
     threshold = config.multipart_threshold
     dedup_stats.skip_shared_manifest = 0
-
+    dedup_stats.size_before_dedup += (obj_size * num_copies)
     if obj_size <= RADOS_OBJ_SIZE and threshold > RADOS_OBJ_SIZE:
         dedup_stats.skip_too_small += num_copies
         return
@@ -396,14 +398,23 @@ def calc_expected_stats(dedup_stats, obj_size, num_copies, config):
     dedup_stats.loaded_objects += num_copies
 
     if num_copies == 1:
-        dedup_stats.skip_singleton += 1
         dedup_stats.singleton_obj += 1
+        dedup_stats.skip_singleton += 1
+        dedup_stats.skip_singleton_bytes += obj_size
     else:
         dedup_stats.skip_src_record += 1
         dedup_stats.set_shared_manifest += 1
         dedup_stats.unique_obj += 1
-        dedup_stats.deduped_obj +=  (num_copies - 1)
-        dedup_stats.duplicate_obj += (num_copies - 1)
+        dups_count = (num_copies - 1)
+        dedup_stats.duplicate_obj += dups_count
+        dedup_stats.deduped_obj += dups_count
+        deduped_obj_bytes=calc_dedupable_space(obj_size, config)
+        dedup_stats.deduped_obj_bytes += (deduped_obj_bytes * dups_count)
+        # roundup to next 4KB
+        #blocks_bytes = ((obj_size+BLOCK_SIZE-1)//BLOCK_SIZE)*BLOCK_SIZE
+        #deduped_block_bytes=calc_dedupable_space(blocks_bytes, config)
+        deduped_block_bytes=((deduped_obj_bytes+BLOCK_SIZE-1)//BLOCK_SIZE)*BLOCK_SIZE
+        dedup_stats.duplicate_bytes += (deduped_block_bytes * dups_count)
 
 
 #-------------------------------------------------------------------------------
@@ -422,7 +433,7 @@ def calc_expected_results(files, config):
         if num_copies > 0:
             log.debug("calc_expected_results::%s::size=%d, num_copies=%d", filename, obj_size, num_copies);
             total_space += (obj_size * num_copies)
-            dedupable_space=calc_dedupable_space(filename, obj_size, config)
+            dedupable_space=calc_dedupable_space(obj_size, config)
             duplicated_space += ((num_copies-1) * dedupable_space)
             rados_obj_count=calc_rados_obj_count(num_copies, obj_size, config)
             rados_objects_total += (rados_obj_count * num_copies)
@@ -451,7 +462,7 @@ def upload_objects(out_dir, bucket_name, files, indices, conn, config, check_obj
         assert(obj_size)
         calc_expected_stats(dedup_stats, obj_size, num_copies, config)
         total_space += (obj_size * num_copies)
-        dedupable_space=calc_dedupable_space(filename, obj_size, config)
+        dedupable_space=calc_dedupable_space(obj_size, config)
         duplicated_space += ((num_copies-1) * dedupable_space)
         rados_obj_count=calc_rados_obj_count(num_copies, obj_size, config)
         rados_objects_total += (rados_obj_count * num_copies)
@@ -466,22 +477,22 @@ def upload_objects(out_dir, bucket_name, files, indices, conn, config, check_obj
                          s3_objects_total, rados_objects_total, total_space/MB)
 
     log.debug("==========================================")
-    log.debug("Summery:\n%d S3 objects were uploaded (%d rados objects), total size = %.2f MiB",
+    log.info("Summery:\n%d S3 objects were uploaded (%d rados objects), total size = %.2f MiB",
              s3_objects_total, rados_objects_total, total_space/MB)
     log.debug("Based on calculation we should have %d rados objects", rados_objects_total)
     log.debug("Based on calculation we should have %d duplicated tail objs", duplicated_tail_objs)
-    log.debug("Based on calculation we should have %.2f MiB total in pool", total_space/MB)
-    log.debug("Based on calculation we should have %.2f MiB duplicated space in pool", duplicated_space/MB)
+    log.info("Based on calculation we should have %.2f MiB total in pool", total_space/MB)
+    log.info("Based on calculation we should have %.2f MiB duplicated space in pool", duplicated_space/MB)
 
     expected_rados_obj_count_post_dedup=(rados_objects_total-duplicated_tail_objs)
     log.debug("Post dedup expcted rados obj count = %d", expected_rados_obj_count_post_dedup)
     expcted_space_post_dedup=(total_space-duplicated_space)
-    log.debug("Post dedup expcted data in pool = %.2f MiB", expcted_space_post_dedup/MB)
+    log.info("Post dedup expcted data in pool = %.2f MiB", expcted_space_post_dedup/MB)
     if check_obj_count:
         assert (rados_objects_total, total_space) == count_object_parts_in_all_buckets()
 
     dedup_stats.size_before_dedup=total_space
-    #dedup_stats.duplicated_bytes=duplicated_space
+    #dedup_stats.duplicate_bytes=duplicated_space
     expected_results=(expected_rados_obj_count_post_dedup, expcted_space_post_dedup)
     return (expected_results, dedup_stats, s3_objects_total)
 
@@ -501,7 +512,7 @@ def upload_objects_multi(out_dir, files, conns, bucket_names, indices, config, c
         assert(obj_size)
         calc_expected_stats(dedup_stats, obj_size, num_copies, config)
         total_space += (obj_size * num_copies)
-        dedupable_space=calc_dedupable_space(filename, obj_size, config)
+        dedupable_space=calc_dedupable_space(obj_size, config)
         duplicated_space += ((num_copies-1) * dedupable_space)
         rados_obj_count=calc_rados_obj_count(num_copies, obj_size, config)
         rados_objects_total += (rados_obj_count * num_copies)
@@ -518,7 +529,7 @@ def upload_objects_multi(out_dir, files, conns, bucket_names, indices, config, c
 
     log.debug("==========================================")
     log.info("Summery:%d S3 objects were uploaded (%d rados objects), total size = %.2f MiB",
-              s3_objects_total, rados_objects_total, total_space/MB)
+             s3_objects_total, rados_objects_total, total_space/MB)
     log.debug("Based on calculation we should have %d rados objects", rados_objects_total)
     log.debug("Based on calculation we should have %d duplicated tail objs", duplicated_tail_objs)
     log.debug("Based on calculation we should have %.2f MiB total in pool", total_space/MB)
@@ -532,7 +543,7 @@ def upload_objects_multi(out_dir, files, conns, bucket_names, indices, config, c
         assert (rados_objects_total, total_space) == count_object_parts_in_all_buckets()
 
     dedup_stats.size_before_dedup=total_space
-    #dedup_stats.duplicated_bytes=duplicated_space
+    #dedup_stats.duplicate_bytes=duplicated_space
     expected_results=(expected_rados_obj_count_post_dedup, expcted_space_post_dedup)
     return (expected_results, dedup_stats, s3_objects_total)
 
@@ -584,24 +595,16 @@ def get_stats_line_val(line):
 
 #-------------------------------------------------------------------------------
 def print_dedup_stats(dedup_stats):
-    log.info("total_processed_objects %d", dedup_stats.total_processed_objects)
-    log.info("size_before_dedup %d", dedup_stats.size_before_dedup);
-    #size_after_dedup=dedup_stats.size_before_dedup - dedup_stats.duplicated_bytes
-    #log.info("size_after_dedup  %d", size_after_dedup)
+    for key in dedup_stats.__dict__:
+        log.info("dedup_stats[%s] = %d", key, dedup_stats.__dict__[key])
 
-    log.info("loaded_objects = %d", dedup_stats.loaded_objects)
 
-    log.info("skip_too_small = %d", dedup_stats.skip_too_small)
-    log.info("skip_shared_manifest = %d", dedup_stats.skip_shared_manifest)
-    log.info("skip_singleton = %d", dedup_stats.skip_singleton)
-    log.info("skip_src_record = %d", dedup_stats.skip_src_record)
-
-    log.info("set_shared_manifest = %d", dedup_stats.set_shared_manifest)
-    log.info("deduped_obj = %d", dedup_stats.deduped_obj)
-    #log.info("duplicated_bytes = %d", dedup_stats.duplicated_bytes)
-    log.info("singleton_obj = %d", dedup_stats.singleton_obj)
-    log.info("unique_obj = %d", dedup_stats.unique_obj)
-    log.info("duplicate_obj = %d", dedup_stats.duplicate_obj)
+#-------------------------------------------------------------------------------
+def print_dedup_stats_diff(actual, expected):
+    for (key1, key2) in zip(actual.__dict__, expected.__dict__):
+        if (actual.__dict__[key1] != expected.__dict__[key2]):
+            log.error("actual[%s] = %d != expected[%s] = %d",
+                      key1, actual.__dict__[key1], key2, expected.__dict__[key2])
 
 
 #-------------------------------------------------------------------------------
@@ -619,14 +622,13 @@ def read_dedup_stats():
             dedup_stats.size_before_dedup = get_stats_line_val(line)
 
         if line.startswith("Duplicate Bytes"):
-            dedup_stats.duplicated_bytes = get_stats_line_val(line)
+            dedup_stats.duplicate_bytes = get_stats_line_val(line)
 
         if line.startswith("Loaded objects"):
             dedup_stats.loaded_objects = get_stats_line_val(line)
 
         if line.startswith("Ingress skip: too small objs"):
             dedup_stats.skip_too_small = get_stats_line_val(line)
-            get_stats_line_val(line)
 
         if line.startswith("Skipped shared_manifest"):
             dedup_stats.skip_shared_manifest = get_stats_line_val(line)
@@ -634,11 +636,17 @@ def read_dedup_stats():
         elif line.startswith("Skipped singleton objs"):
             dedup_stats.skip_singleton = get_stats_line_val(line)
 
+        if line.startswith("Skipped singleton Bytes"):
+            dedup_stats.skip_singleton_bytes = get_stats_line_val(line)
+
         if line.startswith("Skipped source record"):
             dedup_stats.skip_src_record = get_stats_line_val(line)
 
         elif line.startswith("Set Shared-Manifest"):
             dedup_stats.set_shared_manifest = get_stats_line_val(line)
+
+        if line.startswith("Deduped Bytes(this cycle)"):
+            dedup_stats.deduped_obj_bytes = get_stats_line_val(line)
 
         if line.startswith("Deduped Obj (this cycle)"):
             dedup_stats.deduped_obj = get_stats_line_val(line)
@@ -685,12 +693,10 @@ def exec_dedup(expcted_dedup_stats, verify_stats=True):
         expcted_dedup_stats.skip_shared_manifest = dedup_stats.skip_shared_manifest
 
     if dedup_stats != expcted_dedup_stats:
-        log.info("Actual Dedup Stats:\n=========================\n");
-        print_dedup_stats(dedup_stats)
-        log.info("Expected Dedup Stats:\n=========================\n");
-        print_dedup_stats(expcted_dedup_stats)
-        if verify_stats:
-            assert dedup_stats == expcted_dedup_stats
+        log.info("==================================================")
+        print_dedup_stats_diff(dedup_stats, expcted_dedup_stats)
+        log.info("==================================================\n")
+        assert dedup_stats == expcted_dedup_stats
 
     log.info("expcted_dedup::stats check completed successfully!!")
 
@@ -783,544 +789,6 @@ def simple_dedup(out_dir, conn, files, bucket_name, run_cleanup_after, config):
         if run_cleanup_after:
             cleanup(out_dir, bucket_name, conn)
 
-
-#-------------------------------------------------------------------------------
-@pytest.mark.basic_test
-def test_dedup_small():
-    return
-
-    bucket_name = gen_bucket_name()
-    log.info("test_dedup_small: connect to AWS ...")
-    conn = connection()
-    small_single_part_objs_dedup(OUT_DIR, conn, bucket_name, True)
-
-
-#-------------------------------------------------------------------------------
-@pytest.mark.basic_test
-def test_dedup_small_with_tenants():
-    return
-
-    prepare_test(OUT_DIR)
-    max_copies_count=3
-    files=[]
-    num_files=10 # [4KB-4MB]
-    base_size = 4*KB
-    log.info("generate files: base size=%d KiB, max_size=%d KiB",
-             base_size/KB, (pow(2, num_files) * base_size)/KB)
-    try:
-        gen_files(OUT_DIR, files, base_size, num_files, max_copies_count)
-        indices=[0] * len(files)
-        ret=gen_connections_multi(max_copies_count)
-        tenants=ret[0]
-        bucket_names=ret[1]
-        conns=ret[2]
-
-        ret=upload_objects_multi(OUT_DIR, files, conns, bucket_names, indices, default_config)
-        expected_results = ret[0]
-        dedup_stats = ret[1]
-        s3_objects_total = ret[2]
-
-        # expected stats for small objects - all zeros except for skip_too_small
-        small_objs_dedup_stats = Dedup_Stats()
-        small_objs_dedup_stats.size_before_dedup=dedup_stats.size_before_dedup
-        small_objs_dedup_stats.skip_too_small=s3_objects_total
-        assert small_objs_dedup_stats == dedup_stats
-
-        exec_dedup(dedup_stats)
-        log.info("Verify all objects")
-        verify_objects_multi(OUT_DIR, files, conns, bucket_names, expected_results, default_config)
-    finally:
-        cleanup_all_buckets(OUT_DIR, bucket_names, conns)
-
-
-#------------------------------------------------------------------------------
-# Trivial incremental dedup:
-# 1) Run the @simple_dedup test above without cleanup post dedup
-# 2) Run a second dedup *without making any change*
-# 3) The stats-counters should show the same dedup ratio, but no change
-#    should be made to the system
-@pytest.mark.basic_test
-def test_dedup_inc_0_with_tenants():
-    return
-
-    prepare_test(OUT_DIR)
-    log.info("test_dedup_inc_0: connect to AWS ...")
-    max_copies_count=3
-    config=default_config
-    ret=gen_connections_multi(max_copies_count)
-    tenants=ret[0]
-    bucket_names=ret[1]
-    conns=ret[2]
-    try:
-        files=[]
-        num_files=11
-        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
-        # upload objects, dedup, verify, but don't cleanup
-        ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
-        expected_results = ret[0]
-        dedup_stats = ret[1]
-        s3_objects_total = ret[2]
-
-        dedup_stats2 = dedup_stats
-        dedup_stats2.skip_shared_manifest = dedup_stats.set_shared_manifest + dedup_stats.deduped_obj
-        dedup_stats2.skip_src_record = 0
-        dedup_stats2.set_shared_manifest = 0
-        dedup_stats2.deduped_obj = 0
-
-        # run dedup again and make sure nothing has changed
-        exec_dedup(dedup_stats2)
-        verify_objects_multi(OUT_DIR, files, conns, bucket_names, expected_results, config)
-    finally:
-        cleanup_all_buckets(OUT_DIR, bucket_names, conns)
-
-
-#------------------------------------------------------------------------------
-# Trivial incremental dedup:
-# 1) Run the @simple_dedup test above without cleanup post dedup
-# 2) Run a second dedup *without making any change*
-# 3) The stats-counters should show the same dedup ratio, but no change
-#    should be made to the system
-@pytest.mark.basic_test
-def test_dedup_inc_0():
-    return
-
-    config=default_config
-    prepare_test(OUT_DIR)
-    bucket_name = gen_bucket_name()
-    log.info("test_dedup_inc_0: connect to AWS ...")
-    conn = connection()
-    try:
-        files=[]
-        num_files = 11
-        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
-        # upload objects, dedup, verify, but don't cleanup
-        ret = simple_dedup(OUT_DIR, conn, files, bucket_name, False, config)
-        expected_results = ret[0]
-        dedup_stats = ret[1]
-        s3_objects_total = ret[2]
-
-        dedup_stats2 = dedup_stats
-        dedup_stats2.skip_shared_manifest = dedup_stats.set_shared_manifest + dedup_stats.deduped_obj
-        dedup_stats2.skip_src_record = 0
-        dedup_stats2.set_shared_manifest = 0
-        dedup_stats2.deduped_obj = 0
-
-        # run dedup again and make sure nothing has changed
-        exec_dedup(dedup_stats2)
-        verify_objects(OUT_DIR, bucket_name, files, conn, expected_results, config)
-    finally:
-        cleanup(OUT_DIR, bucket_name, conn)
-
-
-#-------------------------------------------------------------------------------
-# Basic incremental dedup:
-# 1) Run the @simple_dedup test above without cleanup post dedup
-# 2) Add more copies of the *original objects*
-# 3) Run another dedup
-@pytest.mark.basic_test
-def test_dedup_inc_1_with_tenants():
-    return
-
-    prepare_test(OUT_DIR)
-    log.info("test_dedup_inc_1_with_tenants: connect to AWS ...")
-    max_copies_count=6
-    config=default_config
-    ret=gen_connections_multi(max_copies_count)
-    tenants=ret[0]
-    bucket_names=ret[1]
-    conns=ret[2]
-    try:
-        files=[]
-        num_files=17
-        # gen_files_in_range creates 2-3 copies
-        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
-        # upload objects, dedup, verify, but don't cleanup
-        ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
-        expected_results_base=ret[0]
-        stats_base=ret[1]
-
-        # upload more copies of the same objects
-        indices=[]
-        files_combined=[]
-        for f in files:
-            filename=f[0]
-            obj_size=f[1]
-            num_copies_base=f[2]
-            # indices holds the start index of the new copies
-            indices.append(num_copies_base)
-            num_copies_to_add=random.randint(0, 2)
-            num_copies_combined=num_copies_to_add+num_copies_base
-            files_combined.append((filename, obj_size, num_copies_combined))
-
-        ret=upload_objects_multi(OUT_DIR, files_combined, conns, bucket_names, indices, config, False)
-        expected_results=ret[0]
-        stats_combined=ret[1]
-        stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
-        stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
-        stats_combined.deduped_obj         -= stats_base.deduped_obj
-
-        # run dedup again
-        exec_dedup(stats_combined)
-        verify_objects_multi(OUT_DIR, files_combined, conns, bucket_names, expected_results, config)
-    finally:
-        cleanup_all_buckets(OUT_DIR, bucket_names, conns)
-
-
-#-------------------------------------------------------------------------------
-# Basic incremental dedup:
-# 1) Run the @simple_dedup test above without cleanup post dedup
-# 2) Add more copies of the *original objects*
-# 3) Run another dedup
-@pytest.mark.basic_test
-def test_dedup_inc_1():
-    return
-
-    config=default_config
-    prepare_test(OUT_DIR)
-    bucket_name = gen_bucket_name()
-    log.info("test_dedup_inc_1: connect to AWS ...")
-    conn = connection()
-    try:
-        files=[]
-        num_files = 4
-        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
-        # upload objects, dedup, verify, but don't cleanup
-        ret = simple_dedup(OUT_DIR, conn, files, bucket_name, False, config)
-        expected_results_base = ret[0]
-        stats_base = ret[1]
-
-        # upload more copies of the same objects
-        indices=[]
-        files_combined=[]
-        for f in files:
-            filename=f[0]
-            obj_size=f[1]
-            num_copies_base=f[2]
-            # indices holds the start index of the new copies
-            indices.append(num_copies_base)
-            num_copies_to_add=random.randint(0, 2)
-            num_copies_combined=num_copies_to_add+num_copies_base
-            files_combined.append((filename, obj_size, num_copies_combined))
-
-        ret=upload_objects(OUT_DIR, bucket_name, files_combined, indices, conn, config, False)
-        expected_results = ret[0]
-        stats_combined = ret[1]
-        stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
-        stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
-        stats_combined.deduped_obj         -= stats_base.deduped_obj
-
-        # run dedup again
-        exec_dedup(stats_combined)
-        verify_objects(OUT_DIR, bucket_name, files_combined, conn, expected_results, config)
-    finally:
-        cleanup(OUT_DIR, bucket_name, conn)
-
-
-#-------------------------------------------------------------------------------
-# Simple incremental dedup:
-# 1) Run the @simple_dedup test above without cleanup post dedup
-# 2) Add more copies of the original objects
-# 3) Add new objects to buckets
-# 4) Run another dedup
-@pytest.mark.basic_test
-def test_dedup_inc_2_with_tenants():
-    return
-
-    prepare_test(OUT_DIR)
-    log.info("test_dedup_inc_2_with_tenants: connect to AWS ...")
-    max_copies_count=6
-    config=default_config
-    ret=gen_connections_multi(max_copies_count)
-    tenants=ret[0]
-    bucket_names=ret[1]
-    conns=ret[2]
-    try:
-        files=[]
-        num_files = 17
-        # gen_files_in_range creates 2-3 copies
-        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
-        # upload objects, dedup, verify, but don't cleanup
-        ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
-        expected_results_base=ret[0]
-        stats_base=ret[1]
-
-        # upload more copies of the same files
-        indices=[]
-        files_combined=[]
-        for f in files:
-            filename=f[0]
-            obj_size=f[1]
-            num_copies_base=f[2]
-            # indices holds the start index of the new copies
-            indices.append(num_copies_base)
-            num_copies_inc=random.randint(0, 2)
-            num_copies_combined=num_copies_inc+num_copies_base
-            files_combined.append((filename, obj_size, num_copies_combined))
-
-        # add new files
-        num_files_new = 13
-        gen_files_in_range(OUT_DIR, files_combined, num_files_new, 2*MB, 32*MB)
-        pad_count = len(files_combined) - len(files)
-        for i in range(0, pad_count):
-            indices.append(0)
-
-        assert(len(indices) == len(files_combined))
-        ret=upload_objects_multi(OUT_DIR, files_combined, conns, bucket_names, indices, config, False)
-        expected_results = ret[0]
-        stats_combined = ret[1]
-        stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
-        stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
-        stats_combined.deduped_obj         -= stats_base.deduped_obj
-
-        # run dedup again
-        exec_dedup(stats_combined)
-        verify_objects_multi(OUT_DIR, files_combined, conns, bucket_names, expected_results, config)
-    finally:
-        cleanup_all_buckets(OUT_DIR, bucket_names, conns)
-
-
-#-------------------------------------------------------------------------------
-# Simple incremental dedup:
-# 1) Run the @simple_dedup test above without cleanup post dedup
-# 2) Add more copies of the original objects
-# 3) Add new objects to buckets
-# 4) Run another dedup
-@pytest.mark.basic_test
-def test_dedup_inc_2():
-    return
-
-    config=default_config
-    prepare_test(OUT_DIR)
-    bucket_name = gen_bucket_name()
-    log.info("test_dedup_inc_2: connect to AWS ...")
-    conn = connection()
-    try:
-        files=[]
-        num_files = 17
-        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
-        # upload objects, dedup, verify, but don't cleanup
-        ret = simple_dedup(OUT_DIR, conn, files, bucket_name, False, config)
-        expected_results_base = ret[0]
-        stats_base = ret[1]
-
-        # upload more copies of the same files
-        indices=[]
-        files_combined=[]
-        for f in files:
-            filename=f[0]
-            obj_size=f[1]
-            num_copies_base=f[2]
-            indices.append(num_copies_base)
-            num_copies_inc=random.randint(0, 2)
-            num_copies_combined=num_copies_inc+num_copies_base
-            files_combined.append((filename, obj_size, num_copies_combined))
-
-        # add new files
-        num_files_new = 13
-        gen_files_in_range(OUT_DIR, files_combined, num_files_new, 2*MB, 32*MB)
-        pad_count = len(files_combined) - len(files)
-        for i in range(0, pad_count):
-            indices.append(0)
-
-        assert(len(indices) == len(files_combined))
-        ret=upload_objects(OUT_DIR, bucket_name, files_combined, indices, conn, config, False)
-        expected_results = ret[0]
-        stats_combined = ret[1]
-        stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
-        stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
-        stats_combined.deduped_obj         -= stats_base.deduped_obj
-
-        # run dedup again
-        exec_dedup(stats_combined)
-        verify_objects(OUT_DIR, bucket_name, files_combined, conn, expected_results,
-                       config)
-
-    finally:
-        cleanup(OUT_DIR, bucket_name, conn)
-
-
-#-------------------------------------------------------------------------------
-# Incremental dedup with object removal:
-# 1) Run the @simple_dedup test above without cleanup post dedup
-# 2) Remove copies of some objects
-# 3) Run another dedup
-@pytest.mark.basic_test
-def test_dedup_inc_with_remove_multi_tenants():
-    return
-
-    prepare_test(OUT_DIR)
-    log.info("test_dedup_inc_with_remove_multi_tenants: connect to AWS ...")
-    max_copies_count=6
-    config=default_config
-    ret=gen_connections_multi(max_copies_count)
-    tenants=ret[0]
-    bucket_names=ret[1]
-    conns=ret[2]
-    try:
-        files=[]
-        num_files = 17
-        # gen_files_in_range creates 2-3 copies
-        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
-        # upload objects, dedup, verify, but don't cleanup
-        ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
-        expected_results_base = ret[0]
-        stats_base = ret[1]
-
-        # REMOVE some objects and update stats/expected
-        object_keys=[]
-        files_sub=[]
-        dedup_stats = Dedup_Stats()
-        for f in files:
-            filename=f[0]
-            obj_size=f[1]
-            num_copies=f[2]
-            num_remove=random.randint(0, num_copies)
-            num_copies_2=num_copies-num_remove
-            log.debug("objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies_2);
-            if num_copies_2:
-                files_sub.append((filename, obj_size, num_copies_2))
-                calc_expected_stats(dedup_stats, obj_size, num_copies_2, config)
-
-            start_idx=num_copies_2
-            for i in range(start_idx, num_copies):
-                key = gen_object_name(filename, i)
-                log.debug("delete key::%s::", key);
-                object_keys.append(key)
-
-            response=conn.delete_objects(Bucket=bucket_name,
-                                         Delete={"Objects": [{"Key": key} for key in object_keys]})
-            # must call garbage collection for predictable count
-            result = admin(['gc', 'process', '--include-all'])
-            assert result[1] == 0
-
-        # run dedup again
-        dedup_stats.set_shared_manifest=0
-        dedup_stats.deduped_obj=0
-        dedup_stats.skip_src_record=0
-        exec_dedup(dedup_stats, False)
-        expected_results=calc_expected_results(files_sub, config)
-        verify_objects(OUT_DIR, bucket_name, files_sub, conn, expected_results,
-                       config)
-
-    finally:
-        cleanup(OUT_DIR, bucket_name, conn)
-
-
-#-------------------------------------------------------------------------------
-# Incremental dedup with object removal:
-# 1) Run the @simple_dedup test above without cleanup post dedup
-# 2) Remove copies of some objects
-# 3) Run another dedup
-@pytest.mark.basic_test
-def test_dedup_inc_with_remove():
-    return
-
-    config=default_config
-    prepare_test(OUT_DIR)
-    bucket_name = gen_bucket_name()
-    log.info("test_dedup_inc_with_remove: connect to AWS ...")
-    conn = connection()
-    try:
-        files=[]
-        num_files = 17
-        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
-        # upload objects, dedup, verify, but don't cleanup
-        ret = simple_dedup(OUT_DIR, conn, files, bucket_name, False, config)
-        expected_results_base = ret[0]
-        stats_base = ret[1]
-
-        # REMOVE some objects and update stats/expected
-        object_keys=[]
-        files_sub=[]
-        dedup_stats = Dedup_Stats()
-        for f in files:
-            filename=f[0]
-            obj_size=f[1]
-            num_copies=f[2]
-            num_remove=random.randint(0, num_copies)
-            num_copies_2=num_copies-num_remove
-            log.debug("objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies_2);
-            if num_copies_2:
-                files_sub.append((filename, obj_size, num_copies_2))
-                calc_expected_stats(dedup_stats, obj_size, num_copies_2, config)
-
-            start_idx=num_copies_2
-            for i in range(start_idx, num_copies):
-                key = gen_object_name(filename, i)
-                log.debug("delete key::%s::", key);
-                object_keys.append(key)
-
-            response=conn.delete_objects(Bucket=bucket_name,
-                                         Delete={"Objects": [{"Key": key} for key in object_keys]})
-            # must call garbage collection for predictable count
-            result = admin(['gc', 'process', '--include-all'])
-            assert result[1] == 0
-
-        # run dedup again
-        dedup_stats.set_shared_manifest=0
-        dedup_stats.deduped_obj=0
-        dedup_stats.skip_src_record=0
-        exec_dedup(dedup_stats, False)
-        expected_results=calc_expected_results(files_sub, config)
-        verify_objects(OUT_DIR, bucket_name, files_sub, conn, expected_results,
-                       config)
-
-    finally:
-        cleanup(OUT_DIR, bucket_name, conn)
-
-
-#-------------------------------------------------------------------------------
-@pytest.mark.basic_test
-def test_dedup_multipart_with_tenants():
-    return
-
-    prepare_test(OUT_DIR)
-    log.info("test_dedup_multipart_with_tenants: connect to AWS ...")
-    max_copies_count=3
-    num_files=8
-    files=[]
-    min_size=MULTIPART_SIZE
-    # create files in range [MULTIPART_SIZE, 4*MULTIPART_SIZE] aligned on RADOS_OBJ_SIZE
-    gen_files_in_range(OUT_DIR, files, num_files, min_size, min_size*8)
-
-    # add files in range [MULTIPART_SIZE, 4*MULTIPART_SIZE] aligned on MULTIPART_SIZE
-    gen_files_in_range(OUT_DIR, files, num_files, min_size, min_size*8, MULTIPART_SIZE)
-
-    # add file with excatly MULTIPART_SIZE
-    write_random(OUT_DIR, files, MULTIPART_SIZE, 2, 2)
-
-    dedup_basic_with_tenants_common(OUT_DIR, files, max_copies_count, default_config)
-
-
-#-------------------------------------------------------------------------------
-@pytest.mark.basic_test
-def test_dedup_multipart():
-    return
-
-    prepare_test(OUT_DIR)
-    bucket_name = gen_bucket_name()
-    log.info("test_dedup_multipart: connect to AWS ...")
-    conn = connection()
-    files=[]
-
-    num_files=8
-    min_size=MULTIPART_SIZE
-    # create files in range [MULTIPART_SIZE, 4*MULTIPART_SIZE] aligned on RADOS_OBJ_SIZE
-    gen_files_in_range(OUT_DIR, files, num_files, min_size, min_size*8)
-
-    # add files in range [MULTIPART_SIZE, 4*MULTIPART_SIZE] aligned on MULTIPART_SIZE
-    gen_files_in_range(OUT_DIR, files, num_files, min_size, min_size*8, MULTIPART_SIZE)
-
-    # add file with excatly MULTIPART_SIZE
-    write_random(OUT_DIR, files, MULTIPART_SIZE, 2, 2)
-
-    simple_dedup(OUT_DIR, conn, files, bucket_name, True, default_config)
-
-
 #-------------------------------------------------------------------------------
 def gen_connections_multi(max_copies_count):
     global num_conns
@@ -1374,12 +842,567 @@ def dedup_basic_with_tenants_common(out_dir, files, max_copies_count, config, cl
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
-def test_dedup_basic_with_tenants():
-    return
+def test_dedup_small():
+    #return
+
+    bucket_name = gen_bucket_name()
+    log.info("test_dedup_small: connect to AWS ...")
+    conn = connection()
+    small_single_part_objs_dedup(OUT_DIR, conn, bucket_name, True)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_small_with_tenants():
+    #return
 
     prepare_test(OUT_DIR)
     max_copies_count=3
-    num_files=17
+    files=[]
+    num_files=10 # [4KB-4MB]
+    base_size = 4*KB
+    log.info("generate files: base size=%d KiB, max_size=%d KiB",
+             base_size/KB, (pow(2, num_files) * base_size)/KB)
+    try:
+        gen_files(OUT_DIR, files, base_size, num_files, max_copies_count)
+        indices=[0] * len(files)
+        ret=gen_connections_multi(max_copies_count)
+        tenants=ret[0]
+        bucket_names=ret[1]
+        conns=ret[2]
+
+        ret=upload_objects_multi(OUT_DIR, files, conns, bucket_names, indices, default_config)
+        expected_results = ret[0]
+        dedup_stats = ret[1]
+        s3_objects_total = ret[2]
+
+        # expected stats for small objects - all zeros except for skip_too_small
+        small_objs_dedup_stats = Dedup_Stats()
+        small_objs_dedup_stats.size_before_dedup=dedup_stats.size_before_dedup
+        small_objs_dedup_stats.skip_too_small=s3_objects_total
+        assert small_objs_dedup_stats == dedup_stats
+
+        exec_dedup(dedup_stats)
+        log.info("Verify all objects")
+        verify_objects_multi(OUT_DIR, files, conns, bucket_names, expected_results, default_config)
+    finally:
+        cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+
+
+#------------------------------------------------------------------------------
+# Trivial incremental dedup:
+# 1) Run the @simple_dedup test above without cleanup post dedup
+# 2) Run a second dedup *without making any change*
+# 3) The stats-counters should show the same dedup ratio, but no change
+#    should be made to the system
+@pytest.mark.basic_test
+def test_dedup_inc_0_with_tenants():
+    #return
+
+    prepare_test(OUT_DIR)
+    log.info("test_dedup_inc_0: connect to AWS ...")
+    max_copies_count=3
+    config=default_config
+    ret=gen_connections_multi(max_copies_count)
+    tenants=ret[0]
+    bucket_names=ret[1]
+    conns=ret[2]
+    try:
+        files=[]
+        num_files=11
+        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
+        # upload objects, dedup, verify, but don't cleanup
+        ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
+        expected_results = ret[0]
+        dedup_stats = ret[1]
+        s3_objects_total = ret[2]
+
+        dedup_stats2 = dedup_stats
+        dedup_stats2.skip_shared_manifest = dedup_stats.set_shared_manifest + dedup_stats.deduped_obj
+        dedup_stats2.skip_src_record = 0
+        dedup_stats2.set_shared_manifest = 0
+        dedup_stats2.deduped_obj = 0
+        dedup_stats2.deduped_obj_bytes = 0
+
+        log.info("test_dedup_inc_0_with_tenants: incremental dedup:")
+        # run dedup again and make sure nothing has changed
+        exec_dedup(dedup_stats2)
+        verify_objects_multi(OUT_DIR, files, conns, bucket_names, expected_results, config)
+    finally:
+        cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+
+
+#------------------------------------------------------------------------------
+# Trivial incremental dedup:
+# 1) Run the @simple_dedup test above without cleanup post dedup
+# 2) Run a second dedup *without making any change*
+# 3) The stats-counters should show the same dedup ratio, but no change
+#    should be made to the system
+@pytest.mark.basic_test
+def test_dedup_inc_0():
+    #return
+
+    config=default_config
+    prepare_test(OUT_DIR)
+    bucket_name = gen_bucket_name()
+    log.info("test_dedup_inc_0: connect to AWS ...")
+    conn = connection()
+    try:
+        files=[]
+        num_files = 11
+        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
+        # upload objects, dedup, verify, but don't cleanup
+        ret = simple_dedup(OUT_DIR, conn, files, bucket_name, False, config)
+        expected_results = ret[0]
+        dedup_stats = ret[1]
+        s3_objects_total = ret[2]
+
+        dedup_stats2 = dedup_stats
+        dedup_stats2.skip_shared_manifest = dedup_stats.set_shared_manifest + dedup_stats.deduped_obj
+        dedup_stats2.skip_src_record = 0
+        dedup_stats2.set_shared_manifest = 0
+        dedup_stats2.deduped_obj = 0
+        dedup_stats2.deduped_obj_bytes = 0
+
+        log.info("test_dedup_inc_0: incremental dedup:")
+        # run dedup again and make sure nothing has changed
+        exec_dedup(dedup_stats2)
+        verify_objects(OUT_DIR, bucket_name, files, conn, expected_results, config)
+    finally:
+        cleanup(OUT_DIR, bucket_name, conn)
+
+
+#-------------------------------------------------------------------------------
+# Basic incremental dedup:
+# 1) Run the @simple_dedup test above without cleanup post dedup
+# 2) Add more copies of the *original objects*
+# 3) Run another dedup
+@pytest.mark.basic_test
+def test_dedup_inc_1_with_tenants():
+    #return
+
+    prepare_test(OUT_DIR)
+    log.info("test_dedup_inc_1_with_tenants: connect to AWS ...")
+    max_copies_count=6
+    config=default_config
+    ret=gen_connections_multi(max_copies_count)
+    tenants=ret[0]
+    bucket_names=ret[1]
+    conns=ret[2]
+    try:
+        files=[]
+        num_files=17
+        # gen_files_in_range creates 2-3 copies
+        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
+        # upload objects, dedup, verify, but don't cleanup
+        ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
+        expected_results_base=ret[0]
+        stats_base=ret[1]
+
+        # upload more copies of the same objects
+        indices=[]
+        files_combined=[]
+        for f in files:
+            filename=f[0]
+            obj_size=f[1]
+            num_copies_base=f[2]
+            # indices holds the start index of the new copies
+            indices.append(num_copies_base)
+            num_copies_to_add=random.randint(0, 2)
+            num_copies_combined=num_copies_to_add+num_copies_base
+            files_combined.append((filename, obj_size, num_copies_combined))
+
+        ret=upload_objects_multi(OUT_DIR, files_combined, conns, bucket_names, indices, config, False)
+        expected_results=ret[0]
+        stats_combined=ret[1]
+        stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
+        stats_combined.skip_src_record     -= stats_base.skip_src_record
+        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
+        stats_combined.deduped_obj         -= stats_base.deduped_obj
+        stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
+
+        log.info("test_dedup_inc_1_with_tenants: incremental dedup:")
+        # run dedup again
+        exec_dedup(stats_combined)
+        verify_objects_multi(OUT_DIR, files_combined, conns, bucket_names, expected_results, config)
+    finally:
+        cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+
+
+#-------------------------------------------------------------------------------
+# Basic incremental dedup:
+# 1) Run the @simple_dedup test above without cleanup post dedup
+# 2) Add more copies of the *original objects*
+# 3) Run another dedup
+@pytest.mark.basic_test
+def test_dedup_inc_1():
+    #return
+
+    config=default_config
+    prepare_test(OUT_DIR)
+    bucket_name = gen_bucket_name()
+    log.info("test_dedup_inc_1: connect to AWS ...")
+    conn = connection()
+    try:
+        files=[]
+        num_files = 4
+        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
+        # upload objects, dedup, verify, but don't cleanup
+        ret = simple_dedup(OUT_DIR, conn, files, bucket_name, False, config)
+        expected_results_base = ret[0]
+        stats_base = ret[1]
+
+        # upload more copies of the same objects
+        indices=[]
+        files_combined=[]
+        for f in files:
+            filename=f[0]
+            obj_size=f[1]
+            num_copies_base=f[2]
+            # indices holds the start index of the new copies
+            indices.append(num_copies_base)
+            num_copies_to_add=random.randint(0, 2)
+            num_copies_combined=num_copies_to_add+num_copies_base
+            files_combined.append((filename, obj_size, num_copies_combined))
+
+        ret=upload_objects(OUT_DIR, bucket_name, files_combined, indices, conn, config, False)
+        expected_results = ret[0]
+        stats_combined = ret[1]
+        stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
+        stats_combined.skip_src_record     -= stats_base.skip_src_record
+        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
+        stats_combined.deduped_obj         -= stats_base.deduped_obj
+        stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
+
+        log.info("test_dedup_inc_1: incremental dedup:")
+        # run dedup again
+        exec_dedup(stats_combined)
+        verify_objects(OUT_DIR, bucket_name, files_combined, conn, expected_results, config)
+    finally:
+        cleanup(OUT_DIR, bucket_name, conn)
+
+
+#-------------------------------------------------------------------------------
+# Simple incremental dedup:
+# 1) Run the @simple_dedup test above without cleanup post dedup
+# 2) Add more copies of the original objects
+# 3) Add new objects to buckets
+# 4) Run another dedup
+@pytest.mark.basic_test
+def test_dedup_inc_2_with_tenants():
+    #return
+
+    prepare_test(OUT_DIR)
+    log.info("test_dedup_inc_2_with_tenants: connect to AWS ...")
+    max_copies_count=6
+    config=default_config
+    ret=gen_connections_multi(max_copies_count)
+    tenants=ret[0]
+    bucket_names=ret[1]
+    conns=ret[2]
+    try:
+        files=[]
+        num_files = 17
+        # gen_files_in_range creates 2-3 copies
+        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
+        # upload objects, dedup, verify, but don't cleanup
+        ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
+        expected_results_base=ret[0]
+        stats_base=ret[1]
+
+        # upload more copies of the same files
+        indices=[]
+        files_combined=[]
+        for f in files:
+            filename=f[0]
+            obj_size=f[1]
+            num_copies_base=f[2]
+            # indices holds the start index of the new copies
+            indices.append(num_copies_base)
+            num_copies_inc=random.randint(0, 2)
+            num_copies_combined=num_copies_inc+num_copies_base
+            files_combined.append((filename, obj_size, num_copies_combined))
+
+        # add new files
+        num_files_new = 13
+        gen_files_in_range(OUT_DIR, files_combined, num_files_new, 2*MB, 32*MB)
+        pad_count = len(files_combined) - len(files)
+        for i in range(0, pad_count):
+            indices.append(0)
+
+        assert(len(indices) == len(files_combined))
+        ret=upload_objects_multi(OUT_DIR, files_combined, conns, bucket_names, indices, config, False)
+        expected_results = ret[0]
+        stats_combined = ret[1]
+        stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
+        stats_combined.skip_src_record     -= stats_base.skip_src_record
+        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
+        stats_combined.deduped_obj         -= stats_base.deduped_obj
+        stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
+
+        log.info("test_dedup_inc_2_with_tenants: incremental dedup:")
+        # run dedup again
+        exec_dedup(stats_combined)
+        verify_objects_multi(OUT_DIR, files_combined, conns, bucket_names, expected_results, config)
+    finally:
+        cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+
+
+#-------------------------------------------------------------------------------
+# Simple incremental dedup:
+# 1) Run the @simple_dedup test above without cleanup post dedup
+# 2) Add more copies of the original objects
+# 3) Add new objects to buckets
+# 4) Run another dedup
+@pytest.mark.basic_test
+def test_dedup_inc_2():
+    #return
+
+    config=default_config
+    prepare_test(OUT_DIR)
+    bucket_name = gen_bucket_name()
+    log.info("test_dedup_inc_2: connect to AWS ...")
+    conn = connection()
+    try:
+        files=[]
+        num_files = 17
+        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
+        # upload objects, dedup, verify, but don't cleanup
+        ret = simple_dedup(OUT_DIR, conn, files, bucket_name, False, config)
+        expected_results_base = ret[0]
+        stats_base = ret[1]
+
+        # upload more copies of the same files
+        indices=[]
+        files_combined=[]
+        for f in files:
+            filename=f[0]
+            obj_size=f[1]
+            num_copies_base=f[2]
+            indices.append(num_copies_base)
+            num_copies_inc=random.randint(0, 2)
+            num_copies_combined=num_copies_inc+num_copies_base
+            files_combined.append((filename, obj_size, num_copies_combined))
+
+        # add new files
+        num_files_new = 13
+        gen_files_in_range(OUT_DIR, files_combined, num_files_new, 2*MB, 32*MB)
+        pad_count = len(files_combined) - len(files)
+        for i in range(0, pad_count):
+            indices.append(0)
+
+        assert(len(indices) == len(files_combined))
+        ret=upload_objects(OUT_DIR, bucket_name, files_combined, indices, conn, config, False)
+        expected_results = ret[0]
+        stats_combined = ret[1]
+        stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
+        stats_combined.skip_src_record     -= stats_base.skip_src_record
+        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
+        stats_combined.deduped_obj         -= stats_base.deduped_obj
+        stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
+
+        log.info("test_dedup_inc_2: incremental dedup:")
+        # run dedup again
+        exec_dedup(stats_combined)
+        verify_objects(OUT_DIR, bucket_name, files_combined, conn, expected_results,
+                       config)
+
+    finally:
+        cleanup(OUT_DIR, bucket_name, conn)
+
+
+#-------------------------------------------------------------------------------
+# Incremental dedup with object removal:
+# 1) Run the @simple_dedup test above without cleanup post dedup
+# 2) Remove copies of some objects
+# 3) Run another dedup
+@pytest.mark.basic_test
+def test_dedup_inc_with_remove_multi_tenants():
+    #return
+
+    prepare_test(OUT_DIR)
+    log.info("test_dedup_inc_with_remove_multi_tenants: connect to AWS ...")
+    max_copies_count=6
+    config=default_config
+    ret=gen_connections_multi(max_copies_count)
+    tenants=ret[0]
+    bucket_names=ret[1]
+    conns=ret[2]
+    try:
+        files=[]
+        num_files = 17
+        # gen_files_in_range creates 2-3 copies
+        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
+        # upload objects, dedup, verify, but don't cleanup
+        ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
+        expected_results_base = ret[0]
+        stats_base = ret[1]
+
+        # REMOVE some objects and update stats/expected
+        object_keys=[]
+        files_sub=[]
+        dedup_stats = Dedup_Stats()
+        for f in files:
+            filename=f[0]
+            obj_size=f[1]
+            num_copies=f[2]
+            num_remove=random.randint(0, num_copies)
+            num_copies_2=num_copies-num_remove
+            log.debug("objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies_2);
+            if num_copies_2:
+                files_sub.append((filename, obj_size, num_copies_2))
+                calc_expected_stats(dedup_stats, obj_size, num_copies_2, config)
+
+            start_idx=num_copies_2
+            for i in range(start_idx, num_copies):
+                key = gen_object_name(filename, i)
+                log.debug("delete object Bucket=%s, Key=%s", bucket_names[i], key);
+                conns[i].delete_object(Bucket=bucket_names[i], Key=key)
+
+            # must call garbage collection for a predictable count
+            result = admin(['gc', 'process', '--include-all'])
+            assert result[1] == 0
+
+        # run dedup again
+        dedup_stats.set_shared_manifest=0
+        dedup_stats.deduped_obj=0
+        dedup_stats.deduped_obj_bytes=0
+        dedup_stats.skip_src_record=0
+
+        log.info("test_dedup_inc_with_remove: incremental dedup:")
+        exec_dedup(dedup_stats, False)
+        expected_results=calc_expected_results(files_sub, config)
+        verify_objects_multi(OUT_DIR, files_sub, conns, bucket_names, expected_results, config)
+
+    finally:
+        cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+
+
+#-------------------------------------------------------------------------------
+# Incremental dedup with object removal:
+# 1) Run the @simple_dedup test above without cleanup post dedup
+# 2) Remove copies of some objects
+# 3) Run another dedup
+@pytest.mark.basic_test
+def test_dedup_inc_with_remove():
+    #return
+
+    config=default_config
+    prepare_test(OUT_DIR)
+    bucket_name = gen_bucket_name()
+    log.info("test_dedup_inc_with_remove: connect to AWS ...")
+    conn = connection()
+    try:
+        files=[]
+        num_files = 17
+        gen_files_in_range(OUT_DIR, files, num_files, 1*MB, 64*MB)
+        # upload objects, dedup, verify, but don't cleanup
+        ret = simple_dedup(OUT_DIR, conn, files, bucket_name, False, config)
+        expected_results_base = ret[0]
+        stats_base = ret[1]
+
+        # REMOVE some objects and update stats/expected
+        object_keys=[]
+        files_sub=[]
+        dedup_stats = Dedup_Stats()
+        for f in files:
+            filename=f[0]
+            obj_size=f[1]
+            num_copies=f[2]
+            num_remove=random.randint(0, num_copies)
+            num_copies_2=num_copies-num_remove
+            log.debug("objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies_2);
+            if num_copies_2:
+                files_sub.append((filename, obj_size, num_copies_2))
+                calc_expected_stats(dedup_stats, obj_size, num_copies_2, config)
+
+            start_idx=num_copies_2
+            for i in range(start_idx, num_copies):
+                key = gen_object_name(filename, i)
+                log.debug("delete key::%s::", key);
+                object_keys.append(key)
+
+            response=conn.delete_objects(Bucket=bucket_name,
+                                         Delete={"Objects": [{"Key": key} for key in object_keys]})
+            # must call garbage collection for predictable count
+            result = admin(['gc', 'process', '--include-all'])
+            assert result[1] == 0
+
+        # run dedup again
+        dedup_stats.set_shared_manifest=0
+        dedup_stats.deduped_obj=0
+        dedup_stats.deduped_obj_bytes=0
+        dedup_stats.skip_src_record=0
+
+        log.info("test_dedup_inc_with_remove: incremental dedup:")
+        log.info("stats_base.size_before_dedup=%d", stats_base.size_before_dedup)
+        log.info("dedup_stats.size_before_dedup=%d", dedup_stats.size_before_dedup)
+
+        exec_dedup(dedup_stats, False)
+        expected_results=calc_expected_results(files_sub, config)
+        verify_objects(OUT_DIR, bucket_name, files_sub, conn, expected_results,
+                       config)
+
+    finally:
+        cleanup(OUT_DIR, bucket_name, conn)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_multipart_with_tenants():
+    #return
+
+    prepare_test(OUT_DIR)
+    log.info("test_dedup_multipart_with_tenants: connect to AWS ...")
+    max_copies_count=3
+    num_files=8
+    files=[]
+    min_size=MULTIPART_SIZE
+    # create files in range [MULTIPART_SIZE, 4*MULTIPART_SIZE] aligned on RADOS_OBJ_SIZE
+    gen_files_in_range(OUT_DIR, files, num_files, min_size, min_size*8)
+
+    # add files in range [MULTIPART_SIZE, 4*MULTIPART_SIZE] aligned on MULTIPART_SIZE
+    gen_files_in_range(OUT_DIR, files, num_files, min_size, min_size*8, MULTIPART_SIZE)
+
+    # add file with excatly MULTIPART_SIZE
+    write_random(OUT_DIR, files, MULTIPART_SIZE, 2, 2)
+
+    dedup_basic_with_tenants_common(OUT_DIR, files, max_copies_count, default_config)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_multipart():
+    #return
+
+    prepare_test(OUT_DIR)
+    bucket_name = gen_bucket_name()
+    log.info("test_dedup_multipart: connect to AWS ...")
+    conn = connection()
+    files=[]
+
+    num_files=8
+    min_size=MULTIPART_SIZE
+    # create files in range [MULTIPART_SIZE, 4*MULTIPART_SIZE] aligned on RADOS_OBJ_SIZE
+    gen_files_in_range(OUT_DIR, files, num_files, min_size, min_size*8)
+
+    # add files in range [MULTIPART_SIZE, 4*MULTIPART_SIZE] aligned on MULTIPART_SIZE
+    gen_files_in_range(OUT_DIR, files, num_files, min_size, min_size*8, MULTIPART_SIZE)
+
+    # add file with excatly MULTIPART_SIZE
+    write_random(OUT_DIR, files, MULTIPART_SIZE, 2, 2)
+
+    simple_dedup(OUT_DIR, conn, files, bucket_name, True, default_config)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_basic_with_tenants():
+    #return
+
+    prepare_test(OUT_DIR)
+    max_copies_count=3
+    num_files=23
     file_size=33*MB
     files=[]
     log.info("test_dedup_basic_with_tenants: connect to AWS ...")
@@ -1390,7 +1413,7 @@ def test_dedup_basic_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_basic():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     bucket_name = gen_bucket_name()
@@ -1409,7 +1432,7 @@ def test_dedup_basic():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_multipart_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     max_copies_count=4
@@ -1428,7 +1451,7 @@ def test_dedup_small_multipart_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_multipart():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_small_multipart: connect to AWS ...")
@@ -1450,23 +1473,23 @@ def test_dedup_small_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     max_copies_count=3
-    num_files=7*1024
-    file_size=4*KB
+    num_files=11*1024
+    size=1*KB
     files=[]
-    config=TransferConfig(multipart_threshold=file_size, multipart_chunksize=1*MB)
+    config=TransferConfig(multipart_threshold=size, multipart_chunksize=1*MB)
     log.info("test_dedup_large_scale: connect to AWS ...")
-    gen_files_fixed_size(OUT_DIR, files, num_files, file_size, max_copies_count)
+    gen_files_fixed_size(OUT_DIR, files, num_files, size, max_copies_count)
     dedup_basic_with_tenants_common(OUT_DIR, files, max_copies_count, config)
 
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_large_scale: connect to AWS ...")
@@ -1476,7 +1499,7 @@ def test_dedup_large_scale():
     files=[]
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(Bucket=bucket_name)
-    num_files = 2*1024
+    num_files = 7*1024
     size = 4*KB
 
     gen_files_fixed_size(OUT_DIR, files, num_files, size)

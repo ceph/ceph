@@ -111,7 +111,8 @@ namespace rgw::dedup {
     int  remove_objects_not_protected_by_md5(uint64_t max_allowed);
     void count_duplicates(uint64_t *p_singleton_count,
 			  uint64_t *p_unique_count,
-			  uint64_t *p_duplicate_count);
+			  uint64_t *p_duplicate_count,
+			  uint64_t *p_duplicate_bytes_approx);
     void remove_singletons_and_redistribute_keys();
     void get_stats(uint32_t *p_entries_count, uint32_t *p_occupied_count);
     void stat_counters_reset();
