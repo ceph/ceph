@@ -712,16 +712,19 @@ private:
   struct search_insert_pos_result_t {
     search_insert_pos_result_t(laddr_t laddr, LBABtree::iterator &&iter)
 	: laddr(laddr), iter(iter) {}
+    // Point to insert position.
     laddr_t laddr;
+    // Point to insert position.
     LBABtree::iterator iter;
   };
   using search_insert_pos_iertr = base_iertr;
   using search_insert_pos_ret = search_insert_pos_iertr::future<
     search_insert_pos_result_t>;
+  // Search for a suitable position and laddr according to hint~length.
   search_insert_pos_ret search_insert_pos(
     Transaction &t,
     LBABtree &btree,
-    laddr_t hint,
+    laddr_hint_t hint,
     extent_len_t length);
 
   struct {
@@ -775,6 +778,11 @@ private:
     update_func_t &&f,
     LogicalCachedExtent*);
 
+  // Allocate a list of pins.
+  // If alloc_mapping_info_t::key in alloc_infos are all L_ADDR_NULL, allocate a
+  // consecutive pins of the total length based on the hint.
+  // If the keys are all not L_ADDR_NULL, allocate a list of ordered pins based
+  // on each key. The hint must equal to the key of first entriy in alloc_infos.
   alloc_extents_ret _alloc_extents(
     Transaction &t,
     laddr_hint_t hint,
