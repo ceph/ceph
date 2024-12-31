@@ -248,6 +248,7 @@ void MDSMap::dump_flags_state(Formatter *f) const
     f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION), test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION));
     f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS), test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS));
     f->dump_bool(flag_display.at(CEPH_MDSMAP_BALANCE_AUTOMATE), test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE));
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_GLOBAL_SNAPREALM), use_global_snaprealm());
     f->close_section();
 }
 
@@ -395,6 +396,8 @@ void MDSMap::print_flags(std::ostream& out) const {
     out << " " << flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
   if (test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE))
     out << " " << flag_display.at(CEPH_MDSMAP_BALANCE_AUTOMATE);
+  if (use_global_snaprealm())
+    out << " " << flag_display.at(CEPH_MDSMAP_GLOBAL_SNAPREALM);
 }
 
 void MDSMap::get_health(list<pair<health_status_t,string> >& summary,

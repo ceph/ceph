@@ -293,8 +293,10 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS (1<<7) /* fs is forbidden to use standby
                                                             for another fs */
 #define CEPH_MDSMAP_BALANCE_AUTOMATE             (1<<8)  /* automate metadata balancing */
+#define CEPH_MDSMAP_GLOBAL_SNAPREALM             (1<<9)  /* use global snaprealm for hardlink snapshots */
 #define CEPH_MDSMAP_DEFAULTS (CEPH_MDSMAP_ALLOW_SNAPS | \
-			      CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS)
+			      CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS | \
+			      CEPH_MDSMAP_GLOBAL_SNAPREALM)
 
 /*
  * mds states
