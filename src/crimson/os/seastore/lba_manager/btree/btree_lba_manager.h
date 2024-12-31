@@ -73,13 +73,13 @@ public:
 	c,
 	parent,
 	pos,
-	pladdr_t(val.pladdr.is_paddr() ? val.pladdr.get_paddr() : P_ADDR_NULL),
+	val.pladdr.is_paddr() ? val.pladdr.get_paddr() : P_ADDR_NULL,
 	val.len,
 	meta,
 	ver),
       key(meta.begin),
       indirect(val.pladdr.is_laddr()),
-      intermediate_key(indirect ? val.pladdr.get_laddr() : L_ADDR_NULL),
+      intermediate_key(indirect ? val.pladdr.build_laddr(key) : L_ADDR_NULL),
       intermediate_length(indirect ? val.len : 0),
       raw_val(val.pladdr),
       map_val(val),
@@ -153,7 +153,7 @@ public:
     laddr_t interkey = L_ADDR_NULL)
   {
     assert(indirect);
-    assert(value.is_paddr());
+    assert(value_is_paddr());
     intermediate_key = (interkey == L_ADDR_NULL ? key : interkey);
     key = new_key;
     len = length;
@@ -291,11 +291,12 @@ public:
       laddr_t laddr,
       extent_len_t len,
       laddr_t intermediate_key) {
+      assert(laddr.get_object_prefix() == intermediate_key.get_object_prefix());
       return {
 	laddr,
 	{
 	  len,
-	  pladdr_t(intermediate_key),
+	  pladdr_t(intermediate_key.get_local_clone_id()),
 	  EXTENT_DEFAULT_REF_COUNT,
 	  0	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
@@ -795,7 +796,9 @@ private:
   {
 #ifndef NDEBUG
     for (auto &alloc_info : alloc_infos) {
-      assert(alloc_info.value.pladdr.get_laddr() != L_ADDR_NULL);
+      assert(alloc_info.value.pladdr.is_laddr());
+      assert(alloc_info.value.pladdr.get_local_clone_id()
+	     != LOCAL_CLONE_ID_NULL);
     }
 #endif
     return seastar::do_with(
@@ -814,8 +817,8 @@ private:
 	  auto mapping = static_cast<BtreeLBAMapping*>(mit->release());
 	  auto &alloc_info = *ait;
 	  assert(mapping->get_key() == alloc_info.key);
-	  assert(mapping->get_raw_val().get_laddr() ==
-	    alloc_info.value.pladdr.get_laddr());
+	  assert(mapping->get_raw_val().get_local_clone_id() ==
+	    alloc_info.value.pladdr.get_local_clone_id());
 	  assert(mapping->get_length() == alloc_info.value.len);
 	  rets.emplace_back(mapping);
 	}

@@ -112,7 +112,7 @@ protected:
    */
   CachedExtentRef parent;
 
-  pladdr_t value;
+  std::variant<laddr_t, paddr_t> value;
   extent_len_t len = 0;
   fixed_kv_node_meta_t<key_t> range;
   uint16_t pos = std::numeric_limits<uint16_t>::max();
@@ -123,6 +123,14 @@ protected:
     return range;
   }
 
+  bool value_is_laddr() const {
+    return value.index() == 0;
+  }
+
+  bool value_is_paddr() const {
+    return value.index() == 1;
+  }
+
 public:
   using val_type = val_t;
   BtreeNodeMapping(op_context_t<key_t> ctx) : ctx(ctx) {}
@@ -131,7 +139,7 @@ public:
     op_context_t<key_t> ctx,
     CachedExtentRef parent,
     uint16_t pos,
-    pladdr_t value,
+    std::variant<laddr_t, paddr_t> value,
     extent_len_t len,
     fixed_kv_node_meta_t<key_t> meta,
     btree_iter_version_t ver)
@@ -176,10 +184,10 @@ public:
 
   val_t get_val() const final {
     if constexpr (std::is_same_v<val_t, paddr_t>) {
-      return value.get_paddr();
+      return std::get<1>(value);
     } else {
       static_assert(std::is_same_v<val_t, laddr_t>);
-      return value.get_laddr();
+      return std::get<0>(value);
     }
   }
 

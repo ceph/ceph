@@ -1812,7 +1812,7 @@ ObjectDataHandler::clone_mappings(context_t ctx)
 
 		    // make current mapping indirect
 		    auto new_val = state.lba_iter.val;
-		    new_val.pladdr = dst_laddr;
+		    new_val.pladdr = dst_laddr.get_local_clone_id();
 		    assert(new_val.refcount == EXTENT_DEFAULT_REF_COUNT);
 		    DEBUGT("make {} indirect: {}",
 			   ctx.t, state.lba_iter, new_val);
@@ -1826,7 +1826,8 @@ ObjectDataHandler::clone_mappings(context_t ctx)
 		    ).si_then([&state, dst_laddr](LBAIter iter) {
 		      boost::ignore_unused(dst_laddr);
 		      assert(iter.val.pladdr.is_laddr());
-		      assert(iter.val.pladdr.get_laddr() == dst_laddr);
+		      assert(iter.val.pladdr.get_local_clone_id()
+			     == dst_laddr.get_local_clone_id());
 		      lba_entry_t entry {
 			iter.key,
 			iter.val,
@@ -1921,7 +1922,7 @@ ObjectDataHandler::clone_mappings(context_t ctx)
 		  if (!entry.update_refcount) {
 		    return clone_iertr::now();
 		  } else {
-		    auto key = entry.value.pladdr.get_laddr();
+		    auto key = entry.value.pladdr.build_laddr(entry.laddr);
 		    DEBUGT("update refcount for {}", ctx.t, key);
 		    return ctx.tm.get_iterators(ctx.t, key, entry.value.len
 		    ).si_then([ctx](std::vector<LBAIter> iters) {
@@ -2000,7 +2001,7 @@ ObjectDataHandler::copy_indirect_mappings(
 		    assert(value.pladdr.get_paddr() == P_ADDR_ZERO);
 		    return clone_iertr::now();
 		  } else {
-		    auto laddr = value.pladdr.get_laddr();
+		    auto laddr = value.pladdr.build_laddr(iter.key);
 		    DEBUGT("increase the refcount of {}", ctx.t, laddr);
 		    return ctx.tm.get_iterators(
 		      ctx.t,
