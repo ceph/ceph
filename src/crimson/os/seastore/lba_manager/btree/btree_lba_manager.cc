@@ -1091,7 +1091,7 @@ BtreeLBAManager::upper_bound_right(
 BtreeLBAManager::find_region_ret
 BtreeLBAManager::find_region(
   Transaction &t,
-  laddr_t hint,
+  laddr_hint_t hint,
   extent_len_t length)
 {
   auto c = get_context(t);

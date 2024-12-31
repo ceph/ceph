@@ -531,7 +531,7 @@ ObjectDataHandler::write_ret do_insertions(
 	       region.len);
 	return ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	  ctx.t,
-	  region.addr,
+	  laddr_hint_t::create_as_fixed(region.addr),
 	  region.len
         ).si_then([&region](auto extents) {
           auto off = region.addr;
@@ -562,7 +562,7 @@ ObjectDataHandler::write_ret do_insertions(
 	       region.len);
 	return ctx.tm.reserve_region(
 	  ctx.t,
-	  region.addr,
+	  laddr_hint_t::create_as_fixed(region.addr),
 	  region.len
 	).si_then([FNAME, ctx, &region](auto pin) {
 	  ceph_assert(pin->get_length() == region.len);
@@ -1065,13 +1065,14 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
            object_data.get_reserved_data_len());
     return write_iertr::now();
   } else {
+    auto hint = ctx.onode.get_data_hint();
     DEBUGT("reserving: {}~0x{:x}",
            ctx.t,
-           ctx.onode.get_data_hint(),
+	   hint,
            max_object_size);
     return ctx.tm.reserve_region(
       ctx.t,
-      ctx.onode.get_data_hint(),
+      hint,
       max_object_size
     ).si_then([max_object_size=max_object_size, &object_data](auto pin) {
       ceph_assert(pin->get_length() == max_object_size);
@@ -1738,7 +1739,7 @@ ObjectDataHandler::clone_mappings(context_t ctx)
 	  // these mappings will be moved to returned address.
 	  return ctx.tm.find_region(
 	    ctx.t,
-	    ctx.onode.get_data_hint(),
+	    ctx.onode.get_data_clone_hint(),
 	    length
 	  ).si_then([ctx, &state, length, FNAME](auto res) {
 	    DEBUGT("reserve {}~{} for direct mappings",
@@ -1892,7 +1893,7 @@ ObjectDataHandler::clone_mappings(context_t ctx)
 	    // find region for clone onode
 	    return ctx.tm.find_region(
 	      ctx.t,
-	      ctx.d_onode->get_data_hint(),
+	      ctx.onode.get_data_clone_hint(),
 	      state.src.get_reserved_data_len());
 	  }).si_then([ctx, &state, FNAME](auto res) {
 	    state.dst.update_reserved(
