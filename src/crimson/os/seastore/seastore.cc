@@ -1985,11 +1985,6 @@ SeaStore::Shard::_rename(
 {
   auto olayout = onode->get_layout();
   uint32_t size = olayout.size;
-  auto omap_root = olayout.omap_root.get(
-    d_onode->get_metadata_hint(device->get_block_size()));
-  auto xattr_root = olayout.xattr_root.get(
-    d_onode->get_metadata_hint(device->get_block_size()));
-  auto object_data = olayout.object_data.get();
   auto oi_bl = ceph::bufferlist::static_from_mem(
     &olayout.oi[0],
     (uint32_t)olayout.oi_size);
@@ -1998,18 +1993,37 @@ SeaStore::Shard::_rename(
     (uint32_t)olayout.ss_size);
 
   d_onode->update_onode_size(*ctx.transaction, size);
-  d_onode->update_omap_root(*ctx.transaction, omap_root);
-  d_onode->update_xattr_root(*ctx.transaction, xattr_root);
-  d_onode->update_object_data(*ctx.transaction, object_data);
   d_onode->update_object_info(*ctx.transaction, oi_bl);
   d_onode->update_snapset(*ctx.transaction, ss_bl);
-  return onode_manager->erase_onode(
-    *ctx.transaction, onode
-  ).handle_error_interruptible(
-    crimson::ct_error::input_output_error::pass_further(),
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStoreS::_rename"}
-  );
+
+  return seastar::do_with(
+    ObjectDataHandler(max_object_size),
+    [this, &ctx, &onode, &d_onode](ObjectDataHandler &obj_handler) {
+      return obj_handler.rename(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  *onode,
+	  d_onode.get()
+	});
+    }).si_then([this, &ctx, &onode, &d_onode] {
+      auto hint = LADDR_HINT_NULL;
+      if (auto prefix = d_onode->get_clone_prefix(); !prefix) {
+	hint = d_onode->get_metadata_hint(device->get_block_size());
+      }
+      return _clone_omaps(ctx, onode, d_onode, omap_type_t::XATTR, hint);
+    }).si_then([this, &ctx, &onode, &d_onode] {
+      return _clone_omaps(ctx, onode, d_onode, omap_type_t::OMAP, LADDR_HINT_NULL);
+    }).si_then([this, &ctx, &onode] {
+      return onode_manager->erase_onode(
+	*ctx.transaction, onode
+       ).handle_error_interruptible(
+	 crimson::ct_error::input_output_error::pass_further(),
+	 crimson::ct_error::assert_all{
+	   "Invalid error in SeaStoreS::_rename"
+	 }
+       );
+    });
 }
 
 SeaStore::Shard::tm_ret
@@ -2116,12 +2130,13 @@ SeaStore::Shard::_clone_omaps(
   internal_context_t &ctx,
   OnodeRef &onode,
   OnodeRef &d_onode,
-  const omap_type_t otype)
+  const omap_type_t otype,
+  laddr_hint_t init_hint)
 {
-  return trans_intr::repeat([&ctx, onode, d_onode, this, otype] {
+  return trans_intr::repeat([&ctx, onode, d_onode, this, otype, init_hint] {
     return seastar::do_with(
       std::optional<std::string>(std::nullopt),
-      [&ctx, onode, d_onode, this, otype](auto &start) {
+      [&ctx, onode, d_onode, this, otype, init_hint](auto &start) {
       auto& layout = onode->get_layout();
       return omap_list(
 	*onode,
@@ -2131,7 +2146,8 @@ SeaStore::Shard::_clone_omaps(
 	*ctx.transaction,
 	start,
 	OMapManager::omap_list_config_t().with_inclusive(false, false)
-      ).si_then([&ctx, onode, d_onode, this, otype, &start](auto p) mutable {
+      ).si_then([&ctx, onode, d_onode, this, otype, &start, init_hint]
+		(auto p) mutable {
 	auto complete = std::get<0>(p);
 	auto &attrs = std::get<1>(p);
 	if (attrs.empty()) {
@@ -2141,6 +2157,14 @@ SeaStore::Shard::_clone_omaps(
 	      seastar::stop_iteration::yes);
 	}
 	std::string nstart = attrs.rbegin()->first;
+	laddr_hint_t hint = LADDR_HINT_NULL;
+	if (auto prefix = d_onode->get_clone_prefix(); prefix) {
+	  hint = d_onode->get_metadata_hint(device->get_block_size());
+	} else {
+	  ceph_assert(!start);
+	  hint = init_hint;
+	}
+	ceph_assert(hint != LADDR_HINT_NULL);
 	return _omap_set_kvs(
 	  d_onode,
 	  otype == omap_type_t::XATTR
@@ -2148,9 +2172,7 @@ SeaStore::Shard::_clone_omaps(
 	    : d_onode->get_layout().omap_root,
 	  *ctx.transaction,
 	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end()),
-	  d_onode->get_clone_prefix()
-	    ? d_onode->get_metadata_hint(device->get_block_size())
-	    : onode->get_metadata_clone_hint(device->get_block_size())
+	  hint
 	).si_then([complete, nstart=std::move(nstart),
 		  &start, &ctx, d_onode, otype](auto root) mutable {
 	  if (root.must_update()) {
@@ -2197,9 +2219,13 @@ SeaStore::Shard::_clone(
 	d_onode.get(),
 	src_is_head});
   }).si_then([&ctx, &onode, &d_onode, this] {
-    return _clone_omaps(ctx, onode, d_onode, omap_type_t::XATTR);
+    auto hint = LADDR_HINT_NULL;
+    if (auto prefix = d_onode->get_clone_prefix(); !prefix) {
+      hint = onode->get_metadata_clone_hint(device->get_block_size());
+    }
+    return _clone_omaps(ctx, onode, d_onode, omap_type_t::XATTR, hint);
   }).si_then([&ctx, &onode, &d_onode, this] {
-    return _clone_omaps(ctx, onode, d_onode, omap_type_t::OMAP);
+    return _clone_omaps(ctx, onode, d_onode, omap_type_t::OMAP, LADDR_HINT_NULL);
   });
 }
 

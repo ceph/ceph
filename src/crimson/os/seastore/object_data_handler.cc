@@ -2038,4 +2038,96 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
   }
 }
 
+ObjectDataHandler::rename_ret ObjectDataHandler::rename(context_t ctx)
+{
+  struct lba_entry_t {
+    laddr_t laddr;
+    lba_map_val_t value;
+    LogicalCachedExtent *nextent;
+  };
+  struct state_t {
+    state_t(object_data_t &src, object_data_t &dst)
+	: src(src), dst(dst) {}
+    object_data_t &src;
+    object_data_t &dst;
+    LBAIter lba_iter;
+    std::vector<lba_entry_t> src_entries;
+  };
+
+  return with_objects_data(ctx, [ctx](object_data_t &src, object_data_t &dst) {
+    return seastar::do_with(state_t(src, dst), [ctx](state_t &state) {
+      return ctx.tm.get_iterators(
+	ctx.t,
+	state.src.get_reserved_data_base(),
+	state.src.get_reserved_data_len()
+      ).si_then([ctx, &state](std::vector<LBAIter> iters) {
+	assert(!iters.empty());
+	state.lba_iter = iters.front();
+	return trans_intr::do_for_each(
+	  boost::make_counting_iterator<size_t>(0),
+	  boost::make_counting_iterator(iters.size()),
+	  [ctx, &state](auto) {
+	    bool cur_is_direct =
+		state.lba_iter.val.pladdr.is_paddr() &&
+		state.lba_iter.val.pladdr.get_paddr() != P_ADDR_ZERO;
+	    return seastar::futurize_invoke([ctx, &state, cur_is_direct] {
+	      if (cur_is_direct) {
+		return ctx.tm.make_mapping(ctx.t, state.lba_iter
+		).si_then([ctx](auto mapping) {
+		  return ctx.tm.relocate_logical_extent(
+		    ctx.t, std::move(mapping));
+		});
+	      } else {
+		return rename_iertr::make_ready_future<
+		  LogicalCachedExtentRef>();
+	      }
+	    }).si_then([ctx, &state](LogicalCachedExtentRef extent) {
+	      lba_entry_t entry {
+		state.lba_iter.key,
+		state.lba_iter.val,
+		extent.get()
+	      };
+	      state.src_entries.push_back(entry);
+	      return ctx.tm.remove_mapping(ctx.t, state.lba_iter
+	      ).si_then([&state](LBAIter iter) {
+		state.lba_iter = iter;
+	      });
+	    });
+	  });
+      }).si_then([ctx, &state] {
+	return ctx.tm.find_region(
+	  ctx.t,
+	  ctx.d_onode->get_data_hint(),
+	  state.src.get_reserved_data_len()
+	).si_then([ctx, &state](LBAManager::find_region_result_t res) {
+	  auto base = res.laddr;
+	  state.lba_iter = res.iter;
+	  return trans_intr::do_for_each(
+	    state.src_entries.rbegin(),
+	    state.src_entries.rend(),
+	    [ctx, &state, base](lba_entry_t &entry) {
+	      auto offset = entry.laddr.get_byte_distance<loffset_t>(
+		state.src.get_reserved_data_base());
+	      auto laddr = (base + offset).checked_to_laddr();
+	      if (entry.nextent) {
+		entry.nextent->set_laddr(laddr);
+	      }
+	      return ctx.tm.insert_mapping(
+		ctx.t,
+		state.lba_iter,
+		laddr,
+		entry.value,
+		entry.nextent
+		? entry.nextent
+		: (LogicalCachedExtent*)get_reserved_ptr()
+	      ).si_then([&state](LBAIter iter) {
+		state.lba_iter = iter;
+	      });
+	    });
+	});
+      });
+    });
+  });
+}
+
 } // namespace crimson::os::seastore

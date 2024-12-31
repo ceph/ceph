@@ -226,6 +226,10 @@ public:
   using clone_ret = clone_iertr::future<>;
   clone_ret clone(context_t ctx);
 
+  using rename_iertr = base_iertr;
+  using rename_ret = rename_iertr::future<>;
+  rename_ret rename(context_t ctx);
+
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
   write_ret overwrite(

@@ -429,7 +429,8 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       OnodeRef &d_onode,
-      const omap_type_t otype);
+      const omap_type_t otype,
+      laddr_hint_t init_hint);
     tm_ret _clone(
       internal_context_t &ctx,
       OnodeRef &onode,
