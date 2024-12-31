@@ -8,23 +8,10 @@
 #include <optional>
 #include <ostream>
 
-#include "common/hobject.h"
 #include "crimson/os/seastore/onode.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fwd.h"
 
 namespace crimson::os::seastore::onode {
-
-using shard_t = int8_t;
-using pool_t = int64_t;
-// Note: this is the reversed version of the object hash
-using crush_hash_t = uint32_t;
-using snap_t = uint64_t;
-using gen_t = uint64_t;
-static_assert(sizeof(shard_t) == sizeof(ghobject_t().shard_id.id));
-static_assert(sizeof(pool_t) == sizeof(ghobject_t().hobj.pool));
-static_assert(sizeof(crush_hash_t) == sizeof(ghobject_t().hobj.get_bitwise_key_u32()));
-static_assert(sizeof(snap_t) == sizeof(ghobject_t().hobj.snap.val));
-static_assert(sizeof(gen_t) == sizeof(ghobject_t().generation));
 
 constexpr auto MAX_SHARD = std::numeric_limits<shard_t>::max();
 constexpr auto MAX_POOL = std::numeric_limits<pool_t>::max();
