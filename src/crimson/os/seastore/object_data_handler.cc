@@ -1053,6 +1053,7 @@ auto with_objects_data(
 ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   context_t ctx,
   object_data_t &object_data,
+  laddr_hint_t hint,
   extent_len_t size)
 {
   LOG_PREFIX(ObjectDataHandler::prepare_data_reservation);
@@ -1404,6 +1405,7 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
       return prepare_data_reservation(
 	ctx,
 	object_data,
+	ctx.onode.get_data_hint(),
 	p2roundup(offset + len, ctx.tm.get_block_size())
       ).si_then([this, ctx, offset, len, &object_data] {
 	auto data_base = object_data.get_reserved_data_base();
@@ -1445,6 +1447,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
       return prepare_data_reservation(
 	ctx,
 	object_data,
+	ctx.onode.get_data_hint(),
 	p2roundup(offset + bl.length(), ctx.tm.get_block_size())
       ).si_then([this, ctx, offset, &object_data, &bl] {
 	auto data_base = object_data.get_reserved_data_base();
@@ -1676,6 +1679,7 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
 	return prepare_data_reservation(
 	  ctx,
 	  object_data,
+	  ctx.onode.get_data_hint(),
 	  p2roundup(offset, ctx.tm.get_block_size()));
       } else {
 	return truncate_iertr::now();
