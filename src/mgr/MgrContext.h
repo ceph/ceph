@@ -51,12 +51,10 @@ public:
   virtual ~Command() {}
 };
 
-
-//JFW: is this even used?
 class JSONCommand : public Command
 {
 public:
-//JFW: looks like this is just discarded??  json_spirit::mValue json_result;
+  boost::json::value json_result;
 
   void wait() override
   {
@@ -64,7 +62,8 @@ public:
 
     if (r == 0) {
       boost::system::error_code ec;
-      auto json_result = boost::json::parse(outbl.to_str(), ec);
+
+      json_result = boost::json::parse(outbl.to_str(), ec);
 
       if(ec)
        r = -EINVAL;

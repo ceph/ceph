@@ -12,8 +12,6 @@
 #include <include/ceph_fs.h>
 #include "common/ceph_time.h"
 
-//JFW: #include "json_spirit/json_spirit.h"
-
 #include "Formatter.h"
 
 
