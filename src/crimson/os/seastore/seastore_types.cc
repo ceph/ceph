@@ -94,8 +94,41 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   }
 }
 
+template <typename T>
+concept is_convertible_to_stream = std::is_convertible_v<T, std::ostream &>;
+
+template <typename T>
+concept is_streamable = requires(std::ostream &os, const T &value) {
+  { os << value } -> is_convertible_to_stream;
+};
+
+template <typename T>
+struct laddr_formatter_t;
+
+template <typename T>
+requires fmt::is_formattable<T>::value
+struct laddr_formatter_t<T> {
+  static std::ostream &format(std::ostream &out, const T &v) {
+    // fmt support format __int128
+    fmt::format_to(std::ostreambuf_iterator<char>(out), "L0x{:x}", v);
+    return out;
+  }
+};
+template <typename T>
+requires is_streamable<T>
+struct laddr_formatter_t<T> {
+  static std::ostream &format(std::ostream &out, const T &v) {
+    // boost uint128_t support stream operator but __int128 doesn't
+    return out << "L0x" << std::hex << v << std::dec;
+  }
+};
+
 std::ostream &operator<<(std::ostream &out, const laddr_t &laddr) {
-  return out << "L0x" << std::hex << laddr.value << std::dec;
+  if (laddr == L_ADDR_NULL) {
+    return out << "L_ADDR_NULL";
+  } else {
+    return laddr_formatter_t<laddr_t::Unsigned>::format(out, laddr.value);
+  }
 }
 
 std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) {

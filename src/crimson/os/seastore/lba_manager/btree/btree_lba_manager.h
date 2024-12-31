@@ -73,7 +73,7 @@ public:
 	c,
 	parent,
 	pos,
-	val.pladdr.is_paddr() ? val.pladdr.get_paddr() : P_ADDR_NULL,
+	pladdr_t(val.pladdr.is_paddr() ? val.pladdr.get_paddr() : P_ADDR_NULL),
 	val.len,
 	meta,
 	ver),
@@ -280,7 +280,7 @@ public:
 	L_ADDR_NULL,
 	lba_map_val_t{
 	  len,
-	  P_ADDR_ZERO,
+	  pladdr_t(P_ADDR_ZERO),
 	  EXTENT_DEFAULT_REF_COUNT,
 	  0
 	},
@@ -295,7 +295,7 @@ public:
 	laddr,
 	{
 	  len,
-	  intermediate_key,
+	  pladdr_t(intermediate_key),
 	  EXTENT_DEFAULT_REF_COUNT,
 	  0	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
@@ -309,7 +309,7 @@ public:
       extent_ref_count_t refcount,
       uint32_t checksum,
       LogicalCachedExtent *extent) {
-      return {laddr, {len, paddr, refcount, checksum}, extent};
+      return {laddr, {len, pladdr_t(paddr), refcount, checksum}, extent};
     }
   };
 

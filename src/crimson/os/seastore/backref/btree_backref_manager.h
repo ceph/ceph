@@ -27,7 +27,7 @@ public:
 	ctx,
 	parent,
 	pos,
-	val.laddr,
+	pladdr_t(val.laddr),
 	val.len,
 	std::forward<backref_node_meta_t>(meta),
 	ver),

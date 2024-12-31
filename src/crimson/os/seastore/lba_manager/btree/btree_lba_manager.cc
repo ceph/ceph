@@ -1376,7 +1376,7 @@ BtreeLBAManager::_decref_intermediate(
 	  ).si_then([val](auto) {
 	    auto res = ref_update_result_t{
 	      val.refcount,
-	      val.pladdr.get_paddr(),
+	      val.pladdr,
 	      val.len
 	    };
 	    return ref_iertr::make_ready_future<
