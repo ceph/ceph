@@ -125,7 +125,7 @@
 
 
         <!-- Bucket Rate Limit -->
-        <ng-container *ngIf="selection.bucket_ratelimit">
+        <ng-container *ngIf="selection?.bucket_ratelimit">
           <legend i18n>Bucket Rate Limit</legend>
           <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
             <tbody>
@@ -141,7 +141,7 @@
                 <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_read_ops <= -1"
                          i18n>Unlimited</td>
                 <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_read_ops > -1">
-                  {{ selection.bucket_ratelimit.max_read_ops}}
+                  {{ selection.bucket_ratelimit.max_read_ops}} IOPM
                 </td>
               </tr>
               <tr>
@@ -151,7 +151,7 @@
                 <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_write_ops <= -1"
                          i18n>Unlimited</td>
                 <td *ngIf="selection.bucket_ratelimit.enabled && selection.bucket_ratelimit.max_write_ops > -1">
-                  {{ selection.bucket_ratelimit.max_write_ops}}
+                  {{ selection.bucket_ratelimit.max_write_ops}} IOPM
                 </td>
               </tr>
               <tr>

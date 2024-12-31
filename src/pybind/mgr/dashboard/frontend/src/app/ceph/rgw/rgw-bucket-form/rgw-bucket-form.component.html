@@ -763,6 +763,7 @@
                        class="form-control"
                        type="text"
                        formControlName="bucket_rate_limit_max_readBytes"
+                       defaultUnit="b"
                        cdDimlessBinaryPerMinute>
                 <span class="invalid-feedback"
                       *ngIf="bucketForm.showError('bucket_rate_limit_max_readBytes', frm, 'required')"
@@ -800,6 +801,7 @@
                 <input id="bucket_rate_limit_max_writeBytes"
                        class="form-control"
                        type="text"
+                       defaultUnit="b"
                        formControlName="bucket_rate_limit_max_writeBytes"
                        cdDimlessBinaryPerMinute>
                 <span class="invalid-feedback"

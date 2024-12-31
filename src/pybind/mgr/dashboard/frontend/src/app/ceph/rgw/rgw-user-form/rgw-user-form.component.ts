@@ -253,7 +253,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
             case 0:
               value['max_buckets_mode'] = 0;
               value['max_buckets'] = '';
-              break;
+              break;  
             default:
               value['max_buckets_mode'] = 1;
               break;
@@ -810,23 +810,23 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       result['max_write_ops'] = new FormatterService().toIopm(this.userForm.getValue('user_rate_limit_max_writeOps'))+'';
     }
     if (!this.userForm.getValue('user_rate_limit_max_readBytes_unlimited')) {
-       // Convert the given value to bytes.
-      
-       result['max_read_bytes']  = (this.userForm.getValue('user_rate_limit_max_readBytes')) + '';
+       // Convert the given value to bytes.   
+       result['max_read_bytes']  = new FormatterService().convertUnitToBytes(this.userForm.getValue('user_rate_limit_max_readBytes')) + '';
     }
     if (!this.userForm.getValue('user_rate_limit_max_writeBytes_unlimited')) {
-      result['max_write_bytes'] = (this.userForm.getValue('user_rate_limit_max_writeBytes'))+'';
+      result['max_write_bytes'] = new FormatterService().convertUnitToBytes(this.userForm.getValue('user_rate_limit_max_writeBytes'))+'';
     }
     return result;
   }
 
   private _setRateLimitProperty(value: Pick<any, string>, rateLimitKey:string, unlimitedKey:string, property:any) {
-    if (property < 0) {
+    console.log("property", property);
+    if (property === 0) {
       value[unlimitedKey] = true;
-      value[rateLimitKey] = null;
-    } else {
+      value[rateLimitKey] = '';
+    } else {  
       value[unlimitedKey] = false;
-      value[rateLimitKey] = property; //TODO-set unit
+      value[rateLimitKey] = property;
     }
   }
 

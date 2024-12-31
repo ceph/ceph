@@ -93,6 +93,11 @@ import { DimlessBinaryPerMinutePipe } from '../pipes/dimless-binary-per-minute.p
     }
   
     setValue(value: string) {
+      if(value === '') {
+        this.ngModelChange.emit(value);
+        this.control.control.setValue(value);
+        return;
+      }
       if (/^[\d.]+$/.test(value)) {
         value += this.defaultUnit || 'm';
       }

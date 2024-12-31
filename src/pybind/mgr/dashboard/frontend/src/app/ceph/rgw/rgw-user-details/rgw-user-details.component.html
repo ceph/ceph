@@ -165,40 +165,40 @@
             <td i18n
                 class="bold">Maximum Read Ops</td>
             <td *ngIf="!user.user_ratelimit.enabled">-</td>
-            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_ops <= -1"
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_ops <= 0"
                      i18n>Unlimited</td>
-            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_ops > -1">
-              {{ user.user_ratelimit.max_read_ops}}
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_ops > 0">
+              {{ user.user_ratelimit.max_read_ops}} IOPM
             </td>
           </tr>
           <tr>
             <td i18n
                 class="bold">Maximum Write Ops</td>
             <td *ngIf="!user.user_ratelimit.enabled">-</td>
-            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_ops <= -1"
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_ops <= 0"
                      i18n>Unlimited</td>
-            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_ops > -1">
-              {{ user.user_ratelimit.max_write_ops}}
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_ops > 0">
+              {{ user.user_ratelimit.max_write_ops }} IOPM
             </td>
           </tr>
           <tr>
             <td i18n
                 class="bold">Maximum Read Bytes</td>
             <td *ngIf="!user.user_ratelimit.enabled">-</td>
-            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_bytes <= -1"
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_bytes <= 0"
                      i18n>Unlimited</td>
-            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_bytes > -1">
-              {{ user.user_ratelimit.max_read_bytes}}
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_bytes > 0">
+              {{ user.user_ratelimit.max_read_bytes | dimlessBinaryPerMinute}}
             </td>
           </tr>
           <tr>
             <td i18n
                 class="bold">Maximum Write Bytes</td>
             <td *ngIf="!user.user_ratelimit.enabled">-</td>
-            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_bytes <= -1"
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_bytes <= 0"
                      i18n>Unlimited</td>
-            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_bytes > -1">
-              {{ user.user_ratelimit.max_write_bytes}}
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_bytes > 0">
+              {{ user.user_ratelimit.max_write_bytes | dimlessBinaryPerMinute}}
             </td>
           </tr>
         </tbody>

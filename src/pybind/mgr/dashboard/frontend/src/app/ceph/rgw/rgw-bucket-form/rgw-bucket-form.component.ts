@@ -39,6 +39,7 @@ import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { map, switchMap } from 'rxjs/operators';
 import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml-formatter.service';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -256,11 +257,6 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         this.bucketForm.get('encryption_type').setValue('');
       }
     });
-    // const s=this.bucketForm.get('bid');
-    // console.log("this.bucketForm.getValue('bid')", s);
-    // this.rgwUserService.getRateLimit(this.bucketForm.getValue('bid')).subscribe((data)=>{
-    //   console.log("data",data);
-    // })
 
     if (!this.editing) {
       promises['getPlacementTargets'] = this.rgwSiteService.get('placement-targets');
@@ -272,6 +268,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         const bid = decodeURIComponent(params.bid);
         promises['getBid'] = this.rgwBucketService.get(bid);
       } 
+      
       forkJoin(promises).subscribe((data: any) => {
         // Get the list of possible owners.
         this.owners = (<string[]>data.owners).sort();
@@ -292,7 +289,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
             this.bucketForm.get('placement-target').setValue(this.placementTargets[0]['name']);
           }
         }
-
+        if(this.editing){
+          this._setBucketRateLimit(data['getBid'].bid);
+        }
         if (data['getBid']) {
           const bidResp = data['getBid'];
           // Get the default values (incl. the values from disabled fields).
@@ -359,6 +358,27 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         this.loadingReady();
       });
     });
+  }
+
+  private _setBucketRateLimit(bid:string){
+    this.rgwBucketService.getBucketRateLimit(bid).subscribe((data:any)=>{
+      //Map Rate Limit Values
+      this.bucketForm.get('bucket_rate_limit_enabled').setValue(data.bucket_ratelimit.enabled);
+      this._setRateLimitProperty('bucket_rate_limit_max_readBytes', 'bucket_rate_limit_max_readBytes_unlimited', data.bucket_ratelimit.max_read_bytes);
+      this._setRateLimitProperty('bucket_rate_limit_max_writeBytes', 'bucket_rate_limit_max_writeBytes_unlimited', data.bucket_ratelimit.max_write_bytes);
+      this._setRateLimitProperty('bucket_rate_limit_max_readOps', 'bucket_rate_limit_max_readOps_unlimited', data.bucket_ratelimit.max_read_ops);
+      this._setRateLimitProperty('bucket_rate_limit_max_writeOps', 'bucket_rate_limit_max_writeOps_unlimited', data.bucket_ratelimit.max_write_ops);
+    })
+  }
+  private _setRateLimitProperty(rateLimitKey:string, unlimitedKey:string, property:any) {
+    console.log("property", property);
+    if (property === 0) {
+      this.bucketForm.get(unlimitedKey).setValue(true);
+      this.bucketForm.get(rateLimitKey).setValue('');
+    } else {  
+      this.bucketForm.get(unlimitedKey).setValue(false);
+      this.bucketForm.get(rateLimitKey).setValue(property);
+    }
   }
 
   goToListView() {
@@ -699,18 +719,17 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       "max_read_bytes": '0',
       "max_write_bytes": '0'
     }
-
     if (!this.bucketForm.getValue('bucket_rate_limit_max_readOps_unlimited')) { 
-      result['max_read_ops'] =(this.bucketForm.getValue('bucket_rate_limit_max_readOps'))+'';
+      result['max_read_ops'] = new FormatterService().toIopm(this.bucketForm.getValue('bucket_rate_limit_max_readOps'))+'';
     }
     if (!this.bucketForm.getValue('bucket_rate_limit_max_writeOps_unlimited')) {
-      result['max_write_ops'] =(this.bucketForm.getValue('bucket_rate_limit_max_writeOps'))+'';
+      result['max_write_ops'] = new FormatterService().toIopm(this.bucketForm.getValue('bucket_rate_limit_max_writeOps'))+'';
     }
     if (!this.bucketForm.getValue('bucket_rate_limit_max_readBytes_unlimited')) {
-      result['max_read_bytes'] =(this.bucketForm.getValue('bucket_rate_limit_max_readBytes'))+'';
+      result['max_read_bytes'] =new FormatterService().convertUnitToBytes(this.bucketForm.getValue('bucket_rate_limit_max_readBytes'))+'';
     }
     if (!this.bucketForm.getValue('bucket_rate_limit_max_writeBytes_unlimited')) {
-      result['max_write_bytes'] =(this.bucketForm.getValue('bucket_rate_limit_max_writeBytes'))+'';
+      result['max_write_bytes'] =new FormatterService().convertUnitToBytes(this.bucketForm.getValue('bucket_rate_limit_max_writeBytes'))+'';
     }
     return result;
   }

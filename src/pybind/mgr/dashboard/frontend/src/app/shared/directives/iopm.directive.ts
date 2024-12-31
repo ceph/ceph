@@ -13,6 +13,10 @@ export class IopmDirective implements OnInit {
   constructor(private formatter: FormatterService, private ngControl: NgControl) {}
 
   setValue(value: string): void {
+    if(value === '' || value === null){
+      this.ngControl.control.setValue(value);
+      return;
+    }
     const iopm = this.formatter.toIopm(value);
     this.ngControl.control.setValue(`${iopm} IOPM`);
   }
