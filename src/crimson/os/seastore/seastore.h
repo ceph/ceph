@@ -495,7 +495,8 @@ public:
       const OnodeRef &onode,
       const omap_root_le_t& omap_root,
       Transaction& t,
-      std::map<std::string, ceph::bufferlist>&& kvs);
+      std::map<std::string, ceph::bufferlist>&& kvs,
+      laddr_hint_t hint);
 
     boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
 

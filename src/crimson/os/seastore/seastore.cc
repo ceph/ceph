@@ -2147,7 +2147,10 @@ SeaStore::Shard::_clone_omaps(
 	    ? d_onode->get_layout().xattr_root
 	    : d_onode->get_layout().omap_root,
 	  *ctx.transaction,
-	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end())
+	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end()),
+	  d_onode->get_clone_prefix()
+	    ? d_onode->get_metadata_hint(device->get_block_size())
+	    : onode->get_metadata_clone_hint(device->get_block_size())
 	).si_then([complete, nstart=std::move(nstart),
 		  &start, &ctx, d_onode, otype](auto root) mutable {
 	  if (root.must_update()) {
@@ -2236,17 +2239,18 @@ SeaStore::Shard::_omap_set_kvs(
   const OnodeRef &onode,
   const omap_root_le_t& omap_root,
   Transaction& t,
-  std::map<std::string, ceph::bufferlist>&& kvs)
+  std::map<std::string, ceph::bufferlist>&& kvs,
+  laddr_hint_t hint)
 {
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
-    omap_root.get(onode->get_metadata_hint(device->get_block_size())),
+    omap_root.get(hint),
     [&, keys=std::move(kvs)](auto &omap_manager, auto &root) {
       tm_iertr::future<> maybe_create_root =
         !root.is_null() ?
         tm_iertr::now() :
         omap_manager.initialize_omap(
-          t, onode->get_metadata_hint(device->get_block_size())
+          t, root.get_hint()
         ).si_then([&root](auto new_root) {
           root = new_root;
         });
@@ -2270,7 +2274,8 @@ SeaStore::Shard::_omap_set_values(
     onode,
     onode->get_layout().omap_root,
     *ctx.transaction,
-    std::move(aset)
+    std::move(aset),
+    onode->get_metadata_hint(device->get_block_size())
   ).si_then([onode, &ctx](auto root) {
     if (root.must_update()) {
       onode->update_omap_root(*ctx.transaction, root);
@@ -2479,7 +2484,8 @@ SeaStore::Shard::_setattrs(
       onode,
       onode->get_layout().xattr_root,
       *ctx.transaction,
-      std::move(aset)
+      std::move(aset),
+      onode->get_metadata_hint(device->get_block_size())
     ).si_then([onode, &ctx](auto root) {
       if (root.must_update()) {
 	onode->update_xattr_root(*ctx.transaction, root);
