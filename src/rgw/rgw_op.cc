@@ -6661,8 +6661,10 @@ void RGWInitMultipart::execute(optional_yield y)
     upload_id = upload->get_upload_id();
   }
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
-  multipart_trace->UpdateName(tracing::rgw::MULTIPART + upload_id);
-
+  
+  if (multipart_trace) {
+    multipart_trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
+  }
 }
 
 int RGWCompleteMultipart::verify_permission(optional_yield y)
