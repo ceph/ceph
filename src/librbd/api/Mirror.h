@@ -95,7 +95,13 @@ struct Mirror {
                           mirror_image_mode_t mode,
                           bool relax_same_pool_parent_check,
                           uint64_t *snap_id);
+  static void image_enable(ImageCtxT *ictx,
+                          const std::string &group_snap_id,
+                          mirror_image_mode_t mode,
+                          bool relax_same_pool_parent_check,
+                          uint64_t *snap_id, Context *on_finish);
   static int image_disable(ImageCtxT *ictx, bool force);
+  static void image_disable(ImageCtxT *ictx, bool force, Context *on_finish);
   static int image_promote(ImageCtxT *ictx, bool force);
   static void image_promote(ImageCtxT *ictx, bool force, Context *on_finish);
   static void image_promote(ImageCtxT *ictx,

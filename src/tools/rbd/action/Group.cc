@@ -97,6 +97,18 @@ std::string get_group_snap_state_name(rbd_group_snap_state_t state)
   }
 }
 
+std::string get_get_snap_namespace_type(rbd_group_snap_namespace_type_t type)
+{
+  switch (type) {
+  case RBD_GROUP_SNAP_NAMESPACE_TYPE_USER:
+    return "user";
+  case RBD_GROUP_SNAP_NAMESPACE_TYPE_MIRROR:
+    return "mirror";
+  default:
+    return "unknown (" + stringify(type) + ")";
+  }
+}
+
 int execute_create(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
@@ -158,8 +170,10 @@ int execute_list(const po::variables_map &vm,
   librbd::RBD rbd;
   std::vector<std::string> names;
   r = rbd.group_list(io_ctx, &names);
-  if (r < 0)
+  if (r < 0) {
+    std::cerr << "rbd: list groups error: " << cpp_strerror(r) << std::endl;
     return r;
+  }
 
   if (f)
     f->open_array_section("groups");
@@ -502,11 +516,10 @@ int execute_list_images(const po::variables_map &vm,
   r = rbd.group_image_list(io_ctx, group_name.c_str(), &images,
                            sizeof(librbd::group_image_info_t));
 
-  if (r == -ENOENT)
-    r = 0;
-
-  if (r < 0)
+  if (r < 0) {
+    std::cerr << "rbd: list images error: " << cpp_strerror(r) << std::endl;
     return r;
+  }
 
   std::sort(images.begin(), images.end(),
     [](const librbd::group_image_info_t &lhs,
@@ -742,18 +755,21 @@ int execute_group_snap_list(const po::variables_map &vm,
     t.define_column("ID", TextTable::LEFT, TextTable::LEFT);
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     t.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
+    t.define_column("NAMESPACE", TextTable::LEFT, TextTable::RIGHT);
   }
 
   for (const auto& snap : snaps) {
     auto state_string = get_group_snap_state_name(snap.state);
+    auto namespace_string = get_get_snap_namespace_type(snap.namespace_type);
     if (f) {
       f->open_object_section("group_snap");
       f->dump_string("id", snap.id);
       f->dump_string("snapshot", snap.name);
       f->dump_string("state", state_string);
+      f->dump_string("namespace", namespace_string);
       f->close_section();
     } else {
-      t << snap.id << snap.name << state_string << TextTable::endrow;
+      t << snap.id << snap.name << state_string << namespace_string << TextTable::endrow;
     }
   }
 

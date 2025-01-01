@@ -257,8 +257,8 @@ private:
   void bootstrap_group();
   void handle_bootstrap_group(int r);
 
-  void create_group_replayer(Context *on_finish);
-  void handle_create_group_replayer(int r, Context *on_finish);
+  void create_group_replayer();
+  void handle_create_group_replayer(int r);
 
   void start_image_replayers();
   void handle_start_image_replayers(int r);

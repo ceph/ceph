@@ -95,7 +95,12 @@ int group_image_list(librados::IoCtx& group_ioctx,
     return r;
   }
 
-  return Group<>::group_image_list_by_id(group_ioctx, group_id, images);
+  r = Group<>::group_image_list_by_id(group_ioctx, group_id, images);
+  if (r < 0) {
+    lderr(cct) << "error listing images in the group: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
 }
 
 int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
@@ -251,7 +256,8 @@ int GroupSnapshot_to_group_snap_info2(
   group_snap->id = cls_group_snap.id;
   group_snap->name = cls_group_snap.name;
   group_snap->state = static_cast<group_snap_state_t>(cls_group_snap.state);
-  group_snap->namespace_type = RBD_GROUP_SNAP_NAMESPACE_TYPE_USER;
+  group_snap->namespace_type = static_cast<group_snap_namespace_type_t>
+    (cls::rbd::get_group_snap_namespace_type(cls_group_snap.snapshot_namespace));
   if (!image_snaps.empty()) {
     group_snap->image_snap_name = calc_ind_image_snap_name(
         group_ioctx.get_id(), group_id, cls_group_snap.id);
@@ -618,11 +624,14 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
 
   std::vector<cls::rbd::GroupImageStatus> images;
 
-  group_image_list(group_ioctx, group_name, &images);
+  int r = group_image_list(group_ioctx, group_name, &images);
+  if (r < 0) {
+    return r;
+  }
 
   for (auto image : images) {
     IoCtx ioctx;
-    int r = librbd::util::create_ioctx(group_ioctx, "image",
+    r = librbd::util::create_ioctx(group_ioctx, "image",
                                        image.spec.pool_id, {}, &ioctx);
     if (r < 0) {
       return r;
@@ -729,6 +738,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   std::vector<cls::rbd::GroupImageStatus> images;
   r = Group<I>::group_image_list_by_id(group_ioctx, group_id, &images);
   if (r < 0) {
+    lderr(cct) << "error listing images by id: " << cpp_strerror(r) << dendl;
     return r;
   }
   int image_count = images.size();

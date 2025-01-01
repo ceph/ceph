@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_UNLINK_PEER_GROUP_REQUST_H
-#define CEPH_LIBRBD_UNLINK_PEER_GROUP_REQUST_H
+#ifndef CEPH_LIBRBD_MIRROR_SNAPSHOT_GROUP_UNLINK_PEER_REQUEST_H
+#define CEPH_LIBRBD_MIRROR_SNAPSHOT_GROUP_UNLINK_PEER_REQUEST_H
 
 #include "include/int_types.h"
 #include "include/types.h"
@@ -18,25 +18,27 @@ namespace librbd {
 
 struct ImageCtx;
 
-namespace group {
+namespace mirror {
+namespace snapshot {
 
 template <typename ImageCtxT = librbd::ImageCtx>
-class UnlinkPeerGroupRequest {
+class GroupUnlinkPeerRequest {
 public:
-  static UnlinkPeerGroupRequest *create(
+  static GroupUnlinkPeerRequest *create(
       librados::IoCtx &group_io_ctx, const std::string &group_id,
       std::vector<ImageCtx *> *image_ctxs,
       Context *on_finish) {
-    return new UnlinkPeerGroupRequest(group_io_ctx, group_id,
+    return new GroupUnlinkPeerRequest(group_io_ctx, group_id,
                                       image_ctxs, on_finish);
   }
 
-  UnlinkPeerGroupRequest(librados::IoCtx &group_io_ctx,
+  GroupUnlinkPeerRequest(librados::IoCtx &group_io_ctx,
                        const std::string &group_id,
                        std::vector<ImageCtx *> *image_ctxs,
                        Context *on_finish)
     : m_group_io_ctx(group_io_ctx), m_group_id(group_id),
       m_image_ctxs(image_ctxs), m_on_finish(on_finish) {
+    m_cct = (CephContext *)group_io_ctx.cct();
   }
 
   void send();
@@ -47,15 +49,33 @@ private:
   std::vector<ImageCtx *> *m_image_ctxs;
   Context *m_on_finish;
 
+  uint64_t m_max_snaps;
+  CephContext *m_cct;
+
+  std::vector<cls::rbd::GroupSnapshot> m_group_snaps;
+  std::map<std::string, ImageCtx *> m_image_ctx_map;
+  std::string m_group_snap_id;
+
   void unlink_peer();
+
+  void list_group_snaps();
+  void handle_list_group_snaps(int r);
+
   void remove_group_snapshot(cls::rbd::GroupSnapshot group_snap);
-  void remove_image_snapshot(ImageCtx *image_ctx, uint64_t snap_id);
+  void handle_remove_group_snapshot(int r);
+
+  void remove_snap();
+  void handle_remove_snap(int r);
+
+  void remove_image_snapshot(ImageCtx *image_ctx, uint64_t snap_id,
+                             C_Gather *ctx);
   void finish(int r);
 };
 
-} // namespace group
+} // namespace snapshot
+} // namespace mirror
 } // namespace librbd
 
-extern template class librbd::group::UnlinkPeerGroupRequest<librbd::ImageCtx>;
+extern template class librbd::mirror::snapshot::GroupUnlinkPeerRequest<librbd::ImageCtx>;
 
-#endif // CEPH_LIBRBD_UNLINK_PEER_GROUP_REQUST_H
+#endif // CEPH_LIBRBD_MIRROR_SNAPSHOT_GROUP_UNLINK_PEER_REQUEST_H

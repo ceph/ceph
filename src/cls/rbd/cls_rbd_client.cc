@@ -3204,6 +3204,15 @@ int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
   return ioctx->exec(oid, "rbd", "group_snap_remove", inbl, outbl);
 }
 
+void group_snap_remove(librados::ObjectWriteOperation *op,
+                      const std::string &snap_id)
+{
+  using ceph::encode;
+  bufferlist inbl, outbl;
+  encode(snap_id, inbl);
+  op->exec("rbd", "group_snap_remove", inbl);
+}
+
 void group_snap_unlink(librados::ObjectWriteOperation *op,
                        const std::string &group_snap_id,
                        const cls::rbd::ImageSnapshotSpec &image_snap) {
