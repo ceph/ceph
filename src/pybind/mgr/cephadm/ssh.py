@@ -358,7 +358,7 @@ class SSHManager:
                 await self._check_execute_command(host, chown, addr=addr)
                 chmod = RemoteCommand(Executables.CHMOD, [oct(mode)[2:], tmp_path])
                 await self._check_execute_command(host, chmod, addr=addr)
-            mv = RemoteCommand(Executables.MV, [tmp_path, path])
+            mv = RemoteCommand(Executables.MV, ['-Z', tmp_path, path])
             await self._check_execute_command(host, mv, addr=addr)
         except Exception as e:
             msg = f"Unable to write {host}:{path}: {e}"
