@@ -95,7 +95,12 @@ int group_image_list(librados::IoCtx& group_ioctx,
     return r;
   }
 
-  return Group<>::group_image_list_by_id(group_ioctx, group_id, images);
+  r = Group<>::group_image_list_by_id(group_ioctx, group_id, images);
+  if (r < 0) {
+    lderr(cct) << "error listing images in the group: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
 }
 
 int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
@@ -618,11 +623,14 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
 
   std::vector<cls::rbd::GroupImageStatus> images;
 
-  group_image_list(group_ioctx, group_name, &images);
+  int r = group_image_list(group_ioctx, group_name, &images);
+  if (r < 0) {
+    return r;
+  }
 
   for (auto image : images) {
     IoCtx ioctx;
-    int r = librbd::util::create_ioctx(group_ioctx, "image",
+    r = librbd::util::create_ioctx(group_ioctx, "image",
                                        image.spec.pool_id, {}, &ioctx);
     if (r < 0) {
       return r;
@@ -729,6 +737,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   std::vector<cls::rbd::GroupImageStatus> images;
   r = Group<I>::group_image_list_by_id(group_ioctx, group_id, &images);
   if (r < 0) {
+    lderr(cct) << "error listing images by id: " << cpp_strerror(r) << dendl;
     return r;
   }
   int image_count = images.size();
