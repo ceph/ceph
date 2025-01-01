@@ -2,4 +2,4 @@ tasks:
   - cephfs_test_runner:
       fail_on_skip: false
       modules:
-        - tasks.cephfs.test_volumes.TestCloneProgressReporter
+        - tasks.cephfs.volumes.test_progress_stats.TestCloneProgressReporter
