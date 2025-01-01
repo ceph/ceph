@@ -111,6 +111,7 @@ class Executables(RemoteExecutable, enum.Enum):
     SYSCTL = RemoteExecutable('sysctl')
     TOUCH = RemoteExecutable('touch')
     TRUE = RemoteExecutable('true')
+    RESTORECON = RemoteExecutable('restorecon')
 
     def __str__(self) -> str:
         return self.value
@@ -360,6 +361,8 @@ class SSHManager:
                 await self._check_execute_command(host, chmod, addr=addr)
             mv = RemoteCommand(Executables.MV, [tmp_path, path])
             await self._check_execute_command(host, mv, addr=addr)
+            restorecon = RemoteCommand(Executables.RESTORECON,['-R', path])
+            await self._check_execute_command(host, restorecon, addr=addr)
         except Exception as e:
             msg = f"Unable to write {host}:{path}: {e}"
             logger.exception(msg)
