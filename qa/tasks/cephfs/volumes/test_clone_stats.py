@@ -791,3 +791,74 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
                 pass
             else:
                 raise
+
+
+class TestOngoingClonesCounter(CloneProgressReporterHelper):
+    '''
+    Class CloneProgressReporter contains the code that lets it figure out the
+    number of ongoing clones on its own, without referring the MGR config
+    option mgr/volumes/max_concurrenr_clones. This class contains tests to
+    ensure that this code, that does the figuring out, is working fine.
+    '''
+
+    def _run_test(self, MAX_THREADS, NUM_OF_CLONES):
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(NUM_OF_CLONES)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', MAX_THREADS)
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+
+        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.wait_till_rbytes_is_right(v, sv, size)
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        msg = ('messages for progress bars for snapshot cloning are not how '
+               'they were expected')
+        with safe_while(tries=20, sleep=1, action=msg) as proceed:
+            while proceed():
+                pevs = self.get_pevs_from_ceph_status(c)
+
+                if len(pevs) <= 1:
+                    continue # let's wait for second progress bar to appear
+                elif len(pevs) > 2:
+                    raise RuntimeError(
+                        'More than 2 progress bars were found in the output '
+                        'of "ceph status" command.\nprogress events -'
+                        f'\n{pevs}')
+
+                msg = ('"progress_events" dict in "ceph -s" output must have '
+                       f'only two entries.\n{pevs}')
+                self.assertEqual(len(pevs), 2, msg)
+                pev1, pev2 = pevs.values()
+                pev1_msg, pev2_msg = pev1['message'].lower(), pev2['message'].lower()
+                if 'ongoing clones' in pev1_msg and 'total ' in pev2_msg:
+                    if f'{MAX_THREADS} ongoing clones' in pev1_msg:
+                        break
+                elif 'ongoing clones' in pev2_msg and 'total ' in pev1_msg:
+                    if f'{MAX_THREADS} ongoing clones' in pev2_msg:
+                        break
+                else:
+                    raise RuntimeError(msg)
+
+        self.cancel_clones_and_ignore_if_finished(c)
+        for i in c:
+            self._wait_for_clone_to_be_canceled(i)
+        self._wait_for_clone_progress_bars_to_be_removed()
+
+    def test_for_2_ongoing_clones(self):
+        self._run_test(MAX_THREADS=2, NUM_OF_CLONES=5)
+
+    def test_for_4_ongoing_clones(self):
+        self._run_test(MAX_THREADS=4, NUM_OF_CLONES=8)
+
+    def test_for_6_ongoing_clones(self):
+        self._run_test(MAX_THREADS=6, NUM_OF_CLONES=16)
