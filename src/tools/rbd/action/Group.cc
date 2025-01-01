@@ -158,8 +158,10 @@ int execute_list(const po::variables_map &vm,
   librbd::RBD rbd;
   std::vector<std::string> names;
   r = rbd.group_list(io_ctx, &names);
-  if (r < 0)
+  if (r < 0) {
+    std::cerr << "rbd: list groups error: " << cpp_strerror(r) << std::endl;
     return r;
+  }
 
   if (f)
     f->open_array_section("groups");
@@ -502,11 +504,10 @@ int execute_list_images(const po::variables_map &vm,
   r = rbd.group_image_list(io_ctx, group_name.c_str(), &images,
                            sizeof(librbd::group_image_info_t));
 
-  if (r == -ENOENT)
-    r = 0;
-
-  if (r < 0)
+  if (r < 0) {
+    std::cerr << "rbd: list images error: " << cpp_strerror(r) << std::endl;
     return r;
+  }
 
   std::sort(images.begin(), images.end(),
     [](const librbd::group_image_info_t &lhs,
