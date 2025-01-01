@@ -3,3 +3,4 @@ tasks:
       fail_on_skip: false
       modules:
         - tasks.cephfs.volumes.test_progress_stats.TestCloneProgressReporter
+        - tasks.cephfs.volumes.test_progress_stats.TestOngoingClonesCounter
