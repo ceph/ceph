@@ -2896,6 +2896,14 @@ Then run the following:
         filtered_hosts: List[str] = drive_group.placement.filter_matching_hostspecs(hosts)
         if not filtered_hosts:
             return "Invalid 'host:device' spec: host not found in cluster. Please check 'ceph orch host ls' for available hosts"
+
+        if not drive_group.service_id:
+            for service_name, spec in self.spec_store.all_specs.items():
+                if service_name.startswith("osd"):
+                    drive_group.service_id = spec.service_id
+                    self.log.info(f"Assigned service ID: {drive_group.service_id} from service name : {service_name}")
+                    break
+        self.log.info(f"Creating OSDs with service ID: {drive_group.service_id}")
         return self.osd_service.create_from_spec(drive_group)
 
     def _preview_osdspecs(self,
