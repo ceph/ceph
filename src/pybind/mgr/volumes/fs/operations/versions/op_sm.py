@@ -19,7 +19,7 @@ class TransitionKey(object):
         return not(self == other)
 
 class SubvolumeOpSm(object):
-    transition_table = {} # type: Dict
+    transition_table: Dict = {}
 
     @staticmethod
     def is_complete_state(state):
