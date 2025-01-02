@@ -12831,6 +12831,8 @@ int Client::_sync_fs()
   // flush the mdlog before waiting for unsafe requests.
   flush_mdlog_sync();
 
+  flush_cap_releases();
+
   // wait for unsafe mds requests
   wait_unsafe_requests();
 
