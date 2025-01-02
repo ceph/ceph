@@ -210,6 +210,15 @@ std::string to_string(const rgw_owner& o)
   return std::visit(visitor{}, o);
 }
 
+std::string to_id(const rgw_owner& o)
+{
+  struct visitor {
+    std::string operator()(const rgw_account_id& a) { return a; }
+    std::string operator()(const rgw_user& u) { return u.id; }
+  };
+  return std::visit(visitor{}, o);
+}
+
 std::ostream& operator<<(std::ostream& out, const rgw_owner& o)
 {
   struct visitor {
