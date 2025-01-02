@@ -682,6 +682,16 @@ public:
   void remove_session(Session *s);
   void touch_session(Session *session);
 
+  void add_to_broken_root_squash_clients(Session* s) {
+    broken_root_squash_clients.insert(s);
+  }
+  uint64_t num_broken_root_squash_clients() const {
+    return broken_root_squash_clients.size();
+  }
+  auto const& get_broken_root_squash_clients() const {
+    return broken_root_squash_clients;
+  }
+
   Session *get_oldest_session(int state) {
     auto by_state_entry = by_state.find(state);
     if (by_state_entry == by_state.end() || by_state_entry->second->empty())
@@ -849,6 +859,8 @@ private:
 
   bool validate_and_encode_session(MDSRank *mds, Session *session, bufferlist& bl);
   void apply_blocklist(const std::set<entity_name_t>& victims);
+
+  std::set<Session*> broken_root_squash_clients;
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);
