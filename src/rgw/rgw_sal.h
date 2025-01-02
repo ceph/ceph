@@ -160,6 +160,7 @@ enum RGWRestoreStatus : uint8_t {
   RestoreFailed = 3
 };
 
+std::string_view rgw_restore_status_dump(rgw::sal::RGWRestoreStatus status);
 
 enum class RGWRestoreType : uint8_t {
   None = 0,
@@ -167,6 +168,7 @@ enum class RGWRestoreType : uint8_t {
   Permanent = 2
 };
 
+std::string_view rgw_restore_type_dump(rgw::sal::RGWRestoreType type);
 
 // a simple streaming data processing abstraction
 /**

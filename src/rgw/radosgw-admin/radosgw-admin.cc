@@ -8822,9 +8822,19 @@ next:
       } else if (iter->first == RGW_ATTR_SOURCE_ZONE) {
         handled = decode_dump<uint32_t>("source_zone", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_RESTORE_EXPIRY_DATE) {
-        handled = decode_dump<utime_t>("restore_expiry_date", bl, formatter.get());
+        handled = decode_dump<ceph::real_time>("restore_expiry_date", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_RESTORE_TIME) {
-        handled = decode_dump<utime_t>("restore_time", bl, formatter.get());
+        handled = decode_dump<ceph::real_time>("restore_time", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_RESTORE_TYPE) {
+        rgw::sal::RGWRestoreType rt;
+        decode(rt, bl);
+        formatter->dump_string("RestoreType", rgw::sal::rgw_restore_type_dump(rt));
+        handled = true;
+      } else if (iter->first == RGW_ATTR_RESTORE_STATUS) {
+        rgw::sal::RGWRestoreStatus rs;
+        decode(rs, bl);
+        formatter->dump_string("RestoreStatus", rgw::sal::rgw_restore_status_dump(rs));
+        handled = true;
       }
 
       if (!handled)
@@ -8840,6 +8850,8 @@ next:
       bufferlist& bl = iter->second;
       if (iter->first == RGW_ATTR_OBJ_REPLICATION_TIMESTAMP) {
         decode_dump<ceph::real_time>("user.rgw.replicated-at", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_RESTORE_TIME) {
+        decode_dump<ceph::real_time>("user.rgw.restore-at", bl, formatter.get());
       } else {
         dump_string(iter->first.c_str(), iter->second, formatter.get());
       }
