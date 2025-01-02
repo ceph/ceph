@@ -225,6 +225,16 @@ static string get_abs_path(const string& request_uri) {
   return request_uri.substr(beg_pos, len - beg_pos);
 }
 
+static std::string to_expected_bucket_owner(const rgw_owner &o)
+{
+  struct visitor
+  {
+    std::string operator()(const rgw_account_id &a) { return a; }
+    std::string operator()(const rgw_user &u) { return u.id; }
+  };
+  return std::visit(visitor{}, o);
+}
+
 req_info::req_info(CephContext *cct, const class RGWEnv *env) : env(env) {
   method = env->get("REQUEST_METHOD", "");
   script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
@@ -1378,6 +1388,12 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               const uint64_t op)
 {
   perm_state_from_req_state ps(s);
+  auto expected = s->info.env->get("HTTP_X_AMZ_EXPECTED_BUCKET_OWNER");
+
+  if (expected && expected != to_expected_bucket_owner(s->bucket->get_owner())) {
+    ldpp_dout(dpp, 4) << "ERROR: The expected-source-bucket-owner does not match bucket owner." << dendl;
+    return false;
+  }
 
   if (ps.identity->get_account()) {
     const bool account_root = (ps.identity->get_identity_type() == TYPE_ROOT);
@@ -1522,6 +1538,12 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s
                               const uint64_t op)
 {
   perm_state_from_req_state ps(s);
+  auto expected = s->info.env->get("HTTP_X_AMZ_EXPECTED_BUCKET_OWNER");
+
+  if (expected && expected != to_expected_bucket_owner(s->bucket->get_owner())) {
+    ldpp_dout(dpp, 4) << "ERROR: The expected-source-bucket-owner does not match bucket owner." << dendl;
+    return false;
+  }
 
   if (ps.identity->get_account()) {
     const bool account_root = (ps.identity->get_identity_type() == TYPE_ROOT);
