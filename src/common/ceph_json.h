@@ -19,13 +19,13 @@
 class JSONObj;
 
 class JSONObjIter {
-  typedef std::map<std::string, JSONObj *>::iterator map_iter_t;
+
+  using map_iter_t = std::map<std::string, std::unique_ptr<JSONObj>>::iterator;
+
   map_iter_t cur;
   map_iter_t last;
 
 public:
-  JSONObjIter();
-  ~JSONObjIter();
   void set(const JSONObjIter::map_iter_t &_cur, const JSONObjIter::map_iter_t &_end);
 
   void operator++();
@@ -36,9 +36,13 @@ public:
   }
 };
 
-class JSONObj
+class JSONObj 
 {
-  JSONObj *parent;
+  using children_multimap_t = std::multimap<std::string, std::unique_ptr<JSONObj>>;
+  using children_multimap_value_type = typename children_multimap_t::value_type;
+
+  JSONObj *parent = nullptr;
+
 public:
   struct data_val {
     std::string str;
@@ -49,30 +53,42 @@ public:
       quoted = q;
     }
   };
+
 protected:
   std::string name; // corresponds to obj_type in XMLObj
+
   boost::json::value data;
-  struct data_val val;
+
+  data_val val;
+
   bool data_quoted{false};
-  std::multimap<std::string, JSONObj *> children;
+
+  std::multimap<std::string, std::unique_ptr<JSONObj>> children;
+
   std::map<std::string, data_val> attr_map;
+
   void handle_value(boost::json::value v);
 
 public:
+  virtual ~JSONObj() = default;
 
-  JSONObj() : parent(NULL){}
-
-  virtual ~JSONObj();
-
-  void init(JSONObj *p, boost::json::value v, std::string n);
+public:
+  void init(JSONObj *parent, boost::json::value data_in, std::string name_in);
 
   std::string& get_name() { return name; }
+  
   data_val& get_data_val() { return val; }
+
   const std::string& get_data() { return val.str; }
   bool get_data(const std::string& key, data_val *dest);
+
   JSONObj *get_parent();
+
+  // Note: takes ownership of child:
   void add_child(std::string el, JSONObj *child);
+
   bool get_attr(std::string name, data_val& attr);
+
   JSONObjIter find(const std::string& name);
   JSONObjIter find_first();
   JSONObjIter find_first(const std::string& name);
@@ -83,6 +99,7 @@ public:
 
   bool is_array();
   bool is_object();
+
   std::vector<std::string> get_array_elements();
 };
 
@@ -94,12 +111,11 @@ inline std::ostream& operator<<(std::ostream &out, const JSONObj::data_val& dv) 
 
 class JSONParser : public JSONObj
 {
-  int buf_len;
+  int buf_len = 0;
   std::string json_buffer;
-  bool success;
+  bool success = true;
+
 public:
-  JSONParser();
-  ~JSONParser() override;
   void handle_data(const char *s, int len);
 
   bool parse(const char *buf_, int len);
