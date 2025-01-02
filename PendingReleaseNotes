@@ -273,6 +273,7 @@
   exposed via the new `--snap-id` option for `rbd clone` command.
 * RBD: The output of `rbd snap ls --all` command now includes the original
   type for trashed snapshots.
+* cls_cxx_gather is marked as deprecated.
 
 * CephFS: Command "ceph mds fail" and "ceph fs fail" now requires a
   confirmation flag when some MDSs exhibit health warning MDS_TRIM or
