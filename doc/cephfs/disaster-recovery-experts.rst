@@ -68,9 +68,9 @@ truncate it like so:
 
 ::
 
-    cephfs-journal-tool [--rank=N] journal reset
+    cephfs-journal-tool [--rank=<fs_name>:{mds-rank|all}] journal reset --yes-i-really-really-mean-it
 
-Specify the MDS rank using the ``--rank`` option when the file system has/had
+Specify the filesystem and the MDS rank using the ``--rank`` option when the file system has/had
 multiple active MDS.
 
 .. warning::
@@ -135,7 +135,7 @@ objects.
     # InoTable
     cephfs-table-tool 0 reset inode
     # Journal
-    cephfs-journal-tool --rank=0 journal reset
+    cephfs-journal-tool --rank=<fs_name>:0 journal reset --yes-i-really-really-mean-it
     # Root inodes ("/" and MDS directory)
     cephfs-data-scan init
 
@@ -248,7 +248,7 @@ Next, we will create the intial metadata for the fs:
     cephfs-table-tool cephfs_recovery:0 reset session
     cephfs-table-tool cephfs_recovery:0 reset snap
     cephfs-table-tool cephfs_recovery:0 reset inode
-    cephfs-journal-tool --rank cephfs_recovery:0 journal reset --force
+    cephfs-journal-tool --rank cephfs_recovery:0 journal reset --force --yes-i-really-really-mean-it
 
 Now perform the recovery of the metadata pool from the data pool:
 
