@@ -3212,6 +3212,21 @@ snapid_t CInode::pick_old_inode(snapid_t snap) const
   return 0;
 }
 
+void CInode::get_related_realms(std::vector<SnapRealm*>& related_realms)
+{
+  const std::vector<uint64_t>& referent_inodes = get_inode()->referent_inodes;
+  dout(20) << __func__ << " referent inodes of inode " << *this << " are " << std::hex << referent_inodes << dendl;
+  for (const auto& ri : referent_inodes) {
+    CInode *cur = mdcache->get_inode(ri);
+    if (!cur) {
+      dout(3) << __func__ << " error: referent inode " << std::hex << ri << " of inode " << *this << " not loaded" << dendl;
+      ceph_abort("get_related_realms: referent inode not loaded");
+    }
+    SnapRealm *cur_realm = cur->find_snaprealm();
+    related_realms.push_back(cur_realm);
+  }
+}
+
 void CInode::open_snaprealm(bool nosplit)
 {
   if (!snaprealm) {

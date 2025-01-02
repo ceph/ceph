@@ -2447,24 +2447,19 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
     else
       realm = dn->get_dir()->get_inode()->find_snaprealm();
 
-    vector<SnapRealm*> related_realms;
-    if (in) {
-      const std::vector<uint64_t>& referent_inodes = early_reply?in->get_projected_inode()->referent_inodes:in->get_inode()->referent_inodes;
-      dout(20) << "set_trace_dist snaprealms of referent inodes to be sent to client " << std::hex << referent_inodes << dendl;
-      for (const auto& ri : referent_inodes) {
-        CInode *cur = mdcache->get_inode(ri);
-        if (!cur) {
-          dout(3) << "set_trace_dist error: referent inode not loaded " << std::hex << ri << dendl;
-          ceph_abort("set_trace_dist: referent inode not loaded");
-        }
-        SnapRealm *cur_realm = cur->find_snaprealm();
-        related_realms.push_back(cur_realm);
-      }
+    if (mds->mdsmap->use_global_snaprealm()) {
+      reply->snapbl = get_snap_trace(session, realm);
     } else {
-      dout(10) << "set_trace_dist inode not passed. Used parent snaprealm " << *realm << dendl;
+      std::vector<SnapRealm*> related_realms;
+      if (in) {
+        dout(20) << "set_trace_dist ----> get_related_realms for inode "<< *in << dendl;
+	in->get_related_realms(related_realms);
+      } else {
+        dout(20) << "set_trace_dist inode not passed. Used parent snaprealm " << *realm << dendl;
+      }
+      reply->snapbl = get_snap_trace(session, realm, related_realms);
     }
-    reply->snapbl = get_snap_trace(session, realm, related_realms);
-    dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
+    dout(10) << "set_trace_dist use_global_snaprealm="<< mds->mdsmap->use_global_snaprealm() << " snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
   }
 
   // dir + dentry?
@@ -7575,6 +7570,13 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   // TODO - snapshot related inode updates - snaprealm on referent inode
 
   bool adjust_realm = false;
+  if (mds->mdsmap->use_global_snaprealm() && !target_realm->get_subvolume_ino()
+      && !targeti->is_projected_snaprealm_global()) {
+    sr_t *newsnap = targeti->project_snaprealm();
+    targeti->mark_snaprealm_global(newsnap);
+    targeti->record_snaprealm_parent_dentry(newsnap, target_realm, targeti->get_projected_parent_dn(), true);
+    adjust_realm = true;
+  }
 
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");

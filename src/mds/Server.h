@@ -174,6 +174,7 @@ public:
   void perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat);
   void early_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(const MDRequestRef& mdr, int r = 0);
+  void get_related_realms(CInode *in, std::vector<SnapRealm*>& related_realms);
   void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      const MDRequestRef& mdr, bool early_reply=false);
 

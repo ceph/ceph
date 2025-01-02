@@ -852,6 +852,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void finish_scatter_gather_update_accounted(int type, EMetaBlob *metablob);
 
   // -- snap --
+  void get_related_realms(std::vector<SnapRealm*>& related_realms);
   void open_snaprealm(bool no_split=false);
   void close_snaprealm(bool no_join=false);
   SnapRealm *find_snaprealm() const;
