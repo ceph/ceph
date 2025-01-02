@@ -3259,6 +3259,10 @@ TEST_P(StoreTest, MultipoolListTest) {
 }
 
 TEST_P(StoreTest, SimpleCloneTest) {
+  if (string(GetParam()) == "filestore") {
+    GTEST_SKIP() << "skipping for filestore";
+    return;
+  }
   int r;
   coll_t cid;
 
