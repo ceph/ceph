@@ -29,13 +29,13 @@ class SharedLRU {
   // erase the tracked object from the weak_ref map
   // before actually destorying it
   struct Deleter {
-    SharedLRU<K,V>* cache;
+    SharedLRU<K,V>* shared_lru_ptr;
     const K key;
-    void operator()(V* ptr) {
-      if (cache) {
-        cache->_erase_weak(key);
+    void operator()(V* value_ptr) {
+      if (shared_lru_ptr) {
+        shared_lru_ptr->_erase_weak(key);
       }
-      delete ptr;
+      delete value_ptr;
     }
   };
   void _erase_weak(const K& key) {
@@ -57,7 +57,7 @@ public:
       shared_ptr_t val;
       val = value.first.lock();
       auto this_deleter = get_deleter<Deleter>(val);
-      this_deleter->cache = nullptr;
+      this_deleter->shared_lru_ptr = nullptr;
     }
 
     weak_refs.clear();
