@@ -561,6 +561,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.oob_default_addr = ''
             self.ssh_keepalive_interval = 0
             self.ssh_keepalive_count_max = 0
+            self.certificate_duration_days = 0
+            self.renewal_threshold_days = 0
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()

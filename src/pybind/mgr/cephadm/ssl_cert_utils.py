@@ -15,8 +15,8 @@ class SSLConfigException(Exception):
 
 
 class SSLCerts:
-    def __init__(self, _certificate_duration_days=(365 * 10 + 3)) -> None:
-        self.certificate_duration_days=_certificate_duration_days
+    def __init__(self, _certificate_duration_days: int = (365 * 10 + 3)) -> None:
+        self.certificate_duration_days = _certificate_duration_days
         self.root_cert: Any
         self.root_key: Any
         self.key_file: IO[bytes]
@@ -124,7 +124,6 @@ class SSLCerts:
                                             ).decode('utf-8')
 
         return (cert_str, key_str)
-
 
     def renew_cert(
         self,

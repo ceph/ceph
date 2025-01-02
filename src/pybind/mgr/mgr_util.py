@@ -669,7 +669,7 @@ def create_self_signed_cert(organisation: str = 'Ceph',
 
 
 def verify_cacrt_content(crt):
-    # type: (str) -> None
+    # type: (str) -> int
     from OpenSSL import crypto
     try:
         crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
@@ -729,7 +729,7 @@ def get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
 
 
 def verify_tls(crt, key):
-    # type: (str, str) -> None
+    # type: (str, str) -> int
     days_to_expiration = verify_cacrt_content(crt)
 
     from OpenSSL import crypto, SSL

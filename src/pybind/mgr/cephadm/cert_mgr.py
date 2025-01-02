@@ -14,6 +14,7 @@ CERT_STORE_KEY_PREFIX = 'cert_store.key.'
 
 logger = logging.getLogger(__name__)
 
+
 class Cert():
     def __init__(self, cert: str = '', user_made: bool = False) -> None:
         self.cert = cert
@@ -133,7 +134,7 @@ class CertKeyStore():
     def _init_known_cert_key_dicts(self) -> None:
         # In an effort to try and track all the certs we manage in cephadm
         # we're being explicit here and listing them out.
-        self.cert_to_service {
+        self.cert_to_service = {
             'rgw_frontend_ssl_cert': 'rgw',
             'iscsi_ssl_cert': 'iscsi',
             'ingress_ssl_cert': 'ingress',
@@ -305,6 +306,7 @@ class CertKeyStore():
                 priv_key_obj = PrivKey.from_json(self.known_keys[entity])
                 self.known_keys[entity] = priv_key_obj
 
+
 class CertMgr:
 
     CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
@@ -353,7 +355,7 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
-    def check_certificate(self, cert_ref: str, cert: str, key: str, instance: str = '') -> Option[str]:
+    def _check_certificate(self, cert_ref: str, cert: str, key: str, instance: str = '') -> Optional[str]:
         """Helper method to validate a cert/key pair and handle errors."""
         if not cert.strip() and not key.strip():
             # Both cert and key are empty, nothing to check
@@ -372,6 +374,7 @@ class CertMgr:
                 else:
                     # TODO(redo): contact ACME to get a new certificate
                     # self.enqueue_acme_certificate_renewal(cert_ref)
+                    pass
             else:
                 logger.info(f'Certificate for "{cert_ref}" is still valid for {days_to_expiration} days.')
             # self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
@@ -407,7 +410,7 @@ class CertMgr:
             key = self.cert_key_store.get_key(key_ref, service_name=service_name, host=host)
             return cert, key, instance
 
-        #services_to_reconfig = self.get_acme_ready_certificates()
+        # services_to_reconfig = self.get_acme_ready_certificates()
         services_to_reconfig = []
         for cert_ref, cert_entries in self.cert_key_store.cert_ls().items():
             if not cert_entries:
@@ -419,13 +422,13 @@ class CertMgr:
                 instances = [instance for instance, exists in cert_entries.items() if exists]
                 for instance in instances:
                     cert, key, instance_info = get_cert_and_key(cert_ref, instance)
-                    if self.check_certificate(cert_ref, cert, key, instance_info):
+                    if self._check_certificate(cert_ref, cert, key, instance_info):
                         # TODO(redo): get srv name from the instance info
                         services_to_reconfig.append(self.cert_key_store.cert_to_service[cert_ref])
             else:
                 # Global cert case
                 cert, key, _ = get_cert_and_key(cert_ref)
-                if self.check_certificate(cert_ref, cert, key):
+                if self._check_certificate(cert_ref, cert, key):
                     services_to_reconfig.append(self.cert_key_store.cert_to_service[cert_ref])
 
         # return the list of services that need reconfiguration

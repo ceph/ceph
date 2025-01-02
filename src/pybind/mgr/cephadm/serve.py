@@ -110,7 +110,7 @@ class CephadmServe:
 
                     self._check_daemons()
 
-                    #self._check_certificates()
+                    # self._check_certificates()
                     services_to_reconfig = self.mgr.cert_mgr.check_certificates()
                     for svc in services_to_reconfig:
                         self.mgr.service_action('reconfig', svc)
