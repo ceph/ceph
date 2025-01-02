@@ -3,6 +3,9 @@
 
 // for testing DELETE ME
 #include <fstream>
+
+#include <memory>
+
 #include <include/types.h>
 
 #include <boost/algorithm/string.hpp>
@@ -34,14 +37,6 @@ void encode_json(const char *name, const JSONObj::data_val& v, Formatter *f)
   }
 }
 
-JSONObjIter::JSONObjIter()
-{
-}
-
-JSONObjIter::~JSONObjIter()
-{
-}
-
 void JSONObjIter::set(const JSONObjIter::map_iter_t &_cur, const JSONObjIter::map_iter_t &_last)
 {
   cur = _cur;
@@ -54,9 +49,10 @@ void JSONObjIter::operator++()
     ++cur;
 }
 
+// IMPORTANT: The returned pointer is inteded as NON-OWNING (i.e. the JSONObjIter is responsible for it):
 JSONObj *JSONObjIter::operator*()
 {
-  return cur->second;
+  return cur->second.get();
 }
 
 // does not work, FIXME
@@ -65,18 +61,11 @@ ostream& operator<<(ostream &out, const JSONObj &obj) {
    return out;
 }
 
-JSONObj::~JSONObj()
-{
-  for (auto iter = children.begin(); iter != children.end(); ++iter) {
-    JSONObj *obj = iter->second;
-    delete obj;
-  }
-}
-
-
 void JSONObj::add_child(string el, JSONObj *obj)
 {
-  children.insert(pair<string, JSONObj *>(el, obj));
+  auto p = std::unique_ptr<JSONObj>(obj);
+
+  children.insert({el, std::move(p)});
 }
 
 bool JSONObj::get_attr(string name, data_val& attr)
@@ -167,21 +156,21 @@ void JSONObj::handle_value(boost::json::value v)
  // unknown type is not-an-error
 }
 
-void JSONObj::init(JSONObj *p, boost::json::value v, string n)
+void JSONObj::init(JSONObj *parent, boost::json::value data_in, std::string name_in)
 {
-  name = n;
-  parent = p;
-  data = v;
+  name = name_in;
+  parent = parent;
+  data = data_in;
 
-  handle_value(v);
+  handle_value(data_in);
 
-  if (auto vp = v.if_string())
+  if (auto vp = data_in.if_string())
    val.set(*vp, true); 
   else {
-   val.set(boost::json::serialize(v), false);
+   val.set(boost::json::serialize(data_in), false);
   }
 
-  attr_map.insert(pair<string,data_val>(name, val)); 
+  attr_map.insert({name, val});
 }
 
 JSONObj *JSONObj::get_parent()
@@ -221,16 +210,6 @@ vector<string> JSONObj::get_array_elements()
 
   return elements;
 }
-
-JSONParser::JSONParser() : buf_len(0), success(true)
-{
-}
-
-JSONParser::~JSONParser()
-{
-}
-
-
 
 void JSONParser::handle_data(const char *s, int len)
 {
