@@ -540,6 +540,11 @@ public:
 
       ss << fsp->get_mds_map().get_fs_name();
 
+      if (!is_down && fsp->get_mds_map().get_max_mds() > 0) {
+        ss << " is already online";
+        return 0;
+      }
+
       fsmap.modify_filesystem(
           fsp->get_fscid(),
           [is_down](auto&& fs)
