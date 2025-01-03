@@ -136,9 +136,9 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            1: { value: 'DISCONNECTED', class: 'badge-danger' },
-            0: { value: 'CONNECTED', class: 'badge-success' },
-            2: { value: 'CHECKING..', class: 'badge-info' }
+            1: { value: 'DISCONNECTED', class: 'tags-danger' },
+            0: { value: 'CONNECTED', class: 'tags-success' },
+            2: { value: 'CHECKING..', class: 'tags-info' }
           }
         }
       },
@@ -149,9 +149,9 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            1: { value: 'WARN', class: 'badge-warning' },
-            0: { value: 'OK', class: 'badge-success' },
-            2: { value: 'ERROR', class: 'badge-danger' }
+            1: { value: 'WARN', class: 'tags-warning' },
+            0: { value: 'OK', class: 'tags-success' },
+            2: { value: 'ERROR', class: 'tags-danger' }
           }
         }
       },

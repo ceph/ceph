@@ -73,8 +73,8 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            critical: { class: 'badge-danger' },
-            warning: { class: 'badge-warning' }
+            critical: { class: 'tags-danger' },
+            warning: { class: 'tags-warning' }
           }
         }
       },
@@ -85,9 +85,9 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            active: { class: 'badge-info' },
-            unprocessed: { class: 'badge-warning' },
-            suppressed: { class: 'badge-dark' }
+            active: { class: 'tags-info' },
+            unprocessed: { class: 'tags-warning' },
+            suppressed: { class: 'tags-dark' }
           }
         }
       },
