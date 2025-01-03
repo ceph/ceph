@@ -52,7 +52,7 @@ struct ECSubWrite;
 struct PGLog;
 
 // ECListener -- an interface decoupling the pipelines from
-// particular implementation of ECBackend (crimson vs cassical).
+// particular implementation of ECBackendL (crimson vs cassical).
 // https://stackoverflow.com/q/7872958
 struct ECListener {
   virtual ~ECListener() = default;
@@ -500,7 +500,7 @@ struct ECCommonL {
    *
    * ECTransaction is responsible for generating a transaction for
    * each shard to which we need to send the write.  As required
-   * by the PGBackend interface, the ECBackend write mechanism
+   * by the PGBackend interface, the ECBackendL write mechanism
    * passes trim information with the write and last_complete back
    * with the reply.
    *

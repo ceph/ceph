@@ -34,7 +34,7 @@ struct ECSubReadReply;
 
 struct RecoveryMessages;
 
-class ECBackend : public PGBackend, public ECCommonL {
+class ECBackendL : public PGBackend, public ECCommonL {
 public:
   RecoveryHandle *open_recovery_op() override;
 
@@ -197,7 +197,7 @@ public:
     UnstableHashInfoRegistry& unstable_hashinfo_registry;
     // TODO: lay an interface down here
     ECListener* parent;
-    ECBackend* ecbackend;
+    ECBackendL* ecbackend;
 
     ECListener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
@@ -213,7 +213,7 @@ public:
 		    ReadPipeline& read_pipeline,
 		    UnstableHashInfoRegistry& unstable_hashinfo_registry,
 		    ECListener* parent,
-		    ECBackend* ecbackend);
+		    ECBackendL* ecbackend);
   struct RecoveryOp {
     hobject_t hoid;
     eversion_t v;
@@ -309,7 +309,7 @@ public:
 		      ReadPipeline& read_pipeline,
 		      UnstableHashInfoRegistry& unstable_hashinfo_registry,
 		      Listener* parent,
-		      ECBackend* ecbackend)
+		      ECBackendL* ecbackend)
       : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline, unstable_hashinfo_registry, parent->get_eclistener(), ecbackend),
 	parent(parent) {
     }
@@ -411,7 +411,7 @@ public:
 
 public:
   int object_stat(const hobject_t &hoid, struct stat* st);
-  ECBackend(
+  ECBackendL(
     PGBackend::Listener *pg,
     const coll_t &coll,
     ObjectStore::CollectionHandle &ch,
@@ -441,6 +441,6 @@ public:
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };
-ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
+ostream &operator<<(ostream &lhs, const ECBackendL::RMWPipeline::pipeline_state_t &rhs);
 
 #endif
