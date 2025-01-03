@@ -5,13 +5,13 @@ import json
 import logging
 from typing import List
 
-from smb.enums import Intent
-from smb.proto import Simplified
-from smb.resources import Cluster, Share
-
 from dashboard.controllers._docs import EndpointDoc
 from dashboard.controllers._permissions import CreatePermission, DeletePermission
 from dashboard.exceptions import DashboardException
+
+from smb.enums import Intent
+from smb.proto import Simplified
+from smb.resources import Cluster, Share
 
 from .. import mgr
 from ..security import Scope
@@ -137,6 +137,23 @@ class SMBCluster(RESTController):
         except RuntimeError as e:
             raise DashboardException(e, component='smb')
 
+    @DeletePermission
+    @EndpointDoc("Remove an smb cluster",
+                 parameters={
+                     'cluster_id': (str, 'Unique identifier for the cluster')},
+                 responses={204: None})
+    def delete(self, cluster_id: str):
+        """
+        Remove an smb cluster
+
+        :param cluster_id: Cluster identifier
+        :return: None.
+        """
+        resource = {}
+        resource['resource_type'] = self._resource
+        resource['cluster_id'] = cluster_id
+        resource['intent'] = Intent.REMOVED
+        return mgr.remote('smb', 'apply_resources', json.dumps(resource)).one().to_simplified()
 
 @APIRouter('/smb/share', Scope.SMB)
 @APIDoc("SMB Share Management API", "SMB")
