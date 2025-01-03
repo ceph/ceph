@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
+from typing import Optional
+
 import cherrypy
 
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
-from . import APIDoc, APIRouter, EndpointDoc, RESTController
+from . import APIDoc, APIRouter, EndpointDoc, Param, RESTController
 
 FILTER_SCHEMA = [{
     "name": (str, 'Name of the config option'),
@@ -80,22 +82,33 @@ class ClusterConfiguration(RESTController):
 
         return config_options
 
-    def create(self, name, value):
+    @EndpointDoc("Create/Update Cluster Configuration",
+                 parameters={
+                     'name': Param(str, 'Config option name'),
+                     'value': (
+                         [
+                            {
+                                'section': Param(
+                                    str, 'Section/Client where config needs to be updated'
+                                ),
+                                'value': Param(str, 'Value of the config option')
+                            }
+                         ], 'Section and Value of the config option'
+                     ),
+                     'force_update': Param(bool, 'Force update the config option', False, None)
+                 }
+                 )
+    def create(self, name, value, force_update: Optional[bool] = None):
         # Check if config option is updateable at runtime
-        self._updateable_at_runtime([name])
+        self._updateable_at_runtime([name], force_update)
 
-        # Update config option
-        avail_sections = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']
+        for entry in value:
+            section = entry['section']
+            entry_value = entry['value']
 
-        for section in avail_sections:
-            for entry in value:
-                if entry['value'] is None:
-                    break
-
-                if entry['section'] == section:
-                    CephService.send_command('mon', 'config set', who=section, name=name,
-                                             value=str(entry['value']))
-                    break
+            if entry_value not in (None, ''):
+                CephService.send_command('mon', 'config set', who=section, name=name,
+                                         value=str(entry_value))
             else:
                 CephService.send_command('mon', 'config rm', who=section, name=name)
 
@@ -116,11 +129,24 @@ class ClusterConfiguration(RESTController):
 
         raise cherrypy.HTTPError(404)
 
-    def _updateable_at_runtime(self, config_option_names):
+    def _updateable_at_runtime(self, config_option_names, force_update=False):
         not_updateable = []
 
         for name in config_option_names:
             config_option = self._get_config_option(name)
+
+            # making rgw configuration to be editable by bypassing 'can_update_at_runtime'
+            # as the same can be done via CLI.
+            if force_update and 'rgw' in name and not config_option['can_update_at_runtime']:
+                break
+
+            if force_update and 'rgw' not in name and not config_option['can_update_at_runtime']:
+                raise DashboardException(
+                    msg=f'Only the configuration containing "rgw" can be edited at runtime with'
+                        f' force_update flag, hence not able to update "{name}"',
+                    code='config_option_not_updatable_at_runtime',
+                    component='cluster_configuration'
+                )
             if not config_option['can_update_at_runtime']:
                 not_updateable.append(name)
 
