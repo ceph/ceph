@@ -1457,6 +1457,7 @@ public:
     }
 
     void rewrite_omap_key(const std::string& old, std::string *out);
+    size_t calc_userkey_offset_in_omap_key() const;
     void decode_omap_key(const std::string& key, std::string *user_key);
 
     void finish_write(TransContext* txc, uint32_t offset, uint32_t length);
@@ -1753,6 +1754,7 @@ public:
     int next() override;
     std::string key() override;
     ceph::buffer::list value() override;
+    std::string_view value_as_sv() override;
     std::string tail_key() override {
       return tail;
     }
@@ -3416,15 +3418,6 @@ public:
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
 
-#ifdef WITH_SEASTAR
-  int omap_get_values(
-    CollectionHandle &c,         ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const std::optional<std::string> &start_after,     ///< [in] Keys to get
-    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
-    ) override;
-#endif
-
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
     CollectionHandle &c,                ///< [in] Collection containing oid
@@ -3437,6 +3430,13 @@ public:
     CollectionHandle &c,   ///< [in] collection
     const ghobject_t &oid  ///< [in] object
     ) override;
+
+  int omap_iterate(
+    CollectionHandle &c,   ///< [in] collection
+    const ghobject_t &oid, ///< [in] object
+    omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+    std::function<omap_iter_ret_t(std::string_view, std::string_view)> f
+  ) override;
 
   void set_fsid(uuid_d u) override {
     fsid = u;
