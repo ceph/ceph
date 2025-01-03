@@ -1663,6 +1663,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       if (dir_follows+1 > dn->first) {
 	snapid_t oldfirst = dn->first;
 	dn->first = dir_follows+1;
+	// TODO: Needs to call with related_snaprealm??
 	if (realm->has_snaps_in_range(oldfirst, dir_follows)) {
 	  CDir *dir = dn->dir;
           // TODO: What does this mean for referent inode ?? Passing 0 for now.
@@ -1698,7 +1699,16 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       return;
     }
 
-    if (!realm->has_snaps_in_range(in, follows)) {
+    bool has_snaps = false;
+    if (mds->mdsmap->use_global_snaprealm()) {
+      has_snaps = realm->has_snaps_in_range(in->first, follows);
+    } else {
+      std::vector<SnapRealm*> related_realms;
+      dout(20) << "journal_cow_dentry1 ----> get_related_realms for inode "<< *in << dendl;
+      in->get_related_realms(related_realms);
+      has_snaps = realm->has_snaps_in_range(in->first, follows, related_realms);
+    }
+    if (!has_snaps) {
       dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *in << dendl;
       in->first = follows + 1;
       return;
@@ -1723,7 +1733,16 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     snapid_t oldfirst = dn->first;
     dn->first = follows+1;
 
-    if (!realm->has_snaps_in_range(oldfirst, follows)) {
+    bool has_snaps = false;
+    if (!mds->mdsmap->use_global_snaprealm() && in) {
+      std::vector<SnapRealm*> related_realms;
+      dout(20) << "journal_cow_dentry2 ----> get_related_realms for inode "<< *in << dendl;
+      in->get_related_realms(related_realms);
+      has_snaps = realm->has_snaps_in_range(oldfirst, follows, related_realms);
+    } else {
+      has_snaps = realm->has_snaps_in_range(oldfirst, follows);
+    }
+    if (!has_snaps) {
       dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *dn << dendl;
       if (in)
 	in->first = follows+1;
@@ -5597,7 +5616,17 @@ void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
 {
   dout(10) << "rebuild_need_snapflush " << snap_follows << " on " << *head_in << dendl;
 
-  if (!realm->has_snaps_in_range(snap_follows + 1, head_in->first - 1))
+  bool has_snaps = false;
+  if (!mds->mdsmap->use_global_snaprealm() && head_in) {
+    std::vector<SnapRealm*> related_realms;
+    dout(20) << "rebuild_needs_snapflush ----> get_related_realms for inode "<< *head_in << dendl;
+    head_in->get_related_realms(related_realms);
+    has_snaps = realm->has_snaps_in_range(snap_follows + 1, head_in->first - 1, related_realms);
+  } else {
+    has_snaps = realm->has_snaps_in_range(snap_follows + 1, head_in->first - 1);
+  }
+
+  if (!has_snaps)
     return;
 
   const set<snapid_t>& snaps = realm->get_snaps();

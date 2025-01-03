@@ -88,7 +88,21 @@ public:
     return CEPH_NOSNAP;
   }
 
-  bool has_snaps_in_range(CInode *in, snapid_t last);
+  bool has_snaps_in_range(snapid_t first, snapid_t last, std::vector<SnapRealm*>& related_realms) {
+  check_cache();
+  const auto& s = get_snaps();
+  std::set<snapid_t> snaps_set;
+  snaps_set.insert(s.begin(), s.end());
+
+  for (const auto& r_realm : related_realms) {
+    r_realm->check_cache();
+    const auto& s1 = r_realm->get_snaps();
+    snaps_set.insert(s1.begin(), s1.end());
+  }
+  auto p = snaps_set.lower_bound(first);
+  return (p != snaps_set.end() && *p <= last);
+  }
+
   bool has_snaps_in_range(snapid_t first, snapid_t last) {
     check_cache();
     const auto& s = get_snaps();
