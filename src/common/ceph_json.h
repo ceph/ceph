@@ -29,6 +29,9 @@ public:
   void set(const JSONObjIter::map_iter_t &_cur, const JSONObjIter::map_iter_t &_end);
 
   void operator++();
+
+  // IMPORTANT: The returned pointer is intended as NON-OWNING (i.e. JSONObjIter 
+  // is responsible for it):
   JSONObj *operator*();
 
   bool end() const {
@@ -73,10 +76,9 @@ public:
   virtual ~JSONObj() = default;
 
 public:
-  void init(JSONObj *parent, boost::json::value data_in, std::string name_in);
+  void init(JSONObj *parent_node, boost::json::value data_in, std::string name_in);
 
   std::string& get_name() { return name; }
-  
   data_val& get_data_val() { return val; }
 
   const std::string& get_data() { return val.str; }
@@ -113,7 +115,6 @@ class JSONParser : public JSONObj
 {
   int buf_len = 0;
   std::string json_buffer;
-  bool success = true;
 
 public:
   void handle_data(const char *s, int len);
@@ -121,10 +122,12 @@ public:
   bool parse(const char *buf_, int len);
   bool parse(int len);
   bool parse();
-  bool parse(const char *file_name);
+
+  [[deprecated("author comments requested removal")]] bool parse(const char *file_name);
 
   const char *get_json() { return json_buffer.c_str(); }
-  void set_failure() { success = false; }
+
+  [[deprecated("never used to track internal state")]] void set_failure() {} // JFW: remove if unused
 };
 
 void encode_json(const char *name, const JSONObj::data_val& v, ceph::Formatter *f);
@@ -139,7 +142,7 @@ public:
 
   JSONDecoder(ceph::buffer::list& bl) {
     if (!parser.parse(bl.c_str(), bl.length())) {
-      std::cout << "JSONDecoder::err()" << std::endl;
+      std::cout << "JSONDecoder::err()" << std::endl;	// JFW: do we still want this here?
       throw JSONDecoder::err("failed to parse JSON input");
     }
   }
