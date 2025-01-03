@@ -24,7 +24,7 @@
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
 #include "ECTransaction.h"
-#include "ExtentCache.h"
+#include "ECExtentCacheL.h"
 
 //forward declaration
 struct ECSubWrite;

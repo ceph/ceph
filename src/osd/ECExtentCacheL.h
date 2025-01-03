@@ -12,8 +12,7 @@
  *
  */
 
-#ifndef EXTENT_CACHE_H
-#define EXTENT_CACHE_H
+#pragma once
 
 #include <map>
 #include <list>
@@ -28,7 +27,7 @@
 #include "common/hobject.h"
 
 /**
-   ExtentCache
+   ECExtentCacheL
 
    The main purpose of this cache is to ensure that we can pipeline
    overlapping partial overwrites.
@@ -94,8 +93,8 @@
    states.
  */
 
-/// If someone wants these types, but not ExtentCache, move to another file
-struct bl_split_merge {
+/// If someone wants these types, but not ECExtentCacheL, move to another file
+struct bl_split_merge_l {
   ceph::buffer::list split(
     uint64_t offset,
     uint64_t length,
@@ -114,10 +113,10 @@ struct bl_split_merge {
   }
   uint64_t length(const ceph::buffer::list &b) const { return b.length(); }
 };
-using extent_set = interval_set<uint64_t>;
-using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
+using extent_set_l = interval_set<uint64_t>;
+using extent_map_l = interval_map<uint64_t, ceph::buffer::list, bl_split_merge_l>;
 
-class ExtentCache {
+class ECExtentCacheL {
   struct object_extent_set;
   struct pin_state;
 private:
@@ -288,11 +287,11 @@ private:
 		*(ext->bl),
 		extoff - ext->offset,
 		extlen);
-	      final_extent = new ExtentCache::extent(
+	      final_extent = new ECExtentCacheL::extent(
 		extoff,
 		bl);
 	    } else {
-	      final_extent = new ExtentCache::extent(
+	      final_extent = new ECExtentCacheL::extent(
 		extoff, extlen);
 	    }
 	    final_extent->link(*this, pin);
@@ -393,7 +392,7 @@ private:
 
 public:
   class write_pin : private pin_state {
-    friend class ExtentCache;
+    friend class ECExtentCacheL;
   private:
     void open(uint64_t in_tid) {
       _open(in_tid, pin_state::WRITE);
@@ -426,11 +425,11 @@ public:
    *                     of to_write)
    * @return subset of to_read which isn't already present or pending
    */
-  extent_set reserve_extents_for_rmw(
+  extent_set_l reserve_extents_for_rmw(
     const hobject_t &oid,
     write_pin &pin,
-    const extent_set &to_write,
-    const extent_set &to_read);
+    const extent_set_l &to_write,
+    const extent_set_l &to_read);
 
   /**
    * Gets extents required for rmw not returned from
@@ -446,10 +445,10 @@ public:
    * @param to_get [in] extents to get (see above for restrictions)
    * @return map of buffers from to_get
    */
-  extent_map get_remaining_extents_for_rmw(
+  extent_map_l get_remaining_extents_for_rmw(
     const hobject_t &oid,
     write_pin &pin,
-    const extent_set &to_get);
+    const extent_set_l &to_get);
 
   /**
    * Updates the cache to reflect the rmw write
@@ -471,7 +470,7 @@ public:
   void present_rmw_update(
     const hobject_t &oid,
     write_pin &pin,
-    const extent_map &extents);
+    const extent_map_l &extents);
 
   /**
    * Release all buffers pinned by pin
@@ -484,6 +483,5 @@ public:
   std::ostream &print(std::ostream &out) const;
 };
 
-std::ostream &operator <<(std::ostream &lhs, const ExtentCache &cache);
+std::ostream &operator <<(std::ostream &lhs, const ECExtentCacheL &cache);
 
-#endif
