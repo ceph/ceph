@@ -1158,6 +1158,16 @@ struct obj_time_weight {
     if (l < r) {
       return true;
     }
+    l = ceph::real_clock::to_timespec(mtime);
+    r = ceph::real_clock::to_timespec(rhs.mtime);
+    l.tv_nsec = 0;
+    r.tv_nsec = 0;
+    if (l > r) {
+      return false;
+    }
+    if (l < r) {
+      return true;
+    }
     if (!zone_short_id || !rhs.zone_short_id) {
       /* don't compare zone ids, if one wasn't provided */
       return false;
@@ -1199,6 +1209,15 @@ struct obj_time_weight {
     mtime = state->mtime;
     zone_short_id = state->zone_short_id;
     pg_ver = state->pg_ver;
+        bufferlist bl;
+    if (state->get_attr(RGW_ATTR_INTERNAL_MTIME, bl)) {
+      try {
+        auto iter = bl.cbegin();
+        decode(mtime, iter);
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 0) << "ERROR: couldn't decode RGW_ATTR_INTERNAL_MTIME" << dendl;
+      }
+    }
   }
 };
 
