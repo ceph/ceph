@@ -100,14 +100,7 @@ struct rgw_placement_rule {
   }
 
   std::string to_str() const {
-    if (standard_storage_class()) {
-      return name;
-    }
-    return to_str_explicit();
-  }
-
-  std::string to_str_explicit() const {
-    return name + "/" + storage_class;
+    return name + "/" + get_storage_class();
   }
 
   void from_str(const std::string& s) {
@@ -121,8 +114,5 @@ struct rgw_placement_rule {
     storage_class = s.substr(pos + 1);
   }
 
-  bool standard_storage_class() const {
-    return storage_class.empty() || storage_class == RGW_STORAGE_CLASS_STANDARD;
-  }
 };
 WRITE_CLASS_ENCODER(rgw_placement_rule)
