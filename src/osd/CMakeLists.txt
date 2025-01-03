@@ -33,7 +33,6 @@ set(osd_srcs
   Session.cc
   SnapMapper.cc
   osd_types.cc
-  ECUtil.cc
   scheduler/OpScheduler.cc
   scheduler/OpSchedulerItem.cc
   scheduler/mClockScheduler.cc
@@ -45,6 +44,8 @@ set(osd_srcs
   ECCommonL.cc
   ECBackendL.cc
   ECExtentCacheL.cc
+  ECUtilL.cc
+  ECUtil.cc
   ECTransactionL.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
