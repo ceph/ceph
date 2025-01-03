@@ -11,19 +11,26 @@ LBAManager::update_mappings(
   Transaction& t,
   const std::list<LogicalCachedExtentRef>& extents)
 {
-  return trans_intr::do_for_each(extents,
-				 [this, &t](auto &extent) {
-    return update_mapping(
-      t,
-      extent->get_laddr(),
-      extent->get_length(),
-      extent->get_prior_paddr_and_reset(),
-      extent->get_length(),
-      extent->get_paddr(),
-      extent->get_last_committed_crc(),
-      nullptr	// all the extents should have already been
-		// added to the fixed_kv_btree
-    ).discard_result();
+  return seastar::do_with(
+    LBAIter{},
+    [this, &t, &extents](LBAIter &iter) {
+      return trans_intr::do_for_each(
+	extents,
+	[this, &t, &iter](auto &extent) {
+	  return make_iterator(t, extent
+	  ).si_then([this, &t, &iter, &extent](LBAIter i) {
+	    iter = i;
+	    auto val = iter.val;
+	    ceph_assert(extent->get_laddr() == iter.key);
+	    ceph_assert(val.pladdr.get_paddr() ==
+			extent->get_prior_paddr_and_reset());
+	    val.pladdr = extent->get_paddr();
+	    val.len = extent->get_length();
+	    val.checksum = extent->get_last_committed_crc();
+	    return change_mapping(t, iter, iter.key, val, nullptr)
+		.discard_result();
+	  });
+	});
   });
 }
 
