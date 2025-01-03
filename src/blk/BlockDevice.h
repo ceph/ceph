@@ -195,6 +195,7 @@ protected:
   uint64_t conventional_region_size = 0;
   uint64_t zone_size = 0;
   void add_stalled_read_event();
+  bool check_discard_queue_overload();
 
 public:
   aio_callback_t aio_callback;
@@ -303,6 +304,8 @@ public:
   virtual void close() = 0;
 
   struct hugepaged_raw_marker_t {};
+
+  std::atomic<uint64_t> discarded_bytes = 0;
 
 protected:
   bool is_valid_io(uint64_t off, uint64_t len) const;
