@@ -208,7 +208,7 @@ struct ECListener {
     const eversion_t &applied_version) = 0;
 };
 
-struct ECCommon {
+struct ECCommonL {
   struct ec_align_t {
     uint64_t offset;
     uint64_t size;
@@ -223,7 +223,7 @@ struct ECCommon {
   friend std::ostream &operator<<(std::ostream &lhs, const ec_extent_t &rhs);
   using ec_extents_t = std::map<hobject_t, ec_extent_t>;
 
-  virtual ~ECCommon() = default;
+  virtual ~ECCommonL() = default;
 
   virtual void handle_sub_write(
     pg_shard_t from,
@@ -285,7 +285,7 @@ struct ECCommon {
     virtual void finish_single_request(
       const hobject_t &hoid,
       read_result_t &res,
-      std::list<ECCommon::ec_align_t> to_read,
+      std::list<ECCommonL::ec_align_t> to_read,
       std::set<int> wanted_to_read) = 0;
 
     virtual void finish(int priority) && = 0;
@@ -673,7 +673,7 @@ struct ECCommon {
         _to_read,
         false,
         make_gen_lambda_context<
-        ECCommon::ec_extents_t &&, Func>(
+        ECCommonL::ec_extents_t &&, Func>(
             std::forward<Func>(on_complete)));
     }
     void handle_sub_write(
@@ -689,13 +689,13 @@ struct ECCommon {
     ceph::ErasureCodeInterfaceRef ec_impl;
     const ECUtil::stripe_info_t& sinfo;
     ECListener* parent;
-    ECCommon& ec_backend;
+    ECCommonL& ec_backend;
 
     RMWPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
                 const ECUtil::stripe_info_t& sinfo,
                 ECListener* parent,
-                ECCommon& ec_backend)
+                ECCommonL& ec_backend)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
         sinfo(sinfo),
@@ -730,24 +730,24 @@ struct ECCommon {
 };
 
 std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::RMWPipeline::pipeline_state_t &rhs);
+			 const ECCommonL::RMWPipeline::pipeline_state_t &rhs);
 std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::read_request_t &rhs);
+			 const ECCommonL::read_request_t &rhs);
 std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::read_result_t &rhs);
+			 const ECCommonL::read_result_t &rhs);
 std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::ReadOp &rhs);
+			 const ECCommonL::ReadOp &rhs);
 std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::RMWPipeline::Op &rhs);
+			 const ECCommonL::RMWPipeline::Op &rhs);
 
-template <> struct fmt::formatter<ECCommon::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::read_request_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::read_result_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::ReadOp> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::RMWPipeline::Op> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommonL::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommonL::read_request_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommonL::read_result_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommonL::ReadOp> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommonL::RMWPipeline::Op> : fmt::ostream_formatter {};
 
 template <class F, class G>
-void ECCommon::ReadPipeline::check_recovery_sources(
+void ECCommonL::ReadPipeline::check_recovery_sources(
   const OSDMapRef& osdmap,
   F&& on_erase,
   G&& on_schedule_recovery)
@@ -774,7 +774,7 @@ void ECCommon::ReadPipeline::check_recovery_sources(
 }
 
 template <class F, class G>
-void ECCommon::ReadPipeline::filter_read_op(
+void ECCommonL::ReadPipeline::filter_read_op(
   const OSDMapRef& osdmap,
   ReadOp &op,
   F&& on_erase,

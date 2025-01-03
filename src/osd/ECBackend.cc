@@ -167,7 +167,7 @@ PGBackend::RecoveryHandle *ECBackend::RecoveryBackend::open_recovery_op()
   return new ECRecoveryHandle;
 }
 
-void ECBackend::RecoveryBackend::_failed_push(const hobject_t &hoid, ECCommon::read_result_t &res)
+void ECBackend::RecoveryBackend::_failed_push(const hobject_t &hoid, ECCommonL::read_result_t &res)
 {
   dout(10) << __func__ << ": Read error " << hoid << " r="
 	   << res.r << " errors=" << res.errors << dendl;
@@ -186,7 +186,7 @@ void ECBackend::RecoveryBackend::_failed_push(const hobject_t &hoid, ECCommon::r
 
 struct RecoveryMessages {
   map<hobject_t,
-      ECCommon::read_request_t> recovery_reads;
+      ECCommonL::read_request_t> recovery_reads;
   map<hobject_t, set<int>> want_to_read;
 
   void recovery_read(
@@ -195,14 +195,14 @@ struct RecoveryMessages {
     const map<pg_shard_t, vector<pair<int, int>>> &need,
     bool attrs)
   {
-    list<ECCommon::ec_align_t> to_read;
-    to_read.emplace_back(ECCommon::ec_align_t{off, len, 0});
+    list<ECCommonL::ec_align_t> to_read;
+    to_read.emplace_back(ECCommonL::ec_align_t{off, len, 0});
     ceph_assert(!recovery_reads.count(hoid));
     want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
     recovery_reads.insert(
       make_pair(
 	hoid,
-	ECCommon::read_request_t(
+	ECCommonL::read_request_t(
 	  to_read,
 	  need,
 	  attrs)));
@@ -456,14 +456,14 @@ struct SendPushReplies : public Context {
   }
 };
 
-struct RecoveryReadCompleter : ECCommon::ReadCompleter {
+struct RecoveryReadCompleter : ECCommonL::ReadCompleter {
   RecoveryReadCompleter(ECBackend::RecoveryBackend& backend)
     : backend(backend) {}
 
   void finish_single_request(
     const hobject_t &hoid,
-    ECCommon::read_result_t &res,
-    list<ECCommon::ec_align_t>,
+    ECCommonL::read_result_t &res,
+    list<ECCommonL::ec_align_t>,
     set<int> wanted_to_read) override
   {
     if (!(res.r == 0 && res.errors.empty())) {
@@ -1369,9 +1369,9 @@ void ECBackend::handle_sub_read_reply(
 void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
 {
   struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
-    ECCommon::ReadPipeline& read_pipeline;
+    ECCommonL::ReadPipeline& read_pipeline;
     ceph_tid_t tid;
-    FinishReadOp(ECCommon::ReadPipeline& read_pipeline, ceph_tid_t tid)
+    FinishReadOp(ECCommonL::ReadPipeline& read_pipeline, ceph_tid_t tid)
       : read_pipeline(read_pipeline), tid(tid) {}
     void finish(ThreadPool::TPHandle&) override {
       auto ropiter = read_pipeline.tid_to_read_map.find(tid);
@@ -1426,7 +1426,7 @@ void ECBackend::dump_recovery_info(Formatter *f) const
   f->close_section();
 }
 
-struct ECClassicalOp : ECCommon::RMWPipeline::Op {
+struct ECClassicalOp : ECCommonL::RMWPipeline::Op {
   PGTransactionUPtr t;
 
   void generate_transactions(
@@ -1567,7 +1567,7 @@ int ECBackend::objects_read_sync(
 
 void ECBackend::objects_read_async(
   const hobject_t &hoid,
-  const list<pair<ECCommon::ec_align_t,
+  const list<pair<ECCommonL::ec_align_t,
                   pair<bufferlist*, Context*>>> &to_read,
   Context *on_complete,
   bool fast_read)
@@ -1599,21 +1599,21 @@ void ECBackend::objects_read_async(
   struct cb {
     ECBackend *ec;
     hobject_t hoid;
-    list<pair<ECCommon::ec_align_t,
+    list<pair<ECCommonL::ec_align_t,
 	      pair<bufferlist*, Context*> > > to_read;
     unique_ptr<Context> on_complete;
     cb(const cb&) = delete;
     cb(cb &&) = default;
     cb(ECBackend *ec,
        const hobject_t &hoid,
-       const list<pair<ECCommon::ec_align_t,
+       const list<pair<ECCommonL::ec_align_t,
                   pair<bufferlist*, Context*> > > &to_read,
        Context *on_complete)
       : ec(ec),
 	hoid(hoid),
 	to_read(to_read),
 	on_complete(on_complete) {}
-    void operator()(ECCommon::ec_extents_t &&results) {
+    void operator()(ECCommonL::ec_extents_t &&results) {
       auto dpp = ec->get_parent()->get_dpp();
       ldpp_dout(dpp, 20) << "objects_read_async_cb: got: " << results
 			 << dendl;
@@ -1671,7 +1671,7 @@ void ECBackend::objects_read_async(
     reads,
     fast_read,
     make_gen_lambda_context<
-      ECCommon::ec_extents_t &&, cb>(
+      ECCommonL::ec_extents_t &&, cb>(
 	cb(this,
 	   hoid,
 	   to_read,
@@ -1683,7 +1683,7 @@ void ECBackend::objects_read_and_reconstruct(
     std::list<ECBackend::ec_align_t>
   > &reads,
   bool fast_read,
-  GenContextURef<ECCommon::ec_extents_t &&> &&func)
+  GenContextURef<ECCommonL::ec_extents_t &&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct(
     reads, fast_read, std::move(func));

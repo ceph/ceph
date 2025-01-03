@@ -18,7 +18,7 @@
 #ifndef PGBACKEND_H
 #define PGBACKEND_H
 
-#include "ECCommon.h"
+#include "ECCommonL.h"
 #include "osd_types.h"
 #include "pg_features.h"
 #include "common/intrusive_timer.h"
@@ -585,7 +585,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual void objects_read_async(
      const hobject_t &hoid,
-     const std::list<std::pair<ECCommon::ec_align_t,
+     const std::list<std::pair<ECCommonL::ec_align_t,
 		std::pair<ceph::buffer::list*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
