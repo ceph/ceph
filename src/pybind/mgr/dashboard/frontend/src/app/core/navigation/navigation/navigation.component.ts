@@ -56,7 +56,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
     private featureToggles: FeatureTogglesService,
     public prometheusAlertService: PrometheusAlertService,
     private cookieService: CookiesService,
-    private settingsService: SettingsService
+    private settingsService: SettingsService,
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -158,12 +158,12 @@ export class NavigationComponent implements OnInit, OnDestroy {
         if (clustersConfig && typeof clustersConfig === 'object') {
           Object.keys(clustersConfig).forEach((clusterKey: string) => {
             const clusterDetailsList = clustersConfig[clusterKey];
-
+  
             clusterDetailsList.forEach((clusterDetails: any) => {
               const clusterName = clusterDetails['name'];
               const clusterToken = clusterDetails['token'];
               const clusterUser = clusterDetails['user'];
-
+  
               if (
                 clusterName === this.selectedCluster['name'] &&
                 clusterUser === this.selectedCluster['user'] &&
@@ -189,6 +189,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
       }
     );
   }
+  
 
   trackByFn(item: any) {
     return item;
