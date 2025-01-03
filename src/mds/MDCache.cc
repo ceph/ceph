@@ -6555,19 +6555,14 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   const SnapContext *snapc;
   if (realm) {
     dout(10) << " realm " << *realm << dendl;
-    vector<SnapRealm*> related_realms;
-    const std::vector<uint64_t>& referent_inodes = in->get_inode()->referent_inodes;
-    dout(20) << "_truncate_inode referent_inodes " << std::hex << referent_inodes << dendl;
-    for (const auto& ri : referent_inodes) {
-      CInode *cur = get_inode(ri);
-      if (!cur) {
-        dout(3) << "_truncate_inode error: referent inode not loaded " << std::hex << ri << dendl;
-        ceph_abort("_truncate_inode: referent inode not loaded");
-      }
-      SnapRealm *cur_realm = cur->find_snaprealm();
-      related_realms.push_back(cur_realm);
+    if (mds->mdsmap->use_global_snaprealm()) {
+      snapc = &realm->get_snap_context();
+    } else {
+      std::vector<SnapRealm*> related_realms;
+      dout(20) << "_truncate_inode ----> get_related_realms for inode "<< *in << dendl;
+      in->get_related_realms(related_realms);
+      snapc = &realm->get_snap_context(related_realms);
     }
-    snapc = &realm->get_snap_context(related_realms);
   } else {
     dout(10) << " NO realm, using null context" << dendl;
     snapc = &nullsnap;
@@ -6664,19 +6659,14 @@ void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
   const SnapContext *snapc;
   if (realm) {
     dout(10) << " realm " << *realm << dendl;
-    vector<SnapRealm*> related_realms;
-    const std::vector<uint64_t>& referent_inodes = in->get_inode()->referent_inodes;
-    dout(20) << "truncate_inode_write_finish referent_inodes " << std::hex << referent_inodes << dendl;
-    for (const auto& ri : referent_inodes) {
-      CInode *cur = get_inode(ri);
-      if (!cur) {
-        dout(3) << "truncate_inode_write_finish error: referent inode not loaded " << std::hex << ri << dendl;
-        ceph_abort("truncate_inode_write_finish: referent inode not loaded");
-      }
-      SnapRealm *cur_realm = cur->find_snaprealm();
-      related_realms.push_back(cur_realm);
+    if (mds->mdsmap->use_global_snaprealm()) {
+      snapc = &realm->get_snap_context();
+    } else {
+      std::vector<SnapRealm*> related_realms;
+      dout(20) << "truncate_inode_write_finish ----> get_related_realms for inode "<< *in << dendl;
+      in->get_related_realms(related_realms);
+      snapc = &realm->get_snap_context(related_realms);
     }
-    snapc = &realm->get_snap_context(related_realms);
   } else {
     dout(10) << " NO realm, using null context" << dendl;
     snapc = &nullsnap;
@@ -13489,9 +13479,21 @@ void MDCache::uninline_data_work(MDRequestRef mdr)
   ceph_assert(pi->inline_data.version != CEPH_INLINE_NONE);
 
   object_t oid = InodeStoreBase::get_object_name(ino(), frag_t(), "");
-  SnapContext snapc;
   SnapRealm *snaprealm = in->find_snaprealm();
-  auto& snapc_ref = (snaprealm ? snaprealm->get_snap_context() : snapc);
+  SnapContext nullsnap;
+  const SnapContext *snapc;
+  if (snaprealm) {
+    if (mds->mdsmap->use_global_snaprealm()) {
+      snapc = &snaprealm->get_snap_context();
+    } else {
+      std::vector<SnapRealm*> related_realms;
+      dout(20) << "uninline_data_work ----> get_related_realms for inode "<< *in << dendl;
+      in->get_related_realms(related_realms);
+      snapc = &snaprealm->get_snap_context(related_realms);
+    }
+  } else {
+    snapc = &nullsnap;
+  }
 
   ObjectOperation create_ops;
   create_ops.create(false);
@@ -13502,7 +13504,7 @@ void MDCache::uninline_data_work(MDRequestRef mdr)
   objecter->mutate(oid,
 		   OSDMap::file_to_object_locator(pi->layout),
 		   create_ops,
-		   snapc_ref,
+		   *snapc,
 		   ceph::real_clock::now(),
 		   0,
 		   nullptr);
@@ -13528,7 +13530,7 @@ void MDCache::uninline_data_work(MDRequestRef mdr)
   objecter->mutate(oid,
 		   OSDMap::file_to_object_locator(pi->layout),
 		   uninline_ops,
-		   snapc_ref,
+		   *snapc,
 		   ceph::real_clock::now(),
 		   0,
 		   new C_IO_DataUninlined(mdr, mds));
