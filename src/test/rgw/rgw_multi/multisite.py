@@ -212,7 +212,7 @@ class ZoneConn(object):
     def get_bucket(self, bucket_name, credentials):
         raise NotImplementedError
 
-    def check_bucket_eq(self, zone, bucket_name):
+    def check_bucket_eq(self, zone, bucket_name, bucket_name2=None):
         raise NotImplementedError
 
 class ZoneGroup(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemObject.Modify):

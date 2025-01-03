@@ -272,12 +272,12 @@ class CloudZone(Zone):
             log.critical('Conn.create_bucket() should not be called in cloud zone')
             assert False
 
-        def check_bucket_eq(self, zone_conn, bucket_name):
+        def check_bucket_eq(self, zone_conn, bucket_name, bucket_name2=None):
             assert(zone_conn.zone.tier_type() == "rados")
 
-            log.info('comparing bucket=%s zones={%s, %s}', bucket_name, self.name, self.name)
+            log.info('comparing buckets={%s, %s} zones={%s, %s}', bucket_name, bucket_name2 or bucket_name, self.name, zone_conn.zone.name)
             b1 = self.get_bucket(bucket_name)
-            b2 = zone_conn.get_bucket(bucket_name)
+            b2 = zone_conn.get_bucket(bucket_name2 or bucket_name)
 
             log.debug('bucket1 objects:')
             for o in b1.get_all_versions():
@@ -297,7 +297,7 @@ class CloudZone(Zone):
                 check_object_eq(k1, k2)
 
 
-            log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
+            log.info('success, bucket identical: buckets={%s, %s} zones={%s, %s}', bucket_name, bucket_name2 or bucket_name, self.name, zone_conn.name)
 
             return True
 

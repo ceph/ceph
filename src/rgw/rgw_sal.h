@@ -201,7 +201,8 @@ class ObjectProcessor : public DataProcessor {
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags) = 0;
 };
@@ -578,6 +579,12 @@ class Driver {
 					std::optional<rgw_bucket> bucket,
 					RGWBucketSyncPolicyHandlerRef* phandler,
 					optional_yield y) = 0;
+    /** Get sync hints for the bucket */
+    virtual int get_bucket_sync_hints(const DoutPrefixProvider* dpp,
+                                      const rgw_bucket& bucket,
+                                      std::set<rgw_bucket> *sources,
+                                      std::set<rgw_bucket> *dests,
+                                      optional_yield y) = 0;
     /** Get a status manager for bucket sync */
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) = 0;
     /** Wake up sync threads for bucket metadata sync */
@@ -1128,6 +1135,7 @@ class Object {
         ceph::real_time mtime;
         bool high_precision_time{false};
         rgw_zone_set* zones_trace{nullptr};
+        rgw_log_op_info *log_op_info{nullptr};
 	bool abortmp{false};
 	uint64_t parts_accounted_size{0};
         RGWObjVersionTracker* objv_tracker = nullptr;
@@ -1150,6 +1158,7 @@ class Object {
     /** Shortcut synchronous delete call for common deletes */
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y,
+                              rgw_log_op_info *log_op_info,
 			      uint32_t flags,
 			      std::list<rgw_obj_index_key>* remove_objs,
 			      RGWObjVersionTracker* objv) = 0;
@@ -1201,13 +1210,13 @@ class Object {
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
      * deleted.  @note the attribute APIs may be revisited in the future. */
-    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;
+    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, rgw_log_op_info *log_op_info, uint32_t flags) = 0;
     /** Get attributes for this object */
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) = 0;
     /** Modify attributes for this object. */
-    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) = 0;
+    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, rgw_log_op_info *log_op_info, uint32_t flags) = 0;
     /** Delete attributes for this object */
-    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) = 0;
+    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y, rgw_log_op_info *log_op_info, uint32_t flags) = 0;
     /** Check to see if this object has expired */
     virtual bool is_expired() = 0;
     /** Create a randomized instance ID for this object */
@@ -1222,6 +1231,7 @@ class Object {
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y,
+                           rgw_log_op_info *log_op_info,
                            uint32_t flags) = 0;
     /** Move an object to the cloud */
     virtual int transition_to_cloud(Bucket* bucket,
@@ -1233,17 +1243,18 @@ class Object {
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) = 0;
     virtual int restore_obj_from_cloud(Bucket* bucket,
-			   rgw::sal::PlacementTier* tier,
-			   rgw_placement_rule& placement_rule,
-			   rgw_bucket_dir_entry& o,
-			   CephContext* cct,
-         		   RGWObjTier& tier_config,
-			   real_time& mtime,
-			   uint64_t olh_epoch,
-		           std::optional<uint64_t> days,
-			   const DoutPrefixProvider* dpp,
-			   optional_yield y,
-			   uint32_t flags) = 0;
+                                       rgw::sal::PlacementTier* tier,
+                                       rgw_placement_rule& placement_rule,
+                                       rgw_bucket_dir_entry& o,
+                                       CephContext* cct,
+                                       RGWObjTier& tier_config,
+                                       real_time& mtime,
+                                       uint64_t olh_epoch,
+                                       std::optional<uint64_t> days,
+                                       const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       rgw_log_op_info *log_op_info,
+                                       uint32_t flags) = 0;
     /** Check to see if two placement rules match */
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     /** Dump driver-specific object layout info in JSON */
@@ -1661,7 +1672,8 @@ public:
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags) = 0;
 };
