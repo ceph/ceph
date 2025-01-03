@@ -1338,10 +1338,15 @@ class HostCache():
 
     def get_daemons_by_type(self, service_type: str, host: str = '') -> List[orchestrator.DaemonDescription]:
         assert service_type not in ['keepalived', 'haproxy']
-
         daemons = self.daemons[host].values() if host else self._get_daemons()
-
         return [d for d in daemons if d.daemon_type in service_to_daemon_types(service_type)]
+
+    def get_daemons_by_types(self, daemon_types: List[str]) -> List[str]:
+        daemon_names = []
+        for daemon_type in daemon_types:
+            for dd in self.get_daemons_by_type(daemon_type):
+                daemon_names.append(dd.name())
+        return daemon_names
 
     def get_daemon_types(self, hostname: str) -> Set[str]:
         """Provide a list of the types of daemons on the host"""
