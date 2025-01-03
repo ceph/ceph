@@ -137,15 +137,14 @@ To build Ceph, follow this procedure:
    * Preserve Existing Data skip cluster reinitialization between tests by
      using the `-n` flag.
 
-    > [TROUBLESHOOTING]
-    >
-    >Cluster Fails to Start: Look for errors in the logs under the out/ directory, e.g.
-    >
-    >OSD Crashes: Check the OSD logs for errors.
-    >
-    >Cluster in a Health Error State: Run `ceph status` to identify the issue.
-    >
-    >RocksDB Errors: Look for RocksDB-related errors in OSD logs.
+##  Troubleshooting     
+ 
+    * Cluster Fails to Start: Look for errors in the logs under the `out/`
+      directory.
+    * OSD Crashes: Check the OSD logs for errors.
+    * Cluster in a `Health Error` State: Run the `ceph status` command to
+      identify the issue.
+    * RocksDB Errors: Look for RocksDB-related errors in the OSD logs.
     
     To manage a vstart cluster, stop daemons using `./stop.sh` and start them with ./vstart.sh --daemon osd.${ID} [--nodaemonize]. 
     Restart by stopping and restarting daemons, ensuring no stale sockets. 
