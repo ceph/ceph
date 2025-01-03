@@ -62,6 +62,12 @@ struct PGRepopPipeline {
   struct Process : OrderedExclusivePhaseT<Process> {
     static constexpr auto type_name = "PGRepopPipeline::process";
   } process;
+  struct WaitCommit : OrderedConcurrentPhaseT<WaitCommit> {
+    static constexpr auto type_name = "PGRepopPipeline::wait_repop";
+  } wait_commit;
+  struct SendReply : OrderedExclusivePhaseT<SendReply> {
+    static constexpr auto type_name = "PGRepopPipeline::send_reply";
+  } send_reply;
 };
 
 struct CommonOBCPipeline {

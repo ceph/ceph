@@ -596,7 +596,13 @@ public:
   using with_obc_func_t =
     std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
-  interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
+  using handle_rep_op_ret = std::tuple<
+    interruptible_future<>, // resolves upon commit
+    MURef<MOSDRepOpReply>     // reply message
+    >;
+  // outer future resolves upon submission
+  using handle_rep_op_fut = interruptible_future<handle_rep_op_ret>;
+  handle_rep_op_fut handle_rep_op(Ref<MOSDRepOp> m);
   void update_stats(const pg_stat_t &stat);
   interruptible_future<> update_snap_map(
     const std::vector<pg_log_entry_t> &log_entries,
