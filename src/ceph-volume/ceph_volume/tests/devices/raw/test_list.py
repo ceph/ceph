@@ -1,5 +1,7 @@
+# type: ignore
 import pytest
-from mock.mock import patch
+from .data_list import ceph_bluestore_tool_show_label_output
+from mock.mock import patch, Mock
 from ceph_volume.devices import raw
 
 # Sample lsblk output is below that overviews the test scenario. (--json output for reader clarity)
@@ -74,98 +76,6 @@ def _lsblk_output(dev, parent=None):
     ret = 'NAME="{}" KNAME="{}" PKNAME="{}"'.format(dev, dev, parent)
     return [ret] # needs to be in a list form
 
-def _bluestore_tool_label_output_sdb():
-    return '''{
-    "/dev/sdb": {
-        "osd_uuid": "sdb-uuid",
-        "size": 1099511627776,
-        "btime": "2021-07-23T16:02:22.809186+0000",
-        "description": "main",
-        "bfm_blocks": "268435456",
-        "bfm_blocks_per_key": "128",
-        "bfm_bytes_per_block": "4096",
-        "bfm_size": "1099511627776",
-        "bluefs": "1",
-        "ceph_fsid": "sdb-fsid",
-        "kv_backend": "rocksdb",
-        "magic": "ceph osd volume v026",
-        "mkfs_done": "yes",
-        "osd_key": "AQAO6PpgK+y4CBAAixq/X7OVimbaezvwD/cDmg==",
-        "ready": "ready",
-        "require_osd_release": "16",
-        "whoami": "0"
-    }
-}'''
-
-def _bluestore_tool_label_output_sdb2():
-    return '''{
-    "/dev/sdb2": {
-        "osd_uuid": "sdb2-uuid",
-        "size": 1099511627776,
-        "btime": "2021-07-23T16:02:22.809186+0000",
-        "description": "main",
-        "bfm_blocks": "268435456",
-        "bfm_blocks_per_key": "128",
-        "bfm_bytes_per_block": "4096",
-        "bfm_size": "1099511627776",
-        "bluefs": "1",
-        "ceph_fsid": "sdb2-fsid",
-        "kv_backend": "rocksdb",
-        "magic": "ceph osd volume v026",
-        "mkfs_done": "yes",
-        "osd_key": "AQAO6PpgK+y4CBAAixq/X7OVimbaezvwD/cDmg==",
-        "ready": "ready",
-        "require_osd_release": "16",
-        "whoami": "2"
-    }
-}'''
-
-def _bluestore_tool_label_output_sde1():
-    return '''{
-    "/dev/sde1": {
-        "osd_uuid": "sde1-uuid",
-        "size": 214747316224,
-        "btime": "2023-07-26T13:20:19.509457+0000",
-        "description": "main",
-        "bfm_blocks": "268435456",
-        "bfm_blocks_per_key": "128",
-        "bfm_bytes_per_block": "4096",
-        "bfm_size": "214747316224",
-        "bluefs": "1",
-        "ceph_fsid": "sde1-fsid",
-        "kv_backend": "rocksdb",
-        "magic": "ceph osd volume v026",
-        "mkfs_done": "yes",
-        "osd_key": "AQCSHcFkUeLIMBAAjKqANkXafjvVISkXt6FGCA==",
-        "ready": "ready",
-        "require_osd_release": "16",
-        "whoami": "1"
-    }
-}'''
-
-def _bluestore_tool_label_output_dm_okay():
-    return '''{
-    "/dev/mapper/ceph--osd--block--1": {
-        "osd_uuid": "lvm-1-uuid",
-        "size": 549751619584,
-        "btime": "2021-07-23T16:04:37.881060+0000",
-        "description": "main",
-        "bfm_blocks": "134216704",
-        "bfm_blocks_per_key": "128",
-        "bfm_bytes_per_block": "4096",
-        "bfm_size": "549751619584",
-        "bluefs": "1",
-        "ceph_fsid": "lvm-1-fsid",
-        "kv_backend": "rocksdb",
-        "magic": "ceph osd volume v026",
-        "mkfs_done": "yes",
-        "osd_key": "AQCU6Ppgz+UcIRAAh6IUjtPjiXBlEXfwO8ixzw==",
-        "ready": "ready",
-        "require_osd_release": "16",
-        "whoami": "2"
-    }
-}'''
-
 def _process_call_side_effect(command, **kw):
     if "lsblk" in command:
         if "/dev/" in command[-1]:
@@ -186,19 +96,7 @@ def _process_call_side_effect(command, **kw):
         pytest.fail('command {} needs behavior specified for it'.format(command))
 
     if "ceph-bluestore-tool" in command:
-        if "/dev/sdb" in command:
-            # sdb is a bluestore OSD
-            return _bluestore_tool_label_output_sdb(), '', 0
-        if "/dev/sdb2" in command:
-            # sdb2 is a phantom atari partition that appears to have some valid bluestore info
-            return _bluestore_tool_label_output_sdb2(), '', 0
-        if "/dev/sde1" in command:
-            return _bluestore_tool_label_output_sde1(), '', 0
-        if "/dev/mapper/ceph--osd--block--1" in command:
-            # dm device 1 is a valid bluestore OSD (the other is corrupted/invalid)
-            return _bluestore_tool_label_output_dm_okay(), '', 0
-        # sda and children, sdb's children, sdc, sdd, dm device 2 all do NOT have bluestore OSD data
-        return [], 'fake No such file or directory error', 1
+        return ceph_bluestore_tool_show_label_output, '', 0
     pytest.fail('command {} needs behavior specified for it'.format(command))
 
 def _has_bluestore_label_side_effect(disk_path):
@@ -224,6 +122,7 @@ def _has_bluestore_label_side_effect(disk_path):
 
 class TestList(object):
 
+    @patch('ceph_volume.devices.raw.list.List.exclude_lvm_osd_devices', Mock())
     @patch('ceph_volume.util.device.disk.get_devices')
     @patch('ceph_volume.util.disk.has_bluestore_label')
     @patch('ceph_volume.process.call')
@@ -257,6 +156,7 @@ class TestList(object):
         assert sde1['ceph_fsid'] == 'sde1-fsid'
         assert sde1['type'] == 'bluestore'
 
+    @patch('ceph_volume.devices.raw.list.List.exclude_lvm_osd_devices', Mock())
     @patch('ceph_volume.util.device.disk.get_devices')
     @patch('ceph_volume.util.disk.has_bluestore_label')
     @patch('ceph_volume.process.call')
@@ -275,4 +175,4 @@ class TestList(object):
 
         result = raw.list.List([]).generate()
         assert len(result) == 2
-        assert 'sdb-uuid' in result
+        assert {'sdb-uuid', 'sde1-uuid'} == set(result.keys())
