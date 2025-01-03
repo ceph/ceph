@@ -1144,13 +1144,28 @@ SegmentCleaner::do_reclaim_space(
             pin->get_length(),
             pin->get_type());
         }
+        std::map<paddr_t, backref_entry_t> removed_entries;
         for (auto &cached_backref : cached_backref_entries) {
           if (cached_backref.laddr == L_ADDR_NULL) {
             auto it = backref_entries.find(cached_backref.paddr);
             assert(it->len == cached_backref.len);
+            removed_entries.insert_or_assign(it->paddr, *it);
             backref_entries.erase(it);
           } else {
-            backref_entries.emplace(cached_backref);
+	    auto type = cached_backref.type;
+	    if (is_remapped_placeholder_type(type)) {
+	      auto iter = removed_entries.upper_bound(cached_backref.paddr);
+	      assert(iter != removed_entries.begin());
+	      --iter;
+	      assert(iter->first <= cached_backref.paddr);
+	      assert(iter->first + iter->second.len >=
+		     cached_backref.paddr + cached_backref.len);
+	      type = iter->second.type;
+	    }
+	    auto e = cached_backref;
+	    e.type = type;
+	    assert(!is_remapped_placeholder_type(type));
+	    backref_entries.emplace(e);
           }
         }
         // retrieve live extents

@@ -40,42 +40,6 @@ constexpr size_t LEAF_NODE_CAPACITY = 193;
 
 using BackrefNode = FixedKVNode<paddr_t>;
 
-struct backref_map_val_t {
-  extent_len_t len = 0;	///< length of extents
-  laddr_t laddr = L_ADDR_MIN; ///< logical address of extents
-  extent_types_t type = extent_types_t::ROOT;
-
-  backref_map_val_t() = default;
-  backref_map_val_t(
-    extent_len_t len,
-    laddr_t laddr,
-    extent_types_t type)
-    : len(len), laddr(laddr), type(type) {}
-
-  bool operator==(const backref_map_val_t& rhs) const noexcept {
-    return len == rhs.len && laddr == rhs.laddr;
-  }
-};
-
-std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val);
-
-struct __attribute__((packed)) backref_map_val_le_t {
-  extent_len_le_t len = init_extent_len_le(0);
-  laddr_le_t laddr = laddr_le_t(L_ADDR_MIN);
-  extent_types_le_t type = 0;
-
-  backref_map_val_le_t() = default;
-  backref_map_val_le_t(const backref_map_val_le_t &) = default;
-  explicit backref_map_val_le_t(const backref_map_val_t &val)
-    : len(init_extent_len_le(val.len)),
-      laddr(val.laddr),
-      type(extent_types_le_t(val.type)) {}
-
-  operator backref_map_val_t() const {
-    return backref_map_val_t{len, laddr, (extent_types_t)type};
-  }
-};
-
 class BackrefInternalNode
   : public FixedKVInternalNode<
       INTERNAL_NODE_CAPACITY,
@@ -161,7 +125,6 @@ using BackrefLeafNodeRef = BackrefLeafNode::Ref;
 } // namespace crimson::os::seastore::backref
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::os::seastore::backref::backref_map_val_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefInternalNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefLeafNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backref::backref_node_meta_t> : fmt::ostream_formatter {};

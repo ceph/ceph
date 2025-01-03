@@ -1928,7 +1928,11 @@ SeaStore::Shard::_do_transaction_step(
       {
         DEBUGT("op CLONE, oid={}, dest oid={} ...",
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
-	return _clone(ctx, onodes[op->oid], d_onodes[op->dest_oid]);
+	return _clone(
+	  ctx,
+	  onodes[op->oid],
+	  d_onodes[op->dest_oid],
+	  oid.hobj.is_head());
       }
       case Transaction::OP_COLL_MOVE_RENAME:
       {
@@ -2176,11 +2180,12 @@ SeaStore::Shard::tm_ret
 SeaStore::Shard::_clone(
   internal_context_t &ctx,
   OnodeRef &onode,
-  OnodeRef &d_onode)
+  OnodeRef &d_onode,
+  bool src_is_head)
 {
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
-    [this, &ctx, &onode, &d_onode](auto &objHandler) {
+    [this, &ctx, &onode, &d_onode, src_is_head](auto &objHandler) {
     auto &object_size = onode->get_layout().size;
     d_onode->update_onode_size(*ctx.transaction, object_size);
     return objHandler.clone(
@@ -2188,7 +2193,8 @@ SeaStore::Shard::_clone(
 	*transaction_manager,
 	*ctx.transaction,
 	*onode,
-	d_onode.get()});
+	d_onode.get(),
+	src_is_head});
   }).si_then([&ctx, &onode, &d_onode, this] {
     return _clone_omaps(ctx, onode, d_onode, omap_type_t::XATTR);
   }).si_then([&ctx, &onode, &d_onode, this] {

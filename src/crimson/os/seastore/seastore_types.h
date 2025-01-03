@@ -1395,8 +1395,9 @@ enum class extent_types_t : uint8_t {
   TEST_BLOCK_PHYSICAL = 14,
   BACKREF_INTERNAL = 15,
   BACKREF_LEAF = 16,
+  REMAPPED_PLACEHOLDER = 17,
   // None and the number of valid extent_types_t
-  NONE = 17,
+  NONE = 18,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1415,12 +1416,18 @@ constexpr bool is_logical_metadata_type(extent_types_t type) {
          type <= extent_types_t::COLL_BLOCK;
 }
 
+constexpr bool is_remapped_placeholder_type(extent_types_t type) {
+  return type == extent_types_t::REMAPPED_PLACEHOLDER;
+}
+
 constexpr bool is_logical_type(extent_types_t type) {
   if ((type >= extent_types_t::ROOT_META &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
-      type == extent_types_t::TEST_BLOCK) {
+      type == extent_types_t::TEST_BLOCK ||
+      type == extent_types_t::REMAPPED_PLACEHOLDER) {
     assert(is_logical_metadata_type(type) ||
-           is_data_type(type));
+           is_data_type(type) ||
+           is_remapped_placeholder_type(type));
     return true;
   } else {
     assert(!is_logical_metadata_type(type) &&
@@ -1472,7 +1479,8 @@ constexpr bool is_backref_mapped_type(extent_types_t type) {
   if ((type >= extent_types_t::LADDR_INTERNAL &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK ||
-      type == extent_types_t::TEST_BLOCK_PHYSICAL) {
+      type == extent_types_t::TEST_BLOCK_PHYSICAL ||
+      type == extent_types_t::REMAPPED_PLACEHOLDER) {
     assert(is_logical_type(type) ||
 	   is_lba_node(type) ||
 	   type == extent_types_t::TEST_BLOCK_PHYSICAL);
@@ -1500,6 +1508,134 @@ constexpr bool is_real_type(extent_types_t type) {
 }
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
+
+using btree_iter_version_t = uint32_t;
+
+/**
+ * lba_map_val_t
+ *
+ * struct representing a single lba mapping
+ */
+struct lba_map_val_t {
+  extent_len_t len = 0;  ///< length of mapping
+  pladdr_t pladdr;         ///< physical addr of mapping or
+			   //	laddr of a physical lba mapping(see btree_lba_manager.h)
+  extent_ref_count_t refcount = 0; ///< refcount
+  uint32_t checksum = 0; ///< checksum of original block written at paddr (TODO)
+
+  lba_map_val_t() = default;
+  lba_map_val_t(
+    extent_len_t len,
+    pladdr_t pladdr,
+    extent_ref_count_t refcount,
+    uint32_t checksum)
+    : len(len), pladdr(pladdr), refcount(refcount), checksum(checksum) {}
+  bool operator==(const lba_map_val_t&) const = default;
+};
+
+std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
+
+/**
+ * lba_map_val_le_t
+ *
+ * On disk layout for lba_map_val_t.
+ */
+struct __attribute__((packed)) lba_map_val_le_t {
+  extent_len_le_t len = init_extent_len_le(0);
+  pladdr_le_t pladdr;
+  extent_ref_count_le_t refcount{0};
+  ceph_le32 checksum{0};
+
+  lba_map_val_le_t() = default;
+  lba_map_val_le_t(const lba_map_val_le_t &) = default;
+  explicit lba_map_val_le_t(const lba_map_val_t &val)
+    : len(init_extent_len_le(val.len)),
+      pladdr(pladdr_le_t(val.pladdr)),
+      refcount(val.refcount),
+      checksum(val.checksum) {}
+
+  operator lba_map_val_t() const {
+    return lba_map_val_t{ len, pladdr, refcount, checksum };
+  }
+};
+
+struct backref_map_val_t {
+  extent_len_t len = 0;	///< length of extents
+  laddr_t laddr = L_ADDR_MIN; ///< logical address of extents
+  extent_types_t type = extent_types_t::ROOT;
+
+  backref_map_val_t() = default;
+  backref_map_val_t(
+    extent_len_t len,
+    laddr_t laddr,
+    extent_types_t type)
+    : len(len), laddr(laddr), type(type) {}
+
+  bool operator==(const backref_map_val_t& rhs) const noexcept {
+    return len == rhs.len && laddr == rhs.laddr;
+  }
+};
+
+std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val);
+
+struct __attribute__((packed)) backref_map_val_le_t {
+  extent_len_le_t len = init_extent_len_le(0);
+  laddr_le_t laddr = laddr_le_t(L_ADDR_MIN);
+  extent_types_le_t type = 0;
+
+  backref_map_val_le_t() = default;
+  backref_map_val_le_t(const backref_map_val_le_t &) = default;
+  explicit backref_map_val_le_t(const backref_map_val_t &val)
+    : len(init_extent_len_le(val.len)),
+      laddr(val.laddr),
+      type(extent_types_le_t(val.type)) {}
+
+  operator backref_map_val_t() const {
+    return backref_map_val_t{len, laddr, (extent_types_t)type};
+  }
+};
+
+class CachedExtent;
+
+/**
+ * ErasedBtreeIter
+ *
+ * ErasedBtreeIter is a wrapper of FixedKVBtree::iterator that povides
+ * more capabilities to operate the LBA/Backref btree compared to
+ * PhysicalNodeMapping. Supported operations are listed in LBAManager
+ * and BackrefManager(TODO).
+ *
+ * The invalidation rule of ErasedBtreeIter:
+ * The iterator becomes invalid when its parent is not viewable(see
+ * CachedExtent::is_viewable_by_trans()) by current transaction. The
+ * btree_iter_version_t field in ErasedBtreeIter records the version
+ * number of btree when it was created. This version is transaction-local
+ * and all insert and remove operations increment this version. The
+ * LBAManager/BackrefManager and FixedKVBtree are responsible for making
+ * sure the iterator is valid.
+ *
+ * 1. When the parent is valid but unviewable by current transaction,
+ *    we could use FixedKVNode::find_pending_version() to find the latest
+ *    pending extent.
+ * 2. When the parent is invalid, start a new lookup to rebuild the iterator.
+ *
+ * When the ErasedBtreeIter is at the end of FixedKVBtree, the key should
+ * be min_max_t<Key>::max.
+ */
+template <typename Key, typename Val>
+struct ErasedBtreeIter {
+  CachedExtent *parent;
+  uint16_t pos;
+  Key key;
+  Val val;
+  btree_iter_version_t ver;
+};
+
+using LBAIter = ErasedBtreeIter<laddr_t, lba_map_val_t>;
+using BackrefIter = ErasedBtreeIter<paddr_t, backref_map_val_t>;
+
+std::ostream &operator<<(std::ostream &out, const LBAIter &iter);
+std::ostream &operator<<(std::ostream &out, const BackrefIter &iter);
 
 /**
  * rewrite_gen_t
@@ -3061,6 +3197,10 @@ template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ost
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::pladdr_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::LBAIter> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::BackrefIter> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::device_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};

@@ -175,6 +175,7 @@ public:
     Transaction &t;
     Onode &onode;
     Onode *d_onode = nullptr; // The desination node in case of clone
+    bool src_is_head = true;
   };
 
   /// Writes bl to [offset, offset + bl.length())
@@ -248,11 +249,8 @@ private:
     object_data_t &object_data,
     extent_len_t size);
 
-  clone_ret clone_extents(
-    context_t ctx,
-    object_data_t &object_data,
-    lba_pin_list_t &pins,
-    laddr_t data_base);
+  clone_ret clone_mappings(context_t ctx);
+  clone_ret copy_indirect_mappings(context_t ctx);
 
 private:
   /**

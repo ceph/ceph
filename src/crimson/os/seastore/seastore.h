@@ -434,7 +434,8 @@ public:
     tm_ret _clone(
       internal_context_t &ctx,
       OnodeRef &onode,
-      OnodeRef &d_onode);
+      OnodeRef &d_onode,
+      bool src_is_head);
     tm_ret _rename(
       internal_context_t &ctx,
       OnodeRef &onode,

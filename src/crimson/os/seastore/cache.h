@@ -168,7 +168,7 @@ public:
   retire_extent_ret retire_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
-  void retire_absent_extent_addr(
+  CachedExtentRef retire_absent_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
   /**
@@ -348,6 +348,26 @@ public:
           offset, length, [](T &){}, std::move(f), &t_src)
       );
     }
+  }
+
+  template <typename T>
+  TCachedExtentRef<T> replace_remapped_placeholder(
+    Transaction &t,
+    LogicalCachedExtentRef placeholder)
+  {
+    ceph_assert(is_remapped_placeholder_type(placeholder->get_type()));
+    ceph_assert(placeholder->get_parent_node<CachedExtent>()->is_pending());
+    ceph_assert(placeholder->transactions.empty());
+    retire_extent(t, placeholder);
+    auto extent = alloc_remapped_extent<T>(
+      t,
+      placeholder->get_laddr(),
+      placeholder->get_paddr(),
+      placeholder->get_length(),
+      placeholder->get_laddr(),
+      std::nullopt);
+    extent->replace(placeholder);
+    return extent;
   }
 
   /*
@@ -1087,7 +1107,9 @@ public:
     paddr_t remap_paddr,
     extent_len_t remap_length,
     laddr_t original_laddr,
-    std::optional<ceph::bufferptr> &original_bptr) {
+    const std::optional<ceph::bufferptr> &original_bptr) {
+    static_assert(T::TYPE != extent_types_t::REMAPPED_PLACEHOLDER,
+		  "use Cache::alloc_remapped_placeholder");
     LOG_PREFIX(Cache::alloc_remapped_extent);
     assert(remap_laddr >= original_laddr);
     TCachedExtentRef<T> ext;
@@ -1115,6 +1137,35 @@ public:
     SUBTRACET(seastore_cache, "allocated {} 0x{:x}B, hint={}, has ptr? {} -- {}",
       t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *extent);
     return extent;
+  }
+
+  CachedExtentRef alloc_remapped_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    laddr_t remap_laddr,
+    paddr_t remap_paddr,
+    extent_len_t remap_length,
+    laddr_t original_laddr,
+    const std::optional<ceph::bufferptr> &original_bptr);
+
+  RemappedExtentPlaceholderRef alloc_remapped_placeholder(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t paddr,
+    extent_len_t length) {
+    LOG_PREFIX(Cache::alloc_remapped_placeholder);
+    SUBTRACET(seastore_cache, "remap {}~{} to {}", t, paddr, length, laddr);
+    auto ext = CachedExtent::make_cached_extent_ref<
+      RemappedExtentPlaceholder>(length);
+
+    ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
+	      paddr,
+	      PLACEMENT_HINT_NULL,
+	      NULL_GENERATION,
+              t.get_trans_id());
+    ext->set_laddr(laddr);
+    t.add_fresh_extent(ext);
+    return ext;
   }
 
   /**
@@ -1474,6 +1525,7 @@ private:
       CachedExtent &ext,
       const Transaction::src_t* p_src)
   {
+    assert(!is_remapped_placeholder_type(ext.get_type()));
     if (p_src &&
 	is_background_transaction(*p_src) &&
 	is_logical_type(ext.get_type())) {
@@ -1571,14 +1623,16 @@ private:
       assert(current_size >= extent_loaded_length);
 
       lru.erase(lru.s_iterator_to(extent));
-      current_size -= extent_loaded_length;
-      get_by_ext(sizes_by_ext, extent.get_type()).account_out(extent_loaded_length);
-      overall_io.out_sizes.account_in(extent_loaded_length);
-      if (p_src) {
-        get_by_ext(
-          get_by_src(trans_io_by_src_ext, *p_src),
-          extent.get_type()
-        ).out_sizes.account_in(extent_loaded_length);
+      if (extent_loaded_length != 0) {
+	current_size -= extent_loaded_length;
+	get_by_ext(sizes_by_ext, extent.get_type()).account_out(extent_loaded_length);
+	overall_io.out_sizes.account_in(extent_loaded_length);
+	if (p_src) {
+	  get_by_ext(
+	    get_by_src(trans_io_by_src_ext, *p_src),
+	    extent.get_type()
+	  ).out_sizes.account_in(extent_loaded_length);
+	}
       }
       intrusive_ptr_release(&extent);
     }
