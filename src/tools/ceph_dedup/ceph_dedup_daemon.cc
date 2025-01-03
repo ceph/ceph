@@ -42,6 +42,7 @@ public:
     size_t size = 0;
     string fingerprint = "";
     bufferlist data;
+    snap_t snap;
   };
 
   using dup_count_t = size_t;
@@ -313,21 +314,19 @@ private:
     ObjectCursor end,
     size_t max_object_count);
   std::vector<size_t> sample_object(size_t count);
-  void try_dedup_and_accumulate_result(ObjectItem &object, snap_t snap = 0);
-  int do_chunk_dedup(chunk_t &chunk, snap_t snap);
+  list<SampleDedupWorkerThread::chunk_t> scan_duplicate_chunks(ObjectItem &object, snap_t snap = 0);
   bufferlist read_object(ObjectItem &object);
   std::vector<std::tuple<bufferlist, pair<uint64_t, uint64_t>>> do_cdc(
     ObjectItem &object,
     bufferlist &data);
   std::string generate_fingerprint(bufferlist chunk_data);
-  AioCompRef do_async_evict(string oid);
+  void do_dedup(list<SampleDedupWorkerThread::chunk_t> &redundant_chunks);
 
   IoCtx io_ctx;
   IoCtx chunk_io_ctx;
   size_t total_duplicated_size = 0;
   size_t total_object_size = 0;
 
-  std::set<std::pair<std::string, snap_t>> oid_for_evict;
   const size_t chunk_size = 0;
   pg_pool_t::fingerprint_t fp_type = pg_pool_t::TYPE_FINGERPRINT_NONE;
   std::string chunk_algo;
@@ -349,6 +348,7 @@ void SampleDedupWorkerThread::crawl()
     // objects to pick. Lower sampling ratio makes crawler have lower crawling
     // overhead but find less duplication.
     auto sampled_indexes = sample_object(objects.size());
+    list<chunk_t> redundant_chunks;
     for (size_t index : sampled_indexes) {
       ObjectItem target = objects[index];
       if (snap) {
@@ -363,44 +363,20 @@ void SampleDedupWorkerThread::crawl()
 	  r != snap_set.clones.end();
 	  ++r) {
 	  io_ctx.snap_set_read(r->cloneid);
-	  try_dedup_and_accumulate_result(target, r->cloneid);
+	  auto ret = scan_duplicate_chunks(target, r->cloneid);
+	  redundant_chunks.splice(redundant_chunks.end(), ret);
 	}
       } else {
-	try_dedup_and_accumulate_result(target);
+	auto ret = scan_duplicate_chunks(target);
+	redundant_chunks.splice(redundant_chunks.end(), ret);
       }
       if (sample_dedup_global.is_all_stop()) {
-	oid_for_evict.clear();
+	redundant_chunks.clear();
 	break;
       }
     }
+    do_dedup(redundant_chunks);
   }
-
-  vector<AioCompRef> evict_completions(oid_for_evict.size());
-  int i = 0;
-  for (auto &oid : oid_for_evict) {
-    if (snap) {
-      io_ctx.snap_set_read(oid.second);
-    }
-    evict_completions[i] = do_async_evict(oid.first);
-    i++;
-  }
-  for (auto &completion : evict_completions) {
-    completion->wait_for_complete();
-  }
-}
-
-AioCompRef SampleDedupWorkerThread::do_async_evict(string oid)
-{
-  Rados rados;
-  ObjectReadOperation op_tier;
-  AioCompRef completion(rados.aio_create_completion());
-  op_tier.tier_evict();
-  io_ctx.aio_operate(
-      oid,
-      completion.get(),
-      &op_tier,
-      NULL);
-  return completion;
 }
 
 std::tuple<std::vector<ObjectItem>, ObjectCursor> SampleDedupWorkerThread::get_objects(
@@ -438,14 +414,14 @@ std::vector<size_t> SampleDedupWorkerThread::sample_object(size_t count)
   return indexes;
 }
 
-void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
-  ObjectItem &object, snap_t snap)
+list<SampleDedupWorkerThread::chunk_t> SampleDedupWorkerThread::scan_duplicate_chunks(ObjectItem &object, snap_t snap)
 {
   bufferlist data = read_object(object);
+  list<chunk_t> redundant_chunks;
   if (data.length() == 0) {
     derr << __func__ << " skip object " << object.oid
 	 << " read returned size 0" << dendl;
-    return;
+    return redundant_chunks;
   }
   auto chunks = do_cdc(object, data);
   size_t chunk_total_amount = 0;
@@ -459,11 +435,10 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
     derr << __func__ << " sum of chunked length(" << chunk_total_amount
 	 << ") is different from object data length(" << data.length() << ")"
 	 << dendl;
-    return;
+    return redundant_chunks;
   }
 
   size_t duplicated_size = 0;
-  list<chunk_t> redundant_chunks;
   for (auto &chunk : chunks) {
     auto &chunk_data = std::get<0>(chunk);
     std::string fingerprint = generate_fingerprint(chunk_data);
@@ -473,7 +448,8 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
       .start = chunk_boundary.first,
       .size = chunk_boundary.second,
       .fingerprint = fingerprint,
-      .data = chunk_data
+      .data = chunk_data,
+      .snap = snap
       };
 
     if (sample_dedup_global.fp_store.contains(fingerprint)) {
@@ -486,18 +462,84 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
 
     if (sample_dedup_global.fp_store.add(chunk_info)) {
       redundant_chunks.push_back(chunk_info);
+      total_duplicated_size += chunk_info.data.length();
       dout(20) << chunk_info.fingerprint << "is duplicated, try to perform dedup" << dendl;
     }
   }
+  return redundant_chunks;
+}
 
-  size_t object_size = data.length();
+void SampleDedupWorkerThread::do_dedup(list<chunk_t> &redundant_chunks)
+{
+  vector<std::pair<chunk_t, AioCompRef>> wait_evict_comp;
+  
+  auto do_set_chunk = [this](chunk_t &chunk) {
+    uint64_t size;
+    time_t mtime;
+    int ret = chunk_io_ctx.stat(chunk.fingerprint, &size, &mtime);
+    if (ret == -ENOENT) {
+      bufferlist bl;
+      bl.append(chunk.data);
+      ObjectWriteOperation wop;
+      wop.write_full(bl);
+      ret = chunk_io_ctx.operate(chunk.fingerprint, &wop);
+    } 
 
-  // perform chunk-dedup
+    if (ret < 0) {
+      return ret;
+    }
+
+    ObjectReadOperation op;
+    op.set_chunk(
+      chunk.start,
+      chunk.size,
+      chunk_io_ctx,
+      chunk.fingerprint,
+      0,
+      CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    return io_ctx.operate(chunk.oid, &op, nullptr);
+  };
+
+  auto do_async_evict = [this](string oid) {
+    Rados rados;
+    ObjectReadOperation op;
+    AioCompRef completion(rados.aio_create_completion());
+    op.tier_evict();
+    int ret = io_ctx.aio_operate(
+      oid,
+      completion.get(),
+      &op,
+      NULL);
+    if (ret < 0) {
+      return AioCompRef();
+    }
+    return completion;
+  };
+
   for (auto &p : redundant_chunks) {
-    do_chunk_dedup(p, snap);
+    // As to each of the duplicate chunks, set_chunk should be done synchronously first.
+    // Then, send tier_evict asynchronously 
+    if (snap) {
+      io_ctx.snap_set_read(p.snap);
+    }
+    int ret = do_set_chunk(p);
+    if (ret >= 0) {
+      auto comp = do_async_evict(p.oid);
+      if (comp) {
+	wait_evict_comp.push_back(std::make_pair(p, std::move(comp)));
+      }
+    }
+    if (sample_dedup_global.is_all_stop()) {
+      wait_evict_comp.clear();
+      break;
+    }
   }
-  total_duplicated_size += duplicated_size;
-  total_object_size += object_size;
+
+  for (auto &comp : wait_evict_comp) {
+    assert(comp.second);
+    comp.second->wait_for_complete();
+    total_object_size += comp.first.size;
+  }
 }
 
 bufferlist SampleDedupWorkerThread::read_object(ObjectItem &object)
@@ -560,36 +602,6 @@ std::string SampleDedupWorkerThread::generate_fingerprint(bufferlist chunk_data)
       ceph_assert(0 == "Invalid fp type");
       break;
   }
-  return ret;
-}
-
-int SampleDedupWorkerThread::do_chunk_dedup(chunk_t &chunk, snap_t snap)
-{
-  uint64_t size;
-  time_t mtime;
-
-  int ret = chunk_io_ctx.stat(chunk.fingerprint, &size, &mtime);
-
-  if (ret == -ENOENT) {
-    bufferlist bl;
-    bl.append(chunk.data);
-    ObjectWriteOperation wop;
-    wop.write_full(bl);
-    chunk_io_ctx.operate(chunk.fingerprint, &wop);
-  } else {
-    ceph_assert(ret == 0);
-  }
-
-  ObjectReadOperation op;
-  op.set_chunk(
-      chunk.start,
-      chunk.size,
-      chunk_io_ctx,
-      chunk.fingerprint,
-      0,
-      CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-  ret = io_ctx.operate(chunk.oid, &op, nullptr);
-  oid_for_evict.insert(make_pair(chunk.oid, snap));
   return ret;
 }
 
