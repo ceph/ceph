@@ -429,6 +429,10 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, -1) << "ERROR: unable to remove notifications from bucket. ret=" << ps_ret << dendl;
   }
 
+  if (ret = rgw::bucketlogging::bucket_deletion_cleanup(dpp, store, this, y); ret < 0) {
+    ldpp_dout(dpp, 1) << "WARNING: could not cleanup bucket logging configuration and pending objects, ret = " << ret << dendl;
+  }
+
   ret = store->ctl()->bucket->unlink_bucket(rados, info.owner,
                                             info.bucket, y, dpp, false);
   if (ret < 0) {
@@ -1024,15 +1028,15 @@ int RadosBucket::remove_topics(RGWObjVersionTracker* objv_tracker,
       objv_tracker, y);
 }
 
-int RadosBucket::get_logging_object_name(std::string& obj_name, 
-    const std::string& prefix, 
-    optional_yield y, 
+int RadosBucket::get_logging_object_name(std::string& obj_name,
+    const std::string& prefix,
+    optional_yield y,
     const DoutPrefixProvider *dpp,
     RGWObjVersionTracker* objv_tracker) {
   rgw_pool data_pool;
   const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
-    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
       "' when getting logging object name" << dendl;
     return -EIO;
   }
@@ -1048,23 +1052,23 @@ int RadosBucket::get_logging_object_name(std::string& obj_name,
                                nullptr,
                                nullptr);
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to get logging object name from '" << obj_name_oid << "'. ret = " << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to get logging object name from '" << obj_name_oid << "'. ret = " << ret << dendl;
     return ret;
   }
   obj_name = bl.to_str();
   return 0;
 }
 
-int RadosBucket::set_logging_object_name(const std::string& obj_name, 
-    const std::string& prefix, 
-    optional_yield y, 
-    const DoutPrefixProvider *dpp, 
+int RadosBucket::set_logging_object_name(const std::string& obj_name,
+    const std::string& prefix,
+    optional_yield y,
+    const DoutPrefixProvider *dpp,
     bool new_obj,
     RGWObjVersionTracker* objv_tracker) {
   rgw_pool data_pool;
   const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
-    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
       "' when setting logging object name"  << dendl;
     return -EIO;
   }
@@ -1080,13 +1084,31 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name,
                                y,
                                nullptr);
   if (ret == -EEXIST) {
-    ldpp_dout(dpp, 20) << "race detected in initializing '" << obj_name_oid << "' with logging object name:'" << obj_name  << "'. ret = " << ret << dendl;
+    ldpp_dout(dpp, 20) << "INFO: race detected in initializing '" << obj_name_oid << "' with logging object name:'" << obj_name  << "'. ret = " << ret << dendl;
   } else if (ret == -ECANCELED) {
-    ldpp_dout(dpp, 20) << "race detected in updating logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
+    ldpp_dout(dpp, 20) << "INFO: race detected in updating logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
   } else if (ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to set logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to set logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
   }
   return ret;
+}
+
+int RadosBucket::remove_logging_object_name(const std::string& prefix,
+    optional_yield y,
+    const DoutPrefixProvider *dpp,
+    RGWObjVersionTracker* objv_tracker) {
+  rgw_pool data_pool;
+  const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
+  if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
+      "' when setting logging object name"  << dendl;
+    return -EIO;
+  }
+  return rgw_delete_system_obj(dpp, store->svc()->sysobj,
+      data_pool,
+      obj_name_oid,
+      objv_tracker,
+      y);
 }
 
 std::string to_temp_object_name(const rgw::sal::Bucket* bucket, const std::string& obj_name) {
@@ -1095,13 +1117,32 @@ std::string to_temp_object_name(const rgw::sal::Bucket* bucket, const std::strin
       obj_name);
 }
 
+int RadosBucket::remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) {
+  rgw_pool data_pool;
+  const rgw_obj head_obj{get_key(), obj_name};
+  const auto placement_rule = get_placement_rule();
+
+  if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &data_pool)) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
+      "' when deleting logging object"  << dendl;
+    return -EIO;
+  }
+
+  const auto temp_obj_name = to_temp_object_name(this, obj_name);
+  return rgw_delete_system_obj(dpp, store->svc()->sysobj,
+      data_pool,
+      temp_obj_name,
+      nullptr,
+      y);
+}
+
 int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) {
   rgw_pool data_pool;
   const rgw_obj head_obj{get_key(), obj_name};
   const auto placement_rule = get_placement_rule();
 
   if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &data_pool)) {
-    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
       "' when comitting logging object"  << dendl;
     return -EIO;
   }
@@ -1110,7 +1151,6 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   std::map<string, bufferlist> obj_attrs;
   ceph::real_time mtime;
   bufferlist bl_data;
-  // TODO: this is needed only for etag calculation
   if (const auto ret = rgw_get_system_obj(store->svc()->sysobj,
                      data_pool,
                      temp_obj_name,
@@ -1120,10 +1160,13 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
                      y,
                      dpp,
                      &obj_attrs,
-                     nullptr); ret < 0) {
-    ldpp_dout(dpp, 1) << "faild to read logging data when comitting to object '" << temp_obj_name
+                     nullptr); ret < 0 && ret != -ENOENT) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to read logging data when comitting object '" << temp_obj_name
       << ". error: " << ret << dendl;
     return ret;
+  } else if (ret == -ENOENT) {
+    ldpp_dout(dpp, 1) << "WARNING: temporary logging object '" << temp_obj_name << "' does not exists" << dendl;
+    return 0;
   }
 
   uint64_t size = bl_data.length();
@@ -1137,13 +1180,13 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
                                 nullptr, // no special placment for tail
                                 get_key(),
                                 head_obj); ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to create manifest when comitting logging object. error: " <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to create manifest when comitting logging object. error: " <<
       ret << dendl;
     return ret;
   }
 
   if (const auto ret = manifest_gen.create_next(size); ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to add object to manifest when comitting logging object. error: " <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to add object to manifest when comitting logging object. error: " <<
       ret << dendl;
     return ret;
   }
@@ -1151,7 +1194,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   if (const auto expected_temp_obj = manifest_gen.get_cur_obj(store->getRados());
       temp_obj_name != expected_temp_obj.oid) {
     // TODO: cleanup temporary object, commit would never succeed
-    ldpp_dout(dpp, 1) << "temporary logging object name mismatch: '" <<
+    ldpp_dout(dpp, 1) << "ERROR: temporary logging object name mismatch: '" <<
       temp_obj_name << "' != '" << expected_temp_obj.oid << "'" << dendl;
     return -EINVAL;
   }
@@ -1182,11 +1225,11 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   const req_context rctx{dpp, y, nullptr};
   jspan_context trace{false, false};
   if (const auto ret = head_obj_wop.write_meta(0, size, obj_attrs, rctx, trace); ret < 0) {
-  ldpp_dout(dpp, 1) << "failed to commit logging object '" << temp_obj_name <<
-    "' to bucket id '" << get_bucket_id() <<"'. error: " << ret << dendl;
+  ldpp_dout(dpp, 1) << "ERROR: failed to commit logging object '" << temp_obj_name <<
+    "' to bucket id '" << get_info().bucket <<"'. error: " << ret << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 20) << "committed logging object '" << temp_obj_name <<
+  ldpp_dout(dpp, 20) << "INFO: committed logging object '" << temp_obj_name <<
     "' with size of " << size << " bytes, to bucket '" << get_key() << "' as '" <<
     obj_name << "'" << dendl;
   return 0;
@@ -1204,30 +1247,30 @@ void bucket_logging_completion(rados_completion_t completion, void* args) {
   auto* aio_comp = reinterpret_cast<librados::AioCompletionImpl*>(completion);
   std::unique_ptr<BucketLoggingCompleteArg> logging_args(reinterpret_cast<BucketLoggingCompleteArg*>(args));
   if (aio_comp->get_return_value() < 0) {
-    ldout(logging_args->cct, 1) << "failed to complete append to logging object '" << logging_args->obj_name <<
+    ldout(logging_args->cct, 1) << "ERROR: failed to complete append to logging object '" << logging_args->obj_name <<
       "'. ret = " << aio_comp->get_return_value() << dendl;
   } else {
-    ldout(logging_args->cct, 20) << "wrote " << logging_args->size << " bytes to logging object '" <<
+    ldout(logging_args->cct, 20) << "INFO: wrote " << logging_args->size << " bytes to logging object '" <<
       logging_args->obj_name << "'" << dendl;
   }
 }
 
-int RadosBucket::write_logging_object(const std::string& obj_name, 
-    const std::string& record, 
-    optional_yield y, 
+int RadosBucket::write_logging_object(const std::string& obj_name,
+    const std::string& record,
+    optional_yield y,
     const DoutPrefixProvider *dpp,
     bool async_completion) {
   const auto temp_obj_name = to_temp_object_name(this, obj_name);
   rgw_pool data_pool;
   rgw_obj obj{get_key(), obj_name};
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), obj, &data_pool)) {
-    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
       "' when writing logging object" << dendl;
     return -EIO;
   }
   librados::IoCtx io_ctx;
   if (const auto ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx); ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to get IO context for logging object from data pool:" << data_pool.to_str() << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to get IO context for logging object from data pool:" << data_pool.to_str() << dendl;
     return -EIO;
   }
   bufferlist bl;
@@ -1242,7 +1285,7 @@ int RadosBucket::write_logging_object(const std::string& obj_name,
     auto arg = std::make_unique<BucketLoggingCompleteArg>(temp_obj_name, record.length(), store->ctx());
     completion->set_complete_callback(arg.get(), bucket_logging_completion);
     if (const auto ret = io_ctx.aio_operate(temp_obj_name, completion.get(), &op); ret < 0) {
-      ldpp_dout(dpp, 1) << "failed to append to logging object '" << temp_obj_name <<
+      ldpp_dout(dpp, 1) << "ERROR: failed to append to logging object '" << temp_obj_name <<
         "'. ret = " << ret << dendl;
       return ret;
     }
@@ -1251,11 +1294,11 @@ int RadosBucket::write_logging_object(const std::string& obj_name,
     return 0;
   }
   if (const auto ret = rgw_rados_operate(dpp, io_ctx, temp_obj_name, &op, y); ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to append to logging object '" << temp_obj_name <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to append to logging object '" << temp_obj_name <<
       "'. ret = " << ret << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 20) << "wrote " << record.length() << " bytes to logging object '" <<
+  ldpp_dout(dpp, 20) << "INFO: wrote " << record.length() << " bytes to logging object '" <<
     temp_obj_name << "'" << dendl;
   return 0;
 }

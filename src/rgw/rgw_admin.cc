@@ -178,7 +178,8 @@ void usage()
   cout << "  bucket sync disable              disable bucket sync\n";
   cout << "  bucket sync enable               enable bucket sync\n";
   cout << "  bucket radoslist                 list rados objects backing bucket's objects\n";
-  cout << "  bucket logging flush             flush pending log records object of source bucket to the log bucket to bucket\n";
+  cout << "  bucket logging flush             flush pending log records object of source bucket to the log bucket\n";
+  cout << "  bucket logging info              get info on bucket logging configuration on source bucket or list of sources in log bucket\n";
   cout << "  bi get                           retrieve bucket index object entries\n";
   cout << "  bi put                           store bucket index object entries\n";
   cout << "  bi list                          list raw bucket index entries\n";
@@ -708,6 +709,7 @@ enum class OPT {
   BUCKET_OBJECT_SHARD,
   BUCKET_RESYNC_ENCRYPTED_MULTIPART,
   BUCKET_LOGGING_FLUSH,
+  BUCKET_LOGGING_INFO,
   POLICY,
   LOG_LIST,
   LOG_SHOW,
@@ -947,6 +949,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
   { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
   { "bucket logging flush", OPT::BUCKET_LOGGING_FLUSH },
+  { "bucket logging info", OPT::BUCKET_LOGGING_INFO },
   { "policy", OPT::POLICY },
   { "log list", OPT::LOG_LIST },
   { "log show", OPT::LOG_SHOW },
@@ -7754,6 +7757,47 @@ int main(int argc, const char **argv)
     }
     cout << "flushed pending logging object '" << obj_name
       << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
+    return 0;
+  }
+
+  if (opt_cmd == OPT::BUCKET_LOGGING_INFO) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    const auto& bucket_attrs = bucket->get_attrs();
+    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
+    if (iter != bucket_attrs.end()) {
+      rgw::bucketlogging::configuration configuration;
+      try {
+        configuration.enabled = true;
+        decode(configuration, iter->second);
+      } catch (buffer::error& err) {
+        cerr << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+          << "'. error: " << err.what() << std::endl;
+        return  EINVAL;
+      }
+      encode_json("logging", configuration, formatter.get());
+      formatter->flush(cout);
+    }
+    iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING_SOURCES);
+    if (iter != bucket_attrs.end()) {
+      rgw::bucketlogging::source_buckets sources;
+      try {
+        decode(sources, iter->second);
+      } catch (buffer::error& err) {
+        cerr << "ERROR: failed to decode logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
+          << "'. error: " << err.what() << std::endl;
+        return  EINVAL;
+      }
+      encode_json("logging_sources", sources, formatter.get());
+      formatter->flush(cout);
+    }
+
     return 0;
   }
 
