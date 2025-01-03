@@ -157,6 +157,7 @@ struct dir_result_t {
     explicit dentry(int64_t o) : offset(o) {}
     dentry(int64_t o, std::string n, std::string an, InodeRef in) :
       offset(o), name(std::move(n)), alternate_name(std::move(an)), inode(std::move(in)) {}
+    void print(std::ostream& os) const;
   };
   struct dentry_off_lt {
     bool operator()(const dentry& d, int64_t off) const {

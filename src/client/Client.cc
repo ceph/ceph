@@ -270,6 +270,17 @@ dir_result_t::dir_result_t(InodeRef in, const UserPerm& perms, int fd)
     perms(perms), fd(fd)
   { }
 
+void dir_result_t::dentry::print(std::ostream& os) const
+{
+  os << "dn(name=" << name << " altn=" << alternate_name;
+  if (inode) {
+    os << " ino=" << inode->ino;
+  } else {
+    os << " null";
+  }
+  os << ")";
+}
+
 void Client::_reset_faked_inos()
 {
   ino_t start = 1024;
