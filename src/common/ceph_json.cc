@@ -1,19 +1,16 @@
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
-// for testing DELETE ME
-#include <fstream>
-
-#include <memory>
-
-#include <include/types.h>
-
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 #include <boost/lexical_cast.hpp>
+#include <include/types.h>
 
 // Enable boost.json's header-only mode ("https://github.com/boostorg/json?tab=readme-ov-file#header-only"):
 #include <boost/json/src.hpp>
+
+#include <memory>
+#include <fstream>
 
 using std::ifstream;
 using std::pair;
@@ -49,7 +46,7 @@ void JSONObjIter::operator++()
     ++cur;
 }
 
-// IMPORTANT: The returned pointer is inteded as NON-OWNING (i.e. the JSONObjIter is responsible for it):
+// IMPORTANT: The returned pointer is intended as NON-OWNING (i.e. the JSONObjIter is responsible for it):
 JSONObj *JSONObjIter::operator*()
 {
   return cur->second.get();
@@ -156,11 +153,11 @@ void JSONObj::handle_value(boost::json::value v)
  // unknown type is not-an-error
 }
 
-void JSONObj::init(JSONObj *parent, boost::json::value data_in, std::string name_in)
+void JSONObj::init(JSONObj *parent_node, boost::json::value data_in, std::string name_in)
 {
-  name = name_in;
-  parent = parent;
+  parent = parent_node;
   data = data_in;
+  name = name_in;
 
   handle_value(data_in);
 
@@ -220,60 +217,53 @@ void JSONParser::handle_data(const char *s, int len)
 // parse a supplied JSON fragment
 bool JSONParser::parse(const char *buf_, int len)
 {
-  if (!buf_) {
-    set_failure();
+  if (!buf_ || 0 >= len) {
     return false;
   }
 
-  string json_string(buf_, len);
+  std::string_view json_string_view(buf_, len);
 
   std::error_code ec; 
-  data = boost::json::parse(json_string, ec);
+  data = boost::json::parse(json_string_view, ec);
   
   if(ec)
-   set_failure();
+   return false;
 
-  if (success) {
+  // recursively evaluate the result:
+  handle_value(data);
 
-    handle_value(data);
+  if (data.is_object() or data.is_array()) 
+   return true;
 
-    if (!data.is_object() &&
-        !data.is_array()) {
+  if (data.is_string()) {
+   val.set(data.as_string(), true);
+   return true;
+  } 
 
-      if (data.is_string()) {
-        val.set(data.as_string(), true);
-      } else {
-	std::string s = boost::json::serialize(data);
+  // For any other kind of value:
+  std::string s = boost::json::serialize(data);
 
-        if (s.size() == (uint64_t)len) { /* Check if entire string is read */
-          val.set(s, false);
-        } else {
-          set_failure();
-        }
-      }
-    }
-  } else {
-    set_failure();
-  }
+  if (s.size() == static_cast<uint64_t>(len)) { // entire string was read
+    val.set(s, false);
+    return true;
+   }
 
-  return success;
+  // Could not parse and convert:
+  return false; 
 }
 
 // parse the internal json_buffer up to len
 bool JSONParser::parse(int len)
 {
+  std::string_view json_string(std::begin(json_buffer), len + std::begin(json_buffer));
+
   std::error_code ec;
+  if(data = boost::json::parse(json_string, ec); ec)
+   return false;
 
-  string json_string = json_buffer.substr(0, len);
+  handle_value(data);
 
-  data = boost::json::parse(json_string, ec);
-
-  if(ec)
-   set_failure();
-  else
-   handle_value(data);
-
-  return success;
+  return true;
 }
 
 // parse the complete internal json_buffer
@@ -284,17 +274,14 @@ bool JSONParser::parse()
   data = boost::json::parse(json_buffer, ec);
 
   if(ec)
-   set_failure();
+   return false;
 
-  if (success)
-    handle_value(data);
-  else
-    set_failure();
+  handle_value(data);
 
-  return success;
+  return true;
 }
 
-// parse a supplied ifstream, for testing. DELETE ME
+// parse a supplied ifstream:
 bool JSONParser::parse(const char *file_name)
 {
  ifstream is(file_name);
@@ -303,24 +290,11 @@ bool JSONParser::parse(const char *file_name)
  data = boost::json::parse(is, ec);
 
  if(ec)
-  set_failure();
+  return false;
 
- if(success)
-  handle_value(data);
- else
- set_failure();
+ handle_value(data);
 
- return success;
-/*
-  ifstream is(file_name);
-  success = read(is, data);
-  if (success)
-    handle_value(data);
-  else
-    set_failure();
-
-  return success;
-*/
+ return true;
 }
 
 
