@@ -1,19 +1,16 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { Observable, Subscriber, Subscription } from 'rxjs';
+import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { PoolEditPeerModalComponent } from '../pool-edit-peer-modal/pool-edit-peer-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
@@ -30,23 +27,20 @@ export class PoolListComponent implements OnInit, OnDestroy {
   localTmpl: TemplateRef<any>;
   @ViewChild('remoteTmpl', { static: true })
   remoteTmpl: TemplateRef<any>;
-
   subs: Subscription;
-
   permission: Permission;
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
-
+  expandedRow: any;
   data: [];
   columns: {};
-
   tableStatus = new TableStatusViewCache();
+  poolName: any;
 
   constructor(
     private authStorageService: AuthStorageService,
     private rbdMirroringService: RbdMirroringService,
     private modalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService,
     private router: Router
   ) {
     this.data = [];
@@ -68,21 +62,8 @@ export class PoolListComponent implements OnInit, OnDestroy {
       visible: () => !this.getPeerUUID(),
       canBePrimary: () => false
     };
-    const editPeerAction: CdTableAction = {
-      permission: 'update',
-      icon: Icons.exchange,
-      name: $localize`Edit Peer`,
-      click: () => this.editPeersModal('edit'),
-      visible: () => !!this.getPeerUUID()
-    };
-    const deletePeerAction: CdTableAction = {
-      permission: 'delete',
-      icon: Icons.destroy,
-      name: $localize`Delete Peer`,
-      click: () => this.deletePeersModal(),
-      visible: () => !!this.getPeerUUID()
-    };
-    this.tableActions = [editModeAction, addPeerAction, editPeerAction, deletePeerAction];
+
+    this.tableActions = [editModeAction, addPeerAction];
   }
 
   ngOnInit() {
@@ -136,37 +117,7 @@ export class PoolListComponent implements OnInit, OnDestroy {
       poolName: this.selection.first().name,
       mode: mode
     };
-    if (mode === 'edit') {
-      initialState['peerUUID'] = this.getPeerUUID();
-    }
     this.modalService.show(PoolEditPeerModalComponent, initialState);
-  }
-
-  deletePeersModal() {
-    const poolName = this.selection.first().name;
-    const peerUUID = this.getPeerUUID();
-
-    this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: $localize`mirror peer`,
-      itemNames: [`${poolName} (${peerUUID})`],
-      submitActionObservable: () =>
-        new Observable((observer: Subscriber<any>) => {
-          this.taskWrapper
-            .wrapTaskAroundCall({
-              task: new FinishedTask('rbd/mirroring/peer/delete', {
-                pool_name: poolName
-              }),
-              call: this.rbdMirroringService.deletePeer(poolName, peerUUID)
-            })
-            .subscribe({
-              error: (resp) => observer.error(resp),
-              complete: () => {
-                this.rbdMirroringService.refresh();
-                observer.complete();
-              }
-            });
-        })
-    });
   }
 
   getPeerUUID(): any {
@@ -181,5 +132,9 @@ export class PoolListComponent implements OnInit, OnDestroy {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  setExpandedRow(expandedRow: any) {
+    this.expandedRow = expandedRow;
   }
 }
