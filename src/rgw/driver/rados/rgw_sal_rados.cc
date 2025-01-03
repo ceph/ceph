@@ -2761,14 +2761,12 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
           bufferlist bl;
           bl.append(tier_config.name);
           attrs[RGW_ATTR_STORAGE_CLASS] = bl;
-	  char buf[32];
-	  utime_t ut(obj_op.meta.delete_at);
-	  snprintf(buf, sizeof(buf), "%lld.%09lld",
-			  (long long)ut.sec(),
-			  (long long)ut.nsec());
-	  bl.append(buf, 32);
-	  attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
-
+	  {
+	    ceph::real_time deletion_time = real_clock::now();
+	    bufferlist bl;
+	    encode(deletion_time, bl);
+	    attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
+	  }
           const req_context rctx{dpp, y, nullptr};
           return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace());
         } catch (const buffer::end_of_buffer&) {
@@ -2960,8 +2958,6 @@ int RadosObject::RadosReadOp::prepare(optional_yield y, const DoutPrefixProvider
 
   parent_op.conds.mod_ptr = params.mod_ptr;
   parent_op.conds.unmod_ptr = params.unmod_ptr;
-  if (params.internal_mtime_ptr)
-    parent_op.conds.internal_mtime_ptr = params.internal_mtime_ptr;
   parent_op.conds.high_precision_time = params.high_precision_time;
   parent_op.conds.mod_zone_id = params.mod_zone_id;
   parent_op.conds.mod_pg_ver = params.mod_pg_ver;

@@ -1141,7 +1141,6 @@ class MotrStore : public StoreDriver {
 
 struct obj_time_weight {
   real_time mtime;
-  real_time internal_mtime;
   uint32_t zone_short_id;
   uint64_t pg_ver;
   bool high_precision;
@@ -1190,12 +1189,6 @@ struct obj_time_weight {
     if (mtime < rhs.mtime) {
       return true;
     }
-    if (internal_mtime > rhs.internal_mtime) {
-      return false;
-    }
-    if (internal_mtime < rhs.internal_mtime) {
-      return true;
-    }
     if (!zone_short_id || !rhs.zone_short_id) {
       /* don't compare zone ids, if one wasn't provided */
       return false;
@@ -1206,9 +1199,8 @@ struct obj_time_weight {
     return (pg_ver < rhs.pg_ver);
   }
 
-  void init(const real_time& _mtime, const real_time& _internal_mtime, uint32_t _short_id, uint64_t _pg_ver) {
+  void init(const real_time& _mtime, uint32_t _short_id, uint64_t _pg_ver) {
     mtime = _mtime;
-    internal_mtime = _internal_mtime;
     zone_short_id = _short_id;
     pg_ver = _pg_ver;
   }
@@ -1221,7 +1213,7 @@ struct obj_time_weight {
     if (state->get_attr(RGW_ATTR_INTERNAL_MTIME, bl)) {
       try {
         auto iter = bl.cbegin();
-        decode(internal_mtime, iter);
+        decode(mtime, iter);
       } catch (buffer::error& err) {
         ldpp_dout(dpp, 0) << "ERROR: couldn't decode RGW_ATTR_INTERNAL_MTIME" << dendl;
       }
