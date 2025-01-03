@@ -154,8 +154,8 @@ class ControllerTestCase(helper.CPWebCase):
     _request_logging = False
 
     @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    def setup_class(cls):
+        super().setup_class()
         cherrypy.tools.authenticate = AuthManagerTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
@@ -169,11 +169,6 @@ class ControllerTestCase(helper.CPWebCase):
         if cls._request_logging:
             cherrypy.tools.request_logging = RequestLoggingTool()
             cherrypy.config.update({'tools.request_logging.on': True})
-
-    @classmethod
-    def tearDownClass(cls):
-        if cls._request_logging:
-            cherrypy.config.update({'tools.request_logging.on': False})
 
     def _request(self, url, method, data=None, headers=None, version=APIVersion.DEFAULT):
         if not data:
