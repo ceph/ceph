@@ -2350,6 +2350,14 @@ options:
   level: advanced
   default: 10
   with_legacy: true
+- name: mon_client_hunt_on_resend
+  type: bool
+  level: advanced
+  default: true
+  fmt_desc: On commands connection failure, hunt for any monitor.
+    If false, try to resend the command to the same monitor to prevent
+    command race conditions.
+  with_legacy: true
 - name: mon_client_max_log_entries_per_message
   type: int
   level: advanced
