@@ -77,7 +77,7 @@ public:
 
   virtual interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
-    crimson::net::ConnectionXcoreRef conn);
+    crimson::net::ConnectionXcoreRef conn) = 0;
 
   virtual interruptible_future<> recover_object(
     const hobject_t& soid,
@@ -268,6 +268,10 @@ protected:
 
   void clean_up(ceph::os::Transaction& t, interrupt_cause_t why);
   virtual seastar::future<> on_stop() = 0;
+
+  virtual interruptible_future<> handle_backfill_op(
+    Ref<MOSDFastDispatchOp> m,
+    crimson::net::ConnectionXcoreRef conn);
 private:
   void handle_backfill_finish(
     MOSDPGBackfill& m,

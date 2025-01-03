@@ -1356,8 +1356,8 @@ ReplicatedRecoveryBackend::handle_recovery_op(
     return handle_recovery_delete_reply(
 	boost::static_pointer_cast<MOSDPGRecoveryDeleteReply>(m));
   default:
-    // delegate to parent class for handling backend-agnostic recovery ops.
-    return RecoveryBackend::handle_recovery_op(std::move(m), conn);
+    // delegate backfill messages to parent class
+    return handle_backfill_op(std::move(m), conn);
   }
 }
 
