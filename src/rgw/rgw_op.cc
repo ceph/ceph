@@ -6569,7 +6569,6 @@ void RGWInitMultipart::execute(optional_yield y)
     upload_id = upload->get_upload_id();
   }
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
-  multipart_trace->UpdateName(tracing::rgw::MULTIPART + upload_id);
 
 }
 
