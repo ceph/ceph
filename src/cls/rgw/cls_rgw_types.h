@@ -688,12 +688,10 @@ struct rgw_bi_log_entry {
 WRITE_CLASS_ENCODER(rgw_bi_log_entry)
 
 struct rgw_bucket_category_stats {
-  uint64_t total_size;
-  uint64_t total_size_rounded;
-  uint64_t num_entries;
+  uint64_t total_size = 0;
+  uint64_t total_size_rounded = 0;
+  uint64_t num_entries = 0;
   uint64_t actual_size{0}; //< account for compression, encryption
-
-  rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(3, 2, bl);
@@ -730,6 +728,49 @@ inline bool operator==(const rgw_bucket_category_stats& lhs,
 inline bool operator!=(const rgw_bucket_category_stats& lhs,
                        const rgw_bucket_category_stats& rhs) {
   return !(lhs == rhs);
+}
+
+inline auto operator+(const rgw_bucket_category_stats& lhs,
+                      const rgw_bucket_category_stats& rhs)
+  -> rgw_bucket_category_stats
+{
+  return rgw_bucket_category_stats{
+    .total_size = lhs.total_size + rhs.total_size,
+    .total_size_rounded = lhs.total_size_rounded + rhs.total_size_rounded,
+    .num_entries = lhs.num_entries + rhs.num_entries,
+    .actual_size = lhs.actual_size + rhs.actual_size
+  };
+}
+inline auto operator+=(rgw_bucket_category_stats& lhs,
+                       const rgw_bucket_category_stats& rhs)
+  -> rgw_bucket_category_stats&
+{
+  lhs.total_size += rhs.total_size;
+  lhs.total_size_rounded += rhs.total_size_rounded;
+  lhs.num_entries += rhs.num_entries;
+  lhs.actual_size += rhs.actual_size;
+  return lhs;
+}
+inline auto operator-(const rgw_bucket_category_stats& lhs,
+                      const rgw_bucket_category_stats& rhs)
+  -> rgw_bucket_category_stats
+{
+  return rgw_bucket_category_stats{
+    .total_size = lhs.total_size - rhs.total_size,
+    .total_size_rounded = lhs.total_size_rounded - rhs.total_size_rounded,
+    .num_entries = lhs.num_entries - rhs.num_entries,
+    .actual_size = lhs.actual_size - rhs.actual_size
+  };
+}
+inline auto operator-=(rgw_bucket_category_stats& lhs,
+                       const rgw_bucket_category_stats& rhs)
+  -> rgw_bucket_category_stats&
+{
+  lhs.total_size -= rhs.total_size;
+  lhs.total_size_rounded -= rhs.total_size_rounded;
+  lhs.num_entries -= rhs.num_entries;
+  lhs.actual_size -= rhs.actual_size;
+  return lhs;
 }
 
 enum class cls_rgw_reshard_status : uint8_t {
