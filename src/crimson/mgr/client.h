@@ -9,6 +9,7 @@
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
 #include "mon/MgrMap.h"
+#include "mgr/MetricTypes.h"
 
 template<typename Message> using Ref = boost::intrusive_ptr<Message>;
 namespace crimson::net {
@@ -29,9 +30,14 @@ public:
 };
 
 class Client : public crimson::net::Dispatcher {
+  using get_perf_report_cb_t = std::function<seastar::future<MetricPayload> ()>;
+  using set_perf_queries_cb_t =
+    std::function<seastar::future<> (const ConfigPayload &)>;
 public:
   Client(crimson::net::Messenger& msgr,
-	 WithStats& with_stats);
+	 WithStats& with_stats,
+	 set_perf_queries_cb_t cb_set,
+	 get_perf_report_cb_t cb_get);
   seastar::future<> start();
   seastar::future<> stop();
   void report();
@@ -58,6 +64,8 @@ private:
   crimson::common::gate_per_shard gates;
   uint64_t last_config_bl_version = 0;
   std::string service_name, daemon_name;
+  set_perf_queries_cb_t set_perf_queries_cb;
+  get_perf_report_cb_t get_perf_report_cb;
 
   void _send_report();
 };

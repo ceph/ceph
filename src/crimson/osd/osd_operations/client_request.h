@@ -40,8 +40,22 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
   OpInfo op_info;
   seastar::promise<> on_complete;
   unsigned instance_id = 0;
+  std::chrono::time_point<std::chrono::steady_clock> begin_time;
 
 public:
+
+  bool may_write() const { return op_info.may_write(); }
+  bool may_cache() const { return op_info.may_cache(); }
+  bool may_read() const { return op_info.may_read(); }
+  template <typename T>
+  T* get_req() const {
+    static_assert(std::is_same_v<T, MOSDOp>);
+    return m.get();
+  }
+  const crimson::net::ConnectionRef &get_connection() const {
+    return l_conn;
+  }
+
   /**
    * instance_handle_t
    *
