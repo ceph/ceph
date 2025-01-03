@@ -319,8 +319,15 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
 
     const auto aiter = generic_attrs_map.find(name);
     if (aiter != std::end(generic_attrs_map)) {
-      ldpp_dout(tier_ctx.dpp, 20) << __func__ << " Received attrs aiter->first = " << aiter->first << ", aiter->second = " << aiter->second << ret << dendl;
-     attrs[aiter->second] = bl;
+      attrs[aiter->second] = bl;
+    } else {
+      std::string s1 = boost::algorithm::to_lower_copy(header.first);
+      std::replace(s1.begin(), s1.end(), '_', '-');
+
+      // copy versioned epoch
+      if (s1 == "x-amz-meta-rgwx-versioned-epoch") {
+        attrs[s1] = bl;
+      }
     }
     
     if (header.first == "CONTENT_LENGTH") {
