@@ -94,6 +94,14 @@ class OrchestratorValidationError(OrchestratorError):
     """
 
 
+class OrchestratorPaused(OrchestratorError):
+    """
+    Raised when an orchestrator is paused and the command cannot proceed immediately.
+    """
+    def __init__(self, msg: str = "WARNING: The orchestrator is paused. The command will be deferred.") -> None:
+        super(OrchestratorPaused, self).__init__(msg, errno=-errno.EAGAIN)
+
+
 @contextmanager
 def set_exception_subject(kind: str, subject: str, overwrite: bool = False) -> Iterator[None]:
     try:
@@ -157,6 +165,46 @@ def _cli_command(perm: str) -> InnerCliCommandCallable:
     def inner_cli_command(prefix: str) -> Callable[[FuncT], FuncT]:
         return lambda func: handle_exception(prefix, perm, func)
     return inner_cli_command
+
+
+def is_paused(status: str) -> bool:
+    lines = status.strip().splitlines()
+    for line in lines:
+        if "paused" in line.lower():
+            return "yes" in line.lower()
+    return False
+
+
+def check_orchestrator_paused(status_method: str = '_status') -> Callable[[Callable[..., HandleCommandResult]], Callable[..., HandleCommandResult]]:
+    def decorator(func: Callable[..., HandleCommandResult]) -> Callable[..., HandleCommandResult]:
+        @wraps(func)
+        def wrapper(self: Any, *args: Any, **kwargs: Any) -> HandleCommandResult:
+            get_status_func = getattr(self, status_method, None)
+
+            if not callable(get_status_func):
+                raise RuntimeError(f"'{status_method}' method is not defined or callable on {self.__class__.__name__}")
+            status_result = get_status_func(self)
+
+            if not status_result.stdout.strip():
+                if func.__name__ == '_set_backend':
+                    return func(self, *args, **kwargs)
+                raise NoOrchestrator()
+
+            if "No orchestrator configured" in status_result.stdout:
+                if func.__name__ == '_set_backend':
+                    return func(self, *args, **kwargs)
+                raise NoOrchestrator()
+
+            if is_paused(status_result.stdout):
+                result = func(self, *args, **kwargs)
+                raise OrchestratorPaused(
+                    f"WARNING: The orchestrator is paused. The command is deferred for execution until orchestrator is resumed. \n"
+                    f"{result.stdout}"
+                )
+            return func(self, *args, **kwargs)
+
+        return wrapper
+    return decorator
 
 
 _cli_read_command = _cli_command('r')
