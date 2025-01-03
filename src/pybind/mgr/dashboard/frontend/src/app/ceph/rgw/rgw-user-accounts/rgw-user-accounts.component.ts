@@ -1,0 +1,124 @@
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { Account } from '../models/rgw-user-accounts';
+import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { Subscription } from 'rxjs';
+import { Router } from '@angular/router';
+
+const BASE_URL = 'rgw/accounts';
+
+@Component({
+  selector: 'cd-rgw-user-accounts',
+  templateUrl: './rgw-user-accounts.component.html',
+  styleUrls: ['./rgw-user-accounts.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+})
+export class RgwUserAccountsComponent implements OnInit, OnDestroy {
+  @ViewChild(TableComponent, { static: true })
+  table: TableComponent;
+  permission: Permission;
+  tableActions: CdTableAction[] = [];
+  columns: CdTableColumn[] = [];
+  accounts: Account[] = [];
+  selection: CdTableSelection = new CdTableSelection();
+  private routerSubscription: Subscription = new Subscription();
+
+  constructor(
+    private authStorageService: AuthStorageService,
+    public actionLabels: ActionLabelsI18n,
+    private router: Router,
+    private rgwUserAccountsService: RgwUserAccountsService
+  ) {}
+
+  ngOnInit() {
+    this.permission = this.authStorageService.getPermissions().rgw;
+    this.columns = [
+      {
+        name: $localize`Account Id`,
+        prop: 'id',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Tenant`,
+        prop: 'tenant',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Full name`,
+        prop: 'name',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Email address`,
+        prop: 'email',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Max Users`,
+        prop: 'max_users',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Max Roles`,
+        prop: 'max_roles',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Max Groups`,
+        prop: 'max_groups',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Max. buckets`,
+        prop: 'max_buckets',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Max Access Keys`,
+        prop: 'max_access_keys',
+        flexGrow: 1
+      }
+    ];
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: Icons.add,
+      click: () => this.router.navigate([BASE_URL, { outlets: { modal: URLVerbs.CREATE } }]),
+      name: this.actionLabels.CREATE,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+    };
+    this.tableActions = [addAction];
+  }
+
+  getAccountsList(context?: CdTableFetchDataContext) {
+    this.rgwUserAccountsService.list(true).subscribe({
+      next: (accounts: Account[]) => {
+        this.accounts = accounts;
+      },
+      error: () => {
+        if (context) {
+          context.error();
+        }
+      }
+    });
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
+  }
+
+  ngOnDestroy() {
+    if (this.routerSubscription) {
+      this.routerSubscription.unsubscribe();
+    }
+  }
+}
