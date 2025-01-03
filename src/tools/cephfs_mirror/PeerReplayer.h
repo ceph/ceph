@@ -307,7 +307,6 @@ private:
   int open_dir(MountRef mnt, const std::string &dir_path, boost::optional<uint64_t> snap_id);
   int pre_sync_check_and_open_handles(const std::string &dir_root, const Snapshot &current,
                                       boost::optional<Snapshot> prev, FHandles *fh);
-  void post_sync_close_handles(const FHandles &fh);
 
   int do_synchronize(const std::string &dir_root, const Snapshot &current,
                      boost::optional<Snapshot> prev);
