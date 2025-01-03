@@ -23,6 +23,19 @@ using namespace ceph;
 
 typedef uint64_t IntervalValueType;
 
+struct IntType {
+  IntType() : value(0) {}
+  IntType(uint64_t value) : value(value) {}
+  IntType &operator+=(IntType o) { value += o.value; return *this; }
+  IntType &operator+=(uint64_t v) { value += v; return *this; }
+  IntType &operator-=(IntType o) { value -= o.value; return *this; }
+  IntType &operator-=(uint64_t v) { value -= v; return *this; }
+  uint64_t value;
+  operator uint64_t() const {
+    return value;
+  }
+};
+
 template<typename T>  // tuple<type to test on, test array size>
 class IntervalSetTest : public ::testing::Test {
 
@@ -32,8 +45,11 @@ class IntervalSetTest : public ::testing::Test {
 
 typedef ::testing::Types<
   interval_set<IntervalValueType>,
-  interval_set<IntervalValueType, btree::btree_map>,
-  interval_set<IntervalValueType, boost::container::flat_map>
+  interval_set<IntervalValueType, IntervalValueType, btree::btree_map>,
+  interval_set<IntervalValueType, IntervalValueType, boost::container::flat_map>,
+  interval_set<IntType>,
+  interval_set<IntType, IntervalValueType, btree::btree_map>,
+  interval_set<IntType, IntervalValueType, boost::container::flat_map>
   > IntervalSetTypes;
 
 TYPED_TEST_SUITE(IntervalSetTest, IntervalSetTypes);
@@ -216,7 +232,8 @@ TYPED_TEST(IntervalSetTest, intersects) {
 TYPED_TEST(IntervalSetTest, insert_erase) {
   typedef typename TestFixture::ISet ISet;
   ISet iset1, iset2;
-  IntervalValueType start, len;
+  typename ISet::offset_type start;
+  typename ISet::length_type len;
   
   iset1.insert(3, 5, &start, &len);
   ASSERT_EQ(3, start);
