@@ -17,7 +17,6 @@ set(osd_srcs
   PGLog.cc
   PrimaryLogPG.cc
   ReplicatedBackend.cc
-  ECBackend.cc
   ECTransaction.cc
   PGBackend.cc
   OSDCap.cc
@@ -46,6 +45,7 @@ set(osd_srcs
   MissingLoc.cc
   osd_perf_counters.cc
   ECCommonL.cc
+  ECBackendL.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   ${osd_cyg_functions_src}

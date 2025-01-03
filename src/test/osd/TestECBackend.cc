@@ -17,7 +17,7 @@
 #include <errno.h>
 #include <signal.h>
 #include "osd/ECCommonL.h"
-#include "osd/ECBackend.h"
+#include "osd/ECBackendL.h"
 #include "gtest/gtest.h"
 
 using namespace std;

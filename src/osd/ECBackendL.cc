@@ -15,7 +15,7 @@
 #include <iostream>
 #include <sstream>
 
-#include "ECBackend.h"
+#include "ECBackendL.h"
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDECSubOpWrite.h"
@@ -52,16 +52,16 @@ using ceph::bufferptr;
 using ceph::ErasureCodeInterfaceRef;
 using ceph::Formatter;
 
-static ostream& _prefix(std::ostream *_dout, ECBackend *pgb) {
+static ostream& _prefix(std::ostream *_dout, ECBackendL *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
-static ostream& _prefix(std::ostream *_dout, ECBackend::RecoveryBackend *pgb) {
+static ostream& _prefix(std::ostream *_dout, ECBackendL::RecoveryBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
 struct ECRecoveryHandle : public PGBackend::RecoveryHandle {
-  list<ECBackend::RecoveryBackend::RecoveryOp> ops;
+  list<ECBackendL::RecoveryBackend::RecoveryOp> ops;
 };
 
 static ostream &operator<<(ostream &lhs, const map<pg_shard_t, bufferlist> &rhs)
@@ -90,7 +90,7 @@ static ostream &operator<<(ostream &lhs, const map<int, bufferlist> &rhs)
   return lhs << "]";
 }
 
-ostream &operator<<(ostream &lhs, const ECBackend::RecoveryBackend::RecoveryOp &rhs)
+ostream &operator<<(ostream &lhs, const ECBackendL::RecoveryBackend::RecoveryOp &rhs)
 {
   return lhs << "RecoveryOp("
 	     << "hoid=" << rhs.hoid
@@ -100,13 +100,13 @@ ostream &operator<<(ostream &lhs, const ECBackend::RecoveryBackend::RecoveryOp &
 	     << " recovery_info=" << rhs.recovery_info
 	     << " recovery_progress=" << rhs.recovery_progress
 	     << " obc refcount=" << rhs.obc.use_count()
-	     << " state=" << ECBackend::RecoveryBackend::RecoveryOp::tostr(rhs.state)
+	     << " state=" << ECBackendL::RecoveryBackend::RecoveryOp::tostr(rhs.state)
 	     << " waiting_on_pushes=" << rhs.waiting_on_pushes
 	     << " extent_requested=" << rhs.extent_requested
 	     << ")";
 }
 
-void ECBackend::RecoveryBackend::RecoveryOp::dump(Formatter *f) const
+void ECBackendL::RecoveryBackend::RecoveryOp::dump(Formatter *f) const
 {
   f->dump_stream("hoid") << hoid;
   f->dump_stream("v") << v;
@@ -119,7 +119,7 @@ void ECBackend::RecoveryBackend::RecoveryOp::dump(Formatter *f) const
   f->dump_stream("extent_requested") << extent_requested;
 }
 
-ECBackend::ECBackend(
+ECBackendL::ECBackendL(
   PGBackend::Listener *pg,
   const coll_t &coll,
   ObjectStore::CollectionHandle &ch,
@@ -138,12 +138,12 @@ ECBackend::ECBackend(
 	  ec_impl->get_chunk_size(stripe_width)) == stripe_width);
 }
 
-PGBackend::RecoveryHandle *ECBackend::open_recovery_op()
+PGBackend::RecoveryHandle *ECBackendL::open_recovery_op()
 {
   return recovery_backend.open_recovery_op();
 }
 
-ECBackend::RecoveryBackend::RecoveryBackend(
+ECBackendL::RecoveryBackend::RecoveryBackend(
   CephContext* cct,
   const coll_t &coll,
   ceph::ErasureCodeInterfaceRef ec_impl,
@@ -151,7 +151,7 @@ ECBackend::RecoveryBackend::RecoveryBackend(
   ReadPipeline& read_pipeline,
   UnstableHashInfoRegistry& unstable_hashinfo_registry,
   ECListener* parent,
-  ECBackend* ecbackend)
+  ECBackendL* ecbackend)
   : cct(cct),
     coll(coll),
     ec_impl(std::move(ec_impl)),
@@ -162,12 +162,12 @@ ECBackend::RecoveryBackend::RecoveryBackend(
     ecbackend(ecbackend) {
 }
 
-PGBackend::RecoveryHandle *ECBackend::RecoveryBackend::open_recovery_op()
+PGBackend::RecoveryHandle *ECBackendL::RecoveryBackend::open_recovery_op()
 {
   return new ECRecoveryHandle;
 }
 
-void ECBackend::RecoveryBackend::_failed_push(const hobject_t &hoid, ECCommonL::read_result_t &res)
+void ECBackendL::RecoveryBackend::_failed_push(const hobject_t &hoid, ECCommonL::read_result_t &res)
 {
   dout(10) << __func__ << ": Read error " << hoid << " r="
 	   << res.r << " errors=" << res.errors << dendl;
@@ -213,7 +213,7 @@ struct RecoveryMessages {
   ObjectStore::Transaction t;
 };
 
-void ECBackend::handle_recovery_push(
+void ECBackendL::handle_recovery_push(
   const PushOp &op,
   RecoveryMessages *m,
   bool is_repair)
@@ -247,7 +247,7 @@ void ECBackend::handle_recovery_push(
   }
 }
 
-void ECBackend::RecoveryBackend::handle_recovery_push(
+void ECBackendL::RecoveryBackend::handle_recovery_push(
   const PushOp &op,
   RecoveryMessages *m,
   bool is_repair)
@@ -341,7 +341,7 @@ void ECBackend::RecoveryBackend::handle_recovery_push(
   m->push_replies[get_parent()->primary_shard()].back().soid = op.soid;
 }
 
-void ECBackend::RecoveryBackend::handle_recovery_push_reply(
+void ECBackendL::RecoveryBackend::handle_recovery_push_reply(
   const PushReplyOp &op,
   pg_shard_t from,
   RecoveryMessages *m)
@@ -354,7 +354,7 @@ void ECBackend::RecoveryBackend::handle_recovery_push_reply(
   continue_recovery_op(rop, m);
 }
 
-void ECBackend::RecoveryBackend::handle_recovery_read_complete(
+void ECBackendL::RecoveryBackend::handle_recovery_read_complete(
   const hobject_t &hoid,
   boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
   std::optional<map<string, bufferlist, less<>> > attrs,
@@ -457,7 +457,7 @@ struct SendPushReplies : public Context {
 };
 
 struct RecoveryReadCompleter : ECCommonL::ReadCompleter {
-  RecoveryReadCompleter(ECBackend::RecoveryBackend& backend)
+  RecoveryReadCompleter(ECBackendL::RecoveryBackend& backend)
     : backend(backend) {}
 
   void finish_single_request(
@@ -483,11 +483,11 @@ struct RecoveryReadCompleter : ECCommonL::ReadCompleter {
     backend.dispatch_recovery_messages(rm, priority);
   }
 
-  ECBackend::RecoveryBackend& backend;
+  ECBackendL::RecoveryBackend& backend;
   RecoveryMessages rm;
 };
 
-void ECBackend::ECRecoveryBackend::commit_txn_send_replies(
+void ECBackendL::ECRecoveryBackend::commit_txn_send_replies(
   ceph::os::Transaction&& txn,
   std::map<int, MOSDPGPushReply*> replies)
 {
@@ -500,7 +500,7 @@ void ECBackend::ECRecoveryBackend::commit_txn_send_replies(
   get_parent()->queue_transaction(std::move(txn));
 }
 
-void ECBackend::RecoveryBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
+void ECBackendL::RecoveryBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
 {
   for (map<pg_shard_t, vector<PushOp> >::iterator i = m.pushes.begin();
        i != m.pushes.end();
@@ -553,7 +553,7 @@ void ECBackend::RecoveryBackend::dispatch_recovery_messages(RecoveryMessages &m,
     std::make_unique<RecoveryReadCompleter>(*this));
 }
 
-void ECBackend::RecoveryBackend::continue_recovery_op(
+void ECBackendL::RecoveryBackend::continue_recovery_op(
   RecoveryBackend::RecoveryOp &op,
   RecoveryMessages *m)
 {
@@ -719,7 +719,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
   }
 }
 
-void ECBackend::run_recovery_op(
+void ECBackendL::run_recovery_op(
   RecoveryHandle *_h,
   int priority)
 {
@@ -730,7 +730,7 @@ void ECBackend::run_recovery_op(
   delete _h;
 }
 
-void ECBackend::RecoveryBackend::run_recovery_op(
+void ECBackendL::RecoveryBackend::run_recovery_op(
   ECRecoveryHandle &h,
   int priority)
 {
@@ -746,7 +746,7 @@ void ECBackend::RecoveryBackend::run_recovery_op(
   dispatch_recovery_messages(m, priority);
 }
 
-int ECBackend::recover_object(
+int ECBackendL::recover_object(
   const hobject_t &hoid,
   eversion_t v,
   ObjectContextRef head,
@@ -756,7 +756,7 @@ int ECBackend::recover_object(
   return recovery_backend.recover_object(hoid, v, head, obc, _h);
 }
 
-int ECBackend::RecoveryBackend::recover_object(
+int ECBackendL::RecoveryBackend::recover_object(
   const hobject_t &hoid,
   eversion_t v,
   ObjectContextRef head,
@@ -800,13 +800,13 @@ int ECBackend::RecoveryBackend::recover_object(
   return 0;
 }
 
-bool ECBackend::can_handle_while_inactive(
+bool ECBackendL::can_handle_while_inactive(
   OpRequestRef _op)
 {
   return false;
 }
 
-bool ECBackend::_handle_message(
+bool ECBackendL::_handle_message(
   OpRequestRef _op)
 {
   dout(10) << __func__ << ": " << *_op->get_req() << dendl;
@@ -880,14 +880,14 @@ bool ECBackend::_handle_message(
 }
 
 struct SubWriteCommitted : public Context {
-  ECBackend *pg;
+  ECBackendL *pg;
   OpRequestRef msg;
   ceph_tid_t tid;
   eversion_t version;
   eversion_t last_complete;
   const ZTracer::Trace trace;
   SubWriteCommitted(
-    ECBackend *pg,
+    ECBackendL *pg,
     OpRequestRef msg,
     ceph_tid_t tid,
     eversion_t version,
@@ -901,7 +901,7 @@ struct SubWriteCommitted : public Context {
     pg->sub_write_committed(tid, version, last_complete, trace);
   }
 };
-void ECBackend::sub_write_committed(
+void ECBackendL::sub_write_committed(
   ceph_tid_t tid, eversion_t version, eversion_t last_complete,
   const ZTracer::Trace &trace) {
   if (get_parent()->pgb_is_primary()) {
@@ -933,7 +933,7 @@ void ECBackend::sub_write_committed(
   }
 }
 
-void ECBackend::handle_sub_write(
+void ECBackendL::handle_sub_write(
   pg_shard_t from,
   OpRequestRef msg,
   ECSubWrite &op,
@@ -1015,7 +1015,7 @@ void ECBackend::handle_sub_write(
   }
 }
 
-void ECBackend::handle_sub_read(
+void ECBackendL::handle_sub_read(
   pg_shard_t from,
   const ECSubRead &op,
   ECSubReadReply *reply,
@@ -1029,8 +1029,8 @@ void ECBackend::handle_sub_read(
     int r = 0;
     for (auto j = i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
-      if ((op.subchunks.find(i->first)->second.size() == 1) && 
-          (op.subchunks.find(i->first)->second.front().second == 
+      if ((op.subchunks.find(i->first)->second.size() == 1) &&
+          (op.subchunks.find(i->first)->second.front().second ==
                                             ec_impl->get_sub_chunk_count())) {
         dout(20) << __func__ << " case1: reading the complete chunk/shard." << dendl;
         r = store->read(
@@ -1164,7 +1164,7 @@ error:
   reply->tid = op.tid;
 }
 
-void ECBackend::handle_sub_write_reply(
+void ECBackendL::handle_sub_write_reply(
   pg_shard_t from,
   const ECSubWriteReply &op,
   const ZTracer::Trace &trace)
@@ -1206,7 +1206,7 @@ void ECBackend::handle_sub_write_reply(
   rmw_pipeline.check_ops();
 }
 
-void ECBackend::handle_sub_read_reply(
+void ECBackendL::handle_sub_read_reply(
   pg_shard_t from,
   ECSubReadReply &op,
   const ZTracer::Trace &trace)
@@ -1356,7 +1356,7 @@ void ECBackend::handle_sub_read_reply(
   }
   if (need_resend) {
     read_pipeline.do_read_op(rop);
-  } else if (rop.in_progress.empty() || 
+  } else if (rop.in_progress.empty() ||
              is_complete == rop.complete.size()) {
     dout(20) << __func__ << " Complete: " << rop << dendl;
     rop.trace.event("ec read complete");
@@ -1366,7 +1366,7 @@ void ECBackend::handle_sub_read_reply(
   }
 }
 
-void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
+void ECBackendL::check_recovery_sources(const OSDMapRef& osdmap)
 {
   struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
     ECCommonL::ReadPipeline& read_pipeline;
@@ -1392,19 +1392,19 @@ void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
     });
 }
 
-void ECBackend::on_change()
+void ECBackendL::on_change()
 {
   rmw_pipeline.on_change();
   read_pipeline.on_change();
   clear_recovery_state();
 }
 
-void ECBackend::clear_recovery_state()
+void ECBackendL::clear_recovery_state()
 {
   recovery_backend.recovery_ops.clear();
 }
 
-void ECBackend::dump_recovery_info(Formatter *f) const
+void ECBackendL::dump_recovery_info(Formatter *f) const
 {
   f->open_array_section("recovery_ops");
   for (map<hobject_t, RecoveryBackend::RecoveryOp>::const_iterator i = recovery_backend.recovery_ops.begin();
@@ -1474,7 +1474,7 @@ std::tuple<
   int,
   map<string, bufferlist, less<>>,
   size_t
-> ECBackend::get_attrs_n_size_from_disk(const hobject_t& hoid)
+> ECBackendL::get_attrs_n_size_from_disk(const hobject_t& hoid)
 {
   struct stat st;
   if (int r = object_stat(hoid, &st); r < 0) {
@@ -1489,7 +1489,7 @@ std::tuple<
   return { 0, real_attrs, st.st_size };
 }
 
-void ECBackend::submit_transaction(
+void ECBackendL::submit_transaction(
   const hobject_t &hoid,
   const object_stat_sum_t &delta_stats,
   const eversion_t &at_version,
@@ -1511,7 +1511,7 @@ void ECBackend::submit_transaction(
   op->version = at_version;
   op->trim_to = trim_to;
   /* We update PeeringState::pg_committed_to via the callback
-   * invoked from ECBackend::handle_sub_write_reply immediately
+   * invoked from ECBackendL::handle_sub_write_reply immediately
    * before updating rmw_pipeline.commited_to via
    * rmw_pipeline.check_ops()->try_finish_rmw(), so these will
    * *usually* match.  However, the PrimaryLogPG::submit_log_entries
@@ -1555,7 +1555,7 @@ void ECBackend::submit_transaction(
   rmw_pipeline.start_rmw(std::move(op));
 }
 
-int ECBackend::objects_read_sync(
+int ECBackendL::objects_read_sync(
   const hobject_t &hoid,
   uint64_t off,
   uint64_t len,
@@ -1565,7 +1565,7 @@ int ECBackend::objects_read_sync(
   return -EOPNOTSUPP;
 }
 
-void ECBackend::objects_read_async(
+void ECBackendL::objects_read_async(
   const hobject_t &hoid,
   const list<pair<ECCommonL::ec_align_t,
                   pair<bufferlist*, Context*>>> &to_read,
@@ -1597,14 +1597,14 @@ void ECBackend::objects_read_async(
   }
 
   struct cb {
-    ECBackend *ec;
+    ECBackendL *ec;
     hobject_t hoid;
     list<pair<ECCommonL::ec_align_t,
 	      pair<bufferlist*, Context*> > > to_read;
     unique_ptr<Context> on_complete;
     cb(const cb&) = delete;
     cb(cb &&) = default;
-    cb(ECBackend *ec,
+    cb(ECBackendL *ec,
        const hobject_t &hoid,
        const list<pair<ECCommonL::ec_align_t,
                   pair<bufferlist*, Context*> > > &to_read,
@@ -1678,9 +1678,9 @@ void ECBackend::objects_read_async(
 	   on_complete)));
 }
 
-void ECBackend::objects_read_and_reconstruct(
+void ECBackendL::objects_read_and_reconstruct(
   const map<hobject_t,
-    std::list<ECBackend::ec_align_t>
+    std::list<ECBackendL::ec_align_t>
   > &reads,
   bool fast_read,
   GenContextURef<ECCommonL::ec_extents_t &&> &&func)
@@ -1689,11 +1689,11 @@ void ECBackend::objects_read_and_reconstruct(
     reads, fast_read, std::move(func));
 }
 
-void ECBackend::kick_reads() {
+void ECBackendL::kick_reads() {
   read_pipeline.kick_reads();
 }
 
-int ECBackend::object_stat(
+int ECBackendL::object_stat(
   const hobject_t &hoid,
   struct stat* st)
 {
@@ -1704,7 +1704,7 @@ int ECBackend::object_stat(
   return r;
 }
 
-int ECBackend::objects_get_attrs(
+int ECBackendL::objects_get_attrs(
   const hobject_t &hoid,
   map<string, bufferlist, less<>> *out)
 {
@@ -1724,7 +1724,7 @@ int ECBackend::objects_get_attrs(
   return r;
 }
 
-void ECBackend::rollback_append(
+void ECBackendL::rollback_append(
   const hobject_t &hoid,
   uint64_t old_size,
   ObjectStore::Transaction *t)
@@ -1737,7 +1737,7 @@ void ECBackend::rollback_append(
       old_size));
 }
 
-int ECBackend::be_deep_scrub(
+int ECBackendL::be_deep_scrub(
   const hobject_t &poid,
   ScrubMap &map,
   ScrubMapBuilder &pos,
