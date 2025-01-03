@@ -17607,6 +17607,19 @@ int BlueStore::_do_remove(
   set<SharedBlob*> maybe_unshared_blobs;
   bool is_gen = !o->oid.is_no_gen();
   _do_truncate(txc, c, o, 0, is_gen ? &maybe_unshared_blobs : nullptr);
+
+  if (cct->_conf->bluestore_enable_zeroout_sync && bdev->is_rotational()) {
+    for (interval_set<uint64_t>::iterator p = txc->released.begin();
+         p != txc->released.end();
+         ++p) {
+      dout(20) << __func__ << " filling zero 0x" << std::hex << p.get_start()
+             << "~" << p.get_len() << std::dec << dendl;
+      bufferlist bl;
+      bl.append_zero(p.get_len());
+      bdev->aio_write(p.get_start(), bl, &txc->ioc, false);
+    }
+  }
+
   if (o->onode.has_omap()) {
     o->flush();
     _do_omap_clear(txc, o);
