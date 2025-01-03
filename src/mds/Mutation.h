@@ -488,6 +488,9 @@ struct MDRequestImpl : public MutationImpl {
   // indicator for vxattr osdmap update
   bool waited_for_osdmap = false;
 
+  // referent straydn
+  bool referent_straydn = false;
+
 protected:
   void _dump(ceph::Formatter *f) const override {
     _dump(f, false);

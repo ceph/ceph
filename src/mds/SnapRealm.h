@@ -46,13 +46,15 @@ public:
 
   const ceph::buffer::list& get_snap_trace() const;
   const ceph::buffer::list& get_snap_trace_new() const;
-  void build_snap_trace() const;
+  const ceph::buffer::list& get_snap_trace_new(std::vector<SnapRealm*>& related_realms) const;
+  void build_snap_trace(std::vector<SnapRealm*>& related_realms) const;
 
   std::string_view get_snapname(snapid_t snapid, inodeno_t atino);
   snapid_t resolve_snapname(std::string_view name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   const std::set<snapid_t>& get_snaps() const;
   const SnapContext& get_snap_context() const;
+  const SnapContext& get_snap_context(std::vector<SnapRealm*>& related_realms) const;
   void invalidate_cached_snaps() {
     cached_seq = 0;
   }
@@ -76,6 +78,7 @@ public:
     return cached_seq;
   }
 
+  snapid_t get_snap_following(CInode *in, snapid_t follows);
   snapid_t get_snap_following(snapid_t follows) {
     check_cache();
     const std::set<snapid_t>& s = get_snaps();
@@ -85,6 +88,7 @@ public:
     return CEPH_NOSNAP;
   }
 
+  bool has_snaps_in_range(CInode *in, snapid_t last);
   bool has_snaps_in_range(snapid_t first, snapid_t last) {
     check_cache();
     const auto& s = get_snaps();
@@ -133,6 +137,7 @@ public:
 
 protected:
   void check_cache() const;
+  void check_cache(std::vector<SnapRealm*>& related_realms) const;
 
 private:
   bool global;
