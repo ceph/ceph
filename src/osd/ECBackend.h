@@ -18,7 +18,7 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
 
-#include "ECCommon.h"
+#include "ECCommonL.h"
 #include "OSD.h"
 #include "PGBackend.h"
 #include "erasure-code/ErasureCodeInterface.h"
@@ -34,7 +34,7 @@ struct ECSubReadReply;
 
 struct RecoveryMessages;
 
-class ECBackend : public PGBackend, public ECCommon {
+class ECBackend : public PGBackend, public ECCommonL {
 public:
   RecoveryHandle *open_recovery_op() override;
 
@@ -141,13 +141,13 @@ public:
    * check_recovery_sources.
    */
   void objects_read_and_reconstruct(
-    const std::map<hobject_t, std::list<ECCommon::ec_align_t>> &reads,
+    const std::map<hobject_t, std::list<ECCommonL::ec_align_t>> &reads,
     bool fast_read,
-    GenContextURef<ECCommon::ec_extents_t &&> &&func) override;
+    GenContextURef<ECCommonL::ec_extents_t &&> &&func) override;
 
   void objects_read_async(
     const hobject_t &hoid,
-    const std::list<std::pair<ECCommon::ec_align_t,
+    const std::list<std::pair<ECCommonL::ec_align_t,
                               std::pair<ceph::buffer::list*, Context*>>> &to_read,
     Context *on_complete,
     bool fast_read = false) override;
@@ -299,7 +299,7 @@ public:
   int get_ec_data_chunk_count() const {
     return ec_impl->get_data_chunk_count();
   }
-  void _failed_push(const hobject_t &hoid, ECCommon::read_result_t &res);
+  void _failed_push(const hobject_t &hoid, ECCommonL::read_result_t &res);
   };
   struct ECRecoveryBackend : RecoveryBackend {
     ECRecoveryBackend(CephContext* cct,
@@ -400,7 +400,7 @@ public:
 
   const ECUtil::stripe_info_t sinfo;
 
-  ECCommon::UnstableHashInfoRegistry unstable_hashinfo_registry;
+  ECCommonL::UnstableHashInfoRegistry unstable_hashinfo_registry;
 
 
   std::tuple<

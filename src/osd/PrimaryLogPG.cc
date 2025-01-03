@@ -295,11 +295,11 @@ void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
 	    pair<bufferlist*, Context*> > > in;
   in.swap(pending_async_reads);
   // TODO: drop the converter
-  list<pair<ECCommon::ec_align_t,
+  list<pair<ECCommonL::ec_align_t,
 	    pair<bufferlist*, Context*> > > in_native;
   for (auto [align_tuple, ctx_pair] : in) {
     in_native.emplace_back(
-      ECCommon::ec_align_t{
+      ECCommonL::ec_align_t{
         align_tuple.get<0>(), align_tuple.get<1>(), align_tuple.get<2>()
       },
       std::move(ctx_pair));
