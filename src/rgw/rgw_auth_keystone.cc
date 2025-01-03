@@ -412,17 +412,6 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   keystone_url.append("v3/s3tokens");
 
-  /* get authentication token for Keystone. */
-  std::string admin_token;
-  bool admin_token_cached = false;
-  int ret = rgw::keystone::Service::get_admin_token(dpp, token_cache, config,
-                                                    y, admin_token, admin_token_cached);
-  if (ret < 0) {
-    ldpp_dout(dpp, 2) << "s3 keystone: cannot get token for keystone access"
-                  << dendl;
-    throw ret;
-  }
-
   using RGWValidateKeystoneToken
     = rgw::keystone::Service::RGWValidateKeystoneToken;
 
@@ -431,8 +420,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   ceph::bufferlist token_body_bl;
   RGWValidateKeystoneToken validate(cct, "POST", keystone_url, &token_body_bl);
 
-  /* set required headers for keystone request */
-  validate.append_header("X-Auth-Token", admin_token);
+  /* set required header for keystone request */
   validate.append_header("Content-Type", "application/json");
 
   /* check if we want to verify keystone's ssl certs */
@@ -484,7 +472,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 }
 
 auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
-                                         const std::string& user_id,
+                                         const rgw::keystone::TokenEnvelope& token_env,
                                          const std::string_view& access_key_id,
                                          optional_yield y) const
     -> std::pair<boost::optional<std::string>, int>
@@ -504,17 +492,6 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
   keystone_url.append("/credentials/OS-EC2/");
   keystone_url.append(std::string(access_key_id));
 
-  /* get authentication token for Keystone. */
-  std::string admin_token;
-  bool admin_token_cached = false;
-  int ret = rgw::keystone::Service::get_admin_token(dpp, token_cache, config,
-                                                    y, admin_token, admin_token_cached);
-  if (ret < 0) {
-    ldpp_dout(dpp, 2) << "s3 keystone: cannot get token for keystone access"
-                  << dendl;
-    return make_pair(boost::none, ret);
-  }
-
   using RGWGetAccessSecret
     = rgw::keystone::Service::RGWKeystoneHTTPTransceiver;
 
@@ -522,8 +499,8 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
   ceph::bufferlist token_body_bl;
   RGWGetAccessSecret secret(cct, "GET", keystone_url, &token_body_bl);
 
-  /* set required headers for keystone request */
-  secret.append_header("X-Auth-Token", admin_token);
+  /* set required header for keystone request */
+  secret.append_header("X-Auth-Token", token_env.token.id);
 
   /* check if we want to verify keystone's ssl certs */
   secret.set_verify_ssl(cct->_conf->rgw_keystone_verify_ssl);
@@ -617,7 +594,7 @@ auto EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
   if (token) {
     /* Fetch secret from keystone for the access_key_id */
     std::tie(secret, failure_reason) =
-        get_secret_from_keystone(dpp, token->get_user_id(), access_key_id, y);
+        get_secret_from_keystone(dpp, token, access_key_id, y);
 
     if (secret) {
       /* Add token, secret pair to cache, and set timeout */
