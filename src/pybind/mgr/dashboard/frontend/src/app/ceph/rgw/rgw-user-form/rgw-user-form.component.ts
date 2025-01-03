@@ -167,6 +167,60 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
             bucket_quota_max_objects_unlimited: false
           })
         ]
+      ],
+      // user rate limit
+      user_rate_limit_enabled: [false],
+      user_rate_limit_max_readOps_unlimited: [true],
+      user_rate_limit_max_readOps: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              user_rate_limit_enabled: true,
+              user_rate_limit_max_readOps_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      user_rate_limit_max_writeOps_unlimited: [true],
+      user_rate_limit_max_writeOps: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              user_rate_limit_enabled: true,
+              user_rate_limit_max_writeOps_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      user_rate_limit_max_readBytes_unlimited: [true],
+      user_rate_limit_max_readBytes: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              user_rate_limit_enabled: true,
+              user_rate_limit_max_readBytes_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      user_rate_limit_max_writeBytes_unlimited: [true],
+      user_rate_limit_max_writeBytes: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              user_rate_limit_enabled: true,
+              user_rate_limit_max_writeBytes_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
       ]
     });
   }
