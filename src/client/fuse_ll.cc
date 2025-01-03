@@ -464,7 +464,7 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  char buf[size];
+  std::vector<char> buf(size);
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
@@ -474,11 +474,11 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
 
   get_fuse_groups(perms, req);
 
-  int r = cfuse->client->ll_listxattr(in, buf, size, perms);
+  int r = cfuse->client->ll_listxattr(in, buf.data(), size, perms);
   if (size == 0 && r >= 0)
     fuse_reply_xattr(req, r);
-  else if (r >= 0) 
-    fuse_reply_buf(req, buf, r);
+  else if (r >= 0)
+    fuse_reply_buf(req, buf.data(), r);
   else
     fuse_reply_err(req, get_sys_errno(-r));
 
@@ -494,7 +494,7 @@ static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  char buf[size];
+  std::vector<char> buf(size, '\0');
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
@@ -504,11 +504,11 @@ static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 
   get_fuse_groups(perms, req);
 
-  int r = cfuse->client->ll_getxattr(in, name, buf, size, perms);
+  int r = cfuse->client->ll_getxattr(in, name, buf.data(), size, perms);
   if (size == 0 && r >= 0)
     fuse_reply_xattr(req, r);
   else if (r >= 0)
-    fuse_reply_buf(req, buf, r);
+    fuse_reply_buf(req, buf.data(), r);
   else
     fuse_reply_err(req, get_sys_errno(-r));
 
