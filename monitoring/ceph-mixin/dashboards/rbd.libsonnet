@@ -73,18 +73,18 @@ local info_rbd_stats = std.join(
                           1,
                           false,
                           0,
-                          '',
+                          'Pool',
                           '')
     )
 
     .addTemplate(
       $.addTemplateSchema('image',
                           '$datasource',
-                          'label_values(ceph_rbd_read_ops{%(matchers)s, pool="$pool"}, image)' % $.matchers(),
+                          'label_values(ceph_rbd_read_ops{pool="$pool", %(matchers)s}, image)' % $.matchers(),
                           1,
                           false,
                           0,
-                          '',
+                          'Image',
                           '')
     )
     .addPanels([
