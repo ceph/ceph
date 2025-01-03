@@ -3820,6 +3820,17 @@ void RGWDeleteBucket::execute(optional_yield y)
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
+
+  // Verifying bucket ownership with bucket owner condition.
+  if (s->info.env->get("HTTP_X_AMZ_EXPECTED_BUCKET_OWNER") != nullptr){
+    auto expected_bucket_owner = s->info.env->get("HTTP_X_AMZ_EXPECTED_BUCKET_OWNER");
+    if (expected_bucket_owner != to_string(s->bucket->get_owner())){
+      ldpp_dout(this, 0) << "ERROR: The owner of bucket '" << s->bucket_name << "' does not match the expected_bucket_owner." << dendl;
+      op_ret = -EACCES;
+      return;
+    }
+  }
+
   RGWObjVersionTracker ot;
   ot.read_version = s->bucket->get_version();
 
