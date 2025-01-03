@@ -19,7 +19,9 @@ if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in
       fedora)
-          if [ "$VERSION_ID" -ge "39" ] ; then
+          if [ "$VERSION_ID" -ge "41" ] ; then
+            PYBUILD="3.13"
+          elif [ "$VERSION_ID" -ge "39" ] ; then
             PYBUILD="3.12"
           else
             # Fedora 37 and above
