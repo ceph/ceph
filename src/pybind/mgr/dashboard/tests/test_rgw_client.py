@@ -6,11 +6,11 @@ from unittest.mock import Mock, patch
 
 from .. import mgr
 from ..exceptions import DashboardException
-from ..services.rgw_client import NoRgwDaemonsException, RgwClient, _parse_frontend_config
+from ..services.rgw_client import NoRgwDaemonsException, RgwClient, _parse_frontend_config, RgwRateLimit
 from ..services.service import NoCredentialsException
 from ..settings import Settings
 from ..tests import CLICommandTestMixin, RgwStub
-
+from ..controllers.rgw import RgwUser
 
 @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
     return_value='dummy_admin'))
@@ -399,3 +399,73 @@ class TestDictToXML(TestCase):
         expected_xml = "<name>Foo</name>\n<age>30</age>\n"
         result = RgwClient.dict_to_xml(data)
         self.assertEqual(result, expected_xml)
+
+class RgwRateLimitTest(TestCase):
+
+    @patch.object(RgwRateLimit, 'get_global_rateLimit')
+    def test_get_global_rateLimit(self, mock_get_global_rateLimit):
+        mock_return_value = {
+            "bucket_ratelimit": {
+                "max_read_ops": 2024,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": 'true'
+            },
+            "user_ratelimit": {
+                "max_read_ops": 1024,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": 'true'
+            },
+            "anonymous_ratelimit": {
+                "max_read_ops": 0,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": 'false'
+            }
+        }
+
+        mock_get_global_rateLimit.return_value = mock_return_value
+
+        controller = RgwUser()
+        result = controller.get_global_rate_limit()
+
+        mock_get_global_rateLimit.assert_called_with()
+
+        self.assertEqual(result, mock_return_value)
+
+    @patch.object(RgwRateLimit, 'get_rateLimit')
+    def test_get_rateLimit(self, mock_get_rateLimit):
+        mock_return_value = {
+            "user_ratelimit": {
+                "max_read_ops": 0,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": 'false'
+                }
+            }
+        mock_get_rateLimit.return_value = mock_return_value
+
+        controller = RgwUser()
+        result = controller.get_rate_limit(name='dashboard')
+
+        mock_get_rateLimit.assert_called_with('user','dashboard')
+
+        self.assertEqual(result, mock_return_value)
+
+    @patch.object(RgwRateLimit, 'set_rate_limit')
+    def set_rate_limit(self, mock_set_rate_limit):
+        mock_return_value = {}
+
+        mock_set_rate_limit.return_value = mock_return_value
+
+        controller = RgwUser()
+        result = controller.set_rate_limit(enabled='true', name='dashboard', max_read_ops='1000',max_write_ops='1000',max_read_bytes='1080', max_write_bytes='1080')
+
+        mock_set_rate_limit.assert_called_with('true', 'dashboard', '1000','1000', '1080','1080')
+
+        self.assertEqual(result, mock_return_value)
