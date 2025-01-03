@@ -35,7 +35,7 @@ def verify_service_restart(service_type: str, service_id: str):
 
     wait_for_refresh(orch, service_name, last_refreshed)
 
-    daemon_status = wait_for_daemon_to_start(service_name)
+    daemon_status = wait_for_service_to_start(service_name)
     return daemon_status
 
 
@@ -47,16 +47,15 @@ def wait_for_refresh(orch, service_name, last_refreshed):
             break
 
 
-def wait_for_daemon_to_start(service_name, timeout=30):
+def wait_for_service_to_start(service_name, timeout=30):
     orch = OrchClient.instance()
     start_time = time.time()
 
     while True:
         daemons = [d.to_dict() for d in orch.services.list_daemons(service_name=service_name)]
-        logger.info("Daemon list for service %s: %s", service_name, daemons)
 
         if not daemons:
-            logger.info("No daemons found for service %s. Retrying...", service_name)
+            logger.debug("No daemons found for service %s. Retrying...", service_name)
             # Check if timeout has been reached
             daemon_start_time = time.time()
             if time.time() - daemon_start_time > timeout:
@@ -71,10 +70,12 @@ def wait_for_daemon_to_start(service_name, timeout=30):
         all_running = True
 
         for daemon in daemons:
+            logger.debug("Checking daemon %s state", daemon['daemon_id'])
             daemon_state = daemon['status_desc']
 
             if daemon_state in ('unknown', 'error', 'stopped'):
-                logger.error("Failed to restart daemon %s for service %s. State is %s", daemon['daemon_id'], service_name, daemon_state)  # noqa E501  # pylint: disable=line-too-long
+                logger.error("Failed to restart daemon %s for service %s. State is %s",
+                             daemon['daemon_id'], service_name, daemon_state)
                 raise DashboardException(
                     code='daemon_restart_failed',
                     msg="Failed to restart the daemon %s. Daemon state is %s." % (daemon['daemon_id'], daemon_state)  # noqa E501  # pylint: disable=line-too-long
@@ -102,6 +103,12 @@ def wait_for_daemon_to_start(service_name, timeout=30):
 
 class RgwServiceManager:
     user = 'dashboard'
+
+    def create_rgw_instance(self, service_spec):
+        logger.info("Creating RGW instance %s", service_spec['service_id'])
+        orch = OrchClient.instance()
+        result = orch.services.apply(service_spec)
+        return result
 
     def find_available_port(self, starting_port=80):
         orch = OrchClient.instance()

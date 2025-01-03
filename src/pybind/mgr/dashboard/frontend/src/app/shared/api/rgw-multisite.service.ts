@@ -79,6 +79,7 @@ export class RgwMultisiteService {
 
   setUpMultisiteReplication(
     realmName: string,
+    defaultRealm: boolean,
     zonegroupName: string,
     zonegroupEndpoints: string,
     zoneName: string,
@@ -90,6 +91,7 @@ export class RgwMultisiteService {
   ) {
     let params = new HttpParams()
       .set('realm_name', realmName)
+      .set('default_realm', defaultRealm.toString())
       .set('zonegroup_name', zonegroupName)
       .set('zonegroup_endpoints', zonegroupEndpoints)
       .set('zone_name', zoneName)

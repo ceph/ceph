@@ -17,7 +17,8 @@ export class RgwZoneService {
     zonegroup: RgwZonegroup,
     defaultZone: boolean,
     master: boolean,
-    endpoints: string
+    endpoints: string,
+    realmId: string
   ) {
     let params = new HttpParams();
     params = params.appendAll({
@@ -27,7 +28,8 @@ export class RgwZoneService {
       master: master,
       zone_endpoints: endpoints,
       access_key: zone.system_key.access_key,
-      secret_key: zone.system_key.secret_key
+      secret_key: zone.system_key.secret_key,
+      realm_id: realmId
     });
     return this.http.post(`${this.url}`, null, { params: params });
   }
@@ -45,6 +47,7 @@ export class RgwZoneService {
   }
 
   delete(
+    realmId: string,
     zoneName: string,
     deletePools: boolean,
     pools: Set<string>,
@@ -52,6 +55,7 @@ export class RgwZoneService {
   ): Observable<any> {
     let params = new HttpParams();
     params = params.appendAll({
+      realm_id: realmId,
       zone_name: zoneName,
       delete_pools: deletePools,
       pools: Array.from(pools.values()),
@@ -64,6 +68,7 @@ export class RgwZoneService {
     zone: RgwZone,
     zonegroup: RgwZonegroup,
     newZoneName: string,
+    realmId: string,
     defaultZone?: boolean,
     master?: boolean,
     endpoints?: string,
@@ -79,6 +84,7 @@ export class RgwZoneService {
       zone_name: zone.name,
       zonegroup_name: zonegroup.name,
       new_zone_name: newZoneName,
+      realm_id: realmId,
       default: defaultZone,
       master: master,
       zone_endpoints: endpoints,
