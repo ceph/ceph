@@ -49,6 +49,7 @@ from ._interface import (
     MgmtGatewaySpec,
     OAuth2ProxySpec,
     ServiceDescription,
+    UpgradeStatusSpec,
     TunedProfileSpec,
     _cli_read_command,
     _cli_write_command,
@@ -2347,20 +2348,23 @@ Usage:
         return HandleCommandResult(stdout=out)
 
     @_cli_write_command('orch upgrade status')
-    def _upgrade_status(self) -> HandleCommandResult:
+    def _upgrade_status(self, format: Optional[str] = None) -> HandleCommandResult:
         """Check the status of any potential ongoing upgrade operation"""
         completion = self.upgrade_status()
         status = raise_if_exception(completion)
-        r = {
-            'target_image': status.target_image,
-            'in_progress': status.in_progress,
-            'which': status.which,
-            'services_complete': status.services_complete,
-            'progress': status.progress,
-            'message': status.message,
-            'is_paused': status.is_paused,
-        }
-        out = json.dumps(r, indent=4)
+        upgrade_status = UpgradeStatusSpec()
+        upgrade_status.target_image = status.target_image
+        upgrade_status.in_progress = status.in_progress
+        upgrade_status.which = status.which
+        upgrade_status.services_complete = status.services_complete
+        upgrade_status.progress = status.progress
+        upgrade_status.message = status.message
+        upgrade_status.is_paused = status.is_paused
+        if format is not None:
+            format = Format(format)
+            out = to_format(upgrade_status, format, many=False, cls=UpgradeStatusSpec)
+        else:
+            out = json.dumps(upgrade_status.to_dict(), indent=4)
         return HandleCommandResult(stdout=out)
 
     @_cli_write_command('orch upgrade start')
