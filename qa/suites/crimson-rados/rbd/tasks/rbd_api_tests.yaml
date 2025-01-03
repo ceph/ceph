@@ -1,0 +1,21 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(CACHE_POOL_NO_HIT_SET\)
+      - \(POOL_APP_NOT_ENABLED\)
+      - is full \(reached quota
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(POOL_FULL\)
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/crimson/test_crimson_librbd.sh
+    env:
+      RBD_FEATURES: "61"
+

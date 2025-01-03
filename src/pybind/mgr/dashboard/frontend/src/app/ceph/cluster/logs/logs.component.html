@@ -1,0 +1,194 @@
+<div *ngIf="contentData">
+  <ng-container *ngTemplateOutlet="logFiltersTpl"></ng-container>
+
+  <nav ngbNav
+       #nav="ngbNav"
+       class="nav-tabs"
+       cdStatefulTab="logs"
+       [cdStatefulTabDefault]="defaultTab"
+       [hidden]="!showNavLinks">
+    <ng-container ngbNavItem="cluster-logs">
+      <a ngbNavLink
+         i18n>Cluster Logs</a>
+      <ng-template ngbNavContent>
+        <div class="card bg-light mb-3"
+             *ngIf="clog">
+          <div class="btn-group"
+               role="group"
+               *ngIf="clog.length && showClusterLogs">
+            <cd-download-button [objectItem]="clog"
+                                [textItem]="clogText"
+                                fileName="cluster_log"
+                                *ngIf="showDownloadCopyButton">
+            </cd-download-button>
+            <cd-copy-2-clipboard-button
+                    [source]="clogText"
+                    [byId]="false"
+                    *ngIf="showDownloadCopyButton">
+            </cd-copy-2-clipboard-button>
+          </div>
+          <div class="card-body"
+               [ngClass]="{'overflow-auto': scrollable}">
+            <p *ngFor="let line of clog">
+              <span class="timestamp">{{ line.stamp | cdDate }}</span>
+              <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
+              <span class="message"
+                    [innerHTML]="line.message | searchHighlight: search"></span>
+            </p>
+
+            <ng-container *ngIf="clog.length !== 0 else noEntriesTpl"></ng-container>
+          </div>
+        </div>
+      </ng-template>
+    </ng-container>
+    <ng-container ngbNavItem="audit-logs">
+      <a ngbNavLink
+         i18n>Audit Logs</a>
+      <ng-template ngbNavContent>
+        <div class="card bg-light mb-3"
+             *ngIf="audit_log && showAuditLogs">
+          <div class="btn-group"
+               role="group"
+               *ngIf="audit_log.length">
+            <cd-download-button [objectItem]="audit_log"
+                                [textItem]="auditLogText"
+                                fileName="audit_log"
+                                *ngIf="showDownloadCopyButton">
+            </cd-download-button>
+            <cd-copy-2-clipboard-button
+                    [source]="auditLogText"
+                    [byId]="false"
+                    *ngIf="showDownloadCopyButton">
+            </cd-copy-2-clipboard-button>
+          </div>
+          <div class="card-body">
+            <p *ngFor="let line of audit_log">
+              <span class="timestamp">{{ line.stamp | cdDate }}</span>
+              <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
+              <span class="message"
+                    [innerHTML]="line.message | searchHighlight: search"></span>
+            </p>
+
+            <ng-container *ngIf="audit_log.length !== 0 else noEntriesTpl"></ng-container>
+          </div>
+        </div>
+      </ng-template>
+    </ng-container>
+    <ng-container ngbNavItem="daemon-logs">
+      <a ngbNavLink
+         i18n>Daemon Logs</a>
+      <ng-template ngbNavContent>
+        <ng-container *ngIf="showDaemonLogs && lokiServiceStatus$ | async as lokiServiceStatus ; else daemonLogsTpl ">
+          <div *ngIf="promtailServiceStatus$ | async as promtailServiceStatus; else daemonLogsTpl">
+            <cd-grafana i18n-title
+                        title="Daemon logs"
+                        [grafanaPath]="'explore?'"
+                        [type]="'logs'"
+                        uid="CrAHE0iZz"
+                        grafanaStyle="three">
+            </cd-grafana>
+          </div>
+        </ng-container>
+      </ng-template>
+    </ng-container>
+  </nav>
+
+  <div [ngbNavOutlet]="nav"></div>
+</div>
+
+<ng-template #logFiltersTpl>
+  <div class="row mb-3"
+       *ngIf="showFilterTools">
+  <div class="col-lg-10 d-flex">
+    <div class="col-sm-1 me-3">
+      <label for="logs-priority"
+             class="fw-bold"
+             i18n>Priority:</label>
+      <select id="logs-priority"
+              class="form-select"
+              [(ngModel)]="priority"
+              (ngModelChange)="filterLogs()">
+        <option *ngFor="let prio of priorities"
+                [value]="prio.value">{{ prio.name }}</option>
+      </select>
+    </div>
+
+    <div class="col-md-3 me-3">
+      <label for="logs-keyword"
+             class="fw-bold"
+             i18n>Keyword:</label>
+      <div class="input-group">
+        <span class="input-group-text">
+          <i [ngClass]="[icons.search]"></i>
+        </span>
+
+        <input class="form-control"
+               id="logs-keyword"
+               type="text"
+               [(ngModel)]="search"
+               (keyup)="filterLogs()">
+
+        <button type="button"
+                class="btn btn-light"
+                (click)="clearSearchKey()"
+                title="Clear">
+          <i class="icon-prepend {{ icons.destroy }}"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="col-md-3 me-3">
+      <label for="logs-date"
+             class="fw-bold"
+             i18n>Date:</label>
+      <div class="input-group">
+        <input class="form-control"
+               id="logs-date"
+               placeholder="YYYY-MM-DD"
+               ngbDatepicker
+               [maxDate]="maxDate"
+               #d="ngbDatepicker"
+               (click)="d.open()"
+               [(ngModel)]="selectedDate"
+               (ngModelChange)="filterLogs()">
+        <button type="button"
+                class="btn btn-light"
+                (click)="clearDate()"
+                title="Clear">
+          <i class="icon-prepend {{ icons.destroy }}"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="col-md-5">
+      <label i18n
+             class="fw-bold">Time range:</label>
+      <div class="d-flex">
+      <ngb-timepicker [spinners]="false"
+                      [(ngModel)]="startTime"
+                      (ngModelChange)="filterLogs()"></ngb-timepicker>
+
+      <span class="mt-2">&nbsp;&mdash;&nbsp;</span>
+
+      <ngb-timepicker [spinners]="false"
+                      [(ngModel)]="endTime"
+                      (ngModelChange)="filterLogs()"></ngb-timepicker>
+    </div></div>
+  </div></div>
+</ng-template>
+
+<ng-template #noEntriesTpl>
+  <span i18n>No log entries found. Please try to select different filter options.</span>
+  <span>&nbsp;</span>
+  <a href="#"
+     (click)="resetFilter()"
+     i18n>Reset filter.</a>
+</ng-template>
+
+<ng-template #daemonLogsTpl>
+  <cd-alert-panel type="info"
+                  title="Loki/Promtail service not running"
+                  i18n-title>
+  <ng-container i18n>Please start the loki and promtail service to see these logs.</ng-container>
+  </cd-alert-panel>
+</ng-template>

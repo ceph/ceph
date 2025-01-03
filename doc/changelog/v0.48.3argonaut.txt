@@ -1,0 +1,895 @@
+commit 920f82e805efec2cae05b79c155c07df0f3ed5dd
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Mon Jan 7 21:08:08 2013 -0800
+
+    v0.48.3argonaut
+
+commit 213e3559dd260a2e19324f2a671c808261249f96
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 6 20:43:21 2013 -0800
+
+    osd: fix race in do_recovery()
+    
+    Verify that the PG is still RECOVERING or BACKFILL when we take the pg
+    lock in the recovery thread.  This prevents a crash from an invalid
+    state machine event when the recovery queue races with a PG state change
+    (e.g., due to peering).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+
+commit e410d1a066b906cad3103a5bbfa5b4509be9ac37
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Jan 4 21:19:45 2013 -0800
+
+    ReplicatedPG: requeue waiting_for_ondisk in apply_and_flush_repops
+    
+    Fixes: #3722
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit cd5f2bfdbb7fbf9237bef482845644cc41fa66de
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Nov 15 16:20:33 2012 -0800
+
+    ObjectCacher: fix off-by-one error in split
+    
+    This error left a completion that should have been attached
+    to the right BufferHead on the left BufferHead, which would
+    result in the completion never being called unless the buffers
+    were merged before it's original read completed. This would cause
+    a hang in any higher level waiting for a read to complete.
+    
+    The existing loop went backwards (using a forward iterator),
+    but stopped when the iterator reached the beginning of the map,
+    or when a waiter belonged to the left BufferHead.
+    
+    If the first list of waiters should have been moved to the right
+    BufferHead, it was skipped because at that point the iterator
+    was at the beginning of the map, which was the main condition
+    of the loop.
+    
+    Restructure the waiters-moving loop to go forward in the map instead,
+    so it's harder to make an off-by-one error.
+    
+    Possibly-fixes: #3286
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 2e862f4d183d8b57b43b0777737886f18f68bf00)
+
+commit 802c486fd0913e9fe58ae7ff72df135f99712358
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 4 11:07:48 2013 -0800
+
+    config: change default log_max_recent to 10,000
+    
+    Commit c34e38bcdc0460219d19b21ca7a0554adf7f7f84 meant to do this but got
+    the wrong number of zeros.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 39a734fbf34ccd121f17023bcec814e61c8bdaab
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jan 3 17:15:07 2013 -0800
+
+    os/FileStore: fix non-btrfs op_seq commit order
+    
+    The op_seq file is the starting point for journal replay.  For stable btrfs
+    commit mode, which is using a snapshot as a reference, we should write this
+    file before we take the snap.  We normally ignore current/ contents anyway.
+    
+    On non-btrfs file systems, however, we should only write this file *after*
+    we do a full sync, and we should then fsync(2) it before we continue
+    (and potentially trim anything from the journal).
+    
+    This fixes a serious bug that could cause data loss and corruption after
+    a power loss event.  For a 'kill -9' or crash, however, there was little
+    risk, since the writes were still captured by the host's cache.
+    
+    Fixes: #3721
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 28d59d374b28629a230d36b93e60a8474c902aa5)
+
+commit 49416619d733572368e5d2ba7f2b34150c754b23
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Dec 28 13:07:18 2012 -0800
+
+    log: broadcast cond signals
+    
+    We were using a single cond, and only signalling one waiter.  That means
+    that if the flusher and several logging threads are waiting, and we hit
+    a limit, we the logger could signal another logger instead of the flusher,
+    and we could deadlock.
+    
+    Similarly, if the flusher empties the queue, it might signal only a single
+    logger, and that logger could re-signal the flusher, and the other logger
+    could wait forever.
+    
+    Intead, break the single cond into two: one for loggers, and one for the
+    flusher.  Always signal the (one) flusher, and always broadcast to all
+    loggers.
+    
+    Backport: bobtail, argonaut
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 813787af3dbb99e42f481af670c4bb0e254e4432)
+
+commit f8bb4814d0fd7e08c9b6cdcde02940bf1b42cadd
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 2 13:58:44 2013 -0800
+
+    log: fix locking typo/stupid for dump_recent()
+    
+    We weren't locking m_flush_mutex properly, which in turn was leading to
+    racing threads calling dump_recent() and garbling the crash dump output.
+    
+    Backport: bobtail, argonaut
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 43cba617aa0247d714632bddf31b9271ef3a1b50)
+
+commit 9483a032f750572586f146c696ec6501d3df0383
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Dec 27 16:06:24 2012 -0800
+
+    init-ceph: fix status version check across machines
+    
+    The local state isn't propagated into the backtick shell, resulting in
+    'unknown' for all remote daemons.  Avoid backticks altogether.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6c7b667badc5e7608b69c533a119a2afc062e257)
+
+commit 8fef9360fe949fbf4ee6e468c36cc1c84b369b6e
+Author: Travis Rhoden <trhoden@gmail.com>
+Date:   Mon Aug 20 13:29:11 2012 -0700
+
+    init-ceph: use SSH in "service ceph status -a" to get version
+    
+    When running "service ceph status -a", a version number was never
+    returned for remote hosts, only for the local.  This was because
+    the command to query the version number didn't use the do_cmd
+    function, which is responsible for running the command over SSH
+    when needed.
+    
+    Modify the ceph init.d script to use do_cmd for querying the
+    Ceph version.
+    
+    Signed-off-by: Travis Rhoden <trhoden@gmail.com>
+    (cherry picked from commit 60fdb6fda6233b01dae4ed8a34427d5960840b84)
+
+commit c34e38bcdc0460219d19b21ca7a0554adf7f7f84
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Nov 28 13:00:36 2012 -0800
+
+    log: 10,000 recent log entries
+    
+    This is what we were (wrongly) doing before, so there are no memory
+    utilization surprises.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 78286b1403a5e0f14f95fe6b92f2fdb163e909f1)
+
+commit 4daede79f578cccd340210752f912e685b1ff03d
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Nov 28 12:59:43 2012 -0800
+
+    log: fix log_max_recent config
+    
+    <facepalm>
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4de7748b72d4f90eb1197a70015c199c15203354)
+
+commit fdae0552a0b8b1a634775609b473aff9221904f3
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Dec 20 13:48:06 2012 -0800
+
+    log: fix flush/signal race
+    
+    We need to signal the cond in the same interval where we hold the lock
+    *and* modify the queue.  Otherwise, we can have a race like:
+    
+     queue has 1 item, max is 1.
+     A: enter submit_entry, signal cond, wait on condition
+     B: enter submit_entry, signal cond, wait on condition
+     C: flush wakes up, flushes 1 previous item
+     A: retakes lock, enqueues something, exits
+     B: retakes lock, condition fails, waits
+      -> C is never woken up as there are 2 items waiting
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 50914e7a429acddb981bc3344f51a793280704e6)
+
+commit bdcf6647dec05617d3da46ad00459498ede94f1d
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Fri Dec 21 17:12:07 2012 -0800
+
+    .gitignore:  Add ar-lib to ignore list
+
+commit 51a900cfd7cc009f03fdb80be028015fc34547d2
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Fri Dec 21 16:55:27 2012 -0800
+
+    autogen.sh:  Create m4 directory for leveldb
+    
+    Signed-off-by: Gary Lowell <gary.lowell@inktank.com>
+
+commit 74473bb667df0ee0bb1adc6c43242733b80aa10d
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Fri Dec 21 16:17:33 2012 -0800
+
+    leveldb:  Update submodule
+    
+    Signed-off-by: Gary Lowell <gary.lowell@inktank.com>
+
+commit bc4f74c7b9ec4e6bbcf4ab4ab68a82a69b8eaca5
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Thu Dec 20 16:49:32 2012 -0800
+
+    ceph.spec.in:  Fedora builds debuginfo by default.
+    
+    Signed-off-by: Gary Lowell <gary.lowell@inktank.com>
+
+commit 3ed2d59e98494a0da29f4bb8537471237a6f8e93
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Dec 19 17:07:18 2012 -0800
+
+    rgw: fix error handling with swift
+    
+    Fixes: #3649
+    verify_swift_token returns a bool and not an int.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit dfd310368267df848f2b65cc536b4ffcb039d353
+Author: Sam Lang <sam.lang@inktank.com>
+Date:   Mon Sep 24 09:55:25 2012 -0700
+
+    client: Fix for #3184 cfuse segv with no keyring
+    
+    Fixes bug #3184 where the ceph-fuse client segfaults if authx is
+    enabled but no keyring file is present.  This was due to the
+    client->init() return value not getting checked.
+    
+    Signed-off-by: Sam Lang <sam.lang@inktank.com>
+    (cherry picked from commit 47983df4cbd31f299eef896b4612d3837bd7c7bd)
+
+commit acebcce91448421c34a72850a380fcd1aabe9f41
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Oct 9 21:25:54 2012 +0100
+
+    mon: Monitor: resolve keyring option to a file before loading keyring
+    
+    Otherwise our keyring default location, or any other similarly formatted
+    location, will be taken as the actual location for the keyring and fail.
+    
+    Reported-by: tziOm (at) #ceph
+    Fixes: 3276
+    Backport: argonaut
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 7ef0df25e001bfae303feb3ae36514608767b1f2)
+
+commit 7ab00a796d2233c3804f52fbba16c2f3ed0c297b
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Wed Dec 5 19:39:11 2012 -0800
+
+    .gitignore:  Add m4 macro directories to ignore list
+
+commit b781ac00e16fd802b6e055dd9d453271db6efa39
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Thu Nov 8 12:43:24 2012 -0800
+
+    build:  Add RPM release string generated from git describe.
+    
+    Fix for bug 3451.  Use the commit count and sha1 from git describe to
+    construct a release string for rpm packages.
+    
+    Conflicts:
+    
+    	configure.ac
+
+commit f60c9b6600a85b840a02e145bac77326d60fd03f
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Fri Nov 9 13:28:13 2012 -0800
+
+    ceph.spec.in:  Build debuginfo subpackage.
+    
+    This is a partial fix for bug 3471.  Enable building of debuginfo package.
+    Some distributions enable this automatically by installing additional rpm
+    macros, on others it needs to be explicity added to the spec file.
+
+commit 7fbf9476cb44ce256f4bb2366f46fa20cb570eda
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Dec 3 14:32:28 2012 -0800
+
+    rgw: fix swift auth concurrency issue
+    
+    Fixes: #3565
+    Originally ops were using static structures, but that
+    has since changed. Switching swift auth handler to do
+    the same.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 0639cd9c479d69b077175f0385eb569ebb839349
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Nov 29 13:39:22 2012 -0800
+
+    rgw: fix rgw_tools get_obj()
+    
+    The original implementation broke whenever data exceeded
+    the chunk size. Also don't keep cache for objects that
+    exceed the chunk size as cache is not designed for
+    it. Increased chunk size to 512k.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 84983387a220a29540aca64af774bbe7bc6b5ee6
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Nov 29 12:47:59 2012 -0800
+
+    rgw: fix PUT acls
+    
+    This fixes a regression introduced at
+    17e4c0df44781f5ff1d74f3800722452b6a0fc58. The original
+    patch fixed error leak, however it also removed the
+    operation's send_response() call.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 6c1e2b663227cadff4255db3321976882df6b261
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Nov 19 17:10:11 2012 -0800
+
+    rgw: fix xml parser leak
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit f86522cdfcd81b2d28c581ac8b8de6226bc8d1a4)
+
+commit 17e4c0df44781f5ff1d74f3800722452b6a0fc58
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Nov 19 16:52:38 2012 -0800
+
+    rgw: fix memory leaks
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 98a04d76ebffa61c3ba4b033cdd57ac57b2f29f3)
+    
+    Conflicts:
+    	src/rgw/rgw_op.cc
+    	src/rgw/rgw_op.h
+
+commit cd18b9f43cce68ac3d8f109e82a5b603f9caad9b
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Nov 7 13:21:15 2012 -0800
+
+    rgw: don't convert object mtime to UTC
+    
+    Fixes: #3452
+    When we read object info, don't try to convert mtime to
+    UTC, it's already in UTC.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit ddb40dec6e8d930fd63a71ef1c98279d6472e3e4
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Nov 14 11:30:34 2012 -0800
+
+    rgw: relax date format check
+    
+    Don't try to parse beyond the GMT or UTC. Some clients use
+    special date formatting. If we end up misparsing the date
+    it'll fail in the authorization, so don't need to be too
+    restrictive.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit e35e7e2bcb749e3ee00f1f93bc6b17bde8329414
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Oct 30 14:17:56 2012 -0700
+
+    ceph-disk-activate: avoid duplicating mounts if already activated
+    
+    If the given device is already mounted at the target location, do not
+    mount --move it again and create a bunch of dup entries in the /etc/mtab
+    and kernel mount table.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c435d314caeb5424c1f4482ad02f8a085317ad5b)
+
+commit 0c9bbb3b4b4dbe6f0a12960785e35af9c748701a
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Oct 25 21:21:18 2012 -0700
+
+    ceph-disk-prepare: poke kernel into refreshing partition tables
+    
+    Prod the kernel to refresh the partition table after we create one.  The
+    partprobe program is packaged with parted, which we already use, so this
+    introduces no new dependency.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 402e1f5319a52c309eca936081fddede1f107268)
+
+commit b4004806ec387915ba4e039b9bc1c563273ef08f
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Oct 25 21:20:21 2012 -0700
+
+    ceph-disk-prepare: fix journal partition creation
+    
+    The end value needs to have + to indicate it is relative to wherever the
+    start is.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2e32a0ee2d9e2a3bf5b138f50efc5fba8d5b8660)
+
+commit efac1bb19f1ca3851c7b51d96cb4e82d8d142a45
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Oct 25 18:14:47 2012 -0700
+
+    ceph-disk-prepare: assume parted failure means no partition table
+    
+    If the disk has no valid label we get an error like
+    
+      Error: /dev/sdi: unrecognised disk label
+    
+    Assume any error we get is that and go with an id label of 1.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8921fc7c7bc28fb98334c06f1f0c10af58085085)
+
+commit 39b9da403541617fb088aa4ae03925850aa2de65
+Merge: 83ab366 8c115d3
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Nov 12 11:24:00 2012 -0800
+
+    Merge remote-tracking branch 'gh/wip-mds-stable' into stable
+
+commit 8c115d3e81543a4c723bae217ba5b9d2c0e988f7
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Nov 9 05:28:12 2012 -0800
+
+    mds: re-try_set_loner() after doing evals in eval(CInode*, int mask)
+    
+    Consider a case where current loner is A and wanted loner is B.
+    At the top of the function we try to set the loner, but that may fail
+    because we haven't processed the gathered caps yet for the previous
+    loner.  In the body we do that and potentially drop the old loner, but we
+    do not try_set_loner() again on the desired loner.
+    
+    Try after our drop.  If it succeeds, loop through the eval's one more time
+    so that we can issue caps approriately.
+    
+    This fixes a hang induced by a simple loop like:
+    
+     while true ; do echo asdf >> mnt.a/foo ; tail mnt.b/foo ; done &
+     while true ; do ls mnt.a mnt.b ; done
+    
+    (The second loop may not be necessary.)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 1a23bd6981e2a308be4a905021453a6d5feac9e3
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Jul 13 14:23:27 2012 -0700
+
+    CompatSet: users pass bit indices rather than masks
+    
+    CompatSet users number the Feature objects rather than
+    providing masks.  Thus, we should do
+    
+    mask |= (1 << f.id) rather than mask |= f.id.
+    
+    In order to detect old, broken encodings, the lowest
+    bit will be set in memory but not set in the encoding.
+    We can reconstruct the correct mask from the names map.
+    
+    This bug can cause an incompat bit to not be detected
+    since 1|2 == 1|2|3.
+    
+    fixes: #2748
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit 83ab36655f397b7d781a611b4d82679c8484710f
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Wed Nov 7 12:41:10 2012 -0800
+
+    ceph.spec.in:  Remove ceph version requirement from ceph-fuse package.
+    
+    The ceph-fuse rpm package now only requires ceph as a pre-req, not a specific
+    version.
+
+commit 578b5764d5b26d190c295da88c1be5f0c77682a7
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Oct 24 13:15:46 2012 -0700
+
+    rgw: fix multipart overwrite
+    
+    Fixes: #3400
+    Removed a few lines of code that prematurely created the head
+    part of the final object (before creating the manifest).
+    
+    backport:argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 96888ddf154231daa6c7138bb2b97674771cc610
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Nov 5 23:27:13 2012 -0800
+
+    mds: move to from loner -> mix if *anyone* wants rd|wr
+    
+    We were either going to MIX or SYNC depending on whether non-loners wanted
+    to read/write, but it may be that the loner wants to if our logic for
+    choosing loner vs not longer is based on anything other that just rd|wr
+    wanted.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit b940d7750d14285fc85ce63b0f0444b58ad3ad93
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Nov 5 23:26:09 2012 -0800
+
+    mds: base loner decision on wanted RD|WR|EXCL, not CACHE|BUFFER
+    
+    Observed instance where one client wanted the Fc cap and prevented the
+    loner from getting RD|WR caps.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 7a82a3214a38cbc7b5750adba23b760a4f51643a
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Oct 30 09:00:11 2012 -0700
+
+    osd: make pool_snap_info_t encoding backward compatible
+    
+    Way back in fc869dee1e8a1c90c93cb7e678563772fb1c51fb (v0.42) when we redid
+    the osd type encoding we forgot to make this conditionally encode the old
+    format for old clients.  In particular, this means that kernel clients
+    will fail to decode the osdmap if there is a rados pool with a pool-level
+    snapshot defined.
+    
+    Fixes: #3290
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    
+    Conflicts:
+    
+    	src/test/encoding/types.h
+
+commit 8d7ca76182fdc04aaf8b698afbbd2d9b22e07fdc
+Author: Yan, Zheng <zheng.z.yan@intel.com>
+Date:   Fri Sep 7 13:49:27 2012 +0800
+
+    osd/OSD.cc: Fix typo in OSD::heartbeat_check()
+    
+    The check 'p->second.last_tx > cutoff' should always be false
+    since last_tx is periodically updated by OSD::heartbeat()
+    
+    Signed-off-by: Yan, Zheng <zheng.z.yan@intel.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit fc2b3ced4f7ed8d6e065c159fbeb8670fcdaca2a
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Oct 22 16:52:11 2012 -0700
+
+    rgw: dump an error message if FCGX_Accept fails
+    
+    Adding missing debug info.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit d9b51b3b7011f4551fe27e33301b26cd23a72378
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Oct 22 15:38:30 2012 -0700
+
+    workqueue: make debug output include active threads
+    
+    Include active thread count in threadpool debug output.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 852e27d3e19239a696fa693e2a30c3226d27a611
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Oct 22 13:16:59 2012 -0700
+
+    rgw: don't continue processing of GET request on error
+    
+    Fixes #3381
+    We continued processing requests long after the client
+    has died. This fix appliese to both s3 and swift.
+    
+    backport: argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 5f2b9b451da5a96fdbf9cf292648feb40dc13d28
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Oct 19 08:46:19 2012 -0700
+
+    osd: be quiet about watches
+    
+    Useless log noise.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit ea42eb1f7866fed0e843257ce05e34503fd0129c
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Oct 17 17:44:12 2012 -0700
+
+    addr_parsing: make , and ; and ' ' all delimiters
+    
+    Instead of just ,.  Currently "foo.com, bar.com" will fail because of the
+    space after the comma.  This patches fixes that, and makes all delim
+    chars interchangeable.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit b0164d9902c834c95187f6b277f58a30d26cc4d3
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Fri Oct 5 10:57:42 2012 -0700
+
+    ceph-disk-prepare, debian/control: Support external journals.
+    
+    Previously, ceph-disk-* would only let you use a journal that was a
+    file inside the OSD data directory. With this, you can do:
+    
+      ceph-disk-prepare /dev/sdb /dev/sdb
+    
+    to put the journal as a second partition on the same disk as the OSD
+    data (might save some file system overhead), or, more interestingly:
+    
+      ceph-disk-prepare /dev/sdb /dev/sdc
+    
+    which makes it create a new partition on /dev/sdc to use as the
+    journal. Size of the partition is decided by $osd_journal_size.
+    /dev/sdc must be a GPT-format disk. Multiple OSDs may share the same
+    journal disk (using separate partitions); this way, a single fast SSD
+    can serve as journal for multiple spinning disks.
+    
+    The second use case currently requires parted, so a Recommends: for
+    parted has been added to Debian packaging.
+    
+    Closes: #3078
+    Closes: #3079
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 5a3076fd51706e32bc55b734099037520299003b
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Oct 15 09:43:47 2012 -0700
+
+    rgw: don't add port to url if already has one
+    
+    Fixes: #3296
+    Specifically, is host name string already has ':', then
+    don't try to append theport (swift auth).
+    
+    backport: argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit d76b71caa99a39035ea6ed9db6ca0994975d38af
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Oct 15 16:37:05 2012 -0700
+
+    admin_socket: fix '0' protocol version
+    
+    Broken by 895e24d198ced83ab7fed3725f12f75e3bc97b0b.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 714254cb0522b194118eb854f90d4c3971e8c6b3
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Oct 8 17:14:22 2012 -0700
+
+    mon: drop command replies on paxos reset
+    
+    If paxos resets, do not send the reply for the commit we were waiting for;
+    let the command be reprocessed and re-proposed.
+    
+    Among other things, this could lead to nondeterministic results for
+    'ceph osd create <uuid>'.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit d9e981f4209da9a0e000d434e28686a133b25f11
+Merge: 5d84b4a 13b448b
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Oct 8 21:02:51 2012 -0700
+
+    Merge remote-tracking branch 'gh/for-stable-fstypes-and-ext-journal' into stable
+
+commit 5d84b4a22b2ff975679711719f336a312a6edff3
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Thu Aug 2 13:02:04 2012 -0700
+
+    ceph-authtool: Fix usage, it's --print-key not --print.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 13b448b8ce959f31d07cd1827614c445c410aa62
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Fri Oct 5 09:22:34 2012 -0700
+
+    upstart: OSD journal can be a symlink; if it's dangling, don't start.
+    
+    This lets a $osd_data/journal symlink point to
+    /dev/disk/by-partuuid/UUID and the osd will not attempt to start until
+    that disk is available.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit d9dfa2d17859ca07d735b8e35c5dc00a25995153
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Oct 5 09:10:31 2012 -0700
+
+    osd: Make --get-journal-fsid not really start the osd.
+    
+    This way, it won't need -i ID and it won't access the osd_data_dir.
+    That makes it useful for locating the right osd to use with an
+    external journal partition.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit f65daf3f24830a28e85ebe7c6fce2642f5fc6dd8
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Fri Oct 5 09:08:56 2012 -0700
+
+    osd: Make --get-journal-fsid not attempt aio or direct_io.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 86546d7dec6cd5080162d1f3d7de2c579736dd65
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Thu Oct 4 16:03:40 2012 -0700
+
+    ceph-disk-prepare: Use the OSD uuid as the partition GUID.
+    
+    This will make locating the right data partition for a given journal
+    partition a lot easier.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit fa3aa41ead0be5a27695e3c208c5af00af90bc53
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Wed Oct 3 12:38:38 2012 -0700
+
+    debian/control, ceph-disk-prepare: Depend on xfsprogs, use xfs by default.
+    
+    Ext4 as a default is a bad choice, as we don't perform enough QA with
+    it. To use XFS as the default for ceph-disk-prepare, we need to depend
+    on xfsprogs.
+    
+    btrfs-tools is already recommended, so no change there. If you set
+    osd_fs_type=btrfs, and don't have the package installed, you'll just
+    get an error message.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 4c3997dc8bbd3985a7b86d8c54b71fbe15af1591
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Wed Oct 3 10:13:17 2012 -0700
+
+    ceph-disk-{prepare,activate}: Default mkfs arguments and mount options.
+    
+    The values for the settings were copied from teuthology task "ceph".
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit a6229b901785ef0a88d1b1886b5b5ae339ac7fcb
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Wed Oct 3 08:47:20 2012 -0700
+
+    ceph-disk-prepare: Avoid triggering activate before prepare is done.
+    
+    Earlier testing never saw this, but now a mount of a disk triggers a
+    udev blockdev-added event, causing ceph-disk-activate to run even
+    before ceph-disk-prepare has had a chance to write the files and
+    unmount the disk.
+    
+    Avoid this by using a temporary partition type uuid ("ceph 2 be"), and
+    only setting it to the permanent ("ceph osd"). The hotplug event won't
+    match the type uuid, and thus won't trigger ceph-disk-activate.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 03cec77e2b0b4536349880de6890ad9537da0783
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Oct 2 17:06:11 2012 -0700
+
+    ceph-disk-activate: Add a comment about user_xattr being default now.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 4aa13c6d228b9256870e02a57496f00a75e17349
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Oct 2 16:53:35 2012 -0700
+
+    ceph-disk-activate: Use mount options from ceph.conf
+    
+    Always uses default cluster name ("ceph") for now, see
+    http://tracker.newdream.net/issues/3253
+    
+    Closes: #2548
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit b684ab1d1727b23f75f232123f1da947df2e5e63
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Oct 2 16:43:08 2012 -0700
+
+    ceph-disk-activate: Refactor to extract detect_fstype call.
+    
+    This allows us to use the fstype for a config lookup.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit ce5e1f8dfaa8675b0a1e9fa22ebf91be9652aa01
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Oct 2 16:37:07 2012 -0700
+
+    ceph-disk-activate: Unmount on errors (if it did the mount).
+    
+    This cleans up the error handling to not leave disks mounted
+    in /var/lib/ceph/tmp/mnt.* when something fails, e.g. when
+    the ceph command line tool can't talk to mons.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit da86e4e43676ceaf0b39635954489c297de88025
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Oct 2 16:23:55 2012 -0700
+
+    ceph-disk-prepare: Allow setting mkfs arguments and mount options in ceph.conf
+    
+    Tested with meaningless but easy-to-verify values:
+    
+      [global]
+      osd_fs_type = xfs
+      osd_fs_mkfs_arguments_xfs = -i size=512
+      osd_fs_mount_options_xfs = noikeep
+    
+    ceph-disk-activate does not respect the mount options yet.
+    
+    Closes: #2549
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit cf2e3b15cea99cc100169e7a67103676d8990aee
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Oct 2 16:04:15 2012 -0700
+
+    ceph-disk-prepare: Allow specifying fs type to use.
+    
+    Either use ceph.conf variable osd_fs_type or command line option
+    --fs-type=
+    
+    Default is still ext4, as currently nothing guarantees xfsprogs
+    or btrfs-tools are installed.
+    
+    Currently both btrfs and xfs seems to trigger a disk hotplug event at
+    mount time, thus triggering a useless and unwanted ceph-disk-activate
+    run. This will be worked around in a later commit.
+    
+    Currently mkfs and mount options cannot be configured.
+    
+    Bug: #2549
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit f031046c4d600ce0a0c2c9ad5856dc100b0901fb
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Sep 26 15:43:56 2012 -0700
+
+    rgw: copy_object should not override ETAG implicitly
+    
+    When copying an object with new attrs, we still need to
+    maintain the ETAG.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 2fddfb0a95288d39cee2e82376297ce43296743b
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Sep 24 18:10:24 2012 -0700
+
+    rgw: url_decode should allocate extra byte for dest
+    
+    Was missing extra byte for null termination
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>

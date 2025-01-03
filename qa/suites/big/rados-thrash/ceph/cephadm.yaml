@@ -1,0 +1,8 @@
+overrides:
+  kernel:
+    hwe: true
+tasks:
+- install:
+- nvme_loop:
+- cephadm:
+    roleless: true

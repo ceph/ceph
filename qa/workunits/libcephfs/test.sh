@@ -1,0 +1,12 @@
+#!/bin/sh -e
+
+ceph_test_libcephfs
+ceph_test_libcephfs_access
+ceph_test_libcephfs_reclaim
+ceph_test_libcephfs_lazyio
+ceph_test_libcephfs_newops
+ceph_test_libcephfs_suidsgid
+ceph_test_libcephfs_snapdiff
+ceph_test_libcephfs_vxattr
+
+exit 0

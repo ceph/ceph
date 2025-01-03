@@ -1,0 +1,54 @@
+libcephfs Java wrappers
+=======================
+
+- native/: C++
+- java/: Java
+- test/: JUnit tests
+- lib/: JUnit library
+- build.xml: Test runner
+
+Building
+--------
+
+Autotools handles the build using the configure flag --enable-cephfs-java
+
+Testing
+-------
+
+These tests assume a live cluster, and depend on JUnit4 and Ant.
+
+To run the tests make sure that the JUnit4 JAR is installed. 
+Install it via a package manager or like this:
+
+  $ mkdir lib
+  $ cd lib
+  $ wget https://github.com/downloads/KentBeck/junit/junit-4.8.2.jar
+
+And then add the jar to the CLASSPATH.
+*NOTE* for now, configure is only looking for this jar in the 
+/usr/share/java directory as junit4.jar. So create a softlink
+to that location from wherever the junit jar is installed. 
+
+Ant is used to run the unit test (apt-get install ant). For example:
+
+  $ cd src/
+  $ ./vstart -d -n --localhost
+  $ cd java
+  $ CEPHFS_CONF=../ceph.conf CLASSPATH=/usr/share/java/junit4.jar ant test
+
+1. The tests depend on the compiled wrappers. If the wrappers are installed as
+part of a package (e.g. Debian package) then this should 'just work'. Ant will
+also look in the current directory for 'libcephfs.jar' and 'libcephfs-test.jar';
+and in ../build/lib for the
+JNI library.  If all else fails, set the environment variables CEPHFS_JAR, and
+CEPHFS_JNI_LIB accordingly.
+
+2. Set CEPHFS_CONF environment variable to point to a ceph.conf. This can be
+omitted if the desired configuration file can be found in a default location.
+
+Documentation
+-------------
+
+Ant is used to build the Javadocs:
+
+  $ ant docs

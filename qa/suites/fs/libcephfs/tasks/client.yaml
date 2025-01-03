@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 1
+        debug client: 20
+      mds:
+        debug ms: 2
+        debug mds: 20
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - client/test.sh
+        - client/test_oc_disabled.sh

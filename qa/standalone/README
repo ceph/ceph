@@ -1,0 +1,23 @@
+qa/standalone
+=============
+
+These scripts run standalone clusters, but not in a normal way.  They make
+use of functions ceph-helpers.sh to quickly start/stop daemons against
+toy clusters in a single directory.
+
+They are normally run via teuthology based on qa/suites/rados/standalone/*.yaml.
+
+You can run them in a git checkout + build directory as well:
+
+  * The qa/run-standalone.sh will run all of them in sequence.  This is slow
+     since there is no parallelism.
+
+  * You can run individual script(s) by specifying the basename or path below
+    qa/standalone as arguments to qa/run-standalone.sh.
+
+../qa/run-standalone.sh misc.sh osd/osd-dup.sh
+
+  * Add support for specifying arguments to selected tests by simply adding
+    list of tests to each argument.
+
+../qa/run-standalone.sh "test-ceph-helpers.sh test_get_last_scrub_stamp"

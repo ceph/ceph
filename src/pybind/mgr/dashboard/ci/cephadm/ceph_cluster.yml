@@ -1,0 +1,54 @@
+parameters:
+ nodes: 4
+ node_ip_offset: 100
+ pool: ceph-dashboard
+ network: ceph-dashboard
+ gateway: 192.168.100.1
+ netmask: 255.255.255.0
+ prefix: ceph
+ numcpus: 1
+ memory: 2048
+ image: fedora40
+ notify: false
+ admin_password: password
+ disks:
+ - 15
+ - 5
+ - 5
+
+{% for number in range(0, nodes) %}
+{{ prefix }}-node-0{{ number }}:
+ image: {{ image }}
+ numcpus: {{ numcpus }}
+ memory: {{ memory }}
+ reserveip: true
+ reservedns: true
+ sharedkey: true
+ nets:
+  - name: {{ network }}
+    ip: 192.168.100.{{ node_ip_offset + number }}
+    gateway: {{ gateway }}
+    mask: {{ netmask }}
+    dns: {{ gateway }}
+ disks: {{ disks }}
+ pool: {{ pool }}
+ sharedfolders: [{{ ceph_dev_folder }}]
+ files:
+  - bootstrap-cluster.sh
+  - dnf.conf.tpl
+  - load-podman-image.sh
+  - initial-ceph.conf
+ cmds:
+ # updating the dnf.conf to make the dnf faster
+ - cp /root/dnf.conf.tpl /etc/dnf/dnf.conf
+ - dnf -y install python3 chrony lvm2 podman
+ # setting up an insecure podman registry and then loading the ceph image to all hosts
+ {% if quick_install is defined %}
+ - /root/load-podman-image.sh
+ {% endif %}
+ - sed -i "s/SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config
+ - setenforce 0
+ {% if number == 0 %}
+ - bash /root/bootstrap-cluster.sh
+ {% endif %}
+{% endfor %}

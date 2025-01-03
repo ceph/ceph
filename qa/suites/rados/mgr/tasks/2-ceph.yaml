@@ -1,0 +1,12 @@
+tasks:
+  - ceph:
+      # tests may leave mgrs broken, so don't try and call into them
+      # to invoke e.g. pg dump during teardown.
+      wait-for-scrub: false
+      log-ignorelist:
+        - overall HEALTH_
+        - \(MGR_DOWN\)
+        - \(PG_
+        - replacing it with standby
+        - No standby daemons available
+        - \(POOL_APP_NOT_ENABLED\)

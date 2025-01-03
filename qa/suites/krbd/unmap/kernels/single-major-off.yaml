@@ -1,0 +1,6 @@
+tasks:
+- exec:
+    client.0:
+    - "modprobe -r rbd"
+    - "modprobe --first-time rbd single_major=0"
+    - "grep -q N /sys/module/rbd/parameters/single_major"

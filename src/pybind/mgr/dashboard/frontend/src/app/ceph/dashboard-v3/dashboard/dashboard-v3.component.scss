@@ -1,0 +1,33 @@
+.details {
+  font-size: larger;
+
+  dt {
+    margin-bottom: 0.3rem;
+  }
+
+  dd {
+    margin-bottom: 0.8rem;
+  }
+}
+
+.status {
+  .viewAlert {
+    position: absolute;
+    right: 2rem;
+    top: 2rem;
+  }
+}
+
+.alerts {
+  ngx-simplebar {
+    height: 13.5rem;
+    overflow-x: hidden;
+  }
+
+  .text-truncate {
+    -webkit-box-orient: vertical; /* stylelint-disable-line property-no-vendor-prefix */
+    display: -webkit-box; /* stylelint-disable-line value-no-vendor-prefix */
+    -webkit-line-clamp: 2;
+    white-space: normal;
+  }
+}

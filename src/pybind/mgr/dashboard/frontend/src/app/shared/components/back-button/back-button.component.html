@@ -1,0 +1,10 @@
+<button class="w-100 tc_backButton"
+        [ngClass]="{'w-100': modalForm && showSubmit, 'w-50 float-end': modalForm && !showSubmit}"
+        aria-label="Back"
+        (click)="back()"
+        [disabled]="disabled"
+        type="button"
+        size="lg"
+        cdsButton="secondary">
+  {{ name }}
+</button>

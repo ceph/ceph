@@ -1,0 +1,33 @@
+<nav ngbNav
+     #nav="ngbNav"
+     class="nav-tabs">
+  <ng-container ngbNavItem>
+    <a ngbNavLink
+       i18n>Server-side Encryption</a>
+    <ng-template ngbNavContent>
+      <cd-table #table
+                [data]="encryptionConfigValues"
+                [columns]="columns"
+                (fetchData)="fetchData()"
+                identifier="unique_id"
+                [forceIdentifier]="true"
+                [hasDetails]="true"
+                (updateSelection)="updateSelection($event)"
+                (setExpandedRow)="setExpandedRow($event)"
+                columnMode="flex"
+                selectionType="single">
+        <cd-table-actions class="table-actions"
+                          [permission]="permissions.configOpt"
+                          [selection]="selection"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+        <cd-rgw-config-details *cdTableDetail
+                               [selection]="expandedRow"
+                               [excludeProps]="excludeProps">
+        </cd-rgw-config-details>
+      </cd-table>
+    </ng-template>
+  </ng-container>
+</nav>
+
+<div [ngbNavOutlet]="nav"></div>

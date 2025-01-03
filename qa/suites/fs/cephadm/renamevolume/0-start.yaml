@@ -1,0 +1,38 @@
+roles:
+- - host.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+  - client.0
+- - host.b
+  - osd.4
+  - osd.5
+  - osd.6
+  - osd.7
+  - client.1
+openstack:
+- volumes: # attached to each instance
+    count: 4
+    size: 10 # GB
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+tasks:
+- install:
+- cephadm:
+    roleless: true
+- cephadm.shell:
+    host.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create foo
+- fs.ready:
+    timeout: 300

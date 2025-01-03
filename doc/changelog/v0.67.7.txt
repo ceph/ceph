@@ -1,0 +1,110 @@
+commit d7ab4244396b57aac8b7e80812115bbd079e6b73 (tag: refs/tags/v0.67.7, refs/remotes/gh/dumpling)
+Author: Ken Dreyer <ken.dreyer@inktank.com>
+Date:   Wed Feb 19 18:09:39 2014 +0000
+
+    v0.67.7
+    
+    Signed-off-by: Ken Dreyer <ken.dreyer@inktank.com>
+
+commit c1f42770f45205c8a3eae774d09e747408130c50
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Jan 6 12:53:58 2014 -0800
+
+    radosgw-admin: fix object policy read op
+    
+    Fixes: #7083
+    This was broken when we fixed #6940. We use the same function to both
+    read the bucket policy and the object policy. However, each needed to be
+    treated differently. Restore old behavior for objects.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit b1976dd00f5b29c01791272f63a18250319f2edb)
+
+commit 404500811adc74c79583bbf3122dc333e0b41b51
+Merge: 3e7ea33 fec55a2
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Feb 15 22:20:45 2014 -0800
+
+    Merge pull request #1243 from dachary/wip-ceph-disk-dumpling
+    
+    ceph-disk: unit tests (dumpling)
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 3e7ea33cfc80031aed8d6c61e1bdca947b36d69b
+Author: Ken Dreyer <ken.dreyer@inktank.com>
+Date:   Fri Jan 3 16:38:25 2014 -0700
+
+    add autotools-generated files to .gitignore
+    
+    When running "make check", Automake generates test-suite.log, along with
+    various *.log and *.trs files in the tree. Add these files to
+    .gitignore.
+    
+    (It looks like this feature arrived in Automake 1.13.)
+    
+    Signed-off-by: Ken Dreyer <ken.dreyer@inktank.com>
+    (cherry picked from commit bb8b7503b03fac5830fb71b9723963fdc803ca90)
+
+commit fec55a2174b49ef68c816755c1218f9cd69033b6
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sat Feb 15 18:34:04 2014 +0100
+
+    ceph-disk: unit tests
+    
+    src/test/ceph-disk.sh replaces src/test/cli/ceph-disk/data-dir.t
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+
+commit 0679b11b4d2f7cb7bd9c1cd86854a064aaa83f8a
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Jan 2 22:42:17 2014 +0100
+
+    ceph-disk: cannot run unit tests
+    
+    Because ceph-disk relies on hardcoded paths. The corresponding test will
+    be added back when ceph-disk can run from sources.
+    
+    Fixes: #7085
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 2ba6930d62263a39f150ab43bf8cd860b9245188)
+
+commit 9dae9993e9b36e741e05804807bdb738fbe52e6f
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Feb 14 23:52:06 2014 -0800
+
+    Revert "librbd: remove limit on number of objects in the cache"
+    
+    This reverts commit 367cf1bbf86233eb20ff2304e7d6caab77b84fcc.
+    
+    Removing the limit on objects means we leak memory, since Objects without
+    any buffers can exist in the cache.
+
+commit 2795339d3632df975486d51e69762f9f567fb43d
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Oct 7 05:22:20 2013 -0700
+
+    os/FileStore: fix ENOENT error code for getattrs()
+    
+    In commit dc0dfb9e01d593afdd430ca776cf4da2c2240a20 the omap xattrs code
+    moved up a block and r was no longer local to the block.  Translate
+    ENOENT -> 0 to compensate.
+    
+    Fix the same error in _rmattrs().
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 6da4b91c07878e07f23eee563cf1d2422f348c2f)
+
+commit c158de232fcfb0e39f4b7eaac6dacbaaaee84b5f
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Oct 15 16:00:26 2013 -0700
+
+    test/filestore/run_seed_to.sh: avoid obsolete --filestore-xattr-use-omap
+    
+    This option no longer exists.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1d4f501a015727a7ff4b2f9b20dc91f2bbd9707b)

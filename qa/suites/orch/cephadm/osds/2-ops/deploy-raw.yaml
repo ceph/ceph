@@ -1,0 +1,30 @@
+overrides:
+  cephadm:
+    raw-osds: True
+tasks:
+- cephadm.shell:
+    host.a:
+      - |
+        set -e
+        set -x
+        ceph orch ps
+        ceph orch device ls
+        ceph osd tree
+        ORCH_PS=$(ceph orch ps)
+        if grep -q "No daemons" <<< "$ORCH_PS"; then
+          echo "No OSDs were deployed"
+          exit 1
+        fi
+        ceph orch ps | grep -q "running"
+        if grep -q "failed" <<< "$ORCH_PS"; then
+          echo "At least one raw OSD deployed is failed"
+          exit 1
+        fi
+        if grep -q "stopped" <<< "$ORCH_PS"; then
+          echo "At least one raw OSD deployed is stopped"
+          exit 1
+        fi
+        if ceph-volume lvm list; then
+          echo "ceph-volume lvm list was expected to give non-zero rc with all raw OSDs"
+          exit 1
+        fi

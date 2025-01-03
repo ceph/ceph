@@ -1,0 +1,22 @@
+@use './src/styles/vendor/variables' as vv;
+
+// Angular2-Tree Component
+::ng-deep cd-cephfs-directories tree-root {
+  .tree-children {
+    overflow: inherit;
+  }
+}
+
+.quota-origin {
+  color: vv.$primary;
+  cursor: pointer;
+
+  &:hover {
+    color: vv.$gray-900;
+  }
+}
+
+.card-tree {
+  height: 50vh;
+  overflow-y: auto;
+}

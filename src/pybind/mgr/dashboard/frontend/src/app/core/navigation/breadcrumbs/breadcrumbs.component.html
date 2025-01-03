@@ -1,0 +1,14 @@
+<cds-breadcrumb [noTrailingSlash]="true"
+                *ngIf="crumbs.length">
+  <ng-container *ngFor="let crumb of crumbs; let last = last">
+    <cds-breadcrumb-item *ngIf="!last && crumb.path !== null"
+                         href="#/{{ crumb.path }}">
+      {{ crumb.text }}
+    </cds-breadcrumb-item>
+
+    <cds-breadcrumb-item *ngIf="last || crumb.path === null"
+                         data-testid="active-breadcrumb-item">
+      {{ crumb.text }}
+    </cds-breadcrumb-item>
+  </ng-container>
+</cds-breadcrumb>

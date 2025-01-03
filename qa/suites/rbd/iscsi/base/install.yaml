@@ -1,0 +1,18 @@
+use_shaman: True
+tasks:
+- cephadm:
+- cephadm.shell:
+    host.a:
+    - ceph orch status
+    - ceph orch ps
+    - ceph orch ls
+    - ceph orch host ls
+    - ceph orch device ls
+- install:
+    extra_system_packages:
+      deb:
+      - open-iscsi
+      - multipath-tools
+      rpm:
+      - iscsi-initiator-utils
+      - device-mapper-multipath

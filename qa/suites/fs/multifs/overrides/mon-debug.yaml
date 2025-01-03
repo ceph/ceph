@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        debug mon: 20

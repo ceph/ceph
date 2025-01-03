@@ -1,0 +1,590 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: client_cache_size
+  type: size
+  level: basic
+  desc: soft maximum number of directory entries in client cache
+  fmt_desc: Set the number of inodes that the client keeps in the metadata cache.
+  default: 16_K
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_cache_mid
+  type: float
+  level: advanced
+  desc: mid-point of client cache LRU
+  fmt_desc: Set client cache midpoint. The midpoint splits the least recently used
+    lists into a hot and warm list.
+  default: 0.75
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_use_random_mds
+  type: bool
+  level: dev
+  desc: issue new requests to a random active MDS
+  fmt_desc: Choose random MDS for each request.
+  default: false
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_mount_timeout
+  type: secs
+  level: advanced
+  desc: timeout for mounting CephFS (seconds)
+  fmt_desc: Set the timeout for CephFS mount in seconds.
+  default: 5_min
+  services:
+  - mds_client
+- name: client_tick_interval
+  type: secs
+  level: dev
+  desc: seconds between client upkeep ticks
+  fmt_desc: Set the interval in seconds between capability renewal and other upkeep.
+  default: 1
+  services:
+  - mds_client
+- name: client_trace
+  type: str
+  level: dev
+  desc: file containing trace of client operations
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_readahead_min
+  type: size
+  level: advanced
+  desc: minimum bytes to readahead in a file
+  fmt_desc: Set the minimum number bytes that the client reads ahead.
+  default: 128_K
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_readahead_max_bytes
+  type: size
+  level: advanced
+  desc: maximum bytes to readahead in a file (zero is unlimited)
+  fmt_desc: Set the maximum number of bytes that the client reads ahead for
+    future read operations. Overridden by the ``client_readahead_max_periods``
+    setting.
+  default: 0
+  services:
+  - mds_client
+  with_legacy: true
+# as multiple of file layout period (object size * num stripes)
+- name: client_readahead_max_periods
+  type: int
+  level: advanced
+  desc: maximum stripe periods to readahead in a file
+  fmt_desc: Set the number of file layout periods (object size * number of
+    stripes) that the client reads ahead. Overrides the
+    ``client_readahead_max_bytes`` setting.
+  default: 4
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_reconnect_stale
+  type: bool
+  level: advanced
+  desc: reconnect when the session becomes stale
+  default: false
+  services:
+  - mds_client
+- name: client_snapdir
+  type: str
+  level: advanced
+  desc: pseudo directory for snapshot access to a directory
+  fmt_desc: Set the snapshot directory name.
+  default: .snap
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_mountpoint
+  type: str
+  level: advanced
+  desc: default mount-point
+  fmt_desc: Directory to mount on the CephFS file system. An alternative to the
+    ``-r`` option of the ``ceph-fuse`` command.
+  default: /
+  services:
+  - mds_client
+- name: client_mount_uid
+  type: int
+  level: advanced
+  desc: uid to mount as
+  default: -1
+  services:
+  - mds_client
+  fmt_desc: Set the user ID of CephFS mount.
+  with_legacy: true
+- name: client_mount_gid
+  type: int
+  level: advanced
+  desc: gid to mount as
+  fmt_desc: Set the group ID of CephFS mount.
+  default: -1
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_notify_timeout
+  type: int
+  level: dev
+  default: 10
+  services:
+  - mds_client
+  with_legacy: true
+- name: osd_client_watch_timeout
+  type: int
+  level: dev
+  default: 30
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_caps_release_delay
+  type: secs
+  level: dev
+  default: 5
+  services:
+  - mds_client
+  fmt_desc: Set the delay between capability releases in seconds. The delay
+    sets how many   seconds a client waits to release capabilities that it no
+    longer needs in case the capabilities are needed for another user space
+    operation.
+- name: client_quota_df
+  type: bool
+  level: advanced
+  desc: show quota usage for statfs (df)
+  fmt_desc: Report root directory quota for the ``statfs`` operation.
+  default: true
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_oc
+  type: bool
+  level: advanced
+  desc: enable object caching
+  default: true
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_oc_size
+  type: size
+  level: advanced
+  desc: maximum size of object cache
+  fmt_desc: Set how many bytes of data will the client cache.
+  default: 200_M
+  services:
+  - mds_client
+  flags:
+  - runtime
+  with_legacy: true
+# MB * n  (dirty OR tx.. bigish)
+- name: client_oc_max_dirty
+  type: size
+  level: advanced
+  desc: maximum size of dirty pages in object cache
+  fmt_desc: Set the maximum number of dirty bytes in the object cache.
+  default: 100_M
+  services:
+  - mds_client
+  flags:
+  - runtime
+  with_legacy: true
+# target dirty (keep this smallish)
+- name: client_oc_target_dirty
+  type: size
+  level: advanced
+  desc: target size of dirty pages object cache
+  fmt_desc: Set the target size of dirty data. We recommend to keep this number low.
+  default: 8_M
+  services:
+  - mds_client
+  flags:
+  - runtime
+  with_legacy: true
+- name: client_oc_max_dirty_age
+  type: float
+  level: advanced
+  desc: maximum age of dirty pages in object cache (seconds)
+  fmt_desc: Set the maximum age in seconds of dirty data in the object cache
+    before writeback.
+  default: 5
+  services:
+  - mds_client
+  flags:
+  - runtime
+  with_legacy: true
+- name: client_oc_max_objects
+  type: int
+  level: advanced
+  desc: maximum number of objects in cache
+  fmt_desc: Set the maximum number of objects in the object cache.
+  default: 1000
+  services:
+  - mds_client
+  flags:
+  - runtime
+  with_legacy: true
+# check if MDS reply contains wanted caps
+- name: client_debug_getattr_caps
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds_client
+  with_legacy: true
+# always read synchronously (go to osds)
+- name: client_debug_force_sync_read
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds_client
+  fmt_desc: If set to ``true``, clients read data directly from OSDs instead
+    of using a local page cache.
+  with_legacy: true
+- name: client_debug_inject_tick_delay
+  type: secs
+  level: dev
+  default: 0
+  services:
+  - mds_client
+- name: client_debug_inject_features
+  type: str
+  level: dev
+  services:
+  - mds_client
+  flags:
+  - startup
+  with_legacy: true
+- name: client_max_inline_size
+  type: size
+  level: dev
+  default: 4_K
+  services:
+  - mds_client
+  fmt_desc: Set the maximum size of inlined data stored in a file inode rather
+    than in a separate data object in RADOS. This setting only applies if the
+    ``inline_data`` flag is set on the MDS map.
+  with_legacy: true
+# synthetic client bug for testing
+- name: client_inject_release_failure
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds_client
+  with_legacy: true
+# synthetic client bug for testing
+- name: client_inject_fixed_oldest_tid
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_metadata
+  type: str
+  level: advanced
+  desc: metadata key=value comma-delimited pairs appended to session metadata
+  fmt_desc: Comma-delimited strings for client metadata sent to each MDS, in addition
+    to the automatically generated version, host name, and other metadata.
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_acl_type
+  type: str
+  level: advanced
+  desc: ACL type to enforce (none or "posix_acl")
+  fmt_desc: Set the ACL type. Currently, only possible value is ``"posix_acl"`` to
+    enable POSIX ACL, or an empty string. This option only takes effect when the
+    ``fuse_default_permissions`` is set to ``false``.
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_permissions
+  type: bool
+  level: advanced
+  desc: client-enforced permission checking
+  fmt_desc: Check client permissions on all I/O operations.
+  default: true
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_dirsize_rbytes
+  type: bool
+  level: advanced
+  desc: set the directory size as the number of file bytes recursively used
+  long_desc: This option enables a CephFS feature that stores the recursive directory
+    size (the bytes used by files in the directory and its descendents) in the st_size
+    field of the stat structure.
+  default: true
+  services:
+  - mds_client
+  flags:
+  - startup
+  with_legacy: true
+- name: client_force_lazyio
+  type: bool
+  level: advanced
+  default: false
+  services:
+  - mds_client
+- name: fuse_use_invalidate_cb
+  type: bool
+  level: advanced
+  desc: use fuse 2.8+ invalidate callback to keep page cache consistent
+  default: true
+  services:
+  - mds_client
+- name: fuse_disable_pagecache
+  type: bool
+  level: advanced
+  desc: disable page caching in the kernel for this FUSE mount
+  fmt_desc: If set to ``true``, kernel page cache is disabled for ``ceph-fuse``
+    mounts. When multiple clients read/write to a file at the same
+    time, readers may get stale data from page cache. Due to
+    limitations of FUSE, ``ceph-fuse`` can't disable page cache dynamically.
+  default: false
+  services:
+  - mds_client
+- name: fuse_allow_other
+  type: bool
+  level: advanced
+  desc: pass allow_other to FUSE on mount
+  default: true
+  services:
+  - mds_client
+- name: fuse_default_permissions
+  type: bool
+  level: advanced
+  desc: pass default_permisions to FUSE on mount
+  fmt_desc: When set to ``false``, ``ceph-fuse`` utility checks does its own
+    permissions checking, instead of relying on the permissions enforcement in
+    FUSE. Set to ``false`` together with the ``client acl type=posix_acl``
+    option to enable POSIX ACL.
+  default: false
+  services:
+  - mds_client
+  flags:
+  - startup
+- name: fuse_splice_read
+  type: bool
+  level: advanced
+  desc: enable splice read to reduce the memory copies
+  default: true
+  services:
+  - mds_client
+- name: fuse_splice_write
+  type: bool
+  level: advanced
+  desc: enable splice write to reduce the memory copies
+  default: true
+  services:
+  - mds_client
+- name: fuse_splice_move
+  type: bool
+  level: advanced
+  desc: enable splice move to reduce the memory copies
+  default: true
+  services:
+  - mds_client
+- name: fuse_big_writes
+  type: bool
+  level: advanced
+  desc: big_writes is deprecated in libfuse 3.0.0
+  default: true
+  services:
+  - mds_client
+- name: fuse_max_write
+  type: size
+  level: advanced
+  desc: set the maximum number of bytes in a single write operation
+  long_desc: Set the maximum number of bytes in a single write operation that may
+    pass atomically through FUSE. The FUSE default is 128kB and may be indicated by
+    setting this option to 0.
+  fmt_desc: Set the maximum number of bytes in a single write operation. A value of
+    0 indicates no change; the FUSE default of 128 kbytes remains in force.
+  default: 0
+  services:
+  - mds_client
+- name: fuse_atomic_o_trunc
+  type: bool
+  level: advanced
+  desc: pass atomic_o_trunc flag to FUSE on mount
+  default: true
+  services:
+  - mds_client
+- name: fuse_debug
+  type: bool
+  level: advanced
+  desc: enable debugging for the libfuse
+  default: false
+  services:
+  - mds_client
+  flags:
+  - no_mon_update
+  - startup
+- name: fuse_multithreaded
+  type: bool
+  level: advanced
+  desc: allow parallel processing through FUSE library
+  default: true
+  services:
+  - mds_client
+- name: fuse_require_active_mds
+  type: bool
+  level: advanced
+  desc: require active MDSs in the file system when mounting
+  default: true
+  services:
+  - mds_client
+- name: fuse_syncfs_on_mksnap
+  type: bool
+  level: advanced
+  desc: synchronize all local metadata/file changes after snapshot
+  default: true
+  services:
+  - mds_client
+- name: fuse_set_user_groups
+  type: bool
+  level: advanced
+  desc: check for ceph-fuse to consider supplementary groups for permissions
+  default: true
+  services:
+  - mds_client
+# the client should try to use dentry invalidation instead of remounting, on kernels it believes that will work for
+- name: client_try_dentry_invalidate
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_max_retries_on_remount_failure
+  type: uint
+  level: advanced
+  desc: number of consecutive failed remount attempts for invalidating kernel dcache
+    after which client would abort.
+  default: 5
+  services:
+  - mds_client
+- name: client_die_on_failed_remount
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds_client
+- name: client_die_on_failed_dentry_invalidate
+  type: bool
+  level: advanced
+  desc: kill the client when no dentry invalidation options are available
+  long_desc: The CephFS client requires a mechanism to invalidate dentries in the
+    caller (e.g. the kernel for ceph-fuse) when capabilities must be recalled. If
+    the client cannot do this then the MDS cache cannot shrink which can cause the
+    MDS to fail.
+  default: true
+  services:
+  - mds_client
+- name: client_check_pool_perm
+  type: bool
+  level: advanced
+  desc: confirm access to inode's data pool/namespace described in file layout
+  default: true
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_use_faked_inos
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds_client
+  flags:
+  - startup
+  - no_mon_update
+  with_legacy: true
+- name: client_fs
+  type: str
+  level: advanced
+  desc: CephFS file system name to mount
+  long_desc: Use this with ceph-fuse, or with any process that uses libcephfs.  Programs
+    using libcephfs may also pass the filesystem name into mount(), which will override
+    this setting. If no filesystem name is given in mount() or this setting, the default
+    filesystem will be mounted (usually the first created).
+  services:
+  - mds_client
+  flags:
+  - startup
+- name: client_mds_namespace
+  type: str
+  level: dev
+  services:
+  - mds_client
+  flags:
+  - startup
+- name: fake_statfs_for_testing
+  type: int
+  level: dev
+  desc: Set a value for kb and compute kb_used from total of num_bytes
+  default: 0
+  services:
+  - mds_client
+  with_legacy: true
+# XXX: mon
+- name: debug_allow_any_pool_priority
+  type: bool
+  level: dev
+  desc: Allow any pool priority to be set to test conversion to new range
+  default: false
+  services:
+  - mds_client
+  with_legacy: true
+- name: client_asio_thread_count
+  type: uint
+  level: advanced
+  desc: Size of thread pool for ASIO completions
+  default: 2
+  tags:
+  - client
+  services:
+  - mds_client
+  min: 1
+- name: client_shutdown_timeout
+  type: secs
+  level: advanced
+  desc: timeout for shutting down CephFS
+  long_desc: Timeout for shutting down CephFS via unmount or shutdown.
+  default: 30
+  tags:
+  - client
+  services:
+  - mds_client
+  min: 0
+  flags:
+  - runtime
+- name: client_collect_and_send_global_metrics
+  type: bool
+  level: advanced
+  desc: to enable and force collecting and sending the global metrics to MDS
+  long_desc: To be careful for this, when connecting to some old ceph clusters
+    it may crash the MDS daemons while upgrading.
+  default: false
+  tags:
+  - client
+  services:
+  - mds_client
+  flags:
+  - runtime
+- name: client_quota
+  type: bool
+  level: advanced
+  desc: Enable quota enforcement
+  long_desc: Enable quota_bytes and quota_files enforcement for the client.
+  default: true
+  services:
+  - mds_client
+  flags:
+  - runtime

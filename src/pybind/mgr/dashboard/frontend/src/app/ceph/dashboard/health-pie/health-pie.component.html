@@ -1,0 +1,14 @@
+<div class="chart-container">
+  <canvas baseChart
+          #chartCanvas
+          [datasets]="chartConfig.dataset"
+          [type]="chartConfig.chartType"
+          [options]="chartConfig.options"
+          [labels]="chartConfig.labels"
+          [plugins]="doughnutChartPlugins"
+          class="chart-canvas">
+  </canvas>
+  <div class="chartjs-tooltip"
+       #chartTooltip>
+  </div>
+</div>

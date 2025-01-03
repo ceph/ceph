@@ -1,0 +1,27 @@
+tasks:
+- print: "ragweed prepare before upgrade"
+- ragweed:
+    client.0:
+      stages: prepare
+- print: "restarting upgraded rgws"
+- ceph.restart:
+    daemons: [rgw.*]
+- print: "ragweed check/prepare after rgw upgrade"
+- ragweed:
+    client.0:
+      stages: check
+    client.1:
+      stages: prepare
+- print: "restarting upgraded osds"
+- ceph.restart:
+    daemons: [osd.0, osd.2]
+- ceph.restart:
+    daemons: [osd.1, osd.3]
+- ceph.restart:
+    daemons: [osd.4, osd.6]
+- ceph.restart:
+    daemons: [osd.5, osd.7]
+- print: "ragweed check after osd upgrade"
+- ragweed:
+    client.1:
+      stages: check

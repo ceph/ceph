@@ -1,0 +1,21 @@
+@use './src/styles/vendor/variables' as vv;
+
+.pagination {
+  align-items: center;
+  display: flex;
+}
+
+.pagination__btn {
+  background: none;
+  border: 0;
+
+  &:disabled {
+    color: vv.$gray-500;
+  }
+}
+
+.pagination__page_input {
+  border: 1px solid vv.$gray-500;
+  border-radius: 0.25rem;
+  padding-left: 0.25rem;
+}

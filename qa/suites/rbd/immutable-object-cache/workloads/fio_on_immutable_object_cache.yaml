@@ -1,0 +1,11 @@
+tasks:
+- rbd_fio:
+    client.0:
+      thick-provision: true
+      fio-io-size: 100%
+      formats: [2]
+      features: [[layering]]
+      io-engine: rbd
+      test-clone-io: 1
+      rw: randread
+      runtime: 600

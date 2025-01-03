@@ -1,0 +1,6 @@
+tasks:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release squid
+      - ceph osd set-require-min-compat-client squid
+- ceph.healthy:

@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd_persistent_cache_path: /home/ubuntu/cephtest/rbd-pwl-cache
+        rbd_plugins: pwl_cache
+tasks:
+- exec:
+    client.0:
+      - "mkdir -m 777 /home/ubuntu/cephtest/rbd-pwl-cache"
+- exec_on_cleanup:
+    client.0:
+      - "rm -rf /home/ubuntu/cephtest/rbd-pwl-cache"

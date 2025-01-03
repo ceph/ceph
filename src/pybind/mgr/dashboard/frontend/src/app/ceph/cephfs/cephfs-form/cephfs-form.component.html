@@ -1,0 +1,128 @@
+<div cdsCol
+     [columnNumbers]="{md: 4}"
+     *ngIf="orchStatus$ | async as orchStatus">
+  <ng-container *cdFormLoading="loading">
+    <form #frm="ngForm"
+          #formDir="ngForm"
+          [formGroup]="form"
+          novalidate>
+      <div i18n="form title|Example: Create Volume@@formTitle"
+           class="form-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+
+      <div class="form-item">
+        <ng-container *ngIf="!orchStatus.available">
+          <cd-alert-panel type="info"
+                          spacingClass="mb-2"
+                          i18n
+                          *ngIf="!editing">Orchestrator is not configured. Deploy MDS daemons manually after creating the volume.</cd-alert-panel>
+        </ng-container>
+
+        <cd-alert-panel type="info"
+                        spacingClass="mb-2"
+                        i18n
+                        *ngIf="editing && disableRename">
+          <p>The File System can only be renamed if it is shutdown and `refuse_client_session` is set to true.
+            Follow the steps below in the command line and refresh the page:</p>
+          <cd-code-block [codes]="[fsFailCmd]"></cd-code-block>
+          <cd-code-block [codes]="[fsSetCmd]"></cd-code-block>
+        </cd-alert-panel>
+      </div>
+        <!-- Name -->
+        <div class="form-item">
+          <cds-text-label for="name"
+                          cdRequiredField="Name"
+                          [invalid]="!form.controls.name.valid && form.controls.name.dirty"
+                          [invalidText]="nameError"
+                          i18n>Name
+            <input cdsText
+                   placeholder="Name..."
+                   i18n-placeholder
+                   id="name"
+                   name="name"
+                   formControlName="name"
+                   [invalid]="!form.controls.name.valid && form.controls.name.dirty"
+                   autofocus>
+          </cds-text-label>
+          <ng-template #nameError>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('name', formDir, 'required')"
+                  i18n>This field is required!</span>
+            <span *ngIf="form.showError('name', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>File System name should start with a letter or dot (.) and can only contain letters, numbers, '.', '-' or '_'</span>
+          </ng-template>
+        </div>
+
+        <ng-container *ngIf="orchStatus.available">
+          <!-- Placement -->
+          <div class="form-item"
+               *ngIf="!editing">
+            <cds-select label="Placement"
+                        for="placement"
+                        formControlName="placement"
+                        name="placement"
+                        id="placement"
+                        i18n>
+              <option value="hosts">Hosts</option>
+              <option value="label">Labels</option>
+            </cds-select>
+          </div>
+
+          <ng-container *ngIf="hostsAndLabels$ | async as data">
+          <!-- Label -->
+          <div *ngIf="form.controls.placement.value === 'label' && !editing"
+               class="form-item">
+            <cds-combo-box type="multi"
+                           selectionFeedback="top-after-reopen"
+                           label="Label"
+                           for="label"
+                           name="label"
+                           formControlName="label"
+                           id="label"
+                           placeholder="Select labels..."
+                           [appendInline]="true"
+                           [items]="data.labels"
+                           i18n-placeholder
+                           (selected)="multiSelector($event, 'label')"
+                           [invalid]="form.controls.label.invalid && (form.controls.label.dirty)"
+                           [invalidText]="labelError"
+                           cdRequiredField="Label"
+                           i18n>
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+            <ng-template #labelError>
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('label', frm, 'required')"
+                    i18n>This field is required.</span>
+            </ng-template>
+          </div>
+
+          <!-- Hosts -->
+          <div *ngIf="form.controls.placement.value === 'hosts' && !editing"
+               class="form-item">
+            <cds-combo-box type="multi"
+                           selectionFeedback="top-after-reopen"
+                           label="Hosts"
+                           for="hosts"
+                           name="hosts"
+                           formControlName="hosts"
+                           id="hosts"
+                           placeholder="Select hosts..."
+                           i18n-placeholder
+                           [appendInline]="true"
+                           [items]="data.hosts"
+                           (selected)="multiSelector($event, 'hosts')"
+                           i18n>
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+          </div>
+        </ng-container>
+      </ng-container>
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [form]="formDir"
+                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                            [disabled]="editing ? disableRename: false"
+                            wrappingClass="text-right"></cd-form-button-panel>
+    </form>
+  </ng-container>
+</div>

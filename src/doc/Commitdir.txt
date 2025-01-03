@@ -1,0 +1,24 @@
+OLD
+
+
+How Directory Committing Works:
+
+Each CDir has: 
+	 version - current version of directory
+	 committing_version - which version was sent to stable storage
+	 last_committed_version - last version to be safely stored
+
+Each Inode has: 
+	 parent_dir_version - what dir version i was in when i was dirtied.  (*)
+
+	 (*) note that if you change an inode, mark_dirty() again, even if it's already dirty!
+
+
+How committing works:
+
+A call to commit_dir(dir, context) will ensure tha the _current_ version is stored safely on disk before the context is finished.
+
+When a commit completes, inodes in the directory are checked.  If they are dirty and belonged to the _committed_ (or earlier) version, then they are marked clean.  If they belong to a newer version, then they are _still dirty_.
+
+
+

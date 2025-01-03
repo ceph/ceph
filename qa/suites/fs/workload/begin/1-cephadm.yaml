@@ -1,0 +1,21 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+tasks:
+- cephadm:
+    roleless: false
+- cephadm.shell:
+    mon.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
+- cephadm.shell:
+    mon.a:
+      - ceph fs dump
+      - ceph osd dump
+- fs.ready:
+    timeout: 300

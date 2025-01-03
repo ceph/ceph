@@ -1,0 +1,35 @@
+@use './src/styles/vendor/variables' as vv;
+
+.bg-info {
+  background-color: vv.$primary !important;
+}
+
+.bg-warning {
+  background-color: vv.$warning !important;
+}
+
+.bg-danger {
+  background-color: vv.$danger !important;
+}
+
+.bg-freespace {
+  background-color: vv.$gray-400 !important;
+}
+
+.progress {
+  height: 20px;
+  margin-bottom: 0;
+  position: relative;
+
+  div.progress-bar {
+    position: static;
+  }
+
+  span {
+    color: vv.$white;
+    display: block;
+    font-weight: normal;
+    position: absolute;
+    width: 100%;
+  }
+}

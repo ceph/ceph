@@ -1,0 +1,14 @@
+meta:
+- desc: |
+   run basic import/export cli tests for rbd
+workload:
+  full_sequential:
+    - print: "**** done start rbd_import_export.yaml"
+    - workunit:
+        branch: reef
+        clients:
+          client.1:
+              - rbd/import_export.sh
+        env:
+          RBD_CREATE_ARGS: --new-format
+    - print: "**** done end rbd_import_export.yaml"

@@ -1,0 +1,7 @@
+teuthology:
+  postmerge:
+    # Once can we make sure the distro kernels have included the fscrypt feature
+    # or the ceph-fuse have supported the fscrypt feature we can remove this
+    # restriction.
+    - if not is_kupstream() then reject() end
+task:

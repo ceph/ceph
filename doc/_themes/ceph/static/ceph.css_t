@@ -1,0 +1,199 @@
+@import url("css/theme.css");
+@import url('https://fonts.googleapis.com/css?family=Titillium+Web:400,300,700');
+
+.top-bar {
+  position: fixed;
+  min-width: auto;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 5050;
+}
+
+.top-bar > div[role=navigation] {
+  border-top: 5px solid #F05C56;
+}
+
+.top-bar > div[role=navigation] > ul {
+  border-top: 5px solid #9C4850;
+  padding: 0 1em;
+}
+
+.top-bar > div[role=navigation] > hr {
+  margin: 0 0 10px;
+}
+
+body {
+  padding-top: 40px;
+}
+
+.wy-nav-side {
+  padding-top: 33px;
+}
+
+.wy-nav-content {
+  padding-top: 0;
+  min-width: 450px;
+  max-width: 940px;
+}
+
+.wy-breadcrumbs {
+  background-color: #80D2DC;
+  font-size: 0.9em;
+}
+
+.wy-nav-content-wrap.shift {
+  top: 2em;
+}
+
+section h1,
+section h2,
+section h3,
+section h4,
+section h5,
+section h6 {
+  font-weight: normal;
+  margin: 30px 0px 10px 0px;
+  padding: 5px 0 5px 10px;
+  color: #212224;
+  text-transform: uppercase;
+}
+
+section h1 {
+  border-top: 20px solid white; margin-top: 0;
+}
+
+section h1 { font-family: Titillium Web; font-size: 200%; background-color: #99DAE3;}
+section h2 { font-family: Titillium Web; font-size: 150%; background-color: #B2E3EA; }
+section h3 { font-family: Titillium Web; font-size: 120%; background-color: #CCECF1; }
+section h4 { font-family: Helvetica, Arial, sans-serif; font-size: 110%; background-color: #CCECF1; }
+section h5 { font-family: Helvetica, Arial, sans-serif; font-size: 100%; background-color: #CCECF1; }
+section h6 { font-family: Helvetica, Arial, sans-serif; font-size: 100%; background-color: #CCECF1; }
+
+/* nature theme */
+div.highlight {
+  background-color: white;
+}
+
+/* admonition */
+.rst-content .tip .admonition-title {
+  background-color: #1abc9c;
+}
+
+.admonition.tip {
+  background-color: #B2EBD8;
+  border: 1px solid #55AEBA;
+}
+
+.admonition.note {
+  background-color: #A9D1EC;
+  border: 1px solid #6AB0DE;
+}
+
+
+.rst-content .important .admonition-title {
+  background-color: #F05C56;
+}
+
+.admonition.important {
+  background-color: #FBD9D4;
+  border: 1px solid #F6A99E;
+}
+
+.admonition.warning {
+  border: 1px solid #F5DBC6;
+}
+
+/* table */
+.rst-content table.docutils {
+  border: 0;
+  border-collapse: collapse;
+}
+
+.rst-content li dl:not(.docutils) dt {
+  display: inline-block;
+}
+
+.rst-content table.docutils tr p:last-child {
+  margin-bottom: 0;
+}
+
+html.writer-html5 .rst-content table.docutils th,
+.rst-content table.docutils th,
+.rst-content table.docutils td,
+.rst-content table.docutils tbody > tr:last-child td {
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 1px solid #aaa;
+  white-space: normal;
+}
+
+.rst-content table.docutils ul {
+  margin-bottom: inherit;
+}
+
+/* lists */
+.rst-content .section dl:not(.docutils) dt {
+  display: inline-block;
+}
+
+.rst-content table.docutils ul + ul {
+  margin-top: 1em;
+}
+
+.rst-content section ul li {
+  list-style: disc;
+  margin-left: 24px;
+}
+
+.rst-content section ol li>p,
+.rst-content section ol li>p:last-child,
+.rst-content section ul li>p,
+.rst-content section ul li>p:last-child {
+  margin-bottom: 12px;
+}
+
+.rst-content section ol li>p:only-child,
+.rst-content section ol li>p:only-child:last-child,
+.rst-content section ul li>p:only-child,
+.rst-content section ul li>p:only-child:last-child {
+  margin-bottom: 0;
+}
+
+/* versions */
+.injected .rst-versions.rst-badge {
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.injected .rst-versions.rst-badge .rst-current-version {
+  bottom: 0;
+  line-height: 1px;
+  padding: 12px;
+  height: auto;
+}
+
+.columns-2,
+.columns-3 {
+  display: flex;
+}
+
+.columns-2 > div,
+.columns-3 > div {
+  flex: 1;
+  padding: 0 10px 10px 0;
+}
+
+.columns-2 > div {
+  width: 50%;
+}
+
+.columns-3 > div {
+  width: 33.33%;
+}
+
+div[class*="highlight-"] {
+  margin-bottom: 12px;
+}

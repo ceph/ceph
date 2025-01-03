@@ -1,0 +1,112 @@
+<div class="container h-75"
+     *ngIf="startClusterCreation">
+  <div class="h-100 justify-content-center align-items-center"
+       cdsRow>
+    <div class="blank-page">
+      <!-- htmllint img-req-src="false" -->
+      <img [src]="projectConstants.cephLogo"
+           alt="Ceph"
+           class="img-fluid mx-auto d-block">
+      <h3 class="text-center m-2"
+          i18n>Welcome to {{ projectConstants.projectName }}</h3>
+
+      <div class="m-4">
+        <h4 class="text-center"
+            i18n>Please expand your cluster first</h4>
+        <div class="text-center">
+          <button cdsButton="primary"
+                  name="expand-cluster"
+                  (click)="createCluster()"
+                  aria-label="Expand Cluster"
+                  i18n>Expand Cluster</button>
+          <button cdsButton="secondary"
+                  name="skip-cluster-creation"
+                  aria-label="Skip"
+                  (click)="skipClusterCreation()"
+                  i18n>Skip</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div cdsRow
+     class="form"
+     *ngIf="!startClusterCreation">
+  <div cdsCol
+       [columnNumbers]="{'lg': 2, 'md': 2, 'sm': 2}"
+       class="indicator-wrapper">
+
+    <div class="form-header"
+         i18n>Expand Cluster</div>
+    <cd-wizard [stepsTitle]="stepTitles"></cd-wizard>
+  </div>
+
+  <div cdsCol
+       [columnNumbers]="{'lg': 14, 'md': 14, 'sm': 14}">
+    <ng-container [ngSwitch]="currentStep?.stepIndex">
+      <div *ngSwitchCase="'0'"
+           class="ms-5">
+        <h4 class="title"
+            i18n>Add Hosts</h4>
+
+        <cd-hosts [hiddenColumns]="['service_instances']"
+                  [hideMaintenance]="true"
+                  [hasTableDetails]="false"
+                  [showGeneralActionsOnly]="true"
+                  [showExpandClusterBtn]="false"></cd-hosts>
+      </div>
+      <div *ngSwitchCase="'1'"
+           class="ms-5">
+        <h4 class="title"
+            i18n>Create OSDs</h4>
+        <div class="alignForm">
+          <cd-osd-form [hideTitle]="true"
+                       [hideSubmitBtn]="true"
+                       (emitDriveGroup)="setDriveGroup($event)"
+                       (emitDeploymentOption)="setDeploymentOptions($event)"
+                       (emitMode)="setDeploymentMode($event)"></cd-osd-form>
+        </div>
+      </div>
+      <div *ngSwitchCase="'2'"
+           class="ms-5">
+        <h4 class="title"
+            i18n>Create Services</h4>
+        <cd-services [hasDetails]="false"
+                     [hiddenServices]="['mon', 'mgr', 'crash', 'agent']"
+                     [hiddenColumns]="['status.running', 'status.size', 'status.last_refresh']"
+                     [routedModal]="false"></cd-services>
+      </div>
+      <div *ngSwitchCase="'3'"
+           class="ms-5">
+        <cd-create-cluster-review></cd-create-cluster-review>
+      </div>
+    </ng-container>
+    <div cdsRow
+         class="m-5">
+      <button cdsButton="secondary"
+              class="me-3"
+              id="skipStepBtn"
+              (click)="onSkip()"
+              aria-label="Skip this step"
+              *ngIf="stepTitles[currentStep?.stepIndex]?.label === 'Create OSDs'"
+              i18n>Skip</button>
+      <cd-back-button buttonType="secondary"
+                      aria-label="Close"
+                      (backAction)="onPreviousStep()"
+                      [name]="showCancelButtonLabel()"></cd-back-button>
+      <button cdsButton="primary"
+              (click)="onNextStep()"
+              aria-label="Next"
+              i18n>{{ showSubmitButtonLabel() }}</button>
+    </div>
+  </div>
+</div>
+
+<ng-template #skipConfirmTpl>
+  <span i18n>You are about to skip the cluster expansion process.
+             You’ll need to <strong>navigate through the menu to add hosts and services.</strong></span>
+
+  <div class="mt-4"
+       i18n>Are you sure you want to continue?</div>
+</ng-template>

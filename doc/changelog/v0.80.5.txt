@@ -1,0 +1,354 @@
+commit 38b73c67d375a2552d8ed67843c8a65c2c0feba6 (tag: refs/tags/v0.80.5, refs/remotes/gh/last, refs/remotes/gh/firefly)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Tue Jul 29 05:24:39 2014 -0700
+
+    0.80.5
+
+commit b576d5a242c16bc9e38ba283a9784f838614882a
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 9 08:41:33 2014 -0700
+
+    osd: cancel agent_timer events on shutdown
+    
+    We need to cancel all agent timer events on shutdown.  This also needs to
+    happen early so that any in-progress events will execute before we start
+    flushing and cleaning up PGs.
+    
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c0dc245b662f1f9c640d7dd15fdf4cf26e729782)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+
+commit 6213130f76b1ee89947bae578a1fccf16b845956
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 8 16:11:44 2014 -0700
+
+    osd: s/applying repop/canceling repop/
+    
+    The 'applying' language dates back to when we would wait for acks from
+    replicas before applying writes locally.  We don't do any of that any more;
+    now, this loop just cancels the repops with remove_repop() and some other
+    cleanup.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ef40737eee4389faa7792661a0f9d15b3d0440f2)
+
+commit 2e7c91587d99c9eba85ab7bd407a5b722b25a81e
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 8 16:11:27 2014 -0700
+
+    osd: clear PGBackend state on shutdown
+    
+    This was leaking state on shutdown whenever there were in-flight repops
+    that were canceled.
+    
+    Fixes: #7891
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cafceae6c243369d3616af8217884e7e029896b9)
+
+commit f03110f3889ce7340c64f19358840b2425c93f68
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 8 16:10:58 2014 -0700
+
+    osd: separate cleanup from PGBackend::on_change()
+    
+    The generic portion of on_change() cleaned up temporary on-disk objects
+    and requires a Transaction.  The rest is clearing out in-memory state and
+    does not.  Separate the two.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e299357e2a24474ab7a02e65ca0279336fd04b76)
+
+commit 42ad241efab751a1d4f50d5a748d91d0fe967844
+Merge: 5f4ceb2 5049fc4
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Jul 23 10:09:19 2014 -0700
+
+    Merge remote-tracking branch 'origin/wip-8858-firefly' into firefly
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 5f4ceb208b55fab7fd1530dcf8fe03198b044148
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Jul 22 00:25:37 2014 +0100
+
+    mon: AuthMonitor: always encode full regardless of keyserver having keys
+    
+    On clusters without cephx, assuming an admin never added a key to the
+    cluster, the monitors have empty key servers.  A previous patch had the
+    AuthMonitor not encoding an empty keyserver as a full version.
+    
+    As such, whenever the monitor restarts we will have to read the whole
+    state from disk in the form of incrementals.  This poses a problem upon
+    trimming, as we do every now and then: whenever we start the monitor, it
+    will start with an empty keyserver, waiting to be populated from whatever
+    we have on disk.  This is performed in update_from_paxos(), and the
+    AuthMonitor's will rely on the keyserver version to decide which
+    incrementals we care about -- basically, all versions > keyserver version.
+    
+    Although we started with an empty keyserver (version 0) and are expecting
+    to read state from disk, in this case it means we will attempt to read
+    version 1 first.  If the cluster has been running for a while now, and
+    even if no keys have been added, it's fair to assume that version is
+    greater than 0 (or even 1), as the AuthMonitor also deals and keeps track
+    of auth global ids.  As such, we expect to read version 1, then version 2,
+    and so on.  If we trim at some point however this will not be possible,
+    as version 1 will not exist -- and we will assert because of that.
+    
+    This is fixed by ensuring the AuthMonitor keeps track of full versions
+    of the key server, even if it's of an empty key server -- it will still
+    keep track of the key server's version, which is incremented each time
+    we update from paxos even if it is empty.
+    
+    Fixes: #8851
+    Backport: dumpling, firefly
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit b551ae2bcea2dd17b37f5f5ab34251cc78de0e26)
+
+commit 5c1d74848863b45aa9e98d134cbe0cd1c8199557
+Merge: 442c3fd c390ec4
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 21 13:10:28 2014 -0700
+
+    Merge pull request #2122 from ceph/wip-dencoder-firefly
+    
+    fix linking deps, cpeh-dencoder, etc., firefly backport
+
+commit 5049fc4c9d6513bc58c3c4464f3de18949ac0aa5
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Jul 18 14:52:48 2014 -0700
+
+    rgw: dump prefix unconditionally
+    
+    As part of issue #8858, and to be more in line with S3, dump the Prefix
+    field when listing bucket even if bucket is empty.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit d7209c11251d42227608bc54cc69232ef62ffe80)
+
+commit 7fdd6d94262d8e6c81d168f5b997b3a5f030e6fa
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jul 17 15:48:26 2014 -0700
+
+    rgw: list extra objects to set truncation flag correctly
+    
+    Otherwise we end up returning wrong truncated value, and no data on the
+    next iteration.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit dc417e477d4ad262885c6b5f5987cf06d63b159d)
+
+commit 1f8774e01a616739ab70a78c348ab986b64b8fce
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jul 17 11:45:44 2014 -0700
+
+    rgw: account common prefixes for MaxKeys in bucket listing
+    
+    To be more in line with the S3 api. Beforehand we didn't account the
+    common prefixes towards the MaxKeys (a single common prefix counts as a
+    single key). Also need to adjust the marker now if it is pointing at a
+    common prefix.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 82d2d612e700f94a0bb2d9fb7555abf327be379b)
+
+commit cb0a7ab8eb1d2fc8799b97c5a387b5f4f93b515c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jul 17 11:24:51 2014 -0700
+
+    rgw: add NextMarker param for bucket listing
+    
+    Partially fixes #8858.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 924686f0b6593deffcd1d4e80ab06b1e7af00dcb)
+
+commit 34aa7086ba5293ee4d008016558dcdb1ada02e83
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jul 16 15:21:09 2014 -0700
+
+    rgw: improve delmited listing of bucket
+    
+    If found a prefix, calculate a string greater than that so that next
+    request we can skip to that. This is still not the most efficient way to
+    do it. It'll be better to push it down to the objclass, but that'll
+    require a much bigger change.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit e6cf618c257f26f97f60a4c1df1d23a14496cab0)
+
+commit d027ff1b432a265ad49ddfeafab45093bcd03e6c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jul 16 16:05:58 2014 -0700
+
+    utf8: export encode_utf8() and decode_utf8()
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 49fc68cf8c3122c878ea9503c9c74d7046bc9c6f)
+
+commit c390ec4fa919e0a17e646e595b30cfa878c3454f
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jul 18 22:44:51 2014 -0700
+
+    ceph-dencoder: don't link librgw.la (and rados, etc.)
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 34671108ce0b7597dba4f619732ecdb8933cda6e)
+
+commit 3d89380c90ab632eb76d3e429788fd81630e7a57
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jul 18 22:27:25 2014 -0700
+
+    rgw: move a bunch of stuff into rgw_dencoder
+    
+    This will help out ceph-dencoder ...
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit b1a641f307942cbf43036f75ef67fb30441dfe95)
+
+commit dc6c9bf2b92d28bbd2bc822c267b0555f74c87fc
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jul 18 21:58:29 2014 -0700
+
+    libosd_types, libos_types, libmon_types
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 1c170776cb8c0266f0f54f049ed07bbdb9c9ab5e)
+    
+    Conflicts:
+    
+    	src/os/Makefile.am
+    	src/os/ObjectStore.cc
+    	src/osd/Makefile.am
+
+commit 7be91e8c5d935f7094033842bde1da2486905c70
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jul 18 20:55:39 2014 -0700
+
+    Revert "ceph.spec: move ceph-dencoder to ceph from ceph-common"
+    
+    This reverts commit 95f5a448b52db545a2b9bbad47fdb287254f93ea.
+    (cherry picked from commit 58cc894b3252a848ebc2169bcc4980a0ae6cc375)
+
+commit 04ad08a18a773e104a826b2a77ab0b2ffaac1e5f
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jul 18 20:55:35 2014 -0700
+
+    Revert "debian: move ceph-dencoder to ceph from ceph-common"
+    
+    This reverts commit b37e3bde3bd31287b11c069062280258666df7c5.
+    (cherry picked from commit f181f78b7473260a717bc8ab4fc4d73a80e3b5ba)
+
+commit 442c3fd5a3b6a6c6a85d9bd7755923f14aa598e7
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Thu Jul 17 21:44:06 2014 -0700
+
+    configure: do not link leveldb with everything
+    
+    Detect leveldb, but do not let autoconf blindly link it with everything on the
+    planet.
+    
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Sighed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 06a8f7b99c5533f397b34f448138220384df60ac)
+
+commit c1073e430eafeb1f213f80636a3a24966b292698
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jul 14 17:02:05 2014 -0700
+
+    ceph.spec: move ceph-dencoder to ceph from ceph-common
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 95f5a448b52db545a2b9bbad47fdb287254f93ea)
+
+commit f4e9e0ef2eab3174584f1695122b114549feff57
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jul 14 14:16:43 2014 -0700
+
+    debian: move ceph-dencoder to ceph from ceph-common
+    
+    It links against the world currently (notably leveldb).  Not nice for the
+    client-side lib.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit b37e3bde3bd31287b11c069062280258666df7c5)
+
+commit 681c399e83df4c6ebd7e0836203eb2466455f548
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jul 17 16:40:06 2014 -0700
+
+    logrotate.conf: fix osd log rotation under upstart
+    
+    In commit 7411c3c6a42bef5987bdd76b1812b01686303502 we generalized this
+    enumeration code by copying what was in the upstart scripts.  However,
+    while the mon and mds directories get a 'done' file, the OSDs get a 'ready'
+    file.  Bah!  Trigger off of either one.
+    
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 14a9ca602fa9573b0b6b94709b384bca02d12fac)
+
+commit 794ec7fb43da4db930d28571a84c1c1cec1eb066
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jul 16 12:23:31 2014 -0700
+
+    rgw: don't try to wait for pending if list is empty
+    
+    Fixes: #8846
+    Backport: firefly, dumpling
+    
+    This was broken at ea68b9372319fd0bab40856db26528d36359102e. We ended
+    up calling wait_pending_front() when pending list was empty.
+    This commit also moves the need_to_wait check to a different place,
+    where we actually throttle (and not just drain completed IOs).
+    
+    Reported-by: Sylvain Munaut <s.munaut@whatever-company.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit f9f2417d7db01ecf2425039539997901615816a9)
+
+commit e75dd2e4b7adb65c2de84e633efcd6c19a6e457b
+Author: Alfredo Deza <alfredo.deza@inktank.com>
+Date:   Thu Jul 17 10:06:37 2014 -0400
+
+    remove suse service restarts
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+    (cherry picked from commit 0f11aaeefd7e8b49f88607937aade6113ebda52c)
+
+commit 361c1f8554ce1fedfd0020cd306c41b0ba25f53e
+Author: Alfredo Deza <alfredo.deza@inktank.com>
+Date:   Wed Jul 16 16:12:12 2014 -0400
+
+    remove ceph restarts on upgrades for RPMs
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+    (cherry picked from commit e3a5756f58ef5d07badf18ab08a26f47f7d232cb)
+
+commit 88f694dcd3d3342f764f3790572988b7808028ae
+Author: Alfredo Deza <alfredo.deza@inktank.com>
+Date:   Wed Jul 16 11:07:13 2014 -0400
+
+    set the default log level to WARNING
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+    (cherry picked from commit 420f0a471a31d1e56359ea642ed831e8a38b1e90)
+
+commit 67b5193f73a2c9ec9e503ad3431473998217375d
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Jul 15 18:11:41 2014 -0700
+
+    init-ceph: wrap daemon startup with systemd-run when running under systemd
+    
+    We want to make sure the daemon runs in its own systemd environment.  Check
+    for systemd as pid 1 and, when present, use systemd-run -r <cmd> to do
+    this.
+    
+    Probably fixes #7627
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    Tested-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 3e0d9800767018625f0e7d797c812aa44c426dab)

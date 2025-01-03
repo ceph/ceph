@@ -1,0 +1,34 @@
+@use './src/styles/vendor/variables' as vv;
+
+::ng-deep cd-wizard {
+  width: 15%;
+}
+
+.card-body {
+  padding-left: 0;
+}
+
+span.circle-step {
+  background: vv.$gray-500;
+  border-radius: 0.8em;
+  color: vv.$white;
+  display: inline-block;
+  font-weight: bold;
+  line-height: 1.6em;
+  margin-right: 5px;
+  text-align: center;
+  width: 1.6em;
+
+  &.active {
+    background-color: vv.$primary;
+  }
+}
+
+.nav-pills .nav-link {
+  background-color: vv.$white;
+  color: vv.$gray-800;
+
+  &.active {
+    color: vv.$primary;
+  }
+}

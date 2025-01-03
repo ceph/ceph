@@ -1,0 +1,24 @@
+<div class="card flex-fill"
+     [ngClass]="{'border-0': removeBorder, 'bg-color': cardType === 'Sync Status Card', 'shadow': shadow, 'shadow-sm': !shadow && cardType !== 'syncCards', 'h-100': fullHeight}">
+  <h4 class="card-title mt-4 ms-4 mb-0"
+      *ngIf="cardType !== 'zone'">
+    <span *ngIf="cardType === ''">{{ cardTitle }}</span>
+  </h4>
+  <h4 *ngIf="cardType === 'zone'"
+      class="text-center mt-4 mb-0">
+    <i [ngClass]="icons.deploy"></i>
+    <span class="badge badge-info">{{ cardTitle }}</span>
+  </h4>
+  <h5 *ngIf="cardType === 'syncCards'"
+      class="text-center card-title">
+      {{ cardTitle }}
+  </h5>
+  <div class="card-body ps-0 pe-0"
+       [ngClass]="{'d-flex align-items-center': alignItemsCenter, 'justify-content-center': justifyContentCenter}">
+    <ng-content></ng-content>
+  </div>
+  <div class="card-footer p-0 bg-white"
+       *ngIf="cardFooter">
+    <ng-content select=".footer"></ng-content>
+  </div>
+</div>

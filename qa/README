@@ -1,0 +1,90 @@
+ceph-qa-suite
+-------------
+
+clusters/    - some predefined cluster layouts
+suites/      - set suite
+
+The suites directory has a hierarchical collection of tests.  This can be
+freeform, but generally follows the convention of
+
+  suites/<test suite name>/<test group>/...
+
+A test is described by a yaml fragment.
+
+A test can exist as a single .yaml file in the directory tree.  For example:
+
+ suites/foo/one.yaml
+ suites/foo/two.yaml
+
+is a simple group of two tests.
+
+A directory with a magic '+' file represents a test that combines all
+other items in the directory into a single yaml fragment.  For example:
+
+ suites/foo/bar/+
+ suites/foo/bar/a.yaml
+ suites/foo/bar/b.yaml
+ suites/foo/bar/c.yaml
+
+is a single test consisting of a + b + c.
+
+A directory with a magic '%' file represents a test matrix formed from
+all other items in the directory.  For example,
+
+ suites/baz/%
+ suites/baz/a.yaml
+ suites/baz/b/b1.yaml
+ suites/baz/b/b2.yaml
+ suites/baz/c.yaml
+ suites/baz/d/d1.yaml
+ suites/baz/d/d2.yaml
+
+is a 4-dimensional test matrix.  Two dimensions (a, c) are trivial (1
+item), so this is really 2x2 = 4 tests, which are
+
+  a + b1 + c + d1
+  a + b1 + c + d2
+  a + b2 + c + d1
+  a + b2 + c + d2
+
+A directory with a magic '$' file, or a directory whose name ends with '$',
+represents a test where one of the non-magic items is chosen randomly.  For
+example, both
+
+ suites/foo/$
+ suites/foo/a.yaml
+ suites/foo/b.yaml
+ suites/foo/c.yaml
+
+and
+
+ suites/foo$/a.yaml
+ suites/foo$/b.yaml
+ suites/foo$/c.yaml
+
+is a single test, either a, b or c.  This can be used in conjunction with the
+'%' file in the same (see below) or other directories to run a series of tests
+without causing an unwanted increase in the total number of jobs run.
+
+Symlinks are okay.
+
+One particular use of symlinks is to combine '%' and the latter form of '$'
+feature.  Consider supported_distros directory containing fragments that define
+os_type and os_version:
+
+ supported_distros/%
+ supported_distros/centos.yaml
+ supported_distros/rhel.yaml
+ supported_distros/ubuntu.yaml
+
+A test that links supported_distros as distros (a name that doesn't end with
+'$') will be run three times: on centos, rhel and ubuntu.  A test that links
+supported_distros as distros$ will be run just once: either on centos, rhel or
+ubuntu, chosen randomly.
+
+The teuthology code can be found in https://github.com/ceph/teuthology.git
+
+Note: The performance suites clone CBT from master here: https://github.com/ceph/cbt.git
+CBT will not support cosbench beyond release tag v0.3, therefore no qa suite should use cosbench.
+cosbench support has been removed from qa/tasks/cbt.py.
+

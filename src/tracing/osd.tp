@@ -1,0 +1,836 @@
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(osd, prepare_tx_enter,
+    TP_ARGS(
+        // osd_reqid_t
+        uint8_t,  type,
+        int64_t,  num,
+        uint64_t, tid,
+        int32_t,  inc),
+    TP_FIELDS(
+        ctf_integer(uint8_t, type, type)
+        ctf_integer(int64_t, num, num)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int32_t, inc, inc)
+    )
+)
+
+TRACEPOINT_EVENT(osd, prepare_tx_exit,
+    TP_ARGS(
+        // osd_reqid_t
+        uint8_t,  type,
+        int64_t,  num,
+        uint64_t, tid,
+        int32_t,  inc),
+    TP_FIELDS(
+        ctf_integer(uint8_t, type, type)
+        ctf_integer(int64_t, num, num)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int32_t, inc, inc)
+    )
+)
+
+TRACEPOINT_EVENT(osd, ms_fast_dispatch,
+    TP_ARGS(
+        // osd_reqid_t
+        uint8_t,  type,
+        int64_t,  num,
+        uint64_t, tid,
+        int32_t,  inc),
+    TP_FIELDS(
+        ctf_integer(uint8_t, type, type)
+        ctf_integer(int64_t, num, num)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int32_t, inc, inc)
+    )
+)
+
+TRACEPOINT_EVENT(osd, opwq_process_start,
+    TP_ARGS(
+        // osd_reqid_t
+        uint8_t,  type,
+        int64_t,  num,
+        uint64_t, tid,
+        int32_t,  inc),
+    TP_FIELDS(
+        ctf_integer(uint8_t, type, type)
+        ctf_integer(int64_t, num, num)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int32_t, inc, inc)
+    )
+)
+
+TRACEPOINT_EVENT(osd, opwq_process_finish,
+    TP_ARGS(
+        // osd_reqid_t
+        uint8_t,  type,
+        int64_t,  num,
+        uint64_t, tid,
+        int32_t,  inc),
+    TP_FIELDS(
+        ctf_integer(uint8_t, type, type)
+        ctf_integer(int64_t, num, num)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int32_t, inc, inc)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint16_t, op,
+        const char*, opname,
+        uint32_t, flags),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer_hex(uint16_t, op, op)
+        ctf_string(opname, opname)
+        ctf_integer_hex(uint32_t, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_extent_cmp,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint32_t, oseq,
+        uint64_t, offset,
+        uint64_t, length,
+        uint64_t, truncate_size,
+        uint32_t, truncate_seq),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint32_t, oseq, oseq)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint64_t, truncate_size, truncate_size)
+        ctf_integer(uint32_t, truncate_seq, truncate_seq)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_read,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint32_t, oseq,
+        uint64_t, offset,
+        uint64_t, length,
+        uint64_t, truncate_size,
+        uint32_t, truncate_seq),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint32_t, oseq, oseq)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint64_t, truncate_size, truncate_size)
+        ctf_integer(uint32_t, truncate_seq, truncate_seq)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_checksum,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint32_t, oseq,
+        uint8_t, type,
+        uint64_t, offset,
+        uint64_t, length,
+	uint32_t, chunk_size),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint32_t, oseq, oseq)
+        ctf_integer(uint8_t, type, type)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint32_t, chunk_size, chunk_size)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_mapext,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, offset,
+        uint64_t, length),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_sparse_read,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint32_t, oseq,
+        uint64_t, offset,
+        uint64_t, length,
+        uint64_t, truncate_size,
+        uint32_t, truncate_seq),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint32_t, oseq, oseq)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint64_t, truncate_size, truncate_size)
+        ctf_integer(uint32_t, truncate_seq, truncate_seq)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_call,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        const char*, class_name,
+        const char*, method_name),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_string(class_name, class_name)
+        ctf_string(method_name, method_name)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_stat,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_isdirty,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_undirty,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_try_flush,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_cache_flush,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_cache_evict,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_getxattr,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        const char*, aname),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_string(aname, aname)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_getxattrs,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_cmpxattr,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        const char*, aname),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_string(aname, aname)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_assert_ver,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, ver),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, ver, ver)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_list_watchers,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_list_snaps,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_assert_src_version,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, ver),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, ver, ver)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_notify,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, timeout),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, timeout, timeout)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_notify_ack,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, notify_id,
+        uint64_t, watch_cookie,
+        const char*, watch_cookie_valid),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, notify_id, notify_id)
+        ctf_integer(uint64_t, watch_cookie, watch_cookie)
+        ctf_string(watch_cookie_valid, watch_cookie_valid)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_setallochint,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, expected_object_size,
+        uint64_t, expected_write_size),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, expected_object_size, expected_object_size)
+        ctf_integer(uint64_t, expected_write_size, expected_write_size)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_write,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint32_t, oseq,
+        uint64_t, offset,
+        uint64_t, length,
+        uint64_t, truncate_size,
+        uint32_t, truncate_seq),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint32_t, oseq, oseq)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint64_t, truncate_size, truncate_size)
+        ctf_integer(uint32_t, truncate_seq, truncate_seq)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_writefull,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint64_t, offset,
+        uint64_t, length),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_writesame,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint64_t, offset,
+        uint64_t, length,
+        uint64_t, data_length),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint64_t, data_length, data_length)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_rollback,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_zero,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, offset,
+        uint64_t, length),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_create,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_truncate,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint32_t, oseq,
+        uint64_t, offset,
+        uint64_t, length,
+        uint64_t, truncate_size,
+        uint32_t, truncate_seq),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint32_t, oseq, oseq)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint64_t, truncate_size, truncate_size)
+        ctf_integer(uint32_t, truncate_seq, truncate_seq)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_delete,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_clonerange,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, offset,
+        uint64_t, length,
+        uint64_t, src_offset),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint64_t, src_offset, src_offset)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_watch,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, cookie,
+        uint8_t, op),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, cookie, cookie)
+        ctf_integer(uint8_t, op, op)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_cache_pin,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_cache_unpin,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_setxattr,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        const char*, aname),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_string(aname, aname)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_rmxattr,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        const char*, aname),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_string(aname, aname)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_append,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint32_t, oseq,
+        uint64_t, offset,
+        uint64_t, length,
+        uint64_t, truncate_size,
+        uint32_t, truncate_seq),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint32_t, oseq, oseq)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint64_t, truncate_size, truncate_size)
+        ctf_integer(uint32_t, truncate_seq, truncate_seq)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_tmapget,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_tmapput,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_tmapup,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_tmap2omap,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omapgetkeys,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        const char*, start_after,
+        uint64_t, max_return),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_string(start_after, start_after)
+        ctf_integer(uint64_t, max_return, max_return)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omapgetvals,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        const char*, start_after,
+        uint64_t, max_return,
+        const char*, filter_prefix),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_string(start_after, start_after)
+        ctf_integer(uint64_t, max_return, max_return)
+        ctf_string(filter_prefix, filter_prefix)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omapgetheader,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omapgetvalsbykeys,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        const char*, keys),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_string(keys, keys)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omap_cmp,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        const char*, keys),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_string(keys, keys)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omapsetvals,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omapsetheader,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omapclear,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omaprmkeys,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omaprmkeyrange,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_copy_get_classic,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_copy_get,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_copy_from,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        const char*, src_name,
+        int64_t, src_pool,
+        const char*, src_key,
+        const char*, src_nspace,
+        int64_t, src_hash,
+        uint64_t, src_snapid,
+        uint64_t, src_version),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_string(src_name, src_name)
+        ctf_integer(int64_t, src_pool, src_pool)
+        ctf_string(src_key, src_key)
+        ctf_string(src_nspace, src_nspace)
+        ctf_integer(int64_t, src_hash, src_hash)
+        ctf_integer(uint64_t, src_snapid, src_snapid)
+        ctf_integer(uint64_t, src_version, src_version)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_unknown,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint16_t, op,
+        const char*, opname),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer_hex(uint16_t, op, op)
+        ctf_string(opname, opname)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_post,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint16_t, op,
+        const char*, opname,
+        uint32_t, flags,
+        int, result),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer_hex(uint16_t, op, op)
+        ctf_string(opname, opname)
+        ctf_integer_hex(uint32_t, flags, flags)
+        ctf_integer_hex(int, result, result)
+    )
+)

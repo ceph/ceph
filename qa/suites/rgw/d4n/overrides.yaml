@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
+        rgw filter: d4n
+  rgw:
+    frontend: beast

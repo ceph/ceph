@@ -1,0 +1,41 @@
+parameters:
+ nodes: {{ nodes }}
+ pool: default
+ network: default
+ domain: cephlab.com
+ prefix: ceph
+ numcpus: {{ numcpus }}
+ memory: {{ memory }}
+ image: {{ image }}
+ notify: false
+ admin_password: password
+ disks: {{ disks }}
+
+{% raw %}
+{% for number in range(0, nodes) %}
+{{ prefix }}-node-0{{ number }}:
+ image: {{ image }}
+ numcpus: {{ numcpus }}
+ memory: {{ memory }}
+ reserveip: true
+ reservedns: true
+ sharedkey: true
+ domain: {{ domain }}
+ nets:
+  - {{ network }}
+ disks: {{ disks }}
+ pool: {{ pool }}
+ {% if ceph_dev_folder is defined %}
+ sharedfolders: [{{ ceph_dev_folder }}]
+ {% endif %}
+ cmds:
+ - yum -y install python3 chrony lvm2 podman
+ - sed -i "s/SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config
+ - echo "after installing the python3"
+ - setenforce 0
+ {% if number == 0 %}
+ scripts:
+  - bootstrap_cluster_dev.sh
+ {% endif %}
+{% endfor %}
+{% endraw %}

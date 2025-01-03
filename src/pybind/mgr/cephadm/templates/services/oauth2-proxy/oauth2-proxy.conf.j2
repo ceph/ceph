@@ -1,0 +1,37 @@
+
+# Listen on port 4180 for incoming HTTP traffic.
+https_address= "{{ spec.https_address or '0.0.0.0:4180' }}"
+
+skip_provider_button= true
+skip_jwt_bearer_tokens= true
+
+# OIDC provider configuration.
+provider= "oidc"
+provider_display_name= "{{ spec.provider_display_name }}"
+client_id= "{{ spec.client_id }}"
+client_secret= "{{ spec.client_secret }}"
+oidc_issuer_url= "{{ spec.oidc_issuer_url }}"
+{% if redirect_url %}
+redirect_url= "{{ redirect_url }}"
+{% endif %}
+
+ssl_insecure_skip_verify=true
+
+# following configuration is needed to avoid getting Forbidden
+# when using chrome like browsers as they handle 3rd party cookies
+# more strictly than Firefox
+cookie_samesite= "none"
+cookie_secure= true
+cookie_expire= "5h"
+cookie_refresh= "2h"
+
+pass_access_token= true
+pass_authorization_header= true
+pass_basic_auth= true
+pass_user_headers= true
+set_xauthrequest= true
+
+# Secret value for encrypting cookies.
+cookie_secret= "{{ cookie_secret }}"
+email_domains= "*"
+whitelist_domains= "{{ allowlist_domains | join(',') }}"

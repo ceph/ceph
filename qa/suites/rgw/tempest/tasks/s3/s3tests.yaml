@@ -1,0 +1,37 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw s3 auth use keystone: true
+        rgw crypt s3 kms backend: testing
+        rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl: false
+        rgw sts key: abcdefghijklmnop
+        rgw s3 auth use sts: true
+  keystone:
+    client.0:
+      projects:
+        - name: s3tests
+          description: s3tests project
+      users:
+        - name: s3tests-main
+          password: SECRET
+          project: s3tests
+      ec2 credentials:
+        - project: s3tests
+          user: s3tests-main
+      roles: [ name: member ]
+      role-mappings:
+        - name: member
+          user: s3tests-main
+          project: s3tests
+
+tasks:
+- s3tests:
+    client.0:
+      rgw_server: client.0
+      keystone users:
+        s3 main:
+          client: client.0
+          project: s3tests
+          user: s3tests-main

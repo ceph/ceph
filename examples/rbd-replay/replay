@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+lttng create
+lttng enable-event -u 'librbd:*'
+lttng add-context -u -t pthread_id
+lttng start
+../../src/rbd-replay --conf=../../src/ceph.conf replay.bin "$@" | tee replay.log
+lttng stop
+lttng view > replay-trace.log

@@ -1,0 +1,39 @@
+<div class="row">
+  <div class="col-6 card-tree">
+    <legend i18n>iSCSI Topology</legend>
+
+    <cds-tree-view #tree
+                   [tree]="nodes"
+                   (select)="onNodeSelected($event)">
+    </cds-tree-view>
+    <ng-template #treeNodeTemplate
+                 let-node>
+      <i [class]="node?.cdIcon"></i>
+      <span>{{ node?.name }}</span>
+      &nbsp;
+      <span class="badge"
+            [ngClass]="{'badge-success': ['logged_in'].includes(node?.status), 'badge-danger': ['logged_out'].includes(node?.status)}">
+        {{ node?.status }}
+      </span>
+    </ng-template>
+  </div>
+
+  <div class="col-6 metadata"
+       *ngIf="data">
+    <legend>{{ title }}</legend>
+
+    <cd-table #detailTable
+              [data]="data"
+              columnMode="flex"
+              [columns]="columns"
+              [limit]="0">
+    </cd-table>
+  </div>
+</div>
+
+<ng-template #highlightTpl
+             let-row="data.row"
+             let-value="data.value">
+  <span *ngIf="row.default === undefined || row.default === row.current">{{ value }}</span>
+  <strong *ngIf="row.default !== undefined && row.default !== row.current">{{ value }}</strong>
+</ng-template>

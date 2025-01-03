@@ -1,0 +1,12 @@
+tasks:
+- install:
+    extra_packages: ['ceph-immutable-object-cache']
+- ceph:
+    conf:
+      client:
+        rbd parent cache enabled: true
+        rbd plugins: parent_cache
+        immutable_object_cache_path: /tmp/ceph-immutable-object-cache
+        immutable_object_cache_max_size: 10G
+- immutable_object_cache:
+    client.0:

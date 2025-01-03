@@ -1,0 +1,35 @@
+overrides:
+  ceph:
+    log-ignorelist:
+    - but it is still running
+    - objects unfound and apparently lost
+    conf:
+      osd:
+        osd debug reject backfill probability: .3
+        osd scrub min interval: 60
+        osd scrub max interval: 120
+        osd max backfills: 3
+        osd snap trim sleep: 2
+        osd delete sleep: 1
+      mon:
+        mon min osdmap epochs: 50
+        paxos service trim min: 10
+        # prune full osdmaps regularly
+        mon osdmap full prune min: 15
+        mon osdmap full prune interval: 2
+        mon osdmap full prune txsize: 2
+tasks:
+- thrashosds:
+    timeout: 2400
+    dump_ops_enable: false
+    sighup_delay: 0
+    min_in: 3
+    noscrub_toggle_delay: 0
+    chance_down: 0
+    chance_thrash_pg_upmap: 0
+    reweight_osd: 0
+    thrash_primary_affinity: false
+    ceph_objectstore_tool: false
+    chance_inject_pause_short: 0
+    chance_thrash_cluster_full: 0
+    chance_reset_purged_snaps_last: 0

@@ -1,0 +1,90 @@
+# {{ cephadm_managed }}
+global
+    log         127.0.0.1 local2
+    chroot      /var/lib/haproxy
+    pidfile     /var/lib/haproxy/haproxy.pid
+    maxconn     8000
+    daemon
+    stats socket /var/lib/haproxy/stats
+{% if spec.ssl_cert %}
+  {% if spec.ssl_dh_param %}
+    tune.ssl.default-dh-param {{ spec.ssl_dh_param }}
+  {% endif %}
+  {% if spec.ssl_ciphers %}
+    ssl-default-bind-ciphers {{ spec.ssl_ciphers | join(':') }}
+  {% endif %}
+  {% if spec.ssl_options %}
+    ssl-default-bind-options {{ spec.ssl_options | join(' ') }}
+  {% endif %}
+{% endif %}
+
+defaults
+    mode                    {{ mode }}
+    log                     global
+{% if mode == 'http' %}
+    option                  httplog
+    option                  dontlognull
+    option http-server-close
+    option forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout queue           20s
+    timeout connect         5s
+    timeout http-request    1s
+    timeout http-keep-alive 5s
+    timeout client          30s
+    timeout server          30s
+    timeout check           5s
+{% endif %}
+{% if mode == 'tcp' %}
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+    timeout check           10s
+{% endif %}
+    maxconn                 8000
+
+frontend stats
+    mode http
+    bind {{ ip }}:{{ monitor_port }}
+    bind {{ local_host_ip }}:{{ monitor_port }}
+    stats enable
+    stats uri /stats
+    stats refresh 10s
+    stats auth {{ user }}:{{ password }}
+    http-request use-service prometheus-exporter if { path /metrics }
+    monitor-uri /health
+
+frontend frontend
+{% if spec.ssl_cert %}
+    bind {{ ip }}:{{ frontend_port }} ssl crt /var/lib/haproxy/haproxy.pem
+{% else %}
+    bind {{ ip }}:{{ frontend_port }}
+{% endif %}
+    default_backend backend
+
+backend backend
+{% if mode == 'http' %}
+    option forwardfor
+{% if backend_spec.ssl %}
+    default-server ssl
+    default-server verify none
+{% endif %}
+    balance static-rr
+    option httpchk HEAD / HTTP/1.0
+    {% for server in servers %}
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check weight 100 inter {{ health_check_interval }}
+    {% endfor %}
+{% endif %}
+{% if mode == 'tcp' %}
+    mode        tcp
+    balance     source
+    hash-type   consistent
+{% if default_server_opts %}
+    default-server {{ default_server_opts|join(" ") }}
+{% endif %}
+    {% for server in servers %}
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check
+    {% endfor %}
+{% endif %}

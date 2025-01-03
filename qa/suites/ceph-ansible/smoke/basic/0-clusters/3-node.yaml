@@ -1,0 +1,12 @@
+meta:
+- desc: |
+   3-node cluster
+   install and run ceph-ansible on a mon.a node alone with ceph 
+roles:
+- [mon.a, mds.a, osd.0, osd.1, osd.2]
+- [mon.b, mgr.x, osd.3, osd.4, osd.5]
+- [mon.c, mgr.y, osd.6, osd.7, osd.8, client.0]
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 10 # GB

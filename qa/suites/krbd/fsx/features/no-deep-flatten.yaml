@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        # layering
+        rbd default features: 1

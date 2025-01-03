@@ -1,0 +1,68 @@
+tasks:
+- vip:
+
+# make sure cephadm notices the new IP
+- cephadm.shell:
+    host.a:
+      - ceph orch device ls --refresh
+
+# stop kernel nfs server, if running
+- vip.exec:
+    all-hosts:
+      - systemctl stop nfs-server
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create foofs
+
+# deploy nfs + ingress
+- cephadm.apply:
+    specs:
+      - service_type: nfs
+        service_id: foo
+        placement:
+          count: 2
+        spec:
+          port: 12049
+      - service_type: ingress
+        service_id: nfs.foo
+        spec:
+          backend_service: nfs.foo
+          frontend_port: 2049
+          monitor_port: 9002
+          virtual_ip: "{{VIP0}}/{{VIPPREFIXLEN}}"
+- cephadm.wait_for_service:
+    service: nfs.foo
+- cephadm.wait_for_service:
+    service: ingress.nfs.foo
+
+## export and mount
+
+- cephadm.shell:
+    host.a:
+      - ceph nfs export create cephfs --fsname foofs --cluster-id foo --pseudo-path /fake
+
+- vip.exec:
+    host.a:
+      - mkdir /mnt/foo
+      - sleep 5
+      - mount -t nfs {{VIP0}}:/fake /mnt/foo
+      - echo test > /mnt/foo/testfile
+      - sync
+
+# take each gateway down in turn and ensure things still work
+- cephadm.shell:
+    volumes:
+      - /mnt/foo:/mnt/foo
+    host.a:
+      - |
+        echo "Check with each haproxy down in turn..."
+        for haproxy in `ceph orch ps | grep ^haproxy.nfs.foo. | awk '{print $1}'`; do
+          ceph orch daemon stop $haproxy
+          while ! ceph orch ps | grep $haproxy | grep stopped; do sleep 1 ; done
+          cat /mnt/foo/testfile
+          echo $haproxy > /mnt/foo/testfile
+          sync
+          ceph orch daemon start $haproxy
+          while ! ceph orch ps | grep $haproxy | grep running; do sleep 1 ; done
+        done

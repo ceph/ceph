@@ -1,0 +1,46 @@
+<div *ngIf="upgradeStatus$ | async as upgradeStatus">
+  <ng-container>
+    <cd-progress [value]="executingTask?.progress"
+                 [label]="executingTask?.description"
+                 [status]="upgradeStatus.in_progress ? 'in-progress' : 'paused'"
+                 [subLabel]="upgradeStatus.which"
+                 [completedItems]="upgradeStatus.services_complete"
+                 [actionName]="'upgrading'"
+                 [helperText]="upgradeStatus.progress"
+                 [footerText]="upgradeStatus.message"
+                 [isPaused]="upgradeStatus.is_paused">
+    </cd-progress>
+
+    <div class="text-center mt-3">
+      <button class="btn btn-light"
+              aria-label="Go back"
+              routerLink="/upgrade"
+              i18n>Back</button>
+      <button *ngIf="upgradeStatus.in_progress && !upgradeStatus.is_paused"
+              (click)="pauseUpgrade()"
+              class="btn btn-light m-2"
+              aria-label="Pause Upgrade"
+              i18n>Pause</button>
+      <button *ngIf="upgradeStatus.in_progress && upgradeStatus.is_paused"
+              (click)="resumeUpgrade()"
+              class="btn btn-light m-2"
+              aria-label="Resume Upgrade"
+              i18n>Resume</button>
+      <button *ngIf="upgradeStatus.in_progress"
+              (click)="stopUpgradeModal()"
+              class="btn btn-danger"
+              aria-label="Stop Upgrade"
+              i18n>Stop</button>
+    </div>
+  </ng-container>
+</div>
+
+<legend class="cd-header"
+        i18n>Cluster logs</legend>
+  <cd-logs [showAuditLogs]="false"
+           [showDaemonLogs]="false"
+           [showNavLinks]="false"
+           [showFilterTools]="false"
+           [showDownloadCopyButton]="false"
+           defaultTab="cluster-logs"
+           [scrollable]="true"></cd-logs>

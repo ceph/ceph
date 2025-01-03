@@ -1,0 +1,15 @@
+tasks:
+- install:
+- ceph:
+    conf:
+      mds:
+        mds thrash exports: 1
+        mds debug subtrees: 1
+        mds debug scatterstat: 1
+        mds verify scatter: 1
+- ceph-fuse:
+- workunit:
+    clients:
+      client.0:
+        - suites/fsstress.sh
+

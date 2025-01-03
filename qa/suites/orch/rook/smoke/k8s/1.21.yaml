@@ -1,0 +1,3 @@
+overrides:
+  kubeadm:
+    version: "1.21"
