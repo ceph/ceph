@@ -62,6 +62,8 @@ struct BackfillState {
   struct CancelBackfill : sc::event<CancelBackfill> {
   };
 
+  struct ThrottleAcquired : sc::event<ThrottleAcquired> {
+  };
 private:
   // internal events
   struct RequestPrimaryScanning : sc::event<RequestPrimaryScanning> {
@@ -278,6 +280,7 @@ public:
       sc::custom_reaction<ObjectPushed>,
       sc::transition<RequestDone, Done>,
       sc::transition<CancelBackfill, Cancelled>,
+      sc::transition<ThrottleAcquired, Enqueuing>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Waiting(my_context);
     sc::result react(ObjectPushed);
