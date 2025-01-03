@@ -879,6 +879,17 @@ void PG::enqueue_push_for_backfill(
   backfill_state->enqueue_standalone_push(obj, v, peers);
 }
 
+void PG::enqueue_delete_for_backfill(
+  const hobject_t &obj,
+  const eversion_t &v,
+  const std::vector<pg_shard_t> &peers)
+{
+  assert(recovery_handler);
+  assert(recovery_handler->backfill_state);
+  auto backfill_state = recovery_handler->backfill_state.get();
+  backfill_state->enqueue_standalone_delete(obj, v, peers);
+}
+
 PG::interruptible_future<
   std::tuple<PG::interruptible_future<>,
              PG::interruptible_future<>>>
