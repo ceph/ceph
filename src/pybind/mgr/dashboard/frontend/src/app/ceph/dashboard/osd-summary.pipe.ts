@@ -3,7 +3,7 @@ import { Pipe, PipeTransform } from '@angular/core';
 import _ from 'lodash';
 
 @Pipe({
-  name: 'osdSummary'
+  name: 'osdDashboardSummary'
 })
 export class OsdSummaryPipe implements PipeTransform {
   transform(value: any): any {

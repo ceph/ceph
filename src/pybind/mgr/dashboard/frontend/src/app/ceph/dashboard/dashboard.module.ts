@@ -16,7 +16,7 @@ import { HealthComponent } from './health/health.component';
 import { InfoCardComponent } from './info-card/info-card.component';
 import { InfoGroupComponent } from './info-group/info-group.component';
 import { MdsSummaryPipe } from './mds-summary.pipe';
-import { MgrSummaryPipe } from './mgr-summary.pipe';
+import { MgrDashboardSummaryPipe } from './mgr-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
 import { OsdSummaryPipe } from './osd-summary.pipe';
 
@@ -39,7 +39,7 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     DashboardComponent,
     MonSummaryPipe,
     OsdSummaryPipe,
-    MgrSummaryPipe,
+    MgrDashboardSummaryPipe,
     MdsSummaryPipe,
     HealthPieComponent,
     InfoCardComponent,

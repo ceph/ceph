@@ -18,10 +18,9 @@
       <ng-container *ngFor="let field of fields">
         <div class="form-item">
           <cds-text-label *ngIf="field.type === 'text'"
-                          [for]="field.name"
+                          [labelInputID]="field.name"
                           [invalid]="getError(field)"
                           [invalidText]="getError(field)"
-                          [label]="field.label"
                           [cdRequiredField]="field?.required === true ? field.label : ''"
                           i18n>
             {{ field.label }}
@@ -34,18 +33,15 @@
                    autofocus>
           </cds-text-label>
           <cds-number *ngIf="field.type === 'number'"
-                      [for]="field.name"
                       [invalid]="getError(field)"
                       [invalidText]="getError(field)"
                       [label]="field.label"
                       [cdRequiredField]="field?.required === true ? field.label : ''"
                       [formControlName]="field.name"
                       [id]="field.name"
-                      [name]="field.name"
                       i18n></cds-number>
           <cds-text-label *ngIf="field.type === 'binary'"
-                          [for]="field.name"
-                          [label]="field.label"
+                          [labelInputID]="field.name"
                           [invalid]="getError(field)"
                           [invalidText]="getError(field)"
                           [cdRequiredField]="field?.required === true ? field.label : ''"

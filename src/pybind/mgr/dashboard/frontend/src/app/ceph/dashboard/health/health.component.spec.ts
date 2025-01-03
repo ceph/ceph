@@ -17,7 +17,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { HealthPieComponent } from '../health-pie/health-pie.component';
 import { MdsSummaryPipe } from '../mds-summary.pipe';
-import { MgrSummaryPipe } from '../mgr-summary.pipe';
+import { MgrDashboardSummaryPipe } from '../mgr-summary.pipe';
 import { MonSummaryPipe } from '../mon-summary.pipe';
 import { OsdSummaryPipe } from '../osd-summary.pipe';
 import { HealthComponent } from './health.component';
@@ -56,7 +56,7 @@ describe('HealthComponent', () => {
       MonSummaryPipe,
       OsdSummaryPipe,
       MdsSummaryPipe,
-      MgrSummaryPipe
+      MgrDashboardSummaryPipe
     ],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
