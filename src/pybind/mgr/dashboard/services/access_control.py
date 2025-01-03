@@ -225,7 +225,8 @@ READ_ONLY_ROLE = Role(
 
 # block manager role provides all permission for block related scopes
 BLOCK_MGR_ROLE = Role(
-    'block-manager', 'allows full permissions for rbd-image, rbd-mirroring, and iscsi scopes', {
+    'block-manager',
+    'allows full permissions for rbd-image, rbd-mirroring, iscsi and nvmeof scopes', {
         Scope.RBD_IMAGE: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.POOL: [_P.READ],
         Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
