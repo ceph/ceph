@@ -240,8 +240,8 @@ function standard_scrub_cluster() {
     local saved_echo_flag=${-//[^x]/}
     set +x
 
-    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
-    run_mgr $dir x || return 1
+    run_mon $dir a --osd_pool_default_size=3 || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
 
     local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
             --osd_scrub_interval_randomize_ratio=0 \
@@ -249,9 +249,12 @@ function standard_scrub_cluster() {
             --osd_pool_default_pg_autoscale_mode=off \
             --osd_pg_stat_report_interval_max_seconds=1 \
             --osd_pg_stat_report_interval_max_epochs=1 \
+            --osd_stats_update_period_not_scrubbing=3 \
+            --osd_stats_update_period_scrubbing=1 \
             --osd_scrub_retry_after_noscrub=5 \
             --osd_scrub_retry_pg_state=5 \
             --osd_scrub_retry_delay=3 \
+            --osd_pool_default_size=3 \
             $extra_pars"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
@@ -295,6 +298,107 @@ function standard_scrub_wpq_cluster() {
 
     standard_scrub_cluster $dir conf || return 1
 }
+
+
+# Parse the output of a 'pg dump pgs_brief' command and build a set of dictionaries:
+# - pg_primary_dict: a dictionary of pgid -> acting_primary
+# - pg_acting_dict: a dictionary of pgid -> acting set
+# - pg_pool_dict: a dictionary of pgid -> pool
+# If the input file is '-', the function will fetch the dump directly from the ceph cluster.
+function build_pg_dicts {
+  local dir=$1
+  local -n pg_primary_dict=$2
+  local -n pg_acting_dict=$3
+  local -n pg_pool_dict=$4
+  local infile=$5
+
+  local extr_dbg=0 # note: 3 and above leave some temp files around
+
+  #turn off '-x' (but remember previous state)
+  local saved_echo_flag=${-//[^x]/}
+  set +x
+
+  # if the infile name is '-', fetch the dump directly from the ceph cluster
+  if [[ $infile == "-" ]]; then
+    local -r ceph_cmd="bin/ceph pg dump pgs_brief -f=json-pretty"
+    local -r ceph_cmd_out=$(eval $ceph_cmd)
+    local -r ceph_cmd_rc=$?
+    if [[ $ceph_cmd_rc -ne 0 ]]; then
+      echo "Error: the command '$ceph_cmd' failed with return code $ceph_cmd_rc"
+    fi
+    (( extr_dbg >= 3 )) && echo "$ceph_cmd_out" > /tmp/e2
+    l0=`echo "$ceph_cmd_out" | jq '[.pg_stats | group_by(.pg_stats)[0] | map({pgid: .pgid, pool: (.pgid | split(".")[0]), acting: .acting, acting_primary: .acting_primary})] | .[]' `
+  else
+    l0=`jq '[.pg_stats | group_by(.pg_stats)[0] | map({pgid: .pgid, pool: (.pgid | split(".")[0]), acting: .acting, acting_primary: .acting_primary})] | .[]' $infile `
+  fi
+  (( extr_dbg >= 2 )) && echo "L0: $l0"
+
+  mapfile -t l1 < <(echo "$l0" | jq -c '.[]')
+  (( extr_dbg >= 2 )) && echo "L1: ${#l1[@]}"
+
+  for item in "${l1[@]}"; do
+    pgid=$(echo "$item" | jq -r '.pgid')
+    acting=$(echo "$item" | jq -r '.acting | @sh')
+    pg_acting_dict["$pgid"]=$acting
+    acting_primary=$(echo "$item" | jq -r '.acting_primary')
+    pg_primary_dict["$pgid"]=$acting_primary
+    pool=$(echo "$item" | jq -r '.pool')
+    pg_pool_dict["$pgid"]=$pool
+  done
+
+  if [[ -n "$saved_echo_flag" ]]; then set -x; fi
+}
+
+
+# a function that counts the number of common active-set elements between two PGs
+# 1 - the first PG
+# 2 - the second PG
+# 3 - the dictionary of active sets
+function count_common_active {
+  local pg1=$1
+  local pg2=$2
+  local -n pg_acting_dict=$3
+  local -n res=$4
+
+  local -a a1=(${pg_acting_dict[$pg1]})
+  local -a a2=(${pg_acting_dict[$pg2]})
+
+  local -i cnt=0
+  for i in "${a1[@]}"; do
+    for j in "${a2[@]}"; do
+      if [[ $i -eq $j ]]; then
+        cnt=$((cnt+1))
+      fi
+    done
+  done
+
+  res=$cnt
+}
+
+
+# given a PG, find another one with a disjoint active set
+# - but allow a possible common Primary
+# 1 - the PG
+# 2 - the dictionary of active sets
+# 3 - [out] - the PG with a disjoint active set
+function find_disjoint_but_primary {
+  local pg=$1
+  local -n ac_dict=$2
+  local -n p_dict=$3
+  local -n res=$4
+
+  for cand in "${!ac_dict[@]}"; do
+    if [[ "$cand" != "$pg" ]]; then
+      local -i common=0
+      count_common_active "$pg" "$cand" ac_dict common
+      if [[ $common -eq 0 || ( $common -eq 1 && "${p_dict[$pg]}" == "${p_dict[$cand]}" )]]; then
+        res=$cand
+        return
+      fi
+    fi
+  done
+}
+
 
 
 # A debug flag is set for the PG specified, causing the 'pg query' command to display

@@ -161,6 +161,11 @@ VALUE_EVENT(ReserverGranted, AsyncScrubResData);
 /// all replicas have granted our reserve request
 MEV(RemotesReserved)
 
+/// abort the scrub session, if in ReservingReplicas state
+/// (used when the operator issues a scrub request, and we no longer
+/// need the reservations)
+MEV(AbortIfReserving)
+
 /// initiate a new scrubbing session (relevant if we are a Primary)
 MEV(StartScrub)
 
@@ -570,6 +575,7 @@ struct ReservingReplicas : sc::state<ReservingReplicas, Session>, NamedSimply {
   using reactions = mpl::list<
       sc::custom_reaction<ReplicaGrant>,
       sc::custom_reaction<ReplicaReject>,
+      sc::transition<AbortIfReserving, PrimaryIdle>,
       sc::transition<RemotesReserved, ActiveScrubbing>>;
 
   ScrubTimePoint entered_at = ScrubClock::now();
