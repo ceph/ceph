@@ -127,18 +127,15 @@ To build Ceph, follow this procedure:
 
        ninja install
 
-    >vstart.sh is commonly used to quickly deploy a development cluster.
+## Tips and Tricks
 
-    > [TIPS & TRICKS]
-    >
-    >Use Debug Builds Only When Needed 
-    >
-    >While debugging builds are helpful for development, they can slow down performance.
-    >
-    >Use `-DCMAKE_BUILD_TYPE=Release` when debugging isn't necessary.
-    
-    Enable Selective Daemons if you're testing specific components, don't start unnecessary daemons.
-    Preserve Existing Data skip cluster reinitialization between tests by using the `-n` flag
+   * Use "debug builds" only when needed. Debugging builds are helpful for
+     development, but they can slow down performance. Use
+     `-DCMAKE_BUILD_TYPE=Release` when debugging isn't necessary.
+   * Enable Selective Daemons when testing specific components. Don't start
+     unnecessary daemons.
+   * Preserve Existing Data skip cluster reinitialization between tests by
+     using the `-n` flag.
 
     > [TROUBLESHOOTING]
     >
