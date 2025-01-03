@@ -5485,7 +5485,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   }
 
   /* if the bucket is not synced we can remove the meta file */
-  if (!svc.zone->is_syncing_bucket_meta(bucket)) {
+  if (!svc.zone->is_syncing_bucket_meta()) {
     RGWObjVersionTracker objv_tracker;
     r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
     if (r < 0) {
