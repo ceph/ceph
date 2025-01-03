@@ -104,11 +104,21 @@ def bilog_list(zone, bucket, args = None):
     return json.loads(bilog)
 
 def bilog_autotrim(zone, args = None):
-    zone.cluster.admin(['bilog', 'autotrim'] + (args or []))
+    cmd = ['bilog', 'autotrim'] + (args or []) + zone.zone_args()
+    zone.cluster.admin(cmd, debug_rgw=20)
 
 def bucket_layout(zone, bucket, args = None):
     (bl_output,_) = zone.cluster.admin(['bucket', 'layout', '--bucket', bucket] + (args or []))
     return json.loads(bl_output)
+
+def check_bucket_instance_metadata(zone, bucket):
+    cmd = ['metadata', 'list', 'bucket.instance'] + zone.zone_args()
+    metadata_list, ret = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
+    if metadata_list.find(bucket+":") >= 0:
+        log.critical('zone %s contains bucket instance %s', zone, bucket)
+        return False
+
+    return True
 
 def parse_meta_sync_status(meta_sync_status_json):
     log.debug('current meta sync status=%s', meta_sync_status_json)
@@ -1520,6 +1530,7 @@ def test_encrypted_object_sync():
     key = bucket2.get_key('testobj-sse-kms')
     eq(data, key.get_contents_as_string(encoding='ascii'))
 
+@attr('bucket_trim')
 def test_bucket_index_log_trim():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1611,7 +1622,7 @@ def test_bucket_reshard_index_log_trim():
     # Resharding the bucket
     zone.zone.cluster.admin(['bucket', 'reshard',
         '--bucket', test_bucket.name,
-        '--num-shards', '3',
+        '--num-shards', '13',
         '--yes-i-really-mean-it'])
 
     # checking bucket layout after 1st resharding
@@ -1632,7 +1643,7 @@ def test_bucket_reshard_index_log_trim():
     # Resharding the bucket again
     zone.zone.cluster.admin(['bucket', 'reshard',
         '--bucket', test_bucket.name,
-        '--num-shards', '3',
+        '--num-shards', '15',
         '--yes-i-really-mean-it'])
 
     # checking bucket layout after 2nd resharding
@@ -1664,6 +1675,132 @@ def test_bucket_reshard_index_log_trim():
     # verify the bucket has non-empty bilog
     test_bilog = bilog_list(zone.zone, test_bucket.name)
     assert(len(test_bilog) > 0)
+
+@attr('bucket_trim')
+def test_bucket_log_trim_after_delete_bucket_primary_reshard():
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+
+    # create a test bucket, upload some objects, and wait for sync
+    def make_test_bucket():
+        name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', primary.name, name)
+        bucket = primary.conn.create_bucket(name)
+        for objname in ('a', 'b', 'c', 'd'):
+            k = new_key(primary, name, objname)
+            k.set_contents_from_string('foo')
+        zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_bucket_checkpoint(zonegroup_conns, name)
+        return bucket
+
+    # create a 'test' bucket
+    test_bucket = make_test_bucket()
+
+    # Resharding the bucket
+    primary.zone.cluster.admin(['bucket', 'reshard',
+        '--bucket', test_bucket.name,
+        '--num-shards', '13'])
+
+    # Delete the objects
+    for obj in ('a', 'b', 'c', 'd'):
+        cmd = ['object', 'rm'] + primary.zone.zone_args()
+        cmd += ['--bucket', test_bucket.name]
+        cmd += ['--object', obj]
+        primary.zone.cluster.admin(cmd)
+
+    # delete bucket and test bilog autotrim
+    primary.conn.delete_bucket(test_bucket.name)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+    bilog_autotrim(primary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+    time.sleep(config.checkpoint_delay)
+
+    bilog_autotrim(primary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+
+    for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        zonegroup_meta_checkpoint(zonegroup)
+
+        for zone in zonegroup_conns.zones:
+            log.info('trimming on zone=%s', zone.name)
+            bilog_autotrim(zone.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+            time.sleep(config.checkpoint_delay)
+
+    # run bilog trim twice on primary zone where the bucket was resharded
+    bilog_autotrim(primary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+    
+    for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        for zone in zonegroup_conns.zones:
+            assert check_bucket_instance_metadata(zone.zone, test_bucket.name)
+
+@attr('bucket_trim')
+def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    # create a test bucket, upload some objects, and wait for sync
+    def make_test_bucket():
+        name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', primary.name, name)
+        bucket = primary.conn.create_bucket(name)
+        for objname in ('a', 'b', 'c', 'd'):
+            k = new_key(primary, name, objname)
+            k.set_contents_from_string('foo')
+        zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_bucket_checkpoint(zonegroup_conns, name)
+        return bucket
+
+    # create a 'test' bucket
+    test_bucket = make_test_bucket()
+
+    # Resharding the bucket on secondary
+    secondary.zone.cluster.admin(['bucket', 'reshard',
+        '--bucket', test_bucket.name,
+        '--num-shards', '13',
+        '--yes-i-really-mean-it'])
+
+    # Delete the objects
+    for obj in ('a', 'b', 'c', 'd'):
+        cmd = ['object', 'rm'] + primary.zone.zone_args()
+        cmd += ['--bucket', test_bucket.name]
+        cmd += ['--object', obj]
+        primary.zone.cluster.admin(cmd)
+
+    # delete bucket and test bilog autotrim
+    primary.conn.delete_bucket(test_bucket.name)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+    bilog_autotrim(secondary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+    time.sleep(config.checkpoint_delay)
+
+    bilog_autotrim(secondary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+
+    for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        zonegroup_meta_checkpoint(zonegroup)
+
+        for zone in zonegroup_conns.zones:
+            log.info('trimming on zone=%s', zone.name)
+            bilog_autotrim(zone.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+            time.sleep(config.checkpoint_delay)
+
+    # run bilog trim twice on primary zone where the bucket was resharded
+    bilog_autotrim(secondary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+    time.sleep(config.checkpoint_delay)
+
+    for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        for zone in zonegroup_conns.zones:
+            assert check_bucket_instance_metadata(zone.zone, test_bucket.name)
+
 
 @attr('bucket_reshard')
 def test_bucket_reshard_incremental():
@@ -2380,6 +2517,86 @@ def check_object_not_exists(bucket, objname):
 def check_objects_not_exist(bucket, obj_arr):
     for objname in obj_arr:
         check_object_not_exists(bucket, objname)
+        
+@attr('sync_policy')
+def test_bucket_delete_with_sync_policy():
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    (zoneA, zoneB) = zonegroup.zones[0:2]
+    (zcA, zcB) = zonegroup_conns.zones[0:2]
+
+    c1 = zoneA.cluster
+
+    # configure sync policy
+    zones = zoneA.name + ',' + zoneB.name
+    c1.admin(['sync', 'policy', 'get'])
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow", zones)
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zoneA.name, zoneB.name)
+    set_sync_policy_group_status(c1, "sync-group", "allowed")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    """
+        configure policy at bucketA level with src and dest
+        zones specified to zoneA and zoneB resp.
+
+        verify zoneA bucketA syncs to zoneB BucketA but not viceversa.
+    """
+
+    # configure sync policy for only bucketA and enable it
+    bucketA = create_zone_bucket(zcA)
+    buckets = []
+    buckets.append(bucketA)
+    create_sync_policy_group(c1, "sync-bucket", "allowed", bucketA.name)
+    create_sync_group_flow_directional(c1, "sync-bucket", "sync-flow-bucket", zoneA.name, zoneB.name, bucketA.name)
+    create_sync_group_pipe(c1, "sync-bucket", "sync-pipe", zoneA.name, zoneB.name, bucketA.name)
+    set_sync_policy_group_status(c1, "sync-bucket", "enabled", bucketA.name)
+
+    get_sync_policy(c1, bucketA.name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create bucketA and objects in zoneA and zoneB
+    objnameA = 'a'
+    objnameB = 'b'
+
+    # upload object in each zone and wait for sync.
+    k = new_key(zcA, bucketA, objnameA)
+    k.set_contents_from_string('foo')
+    k = new_key(zcB, bucketA, objnameB)
+    k.set_contents_from_string('foo')
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify that objnameA is synced to bucketA in zoneB
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_exist(bucket, objnameA)
+
+    # verify that objnameB is not synced to bucketA in zoneA
+    bucket = get_bucket(zcA, bucketA.name)
+    check_objects_not_exist(bucket, objnameB)
+
+    log.debug('deleting object')
+    k = get_key(zcA, bucket, objnameA)
+    k.delete()
+    
+    zone_bucket_checkpoint(zoneA, zoneB, bucketA.name)
+    
+    # delete bucket on zoneA. it should fail to delete
+    log.debug('deleting bucket')
+    assert_raises(boto.exception.S3ResponseError, zcA.delete_bucket, bucketA.name)
+
+    assert check_all_buckets_exist(zcA, buckets)
+    assert check_all_buckets_exist(zcB, buckets)
+    return
+
 
 @attr('fails_with_rgw')
 @attr('sync_policy')
