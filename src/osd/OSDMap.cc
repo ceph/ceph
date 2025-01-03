@@ -7423,6 +7423,10 @@ unsigned OSDMap::get_device_class_flags(int id) const
 
 std::optional<std::string> OSDMap::pending_require_osd_release() const
 {
+  if (HAVE_FEATURE(get_up_osd_features(), SERVER_REEF) &&
+      require_osd_release < ceph_release_t::reef) {
+    return "reef";
+  }
   if (HAVE_FEATURE(get_up_osd_features(), SERVER_QUINCY) &&
       require_osd_release < ceph_release_t::quincy) {
     return "quincy";
