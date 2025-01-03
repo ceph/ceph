@@ -23,7 +23,7 @@
 #include "PGBackend.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
-#include "ECTransaction.h"
+#include "ECTransactionL.h"
 #include "ECExtentCacheL.h"
 
 //forward declaration

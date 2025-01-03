@@ -44,7 +44,7 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #include "common/WorkQueue.h"
 #endif
 
-#include "ECTransaction.h"
+#include "ECTransactionL.h"
 #include "ECExtentCacheL.h"
 
 //forward declaration
@@ -544,7 +544,7 @@ struct ECCommonL {
       std::set<hobject_t> temp_added;
       std::set<hobject_t> temp_cleared;
 
-      ECTransaction::WritePlan plan;
+      ECTransactionL::WritePlan plan;
       bool requires_rmw() const { return !plan.to_read.empty(); }
       bool invalidates_cache() const { return plan.invalidates_cache; }
 

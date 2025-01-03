@@ -16,7 +16,7 @@
 #include <vector>
 #include <sstream>
 
-#include "ECTransaction.h"
+#include "ECTransactionL.h"
 #include "ECUtil.h"
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
@@ -94,7 +94,7 @@ static void encode_and_write(
   }
 }
 
-void ECTransaction::generate_transactions(
+void ECTransactionL::generate_transactions(
   PGTransaction* _t,
   WritePlan &plan,
   ErasureCodeInterfaceRef &ecimpl,

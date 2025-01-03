@@ -14,7 +14,7 @@
 
 #include <gtest/gtest.h>
 #include "osd/PGTransaction.h"
-#include "osd/ECTransaction.h"
+#include "osd/ECTransactionL.h"
 #include "common/debug.h"
 
 #include "test/unit.cc"
@@ -39,7 +39,7 @@ TEST(ectransaction, two_writes_separated)
   t->write(h, 669856, b.length(), b, 0);
 
   ECUtil::stripe_info_t sinfo(2, 2, 8192);
-  auto plan = ECTransaction::get_write_plan(
+  auto plan = ECTransactionL::get_write_plan(
     sinfo,
     *t,
     [&](const hobject_t &i) {
@@ -68,7 +68,7 @@ TEST(ectransaction, two_writes_nearby)
   b.append_zero(2437120);
   t->write(h, 569856, b.length(), b, 0);
 
-  auto plan = ECTransaction::get_write_plan(
+  auto plan = ECTransactionL::get_write_plan(
     sinfo,
     *t,
     [&](const hobject_t &i) {
@@ -109,7 +109,7 @@ TEST(ectransaction, many_writes)
   t->write(h, 2809856, b.length(), b, 0);
   t->write(h, 2813952, b.length(), b, 0);
 
-  auto plan = ECTransaction::get_write_plan(
+  auto plan = ECTransactionL::get_write_plan(
     sinfo,
     *t,
     [&](const hobject_t &i) {

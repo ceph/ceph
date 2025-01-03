@@ -1439,7 +1439,7 @@ struct ECClassicalOp : ECCommonL::RMWPipeline::Op {
       const ceph_release_t require_osd_release) final
   {
     assert(t);
-    ECTransaction::generate_transactions(
+    ECTransactionL::generate_transactions(
       t.get(),
       plan,
       ecimpl,
@@ -1456,13 +1456,13 @@ struct ECClassicalOp : ECCommonL::RMWPipeline::Op {
   }
 
   template <typename F>
-  static ECTransaction::WritePlan get_write_plan(
+  static ECTransactionL::WritePlan get_write_plan(
     const ECUtil::stripe_info_t &sinfo,
     PGTransaction& t,
     F &&get_hinfo,
     DoutPrefixProvider *dpp)
   {
-    return ECTransaction::get_write_plan(
+    return ECTransactionL::get_write_plan(
       sinfo,
       t,
       std::forward<F>(get_hinfo),

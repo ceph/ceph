@@ -21,7 +21,7 @@
 #include "os/Transaction.h"
 #include "PGTransaction.h"
 
-namespace ECTransaction {
+namespace ECTransactionL {
   struct WritePlan {
     bool invalidates_cache = false; // Yes, both are possible
     std::map<hobject_t,extent_set> to_read;
