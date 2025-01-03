@@ -471,6 +471,72 @@ void ScrubStack::scrub_dir_inode_final(CInode *in)
   return;
 }
 
+class C_RepairRemoteDentry : public MDSContext {
+private:
+  ScrubStack *scrubstack;
+  CDentry *dn;
+
+public:
+  C_RepairRemoteDentry(ScrubStack * _scrubstack, CDentry *_dn)
+      : scrubstack(_scrubstack), dn(_dn) {}
+
+  MDSRank *get_mds() override { return scrubstack->mdcache->mds; }
+  void finish(int r) override {
+    // do nothing
+  }
+  void complete(int r) override {
+    if (r < 0) {
+      scrubstack->cleanup_remote_orphan_link(dn);
+    }
+  }
+};
+
+void ScrubStack::cleanup_remote_orphan_link(CDentry *dn) {
+  dout(1) << "scrub: Got an orphan remote link " << *dn
+          << ", scrub in repair mode decides to clean it up instead of recover"
+          << dendl;
+  CDentry::linkage_t *dnl = dn->get_linkage();
+  inodeno_t ino = dnl->get_remote_ino();
+  dn->get_dir()->unlink_inode(dn);
+  dn->mark_dirty(dn->get_projected_version(),
+                 mdcache->mds->mdlog->get_current_segment());
+  MDRequestRef null_ref;
+  mdcache->send_dentry_unlink(dn, NULL, null_ref);
+  dn->get_dir()->try_remove_unlinked_dn(dn);
+  // Removing from the damage list after repairing
+  mdcache->mds->damage_table.remove_backtrace_damage_entry(ino);
+}
+
+void ScrubStack::scrub_remote_link(CDentry *dn, ScrubHeaderRef &header) {
+  std::string path;
+  dn->make_path_string(path, true);
+
+  CDentry::linkage_t *dnl = dn->get_linkage();
+  CInode *remote_inode = dnl->get_inode();
+  if (!remote_inode) {
+    if (header->get_repair()) {
+      inodeno_t remote_ino = dnl->get_remote_ino();
+      if (mdcache->mds->damage_table.is_remote_damaged(remote_ino)) {
+        // Already in the damage list, clean it directly
+        cleanup_remote_orphan_link(dn);
+        return;
+      }
+
+      // Check the link is orphan or not then clean it asynchronously
+      mdcache->open_remote_dentry(dn, true,
+                                  new C_RepairRemoteDentry(this, dn));
+      // TODO: We need a mechanism to actually repair link instead of cleaning.
+    } else {
+      if (mdcache->mds->damage_table.is_remote_damaged(dnl->get_remote_ino())) {
+        dout(4) << "scrub: remote dentry points to damaged ino " << *dn
+                << dendl;
+        return;
+      }
+      mdcache->open_remote_dentry(dn, true, nullptr);
+    }
+  }
+}
+
 void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
 {
   ceph_assert(dir != NULL);
@@ -514,7 +580,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
       if (dnl->is_primary()) {
 	_enqueue(dnl->get_inode(), header, false);
       } else if (dnl->is_remote()) {
-	// TODO: check remote linkage
+        scrub_remote_link(dn, header);
       }
     }
   }
