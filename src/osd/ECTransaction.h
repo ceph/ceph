@@ -16,7 +16,7 @@
 #define ECTRANSACTION_H
 
 #include "ECUtil.h"
-#include "ExtentCache.h"
+#include "ECExtentCacheL.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "os/Transaction.h"
 #include "PGTransaction.h"

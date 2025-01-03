@@ -14,7 +14,7 @@
 
 
 #include <gtest/gtest.h>
-#include "osd/ExtentCache.h"
+#include "osd/ECExtentCacheL.h"
 #include <iostream>
 
 using namespace std;
@@ -54,8 +54,8 @@ TEST(extentcache, simple_write)
 {
   hobject_t oid;
 
-  ExtentCache c;
-  ExtentCache::write_pin pin;
+  ECExtentCacheL c;
+  ECExtentCacheL::write_pin pin;
   c.open_write_pin(pin);
 
   auto to_read = iset_from_vector(
@@ -93,8 +93,8 @@ TEST(extentcache, write_write_overlap)
 {
   hobject_t oid;
 
-  ExtentCache c;
-  ExtentCache::write_pin pin;
+  ECExtentCacheL c;
+  ECExtentCacheL::write_pin pin;
   c.open_write_pin(pin);
 
   // start write 1
@@ -111,7 +111,7 @@ TEST(extentcache, write_write_overlap)
   c.print(std::cerr);
 
   // start write 2
-  ExtentCache::write_pin pin2;
+  ECExtentCacheL::write_pin pin2;
   c.open_write_pin(pin2);
   auto to_read2 = iset_from_vector(
     {{2, 4}, {10, 4}, {18, 4}});
@@ -173,8 +173,8 @@ TEST(extentcache, write_write_overlap2)
 {
   hobject_t oid;
 
-  ExtentCache c;
-  ExtentCache::write_pin pin;
+  ECExtentCacheL c;
+  ECExtentCacheL::write_pin pin;
   c.open_write_pin(pin);
 
   // start write 1
@@ -190,7 +190,7 @@ TEST(extentcache, write_write_overlap2)
   c.print(std::cerr);
 
   // start write 2
-  ExtentCache::write_pin pin2;
+  ECExtentCacheL::write_pin pin2;
   c.open_write_pin(pin2);
   auto to_read2 = extent_set();
   auto to_write2 = iset_from_vector(
@@ -203,7 +203,7 @@ TEST(extentcache, write_write_overlap2)
 
 
   // start write 3
-  ExtentCache::write_pin pin3;
+  ECExtentCacheL::write_pin pin3;
   c.open_write_pin(pin3);
   auto to_read3 = iset_from_vector({{659456, 8192}});
   auto to_write3 = iset_from_vector({{659456, 8192}});

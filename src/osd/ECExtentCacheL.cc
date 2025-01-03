@@ -12,13 +12,13 @@
  *
  */
 
-#include "ExtentCache.h"
+#include "ECExtentCacheL.h"
 
 using std::ostream;
 
 using ceph::bufferlist;
 
-void ExtentCache::extent::_link_pin_state(pin_state &pin_state)
+void ECExtentCacheL::extent::_link_pin_state(pin_state &pin_state)
 {
   ceph_assert(parent_extent_set);
   ceph_assert(!parent_pin_state);
@@ -26,7 +26,7 @@ void ExtentCache::extent::_link_pin_state(pin_state &pin_state)
   pin_state.pin_list.push_back(*this);
 }
 
-void ExtentCache::extent::_unlink_pin_state()
+void ECExtentCacheL::extent::_unlink_pin_state()
 {
   ceph_assert(parent_extent_set);
   ceph_assert(parent_pin_state);
@@ -35,7 +35,7 @@ void ExtentCache::extent::_unlink_pin_state()
   parent_pin_state = nullptr;
 }
 
-void ExtentCache::extent::unlink()
+void ECExtentCacheL::extent::unlink()
 {
   ceph_assert(parent_extent_set);
   ceph_assert(parent_pin_state);
@@ -54,7 +54,7 @@ void ExtentCache::extent::unlink()
   ceph_assert(!parent_pin_state);
 }
 
-void ExtentCache::extent::link(
+void ECExtentCacheL::extent::link(
   object_extent_set &extent_set,
   pin_state &pin_state)
 {
@@ -65,14 +65,14 @@ void ExtentCache::extent::link(
   _link_pin_state(pin_state);
 }
 
-void ExtentCache::extent::move(
+void ECExtentCacheL::extent::move(
   pin_state &to)
 {
   _unlink_pin_state();
   _link_pin_state(to);
 }
 
-void ExtentCache::remove_and_destroy_if_empty(object_extent_set &eset)
+void ECExtentCacheL::remove_and_destroy_if_empty(object_extent_set &eset)
 {
   if (eset.extent_set.empty()) {
     auto siter = cache_set::s_iterator_to(eset);
@@ -85,7 +85,7 @@ void ExtentCache::remove_and_destroy_if_empty(object_extent_set &eset)
   }
 }
 
-ExtentCache::object_extent_set &ExtentCache::get_or_create(
+ECExtentCacheL::object_extent_set &ECExtentCacheL::get_or_create(
   const hobject_t &oid)
 {
   cache_set::insert_commit_data data;
@@ -99,7 +99,7 @@ ExtentCache::object_extent_set &ExtentCache::get_or_create(
   }
 }
 
-ExtentCache::object_extent_set *ExtentCache::get_if_exists(
+ECExtentCacheL::object_extent_set *ECExtentCacheL::get_if_exists(
   const hobject_t &oid)
 {
   cache_set::insert_commit_data data;
@@ -112,9 +112,9 @@ ExtentCache::object_extent_set *ExtentCache::get_if_exists(
 }
 
 std::pair<
-  ExtentCache::object_extent_set::set::iterator,
-  ExtentCache::object_extent_set::set::iterator
-  > ExtentCache::object_extent_set::get_containing_range(
+  ECExtentCacheL::object_extent_set::set::iterator,
+  ECExtentCacheL::object_extent_set::set::iterator
+  > ECExtentCacheL::object_extent_set::get_containing_range(
     uint64_t off, uint64_t len)
 {
   // fst is first iterator with end after off (may be end)
@@ -129,7 +129,7 @@ std::pair<
   return std::make_pair(fst, lst);
 }
 
-extent_set ExtentCache::reserve_extents_for_rmw(
+extent_set ECExtentCacheL::reserve_extents_for_rmw(
   const hobject_t &oid,
   write_pin &pin,
   const extent_set &to_write,
@@ -160,7 +160,7 @@ extent_set ExtentCache::reserve_extents_for_rmw(
   return must_read;
 }
 
-extent_map ExtentCache::get_remaining_extents_for_rmw(
+extent_map ECExtentCacheL::get_remaining_extents_for_rmw(
   const hobject_t &oid,
   write_pin &pin,
   const extent_set &to_get)
@@ -193,7 +193,7 @@ extent_map ExtentCache::get_remaining_extents_for_rmw(
   return ret;
 }
 
-void ExtentCache::present_rmw_update(
+void ECExtentCacheL::present_rmw_update(
   const hobject_t &oid,
   write_pin &pin,
   const extent_map &extents)
@@ -220,9 +220,9 @@ void ExtentCache::present_rmw_update(
   }
 }
 
-ostream &ExtentCache::print(ostream &out) const
+ostream &ECExtentCacheL::print(ostream &out) const
 {
-  out << "ExtentCache(" << std::endl;
+  out << "ECExtentCacheL(" << std::endl;
   for (auto esiter = per_object_caches.begin();
        esiter != per_object_caches.end();
        ++esiter) {
@@ -239,7 +239,7 @@ ostream &ExtentCache::print(ostream &out) const
   return out << ")" << std::endl;
 }
 
-ostream &operator<<(ostream &lhs, const ExtentCache &cache)
+ostream &operator<<(ostream &lhs, const ECExtentCacheL &cache)
 {
   return cache.print(lhs);
 }

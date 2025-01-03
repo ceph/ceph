@@ -35,7 +35,6 @@ set(osd_srcs
   SnapMapper.cc
   osd_types.cc
   ECUtil.cc
-  ExtentCache.cc
   scheduler/OpScheduler.cc
   scheduler/OpSchedulerItem.cc
   scheduler/mClockScheduler.cc
@@ -46,6 +45,7 @@ set(osd_srcs
   osd_perf_counters.cc
   ECCommonL.cc
   ECBackendL.cc
+  ECExtentCacheL.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   ${osd_cyg_functions_src}

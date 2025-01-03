@@ -22,7 +22,7 @@
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
 #if WITH_SEASTAR
-#include "ExtentCache.h"
+#include "ECExtentCacheL.h"
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"
 #include "osd/OSDMap.h"
@@ -45,7 +45,7 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #endif
 
 #include "ECTransaction.h"
-#include "ExtentCache.h"
+#include "ECExtentCacheL.h"
 
 //forward declaration
 struct ECSubWrite;
@@ -573,7 +573,7 @@ struct ECCommonL {
       OpRequestRef client_op;
 
       /// pin for cache
-      ExtentCache::write_pin pin;
+      ECExtentCacheL::write_pin pin;
 
       /// Callbacks
       Context *on_all_commit = nullptr;
@@ -594,7 +594,7 @@ struct ECCommonL {
     using op_list = boost::intrusive::list<Op>;
     friend std::ostream &operator<<(std::ostream &lhs, const Op &rhs);
 
-    ExtentCache cache;
+    ECExtentCacheL cache;
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
     /**
      * We model the possible rmw states as a std::set of waitlists.
