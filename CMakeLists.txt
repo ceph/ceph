@@ -417,6 +417,9 @@ if(LINUX)
     set(HAVE_KEYUTILS ${KEYUTILS_FOUND})
   endif()
 endif()
+if(WITH_LIBCEPHFS)
+  find_package(ICU 64.0 COMPONENTS uc i18n REQUIRED)
+endif()
 
 find_package(snappy REQUIRED)
 
@@ -713,7 +716,7 @@ option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
 # Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
-  atomic chrono thread system regex random program_options date_time
+  atomic chrono locale thread system regex random program_options date_time
   iostreams context coroutine url)
 set(BOOST_HEADER_COMPONENTS container)
 
