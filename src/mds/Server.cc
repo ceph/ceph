@@ -6012,6 +6012,7 @@ int Server::check_layout_vxattr(const MDRequestRef& mdr,
                                 file_layout_t *layout)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
+  bool is_rmxattr = (req->get_op() == CEPH_MDS_OP_RMXATTR);
   epoch_t epoch;
   int r;
 
@@ -6021,7 +6022,12 @@ int Server::check_layout_vxattr(const MDRequestRef& mdr,
     });
 
   if (r == -CEPHFS_ENOENT) {
+    if (is_rmxattr) {
+      r = -CEPHFS_EINVAL;
 
+      respond_to_request(mdr, r);
+      return r;
+    }
     // we don't have the specified pool, make sure our map
     // is newer than or as new as the client.
     epoch_t req_epoch = req->get_osdmap_epoch();
@@ -6061,14 +6067,15 @@ int Server::check_layout_vxattr(const MDRequestRef& mdr,
   return 0;
 }
 
-void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
+void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
+  bool is_rmxattr = (req->get_op() == CEPH_MDS_OP_RMXATTR);
   MutationImpl::LockOpVec lov;
   string name(req->get_path2());
   bufferlist bl = req->get_data();
   string value (bl.c_str(), bl.length());
-  dout(10) << "handle_set_vxattr " << name
+  dout(10) << "handle_client_setvxattr " << name
            << " val " << value.length()
            << " bytes on " << *cur
            << dendl;
@@ -6110,17 +6117,42 @@ void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
     else
       layout = mdcache->default_file_layout;
 
-    rest = name.substr(name.find("layout"));
-    if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
-      return;
+    if (is_rmxattr && name == "ceph.dir.layout") {
+      lov.add_xlock(&cur->policylock);
+      if (!mds->locker->acquire_locks(mdr, lov)) {
+        return;
+      }
+      if (!cur->get_projected_inode()->has_layout()) {
+        respond_to_request(mdr, 0);
+        return;
+      }
+      auto pi = cur->project_inode(mdr);
 
-    auto pi = cur->project_inode(mdr);
-    pi.inode->layout = layout;
+      if (cur->is_root()) {
+	  pi.inode->layout = mdcache->default_file_layout;
+      } else {
+	pi.inode->clear_layout();
+	pi.inode->version = cur->pre_dirty();
+      }
+      pip = pi.inode.get();
+    } else {
+      rest = name.substr(name.find("layout"));
+      if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
+	return;
+
+      auto pi = cur->project_inode(mdr);
+      pi.inode->layout = layout;
+      pip = pi.inode.get();
+    }
+
     mdr->no_early_reply = true;
-    pip = pi.inode.get();
   } else if (name.compare(0, 16, "ceph.file.layout") == 0) {
     if (!cur->is_file()) {
       respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+    if (!cur->get_projected_inode()->has_layout()) {
+      respond_to_request(mdr, 0);
       return;
     }
     if (cur->get_projected_inode()->size ||
@@ -6155,6 +6187,13 @@ void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
     }
 
     quota_info_t quota = cur->get_projected_inode()->quota;
+    if (is_rmxattr) {
+      if (!quota.is_enabled()) {
+        respond_to_request(mdr, 0);
+        return;
+      }
+      value = "0";
+    }
 
     rest = name.substr(name.find("quota"));
     int r = parse_quota_vxattr(rest, value, &quota);
@@ -6240,6 +6279,14 @@ void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
 
     bool val;
     try {
+      if (is_rmxattr) {
+        const auto srnode = cur->get_projected_srnode();
+	if (!srnode->is_subvolume()) {
+	  respond_to_request(mdr, 0);
+	  return;
+	}
+        value = "0";
+      }
       val = boost::lexical_cast<bool>(value);
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
@@ -6313,6 +6360,13 @@ void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
 
     mds_rank_t rank;
     try {
+      if (is_rmxattr) {
+	if (cur->get_projected_inode()->export_pin == -1) {
+          respond_to_request(mdr, 0);
+          return;
+	}
+        value = "-1";
+      }
       rank = boost::lexical_cast<mds_rank_t>(value);
       if (rank < 0) rank = MDS_RANK_NONE;
       else if (rank >= MAX_MDS) {
@@ -6339,6 +6393,13 @@ void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
 
     double val;
     try {
+      if (is_rmxattr) {
+	if (cur->get_projected_inode()->export_ephemeral_random_pin == 0.0) {
+	  respond_to_request(mdr, 0);
+          return;
+	}
+        value = "0";
+      }
       val = boost::lexical_cast<double>(value);
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse float for " << name << dendl;
@@ -6368,6 +6429,13 @@ void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
 
     bool val;
     try {
+      if (is_rmxattr) {
+	if (cur->get_projected_inode()->get_ephemeral_distributed_pin() == 0) {
+          respond_to_request(mdr, 0);
+          return;
+	}
+        value = "0";
+      }
       val = boost::lexical_cast<bool>(value);
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
@@ -6405,61 +6473,6 @@ void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
 								   false, false, adjust_realm));
   return;
-}
-
-void Server::handle_remove_vxattr(const MDRequestRef& mdr, CInode *cur)
-{
-  const cref_t<MClientRequest> &req = mdr->client_request;
-  string name(req->get_path2());
-
-  dout(10) << __func__ << " " << name << " on " << *cur << dendl;
-
-  if (name == "ceph.dir.layout") {
-    if (!cur->is_dir()) {
-      respond_to_request(mdr, -CEPHFS_ENODATA);
-      return;
-    }
-    if (cur->is_root()) {
-      dout(10) << "can't remove layout policy on the root directory" << dendl;
-      respond_to_request(mdr, -CEPHFS_EINVAL);
-      return;
-    }
-
-    if (!cur->get_projected_inode()->has_layout()) {
-      respond_to_request(mdr, -CEPHFS_ENODATA);
-      return;
-    }
-
-    MutationImpl::LockOpVec lov;
-    lov.add_xlock(&cur->policylock);
-    if (!mds->locker->acquire_locks(mdr, lov))
-      return;
-
-    auto pi = cur->project_inode(mdr);
-    pi.inode->clear_layout();
-    pi.inode->version = cur->pre_dirty();
-
-    // log + wait
-    mdr->ls = mdlog->get_current_segment();
-    EUpdate *le = new EUpdate(mdlog, "remove dir layout vxattr");
-    le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
-    mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
-    mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
-
-    mdr->no_early_reply = true;
-    journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
-    return;
-  } else if (name == "ceph.dir.layout.pool_namespace"
-          || name == "ceph.file.layout.pool_namespace") {
-    // Namespace is the only layout field that has a meaningful
-    // null/none value (empty string, means default layout).  Is equivalent
-    // to a setxattr with empty string: pass through the empty payload of
-    // the rmxattr request to do this.
-    handle_set_vxattr(mdr, cur);
-    return;
-  }
-
-  respond_to_request(mdr, -CEPHFS_ENODATA);
 }
 
 const Server::XattrHandler Server::xattr_handlers[] = {
@@ -6657,7 +6670,7 @@ void Server::handle_client_setxattr(const MDRequestRef& mdr)
     if (!cur)
       return;
 
-    handle_set_vxattr(mdr, cur);
+    handle_client_setvxattr(mdr, cur);
     return;
   }
 
@@ -6754,7 +6767,7 @@ void Server::handle_client_removexattr(const MDRequestRef& mdr)
     if (!cur)
       return;
 
-    handle_remove_vxattr(mdr, cur);
+    handle_client_setvxattr(mdr, cur);
     return;
   }
 

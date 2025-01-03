@@ -198,6 +198,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   without this feature will trigger the MDS to raise a HEALTH_ERR on the
   cluster, MDS_CLIENTS_BROKEN_ROOTSQUASH. See the documentation on this warning
   and the new feature bit for more information.
+* CephFS: Expanded removexattr support for cephfs virtual extended attributes.
+  Previously one had to use setxattr to restore the default in order to "remove".
+  You may now properly use removexattr to remove. You can also now remove layout
+  on root inode, which then will restore layout to default layout.
 
 * cls_cxx_gather is marked as deprecated.
 * CephFS: cephfs-journal-tool is guarded against running on an online file system.
