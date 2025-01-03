@@ -18,6 +18,7 @@
 #ifndef PGBACKEND_H
 #define PGBACKEND_H
 
+#include "ECCommon.h"
 #include "osd_types.h"
 #include "common/WorkQueue.h"
 #include "include/Context.h"
@@ -560,7 +561,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual void objects_read_async(
      const hobject_t &hoid,
-     const std::list<std::pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
+     const std::list<std::pair<ECCommon::ec_align_t,
 		std::pair<ceph::buffer::list*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
