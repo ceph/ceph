@@ -1,0 +1,18 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd mclock profile: high_recovery_ops
+      global:
+        osd pool default size : 3
+        osd pool default min size : 2
+    log-ignorelist:
+      - \(MDS_ALL_DOWN\)
+      - \(MDS_UP_LESS_THAN_MAX\)
+      - \(FS_WITH_FAILED_MDS\)
+      - \(FS_DEGRADED\)
+      - \(OSDMAP_FLAGS\)
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.mgr.test_progress
