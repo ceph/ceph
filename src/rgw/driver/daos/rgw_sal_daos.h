@@ -655,7 +655,6 @@ class DaosObject : public StoreObject {
 			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
 			   RGWObjTier& tier_config,
-			   real_time& mtime,
 			   uint64_t olh_epoch,
 			   std::optional<uint64_t> days,
 			   const DoutPrefixProvider* dpp,
