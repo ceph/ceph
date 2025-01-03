@@ -3482,7 +3482,15 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     }
 
     SnapRealm *realm = head_in->find_snaprealm();
-    snapid_t snap = realm->get_snap_following(head_in, follows);
+    snapid_t snap;
+    if (mds->mdsmap->use_global_snaprealm()) {
+      snap = realm->get_snap_following(follows);
+    } else {
+      std::vector<SnapRealm*> related_realms;
+      dout(20) << "handle_client_caps ----> get_related_realms for inode "<< *head_in << dendl;
+      head_in->get_related_realms(related_realms);
+      snap = realm->get_snap_following(follows, related_realms);
+    }
     dout(10) << "  flushsnap follows " << follows << " -> snap " << snap << dendl;
 
     auto p = head_in->client_need_snapflush.begin();

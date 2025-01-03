@@ -78,7 +78,23 @@ public:
     return cached_seq;
   }
 
-  snapid_t get_snap_following(CInode *in, snapid_t follows);
+  snapid_t get_snap_following(snapid_t follows, std::vector<SnapRealm*>& related_realms) {
+    check_cache();
+    const std::set<snapid_t>& s = get_snaps();
+    std::set<snapid_t> snaps_set;
+    snaps_set.insert(s.begin(), s.end());
+
+    for (const auto& r_realm : related_realms) {
+      r_realm->check_cache();
+      const auto& s1 = r_realm->get_snaps();
+      snaps_set.insert(s1.begin(), s1.end());
+    }
+    auto p = snaps_set.upper_bound(follows);
+    if (p != snaps_set.end())
+      return *p;
+    return CEPH_NOSNAP;
+  }
+
   snapid_t get_snap_following(snapid_t follows) {
     check_cache();
     const std::set<snapid_t>& s = get_snaps();
