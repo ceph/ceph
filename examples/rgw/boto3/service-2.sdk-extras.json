@@ -379,7 +379,36 @@
             },
             "documentation":"<p>A filter for all log object. Filter for the object by its key (prefix, suffix and regex).</p>",
             "locationName":"Filter"
-        }
+        },
+        "HeadBucketRequest": {
+            "members": {
+                "ReadStats":{
+                    "shape":"ReadStats",
+                    "documentation":"<p>Read additional usage statistics for <code>ObjectCount</code> and <code>BytesUsed</code> in the response.</p> <note> <p>This request parameter is a Ceph RGW extension.</p> </note>",
+                    "location":"querystring",
+                    "locationName":"read-stats"
+                }
+            }
+        },
+        "HeadBucketOutput":{
+            "members":{
+                "ObjectCount":{
+                    "shape":"ObjectCount",
+                    "documentation": "<p>Total number of objects/versions in the bucket.</p>",
+                    "location": "header",
+                    "locationName": "x-rgw-object-count"
+                },
+                "BytesUsed":{
+                    "shape":"BytesUsed",
+                    "documentation": "<p>Total size in bytes of all objects/versions in the bucket.</p>",
+                    "location": "header",
+                    "locationName": "x-rgw-bytes-used"
+                }
+            }
+        },
+        "ReadStats":{"type":"boolean"},
+        "ObjectCount":{"type":"integer"},
+        "BytesUsed":{"type":"integer"}
     },
     "documentation":"<p/>"
 }
