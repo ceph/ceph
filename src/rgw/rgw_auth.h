@@ -39,6 +39,9 @@ public:
   /* Return the ACLOwner for resources created by this identity. */
   virtual ACLOwner get_aclowner() const = 0;
 
+  /* Return the tenant of the ACLOwner for resources created by this identity. */
+  virtual std::string get_aclowner_tenant() const = 0;
+
   /* Translate the ACL provided in @aclspec into concrete permission set that
    * can be used during the authorization phase (RGWOp::verify_permission).
    * On error throws rgw::auth::Exception storing the reason.
@@ -465,6 +468,7 @@ public:
   void modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const override;
 
   ACLOwner get_aclowner() const override;
+  std::string get_aclowner_tenant() const override;
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const  override {
     return RGW_PERM_NONE;
@@ -649,6 +653,7 @@ public:
   }
 
   ACLOwner get_aclowner() const override;
+  std::string get_aclowner_tenant() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_owner& o) const override;
   bool is_owner_of(const rgw_owner& o) const override;
@@ -720,6 +725,7 @@ public:
   }
 
   ACLOwner get_aclowner() const override;
+  std::string get_aclowner_tenant() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_owner& o) const override;
   bool is_owner_of(const rgw_owner& o) const override;
@@ -791,6 +797,7 @@ public:
       token_attrs(token_attrs) {}
 
   ACLOwner get_aclowner() const override;
+  std::string get_aclowner_tenant() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
   }
