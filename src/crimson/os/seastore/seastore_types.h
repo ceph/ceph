@@ -1756,17 +1756,28 @@ struct __attribute__((packed)) object_data_le_t {
   }
 };
 
+enum class omap_type_t : uint8_t {
+  XATTR = 0,
+  OMAP,
+  LOG,
+  NONE,
+  NUM_TYPES
+};
+std::ostream &operator<<(std::ostream &out, const omap_type_t &type);
+
 struct omap_root_t {
   laddr_t addr = L_ADDR_NULL;
   depth_t depth = 0;
   laddr_t hint = L_ADDR_MIN;
   bool mutated = false;
+  omap_type_t type = omap_type_t::NONE;
 
   omap_root_t() = default;
-  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min)
+  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min, omap_type_t type)
     : addr(addr),
       depth(depth),
-      hint(addr_min) {}
+      hint(addr_min),
+      type(type) {}
 
   omap_root_t(const omap_root_t &o) = default;
   omap_root_t(omap_root_t &&o) = default;
@@ -1781,11 +1792,12 @@ struct omap_root_t {
     return mutated;
   }
   
-  void update(laddr_t _addr, depth_t _depth, laddr_t _hint) {
+  void update(laddr_t _addr, depth_t _depth, laddr_t _hint, omap_type_t _type) {
     mutated = true;
     addr = _addr;
     depth = _depth;
     hint = _hint;
+    type = _type;
   }
   
   laddr_t get_location() const {
@@ -1798,6 +1810,10 @@ struct omap_root_t {
 
   laddr_t get_hint() const {
     return hint;
+  }
+
+  omap_type_t get_type() const {
+    return type;
   }
 };
 std::ostream &operator<<(std::ostream &out, const omap_root_t &root);
@@ -1822,8 +1838,8 @@ public:
     depth = init_depth_le(nroot.get_depth());
   }
   
-  omap_root_t get(laddr_t hint) const {
-    return omap_root_t(addr, depth, hint);
+  omap_root_t get(laddr_t hint, omap_type_t type) const {
+    return omap_root_t(addr, depth, hint, type);
   }
 };
 
@@ -3079,5 +3095,6 @@ template <> struct fmt::formatter<crimson::os::seastore::segment_tail_t> : fmt::
 template <> struct fmt::formatter<crimson::os::seastore::segment_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::transaction_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::write_result_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::omap_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ceph::buffer::list> : fmt::ostream_formatter {};
 #endif
