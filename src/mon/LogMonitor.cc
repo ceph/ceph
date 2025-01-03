@@ -208,11 +208,10 @@ ceph::logging::JournaldClusterLogger &LogMonitor::log_channel_info::get_journald
 void LogMonitor::log_channel_info::clear()
 {
   log_to_syslog.clear();
-  syslog_level.clear();
   syslog_facility.clear();
   log_file.clear();
   expanded_log_file.clear();
-  log_file_level.clear();
+  log_level.clear();
   log_to_graylog.clear();
   log_to_graylog_host.clear();
   log_to_graylog_port.clear();
@@ -356,16 +355,25 @@ void LogMonitor::log_external(const LogEntry& le)
     channel = CLOG_CHANNEL_CLUSTER;
   }
 
+  string level = channels.get_log_level(channel);
+  if (int log_level = LogEntry::str_to_level(level);log_level > le.prio) {
+    // Do not log LogEntry to any external entity if le.prio is
+    // less than channel log level.
+    return;
+  }
+
+  if (g_conf().get_val<bool>("mon_cluster_log_to_stderr")) {
+    cerr << channel << " " << le << std::endl;
+  }
+
   if (channels.do_log_to_syslog(channel)) {
-    string level = channels.get_level(channel);
     string facility = channels.get_facility(channel);
     if (level.empty() || facility.empty()) {
       derr << __func__ << " unable to log to syslog -- level or facility"
 	   << " not defined (level: " << level << ", facility: "
 	   << facility << ")" << dendl;
     } else {
-      le.log_to_syslog(channels.get_level(channel),
-		       channels.get_facility(channel));
+      le.log_to_syslog(level, facility);
     }
   }
 
@@ -1192,16 +1200,6 @@ void LogMonitor::update_log_channels()
   }
 
   r = get_conf_str_map_helper(
-    g_conf().get_val<string>("mon_cluster_log_to_syslog_level"),
-    oss, &channels.syslog_level,
-    CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'mon_cluster_log_to_syslog_level'"
-         << dendl;
-    return;
-  }
-
-  r = get_conf_str_map_helper(
     g_conf().get_val<string>("mon_cluster_log_to_syslog_facility"),
     oss, &channels.syslog_facility,
     CLOG_CONFIG_DEFAULT_KEY);
@@ -1221,11 +1219,11 @@ void LogMonitor::update_log_channels()
   }
 
   r = get_conf_str_map_helper(
-    g_conf().get_val<string>("mon_cluster_log_file_level"), oss,
-    &channels.log_file_level,
+    g_conf().get_val<string>("mon_cluster_log_level"), oss,
+    &channels.log_level,
     CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
-    derr << __func__ << " error parsing 'mon_cluster_log_file_level'"
+    derr << __func__ << " error parsing 'mon_cluster_log_level'"
          << dendl;
     return;
   }
@@ -1279,10 +1277,9 @@ void LogMonitor::handle_conf_change(const ConfigProxy& conf,
                                     const std::set<std::string> &changed)
 {
   if (changed.count("mon_cluster_log_to_syslog") ||
-      changed.count("mon_cluster_log_to_syslog_level") ||
       changed.count("mon_cluster_log_to_syslog_facility") ||
       changed.count("mon_cluster_log_file") ||
-      changed.count("mon_cluster_log_file_level") ||
+      changed.count("mon_cluster_log_level") ||
       changed.count("mon_cluster_log_to_graylog") ||
       changed.count("mon_cluster_log_to_graylog_host") ||
       changed.count("mon_cluster_log_to_graylog_port") ||
