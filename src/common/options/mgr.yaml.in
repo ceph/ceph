@@ -315,8 +315,9 @@ options:
   long_desc: When creating pools, the automated PG management logic will attempt to
     reach this target.  In some circumstances, it may exceed this target, up to the
     ``mon_max_pg_per_osd`` limit. Conversely, a lower number of PGs per OSD may be
-    created if the cluster is not yet fully utilised
-  default: 100
+    created if the cluster is not yet fully populated and the ``bulk`` flag is not
+    enabled for a given pool.
+  default: 200
   min: 1
 # min pgs per osd for reweight-by-pg command
 - name: mon_reweight_min_pgs_per_osd
