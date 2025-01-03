@@ -42,6 +42,9 @@
     bucket sync checkpoint           poll a bucket's sync status until it catches up to its remote
     bucket sync disable              disable bucket sync
     bucket sync enable               enable bucket sync
+    bucket sync init                 reset the bucket sync state to init to restore consistency of a bucket
+    bucket sync batch-replicate      reset the bucket sync state to full-sync to perform a full sync of a bucket (replicate existing objects)
+    bucket sync skip-full-sync       reset the bucket sync state to incremental-sync to perform an incremental sync of a bucket (skip existing objects)
     bucket radoslist                 list rados objects backing bucket's objects
     bucket logging flush             flush pending log records object of source bucket to the log bucket to bucket
     bi get                           retrieve bucket index object entries
