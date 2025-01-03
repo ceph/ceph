@@ -1426,6 +1426,7 @@ struct RGWBucketEnt {
   size_t size;
   size_t size_rounded;
   ceph::real_time creation_time;
+  ceph::real_time modification_time;
   uint64_t count;
 
   /* The placement_rule is necessary to calculate per-storage-policy statics
