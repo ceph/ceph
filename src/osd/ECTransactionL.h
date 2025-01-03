@@ -12,8 +12,7 @@
  *
  */
 
-#ifndef ECTRANSACTION_H
-#define ECTRANSACTION_H
+#pragma once
 
 #include "ECUtilL.h"
 #include "ECExtentCacheL.h"
@@ -191,5 +190,3 @@ namespace ECTransactionL {
     DoutPrefixProvider *dpp,
     const ceph_release_t require_osd_release = ceph_release_t::unknown);
 };
-
-#endif

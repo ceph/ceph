@@ -12,8 +12,7 @@
  *
  */
 
-#ifndef ECUTILL_H
-#define ECUTILL_H
+#pragma once
 
 #include <ostream>
 #include "erasure-code/ErasureCodeInterface.h"
@@ -206,4 +205,3 @@ const std::string &get_hinfo_key();
 
 WRITE_CLASS_ENCODER(ECUtilL::HashInfo)
 }
-#endif

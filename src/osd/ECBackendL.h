@@ -12,8 +12,7 @@
  *
  */
 
-#ifndef ECBACKEND_H
-#define ECBACKEND_H
+#pragma once
 
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
@@ -443,4 +442,3 @@ public:
 };
 ostream &operator<<(ostream &lhs, const ECBackendL::RMWPipeline::pipeline_state_t &rhs);
 
-#endif
