@@ -241,6 +241,11 @@ private:
   const char* s3select_json_error = "InvalidJsonType";
 
 public:
+  enum class OutputFormat {
+            CSV,
+            JSON
+        };
+  OutputFormat m_outputFormat;
   unsigned int chunk_number;
   size_t m_requested_range;
   size_t m_scan_offset;
