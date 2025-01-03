@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { SMBCluster } from '~/app/ceph/smb/smb.model';
+import { JoinAuth, SMBCluster, UsersGroups } from '~/app/ceph/smb/smb.model';
 
 @Injectable({
   providedIn: 'root'
@@ -14,5 +14,13 @@ export class SmbService {
 
   listClusters(): Observable<SMBCluster[]> {
     return this.http.get<SMBCluster[]>(`${this.baseURL}/cluster`);
+  }
+
+  listJoinAuths(): Observable<JoinAuth[]> {
+    return this.http.get<JoinAuth[]>(`${this.baseURL}/joinauth`);
+  }
+
+  listUsersGroups(): Observable<UsersGroups[]> {
+    return this.http.get<UsersGroups[]>(`${this.baseURL}/usersgroups`);
   }
 }

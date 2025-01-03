@@ -1,7 +1,7 @@
 import json
 from unittest.mock import Mock
 
-from dashboard.controllers.smb import SMBCluster, SMBShare
+from dashboard.controllers.smb import SMBCluster, SMBJoinAuth, SMBShare, SMBUsersgroups
 
 from .. import mgr
 from ..tests import ControllerTestCase
@@ -125,35 +125,36 @@ class SMBClusterTest(ControllerTestCase):
 class SMBShareTest(ControllerTestCase):
     _endpoint = '/api/smb/share'
 
-    _shares = [{
-        "resource_type": "ceph.smb.share",
-        "cluster_id": "clusterUserTest",
-        "share_id": "share1",
-                    "intent": "present",
-                    "name": "share1name",
-                    "readonly": "false",
-                    "browseable": "true",
-                    "cephfs": {
-                        "volume": "fs1",
-                        "path": "/",
-                        "provider": "samba-vfs"
-                    }
-    },
-        {
-        "resource_type": "ceph.smb.share",
-        "cluster_id": "clusterADTest",
-        "share_id": "share2",
-                    "intent": "present",
-                    "name": "share2name",
-                    "readonly": "false",
-                    "browseable": "true",
-                    "cephfs": {
-                        "volume": "fs2",
-                        "path": "/",
-                        "provider": "samba-vfs"
-                    }
+    _shares = {
+        "resources": [{
+            "resource_type": "ceph.smb.share",
+            "cluster_id": "clusterUserTest",
+            "share_id": "share1",
+            "intent": "present",
+            "name": "share1name",
+            "readonly": "false",
+            "browseable": "true",
+            "cephfs": {
+                "volume": "fs1",
+                "path": "/",
+                "provider": "samba-vfs"
+            }
+        },
+            {
+            "resource_type": "ceph.smb.share",
+            "cluster_id": "clusterADTest",
+            "share_id": "share2",
+            "intent": "present",
+            "name": "share2name",
+            "readonly": "false",
+            "browseable": "true",
+            "cephfs": {
+                "volume": "fs2",
+                "path": "/",
+                "provider": "samba-vfs"
+            }
+        }]
     }
-    ]
 
     @classmethod
     def setup_server(cls):
@@ -164,14 +165,14 @@ class SMBShareTest(ControllerTestCase):
 
         self._get(self._endpoint)
         self.assertStatus(200)
-        self.assertJsonBody(self._shares)
+        self.assertJsonBody(self._shares['resources'])
 
     def test_list_from_cluster(self):
-        mgr.remote = Mock(return_value=self._shares[0])
+        mgr.remote = Mock(return_value=self._shares['resources'][0])
 
         self._get(self._endpoint)
         self.assertStatus(200)
-        self.assertJsonBody(self._shares[0])
+        self.assertJsonBody([self._shares['resources'][0]])
 
     def test_delete(self):
         _res = {
@@ -195,3 +196,103 @@ class SMBShareTest(ControllerTestCase):
         self._delete(f'{self._endpoint}/smbCluster1/share1')
         self.assertStatus(204)
         mgr.remote.assert_called_once_with('smb', 'apply_resources', json.dumps(_res_simplified))
+
+
+class SMBJoinAuthTest(ControllerTestCase):
+    _endpoint = '/api/smb/joinauth'
+
+    _join_auths = {
+        "resources": [
+            {
+                "resource_type": "ceph.smb.join.auth",
+                "auth_id": "join1-admin",
+                "intent": "present",
+                "auth": {
+                    "username": "Administrator",
+                    "password": "Passw0rd"
+                }
+            },
+            {
+                "resource_type": "ceph.smb.join.auth",
+                "auth_id": "ja2",
+                "intent": "present",
+                "auth": {
+                    "username": "user123",
+                    "password": "foobar"
+                }
+            }
+        ]
+    }
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([SMBJoinAuth])
+
+    def test_list_one_join_auth(self):
+        mgr.remote = Mock(return_value=self._join_auths['resources'][0])
+
+        self._get(self._endpoint)
+        self.assertStatus(200)
+        self.assertJsonBody([self._join_auths['resources'][0]])
+
+    def test_list_multiple_clusters(self):
+        mgr.remote = Mock(return_value=self._join_auths)
+
+        self._get(self._endpoint)
+        self.assertStatus(200)
+        self.assertJsonBody(self._join_auths['resources'])
+
+
+class SMBUsersgroupsTest(ControllerTestCase):
+    _endpoint = '/api/smb/usersgroups'
+
+    _usersgroups = {
+        "resources": [
+            {
+                "resource_type": "ceph.smb.usersgroups",
+                "users_groups_id": "u2",
+                "intent": "present",
+                "values": {
+                    "users": [
+                        {
+                            "name": "user3",
+                            "password": "pass"
+                        }
+                    ],
+                    "groups": []
+                }
+            },
+            {
+                "resource_type": "ceph.smb.usersgroups",
+                "users_groups_id": "u1",
+                "intent": "present",
+                "values": {
+                    "users": [
+                        {
+                            "name": "user2",
+                            "password": "pass"
+                        }
+                    ],
+                    "groups": []
+                }
+            }
+        ]
+    }
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([SMBUsersgroups])
+
+    def test_list_one_usersgroups(self):
+        mgr.remote = Mock(return_value=self._usersgroups['resources'][0])
+
+        self._get(self._endpoint)
+        self.assertStatus(200)
+        self.assertJsonBody([self._usersgroups['resources'][0]])
+
+    def test_list_multiple_usersgroups(self):
+        mgr.remote = Mock(return_value=self._usersgroups)
+
+        self._get(self._endpoint)
+        self.assertStatus(200)
+        self.assertJsonBody(self._usersgroups['resources'])

@@ -52,6 +52,8 @@ import { MultiClusterComponent } from './ceph/cluster/multi-cluster/multi-cluste
 import { MultiClusterListComponent } from './ceph/cluster/multi-cluster/multi-cluster-list/multi-cluster-list.component';
 import { MultiClusterDetailsComponent } from './ceph/cluster/multi-cluster/multi-cluster-details/multi-cluster-details.component';
 import { SmbClusterListComponent } from './ceph/smb/smb-cluster-list/smb-cluster-list.component';
+import { SmbJoinAuthListComponent } from './ceph/smb/smb-join-auth-list/smb-join-auth-list.component';
+import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb-usersgroups-list.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -436,7 +438,19 @@ const routes: Routes = [
             data: {
               breadcrumbs: 'File/SMB'
             },
-            children: [{ path: '', component: SmbClusterListComponent }]
+            children: [
+              { path: '', component: SmbClusterListComponent },
+              {
+                path: 'joinauth',
+                component: SmbJoinAuthListComponent,
+                data: { breadcrumbs: 'Active Directories' }
+              },
+              {
+                path: 'usersgroups',
+                component: SmbUsersgroupsListComponent,
+                data: { breadcrumbs: 'Users' }
+              }
+            ]
           }
         ]
       },
