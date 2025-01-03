@@ -1,19 +1,16 @@
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
-// for testing DELETE ME
-#include <fstream>
-
-#include <memory>
-
-#include <include/types.h>
-
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 #include <boost/lexical_cast.hpp>
+#include <include/types.h>
 
 // Enable boost.json's header-only mode ("https://github.com/boostorg/json?tab=readme-ov-file#header-only"):
 #include <boost/json/src.hpp>
+
+#include <memory>
+#include <fstream>
 
 using std::ifstream;
 using std::pair;
@@ -282,7 +279,7 @@ bool JSONParser::parse()
   return true;
 }
 
-// parse a supplied ifstream, for testing. DELETE ME
+// parse a supplied ifstream:
 bool JSONParser::parse(const char *file_name)
 {
  ifstream is(file_name);

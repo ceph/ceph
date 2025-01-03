@@ -14,8 +14,6 @@
 
 #include "Formatter.h"
 
-
-
 class JSONObj;
 
 class JSONObjIter {
@@ -122,12 +120,9 @@ public:
   bool parse(const char *buf_, int len);
   bool parse(int len);
   bool parse();
-
-  [[deprecated("author comments requested removal")]] bool parse(const char *file_name);
+  bool parse(const char *file_name);
 
   const char *get_json() { return json_buffer.c_str(); }
-
-  [[deprecated("never used to track internal state")]] void set_failure() {} // JFW: remove if unused
 };
 
 void encode_json(const char *name, const JSONObj::data_val& v, ceph::Formatter *f);
