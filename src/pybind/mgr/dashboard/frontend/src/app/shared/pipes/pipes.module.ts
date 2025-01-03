@@ -40,6 +40,7 @@ import { PathPipe } from './path.pipe';
 import { PluralizePipe } from './pluralize.pipe';
 import { XmlPipe } from './xml.pipe';
 import { MbpersecondPipe } from './mbpersecond.pipe';
+import { DimlessBinaryPerMinutePipe } from './dimless-binary-per-minute.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -49,6 +50,7 @@ import { MbpersecondPipe } from './mbpersecond.pipe';
     BooleanTextPipe,
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
+    DimlessBinaryPerMinutePipe,
     HealthColorPipe,
     HealthLabelPipe,
     DimlessPipe,
@@ -90,6 +92,7 @@ import { MbpersecondPipe } from './mbpersecond.pipe';
     BooleanTextPipe,
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
+    DimlessBinaryPerMinutePipe,
     HealthColorPipe,
     HealthLabelPipe,
     DimlessPipe,
@@ -134,6 +137,7 @@ import { MbpersecondPipe } from './mbpersecond.pipe';
     CephReleaseNamePipe,
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
+    DimlessBinaryPerMinutePipe,
     DimlessPipe,
     RelativeDatePipe,
     IscsiBackstorePipe,

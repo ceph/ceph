@@ -4,18 +4,21 @@ import { NgControl } from '@angular/forms';
 import { FormatterService } from '../services/formatter.service';
 
 @Directive({
-  selector: '[cdIops]'
+  selector: '[cdIopm]'
 })
-export class IopsDirective implements OnInit {
+export class IopmDirective implements OnInit {
   @Input()
   ngDataReady: EventEmitter<any>;
 
   constructor(private formatter: FormatterService, private ngControl: NgControl) {}
 
   setValue(value: string): void {
-    console.log(value);
-    const iops = this.formatter.toIops(value);
-    this.ngControl.control.setValue(`${iops} IOPS`);
+    if(value === '' || value === null){
+      this.ngControl.control.setValue(value);
+      return;
+    }
+    const iopm = this.formatter.toIopm(value);
+    this.ngControl.control.setValue(`${iopm} IOPM`);
   }
 
   ngOnInit(): void {
