@@ -25,6 +25,7 @@ import { RgwUserCapabilityModalComponent } from '../rgw-user-capability-modal/rg
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
 import { RgwUserSubuserModalComponent } from '../rgw-user-subuser-modal/rgw-user-subuser-modal.component';
 import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
+import { GlobalRateLimit, RgwRateLimit } from '../models/rgw-rate-limit';
 
 @Component({
   selector: 'cd-rgw-user-form',
@@ -49,6 +50,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   usernameExists: boolean;
   showTenant = false;
   previousTenant: string = null;
+  globalUserRateLimit:GlobalRateLimit["user_ratelimit"];
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -167,11 +169,69 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
             bucket_quota_max_objects_unlimited: false
           })
         ]
+      ],
+      // user rate limit
+      user_rate_limit_enabled: [false],
+      user_rate_limit_max_readOps_unlimited: [true],
+      user_rate_limit_max_readOps: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              user_rate_limit_enabled: true,
+              user_rate_limit_max_readOps_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      user_rate_limit_max_writeOps_unlimited: [true],
+      user_rate_limit_max_writeOps: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              user_rate_limit_enabled: true,
+              user_rate_limit_max_writeOps_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      user_rate_limit_max_readBytes_unlimited: [true],
+      user_rate_limit_max_readBytes: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              user_rate_limit_enabled: true,
+              user_rate_limit_max_readBytes_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      user_rate_limit_max_writeBytes_unlimited: [true],
+      user_rate_limit_max_writeBytes: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              user_rate_limit_enabled: true,
+              user_rate_limit_max_writeBytes_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
       ]
     });
   }
 
   ngOnInit() {
+     //get the global rate Limit
+     this.rgwUserService.getGlobalUserRateLimit().subscribe((data:GlobalRateLimit)=>{
+      this.globalUserRateLimit= data.user_ratelimit; 
+    });
     // Process route parameters.
     this.route.params.subscribe((params: { uid: string }) => {
       if (!params.hasOwnProperty('uid')) {
@@ -183,6 +243,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       const observables = [];
       observables.push(this.rgwUserService.get(uid));
       observables.push(this.rgwUserService.getQuota(uid));
+      observables.push(this.rgwUserService.getUserRateLimit(uid));
       observableForkJoin(observables).subscribe(
         (resp: any[]) => {
           // Get the default values.
@@ -222,6 +283,14 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
               value[type + '_quota_max_objects'] = quota.max_objects;
             }
           });
+
+          //Map Rate Limit Values
+          value['user_rate_limit_enabled']= resp[2].user_ratelimit.enabled;
+          this._setRateLimitProperty(value, 'user_rate_limit_max_readBytes', 'user_rate_limit_max_readBytes_unlimited', resp[2].user_ratelimit.max_read_bytes);
+          this._setRateLimitProperty(value, 'user_rate_limit_max_writeBytes', 'user_rate_limit_max_writeBytes_unlimited', resp[2].user_ratelimit.max_write_bytes);
+          this._setRateLimitProperty(value, 'user_rate_limit_max_readOps', 'user_rate_limit_max_readOps_unlimited', resp[2].user_ratelimit.max_read_ops);
+          this._setRateLimitProperty(value, 'user_rate_limit_max_writeOps', 'user_rate_limit_max_writeOps_unlimited', resp[2].user_ratelimit.max_write_ops);
+
           // Merge with default values.
           value = _.merge(defaults, value);
           // Update the form.
@@ -286,6 +355,12 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (this._isBucketQuotaDirty()) {
       const bucketQuotaArgs = this._getBucketQuotaArgs();
       this.submitObservables.push(this.rgwUserService.updateQuota(uid, bucketQuotaArgs));
+    }
+
+     // Check if user ratelimit has been modified.
+     if (this._isUserRateLimitDirty()) {
+      const userRateLimitArgs = this._getUserRateLimitArgs();
+      this.submitObservables.push(this.rgwUserService.updateUserRateLimit(userRateLimitArgs));
     }
     // Finally execute all observables one by one in serial.
     observableConcat(...this.submitObservables).subscribe({
@@ -758,4 +833,69 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       }
     }
   }
+
+    /**
+   * Check if the user rate limit has been modified.
+   * @return {Boolean} Returns TRUE if the user rate limit has been modified.
+   */
+    private _isUserRateLimitDirty(): boolean {
+      return [
+        'user_rate_limit_enabled',
+        'user_rate_limit_max_readOps_unlimited',
+        'user_rate_limit_max_readOps',
+        'user_rate_limit_max_writeOps_unlimited',
+        'user_rate_limit_max_writeOps',
+        'user_rate_limit_max_readBytes_unlimited',
+        'user_rate_limit_max_readBytes',
+        'user_rate_limit_max_writeBytes_unlimited',
+        'user_rate_limit_max_writeBytes'
+      ].some((path) => {
+        return this.userForm.get(path).dirty;
+      });
+    }
+     /**
+     * Helper function to get the arguments for the API request when the user
+     * rate limit configuration has been modified.
+     */
+    private _getUserRateLimitArgs(): RgwRateLimit {
+  
+      const result: RgwRateLimit = {
+        "enabled": this.userForm.getValue('user_rate_limit_enabled') + '',
+        "name": this.userForm.getValue('user_id'),
+        "max_read_ops": '0',
+        "max_write_ops": '0',
+        "max_read_bytes": '0',
+        "max_write_bytes": '0'
+      }
+      if (!this.userForm.getValue('user_rate_limit_max_readOps_unlimited')) {
+        result['max_read_ops'] = new FormatterService().toIopm(this.userForm.getValue('user_rate_limit_max_readOps'))+'';
+      }
+      if (!this.userForm.getValue('user_rate_limit_max_writeOps_unlimited')) {
+        result['max_write_ops'] = new FormatterService().toIopm(this.userForm.getValue('user_rate_limit_max_writeOps'))+'';
+      }
+      if (!this.userForm.getValue('user_rate_limit_max_readBytes_unlimited')) {
+         // Convert the given value to bytes.   
+         result['max_read_bytes']  = new FormatterService().convertUnitToBytes(this.userForm.getValue('user_rate_limit_max_readBytes')) + '';
+      }
+      if (!this.userForm.getValue('user_rate_limit_max_writeBytes_unlimited')) {
+        result['max_write_bytes'] = new FormatterService().convertUnitToBytes(this.userForm.getValue('user_rate_limit_max_writeBytes'))+'';
+      }
+      return result;
+    }
+  
+    /**
+     * Helper function to map the values for the Rate Limit when the user
+     * rate limit gets loaded for first time or edited.
+     */
+  
+    private _setRateLimitProperty(value: Pick<any, string>, rateLimitKey:string, unlimitedKey:string, property:string | number) {
+      if (property === 0) {
+        value[unlimitedKey] = true;
+        value[rateLimitKey] = '';
+      } else {  
+        value[unlimitedKey] = false;
+        value[rateLimitKey] = property;
+      }
+    }
+
 }

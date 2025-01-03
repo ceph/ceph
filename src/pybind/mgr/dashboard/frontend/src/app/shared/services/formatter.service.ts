@@ -73,6 +73,35 @@ export class FormatterService {
     result = `${result} ${targetedUnits}`;
     return result;
   }
+ /**
+   * Convert the given unit into bytes.
+   */
+  convertUnitToBytes(formattedString: string): number {
+    // Handle special cases
+    if (formattedString === '-' || formattedString === 'N/A') {
+      return NaN;
+    }
+
+    // Regular expression to match number and unit
+    const match = formattedString.match(/^(\d+(?:\.\d+)?)\s*([A-Za-z]+\/m)?$/);
+    if (!match) {
+      throw new Error('Invalid formatted string');
+    }
+
+    const [, valueStr, unit] = match;
+    let value = parseFloat(valueStr);
+
+    // Units and their corresponding powers of 1024
+    const units = [ 'B/m', 'KiB/m', 'MiB/m', 'GiB/m', 'TiB/m', 'PiB/m', 'EiB/m', 'ZiB/m', 'YiB/m', ];
+    const unitIndex = units.indexOf(unit);
+
+    if (unitIndex === -1) {
+      throw new Error('Invalid unit');
+    }
+
+    // Convert back to bytes
+    return Math.round(value * Math.pow(1024, unitIndex));
+  }
 
   /**
    * Convert the given value into bytes.
@@ -85,7 +114,7 @@ export class FormatterService {
   toBytes(value: string, error_value: number = null): number | null {
     const base = 1024;
     const units = ['b', 'k', 'm', 'g', 't', 'p', 'e', 'z', 'y'];
-    const m = RegExp('^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s)?)?$', 'i').exec(value);
+    const m = RegExp('^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s|B/m|iB/m)?)?$', 'i').exec(value);
     if (m === null) {
       return error_value;
     }
@@ -115,6 +144,20 @@ export class FormatterService {
    */
   toIops(value: string): number {
     const pattern = /^\s*(\d+)\s*(IOPS)?\s*$/i;
+    const testResult = pattern.exec(value);
+
+    if (testResult !== null) {
+      return +testResult[1];
+    }
+
+    return 0;
+  }
+
+   /**
+   * Converts `x IOPM` to `x` (currently) or `0` if the conversion fails
+   */
+   toIopm(value: string): number {
+    const pattern = /^\s*(\d+)\s*(IOPM)?\s*$/i;
     const testResult = pattern.exec(value);
 
     if (testResult !== null) {
