@@ -536,11 +536,6 @@ public:
     return mapper->to_raw(to_map);
   }
 
-  std::string to_legacy_raw_key(
-    const std::pair<snapid_t, hobject_t> &to_map) {
-    return mapper->to_legacy_raw_key(to_map);
-  }
-
   template <typename... Args>
   std::string to_object_key(Args&&... args) {
     return mapper->to_object_key(std::forward<Args>(args)...);
@@ -1037,23 +1032,6 @@ TEST_F(SnapMapperTest, CheckMakePurgedSnapKeyFormat) {
   }
 }
 
-TEST_F(SnapMapperTest, LegacyKeyConvertion) {
-    init(1);
-    auto obj = get_tester().random_hobject();
-    snapid_t snapid = random() % 10;
-    auto snap_obj = make_pair(snapid, obj);
-    auto raw = get_tester().to_raw(snap_obj);
-    std::string old_key = get_tester().to_legacy_raw_key(snap_obj);
-    std::string converted_key =
-      SnapMapper::convert_legacy_key(old_key, raw.second);
-    std::string new_key = get_tester().to_raw_key(snap_obj);
-    if (converted_key != new_key) {
-      std::cout << "Converted: " << old_key << "\nTo:        " << converted_key
-	        << "\nNew key:   " << new_key << std::endl;
-    }
-    ASSERT_EQ(converted_key, new_key);
-}
-
 /**
  * 'DirectMapper' provides simple, controlled, interface to the underlying
  * SnapMapper.
@@ -1091,11 +1069,6 @@ public:
   std::pair<std::string, ceph::buffer::list> to_raw(
     const std::pair<snapid_t, hobject_t> &to_map) {
     return mapper->to_raw(to_map);
-  }
-
-  std::string to_legacy_raw_key(
-    const std::pair<snapid_t, hobject_t> &to_map) {
-    return mapper->to_legacy_raw_key(to_map);
   }
 
   std::string to_raw_key(
