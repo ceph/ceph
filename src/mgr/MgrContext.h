@@ -67,14 +67,6 @@ public:
 
       if(ec)
        r = -EINVAL;
-
-/*JFW:
-      bool read_ok = json_spirit::read(
-          outbl.to_str(), json_result);
-      if (!read_ok) {
-        r = -EINVAL;
-      }
-*/
     }
   }
 };
