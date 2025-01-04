@@ -309,7 +309,7 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   }
 
   JSONParser parser;
-  if (!parser.parse(bl.c_str(), bl.length())) {
+  if (!parser.parse(bl)) {
     return -EINVAL;
   }
 
