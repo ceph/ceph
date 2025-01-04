@@ -217,20 +217,23 @@ void JSONParser::handle_data(const char *s, int len)
 // parse a supplied JSON fragment
 bool JSONParser::parse(const char *buf_, int len)
 {
-  if (!buf_) {
+  if (!buf_ || 0 >= len) {
     return false;
   }
 
-  string json_string(buf_, len);
+  std::string_view json_string_view(buf_, len);
 
   std::error_code ec; 
-  data = boost::json::parse(json_string, ec);
+  data = boost::json::parse(json_string_view, ec);
   
   if(ec)
    return false;
 
   // recursively evaluate the result:
   handle_value(data);
+
+  if (data.is_object() or data.is_array()) 
+   return true;
 
   if (data.is_string()) {
    val.set(data.as_string(), true);
@@ -253,7 +256,6 @@ bool JSONParser::parse(const char *buf_, int len)
 bool JSONParser::parse(int len)
 {
   std::string_view json_string(std::begin(json_buffer), len + std::begin(json_buffer));
-//JFW = json_buffer.substr(0, len);
 
   std::error_code ec;
   if(data = boost::json::parse(json_string, ec); ec)
