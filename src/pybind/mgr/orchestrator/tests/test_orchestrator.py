@@ -102,7 +102,7 @@ placement:
   host_pattern: '*'
 status:
   container_image_id: 74803e884bea289d2d2d3ebdf6d37cd560499e955595695b1390a89800f4e37a
-  container_image_name: docker.io/ceph/daemon-base:latest-master-devel
+  container_image_name: quay.io/ceph/daemon-base:latest-main-devel
   created: '2020-06-10T10:37:31.051288Z'
   last_refresh: '2020-06-10T10:57:40.715637Z'
   running: 1
