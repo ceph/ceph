@@ -15,6 +15,7 @@
 
 #include "osdc/Objecter.h"
 #include "common/errno.h"
+#include "common/ceph_json.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"
 #include "global/global_context.h"
@@ -79,7 +80,6 @@ Mgr::~Mgr()
 }
 
 void MetadataUpdate::finish(int r)
-try
 {
   daemon_state.clear_updating(key);
   if (r == 0) {
@@ -87,8 +87,8 @@ try
         key.type == "mgr" || key.type == "mon") {
 
       std::error_code ec;
-
-      boost::json::value json_result = boost::json::parse(outbl.to_str(), ec);
+      auto json_result = boost::json::parse(outbl.to_str(), ec, boost::json::storage_ptr(), 
+				            { .allow_invalid_utf8 = true });
      
       if (ec) {
         dout(1) << "mon returned invalid JSON for " << key << dendl;
@@ -162,10 +162,6 @@ try
 	    << ": " << cpp_strerror(r) << dendl;
   }
 }
-catch(const std::exception& e)
-{
-    dout(1) << "!!JFW: mon caught: " << e.what() << dendl;
-}
 
 void Mgr::background_init(Context *completion)
 {
@@ -197,7 +193,7 @@ std::map<std::string, std::string> Mgr::load_store()
   std::map<std::string, std::string> loaded;
   
   for (auto &key_str : cmd.json_result.get_array()) {
-    std::string const key = key_str.get_string().c_str();
+    boost::json::string_view key = key_str.get_string();
     
     dout(20) << "saw key '" << key << "'" << dendl;
 
@@ -401,7 +397,6 @@ void Mgr::init()
 }
 
 void Mgr::load_all_metadata()
-try
 {
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
@@ -430,15 +425,15 @@ try
     }
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-    dm->key = DaemonKey{"mds",
-                        daemon_meta.at("name").get_string().c_str()};
-    dm->hostname = daemon_meta.at("hostname").get_string().c_str();
 
+    dm->key = DaemonKey{"mds", boost::json::value_to<std::string>(daemon_meta.at("name")) }; 
+    dm->hostname = boost::json::value_to<std::string>(daemon_meta.at("hostname")); 
+   
     daemon_meta.erase("name");
     daemon_meta.erase("hostname");
 
     for (const auto &[key, val] : daemon_meta) {
-      dm->metadata.emplace(key, val.get_string());
+      dm->metadata.emplace(key, boost::json::value_to<std::string>(val)); 
     }
 
     daemon_state.insert(dm);
@@ -452,9 +447,8 @@ try
     }
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-    dm->key = DaemonKey{"mon",
-                        daemon_meta.at("name").get_string().c_str()};
-    dm->hostname = daemon_meta.at("hostname").get_string().c_str();
+    dm->key = DaemonKey{"mon", boost::json::value_to<std::string>(daemon_meta.at("name")) };
+    dm->hostname = daemon_meta.at("hostname").get_string();
 
     daemon_meta.erase("name");
     daemon_meta.erase("hostname");
@@ -492,10 +486,6 @@ try
 
     daemon_state.insert(dm);
   }
-}
-catch(const std::exception& e)
-{
-      dout(1) << "JFW: load_all_metadata(): caught " << e.what() << dendl;
 }
 
 void Mgr::handle_osd_map()
