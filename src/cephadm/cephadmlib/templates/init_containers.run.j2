@@ -1,0 +1,57 @@
+#!/bin/sh
+# {{ comment }}
+
+set -e
+
+stop_all_init_containers() {
+    {%- for ic in init_containers %}
+    # stop init container {{ loop.index0 }}: {{ ic.cname }}
+    ! {{ ic.stop_cmd() | map('shellquote') | join(' ') }}
+    {%- endfor %}
+    return 0
+}
+
+rm_all_init_containers() {
+    {%- for ic in init_containers %}
+    # remove init container {{ loop.index0 }}: {{ ic.cname }}
+    ! {{ ic.rm_cmd() | map('shellquote') | join(' ') }} 2> /dev/null
+    {%- if has_podman_engine %}
+    ! {{ ic.rm_cmd(storage=True) | map('shellquote') | join(' ') }} 2> /dev/null
+    {%- endif %}
+    {%- endfor %}
+    return 0
+}
+
+has_running_init_container() {
+    {%- for ic in init_containers %}
+    if {{ ctx.container_engine.path }} inspect {{ ic.cname | shellquote }} &>/dev/null; then return 0; fi
+    {%- endfor %}
+    return 1
+}
+
+run_init_containers() {
+    {%- for ic in init_containers %}
+    # run init container {{ loop.index0 }}: {{ ic.cname }}
+    {{ ic.run_cmd() | map('shellquote') | join(' ') }}
+    # clean up {{ ic.cname }}
+    ! {{ ic.rm_cmd() | map('shellquote') | join(' ') }} 2> /dev/null
+    {%- if has_podman_engine %}
+    ! {{ ic.rm_cmd(storage=True) | map('shellquote') | join(' ') }} 2> /dev/null
+    {%- endif %}
+    {%- endfor %}
+    return 0
+}
+
+if [ "$1" = stop ] || [ "$1" = poststop ]; then
+    stop_all_init_containers
+    if has_running_init_container; then
+        exit 1
+    fi
+    exit 0
+fi
+
+# init container cleanup
+rm_all_init_containers
+
+run_init_containers
+exit 0
