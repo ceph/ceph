@@ -256,18 +256,40 @@ public:
     auto &opref = *op;
     return opref.template with_blocking_event<
       PGMap::PGCreationBlockingEvent
-    >([&target_shard_services, &opref](auto &&trigger) {
-      return target_shard_services.wait_for_pg(
-        std::move(trigger), opref.get_pgid());
-    }).safe_then([&logger, &target_shard_services, &opref](Ref<PG> pgref) {
-      logger.debug("{}: have_pg", opref);
-      return opref.with_pg(target_shard_services, pgref);
-    }).handle_error(
-      crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
-        logger.debug("{}: pg creation canceled, dropping", opref);
-        return seastar::now();
-      })
-    ).then([op=std::move(op)] {});
+    >([&target_shard_services, &opref, &logger](auto &&trigger) mutable {
+      auto pg = target_shard_services.get_pg(opref.get_pgid());
+      auto fut = ShardServices::wait_for_pg_ertr::make_ready_future<Ref<PG>>(pg);
+      if (!pg) {
+	if (opref.requires_pg()) {
+	  auto osdmap = target_shard_services.get_map();
+	  if (!osdmap->is_up_acting_osd_shard(
+		opref.get_pgid(), target_shard_services.local_state.whoami)) {
+	    logger.debug(
+	      "pg {} for {} is no longer here, discarding",
+	      opref.get_pgid(), opref);
+	    opref.get_handle().exit();
+	    auto _fut = seastar::now();
+	    if (osdmap->get_epoch() > opref.get_epoch_sent_at()) {
+	      _fut = target_shard_services.send_incremental_map(
+		std::ref(opref.get_foreign_connection()),
+		opref.get_epoch_sent_at() + 1);
+	    }
+	    return _fut;
+	  }
+	}
+	fut = target_shard_services.wait_for_pg(
+	  std::move(trigger), opref.get_pgid());
+      }
+      return fut.safe_then([&logger, &target_shard_services, &opref](Ref<PG> pgref) {
+	logger.debug("{}: have_pg", opref);
+	return opref.with_pg(target_shard_services, pgref);
+      }).handle_error(
+	crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
+	  logger.debug("{}: pg creation canceled, dropping", opref);
+	  return seastar::now();
+	})
+      );
+    }).then([op=std::move(op)] {});
   }
 
   seastar::future<> load_pgs(crimson::os::FuturizedStore& store);
