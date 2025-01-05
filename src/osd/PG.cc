@@ -712,7 +712,7 @@ void PG::clear_recovery_state()
     finish_recovery_op(soid, true);
   }
 
-  backfill_info.clear();
+  backfill_info.reset();
   peer_backfill_info.clear();
   waiting_on_backfill.clear();
   _clear_recovery_state();  // pg impl specific hook
