@@ -1,0 +1,19 @@
+@use './src/styles/vendor/variables' as vv;
+
+::ng-deep cd-pool-list {
+  .pg-clean {
+    color: vv.$success;
+  }
+
+  .pg-working {
+    color: vv.$primary;
+  }
+
+  .pg-warning {
+    color: vv.$warning;
+  }
+
+  .pg-unknown {
+    color: vv.$danger;
+  }
+}

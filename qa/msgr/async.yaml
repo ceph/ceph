@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms type: async
