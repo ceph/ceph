@@ -1,0 +1,217 @@
+ARG FROM_IMAGE="quay.io/centos/centos:stream9"
+FROM $FROM_IMAGE
+
+# allow FROM_IMAGE to be visible inside this stage
+ARG FROM_IMAGE
+
+# Ceph branch name
+ARG CEPH_REF="main"
+
+# Ceph SHA1
+ARG CEPH_SHA1
+
+# Ceph git repo (ceph-ci.git or ceph.git)
+ARG CEPH_GIT_REPO
+
+# (optional) Define the baseurl= for the ganesha.repo
+ARG GANESHA_REPO_BASEURL="https://buildlogs.centos.org/centos/\$releasever-stream/storage/\$basearch/nfsganesha-5/"
+
+# (optional) Set to "crimson" to install crimson packages.
+ARG OSD_FLAVOR="default"
+
+# (optional) Should be 'true' for CI builds (pull from shaman, etc.)
+ARG CI_CONTAINER="true"
+
+
+RUN /bin/echo -e "\
+FROM_IMAGE: ${FROM_IMAGE}\n\
+CEPH_REF: ${CEPH_REF}\n\
+GANESHA_REPO_BASEURL: ${GANESHA_REPO_BASEURL} \n\
+OSD_FLAVOR: ${OSD_FLAVOR} \n\
+CI_CONTAINER: ${CI_CONTAINER}"
+
+# Other labels are set automatically by container/build github action
+# See: https://github.com/opencontainers/image-spec/blob/main/annotations.md
+LABEL org.opencontainers.image.authors="Ceph Release Team <ceph-maintainers@ceph.io>" \
+      org.opencontainers.image.documentation="https://docs.ceph.com/"
+
+LABEL \
+FROM_IMAGE=${FROM_IMAGE} \
+CEPH_REF=${CEPH_REF} \
+CEPH_SHA1=${CEPH_SHA1} \
+CEPH_GIT_REPO=${CEPH_GIT_REPO} \
+GANESHA_REPO_BASEURL=${GANESHA_REPO_BASEURL} \
+OSD_FLAVOR=${OSD_FLAVOR}
+
+
+#===================================================================================================
+# Install ceph and dependencies, and clean up
+# IMPORTANT: in official builds, use '--squash' build option to keep image as small as possible
+#   keeping run steps separate makes local rebuilds quick, but images are big without squash option
+#===================================================================================================
+
+# Pre-reqs
+RUN dnf install -y --setopt=install_weak_deps=False epel-release jq
+
+# Add NFS-Ganesha repo
+RUN \
+    echo "[ganesha]" > /etc/yum.repos.d/ganesha.repo && \
+    echo "name=ganesha" >> /etc/yum.repos.d/ganesha.repo && \
+    echo "baseurl=${GANESHA_REPO_BASEURL}" >> /etc/yum.repos.d/ganesha.repo && \
+    echo "gpgcheck=0" >> /etc/yum.repos.d/ganesha.repo && \
+    echo "enabled=1" >> /etc/yum.repos.d/ganesha.repo
+
+# ISCSI repo
+RUN set -ex && \
+    curl -s -L https://shaman.ceph.com/api/repos/tcmu-runner/main/latest/centos/9/repo?arch=$(arch) -o /etc/yum.repos.d/tcmu-runner.repo && \
+    case "${CEPH_REF}" in \
+        quincy|reef) \
+            curl -fs -L https://download.ceph.com/ceph-iscsi/3/rpm/el9/ceph-iscsi.repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
+            ;;\
+        main|*) \
+            curl -fs -L https://shaman.ceph.com/api/repos/ceph-iscsi/main/latest/centos/9/repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
+            ;;\
+    esac
+
+# Ceph repo
+RUN --mount=type=secret,id=prerelease_creds set -ex && \
+    rpm --import 'https://download.ceph.com/keys/release.asc' && \
+    ARCH=$(arch); if [ "${ARCH}" == "aarch64" ]; then ARCH="arm64"; fi ;\
+    IS_RELEASE=0 ;\
+    if [[ "${CI_CONTAINER}" == "true" ]] ; then \
+        # TODO: this can return different ceph builds (SHA1) for x86 vs. arm runs. is it important to fix?
+        REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/9/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
+    else \
+        IS_RELEASE=1 ;\
+        source /run/secrets/prerelease_creds; \
+        REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/el9/" ;\
+    fi && \
+    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el9.noarch.rpm" ; \
+    if [[ "$IS_RELEASE" == 1 ]] ; then \
+        sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
+        dnf clean expire-cache ; \
+    fi
+
+
+# Copr repos
+# scikit for mgr-diskprediction-local
+# ref: https://github.com/ceph/ceph-container/pull/1821
+RUN \
+    dnf install -y --setopt=install_weak_deps=False dnf-plugins-core && \
+    dnf copr enable -y tchaikov/python-scikit-learn
+
+# Update package mgr
+RUN dnf update -y --setopt=install_weak_deps=False
+
+# Define and install packages
+# General
+RUN echo "ca-certificates" > packages.txt
+# Ceph
+# TODO: remove lua-devel and luarocks once they are present in ceph.spec.in
+#       ref: https://github.com/ceph/ceph/pull/54575#discussion_r1401199635
+RUN echo \
+"ceph-common \
+ceph-exporter \
+ceph-grafana-dashboards \
+ceph-immutable-object-cache \
+ceph-mds \
+ceph-mgr-cephadm \
+ceph-mgr-dashboard \
+ceph-mgr-diskprediction-local \
+ceph-mgr-k8sevents \
+ceph-mgr-rook \
+ceph-mgr \
+ceph-mon \
+ceph-osd \
+ceph-radosgw lua-devel luarocks \
+ceph-volume \
+cephfs-mirror \
+cephfs-top \
+kmod \
+libradosstriper1 \
+rbd-mirror" \
+>> packages.txt
+
+# Optional crimson package(s)
+RUN if [ "${OSD_FLAVOR}" == "crimson" ]; then \
+    echo "ceph-crimson-osd" >> packages.txt ; \
+fi
+
+# Ceph "Recommends"
+RUN echo "nvme-cli python3-saml smartmontools" >> packages.txt
+# NFS-Ganesha
+RUN echo "\
+dbus-daemon \
+nfs-ganesha-ceph \
+nfs-ganesha-rados-grace \
+nfs-ganesha-rados-urls \
+nfs-ganesha-rgw \
+nfs-ganesha \
+rpcbind \
+sssd-client" >> packages.txt
+
+# ISCSI
+RUN echo "ceph-iscsi tcmu-runner python3-rtslib" >> packages.txt
+
+# Ceph-CSI
+# TODO: coordinate with @Madhu-1 to have Ceph-CSI install these itself if unused by ceph
+#       @adk3798 does cephadm use these?
+RUN echo "attr ceph-fuse rbd-nbd"  >> packages.txt
+
+# Rook (only if packages must be in ceph container image)
+RUN echo "systemd-udev" >> packages.txt
+
+# Util packages (should be kept to only utils that are truly very useful)
+# 'sgdisk' (from gdisk) is used in docs and scripts for clearing disks (could be a risk? @travisn @guits @ktdreyer ?)
+# 'ps' (from procps-ng) and 'hostname' are very valuable for debugging and CI
+# TODO: remove sg3_utils once they are moved to ceph.spec.in with libstoragemgmt
+#       ref: https://github.com/ceph/ceph-container/pull/2013#issuecomment-1248606472
+RUN echo "gdisk hostname procps-ng sg3_utils e2fsprogs lvm2 gcc" >> packages.txt
+
+# scikit
+RUN echo "python3-scikit-learn" >> packages.txt
+
+# ceph-node-proxy
+RUN echo "ceph-node-proxy" >> packages.txt
+
+RUN echo "=== PACKAGES TO BE INSTALLED ==="; cat packages.txt
+RUN echo "=== INSTALLING ===" ; \
+dnf install -y --setopt=install_weak_deps=False --setopt=skip_missing_names_on_install=False --enablerepo=crb $(cat packages.txt)
+
+# XXX why isn't this done in the ganesha package?
+RUN mkdir -p /var/run/ganesha
+
+# Disable sync with udev since the container can not contact udev
+RUN \
+    sed -i -e 's/udev_rules = 1/udev_rules = 0/' \
+           -e 's/udev_sync = 1/udev_sync = 0/' \
+           -e 's/obtain_device_list_from_udev = 1/obtain_device_list_from_udev = 0/' \
+        /etc/lvm/lvm.conf && \
+    # validate the sed command worked as expected
+    grep -sqo "udev_sync = 0" /etc/lvm/lvm.conf && \
+    grep -sqo "udev_rules = 0" /etc/lvm/lvm.conf && \
+    grep -sqo "obtain_device_list_from_udev = 0" /etc/lvm/lvm.conf
+
+# CLEAN UP!
+RUN set -ex && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf/* && \
+    rm -rf /var/lib/dnf/* && \
+    rm -f /var/lib/rpm/__db* && \
+    # remove unnecessary files with big impact
+    rm -rf /etc/selinux /usr/share/{doc,man,selinux} && \
+    # don't keep compiled python binaries
+    find / -xdev \( -name "*.pyc" -o -name "*.pyo" \) -delete && \
+    rm -f /etc/yum.repos.d/{ceph,ganesha,tcmu-runner,ceph-iscsi}.repo
+
+# Verify that the packages installed haven't been accidentally cleaned, then
+# clean the package list and re-clean unnecessary RPM database files
+RUN rpm -q $(cat packages.txt) && rm -f /var/lib/rpm/__db* && rm -f *packages.txt
+
+#
+# Set some envs in the container for quickly inspecting details about the build at runtime
+ENV CEPH_IS_DEVEL="${CI_CONTAINER}" \
+    CEPH_REF="${CEPH_REF}" \
+    CEPH_OSD_FLAVOR="${OSD_FLAVOR}" \
+    FROM_IMAGE="${FROM_IMAGE}"
+

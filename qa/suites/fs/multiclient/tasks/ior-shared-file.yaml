@@ -1,0 +1,31 @@
+# make sure we get the same MPI version on all hosts
+tasks:
+- pexec:
+    clients:
+      - set -x
+      - cd $TESTDIR
+      # partially or incorrectly installed mpich will create a mess and the
+      # configure script or the build process (which is initiated using "make"
+      # command) for the ior project will fail
+      - sudo apt purge -y mpich
+      - sudo apt install -y mpich
+      - wget http://download.ceph.com/qa/ior-3.3.0.tar.bz2
+      - tar xvfj ior-3.3.0.tar.bz2
+      - cd ior-3.3.0
+      - ./configure
+      - make
+      - make install DESTDIR=$TESTDIR/binary/
+      - cd $TESTDIR/
+      - sudo apt install -y tree
+      - tree binary/
+      - rm ior-3.3.0.tar.bz2
+      - rm -r ior-3.3.0
+      - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
+- ssh_keys:
+- mpi:
+    exec: $TESTDIR/binary/usr/local/bin/ior -e -w -r -W -b 10m -a POSIX -o $TESTDIR/gmnt/ior.testfile
+- pexec:
+    clients:
+      - rm -f $TESTDIR/gmnt/ior.testfile
+      - rm -f $TESTDIR/gmnt
+      - rm -rf $TESTDIR/binary
