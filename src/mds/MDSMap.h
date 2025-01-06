@@ -246,6 +246,15 @@ public:
   bool use_global_snaprealm() const { return test_flag(CEPH_MDSMAP_GLOBAL_SNAPREALM); }
   bool was_global_snaprealm_ever_used() const { return ever_allowed_features & CEPH_MDSMAP_GLOBAL_SNAPREALM; }
 
+  void set_referent_inodes() {
+    set_flag(CEPH_MDSMAP_REFERENT_INODES);
+    ever_allowed_features |= CEPH_MDSMAP_REFERENT_INODES;
+    explicitly_allowed_features |= CEPH_MDSMAP_REFERENT_INODES;
+  }
+  void clear_referent_inodes() { clear_flag(CEPH_MDSMAP_REFERENT_INODES); }
+  bool allow_referent_inodes() const { return test_flag(CEPH_MDSMAP_REFERENT_INODES); }
+  bool was_referent_inodes_ever_used() const { return ever_allowed_features & CEPH_MDSMAP_REFERENT_INODES; }
+
   void set_standby_replay_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY);
     ever_allowed_features |= CEPH_MDSMAP_ALLOW_STANDBY_REPLAY;
@@ -728,7 +737,8 @@ private:
     {CEPH_MDSMAP_REFUSE_CLIENT_SESSION, "refuse_client_session"},
     {CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS, "refuse_standby_for_another_fs"},
     {CEPH_MDSMAP_BALANCE_AUTOMATE, "balance_automate"},
-    {CEPH_MDSMAP_GLOBAL_SNAPREALM, "use_global_snaprealm"}
+    {CEPH_MDSMAP_GLOBAL_SNAPREALM, "use_global_snaprealm"},
+    {CEPH_MDSMAP_REFERENT_INODES, "allow_referent_inodes"}
   };
 };
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
