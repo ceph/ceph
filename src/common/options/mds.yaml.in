@@ -1745,4 +1745,4 @@ options:
   default: 16
   services:
   - mds
-  min: 8
+  min: 4
