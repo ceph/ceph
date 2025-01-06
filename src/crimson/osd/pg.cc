@@ -956,12 +956,12 @@ PG::BackgroundProcessLock::lock() noexcept
 }
 
 // We may need to rollback the ObjectContext on failed op execution.
-// Copy the current obc before mutating it in order to recover on failures.
-ObjectContextRef duplicate_obc(const ObjectContextRef &obc) {
-  ObjectContextRef object_context = new ObjectContext(obc->obs.oi.soid);
-  object_context->obs = obc->obs;
-  object_context->ssc = new SnapSetContext(*obc->ssc);
-  return object_context;
+// Copy the current obc data before mutating it in order to recover on failures.
+std::pair<ObjectState, SnapSetContextRef>
+duplicate_obc_data(const ObjectContextRef &obc) {
+  ObjectState os = obc->obs;
+  SnapSetContextRef ssc = new SnapSetContext(*obc->ssc);
+  return {os, ssc};
 }
 
 PG::interruptible_future<> PG::complete_error_log(const ceph_tid_t& rep_tid,
@@ -1078,8 +1078,8 @@ PG::run_executer_fut PG::run_executer(
 {
   LOG_PREFIX(PG::run_executer);
   auto rollbacker = ox.create_rollbacker(
-    [stored_obc=duplicate_obc(obc)](auto &obc) mutable {
-      obc->update_from(*stored_obc);
+    [obc_data = duplicate_obc_data(obc)](auto &obc) mutable {
+      obc->update_from(obc_data);
     });
   auto rollback_on_error = seastar::defer([&rollbacker] {
     rollbacker.rollback_obc_if_modified();

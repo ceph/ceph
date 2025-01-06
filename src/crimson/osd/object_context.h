@@ -79,9 +79,10 @@ public:
   ObjectContext(hobject_t hoid) : lock(hoid),
                                   obs(std::move(hoid)) {}
 
-  void update_from(const ObjectContext &obc) {
-    obs = obc.obs;
-    ssc = obc.ssc;
+  void update_from(
+    std::pair<ObjectState, SnapSetContextRef> obc_data) {
+    obs = obc_data.first;
+    ssc = obc_data.second;
   }
 
   const hobject_t &get_oid() const {
