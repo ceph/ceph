@@ -134,9 +134,9 @@ private:
 inline std::ostream& operator<<(std::ostream& os, const tri_mutex& tm)
 {
   os << fmt::format("tri_mutex {} writers {} readers {}"
-                    " exclusively_used {} waiters: {}",
+                    " exclusively_used {} waiters: {} address {}",
                     tm.get_name(), tm.get_writers(), tm.get_readers(),
-                    tm.exclusively_used, tm.waiters.size());
+                    tm.exclusively_used, tm.waiters.size(), fmt::ptr(&tm));
   return os;
 }
 
