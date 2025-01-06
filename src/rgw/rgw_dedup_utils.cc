@@ -232,13 +232,10 @@ namespace rgw::dedup {
     out << "Set Shared-Manifest      = " << s.set_shared_manifest << "\n";
     out << "Deduped Obj (this cycle) = " << s.deduped_objects << "\n";
     out << "Deduped Bytes(this cycle)= " << s.deduped_objects_bytes << "\n";
-    if (s.deduped_objects) {
-      
-    }
     out << "Singleton Obj            = " << s.singleton_count << "\n";
     out << "Unique Obj               = " << s.unique_count << "\n";
     out << "Duplicate Obj            = " << s.duplicate_count << "\n";
-    out << "Duplicate Bytes (BLOCKS) = " << s.duplicated_bytes_blocks << "\n";
+    out << "Duplicate Blocks Bytes   = " << s.duplicated_blocks_bytes << "\n";
 
     return out;
   }

@@ -1222,13 +1222,19 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   static void display_table_stat_counters(const DoutPrefixProvider* dpp,
 					  uint64_t obj_count_in_shard,
+					  uint64_t num_rados_objects_bytes,
 					  const md5_stats_t *p_stats)
   {
-    ldpp_dout(dpp, 1) << "\n>>>>>" << __func__ << "::FINISHED STEP_BUILD_TABLE"
+    double_t post_dedup_bytes = num_rados_objects_bytes-p_stats->duplicated_blocks_bytes;
+    double dedup_ratio = post_dedup_bytes ? num_rados_objects_bytes/post_dedup_bytes : 0;
+    ldpp_dout(dpp, 1) << "\n>>>>>" << __func__ << "::FINISHED STEP_BUILD_TABLE\n"
 		      << "::total_count="      << obj_count_in_shard
 		      << "::singleton_count="  << p_stats->singleton_count
-		      << "::unique_count="     << p_stats->unique_count
-		      << "::duplicate_count="  << p_stats->duplicate_count << dendl;
+		      << "::unique_count="     << p_stats->unique_count << "\n"
+		      << "::duplicate_count="  << p_stats->duplicate_count
+		      << "::duplicated_bytes=" << p_stats->duplicated_blocks_bytes
+		      << "::rados_num_bytes="  << num_rados_objects_bytes
+		      << "::dedup_ratio="        << dedup_ratio << dendl;
   }
 
   //---------------------------------------------------------------------------
@@ -1274,10 +1280,10 @@ namespace rgw::dedup {
       }
     }
     d_table.count_duplicates(&p_stats->singleton_count, &p_stats->unique_count,
-			     &p_stats->duplicate_count, &p_stats->duplicated_bytes_blocks);
+			     &p_stats->duplicate_count, &p_stats->duplicated_blocks_bytes);
     uint64_t obj_count_in_shard = (p_stats->singleton_count + p_stats->unique_count +
 				   p_stats->duplicate_count);
-    display_table_stat_counters(dpp, obj_count_in_shard, p_stats);
+    display_table_stat_counters(dpp, obj_count_in_shard, d_num_rados_objects_bytes, p_stats);
     d_table.remove_singletons_and_redistribute_keys();
 #if 0
     reduce_md5_collision_chances(obj_count_in_shard);
@@ -1322,14 +1328,12 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::read_bucket_stats(const string &bucket_name,
-				    uint64_t     *p_num_obj,
-				    uint64_t     *p_size)
+  int Background::read_bucket_stats(const rgw_bucket &bucket_rec,
+				    uint64_t         *p_num_obj,
+				    uint64_t         *p_size)
   {
     unique_ptr<rgw::sal::Bucket> bucket;
-    const string tenant_name, empty_bucket_id;
-    rgw_bucket b{tenant_name, bucket_name, empty_bucket_id};
-    int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
+    int ret = driver->load_bucket(dpp, bucket_rec, &bucket, null_yield);
     if (unlikely(ret != 0)) {
       derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
       return -ret;
@@ -1338,7 +1342,7 @@ namespace rgw::dedup {
     const auto& index = bucket->get_info().get_current_index();
     if (is_layout_indexless(index)) {
       derr << "error, indexless buckets do not maintain stats; bucket="
-	   << bucket_name << dendl;
+	   << bucket->get_name() << dendl;
       return -EINVAL;
     }
 
@@ -1347,15 +1351,15 @@ namespace rgw::dedup {
     std::string max_marker;
     ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
     if (ret < 0) {
-      derr << "error getting bucket stats bucket=" << bucket_name << " ret=" << ret << dendl;
+      derr << "error getting bucket stats bucket=" << bucket->get_name()
+	   << " ret=" << ret << dendl;
       return ret;
     }
 
     for (auto itr = stats.begin(); itr != stats.end(); ++itr) {
       RGWStorageStats& s = itr->second;
-      ldpp_dout(dpp, 1) << __func__ << "::" << bucket_name << "::"
-			<< to_string(itr->first)
-			<< "::num_obj" << s.num_objects
+      ldpp_dout(dpp, 1) << __func__ << "::" << bucket->get_name() << "::"
+			<< to_string(itr->first) << "::num_obj" << s.num_objects
 			<< "::size=" << s.size << dendl;
       *p_num_obj += s.num_objects;
       *p_size    += s.size;
@@ -1368,27 +1372,38 @@ namespace rgw::dedup {
   int Background::collect_all_buckets_stats()
   {
     int ret = 0;
-    std::string section("bucket");
+    std::string section("bucket.instance");
     std::string marker;
     void *handle = nullptr;
     ret = driver->meta_list_keys_init(dpp, section, marker, &handle);
+    if (ret < 0) {
+      driver->meta_list_keys_complete(handle);
+      return -ret;
+    }
+
     d_all_buckets_obj_count = 0;
     d_all_buckets_obj_size  = 0;
 
     bool has_more = true;
     while (has_more) {
-      std::list<std::string> buckets;
+      std::list<std::string> entries;
       constexpr int max_keys = 1000;
-      ret = driver->meta_list_keys_next(dpp, handle, max_keys, buckets, &has_more);
+      ret = driver->meta_list_keys_next(dpp, handle, max_keys, entries, &has_more);
       if (ret == 0) {
-	for (auto& bucket_name : buckets) {
-	  //ldpp_dout(dpp, 20) <<__func__ << "::" << bucket_name << dendl;
-	  ret = read_bucket_stats(bucket_name, &d_all_buckets_obj_count,
+	for (auto& entry : entries) {
+	  rgw_bucket bucket;
+	  ret = rgw_bucket_parse_bucket_key(cct, entry, &bucket, nullptr);
+	  if (unlikely(ret < 0)) {
+	    goto err;
+	  }
+	  ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
+	  ret = read_bucket_stats(bucket, &d_all_buckets_obj_count,
 				  &d_all_buckets_obj_size);
 	  if (unlikely(ret != 0)) {
 	    goto err;
 	  }
 	}
+	//ldpp_dout(dpp, 0) <<__func__ << "::1::meta_list_keys_complete()" << dendl;
 	driver->meta_list_keys_complete(handle);
       }
       else {
@@ -1407,6 +1422,9 @@ namespace rgw::dedup {
     // reset counters to mark that we don't have the info
     d_all_buckets_obj_count = 0;
     d_all_buckets_obj_size  = 0;
+    if (handle) {
+      driver->meta_list_keys_complete(handle);
+    }
     return ret;
   }
 
@@ -1418,7 +1436,6 @@ namespace rgw::dedup {
       p_disk_arr[md5_shard]->set_worker_id(worker_id, p_worker_stats);
     }
     int ret = 0;
-    //std::string section("bucket");
     std::string section("bucket.instance");
     std::string marker;
     void *handle = nullptr;
@@ -1502,10 +1519,10 @@ namespace rgw::dedup {
   {
     utime_t start_time = ceph_clock_now();
     md5_stats_t md5_stats;
-
     int ret = objects_dedup_single_md5_shard(md5_shard, &md5_stats);
     if (ret == 0) {
       md5_stats.duration = ceph_clock_now() - start_time;
+      md5_stats.rados_bytes_before_dedup = d_num_rados_objects_bytes;
       d_cluster.mark_md5_shard_token_completed(p_dedup_cluster_ioctx, md5_shard, &md5_stats);
       ldpp_dout(dpp, 0) << "stat counters [md5]:\n" << md5_stats << dendl;
       ldpp_dout(dpp, 0) << "Shard Process Duration   = " << md5_stats.duration << dendl;
@@ -1578,6 +1595,37 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static int collect_pool_stats(const DoutPrefixProvider* const dpp,
+				RGWRados* rados,
+				uint64_t *p_num_objects,
+				uint64_t *p_num_objects_bytes)
+  {
+    *p_num_objects       = 0;
+    *p_num_objects_bytes = 0;
+    list<string> vec;
+    vec.push_back("default.rgw.buckets.data");
+    map<string,librados::pool_stat_t> stats;
+    auto rados_handle = rados->get_rados_handle();
+    int ret = rados_handle->get_pool_stats(vec, stats);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "error fetching pool stats: " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+    for (auto i = stats.begin(); i != stats.end(); ++i) {
+      const char *pool_name = i->first.c_str();
+      librados::pool_stat_t& s = i->second;
+      // TBD: add support for EC
+      double replica_level = (double)s.num_object_copies / s.num_objects;
+      *p_num_objects       = s.num_objects;
+      *p_num_objects_bytes = s.num_bytes / replica_level;
+      ldpp_dout(dpp, 0) <<__func__ << "::" << pool_name << "::num_objects="
+			<< s.num_objects << "::num_copies=" << s.num_object_copies
+			<< "::num_bytes=" << s.num_bytes << "/" << *p_num_objects_bytes << dendl;
+    }
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
   int Background::setup()
   {
     init_rados_access_handles();
@@ -1587,6 +1635,7 @@ namespace rgw::dedup {
       return -1;
     }
     d_table.reset();
+    collect_pool_stats(dpp, rados, &d_num_rados_objects, &d_num_rados_objects_bytes);
     collect_all_buckets_stats();
     return 0;
   }

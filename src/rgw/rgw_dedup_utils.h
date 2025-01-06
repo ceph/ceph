@@ -173,6 +173,9 @@ namespace rgw::dedup {
 	      skipped_duplicate + skipped_bad_sha256 + skipped_failed_src_load);
     }
     md5_stats_t& operator +=(const md5_stats_t& other) {
+      // rados_bytes_before_dedup should be identical on all systems
+      this->rados_bytes_before_dedup = std::max(this->rados_bytes_before_dedup,
+						other.rados_bytes_before_dedup);
       this->ingress_failed_get_object    += other.ingress_failed_get_object;
       this->ingress_failed_get_obj_attrs += other.ingress_failed_get_obj_attrs;
       this->ingress_skip_encrypted       += other.ingress_skip_encrypted;
@@ -198,7 +201,7 @@ namespace rgw::dedup {
       this->processed_objects       += other.processed_objects;
       this->singleton_count         += other.singleton_count;
       this->duplicate_count         += other.duplicate_count;
-      this->duplicated_bytes_blocks += other.duplicated_bytes_blocks;
+      this->duplicated_blocks_bytes += other.duplicated_blocks_bytes;
       this->unique_count            += other.unique_count;
       this->deduped_objects         += other.deduped_objects;
       this->deduped_objects_bytes   += other.deduped_objects_bytes;
@@ -207,6 +210,7 @@ namespace rgw::dedup {
       return *this;
     }
 
+    uint64_t rados_bytes_before_dedup = 0;
     uint64_t ingress_failed_get_object = 0;
     uint64_t ingress_failed_get_obj_attrs = 0;
 
@@ -233,7 +237,7 @@ namespace rgw::dedup {
     uint64_t processed_objects = 0;
     uint64_t singleton_count = 0;
     uint64_t duplicate_count = 0;
-    uint64_t duplicated_bytes_blocks = 0;
+    uint64_t duplicated_blocks_bytes = 0;
     uint64_t unique_count = 0;
     uint64_t deduped_objects = 0;
     uint64_t deduped_objects_bytes = 0;
@@ -246,6 +250,7 @@ namespace rgw::dedup {
   {
     ENCODE_START(1, 1, bl);
 
+    encode(m.rados_bytes_before_dedup, bl);
     encode(m.ingress_failed_get_object, bl);
     encode(m.ingress_failed_get_obj_attrs, bl);
     encode(m.ingress_skip_encrypted, bl);
@@ -271,7 +276,7 @@ namespace rgw::dedup {
     encode(m.processed_objects, bl);
     encode(m.singleton_count, bl);
     encode(m.duplicate_count, bl);
-    encode(m.duplicated_bytes_blocks, bl);
+    encode(m.duplicated_blocks_bytes, bl);
     encode(m.unique_count, bl);
     encode(m.deduped_objects, bl);
     encode(m.deduped_objects_bytes, bl);
@@ -284,6 +289,7 @@ namespace rgw::dedup {
   inline void decode(md5_stats_t& m, ceph::bufferlist::const_iterator& bl)
   {
     DECODE_START(1, bl);
+    decode(m.rados_bytes_before_dedup, bl);
     decode(m.ingress_failed_get_object, bl);
     decode(m.ingress_failed_get_obj_attrs, bl);
     decode(m.ingress_skip_encrypted, bl);
@@ -309,7 +315,7 @@ namespace rgw::dedup {
     decode(m.processed_objects, bl);
     decode(m.singleton_count, bl);
     decode(m.duplicate_count, bl);
-    decode(m.duplicated_bytes_blocks, bl);
+    decode(m.duplicated_blocks_bytes, bl);
     decode(m.unique_count, bl);
     decode(m.deduped_objects, bl);
     decode(m.deduped_objects_bytes, bl);

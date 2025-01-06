@@ -251,8 +251,9 @@ namespace rgw::dedup {
       return 0;
     }
     else {
-      ldpp_dout(dpp, 1) << __func__ << "::failed ioctx.getxattr() ret="
-			<< ret << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::" << (caller ? caller : "")
+			<< "::failed ioctx.getxattr() with: "
+			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
       return -1;
     }
   }
@@ -552,7 +553,7 @@ namespace rgw::dedup {
     char buff[16];
     int n = snprintf(buff, sizeof(buff), "%s%02x", prefix, shard);
     std::string oid(buff,  n);
-    ldpp_dout(dpp, 20) << __func__ << "::" << prefix << "::" << oid << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::" << prefix << "::" << oid << dendl;
 
     librados::ObjectWriteOperation op;
     utime_t max_lock_duration(MAX_LOCK_DURATION_SEC, 0);
@@ -789,6 +790,23 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static void show_dedup_ratio(const worker_stats_t &wrk_stats_sum,
+			       const md5_stats_t    &md5_stats_sum)
+  {
+    uint64_t rados_bytes_before = md5_stats_sum.rados_bytes_before_dedup;
+    uint64_t s3_bytes_before    = wrk_stats_sum.ingress_obj_bytes;
+    uint64_t s3_dedup_bytes     = md5_stats_sum.duplicated_blocks_bytes;
+    uint64_t s3_bytes_after     = s3_bytes_before - s3_dedup_bytes;
+    if (rados_bytes_before > s3_bytes_after && s3_bytes_after) {
+      double dedup_ratio = (double)rados_bytes_before/s3_bytes_after;
+      std::cout << "rados_bytes_before = " << rados_bytes_before << "\n";
+      std::cout << "s3_bytes_before    = " << s3_bytes_before << "\n";
+      std::cout << "s3_bytes_after     = " << s3_bytes_after << "\n";
+      std::cout << "dedup_ratio        = " << dedup_ratio << "\n";
+    }
+  }
+
+  //---------------------------------------------------------------------------
   int cluster::collect_all_shard_stats(rgw::sal::RadosStore *store,
 				       const DoutPrefixProvider *dpp)
   {
@@ -806,10 +824,10 @@ namespace rgw::dedup {
     unsigned completed_work_shards_count = 0;
     unsigned completed_md5_shards_count  = 0;
     utime_t md5_start_time;
+    worker_stats_t wrk_stats_sum;
     {
       std::map<std::string, member_time_t> owner_map;
       bool show_time = true;
-      worker_stats_t wrk_stats_sum;
       bufferlist bl_arr[MAX_WORK_SHARD];
       named_time_lock_t ntl_arr[MAX_WORK_SHARD];
       int cnt = collect_shard_stats(p_ioctx, dpp, MAX_WORK_SHARD, WORKER_SHARD_PREFIX, bl_arr, ntl_arr);
@@ -869,6 +887,7 @@ namespace rgw::dedup {
 	collect_single_shard_stats(dpp, owner_map, ntl_arr, shard, &show_time, "MD5");
       }
       std::cout << "Aggreagted md5-shard stats counters:\n" << md5_stats_sum << std::endl;
+      show_dedup_ratio(wrk_stats_sum, md5_stats_sum);
       show_time_func(md5_start_time, show_time, owner_map);
     }
 

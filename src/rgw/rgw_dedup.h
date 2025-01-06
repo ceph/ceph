@@ -68,7 +68,7 @@ namespace rgw::dedup {
     int  f_ingress_work_shard(unsigned shard_id);
     int  f_dedup_md5_shard(unsigned shard_id);
     int  process_all_shards(bool ingress_work_shards, int (Background::* func)(unsigned));
-    int  read_bucket_stats(const std::string &bucket_name,
+    int  read_bucket_stats(const rgw_bucket &bucket_rec,
 			   uint64_t     *p_num_obj,
 			   uint64_t     *p_size);
     int  collect_all_buckets_stats();
@@ -135,9 +135,11 @@ namespace rgw::dedup {
     unsigned d_heart_beat_max_elapsed_sec;
 
     // A pool with 6 billion objects has a  1/(2^64) chance for collison with a 128bit MD5
-    uint64_t d_max_protected_objects = (6ULL * 1024 * 1024 * 1024);
-    uint64_t d_all_buckets_obj_count = 0;
-    uint64_t d_all_buckets_obj_size  = 0;
+    uint64_t d_max_protected_objects   = (6ULL * 1024 * 1024 * 1024);
+    uint64_t d_all_buckets_obj_count   = 0;
+    uint64_t d_all_buckets_obj_size    = 0;
+    uint64_t d_num_rados_objects       = 0;
+    uint64_t d_num_rados_objects_bytes = 0;
     // we don't benefit from deduping RGW objects smaller than head-object size
     uint32_t d_min_obj_size_for_dedup = (4ULL * 1024 * 1024);
     // allow to start/pasue/resume/stop execution
