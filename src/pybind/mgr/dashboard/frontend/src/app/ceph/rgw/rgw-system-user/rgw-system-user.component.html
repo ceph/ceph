@@ -1,0 +1,37 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">Create System User</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="multisiteSystemUserForm"
+          #formDir="ngForm"
+          [formGroup]="multisiteSystemUserForm"
+          novalidate>
+      <div class="modal-body">
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="userName"
+                 i18n>User Name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="User name..."
+                   id="userName"
+                   name="userName"
+                   formControlName="userName">
+            <span class="invalid-feedback"
+                  *ngIf="multisiteSystemUserForm.showError('userName', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="multisiteSystemUserForm.showError('userName', formDir, 'uniqueName')"
+                  i18n>The chosen realm name is already in use.</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="multisiteSystemUserForm"></cd-form-button-panel>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
