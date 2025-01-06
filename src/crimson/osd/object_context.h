@@ -76,7 +76,7 @@ public:
 
   CommonOBCPipeline obc_pipeline;
 
-  ObjectContext(hobject_t hoid) : lock(hoid),
+  ObjectContext(hobject_t hoid) : lock(hoid.to_str()),
                                   obs(std::move(hoid)) {}
 
   void update_from(

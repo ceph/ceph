@@ -6,7 +6,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/circular_buffer.hh>
 
-#include "common/hobject.h"
 #include "crimson/common/log.h"
 
 class read_lock {
@@ -47,9 +46,10 @@ class tri_mutex : private read_lock,
 public:
   tri_mutex() = default;
 #ifdef NDEBUG
-  tri_mutex(const hobject_t &obj_name) : name() {}
+  tri_mutex(const std::string &obj_str) : name() {}
 #else
-  tri_mutex(const hobject_t &obj_name) : name(obj_name) {}
+  tri_mutex(const std::string &obj_str) : name(obj_str) {
+  }
 #endif
   ~tri_mutex();
 
@@ -101,8 +101,8 @@ public:
     }
   }
 
-  std::string get_name() const{
-    return name.to_str();
+  std::string_view get_name() const{
+    return name;
   }
 
 private:
@@ -124,7 +124,7 @@ private:
     type_t type;
   };
   seastar::circular_buffer<waiter_t> waiters;
-  const hobject_t name;
+  const std::string name;
   friend class read_lock;
   friend class write_lock;
   friend class excl_lock;
