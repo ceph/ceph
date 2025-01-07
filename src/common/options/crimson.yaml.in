@@ -6,7 +6,7 @@ options:
   type: str
   level: advanced
   desc: backend type for a Crimson OSD (e.g seastore or bluestore)
-  default: seastore
+  default: bluestore
   enum_values:
   - bluestore
   - seastore
