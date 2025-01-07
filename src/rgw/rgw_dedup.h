@@ -30,18 +30,23 @@ namespace rgw::dedup {
     void resume(rgw::sal::Driver* _driver) override;
 
   private:
-    void run();
-    int  setup();
-    void handle_pause_req();
-    bool should_stop() {
-      return (unlikely(d_shutdown_req || d_remote_abort_req));
-    }
     enum dedup_step_t {
       STEP_NONE,
+      STEP_BUCKET_INDEX_INGRESS,
       STEP_BUILD_TABLE,
       STEP_READ_ATTRIBUTES,
       STEP_REMOVE_DUPLICATES
     };
+
+    void run();
+    int  setup();
+    bool all_shards_completed(dedup_step_t step, uint32_t *ttl,
+			      uint64_t *p_total_ingressed);
+    void all_shards_barrier(dedup_step_t step, const char *stepname);
+    void handle_pause_req();
+    bool should_stop() {
+      return (unlikely(d_shutdown_req || d_remote_abort_req));
+    }
     const char* dedup_step_name(dedup_step_t step);
     int  read_buckets();
     bool need_to_update_heartbeat();

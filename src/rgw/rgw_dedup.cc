@@ -96,6 +96,10 @@ namespace rgw::dedup {
     d_cluster(dpp),
     d_execute_interval(_execute_interval)
   {
+    // TBD1: disk_block_array_t should be released after bucket-index scan
+    // TBD2: d_table should be dynamiclly allocated
+    // TBD3: disk_block_array_t and d_table should use the same memory-buffer
+    // TBD4: memory-buffer should be released after dedup is completed
     for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
       // TBD: check allocation success
       p_disk_arr[md5_shard] = new disk_block_array_t(dpp, md5_shard);
@@ -869,6 +873,7 @@ namespace rgw::dedup {
   const char* Background::dedup_step_name(dedup_step_t step)
   {
     static const char* names[] = {"STEP_NONE",
+				  "STEP_BUCKET_INDEX_INGRESS",
 				  "STEP_BUILD_TABLE",
 				  "STEP_READ_ATTRIBUTES",
 				  "STEP_REMOVE_DUPLICATES"};
@@ -1283,6 +1288,12 @@ namespace rgw::dedup {
 			     &p_stats->duplicate_count, &p_stats->duplicated_blocks_bytes);
     uint64_t obj_count_in_shard = (p_stats->singleton_count + p_stats->unique_count +
 				   p_stats->duplicate_count);
+#if 0
+    md5_stats.duration = ceph_clock_now() - start_time;
+    md5_stats.rados_bytes_before_dedup = d_num_rados_objects_bytes;
+    d_cluster.mark_md5_shard_token_completed(p_dedup_cluster_ioctx, md5_shard, &md5_stats);
+#endif
+
     display_table_stat_counters(dpp, obj_count_in_shard, d_num_rados_objects_bytes, p_stats);
     d_table.remove_singletons_and_redistribute_keys();
 #if 0
@@ -1544,6 +1555,7 @@ namespace rgw::dedup {
       else {
 	shard_id = d_cluster.get_next_md5_shard_token(p_dedup_cluster_ioctx, &urgent_msg);
       }
+
       // start with a common error handler
       if (shard_id != NULL_SHARD) {
 	int ret = (this->*func)(shard_id);
@@ -1615,6 +1627,7 @@ namespace rgw::dedup {
       const char *pool_name = i->first.c_str();
       librados::pool_stat_t& s = i->second;
       // TBD: add support for EC
+      // We need to find the user byte size without the added protection
       double replica_level = (double)s.num_object_copies / s.num_objects;
       *p_num_objects       = s.num_objects;
       *p_num_objects_bytes = s.num_bytes / replica_level;
@@ -1773,6 +1786,53 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  bool Background::all_shards_completed(dedup_step_t step,
+					uint32_t *ttl,
+					uint64_t *p_total_ingressed)
+  {
+    if (step == STEP_BUCKET_INDEX_INGRESS) {
+      return d_cluster.all_work_shard_tokens_completed(p_dedup_cluster_ioctx, ttl,
+						       p_total_ingressed);
+    }
+    else if (step == STEP_BUILD_TABLE) {
+      return d_cluster.all_md5_shard_tokens_completed(p_dedup_cluster_ioctx, ttl,
+						      p_total_ingressed);
+    }
+    else {
+      ceph_abort("illegal dedup_step");
+      return false;
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  void Background::all_shards_barrier(dedup_step_t step, const char *stepname)
+  {
+    // Wait for other worker to finish ingress step
+    uint32_t ttl = 0;
+    uint64_t total_ingressed = 0;
+    while (!all_shards_completed(step, &ttl, &total_ingressed)) {
+      ldpp_dout(dpp, 0) << "Waiting for " << stepname
+			<< " step completion ttl=" << ttl << dendl;
+      std::unique_lock cond_lock(d_cond_mutex);
+      d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
+		      [this]{return d_shutdown_req || d_local_pause_req;});
+      if (unlikely(d_local_pause_req)) {
+	handle_pause_req();
+      }
+      if (should_stop()) {
+	return;
+      }
+    }
+
+    ldpp_dout(dpp, 1) << "\n\n==" << stepname
+		      << " step was completed on all shards! ("
+		      << total_ingressed << ")==\n" << dendl;
+    if (unlikely(d_local_pause_req)) {
+      handle_pause_req();
+    }
+  }
+
+  //---------------------------------------------------------------------------
   void Background::run()
   {
     init_rados_access_handles();
@@ -1802,30 +1862,12 @@ namespace rgw::dedup {
 	}
 
 	// Wait for other worker to finish ingress step
-	uint32_t ttl = 0;
-	uint64_t total_ingressed = 0;
-	while (!d_cluster.all_work_shard_tokens_completed(p_dedup_cluster_ioctx, &ttl, &total_ingressed)) {
-	  ldpp_dout(dpp, 0) << "Waiting for INGRESS step completion ttl=" << ttl << dendl;
-	  std::unique_lock cond_lock(d_cond_mutex);
-	  d_cond.wait_for(cond_lock, std::chrono::seconds(ttl), [this]{return d_shutdown_req || d_local_pause_req;});
-	  if (unlikely(d_local_pause_req)) {
-	    handle_pause_req();
-	  }
-	  if (should_stop()) {
-	    goto finish_scan;
-	  }
-	}
-
-	ldpp_dout(dpp, 1) << "\n\n==INGRESS step was completed on all shards! ("
-			  << total_ingressed << ")==\n" << dendl;
-	if (unlikely(d_local_pause_req)) {
-	  handle_pause_req();
-	}
+	all_shards_barrier(STEP_BUCKET_INDEX_INGRESS, "INGRESS");
 	if (should_stop()) {
 	  goto finish_scan;
 	}
 	process_all_shards(false, &Background::f_dedup_md5_shard);
-	ldpp_dout(dpp, 1) << "\n\n==DEDUP step was completed on all shards! ==\n" << dendl;
+	ldpp_dout(dpp, 1) << "\n==DEDUP was completed on all shards! ==\n" << dendl;
       }
     finish_scan:
       need_to_scan = false;

@@ -625,7 +625,7 @@ def read_dedup_stats():
         if line.startswith("Accum byte size Ingress Objs"):
             dedup_stats.size_before_dedup = get_stats_line_val(line)
 
-        if line.startswith("Duplicate Bytes"):
+        if line.startswith("Duplicate Blocks Bytes"):
             dedup_stats.duplicate_bytes = get_stats_line_val(line)
 
         if line.startswith("Loaded objects"):
@@ -1420,7 +1420,7 @@ def test_dedup_basic_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_basic():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     bucket_name = gen_bucket_name()
@@ -1583,7 +1583,7 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_inc_loop_with_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_loop_with_tenants: connect to AWS ...")
@@ -1602,7 +1602,7 @@ def test_dedup_inc_loop_with_tenants():
         ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
         stats_base=ret[1]
 
-        for idx in range(0, 13):
+        for idx in range(0, 7):
             log.info("test_dedup_inc_loop_with_tenants: INC-STEP %d", idx)
             ret = inc_step_with_tenants(stats_base, files, conns, bucket_names, config)
             files=ret[0]

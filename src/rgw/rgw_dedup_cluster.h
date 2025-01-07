@@ -103,8 +103,7 @@ namespace rgw::dedup {
 					ttl,
 					p_total_ingressed);
     }
-#if 1
-    // TBD: d_total_ingressed_obj must be passed in as it is modified by worker code!
+
     //---------------------------------------------------------------------------
     bool all_md5_shard_tokens_completed(librados::IoCtx *p_ioctx, uint32_t *ttl,
 					uint64_t *p_total_ingressed)
@@ -117,7 +116,6 @@ namespace rgw::dedup {
 					ttl,
 					p_total_ingressed);
     }
-#endif
 
     int  get_urgent_msg_state(librados::IoCtx *p_ioctx,
 			      int *urgent_msg /* OUT-PARAM */);
