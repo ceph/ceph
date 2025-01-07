@@ -588,7 +588,7 @@ auto EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
 
   /* Get a token from the cache if one has already been stored */
   boost::optional<boost::tuple<rgw::keystone::TokenEnvelope, std::string>>
-    t = secret_cache.find(std::string(access_key_id));
+    t = secret_cache.find(std::string(access_key_id), y);
 
   /* Check that credentials can correctly be used to sign data */
   if (t) {
@@ -610,18 +610,21 @@ auto EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 0) << "No stored secret string, cache miss" << dendl;
   }
 
-  /* No cached token, token expired, or secret invalid: fall back to keystone */
-  std::tie(token, failure_reason) =
-      get_from_keystone(dpp, access_key_id, string_to_sign, signature, y);
+  { 
 
-  if (token) {
-    /* Fetch secret from keystone for the access_key_id */
-    std::tie(secret, failure_reason) =
-        get_secret_from_keystone(dpp, token->get_user_id(), access_key_id, y);
+    /* No cached token, token expired, or secret invalid: fall back to keystone */
+    std::tie(token, failure_reason) =
+        get_from_keystone(dpp, access_key_id, string_to_sign, signature, y);
 
-    if (secret) {
-      /* Add token, secret pair to cache, and set timeout */
-      secret_cache.add(std::string(access_key_id), *token, *secret);
+    if (token) {
+      /* Fetch secret from keystone for the access_key_id */
+      std::tie(secret, failure_reason) =
+          get_secret_from_keystone(dpp, token->get_user_id(), access_key_id, y);
+
+      if (secret) {
+        /* Add token, secret pair to cache, and set timeout */
+        secret_cache.add(std::string(access_key_id), *token, *secret);
+      }
     }
   }
 
@@ -747,7 +750,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
 
 bool SecretCache::find(const std::string& token_id,
                        SecretCache::token_envelope_t& token,
-		       std::string &secret)
+		       std::string &secret, optional_yield y)
 {
   std::lock_guard<std::mutex> l(lock);
 
@@ -764,6 +767,15 @@ bool SecretCache::find(const std::string& token_id,
     secrets.erase(iter);
     return false;
   }
+
+   // If optional_yield is provided, yield control back to the caller
+  if (y) {
+    // Simulate an asynchronous operation (e.g., waiting for I/O)
+    boost::asio::steady_timer timer(y.get_yield_context().get_executor());
+    timer.expires_after(std::chrono::milliseconds(10)); // Simulate a small delay
+    timer.async_wait(y.get_yield_context()); // Yield control
+  }
+
   token = entry.token;
   secret = entry.secret;
 
@@ -802,6 +814,75 @@ void SecretCache::add(const std::string& token_id,
   }
 }
 
+void SecretCache::clear() {
+    secrets.clear();
+    secrets_lru.clear();
+}
+
+int AuthRequestCache::wait(optional_yield y)
+{
+  std::unique_lock lock(mutex);
+
+  if (going_down) {
+    return -ECANCELED; // Return if the cache is shutting down
+  }
+
+  if (y) {
+    // Get the yield context and executor
+    auto& yield = y.get_yield_context();
+    auto executor = yield.get_executor();
+
+    // Create a Waiter object
+    Waiter waiter(executor);
+    waiter.timer.expires_after(duration); // Set a timer for expiry
+
+    // Add the waiter to the list of waiters
+    waiters.push_back(waiter);
+
+    // Unlock the mutex before yielding
+    lock.unlock();
+
+    // Wait for the timer to expire
+    boost::system::error_code ec;
+    waiter.timer.async_wait(yield[ec]);
+
+    // Re-lock the mutex after resuming
+    lock.lock();
+
+    // Remove the waiter from the waiters list
+    waiters.erase(waiters.iterator_to(waiter));
+
+    // Return an error code if the timer was canceled or failed
+    if (ec) {
+        return -ec.value();
+    }
+
+    // Return success if the timer completed without errors
+    return 0;
+
+  } else {
+    // Blocking wait using condition variable
+    cond.wait_for(lock, duration);
+
+    // Check if the cache is going down after waiting
+    if (going_down) {
+        return -ECANCELED;
+    }
+
+    return 0; // Success
+  }
+}
+
+void AuthRequestCache::stop()
+{
+  std::scoped_lock lock(mutex);
+  going_down = true;
+  cond.notify_all();
+  for (auto& waiter : waiters) {
+    // unblock any waiters with ECANCELED
+    waiter.timer.cancel();
+  }
+}
 }; /* namespace keystone */
 }; /* namespace auth */
 }; /* namespace rgw */
