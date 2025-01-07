@@ -9875,7 +9875,8 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_scrub_max_interval",
     "osd_op_thread_timeout",
     "osd_op_thread_suicide_timeout",
-    NULL
+    "osd_max_scrubs",
+    nullptr
   };
   return KEYS;
 }
@@ -9919,6 +9920,10 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
     service.snap_reserver.set_max(cct->_conf->osd_max_trimming_pgs);
   }
   if (changed.count("osd_max_scrubs")) {
+    dout(0) << fmt::format(
+                   "{}: scrub concurrency max changed to {}",
+                   __func__, cct->_conf->osd_max_scrubs)
+            << dendl;
     service.scrub_reserver.set_max(cct->_conf->osd_max_scrubs);
   }
   if (changed.count("osd_op_complaint_time") ||
