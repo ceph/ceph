@@ -315,7 +315,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
 
     def _get_devices(self, remote):
         GET_DEVICE_CMD = "sudo nvme list --output-format=json | " \
-            "jq -r '.Devices | sort_by(.NameSpace) | .[] | select(.ModelNumber == \"Ceph bdev Controller\") | .DevicePath'"
+            "jq -r '.Devices[].Subsystems[] | select(.Controllers | all(.ModelNumber == \"Ceph bdev Controller\")) | .Namespaces | sort_by(.NSID) | .[] | .NameSpace'"
         devices = remote.sh(GET_DEVICE_CMD).split()
         return devices
     
