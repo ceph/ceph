@@ -21,6 +21,7 @@
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtilL.h"
+#include "ECTypes.h"
 #if WITH_SEASTAR
 #include "ECExtentCacheL.h"
 #include "crimson/osd/object_context.h"
@@ -209,12 +210,6 @@ struct ECListener {
 };
 
 struct ECCommonL {
-  struct ec_align_t {
-    uint64_t offset;
-    uint64_t size;
-    uint32_t flags;
-  };
-  friend std::ostream &operator<<(std::ostream &lhs, const ec_align_t &rhs);
 
   struct ec_extent_t {
     int err;
@@ -285,7 +280,7 @@ struct ECCommonL {
     virtual void finish_single_request(
       const hobject_t &hoid,
       read_result_t &res,
-      std::list<ECCommonL::ec_align_t> to_read,
+      std::list<ec_align_t> to_read,
       std::set<int> wanted_to_read) = 0;
 
     virtual void finish(int priority) && = 0;

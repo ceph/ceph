@@ -23,6 +23,7 @@
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
 #include "ECMsgTypes.h"
+#include "ECTypes.h"
 
 #include "PrimaryLogPG.h"
 #include "osd_tracer.h"
@@ -195,8 +196,8 @@ struct RecoveryMessages {
     const map<pg_shard_t, vector<pair<int, int>>> &need,
     bool attrs)
   {
-    list<ECCommonL::ec_align_t> to_read;
-    to_read.emplace_back(ECCommonL::ec_align_t{off, len, 0});
+    list<ec_align_t> to_read;
+    to_read.emplace_back(ec_align_t{off, len, 0});
     ceph_assert(!recovery_reads.count(hoid));
     want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
     recovery_reads.insert(
@@ -463,7 +464,7 @@ struct RecoveryReadCompleter : ECCommonL::ReadCompleter {
   void finish_single_request(
     const hobject_t &hoid,
     ECCommonL::read_result_t &res,
-    list<ECCommonL::ec_align_t>,
+    list<ec_align_t>,
     set<int> wanted_to_read) override
   {
     if (!(res.r == 0 && res.errors.empty())) {
@@ -1567,7 +1568,7 @@ int ECBackendL::objects_read_sync(
 
 void ECBackendL::objects_read_async(
   const hobject_t &hoid,
-  const list<pair<ECCommonL::ec_align_t,
+  const list<pair<ec_align_t,
                   pair<bufferlist*, Context*>>> &to_read,
   Context *on_complete,
   bool fast_read)
@@ -1599,14 +1600,14 @@ void ECBackendL::objects_read_async(
   struct cb {
     ECBackendL *ec;
     hobject_t hoid;
-    list<pair<ECCommonL::ec_align_t,
+    list<pair<ec_align_t,
 	      pair<bufferlist*, Context*> > > to_read;
     unique_ptr<Context> on_complete;
     cb(const cb&) = delete;
     cb(cb &&) = default;
     cb(ECBackendL *ec,
        const hobject_t &hoid,
-       const list<pair<ECCommonL::ec_align_t,
+       const list<pair<ec_align_t,
                   pair<bufferlist*, Context*> > > &to_read,
        Context *on_complete)
       : ec(ec),
@@ -1680,7 +1681,7 @@ void ECBackendL::objects_read_async(
 
 void ECBackendL::objects_read_and_reconstruct(
   const map<hobject_t,
-    std::list<ECBackendL::ec_align_t>
+    std::list<ec_align_t>
   > &reads,
   bool fast_read,
   GenContextURef<ECCommonL::ec_extents_t &&> &&func)

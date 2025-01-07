@@ -77,13 +77,6 @@ ostream &operator<<(ostream &lhs, const ECCommonL::RMWPipeline::pipeline_state_t
   return lhs; // unreachable
 }
 
-ostream &operator<<(ostream &lhs, const ECCommonL::ec_align_t &rhs)
-{
-  return lhs << rhs.offset << ","
-	     << rhs.size << ","
-	     << rhs.flags;
-}
-
 ostream &operator<<(ostream &lhs, const ECCommonL::ec_extent_t &rhs)
 {
   return lhs << rhs.err << ","
@@ -517,7 +510,7 @@ struct ClientReadCompleter : ECCommonL::ReadCompleter {
   void finish_single_request(
     const hobject_t &hoid,
     ECCommonL::read_result_t &res,
-    list<ECCommonL::ec_align_t> to_read,
+    list<ec_align_t> to_read,
     set<int> wanted_to_read) override
   {
     auto* cct = read_pipeline.cct;
@@ -606,7 +599,7 @@ static ostream& _prefix(std::ostream *_dout, ClientReadCompleter *read_completer
 }
 
 void ECCommonL::ReadPipeline::objects_read_and_reconstruct(
-  const map<hobject_t, std::list<ECCommonL::ec_align_t>> &reads,
+  const map<hobject_t, std::list<ec_align_t>> &reads,
   bool fast_read,
   GenContextURef<ECCommonL::ec_extents_t &&> &&func)
 {
