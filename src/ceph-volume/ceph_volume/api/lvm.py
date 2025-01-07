@@ -512,6 +512,9 @@ class VolumeGroup(object):
     """
 
     def __init__(self, **kw):
+        self.pv_name: str = ''
+        self.vg_name: str = ''
+        self.vg_free_count: str = ''
         for k, v in kw.items():
             setattr(self, k, v)
         self.name = kw['vg_name']
@@ -819,6 +822,7 @@ class Volume:
         self.lv_path: str = ''
         self.lv_name: str = ''
         self.lv_uuid: str = ''
+        self.vg_name: str = ''
         for k, v in kw.items():
             setattr(self, k, v)
         self.lv_api = kw
