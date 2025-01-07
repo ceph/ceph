@@ -119,13 +119,29 @@ See https://tracker.ceph.com/issues/68338 for more information.
 
 Stretch Mode
 ============
-Stretch mode is designed to handle deployments in which you cannot guarantee the
-replication of data across two data centers. This kind of situation can arise
-when the cluster's CRUSH rule specifies that three copies are to be made, but 
-then a copy is placed in each data center with a ``min_size`` of 2. Under such
-conditions, a placement group can become active with two copies in the first
-data center and no copies in the second data center. 
 
+Stretch mode is designed to handle netsplit scenarios between two data zones as well
+as the loss of one data zone. It handles the netsplit scenario by choosing the surviving zone
+that has the better connection to the ``tiebreaker monitor``. It handles the loss of one zone by
+reducing the ``size`` to ``2`` and ``min_size`` to ``1``, allowing the cluster to continue operating
+with the remaining zone. When the lost zone comes back, the cluster will recover the lost data
+and return to normal operation.
+
+Connectivity Monitor Election Strategy
+---------------------------------------
+When using stretch mode, the monitor election strategy must be set to ``connectivity``.
+This strategy tracks network connectivity between the monitors and is
+used to determine which zone should be favored when the cluster is in a netsplit scenario.
+
+See `Changing Monitor Elections`_
+
+Stretch Peering Rule
+--------------------
+One critical behavior of stretch mode is its ability to prevent a PG from going active if the acting set
+contains only replicas from a single zone. This safeguard is crucial for mitigating the risk of data
+loss during site failures because if a PG were allowed to go active with replicas only in a single site,
+writes could be acknowledged despite a lack of redundancy. In the event of a site failure, all data in the
+affected PG would be lost.
 
 Entering Stretch Mode
 ---------------------
@@ -271,7 +287,7 @@ possible, if needed).
 .. _Changing Monitor elections: ../change-mon-elections
 
 Exiting Stretch Mode
-=====================
+--------------------
 To exit stretch mode, run the following command:
 
 .. prompt:: bash $
