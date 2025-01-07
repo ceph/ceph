@@ -42,7 +42,7 @@ def zap_bluestore(path: str) -> None:
         '--yes-i-really-really-mean-it'
     ])
 
-def wipefs(path):
+def wipefs(path: str) -> None:
     """
     Removes the filesystem from an lv or partition.
 
@@ -74,7 +74,7 @@ def wipefs(path):
     raise RuntimeError("could not complete wipefs on device: %s" % path)
 
 
-def zap_data(path):
+def zap_data(path: str) -> None:
     """
     Clears all data from the given path. Path should be
     an absolute path to an lv or partition.
@@ -122,7 +122,7 @@ class Zap:
         return list(raw_devices)
         
 
-    def find_associated_devices(self) -> List[api.Volume]:
+    def find_associated_devices(self) -> List[Device]:
         """From an ``osd_id`` and/or an ``osd_fsid``, filter out all the Logical Volumes (LVs) in the
         system that match those tag values, further detect if any partitions are
         part of the OSD, and then return the set of LVs and partitions (if any).
@@ -279,7 +279,10 @@ class Zap:
         Device examples: vg-name/lv-name, /dev/vg-name/lv-name
         Requirements: Must be a logical volume (LV)
         """
-        lv: api.Volume = device.lv_api
+        if device.lv_api is not None:
+            lv: api.Volume = device.lv_api
+        else:
+            raise RuntimeError(f"Unexpected error while attempting to zap LV device {device}.")
         self.unmount_lv(lv)
         self.parent_device: str = disk.get_parent_device_from_mapper(lv.lv_path)
         zap_device(device.path)
@@ -298,7 +301,7 @@ class Zap:
                     'db': self.args.replace_db,
                     'wal': self.args.replace_wal
                 }
-                if replacement_args.get(lv.tags.get('ceph.type'), False):
+                if replacement_args.get(lv.tags.get('ceph.type', ''), False):
                     mlogger.info(f'Marking {self.parent_device} as being replaced')
                     self._write_replacement_header(self.parent_device)
             else:
