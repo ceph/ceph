@@ -43,51 +43,30 @@ class RgwAccounts:
 
     @classmethod
     def create_account(cls, account_name: Optional[str] = None, tenant: str = None,
-                       account_id: Optional[str] = None, email: Optional[str] = None,
-                       max_buckets: str = None, max_users: str = None,
-                       max_roles: str = None, max_group: str = None,
-                       max_access_keys: str = None):
+                       email: Optional[str] = None, max_buckets: str = None,
+                       max_users: str = None, max_roles: str = None,
+                       max_group: str = None, max_access_keys: str = None):
         create_accounts_cmd = ['account', 'create']
 
-        if account_name:
-            create_accounts_cmd += ['--account-name', account_name]
-
-        if account_id:
-            create_accounts_cmd += ['--account_id', account_id]
-
-        if email:
-            create_accounts_cmd += ['--email', email]
-
-        if tenant:
-            create_accounts_cmd += ['--tenant', tenant]
-
-        if max_buckets:
-            create_accounts_cmd += ['--max_buckets', str(max_buckets)]
-
-        if max_users:
-            create_accounts_cmd += ['--max_users', str(max_users)]
-
-        if max_roles:
-            create_accounts_cmd += ['--max_roles', str(max_roles)]
-
-        if max_group:
-            create_accounts_cmd += ['--max_groups', str(max_group)]
-
-        if max_access_keys:
-            create_accounts_cmd += ['--max_access_keys', str(max_access_keys)]
+        create_accounts_cmd += cls.get_common_args_list(account_name, email,
+                                                        tenant, max_buckets,
+                                                        max_users, max_roles,
+                                                        max_group, max_access_keys)
 
         return cls.send_rgw_cmd(create_accounts_cmd)
 
     @classmethod
     def modify_account(cls, account_id: str, account_name: Optional[str] = None,
-                       email: Optional[str] = None):
+                       email: Optional[str] = None, tenant: str = None,
+                       max_buckets: str = None, max_users: str = None,
+                       max_roles: str = None, max_group: str = None,
+                       max_access_keys: str = None):
         modify_accounts_cmd = ['account', 'modify', '--account-id', account_id]
 
-        if account_name:
-            modify_accounts_cmd += ['--account-name', account_name]
-
-        if email:
-            modify_accounts_cmd += ['--email', email]
+        modify_accounts_cmd += cls.get_common_args_list(account_name, email,
+                                                        tenant, max_buckets,
+                                                        max_users, max_roles,
+                                                        max_group, max_access_keys)
 
         return cls.send_rgw_cmd(modify_accounts_cmd)
 
@@ -120,3 +99,36 @@ class RgwAccounts:
                                 '--account-id', account_id]
 
         return cls.send_rgw_cmd(set_quota_status_cmd)
+
+    @classmethod
+    def get_common_args_list(cls, account_name: Optional[str] = None,
+                             email: Optional[str] = None, tenant: str = None,
+                             max_buckets: str = None, max_users: str = None,
+                             max_roles: str = None, max_group: str = None,
+                             max_access_keys: str = None):
+        common_cmd_list = []
+        if account_name:
+            common_cmd_list += ['--account-name', account_name]
+
+        if email:
+            common_cmd_list += ['--email', email]
+
+        if tenant:
+            common_cmd_list += ['--tenant', tenant]
+
+        if max_buckets:
+            common_cmd_list += ['--max_buckets', str(max_buckets)]
+
+        if max_users:
+            common_cmd_list += ['--max_users', str(max_users)]
+
+        if max_roles:
+            common_cmd_list += ['--max_roles', str(max_roles)]
+
+        if max_group:
+            common_cmd_list += ['--max_groups', str(max_group)]
+
+        if max_access_keys:
+            common_cmd_list += ['--max_access_keys', str(max_access_keys)]
+
+        return common_cmd_list

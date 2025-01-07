@@ -203,6 +203,11 @@ const routes: Routes = [
         path: URLVerbs.CREATE,
         component: RgwUserAccountsFormComponent,
         data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:id`,
+        component: RgwUserAccountsFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
   },

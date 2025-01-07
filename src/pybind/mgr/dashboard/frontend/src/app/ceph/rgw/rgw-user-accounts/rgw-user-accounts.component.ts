@@ -90,6 +90,13 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
         flexGrow: 1
       }
     ];
+    const getEditURL = () => {
+      if (this.selection.first().groupName && this.selection.first().id) {
+        return `${URLVerbs.EDIT}/${this.selection.first().id}
+        }`;
+      }
+      return `${URLVerbs.EDIT}/${this.selection.first().id}`;
+    };
     const addAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
@@ -97,7 +104,13 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
       name: this.actionLabels.CREATE,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
-    this.tableActions = [addAction];
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      click: () => this.router.navigate([`${BASE_URL}/${getEditURL()}`]),
+      name: this.actionLabels.EDIT
+    };
+    this.tableActions = [addAction, editAction];
   }
 
   getAccountsList(context?: CdTableFetchDataContext) {

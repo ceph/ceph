@@ -30,6 +30,10 @@ export class RgwUserAccountsService {
     return this.http.post(this.url, payload);
   }
 
+  modify(payload: any): Observable<any> {
+    return this.http.put(`${this.url}/set`, payload);
+  }
+
   setQuota(
     account_id: string,
     payload: { quota_type: string; max_size: string; max_objects: string; enabled: boolean }

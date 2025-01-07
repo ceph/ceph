@@ -12,11 +12,10 @@ class RgwUserAccountsController(RESTController):
 
     @allow_empty_body
     def create(self, account_name: Optional[str] = None, tenant: str = None,
-               account_id: Optional[str] = None, email: Optional[str] = None,
-               max_buckets: str = None, max_users: str = None,
-               max_roles: str = None, max_group: str = None,
+               email: Optional[str] = None, max_buckets: str = None,
+               max_users: str = None, max_roles: str = None, max_group: str = None,
                max_access_keys: str = None):
-        return RgwAccounts.create_account(account_name, tenant, account_id, email,
+        return RgwAccounts.create_account(account_name, tenant, email,
                                           max_buckets, max_users, max_roles,
                                           max_group, max_access_keys)
 
@@ -38,8 +37,13 @@ class RgwUserAccountsController(RESTController):
                  parameters={'account_id': (str, 'Account id')})
     @allow_empty_body
     def set(self, account_id: str, account_name: Optional[str] = None,
-            email: Optional[str] = None):
-        return RgwAccounts.modify_account(account_id, account_name, email)
+            email: Optional[str] = None, tenant: str = None,
+            max_buckets: str = None, max_users: str = None,
+            max_roles: str = None, max_group: str = None,
+            max_access_keys: str = None):
+        return RgwAccounts.modify_account(account_id, account_name, email, tenant,
+                                          max_buckets, max_users, max_roles,
+                                          max_group, max_access_keys)
 
     @EndpointDoc("Set RGW Account/Bucket quota",
                  parameters={'account_id': (str, 'Account id'),
