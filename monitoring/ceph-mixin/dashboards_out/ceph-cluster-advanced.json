@@ -519,7 +519,7 @@
                               },
                               {
                                  "color": "red",
-                                 "value": 1
+                                 "value": 10
                               }
                            ]
                         }
@@ -547,7 +547,7 @@
                               },
                               {
                                  "color": "red",
-                                 "value": 1
+                                 "value": 10
                               }
                            ]
                         }
