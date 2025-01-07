@@ -119,13 +119,12 @@ class Zap:
                     osd_uuid = details.get('osd_uuid')
                     break
 
-        for osd_uuid, details in raw_report.items():
+        for _, details in raw_report.items():
             device: str = details.get('device')
             if details.get('osd_uuid') == osd_uuid:
                 raw_devices.add(device)
 
         return list(raw_devices)
-        
 
     def find_associated_devices(self) -> List[api.Volume]:
         """From an ``osd_id`` and/or an ``osd_fsid``, filter out all the Logical Volumes (LVs) in the

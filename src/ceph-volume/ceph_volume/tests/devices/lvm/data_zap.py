@@ -22,7 +22,7 @@ ceph_bluestore_tool_output = '''
         "whoami": "0"
     },
     "/dev/vdx": {
-        "osd_uuid": "d5a496bc-dcb9-4ad0-a12c-393d3200d2b6",
+        "osd_uuid": "d5a496bc-dcb9-4ad0-a12c-393d3200d2b7",
         "size": 214748364800,
         "btime": "2024-10-16T10:51:05.955279+0000",
         "description": "main",
