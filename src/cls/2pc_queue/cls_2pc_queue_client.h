@@ -21,6 +21,8 @@ void cls_2pc_queue_init(librados::ObjectWriteOperation& op, const std::string& q
 int cls_2pc_queue_get_capacity(librados::IoCtx& io_ctx, const std::string& queue_name, uint64_t& size);
 // return the number of committed entries and size (bytes)
 int cls_2pc_queue_get_topic_stats(librados::IoCtx& io_ctx, const std::string& queue_name, uint32_t& committed_entries, uint64_t& size);
+// set the number of committed entries to the correct number
+int cls_2pc_queue_set_topic_committed_entries(librados::IoCtx& io_ctx, const std::string& queue_name, uint32_t& committed_entries);
 
 // make a reservation on the queue (in bytes) and number of expected entries (to calculate overhead)
 // return a reservation id if reservations is possible, 0 otherwise
@@ -39,9 +41,11 @@ int cls_2pc_queue_list_reservations(librados::IoCtx& io_ctx, const std::string& 
 // after answer is received, call cls_2pc_queue_get_capacity_result() to parse the results
 void cls_2pc_queue_get_capacity(librados::ObjectReadOperation& op,  bufferlist* obl, int* prval);
 
-// optionally async method for getting capacity (bytes)
+// optionally async method for getting topic stats
 // after answer is received, call cls_2pc_queue_get_topic_stats_result() to parse the results
 void cls_2pc_queue_get_topic_stats(librados::ObjectReadOperation& op,  bufferlist* obl, int* prval);
+// optionally async method for setting committed entries
+void cls_2pc_queue_set_topic_committed_entries(librados::ObjectReadOperation& op, bufferlist* obl, uint32_t committed_entries, int* prval);
 
 int cls_2pc_queue_get_capacity_result(const bufferlist& bl, uint64_t& size);
 int cls_2pc_queue_get_topic_stats_result(const bufferlist& bl, uint32_t& committed_entries, uint64_t& size);

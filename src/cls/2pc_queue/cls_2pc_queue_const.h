@@ -5,6 +5,7 @@
 #define TPC_QUEUE_INIT "2pc_queue_init"
 #define TPC_QUEUE_GET_CAPACITY "2pc_queue_get_capacity"
 #define TPC_QUEUE_GET_TOPIC_STATS "2pc_queue_get_topic_stats"
+#define TPC_QUEUE_SET_TOPIC_COMMITTED_ENTRIES "2pc_queue_set_topic_committed_entries"
 #define TPC_QUEUE_RESERVE "2pc_queue_reserve"
 #define TPC_QUEUE_COMMIT "2pc_queue_commit"
 #define TPC_QUEUE_ABORT "2pc_queue_abort"

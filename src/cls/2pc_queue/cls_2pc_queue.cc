@@ -85,6 +85,32 @@ static int cls_2pc_queue_get_topic_stats(cls_method_context_t hctx, bufferlist *
   return 0;
 }
 
+static int cls_2pc_queue_set_topic_committed_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls_2pc_queue_set_committed_entries_op op_ret;
+
+  // get head
+  cls_queue_head head;
+  auto ret = queue_read_head(hctx, head);
+  if (ret < 0) {
+    return ret;
+  }
+
+  cls_2pc_urgent_data urgent_data;
+  try {
+    auto in_iter = head.bl_urgent_data.cbegin();
+    decode(urgent_data, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_2pc_queue_set_topic_committed_entries: failed to decode header of queue: %s", err.what());
+    return -EINVAL;
+  }
+  urgent_data.committed_entries = op_ret.committed_entries;
+
+  encode(op_ret, *out);
+
+  return 0;
+}
+
 static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   cls_2pc_queue_reserve_op res_op;
   try {
@@ -625,6 +651,7 @@ CLS_INIT(2pc_queue)
   cls_method_handle_t h_2pc_queue_init;
   cls_method_handle_t h_2pc_queue_get_capacity;
   cls_method_handle_t h_2pc_queue_get_topic_stats;
+  cls_method_handle_t h_2pc_queue_set_topic_committed_entries;
   cls_method_handle_t h_2pc_queue_reserve;
   cls_method_handle_t h_2pc_queue_commit;
   cls_method_handle_t h_2pc_queue_abort;
@@ -638,6 +665,7 @@ CLS_INIT(2pc_queue)
   cls_register_cxx_method(h_class, TPC_QUEUE_INIT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_init, &h_2pc_queue_init);
   cls_register_cxx_method(h_class, TPC_QUEUE_GET_CAPACITY, CLS_METHOD_RD, cls_2pc_queue_get_capacity, &h_2pc_queue_get_capacity);
   cls_register_cxx_method(h_class, TPC_QUEUE_GET_TOPIC_STATS, CLS_METHOD_RD, cls_2pc_queue_get_topic_stats, &h_2pc_queue_get_topic_stats);
+  cls_register_cxx_method(h_class, TPC_QUEUE_SET_TOPIC_COMMITTED_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_set_topic_committed_entries, &h_2pc_queue_set_topic_committed_entries);
   cls_register_cxx_method(h_class, TPC_QUEUE_RESERVE, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_reserve, &h_2pc_queue_reserve);
   cls_register_cxx_method(h_class, TPC_QUEUE_COMMIT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_commit, &h_2pc_queue_commit);
   cls_register_cxx_method(h_class, TPC_QUEUE_ABORT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_abort, &h_2pc_queue_abort);

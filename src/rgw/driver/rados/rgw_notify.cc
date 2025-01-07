@@ -236,6 +236,7 @@ private:
 
   // processing of a specific queue
   void process_queue(const std::string& queue_name, yield_context yield) {
+    uint32_t queue_entries = 0;
     constexpr auto max_elements = 1024;
     auto is_idle = false;
     const std::string start_marker;
@@ -299,6 +300,7 @@ private:
         // nothing in the queue
         continue;
       }
+      queue_entries += total_entries;
       // log when queue is not idle
       ldpp_dout(this, 20) << "INFO: found: " << total_entries << " entries in: " << queue_name <<
         ". end marker is: " << end_marker << dendl;
@@ -364,9 +366,26 @@ private:
           ldpp_dout(this, 1) << "ERROR: failed to remove entries and/or lock queue up to: " << end_marker <<  " from queue: " 
             << queue_name << ". error: " << ret << dendl;
         } else {
+          queue_entries -= entries_to_remove;
           ldpp_dout(this, 20) << "INFO: removed entries up to: " << end_marker <<  " from queue: " 
           << queue_name << dendl;
         }
+      }
+    }
+    rgw_topic_stats stats;
+    auto ret = get_persistent_queue_stats_by_topic_name(
+        this, rados_ioctx, queue_name,
+        stats, optional_yield(io_context, yield));
+    if (ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: could not get persistent queue, err: " << cpp_strerror(-ret) << dendl;
+      return;
+    }
+    if (stats.queue_entries != queue_entries) {
+      // mismatch after migartion of persistent queues
+      ret = set_persistent_queue_committed_entries(this, rados_ioctx, queue_name, queue_entries, optional_yield(io_context, yield));
+      if (ret < 0) {
+        ldpp_dout(this, 1) << "ERROR: could not set persistent queue committed entries to the correct number, err: " << cpp_strerror(-ret) << dendl;
+        return;
       }
     }
   }
@@ -1001,6 +1020,18 @@ int get_persistent_queue_stats_by_topic_name(const DoutPrefixProvider *dpp, libr
 
   return 0;
 }
+
+  int set_persistent_queue_committed_entries(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
+                                               const std::string &topic_name, uint32_t &queue_entries, optional_yield y)
+  {
+    const auto ret = cls_2pc_queue_set_topic_committed_entries(rados_ioctx, topic_name, queue_entries);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to set the committed entries to the correct number of entries, err: " << ret << dendl;
+      return ret;
+    }
+
+    return 0;
+  }
 
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::RadosStore* _store,

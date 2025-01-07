@@ -77,11 +77,31 @@ int cls_2pc_queue_get_topic_stats(IoCtx& io_ctx, const std::string& queue_name, 
 }
 #endif
 
-// optionally async method for getting number of commited entries and size (bytes)
+#ifndef CLS_CLIENT_HIDE_IOCTX
+int cls_2pc_queue_set_topic_committed_entries(IoCtx& io_ctx, const std::string& queue_name, uint32_t& committed_entries) {
+  bufferlist in, out;
+  cls_2pc_queue_set_committed_entries_op set_op;
+  set_op.committed_entries = committed_entries;
+  encode(set_op, in);
+  return io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_SET_TOPIC_COMMITTED_ENTRIES, in, out);
+}
+#endif
+
+// optionally async method for getting number of committed entries and size (bytes)
 // after answer is received, call cls_2pc_queue_get_topic_stats_result() to parse the results
 void cls_2pc_queue_get_topic_stats(ObjectReadOperation& op, bufferlist* obl, int* prval) {
   bufferlist in;
   op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_GET_TOPIC_STATS, in, obl, prval);
+}
+
+// optionally async method for getting number of committed entries and size (bytes)
+// after answer is received, call cls_2pc_queue_get_topic_stats_result() to parse the results
+void cls_2pc_queue_set_topic_committed_entries(ObjectReadOperation& op, bufferlist* obl, uint32_t committed_entries, int* prval) {
+  bufferlist in;
+  cls_2pc_queue_set_committed_entries_op set_op;
+  set_op.committed_entries = committed_entries;
+  encode(set_op, in);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_SET_TOPIC_COMMITTED_ENTRIES, in, obl, prval);
 }
 
 
