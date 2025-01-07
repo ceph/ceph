@@ -1295,11 +1295,17 @@ namespace rgw::dedup {
 #endif
 
     display_table_stat_counters(dpp, obj_count_in_shard, d_num_rados_objects_bytes, p_stats);
-    d_table.remove_singletons_and_redistribute_keys();
-#if 0
-    reduce_md5_collision_chances(obj_count_in_shard);
+
+#if 1
+    if (d_dry_run) {
+      for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
+	remove_slabs(worker_id, md5_shard, slab_count_arr);
+      }
+      return 0;
+    }
 #endif
 
+    d_table.remove_singletons_and_redistribute_keys();
     // The SLABs holds minimal data set brought from the bucket-index
     // Objects participating in DEDUP need to read attributes from the Head-Object
     // TBD  - find a better name than NULL_WORK_SHARD for the combined output
@@ -1322,7 +1328,6 @@ namespace rgw::dedup {
       p_stats->valid_sha256_attrs   = worker_stats.valid_sha256;
       p_stats->invalid_sha256_attrs = worker_stats.invalid_sha256;
     }
-
 
 #if 1
     ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::started..." << dendl;

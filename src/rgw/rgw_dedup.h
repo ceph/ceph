@@ -155,6 +155,7 @@ namespace rgw::dedup {
     bool d_local_pause_req  = false;
     bool d_remote_paused    = false;
     bool d_remote_pause_req = false;
+    bool d_dry_run          = false;
     int  d_execute_interval;
 
     std::thread d_runner;
