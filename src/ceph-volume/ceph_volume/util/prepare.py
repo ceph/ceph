@@ -9,6 +9,7 @@ import logging
 import json
 from ceph_volume import process, conf, terminal
 from ceph_volume.util import system, constants, str_to_int, disk
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
@@ -121,7 +122,7 @@ def get_block_wal_size(lv_format=True):
     return wal_size
 
 
-def create_id(fsid, json_secrets, osd_id=None):
+def create_id(fsid: str, json_secrets: str, osd_id: Optional[str]=None) -> str:
     """
     :param fsid: The osd fsid to create, always required
     :param json_secrets: a json-ready object with whatever secrets are wanted
