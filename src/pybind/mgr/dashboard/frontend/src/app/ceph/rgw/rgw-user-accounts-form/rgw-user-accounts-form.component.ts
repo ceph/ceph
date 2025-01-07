@@ -1,6 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -12,13 +12,14 @@ import { CdValidators, isEmptyInputValue } from '~/app/shared/forms/cd-validator
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { Observable, concat as observableConcat } from 'rxjs';
+import _ from 'lodash';
 
 @Component({
   selector: 'cd-rgw-user-accounts-form',
   templateUrl: './rgw-user-accounts-form.component.html',
   styleUrls: ['./rgw-user-accounts-form.component.scss']
 })
-export class RgwUserAccountsFormComponent extends CdForm {
+export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
   accountForm: CdFormGroup;
   action: string;
   resource: string;
@@ -30,7 +31,8 @@ export class RgwUserAccountsFormComponent extends CdForm {
     private actionLabels: ActionLabelsI18n,
     private rgwUserAccountsService: RgwUserAccountsService,
     private notificationService: NotificationService,
-    private formBuilder: CdFormBuilder
+    private formBuilder: CdFormBuilder,
+    private route: ActivatedRoute
   ) {
     super();
     this.editing = this.router.url.includes('rgw/accounts/edit');
@@ -40,11 +42,76 @@ export class RgwUserAccountsFormComponent extends CdForm {
     this.loadingReady();
   }
 
+  ngOnInit(): void {
+    if (this.editing) {
+      this.route.paramMap.subscribe((params: any) => {
+        const account_id = params.get('id');
+        this.rgwUserAccountsService.get(account_id).subscribe((accountData: Account) => {
+          // Get the default values.
+          const defaults = _.clone(this.accountForm.value);
+          // Extract the values displayed in the form.
+          let value: any = _.pick(accountData, _.keys(this.accountForm.value));
+          // Map the max. values.
+          ['max_users', 'max_roles', 'max_groups', 'max_buckets', 'max_access_keys'].forEach(
+            (formControlName: string) => {
+              this.mapValuesForMode(value, formControlName);
+            }
+          );
+          // Map the quota values.
+          ['account', 'bucket'].forEach((type: string) => {
+            let quota: any = {};
+            if (type == 'bucket') {
+              quota = accountData.bucket_quota;
+            } else {
+              quota = accountData.quota;
+            }
+            value[type + '_quota_enabled'] = quota.enabled;
+            if (quota.max_size < 0) {
+              value[type + '_quota_max_size_unlimited'] = true;
+              value[type + '_quota_max_size'] = null;
+            } else {
+              value[type + '_quota_max_size_unlimited'] = false;
+              value[type + '_quota_max_size'] = `${quota.max_size} B`;
+            }
+            if (quota.max_objects < 0) {
+              value[type + '_quota_max_objects_unlimited'] = true;
+              value[type + '_quota_max_objects'] = null;
+            } else {
+              value[type + '_quota_max_objects_unlimited'] = false;
+              value[type + '_quota_max_objects'] = quota.max_objects;
+            }
+          });
+          // Merge with default values.
+          value = _.merge(defaults, value);
+          // Update the form.
+          this.accountForm.setValue(value);
+          this.accountForm.get('tenant').disable();
+        });
+      });
+    }
+  }
+
+  mapValuesForMode(value: any, formControlName: string) {
+    switch (value[formControlName]) {
+      case -1:
+        value[`${formControlName}_mode`] = -1;
+        value[formControlName] = '';
+        break;
+      case 0:
+        value[`${formControlName}_mode`] = 0;
+        value[formControlName] = '';
+        break;
+      default:
+        value[`${formControlName}_mode`] = 1;
+        break;
+    }
+  }
+
   private createForm() {
     this.accountForm = this.formBuilder.group({
-      account_id: [''],
+      id: [''],
       tenant: [''],
-      account_name: ['', Validators.required],
+      name: ['', Validators.required],
       email: ['', CdValidators.email],
       max_users_mode: [1],
       max_users: [
@@ -56,10 +123,10 @@ export class RgwUserAccountsFormComponent extends CdForm {
         1000,
         [CdValidators.requiredIf({ max_roles_mode: '1' }), CdValidators.number(false)]
       ],
-      max_group_mode: [1],
-      max_group: [
+      max_groups_mode: [1],
+      max_groups: [
         1000,
-        [CdValidators.requiredIf({ max_group_mode: '1' }), CdValidators.number(false)]
+        [CdValidators.requiredIf({ max_groups_mode: '1' }), CdValidators.number(false)]
       ],
       max_access_keys_mode: [1],
       max_access_keys: [
@@ -152,23 +219,37 @@ export class RgwUserAccountsFormComponent extends CdForm {
       return;
     }
 
+    const formvalue = this.accountForm.value;
+    const payload = {
+      account_id: formvalue.id,
+      account_name: formvalue.name,
+      email: formvalue.email,
+      tenant: formvalue.tenant,
+      max_users: this.getValueFromFormControl('max_users'),
+      max_buckets: this.getValueFromFormControl('max_buckets'),
+      max_roles: this.getValueFromFormControl('max_roles'),
+      max_group: this.getValueFromFormControl('max_groups'),
+      max_access_keys: this.getValueFromFormControl('max_access_keys')
+    };
     if (!this.editing) {
-      const formvalue = this.accountForm.value;
-      const createPayload = {
-        account_id: formvalue.account_id,
-        account_name: formvalue.account_name,
-        email: formvalue.email,
-        tenant: formvalue.tenant,
-        max_users: this.getValueFromFormControl('max_users'),
-        max_buckets: this.getValueFromFormControl('max_buckets'),
-        max_roles: this.getValueFromFormControl('max_roles'),
-        max_group: this.getValueFromFormControl('max_group'),
-        max_access_keys: this.getValueFromFormControl('max_access_keys')
-      };
+      delete payload.account_id;
       notificationTitle = $localize`Account created successfully`;
-      this.rgwUserAccountsService.create(createPayload).subscribe({
+      this.rgwUserAccountsService.create(payload).subscribe({
         next: (account: Account) => {
-          this.accountForm.get('account_id').setValue(account.id);
+          this.accountForm.get('id').setValue(account.id);
+          this.setQuotaConfig();
+          this.notificationService.show(NotificationType.success, notificationTitle);
+        },
+        error: () => {
+          // Reset the 'Submit' button.
+          this.accountForm.setErrors({ cdSubmitButton: true });
+        }
+      });
+    } else {
+      notificationTitle = $localize`Account modified successfully`;
+      this.rgwUserAccountsService.modify(payload).subscribe({
+        next: (account: Account) => {
+          this.accountForm.get('id').setValue(account.id);
           this.setQuotaConfig();
           this.notificationService.show(NotificationType.success, notificationTitle);
         },
@@ -181,7 +262,7 @@ export class RgwUserAccountsFormComponent extends CdForm {
   }
 
   setQuotaConfig() {
-    const accountId: string = this.accountForm.get('account_id').value;
+    const accountId: string = this.accountForm.get('id').value;
     // Check if account quota has been modified.
     if (this._isQuotaConfDirty('account')) {
       const accountQuotaArgs = this._getQuotaArgs('account');
@@ -239,18 +320,15 @@ export class RgwUserAccountsFormComponent extends CdForm {
    * @return {Boolean} Returns TRUE if the quota has been modified.
    */
   private _isQuotaConfDirty(quotaType: string): boolean {
-    if (this.accountForm.get(`${quotaType}_quota_enabled`).value) {
-      return [
-        `${quotaType}_quota_enabled`,
-        `${quotaType}_quota_max_size_unlimited`,
-        `${quotaType}_quota_max_size`,
-        `${quotaType}_quota_max_objects_unlimited`,
-        `${quotaType}_quota_max_objects`
-      ].some((path) => {
-        return this.accountForm.get(path).dirty;
-      });
-    }
-    return false;
+    return [
+      `${quotaType}_quota_enabled`,
+      `${quotaType}_quota_max_size_unlimited`,
+      `${quotaType}_quota_max_size`,
+      `${quotaType}_quota_max_objects_unlimited`,
+      `${quotaType}_quota_max_objects`
+    ].some((path) => {
+      return this.accountForm.get(path).dirty;
+    });
   }
 
   onModeChange(mode: string, formControlName: string) {
