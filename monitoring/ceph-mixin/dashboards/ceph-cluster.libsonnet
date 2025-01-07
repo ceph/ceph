@@ -227,7 +227,7 @@ local g = import 'grafonnet/grafana.libsonnet';
             [
               {'color': 'green', 'value': null},
               {'color': 'yellow', 'value': 1},
-              {'color': 'red', 'value': 1}
+              {'color': 'red', 'value': 10}
             ]}
           }]
         },
@@ -236,7 +236,7 @@ local g = import 'grafonnet/grafana.libsonnet';
             [
               {'color': 'green', 'value': null},
               {'color': 'yellow', 'value': 1},
-              {'color': 'red', 'value': 1}
+              {'color': 'red', 'value': 10}
             ]}
           }]
         },
